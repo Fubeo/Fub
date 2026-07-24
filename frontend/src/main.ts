@@ -6,6 +6,7 @@ import {
   type KernelEvent,
   type SearchHit,
   type Span,
+  type UiNode,
   type WorkspaceMeta,
 } from "./api";
 import { createEditor, type Editor } from "./editor";
@@ -783,6 +784,7 @@ async function deleteDoc(id: string) {
     // una perdita silenziosa, è l'azione che l'utente ha appena confermato.
     dirty = false;
     currentDoc = null;
+    await api.setActiveDocument(null);
     editor.setDoc("");
     previewEl.innerHTML = "";
     backlinksEl.innerHTML = "";
@@ -870,6 +872,9 @@ async function selectDoc(id: string) {
   // così nessuna modifica resta appesa al debounce.
   await flushPendingSave();
   currentDoc = id;
+  // Il documento attivo è contesto di sessione del kernel: lo leggono le view
+  // (il pannello backlink lo fa a ogni render) via HostApi::active_document.
+  await api.setActiveDocument(id);
   const source = await api.readDocument(id);
   editor.setDoc(source);
   dirty = false;
@@ -912,7 +917,7 @@ async function refreshCurrent() {
   if (!currentDoc) return;
   await Promise.all([
     updatePreview(currentDoc),
-    updateBacklinks(currentDoc),
+    updateBacklinks(),
     updateHistory(currentDoc),
   ]);
 }
@@ -1142,20 +1147,41 @@ function highlighted(snippet: string, highlights: Span[]): DocumentFragment {
   return frag;
 }
 
-async function updateBacklinks(id: string) {
-  const node = await api.backlinksView(id);
-  backlinksEl.innerHTML = "";
-  backlinksEl.appendChild(
-    renderUiNode(node, (action) => {
-      if (action.startsWith("open:")) selectDoc(action.slice("open:".length));
+// Id della view backlink (rispecchia fubmd_features::BACKLINKS_VIEW).
+const BACKLINKS_VIEW = "backlinks";
+
+// Disegna una view dichiarativa in un contenitore e chiude il giro
+// azione→ViewUpdate: un click torna al provider via `view_action` e la
+// risposta si interpreta qui. È il percorso generico di ogni ViewProvider —
+// il pannello backlink non ha più nulla di cablato lato app.
+async function mountView(view: string, target: HTMLElement, node: UiNode) {
+  target.innerHTML = "";
+  target.appendChild(
+    renderUiNode(node, async (action) => {
+      const update = await api.viewAction(view, action);
+      switch (update.kind) {
+        case "navigate":
+          await selectDoc(update.doc_id);
+          break;
+        case "replace":
+          await mountView(view, target, update.root);
+          break;
+        case "none":
+          break;
+      }
     }),
   );
+}
+
+async function updateBacklinks() {
+  // La view legge il documento attivo dal kernel: non le passiamo dati.
+  await mountView(BACKLINKS_VIEW, backlinksEl, await api.renderView(BACKLINKS_VIEW));
 }
 
 function handleKernelEvent(e: KernelEvent) {
   if (e.type === "index_updated") {
     api.listDocuments().then(refreshFileList);
-    if (currentDoc) updateBacklinks(currentDoc);
+    if (currentDoc) updateBacklinks();
     // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
     // invecchiare sotto gli occhi di chi legge. Vale anche per il cestino, che
     // un'altra app (o un'altra finestra) può aver riempito o svuotato.

@@ -11,13 +11,13 @@ use std::time::Duration;
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
-use fubmd_abi::ui::UiNode;
+use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
-    build_backlinks_view, SearchIndex, VersionRef, VersionStore, VersioningHandler, SEARCH_ID,
-    VERSIONING_ID,
+    BacklinksView, SearchIndex, VersionRef, VersionStore, VersioningHandler, BACKLINKS_ID,
+    SEARCH_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, TrashEntry, Workspace};
+use fubmd_kernel::{FormatRegistry, TrashEntry, Trust, Workspace};
 
 use notify::RecursiveMode;
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
@@ -151,6 +151,13 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
             Box::new(VersioningHandler::new(store.clone())),
         );
     }
+
+    // Il pannello backlink è una feature ufficiale che passa per il protocollo
+    // di view come dovrà fare un plugin: registrato come `ViewProvider` fidato
+    // (produce solo UI dichiarativa, niente `Html`/`WebView`), si prende
+    // documento attivo e riferimenti dall'`HostApi`. L'app non gli fa più da
+    // tramite — il giro render/azione passa dai comandi generici qui sotto.
+    ws.register_view_provider(BACKLINKS_ID, Trust::Trusted, Box::new(BacklinksView));
 
     ws.reindex().map_err(|e| e.to_string())?;
 
@@ -369,12 +376,52 @@ fn backlinks(state: State<AppState>, id: String) -> Result<Vec<BacklinkRef>, Str
     Ok(ws.backlinks(&DocId::new(id)))
 }
 
-/// Backlink già in forma di UI dichiarativa (dogfooding del protocollo `UiNode`).
+// --- view dichiarative (protocollo generico) -------------------------------
+//
+// Il canale core→UI dei `ViewProvider`: la shell chiede l'albero di una view e
+// rimanda le azioni al provider, senza sapere cosa la view faccia. Il pannello
+// backlink passa di qui come dovrà passarci un plugin — nessun comando ad-hoc
+// per feature. L'enforcement del confine di fiducia (`Html`/`WebView` solo dal
+// codice fidato) è dentro `render_view`/`view_action`, in un punto solo.
+
+/// Documento con il focus della sessione: lo imposta la shell a ogni
+/// navigazione, e le view lo leggono via `HostApi::active_document`. `None`
+/// azzera (nessuna nota aperta).
 #[tauri::command]
-fn backlinks_view(state: State<AppState>, id: String) -> Result<UiNode, String> {
+fn set_active_document(state: State<AppState>, id: Option<String>) -> Result<(), String> {
     let ws = current(&state)?;
-    let ws = ws.lock().unwrap();
-    Ok(build_backlinks_view(&ws.backlinks(&DocId::new(id))))
+    let mut ws = ws.lock().unwrap();
+    ws.set_active_document(id.map(DocId::new));
+    Ok(())
+}
+
+/// Rende l'albero `UiNode` di una view registrata.
+#[tauri::command]
+fn render_view(state: State<AppState>, view: String) -> Result<UiNode, String> {
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.render_view(&view).map_err(|e| e.to_string())
+}
+
+/// Consegna un'azione della UI al provider della view e restituisce il suo
+/// aggiornamento (`Replace`/`Navigate`/`None`), che il frontend interpreta.
+#[tauri::command]
+fn view_action(
+    state: State<AppState>,
+    view: String,
+    action: String,
+    payload: Option<serde_json::Value>,
+) -> Result<ViewUpdate, String> {
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.view_action(
+        &view,
+        UiAction {
+            action: ActionId(action),
+            payload: payload.unwrap_or(serde_json::Value::Null),
+        },
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Ricerca full-text sul vault.
@@ -529,7 +576,9 @@ pub fn run() {
             render_preview,
             render_embed,
             backlinks,
-            backlinks_view,
+            set_active_document,
+            render_view,
+            view_action,
             search,
             resolve_link,
             list_versions,

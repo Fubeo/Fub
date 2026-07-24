@@ -16,7 +16,7 @@ use std::sync::Mutex;
 
 use fubmd_abi::event::Event;
 use fubmd_abi::model::DocId;
-use fubmd_abi::traits::{HostApi, JobId, JobSpec};
+use fubmd_abi::traits::{BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec};
 use fubmd_abi::PluginError;
 
 /// Storage dei blob e dei documenti in memoria, più un orologio pilotabile.
@@ -25,6 +25,13 @@ pub struct MemoryHost {
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
     docs: Mutex<BTreeMap<String, String>>,
     now: AtomicU64,
+    /// Il documento attivo servito da [`HostApi::active_document`], come lo
+    /// imposterebbe la shell.
+    active: Mutex<Option<DocId>>,
+    /// Backlink finti per [`HostApi::query_index`], seminati per target. Il
+    /// doppio non ha un grafo: risponde solo a ciò che gli è stato messo dentro,
+    /// ed è quanto basta a provare una view contro il contratto.
+    backlinks: Mutex<BTreeMap<String, Vec<BacklinkRef>>>,
 }
 
 impl MemoryHost {
@@ -60,6 +67,25 @@ impl MemoryHost {
         if let Some(source) = docs.remove(from) {
             docs.insert(to.to_string(), source);
         }
+    }
+
+    /// Imposta il documento attivo, come farebbe la shell su una navigazione.
+    pub fn set_active(&self, id: Option<&str>) {
+        *self.active.lock().unwrap() = id.map(DocId::new);
+    }
+
+    /// Semina i backlink che [`HostApi::query_index`] restituirà per `target`
+    /// (stile builder).
+    pub fn con_backlink(self, target: &str, sorgenti: &[&str]) -> Self {
+        let refs = sorgenti
+            .iter()
+            .map(|s| BacklinkRef {
+                source: DocId::new(*s),
+                context: None,
+            })
+            .collect();
+        self.backlinks.lock().unwrap().insert(target.to_string(), refs);
+        self
     }
 }
 
@@ -130,5 +156,29 @@ impl HostApi for MemoryHost {
 
     fn now_unix_millis(&self) -> u64 {
         self.now.load(Ordering::Relaxed)
+    }
+
+    fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+        match query {
+            // Come il kernel: i backlink sono una risposta del grafo, qui
+            // seminata a mano. Un target senza backlink è una lista vuota, non
+            // un errore.
+            IndexQuery::Backlinks { target } => Ok(IndexResult::Backlinks(
+                self.backlinks
+                    .lock()
+                    .unwrap()
+                    .get(target.as_str())
+                    .cloned()
+                    .unwrap_or_default(),
+            )),
+            // Il doppio non ha un indice: tutto il resto è "non roba mia".
+            _ => Err(PluginError::BadArgs(
+                "MemoryHost non ha indici full-text".into(),
+            )),
+        }
+    }
+
+    fn active_document(&self) -> Option<DocId> {
+        self.active.lock().unwrap().clone()
     }
 }

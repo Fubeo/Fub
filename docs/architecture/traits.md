@@ -86,6 +86,9 @@ pub trait HostApi: Send + Sync {
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError>;
     // il tempo è una capacità come le altre
     fn now_unix_millis(&self) -> u64;
+    // interrogazione del vault e contesto della sessione (le ha chieste la view)
+    fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
+    fn active_document(&self) -> Option<DocId>;
 }
 ```
 
@@ -112,6 +115,22 @@ freeze di M4, non aggirato:
 - `list_documents` — senza, `read_document` serve solo per gli id che arrivano
   dagli eventi: nessun plugin potrebbe reagire a `VaultOpened` guardandosi
   intorno, né costruire alcunché sull'intero vault.
+
+**Le ultime due le ha chieste la migrazione dei backlink a `ViewProvider`** — lo
+stesso meccanismo del dogfooding, un caso reale che scopre un buco nel contratto.
+Una view che non può interrogare il vault né sapere quale nota è aperta non è un
+provider, è un guscio che l'app riempie:
+
+- `query_index` — la porta di `Workspace::query_index` aperta ai provider, stesso
+  dispatch (backlink dal grafo, resto dai provider registrati). `&self`: una
+  query non muta, e così una view la serve sotto prestito condiviso, dalla parte
+  giusta della concorrenza.
+- `active_document` — il documento con il focus della sessione, l'unico contesto
+  di sessione che il contratto espone. La view lo **chiede**; a scriverlo è solo
+  la shell (`Workspace::set_active_document`), mai un plugin. Scartati l'evento
+  (`render_view(&self)` è immutabile) e l'argomento di `render_view` (obbligo per
+  ogni view a portarsi un contesto che non usa) — vedi
+  [plugin-boundary.md](plugin-boundary.md), "Interrogazione e contesto".
 
 L'identità del plugin (`<id>`) la assegna **chi registra**
 (`Workspace::register_event_handler(id, handler)`), non il plugin: chi si
@@ -147,6 +166,15 @@ pub trait ViewProvider: Send + Sync {
 `ViewSpec { id, title, placement: ViewPlacement }` con
 `ViewPlacement { LeftSidebar, RightSidebar, Bottom }`. `UiNode`/`UiAction`/
 `ViewUpdate` sono in [ui-protocol.md](ui-protocol.md).
+
+**Il primo provider vero: `BacklinksView`.** Il pannello backlink è passato da
+funzione libera a `ViewProvider` (`fubmd-features`), ed è ciò che ha esercitato
+il trait per intero — e fatto emergere `query_index`/`active_document`
+nell'`HostApi`. Non riceve dati: in `render_view` chiede il documento attivo e i
+suoi backlink all'host, in `on_action` traduce il click in `ViewUpdate::Navigate`.
+Il giro chiude nel renderer generico del frontend (comandi `render_view`/
+`view_action`/`set_active_document`), non più in un comando ad-hoc. Prova
+end-to-end col kernel vero: `crates/fubmd-features/tests/backlinks_view_e2e.rs`.
 
 **Il varco unico degli alberi di UI.** I provider si registrano con
 `Workspace::register_view_provider(id, trust, provider)`, dove
@@ -341,7 +369,7 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 |---|---|---|---|
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
 | `IndexProvider` | — (backlink via grafo del kernel) | `SearchIndex` (tantivy) **M2** ✅ | `activate`/`flush` con `HostApi`: persiste via `data_*` |
-| `ViewProvider` | — (backlink via `build_backlinks_view`) | **M2** (graph/outline/tag) | routing e confine di fiducia già cablati nel kernel; zero impl |
+| `ViewProvider` | `BacklinksView` (backlink) ✅ **M2** | **M2** (graph/outline/tag) | primo provider vero; usa `query_index`+`active_document`; giro azione→`ViewUpdate` chiuso |
 | `CommandProvider` | — | **M3** (command palette) | keybinding non vincolante |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |

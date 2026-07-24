@@ -141,6 +141,13 @@ pub struct Workspace {
     /// Il namespace per-plugin su questa mappa arriva col registry dei plugin
     /// (M4): oggi gli handler registrati sono tutti codice fidato.
     storage: HashMap<String, serde_json::Value>,
+    /// Il documento con il focus della sessione di editing, servito alle view
+    /// da [`HostApi::active_document`]. Lo imposta la shell
+    /// ([`set_active_document`](Workspace::set_active_document)); il kernel non
+    /// lo deriva né lo cambia da sé — "quale nota guarda l'utente" è una
+    /// decisione dell'app, e il kernel la custodisce solo perché è il contesto
+    /// che una view (anche in WASM) deve poter chiedere.
+    active: Option<DocId>,
 }
 
 impl Workspace {
@@ -161,6 +168,7 @@ impl Workspace {
             pending_jobs: Vec::new(),
             next_job_id: 0,
             storage: HashMap::new(),
+            active: None,
         }
     }
 
@@ -774,6 +782,23 @@ impl Workspace {
         self.graph.resolve_wiki(page)
     }
 
+    // --- sessione ----------------------------------------------------------
+
+    /// Imposta (o azzera) il documento con il focus della sessione di editing.
+    ///
+    /// Lo chiama la shell quando l'utente cambia nota. È l'unico modo di
+    /// scrivere `active`: le view lo **leggono** via
+    /// [`HostApi::active_document`], nessuno lo scrive dall'interno del
+    /// contratto — vedi il campo [`Workspace::active`].
+    pub fn set_active_document(&mut self, id: Option<DocId>) {
+        self.active = id;
+    }
+
+    /// Il documento con il focus della sessione, se impostato.
+    pub fn active_document(&self) -> Option<&DocId> {
+        self.active.as_ref()
+    }
+
     // --- indici -----------------------------------------------------------
 
     /// Interroga gli indici.
@@ -1251,6 +1276,17 @@ impl HostApi for KernelHost<'_> {
 
     fn now_unix_millis(&self) -> u64 {
         crate::time::now_unix_millis()
+    }
+
+    fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
+        // Stesso dispatch di `Workspace::query_index`: i backlink li serve il
+        // grafo, il resto i provider registrati. Una view vede esattamente ciò
+        // che vedrebbe il kernel, e sotto lo stesso prestito condiviso.
+        self.ws.query_index(query)
+    }
+
+    fn active_document(&self) -> Option<DocId> {
+        self.ws.active_document().cloned()
     }
 }
 
