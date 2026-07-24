@@ -20,6 +20,18 @@ pub fn now_unix() -> u64 {
         .unwrap_or(0)
 }
 
+/// Millisecondi dall'epoca UNIX.
+///
+/// Più fine dei secondi perché serve a **identificare** uno snapshot, non a
+/// mostrarlo: il debounce dell'editor è di 400 ms, e due salvataggi nello
+/// stesso secondo non devono essere lo stesso istante.
+pub fn now_unix_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// L'istante in `YYYY-MM-DDTHH-MM-SS`, UTC.
 ///
 /// I `:` dell'ISO 8601 diventano `-`: Windows non li accetta nei nomi di file,

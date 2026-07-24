@@ -137,30 +137,55 @@ dal nome del file togliendo il timbro di D2, riconosciuto dalla forma.
 
 ## Fase 3 — Versioning del vault
 
-- [ ] Store: `.fubmd-data/versions/<hash-del-doc-id>/<timestamp>.md` +
+- [x] Store: `.fubmd-data/versions/<hash-del-doc-id>/<timestamp>.md` +
       indice `versions.json` (doc_id → lista `{ts, hash, size}` + tombstone).
       Hash del contenuto per il dedup (D6), FNV o simile — stessa filosofia
       del manifest dell'indice: nel dubbio si ricostruisce l'indice delle
       versioni leggendo lo store, mai il contrario.
-- [ ] `VersioningHandler` (`fubmd-features`): `EventHandler` su
+      *(Il timestamp è in **millisecondi**: il debounce dell'editor è di 400 ms
+      e due salvataggi nello stesso secondo non sono lo stesso istante. Ogni
+      cartella porta un `meta.json` con il proprio `doc_id` e il tombstone —
+      senza, un indice perso renderebbe le versioni irraggiungibili, visto che
+      il nome della cartella è un'impronta e le impronte non si invertono.)*
+- [x] `VersioningHandler` (`fubmd-features`): `EventHandler` su
       `DocumentChanged`/`DocumentRenamed`/`DocumentRemoved` (D5) —
       `Changed` → snapshot se contenuto nuovo; `Renamed` → migra la chiave;
       `Removed` → tombstone. Lettura via `host.read_document`.
-- [ ] Potatura a fasce (D6), eseguita a fine snapshot; **loggare** quante
+- [x] Potatura a fasce (D6), eseguita a fine snapshot; **loggare** quante
       versioni ha potato (niente sparizioni silenziose).
-- [ ] API kernel/IPC: `list_versions(doc_id)`, `read_version(doc_id, ts)`,
+      *(La più recente non si pota mai, in nessuna fascia: è lo stato attuale
+      della nota anche se la nota è ferma da un anno.)*
+- [x] API kernel/IPC: `list_versions(doc_id)`, `read_version(doc_id, ts)`,
       `restore_version(doc_id, ts)` (D8: è un `write_document`).
-- [ ] Frontend: pannello "Cronologia" per il documento aperto — lista
+      *(Non è API del **kernel**: il kernel non sa che il versioning esiste, e
+      non deve — è una feature scritta come la scriverebbe un plugin. Le due
+      metà, store e workspace, le compone l'app, che è esattamente ciò che
+      dovrà fare per un plugin di terzi a M5.)*
+- [x] Frontend: pannello "Cronologia" per il documento aperto — lista
       versioni con data, anteprima del contenuto, pulsante "Ripristina".
       Se il buffer è sporco: flush prima del ripristino.
-- [ ] Interruttore on/off (D7): spento = handler non registrato, pannello e
+      *(L'anteprima si carica al click sulla riga: elencare le versioni non
+      deve costare la lettura di tutte.)*
+- [x] Interruttore on/off (D7): spento = handler non registrato, pannello e
       voci di menu assenti. Fino ai settings di M3, una env/`config` basta.
-- [ ] Test: snapshot su modifica, dedup su contenuto identico, migrazione su
+      *(`FUBMD_VERSIONING=0|off|no|false`. Acceso di default: è una rete di
+      sicurezza, e una rete che va accesa a mano non c'è quando serve.)*
+- [x] Test: snapshot su modifica, dedup su contenuto identico, migrazione su
       rename, tombstone su delete, potatura, ripristino che genera a sua
       volta uno snapshot; ricostruzione di `versions.json` da store corrotto.
 - [ ] (seconda passata) "Vault al tempo T": vista che ricostruisce l'elenco
       dei file a un istante (ultima versione ≤ T + tombstone) e ripristino
-      selettivo o totale.
+      selettivo o totale. *(Rimandata, come previsto: il meccanismo che la
+      rende possibile — snapshot timestampati + tombstone — c'è tutto, e
+      `VersionStore::documents()` è il punto da cui partirà.)*
+
+**Deciso strada facendo.** Gli snapshot si prendono a **ogni**
+`DocumentChanged`, con il dedup per contenuto a fare da freno: semplice, e il
+costo si misura invece di indovinarlo. In più, all'apertura del vault si scatta
+la **prima fotografia** dei documenti che non hanno ancora una storia — senza,
+la prima modifica a una nota mai versionata cancellerebbe lo stato in cui
+l'utente l'ha trovata, perché l'handler gira *dopo* la scrittura e vede solo il
+testo nuovo. Chi ha già una storia non paga nulla, nemmeno una lettura.
 
 ## Fase 4 — Chiusura
 
