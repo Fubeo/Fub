@@ -135,7 +135,7 @@ l'oracolo full-rebuild appena costruito verifica che nulla cambi.
   tag (`#a/b`), click → ricerca per tag. Candidato a un nuovo `UiNode` tree-node se
   la `List` piatta non basta.
 
-### Flusso "crea nota" (link non risolti)
+### Flusso "crea nota" (link non risolti) — **fatto**
 
 Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
 - il frontend distingue i wikilink risolti da quelli non risolti (data-attribute
@@ -144,6 +144,13 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
   `LinkTarget::Wiki`, path secondo le regole del vault, poi `write_document` di uno
   scheletro e navigazione. Naturale candidato per il primo `CommandProvider`
   (altrimenti cablato nell'app fino a M3).
+
+Chiuso in [CRUD_E_VAULT.md](../CRUD_E_VAULT.md), Fase 2: `Workspace::create_note`
++ comando IPC `create_note`, cablato nell'app — il `CommandProvider` resta a M3,
+che è quando arriva la command palette che gli dà un senso. La nota nasce vuota,
+non da uno scheletro: un template è una preferenza, e le preferenze arrivano coi
+settings. Il backlink compare da solo, perché il link nel documento di partenza
+non viene toccato ed è il grafo a risolverlo di nuovo.
 
 ## Trait/API coinvolti
 
