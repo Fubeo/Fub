@@ -23,8 +23,8 @@ use fubmd_abi::model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
 };
 use fubmd_abi::traits::{
-    BacklinkRef, CommandOutcome, CommandSpec, IndexQuery, IndexResult, PluginManifest,
-    PluginPermissions, SearchHit, ViewPlacement, ViewSpec,
+    BacklinkRef, CommandOutcome, CommandSpec, IndexQuery, IndexResult, JobId, JobSpec,
+    PluginManifest, PluginPermissions, SearchHit, ViewPlacement, ViewSpec,
 };
 use fubmd_abi::ui::{ActionId, Axis, Intent, UiAction, UiNode, ViewUpdate};
 
@@ -250,6 +250,14 @@ fn event_names(e: &Event) -> &'static [&'static str] {
             &["document-renamed", "event-document-renamed", "from", "to"]
         }
         Event::IndexUpdated => &["index-updated"],
+        Event::JobDone { id, job, result } => {
+            let _ = (id, job, result);
+            &["event-job-done", "job-done", "job", "result"]
+        }
+        Event::Overflow { dropped } => {
+            let _ = dropped;
+            &["event-overflow", "overflow", "dropped"]
+        }
         Event::Custom { topic, payload } => {
             let _ = (topic, payload);
             &["event-custom", "custom", "topic", "payload"]
@@ -264,6 +272,8 @@ fn event_kind_names(k: EventKind) -> &'static [&'static str] {
         EventKind::DocumentRemoved => &["document-removed"],
         EventKind::DocumentRenamed => &["document-renamed"],
         EventKind::IndexUpdated => &["index-updated"],
+        EventKind::JobDone => &["job-done"],
+        EventKind::Overflow => &["overflow"],
         EventKind::Custom => &["custom"],
     }
 }
@@ -332,6 +342,10 @@ fn plugin_error_names(e: &PluginError) -> &'static [&'static str] {
         PluginError::UnknownView(s) => {
             let _ = s;
             &["unknown-view"]
+        }
+        PluginError::UnknownJob(s) => {
+            let _ = s;
+            &["unknown-job"]
         }
         PluginError::BadArgs(s) => {
             let _ = s;
@@ -554,6 +568,17 @@ fn struct_names() -> Vec<&'static str> {
     let _ = kinds;
     names.extend(["event-mask", "event-kind"]);
 
+    let JobSpec { job, payload } = JobSpec {
+        job: String::new(),
+        payload: serde_json::Value::Null,
+    };
+    let _ = (job, payload);
+    names.extend(["job-spec", "job", "payload"]);
+
+    let JobId(raw) = JobId(0);
+    let _ = raw;
+    names.push("job-id");
+
     names
 }
 
@@ -677,6 +702,12 @@ fn abi_types_are_mirrored_in_wit() {
         to: DocId::new("b"),
     }));
     expected.extend(event_names(&Event::IndexUpdated));
+    expected.extend(event_names(&Event::JobDone {
+        id: JobId(0),
+        job: String::new(),
+        result: Ok(serde_json::Value::Null),
+    }));
+    expected.extend(event_names(&Event::Overflow { dropped: 0 }));
     expected.extend(event_names(&Event::Custom {
         topic: String::new(),
         payload: serde_json::Value::Null,
@@ -688,6 +719,8 @@ fn abi_types_are_mirrored_in_wit() {
         EventKind::DocumentRemoved,
         EventKind::DocumentRenamed,
         EventKind::IndexUpdated,
+        EventKind::JobDone,
+        EventKind::Overflow,
         EventKind::Custom,
     ] {
         expected.extend(event_kind_names(k));
@@ -721,6 +754,7 @@ fn abi_types_are_mirrored_in_wit() {
     for e in [
         PluginError::UnknownCommand(String::new()),
         PluginError::UnknownView(String::new()),
+        PluginError::UnknownJob(String::new()),
         PluginError::BadArgs(String::new()),
         PluginError::PermissionDenied(String::new()),
         PluginError::Internal(String::new()),
@@ -759,8 +793,11 @@ fn abi_types_are_mirrored_in_wit() {
         "interface plugin",
         "interface event-handler",
         "interface errors",
+        "interface jobs",
         "read-document",
         "write-document",
+        "spawn-job",
+        "run-job",
         "storage-get",
         "storage-set",
         "on-document-indexed",

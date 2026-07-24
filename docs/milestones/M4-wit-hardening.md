@@ -30,8 +30,11 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
 - Da qui: **cambi additivi versionati**; le modifiche breaking richiedono un bump di
   versione del contratto. Documentare la policy di compatibilità.
 - Consolidare le estensioni introdotte in corso d'opera: `PluginPermissions.vault_scope`
-  (vedi [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md)) e i
-  nodi input di `UiNode` aggiunti a [M3](M3-editor-fidelity.md).
+  (vedi [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md)), i
+  nodi input di `UiNode` aggiunti a [M3](M3-editor-fidelity.md), e il modello dei
+  **job** (`JobSpec`/`JobId`, `spawn_job`/`run_job`, `Event::JobDone`/`Overflow`)
+  già nel contratto e nel `wit/` da M2. Prima del freeze va deciso se ai job
+  serve un canale di **progresso** (streaming) o se `JobDone` basta.
 
 ### `wit/fubmd/*.wit` che rispecchia `fubmd-abi`
 
@@ -59,6 +62,11 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
   [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md).
 - Esercita: manifest, permessi (booleani + eventuale `vault_scope`), `activate`/
   `deactivate`, registrazione presso il registry, uso di `HostApi`.
+- Il registry di M4 porta anche il **runner dei job**: un pool di thread che
+  drena `Workspace::take_pending_jobs`, esegue `Plugin::run_job` fuori dal lock
+  e riconsegna con `complete_job` (il giro `spawn_job` → `JobDone` è già
+  implementato e testato nel kernel: `tests/rename_and_events.rs`). Il plugin
+  nativo dovrebbe esercitare anche un job end-to-end.
 - Valore: mette alla prova il confine **prima** di aggiungere WASM. Se `HostApi` è
   scomoda, si corregge qui (ultimo momento prima del freeze duro per M5).
 

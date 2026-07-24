@@ -11,9 +11,16 @@
 //! drena alla fine ([`Workspace::dispatch_pending`]). Un handler che durante
 //! `handle` emette eventi o scrive documenti (via [`HostApi`]) non innesca un
 //! dispatch ricorsivo: i nuovi eventi finiscono in coda e sono drenati dallo
-//! stesso ciclo, con un budget che tronca i ping-pong infiniti fra handler.
-//! Durante il drenaggio gli handler sono *estratti* dal workspace, così il
-//! `HostApi` può prestare `&mut Workspace` senza aliasing.
+//! stesso ciclo, con un budget che tronca i ping-pong infiniti fra handler —
+//! troncamento **rumoroso**: al posto degli eventi persi arriva un
+//! [`Event::Overflow`] col conteggio, e chi deriva stato dagli eventi
+//! riconcilia da zero. Durante il drenaggio gli handler sono *estratti* dal
+//! workspace, così il `HostApi` può prestare `&mut Workspace` senza aliasing.
+//!
+//! Il lavoro **lungo** (rete, calcolo pesante) non passa dagli handler: un
+//! provider lo chiede via [`HostApi::spawn_job`], l'host lo esegue fuori dal
+//! lock ([`Workspace::take_pending_jobs`]) e l'esito rientra come
+//! [`Event::JobDone`] ([`Workspace::complete_job`]).
 //!
 //! Il canale [`EventBus`] resta il ponte verso i subscriber esterni (frontend,
 //! watcher): riceve gli stessi eventi, senza passare dalla coda.
@@ -23,7 +30,7 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use camino::Utf8Path;
 use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
-use fubmd_abi::traits::{BacklinkRef, EventHandler, HostApi};
+use fubmd_abi::traits::{BacklinkRef, EventHandler, HostApi, JobId, JobSpec};
 use fubmd_abi::{Event, PluginError};
 
 use crate::bus::EventBus;
@@ -45,7 +52,9 @@ pub enum GraphUpdate {
 }
 
 /// Tetto di eventi drenati in un singolo `dispatch_pending`: tronca i cicli
-/// di handler che si rimbalzano eventi a vicenda senza convergere.
+/// di handler che si rimbalzano eventi a vicenda senza convergere. Il
+/// troncamento NON è silenzioso: emette [`Event::Overflow`] (bus + handler),
+/// così chi deriva stato dagli eventi sa di dover riconciliare da zero.
 const DISPATCH_BUDGET: usize = 1024;
 
 pub struct Workspace {
@@ -61,6 +70,11 @@ pub struct Workspace {
     pending: VecDeque<Event>,
     /// Guardia anti-rientranza: `dispatch_pending` non si annida mai.
     dispatching: bool,
+    /// Job richiesti via [`HostApi::spawn_job`], in attesa che l'host li
+    /// esegua fuori dal giro sincrono (vedi [`Workspace::take_pending_jobs`]).
+    pending_jobs: Vec<(JobId, JobSpec)>,
+    /// Contatore per l'assegnazione dei [`JobId`].
+    next_job_id: u64,
     /// Storage chiave→valore dell'`HostApi`. In-memory per ora; persistenza e
     /// namespace per-plugin arrivano col registry dei plugin (M4), vedi
     /// `docs/architecture/plugin-boundary.md`.
@@ -80,6 +94,8 @@ impl Workspace {
             handlers: Vec::new(),
             pending: VecDeque::new(),
             dispatching: false,
+            pending_jobs: Vec::new(),
+            next_job_id: 0,
             storage: HashMap::new(),
         }
     }
@@ -225,7 +241,13 @@ impl Workspace {
         if !self.models.contains_key(from) {
             return Err(KernelError::NotFound(from.to_string()));
         }
-        if self.models.contains_key(to) || self.vault.exists(to) {
+        // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
+        // case-insensitive (macOS/Windows) `vault.exists(to)` vede lo STESSO
+        // file, non una collisione — il check sul disco va saltato. Un vero
+        // omonimo-per-case su filesystem case-sensitive è comunque intercettato
+        // da `models` (il vault è l'unica fonte dei DocId, quindi lo conosce).
+        let case_only = from.as_str().to_lowercase() == to.as_str().to_lowercase();
+        if self.models.contains_key(to) || (!case_only && self.vault.exists(to)) {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
         let ext = extension_of(to).unwrap_or_default();
@@ -418,6 +440,13 @@ impl Workspace {
     /// Drena la coda eventi verso gli handler. Mai rientrante: chiamato
     /// durante un dispatch (es. da un `write_document` fatto da un handler)
     /// ritorna subito e lascia drenare il ciclo esterno.
+    ///
+    /// Se il budget si esaurisce (handler che si rimbalzano eventi senza
+    /// convergere) il troncamento è **rumoroso**: gli eventi restanti vengono
+    /// scartati ma al loro posto viene consegnato — al bus e agli handler —
+    /// un [`Event::Overflow`] con il conteggio dei persi. Gli eventi emessi
+    /// *durante* la gestione dell'`Overflow` sono a loro volta scartati (è
+    /// l'unico modo di garantire la terminazione).
     fn dispatch_pending(&mut self) {
         // La guardia di rientranza DEVE venire prima del fast-path qui sotto:
         // durante un dispatch gli handler sono estratti (`handlers` è vuoto) e
@@ -434,29 +463,71 @@ impl Workspace {
         let mut budget = DISPATCH_BUDGET;
         while let Some(event) = self.pending.pop_front() {
             if budget == 0 {
-                // Handler che si rimbalzano eventi senza convergere: si tronca.
+                // L'evento estratto e i rimanenti non verranno consegnati.
+                let dropped = (self.pending.len() + 1) as u64;
+                self.pending.clear();
+                let overflow = Event::Overflow { dropped };
+                self.bus.emit(overflow.clone());
+                self.deliver_to_handlers(&overflow);
+                // Ciò che gli handler hanno emesso gestendo l'Overflow è
+                // scartato: la coda deve terminare qui.
                 self.pending.clear();
                 break;
             }
             budget -= 1;
-            // Gli handler escono dal workspace per la durata della chiamata:
-            // così `KernelHost` può prestare `&mut Workspace` senza aliasing.
-            let mut handlers = std::mem::take(&mut self.handlers);
-            for handler in handlers.iter_mut() {
-                if !handler.subscribed().contains(event.kind()) {
-                    continue;
-                }
-                let mut host = KernelHost { ws: self };
-                // L'errore di un handler non deve far fallire l'operazione
-                // che ha emesso l'evento: si ignora (M4: log/notifica).
-                let _ = handler.handle(&event, &mut host);
-            }
-            // Handler registrati *durante* il dispatch si accodano in fondo.
-            let registered_meanwhile = std::mem::take(&mut self.handlers);
-            self.handlers = handlers;
-            self.handlers.extend(registered_meanwhile);
+            self.deliver_to_handlers(&event);
         }
         self.dispatching = false;
+    }
+
+    /// Consegna un singolo evento a tutti gli handler abbonati. Gli handler
+    /// escono dal workspace per la durata della chiamata: così `KernelHost`
+    /// può prestare `&mut Workspace` senza aliasing.
+    fn deliver_to_handlers(&mut self, event: &Event) {
+        let mut handlers = std::mem::take(&mut self.handlers);
+        for handler in handlers.iter_mut() {
+            if !handler.subscribed().contains(event.kind()) {
+                continue;
+            }
+            let mut host = KernelHost { ws: self };
+            // L'errore di un handler non deve far fallire l'operazione
+            // che ha emesso l'evento: si ignora (M4: log/notifica).
+            let _ = handler.handle(event, &mut host);
+        }
+        // Handler registrati *durante* il dispatch si accodano in fondo.
+        let registered_meanwhile = std::mem::take(&mut self.handlers);
+        self.handlers = handlers;
+        self.handlers.extend(registered_meanwhile);
+    }
+
+    // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------
+
+    /// Preleva i job richiesti dai provider via [`HostApi::spawn_job`].
+    ///
+    /// Il kernel è sincrono e non possiede thread: chi li possiede (l'app, o
+    /// il registry dei plugin a M4/M5) drena questa coda, esegue ogni job
+    /// **fuori** dal lock del workspace (`Plugin::run_job`, a M5 su
+    /// un'istanza separata del componente) e riconsegna l'esito con
+    /// [`Workspace::complete_job`].
+    pub fn take_pending_jobs(&mut self) -> Vec<(JobId, JobSpec)> {
+        std::mem::take(&mut self.pending_jobs)
+    }
+
+    /// Riconsegna l'esito di un job: emette [`Event::JobDone`] sul giro
+    /// sincrono normale (bus + handler). Chi ha lanciato il job riconosce il
+    /// proprio `id`.
+    pub fn complete_job(
+        &mut self,
+        id: JobId,
+        job: impl Into<String>,
+        result: std::result::Result<serde_json::Value, PluginError>,
+    ) {
+        self.emit_event(Event::JobDone {
+            id,
+            job: job.into(),
+            result,
+        });
+        self.dispatch_pending();
     }
 
     // --- interni ---------------------------------------------------------
@@ -501,6 +572,13 @@ impl HostApi for KernelHost<'_> {
 
     fn emit(&mut self, event: Event) {
         self.ws.emit_event(event);
+    }
+
+    fn spawn_job(&mut self, spec: JobSpec) -> std::result::Result<JobId, PluginError> {
+        let id = JobId(self.ws.next_job_id);
+        self.ws.next_job_id += 1;
+        self.ws.pending_jobs.push((id, spec));
+        Ok(id)
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {

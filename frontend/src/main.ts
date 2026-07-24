@@ -14,9 +14,16 @@ const vaultPathEl = $("#vault-path");
 let currentDoc: string | null = null;
 let editor: Editor;
 let saveTimer: number | undefined;
+// Il buffer ha modifiche non ancora scritte su disco? Finché è sporco, il
+// buffer è la verità del documento aperto (vedi docs/architecture/data-model.md,
+// "Fonte di verità"): non va MAI sovrascritto da un reload.
+let dirty = false;
 
 async function init() {
-  editor = createEditor($("#editor"), () => scheduleSave());
+  editor = createEditor($("#editor"), () => {
+    dirty = true;
+    scheduleSave();
+  });
   $("#open-vault").addEventListener("click", pickVault);
   onKernelEvent(handleKernelEvent);
   const initial = await api.initialVault();
@@ -52,9 +59,13 @@ function renderFileList(docs: string[]) {
 }
 
 async function selectDoc(id: string) {
+  // Cambio documento: prima si mette in salvo il buffer corrente (flush),
+  // così nessuna modifica resta appesa al debounce.
+  await flushPendingSave();
   currentDoc = id;
   const source = await api.readDocument(id);
   editor.setDoc(source);
+  dirty = false;
   editor.focus();
   markActive();
   await refreshCurrent();
@@ -72,9 +83,21 @@ function scheduleSave() {
   saveTimer = window.setTimeout(saveCurrent, 400);
 }
 
+/// Salva subito se c'è un salvataggio in attesa (usato prima di cambiare
+/// documento o di operazioni che riscrivono file, come il rename).
+async function flushPendingSave() {
+  if (!dirty) return;
+  window.clearTimeout(saveTimer);
+  await saveCurrent();
+}
+
 async function saveCurrent() {
   if (!currentDoc) return;
-  await api.writeDocument(currentDoc, editor.getDoc());
+  const text = editor.getDoc();
+  await api.writeDocument(currentDoc, text);
+  // Pulito solo se nel frattempo non è arrivato altro input: `dirty` è stato
+  // rimesso a true dal listener se l'utente ha continuato a scrivere.
+  if (editor.getDoc() === text) dirty = false;
   await refreshCurrent();
 }
 
@@ -154,8 +177,16 @@ function handleKernelEvent(e: KernelEvent) {
   if (e.type === "index_updated") {
     api.listDocuments().then(renderFileList);
     if (currentDoc) updateBacklinks(currentDoc);
+  } else if (e.type === "overflow") {
+    // Eventi persi (coda troncata): ciò che deriviamo dagli eventi — lista
+    // file, anteprima, backlink — va riconciliato da zero, non aggiornato.
+    console.warn(`FubMD: ${e.dropped} eventi persi (overflow): riconcilio.`);
+    api.listDocuments().then(renderFileList);
+    refreshCurrent();
+    if (currentDoc) reloadIfClean(currentDoc);
   } else if (e.type === "document_changed" && e.id === currentDoc) {
     updatePreview(currentDoc);
+    reloadIfClean(currentDoc);
   } else if (e.type === "document_renamed") {
     // L'identità è il path: il documento aperto segue il rename.
     if (currentDoc === e.from) {
@@ -164,6 +195,23 @@ function handleKernelEvent(e: KernelEvent) {
       refreshCurrent();
     }
     api.listDocuments().then(renderFileList);
+  }
+}
+
+// Il documento aperto è cambiato su disco (watcher, riscrittura link da un
+// rename, handler): se il buffer è pulito lo si riallinea; se è sporco il
+// buffer vince (verità del documento aperto) e il suo salvataggio riallineerà
+// il disco — limite accettato a M2, conflitto esplicito/merge previsto a M3
+// (vedi docs/milestones/M3-editor-fidelity.md).
+async function reloadIfClean(id: string) {
+  if (dirty) {
+    console.warn(`FubMD: ${id} è cambiato su disco mentre il buffer è sporco: il buffer vince.`);
+    return;
+  }
+  const source = await api.readDocument(id);
+  // Evita il reset del cursore quando l'evento è l'eco del nostro salvataggio.
+  if (id === currentDoc && !dirty && editor.getDoc() !== source) {
+    editor.setDoc(source);
   }
 }
 

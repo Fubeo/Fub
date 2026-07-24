@@ -7,6 +7,15 @@ trasversali (link, tag, heading, frontmatter) sono estratti in tabelle piatte, e
 tutto ciò che è peculiare di un formato (callout, math, embed, tabelle) finisce
 nell'escape hatch `Custom`.
 
+**Che tipo di agnosticismo è (onestà).** Il modello non nomina la *sintassi* di
+nessun formato, ma il kernel possiede una *semantica* precisa dei link: la
+risoluzione wikilink in stile Obsidian (shortest unique path, alias nel
+frontmatter con chiavi `aliases`/`alias`, priorità fra omonimi). È il
+vocabolario comune: un futuro provider (org-mode, AsciiDoc) non porta la
+propria semantica di risoluzione — mappa i propri riferimenti su
+`LinkTarget::Wiki` e adotta quella del kernel. "Zero modifiche al kernel" vale
+per la sintassi; per la semantica vale "una sola, quella del kernel".
+
 Torna a [../PIANO.md](../PIANO.md) · vedi anche [traits.md](traits.md).
 
 ## `DocId` — identità del documento
@@ -32,6 +41,21 @@ per path** che risolvevano davvero al documento rinominato (i riferimenti per
 al rename; i riferimenti a un **omonimo** vincente non vengono dirottati). Se il
 nuovo nome è conteso da un altro documento, la riscrittura usa il path senza
 estensione, che è sempre univoco.
+
+**Case dei path (deciso).** Il `DocId` è **byte-exact** (conserva il case del
+filesystem); la **risoluzione** wikilink è **case-insensitive** (le chiavi degli
+indici del grafo sono normalizzate a minuscolo). Così la semantica osservabile è
+la stessa su filesystem case-sensitive (Linux) e case-insensitive
+(macOS/Windows). Conseguenze cablate:
+
+- il **rename case-only** (`nota.md` → `Nota.md`) è supportato: su FS
+  case-insensitive `vault.exists(to)` vedrebbe lo *stesso* file, quindi il
+  kernel salta il check sul disco quando i due path coincidono a meno del case
+  (una vera collisione è comunque intercettata dalla cache dei modelli, perché
+  il vault è l'unica fonte dei `DocId`);
+- due documenti che differiscono solo per il case possono esistere solo su FS
+  case-sensitive: lì la risoluzione resta deterministica per priorità (path più
+  corto, poi lessicografico), come per qualsiasi omonimo.
 
 ## `Span` — ancoraggio alla sorgente
 
@@ -88,7 +112,34 @@ commenti YAML. Ne discendono tre regole:
 3. Le modifiche programmatiche a un documento esistente (rename dei link,
    inserimenti, refactoring) si fanno come **patch chirurgiche sulla sorgente**,
    guidate dagli `Span` del modello. `Workspace::rename_document` è il primo
-   esempio cablato di questo pattern.
+   esempio cablato di questo pattern. **Guardia delle patch:** gli `Span`
+   valgono solo per la sorgente da cui il modello è stato parsato; prima di
+   applicare, si verifica che il testo dentro lo span sia quello atteso (già
+   fatto in `link_rewrite_plan`) — una patch su sorgente cambiata si scarta,
+   mai si applica alla cieca.
+
+## Le tre copie: disco, modello, buffer (deciso)
+
+"La verità è il disco" è completa solo per i documenti **chiusi**. Per il
+documento aperto le copie sono tre — sorgente sul disco, `DocumentModel`,
+**buffer dell'editor** — e il buffer con modifiche non salvate è **la verità**
+di quel documento. La riconciliazione è dell'**app layer** (il kernel resta
+ignaro dei buffer, come è ignaro della UI); le regole, implementate nel
+frontend (`frontend/src/main.ts`):
+
+- **flush prima di cedere il passo**: cambio di documento (e in futuro ogni
+  operazione che riscrive file, come il rename da palette) salva prima il
+  buffer sporco, così le patch chirurgiche non lavorano mai su una sorgente
+  superata;
+- **cambio esterno, buffer pulito** → il buffer si riallinea dal disco (senza
+  reset del cursore se il contenuto è identico: l'eco del proprio salvataggio
+  non è un cambio);
+- **cambio esterno, buffer sporco** → il buffer **vince** e il suo salvataggio
+  riallinea il disco; il conflitto è segnalato (warn), non silenzioso. È un
+  limite accettato a M2: niente merge. Il conflitto esplicito (dialogo/merge,
+  span-shift delle patch su buffer sporco) è lavoro di
+  [M3](../milestones/M3-editor-fidelity.md), dove la live-preview rende il
+  problema quotidiano.
 
 ## `Block` e `Inline` — l'albero
 

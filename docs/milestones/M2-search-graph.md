@@ -24,6 +24,10 @@ Un `IndexProvider` nativo in `fubmd-features` che avvolge **tantivy**.
 - **Aggiornamento incrementale:** i ganci del trait sono già in firma —
   `on_document_indexed(doc)` fa delete-by-term(`doc_id`) + add; `on_document_removed(id)`
   fa delete-by-term. Commit debounced (batch) su `IndexUpdated`.
+- **Riconciliazione su `Overflow`:** l'indice deriva il proprio stato dagli
+  eventi; su `Event::Overflow` (coda troncata, eventi persi — mai silenziosi,
+  vedi [traits.md](../architecture/traits.md)) si marca stantio e fa rebuild
+  completo, come dopo un bump di schema.
 - **Query:** `IndexQuery::FullText { query, limit }` → `IndexResult::Search(Vec<SearchHit>)`
   con `score` e `snippet` (snippet generator di tantivy). `IndexQuery::Backlinks`
   può continuare a passare dal grafo o essere servito dall'indice — vedi sotto.

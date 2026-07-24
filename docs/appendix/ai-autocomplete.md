@@ -15,8 +15,14 @@ ai trait già definiti in [../architecture/traits.md](../architecture/traits.md)
 
 - `CommandProvider` — comandi espliciti ("continua il paragrafo", "riassumi la
   selezione", "genera da prompt"), con `CommandOutcome.notify` per il feedback.
+- **Job** — la chiamata al modello (locale o cloud) è lavoro lungo: **mai**
+  dentro `invoke`/`handle`. Il comando raccoglie il contesto (sincrono, breve),
+  fa `HostApi::spawn_job` col prompt nel payload e ritorna; il completamento
+  arriva come `Event::JobDone` e solo lì si scrive nel vault — il pattern del
+  contratto, vedi [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md),
+  "Lavoro lungo: i job".
 - `EventHandler` — suggerimenti reattivi (es. su `DocumentChanged`), se/quando si
-  vorrà un autocomplete "ambientale".
+  vorrà un autocomplete "ambientale"; riceve anche i `JobDone`.
 - `HostApi` — lettura del contesto (`read_document`) e scrittura del risultato
   (`write_document`); `storage_get/set` per configurazione e cache.
 - `ViewProvider` (opzionale) — un pannello dichiarativo per cronologia/impostazioni.
@@ -44,7 +50,11 @@ per-plugin.
 
 ## Nodi aperti (da decidere quando si affronta)
 
-- Streaming dei token nell'editor (serve un canale evento/IPC incrementale?).
+- Streaming dei token nell'editor: `JobDone` consegna un esito unico; lo
+  streaming richiederebbe un canale di **progresso dei job** nel contratto.
+  Da decidere **entro il freeze di M4** se aggiungerlo (vedi
+  [M4](../milestones/M4-wit-hardening.md)) o accettare completamenti non
+  incrementali.
 - Gestione del contesto (finestra, note collegate, RAG sul vault via
   `IndexProvider`).
 - Costi/limiti e UX offline↔online.
