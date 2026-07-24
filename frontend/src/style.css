@@ -113,25 +113,169 @@ button:hover {
   color: #e06c75;
 }
 
-#file-list {
+#file-list,
+#pinned-list,
+.tree-children {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-#file-list li {
-  padding: 5px 8px;
+/* L'indentazione dell'albero: ogni livello rientra di poco. */
+.tree-children {
+  padding-left: 14px;
+}
+
+/* Una riga della sidebar: nota o cartella, nell'albero o tra le appuntate. */
+#files-panel .row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
   border-radius: 5px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-#file-list li:hover {
+#files-panel .row:hover {
   background: var(--bg-input);
 }
-#file-list li.active {
+#files-panel .row.active {
   background: var(--accent);
   color: white;
+}
+.row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-icon {
+  flex: none;
+  width: 1.3em;
+  text-align: center;
+}
+#files-panel .row.folder {
+  color: var(--muted);
+}
+#files-panel .row.folder.has-note {
+  color: var(--text);
+}
+.chevron {
+  flex: none;
+  width: 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.chevron:hover {
+  color: var(--accent-soft);
+}
+
+/* Bersagli del drag & drop: riga d'inserimento sopra/sotto, o cartella accesa. */
+#files-panel .row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent-soft);
+}
+#files-panel .row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent-soft);
+}
+.drop-into {
+  outline: 1px solid var(--accent-soft);
+  border-radius: 5px;
+}
+
+/* La striscia degli spazi (stile make.md): home, uno chip per spazio, "+". */
+#space-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin: 8px 2px 2px;
+}
+.space-chip {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 16px;
+  background: none;
+  border-radius: 8px;
+}
+.space-chip:hover {
+  background: var(--bg-input);
+}
+.space-chip.active {
+  background: var(--bg-input);
+  outline: 2px solid var(--accent);
+}
+.space-chip.add {
+  color: var(--muted);
+  font-size: 18px;
+}
+.space-chip.add:hover {
+  color: var(--accent-soft);
+}
+
+/* Il titolo del pannello quando è uno spazio: cliccarlo apre la folder note. */
+#space-title.clickable {
+  cursor: pointer;
+  text-transform: none;
+  font-size: 13px;
+  color: var(--text);
+}
+#space-title.clickable:hover {
+  color: var(--accent-soft);
+}
+
+/* Selettore dell'icona (emoji) di una nota o cartella. */
+#icon-picker {
+  position: fixed;
+  z-index: 60;
+  width: 232px;
+  padding: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#icon-picker .icon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+}
+#icon-picker .icon-grid button {
+  background: none;
+  padding: 4px;
+  font-size: 16px;
+  border-radius: 4px;
+}
+#icon-picker .icon-grid button:hover {
+  background: var(--bg-input);
+}
+#icon-picker input {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+#icon-picker input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+#icon-picker .icon-none {
+  background: none;
+  color: var(--muted);
+  padding: 2px;
+  font-size: 12px;
+}
+#icon-picker .icon-none:hover {
+  background: none;
+  color: var(--accent-soft);
 }
 
 #search-input {
@@ -371,7 +515,7 @@ button:hover {
 }
 
 /* Rinomina inline nella lista file */
-#file-list li input {
+#files-panel .row input {
   width: 100%;
   padding: 2px 4px;
   border: 1px solid var(--accent);

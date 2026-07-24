@@ -5,9 +5,21 @@
 // stringa JSON (`type json = string`), scelta deliberata per preservare l'escape
 // hatch. Vedi docs/architecture/traits.md per la tabella di mapping.
 //
-// Stato conformità: `crates/fubmd-abi/tests/wit_conformance.rs` verifica in modo
-// strutturale (presenza dei nomi + esaustività sui tipi Rust). La validazione con
-// tooling WIT (wit-parser / wit-bindgen) è cablata a M4.
+// ALBERI RICORSIVI — WIT non ammette tipi ricorsivi, e `Block`, `Inline`,
+// `UiNode` lo sono. Al confine viaggiano come ARENA: una lista piatta di nodi
+// più indici `u32` (`block-ref`, `inline-ref`, `ui-ref`) al posto dei
+// riferimenti diretti. I tipi Rust nativi restano alberi veri; la conversione
+// albero↔arena vive nel proxy WASM (M5). Decisione e motivazioni in
+// docs/architecture/traits.md, "Alberi ricorsivi al confine".
+//
+// KEYWORD WIT — `list`, `result` e `from` sono parole chiave del linguaggio:
+// dove sono nomi di variante o di campo compaiono con l'escape `%`. È solo
+// sintassi: l'identificatore dichiarato resta `list`/`result`/`from`, e i tipi
+// Rust non cambiano.
+//
+// Stato conformità: `crates/fubmd-abi/tests/wit_conformance.rs` PARSA questo
+// file con `wit-parser` e confronta i nomi dichiarati con i tipi di `fubmd-abi`
+// nelle due direzioni. Un WIT invalido = test rosso.
 
 package fubmd:abi@0.1.0;
 
@@ -25,6 +37,12 @@ interface model {
     type doc-id = string;
 
     /// Intervallo [start, end) in byte sulla sorgente.
+    ///
+    /// Lato Rust i campi sono `usize` (indicizzano `&str` in memoria); qui sono
+    /// `u64` perché il confine deve avere una larghezza fissa. Su wasm32
+    /// `usize` è a 32 bit: usize→u64 è sempre lecito, u64→usize passa da una
+    /// conversione controllata nel proxy (un documento più grande di 4 GiB non
+    /// entrerebbe comunque nella memoria di un modulo wasm32).
     record span {
         start: u64,
         end: u64,
@@ -67,11 +85,19 @@ interface model {
         context: option<string>,
     }
 
-    // --- albero a blocchi / inline -------------------------------------------
+    // --- albero a blocchi / inline, come arena piatta -------------------------
+    //
+    // `Vec<Inline>` diventa `list<inline-ref>`, `Vec<Block>` diventa
+    // `list<block-ref>`: i nodi veri stanno tutti in `document-tree`.
+
+    /// Indice in `document-tree.inlines`. Fuori range = modello malformato.
+    type inline-ref = u32;
+    /// Indice in `document-tree.blocks`. Fuori range = modello malformato.
+    type block-ref = u32;
 
     record inline-link {
         target: link-target,
-        label: option<list<inline>>,
+        label: option<list<inline-ref>>,
         span: span,
     }
     record inline-tag-ref {
@@ -85,8 +111,8 @@ interface model {
     }
     variant inline {
         text(string),
-        emph(list<inline>),
-        strong(list<inline>),
+        emph(list<inline-ref>),
+        strong(list<inline-ref>),
         code(string),
         link(inline-link),
         tag-ref(inline-tag-ref),
@@ -95,16 +121,16 @@ interface model {
 
     record block-heading {
         level: u8,
-        inlines: list<inline>,
+        inlines: list<inline-ref>,
         span: span,
     }
     record block-paragraph {
-        inlines: list<inline>,
+        inlines: list<inline-ref>,
         span: span,
     }
     record block-list {
         ordered: bool,
-        items: list<list<block>>,
+        items: list<list<block-ref>>,
         span: span,
     }
     record block-code-block {
@@ -113,31 +139,39 @@ interface model {
         span: span,
     }
     record block-quote {
-        blocks: list<block>,
+        blocks: list<block-ref>,
         span: span,
     }
     /// Escape hatch: callout, math, tabelle, embed.
     record block-custom {
         custom-kind: string,
         attrs: json,
-        blocks: list<block>,
+        blocks: list<block-ref>,
         span: span,
     }
     variant block {
         heading(block-heading),
         paragraph(block-paragraph),
-        list(block-list),
+        %list(block-list),
         code-block(block-code-block),
         quote(block-quote),
         thematic-break(span),
         custom(block-custom),
     }
 
+    /// Il corpo del documento: arena dei nodi + radici in ordine di lettura.
+    /// Lato Rust è `Vec<Block>` (albero); qui è appiattito.
+    record document-tree {
+        blocks: list<block>,
+        inlines: list<inline>,
+        roots: list<block-ref>,
+    }
+
     /// Il documento parsato nel modello comune.
     record document-model {
         id: doc-id,
         frontmatter: frontmatter,
-        body: list<block>,
+        body: document-tree,
         outline: list<heading>,
         links: list<link>,
         tags: list<tag>,
@@ -195,10 +229,13 @@ interface ui {
     enum axis { row, column }
     enum intent { neutral, primary, danger }
 
+    /// Indice in `ui-tree.nodes`. Fuori range = albero malformato.
+    type ui-ref = u32;
+
     record ui-stack {
         dir: axis,
         gap: u8,
-        children: list<ui-node>,
+        children: list<ui-ref>,
     }
     record ui-heading {
         level: u8,
@@ -222,7 +259,7 @@ interface ui {
         stack(ui-stack),
         text(string),
         heading(ui-heading),
-        list(list<ui-node>),
+        %list(list<ui-ref>),
         list-item(ui-list-item),
         button(ui-button),
         /// SOLO codice fidato: l'host rifiuta `html`/`web-view` dai plugin
@@ -232,12 +269,19 @@ interface ui {
         web-view(ui-web-view),
     }
 
+    /// Arena dell'albero UI: `root` indicizza `nodes`. Lato Rust è un
+    /// `UiNode` (albero); qui è appiattito, stessa scelta di `document-tree`.
+    record ui-tree {
+        nodes: list<ui-node>,
+        root: ui-ref,
+    }
+
     record ui-action {
         action: action-id,
         payload: json,
     }
     variant view-update {
-        replace(ui-node),
+        replace(ui-tree),
         none,
         navigate(string),
     }
@@ -272,8 +316,8 @@ interface events {
     record event-document-changed { id: doc-id }
     record event-document-removed { id: doc-id }
     /// L'identità È il path: chi tiene stato per-documento migra la chiave,
-    /// non tratta il rename come remove+add.
-    record event-document-renamed { from: doc-id, to: doc-id }
+    /// non tratta il rename come remove+add. (`from` è keyword WIT: `%from`.)
+    record event-document-renamed { %from: doc-id, to: doc-id }
     record event-vault-opened { root: string }
     /// Varco di estensione: eventi dei plugin, topic namespaced
     /// (`"<plugin-id>/<nome>"`).
@@ -283,7 +327,7 @@ interface events {
     record event-job-done {
         id: job-id,
         job: string,
-        result: result<json, plugin-error>,
+        %result: result<json, plugin-error>,
     }
     /// Coda eventi troncata (budget anti-ping-pong): `dropped` eventi persi.
     /// Chi deriva stato dagli eventi deve riconciliare da zero. Mai silenzioso.
@@ -382,7 +426,7 @@ interface index {
 
 /// View dichiarative (`ViewProvider`).
 interface view {
-    use ui.{ui-node, ui-action, view-update};
+    use ui.{ui-tree, ui-action, view-update};
     use errors.{plugin-error};
 
     enum view-placement { left-sidebar, right-sidebar, bottom }
@@ -393,7 +437,7 @@ interface view {
     }
 
     views: func() -> list<view-spec>;
-    render-view: func(view: string) -> result<ui-node, plugin-error>;
+    render-view: func(view: string) -> result<ui-tree, plugin-error>;
     on-action: func(view: string, action: ui-action) -> result<view-update, plugin-error>;
 }
 
@@ -419,12 +463,41 @@ interface host-api {
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
     write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
+    /// I documenti del vault, in ordine. Senza, `read-document` serve solo per
+    /// gli id che arrivano dagli eventi.
+    list-documents: func() -> result<list<doc-id>, plugin-error>;
     emit: func(event: event);
     /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
     /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
     spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
+    /// Stato leggero e volatile del plugin (preferenze, cursori): vive in
+    /// memoria, non sopravvive alla chiusura. Per i dati che devono durare
+    /// c'è lo storage persistente qui sotto.
     storage-get: func(key: string) -> option<json>;
     storage-set: func(key: string, value: json);
+
+    // --- storage persistente per-plugin --------------------------------------
+    //
+    // Namespace `.fubmd-data/plugins/<plugin-id>/`, creato e imposto dall'host:
+    // il plugin nomina blob con path relativi, non tocca mai il filesystem né
+    // conosce la radice del vault. Percorsi assoluti, `..` e separatori di
+    // sistema → `permission-denied`. È la capacità che rende scrivibile uno
+    // store di snapshot (il versioning) da dentro il contratto.
+
+    /// Legge un blob persistente. Assente → `none`.
+    data-read: func(path: string) -> result<option<list<u8>>, plugin-error>;
+    /// Scrive (creando le directory intermedie) un blob persistente.
+    data-write: func(path: string, bytes: list<u8>) -> result<_, plugin-error>;
+    /// Cancella un blob. Assente → successo (idempotente).
+    data-remove: func(path: string) -> result<_, plugin-error>;
+    /// Elenca i blob sotto un prefisso, path relativi allo spazio del plugin,
+    /// ordinati. Prefisso inesistente → lista vuota.
+    data-list: func(prefix: string) -> result<list<string>, plugin-error>;
+
+    /// Orologio dell'host: millisecondi dall'epoca Unix. Un plugin non ha
+    /// accesso al tempo di sistema (WASI lo può negare, e in test serve
+    /// deterministico): il tempo è una capacità come le altre.
+    now-unix-millis: func() -> u64;
 }
 
 /// Reazione agli eventi (`EventHandler`).

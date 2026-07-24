@@ -12,13 +12,15 @@ use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::ui::UiNode;
-use fubmd_features::{build_backlinks_view, SearchIndex, VersionRef, VersionStore, VersioningHandler};
+use fubmd_features::{
+    build_backlinks_view, SearchIndex, VersionRef, VersionStore, VersioningHandler, VERSIONING_ID,
+};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, TrashEntry, Workspace};
 
 use notify::RecursiveMode;
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 /// Sessione di un vault aperto: il workspace condiviso + il watcher tenuto vivo.
@@ -41,6 +43,11 @@ struct AppState {
 struct VaultInfo {
     root: String,
     documents: Vec<String>,
+    /// Le estensioni che i provider registrati gestiscono (minuscole, senza
+    /// punto). Il frontend le usa per ricavare il "nome pagina" di un `DocId`
+    /// senza cablare `.md`: quale sia l'estensione di un documento lo sanno i
+    /// `FormatDescriptor`, non la UI.
+    extensions: Vec<String>,
     /// Il versioning è acceso? Spento significa **assente** (D7): il frontend
     /// non disegna la cronologia, e nel vault non compare nulla.
     versioning: bool,
@@ -111,39 +118,27 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     // Il versioning è una feature ufficiale scritta come la scriverebbe un
     // plugin: un `EventHandler` e nient'altro. Spento (D7) non si registra, e
     // nel vault non compare nemmeno la cartella.
+    //
+    // Lo store si apre con le stesse capacità che avrà l'handler — un
+    // `HostApi` intestato a `VERSIONING_ID` — e non con `std::fs`: l'app non ha
+    // un canale privilegiato che un plugin non avrebbe. La prima fotografia del
+    // vault non è più qui: è policy della feature, e scatta sull'evento
+    // `VaultOpened` che `reindex` emette qui sotto.
     let versions = versioning_enabled()
-        .then(|| VersionStore::open(&root))
+        .then(|| ws.with_host(VERSIONING_ID, |host| VersionStore::open(host)))
         .transpose()
         .unwrap_or_else(|e| {
             eprintln!("versioning non disponibile: {e}");
             None
         });
     if let Some(store) = &versions {
-        ws.register_event_handler(Box::new(VersioningHandler::new(store.clone())));
+        ws.register_event_handler(
+            VERSIONING_ID,
+            Box::new(VersioningHandler::new(store.clone())),
+        );
     }
 
     ws.reindex().map_err(|e| e.to_string())?;
-
-    // La prima fotografia del vault. Gli snapshot nascono dagli eventi e
-    // l'apertura non ne emette per documento: senza questo passaggio, la prima
-    // modifica a una nota mai versionata cancellerebbe lo stato in cui l'utente
-    // l'ha trovata — l'handler gira dopo la scrittura e vede solo il testo
-    // nuovo. Chi ha già una storia non paga nulla, nemmeno una lettura.
-    if let Some(store) = &versions {
-        for id in ws.documents() {
-            if store.has_versions(&id) {
-                continue;
-            }
-            match ws.read_source(&id) {
-                Ok(source) => {
-                    if let Err(e) = store.snapshot(&id, &source) {
-                        eprintln!("versioning: prima versione di {id} non salvata: {e}");
-                    }
-                }
-                Err(e) => eprintln!("versioning: {id} non si legge: {e}"),
-            }
-        }
-    }
 
     // Ponte eventi kernel → frontend (thread dedicato che vive quanto il bus).
     let rx = ws.bus().subscribe();
@@ -162,6 +157,7 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
         VaultInfo {
             root: ws.root().to_string(),
             documents: ws.documents().into_iter().map(|d| d.0).collect(),
+            extensions: ws.extensions(),
             versioning: versions.is_some(),
         }
     };
@@ -281,6 +277,20 @@ fn list_trash(state: State<AppState>) -> Result<Vec<TrashEntry>, String> {
     ws.list_trash().map_err(|e| e.to_string())
 }
 
+/// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, … a partire da un
+/// path occupato (D3).
+///
+/// Esiste per non avere **due** implementazioni della stessa convenzione: la
+/// proposta che il frontend mostra quando un ripristino trova il path occupato
+/// esce dallo stesso codice che nomina le note nuove. Non prenota nulla — il
+/// kernel resta il backstop se il nome viene preso nel frattempo.
+#[tauri::command]
+fn propose_free_name(state: State<AppState>, id: String) -> Result<String, String> {
+    let ws = current(&state)?;
+    let ws = ws.lock().unwrap();
+    Ok(ws.free_name(&DocId::new(id)).0)
+}
+
 /// Ripristina una voce del cestino, opzionalmente sotto un altro nome (è il
 /// caso in cui il path originale è di nuovo occupato e l'app ha chiesto).
 #[tauri::command]
@@ -359,7 +369,11 @@ fn backlinks_view(state: State<AppState>, id: String) -> Result<UiNode, String> 
 /// interno: il frontend evidenzia con i propri elementi, senza mai interpretare
 /// come markup ciò che arriva da un provider (vedi `SearchHit`).
 #[tauri::command]
-fn search(state: State<AppState>, query: String, limit: Option<u32>) -> Result<Vec<SearchHit>, String> {
+fn search(
+    state: State<AppState>,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<SearchHit>, String> {
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
     let q = IndexQuery::FullText {
@@ -383,11 +397,20 @@ fn list_versions(state: State<AppState>, id: String) -> Result<Vec<VersionRef>, 
     Ok(versions_of(&state)?.list(&DocId::new(id)))
 }
 
+/// Rileggere una versione passa dall'`HostApi` come tutto il resto: l'app
+/// presta al versioning le sue stesse capacità (`Workspace::with_host`), non
+/// una scorciatoia sul filesystem.
+fn read_version_source(state: &AppState, doc: &DocId, ts: u64) -> Result<String, String> {
+    let store = versions_of(state)?;
+    let ws = current(state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.with_host(VERSIONING_ID, |host| store.read(doc, ts, host))
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn read_version(state: State<AppState>, id: String, ts: u64) -> Result<String, String> {
-    versions_of(&state)?
-        .read(&DocId::new(id), ts)
-        .map_err(|e| e.to_string())
+    read_version_source(&state, &DocId::new(id), ts)
 }
 
 /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
@@ -396,12 +419,73 @@ fn read_version(state: State<AppState>, id: String, ts: u64) -> Result<String, S
 #[tauri::command]
 fn restore_version(state: State<AppState>, id: String, ts: u64) -> Result<(), String> {
     let doc = DocId::new(id);
-    let source = versions_of(&state)?
-        .read(&doc, ts)
-        .map_err(|e| e.to_string())?;
+    let source = read_version_source(&state, &doc, ts)?;
     let ws = current(&state)?;
     let mut ws = ws.lock().unwrap();
     ws.write_document(&doc, &source).map_err(|e| e.to_string())
+}
+
+// --- organizzazione del vault ----------------------------------------------
+//
+// Icone, note appuntate, ordinamenti scelti a mano e spazio attivo vivono nel
+// sidecar `.fubmd/workspace.json`, dentro il vault: le note restano markdown
+// puro e l'organizzazione viaggia col vault (sync, git). A differenza di
+// `.fubmd-data` questi dati sono autorevoli, non derivati: persi, non si
+// ricostruiscono. Il kernel non ne sa nulla — `.fubmd` è un dot-dir, quindi
+// scansione, watcher e indice lo ignorano già.
+
+/// Metadati di organizzazione del vault (rispecchiato da `WorkspaceMeta` in
+/// `frontend/src/api.ts`). Le chiavi sono path relativi al vault: `DocId` per
+/// le note, path di cartella senza slash finale per le cartelle (`""` è la
+/// radice).
+#[derive(Default, Serialize, Deserialize)]
+struct WorkspaceMeta {
+    /// path → emoji mostrata accanto al nome.
+    #[serde(default)]
+    icons: std::collections::BTreeMap<String, String>,
+    /// Note appuntate in cima alla sidebar, nell'ordine scelto.
+    #[serde(default)]
+    pinned: Vec<String>,
+    /// cartella → nomi dei figli nell'ordine scelto a mano; chi non compare
+    /// segue in ordine alfabetico.
+    #[serde(default)]
+    order: std::collections::BTreeMap<String, Vec<String>>,
+    /// Cartelle registrate come "spazi": la striscia di icone in cima alla
+    /// sidebar, nell'ordine in cui appaiono. QUALE spazio è selezionato è
+    /// stato di vista, per-macchina: sta al frontend, non qui.
+    #[serde(default)]
+    spaces: Vec<String>,
+}
+
+fn workspace_meta_path(state: &AppState) -> Result<Utf8PathBuf, String> {
+    let ws = current(state)?;
+    let ws = ws.lock().unwrap();
+    Ok(ws.root().join(".fubmd").join("workspace.json"))
+}
+
+/// File assente = vault mai personalizzato: si risponde col default, non con
+/// un errore. Un file presente ma malformato invece È un errore: sovrascriverlo
+/// in silenzio con il default butterebbe via l'organizzazione dell'utente.
+#[tauri::command]
+fn read_workspace_meta(state: State<AppState>) -> Result<WorkspaceMeta, String> {
+    let path = workspace_meta_path(&state)?;
+    match std::fs::read_to_string(&path) {
+        Ok(json) => serde_json::from_str(&json)
+            .map_err(|e| format!("{path} non è un workspace.json valido: {e}")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(WorkspaceMeta::default()),
+        Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
+    }
+}
+
+#[tauri::command]
+fn write_workspace_meta(state: State<AppState>, meta: WorkspaceMeta) -> Result<(), String> {
+    let path = workspace_meta_path(&state)?;
+    let dir = path
+        .parent()
+        .expect("il sidecar sta sempre in una cartella");
+    std::fs::create_dir_all(dir).map_err(|e| format!("non riesco a creare {dir}: {e}"))?;
+    let json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("non riesco a scrivere {path}: {e}"))
 }
 
 #[tauri::command]
@@ -425,6 +509,7 @@ pub fn run() {
             create_note,
             delete_document,
             list_trash,
+            propose_free_name,
             restore_from_trash,
             empty_trash,
             render_preview,
@@ -436,6 +521,8 @@ pub fn run() {
             list_versions,
             read_version,
             restore_version,
+            read_workspace_meta,
+            write_workspace_meta,
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio di FubMD");

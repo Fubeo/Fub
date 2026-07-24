@@ -17,4 +17,4 @@ pub mod versioning;
 
 pub use backlinks::build_backlinks_view;
 pub use search::SearchIndex;
-pub use versioning::{VersionRef, VersionStore, VersioningHandler};
+pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};

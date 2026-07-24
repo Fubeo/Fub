@@ -16,5 +16,9 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 # Solo per i test (es. wit_conformance): gli integration test non vedono le
-# dipendenze normali del crate. Nessun impatto sull'invariante.
+# dipendenze normali del crate. Nessun impatto sull'invariante — che riguarda
+# le dipendenze NORMALI ed è verificata da tests/dependency_invariant.rs.
 serde_json = { workspace = true }
+# Il test di conformità PARSA wit/fubmd/abi.wit invece di cercarci dentro delle
+# sottostringhe: un contratto invalido deve essere un test rosso.
+wit-parser = { version = "0.254", default-features = false, features = ["std"] }

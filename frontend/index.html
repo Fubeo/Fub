@@ -26,8 +26,9 @@
             <ul id="search-results"></ul>
           </div>
           <div id="files-panel">
-            <div class="panel-title">
-              <span>Note</span>
+            <div id="space-strip"></div>
+            <div class="panel-title" id="files-title">
+              <span id="space-title">Note</span>
               <button id="new-note" class="link-button" title="Crea una nota nuova">
                 + Nuova
               </button>
@@ -35,6 +36,8 @@
                 Cestino
               </button>
             </div>
+            <div class="panel-title" id="pinned-title" hidden><span>Appuntate</span></div>
+            <ul id="pinned-list" hidden></ul>
             <ul id="file-list"></ul>
           </div>
           <div id="trash-panel" hidden>

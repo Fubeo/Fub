@@ -126,8 +126,14 @@ fn a_new_note_takes_the_first_free_untitled_name() {
     let (_scratch, mut ws) = open_scratch();
 
     assert_eq!(ws.create_note(None).unwrap(), DocId::new("Senza titolo.md"));
-    assert_eq!(ws.create_note(None).unwrap(), DocId::new("Senza titolo 1.md"));
-    assert_eq!(ws.create_note(None).unwrap(), DocId::new("Senza titolo 2.md"));
+    assert_eq!(
+        ws.create_note(None).unwrap(),
+        DocId::new("Senza titolo 1.md")
+    );
+    assert_eq!(
+        ws.create_note(None).unwrap(),
+        DocId::new("Senza titolo 2.md")
+    );
 
     // Nasce vuota, e nasce già dentro il vault: nessun secondo passaggio.
     assert_eq!(ws.read_source(&DocId::new("Senza titolo.md")).unwrap(), "");
@@ -142,7 +148,11 @@ fn creating_the_note_a_dangling_link_points_to_makes_the_backlink_appear() {
 
     let creata = ws.create_note(Some("Inesistente")).unwrap();
 
-    assert_eq!(creata, DocId::new("Inesistente.md"), "l'estensione la mette il kernel");
+    assert_eq!(
+        creata,
+        DocId::new("Inesistente.md"),
+        "l'estensione la mette il kernel"
+    );
     assert_eq!(ws.resolve_link("Inesistente"), Some(creata.clone()));
     // Il backlink compare da solo: il link in `index.md` non è stato toccato,
     // è il grafo a risolverlo di nuovo ora che la destinazione esiste.
@@ -151,7 +161,10 @@ fn creating_the_note_a_dangling_link_points_to_makes_the_backlink_appear() {
         .iter()
         .map(|r| r.source.to_string())
         .collect();
-    assert!(sorgenti.contains(&"index.md".to_string()), "backlink: {sorgenti:?}");
+    assert!(
+        sorgenti.contains(&"index.md".to_string()),
+        "backlink: {sorgenti:?}"
+    );
 }
 
 #[test]
@@ -168,7 +181,10 @@ fn creating_a_note_over_an_existing_one_is_refused() {
     // Nessun nome aggiustato in silenzio: se il path esistesse, il link da cui
     // arriva la richiesta non sarebbe stato non risolto.
     let err = ws.create_note(Some("Nota B")).unwrap_err();
-    assert!(matches!(err, KernelError::AlreadyExists(_)), "trovato {err}");
+    assert!(
+        matches!(err, KernelError::AlreadyExists(_)),
+        "trovato {err}"
+    );
     let err = ws.create_note(Some("   ")).unwrap_err();
     assert!(matches!(err, KernelError::BadName(_)), "trovato {err}");
 }

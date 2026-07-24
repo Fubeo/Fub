@@ -143,7 +143,7 @@ frontend (`frontend/src/main.ts`):
 
 Il flush ha smesso di essere "in futuro": ogni operazione che riscrive file lo
 chiama davvero — il rename dalla lista file e il ripristino di una versione
-(vedi [CRUD_E_VAULT.md](../CRUD_E_VAULT.md)). La cancellazione è l'unica
+(vedi [PIANO.md](../PIANO.md), "Decisioni"). La cancellazione è l'unica
 eccezione, e in una sola direzione: il salvataggio in attesa sul documento
 cestinato viene **disinnescato** invece che eseguito, o farebbe risorgere la
 nota un istante dopo. Il buffer sporco di un documento cancellato muore col

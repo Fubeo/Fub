@@ -517,7 +517,11 @@ mod tests {
 
         let hits = search(&idx, "rust");
         assert_eq!(hits.len(), 2);
-        assert_eq!(hits[0].doc, DocId::new("nota/Rust.md"), "il titolo pesa di più");
+        assert_eq!(
+            hits[0].doc,
+            DocId::new("nota/Rust.md"),
+            "il titolo pesa di più"
+        );
     }
 
     #[test]
