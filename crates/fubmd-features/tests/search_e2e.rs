@@ -244,3 +244,67 @@ fn opstamp(vault_root: &Utf8PathBuf) -> u64 {
     let v: serde_json::Value = serde_json::from_str(&raw).expect("json");
     v["opstamp"].as_u64().expect("opstamp")
 }
+
+/// Micro-bench del criterio di accettazione M2: query < 50 ms su un vault di
+/// almeno 1000 note, indice caldo. Esclusa dal giro normale perché costruire il
+/// vault costa secondi; si esegue a mano, in release:
+///
+/// `cargo test -p fubmd-features --release --test search_e2e -- --ignored --nocapture`
+#[test]
+#[ignore = "micro-bench: si esegue a mano, in release"]
+fn query_latency_on_a_large_vault() {
+    use std::time::Instant;
+
+    const DOCS: usize = 2_000;
+    // Vocabolario piccolo e ripetuto: è il caso peggiore per la ricerca,
+    // perché ogni termine compare in tanti documenti.
+    const WORDS: [&str; 12] = [
+        "kernel", "vault", "grafo", "indice", "nota", "collegamento", "ricerca", "documento",
+        "provider", "formato", "plugin", "contratto",
+    ];
+
+    let v = Vault::new();
+    for i in 0..DOCS {
+        let body: String = (0..120)
+            .map(|j| WORDS[(i * 7 + j * 3) % WORDS.len()])
+            .collect::<Vec<_>>()
+            .join(" ");
+        v.put(&format!("dir{}/nota-{i}.md", i % 40), &format!("# Nota {i}\n\n{body}\n"));
+    }
+
+    let build = Instant::now();
+    let ws = v.open();
+    let build = build.elapsed();
+    assert_eq!(ws.documents().len(), DOCS);
+
+    // Prima query a freddo esclusa dalla misura: scalda i mmap dei segmenti.
+    let _ = search(&ws, "kernel");
+
+    let queries = ["kernel", "grafo indice", "provider formato plugin", "nota"];
+    let mut worst = std::time::Duration::ZERO;
+    for q in queries {
+        let start = Instant::now();
+        let hits = search(&ws, q);
+        let dt = start.elapsed();
+        worst = worst.max(dt);
+        println!("  «{q}» → {} risultati in {dt:?}", hits.len());
+    }
+    println!("indicizzazione di {DOCS} note: {build:?}; query peggiore: {worst:?}");
+
+    assert!(
+        worst < std::time::Duration::from_millis(50),
+        "criterio M2: query < 50 ms a indice caldo, misurato {worst:?}"
+    );
+
+    // La riapertura non deve reindicizzare: è l'altro criterio, sullo stesso
+    // vault grande dove conta davvero. Il primo workspace va chiuso prima:
+    // tiene il lock del writer, come farebbe l'app finché è viva.
+    drop(ws);
+    let opstamp_before = opstamp(&v.root);
+    let reopen = Instant::now();
+    let ws2 = v.open();
+    let reopen = reopen.elapsed();
+    assert_eq!(opstamp(&v.root), opstamp_before, "riapertura senza scritture");
+    assert_eq!(ws2.documents().len(), DOCS);
+    println!("riapertura di {DOCS} note (indice caldo su disco): {reopen:?}");
+}
