@@ -28,7 +28,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Conformità abi ↔ wit/fubmd/abi.wit
         run: cargo test -p fubmd-abi --test wit_conformance
-      - name: fubmd-abi e fubmd-kernel restano agnostici
+      - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fubmd-abi --test dependency_invariant
 
   fmt:

@@ -19,12 +19,30 @@
 //!
 //! # Perché gli eventi qui vanno bene (e all'indice no)
 //!
-//! Un [`Event::Overflow`] può far perdere uno snapshot intermedio. Per un
-//! *campionatore* è accettabile: la versione successiva arriverà al prossimo
+//! Un [`Event::Overflow`] può far perdere uno *snapshot intermedio*. Per un
+//! campionatore è accettabile: la versione successiva arriverà al prossimo
 //! salvataggio, e nel frattempo la verità — il file sul disco — non è cambiata.
 //! Un indice no: un indice che perde un aggiornamento non tace, risponde
 //! sbagliato. È la ragione per cui gli indici il kernel li alimenta da sé e il
 //! versioning invece passa di qui.
+//!
+//! Ma «perdere uno snapshot» vale solo per [`Event::DocumentChanged`]. Perdere un
+//! evento **strutturale** costa altro, e la distinzione è sostanziale:
+//!
+//! - un [`Event::DocumentRenamed`] perso spezzerebbe la storia in due chiavi
+//!   *per sempre*: [`VersionStore::rename`] non verrebbe mai chiamato, la vecchia
+//!   storia resterebbe orfana su un path che non esiste più e sul nuovo path
+//!   nascerebbe una seconda storia senza passato;
+//! - un [`Event::DocumentRemoved`] perso lascerebbe la vista "vault al tempo T"
+//!   **a mentire**: nessun tombstone, quindi una nota cancellata risulterebbe
+//!   ancora viva.
+//!
+//! Per questo l'handler è abbonato anche a [`EventKind::Overflow`] e riconcilia:
+//! `list_documents` dice chi c'è davvero, e ciò che lo store crede vivo e il
+//! vault non ha più prende un tombstone. La frattura da rename perso degrada a
+//! "nuova storia + tombstone della vecchia" — la cronologia si spezza, ma niente
+//! mente sul presente, e il contenuto vecchio resta leggibile. Vedi
+//! `docs/PIANO.md`, riga "Versioning".
 //!
 //! # Lo store, e chi comanda fra store e indice
 //!
@@ -218,15 +236,32 @@ impl VersionStore {
     }
 
     /// Segna che il documento, a questo istante, non c'è più.
+    ///
+    /// **Non sposta un tombstone già posato**: l'istante della morte è un fatto,
+    /// e la riconciliazione dopo un `Overflow` ripassa sulle stesse chiavi. Una
+    /// nota che risorge perde il tombstone in [`VersionStore::snapshot`], che è
+    /// il solo posto dove può tornare viva.
     pub fn tombstone(&self, id: &DocId, host: &mut dyn HostApi) -> Result<(), PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         let now = host.now_unix_millis();
         let Some(doc) = inner.docs.get_mut(id.as_str()) else {
             return Ok(());
         };
+        if doc.deleted_at.is_some() {
+            return Ok(());
+        }
         doc.deleted_at = Some(now);
         inner.write_meta(id, host)?;
         inner.write_index(host)
+    }
+
+    /// Questo documento risulta cancellato?
+    pub fn is_deleted(&self, id: &DocId) -> bool {
+        let inner = self.inner.lock().expect("mutex");
+        inner
+            .docs
+            .get(id.as_str())
+            .is_some_and(|d| d.deleted_at.is_some())
     }
 
     /// Le versioni di un documento, dalla più recente alla più vecchia.
@@ -539,6 +574,26 @@ impl VersioningHandler {
         VersioningHandler { store }
     }
 
+    /// Una passata sull'intero vault, e chi fotografare.
+    fn sweep(&self, host: &mut dyn HostApi, chi: Passata) -> Result<(), PluginError> {
+        for id in host.list_documents()? {
+            if matches!(chi, Passata::SoloNuovi) && self.store.has_versions(&id) {
+                continue;
+            }
+            // Una nota illeggibile o non salvabile non deve impedire
+            // l'apertura del vault: il vault è la verità, le versioni no.
+            match host.read_document(&id) {
+                Ok(source) => {
+                    if let Err(e) = self.store.snapshot(&id, &source, host) {
+                        eprintln!("versioning: versione di {id} non salvata: {e}");
+                    }
+                }
+                Err(e) => eprintln!("versioning: {id} non si legge: {e}"),
+            }
+        }
+        Ok(())
+    }
+
     /// La prima fotografia del vault, all'apertura.
     ///
     /// Gli snapshot nascono dagli eventi e l'apertura non ne emette per
@@ -550,23 +605,59 @@ impl VersioningHandler {
     /// `fubmd-app::open_vault`, cioè in un posto dove un plugin non potrebbe
     /// metterla. Qui è esattamente ciò che farebbe `Plugin::activate`.
     fn first_snapshot_of_the_vault(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        for id in host.list_documents()? {
-            if self.store.has_versions(&id) {
+        self.sweep(host, Passata::SoloNuovi)
+    }
+
+    /// Riconciliazione dopo un [`Event::Overflow`]: la coda è stata troncata e
+    /// non si sa *cosa* si è perso, quindi si riparte dalla verità.
+    ///
+    /// Due passaggi, in quest'ordine:
+    ///
+    /// 1. **Tombstone** per ciò che lo store crede vivo e `list_documents` non
+    ///    nomina più. Chiude il `DocumentRemoved` perso, che è il caso in cui il
+    ///    versioning *mentirebbe* invece di limitarsi a saperne meno.
+    /// 2. **Snapshot di tutto** ciò che esiste. Il dedup per contenuto (D6) rende
+    ///    gratis gli immutati; per i cambiati nasce la versione che l'evento
+    ///    perso non ha prodotto, e per un rename perso nasce la nuova storia sul
+    ///    nuovo path (con la vecchia che resta leggibile sotto il suo tombstone).
+    ///
+    /// Non si prova a *indovinare* i rename: un contenuto identico su due path
+    /// può essere un rename o una copia, e una storia unita per sbaglio sarebbe
+    /// peggio di una spezzata per onestà.
+    fn reconcile_after_overflow(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let vivi: std::collections::BTreeSet<String> =
+            host.list_documents()?.into_iter().map(|id| id.0).collect();
+        let mut sepolti = 0usize;
+        for id in self.store.documents() {
+            if vivi.contains(id.as_str()) || self.store.is_deleted(&id) {
                 continue;
             }
-            // Una nota illeggibile o non salvabile non deve impedire
-            // l'apertura del vault: il vault è la verità, le versioni no.
-            match host.read_document(&id) {
-                Ok(source) => {
-                    if let Err(e) = self.store.snapshot(&id, &source, host) {
-                        eprintln!("versioning: prima versione di {id} non salvata: {e}");
-                    }
-                }
-                Err(e) => eprintln!("versioning: {id} non si legge: {e}"),
+            match self.store.tombstone(&id, host) {
+                Ok(()) => sepolti += 1,
+                Err(e) => eprintln!("versioning: tombstone di {id} non scritto: {e}"),
             }
         }
-        Ok(())
+        if sepolti > 0 {
+            eprintln!(
+                "versioning: riconciliazione dopo un overflow, {sepolti} document{} \
+                 risultat{} cancellat{}",
+                if sepolti == 1 { "o" } else { "i" },
+                if sepolti == 1 { "o" } else { "i" },
+                if sepolti == 1 { "o" } else { "i" }
+            );
+        }
+        self.sweep(host, Passata::Tutti)
     }
+}
+
+/// Chi fotografare in una passata sull'intero vault.
+enum Passata {
+    /// Solo chi non ha ancora una storia (apertura del vault): chi ce l'ha non
+    /// paga nemmeno una lettura.
+    SoloNuovi,
+    /// Tutti (riconciliazione dopo un `Overflow`): il dedup per contenuto rende
+    /// gratis gli immutati, e per gli altri nasce la versione persa.
+    Tutti,
 }
 
 impl EventHandler for VersioningHandler {
@@ -576,6 +667,9 @@ impl EventHandler for VersioningHandler {
             EventKind::DocumentChanged,
             EventKind::DocumentRenamed,
             EventKind::DocumentRemoved,
+            // Senza questo, un troncamento della coda passerebbe inosservato e
+            // il tombstone di una nota cancellata non arriverebbe mai.
+            EventKind::Overflow,
         ])
     }
 
@@ -588,6 +682,7 @@ impl EventHandler for VersioningHandler {
             }
             Event::DocumentRenamed { from, to } => self.store.rename(from, to, host)?,
             Event::DocumentRemoved { id } => self.store.tombstone(id, host)?,
+            Event::Overflow { .. } => self.reconcile_after_overflow(host)?,
             _ => {}
         }
         Ok(())
@@ -596,102 +691,9 @@ impl EventHandler for VersioningHandler {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap as Map;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    use fubmd_abi::traits::{JobId, JobSpec};
+    use crate::testing::MemoryHost;
 
     use super::*;
-
-    /// Un host di prova: lo storage dei blob in memoria e un **orologio che si
-    /// muove a comando**. È il vero guadagno di aver messo il tempo nel
-    /// contratto — le fasce di ritenzione si provano invecchiando l'orologio,
-    /// non piantando timestamp finti nelle strutture interne dello store.
-    #[derive(Default)]
-    struct TestHost {
-        blobs: Mutex<Map<String, Vec<u8>>>,
-        docs: Mutex<Map<String, String>>,
-        now: AtomicU64,
-    }
-
-    impl TestHost {
-        fn new() -> Self {
-            let host = TestHost::default();
-            host.now.store(1_700_000_000_000, Ordering::Relaxed);
-            host
-        }
-
-        fn avanza(&self, ms: u64) {
-            self.now.fetch_add(ms, Ordering::Relaxed);
-        }
-
-        fn con_documento(self, id: &str, source: &str) -> Self {
-            self.docs
-                .lock()
-                .unwrap()
-                .insert(id.to_string(), source.to_string());
-            self
-        }
-    }
-
-    impl HostApi for TestHost {
-        fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
-            self.docs
-                .lock()
-                .unwrap()
-                .get(id.as_str())
-                .cloned()
-                .ok_or_else(|| PluginError::BadArgs(format!("{id} non esiste")))
-        }
-        fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-            self.docs
-                .lock()
-                .unwrap()
-                .insert(id.to_string(), source.to_string());
-            Ok(())
-        }
-        fn list_documents(&self) -> Result<Vec<DocId>, PluginError> {
-            Ok(self.docs.lock().unwrap().keys().map(DocId::new).collect())
-        }
-        fn emit(&mut self, _event: Event) {}
-        fn spawn_job(&mut self, _spec: JobSpec) -> Result<JobId, PluginError> {
-            Ok(JobId(0))
-        }
-        fn storage_get(&self, _key: &str) -> Option<serde_json::Value> {
-            None
-        }
-        fn storage_set(&mut self, _key: &str, _value: serde_json::Value) {}
-        fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-            Ok(self.blobs.lock().unwrap().get(path).cloned())
-        }
-        fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
-            self.blobs
-                .lock()
-                .unwrap()
-                .insert(path.to_string(), bytes.to_vec());
-            Ok(())
-        }
-        fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
-            self.blobs.lock().unwrap().remove(path);
-            Ok(())
-        }
-        fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
-            // Semantica di *cartella*, come l'host vero (`KernelHost`), non di
-            // prefisso testuale: un finto che si comporta diversamente dal vero
-            // è una trappola che scatta il giorno che si cambia chiamante.
-            Ok(self
-                .blobs
-                .lock()
-                .unwrap()
-                .keys()
-                .filter(|k| prefix.is_empty() || k.starts_with(&format!("{prefix}/")))
-                .cloned()
-                .collect())
-        }
-        fn now_unix_millis(&self) -> u64 {
-            self.now.load(Ordering::Relaxed)
-        }
-    }
 
     fn id(s: &str) -> DocId {
         DocId::new(s)
@@ -699,7 +701,7 @@ mod tests {
 
     #[test]
     fn every_new_content_becomes_a_version() {
-        let mut host = TestHost::new();
+        let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
 
         store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
@@ -722,7 +724,7 @@ mod tests {
 
     #[test]
     fn saving_the_same_text_again_is_not_a_new_version() {
-        let mut host = TestHost::new();
+        let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
 
         assert!(store
@@ -741,7 +743,7 @@ mod tests {
 
     #[test]
     fn a_rename_moves_the_history_with_the_note() {
-        let mut host = TestHost::new();
+        let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store
             .snapshot(&id("vecchia.md"), "corpo", &mut host)
@@ -762,7 +764,7 @@ mod tests {
 
     #[test]
     fn a_deletion_leaves_a_tombstone_and_the_content_stays_readable() {
-        let mut host = TestHost::new();
+        let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
 
@@ -783,7 +785,7 @@ mod tests {
 
     #[test]
     fn retention_thins_out_the_past_but_never_the_present() {
-        let mut host = TestHost::new();
+        let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
 
         // Una vita di salvataggi, con l'orologio che avanza fra l'uno e
@@ -831,7 +833,7 @@ mod tests {
 
     #[test]
     fn the_index_is_rebuilt_from_the_store_never_the_other_way_round() {
-        let mut host = TestHost::new();
+        let mut host = MemoryHost::new();
         let ts;
         {
             let store = VersionStore::open(&mut host).unwrap();
@@ -859,7 +861,7 @@ mod tests {
 
     #[test]
     fn asking_for_a_version_that_never_existed_says_so() {
-        let mut host = TestHost::new();
+        let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
 
@@ -874,8 +876,138 @@ mod tests {
     }
 
     #[test]
+    fn the_handler_is_subscribed_to_overflow() {
+        // Se non lo fosse, tutto ciò che segue non verrebbe mai chiamato: la
+        // riconciliazione esisterebbe e non servirebbe a niente.
+        let handler = VersioningHandler::new(VersionStore {
+            inner: Arc::new(Mutex::new(Inner {
+                docs: BTreeMap::new(),
+            })),
+        });
+        assert!(handler.subscribed().contains(EventKind::Overflow));
+    }
+
+    #[test]
+    fn an_overflow_turns_a_lost_removal_into_a_tombstone() {
+        let mut host = MemoryHost::new().con_documento("a.md", "contenuto");
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
+        let mut handler = VersioningHandler::new(store.clone());
+
+        // La nota sparisce e il `DocumentRemoved` va perso nel troncamento.
+        host.dimentica_documento("a.md");
+        assert!(
+            !store.is_deleted(&id("a.md")),
+            "senza riconciliazione lo store crede ancora che sia viva"
+        );
+
+        host.avanza(5_000);
+        handler
+            .handle(&Event::Overflow { dropped: 7 }, &mut host)
+            .unwrap();
+
+        // Senza tombstone la vista "vault al tempo T" mentirebbe: direbbe che
+        // quella nota c'era, e non c'era.
+        assert!(store.is_deleted(&id("a.md")));
+        assert_eq!(
+            store.list(&id("a.md")).len(),
+            1,
+            "cancellare non cancella la storia"
+        );
+    }
+
+    #[test]
+    fn an_overflow_never_moves_the_moment_of_death() {
+        let mut host = MemoryHost::new().con_documento("a.md", "contenuto");
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
+        host.dimentica_documento("a.md");
+        store.tombstone(&id("a.md"), &mut host).unwrap();
+        let morta_alle = store.inner.lock().unwrap().docs["a.md"].deleted_at;
+
+        host.avanza(10 * MS_GIORNO);
+        let mut handler = VersioningHandler::new(store.clone());
+        handler
+            .handle(&Event::Overflow { dropped: 1 }, &mut host)
+            .unwrap();
+
+        // L'istante della morte è un fatto: una riconciliazione che ripassa
+        // sulle stesse chiavi non deve riscriverlo, o "vault al tempo T"
+        // risponderebbe diversamente a ogni overflow.
+        assert_eq!(
+            store.inner.lock().unwrap().docs["a.md"].deleted_at,
+            morta_alle
+        );
+    }
+
+    #[test]
+    fn an_overflow_turns_a_lost_rename_into_a_new_history_plus_a_tombstone() {
+        let mut host = MemoryHost::new().con_documento("vecchia.md", "il corpo");
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("vecchia.md"), "il corpo", &mut host)
+            .unwrap();
+        let vecchio_ts = store.list(&id("vecchia.md"))[0].ts;
+        let mut handler = VersioningHandler::new(store.clone());
+
+        // Il rename avviene e il `DocumentRenamed` va perso: `rename` non viene
+        // mai chiamato, quindi la storia NON migra.
+        host.rinomina_di_nascosto("vecchia.md", "nuova.md");
+        host.avanza(1_000);
+        handler
+            .handle(&Event::Overflow { dropped: 3 }, &mut host)
+            .unwrap();
+
+        // La cronologia si spezza — è il costo dell'evento perso, e non si prova
+        // a indovinare i rename dal contenuto — ma niente mente sul presente:
+        // il nuovo path ha una storia, il vecchio ha un tombstone, e il
+        // contenuto di prima resta leggibile.
+        assert!(store.is_deleted(&id("vecchia.md")));
+        assert_eq!(
+            store.read(&id("vecchia.md"), vecchio_ts, &host).unwrap(),
+            "il corpo"
+        );
+        let nuove = store.list(&id("nuova.md"));
+        assert_eq!(nuove.len(), 1, "sul nuovo path nasce una storia");
+        assert_eq!(
+            store.read(&id("nuova.md"), nuove[0].ts, &host).unwrap(),
+            "il corpo"
+        );
+    }
+
+    #[test]
+    fn an_overflow_recovers_the_snapshot_that_the_lost_event_would_have_taken() {
+        let mut host = MemoryHost::new().con_documento("a.md", "prima");
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
+        let mut handler = VersioningHandler::new(store.clone());
+
+        // Il contenuto cambia e il `DocumentChanged` va perso.
+        host.write_document(&id("a.md"), "seconda").unwrap();
+        host.avanza(1_000);
+        handler
+            .handle(&Event::Overflow { dropped: 2 }, &mut host)
+            .unwrap();
+
+        let versioni = store.list(&id("a.md"));
+        assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
+        assert_eq!(
+            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            "seconda"
+        );
+        // E ripassare senza che nulla sia cambiato non gonfia la storia: il
+        // dedup per contenuto è ciò che rende sostenibile una riconciliazione
+        // che rilegge tutto.
+        host.avanza(1_000);
+        handler
+            .handle(&Event::Overflow { dropped: 2 }, &mut host)
+            .unwrap();
+        assert_eq!(store.list(&id("a.md")).len(), 2);
+    }
+
+    #[test]
     fn opening_the_vault_photographs_what_has_no_history_yet() {
-        let mut host = TestHost::new()
+        let mut host = MemoryHost::new()
             .con_documento("a.md", "com'era")
             .con_documento("b.md", "anche questa");
         let store = VersionStore::open(&mut host).unwrap();

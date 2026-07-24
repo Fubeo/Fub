@@ -1,172 +1,129 @@
-# Piano di aggiustamento (audit architetturale 2026-07-24)
+# Piano di aggiustamento (audit architetturale 2026-07-24, terzo giro)
 
-Torna a [PIANO.md](PIANO.md). Esito dell'audit codice↔documenti: architettura
-solida, stratificazione rispettata quasi ovunque; le voci qui sotto sono ciò che
-va corretto **prima che diventi costoso** (il confine è il freeze del contratto
-a [M4](milestones/M4-wit-hardening.md)), più il debito minore emerso strada
-facendo. In ordine di urgenza.
+Torna a [PIANO.md](PIANO.md). Esito del terzo audit codice↔documenti (i punti
+1–5 del secondo giro sono chiusi e vengono ritirati da questa lista). Verdetto:
+**architettura solida, nessun difetto strutturale.** Il grafo delle crate è
+aciclico e converge su `fubmd-abi` (foglia pura, verificato in CI); le tre
+dipendenze pesanti — `comrak`, `tantivy`, `tauri` — sono ciascuna reclusa in una
+crate di bordo dietro un trait; il confine WASM è già de-rischiato in codice
+testato (`arena` per gli alberi ricorsivi, `HostApi` eliso come capability, 14
+mutazioni-spia nel test di conformità); il dogfooding è reale (le feature
+ufficiali implementano gli stessi trait di un plugin di terzi, invariante
+testato).
 
-**Stato: i punti 1–5 sono chiusi** (2026-07-24). Restano solo le voci del debito
-già dichiarato, in fondo, che hanno un milestone loro.
+**Il rischio non è la struttura: è il momento del freeze.** Il contratto si
+congela a [M4](milestones/M4-wit-hardening.md); da lì i breaking costano un bump
+di versione. Le voci qui sotto sono, nell'ordine, (§1) le decisioni di
+*superficie del contratto* che il freeze deve chiudere — gratis adesso,
+costosissime dopo; (§2) il protocollo `ViewProvider` da esercitare davvero;
+(§3) i tre rilievi nuovi di questo giro; (§4) il debito già dichiarato, che ha un
+milestone suo.
 
-## 1. Contratto WIT: la ricorsione non è esprimibile — decidere ORA ✅
+Nota di framing (non un TODO): non c'è "un trait unico" — sono **sette** trait
+più la capability `HostApi`. La cosa singola è il *crate-contratto*
+`fubmd-abi`. Dove i documenti o gli appunti dicono "trait unico", intendono
+questo.
 
-Il rischio grosso: `wit/fubmd/abi.wit` oggi **non compila** (`wasm-tools
-validate` lo rifiuta) e la causa profonda non è cosmetica — WIT non ammette
-tipi ricorsivi, e `Block`, `Inline`, `UiNode` lo sono. La tabella di
-esprimibilità in [architecture/traits.md](architecture/traits.md) dà per buona
-la ricorsione via `list<ui-node>`: è una proposta aperta del component model,
-non una feature. Contaminazione transitiva: `DocumentModel.body` rende
-inesprimibili le firme di `FormatProvider` e `on_document_indexed`;
-`ViewUpdate::Replace` e `render_view` idem. Scoprirlo a M5, a contratto
-congelato, sarebbe un breaking change; deciso ora è un pomeriggio, e i tipi
-Rust nativi **non si toccano** (la conversione vive nel proxy WASM).
+## 1. Decisioni che il freeze di M4 deve chiudere — costose dopo, gratis prima
 
-- [x] Decidere la rappresentazione al confine per gli alberi ricorsivi:
-      **ARENA** (`list<nodo>` piatta + indici `u32`). Scartata la stringa JSON:
-      avrebbe fatto sparire dal contratto proprio la parte che il contratto
-      esiste per fissare — il modello di documento — e reso invisibile ogni
-      divergenza al test di conformità. Decisione e confronto registrati in
-      [architecture/traits.md](architecture/traits.md), "Alberi ricorsivi al
-      confine".
-- [x] Riscritti in `wit/fubmd/abi.wit`: `inline-ref`/`block-ref`/`ui-ref`
-      (`u32`), `document-tree { blocks, inlines, roots }`,
-      `ui-tree { nodes, root }`, e a cascata `document-model.body`,
-      `view-update.replace`, `render-view`.
-- [x] Keyword WIT: `%list` (in `block` e `ui-node`), `%result`
-      (`event-job-done`), `%from` (`event-document-renamed`). Deciso l'escape
-      nel WIT e **non** la rinomina dei campi Rust: è grammatica di un altro
-      linguaggio, non un problema del modello.
-- [x] Tabella di esprimibilità corretta (le righe `UiNode`/`Block`/`Inline`
-      affermavano il falso) e ampliata con le larghezze e le keyword.
-- [x] Criterio di chiusura: il WIT **parsa** — lo verifica il test di
-      conformità, che lo dà in pasto a `wit-parser` a ogni `cargo test`.
+Sono decisioni sulla **forma delle firme da congelare**, non righe di codice. Vanno
+prese *insieme*: rispondono tutte alla stessa domanda — "cosa vede un plugin del
+vault". Aggiungerle dopo il freeze è un breaking-bump del contratto.
 
-## 2. Test di conformità abi↔WIT: oggi dà falsa sicurezza ✅
+- [ ] **`host-api.query-index`**: oggi un `ViewProvider` con l'`HostApi`
+      attuale non può ottenere i backlink — `IndexQuery::Backlinks` la serve
+      `Workspace::query_index`, che è del kernel, non una capacità del contratto.
+      Decidere la forma della capacità di interrogazione e aggiungerla a
+      `HostApi` (e al WIT) prima del freeze.
+- [ ] **Documento attivo visibile a una view**: un `ViewProvider` non sa *quale
+      documento è aperto*. Serve un meccanismo — un evento che la view segue, o
+      un'azione dall'host. Deciderlo col freeze, non dopo.
+- [ ] **Operazioni strutturali e parità plugin↔nativo**: rename, `create_note`,
+      trash sono kernel-owned e fuori da `HostApi` (scelta deliberata). La
+      "parità plugin↔native" non le copre: decidere a M4 se e quali esporre come
+      capacità del contratto. È la stessa domanda delle due capacità qui sopra.
+- [ ] **`create_note` in una cartella** ("crea nota qui"): oggi `create_note`
+      crea solo nella radice; il caso "in questa cartella" tocca il kernel. Se
+      diventa capacità di plugin, è parte della stessa decisione strutturale.
+- [ ] **Escape hatch `type json = string`**: `serde_json::Value` attraversa il
+      confine come stringa JSON opaca (frontmatter, `attrs` di `Custom`, args
+      comandi, payload job, storage). Nessuno schema è validato al confine.
+      Confermare al freeze che l'opacità è accettabile per ciascun uso, o
+      promuovere a record WIT tipati i punti dove non lo è.
+- [ ] **Canale progresso/streaming dei job**: decidere prima del freeze se a un
+      job serve un canale di avanzamento/streaming o se `Event::JobDone` basta.
+      Aggiungere un canale a `HostApi`/al world dopo è breaking.
 
-`crates/fubmd-abi/tests/wit_conformance.rs` è verde su un WIT sintatticamente
-invalido: `assert_present` fa substring matching (`wit.contains(name)`), quindi
-`tag`/`text`/`custom`/`query` sono coperti "gratis" da altri identificatori, e
-i tipi dei campi non sono verificati affatto. Il lato Rust (match esaustivi che
-non compilano su una variante nuova) è buono e va tenuto.
+## 2. `ViewProvider`: varco cablato, protocollo ancora non esercitato
 
-- [x] Il WIT viene **parsato** (`wit-parser` come dev-dependency di
-      `fubmd-abi`): un WIT invalido è un test rosso.
-- [x] Confronto su **insiemi di nomi dichiarati** estratti dal parse — tipi,
-      casi di variant/enum, campi di record, funzioni per interfaccia — al posto
-      del substring matching.
-- [x] Direzione WIT→abi: un tipo, un caso, un campo o una funzione dichiarati
-      nel contratto e mai rivendicati dall'abi fanno fallire il test (contratto
-      morto).
-- [x] Test del test: cinque divergenze introdotte ad arte (campo rinominato,
-      caso rimosso, funzione sparita, tipo di troppo, alias con la larghezza
-      sbagliata) devono farlo diventare rosso, più un WIT invalido che deve
-      morire subito.
-- [ ] (Estensione, resta a M4) confrontare i **tipi** dei campi di record e le
-      firme complete delle funzioni. Oggi si confrontano i tipi dei soli alias,
-      dove il tipo *è* l'informazione (indici dell'arena `u32`, span `u64`,
-      `job-id` `u64`).
+Il punto di enforcement (`validate_untrusted`) esiste e il routing passa dal
+kernel, ma le implementazioni del trait sono ancora **zero**: i backlink passano
+dalla funzione libera `build_backlinks_view` e il frontend gestisce l'azione
+`open:` ad-hoc invece del giro `on_action` → `ViewUpdate`. Sbloccabile solo dopo
+§1 (le due capacità mancanti sono esattamente ciò che impedisce un dogfooding
+vero, non finto).
 
-## 3. Invariante di dipendenze: vera ma non protetta ✅
+- [ ] Le view di M2 ancora da fare (outline, tag panel, graph-data) **nascono**
+      come `ViewProvider` — il piano M2 già lo prevede; il vincolo è: non
+      cablarle ad-hoc "per fare prima".
+- [ ] Migrare i backlink a `ViewProvider` insieme alla prima delle nuove view,
+      chiudendo il giro azione→`ViewUpdate` nel renderer generico — **dopo** che
+      §1 ha dato a una view il modo di interrogare l'indice e di sapere qual è il
+      documento aperto. Migrarli prima significherebbe farsi passare i dati
+      dall'app: un dogfooding finto, peggio del non averlo migrato.
 
-Oggi `fubmd-abi`/`fubmd-kernel` sono puliti anche transitivamente (verificato
-con `cargo tree`), ma il PIANO dichiara l'invariante "verificata coi test" e il
-test **non esiste**: solo commenti nei Cargo.toml. Un `cargo add tantivy -p
-fubmd-kernel` passerebbe inosservato.
+## 3. Rilievi nuovi di questo giro
 
-- [x] `crates/fubmd-abi/tests/dependency_invariant.rs`: interroga
-      `cargo metadata` e applica due reti di maglia diversa — **denylist
-      transitiva** sulle famiglie proibite (per prefisso: `tauri-build` e
-      `tokio-util` non passano) e **allowlist delle dipendenze dirette** dei due
-      crate. La prima intercetta il contrabbando, la seconda il gesto; e un
-      `cargo update` che cambia un crate di supporto lontano non rompe la build
-      per niente.
-- [x] CI multi-OS: [.github/workflows/ci.yml](../.github/workflows/ci.yml) —
-      matrice ubuntu/windows/macos su toolchain pinnata all'MSRV, più un job
-      rapido di sole invarianti (conformità WIT + dipendenze), fmt/clippy e
-      type-check del frontend. Senza CI ogni invariante "verificata dai test"
-      vale solo sulla macchina di chi ricorda di lanciarli.
+- [ ] **Buco d'ordine nel test di conformità**: l'ordine dei casi di un variant è
+      confrontato con l'ordine in cui il *test* li elenca, non con quello
+      dell'enum Rust. Riordinare il WIT è rosso; riordinare l'enum Rust senza
+      toccare il test resta verde — ma l'ordine dei casi **è il discriminante
+      ABI**. Chiudere il buco prima del freeze: derivare l'ordine atteso
+      dall'enum Rust, così un riordino diventa rosso da entrambi i lati.
+- [ ] **Drift dei mirror TS↔Rust**: `UiNode`, `Event` (`KernelEvent`), `Span`,
+      `VersionRef` sono rispecchiati **a mano** in TypeScript, senza un test che
+      leghi i due lati; la stessa lacuna del test gemello di `pageName` (aperta
+      dal secondo giro). Manca del tutto un harness di test frontend
+      (`package.json` ha solo `vite` e `tsc`). Introdurlo, e con esso i test che
+      confrontano i tipi TS con la forma dei tipi Rust — è il confine che oggi
+      può divergere in silenzio.
+- [ ] **UI di produzione = IPC bespoke, non `UiNode`**: oggi il canale core→UI
+      reale è fatto di ~24 comandi `#[tauri::command]` che restituiscono tipi
+      propri (`search`, `render_preview`, `render_embed`, versioning…), più il
+      bridge eventi `fubmd://event`; solo `backlinks_view` restituisce un
+      `UiNode`. È una scelta legittima (la graph view e `Html`/`WebView` restano
+      superfici privilegiate, ammesso in `ui-protocol.md`), ma è un debito che
+      **cresce**: ogni feature di M2/M3 nata come comando ad-hoc è retrofit in
+      più il giorno in cui deve diventare superficie plugin. Vincolo: le nuove
+      superfici *rivendicate dal dogfooding* nascono come `UiNode`/`ViewProvider`;
+      ciò che resta bespoke va marcato esplicitamente come privilegiato, non
+      lasciato ambiguo.
 
-## 4. `HostApi` troppo stretta per il versioning: chiudere il buco nel contratto ✅
+## 4. Debito già dichiarato (confermato, resta in agenda col suo milestone)
 
-Il dogfooding ha fatto il suo mestiere e ha trovato il buco: il lato *handler*
-del versioning è un `EventHandler` puro, ma `VersionStore` scrive
-`.fubmd-data/versions/` con `std::fs` diretto e usa `fubmd_kernel::time` — un
-plugin WASM con l'`HostApi` attuale non potrebbe (lo `storage_get/set`
-in-memory non basta per uno store di snapshot). Va chiuso **nel contratto**
-prima del freeze M4, non aggirato.
-
-- [x] Deciso: **storage persistente per-plugin a blob**, non API filesystem
-      scoped — `data_read/write/remove/list`, namespace
-      `.fubmd-data/plugins/<id>/` imposto dall'host. Con i blob il plugin non ha
-      mai in mano un path del filesystem: il recinto è una proprietà della
-      firma, non una convenzione da rispettare. Registrato in
-      [architecture/plugin-boundary.md](architecture/plugin-boundary.md),
-      "Storage", con la tabella volatile-vs-persistente.
-- [x] `now_unix_millis` nel contratto: `VersionStore` non dipende più da
-      `fubmd_kernel::time` (né `fubmd-features` da `camino` per questa via).
-      Guadagno collaterale: le fasce di ritenzione ora si provano avanzando un
-      orologio finto invece di piantare timestamp nelle strutture interne.
-- [x] Aggiunta anche `list_documents`: senza, `read_document` serve solo per gli
-      id che arrivano dagli eventi, e la "prima fotografia" non poteva vivere
-      dentro la feature. È il minimo perché un plugin possa reagire a
-      `vault-opened` guardandosi intorno.
-- [x] `VersionStore` migrato: scrive e legge **solo** via `HostApi`. È la prova
-      che la firma regge un caso reale. Anche l'app passa di lì
-      (`Workspace::with_host`): niente canale privilegiato che un plugin non
-      avrebbe.
-- [x] La policy "prima fotografia all'apertura del vault" è dentro la feature
-      (`VersioningHandler` su `Event::VaultOpened`), non più in
-      `fubmd-app::open_vault`. È esattamente ciò che farebbe `Plugin::activate`.
-- [x] `Workspace::register_event_handler(id, handler)`: l'identità del plugin la
-      assegna chi registra, mai il plugin — uno che si sceglie il recinto da sé
-      non è dentro a un recinto. Il recinto è verificato in
-      `crates/fubmd-kernel/tests/plugin_data.rs`.
-
-> **Conseguenza sui vault esistenti:** lo store delle versioni si è spostato da
-> `.fubmd-data/versions/` a `.fubmd-data/plugins/fubmd.versioning/`. Non c'è
-> migrazione automatica: un vault già usato riparte con la storia vuota (la
-> vecchia cartella resta lì, leggibile a mano). Accettabile ora, prima di
-> qualunque distribuzione; da qui in avanti un cambio di layout richiede una
-> migrazione.
-
-## 5. Minori ✅
-
-- [x] `Span`: deciso **`usize` in Rust, `u64` nel WIT**, con la conversione
-      documentata e a carico del proxy. Obbligare il kernel a `u64` metterebbe
-      un `as usize` su ogni slice per compiacere un confine che il kernel non
-      attraversa. Registrato in `abi/src/model.rs` e in
-      [architecture/traits.md](architecture/traits.md), "Larghezze e keyword".
-- [x] `frontend/src/main.ts`: `pageName` non cabla più `\.md$` — le estensioni
-      gestite arrivano dal backend (`VaultInfo.extensions`, dai
-      `FormatDescriptor` dei provider registrati). Un'estensione che nessun
-      provider gestisce resta nel nome, perché non è un'estensione.
-- [x] `freeName` è sparito dal frontend: la convenzione `Nota 1, Nota 2, …` vive
-      in `Workspace::free_name` (che ora usa anche `create_note`) ed è esposta
-      dal comando IPC `propose_free_name`. Una sola implementazione.
-- [x] Riferimenti al cancellato `docs/CRUD_E_VAULT.md` aggiornati ovunque
-      (`vault.rs`, `time.rs`, `PIANO.md`, `data-model.md`, `M2-search-graph.md`)
-      — erano sei, non uno.
-
-## Debito già dichiarato (non è emerso nulla di nuovo: resta in agenda)
-
-Voci confermate dall'audit, già nei documenti con il loro milestone; elencate
-qui solo perché il piano sia completo.
-
-- [ ] **Cache metadata/body da sdoppiare** (M2, [milestone](milestones/M2-search-graph.md)):
-      l'audit conferma che è confinata — `Workspace::model()` non ha chiamanti
-      esterni, il body dei documenti chiusi serve solo a
-      `render_preview`/`render_embed`, ~5-6 siti in `workspace.rs`, zero
-      impatto su abi/features. Non sta marcendo, ma va fatta col resto di M2.
-- [ ] **Mutex unico sul `Workspace`** (accettato nel PIANO): misurare prima di
-      agire; eventuale split lettura/scrittura a M2/M3.
-- [ ] **Organizzazione sidebar chiusa ai plugin** (scelta O3 di
-      [ORGANIZZAZIONE_VAULT.md](ORGANIZZAZIONE_VAULT.md), consapevole): se gli
-      "spazi smart" o criteri di ordinamento estensibili diventeranno un
-      desiderio, il costo sarà riscrivere, non estendere — rivalutare quando si
-      progetta la superficie plugin di M5.
-- [ ] **`SearchIndex` scrive ancora con `std::fs`.** Non è una svista: le firme
-      di `IndexProvider` non portano un `HostApi` (`on_document_indexed` riceve
-      il `DocumentModel` e basta). Un indice di terzi a M5 avrà lo stesso
-      problema che aveva il versioning, e la soluzione è la stessa — decidere a
-      M4, insieme al freeze, se `IndexProvider` debba ricevere l'host.
+- [ ] **Cache metadata/body da sdoppiare** (M2): confermato confinato —
+      `Workspace::model()` senza chiamanti esterni, grafo autosufficiente,
+      ~1–2 giornate dentro `workspace.rs`. Il `Workspace` oggi tiene i
+      `DocumentModel` completi di tutto il vault: è il punto di pressione su
+      vault grandi.
+- [ ] **Mutex unico sul `Workspace`**: misurare prima di agire.
+      `Mutex→RwLock` è quasi gratis (le firme separano già `&self`/`&mut self`);
+      il pezzo vero è `reindex` non bloccante (snapshot) e il watcher che tiene
+      il lock per l'intero lotto debounced. Nota: `render_view`/`view_action`
+      prendono `&mut self` perché prestano un `HostApi` — vanno contati fra le
+      scritture quando si sceglie dove passa la linea lettura/scrittura.
+- [ ] **Organizzazione sidebar chiusa ai plugin** (scelta O3 consapevole):
+      rivalutare quando si progetta la superficie plugin di M5; il sidecar
+      `.fubmd/workspace.json` autoritativo non è un semplice redirect su `data_*`.
+- [ ] **"Tre copie" custodite da un flag TS**: adeguato con una sola superficie
+      di editing; il merge esplicito di M3 è il momento in cui l'invariante del
+      buffer sporco va irrobustito (ed eventualmente rappresentato fuori dal
+      client).
+- [ ] **Ponte byte UTF-8 ↔ code unit UTF-16** (M3): gli `Span` sono in byte
+      UTF-8, CodeMirror 6 in UTF-16; il ponte non esiste ancora (`offsets.rs`
+      copre solo riga/colonna→byte). Va costruito e testato su testo multibyte
+      **prima** di cablare le decorazioni della live-preview.
+- [ ] Cosmetico: chi ha già aperto un vault con una versione precedente si
+      ritrova `.fubmd-data/index/` orfana (l'indice si è spostato nello spazio
+      dati del plugin). È stato derivato e si può cancellare a mano; non vale una
+      migrazione.

@@ -230,7 +230,45 @@ pub enum IndexResult {
 /// Resta un solo modo di divergere dal vault: ciò che succede mentre l'indice
 /// **non è vivo** (documenti cancellati ad app chiusa, se l'indice è
 /// persistente). Lo chiude [`IndexProvider::reconcile`].
+///
+/// # Dove sta l'`HostApi`, e perché non è su ogni metodo
+///
+/// Un indice persistente deve poter **caricare e salvare** il proprio stato, e
+/// l'unico storage durevole del contratto è `data_*` dell'[`HostApi`]: senza
+/// host in nessuna firma, un index provider di terzi in WASM non potrebbe
+/// persistere nulla — lo stesso buco che il versioning ha fatto emergere per
+/// [`EventHandler`]. L'host arriva quindi nei **due punti in cui lo stato
+/// attraversa il disco**: [`activate`](IndexProvider::activate) per leggerlo,
+/// [`flush`](IndexProvider::flush) per scriverlo.
+///
+/// Non sugli altri, e per ragioni, non per risparmio:
+///
+/// - `on_document_*` e `reconcile` sono **mutazioni in memoria**: fra un
+///   `on_document_*` e il `flush` il provider accumula (è già il contratto di
+///   `flush`, che esiste perché il kernel scrive un documento alla volta e un
+///   indice vuole scrivere a lotti). Dare l'host qui costringerebbe il kernel a
+///   prestare `&mut Workspace` dentro il ciclo di alimentazione, cioè a
+///   duplicare il modello appena parsato a ogni salvataggio.
+/// - `query` prende `&self` e il kernel serve le interrogazioni **sotto
+///   prestito condiviso** del workspace: un host per-query lo prenderebbe in
+///   esclusiva, il contrario della direzione in cui va la concorrenza
+///   (`Mutex` → `RwLock`). Un indice risponde da ciò che ha già in mano.
+///
+/// L'host è per-chiamata e non un handle conservato alla costruzione perché è
+/// l'unica forma che regge entrambi i backend: un handle dovrebbe essere
+/// `'static` (la regola d'oro vieta i lifetime nelle firme) e l'host del kernel
+/// **è** un prestito `&mut Workspace`, che `'static` non può essere.
 pub trait IndexProvider: Send + Sync {
+    /// Carica lo stato persistente dell'indice. Il kernel la chiama **una
+    /// volta**, quando l'indice viene registrato, prima di qualunque
+    /// alimentazione.
+    ///
+    /// Un indice tutto in memoria non ha niente da fare qui; un indice
+    /// persistente ricostruisce da `data_*` ciò che gli serve per riconoscere
+    /// quel che ha già visto (ed è quel riconoscimento a rendere rapida la
+    /// riapertura di un vault non toccato). L'errore non è fatale per il
+    /// chiamante: un indice è stato *derivato*, e nel dubbio si ricostruisce.
+    fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn on_document_indexed(&mut self, doc: &DocumentModel);
     fn on_document_removed(&mut self, id: &DocId);
     /// Allinea l'indice alla verità completa del vault: `ids` è l'insieme di
@@ -240,15 +278,18 @@ pub trait IndexProvider: Send + Sync {
     /// Non è un rebuild: i documenti già presenti e immutati non vanno
     /// reindicizzati (è ciò che rende rapida la riapertura di un vault).
     fn reconcile(&mut self, ids: &[DocId]);
-    /// Punto di consistenza: al ritorno, tutto ciò che è stato accettato
-    /// finora è visibile alle `query` e (se l'indice è persistente) durevole.
+    /// Punto di consistenza **e di persistenza**: al ritorno, tutto ciò che è
+    /// stato accettato finora è visibile alle `query` e durevole.
     ///
     /// Esiste perché il kernel scrive **un documento alla volta** ma un
     /// indice vuole scrivere **a lotti**: fra un `on_document_*` e il `flush`
     /// il provider è libero di accumulare. Chi interroga senza aspettare un
     /// flush vede comunque le proprie scritture — è il provider a garantirlo,
     /// non il chiamante.
-    fn flush(&mut self) -> Result<(), PluginError>;
+    ///
+    /// È l'unico punto in cui un indice scrive, e per questo riceve l'host:
+    /// ciò che deve sopravvivere alla chiusura passa da `data_*`.
+    fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 }
 

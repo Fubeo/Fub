@@ -57,9 +57,16 @@ memoria isolata ma `<script>` iniettato nel core. Quindi:
 - le due varianti sono **riservate al codice fidato** (core e feature ufficiali);
 - l'host che riceve un albero da un provider **non fidato** lo rifiuta con
   `UiNode::validate_untrusted()` (in `fubmd-abi`, con test): `PermissionDenied`
-  se `Html`/`WebView` compaiono ovunque nell'albero. Punti di enforcement: il
-  proxy WASM (M5) e il registry dei plugin per i nativi non-core (M4) — stesso
-  principio del "un solo punto" di `HostApi`;
+  se `Html`/`WebView` compaiono ovunque nell'albero. Il punto di enforcement è
+  **uno** ed esiste già: `Workspace::render_view` e `Workspace::view_action`,
+  dove i provider si registrano con il proprio grado di fiducia
+  (`register_view_provider(id, Trust, provider)`). Vale anche per l'albero che
+  torna dentro un `ViewUpdate::Replace`, cioè in risposta a un click e non al
+  rendering — un controllo fatto solo su `render_view` sarebbe aggirabile in un
+  gesto. Oggi nessun provider non fidato esiste e la validazione è un no-op: il
+  varco esiste *prima* del primo, perché aggiungerlo dopo vorrebbe dire cercarlo
+  fra N chiamanti (stesso principio del "un solo punto" di `HostApi`; test in
+  `crates/fubmd-kernel/tests/view_trust.rs`);
 - `WebView` tornerà disponibile ai plugin solo quando esisteranno una **asset
   story** (da dove viene `url`? asset del plugin serviti dall'host, non URL
   arbitrari) e una **CSP** dedicate — da progettare a M5, non prima.

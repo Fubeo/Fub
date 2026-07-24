@@ -148,14 +148,27 @@ pub trait ViewProvider: Send + Sync {
 `ViewPlacement { LeftSidebar, RightSidebar, Bottom }`. `UiNode`/`UiAction`/
 `ViewUpdate` sono in [ui-protocol.md](ui-protocol.md).
 
+**Il varco unico degli alberi di UI.** I provider si registrano con
+`Workspace::register_view_provider(id, trust, provider)`, dove
+`Trust { Trusted, Untrusted }` dice **di chi** ci si fida (non *cosa* è
+ammesso: lo stesso `UiNode::Html` è legittimo da una feature ufficiale e
+inaccettabile da un plugin sandboxato). Ogni albero entra nell'host da
+`Workspace::render_view` / `Workspace::view_action`, e lì — in un punto solo —
+`UiNode::validate_untrusted` rifiuta il contenuto attivo di un provider non
+fidato, a qualunque profondità e anche quando arriva come `ViewUpdate::Replace`
+in risposta a un click. Oggi nessun provider non fidato esiste e la validazione è
+un no-op: il punto esiste **prima** del primo, perché aggiungerlo dopo vorrebbe
+dire cercarlo fra N chiamanti (vedi `crates/fubmd-kernel/tests/view_trust.rs`).
+
 ### `IndexProvider` — ricerca (M2: tantivy)
 
 ```rust
 pub trait IndexProvider: Send + Sync {
+    fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn on_document_indexed(&mut self, doc: &DocumentModel);
     fn on_document_removed(&mut self, id: &DocId);
     fn reconcile(&mut self, ids: &[DocId]);
-    fn flush(&mut self) -> Result<(), PluginError>;
+    fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 }
 ```
@@ -182,12 +195,55 @@ Restano due giunture, ed è il compito degli altri due metodi:
   cancellata ad app chiusa). Il kernel lo chiama in coda a `reindex`. Non è un
   rebuild — gli immutati non vanno reindicizzati, ed è ciò che rende rapida la
   riapertura di un vault.
-- `flush()` — punto di consistenza. Il kernel scrive **un documento alla
-  volta**, un indice vuole scrivere **a lotti**: fra un `on_document_*` e il
-  `flush` il provider è libero di accumulare. Chi decide che il lotto è finito
-  non è il kernel (non lo sa) ma chi il lotto lo ha formato — nell'app, il
-  watcher debounced. Chi interroga senza aspettare un flush vede comunque le
-  proprie scritture: lo garantisce il provider, non il chiamante.
+- `flush(host)` — punto di consistenza **e di persistenza**. Il kernel scrive
+  **un documento alla volta**, un indice vuole scrivere **a lotti**: fra un
+  `on_document_*` e il `flush` il provider è libero di accumulare. Chi decide che
+  il lotto è finito non è il kernel (non lo sa) ma chi il lotto lo ha formato —
+  nell'app, il watcher debounced. Chi interroga senza aspettare un flush vede
+  comunque le proprie scritture: lo garantisce il provider, non il chiamante.
+
+**Dove sta l'`HostApi`, e perché non è su ogni metodo.** Un indice persistente
+deve poter **caricare e salvare** il proprio stato, e l'unico storage durevole
+del contratto è `data_*`: con nessun host in nessuna firma — com'era fino al
+secondo audit — un index provider di terzi in WASM non avrebbe potuto persistere
+*nulla*. È lo stesso buco che il versioning aveva fatto emergere per
+`EventHandler`, e come quello va chiuso **prima** del freeze di M4: dopo, la
+firma è un breaking change.
+
+L'host arriva nei due punti in cui lo stato attraversa il disco, e non altrove:
+
+- `activate(host)` — chiamata **una volta**, alla registrazione, prima di
+  qualunque alimentazione: è il punto in cui un indice ritrova ciò che ha già
+  visto. `SearchIndex` ci carica il manifest delle impronte, ed è quel
+  riconoscimento a rendere rapida la riapertura di un vault non toccato. Dopo il
+  primo `on_document_indexed` sarebbe troppo tardi per averlo.
+- `flush(host)` — l'unico punto in cui un indice **scrive**.
+- `on_document_*` e `reconcile` sono mutazioni in memoria: dare l'host qui
+  costringerebbe il kernel a prestare `&mut Workspace` dentro il ciclo di
+  alimentazione, cioè a duplicare il modello appena parsato a ogni salvataggio.
+- `query` prende `&self` e il kernel serve le interrogazioni sotto prestito
+  **condiviso** del workspace: un host per-query lo prenderebbe in esclusiva, il
+  contrario della direzione in cui va la concorrenza (`Mutex` → `RwLock`).
+
+L'host è **per-chiamata** e non un handle conservato alla costruzione perché è
+l'unica forma che regge entrambi i backend: un handle dovrebbe essere `'static`
+(la regola d'oro vieta i lifetime nelle firme) e l'host del kernel *è* un
+prestito `&mut Workspace`, che `'static` non può essere.
+
+Come per gli `EventHandler`, l'identità la assegna chi registra —
+`Workspace::register_index_provider(id, index)`, che registra **e attiva** — e
+determina lo spazio dati concesso. `SearchIndex` è registrato con
+`SEARCH_ID = "fubmd.search"`.
+
+**Il caso di tantivy, e il varco che ha richiesto.** Il manifest passa da
+`data_*`; la cartella dei segmenti no, e non potrebbe: un motore di ricerca
+mmappa i propri file e li rilegge quando gli pare, anche dai thread di merge, e
+in quei momenti non ha un host da chiamare. Il path arriva da
+`Workspace::plugin_data_dir(id)` — una vera cartella, **dentro lo stesso
+recinto** di `data_*`. È un varco per il codice nativo, dichiarato come tale e
+non una capacità del contratto; a M5 il suo equivalente per un componente è un
+preopen WASI sulla stessa radice. Ciò che la firma garantisce è che un provider
+di terzi *possa* persistere, non che tutti persistano allo stesso modo.
 
 **I backlink non passano dai provider.** `Workspace::query_index` serve
 `IndexQuery::Backlinks` dal grafo del kernel, che è la loro unica fonte di
@@ -234,6 +290,12 @@ Overflow { dropped }, Custom { topic, payload } }`,
   deriva stato dagli eventi (indice, grafo, cache, frontend) deve considerarlo
   stantio e **riconciliare da zero**. È la versione rumorosa del troncamento:
   perdite silenziose non esistono per contratto.
+  Chi tiene stato **per-documento** deve abbonarsi anche a `Overflow`, e non è
+  una raccomandazione di stile: perdere un `DocumentChanged` costa un
+  aggiornamento in ritardo, perdere un `DocumentRenamed` o un `DocumentRemoved`
+  lascia lo stato derivato a *mentire* su chi esiste e con che nome. La
+  riconciliazione parte da `HostApi::list_documents`, che è lì per questo (vedi
+  `VersioningHandler::reconcile_after_overflow` come esempio di riferimento).
 - `Custom { topic, payload }` è il varco per gli eventi dei plugin (topic
   namespaced `"<plugin-id>/<nome>"`): è anche il canale con cui i plugin
   comunicano fra loro. L'abbonamento è a grana `EventKind::Custom`; il filtro
@@ -278,8 +340,8 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | Trait | Impl M1 | Prossima impl | Note |
 |---|---|---|---|
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
-| `IndexProvider` | — (backlink via grafo del kernel) | **M2** (tantivy nativo) | ganci incrementali già in firma |
-| `ViewProvider` | — (backlink via `build_backlinks_view`) | **M2** (graph/outline/tag) | UI dichiarativa |
+| `IndexProvider` | — (backlink via grafo del kernel) | `SearchIndex` (tantivy) **M2** ✅ | `activate`/`flush` con `HostApi`: persiste via `data_*` |
+| `ViewProvider` | — (backlink via `build_backlinks_view`) | **M2** (graph/outline/tag) | routing e confine di fiducia già cablati nel kernel; zero impl |
 | `CommandProvider` | — | **M3** (command palette) | keybinding non vincolante |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
@@ -345,10 +407,30 @@ libero, non dove è la struttura che tutti condividono.
 In pratica: `Vec<Inline>` diventa `list<inline-ref>` (`inline-ref = u32`),
 `Vec<Block>` diventa `list<block-ref>`, e i nodi veri vivono in
 `record document-tree { blocks, inlines, roots }` (per l'UI,
-`record ui-tree { nodes, root }`). **I tipi Rust non si toccano**: restano
-alberi veri, con l'ergonomia degli alberi; la conversione vive nel proxy WASM
-(M5), che è l'unico posto che deve conoscerla. Un indice fuori range è un
-modello malformato, e lo tratta il proxy.
+`record ui-tree { nodes, root }`). **I tipi Rust nativi non si toccano**: restano
+alberi veri, con l'ergonomia degli alberi.
+
+**La conversione esiste già, e non nel proxy: è `fubmd_abi::arena`.** Una
+rappresentazione al confine *dichiarata* e mai prodotta da nessun codice sarebbe
+una promessa non verificata proprio al momento del freeze; il proxy di M5 non la
+reimplementerà, la chiamerà. Il modulo contiene i mirror piatti
+(`arena::Block`/`Inline`/`UiNode`, con gli indici come **newtype** — scambiare un
+indice di blocco con uno di inline è un bug che il compilatore intercetta),
+`DocumentTree`/`UiTree` con `flatten`/`rebuild`, e `arena::Span` con le due
+conversioni di larghezza. Le proprietà sono sotto test:
+
+- **round-trip** albero→arena→albero identità, su un corpo che tocca ogni
+  variante e annida a più livelli;
+- **indici fuori range** e **cicli** sono `ArenaError`, non panic e non loop: chi
+  manda un'arena può essere un plugin sbagliato o ostile, e un'arena è solo *una
+  lista con dei numeri dentro*. (Due riferimenti allo stesso nodo — un DAG — non
+  sono un ciclo: il controllo guarda il *percorso*, non i visitati.)
+- **`usize`↔`u64`** con `From` e `TryFrom`, e gli span che restano attaccati al
+  nodo giusto dopo l'appiattimento, che riordina tutto.
+
+Il legame fra i mirror e gli alberi nativi lo tiene il compilatore:
+`flatten`/`rebuild` sono match esaustivi sui due lati, quindi una variante nuova
+in `model::Block` non compila finché non entra anche nell'arena.
 
 ### Larghezze e keyword
 
@@ -356,8 +438,10 @@ modello malformato, e lo tratta il proxy.
   memoria; obbligarli a `u64` metterebbe un `as usize` su ogni slice del kernel
   per compiacere un confine che il kernel non attraversa. `usize`→`u64` è sempre
   lecita; `u64`→`usize` su wasm32 (`usize` a 32 bit) passa da una conversione
-  controllata nel proxy — un documento oltre i 4 GiB non entrerebbe comunque
-  nella memoria di un modulo.
+  controllata — un documento oltre i 4 GiB non entrerebbe comunque nella memoria
+  di un modulo. La divergenza non è più solo dichiarata: è `arena::Span` con
+  `From<model::Span>` e `TryFrom` nell'altro verso, e il test di conformità
+  confronta il `record span` del WIT con **quello del confine**, non col nativo.
 - **`list`, `result` e `from` sono keyword WIT** e nel contratto compaiono
   con l'escape `%` (`%list`, `%result`, `%from`). È sintassi del linguaggio:
   l'identificatore dichiarato resta quello, e i campi Rust
@@ -368,8 +452,36 @@ modello malformato, e lo tratta il proxy.
 
 `crates/fubmd-abi/tests/wit_conformance.rs` **parsa** `wit/fubmd/abi.wit` con
 `wit-parser` (dev-dependency: l'invariante di `fubmd-abi` riguarda le dipendenze
-normali) e confronta insiemi di **nomi dichiarati**, non sottostringhe del
-sorgente. La pressione è su tre direzioni: un WIT invalido è rosso; un tipo
-Rust che cambia non compila più il test; un tipo/caso/campo presente da una
-parte sola — in *entrambe* le direzioni, contratto morto incluso — fallisce.
-C'è anche il test del test: divergenze introdotte ad arte devono farlo fallire.
+normali) e confronta **nomi e tipi dichiarati**, non sottostringhe del sorgente.
+Quattro pressioni:
+
+1. un WIT che non parsa è rosso;
+2. un tipo Rust che cambia **non compila** più il test — i record si
+   destrutturano per intero, i variant si esauriscono in un `match`, e le
+   funzioni sono *cast dei metodi dei trait a puntatore a funzione*, quindi un
+   parametro o un ritorno diverso è un errore di compilazione;
+3. nomi **e tipi** confrontati nelle due direzioni: campi dei record (in
+   ordine — in un record l'ordine è la disposizione al confine, in un variant è
+   il discriminante), payload dei casi, destinazioni degli alias, firme complete
+   delle funzioni; ciò che il WIT dichiara e l'abi non rivendica è contratto
+   morto e fallisce ugualmente;
+4. **`host` è eliso**: nessuna funzione del WIT può avere un parametro `host`,
+   anche là dove il metodo Rust prende un `&mut dyn HostApi` — le capacità si
+   importano dal world, e questa è la verifica che prima non c'era.
+
+Il punto delicato è **da dove vengono i tipi attesi**: non sono scritti a mano.
+`wit(&campo)` deduce la forma WIT dal tipo Rust del campo destrutturato, e
+`WitFn` deduce parametri e risultato dal tipo del puntatore a funzione. Se
+`SearchHit::score` diventasse `f64`, l'attesa diventerebbe `f64` e il confronto
+col contratto (`f32`) fallirebbe — è il caso che il vecchio confronto per soli
+nomi non avrebbe visto. È il "non compila su divergenza" chiesto dall'audit,
+ottenuto senza generare codice.
+
+E c'è il test del test: **quattordici** divergenze introdotte ad arte — campo
+rinominato, caso rimosso, funzione sparita, tipo di troppo, alias con la
+larghezza sbagliata, tipo di un campo cambiato, payload di un caso cambiato,
+risultato di una funzione cambiato, parametro rinominato o ritipato, `host`
+riapparso, campi e casi riordinati — devono tutte far diventare rosso il test.
+Limite dichiarato: l'**ordine** dei casi di un variant è confrontato con l'ordine
+in cui il test li elenca, non con quello dell'enum Rust (il compilatore
+garantisce che ci siano tutti, non che siano in fila).

@@ -9,11 +9,17 @@ description = "Feature ufficiali come impl native dei trait di estensione: backl
 [dependencies]
 camino.workspace = true
 fubmd-abi = { workspace = true }
-fubmd-kernel = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tantivy = "0.26"
 
+# INVARIANTE: la libreria NON dipende da `fubmd-kernel`. Le feature ufficiali
+# sono impl dei trait del contratto, cioè esattamente ciò che scriverà un plugin
+# di terzi — e un plugin di terzi non ha il kernel fra le mani. È presidiata da
+# crates/fubmd-abi/tests/dependency_invariant.rs.
 [dev-dependencies]
+# Il kernel serve ai soli test end-to-end, che è la loro ragione d'essere:
+# provano le feature contro il kernel VERO, non contro un doppio.
+fubmd-kernel = { workspace = true }
 fubmd-format-markdown.workspace = true
 tempfile = "3.27.0"

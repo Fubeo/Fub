@@ -20,7 +20,7 @@ use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::Event;
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{IndexProvider, IndexQuery, IndexResult};
+use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, KernelError, Workspace};
 
@@ -64,6 +64,9 @@ enum Call {
 struct SpyIndex(Arc<Mutex<Vec<Call>>>);
 
 impl IndexProvider for SpyIndex {
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
     fn on_document_indexed(&mut self, doc: &DocumentModel) {
         self.0
             .lock()
@@ -74,7 +77,7 @@ impl IndexProvider for SpyIndex {
         self.0.lock().unwrap().push(Call::Removed(id.to_string()));
     }
     fn reconcile(&mut self, _ids: &[DocId]) {}
-    fn flush(&mut self) -> Result<(), PluginError> {
+    fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
     fn query(&self, _q: IndexQuery) -> Result<IndexResult, PluginError> {
@@ -121,7 +124,8 @@ impl Fixture {
         let mut registry = FormatRegistry::new();
         registry.register(Box::new(PlainProvider));
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_index_provider(Box::new(SpyIndex(self.calls.clone())));
+        ws.register_index_provider("test.spia", Box::new(SpyIndex(self.calls.clone())))
+            .expect("attivazione");
         ws.reindex().expect("reindex");
         self.calls.lock().unwrap().clear();
         ws

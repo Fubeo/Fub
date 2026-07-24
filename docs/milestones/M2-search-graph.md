@@ -16,9 +16,12 @@ full-rebuild di grafo/indice con un aggiornamento **incrementale**.
 `fubmd_features::SearchIndex`, il primo `IndexProvider` nativo, avvolge
 **tantivy** (`crates/fubmd-features/src/search.rs`).
 
-- **Persistenza:** indice su disco in `.fubmd-data/index/` (già ignorato dal walk
-  del vault, vedi `crates/fubmd-kernel/src/vault.rs`). Avvio rapido: niente
-  reindicizzazione completa ad ogni apertura.
+- **Persistenza:** indice su disco nello spazio dati del proprio plugin,
+  `.fubmd-data/plugins/fubmd.search/` (già ignorato dal walk del vault, vedi
+  `crates/fubmd-kernel/src/vault.rs`). Avvio rapido: niente reindicizzazione
+  completa ad ogni apertura. Le impronte passano da `HostApi::data_*` — è ciò che
+  un index provider di terzi avrà — e la cartella mmap di tantivy dal varco
+  nativo `Workspace::plugin_data_dir`.
 - **Schema:** `doc_id` (STRING → termine esatto, è ciò che rende `delete_term`
   chirurgico), `page_name` (TEXT, con boost ×4: chi cerca "Rust" vuole prima la
   nota *intitolata* Rust), `body` (TEXT+STORED, dalla proiezione
@@ -166,7 +169,8 @@ non viene toccato ed è il grafo a risolverlo di nuovo.
 |---|---|
 | tantivy **incrementale su disco** | Scala a vault grandi e dà avvio rapido; i ganci `on_document_*` esistono già nel trait. |
 | Indici **posseduti e alimentati dal kernel**, non dagli eventi | Un indice che perde un aggiornamento non tace: risponde sbagliato, in silenzio. La coda eventi ha un budget; questo canale no. Vedi sopra, "Perché l'indice non si alimenta dagli eventi". |
-| `reconcile(ids)` + `flush()` **aggiunti al trait** a M2 | Le due giunture che restano: ciò che cambia ad app chiusa, e il fatto che il kernel scriva un documento alla volta mentre un indice vuole scrivere a lotti. Il freeze è a M4: la firma si corregge ora o mai più. |
+| `reconcile(ids)` + `flush(host)` **aggiunti al trait** a M2 | Le due giunture che restano: ciò che cambia ad app chiusa, e il fatto che il kernel scriva un documento alla volta mentre un indice vuole scrivere a lotti. Il freeze è a M4: la firma si corregge ora o mai più. |
+| `activate(host)` + `flush(host)` con l'**`HostApi`** nella firma | Senza, un index provider di terzi in WASM non potrebbe persistere nulla: stesso buco che il versioning aveva trovato per `EventHandler`. L'host arriva nei due punti in cui lo stato attraversa il disco, e in nessun altro — vedi [traits.md](../architecture/traits.md), `IndexProvider`. |
 | `snippet` testo + `highlights: Vec<Span>` | Un provider di terzi non deve poter iniettare markup nella webview privilegiata passando per i risultati di ricerca (stessa regola di `UiNode::Html`). |
 | Backlink **serviti dal grafo**, non dall'indice | Il grafo conosce le regole di risoluzione dei wikilink e le ambiguità dell'intero vault: duplicarli creerebbe una seconda verità che può divergere dalla prima. |
 | Grafo **incrementale insieme** all'indice | Stessa natura del problema (delta per-documento); evita due passaggi di refactor sul `Workspace`. |
