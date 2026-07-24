@@ -18,9 +18,7 @@
 
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Event, EventKind, EventMask};
-use fubmd_abi::format::{
-    FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
-};
+use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
 };
@@ -37,8 +35,7 @@ use fubmd_abi::ui::{ActionId, Axis, Intent, UiAction, UiNode, ViewUpdate};
 fn wit_source() -> String {
     // CARGO_MANIFEST_DIR = crates/fubmd-abi ; il contratto è alla radice del repo.
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../wit/fubmd/abi.wit");
-    std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("impossibile leggere {path}: {e}"))
+    std::fs::read_to_string(path).unwrap_or_else(|e| panic!("impossibile leggere {path}: {e}"))
 }
 
 /// Verifica che ogni identificatore atteso (nome di tipo, variante o campo, in
@@ -61,7 +58,11 @@ fn assert_present(wit: &str, names: &[&str]) {
 
 fn block_names(b: &Block) -> &'static [&'static str] {
     match b {
-        Block::Heading { level, inlines, span } => {
+        Block::Heading {
+            level,
+            inlines,
+            span,
+        } => {
             let _ = (level, inlines, span);
             &["block-heading", "level", "inlines", "span"]
         }
@@ -69,7 +70,11 @@ fn block_names(b: &Block) -> &'static [&'static str] {
             let _ = (inlines, span);
             &["block-paragraph", "inlines", "span"]
         }
-        Block::List { ordered, items, span } => {
+        Block::List {
+            ordered,
+            items,
+            span,
+        } => {
             let _ = (ordered, items, span);
             &["block-list", "ordered", "items", "span"]
         }
@@ -85,7 +90,12 @@ fn block_names(b: &Block) -> &'static [&'static str] {
             let _ = span;
             &["thematic-break"]
         }
-        Block::Custom { custom_kind, attrs, blocks, span } => {
+        Block::Custom {
+            custom_kind,
+            attrs,
+            blocks,
+            span,
+        } => {
             let _ = (custom_kind, attrs, blocks, span);
             &["block-custom", "custom-kind", "attrs"]
         }
@@ -110,7 +120,11 @@ fn inline_names(i: &Inline) -> &'static [&'static str] {
             let _ = s;
             &["code"]
         }
-        Inline::Link { target, label, span } => {
+        Inline::Link {
+            target,
+            label,
+            span,
+        } => {
             let _ = (target, label, span);
             &["inline-link", "target", "label"]
         }
@@ -118,7 +132,11 @@ fn inline_names(i: &Inline) -> &'static [&'static str] {
             let _ = (name, span);
             &["inline-tag-ref", "tag-ref", "name"]
         }
-        Inline::Custom { custom_kind, attrs, span } => {
+        Inline::Custom {
+            custom_kind,
+            attrs,
+            span,
+        } => {
             let _ = (custom_kind, attrs, span);
             &["inline-custom"]
         }
@@ -127,9 +145,21 @@ fn inline_names(i: &Inline) -> &'static [&'static str] {
 
 fn link_target_names(t: &LinkTarget) -> &'static [&'static str] {
     match t {
-        LinkTarget::Wiki { page, heading, block, embed } => {
+        LinkTarget::Wiki {
+            page,
+            heading,
+            block,
+            embed,
+        } => {
             let _ = (page, heading, block, embed);
-            &["link-target-wiki", "wiki", "page", "heading", "block", "embed"]
+            &[
+                "link-target-wiki",
+                "wiki",
+                "page",
+                "heading",
+                "block",
+                "embed",
+            ]
         }
         LinkTarget::Url(s) => {
             let _ = s;
@@ -160,11 +190,19 @@ fn ui_node_names(n: &UiNode) -> &'static [&'static str] {
             let _ = items;
             &["list"]
         }
-        UiNode::ListItem { title, subtitle, action } => {
+        UiNode::ListItem {
+            title,
+            subtitle,
+            action,
+        } => {
             let _ = (title, subtitle, action);
             &["ui-list-item", "list-item", "title", "subtitle", "action"]
         }
-        UiNode::Button { label, intent, action } => {
+        UiNode::Button {
+            label,
+            intent,
+            action,
+        } => {
             let _ = (label, intent, action);
             &["ui-button", "button", "label", "intent"]
         }
@@ -207,7 +245,15 @@ fn event_names(e: &Event) -> &'static [&'static str] {
             let _ = id;
             &["document-removed", "event-document-removed"]
         }
+        Event::DocumentRenamed { from, to } => {
+            let _ = (from, to);
+            &["document-renamed", "event-document-renamed", "from", "to"]
+        }
         Event::IndexUpdated => &["index-updated"],
+        Event::Custom { topic, payload } => {
+            let _ = (topic, payload);
+            &["event-custom", "custom", "topic", "payload"]
+        }
     }
 }
 
@@ -216,7 +262,9 @@ fn event_kind_names(k: EventKind) -> &'static [&'static str] {
         EventKind::VaultOpened => &["vault-opened"],
         EventKind::DocumentChanged => &["document-changed"],
         EventKind::DocumentRemoved => &["document-removed"],
+        EventKind::DocumentRenamed => &["document-renamed"],
         EventKind::IndexUpdated => &["index-updated"],
+        EventKind::Custom => &["custom"],
     }
 }
 
@@ -230,6 +278,10 @@ fn index_query_names(q: &IndexQuery) -> &'static [&'static str] {
             let _ = (query, limit);
             &["index-query-full-text", "full-text", "query", "limit"]
         }
+        IndexQuery::Custom { ns, query } => {
+            let _ = (ns, query);
+            &["index-query-custom", "custom", "ns"]
+        }
     }
 }
 
@@ -242,6 +294,10 @@ fn index_result_names(r: &IndexResult) -> &'static [&'static str] {
         IndexResult::Search(v) => {
             let _ = v;
             &["search"]
+        }
+        IndexResult::Custom(v) => {
+            let _ = v;
+            &["custom"]
         }
     }
 }
@@ -320,24 +376,61 @@ fn view_placement_names(p: ViewPlacement) -> &'static [&'static str] {
 fn struct_names() -> Vec<&'static str> {
     let mut names = Vec::new();
 
-    let DocumentModel { id, frontmatter, body, outline, links, tags, text } =
-        DocumentModel::empty(DocId::new("x.md"));
+    let DocumentModel {
+        id,
+        frontmatter,
+        body,
+        outline,
+        links,
+        tags,
+        text,
+    } = DocumentModel::empty(DocId::new("x.md"));
     let _ = (id, frontmatter, body, outline, links, tags, text);
-    names.extend(["document-model", "id", "frontmatter", "body", "outline", "links", "tags", "text"]);
+    names.extend([
+        "document-model",
+        "id",
+        "frontmatter",
+        "body",
+        "outline",
+        "links",
+        "tags",
+        "text",
+    ]);
 
     let Span { start, end } = Span::EMPTY;
     let _ = (start, end);
     names.extend(["span", "start", "end"]);
 
-    let Heading { level, text, slug, span } = Heading { level: 1, text: String::new(), slug: String::new(), span: Span::EMPTY };
+    let Heading {
+        level,
+        text,
+        slug,
+        span,
+    } = Heading {
+        level: 1,
+        text: String::new(),
+        slug: String::new(),
+        span: Span::EMPTY,
+    };
     let _ = (level, text, slug, span);
     names.extend(["heading", "slug"]);
 
-    let Tag { name, span } = Tag { name: String::new(), span: Span::EMPTY };
+    let Tag { name, span } = Tag {
+        name: String::new(),
+        span: Span::EMPTY,
+    };
     let _ = (name, span);
     names.extend(["tag", "name"]);
 
-    let Link { target, span, context } = Link { target: LinkTarget::wiki("p"), span: Span::EMPTY, context: None };
+    let Link {
+        target,
+        span,
+        context,
+    } = Link {
+        target: LinkTarget::wiki("p"),
+        span: Span::EMPTY,
+        context: None,
+    };
     let _ = (target, span, context);
     names.extend(["link", "target", "context"]);
 
@@ -345,23 +438,51 @@ fn struct_names() -> Vec<&'static str> {
     let _ = map;
     names.push("frontmatter");
 
-    let FormatDescriptor { id, name, extensions } = FormatDescriptor { id: String::new(), name: String::new(), extensions: vec![] };
+    let FormatDescriptor {
+        id,
+        name,
+        extensions,
+    } = FormatDescriptor {
+        id: String::new(),
+        name: String::new(),
+        extensions: vec![],
+    };
     let _ = (id, name, extensions);
     names.extend(["format-descriptor", "extensions"]);
 
-    let FormatCapabilities { wikilinks, tags, frontmatter, callouts, embeds } = FormatCapabilities::default();
+    let FormatCapabilities {
+        wikilinks,
+        tags,
+        frontmatter,
+        callouts,
+        embeds,
+    } = FormatCapabilities::default();
     let _ = (wikilinks, tags, frontmatter, callouts, embeds);
     names.extend(["format-capabilities", "wikilinks", "callouts", "embeds"]);
 
-    let ParseContext { doc_id, parse_tags, parse_wikilinks } = ParseContext::default();
+    let ParseContext {
+        doc_id,
+        parse_tags,
+        parse_wikilinks,
+    } = ParseContext::default();
     let _ = (doc_id, parse_tags, parse_wikilinks);
     names.extend(["parse-context", "doc-id", "parse-tags", "parse-wikilinks"]);
 
-    let RenderOptions { wikilinks_as_data_attrs } = RenderOptions::default();
+    let RenderOptions {
+        wikilinks_as_data_attrs,
+    } = RenderOptions::default();
     let _ = wikilinks_as_data_attrs;
     names.extend(["render-options", "wikilinks-as-data-attrs"]);
 
-    let CommandSpec { id, title, keybinding } = CommandSpec { id: String::new(), title: String::new(), keybinding: None };
+    let CommandSpec {
+        id,
+        title,
+        keybinding,
+    } = CommandSpec {
+        id: String::new(),
+        title: String::new(),
+        keybinding: None,
+    };
     let _ = (id, title, keybinding);
     names.extend(["command-spec", "title", "keybinding"]);
 
@@ -369,28 +490,62 @@ fn struct_names() -> Vec<&'static str> {
     let _ = notify;
     names.extend(["command-outcome", "notify"]);
 
-    let ViewSpec { id, title, placement } = ViewSpec { id: String::new(), title: String::new(), placement: ViewPlacement::Bottom };
+    let ViewSpec {
+        id,
+        title,
+        placement,
+    } = ViewSpec {
+        id: String::new(),
+        title: String::new(),
+        placement: ViewPlacement::Bottom,
+    };
     let _ = (id, title, placement);
     names.extend(["view-spec", "placement", "view-placement"]);
 
-    let BacklinkRef { source, context } = BacklinkRef { source: DocId::new("a"), context: None };
+    let BacklinkRef { source, context } = BacklinkRef {
+        source: DocId::new("a"),
+        context: None,
+    };
     let _ = (source, context);
     names.extend(["backlink-ref", "source"]);
 
-    let SearchHit { doc, score, snippet } = SearchHit { doc: DocId::new("a"), score: 0.0, snippet: String::new() };
+    let SearchHit {
+        doc,
+        score,
+        snippet,
+    } = SearchHit {
+        doc: DocId::new("a"),
+        score: 0.0,
+        snippet: String::new(),
+    };
     let _ = (doc, score, snippet);
     names.extend(["search-hit", "doc", "score", "snippet"]);
 
-    let UiAction { action, payload } = UiAction { action: ActionId(String::new()), payload: serde_json::Value::Null };
+    let UiAction { action, payload } = UiAction {
+        action: ActionId(String::new()),
+        payload: serde_json::Value::Null,
+    };
     let _ = (action, payload);
     names.extend(["ui-action", "action-id", "payload"]);
 
-    let PluginPermissions { read_vault, write_vault, network } = PluginPermissions::default();
+    let PluginPermissions {
+        read_vault,
+        write_vault,
+        network,
+    } = PluginPermissions::default();
     let _ = (read_vault, write_vault, network);
     names.extend(["plugin-permissions", "read-vault", "write-vault", "network"]);
 
-    let PluginManifest { id, name, version, permissions } = PluginManifest {
-        id: String::new(), name: String::new(), version: String::new(), permissions: PluginPermissions::default(),
+    let PluginManifest {
+        id,
+        name,
+        version,
+        permissions,
+    } = PluginManifest {
+        id: String::new(),
+        name: String::new(),
+        version: String::new(),
+        permissions: PluginPermissions::default(),
     };
     let _ = (id, name, version, permissions);
     names.extend(["plugin-manifest", "version", "permissions"]);
@@ -414,73 +569,202 @@ fn abi_types_are_mirrored_in_wit() {
     // Variant/enum: un rappresentante per ogni variante (l'esaustività è forzata
     // dal compilatore nei match sopra).
     expected.extend(block_names(&Block::ThematicBreak { span: Span::EMPTY }));
-    expected.extend(block_names(&Block::Heading { level: 1, inlines: vec![], span: Span::EMPTY }));
-    expected.extend(block_names(&Block::Paragraph { inlines: vec![], span: Span::EMPTY }));
-    expected.extend(block_names(&Block::List { ordered: false, items: vec![], span: Span::EMPTY }));
-    expected.extend(block_names(&Block::CodeBlock { lang: None, code: String::new(), span: Span::EMPTY }));
-    expected.extend(block_names(&Block::Quote { blocks: vec![], span: Span::EMPTY }));
-    expected.extend(block_names(&Block::Custom { custom_kind: String::new(), attrs: serde_json::Value::Null, blocks: vec![], span: Span::EMPTY }));
+    expected.extend(block_names(&Block::Heading {
+        level: 1,
+        inlines: vec![],
+        span: Span::EMPTY,
+    }));
+    expected.extend(block_names(&Block::Paragraph {
+        inlines: vec![],
+        span: Span::EMPTY,
+    }));
+    expected.extend(block_names(&Block::List {
+        ordered: false,
+        items: vec![],
+        span: Span::EMPTY,
+    }));
+    expected.extend(block_names(&Block::CodeBlock {
+        lang: None,
+        code: String::new(),
+        span: Span::EMPTY,
+    }));
+    expected.extend(block_names(&Block::Quote {
+        blocks: vec![],
+        span: Span::EMPTY,
+    }));
+    expected.extend(block_names(&Block::Custom {
+        custom_kind: String::new(),
+        attrs: serde_json::Value::Null,
+        blocks: vec![],
+        span: Span::EMPTY,
+    }));
 
     expected.extend(inline_names(&Inline::Text(String::new())));
     expected.extend(inline_names(&Inline::Emph(vec![])));
     expected.extend(inline_names(&Inline::Strong(vec![])));
     expected.extend(inline_names(&Inline::Code(String::new())));
-    expected.extend(inline_names(&Inline::Link { target: LinkTarget::wiki("p"), label: None, span: Span::EMPTY }));
-    expected.extend(inline_names(&Inline::TagRef { name: String::new(), span: Span::EMPTY }));
-    expected.extend(inline_names(&Inline::Custom { custom_kind: String::new(), attrs: serde_json::Value::Null, span: Span::EMPTY }));
+    expected.extend(inline_names(&Inline::Link {
+        target: LinkTarget::wiki("p"),
+        label: None,
+        span: Span::EMPTY,
+    }));
+    expected.extend(inline_names(&Inline::TagRef {
+        name: String::new(),
+        span: Span::EMPTY,
+    }));
+    expected.extend(inline_names(&Inline::Custom {
+        custom_kind: String::new(),
+        attrs: serde_json::Value::Null,
+        span: Span::EMPTY,
+    }));
 
     expected.extend(link_target_names(&LinkTarget::wiki("p")));
     expected.extend(link_target_names(&LinkTarget::Url(String::new())));
     expected.extend(link_target_names(&LinkTarget::Path(String::new())));
 
-    expected.extend(ui_node_names(&UiNode::Stack { dir: Axis::Row, gap: 0, children: vec![] }));
-    expected.extend(ui_node_names(&UiNode::Text { content: String::new() }));
-    expected.extend(ui_node_names(&UiNode::Heading { level: 1, content: String::new() }));
+    expected.extend(ui_node_names(&UiNode::Stack {
+        dir: Axis::Row,
+        gap: 0,
+        children: vec![],
+    }));
+    expected.extend(ui_node_names(&UiNode::Text {
+        content: String::new(),
+    }));
+    expected.extend(ui_node_names(&UiNode::Heading {
+        level: 1,
+        content: String::new(),
+    }));
     expected.extend(ui_node_names(&UiNode::List { items: vec![] }));
-    expected.extend(ui_node_names(&UiNode::ListItem { title: String::new(), subtitle: None, action: None }));
-    expected.extend(ui_node_names(&UiNode::Button { label: String::new(), intent: Intent::Neutral, action: ActionId(String::new()) }));
-    expected.extend(ui_node_names(&UiNode::Html { html: String::new() }));
-    expected.extend(ui_node_names(&UiNode::WebView { url: String::new(), height: 0 }));
+    expected.extend(ui_node_names(&UiNode::ListItem {
+        title: String::new(),
+        subtitle: None,
+        action: None,
+    }));
+    expected.extend(ui_node_names(&UiNode::Button {
+        label: String::new(),
+        intent: Intent::Neutral,
+        action: ActionId(String::new()),
+    }));
+    expected.extend(ui_node_names(&UiNode::Html {
+        html: String::new(),
+    }));
+    expected.extend(ui_node_names(&UiNode::WebView {
+        url: String::new(),
+        height: 0,
+    }));
 
-    expected.extend(view_update_names(&ViewUpdate::Replace { root: UiNode::Text { content: String::new() } }));
+    expected.extend(view_update_names(&ViewUpdate::Replace {
+        root: UiNode::Text {
+            content: String::new(),
+        },
+    }));
     expected.extend(view_update_names(&ViewUpdate::None));
-    expected.extend(view_update_names(&ViewUpdate::Navigate { doc_id: String::new() }));
+    expected.extend(view_update_names(&ViewUpdate::Navigate {
+        doc_id: String::new(),
+    }));
 
-    expected.extend(event_names(&Event::VaultOpened { root: String::new() }));
-    expected.extend(event_names(&Event::DocumentChanged { id: DocId::new("a") }));
-    expected.extend(event_names(&Event::DocumentRemoved { id: DocId::new("a") }));
+    expected.extend(event_names(&Event::VaultOpened {
+        root: String::new(),
+    }));
+    expected.extend(event_names(&Event::DocumentChanged {
+        id: DocId::new("a"),
+    }));
+    expected.extend(event_names(&Event::DocumentRemoved {
+        id: DocId::new("a"),
+    }));
+    expected.extend(event_names(&Event::DocumentRenamed {
+        from: DocId::new("a"),
+        to: DocId::new("b"),
+    }));
     expected.extend(event_names(&Event::IndexUpdated));
+    expected.extend(event_names(&Event::Custom {
+        topic: String::new(),
+        payload: serde_json::Value::Null,
+    }));
 
-    for k in [EventKind::VaultOpened, EventKind::DocumentChanged, EventKind::DocumentRemoved, EventKind::IndexUpdated] {
+    for k in [
+        EventKind::VaultOpened,
+        EventKind::DocumentChanged,
+        EventKind::DocumentRemoved,
+        EventKind::DocumentRenamed,
+        EventKind::IndexUpdated,
+        EventKind::Custom,
+    ] {
         expected.extend(event_kind_names(k));
     }
 
-    expected.extend(index_query_names(&IndexQuery::Backlinks { target: DocId::new("a") }));
-    expected.extend(index_query_names(&IndexQuery::FullText { query: String::new(), limit: 0 }));
+    expected.extend(index_query_names(&IndexQuery::Backlinks {
+        target: DocId::new("a"),
+    }));
+    expected.extend(index_query_names(&IndexQuery::FullText {
+        query: String::new(),
+        limit: 0,
+    }));
+    expected.extend(index_query_names(&IndexQuery::Custom {
+        ns: String::new(),
+        query: serde_json::Value::Null,
+    }));
     expected.extend(index_result_names(&IndexResult::Backlinks(vec![])));
     expected.extend(index_result_names(&IndexResult::Search(vec![])));
+    expected.extend(index_result_names(&IndexResult::Custom(
+        serde_json::Value::Null,
+    )));
 
-    for e in [FormatError::Parse(String::new()), FormatError::Render(String::new()), FormatError::Serialize(String::new()), FormatError::Unsupported(String::new())] {
+    for e in [
+        FormatError::Parse(String::new()),
+        FormatError::Render(String::new()),
+        FormatError::Serialize(String::new()),
+        FormatError::Unsupported(String::new()),
+    ] {
         expected.extend(format_error_names(&e));
     }
-    for e in [PluginError::UnknownCommand(String::new()), PluginError::UnknownView(String::new()), PluginError::BadArgs(String::new()), PluginError::PermissionDenied(String::new()), PluginError::Internal(String::new())] {
+    for e in [
+        PluginError::UnknownCommand(String::new()),
+        PluginError::UnknownView(String::new()),
+        PluginError::BadArgs(String::new()),
+        PluginError::PermissionDenied(String::new()),
+        PluginError::Internal(String::new()),
+    ] {
         expected.extend(plugin_error_names(&e));
     }
 
-    for a in [Axis::Row, Axis::Column] { expected.extend(axis_names(a)); }
-    for i in [Intent::Neutral, Intent::Primary, Intent::Danger] { expected.extend(intent_names(i)); }
-    for p in [ViewPlacement::LeftSidebar, ViewPlacement::RightSidebar, ViewPlacement::Bottom] { expected.extend(view_placement_names(p)); }
+    for a in [Axis::Row, Axis::Column] {
+        expected.extend(axis_names(a));
+    }
+    for i in [Intent::Neutral, Intent::Primary, Intent::Danger] {
+        expected.extend(intent_names(i));
+    }
+    for p in [
+        ViewPlacement::LeftSidebar,
+        ViewPlacement::RightSidebar,
+        ViewPlacement::Bottom,
+    ] {
+        expected.extend(view_placement_names(p));
+    }
 
     expected.extend(struct_names());
 
     // Le interfacce/host-api e il world attesi nel contratto.
     expected.extend([
-        "package fubmd:abi", "world plugin-world",
-        "interface model", "interface format", "interface ui", "interface events",
-        "interface command", "interface index", "interface view", "interface host-api",
-        "interface plugin", "interface event-handler", "interface errors",
-        "read-document", "write-document", "storage-get", "storage-set",
-        "on-document-indexed", "on-document-removed",
+        "package fubmd:abi",
+        "world plugin-world",
+        "interface model",
+        "interface format",
+        "interface ui",
+        "interface events",
+        "interface command",
+        "interface index",
+        "interface view",
+        "interface host-api",
+        "interface plugin",
+        "interface event-handler",
+        "interface errors",
+        "read-document",
+        "write-document",
+        "storage-get",
+        "storage-set",
+        "on-document-indexed",
+        "on-document-removed",
     ]);
 
     expected.sort_unstable();

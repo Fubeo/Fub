@@ -103,4 +103,20 @@ impl Vault {
     pub fn exists(&self, id: &DocId) -> bool {
         self.path_for(id).exists()
     }
+
+    /// Sposta un documento (creando le cartelle di destinazione se mancano).
+    pub fn rename(&self, from: &DocId, to: &DocId) -> Result<()> {
+        let from_path = self.path_for(from);
+        let to_path = self.path_for(to);
+        if let Some(parent) = to_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| KernelError::Io {
+                path: parent.to_owned(),
+                source: e,
+            })?;
+        }
+        std::fs::rename(&from_path, &to_path).map_err(|e| KernelError::Io {
+            path: from_path,
+            source: e,
+        })
+    }
 }

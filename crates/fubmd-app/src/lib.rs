@@ -151,11 +151,47 @@ fn write_document(state: State<AppState>, id: String, source: String) -> Result<
         .map_err(|e| e.to_string())
 }
 
+/// Rinomina/sposta un documento: file, grafo, evento `DocumentRenamed` e
+/// riscrittura chirurgica dei wikilink entranti (stile Obsidian).
+#[tauri::command]
+fn rename_document(state: State<AppState>, from: String, to: String) -> Result<(), String> {
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.rename_document(&DocId::new(from), &DocId::new(to))
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+struct EmbedContent {
+    doc_id: String,
+    html: String,
+}
+
+/// Contenuto di un embed `![[page#heading]]`: il frontend lo innesta nel
+/// placeholder emesso dal provider (profondità massima e cicli a suo carico).
+#[tauri::command]
+fn render_embed(
+    state: State<AppState>,
+    page: String,
+    heading: Option<String>,
+) -> Result<EmbedContent, String> {
+    let ws = current(&state)?;
+    let ws = ws.lock().unwrap();
+    let (doc_id, html) = ws
+        .render_embed(&page, heading.as_deref())
+        .map_err(|e| e.to_string())?;
+    Ok(EmbedContent {
+        doc_id: doc_id.0,
+        html,
+    })
+}
+
 #[tauri::command]
 fn render_preview(state: State<AppState>, id: String) -> Result<String, String> {
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
-    ws.render_preview(&DocId::new(id)).map_err(|e| e.to_string())
+    ws.render_preview(&DocId::new(id))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -190,7 +226,9 @@ pub fn run() {
             list_documents,
             read_document,
             write_document,
+            rename_document,
             render_preview,
+            render_embed,
             backlinks,
             backlinks_view,
             resolve_link,

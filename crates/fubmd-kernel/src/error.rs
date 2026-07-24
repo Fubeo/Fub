@@ -15,6 +15,8 @@ pub enum KernelError {
     NoProvider(String),
     #[error("documento non trovato: {0}")]
     NotFound(String),
+    #[error("esiste già un documento: {0}")]
+    AlreadyExists(String),
     #[error("path fuori dal vault: {0}")]
     OutsideVault(Utf8PathBuf),
     #[error("path non UTF-8: {0}")]

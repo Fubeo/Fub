@@ -21,8 +21,13 @@ Il perno è già nel modello: ogni nodo porta uno `Span` in byte
   documento aperto; per ogni nodo con `Span` genera una decorazione CodeMirror 6:
   wikilink cliccabili inline, `#tag`, enfasi, heading, code.
 - Modalità Obsidian: la riga sotto il cursore mostra la sorgente; le altre righe la
-  resa. Gli `Span` byte→posizione CM sono già gestiti dal ponte offset
-  (`crates/fubmd-format-markdown/src/offsets.rs`).
+  resa.
+- **Attenzione (nota di revisione):** gli `Span` del modello sono in **byte
+  UTF-8**; le posizioni di CodeMirror 6 sono in **code unit UTF-16**. Il ponte
+  byte→UTF-16 **non esiste ancora** (`offsets.rs` copre solo riga/colonna→byte
+  di comrak): senza, ogni decorazione slitta al primo carattere accentato. Va
+  costruito lato frontend (o come proiezione IPC) e testato su testo multibyte
+  PRIMA di cablare le decorazioni.
 - **De-rischiato da M1:** il pannello anteprima HTML resta come fallback e come
   oracolo visivo; la live-preview è "meccanica" perché non richiede nuovi dati, solo
   proiezione degli `Span` esistenti.
@@ -34,13 +39,19 @@ Oggi il provider markdown emette callout/tabelle/embed/math come
 **l'interpretazione** lato resa, senza togliere l'escape hatch:
 
 - `render_html` del provider markdown (e le decorazioni in-editor) riconoscono i
-  `custom_kind` noti — `callout`, `math`, `embed`, `table` — e producono la resa
-  ricca (callout con icona/colore per tipo, math via KaTeX/MathML, embed di note/
-  immagini, tabelle).
-- Gli `attrs` portano i parametri (tipo di callout, `foldable`, sorgente math, target
-  embed). I `custom_kind` sconosciuti restano resi come blocco generico.
-- **Embed** (`![[..]]`, `LinkTarget::Wiki { embed: true }`): risolti dal kernel come
-  i wikilink; la resa inserisce il contenuto (o un boxed-link se non risolto).
+  `custom_kind` noti — `callout`, `math`, `table` — e producono la resa ricca
+  (callout con icona/colore per tipo, math via KaTeX/MathML, tabelle). Il
+  registro dei kind noti e dei loro `attrs` è in
+  [../architecture/data-model.md](../architecture/data-model.md).
+- Gli `attrs` portano i parametri (tipo di callout, `foldable`, sorgente math).
+  I `custom_kind` sconosciuti restano resi come blocco generico.
+- **Embed** (`![[..]]`, `LinkTarget::Wiki { embed: true }`): il protocollo di
+  transclusion è **già cablato** (deciso in revisione concettuale, vedi
+  [../architecture/ui-protocol.md](../architecture/ui-protocol.md)): il provider
+  emette il placeholder `.embed`, il kernel serve `render_embed(page, heading?)`
+  (anche per sezione, via `Span` dell'outline), il frontend idrata con guardia
+  su cicli e profondità. M3 estende la resa (immagini, blocchi `^id`, stile) —
+  non il meccanismo.
 
 ### Command palette (`CommandProvider`)
 

@@ -99,8 +99,20 @@ pub trait ViewProvider: Send + Sync {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum IndexQuery {
-    Backlinks { target: DocId },
-    FullText { query: String, limit: u32 },
+    Backlinks {
+        target: DocId,
+    },
+    FullText {
+        query: String,
+        limit: u32,
+    },
+    /// Varco di estensione: query definite da un provider di terzi, con
+    /// namespace (`ns` = plugin id). Un provider che non riconosce `ns`
+    /// risponde `PluginError::BadArgs`.
+    Custom {
+        ns: String,
+        query: serde_json::Value,
+    },
 }
 
 /// Un riferimento entrante (backlink) verso un documento.
@@ -123,6 +135,8 @@ pub struct SearchHit {
 pub enum IndexResult {
     Backlinks(Vec<BacklinkRef>),
     Search(Vec<SearchHit>),
+    /// Risposta a una [`IndexQuery::Custom`].
+    Custom(serde_json::Value),
 }
 
 pub trait IndexProvider: Send + Sync {

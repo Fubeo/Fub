@@ -8,11 +8,10 @@ pub fn slugify(text: &str) -> String {
         if c.is_alphanumeric() {
             slug.extend(c.to_lowercase());
             last_dash = false;
-        } else if (c.is_whitespace() || c == '-' || c == '_')
-            && !last_dash && !slug.is_empty() {
-                slug.push('-');
-                last_dash = true;
-            }
+        } else if (c.is_whitespace() || c == '-' || c == '_') && !last_dash && !slug.is_empty() {
+            slug.push('-');
+            last_dash = true;
+        }
         // ogni altra punteggiatura viene ignorata
     }
     while slug.ends_with('-') {

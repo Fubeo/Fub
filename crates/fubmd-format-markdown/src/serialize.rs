@@ -1,8 +1,13 @@
-//! Serializzazione modello → markdown, **best-effort**.
+//! Serializzazione modello → markdown: **generazione, non round-trip**.
 //!
-//! Nota M1: il percorso critico dell'editor scrive la sorgente grezza; questo
-//! serializer serve ai plugin che modificano il modello a livello semantico.
-//! La fedeltà round-trip completa è un obiettivo M3.
+//! La fonte di verità di un documento esistente è la sua sorgente sul disco;
+//! il modello è lossy per costruzione (stile di enfasi, spaziature,
+//! indentazione), quindi la fedeltà round-trip integrale è irraggiungibile e
+//! non è l'obiettivo. Questo serializer genera documenti **nuovi** (template,
+//! "crea nota") e frammenti; le modifiche programmatiche a un documento
+//! esistente si fanno come patch chirurgiche sulla sorgente guidate dagli
+//! `Span` (vedi il contratto: `FormatProvider::serialize`). Il frontmatter
+//! mantiene l'ordine delle chiavi (`serde_json` con `preserve_order`).
 
 use fubmd_abi::model::{Block, DocumentModel, Inline, LinkTarget};
 
