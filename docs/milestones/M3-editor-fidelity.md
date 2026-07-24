@@ -32,6 +32,22 @@ Il perno è già nel modello: ogni nodo porta uno `Span` in byte
   oracolo visivo; la live-preview è "meccanica" perché non richiede nuovi dati, solo
   proiezione degli `Span` esistenti.
 
+### Conflitti buffer ↔ disco (debito dichiarato di M2)
+
+La politica delle **tre copie** è decisa e in parte cablata (vedi
+[data-model.md](../architecture/data-model.md), "Le tre copie"): flush del
+buffer al cambio documento, reload del buffer pulito su cambio esterno, buffer
+sporco mai sovrascritto. Il caso rimasto aperto — **documento aperto e sporco
+che cambia su disco** (watcher, riscrittura link da un rename altrui) — oggi si
+risolve con "il buffer vince, con warning". M3 lo chiude:
+
+- **conflitto esplicito**: dialogo (mantieni buffer / ricarica / confronta) al
+  posto del silenzioso "vince il buffer";
+- **flush-before-patch** esteso ai comandi della palette che riscrivono file
+  (rinomina/sposta nota): si salva il buffer prima di calcolare le patch;
+- valutare lo **span-shift** (rimappare le patch sul buffer corrente invece di
+  rifiutarle) solo se il conflitto si rivela frequente nell'uso reale.
+
 ### Rendering ricco di callout / embed / math
 
 Oggi il provider markdown emette callout/tabelle/embed/math come
@@ -68,6 +84,9 @@ Oggi il provider markdown emette callout/tabelle/embed/math come
 - I settings (del core e dei futuri plugin) sono descritti come **form dichiarativi**
   nel protocollo `UiNode`. M3 introduce i nodi input necessari (text, toggle,
   select, number) — da congelare poi a [M4](M4-wit-hardening.md).
+- I nodi input hanno **`id` stabile** e il renderer **riconcilia per id**: lo
+  stato locale (focus, digitazione in corso) sopravvive a `ViewUpdate::Replace`
+  — decisione già presa, vedi [ui-protocol.md](../architecture/ui-protocol.md).
 - Persistenza via `HostApi.storage_get/set` (namespace per plugin/core).
 
 ## Trait/API coinvolti

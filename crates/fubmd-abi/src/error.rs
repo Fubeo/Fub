@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Errore prodotto da un `FormatProvider`.
-#[derive(Clone, Debug, thiserror::Error, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error, Serialize, Deserialize)]
 pub enum FormatError {
     #[error("parse fallito: {0}")]
     Parse(String),
@@ -17,12 +17,14 @@ pub enum FormatError {
 }
 
 /// Errore prodotto da un plugin (nativo o WASM).
-#[derive(Clone, Debug, thiserror::Error, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error, Serialize, Deserialize)]
 pub enum PluginError {
     #[error("comando sconosciuto: {0}")]
     UnknownCommand(String),
     #[error("view sconosciuta: {0}")]
     UnknownView(String),
+    #[error("job sconosciuto: {0}")]
+    UnknownJob(String),
     #[error("argomenti non validi: {0}")]
     BadArgs(String),
     #[error("permesso negato: {0}")]

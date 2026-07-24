@@ -93,6 +93,15 @@ Canvas/WebGL) **non** passa da `UiNode`. Il `ViewProvider` del grafo espone i da
 `WebView` resta per plugin di terzi che vogliano una propria superficie di disegno.
 Vedi la sezione "Graph view" in [M2](../milestones/M2-search-graph.md).
 
+**Asterisco di onestà sul dogfooding.** La graph view è quindi una superficie
+*privilegiata*: componente frontend + canale IPC dedicato, non percorribile da
+un plugin di terzi finché la `WebView` non ha asset story e CSP (M5). Il
+principio "se il protocollo basta alle feature ufficiali, basta ai plugin" vale
+per le superfici **dichiarative** (liste, pannelli, form); per i canvas ad alte
+prestazioni il claim "le feature native sono di fatto plugin" va letto con
+questo limite dichiarato — finché `WebView` non apre ai terzi, un plugin non
+può costruire una graph view alternativa.
+
 ## Dogfooding: il pannello backlink
 
 La prima feature ufficiale espressa nel protocollo è il pannello backlink
@@ -109,5 +118,12 @@ questo lo si tiene "affamato" e lo si estende solo su necessità reale.
   solo se una di queste li richiede (candidati: input di ricerca, tree-node).
 - **M3** — form dichiarativi per i settings: probabile aggiunta di nodi input
   (text/toggle/select) al protocollo, congelati poi a [M4](../milestones/M4-wit-hardening.md).
+  **Vincolo già deciso:** `ViewUpdate::Replace` rimpiazza l'albero, e un albero
+  con input non può perdere lo stato locale (focus, testo a metà digitazione,
+  scroll) a ogni update. I nodi input avranno un **`id` stabile** e il renderer
+  **riconcilia per id** (aggiorna il DOM esistente invece di ricrearlo) — la
+  semantica di `Replace` resta l'unica del protocollo, ma il rendering è una
+  riconciliazione, non una ricostruzione. Da fissare con i nodi input a M3,
+  prima del freeze.
 - Ogni nuovo `UiNode` deve restare esprimibile in WIT (vedi la tabella in
   [traits.md](traits.md)).

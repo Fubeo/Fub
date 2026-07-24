@@ -3,7 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::PluginError;
 use crate::model::DocId;
+use crate::traits::JobId;
 
 /// Un evento del ciclo di vita del vault.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -20,6 +22,20 @@ pub enum Event {
     DocumentRenamed { from: DocId, to: DocId },
     /// L'indice/grafo è stato aggiornato dopo un batch di modifiche.
     IndexUpdated,
+    /// Esito di un job in background (vedi `HostApi::spawn_job`): consegnato
+    /// sul giro sincrono normale. Chi ha lanciato il job riconosce il proprio
+    /// `id`; `job` è il nome dell'entry point, per comodità di filtro.
+    JobDone {
+        id: JobId,
+        job: String,
+        result: Result<serde_json::Value, PluginError>,
+    },
+    /// La coda eventi è stata troncata: il budget anti-ping-pong del dispatch
+    /// si è esaurito e `dropped` eventi NON sono stati consegnati agli
+    /// handler. Chi deriva stato dagli eventi (indice, grafo, cache) deve
+    /// considerarlo stantio e riconciliare da zero. Mai silenzioso: questo
+    /// evento è la versione rumorosa del troncamento.
+    Overflow { dropped: u64 },
     /// Varco di estensione: eventi definiti dai plugin, con topic namespaced
     /// (`"<plugin-id>/<nome>"`). L'abbonamento è a grana `EventKind::Custom`;
     /// il filtro sul topic è a carico dell'handler.
@@ -37,6 +53,8 @@ impl Event {
             Event::DocumentRemoved { .. } => EventKind::DocumentRemoved,
             Event::DocumentRenamed { .. } => EventKind::DocumentRenamed,
             Event::IndexUpdated => EventKind::IndexUpdated,
+            Event::JobDone { .. } => EventKind::JobDone,
+            Event::Overflow { .. } => EventKind::Overflow,
             Event::Custom { .. } => EventKind::Custom,
         }
     }
@@ -51,6 +69,10 @@ pub enum EventKind {
     DocumentRemoved,
     DocumentRenamed,
     IndexUpdated,
+    /// Esito di un job in background.
+    JobDone,
+    /// Coda eventi troncata: lo stato derivato dagli eventi va riconciliato.
+    Overflow,
     /// Eventi custom dei plugin (il topic sta nel payload dell'`Event`).
     Custom,
 }
@@ -67,6 +89,8 @@ impl EventMask {
             EventKind::DocumentRemoved,
             EventKind::DocumentRenamed,
             EventKind::IndexUpdated,
+            EventKind::JobDone,
+            EventKind::Overflow,
             EventKind::Custom,
         ])
     }

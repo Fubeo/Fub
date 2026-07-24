@@ -46,9 +46,15 @@ sono esposti al componente come **host function** wasmtime:
 - Rete negata salvo `network = true`; FS solo via `HostApi` (soggetto a
   booleani + `vault_scope`).
 - Storage per-plugin namespaced e persistente (`.fubmd-data/plugins/<id>/`).
-- **Disponibilità:** i trait sono sincroni → **epoch interruption** wasmtime con
-  deadline per chiamata e limiti di memoria/fuel; un plugin lento o ostile viene
-  interrotto (`PluginError::Internal`), mai lasciato congelare il kernel.
+- **Disponibilità:** i trait sono sincroni e brevi → **epoch interruption**
+  wasmtime con deadline severa per chiamata e limiti di memoria/fuel; un plugin
+  lento o ostile viene interrotto (`PluginError::Internal`), mai lasciato
+  congelare il kernel. Il lavoro lungo legittimo passa dai **job**: `run_job`
+  gira su un'**istanza separata** del componente (il kernel non è mai in
+  attesa), con deadline propria più lasca e le stesse capability del plugin
+  (`network` compreso) — vedi
+  [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md),
+  "Lavoro lungo: i job".
 - **UI:** il proxy applica `UiNode::validate_untrusted()` (già nel contratto,
   con test) a ogni albero restituito da `render_view`: `Html`/`WebView` sono
   riservati al codice fidato finché non esistono asset story e CSP per i plugin

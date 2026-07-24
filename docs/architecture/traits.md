@@ -16,9 +16,14 @@ Ogni argomento e ogni valore di ritorno di ogni trait è:
 - senza reference con lifetime nella memoria del kernel, senza trait object nelle
   firme dei dati, senza closure.
 
-I trait sono **object-safe** e **sincroni**: nessun `async fn`, nessun metodo
-generico. L'I/O vive nell'`HostApi` (vedi [plugin-boundary.md](plugin-boundary.md)),
-non nelle firme dei provider — `parse`/`render`/`serialize` sono CPU-pure.
+I trait sono **object-safe**, **sincroni** e — per contratto — **brevi**: nessun
+`async fn`, nessun metodo generico. L'I/O vive nell'`HostApi` (vedi
+[plugin-boundary.md](plugin-boundary.md)), non nelle firme dei provider —
+`parse`/`render`/`serialize` sono CPU-pure. Il lavoro **lungo** (rete, calcolo
+pesante) non sta dentro nessuna chiamata sincrona: passa dai **job**
+(`HostApi::spawn_job` → `Plugin::run_job` → `Event::JobDone`), eseguiti
+dall'host fuori dal giro sincrono del kernel — è la storia di concorrenza del
+contratto, vedi [plugin-boundary.md](plugin-boundary.md), "Lavoro lungo: i job".
 
 Questa regola non è più solo un'asserzione: da **M2** un `wit/fubmd/*.wit` vivente
 la rende verificabile ad ogni commit (vedi [M4](../milestones/M4-wit-hardening.md)
@@ -69,10 +74,16 @@ pub trait HostApi: Send + Sync {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
     fn emit(&mut self, event: Event);
+    fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
     fn storage_get(&self, key: &str) -> Option<serde_json::Value>;
     fn storage_set(&mut self, key: &str, value: serde_json::Value);
 }
 ```
+
+`JobSpec { job, payload }` e `JobId(u64)` sono il varco del **lavoro lungo**:
+`spawn_job` accoda e ritorna subito; l'esito arriva come `Event::JobDone` con lo
+stesso `JobId` (il lanciatore lo conserva e riconosce il proprio). Il corpo del
+job è `Plugin::run_job` (vedi sotto), eseguito fuori dal kernel.
 
 ### `CommandProvider` — comandi (M3: command palette)
 
@@ -132,11 +143,21 @@ pub trait EventHandler: Send + Sync {
 ```
 
 `Event { VaultOpened { root }, DocumentChanged { id }, DocumentRemoved { id },
-DocumentRenamed { from, to }, IndexUpdated, Custom { topic, payload } }`,
+DocumentRenamed { from, to }, IndexUpdated, JobDone { id, job, result },
+Overflow { dropped }, Custom { topic, payload } }`,
 `EventKind` (stesso set, senza payload), `EventMask(Vec<EventKind>)`.
 
 - `DocumentRenamed` esiste perché **l'identità è il path**: un rename non è
   remove+add (vedi [data-model.md](data-model.md), "Identità e rename").
+- `JobDone { id, job, result }` è il rientro dei **job** (vedi `HostApi` sopra
+  e [plugin-boundary.md](plugin-boundary.md)): l'esito del lavoro in background
+  consegnato sul giro sincrono normale. Le eventuali scritture le fa l'handler
+  che lo riceve — mai il job stesso.
+- `Overflow { dropped }` segnala che la coda eventi è stata **troncata** (budget
+  anti-ping-pong esaurito): `dropped` eventi non sono stati consegnati. Chi
+  deriva stato dagli eventi (indice, grafo, cache, frontend) deve considerarlo
+  stantio e **riconciliare da zero**. È la versione rumorosa del troncamento:
+  perdite silenziose non esistono per contratto.
 - `Custom { topic, payload }` è il varco per gli eventi dei plugin (topic
   namespaced `"<plugin-id>/<nome>"`): è anche il canale con cui i plugin
   comunicano fra loro. L'abbonamento è a grana `EventKind::Custom`; il filtro
@@ -146,11 +167,14 @@ DocumentRenamed { from, to }, IndexUpdated, Custom { topic, payload } }`,
 dentro al kernel **a coda, mai ricorsivamente**. Ogni operazione mutante del
 `Workspace` accoda i propri eventi e li drena alla fine; un handler che durante
 `handle` emette eventi o scrive documenti via `HostApi` accoda — non rientra —
-e un budget di drenaggio tronca i ping-pong infiniti fra handler. Durante il
-drenaggio gli handler sono estratti dal workspace, così l'`HostApi` presta
-`&mut Workspace` senza aliasing (il nodo di ownership che rendeva il dispatch
-il punto più delicato del contratto). Vedi `workspace.rs` e
-`tests/rename_and_events.rs`.
+e un budget di drenaggio tronca i ping-pong infiniti fra handler. Il
+troncamento è **rumoroso**: al posto degli eventi persi arriva un
+`Event::Overflow { dropped }` (sul bus e agli handler; ciò che viene emesso
+gestendo l'`Overflow` è a sua volta scartato, unico modo di garantire la
+terminazione). Durante il drenaggio gli handler sono estratti dal workspace,
+così l'`HostApi` presta `&mut Workspace` senza aliasing (il nodo di ownership
+che rendeva il dispatch il punto più delicato del contratto). Vedi
+`workspace.rs` e `tests/rename_and_events.rs`.
 
 ### `Plugin` — ciclo di vita (M4/M5)
 
@@ -159,8 +183,16 @@ pub trait Plugin: Send + Sync {
     fn manifest(&self) -> PluginManifest;
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn deactivate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
+    fn run_job(&self, job: &str, payload: serde_json::Value)
+        -> Result<serde_json::Value, PluginError> { /* default: UnknownJob */ }
 }
 ```
+
+`run_job` è il corpo di un job richiesto via `HostApi::spawn_job`, eseguito
+dall'host **fuori** dal kernel. Deliberatamente **senza `HostApi`**: il job è
+puro rispetto al vault — input nel `payload`, output nel risultato; le
+scritture le fa chi riceve il `JobDone`, dentro il giro sincrono normale.
+Default fornito (`UnknownJob`): la maggior parte dei plugin non ha job.
 
 `PluginManifest { id, name, version, permissions: PluginPermissions }` e il modello
 di permessi in [plugin-boundary.md](plugin-boundary.md).
@@ -202,7 +234,8 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `UiNode` | `variant ui-node` (ricorsivo via `list<ui-node>`) |
 | `UiAction`/`ViewUpdate` | `record` / `variant` |
 | `IndexQuery`/`IndexResult`/`BacklinkRef`/`SearchHit` | `variant` (incl. `custom(index-query-custom)`) / `record` |
-| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `custom`) / `enum` / `list<event-kind>` |
+| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`) / `enum` / `list<event-kind>` |
+| `JobSpec`/`JobId` | `record job-spec` / `type job-id = u64` (interface `jobs`) |
 | `PluginManifest`/`PluginPermissions` | `record` |
 | `FormatError`/`PluginError` | `variant` (mappati su `result<_, error>` WIT) |
 | `serde_json::Value` (in `attrs`, `args`, storage) | `type json = string` |

@@ -15,6 +15,28 @@ use crate::model::{DocId, DocumentModel};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
 // ---------------------------------------------------------------------------
+// Job: il varco per il lavoro lungo. Le chiamate dei trait sono sincrone e
+// devono restare brevi (a M5 una deadline le tronca); tutto ciò che è lento —
+// rete, calcolo pesante — passa da qui e gira FUORI dal giro sincrono del
+// kernel. Vedi docs/architecture/plugin-boundary.md, "Lavoro lungo: i job".
+// ---------------------------------------------------------------------------
+
+/// Richiesta di lavoro in background. `job` è il nome dell'entry point del
+/// plugin ([`Plugin::run_job`]); `payload` porta TUTTO l'input necessario:
+/// dentro al job non c'è `HostApi` (niente vault, niente eventi) — input nel
+/// payload, output nel risultato.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct JobSpec {
+    pub job: String,
+    pub payload: serde_json::Value,
+}
+
+/// Identità di un job lanciato: chi lo lancia la conserva e riconosce il
+/// proprio esito in [`Event::JobDone`](crate::Event::JobDone).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct JobId(pub u64);
+
+// ---------------------------------------------------------------------------
 // Capability handle: l'unico modo con cui un provider tocca il mondo esterno.
 // Nativo → oggetto in-process diretto. WASM (M5) → proxy che reinoltra le
 // chiamate come host function attraverso il confine.
@@ -28,6 +50,10 @@ pub trait HostApi: Send + Sync {
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
     /// Emette un evento sull'event bus.
     fn emit(&mut self, event: Event);
+    /// Chiede l'esecuzione in background di un job ([`Plugin::run_job`]).
+    /// Ritorna subito con l'identità del job; l'esito arriverà come
+    /// [`Event::JobDone`](crate::Event::JobDone) sul giro sincrono normale.
+    fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
     /// Storage chiave→valore con spazio dei nomi per-plugin (persistente).
     fn storage_get(&self, key: &str) -> Option<serde_json::Value>;
     fn storage_set(&mut self, key: &str, value: serde_json::Value);
@@ -177,4 +203,18 @@ pub trait Plugin: Send + Sync {
     fn manifest(&self) -> PluginManifest;
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn deactivate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
+    /// Corpo di un job richiesto via [`HostApi::spawn_job`]: eseguito
+    /// dall'host fuori dal kernel (a M5 su un'istanza separata del
+    /// componente). Deliberatamente **senza** `HostApi`: il job è puro
+    /// rispetto al vault — input nel `payload`, output nel risultato; le
+    /// eventuali scritture le fa chi riceve il `JobDone`, dentro il giro
+    /// sincrono normale. Default: nessun job supportato.
+    fn run_job(
+        &self,
+        job: &str,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, PluginError> {
+        let _ = payload;
+        Err(PluginError::UnknownJob(job.to_string()))
+    }
 }

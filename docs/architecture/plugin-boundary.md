@@ -24,6 +24,40 @@ applicare i permessi.
   nel core e ritorna. La firma è identica: per questo la regola d'oro impone tipi
   serializzabili.
 
+## Lavoro lungo: i job (deciso)
+
+I trait sono sincroni e il `Workspace` vive dietro un lock: **qualunque cosa
+lenta dentro una chiamata sincrona blocca l'app**, e a M5 la deadline la
+tronca. Il contratto quindi dà al lavoro lungo (rete, calcolo pesante) una
+strada propria — i **job** — invece di fingere che non esista:
+
+1. **Richiesta (sincrona, istantanea).** Durante una chiamata normale il
+   plugin chiama `HostApi::spawn_job(JobSpec { job, payload })` e riceve
+   subito un `JobId`. Il kernel accoda soltanto: niente esecuzione dentro al
+   lock (`Workspace::take_pending_jobs`).
+2. **Esecuzione (fuori dal kernel).** Chi possiede i thread — l'app oggi, il
+   registry dei plugin a M4, l'host WASM a M5 — drena la coda ed esegue
+   `Plugin::run_job(job, payload)` **fuori** dal lock del workspace. Il job è
+   **puro rispetto al vault**: non ha `HostApi` — tutto l'input viaggia nel
+   `payload` (chi lancia legge ciò che serve *prima*, nel giro sincrono),
+   l'output nel risultato. Niente snapshot da invalidare, niente rientranza.
+3. **Rientro (sincrono).** L'esito torna con `Workspace::complete_job` →
+   `Event::JobDone { id, job, result }` sul giro sincrono normale. Il
+   lanciatore riconosce il proprio `JobId` e — solo qui — scrive documenti,
+   emette eventi, aggiorna storage.
+
+Conseguenze:
+
+- il giro sincrono resta **breve per definizione**: la deadline di M5 può
+  essere severa senza uccidere i plugin legittimi;
+- il permesso `network` si applica **al job** (a M5 l'istanza che esegue
+  `run_job` è un componente con le stesse capability del plugin);
+- un job lento o ostile non congela nulla: al peggio il suo `JobDone` porta
+  un errore (timeout dell'host);
+- lo **streaming** (progressi incrementali di un job) non è ancora nel
+  contratto: se servirà (AI, indicizzazioni lunghe) si aggiungerà un canale di
+  progresso *prima* del freeze — vedi [../appendix/ai-autocomplete.md](../appendix/ai-autocomplete.md).
+
 ## Onestà sul modello di minaccia: nativo = fidato
 
 L'enforcement in `HostApi` confina davvero **solo chi non può aggirarlo**: un
@@ -97,7 +131,10 @@ al frontend/all'IPC.
   a un plugin lento/ostile bloccherebbe il kernel. L'host wasmtime usa **epoch
   interruption** (deadline per chiamata) e limiti di risorse: un plugin che
   sfora viene interrotto con `PluginError::Internal`, non congela l'app. La
-  sandbox deve garantire disponibilità oltre che isolamento.
+  deadline può essere severa perché il lavoro lento **legittimo** ha la sua
+  strada: i **job** (vedi sopra), eseguiti su un'istanza separata del
+  componente con una deadline propria, più lasca. La sandbox deve garantire
+  disponibilità oltre che isolamento.
 - **UI:** il proxy applica `UiNode::validate_untrusted()` a ogni albero
   restituito da `render_view` (vedi [ui-protocol.md](ui-protocol.md)).
 

@@ -17,7 +17,7 @@ use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Event, EventKind, EventMask};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
-use fubmd_abi::traits::{EventHandler, HostApi};
+use fubmd_abi::traits::{EventHandler, HostApi, JobSpec};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
 
@@ -213,6 +213,26 @@ fn rename_to_contended_name_rewrites_by_path() {
 }
 
 #[test]
+fn case_only_rename_preserves_identity() {
+    // `nota.lnk` → `Nota.lnk`: su un filesystem case-insensitive il target
+    // "esiste già" (è lo stesso file) — il rename deve comunque riuscire.
+    let dir = TempDir::new("rename-case");
+    let mut ws = workspace(&dir.0);
+    ws.write_document(&DocId::new("nota.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "nota").unwrap();
+
+    ws.rename_document(&DocId::new("nota.lnk"), &DocId::new("Nota.lnk"))
+        .unwrap();
+
+    assert!(ws.documents().contains(&DocId::new("Nota.lnk")));
+    assert!(!ws.documents().contains(&DocId::new("nota.lnk")));
+    // La risoluzione è case-insensitive: il backlink sopravvive.
+    let bl = ws.backlinks(&DocId::new("Nota.lnk"));
+    assert_eq!(bl.len(), 1);
+    assert_eq!(bl[0].source, DocId::new("a.lnk"));
+}
+
+#[test]
 fn rename_onto_existing_document_is_refused() {
     let dir = TempDir::new("rename-clash");
     let mut ws = workspace(&dir.0);
@@ -325,7 +345,7 @@ impl EventHandler for PingPongHandler {
 }
 
 #[test]
-fn dispatch_budget_stops_infinite_event_loops() {
+fn dispatch_budget_stops_infinite_event_loops_loudly() {
     let dir = TempDir::new("pingpong");
     let mut ws = workspace(&dir.0);
     let count = Arc::new(Mutex::new(0usize));
@@ -333,6 +353,7 @@ fn dispatch_budget_stops_infinite_event_loops() {
         count: count.clone(),
     }));
 
+    let rx = ws.bus().subscribe();
     // L'evento Custom emesso dal handler rialimenta sé stesso: senza budget
     // questo write non tornerebbe mai.
     ws.write_document(&DocId::new("x.lnk"), "").unwrap();
@@ -340,4 +361,91 @@ fn dispatch_budget_stops_infinite_event_loops() {
     let n = *count.lock().unwrap();
     assert!(n > 0, "il handler deve essere stato chiamato");
     assert!(n <= 2048, "il budget deve aver troncato il ping-pong: {n}");
+
+    // Il troncamento non è silenzioso: sul bus arriva Overflow col conteggio
+    // degli eventi persi — il segnale di "riconcilia da zero".
+    let mut overflow = None;
+    while let Ok(e) = rx.try_recv() {
+        if let Event::Overflow { dropped } = e {
+            overflow = Some(dropped);
+        }
+    }
+    let dropped = overflow.expect("il troncamento deve emettere Event::Overflow");
+    assert!(dropped > 0, "Overflow deve contare gli eventi persi");
+}
+
+// ---------------------------------------------------------------------------
+// Job: lavoro lungo fuori dal giro sincrono
+// ---------------------------------------------------------------------------
+
+/// Handler che su `DocumentChanged` chiede un job e su `JobDone` scrive il
+/// risultato nel vault — il pattern canonico: lavoro lungo fuori dal kernel,
+/// scritture solo al rientro, dentro il giro sincrono.
+struct JobRequestingHandler {
+    job_id: Arc<Mutex<Option<fubmd_abi::traits::JobId>>>,
+}
+
+impl EventHandler for JobRequestingHandler {
+    fn subscribed(&self) -> EventMask {
+        EventMask(vec![EventKind::DocumentChanged, EventKind::JobDone])
+    }
+
+    fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        match event {
+            Event::DocumentChanged { id } if id.as_str() == "innesco.lnk" => {
+                if self.job_id.lock().unwrap().is_none() {
+                    let id = host.spawn_job(JobSpec {
+                        job: "sommario".into(),
+                        payload: serde_json::json!({ "doc": id.as_str() }),
+                    })?;
+                    *self.job_id.lock().unwrap() = Some(id);
+                }
+                Ok(())
+            }
+            Event::JobDone { id, job, result } => {
+                // Riconosce il PROPRIO job dall'id che ha conservato.
+                if Some(*id) == *self.job_id.lock().unwrap() {
+                    assert_eq!(job, "sommario");
+                    let text = result.as_ref().unwrap().as_str().unwrap().to_string();
+                    host.write_document(&DocId::new("sommario.lnk"), &text)?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+#[test]
+fn jobs_run_outside_the_kernel_and_complete_via_event() {
+    let dir = TempDir::new("jobs");
+    let mut ws = workspace(&dir.0);
+    let job_id = Arc::new(Mutex::new(None));
+    ws.register_event_handler(Box::new(JobRequestingHandler {
+        job_id: job_id.clone(),
+    }));
+
+    // 1. Il handler chiede il job durante il giro sincrono: il kernel lo
+    //    accoda soltanto (niente esecuzione dentro al lock).
+    ws.write_document(&DocId::new("innesco.lnk"), "").unwrap();
+    let jobs = ws.take_pending_jobs();
+    assert_eq!(jobs.len(), 1);
+    let (id, spec) = &jobs[0];
+    assert_eq!(spec.job, "sommario");
+    assert_eq!(Some(*id), *job_id.lock().unwrap());
+
+    // 2. L'host (qui il test; nell'app un thread) esegue il job FUORI dal
+    //    workspace: il job è puro — input nel payload, output nel risultato.
+    let result = serde_json::Value::String("innesco".to_string());
+
+    // 3. L'esito rientra come JobDone sul giro sincrono normale: il handler
+    //    lo riconosce e scrive il documento derivato.
+    ws.complete_job(*id, spec.job.clone(), Ok(result));
+    assert!(ws.documents().contains(&DocId::new("sommario.lnk")));
+    assert_eq!(
+        ws.read_source(&DocId::new("sommario.lnk")).unwrap(),
+        "innesco"
+    );
+    // La coda dei job non ricresce da sola.
+    assert!(ws.take_pending_jobs().is_empty());
 }
