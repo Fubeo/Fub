@@ -42,7 +42,14 @@ mod tests {
     fn delivers_to_subscribers() {
         let bus = EventBus::new();
         let rx = bus.subscribe();
-        bus.emit(Event::DocumentChanged { id: DocId::new("a.md") });
-        assert_eq!(rx.recv().unwrap(), Event::DocumentChanged { id: DocId::new("a.md") });
+        bus.emit(Event::DocumentChanged {
+            id: DocId::new("a.md"),
+        });
+        assert_eq!(
+            rx.recv().unwrap(),
+            Event::DocumentChanged {
+                id: DocId::new("a.md")
+            }
+        );
     }
 }

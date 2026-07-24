@@ -46,6 +46,14 @@ sono esposti al componente come **host function** wasmtime:
 - Rete negata salvo `network = true`; FS solo via `HostApi` (soggetto a
   booleani + `vault_scope`).
 - Storage per-plugin namespaced e persistente (`.fubmd-data/plugins/<id>/`).
+- **Disponibilità:** i trait sono sincroni → **epoch interruption** wasmtime con
+  deadline per chiamata e limiti di memoria/fuel; un plugin lento o ostile viene
+  interrotto (`PluginError::Internal`), mai lasciato congelare il kernel.
+- **UI:** il proxy applica `UiNode::validate_untrusted()` (già nel contratto,
+  con test) a ogni albero restituito da `render_view`: `Html`/`WebView` sono
+  riservati al codice fidato finché non esistono asset story e CSP per i plugin
+  (da progettare qui a M5) — vedi
+  [../architecture/ui-protocol.md](../architecture/ui-protocol.md).
 
 ### Plugin di esempio (`plugins/`)
 
@@ -86,7 +94,9 @@ backend a parità di logica.
   trait; host function con e senza permesso.
 - **E2e:** carica il plugin di esempio, invoca il suo comando/rende la sua view,
   verifica l'effetto nel vault; test negativi sui permessi.
-- **Isolamento:** un plugin che va in panic è contenuto; timeout/limiti di risorse.
+- **Isolamento:** un plugin che va in panic è contenuto; timeout/limiti di risorse
+  (epoch interruption: un plugin con loop infinito viene interrotto entro la
+  deadline); un `render_view` che restituisce `Html`/`WebView` viene rifiutato.
 - **Parità:** stesso provider nativo (M4) vs WASM → stesso risultato osservabile.
 - `cargo test --workspace` + `cargo clippy`; build del plugin via `cargo component`
   in CI ([../appendix/platforms-ci.md](../appendix/platforms-ci.md)).

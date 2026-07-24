@@ -14,11 +14,35 @@ Un plugin non tocca mai il filesystem o il bus direttamente: passa da `HostApi`
 applicare i permessi.
 
 - **Nativo (M4):** `HostApi` è un oggetto in-process che chiama direttamente il
-  `Workspace`. Costo ≈ zero.
+  `Workspace` (già implementato: `KernelHost` in `fubmd-kernel/src/workspace.rs`,
+  usato dal dispatch degli eventi — a coda, mai ricorsivo, vedi
+  [traits.md](traits.md)). Costo ≈ zero. Lo storage `storage_get/set` è per ora
+  in-memory nel workspace; persistenza e namespace per-plugin arrivano col
+  registry dei plugin a M4.
 - **WASM (M5):** il plugin riceve un *proxy* di `HostApi`; ogni metodo è una **host
   function** wasmtime che serializza gli argomenti, attraversa il confine, esegue
   nel core e ritorna. La firma è identica: per questo la regola d'oro impone tipi
   serializzabili.
+
+## Onestà sul modello di minaccia: nativo = fidato
+
+L'enforcement in `HostApi` confina davvero **solo chi non può aggirarlo**: un
+plugin nativo è codice Rust in-process e può fare qualunque cosa, permessi o no.
+Quindi, esplicitamente:
+
+- **"plugin nativo" significa codice fidato** — feature ufficiali e plugin
+  compilati dentro l'app. Il loro manifest/permessi è *descrittivo* (dogfooding
+  del percorso di attivazione, UI di consenso), non una barriera di sicurezza;
+- il **confine di fiducia reale esiste solo a M5**, con la sandbox WASM: è lì
+  che i permessi diventano enforcement e non convenzione;
+- lo scopo del primo plugin nativo (M4) è esercitare *il percorso* (manifest →
+  consenso → `HostApi` con permessi → attivazione), così M5 cambia il backend,
+  non inventa il confine.
+
+Stesso principio per la UI: un provider non fidato non può emettere
+`UiNode::Html`/`WebView` (iniettano contenuto attivo nella webview privilegiata
+del core, scavalcando la sandbox). L'host lo rifiuta con
+`UiNode::validate_untrusted()` — vedi [ui-protocol.md](ui-protocol.md).
 
 ## Manifest e permessi (stato attuale)
 
@@ -69,6 +93,13 @@ al frontend/all'IPC.
   `write_document`, quindi soggetto a booleani + `vault_scope`.
 - **Storage per-plugin:** `storage_get`/`storage_set` con namespace per plugin id,
   persistente (candidato: sotto `.fubmd-data/plugins/<id>/`).
+- **Disponibilità, non solo memoria:** i trait sono sincroni, quindi una chiamata
+  a un plugin lento/ostile bloccherebbe il kernel. L'host wasmtime usa **epoch
+  interruption** (deadline per chiamata) e limiti di risorse: un plugin che
+  sfora viene interrotto con `PluginError::Internal`, non congela l'app. La
+  sandbox deve garantire disponibilità oltre che isolamento.
+- **UI:** il proxy applica `UiNode::validate_untrusted()` a ogni albero
+  restituito da `render_view` (vedi [ui-protocol.md](ui-protocol.md)).
 
 ## Percorso di attivazione
 

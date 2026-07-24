@@ -7,8 +7,8 @@ use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
 
 fn open_sample() -> Workspace {
-    let root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/sample-vault");
+    let root =
+        Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/sample-vault");
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed());
     let mut ws = Workspace::new(&root, registry);
@@ -29,7 +29,10 @@ fn scans_all_documents() {
 fn resolves_wikilinks_by_name_alias_and_path() {
     let ws = open_sample();
     assert_eq!(ws.resolve_link("Nota B"), Some(DocId::new("Nota B.md")));
-    assert_eq!(ws.resolve_link("Alfa"), Some(DocId::new("Progetti/Alpha.md")));
+    assert_eq!(
+        ws.resolve_link("Alfa"),
+        Some(DocId::new("Progetti/Alpha.md"))
+    );
     assert_eq!(
         ws.resolve_link("Progetti/Alpha"),
         Some(DocId::new("Progetti/Alpha.md"))
@@ -44,8 +47,14 @@ fn computes_backlinks_with_context() {
     let sources: Vec<_> = bl.iter().map(|r| r.source.as_str()).collect();
     // index (2 link), Progetti/Alpha, Daily (via embed) puntano a Nota B.
     assert!(sources.contains(&"index.md"), "backlink: {sources:?}");
-    assert!(sources.contains(&"Progetti/Alpha.md"), "backlink: {sources:?}");
-    assert!(sources.contains(&"Daily/2026-07-24.md"), "backlink: {sources:?}");
+    assert!(
+        sources.contains(&"Progetti/Alpha.md"),
+        "backlink: {sources:?}"
+    );
+    assert!(
+        sources.contains(&"Daily/2026-07-24.md"),
+        "backlink: {sources:?}"
+    );
     assert!(bl.iter().any(|r| r.context.is_some()));
 }
 
@@ -53,7 +62,10 @@ fn computes_backlinks_with_context() {
 fn renders_preview_with_wikilink_data_attrs() {
     let ws = open_sample();
     let html = ws.render_preview(&DocId::new("index.md")).unwrap();
-    assert!(html.contains("data-wikilink-page=\"Nota B\""), "html: {html}");
+    assert!(
+        html.contains("data-wikilink-page=\"Nota B\""),
+        "html: {html}"
+    );
     assert!(html.contains("class=\"tag\""));
 }
 

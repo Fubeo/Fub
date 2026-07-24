@@ -53,6 +53,23 @@ risoluzione di una chiave `K` dipende solo da `path_index[strip_ext(K)]`,
 - Misura indicativa (5000 documenti, 200 modifiche, release): ~12 µs a modifica
   contro ~19 ms del rebuild completo.
 
+### Cache dei modelli: metadata ≠ body (insieme all'indice)
+
+Oggi il `Workspace` tiene il `DocumentModel` **completo** (albero `body` +
+proiezione `text`, ≈2× la sorgente) di *tutto* il vault, per sempre: conflazione
+di due cache con vite diverse. Da sdoppiare quando arriva l'indice:
+
+- **metadata cache** (globale, sempre in RAM): `outline`/`links`/`tags` +
+  frontmatter — è ciò che serve a grafo, pannelli e risoluzione;
+- **body parsato** (solo documenti aperti/anteprima, LRU piccola): serve al
+  rendering; si riparsa on-demand dalla sorgente;
+- `text` non resta in RAM: alimenta tantivy all'indicizzazione e poi vive
+  nell'indice su disco.
+
+Obsidian fa lo stesso (metadata cache persistente, niente AST globale in RAM).
+Farlo a M2 e non prima: è lo stesso refactor dei percorsi incrementali, e
+l'oracolo full-rebuild appena costruito verifica che nulla cambi.
+
 ### Graph view (Canvas/WebGL nel frontend)
 
 - Un `ViewProvider` nativo espone **solo i dati** del grafo: nodi (`DocId`,

@@ -4,7 +4,7 @@
 //! e i provider (nativi o, in futuro, plugin WASM di terzi):
 //!
 //! - il **modello di documento comune** ([`model`]), agnostico rispetto al formato;
-//! - il trait centrale [`FormatProvider`](format::FormatProvider);
+//! - il trait centrale [`format::FormatProvider`];
 //! - gli altri **trait di estensione** ([`traits`]): comandi, view (UI dichiarativa),
 //!   index (ricerca/backlink), event handler, ciclo di vita del plugin;
 //! - il protocollo di **UI dichiarativa** ([`ui`]) e gli **eventi** ([`event`]).

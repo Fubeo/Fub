@@ -214,3 +214,23 @@ button:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Transclusion (embed idratati dal kernel) */
+.embed {
+  display: block;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-input);
+  border-radius: 5px;
+}
+.embed-cycle::after,
+.embed-too-deep::after {
+  content: " (embed ricorsivo)";
+  color: var(--muted);
+  font-size: 12px;
+}
+.embed.unresolved {
+  border-left-color: var(--muted);
+  color: var(--muted);
+}

@@ -66,10 +66,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             ..
         } => {
             if custom_kind == "callout" {
-                let ty = attrs
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("note");
+                let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
                 out.push_str(&format!(
                     "<div class=\"callout\" data-callout=\"{}\">",
                     escape_attr(ty)
@@ -132,7 +129,12 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
     }
 }
 
-fn render_link(target: &LinkTarget, label: Option<&[Inline]>, opts: &RenderOptions, out: &mut String) {
+fn render_link(
+    target: &LinkTarget,
+    label: Option<&[Inline]>,
+    opts: &RenderOptions,
+    out: &mut String,
+) {
     match target {
         LinkTarget::Wiki {
             page,
@@ -140,15 +142,32 @@ fn render_link(target: &LinkTarget, label: Option<&[Inline]>, opts: &RenderOptio
             embed,
             ..
         } => {
-            // Wikilink come data-attribute: il frontend risolve la navigazione.
+            if *embed {
+                // Transclusion: `render_html` è una funzione pura per-documento
+                // e NON può leggere altri documenti (niente HostApi qui). Si
+                // emette un placeholder; il frontend chiama `render_embed` del
+                // kernel e innesta il contenuto (profondità e cicli a suo
+                // carico). Vedi docs/architecture/ui-protocol.md.
+                let heading_attr = heading
+                    .as_ref()
+                    .map(|h| format!(" data-embed-heading=\"{}\"", escape_attr(h)))
+                    .unwrap_or_default();
+                out.push_str(&format!(
+                    "<div class=\"embed\" data-embed-page=\"{}\"{}>",
+                    escape_attr(page),
+                    heading_attr
+                ));
+                render_link_label(label, page, out);
+                out.push_str("</div>");
+                return;
+            }
             let heading_attr = heading
                 .as_ref()
                 .map(|h| format!(" data-wikilink-heading=\"{}\"", escape_attr(h)))
                 .unwrap_or_default();
-            let class = if *embed { "wikilink embed" } else { "wikilink" };
+            // Wikilink come data-attribute: il frontend risolve la navigazione.
             out.push_str(&format!(
-                "<a class=\"{}\" data-wikilink-page=\"{}\"{}",
-                class,
+                "<a class=\"wikilink\" data-wikilink-page=\"{}\"{}",
                 escape_attr(page),
                 heading_attr
             ));

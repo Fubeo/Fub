@@ -15,8 +15,18 @@ pub enum Event {
     DocumentChanged { id: DocId },
     /// Un documento è stato rimosso.
     DocumentRemoved { id: DocId },
+    /// Un documento ha cambiato path (l'identità È il path: chi tiene stato
+    /// per-documento deve migrare la chiave, non trattarlo come remove+add).
+    DocumentRenamed { from: DocId, to: DocId },
     /// L'indice/grafo è stato aggiornato dopo un batch di modifiche.
     IndexUpdated,
+    /// Varco di estensione: eventi definiti dai plugin, con topic namespaced
+    /// (`"<plugin-id>/<nome>"`). L'abbonamento è a grana `EventKind::Custom`;
+    /// il filtro sul topic è a carico dell'handler.
+    Custom {
+        topic: String,
+        payload: serde_json::Value,
+    },
 }
 
 impl Event {
@@ -25,7 +35,9 @@ impl Event {
             Event::VaultOpened { .. } => EventKind::VaultOpened,
             Event::DocumentChanged { .. } => EventKind::DocumentChanged,
             Event::DocumentRemoved { .. } => EventKind::DocumentRemoved,
+            Event::DocumentRenamed { .. } => EventKind::DocumentRenamed,
             Event::IndexUpdated => EventKind::IndexUpdated,
+            Event::Custom { .. } => EventKind::Custom,
         }
     }
 }
@@ -37,7 +49,10 @@ pub enum EventKind {
     VaultOpened,
     DocumentChanged,
     DocumentRemoved,
+    DocumentRenamed,
     IndexUpdated,
+    /// Eventi custom dei plugin (il topic sta nel payload dell'`Event`).
+    Custom,
 }
 
 /// Insieme di tipi di evento a cui un handler è abbonato.
@@ -50,7 +65,9 @@ impl EventMask {
             EventKind::VaultOpened,
             EventKind::DocumentChanged,
             EventKind::DocumentRemoved,
+            EventKind::DocumentRenamed,
             EventKind::IndexUpdated,
+            EventKind::Custom,
         ])
     }
 
