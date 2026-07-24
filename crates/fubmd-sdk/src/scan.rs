@@ -115,7 +115,10 @@ mod tests {
 
     #[test]
     fn extracts_simple_and_nested_tags() {
-        assert_eq!(names("ciao #progetto e #area/lavoro"), vec!["progetto", "area/lavoro"]);
+        assert_eq!(
+            names("ciao #progetto e #area/lavoro"),
+            vec!["progetto", "area/lavoro"]
+        );
     }
 
     #[test]

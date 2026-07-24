@@ -49,6 +49,16 @@ Tipi di supporto: `FormatDescriptor { id, name, extensions }`,
 `ParseContext { doc_id, parse_tags, parse_wikilinks }` (helper `::obsidian(id)`),
 `RenderOptions { wikilinks_as_data_attrs }`.
 
+Due semantiche fissate nel contratto:
+
+- **`serialize` è generazione, non round-trip** — la fonte di verità di un
+  documento esistente è la sorgente; le modifiche programmatiche sono patch
+  via `Span` (vedi [data-model.md](data-model.md), "Fonte di verità").
+- **`render_html` è puro per-documento** — niente `HostApi`, quindi niente
+  transclusion nel provider: gli embed escono come placeholder e la
+  composizione è di kernel+frontend (`Workspace::render_embed`, vedi
+  [ui-protocol.md](ui-protocol.md), "Transclusion").
+
 ### `HostApi` — `src/traits.rs`
 
 L'unico varco con cui un provider/plugin tocca il mondo esterno. Nativo → oggetto
@@ -102,10 +112,15 @@ pub trait IndexProvider: Send + Sync {
 }
 ```
 
-`IndexQuery { Backlinks { target }, FullText { query, limit } }`;
-`IndexResult { Backlinks(Vec<BacklinkRef>), Search(Vec<SearchHit>) }`;
+`IndexQuery { Backlinks { target }, FullText { query, limit }, Custom { ns, query } }`;
+`IndexResult { Backlinks(Vec<BacklinkRef>), Search(Vec<SearchHit>), Custom(Value) }`;
 `BacklinkRef { source, context }`, `SearchHit { doc, score, snippet }`. I metodi
 `on_document_*` sono i ganci per l'**aggiornamento incrementale** di M2.
+
+`Custom` è il **varco di estensione** (namespaced: `ns` = plugin id): senza,
+gli enum chiusi + il freeze WIT di M4 obbligherebbero il contratto a prevedere
+in anticipo ogni query futura — e i plugin di terzi non potrebbero definirne
+di proprie. `ns` sconosciuto → `PluginError::BadArgs`.
 
 ### `EventHandler` — reazione agli eventi
 
@@ -117,7 +132,25 @@ pub trait EventHandler: Send + Sync {
 ```
 
 `Event { VaultOpened { root }, DocumentChanged { id }, DocumentRemoved { id },
-IndexUpdated }`, `EventKind` (stesso set, senza payload), `EventMask(Vec<EventKind>)`.
+DocumentRenamed { from, to }, IndexUpdated, Custom { topic, payload } }`,
+`EventKind` (stesso set, senza payload), `EventMask(Vec<EventKind>)`.
+
+- `DocumentRenamed` esiste perché **l'identità è il path**: un rename non è
+  remove+add (vedi [data-model.md](data-model.md), "Identità e rename").
+- `Custom { topic, payload }` è il varco per gli eventi dei plugin (topic
+  namespaced `"<plugin-id>/<nome>"`): è anche il canale con cui i plugin
+  comunicano fra loro. L'abbonamento è a grana `EventKind::Custom`; il filtro
+  sul topic è dell'handler.
+
+**Dispatch (deciso, implementato in `fubmd-kernel`):** gli handler girano
+dentro al kernel **a coda, mai ricorsivamente**. Ogni operazione mutante del
+`Workspace` accoda i propri eventi e li drena alla fine; un handler che durante
+`handle` emette eventi o scrive documenti via `HostApi` accoda — non rientra —
+e un budget di drenaggio tronca i ping-pong infiniti fra handler. Durante il
+drenaggio gli handler sono estratti dal workspace, così l'`HostApi` presta
+`&mut Workspace` senza aliasing (il nodo di ownership che rendeva il dispatch
+il punto più delicato del contratto). Vedi `workspace.rs` e
+`tests/rename_and_events.rs`.
 
 ### `Plugin` — ciclo di vita (M4/M5)
 
@@ -140,8 +173,9 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `IndexProvider` | — (backlink via grafo del kernel) | **M2** (tantivy nativo) | ganci incrementali già in firma |
 | `ViewProvider` | — (backlink via `build_backlinks_view`) | **M2** (graph/outline/tag) | UI dichiarativa |
 | `CommandProvider` | — | **M3** (command palette) | keybinding non vincolante |
-| `EventHandler` | — (event bus interno) | **M4/M5** (plugin) | |
-| `Plugin` / `HostApi` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
+| `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
+| `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | storage in-memory per ora |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore
@@ -167,8 +201,8 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `ViewSpec`/`ViewPlacement` | `record` / `enum` |
 | `UiNode` | `variant ui-node` (ricorsivo via `list<ui-node>`) |
 | `UiAction`/`ViewUpdate` | `record` / `variant` |
-| `IndexQuery`/`IndexResult`/`BacklinkRef`/`SearchHit` | `variant` / `record` |
-| `Event`/`EventKind`/`EventMask` | `variant` / `enum` / `list<event-kind>` |
+| `IndexQuery`/`IndexResult`/`BacklinkRef`/`SearchHit` | `variant` (incl. `custom(index-query-custom)`) / `record` |
+| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `custom`) / `enum` / `list<event-kind>` |
 | `PluginManifest`/`PluginPermissions` | `record` |
 | `FormatError`/`PluginError` | `variant` (mappati su `result<_, error>` WIT) |
 | `serde_json::Value` (in `attrs`, `args`, storage) | `type json = string` |

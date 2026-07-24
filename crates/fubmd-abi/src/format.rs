@@ -85,7 +85,15 @@ pub trait FormatProvider: Send + Sync {
         opts: &RenderOptions,
     ) -> Result<String, FormatError>;
 
-    /// Serializza un modello (eventualmente modificato) di nuovo a sorgente.
-    /// Per M1 può essere best-effort; la fedeltà round-trip cresce nel tempo.
+    /// Serializza un modello a sorgente. **Generazione, non round-trip.**
+    ///
+    /// La fonte di verità di un documento esistente è la sua sorgente sul
+    /// disco: il modello è lossy per costruzione (non conserva lo stile di
+    /// enfasi, la spaziatura, l'indentazione...), quindi la fedeltà round-trip
+    /// integrale è irraggiungibile e NON è l'obiettivo di questo metodo. Il
+    /// kernel non riscrive mai un file esistente passando da qui: serve a
+    /// generare documenti nuovi (template, "crea nota") e frammenti. Le
+    /// modifiche programmatiche a un documento esistente si fanno come patch
+    /// chirurgiche sulla sorgente, guidate dagli `Span` del modello.
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError>;
 }

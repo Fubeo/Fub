@@ -181,6 +181,8 @@ interface format {
     capabilities: func() -> format-capabilities;
     parse: func(source: string, ctx: parse-context) -> result<document-model, format-error>;
     render-html: func(model: document-model, opts: render-options) -> result<string, format-error>;
+    /// Generazione, non round-trip: la fonte di verità di un documento
+    /// esistente è la sorgente; il kernel non riscrive mai un file da qui.
     serialize: func(model: document-model) -> result<string, format-error>;
 }
 
@@ -223,6 +225,9 @@ interface ui {
         list(list<ui-node>),
         list-item(ui-list-item),
         button(ui-button),
+        /// SOLO codice fidato: l'host rifiuta `html`/`web-view` dai plugin
+        /// (UiNode::validate_untrusted) — un plugin sandboxato non deve poter
+        /// iniettare contenuto attivo nella webview principale.
         html(string),
         web-view(ui-web-view),
     }
@@ -240,23 +245,34 @@ interface ui {
 
 /// Eventi del ciclo di vita del vault.
 interface events {
+    use json.{json};
     use model.{doc-id};
 
     record event-document-changed { id: doc-id }
     record event-document-removed { id: doc-id }
+    /// L'identità È il path: chi tiene stato per-documento migra la chiave,
+    /// non tratta il rename come remove+add.
+    record event-document-renamed { from: doc-id, to: doc-id }
     record event-vault-opened { root: string }
+    /// Varco di estensione: eventi dei plugin, topic namespaced
+    /// (`"<plugin-id>/<nome>"`).
+    record event-custom { topic: string, payload: json }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
         document-removed(event-document-removed),
+        document-renamed(event-document-renamed),
         index-updated,
+        custom(event-custom),
     }
 
     enum event-kind {
         vault-opened,
         document-changed,
         document-removed,
+        document-renamed,
         index-updated,
+        custom,
     }
     type event-mask = list<event-kind>;
 }
@@ -281,6 +297,7 @@ interface command {
 
 /// Ricerca e backlink (`IndexProvider`).
 interface index {
+    use json.{json};
     use model.{doc-id, document-model};
     use errors.{plugin-error};
 
@@ -288,9 +305,16 @@ interface index {
         query: string,
         limit: u32,
     }
+    /// Varco di estensione: query di provider di terzi, con namespace
+    /// (`ns` = plugin id). `ns` sconosciuto → `bad-args`.
+    record index-query-custom {
+        ns: string,
+        query: json,
+    }
     variant index-query {
         backlinks(doc-id),
         full-text(index-query-full-text),
+        custom(index-query-custom),
     }
     record backlink-ref {
         source: doc-id,
@@ -304,6 +328,7 @@ interface index {
     variant index-result {
         backlinks(list<backlink-ref>),
         search(list<search-hit>),
+        custom(json),
     }
 
     on-document-indexed: func(doc: document-model);

@@ -83,11 +83,19 @@ async function refreshCurrent() {
   await Promise.all([updatePreview(currentDoc), updateBacklinks(currentDoc)]);
 }
 
+/// Profondità massima di transclusion: oltre, l'embed resta un link.
+const MAX_EMBED_DEPTH = 5;
+
 async function updatePreview(id: string) {
   const html = await api.renderPreview(id);
   previewEl.innerHTML = html;
-  // Navigazione dei wikilink dal pannello anteprima.
-  previewEl.querySelectorAll<HTMLAnchorElement>("a.wikilink").forEach((a) => {
+  wireWikilinks(previewEl);
+  await hydrateEmbeds(previewEl, new Set([id]));
+}
+
+// Navigazione dei wikilink da un frammento di anteprima.
+function wireWikilinks(container: HTMLElement) {
+  container.querySelectorAll<HTMLAnchorElement>("a.wikilink").forEach((a) => {
     a.addEventListener("click", async (e) => {
       e.preventDefault();
       const page = a.dataset.wikilinkPage;
@@ -97,6 +105,39 @@ async function updatePreview(id: string) {
       else a.classList.add("unresolved");
     });
   });
+}
+
+// Transclusion: il provider emette solo placeholder `.embed` (render puro,
+// per-documento); qui si chiede al kernel il contenuto e lo si innesta,
+// ricorsivamente. La catena dei documenti già aperti spezza i cicli
+// (`![[A]]` dentro A) e MAX_EMBED_DEPTH limita la profondità.
+async function hydrateEmbeds(container: HTMLElement, chain: Set<string>) {
+  const slots = Array.from(
+    container.querySelectorAll<HTMLElement>(".embed[data-embed-page]"),
+  );
+  await Promise.all(
+    slots.map(async (slot) => {
+      const page = slot.dataset.embedPage;
+      if (!page) return;
+      if (chain.size > MAX_EMBED_DEPTH) {
+        slot.classList.add("embed-too-deep");
+        return;
+      }
+      try {
+        const content = await api.renderEmbed(page, slot.dataset.embedHeading ?? null);
+        if (chain.has(content.doc_id)) {
+          slot.classList.add("embed-cycle");
+          return;
+        }
+        slot.innerHTML = content.html;
+        slot.classList.add("embed-loaded");
+        wireWikilinks(slot);
+        await hydrateEmbeds(slot, new Set([...chain, content.doc_id]));
+      } catch {
+        slot.classList.add("unresolved");
+      }
+    }),
+  );
 }
 
 async function updateBacklinks(id: string) {
@@ -115,6 +156,14 @@ function handleKernelEvent(e: KernelEvent) {
     if (currentDoc) updateBacklinks(currentDoc);
   } else if (e.type === "document_changed" && e.id === currentDoc) {
     updatePreview(currentDoc);
+  } else if (e.type === "document_renamed") {
+    // L'identità è il path: il documento aperto segue il rename.
+    if (currentDoc === e.from) {
+      currentDoc = e.to;
+      markActive();
+      refreshCurrent();
+    }
+    api.listDocuments().then(renderFileList);
   }
 }
 

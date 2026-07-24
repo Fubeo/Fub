@@ -10,9 +10,7 @@ mod render;
 mod serialize;
 mod util;
 
-use fubmd_abi::format::{
-    FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
-};
+use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::DocumentModel;
 use fubmd_abi::{FormatError, FormatProvider};
 
@@ -133,10 +131,15 @@ mod tests {
     #[test]
     fn parses_callout_as_custom_block() {
         let doc = parse("> [!note] Attenzione\n> corpo del callout\n");
-        let has_callout = doc.body.iter().any(|b| {
-            matches!(b, Block::Custom { custom_kind, .. } if custom_kind == "callout")
-        });
-        assert!(has_callout, "atteso un blocco callout, trovato: {:?}", doc.body);
+        let has_callout = doc
+            .body
+            .iter()
+            .any(|b| matches!(b, Block::Custom { custom_kind, .. } if custom_kind == "callout"));
+        assert!(
+            has_callout,
+            "atteso un blocco callout, trovato: {:?}",
+            doc.body
+        );
     }
 
     #[test]
@@ -150,8 +153,30 @@ mod tests {
                 },
             )
             .unwrap();
-        assert!(html.contains("data-wikilink-page=\"Nota Due\""), "html: {html}");
+        assert!(
+            html.contains("data-wikilink-page=\"Nota Due\""),
+            "html: {html}"
+        );
         assert!(html.contains("class=\"wikilink\""));
+    }
+
+    #[test]
+    fn renders_embed_as_placeholder_not_link() {
+        // La transclusion è composta dal frontend via `Workspace::render_embed`:
+        // qui deve uscire solo il placeholder, mai il contenuto del target.
+        let doc = parse("![[Altra Nota#Sezione]]");
+        let html = MarkdownProvider::new()
+            .render_html(
+                &doc,
+                &RenderOptions {
+                    wikilinks_as_data_attrs: true,
+                },
+            )
+            .unwrap();
+        assert!(html.contains("class=\"embed\""), "html: {html}");
+        assert!(html.contains("data-embed-page=\"Altra Nota\""));
+        assert!(html.contains("data-embed-heading=\"Sezione\""));
+        assert!(!html.contains("class=\"wikilink\""));
     }
 
     #[test]

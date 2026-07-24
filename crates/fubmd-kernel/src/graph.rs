@@ -347,7 +347,7 @@ impl LinkGraph {
 }
 
 /// Chiave di risoluzione: trim + minuscolo. Unico punto di normalizzazione.
-fn normalize(s: &str) -> String {
+pub(crate) fn normalize(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
@@ -393,7 +393,7 @@ fn priority(id: &DocId) -> (usize, &str) {
     (segments(id), id.as_str())
 }
 
-fn strip_ext(path: &str) -> String {
+pub(crate) fn strip_ext(path: &str) -> String {
     match path.rsplit_once('.') {
         Some((stem, ext)) if !ext.contains('/') => stem.to_string(),
         _ => path.to_string(),
