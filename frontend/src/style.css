@@ -109,6 +109,55 @@ button:hover {
   color: white;
 }
 
+#search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+#search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#search-results li {
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+#search-results li:hover {
+  background: var(--bg-input);
+}
+.hit-title {
+  display: block;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hit-snippet {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+  margin-top: 2px;
+}
+.hit-snippet mark {
+  background: var(--accent-soft);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 #editor-pane {
   min-width: 0;
   border-right: 1px solid var(--border);

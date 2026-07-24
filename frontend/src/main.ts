@@ -1,6 +1,6 @@
 import "./style.css";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, onKernelEvent, type KernelEvent } from "./api";
+import { api, onKernelEvent, type KernelEvent, type SearchHit, type Span } from "./api";
 import { createEditor, type Editor } from "./editor";
 import { renderUiNode } from "./ui";
 
@@ -10,10 +10,19 @@ const fileListEl = $("#file-list");
 const previewEl = $("#preview");
 const backlinksEl = $("#backlinks");
 const vaultPathEl = $("#vault-path");
+const searchInputEl = $<HTMLInputElement>("#search-input");
+const searchPanelEl = $("#search-panel");
+const searchSummaryEl = $("#search-summary");
+const searchResultsEl = $("#search-results");
+const filesPanelEl = $("#files-panel");
 
 let currentDoc: string | null = null;
 let editor: Editor;
 let saveTimer: number | undefined;
+let searchTimer: number | undefined;
+// Ogni ricerca porta il proprio numero d'ordine: una risposta lenta di una
+// query vecchia non deve sovrascrivere i risultati di una più recente.
+let searchSeq = 0;
 // Il buffer ha modifiche non ancora scritte su disco? Finché è sporco, il
 // buffer è la verità del documento aperto (vedi docs/architecture/data-model.md,
 // "Fonte di verità"): non va MAI sovrascritto da un reload.
@@ -25,6 +34,10 @@ async function init() {
     scheduleSave();
   });
   $("#open-vault").addEventListener("click", pickVault);
+  searchInputEl.addEventListener("input", scheduleSearch);
+  searchInputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") clearSearch();
+  });
   onKernelEvent(handleKernelEvent);
   const initial = await api.initialVault();
   if (initial) await openVaultPath(initial);
@@ -42,6 +55,7 @@ async function openVaultPath(dir: string) {
   editor.setDoc("");
   previewEl.innerHTML = "";
   backlinksEl.innerHTML = "";
+  clearSearch();
   renderFileList(info.documents);
   if (info.documents.length > 0) selectDoc(info.documents[0]);
 }
@@ -163,6 +177,98 @@ async function hydrateEmbeds(container: HTMLElement, chain: Set<string>) {
   );
 }
 
+// --- ricerca ---------------------------------------------------------------
+
+function scheduleSearch() {
+  window.clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(runSearch, 180);
+}
+
+function clearSearch() {
+  window.clearTimeout(searchTimer);
+  searchInputEl.value = "";
+  // Il numero d'ordine avanza anche qui: una risposta già in volo non deve
+  // ripopolare un pannello che l'utente ha appena chiuso.
+  searchSeq++;
+  searchPanelEl.hidden = true;
+  filesPanelEl.hidden = false;
+  searchResultsEl.innerHTML = "";
+}
+
+async function runSearch() {
+  const query = searchInputEl.value.trim();
+  if (!query) {
+    clearSearch();
+    return;
+  }
+  const seq = ++searchSeq;
+  let hits: SearchHit[];
+  try {
+    hits = await api.search(query);
+  } catch (e) {
+    // Query sintatticamente non valida (l'utente sta ancora digitando
+    // `campo:`): non è un errore da mostrare, è un risultato non ancora dato.
+    if (seq === searchSeq) showSearchResults([], String(e));
+    return;
+  }
+  if (seq !== searchSeq) return;
+  showSearchResults(hits, null);
+}
+
+function showSearchResults(hits: SearchHit[], error: string | null) {
+  searchPanelEl.hidden = false;
+  filesPanelEl.hidden = true;
+  searchSummaryEl.textContent = error
+    ? "Query incompleta"
+    : hits.length === 0
+      ? "Nessun risultato"
+      : `${hits.length} risultat${hits.length === 1 ? "o" : "i"}`;
+
+  searchResultsEl.innerHTML = "";
+  for (const hit of hits) {
+    const li = document.createElement("li");
+    li.title = hit.doc;
+
+    const title = document.createElement("span");
+    title.className = "hit-title";
+    title.textContent = pageName(hit.doc);
+
+    const snippet = document.createElement("span");
+    snippet.className = "hit-snippet";
+    snippet.appendChild(highlighted(hit.snippet, hit.highlights));
+
+    li.append(title, snippet);
+    li.addEventListener("click", () => selectDoc(hit.doc));
+    searchResultsEl.appendChild(li);
+  }
+}
+
+/// Lo snippet con le porzioni evidenziate, come nodi DOM.
+///
+/// Due invarianti in una funzione sola:
+/// - il testo del provider entra **solo** come `textContent`/nodo di testo, mai
+///   come HTML: un provider non può iniettare markup (vedi `SearchHit`);
+/// - gli offset arrivano in **byte UTF-8** (è la valuta degli `Span` in tutto
+///   il modello) mentre le stringhe JS sono UTF-16: si taglia sui byte e si
+///   decodifica, invece di fingere che gli indici coincidano — con l'italiano
+///   accentato non coinciderebbero quasi mai.
+function highlighted(snippet: string, highlights: Span[]): DocumentFragment {
+  const frag = document.createDocumentFragment();
+  const bytes = new TextEncoder().encode(snippet);
+  const decoder = new TextDecoder();
+  let pos = 0;
+  for (const h of highlights) {
+    if (h.start < pos || h.end > bytes.length || h.start >= h.end) continue;
+    frag.append(decoder.decode(bytes.subarray(pos, h.start)));
+    const mark = document.createElement("mark");
+    mark.textContent = decoder.decode(bytes.subarray(h.start, h.end));
+    frag.append(mark);
+    pos = h.end;
+  }
+  frag.append(decoder.decode(bytes.subarray(pos)));
+  return frag;
+}
+
 async function updateBacklinks(id: string) {
   const node = await api.backlinksView(id);
   backlinksEl.innerHTML = "";
@@ -177,6 +283,9 @@ function handleKernelEvent(e: KernelEvent) {
   if (e.type === "index_updated") {
     api.listDocuments().then(renderFileList);
     if (currentDoc) updateBacklinks(currentDoc);
+    // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
+    // invecchiare sotto gli occhi di chi legge.
+    if (!searchPanelEl.hidden) scheduleSearch();
   } else if (e.type === "overflow") {
     // Eventi persi (coda troncata): ciò che deriviamo dagli eventi — lista
     // file, anteprima, backlink — va riconciliato da zero, non aggiornato.

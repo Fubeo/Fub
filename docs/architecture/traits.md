@@ -113,20 +113,61 @@ pub trait ViewProvider: Send + Sync {
 `ViewPlacement { LeftSidebar, RightSidebar, Bottom }`. `UiNode`/`UiAction`/
 `ViewUpdate` sono in [ui-protocol.md](ui-protocol.md).
 
-### `IndexProvider` — ricerca e backlink (M2: tantivy)
+### `IndexProvider` — ricerca (M2: tantivy)
 
 ```rust
 pub trait IndexProvider: Send + Sync {
     fn on_document_indexed(&mut self, doc: &DocumentModel);
     fn on_document_removed(&mut self, id: &DocId);
+    fn reconcile(&mut self, ids: &[DocId]);
+    fn flush(&mut self) -> Result<(), PluginError>;
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 }
 ```
 
 `IndexQuery { Backlinks { target }, FullText { query, limit }, Custom { ns, query } }`;
 `IndexResult { Backlinks(Vec<BacklinkRef>), Search(Vec<SearchHit>), Custom(Value) }`;
-`BacklinkRef { source, context }`, `SearchHit { doc, score, snippet }`. I metodi
-`on_document_*` sono i ganci per l'**aggiornamento incrementale** di M2.
+`BacklinkRef { source, context }`,
+`SearchHit { doc, score, snippet, highlights: Vec<Span> }`.
+
+**L'alimentazione non passa dagli eventi.** Il `Workspace` possiede gli
+`IndexProvider` registrati e chiama `on_document_*` *dentro* le stesse
+operazioni che aggiornano il grafo. È deliberato e asimmetrico rispetto a
+`EventHandler`: la coda eventi ha un budget e può troncare (`Event::Overflow`),
+e un indice che perde un aggiornamento non smette di rispondere — risponde
+**sbagliato**, in silenzio. In più `on_document_indexed` riceve il
+`DocumentModel`, che un handler non avrebbe modo di ottenere: l'`HostApi` dà la
+sorgente, non il modello parsato.
+
+Restano due giunture, ed è il compito degli altri due metodi:
+
+- `reconcile(ids)` — `ids` è l'insieme **completo** dei documenti del vault e
+  ciò che l'indice ha in più è morto. Chiude l'unico modo in cui un indice
+  persistente può divergere: quel che succede mentre non è vivo (una nota
+  cancellata ad app chiusa). Il kernel lo chiama in coda a `reindex`. Non è un
+  rebuild — gli immutati non vanno reindicizzati, ed è ciò che rende rapida la
+  riapertura di un vault.
+- `flush()` — punto di consistenza. Il kernel scrive **un documento alla
+  volta**, un indice vuole scrivere **a lotti**: fra un `on_document_*` e il
+  `flush` il provider è libero di accumulare. Chi decide che il lotto è finito
+  non è il kernel (non lo sa) ma chi il lotto lo ha formato — nell'app, il
+  watcher debounced. Chi interroga senza aspettare un flush vede comunque le
+  proprie scritture: lo garantisce il provider, non il chiamante.
+
+**I backlink non passano dai provider.** `Workspace::query_index` serve
+`IndexQuery::Backlinks` dal grafo del kernel, che è la loro unica fonte di
+verità — conosce le regole di risoluzione dei wikilink e le ambiguità
+dell'intero vault. Duplicarli in un indice creerebbe una seconda verità che può
+divergere dalla prima. Tutto il resto va ai provider in ordine di
+registrazione: vince il primo che non risponde `BadArgs`, che per contratto
+significa "non è roba mia".
+
+**`snippet` è testo, mai markup.** L'evidenziazione viaggia separata, in
+`highlights: Vec<Span>` (byte *dentro* `snippet`): un provider di terzi non
+deve poter iniettare contenuto attivo nella webview privilegiata passando per
+i risultati di ricerca — è la stessa regola di `UiNode::Html` in
+[ui-protocol.md](ui-protocol.md). Chi disegna avvolge gli intervalli con i
+propri elementi, e nel farlo attraversa il ponte byte→UTF-16.
 
 `Custom` è il **varco di estensione** (namespaced: `ns` = plugin id): senza,
 gli enum chiusi + il freeze WIT di M4 obbligherebbero il contratto a prevedere

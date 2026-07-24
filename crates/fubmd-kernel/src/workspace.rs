@@ -24,13 +24,25 @@
 //!
 //! Il canale [`EventBus`] resta il ponte verso i subscriber esterni (frontend,
 //! watcher): riceve gli stessi eventi, senza passare dalla coda.
+//!
+//! # Indici: alimentati direttamente, non dagli eventi
+//!
+//! Gli [`IndexProvider`] registrati ricevono ogni documento che entra o esce
+//! **dentro la stessa operazione** che aggiorna il grafo, non via event bus.
+//! È deliberato: la coda eventi ha un budget e può troncare, un indice no —
+//! un indice che perde un aggiornamento mente, e mentirebbe in silenzio. Ciò
+//! che invece l'indice non può vedere è quel che succede mentre non è vivo
+//! (cancellazioni ad app chiusa): lo chiude [`IndexProvider::reconcile`] in
+//! [`Workspace::reindex`].
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
 use camino::Utf8Path;
 use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
-use fubmd_abi::traits::{BacklinkRef, EventHandler, HostApi, JobId, JobSpec};
+use fubmd_abi::traits::{
+    BacklinkRef, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
+};
 use fubmd_abi::{Event, PluginError};
 
 use crate::bus::EventBus;
@@ -66,6 +78,10 @@ pub struct Workspace {
     bus: EventBus,
     /// Handler registrati (feature ufficiali; a M4/M5 i plugin via registry).
     handlers: Vec<Box<dyn EventHandler>>,
+    /// Indici derivati dal contenuto, alimentati **direttamente** (non via
+    /// event bus) dentro le stesse operazioni che aggiornano il grafo — così
+    /// un troncamento della coda eventi non può far divergere un indice.
+    indexes: Vec<Box<dyn IndexProvider>>,
     /// Eventi in attesa di dispatch verso gli handler.
     pending: VecDeque<Event>,
     /// Guardia anti-rientranza: `dispatch_pending` non si annida mai.
@@ -92,6 +108,7 @@ impl Workspace {
             graph_update: GraphUpdate::default(),
             bus: EventBus::new(),
             handlers: Vec::new(),
+            indexes: Vec::new(),
             pending: VecDeque::new(),
             dispatching: false,
             pending_jobs: Vec::new(),
@@ -124,7 +141,22 @@ impl Workspace {
         self.handlers.push(handler);
     }
 
-    /// Riparsa tutti i documenti del vault e ricostruisce il grafo.
+    /// Registra un [`IndexProvider`]. Va fatto **prima** di [`reindex`], che è
+    /// il momento in cui l'indice riceve il contenuto del vault e riconcilia
+    /// ciò che è cambiato mentre non era vivo.
+    ///
+    /// [`reindex`]: Workspace::reindex
+    pub fn register_index_provider(&mut self, index: Box<dyn IndexProvider>) {
+        self.indexes.push(index);
+    }
+
+    /// Riparsa tutti i documenti del vault, ricostruisce il grafo e allinea
+    /// gli indici registrati.
+    ///
+    /// Per gli indici questo **non** è un rebuild: ogni documento passa da
+    /// `on_document_indexed` (un indice persistente riconosce e salta gli
+    /// immutati) e [`IndexProvider::reconcile`] gli dice qual è l'insieme
+    /// completo, così cancella ciò che è sparito ad app chiusa.
     pub fn reindex(&mut self) -> Result<()> {
         let ids = self.vault.list_documents(&self.registry.all_extensions())?;
         let mut models = HashMap::with_capacity(ids.len());
@@ -137,6 +169,20 @@ impl Workspace {
         }
         self.models = models;
         self.rebuild_graph();
+
+        for index in self.indexes.iter_mut() {
+            for model in self.models.values() {
+                index.on_document_indexed(model);
+            }
+        }
+        let ids: Vec<DocId> = self.documents();
+        for index in self.indexes.iter_mut() {
+            index.reconcile(&ids);
+        }
+        // Gli errori di flush non fanno fallire l'apertura del vault: un
+        // indice è stato derivato, il vault è la verità (M4: notifica).
+        let _ = self.flush_indexes();
+
         self.emit_event(Event::VaultOpened {
             root: self.vault.root().to_string(),
         });
@@ -186,6 +232,12 @@ impl Workspace {
             GraphUpdate::Incremental => self.graph.upsert(&self.models[id]),
             GraphUpdate::FullRebuild => self.rebuild_graph(),
         }
+        // Gli indici vedono la modifica nella stessa operazione del grafo:
+        // stessa verità, nessun canale che può perdere pezzi per strada.
+        let model = &self.models[id];
+        for index in self.indexes.iter_mut() {
+            index.on_document_indexed(model);
+        }
         self.emit_event(Event::DocumentChanged { id: id.clone() });
         self.emit_event(Event::IndexUpdated);
         Ok(())
@@ -219,6 +271,9 @@ impl Workspace {
             match self.graph_update {
                 GraphUpdate::Incremental => self.graph.remove(id),
                 GraphUpdate::FullRebuild => self.rebuild_graph(),
+            }
+            for index in self.indexes.iter_mut() {
+                index.on_document_removed(id);
             }
             self.emit_event(Event::DocumentRemoved { id: id.clone() });
             self.emit_event(Event::IndexUpdated);
@@ -270,6 +325,16 @@ impl Workspace {
                 self.graph.upsert(&self.models[to]);
             }
             GraphUpdate::FullRebuild => self.rebuild_graph(),
+        }
+        // Per un indice il rename è remove+add: l'identità è la chiave, e la
+        // chiave è cambiata. (Chi tiene stato *per-documento* invece migra la
+        // chiave sull'evento `DocumentRenamed`.)
+        for index in self.indexes.iter_mut() {
+            index.on_document_removed(from);
+        }
+        let model = &self.models[to];
+        for index in self.indexes.iter_mut() {
+            index.on_document_indexed(model);
         }
         self.emit_event(Event::DocumentRenamed {
             from: from.clone(),
@@ -426,6 +491,53 @@ impl Workspace {
     /// Risolve il nome di un wikilink a un documento esistente.
     pub fn resolve_link(&self, page: &str) -> Option<DocId> {
         self.graph.resolve_wiki(page)
+    }
+
+    // --- indici -----------------------------------------------------------
+
+    /// Interroga gli indici.
+    ///
+    /// I **backlink** non passano dai provider: li serve il grafo del kernel,
+    /// che è la loro unica fonte di verità (conosce le regole di risoluzione
+    /// dei wikilink e le ambiguità dell'intero vault). Duplicarli in un indice
+    /// creerebbe una seconda verità che può divergere dalla prima.
+    ///
+    /// Tutto il resto va ai provider registrati, in ordine di registrazione:
+    /// vince il primo che non risponde [`PluginError::BadArgs`], che è per
+    /// contratto il modo di dire "non è roba mia" (vedi
+    /// [`IndexQuery::Custom`]). Se nessuno la riconosce, l'errore dell'ultimo
+    /// interpellato arriva al chiamante.
+    pub fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
+        if let IndexQuery::Backlinks { target } = &query {
+            return Ok(IndexResult::Backlinks(self.graph.backlinks(target)));
+        }
+        let mut last = Err(PluginError::BadArgs(
+            "nessun IndexProvider registrato".to_string(),
+        ));
+        for index in &self.indexes {
+            match index.query(query.clone()) {
+                Err(PluginError::BadArgs(msg)) => last = Err(PluginError::BadArgs(msg)),
+                other => return other,
+            }
+        }
+        last
+    }
+
+    /// Porta gli indici a un punto di consistenza (vedi
+    /// [`IndexProvider::flush`]). Da chiamare quando un lotto di modifiche è
+    /// finito: il kernel non decide da solo *quando* è finito un lotto.
+    ///
+    /// L'errore di un indice non fa fallire il chiamante — un indice è stato
+    /// *derivato*, la verità è il vault e si ricostruisce. Restituisce gli
+    /// errori perché chi ha un canale di notifica possa mostrarli.
+    pub fn flush_indexes(&mut self) -> Vec<PluginError> {
+        let mut errors = Vec::new();
+        for index in self.indexes.iter_mut() {
+            if let Err(e) = index.flush() {
+                errors.push(e);
+            }
+        }
+        errors
     }
 
     // --- eventi ------------------------------------------------------------
