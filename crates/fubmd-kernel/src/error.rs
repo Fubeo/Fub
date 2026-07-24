@@ -13,6 +13,12 @@ pub enum KernelError {
     },
     #[error("nessun provider registrato per l'estensione {0:?}")]
     NoProvider(String),
+    /// Nessun formato registrato, quindi nemmeno uno con cui far nascere una
+    /// nota nuova.
+    #[error("nessun formato registrato: non so con quale creare una nota")]
+    NoDefaultFormat,
+    #[error("nome non valido per una nota: {0:?}")]
+    BadName(String),
     #[error("documento non trovato: {0}")]
     NotFound(String),
     #[error("esiste già un documento: {0}")]

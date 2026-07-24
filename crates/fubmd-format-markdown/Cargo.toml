@@ -19,3 +19,4 @@ serde_yaml_ng = "0.10.0"
 # solo per il test end-to-end sul vault di esempio: monta il core reale.
 fubmd-kernel = { workspace = true }
 camino = { workspace = true }
+tempfile = "3.27.0"

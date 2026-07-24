@@ -40,6 +40,7 @@ async function init() {
     scheduleSave();
   });
   $("#open-vault").addEventListener("click", pickVault);
+  $("#new-note").addEventListener("click", () => newNote());
   $("#show-trash").addEventListener("click", openTrash);
   $("#close-trash").addEventListener("click", () => showPanel("files"));
   $("#empty-trash").addEventListener("click", emptyTrash);
@@ -80,10 +81,82 @@ function renderFileList(docs: string[]) {
     li.addEventListener("click", () => selectDoc(id));
     li.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      showContextMenu(e, [{ label: "Elimina", danger: true, run: () => deleteDoc(id) }]);
+      showContextMenu(e, [
+        { label: "Rinomina", run: () => startRename(li, id) },
+        { label: "Elimina", danger: true, run: () => deleteDoc(id) },
+      ]);
     });
     fileListEl.appendChild(li);
   }
+}
+
+// --- crea e rinomina -------------------------------------------------------
+
+async function newNote(name?: string) {
+  const id = await api.createNote(name);
+  renderFileList(await api.listDocuments());
+  await selectDoc(id);
+  editor.focus();
+}
+
+/// Rinomina in posto: la riga della lista diventa un campo di testo.
+///
+/// Si rinomina il **nome pagina**, non il path: cartella ed estensione restano
+/// quelle di prima, perché è ciò che l'utente si aspetta scrivendo sopra un
+/// titolo. Spostare una nota altrove è un'altra operazione.
+function startRename(li: HTMLElement, id: string) {
+  const input = document.createElement("input");
+  input.value = pageName(id);
+  li.textContent = "";
+  li.appendChild(input);
+  input.focus();
+  input.select();
+
+  let chiuso = false;
+  const annulla = () => {
+    if (chiuso) return;
+    chiuso = true;
+    renderFileList(knownDocs);
+  };
+  const conferma = async () => {
+    if (chiuso) return;
+    chiuso = true;
+    const nuovo = input.value.trim();
+    if (!nuovo || nuovo === pageName(id)) {
+      renderFileList(knownDocs);
+      return;
+    }
+    await renameDoc(id, nuovo);
+  };
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") conferma();
+    else if (e.key === "Escape") annulla();
+  });
+  input.addEventListener("blur", annulla);
+}
+
+async function renameDoc(from: string, newPageName: string) {
+  const slash = from.lastIndexOf("/");
+  const dir = slash === -1 ? "" : from.slice(0, slash + 1);
+  const dot = from.lastIndexOf(".");
+  const ext = dot > slash ? from.slice(dot) : "";
+  const to = `${dir}${newPageName}${ext}`;
+
+  // Il rename riscrive i wikilink entranti, cioè file di terzi — e fra questi
+  // può esserci il documento aperto. Il buffer va messo in salvo prima, o la
+  // riscrittura del kernel finirebbe sotto una copia più vecchia.
+  await flushPendingSave();
+  try {
+    await api.renameDocument(from, to);
+  } catch (e) {
+    console.error(`FubMD: rinomina di ${from} in ${to} rifiutata: ${e}`);
+    renderFileList(knownDocs);
+    return;
+  }
+  // `currentDoc` lo aggiorna l'evento `document_renamed`: l'identità è il path,
+  // e chi la migra è un solo punto.
+  renderFileList(await api.listDocuments());
 }
 
 // --- menu contestuale ------------------------------------------------------
@@ -307,8 +380,19 @@ function wireWikilinks(container: HTMLElement) {
       const page = a.dataset.wikilinkPage;
       if (!page) return;
       const target = await api.resolveLink(page);
-      if (target) selectDoc(target);
-      else a.classList.add("unresolved");
+      if (target) {
+        selectDoc(target);
+        return;
+      }
+      // Link non risolto: cliccarlo crea la nota che manca, col nome scritto
+      // nel link (come in Obsidian). Il backlink c'è già prima ancora che
+      // l'utente abbia scritto la prima riga — è il grafo a ricucirlo.
+      try {
+        await newNote(page);
+      } catch (err) {
+        a.classList.add("unresolved");
+        console.error(`FubMD: non riesco a creare «${page}»: ${err}`);
+      }
     });
   });
 }
