@@ -5,6 +5,17 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 export interface VaultInfo {
   root: string;
   documents: string[];
+  // Il versioning è acceso? Spento significa assente: niente cronologia in UI
+  // e nessuna scrittura nel vault (D7).
+  versioning: boolean;
+}
+
+// Una versione salvata (rispecchia fubmd_features::versioning::VersionRef).
+export interface VersionRef {
+  // Istante dello snapshot in millisecondi UNIX: è anche la sua identità.
+  ts: number;
+  hash: number;
+  size: number;
 }
 
 export interface BacklinkRef {
@@ -90,6 +101,9 @@ export const api = {
   search: (query: string, limit?: number) =>
     invoke<SearchHit[]>("search", { query, limit }),
   resolveLink: (page: string) => invoke<string | null>("resolve_link", { page }),
+  listVersions: (id: string) => invoke<VersionRef[]>("list_versions", { id }),
+  readVersion: (id: string, ts: number) => invoke<string>("read_version", { id, ts }),
+  restoreVersion: (id: string, ts: number) => invoke<void>("restore_version", { id, ts }),
 };
 
 export function onKernelEvent(
