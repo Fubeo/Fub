@@ -69,31 +69,46 @@ Aperto, da decidere strada facendo:
 
 ## Fase 1 — Delete col cestino
 
-- [ ] `Vault::trash(id) -> Result<DocId>`: sposta il file in `.trash/`
+- [x] `Vault::trash(id) -> Result<DocId>`: sposta il file in `.trash/`
       (creandola se manca), gestisce la collisione (D2), restituisce il path
       nel cestino. Niente `std::fs::remove_file` in questa fase: il delete
       dell'app **è** lo spostamento.
-- [ ] `Workspace::delete_document(id)`: `Vault::trash` + il lavoro che già fa
+- [x] `Workspace::delete_document(id)`: `Vault::trash` + il lavoro che già fa
       `remove_document` (modelli, grafo, indici, `Event::DocumentRemoved`).
       `remove_document` resta com'è: è il percorso del *watcher* (file già
       sparito dal disco, nulla da cestinare).
-- [ ] Cestino: elenco e ripristino nel kernel — `Workspace::list_trash()`,
+- [x] Cestino: elenco e ripristino nel kernel — `Workspace::list_trash()`,
       `Workspace::restore_from_trash(trash_id)` (il ripristino è un
       `write_document` sul path originale ricavato dal nome, con dialogo se il
       path è di nuovo occupato).
-- [ ] Svuota cestino (`Workspace::empty_trash`, qui sì `remove_file`).
-- [ ] IPC: `delete_document`, `list_trash`, `restore_from_trash`,
+      *(Firma: `restore_from_trash(trash_id, to: Option<DocId>)` — il kernel
+      rifiuta la collisione con `AlreadyExists`, e il nome alternativo lo
+      sceglie l'app, che è quella che può chiedere all'utente.)*
+- [x] Svuota cestino (`Workspace::empty_trash`, qui sì `remove_file`).
+      *(`Vault::remove_trashed` cancella davvero, ma solo dentro `.trash/`:
+      fuori risponde `OutsideVault`. Il vault continua a non saper cancellare
+      note.)*
+- [x] IPC: `delete_document`, `list_trash`, `restore_from_trash`,
       `empty_trash`.
-- [ ] Frontend: voce "Elimina" nel menu contestuale della lista file (con
+- [x] Frontend: voce "Elimina" nel menu contestuale della lista file (con
       conferma), vista cestino minimale (lista + ripristina + svuota).
-- [ ] Frontend: cancellazione del documento aperto → editor svuotato e
+- [x] Frontend: cancellazione del documento aperto → editor svuotato e
       selezione della prima nota (il buffer sporco di un documento cancellato
       muore col documento: è stata un'azione esplicita dell'utente).
-- [ ] Test kernel (`index_feeding.rs` + nuovo `trash.rs`): il delete alimenta
+      *(Il debounce di salvataggio si disinnesca **prima** della conferma: una
+      scrittura in coda avrebbe fatto risorgere la nota un attimo dopo.)*
+- [x] Test kernel (`index_feeding.rs` + nuovo `trash.rs`): il delete alimenta
       `on_document_removed`; il file esiste in `.trash/`; restore reindicizza;
       il watcher che vede sparire il file originale non fa doppio lavoro.
-- [ ] Test e2e: delete → non più cercabile, backlink verso la nota diventano
-      non risolti; restore → tutto torna.
+- [x] Test e2e: delete → non più cercabile, backlink verso la nota diventano
+      non risolti; restore → tutto torna. *(`search_e2e.rs`.)*
+
+**Deciso strada facendo.** Il cestino è **piatto**, come quello di Obsidian: la
+cartella di provenienza non sopravvive alla cancellazione e un ripristino
+riporta la nota nella radice. È il prezzo di D1 (*un solo* cestino in un vault
+condiviso) ed è anche ciò che rende leggibile un cestino riempito dall'altra
+app, dove non esiste alcun registro da consultare: il nome originale si ricava
+dal nome del file togliendo il timbro di D2, riconosciuto dalla forma.
 
 ## Fase 2 — Create + Rename in UI (chiude il CRUD)
 

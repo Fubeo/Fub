@@ -16,6 +16,7 @@ pub mod bus;
 pub mod error;
 pub mod graph;
 pub mod registry;
+pub mod time;
 pub mod vault;
 pub mod workspace;
 
@@ -23,5 +24,5 @@ pub use bus::EventBus;
 pub use error::{KernelError, Result};
 pub use graph::LinkGraph;
 pub use registry::FormatRegistry;
-pub use vault::Vault;
+pub use vault::{TrashEntry, Vault, TRASH_DIR};
 pub use workspace::{GraphUpdate, Workspace};

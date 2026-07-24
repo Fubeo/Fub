@@ -40,6 +40,10 @@ impl Vault {
         std::fs::remove_file(self.root.join(rel)).unwrap();
     }
 
+    fn read(&self, rel: &str) -> String {
+        std::fs::read_to_string(self.root.join(rel)).expect("lettura")
+    }
+
     /// Apre il vault come farebbe l'app: registry markdown + indice su disco,
     /// registrato prima del `reindex`.
     fn open(&self) -> Workspace {
@@ -151,6 +155,49 @@ fn deleting_a_note_removes_it_from_search() {
 
     ws.remove_document(&DocId::new("effimera.md"));
     assert!(found(&ws, "passeggero").is_empty());
+}
+
+#[test]
+fn trashing_a_note_makes_it_vanish_from_search_and_backlinks_and_coming_back_undoes_it() {
+    let v = Vault::new();
+    v.put("Fotosintesi.md", "La clorofilla cattura la luce.\n");
+    v.put("Biologia.md", "Vedi [[Fotosintesi]] per il dettaglio.\n");
+    let mut ws = v.open();
+    assert_eq!(found(&ws, "clorofilla"), vec!["Fotosintesi.md"]);
+    assert_eq!(ws.backlinks(&DocId::new("Fotosintesi.md")).len(), 1);
+
+    let cestinata = ws.delete_document(&DocId::new("Fotosintesi.md")).unwrap();
+
+    assert!(found(&ws, "clorofilla").is_empty(), "non più cercabile");
+    // Il link da Biologia non è stato toccato — cancellare una nota non
+    // riscrive i documenti di terzi — ma ora non risolve più: è esattamente il
+    // "link non risolto" di Obsidian, da cui si ricrea la nota.
+    assert_eq!(v.read("Biologia.md"), "Vedi [[Fotosintesi]] per il dettaglio.\n");
+    assert!(ws.resolve_link("Fotosintesi").is_none());
+    assert!(ws.backlinks(&DocId::new("Fotosintesi.md")).is_empty());
+
+    ws.restore_from_trash(&cestinata, None).unwrap();
+
+    assert_eq!(found(&ws, "clorofilla"), vec!["Fotosintesi.md"]);
+    assert_eq!(ws.resolve_link("Fotosintesi"), Some(DocId::new("Fotosintesi.md")));
+    assert_eq!(
+        ws.backlinks(&DocId::new("Fotosintesi.md")).len(),
+        1,
+        "il backlink si è ricucito da solo: il grafo lo ricalcola, non lo ricorda"
+    );
+}
+
+#[test]
+fn what_sits_in_the_trash_is_never_searchable() {
+    let v = Vault::new();
+    v.put("viva.md", "Nota corrente.\n");
+    // Una nota cestinata in una sessione precedente (o da Obsidian) è già lì
+    // quando il vault si apre: la scansione non deve raccoglierla.
+    v.put(".trash/Cestinata.md", "Contenuto dimenticato.\n");
+    let ws = v.open();
+
+    assert!(found(&ws, "dimenticato").is_empty());
+    assert_eq!(ws.documents(), vec![DocId::new("viva.md")]);
 }
 
 #[test]

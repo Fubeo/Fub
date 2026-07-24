@@ -1,5 +1,5 @@
 import "./style.css";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { api, onKernelEvent, type KernelEvent, type SearchHit, type Span } from "./api";
 import { createEditor, type Editor } from "./editor";
 import { renderUiNode } from "./ui";
@@ -15,8 +15,14 @@ const searchPanelEl = $("#search-panel");
 const searchSummaryEl = $("#search-summary");
 const searchResultsEl = $("#search-results");
 const filesPanelEl = $("#files-panel");
+const trashPanelEl = $("#trash-panel");
+const trashListEl = $("#trash-list");
 
 let currentDoc: string | null = null;
+// L'ultima lista di documenti disegnata: serve a proporre nomi liberi senza
+// interrogare il kernel a ogni tasto. Non è una verità, è un'eco — chi crea o
+// rinomina passa comunque dal kernel, che le collisioni le sa davvero.
+let knownDocs: string[] = [];
 let editor: Editor;
 let saveTimer: number | undefined;
 let searchTimer: number | undefined;
@@ -34,6 +40,9 @@ async function init() {
     scheduleSave();
   });
   $("#open-vault").addEventListener("click", pickVault);
+  $("#show-trash").addEventListener("click", openTrash);
+  $("#close-trash").addEventListener("click", () => showPanel("files"));
+  $("#empty-trash").addEventListener("click", emptyTrash);
   searchInputEl.addEventListener("input", scheduleSearch);
   searchInputEl.addEventListener("keydown", (e) => {
     if (e.key === "Escape") clearSearch();
@@ -61,6 +70,7 @@ async function openVaultPath(dir: string) {
 }
 
 function renderFileList(docs: string[]) {
+  knownDocs = docs;
   fileListEl.innerHTML = "";
   for (const id of docs) {
     const li = document.createElement("li");
@@ -68,7 +78,166 @@ function renderFileList(docs: string[]) {
     li.title = id;
     li.className = id === currentDoc ? "active" : "";
     li.addEventListener("click", () => selectDoc(id));
+    li.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showContextMenu(e, [{ label: "Elimina", danger: true, run: () => deleteDoc(id) }]);
+    });
     fileListEl.appendChild(li);
+  }
+}
+
+// --- menu contestuale ------------------------------------------------------
+
+interface MenuItem {
+  label: string;
+  danger?: boolean;
+  run: () => void;
+}
+
+function showContextMenu(at: MouseEvent, items: MenuItem[]) {
+  closeContextMenu();
+  const menu = document.createElement("div");
+  menu.id = "context-menu";
+  menu.style.left = `${at.clientX}px`;
+  menu.style.top = `${at.clientY}px`;
+  for (const item of items) {
+    const b = document.createElement("button");
+    b.textContent = item.label;
+    if (item.danger) b.className = "danger";
+    b.addEventListener("click", () => {
+      closeContextMenu();
+      item.run();
+    });
+    menu.appendChild(b);
+  }
+  document.body.appendChild(menu);
+  // Il primo click fuori chiude: `once` evita di dover disiscrivere a mano, e
+  // il ritardo evita che sia questo stesso click ad attivarlo.
+  setTimeout(() => document.addEventListener("click", closeContextMenu, { once: true }), 0);
+}
+
+function closeContextMenu() {
+  document.getElementById("context-menu")?.remove();
+}
+
+// --- cestino ---------------------------------------------------------------
+
+async function deleteDoc(id: string) {
+  // Un salvataggio in attesa su questo documento lo farebbe risorgere subito
+  // dopo la cancellazione: si disinnesca prima ancora di chiedere conferma, e
+  // si rimette in coda se l'utente ci ripensa.
+  const salvataggioInAttesa = id === currentDoc && dirty;
+  if (salvataggioInAttesa) window.clearTimeout(saveTimer);
+
+  const ok = await confirm(`Spostare «${pageName(id)}» nel cestino?`, {
+    title: "Elimina nota",
+    kind: "warning",
+    okLabel: "Elimina",
+    cancelLabel: "Annulla",
+  });
+  if (!ok) {
+    if (salvataggioInAttesa) scheduleSave();
+    return;
+  }
+
+  await api.deleteDocument(id);
+  if (id === currentDoc) {
+    // Il buffer sporco di un documento cancellato muore col documento: non è
+    // una perdita silenziosa, è l'azione che l'utente ha appena confermato.
+    dirty = false;
+    currentDoc = null;
+    editor.setDoc("");
+    previewEl.innerHTML = "";
+    backlinksEl.innerHTML = "";
+    const docs = await api.listDocuments();
+    renderFileList(docs);
+    if (docs.length > 0) await selectDoc(docs[0]);
+  }
+}
+
+async function openTrash() {
+  showPanel("trash");
+  await refreshTrash();
+}
+
+async function refreshTrash() {
+  const entries = await api.listTrash();
+  trashListEl.innerHTML = "";
+  if (entries.length === 0) {
+    const vuoto = document.createElement("li");
+    vuoto.className = "empty-note";
+    vuoto.textContent = "Il cestino è vuoto.";
+    trashListEl.appendChild(vuoto);
+    return;
+  }
+  for (const entry of entries) {
+    const li = document.createElement("li");
+    li.title = entry.id;
+
+    const name = document.createElement("span");
+    name.className = "trash-name";
+    name.textContent = pageName(entry.original);
+
+    const when = document.createElement("span");
+    when.className = "trash-when";
+    when.textContent = new Date(entry.deleted_at * 1000).toLocaleString();
+
+    const restore = document.createElement("button");
+    restore.className = "link-button";
+    restore.textContent = "Ripristina";
+    restore.addEventListener("click", () => restoreFromTrash(entry.id, entry.original));
+
+    li.append(name, when, restore);
+    trashListEl.appendChild(li);
+  }
+}
+
+async function restoreFromTrash(trashId: string, original: string) {
+  let restored: string;
+  try {
+    restored = await api.restoreFromTrash(trashId);
+  } catch {
+    // Il path originale è di nuovo occupato: il kernel non inventa nomi al
+    // posto dell'utente, quindi l'app ne propone uno e chiede.
+    const proposta = freeName(original);
+    const ok = await confirm(
+      `«${pageName(original)}» esiste di nuovo. Ripristinare come «${pageName(proposta)}»?`,
+      { title: "Ripristina nota", okLabel: "Ripristina", cancelLabel: "Annulla" },
+    );
+    if (!ok) return;
+    restored = await api.restoreFromTrash(trashId, proposta);
+  }
+  await refreshTrash();
+  showPanel("files");
+  renderFileList(await api.listDocuments());
+  await selectDoc(restored);
+}
+
+async function emptyTrash() {
+  const entries = await api.listTrash();
+  if (entries.length === 0) return;
+  const ok = await confirm(
+    `Cancellare per sempre ${entries.length} element${entries.length === 1 ? "o" : "i"}?`,
+    { title: "Svuota cestino", kind: "warning", okLabel: "Svuota", cancelLabel: "Annulla" },
+  );
+  if (!ok) return;
+  const quanti = await api.emptyTrash();
+  console.info(`FubMD: cestino svuotato, ${quanti} element${quanti === 1 ? "o" : "i"} cancellati.`);
+  await refreshTrash();
+}
+
+/// Il primo nome libero della famiglia `Nota`, `Nota 1`, `Nota 2`, … a partire
+/// da un `DocId` occupato. Il confronto è sulla lista che l'app ha in mano: il
+/// kernel rifiuterà comunque una collisione che dovesse sfuggire di qui.
+function freeName(id: string): string {
+  const dot = id.lastIndexOf(".");
+  const conEstensione = dot > 0 && !id.slice(dot).includes("/");
+  const stem = conEstensione ? id.slice(0, dot) : id;
+  const ext = conEstensione ? id.slice(dot) : "";
+  const presi = new Set(knownDocs);
+  for (let n = 1; ; n++) {
+    const candidato = `${stem} ${n}${ext}`;
+    if (!presi.has(candidato)) return candidato;
   }
 }
 
@@ -190,9 +359,16 @@ function clearSearch() {
   // Il numero d'ordine avanza anche qui: una risposta già in volo non deve
   // ripopolare un pannello che l'utente ha appena chiuso.
   searchSeq++;
-  searchPanelEl.hidden = true;
-  filesPanelEl.hidden = false;
+  showPanel("files");
   searchResultsEl.innerHTML = "";
+}
+
+/// I tre pannelli della sidebar si escludono a vicenda: uno solo alla volta
+/// occupa lo spazio, e chi lo apre non deve ricordarsi di chiudere gli altri.
+function showPanel(panel: "files" | "search" | "trash") {
+  filesPanelEl.hidden = panel !== "files";
+  searchPanelEl.hidden = panel !== "search";
+  trashPanelEl.hidden = panel !== "trash";
 }
 
 async function runSearch() {
@@ -216,8 +392,7 @@ async function runSearch() {
 }
 
 function showSearchResults(hits: SearchHit[], error: string | null) {
-  searchPanelEl.hidden = false;
-  filesPanelEl.hidden = true;
+  showPanel("search");
   searchSummaryEl.textContent = error
     ? "Query incompleta"
     : hits.length === 0
@@ -284,8 +459,10 @@ function handleKernelEvent(e: KernelEvent) {
     api.listDocuments().then(renderFileList);
     if (currentDoc) updateBacklinks(currentDoc);
     // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
-    // invecchiare sotto gli occhi di chi legge.
+    // invecchiare sotto gli occhi di chi legge. Vale anche per il cestino, che
+    // un'altra app (o un'altra finestra) può aver riempito o svuotato.
     if (!searchPanelEl.hidden) scheduleSearch();
+    if (!trashPanelEl.hidden) refreshTrash();
   } else if (e.type === "overflow") {
     // Eventi persi (coda troncata): ciò che deriviamo dagli eventi — lista
     // file, anteprima, backlink — va riconciliato da zero, non aggiornato.

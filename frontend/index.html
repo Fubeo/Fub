@@ -26,8 +26,25 @@
             <ul id="search-results"></ul>
           </div>
           <div id="files-panel">
-            <div class="panel-title">Note</div>
+            <div class="panel-title">
+              <span>Note</span>
+              <button id="show-trash" class="link-button" title="Apri il cestino">
+                Cestino
+              </button>
+            </div>
             <ul id="file-list"></ul>
+          </div>
+          <div id="trash-panel" hidden>
+            <div class="panel-title">
+              <span>Cestino</span>
+              <button id="empty-trash" class="link-button" title="Cancella tutto per sempre">
+                Svuota
+              </button>
+              <button id="close-trash" class="link-button" title="Torna alle note">
+                Chiudi
+              </button>
+            </div>
+            <ul id="trash-list"></ul>
           </div>
         </aside>
         <section id="editor-pane">

@@ -49,7 +49,7 @@ use crate::bus::EventBus;
 use crate::error::{KernelError, Result};
 use crate::graph::{normalize, strip_ext, LinkGraph};
 use crate::registry::FormatRegistry;
-use crate::vault::Vault;
+use crate::vault::{TrashEntry, Vault};
 
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
 ///
@@ -288,6 +288,79 @@ impl Workspace {
             self.emit_event(Event::IndexUpdated);
             self.dispatch_pending();
         }
+    }
+
+    // --- cestino -----------------------------------------------------------
+
+    /// Cancella un documento **spostandolo nel cestino** del vault, e
+    /// restituisce il [`DocId`] che vi ha assunto.
+    ///
+    /// È il delete dell'app, ed è un metodo a sé: [`remove_document`] è il
+    /// percorso del *watcher*, che reagisce a un file già sparito dal disco e
+    /// non ha nulla da cestinare. Qui il file c'è, e viene spostato prima che i
+    /// modelli lo dimentichino — se lo spostamento fallisce, il workspace non
+    /// si è mosso e la nota è ancora dov'era.
+    ///
+    /// Modelli, grafo, indici ed evento sono esattamente il lavoro di
+    /// [`remove_document`]: un secondo percorso di rimozione da tenere allineato
+    /// sarebbe un secondo modo di divergere.
+    ///
+    /// [`remove_document`]: Workspace::remove_document
+    pub fn delete_document(&mut self, id: &DocId) -> Result<DocId> {
+        if !self.models.contains_key(id) {
+            return Err(KernelError::NotFound(id.to_string()));
+        }
+        let trashed = self.vault.trash(id)?;
+        self.remove_document(id);
+        Ok(trashed)
+    }
+
+    /// Il contenuto del cestino, dal più recente al più vecchio.
+    pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
+        self.vault.list_trash()
+    }
+
+    /// Ripristina una voce del cestino e restituisce il [`DocId`] con cui è
+    /// tornata nel vault: il nome originale nella radice, oppure `to` se il
+    /// chiamante ne ha scelto un altro (è il caso in cui il path è di nuovo
+    /// occupato e l'app ha chiesto all'utente).
+    ///
+    /// Il ripristino è una **scrittura normale** (D8): passa da
+    /// [`write_document`], quindi da parse, grafo, indici ed eventi come
+    /// qualunque altra modifica. Nessun percorso speciale da tenere coerente —
+    /// ed è anche il motivo per cui il ripristino genera a sua volta uno
+    /// snapshot di versione, cioè è annullabile.
+    ///
+    /// [`write_document`]: Workspace::write_document
+    pub fn restore_from_trash(&mut self, trash_id: &DocId, to: Option<DocId>) -> Result<DocId> {
+        let entry = self
+            .vault
+            .list_trash()?
+            .into_iter()
+            .find(|e| &e.id == trash_id)
+            .ok_or_else(|| KernelError::NotFound(trash_id.to_string()))?;
+        let target = to.unwrap_or(entry.original);
+        if self.models.contains_key(&target) || self.vault.exists(&target) {
+            return Err(KernelError::AlreadyExists(target.to_string()));
+        }
+        let ext = extension_of(&target).unwrap_or_default();
+        if self.registry.provider_for_ext(&ext).is_none() {
+            return Err(KernelError::NoProvider(ext));
+        }
+
+        let source = self.vault.read(trash_id)?;
+        self.write_document(&target, &source)?;
+        // La copia nel cestino se ne va per ultima: se la cancellazione
+        // fallisce restano due copie della nota, il che è un fastidio. Fare il
+        // contrario significherebbe rischiare di non averne nessuna.
+        self.vault.remove_trashed(trash_id)?;
+        Ok(target)
+    }
+
+    /// Svuota il cestino. Restituisce quante voci ha cancellato: da qui in poi
+    /// non sono più recuperabili, e chi chiama deve poterlo dire.
+    pub fn empty_trash(&mut self) -> Result<usize> {
+        self.vault.empty_trash()
     }
 
     /// Rinomina/sposta un documento **preservando l'identità**: file sul disco,

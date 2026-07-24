@@ -57,6 +57,17 @@ export interface SearchHit {
   highlights: Span[];
 }
 
+// Una voce del cestino (rispecchia fubmd_kernel::vault::TrashEntry).
+export interface TrashEntry {
+  // Dove il file si trova ora, dentro `.trash/`.
+  id: string;
+  // Dove tornerebbe un ripristino.
+  original: string;
+  // Istante della cancellazione, in secondi UNIX.
+  deleted_at: number;
+  size: number;
+}
+
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
@@ -66,6 +77,11 @@ export const api = {
     invoke<void>("write_document", { id, source }),
   renameDocument: (from: string, to: string) =>
     invoke<void>("rename_document", { from, to }),
+  deleteDocument: (id: string) => invoke<string>("delete_document", { id }),
+  listTrash: () => invoke<TrashEntry[]>("list_trash"),
+  restoreFromTrash: (id: string, to?: string) =>
+    invoke<string>("restore_from_trash", { id, to: to ?? null }),
+  emptyTrash: () => invoke<number>("empty_trash"),
   renderPreview: (id: string) => invoke<string>("render_preview", { id }),
   renderEmbed: (page: string, heading: string | null) =>
     invoke<EmbedContent>("render_embed", { page, heading }),
