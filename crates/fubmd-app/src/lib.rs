@@ -12,7 +12,7 @@ use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::ui::UiNode;
-use fubmd_features::{build_backlinks_view, SearchIndex};
+use fubmd_features::{build_backlinks_view, SearchIndex, VersionRef, VersionStore, VersioningHandler};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, TrashEntry, Workspace};
 
@@ -24,6 +24,10 @@ use tauri::{AppHandle, Emitter, State};
 /// Sessione di un vault aperto: il workspace condiviso + il watcher tenuto vivo.
 struct VaultSession {
     workspace: Arc<Mutex<Workspace>>,
+    /// Copia dello store delle versioni, se il versioning è acceso. L'altra
+    /// vive dentro l'handler registrato nel workspace: il kernel non sa che il
+    /// versioning esiste, ed è l'app a comporre le due metà.
+    versions: Option<VersionStore>,
     /// Debouncer con tipo cancellato: va solo tenuto in vita.
     _watcher: Box<dyn Any + Send>,
 }
@@ -37,6 +41,38 @@ struct AppState {
 struct VaultInfo {
     root: String,
     documents: Vec<String>,
+    /// Il versioning è acceso? Spento significa **assente** (D7): il frontend
+    /// non disegna la cronologia, e nel vault non compare nulla.
+    versioning: bool,
+}
+
+/// Il versioning è acceso?
+///
+/// Fino ai settings dichiarativi di M3 l'interruttore è una variabile
+/// d'ambiente. Acceso di default — è una rete di sicurezza, e una rete che va
+/// accesa a mano non c'è quando serve — e spento da `FUBMD_VERSIONING` a `0`,
+/// `off`, `no` o `false`.
+fn versioning_enabled() -> bool {
+    match std::env::var("FUBMD_VERSIONING") {
+        Err(_) => true,
+        Ok(v) => !matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "0" | "off" | "no" | "false"
+        ),
+    }
+}
+
+/// Lo store delle versioni della sessione, o l'errore se il versioning è
+/// spento: un comando che risponde "vuoto" quando la feature non c'è
+/// racconterebbe che non ci sono versioni, che è un'altra cosa.
+fn versions_of(state: &AppState) -> Result<VersionStore, String> {
+    state
+        .session
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|s| s.versions.clone())
+        .ok_or_else(|| "Versioning disattivato.".to_string())
 }
 
 /// Restituisce un handle clonato al workspace corrente, o errore se nessun
@@ -72,7 +108,42 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
         Err(e) => eprintln!("indice di ricerca non disponibile: {e}"),
     }
 
+    // Il versioning è una feature ufficiale scritta come la scriverebbe un
+    // plugin: un `EventHandler` e nient'altro. Spento (D7) non si registra, e
+    // nel vault non compare nemmeno la cartella.
+    let versions = versioning_enabled()
+        .then(|| VersionStore::open(&root))
+        .transpose()
+        .unwrap_or_else(|e| {
+            eprintln!("versioning non disponibile: {e}");
+            None
+        });
+    if let Some(store) = &versions {
+        ws.register_event_handler(Box::new(VersioningHandler::new(store.clone())));
+    }
+
     ws.reindex().map_err(|e| e.to_string())?;
+
+    // La prima fotografia del vault. Gli snapshot nascono dagli eventi e
+    // l'apertura non ne emette per documento: senza questo passaggio, la prima
+    // modifica a una nota mai versionata cancellerebbe lo stato in cui l'utente
+    // l'ha trovata — l'handler gira dopo la scrittura e vede solo il testo
+    // nuovo. Chi ha già una storia non paga nulla, nemmeno una lettura.
+    if let Some(store) = &versions {
+        for id in ws.documents() {
+            if store.has_versions(&id) {
+                continue;
+            }
+            match ws.read_source(&id) {
+                Ok(source) => {
+                    if let Err(e) = store.snapshot(&id, &source) {
+                        eprintln!("versioning: prima versione di {id} non salvata: {e}");
+                    }
+                }
+                Err(e) => eprintln!("versioning: {id} non si legge: {e}"),
+            }
+        }
+    }
 
     // Ponte eventi kernel → frontend (thread dedicato che vive quanto il bus).
     let rx = ws.bus().subscribe();
@@ -91,11 +162,13 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
         VaultInfo {
             root: ws.root().to_string(),
             documents: ws.documents().into_iter().map(|d| d.0).collect(),
+            versioning: versions.is_some(),
         }
     };
 
     *state.session.lock().unwrap() = Some(VaultSession {
         workspace,
+        versions,
         _watcher: watcher,
     });
     Ok(info)
@@ -299,6 +372,38 @@ fn search(state: State<AppState>, query: String, limit: Option<u32>) -> Result<V
     }
 }
 
+// --- versioning ------------------------------------------------------------
+//
+// Il kernel non sa che il versioning esiste: le versioni le tiene un
+// `EventHandler`, e il ripristino è una scrittura normale (D8). L'app compone
+// le due metà, che è esattamente ciò che dovrà fare per un plugin di terzi.
+
+#[tauri::command]
+fn list_versions(state: State<AppState>, id: String) -> Result<Vec<VersionRef>, String> {
+    Ok(versions_of(&state)?.list(&DocId::new(id)))
+}
+
+#[tauri::command]
+fn read_version(state: State<AppState>, id: String, ts: u64) -> Result<String, String> {
+    versions_of(&state)?
+        .read(&DocId::new(id), ts)
+        .map_err(|e| e.to_string())
+}
+
+/// Ripristina una versione riscrivendo il documento (D8): passa da parse,
+/// grafo, indici ed eventi come ogni altra modifica — e siccome passa dagli
+/// eventi, genera a sua volta uno snapshot. Il ripristino è annullabile.
+#[tauri::command]
+fn restore_version(state: State<AppState>, id: String, ts: u64) -> Result<(), String> {
+    let doc = DocId::new(id);
+    let source = versions_of(&state)?
+        .read(&doc, ts)
+        .map_err(|e| e.to_string())?;
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.write_document(&doc, &source).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn resolve_link(state: State<AppState>, page: String) -> Result<Option<String>, String> {
     let ws = current(&state)?;
@@ -328,6 +433,9 @@ pub fn run() {
             backlinks_view,
             search,
             resolve_link,
+            list_versions,
+            read_version,
+            restore_version,
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio di FubMD");

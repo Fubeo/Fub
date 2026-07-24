@@ -17,6 +17,10 @@ const searchResultsEl = $("#search-results");
 const filesPanelEl = $("#files-panel");
 const trashPanelEl = $("#trash-panel");
 const trashListEl = $("#trash-list");
+const historyPanelEl = $("#history-panel");
+const historyListEl = $("#history-list");
+const historySummaryEl = $("#history-summary");
+const historyPreviewEl = $("#history-preview");
 
 let currentDoc: string | null = null;
 // L'ultima lista di documenti disegnata: serve a proporre nomi liberi senza
@@ -29,6 +33,9 @@ let searchTimer: number | undefined;
 // Ogni ricerca porta il proprio numero d'ordine: una risposta lenta di una
 // query vecchia non deve sovrascrivere i risultati di una più recente.
 let searchSeq = 0;
+// Il versioning è acceso in questa sessione? Spento significa assente (D7):
+// il pannello della cronologia non esiste, e non si interroga.
+let versioningOn = false;
 // Il buffer ha modifiche non ancora scritte su disco? Finché è sporco, il
 // buffer è la verità del documento aperto (vedi docs/architecture/data-model.md,
 // "Fonte di verità"): non va MAI sovrascritto da un reload.
@@ -61,6 +68,8 @@ async function pickVault() {
 async function openVaultPath(dir: string) {
   const info = await api.openVault(dir);
   vaultPathEl.textContent = info.root;
+  versioningOn = info.versioning;
+  historyPanelEl.hidden = !versioningOn;
   currentDoc = null;
   editor.setDoc("");
   previewEl.innerHTML = "";
@@ -359,7 +368,70 @@ async function saveCurrent() {
 
 async function refreshCurrent() {
   if (!currentDoc) return;
-  await Promise.all([updatePreview(currentDoc), updateBacklinks(currentDoc)]);
+  await Promise.all([
+    updatePreview(currentDoc),
+    updateBacklinks(currentDoc),
+    updateHistory(currentDoc),
+  ]);
+}
+
+// --- cronologia (versioning) -----------------------------------------------
+
+async function updateHistory(id: string) {
+  if (!versioningOn) return;
+  const versions = await api.listVersions(id);
+  historySummaryEl.textContent =
+    versions.length === 0
+      ? "nessuna versione"
+      : `${versions.length} version${versions.length === 1 ? "e" : "i"}`;
+  historyListEl.innerHTML = "";
+  historyPreviewEl.hidden = true;
+
+  for (const [i, version] of versions.entries()) {
+    const li = document.createElement("li");
+
+    const when = document.createElement("span");
+    when.className = "version-when";
+    when.textContent = new Date(version.ts).toLocaleString();
+
+    const size = document.createElement("span");
+    size.className = "version-size";
+    // La più recente è lo stato attuale della nota: dirlo evita di ripristinare
+    // ciò che è già sullo schermo.
+    size.textContent = i === 0 ? "attuale" : `${version.size} B`;
+
+    const restore = document.createElement("button");
+    restore.className = "link-button";
+    restore.textContent = "Ripristina";
+    restore.addEventListener("click", (e) => {
+      e.stopPropagation();
+      restoreVersion(id, version.ts);
+    });
+
+    li.append(when, size, restore);
+    // L'anteprima si carica solo quando serve: elencare le versioni non deve
+    // costare la lettura di tutte.
+    li.addEventListener("click", () => showVersionPreview(id, version.ts));
+    historyListEl.appendChild(li);
+  }
+}
+
+async function showVersionPreview(id: string, ts: number) {
+  historyPreviewEl.hidden = false;
+  historyPreviewEl.textContent = await api.readVersion(id, ts);
+}
+
+async function restoreVersion(id: string, ts: number) {
+  // Il ripristino riscrive il file: il buffer va messo in salvo prima, o le
+  // modifiche non ancora scritte se ne andrebbero senza che nessuno lo dica.
+  await flushPendingSave();
+  await api.restoreVersion(id, ts);
+  // Il ripristino è a sua volta una versione (D8): si può annullare.
+  if (id === currentDoc) {
+    editor.setDoc(await api.readDocument(id));
+    dirty = false;
+  }
+  await refreshCurrent();
 }
 
 /// Profondità massima di transclusion: oltre, l'embed resta un link.

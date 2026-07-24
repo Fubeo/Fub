@@ -380,3 +380,50 @@ button:hover {
   color: inherit;
   font: inherit;
 }
+
+/* Cronologia delle versioni */
+#history-panel {
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+#history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+#history-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+#history-list li:hover {
+  background: var(--bg-input);
+}
+.version-when {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.version-size {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+#history-preview {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 160px;
+  overflow: auto;
+  background: var(--bg-input);
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
