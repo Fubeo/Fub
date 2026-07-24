@@ -38,6 +38,14 @@ export type UiNode =
   | { node: "html"; html: string }
   | { node: "web_view"; url: string; height: number };
 
+// Aggiornamento restituito da un ViewProvider dopo un'azione
+// (rispecchia fubmd_abi::ui::ViewUpdate). Il frontend lo interpreta: `replace`
+// ridisegna la view, `navigate` apre un documento, `none` non fa nulla.
+export type ViewUpdate =
+  | { kind: "replace"; root: UiNode }
+  | { kind: "none" }
+  | { kind: "navigate"; doc_id: string };
+
 // Evento del kernel (rispecchia fubmd_abi::event::Event).
 export type KernelEvent =
   | { type: "vault_opened"; root: string }
@@ -118,7 +126,14 @@ export const api = {
   renderPreview: (id: string) => invoke<string>("render_preview", { id }),
   renderEmbed: (page: string, heading: string | null) =>
     invoke<EmbedContent>("render_embed", { page, heading }),
-  backlinksView: (id: string) => invoke<UiNode>("backlinks_view", { id }),
+  // View dichiarative (protocollo generico). La shell imposta il documento
+  // attivo, chiede l'albero di una view e rimanda le azioni al provider, senza
+  // sapere cosa la view faccia — è il percorso di un plugin.
+  setActiveDocument: (id: string | null) =>
+    invoke<void>("set_active_document", { id }),
+  renderView: (view: string) => invoke<UiNode>("render_view", { view }),
+  viewAction: (view: string, action: string, payload?: unknown) =>
+    invoke<ViewUpdate>("view_action", { view, action, payload: payload ?? null }),
   search: (query: string, limit?: number) =>
     invoke<SearchHit[]>("search", { query, limit }),
   resolveLink: (page: string) => invoke<string | null>("resolve_link", { page }),

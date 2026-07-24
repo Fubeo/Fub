@@ -67,6 +67,41 @@ l'`HostApi` precedente non avrebbe potuto tenere il proprio store — vedi
 [traits.md](traits.md), `HostApi`. Il buco è stato chiuso nel contratto prima
 del freeze di M4, e `VersionStore` è la prova che la firma regge un caso reale.
 
+### Interrogazione e contesto (deciso)
+
+Due capacità dell'`HostApi`, aggiunte prima del freeze perché senza di esse un
+`ViewProvider` non è un provider ma un guscio che l'app riempie di dati già
+pronti — un dogfooding finto. Le ha chieste, come per lo storage, il primo caso
+reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
+
+- **`query_index(&self, IndexQuery) -> Result<IndexResult, PluginError>`** — la
+  view interroga il vault da sé (backlink, ricerca) invece di riceverli. È la
+  stessa porta di `Workspace::query_index` e lo stesso dispatch (i backlink li
+  serve il grafo, il resto i provider registrati). È `&self`: una query non muta,
+  e così una view la serve sotto il prestito *condiviso* del workspace, senza
+  entrare in conflitto con la direzione della concorrenza (`Mutex`→`RwLock`).
+
+- **`active_document(&self) -> Option<DocId>`** — il solo contesto di sessione
+  che il contratto espone: *quale nota guarda l'utente*. Una view lo **chiede**
+  quando serve (il pannello backlink a ogni render). Il kernel lo custodisce in
+  `Workspace::active`; a scriverlo è **solo** la shell, con `set_active_document`
+  su ogni navigazione. Non c'è un gemello che scrive nell'`HostApi`: "quale nota
+  guardo" è una decisione dell'utente sull'app, non una capacità da concedere a
+  un plugin.
+
+  Due strade scartate, entrambe per una ragione di forma: un **evento** che la
+  view segue (`render_view(&self)` è immutabile — una view non può accumulare
+  stato dagli eventi senza interior mutability) e un **argomento** di
+  `render_view` (costringerebbe *ogni* view — grafo, settings — a portarsi un
+  contesto che non usa). La capacità che si chiede a domanda non ha nessuno dei
+  due difetti.
+
+Il giro completo di una view passa quindi tutto dal contratto: la shell imposta
+il documento attivo → chiama `render_view` → il provider chiede attivo e dati
+all'host → un click torna come `on_action` e il provider risponde con un
+`ViewUpdate` (`Navigate` per i backlink), che la shell esegue. La prova end-to-end
+attraverso il kernel vero è `crates/fubmd-features/tests/backlinks_view_e2e.rs`.
+
 ## Lavoro lungo: i job (deciso)
 
 I trait sono sincroni e il `Workspace` vive dietro un lock: **qualunque cosa

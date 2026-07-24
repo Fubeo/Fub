@@ -3,8 +3,10 @@
 //! Feature ufficiali come codice nativo: implementano gli **stessi trait** che
 //! useranno i plugin di terzi a M5, senza sandbox e senza serializzazione.
 //!
-//! - [`backlinks`] — UI dichiarativa del pannello backlink, dai riferimenti
-//!   calcolati dal grafo del kernel (M1).
+//! - [`backlinks`] — il pannello backlink come
+//!   [`ViewProvider`](fubmd_abi::traits::ViewProvider): si prende documento
+//!   attivo e riferimenti dall'[`HostApi`](fubmd_abi::traits::HostApi), come un
+//!   plugin (M2).
 //! - [`search`] — [`IndexProvider`](fubmd_abi::traits::IndexProvider) full-text
 //!   su tantivy, persistente e incrementale (M2).
 //! - [`versioning`] — snapshot per-file del vault come
@@ -21,6 +23,6 @@ pub mod versioning;
 #[cfg(test)]
 mod testing;
 
-pub use backlinks::build_backlinks_view;
+pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 pub use search::{SearchIndex, SEARCH_ID};
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};
