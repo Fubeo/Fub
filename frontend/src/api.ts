@@ -5,6 +5,10 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 export interface VaultInfo {
   root: string;
   documents: string[];
+  // Le estensioni che i provider registrati gestiscono (minuscole, senza
+  // punto). Quale sia l'estensione di un documento lo sanno i FormatDescriptor
+  // del backend: la UI non deve cablare ".md".
+  extensions: string[];
   // Il versioning è acceso? Spento significa assente: niente cronologia in UI
   // e nessuna scrittura nel vault (D7).
   versioning: boolean;
@@ -79,6 +83,20 @@ export interface TrashEntry {
   size: number;
 }
 
+// Metadati di organizzazione del vault (rispecchia fubmd_app::WorkspaceMeta):
+// icone, note appuntate, ordinamenti per-cartella e spazio attivo. Vivono nel
+// sidecar `.fubmd/workspace.json` dentro il vault, che il kernel ignora. Le
+// chiavi sono path relativi al vault: DocId per le note, path senza slash
+// finale per le cartelle ("" è la radice).
+export interface WorkspaceMeta {
+  icons: Record<string, string>;
+  pinned: string[];
+  order: Record<string, string[]>;
+  // Cartelle registrate come "spazi" (striscia di icone), nel loro ordine.
+  // Lo spazio SELEZIONATO è stato di vista per-macchina: localStorage.
+  spaces: string[];
+}
+
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
@@ -91,6 +109,9 @@ export const api = {
   createNote: (name?: string) => invoke<string>("create_note", { name: name ?? null }),
   deleteDocument: (id: string) => invoke<string>("delete_document", { id }),
   listTrash: () => invoke<TrashEntry[]>("list_trash"),
+  // Il primo nome libero della famiglia «Nota», «Nota 1», … (D3). La
+  // convenzione vive nel kernel: chiederla evita di averne due versioni.
+  proposeFreeName: (id: string) => invoke<string>("propose_free_name", { id }),
   restoreFromTrash: (id: string, to?: string) =>
     invoke<string>("restore_from_trash", { id, to: to ?? null }),
   emptyTrash: () => invoke<number>("empty_trash"),
@@ -104,6 +125,9 @@ export const api = {
   listVersions: (id: string) => invoke<VersionRef[]>("list_versions", { id }),
   readVersion: (id: string, ts: number) => invoke<string>("read_version", { id, ts }),
   restoreVersion: (id: string, ts: number) => invoke<void>("restore_version", { id, ts }),
+  readWorkspaceMeta: () => invoke<WorkspaceMeta>("read_workspace_meta"),
+  writeWorkspaceMeta: (meta: WorkspaceMeta) =>
+    invoke<void>("write_workspace_meta", { meta }),
 };
 
 export function onKernelEvent(

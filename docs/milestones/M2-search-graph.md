@@ -145,7 +145,7 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
   scheletro e navigazione. Naturale candidato per il primo `CommandProvider`
   (altrimenti cablato nell'app fino a M3).
 
-Chiuso in [CRUD_E_VAULT.md](../CRUD_E_VAULT.md), Fase 2: `Workspace::create_note`
+Chiuso (vedi [PIANO.md](../PIANO.md), "Decisioni"): `Workspace::create_note`
 + comando IPC `create_note`, cablato nell'app — il `CommandProvider` resta a M3,
 che è quando arriva la command palette che gli dà un senso. La nota nasce vuota,
 non da uno scheletro: un template è una preferenza, e le preferenze arrivano coi

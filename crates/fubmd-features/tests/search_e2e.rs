@@ -123,7 +123,10 @@ fn editing_a_note_updates_what_is_findable() {
     ws.write_document(&DocId::new("nota.md"), "Ora parla di ghiacciai.\n")
         .unwrap();
 
-    assert!(found(&ws, "vulcani").is_empty(), "il vecchio testo sparisce");
+    assert!(
+        found(&ws, "vulcani").is_empty(),
+        "il vecchio testo sparisce"
+    );
     assert_eq!(found(&ws, "ghiacciai"), vec!["nota.md"]);
 }
 
@@ -172,14 +175,20 @@ fn trashing_a_note_makes_it_vanish_from_search_and_backlinks_and_coming_back_und
     // Il link da Biologia non è stato toccato — cancellare una nota non
     // riscrive i documenti di terzi — ma ora non risolve più: è esattamente il
     // "link non risolto" di Obsidian, da cui si ricrea la nota.
-    assert_eq!(v.read("Biologia.md"), "Vedi [[Fotosintesi]] per il dettaglio.\n");
+    assert_eq!(
+        v.read("Biologia.md"),
+        "Vedi [[Fotosintesi]] per il dettaglio.\n"
+    );
     assert!(ws.resolve_link("Fotosintesi").is_none());
     assert!(ws.backlinks(&DocId::new("Fotosintesi.md")).is_empty());
 
     ws.restore_from_trash(&cestinata, None).unwrap();
 
     assert_eq!(found(&ws, "clorofilla"), vec!["Fotosintesi.md"]);
-    assert_eq!(ws.resolve_link("Fotosintesi"), Some(DocId::new("Fotosintesi.md")));
+    assert_eq!(
+        ws.resolve_link("Fotosintesi"),
+        Some(DocId::new("Fotosintesi.md"))
+    );
     assert_eq!(
         ws.backlinks(&DocId::new("Fotosintesi.md")).len(),
         1,
@@ -231,7 +240,10 @@ fn reopening_catches_up_with_what_happened_while_it_was_closed() {
     // l'unico modo in cui un indice alimentato dal kernel può divergere dal
     // vault, ed è ciò che `reconcile` + le impronte devono rimettere a posto.
     v.erase("sparisce.md");
-    v.put("resta.md", "Questo documento è stato riscritto: parla di api.\n");
+    v.put(
+        "resta.md",
+        "Questo documento è stato riscritto: parla di api.\n",
+    );
     v.put("nuova.md", "Documento comparso dal nulla.\n");
 
     let ws = v.open();
@@ -269,8 +281,22 @@ fn incremental_index_matches_one_built_from_scratch() {
 
     assert_eq!(ws.documents(), oracle.documents());
     for query in [
-        "alfa", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa",
-        "lambda", "riscritto", "uno", "due", "tre", "quattro",
+        "alfa",
+        "beta",
+        "gamma",
+        "delta",
+        "epsilon",
+        "zeta",
+        "eta",
+        "theta",
+        "iota",
+        "kappa",
+        "lambda",
+        "riscritto",
+        "uno",
+        "due",
+        "tre",
+        "quattro",
     ] {
         assert_eq!(
             found(&ws, query),
@@ -306,8 +332,18 @@ fn query_latency_on_a_large_vault() {
     // Vocabolario piccolo e ripetuto: è il caso peggiore per la ricerca,
     // perché ogni termine compare in tanti documenti.
     const WORDS: [&str; 12] = [
-        "kernel", "vault", "grafo", "indice", "nota", "collegamento", "ricerca", "documento",
-        "provider", "formato", "plugin", "contratto",
+        "kernel",
+        "vault",
+        "grafo",
+        "indice",
+        "nota",
+        "collegamento",
+        "ricerca",
+        "documento",
+        "provider",
+        "formato",
+        "plugin",
+        "contratto",
     ];
 
     let v = Vault::new();
@@ -316,7 +352,10 @@ fn query_latency_on_a_large_vault() {
             .map(|j| WORDS[(i * 7 + j * 3) % WORDS.len()])
             .collect::<Vec<_>>()
             .join(" ");
-        v.put(&format!("dir{}/nota-{i}.md", i % 40), &format!("# Nota {i}\n\n{body}\n"));
+        v.put(
+            &format!("dir{}/nota-{i}.md", i % 40),
+            &format!("# Nota {i}\n\n{body}\n"),
+        );
     }
 
     let build = Instant::now();
@@ -351,7 +390,11 @@ fn query_latency_on_a_large_vault() {
     let reopen = Instant::now();
     let ws2 = v.open();
     let reopen = reopen.elapsed();
-    assert_eq!(opstamp(&v.root), opstamp_before, "riapertura senza scritture");
+    assert_eq!(
+        opstamp(&v.root),
+        opstamp_before,
+        "riapertura senza scritture"
+    );
     assert_eq!(ws2.documents().len(), DOCS);
     println!("riapertura di {DOCS} note (indice caldo su disco): {reopen:?}");
 }

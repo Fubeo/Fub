@@ -1,7 +1,24 @@
 import "./style.css";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
-import { api, onKernelEvent, type KernelEvent, type SearchHit, type Span } from "./api";
+import {
+  api,
+  onKernelEvent,
+  type KernelEvent,
+  type SearchHit,
+  type Span,
+  type WorkspaceMeta,
+} from "./api";
 import { createEditor, type Editor } from "./editor";
+import {
+  allFolders,
+  buildTree,
+  childName,
+  findFolder,
+  folderNoteOf,
+  orderedNames,
+  parentOf,
+  type FolderNode,
+} from "./organizer";
 import { renderUiNode } from "./ui";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -21,11 +38,16 @@ const historyPanelEl = $("#history-panel");
 const historyListEl = $("#history-list");
 const historySummaryEl = $("#history-summary");
 const historyPreviewEl = $("#history-preview");
+const filesTitleEl = $("#files-title");
+const spaceStripEl = $("#space-strip");
+const spaceTitleEl = $("#space-title");
+const pinnedTitleEl = $("#pinned-title");
+const pinnedListEl = $("#pinned-list");
 
 let currentDoc: string | null = null;
-// L'ultima lista di documenti disegnata: serve a proporre nomi liberi senza
-// interrogare il kernel a ogni tasto. Non è una verità, è un'eco — chi crea o
-// rinomina passa comunque dal kernel, che le collisioni le sa davvero.
+// L'ultima lista di documenti disegnata: serve a ridisegnare la sidebar senza
+// richiederla al kernel a ogni ritocco dell'organizzazione. Non è una verità,
+// è un'eco — chi crea o rinomina passa comunque dal kernel.
 let knownDocs: string[] = [];
 let editor: Editor;
 let saveTimer: number | undefined;
@@ -33,6 +55,10 @@ let searchTimer: number | undefined;
 // Ogni ricerca porta il proprio numero d'ordine: una risposta lenta di una
 // query vecchia non deve sovrascrivere i risultati di una più recente.
 let searchSeq = 0;
+// Le estensioni che i provider registrati del backend gestiscono. Serve al
+// solo `pageName`: quale sia l'estensione di un documento lo sanno i
+// `FormatDescriptor`, non la UI — e markdown è il primo formato, non l'unico.
+let handledExtensions: string[] = ["md"];
 // Il versioning è acceso in questa sessione? Spento significa assente (D7):
 // il pannello della cronologia non esiste, e non si interroga.
 let versioningOn = false;
@@ -40,6 +66,21 @@ let versioningOn = false;
 // buffer è la verità del documento aperto (vedi docs/architecture/data-model.md,
 // "Fonte di verità"): non va MAI sovrascritto da un reload.
 let dirty = false;
+// L'organizzazione del vault (icone, appuntate, ordinamenti, spazi): il
+// sidecar `.fubmd/workspace.json`. Autorevole, non derivato.
+let meta: WorkspaceMeta = { icons: {}, pinned: [], order: {}, spaces: [] };
+// Un sidecar illeggibile congela l'organizzazione: si lavora col default ma
+// non si salva, perché salvare sovrascriverebbe ciò che l'utente ha già.
+let metaBroken = false;
+let vaultRoot = "";
+// Cartelle aperte nell'albero: stato di vista per-macchina (localStorage),
+// non nel sidecar — su un altro dispositivo è solo rumore.
+let expanded = new Set<string>();
+// Lo spazio selezionato nella striscia (null = "home", tutto il vault).
+// Anche questo è vista, non organizzazione: localStorage, come `expanded`.
+let activeSpace: string | null = null;
+// Il drag in corso nella sidebar, se c'è.
+let drag: { path: string; kind: "note" | "folder"; parent: string } | null = null;
 
 async function init() {
   editor = createEditor($("#editor"), () => {
@@ -48,6 +89,8 @@ async function init() {
   });
   $("#open-vault").addEventListener("click", pickVault);
   $("#new-note").addEventListener("click", () => newNote());
+  spaceTitleEl.addEventListener("click", openSpaceNote);
+  wireRootDropTarget();
   $("#show-trash").addEventListener("click", openTrash);
   $("#close-trash").addEventListener("click", () => showPanel("files"));
   $("#empty-trash").addEventListener("click", emptyTrash);
@@ -68,8 +111,20 @@ async function pickVault() {
 async function openVaultPath(dir: string) {
   const info = await api.openVault(dir);
   vaultPathEl.textContent = info.root;
+  vaultRoot = info.root;
+  handledExtensions = info.extensions.length > 0 ? info.extensions : handledExtensions;
   versioningOn = info.versioning;
   historyPanelEl.hidden = !versioningOn;
+  try {
+    meta = await api.readWorkspaceMeta();
+    metaBroken = false;
+  } catch (e) {
+    console.error(`FubMD: organizzazione del vault illeggibile, la congelo: ${e}`);
+    meta = { icons: {}, pinned: [], order: {}, spaces: [] };
+    metaBroken = true;
+  }
+  loadExpanded();
+  loadActiveSpace();
   currentDoc = null;
   editor.setDoc("");
   previewEl.innerHTML = "";
@@ -81,22 +136,517 @@ async function openVaultPath(dir: string) {
 
 function renderFileList(docs: string[]) {
   knownDocs = docs;
+  // Uno spazio rimosso (o la cui cartella non esiste più) non può restare
+  // selezionato: si torna a casa senza dire niente.
+  if (activeSpace !== null && !meta.spaces.includes(activeSpace)) {
+    activeSpace = null;
+    saveActiveSpace();
+  }
+  renderSpaceStrip();
+  renderSpaceTitle();
+  renderPinned(docs);
   fileListEl.innerHTML = "";
-  for (const id of docs) {
+  renderChildren(buildTree(docs, meta, activeSpace ?? ""), fileListEl);
+}
+
+/// I figli di una cartella, ricorsivamente: prima le sottocartelle (col loro
+/// sottoalbero, se aperte), poi le note. La folder note non compare tra i
+/// figli: è la cartella stessa, e la apre il click sulla sua riga.
+function renderChildren(node: FolderNode, ul: HTMLElement) {
+  for (const sub of node.folders) {
     const li = document.createElement("li");
-    li.textContent = pageName(id);
-    li.title = id;
-    li.className = id === currentDoc ? "active" : "";
-    li.addEventListener("click", () => selectDoc(id));
-    li.addEventListener("contextmenu", (e) => {
+    li.appendChild(folderRow(sub));
+    if (expanded.has(sub.path)) {
+      const nested = document.createElement("ul");
+      nested.className = "tree-children";
+      renderChildren(sub, nested);
+      li.appendChild(nested);
+    }
+    ul.appendChild(li);
+  }
+  const fnote = folderNoteOf(node);
+  for (const id of node.notes) {
+    if (id === fnote) continue;
+    const li = document.createElement("li");
+    li.appendChild(noteRow(id, { draggable: true }));
+    ul.appendChild(li);
+  }
+}
+
+/// La riga di una nota, usata sia nell'albero sia tra le appuntate (dove il
+/// drag non ha senso: l'ordine delle appuntate è l'ordine in cui si appunta).
+function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "row note" + (id === currentDoc ? " active" : "");
+  row.title = id;
+  const icon = meta.icons[id];
+  if (icon) row.appendChild(rowIcon(icon));
+  const name = document.createElement("span");
+  name.className = "row-name";
+  name.textContent = pageName(id);
+  row.appendChild(name);
+
+  row.addEventListener("click", () => selectDoc(id));
+  row.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    const appuntata = meta.pinned.includes(id);
+    showContextMenu(e, [
+      { label: "Rinomina", run: () => startRename(row, id) },
+      { label: "Icona…", run: () => pickIcon(e, id) },
+      { label: appuntata ? "Togli dalle appuntate" : "Appunta", run: () => togglePin(id) },
+      { label: "Converti in cartella", run: () => convertToFolder(id) },
+      { label: "Elimina", danger: true, run: () => deleteDoc(id) },
+    ]);
+  });
+  if (opts.draggable) wireDrag(row, id, "note");
+  return row;
+}
+
+/// La riga di una cartella: freccia per aprire/chiudere, click che apre la
+/// folder note se c'è (altrimenti apre/chiude, come la freccia).
+function folderRow(folder: FolderNode): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "row folder";
+  row.title = folder.path;
+
+  const chevron = document.createElement("span");
+  chevron.className = "chevron";
+  chevron.textContent = expanded.has(folder.path) ? "▾" : "▸";
+  chevron.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleFolder(folder.path);
+  });
+  row.appendChild(chevron);
+  row.appendChild(rowIcon(meta.icons[folder.path] ?? "📁"));
+
+  const name = document.createElement("span");
+  name.className = "row-name";
+  name.textContent = folder.name;
+  row.appendChild(name);
+
+  const fnote = folderNoteOf(folder);
+  if (fnote) row.classList.add("has-note");
+  row.addEventListener("click", () => {
+    if (fnote) {
+      selectDoc(fnote);
+      if (!expanded.has(folder.path)) toggleFolder(folder.path);
+    } else {
+      toggleFolder(folder.path);
+    }
+  });
+  row.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    showContextMenu(e, [
+      { label: "Icona…", run: () => pickIcon(e, folder.path) },
+      { label: "Usa come spazio", run: () => addSpace(folder.path) },
+    ]);
+  });
+  wireDrag(row, folder.path, "folder");
+  return row;
+}
+
+function rowIcon(icon: string): HTMLElement {
+  const span = document.createElement("span");
+  span.className = "row-icon";
+  span.textContent = icon;
+  return span;
+}
+
+function toggleFolder(path: string) {
+  if (!expanded.delete(path)) expanded.add(path);
+  saveExpanded();
+  renderFileList(knownDocs);
+}
+
+/// Ricostruire la lista distrugge gli `<li>`: un click a cavallo del rebuild
+/// (mousedown sul vecchio nodo, mouseup su quello nuovo) non produce nessun
+/// `click` e all'utente sembra servire un doppio click. Gli eventi del kernel
+/// arrivano a ogni salvataggio con una lista quasi sempre identica: qui si
+/// ricostruisce solo se è cambiata davvero.
+function refreshFileList(docs: string[]) {
+  const uguale =
+    docs.length === knownDocs.length && docs.every((d, i) => d === knownDocs[i]);
+  if (!uguale) renderFileList(docs);
+}
+
+// --- appuntate, icone, spazio ----------------------------------------------
+
+function renderPinned(docs: string[]) {
+  const presenti = new Set(docs);
+  const pinned = meta.pinned.filter((id) => presenti.has(id));
+  pinnedTitleEl.hidden = pinned.length === 0;
+  pinnedListEl.hidden = pinned.length === 0;
+  pinnedListEl.innerHTML = "";
+  for (const id of pinned) {
+    const li = document.createElement("li");
+    li.appendChild(noteRow(id, { draggable: false }));
+    pinnedListEl.appendChild(li);
+  }
+}
+
+function togglePin(id: string) {
+  const i = meta.pinned.indexOf(id);
+  if (i === -1) meta.pinned.push(id);
+  else meta.pinned.splice(i, 1);
+  saveMeta();
+  renderFileList(knownDocs);
+}
+
+// Uno spazio è una cartella registrata nella striscia di icone in cima alla
+// sidebar (stile make.md): selezionarlo radica l'albero lì, e il resto del
+// vault non esiste. La prima icona è "home", cioè il vault intero.
+
+function renderSpaceStrip() {
+  spaceStripEl.innerHTML = "";
+
+  const home = document.createElement("button");
+  home.className = "space-chip" + (activeSpace === null ? " active" : "");
+  home.textContent = "🏠";
+  home.title = "Tutto il vault";
+  home.addEventListener("click", () => selectSpace(null));
+  spaceStripEl.appendChild(home);
+
+  for (const path of meta.spaces) {
+    const chip = document.createElement("button");
+    chip.className = "space-chip" + (activeSpace === path ? " active" : "");
+    chip.textContent = meta.icons[path] ?? "🗂️";
+    chip.title = childName(path);
+    chip.addEventListener("click", () => selectSpace(path));
+    chip.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       showContextMenu(e, [
-        { label: "Rinomina", run: () => startRename(li, id) },
-        { label: "Elimina", danger: true, run: () => deleteDoc(id) },
+        { label: "Icona…", run: () => pickIcon(e, path) },
+        { label: "Togli dagli spazi", run: () => removeSpace(path) },
       ]);
     });
-    fileListEl.appendChild(li);
+    spaceStripEl.appendChild(chip);
   }
+
+  const add = document.createElement("button");
+  add.className = "space-chip add";
+  add.textContent = "+";
+  add.title = "Nuovo spazio da una cartella";
+  add.addEventListener("click", (e) => pickNewSpace(e));
+  spaceStripEl.appendChild(add);
+}
+
+/// Il titolo del pannello: il nome dello spazio attivo (cliccarlo apre la sua
+/// folder note), o "Note" a casa.
+function renderSpaceTitle() {
+  spaceTitleEl.textContent =
+    activeSpace === null
+      ? "Note"
+      : `${meta.icons[activeSpace] ?? "🗂️"} ${childName(activeSpace)}`;
+  spaceTitleEl.classList.toggle("clickable", activeSpace !== null);
+}
+
+function selectSpace(path: string | null) {
+  activeSpace = path;
+  saveActiveSpace();
+  renderFileList(knownDocs);
+}
+
+/// Registra una cartella come spazio (se già non lo è) e la seleziona.
+function addSpace(path: string) {
+  if (!meta.spaces.includes(path)) {
+    meta.spaces.push(path);
+    saveMeta();
+  }
+  selectSpace(path);
+}
+
+/// Toglie lo spazio dalla striscia. La cartella e le note restano dove sono:
+/// uno spazio è solo un punto di vista, non un contenitore.
+function removeSpace(path: string) {
+  const i = meta.spaces.indexOf(path);
+  if (i === -1) return;
+  meta.spaces.splice(i, 1);
+  saveMeta();
+  if (activeSpace === path) activeSpace = null;
+  saveActiveSpace();
+  renderFileList(knownDocs);
+}
+
+/// Il "+" della striscia: un menu con le cartelle del vault non ancora spazi.
+function pickNewSpace(at: MouseEvent) {
+  const candidate = allFolders(buildTree(knownDocs, meta)).filter(
+    (f) => !meta.spaces.includes(f.path),
+  );
+  if (candidate.length === 0) {
+    showContextMenu(at, [{ label: "Nessuna cartella disponibile", run: () => {} }]);
+    return;
+  }
+  showContextMenu(
+    at,
+    candidate.map((f) => ({
+      label: `${meta.icons[f.path] ?? "📁"} ${f.path}`,
+      run: () => addSpace(f.path),
+    })),
+  );
+}
+
+/// Il nome dello spazio nel titolo apre la sua folder note, se esiste.
+function openSpaceNote() {
+  if (activeSpace === null) return;
+  const node = findFolder(buildTree(knownDocs, meta), activeSpace);
+  const fnote = node && folderNoteOf(node);
+  if (fnote) selectDoc(fnote);
+}
+
+function activeSpaceKey(): string {
+  return `fubmd:space:${vaultRoot}`;
+}
+
+function loadActiveSpace() {
+  activeSpace = localStorage.getItem(activeSpaceKey());
+}
+
+function saveActiveSpace() {
+  if (activeSpace === null) localStorage.removeItem(activeSpaceKey());
+  else localStorage.setItem(activeSpaceKey(), activeSpace);
+}
+
+const ICON_PRESETS = [
+  "📝", "📁", "🗂️", "📌", "⭐", "🔥", "💡", "📚", "🎯", "✅",
+  "🧠", "🛠️", "🎨", "🎵", "🏠", "💼", "🌱", "✈️", "❤️", "🧪",
+];
+
+/// Un piccolo selettore accanto al punto del click: qualche emoji pronta, un
+/// campo per incollarne una qualsiasi, e il ritorno a "senza icona".
+function pickIcon(at: MouseEvent, path: string) {
+  document.getElementById("icon-picker")?.remove();
+  const pop = document.createElement("div");
+  pop.id = "icon-picker";
+  pop.style.left = `${Math.min(at.clientX, window.innerWidth - 240)}px`;
+  pop.style.top = `${at.clientY}px`;
+
+  const chiudi = () => {
+    pop.remove();
+    document.removeEventListener("mousedown", fuori, true);
+  };
+  const fuori = (e: MouseEvent) => {
+    if (!pop.contains(e.target as Node)) chiudi();
+  };
+  const applica = (icon: string | null) => {
+    if (icon) meta.icons[path] = icon;
+    else delete meta.icons[path];
+    saveMeta();
+    chiudi();
+    renderFileList(knownDocs);
+  };
+
+  const grid = document.createElement("div");
+  grid.className = "icon-grid";
+  for (const emoji of ICON_PRESETS) {
+    const b = document.createElement("button");
+    b.textContent = emoji;
+    b.addEventListener("click", () => applica(emoji));
+    grid.appendChild(b);
+  }
+  pop.appendChild(grid);
+
+  const input = document.createElement("input");
+  input.placeholder = "un'emoji qualsiasi…";
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && input.value.trim()) applica(input.value.trim());
+    else if (e.key === "Escape") chiudi();
+  });
+  pop.appendChild(input);
+
+  const rimuovi = document.createElement("button");
+  rimuovi.className = "icon-none";
+  rimuovi.textContent = "Senza icona";
+  rimuovi.addEventListener("click", () => applica(null));
+  pop.appendChild(rimuovi);
+
+  document.body.appendChild(pop);
+  input.focus();
+  document.addEventListener("mousedown", fuori, true);
+}
+
+/// `p/X.md` → `p/X/X.md`: la nota diventa la folder note di una cartella nuova
+/// col suo nome. I wikilink entranti li riscrive il rename del kernel; icona e
+/// pin migrano sull'evento `document_renamed`, come per ogni rename.
+async function convertToFolder(id: string) {
+  const stem = pageName(id);
+  const dir = parentOf(id);
+  const folderPath = dir ? `${dir}/${stem}` : stem;
+  try {
+    await api.renameDocument(id, `${folderPath}/${stem}.md`);
+  } catch (e) {
+    console.error(`FubMD: non riesco a convertire ${id} in cartella: ${e}`);
+    return;
+  }
+  expanded.add(folderPath);
+  saveExpanded();
+  renderFileList(await api.listDocuments());
+}
+
+// --- drag & drop nella sidebar ---------------------------------------------
+//
+// Due gesti: riordinare tra fratelli dello stesso tipo (l'ordine finisce in
+// `meta.order`, per cartella) e trascinare una nota SU una cartella per
+// spostarcela dentro (che è un rename: il kernel sposta il file e riscrive i
+// wikilink). Le cartelle non si spostano: sarebbero N rename, un'operazione
+// che merita di più di un gesto ambiguo.
+
+function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder") {
+  row.draggable = true;
+  row.addEventListener("dragstart", (e) => {
+    drag = { path, kind, parent: parentOf(path) };
+    e.dataTransfer!.effectAllowed = "move";
+    e.dataTransfer!.setData("text/plain", path);
+  });
+  row.addEventListener("dragend", () => {
+    drag = null;
+    clearDropMarks();
+  });
+  row.addEventListener("dragover", (e) => {
+    const gesto = dropGesture(row, path, kind, e);
+    if (!gesto) return;
+    e.preventDefault();
+    clearDropMarks();
+    row.classList.add(`drop-${gesto}`);
+  });
+  row.addEventListener("dragleave", () => {
+    row.classList.remove("drop-before", "drop-after", "drop-into");
+  });
+  row.addEventListener("drop", async (e) => {
+    const gesto = dropGesture(row, path, kind, e);
+    clearDropMarks();
+    if (!gesto || !drag) return;
+    e.preventDefault();
+    if (gesto === "into") await moveIntoFolder(drag.path, path);
+    else applyReorder(drag.parent, childName(drag.path), childName(path), gesto === "before");
+    drag = null;
+  });
+}
+
+/// Che gesto sarebbe lasciar cadere qui? `before`/`after` = riordino tra
+/// fratelli dello stesso tipo; `into` = nota dentro una cartella (di un'altra
+/// cartella); null = niente da fare.
+function dropGesture(
+  row: HTMLElement,
+  path: string,
+  kind: "note" | "folder",
+  e: DragEvent,
+): "before" | "after" | "into" | null {
+  if (!drag || drag.path === path) return null;
+  const fratelli = drag.kind === kind && drag.parent === parentOf(path);
+  const dentro = kind === "folder" && drag.kind === "note" && drag.parent !== path;
+  // `offsetY` sarebbe relativo all'elemento più interno sotto il cursore (uno
+  // span, magari): la frazione va calcolata sulla riga intera.
+  const box = row.getBoundingClientRect();
+  const y = (e.clientY - box.top) / box.height;
+  if (dentro && (!fratelli || (y > 0.3 && y < 0.7))) return "into";
+  if (fratelli) return y < 0.5 ? "before" : "after";
+  return null;
+}
+
+function clearDropMarks() {
+  document
+    .querySelectorAll(".drop-before, .drop-after, .drop-into")
+    .forEach((el) => el.classList.remove("drop-before", "drop-after", "drop-into"));
+}
+
+/// Riscrive l'ordine scelto a mano di una cartella: la lista completa dei nomi
+/// nell'ordine visibile, col trascinato nella posizione nuova.
+function applyReorder(parent: string, dragged: string, target: string, before: boolean) {
+  const node = findFolder(buildTree(knownDocs, meta), parent);
+  if (!node) return;
+  const names = orderedNames(node).filter((n) => n !== dragged);
+  const at = names.indexOf(target);
+  if (at === -1) return;
+  names.splice(before ? at : at + 1, 0, dragged);
+  meta.order[parent] = names;
+  saveMeta();
+  renderFileList(knownDocs);
+}
+
+async function moveIntoFolder(id: string, folderPath: string) {
+  const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
+  if (to === id) return;
+  try {
+    await api.renameDocument(id, to);
+  } catch (e) {
+    console.error(`FubMD: non riesco a spostare ${id} in ${folderPath || "radice"}: ${e}`);
+    return;
+  }
+  if (folderPath) expanded.add(folderPath);
+  saveExpanded();
+  renderFileList(await api.listDocuments());
+}
+
+/// Il titolo "Note" accoglie le note trascinate fuori da ogni cartella: è la
+/// radice (del vault, o dello spazio attivo).
+function wireRootDropTarget() {
+  filesTitleEl.addEventListener("dragover", (e) => {
+    const radice = activeSpace ?? "";
+    if (drag?.kind === "note" && drag.parent !== radice) {
+      e.preventDefault();
+      filesTitleEl.classList.add("drop-into");
+    }
+  });
+  filesTitleEl.addEventListener("dragleave", () => filesTitleEl.classList.remove("drop-into"));
+  filesTitleEl.addEventListener("drop", async (e) => {
+    filesTitleEl.classList.remove("drop-into");
+    if (drag?.kind !== "note") return;
+    e.preventDefault();
+    await moveIntoFolder(drag.path, activeSpace ?? "");
+    drag = null;
+  });
+}
+
+// --- persistenza dell'organizzazione ---------------------------------------
+
+async function saveMeta() {
+  if (metaBroken) return;
+  try {
+    await api.writeWorkspaceMeta(meta);
+  } catch (e) {
+    console.error(`FubMD: organizzazione del vault non salvata: ${e}`);
+  }
+}
+
+/// Un rename (anche uno spostamento) porta con sé icona, pin e posto
+/// nell'ordinamento: sono attaccati alla nota, non al suo vecchio path.
+function migrateMeta(from: string, to: string) {
+  let cambiata = false;
+  const icon = meta.icons[from];
+  if (icon) {
+    delete meta.icons[from];
+    meta.icons[to] = icon;
+    cambiata = true;
+  }
+  const i = meta.pinned.indexOf(from);
+  if (i !== -1) {
+    meta.pinned[i] = to;
+    cambiata = true;
+  }
+  const ordine = meta.order[parentOf(from)];
+  const posto = ordine?.indexOf(childName(from)) ?? -1;
+  if (ordine && posto !== -1) {
+    if (parentOf(from) === parentOf(to)) ordine[posto] = childName(to);
+    else ordine.splice(posto, 1);
+    cambiata = true;
+  }
+  if (cambiata) saveMeta();
+}
+
+function expandedKey(): string {
+  return `fubmd:expanded:${vaultRoot}`;
+}
+
+function loadExpanded() {
+  try {
+    expanded = new Set(JSON.parse(localStorage.getItem(expandedKey()) ?? "[]"));
+  } catch {
+    expanded = new Set();
+  }
+}
+
+function saveExpanded() {
+  localStorage.setItem(expandedKey(), JSON.stringify([...expanded]));
 }
 
 // --- crea e rinomina -------------------------------------------------------
@@ -281,7 +831,9 @@ async function restoreFromTrash(trashId: string, original: string) {
   } catch {
     // Il path originale è di nuovo occupato: il kernel non inventa nomi al
     // posto dell'utente, quindi l'app ne propone uno e chiede.
-    const proposta = freeName(original);
+    // La convenzione «Nota», «Nota 1», … è del kernel: chiedergliela evita di
+    // averne una seconda implementazione qui, destinata a divergere.
+    const proposta = await api.proposeFreeName(original);
     const ok = await confirm(
       `«${pageName(original)}» esiste di nuovo. Ripristinare come «${pageName(proposta)}»?`,
       { title: "Ripristina nota", okLabel: "Ripristina", cancelLabel: "Annulla" },
@@ -308,21 +860,6 @@ async function emptyTrash() {
   await refreshTrash();
 }
 
-/// Il primo nome libero della famiglia `Nota`, `Nota 1`, `Nota 2`, … a partire
-/// da un `DocId` occupato. Il confronto è sulla lista che l'app ha in mano: il
-/// kernel rifiuterà comunque una collisione che dovesse sfuggire di qui.
-function freeName(id: string): string {
-  const dot = id.lastIndexOf(".");
-  const conEstensione = dot > 0 && !id.slice(dot).includes("/");
-  const stem = conEstensione ? id.slice(0, dot) : id;
-  const ext = conEstensione ? id.slice(dot) : "";
-  const presi = new Set(knownDocs);
-  for (let n = 1; ; n++) {
-    const candidato = `${stem} ${n}${ext}`;
-    if (!presi.has(candidato)) return candidato;
-  }
-}
-
 async function selectDoc(id: string) {
   // Cambio documento: prima si mette in salvo il buffer corrente (flush),
   // così nessuna modifica resta appesa al debounce.
@@ -337,9 +874,9 @@ async function selectDoc(id: string) {
 }
 
 function markActive() {
-  for (const li of Array.from(fileListEl.children) as HTMLElement[]) {
-    li.classList.toggle("active", li.title === currentDoc);
-  }
+  document
+    .querySelectorAll<HTMLElement>("#files-panel .row.note")
+    .forEach((row) => row.classList.toggle("active", row.title === currentDoc));
 }
 
 function scheduleSave() {
@@ -612,7 +1149,7 @@ async function updateBacklinks(id: string) {
 
 function handleKernelEvent(e: KernelEvent) {
   if (e.type === "index_updated") {
-    api.listDocuments().then(renderFileList);
+    api.listDocuments().then(refreshFileList);
     if (currentDoc) updateBacklinks(currentDoc);
     // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
     // invecchiare sotto gli occhi di chi legge. Vale anche per il cestino, che
@@ -623,20 +1160,21 @@ function handleKernelEvent(e: KernelEvent) {
     // Eventi persi (coda troncata): ciò che deriviamo dagli eventi — lista
     // file, anteprima, backlink — va riconciliato da zero, non aggiornato.
     console.warn(`FubMD: ${e.dropped} eventi persi (overflow): riconcilio.`);
-    api.listDocuments().then(renderFileList);
+    api.listDocuments().then(refreshFileList);
     refreshCurrent();
     if (currentDoc) reloadIfClean(currentDoc);
   } else if (e.type === "document_changed" && e.id === currentDoc) {
     updatePreview(currentDoc);
     reloadIfClean(currentDoc);
   } else if (e.type === "document_renamed") {
+    migrateMeta(e.from, e.to);
     // L'identità è il path: il documento aperto segue il rename.
     if (currentDoc === e.from) {
       currentDoc = e.to;
       markActive();
       refreshCurrent();
     }
-    api.listDocuments().then(renderFileList);
+    api.listDocuments().then(refreshFileList);
   }
 }
 
@@ -657,9 +1195,18 @@ async function reloadIfClean(id: string) {
   }
 }
 
+/// Il "nome pagina" di un `DocId`: basename senza l'estensione **gestita**.
+///
+/// Rispecchia `DocId::page_name` del kernel, ma senza cablare `.md`: le
+/// estensioni arrivano dai `FormatDescriptor` dei provider registrati
+/// (`VaultInfo.extensions`). Un'estensione che nessun provider gestisce resta
+/// nel nome, perché non è un'estensione — è parte del nome del file.
 function pageName(id: string): string {
   const base = id.split("/").pop() ?? id;
-  return base.replace(/\.md$/i, "");
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) return base;
+  const ext = base.slice(dot + 1).toLowerCase();
+  return handledExtensions.includes(ext) ? base.slice(0, dot) : base;
 }
 
 init();

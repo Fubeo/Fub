@@ -16,13 +16,45 @@ applicare i permessi.
 - **Nativo (M4):** `HostApi` è un oggetto in-process che chiama direttamente il
   `Workspace` (già implementato: `KernelHost` in `fubmd-kernel/src/workspace.rs`,
   usato dal dispatch degli eventi — a coda, mai ricorsivo, vedi
-  [traits.md](traits.md)). Costo ≈ zero. Lo storage `storage_get/set` è per ora
-  in-memory nel workspace; persistenza e namespace per-plugin arrivano col
-  registry dei plugin a M4.
+  [traits.md](traits.md)). Costo ≈ zero.
 - **WASM (M5):** il plugin riceve un *proxy* di `HostApi`; ogni metodo è una **host
   function** wasmtime che serializza gli argomenti, attraversa il confine, esegue
   nel core e ritorna. La firma è identica: per questo la regola d'oro impone tipi
   serializzabili.
+
+### Storage: due, e diversi apposta (deciso)
+
+Un plugin ha due modi di ricordare, e la differenza non è un dettaglio
+implementativo — è nella firma, così che nessuno debba indovinare:
+
+| | `storage_get/set` | `data_read/write/remove/list` |
+|---|---|---|
+| Forma | chiave → JSON | path → blob di byte |
+| Durata | **volatile**, muore con la sessione | persistente |
+| Per cosa | preferenze, cursori, ciò che si ricostruisce | ciò che è la verità di quel plugin |
+
+Lo spazio persistente è `.fubmd-data/plugins/<id>/`, **dentro al vault**: i dati
+derivati da un vault appartengono a quel vault, e copiarlo o metterlo in sync se
+li porta dietro.
+
+**Perché blob e non un'API filesystem scoped.** Un filesystem scoped chiede al
+plugin di comporre path e all'host di verificarli: il recinto diventa una
+convenzione, e ogni convenzione ha il giorno in cui qualcuno se ne dimentica.
+Con i blob il plugin non ha mai in mano un path del filesystem, non sa dove sia
+la radice del vault e non può nominare niente che stia fuori — path assoluti,
+`..` e separatori di sistema sono `PermissionDenied`. Il recinto è una proprietà
+della firma.
+
+**Chi assegna `<id>`.** Chi registra il plugin
+(`Workspace::register_event_handler(id, handler)`), mai il plugin: uno che si
+sceglie il proprio recinto non è dentro a un recinto. La verifica sta in
+`crates/fubmd-kernel/tests/plugin_data.rs`.
+
+**Perché esiste.** Non è stato progettato in astratto: lo ha chiesto il
+dogfooding del versioning, che è un `EventHandler` come quelli di terzi e con
+l'`HostApi` precedente non avrebbe potuto tenere il proprio store — vedi
+[traits.md](traits.md), `HostApi`. Il buco è stato chiuso nel contratto prima
+del freeze di M4, e `VersionStore` è la prova che la firma regge un caso reale.
 
 ## Lavoro lungo: i job (deciso)
 
@@ -123,10 +155,15 @@ al frontend/all'IPC.
   del core, solo i dati che gli passano attraverso le host function.
 - **Rete:** negata di default; concessa solo se `network = true`. WASI networking
   abilitato selettivamente.
-- **Filesystem:** nessun accesso diretto; tutto passa da `read_document`/
-  `write_document`, quindi soggetto a booleani + `vault_scope`.
-- **Storage per-plugin:** `storage_get`/`storage_set` con namespace per plugin id,
-  persistente (candidato: sotto `.fubmd-data/plugins/<id>/`).
+- **Filesystem:** nessun accesso diretto; i documenti passano da
+  `read_document`/`write_document`/`list_documents`, quindi soggetti a booleani
+  + `vault_scope`; i dati del plugin passano da `data_*`, dentro al suo spazio.
+- **Storage per-plugin:** deciso e implementato, vedi "Storage" sopra —
+  `storage_get/set` volatile a chiave, `data_*` persistente a blob dentro
+  `.fubmd-data/plugins/<id>/`.
+- **Tempo:** `now_unix_millis` viene dall'host. WASI può negare l'orologio a un
+  componente, e un tempo che passa dal confine è anche un tempo che i test
+  possono fermare.
 - **Disponibilità, non solo memoria:** i trait sono sincroni, quindi una chiamata
   a un plugin lento/ostile bloccherebbe il kernel. L'host wasmtime usa **epoch
   interruption** (deadline per chiamata) e limiti di risorse: un plugin che

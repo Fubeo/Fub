@@ -10,20 +10,21 @@ use serde::{Deserialize, Serialize};
 use crate::error::{KernelError, Result};
 use crate::time::{now_unix, stamp_from_unix};
 
+/// Cartella dei dati **derivati** del vault: indice di ricerca, storage
+/// persistente dei plugin. Sta dentro al vault perché ciò che è derivato da un
+/// vault appartiene a quel vault — copiarlo o spostarlo se li porta dietro — ed
+/// è ignorata dalla scansione: non sono documenti.
+pub const DATA_DIR: &str = ".fubmd-data";
+
 /// Directory ignorate durante la scansione del vault.
-const IGNORED_DIRS: &[&str] = &[
-    ".obsidian",
-    ".git",
-    ".fubmd-data",
-    ".trash",
-    "node_modules",
-];
+const IGNORED_DIRS: &[&str] = &[".obsidian", ".git", DATA_DIR, ".trash", "node_modules"];
 
 /// Nome della cartella cestino dentro il vault.
 ///
 /// È la stessa che usa Obsidian per "Move to Obsidian trash": un vault
 /// condiviso fra le due app ha **un solo** cestino (vedi
-/// `docs/CRUD_E_VAULT.md`, D1).
+/// `docs/PIANO.md`, "Decisioni (con il perché)", e
+/// `docs/architecture/data-model.md`, "Il cestino").
 pub const TRASH_DIR: &str = ".trash";
 
 /// Un componente di path che il vault non deve mai guardare.
@@ -227,7 +228,8 @@ impl Vault {
         };
         for entry in std::fs::read_dir(dir).map_err(|e| io(dir, e))? {
             let entry = entry.map_err(|e| io(dir, e))?;
-            let path = Utf8PathBuf::from_path_buf(entry.path()).map_err(KernelError::NonUtf8Path)?;
+            let path =
+                Utf8PathBuf::from_path_buf(entry.path()).map_err(KernelError::NonUtf8Path)?;
             let meta = entry.metadata().map_err(|e| io(&path, e))?;
             if meta.is_dir() {
                 self.walk_trash(&path, out)?;
@@ -370,7 +372,10 @@ mod tests {
             "senza-estensione.2026-07-24T15-30-00"
         );
         // Un file che è solo estensione (`.gitignore`) non ha stem da timbrare.
-        assert_eq!(stamped_name(".env", "2026-07-24T15-30-00"), ".env.2026-07-24T15-30-00");
+        assert_eq!(
+            stamped_name(".env", "2026-07-24T15-30-00"),
+            ".env.2026-07-24T15-30-00"
+        );
     }
 
     #[test]

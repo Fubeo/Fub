@@ -47,6 +47,14 @@ impl std::fmt::Display for DocId {
 ///
 /// Ogni nodo porta uno span: è indispensabile per le decorazioni di live
 /// preview in CodeMirror e per le modifiche in-place / round-trip.
+///
+/// I campi sono `usize` perché indicizzano `&str` in memoria, e non `u64`:
+/// dover scrivere `as usize` a ogni slice per compiacere il confine sarebbe la
+/// coda che muove il cane. Nel WIT lo span è `record span { start: u64, end: u64 }`
+/// — il confine ha bisogno di una larghezza fissa — e la conversione vive nel
+/// proxy WASM: `usize`→`u64` è sempre lecita, `u64`→`usize` su wasm32 (dove
+/// `usize` è a 32 bit) passa da un `try_into`, con il conforto che un documento
+/// più grande di 4 GiB non entrerebbe comunque nella memoria di un modulo.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Span {
     pub start: usize,

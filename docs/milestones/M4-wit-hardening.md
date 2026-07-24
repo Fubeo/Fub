@@ -48,11 +48,19 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
 
 ### Test di conformità abi↔WIT
 
-- Un test che genera (o confronta) i tipi WIT a partire dai tipi Rust e fallisce se
-  divergono: nomi, forma dei record/variant, cardinalità. Approcci possibili:
-  `wit-bindgen` sui tipi + confronto strutturale, oppure round-trip di valori
-  campione serde↔WIT-values. La scelta esatta è parte del lavoro M4; il requisito è
-  che **il CI rompa** se `fubmd-abi` e `wit/` divergono.
+Buona parte è **già fatta** (vedi [todo.md](../todo.md), punto 2, e
+[wit/README.md](../../wit/README.md)): il test parsa `abi.wit` con `wit-parser`,
+confronta insiemi di nomi dichiarati nelle due direzioni — contratto morto
+incluso — e ha il proprio test del test; gira in CI. Resta a M4:
+
+- **I tipi**, non solo i nomi: tipi dei campi di record e firme complete delle
+  funzioni. La strada più probabile è `wit-bindgen` sui tipi + conversioni
+  `From`/`Into` che non compilano su divergenza di forma; l'alternativa è un
+  round-trip di valori campione serde↔WIT-values. La scelta è parte del lavoro
+  M4; il requisito resta che **la CI rompa** su qualunque divergenza.
+- Il tooling vive in un crate al confine, **mai** fra le dipendenze normali di
+  `fubmd-abi`/`fubmd-kernel` (oggi `wit-parser` è una dev-dependency, che
+  l'invariante non tocca).
 
 ### Primo plugin nativo (`Plugin`/`HostApi`)
 
@@ -69,6 +77,14 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
   nativo dovrebbe esercitare anche un job end-to-end.
 - Valore: mette alla prova il confine **prima** di aggiungere WASM. Se `HostApi` è
   scomoda, si corregge qui (ultimo momento prima del freeze duro per M5).
+- Un anticipo lo ha già dato il **versioning**, che è un `EventHandler` scritto
+  con le sole capacità di un plugin: ha fatto emergere che l'`HostApi` non
+  bastava a tenere uno store su disco né a sapere l'ora, e il contratto è stato
+  allargato di conseguenza (`data_*`, `now_unix_millis`, `list_documents` —
+  vedi [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md)).
+  Resta da decidere **qui** la stessa domanda per `IndexProvider`, le cui firme
+  non portano un host: `SearchIndex` scrive ancora con `std::fs`, e un indice di
+  terzi a M5 non potrebbe.
 
 ## Trait/API coinvolti
 

@@ -176,11 +176,13 @@ fn reindex_feeds_every_document_then_declares_the_full_truth() {
         .position(|c| matches!(c, Call::Reconcile(_)))
         .expect("reconcile");
     let flush = calls.iter().position(|c| *c == Call::Flush).expect("flush");
-    assert!(calls[..reconcile]
-        .iter()
-        .filter(|c| matches!(c, Call::Indexed(..)))
-        .count()
-        == 2);
+    assert!(
+        calls[..reconcile]
+            .iter()
+            .filter(|c| matches!(c, Call::Indexed(..)))
+            .count()
+            == 2
+    );
     assert!(reconcile < flush);
     assert_eq!(
         calls[reconcile],
@@ -197,7 +199,8 @@ fn writes_and_removals_reach_the_index() {
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
-    ws.write_document(&DocId::new("nuova.txt"), "contenuto").unwrap();
+    ws.write_document(&DocId::new("nuova.txt"), "contenuto")
+        .unwrap();
     ws.remove_document(&DocId::new("nuova.txt"));
 
     assert_eq!(
@@ -261,12 +264,13 @@ fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     ws.register_index_provider(Box::new(spy));
-    ws.register_event_handler(Box::new(Loudmouth));
+    ws.register_event_handler("test.loudmouth", Box::new(Loudmouth));
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
     // Questa scrittura fa traboccare la coda eventi...
-    ws.write_document(&DocId::new("a.txt"), "sopravvissuto").unwrap();
+    ws.write_document(&DocId::new("a.txt"), "sopravvissuto")
+        .unwrap();
 
     // ...ma l'indice ha ricevuto comunque il suo aggiornamento, perché non
     // passa dalla coda: è la ragione per cui il kernel lo alimenta da sé.
@@ -356,7 +360,11 @@ fn a_query_falls_through_providers_that_disown_it() {
         Ok(IndexResult::Search(hits)) => assert_eq!(hits[0].doc, DocId::new("risposta.txt")),
         other => panic!("atteso Search, trovato {other:?}"),
     }
-    assert_eq!(calls_of(&mute_log), vec![Call::Query], "interpellato per primo");
+    assert_eq!(
+        calls_of(&mute_log),
+        vec![Call::Query],
+        "interpellato per primo"
+    );
     assert_eq!(calls_of(&answering_log), vec![Call::Query]);
 }
 

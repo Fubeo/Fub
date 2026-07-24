@@ -19,3 +19,6 @@ dist/
 
 # dati locali di sviluppo (indici tantivy, ecc.)
 /.fubmd-data
+
+# vault di prova locale (note usa-e-getta + indici tantivy)
+/VaultProva
