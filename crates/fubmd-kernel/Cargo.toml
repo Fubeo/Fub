@@ -18,3 +18,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 # i test del grafo costruiscono DocumentModel a mano: zero markdown.
+# Espliciti per gli integration test in `tests/` (niente proptest: il generatore
+# di sequenze è un xorshift deterministico dentro il test).
+fubmd-abi = { workspace = true }
+serde_json = { workspace = true }
