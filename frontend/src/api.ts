@@ -30,6 +30,10 @@ export type KernelEvent =
   | { type: "document_removed"; id: string }
   | { type: "document_renamed"; from: string; to: string }
   | { type: "index_updated" }
+  // Esito di un job in background (HostApi::spawn_job).
+  | { type: "job_done"; id: number; job: string; result: unknown }
+  // Coda eventi troncata: lo stato derivato dagli eventi va riconciliato.
+  | { type: "overflow"; dropped: number }
   | { type: "custom"; topic: string; payload: unknown };
 
 export interface EmbedContent {

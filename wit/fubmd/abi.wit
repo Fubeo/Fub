@@ -243,10 +243,31 @@ interface ui {
     }
 }
 
+/// Job: il varco per il lavoro lungo. Le chiamate dei trait sono sincrone e
+/// brevi (a M5 una deadline le tronca); rete e calcolo pesante passano da un
+/// job, eseguito dall'host FUORI dal giro sincrono del kernel. Dentro al job
+/// non c'è host-api: input nel payload, output nel risultato.
+interface jobs {
+    use json.{json};
+
+    /// Identità di un job lanciato: chi lo lancia riconosce il proprio esito
+    /// nell'evento `job-done`.
+    type job-id = u64;
+
+    /// Richiesta di lavoro in background: `job` è il nome dell'entry point
+    /// del plugin (`run-job`), `payload` porta tutto l'input necessario.
+    record job-spec {
+        job: string,
+        payload: json,
+    }
+}
+
 /// Eventi del ciclo di vita del vault.
 interface events {
     use json.{json};
     use model.{doc-id};
+    use jobs.{job-id};
+    use errors.{plugin-error};
 
     record event-document-changed { id: doc-id }
     record event-document-removed { id: doc-id }
@@ -257,12 +278,24 @@ interface events {
     /// Varco di estensione: eventi dei plugin, topic namespaced
     /// (`"<plugin-id>/<nome>"`).
     record event-custom { topic: string, payload: json }
+    /// Esito di un job in background (vedi `host-api.spawn-job`): consegnato
+    /// sul giro sincrono normale, riconosciuto dal lanciatore tramite `id`.
+    record event-job-done {
+        id: job-id,
+        job: string,
+        result: result<json, plugin-error>,
+    }
+    /// Coda eventi troncata (budget anti-ping-pong): `dropped` eventi persi.
+    /// Chi deriva stato dagli eventi deve riconciliare da zero. Mai silenzioso.
+    record event-overflow { dropped: u64 }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
         document-removed(event-document-removed),
         document-renamed(event-document-renamed),
         index-updated,
+        job-done(event-job-done),
+        overflow(event-overflow),
         custom(event-custom),
     }
 
@@ -272,6 +305,8 @@ interface events {
         document-removed,
         document-renamed,
         index-updated,
+        job-done,
+        overflow,
         custom,
     }
     type event-mask = list<event-kind>;
@@ -358,6 +393,7 @@ interface errors {
     variant plugin-error {
         unknown-command(string),
         unknown-view(string),
+        unknown-job(string),
         bad-args(string),
         permission-denied(string),
         internal(string),
@@ -370,10 +406,14 @@ interface host-api {
     use json.{json};
     use events.{event};
     use errors.{plugin-error};
+    use jobs.{job-id, job-spec};
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
     write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
     emit: func(event: event);
+    /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
+    /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
+    spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
     storage-get: func(key: string) -> option<json>;
     storage-set: func(key: string, value: json);
 }
@@ -390,6 +430,7 @@ interface event-handler {
 /// Ciclo di vita del plugin + manifest e permessi.
 interface plugin {
     use errors.{plugin-error};
+    use json.{json};
 
     record plugin-permissions {
         read-vault: bool,
@@ -408,6 +449,9 @@ interface plugin {
     manifest: func() -> plugin-manifest;
     activate: func() -> result<_, plugin-error>;
     deactivate: func() -> result<_, plugin-error>;
+    /// Corpo di un job (vedi `host-api.spawn-job`): eseguito fuori dal
+    /// kernel, senza host-api — input nel payload, output nel risultato.
+    run-job: func(job: string, payload: json) -> result<json, plugin-error>;
 }
 
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che

@@ -17,17 +17,20 @@ di *implementare gli stessi trait*, non di girare in sandbox WASM).
 | Tema | Decisione | Perché |
 |---|---|---|
 | Shell/UI | **Tauri v2** (core Rust + webview) | Massima fedeltà a Obsidian, editor maturi (CodeMirror 6). |
-| Architettura core | **Core agnostico rispetto al formato** | Il kernel non sa cos'è il markdown; sa di documenti, link, tag, heading astratti. |
+| Architettura core | **Core agnostico rispetto al formato** | Il kernel non sa cos'è il markdown; sa di documenti, link, tag, heading astratti. L'agnosticismo è **sintattico**: la *semantica* dei link (risoluzione stile Obsidian, alias) è vocabolario del kernel, e ogni provider vi si mappa — vedi [data-model.md](architecture/data-model.md). |
 | Estensibilità | **Trait di estensione definiti una volta sola** in `fubmd-abi` | Un solo contratto; impl native e (a M5) proxy WASM condividono la stessa firma. |
 | Formato | **`trait FormatProvider`**, markdown = primo provider nativo | Domani org-mode/AsciiDoc sono altri provider, zero modifiche al kernel. |
 | Feature ufficiali | **Impl native dei trait**, non WASM | "Veloci quanto native" perché *sono* native; nessuna tassa di serializzazione. |
 | Plugin di terzi | **WASM (wasmtime), solo al confine di fiducia → Milestone 5** | Sandbox + velocità quasi nativa, senza pagarla dove non serve. |
-| UI dei plugin | **Dichiarativa + escape hatch** | Il plugin descrive la UI (`UiNode`), il core la disegna; web-view isolata solo se indispensabile. |
+| UI dei plugin | **Dichiarativa + escape hatch** | Il plugin descrive la UI (`UiNode`), il core la disegna; web-view isolata solo se indispensabile. Le superfici canvas ad alte prestazioni (graph view) restano del core finché la `WebView` per plugin non ha asset story/CSP (M5) — il dogfooding vale per il dichiarativo. |
 | Vault | **Compatibile Obsidian** | `.md` + frontmatter YAML, `[[wikilink]]`, `#tag`, callout, embed. Zero lock-in. |
 | Verità del documento | **La sorgente sul disco**; `serialize` = generazione, mai round-trip | Il modello è lossy per costruzione; riscrivere un file da esso distruggerebbe la formattazione dell'utente. Modifiche programmatiche = patch via `Span`. |
+| Verità del documento **aperto** | **Il buffer dell'editor finché è sporco** | Il disco vale per i documenti chiusi; l'app flusha prima di cambiare documento, riallinea il buffer pulito su cambi esterni, e non lo sovrascrive mai da sporco (merge esplicito a M3) — vedi [data-model.md](architecture/data-model.md), "Le tre copie". |
 | Rename | **Operazione di prima classe**: `DocumentRenamed` + riscrittura chirurgica dei link | L'identità è il path: remove+add perderebbe backlink e stato per-documento. |
+| Case dei path | `DocId` **byte-exact**, risoluzione wikilink **case-insensitive**, rename case-only supportato | Stessa semantica osservabile su FS case-sensitive (Linux) e case-insensitive (macOS/Windows) — vedi [data-model.md](architecture/data-model.md). |
+| Lavoro lungo dei plugin | **Job fuori dal giro sincrono**: `HostApi::spawn_job` → `Plugin::run_job` (senza `HostApi`) → `Event::JobDone` | I trait restano sincroni e **brevi**; rete e calcolo pesante non bloccano mai il kernel; a M5 la deadline tronca solo chi sfora nel giro sincrono — vedi [plugin-boundary.md](architecture/plugin-boundary.md). |
 | Transclusion (embed) | **Placeholder dal provider, composizione kernel+frontend** | `render_html` resta puro per-documento; solo il kernel conosce la topologia del vault. |
-| Eventi | **Dispatch a coda anti-rientranza** + varco `Event::Custom` | Un handler che emette/scrive durante `handle` non rientra; i plugin comunicano via topic namespaced. |
+| Eventi | **Dispatch a coda anti-rientranza** + varco `Event::Custom` | Un handler che emette/scrive durante `handle` non rientra; i plugin comunicano via topic namespaced. Il budget anti-ping-pong tronca **rumorosamente**: `Event::Overflow { dropped }` avvisa chi deriva stato di riconciliare da zero — mai perdite silenziose. |
 | Sicurezza UI | **`Html`/`WebView` riservati al codice fidato** (`validate_untrusted`) | Contenuto attivo nella webview privilegiata scavalcherebbe la sandbox WASM via UI. |
 | AI autocomplete | **Rimandata**, futuro plugin core (locale + cloud) | Non blocca l'architettura; è un `CommandProvider`/`EventHandler`. |
 | Piattaforme | Linux (primario, Arch) + Windows + macOS | Tauri le supporta; CI multi-OS da subito. |
@@ -76,6 +79,7 @@ come proxy. Il kernel vede solo `dyn Trait`.
 
 **Appendici**:
 - [appendix/ai-autocomplete.md](appendix/ai-autocomplete.md) — design (non milestone) dell'autocompletamento AI.
+- [appendix/funzionalita-future.md](appendix/funzionalita-future.md) — funzionalità post-M5 (app mobile, sync, flashcard, export editoriale…) raccolte dalle interviste alle personas (`docs/personas/`); include il principio della **spegnibilità totale**.
 - [appendix/platforms-ci.md](appendix/platforms-ci.md) — matrice OS e CI multi-piattaforma.
 
 ## Roadmap (sintesi)
@@ -95,7 +99,11 @@ come proxy. Il kernel vede solo `dyn Trait`.
 - **M5 — Runtime WASM per plugin di terzi** → [dettaglio](milestones/M5-wasm-runtime.md)
   `fubmd-wasm-host` (wasmtime, component model); proxy per ogni trait; host
   function per `HostApi`; plugin di esempio in `wasm32-wasip2`.
-- **Futuro** — autocompletamento AI come plugin core → [appendice](appendix/ai-autocomplete.md).
+- **Futuro** — autocompletamento AI come plugin core → [appendice](appendix/ai-autocomplete.md);
+  candidati post-M5 dalle interviste utente (mobile, sync, flashcard, export…) →
+  [appendice](appendix/funzionalita-future.md). Principio per tutto ciò che è oltre
+  il core: **spegnibilità totale** — feature disattivata = feature che non esiste
+  nell'app (l'architettura a plugin/registry lo garantisce per costruzione).
 
 ## Verifica (M1)
 
@@ -118,7 +126,15 @@ documenti milestone.
   in M1; gli `Span` nel modello rendono M3 meccanico.
 - **Edge case markdown Obsidian** — corpus di fixture + snapshot test.
 - **Rientranza del dispatch eventi** — risolto per costruzione: coda + budget nel
-  `Workspace` (vedi [traits.md](architecture/traits.md), "Dispatch").
+  `Workspace`; l'esaurimento del budget emette `Event::Overflow` (mai troncamenti
+  silenziosi) — vedi [traits.md](architecture/traits.md), "Dispatch".
+- **Plugin lenti nel giro sincrono** — risolto per contratto: il lavoro lungo
+  passa dai **job** (`spawn_job`/`run_job`/`JobDone`), eseguiti fuori dal lock
+  del workspace; il giro sincrono resta breve per definizione (vedi
+  [plugin-boundary.md](architecture/plugin-boundary.md), "Lavoro lungo: i job").
+- **Buffer editor vs disco** — politica decisa (flush al cambio documento,
+  reload del buffer pulito, buffer sporco mai sovrascritto); il merge esplicito
+  dei conflitti è lavoro M3 (vedi [data-model.md](architecture/data-model.md)).
 - **Memoria su vault grandi** — oggi il `Workspace` tiene i `DocumentModel`
   completi (albero + testo) di tutto il vault; a M2, insieme all'indice, la cache
   va sdoppiata: metadata (link/tag/outline, globale) vs body parsato (solo
