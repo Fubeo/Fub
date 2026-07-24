@@ -1,0 +1,15 @@
+[package]
+name = "fubmd-abi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Contratto FubMD: modello documento comune + trait di estensione, definiti una volta sola. Nessuna dipendenza da markdown, tauri o wasm."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# INVARIANTE ARCHITETTURALE: questo crate NON deve mai dipendere da
+# comrak/pulldown, tauri, wasmtime, tokio, notify. È il firewall anti-lock-in.

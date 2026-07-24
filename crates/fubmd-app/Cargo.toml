@@ -1,0 +1,32 @@
+[package]
+name = "fubmd-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "App desktop FubMD (Tauri v2): monta il kernel e i provider nativi, espone comandi/eventi IPC al frontend."
+
+[lib]
+name = "fubmd_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "fubmd"
+path = "src/main.rs"
+
+[dependencies]
+fubmd-abi = { workspace = true }
+fubmd-kernel = { workspace = true }
+fubmd-format-markdown = { workspace = true }
+fubmd-features = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+camino = { workspace = true }
+tauri = { version = "2.11.5", features = [] }
+notify = "8.2.0"
+notify-debouncer-full = "0.7.0"
+tauri-plugin-dialog = "2.7.2"
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+# tauri-build aggiunto con `cargo add` (versione corrente)
