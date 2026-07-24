@@ -24,4 +24,4 @@ pub use error::{KernelError, Result};
 pub use graph::LinkGraph;
 pub use registry::FormatRegistry;
 pub use vault::Vault;
-pub use workspace::Workspace;
+pub use workspace::{GraphUpdate, Workspace};

@@ -28,20 +28,30 @@ Un `IndexProvider` nativo in `fubmd-features` che avvolge **tantivy**.
   con `score` e `snippet` (snippet generator di tantivy). `IndexQuery::Backlinks`
   può continuare a passare dal grafo o essere servito dall'indice — vedi sotto.
 
-### Grafo incrementale (insieme all'indice)
+### Grafo incrementale (insieme all'indice) — **fatto**
 
-Oggi `Workspace::rebuild_graph` ricostruisce `LinkGraph` da zero ad ogni modifica
-(`crates/fubmd-kernel/src/workspace.rs`, `graph.rs`). M2 rende l'aggiornamento
-**per-documento**, in un'unica linea di lavoro con l'indice:
+`Workspace::rebuild_graph` ricostruiva `LinkGraph` da zero ad ogni modifica.
+Ora `LinkGraph::upsert`/`LinkGraph::remove` applicano un delta per-documento
+(`crates/fubmd-kernel/src/graph.rs`); `Workspace` li usa su
+`write_document`/`refresh_from_disk`/`remove_document`.
 
-- Su `write_document`/`refresh_from_disk`/`remove_document`: aggiornare gli indici
-  `name`/`alias`/`path` e i `backlinks`/`outgoing` **solo per il documento toccato**
-  e per i documenti che lo referenziano.
-- La struttura `outgoing` (già presente "per invalidazioni future") è il punto di
-  aggancio: da un doc modificato si raggiungono i target da rivedere.
-- **Correttezza prima di tutto:** mantenere il full-rebuild come modalità di
-  fallback/verifica; un test di proprietà confronta incrementale vs rebuild su
-  sequenze di modifiche casuali (vedi Piano di test).
+Il problema vero non è aggiungere gli archi del documento toccato, ma sapere
+**chi altro va ri-risolto**: creare `Nota.md` ruba il nome `nota` a `sub/Nota.md`
+e sposta i link di terzi. L'invariante che rende il delta trattabile è che la
+risoluzione di una chiave `K` dipende solo da `path_index[strip_ext(K)]`,
+`name_index[K]`, `alias_index[K]`. Da lì due mappe di dipendenza inversa:
+`watchers` (chiave d'indice → chiavi di link che ne dipendono) e `refs_by_key`
+(chiave di link → documenti che la usano). Costo proporzionale al vicinato.
+
+- `alias_index` e `path_index` diventano multi-mappe ordinate come `name_index`
+  (vince il path più corto, poi lessicografico). Con la vecchia
+  `HashMap<String, DocId>` due alias uguali — o `a.md` e `a.txt`, stesso path
+  senza estensione — si sovrascrivevano nell'ordine casuale della `HashMap` dei
+  modelli; e comunque serviva sapere **chi subentra** quando il vincitore sparisce.
+- **Correttezza prima di tutto:** il full-rebuild resta come oracolo e come
+  fallback dietro `Workspace::set_graph_update(GraphUpdate::FullRebuild)`.
+- Misura indicativa (5000 documenti, 200 modifiche, release): ~12 µs a modifica
+  contro ~19 ms del rebuild completo.
 
 ### Graph view (Canvas/WebGL nel frontend)
 
@@ -108,7 +118,11 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
 - **Unit:** schema/round-trip dell'indice tantivy; delete-by-term; snippet.
 - **Proprietà:** su una sequenza casuale di write/remove, `grafo_incrementale ==
   LinkGraph::build(tutti)` e `indice_incrementale == indice_da_zero` (oracolo =
-  full-rebuild attuale).
+  full-rebuild attuale). Per il grafo: `crates/fubmd-kernel/tests/graph_incremental.rs`
+  (universo ostile: omonimi a profondità diverse, alias che collidono con i nomi,
+  path che collidono a meno dell'estensione; generatore xorshift deterministico,
+  niente `proptest`) e `tests/workspace_incremental.rs` per lo stesso confronto
+  passando da disco/provider/eventi.
 - **E2e (estende `crates/fubmd-format-markdown/tests/vault_e2e.rs`):** query
   full-text sul sample-vault; creazione nota da link non risolto → il backlink
   compare.

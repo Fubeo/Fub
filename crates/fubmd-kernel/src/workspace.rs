@@ -17,11 +17,24 @@ use crate::graph::LinkGraph;
 use crate::registry::FormatRegistry;
 use crate::vault::Vault;
 
+/// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
+///
+/// L'incrementale è il percorso normale; il rebuild completo resta disponibile
+/// come rete di sicurezza (e come oracolo nei test) finché non ci fidiamo
+/// ciecamente dell'invalidazione — vedi `docs/milestones/M2-search-graph.md`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum GraphUpdate {
+    #[default]
+    Incremental,
+    FullRebuild,
+}
+
 pub struct Workspace {
     vault: Vault,
     registry: FormatRegistry,
     models: HashMap<DocId, DocumentModel>,
     graph: LinkGraph,
+    graph_update: GraphUpdate,
     bus: EventBus,
 }
 
@@ -33,8 +46,18 @@ impl Workspace {
             registry,
             models: HashMap::new(),
             graph: LinkGraph::default(),
+            graph_update: GraphUpdate::default(),
             bus: EventBus::new(),
         }
+    }
+
+    /// Sceglie la strategia di aggiornamento del grafo (default: incrementale).
+    pub fn set_graph_update(&mut self, mode: GraphUpdate) {
+        self.graph_update = mode;
+    }
+
+    pub fn graph_update(&self) -> GraphUpdate {
+        self.graph_update
     }
 
     pub fn bus(&self) -> &EventBus {
@@ -82,8 +105,7 @@ impl Workspace {
     }
 
     /// Scrive la sorgente, riparsa il documento, aggiorna il grafo ed emette
-    /// gli eventi. (M1: ricostruzione completa del grafo — semplice e corretta;
-    /// l'aggiornamento incrementale è un'ottimizzazione successiva.)
+    /// gli eventi. Il grafo si aggiorna per-documento ([`GraphUpdate`]).
     pub fn write_document(&mut self, id: &DocId, source: &str) -> Result<()> {
         self.vault.write(id, source)?;
         self.ingest(id, source)
@@ -98,7 +120,11 @@ impl Workspace {
     fn ingest(&mut self, id: &DocId, source: &str) -> Result<()> {
         let model = self.parse(id, source)?;
         self.models.insert(id.clone(), model);
-        self.rebuild_graph();
+        match self.graph_update {
+            // borrow disgiunti: `graph` in scrittura, `models` in lettura.
+            GraphUpdate::Incremental => self.graph.upsert(&self.models[id]),
+            GraphUpdate::FullRebuild => self.rebuild_graph(),
+        }
         self.bus.emit(Event::DocumentChanged { id: id.clone() });
         self.bus.emit(Event::IndexUpdated);
         Ok(())
@@ -129,7 +155,10 @@ impl Workspace {
     /// Rimuove un documento (usato dal file watcher su cancellazione).
     pub fn remove_document(&mut self, id: &DocId) {
         if self.models.remove(id).is_some() {
-            self.rebuild_graph();
+            match self.graph_update {
+                GraphUpdate::Incremental => self.graph.remove(id),
+                GraphUpdate::FullRebuild => self.rebuild_graph(),
+            }
             self.bus.emit(Event::DocumentRemoved { id: id.clone() });
             self.bus.emit(Event::IndexUpdated);
         }
@@ -151,6 +180,11 @@ impl Workspace {
     /// Backlink verso un documento.
     pub fn backlinks(&self, id: &DocId) -> Vec<BacklinkRef> {
         self.graph.backlinks(id)
+    }
+
+    /// Link uscenti risolti da un documento.
+    pub fn outgoing(&self, id: &DocId) -> Vec<DocId> {
+        self.graph.outgoing(id)
     }
 
     /// Risolve il nome di un wikilink a un documento esistente.
