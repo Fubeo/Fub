@@ -15,9 +15,10 @@ testato).
 congela a [M4](milestones/M4-wit-hardening.md); da lì i breaking costano un bump
 di versione. Le voci qui sotto sono, nell'ordine, (§1) le decisioni di
 *superficie del contratto* che il freeze deve chiudere — gratis adesso,
-costosissime dopo; (§2) il protocollo `ViewProvider` da esercitare davvero;
-(§3) i tre rilievi nuovi di questo giro; (§4) il debito già dichiarato, che ha un
-milestone suo.
+costosissime dopo (le due che sbloccavano le view sono prese; restano le
+strutturali e di forma); (§2) il protocollo `ViewProvider`, ora esercitato dal
+primo provider vero; (§3) i tre rilievi nuovi di questo giro; (§4) il debito già
+dichiarato, che ha un milestone suo.
 
 Nota di framing (non un TODO): non c'è "un trait unico" — sono **sette** trait
 più la capability `HostApi`. La cosa singola è il *crate-contratto*
@@ -30,14 +31,26 @@ Sono decisioni sulla **forma delle firme da congelare**, non righe di codice. Va
 prese *insieme*: rispondono tutte alla stessa domanda — "cosa vede un plugin del
 vault". Aggiungerle dopo il freeze è un breaking-bump del contratto.
 
-- [ ] **`host-api.query-index`**: oggi un `ViewProvider` con l'`HostApi`
-      attuale non può ottenere i backlink — `IndexQuery::Backlinks` la serve
-      `Workspace::query_index`, che è del kernel, non una capacità del contratto.
-      Decidere la forma della capacità di interrogazione e aggiungerla a
-      `HostApi` (e al WIT) prima del freeze.
-- [ ] **Documento attivo visibile a una view**: un `ViewProvider` non sa *quale
-      documento è aperto*. Serve un meccanismo — un evento che la view segue, o
-      un'azione dall'host. Deciderlo col freeze, non dopo.
+**Le due che sbloccavano il dogfooding delle view sono prese e in codice**
+(2026-07-25); restano le decisioni strutturali e di forma, che non hanno un
+consumatore che le pretenda *ora* ma vanno confermate al freeze.
+
+- [x] **`host-api.query-index`**: aggiunta a `HostApi` (e al WIT, con
+      `use index.{index-query, index-result}`) come
+      `query_index(&self, IndexQuery) -> Result<IndexResult, PluginError>`.
+      Delega a `Workspace::query_index`: stesso dispatch (backlink dal grafo,
+      resto ai provider), `&self` perché una query non muta. Una view vede
+      esattamente ciò che vede il kernel, sotto lo stesso prestito condiviso.
+- [x] **Documento attivo visibile a una view**: risolto come *capacità di
+      lettura*, non evento — `HostApi::active_document(&self) -> Option<DocId>`.
+      Il kernel tiene `Workspace::active`, la shell lo imposta con
+      `set_active_document` a ogni navigazione, la view lo **chiede** quando ne
+      ha bisogno. Niente gemello che scrive: "quale nota guardo" è una scelta
+      dell'utente sull'app, non una capacità da concedere a un plugin. Scelto
+      contro l'evento perché `render_view(&self)` è immutabile — una view non
+      può accumulare stato dagli eventi senza interior mutability — e contro un
+      argomento di `render_view` perché costringerebbe *ogni* view (grafo,
+      settings) a portarsi un contesto che non usa.
 - [ ] **Operazioni strutturali e parità plugin↔nativo**: rename, `create_note`,
       trash sono kernel-owned e fuori da `HostApi` (scelta deliberata). La
       "parità plugin↔native" non le copre: decidere a M4 se e quali esporre come
@@ -54,23 +67,27 @@ vault". Aggiungerle dopo il freeze è un breaking-bump del contratto.
       job serve un canale di avanzamento/streaming o se `Event::JobDone` basta.
       Aggiungere un canale a `HostApi`/al world dopo è breaking.
 
-## 2. `ViewProvider`: varco cablato, protocollo ancora non esercitato
+## 2. `ViewProvider`: primo provider vero, protocollo esercitato
 
-Il punto di enforcement (`validate_untrusted`) esiste e il routing passa dal
-kernel, ma le implementazioni del trait sono ancora **zero**: i backlink passano
-dalla funzione libera `build_backlinks_view` e il frontend gestisce l'azione
-`open:` ad-hoc invece del giro `on_action` → `ViewUpdate`. Sbloccabile solo dopo
-§1 (le due capacità mancanti sono esattamente ciò che impedisce un dogfooding
-vero, non finto).
+Il punto di enforcement (`validate_untrusted`) esisteva e il routing passava dal
+kernel, ma le implementazioni del trait erano **zero**. Ora ce n'è una vera:
+`fubmd_features::BacklinksView` (2026-07-25), sbloccata dalle due capacità del §1.
 
+- [x] Migrati i backlink a `ViewProvider`, chiudendo il giro azione→`ViewUpdate`
+      nel renderer generico. `BacklinksView` non riceve dati dall'app: prende il
+      documento attivo con `active_document` e i backlink con `query_index` — è
+      il dogfooding vero che prima era impossibile. La vecchia
+      `build_backlinks_view` resta come pura trasformazione dati→UI (usata dal
+      provider e testabile senza host); scompaiono il comando ad-hoc
+      `backlinks_view` e il parsing `open:` nel frontend, sostituiti dai comandi
+      generici `render_view`/`view_action`/`set_active_document`. La prova che il
+      giro passa dal contratto e non dall'app è
+      `crates/fubmd-features/tests/backlinks_view_e2e.rs` (kernel vero,
+      `KernelHost` vero: render legge attivo+grafo, il click torna `Navigate`).
 - [ ] Le view di M2 ancora da fare (outline, tag panel, graph-data) **nascono**
-      come `ViewProvider` — il piano M2 già lo prevede; il vincolo è: non
-      cablarle ad-hoc "per fare prima".
-- [ ] Migrare i backlink a `ViewProvider` insieme alla prima delle nuove view,
-      chiudendo il giro azione→`ViewUpdate` nel renderer generico — **dopo** che
-      §1 ha dato a una view il modo di interrogare l'indice e di sapere qual è il
-      documento aperto. Migrarli prima significherebbe farsi passare i dati
-      dall'app: un dogfooding finto, peggio del non averlo migrato.
+      come `ViewProvider` sullo stesso giro — il vincolo resta: non cablarle
+      ad-hoc "per fare prima". Ora c'è un esempio da imitare (`BacklinksView`) e
+      i comandi generici già esistono.
 
 ## 3. Rilievi nuovi di questo giro
 
@@ -80,23 +97,26 @@ vero, non finto).
       toccare il test resta verde — ma l'ordine dei casi **è il discriminante
       ABI**. Chiudere il buco prima del freeze: derivare l'ordine atteso
       dall'enum Rust, così un riordino diventa rosso da entrambi i lati.
-- [ ] **Drift dei mirror TS↔Rust**: `UiNode`, `Event` (`KernelEvent`), `Span`,
-      `VersionRef` sono rispecchiati **a mano** in TypeScript, senza un test che
-      leghi i due lati; la stessa lacuna del test gemello di `pageName` (aperta
-      dal secondo giro). Manca del tutto un harness di test frontend
-      (`package.json` ha solo `vite` e `tsc`). Introdurlo, e con esso i test che
-      confrontano i tipi TS con la forma dei tipi Rust — è il confine che oggi
-      può divergere in silenzio.
-- [ ] **UI di produzione = IPC bespoke, non `UiNode`**: oggi il canale core→UI
-      reale è fatto di ~24 comandi `#[tauri::command]` che restituiscono tipi
-      propri (`search`, `render_preview`, `render_embed`, versioning…), più il
-      bridge eventi `fubmd://event`; solo `backlinks_view` restituisce un
-      `UiNode`. È una scelta legittima (la graph view e `Html`/`WebView` restano
-      superfici privilegiate, ammesso in `ui-protocol.md`), ma è un debito che
-      **cresce**: ogni feature di M2/M3 nata come comando ad-hoc è retrofit in
-      più il giorno in cui deve diventare superficie plugin. Vincolo: le nuove
-      superfici *rivendicate dal dogfooding* nascono come `UiNode`/`ViewProvider`;
-      ciò che resta bespoke va marcato esplicitamente come privilegiato, non
+- [ ] **Drift dei mirror TS↔Rust**: `UiNode`, `ViewUpdate`, `Event`
+      (`KernelEvent`), `Span`, `VersionRef` sono rispecchiati **a mano** in
+      TypeScript, senza un test che leghi i due lati; la stessa lacuna del test
+      gemello di `pageName` (aperta dal secondo giro). Manca del tutto un harness
+      di test frontend (`package.json` ha solo `vite` e `tsc`). Introdurlo, e con
+      esso i test che confrontano i tipi TS con la forma dei tipi Rust — è il
+      confine che oggi può divergere in silenzio. (La migrazione dei backlink ha
+      aggiunto `ViewUpdate` a questo elenco.)
+- [ ] **UI di produzione = IPC bespoke + canale view generico**: il canale
+      core→UI reale è ancora fatto in gran parte di ~24 comandi
+      `#[tauri::command]` con tipi propri (`search`, `render_preview`,
+      `render_embed`, versioning…) più il bridge eventi `fubmd://event`. Ma ora
+      esiste anche il **canale generico dei `ViewProvider`** —
+      `render_view`/`view_action`/`set_active_document` — e il pannello backlink
+      ci passa (non più `backlinks_view` ad-hoc). È il varco su cui nascono le
+      nuove superfici dichiarative. Resta il debito che **cresce**: ogni feature
+      nata come comando bespoke è retrofit in più il giorno in cui deve diventare
+      superficie plugin. Vincolo invariato: le superfici *rivendicate dal
+      dogfooding* nascono come `UiNode`/`ViewProvider`; ciò che resta bespoke
+      (graph view, `Html`/`WebView` privilegiate) va marcato come tale, non
       lasciato ambiguo.
 
 ## 4. Debito già dichiarato (confermato, resta in agenda col suo milestone)

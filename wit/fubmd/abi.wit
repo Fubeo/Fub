@@ -475,6 +475,7 @@ interface host-api {
     use events.{event};
     use errors.{plugin-error};
     use jobs.{job-id, job-spec};
+    use index.{index-query, index-result};
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
     write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
@@ -513,6 +514,23 @@ interface host-api {
     /// accesso al tempo di sistema (WASI lo può negare, e in test serve
     /// deterministico): il tempo è una capacità come le altre.
     now-unix-millis: func() -> u64;
+
+    // --- interrogazione dell'indice e contesto della sessione ----------------
+    //
+    // Le due capacità che rendono un `view-provider` un vero provider e non un
+    // guscio riempito dall'app: interrogare il vault e sapere quale documento
+    // è aperto. Vedi docs/architecture/plugin-boundary.md, "Interrogazione e
+    // contesto".
+
+    /// Interroga gli indici del vault: backlink (serviti dal grafo) e ricerca
+    /// full-text (dai provider registrati), con la stessa semantica di dispatch
+    /// del kernel.
+    query-index: func(query: index-query) -> result<index-result, plugin-error>;
+    /// Il documento con il focus della sessione di editing, se ce n'è uno. Lo
+    /// imposta la shell; una view lo chiede quando ne ha bisogno. Non ha un
+    /// gemello che scrive: "quale nota guardo" è una scelta dell'utente
+    /// sull'app, non una capacità concessa a un plugin.
+    active-document: func() -> option<doc-id>;
 }
 
 /// Reazione agli eventi (`EventHandler`).

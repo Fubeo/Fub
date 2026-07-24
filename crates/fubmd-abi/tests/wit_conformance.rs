@@ -1951,6 +1951,19 @@ fn conform(source: &str) -> Result<(), String> {
         <dyn HostApi>::now_unix_millis as fn(&'static dyn HostApi) -> u64,
         &[],
     );
+    contract.method(
+        "host-api",
+        "query-index",
+        <dyn HostApi>::query_index
+            as fn(&'static dyn HostApi, IndexQuery) -> Result<IndexResult, PluginError>,
+        &["query"],
+    );
+    contract.method(
+        "host-api",
+        "active-document",
+        <dyn HostApi>::active_document as fn(&'static dyn HostApi) -> Option<DocId>,
+        &[],
+    );
 
     contract.method(
         "event-handler",

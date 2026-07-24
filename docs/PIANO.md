@@ -109,9 +109,11 @@ come proxy. Il kernel vede solo `dyn Trait`.
 **Piani di lavoro**:
 - [todo.md](todo.md) — piano di aggiustamento dopo il secondo audit
   architetturale: conformità abi↔WIT sui tipi, `IndexProvider` dogfoodabile,
-  versioning vs `Overflow`, presidi cablati. Punti 1–5 chiusi; resta il
-  `ViewProvider` da esercitare (con due capacità da decidere a M4) e il debito
-  già dichiarato.
+  versioning vs `Overflow`, presidi cablati. Punti 1–5 chiusi; il `ViewProvider`
+  è ora esercitato dal primo provider vero (`BacklinksView`), con le due capacità
+  che gli mancavano — `query_index` e `active_document` — aggiunte all'`HostApi`.
+  Restano le decisioni strutturali/di forma del freeze (§1) e il debito già
+  dichiarato.
 - [ORGANIZZAZIONE_VAULT.md](ORGANIZZAZIONE_VAULT.md) — organizzazione stile
   make.md nell'app base: sidebar ad albero, icone, folder notes, spazi
   (appuntate, ordinamento drag & drop, cartella come radice), sidecar
@@ -134,7 +136,9 @@ come proxy. Il kernel vede solo `dyn Trait`.
   risolto), rename, cestino — e versioning del vault (le decisioni D1–D8 sono
   nella tabella qui sopra); organizzazione della sidebar stile
   make.md — albero, icone, folder notes, spazi
-  ([ORGANIZZAZIONE_VAULT.md](ORGANIZZAZIONE_VAULT.md)).
+  ([ORGANIZZAZIONE_VAULT.md](ORGANIZZAZIONE_VAULT.md)); il pannello backlink è
+  ora il primo `ViewProvider` vero, con le due capacità host che gli mancavano
+  (`query_index`, `active_document`) e il giro azione→`ViewUpdate` chiuso.
   Restano: cache metadata/body, graph view (Canvas/WebGL), outline/tag panel.
 - **M3 — Fedeltà editor** → [dettaglio](milestones/M3-editor-fidelity.md)
   Live preview in-editor (decorazioni CodeMirror sugli `Span`), command palette

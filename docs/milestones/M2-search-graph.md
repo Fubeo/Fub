@@ -119,6 +119,25 @@ Obsidian fa lo stesso (metadata cache persistente, niente AST globale in RAM).
 Farlo a M2 e non prima: è lo stesso refactor dei percorsi incrementali, e
 l'oracolo full-rebuild appena costruito verifica che nulla cambi.
 
+### Backlink come `ViewProvider` — **fatto**
+
+Il pannello backlink era una funzione libera (`build_backlinks_view`) che l'app
+riempiva di dati già calcolati: UI dichiarativa sì, ma non un provider. Ora è
+`fubmd_features::BacklinksView`, il **primo `ViewProvider` vero**, e il primo a
+percorrere il protocollo per intero — non solo il rendering ma anche il giro
+azione→`ViewUpdate`.
+
+Per esserlo servivano due capacità che l'`HostApi` non aveva, ed è la
+migrazione ad averle fatte emergere (stesso meccanismo del dogfooding del
+versioning): `query_index` (la view chiede i backlink al vault, non li riceve) e
+`active_document` (la view sa quale nota è aperta). Le decisioni — perché una
+capacità di lettura e non un evento, perché non un argomento di `render_view` —
+sono in [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md),
+"Interrogazione e contesto". Il giro chiude nel renderer generico del frontend
+(comandi `render_view`/`view_action`/`set_active_document`), non più nel comando
+ad-hoc `backlinks_view` né nel parsing `open:` lato client. Le view di M2 ancora
+da fare (graph-data, outline, tag) nascono su questo stesso giro.
+
 ### Graph view (Canvas/WebGL nel frontend)
 
 - Un `ViewProvider` nativo espone **solo i dati** del grafo: nodi (`DocId`,
@@ -158,7 +177,8 @@ non viene toccato ed è il grafo a risolverlo di nuovo.
 ## Trait/API coinvolti
 
 - `IndexProvider` (nuova impl nativa, tantivy) — [traits.md](../architecture/traits.md).
-- `ViewProvider` (graph-data, outline, tag) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
+- `ViewProvider` (backlink ✅; graph-data, outline, tag da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
+- `HostApi::query_index` + `HostApi::active_document` — le due capacità che rendono una view un provider vero.
 - `Workspace` in `fubmd-kernel`: nuovi percorsi incrementali per grafo+indice.
 - Eventuale primo `CommandProvider` per "crea nota".
 - Nuovi comandi IPC in `fubmd-app` (search, graph-data, outline, tags, create-note).

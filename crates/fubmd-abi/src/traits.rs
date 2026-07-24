@@ -100,6 +100,34 @@ pub trait HostApi: Send + Sync {
     /// deterministico nei test. Un plugin che chiamasse `SystemTime::now` per
     /// conto proprio sarebbe non testabile e, sotto sandbox, non funzionante.
     fn now_unix_millis(&self) -> u64;
+
+    // --- interrogazione dell'indice e contesto della sessione ---------------
+    //
+    // Le due capacità che un `ViewProvider` deve avere per essere un vero
+    // provider e non un guscio a cui l'app passa i dati già pronti: sapere
+    // *cosa* c'è nel vault (backlink, ricerca) e *quale* documento è aperto.
+    // Senza, un pannello backlink in WASM non potrebbe fare né l'una né l'altra
+    // cosa — le farebbe l'app per lui, cioè un dogfooding finto. Vedi
+    // docs/architecture/plugin-boundary.md, "Interrogazione e contesto".
+
+    /// Interroga gli indici del vault: backlink e ricerca full-text passano di
+    /// qui, con la stessa semantica di dispatch del kernel (i backlink li serve
+    /// il grafo, tutto il resto i provider registrati; vedi [`IndexQuery`]).
+    ///
+    /// È `&self` — una query non muta niente — ed è la ragione per cui un indice
+    /// può servirla sotto prestito condiviso del workspace, come una view.
+    fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
+
+    /// Il documento con il focus della sessione di editing, se ce n'è uno.
+    ///
+    /// È il solo contesto di sessione che il contratto espone: una view lo
+    /// **chiede** quando ne ha bisogno (un pannello backlink lo fa a ogni
+    /// render), invece di riceverlo come argomento — che costringerebbe *ogni*
+    /// view a portarselo anche quando non le serve (un grafo, un pannello
+    /// impostazioni). Chi lo imposta è la shell, non un plugin: `active_document`
+    /// non ha un gemello che scrive nell'`HostApi`, perché "quale nota guardo"
+    /// è una decisione dell'utente sull'app, non una capacità da concedere.
+    fn active_document(&self) -> Option<DocId>;
 }
 
 // ---------------------------------------------------------------------------
