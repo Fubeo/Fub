@@ -38,6 +38,21 @@ impl FormatRegistry {
         self.by_ext.keys().cloned().collect()
     }
 
+    /// L'estensione con cui nasce una nota nuova a cui nessuno ne ha data una:
+    /// la prima del **primo provider registrato**.
+    ///
+    /// L'ordine di registrazione è una scelta di chi monta l'app (per FubMD:
+    /// markdown), non un dettaglio — per questo non si guarda `by_ext`, che è
+    /// una mappa e non ha un primo.
+    pub fn default_extension(&self) -> Option<String> {
+        self.providers
+            .first()?
+            .descriptor()
+            .extensions
+            .first()
+            .map(|e| e.to_lowercase())
+    }
+
     pub fn is_empty(&self) -> bool {
         self.providers.is_empty()
     }

@@ -69,6 +69,10 @@ pub enum GraphUpdate {
 /// così chi deriva stato dagli eventi sa di dover riconciliare da zero.
 const DISPATCH_BUDGET: usize = 1024;
 
+/// Nome di una nota nuova a cui nessuno ne ha dato uno (D3). L'utente la
+/// rinomina subito: è il motivo per cui non vale la pena essere più creativi.
+const UNTITLED: &str = "Senza titolo";
+
 pub struct Workspace {
     vault: Vault,
     registry: FormatRegistry,
@@ -288,6 +292,68 @@ impl Workspace {
             self.emit_event(Event::IndexUpdated);
             self.dispatch_pending();
         }
+    }
+
+    /// Crea una nota vuota e restituisce il suo [`DocId`].
+    ///
+    /// Senza `name` nasce `Senza titolo` nella radice — e se il nome è già
+    /// preso, `Senza titolo 1`, `2`, … (D3): l'utente la rinomina subito, con
+    /// il rename che i link se li porta dietro. Con `name` è il flusso "crea
+    /// nota da link non risolto": il nome arriva dal wikilink, e una collisione
+    /// è un errore, non un nome da aggiustare in silenzio — se quel path
+    /// esistesse, il link non sarebbe stato non risolto.
+    ///
+    /// Il nome libero si calcola qui dentro, dove il workspace è preso in
+    /// esclusiva: cercarlo dal chiamante e poi scrivere sarebbe una corsa fra
+    /// la domanda e la risposta.
+    pub fn create_note(&mut self, name: Option<&str>) -> Result<DocId> {
+        let id = match name {
+            Some(name) => {
+                let id = self.new_note_id(name)?;
+                if self.models.contains_key(&id) || self.vault.exists(&id) {
+                    return Err(KernelError::AlreadyExists(id.to_string()));
+                }
+                id
+            }
+            None => {
+                let ext = self
+                    .registry
+                    .default_extension()
+                    .ok_or(KernelError::NoDefaultFormat)?;
+                (0u32..)
+                    .map(|n| match n {
+                        0 => DocId::new(format!("{UNTITLED}.{ext}")),
+                        n => DocId::new(format!("{UNTITLED} {n}.{ext}")),
+                    })
+                    .find(|id| !self.models.contains_key(id) && !self.vault.exists(id))
+                    .expect("la sequenza dei candidati è infinita")
+            }
+        };
+        // Una nota nuova è una scrittura come le altre: grafo, indici ed eventi
+        // la vedono nascere per la via normale.
+        self.write_document(&id, "")?;
+        Ok(id)
+    }
+
+    /// Il [`DocId`] di una nota che nasce col nome dato: separatori normalizzati
+    /// e, se il nome non porta già un'estensione gestita, quella di default.
+    fn new_note_id(&self, name: &str) -> Result<DocId> {
+        let normalizzato = name.replace('\\', "/");
+        let pulito = normalizzato.trim().trim_start_matches('/').trim_end();
+        if pulito.is_empty() || pulito.split('/').any(|c| c == ".." || c.is_empty()) {
+            return Err(KernelError::BadName(name.to_string()));
+        }
+        let id = DocId::new(pulito);
+        let ha_estensione = extension_of(&id)
+            .is_some_and(|ext| self.registry.provider_for_ext(&ext).is_some());
+        if ha_estensione {
+            return Ok(id);
+        }
+        let ext = self
+            .registry
+            .default_extension()
+            .ok_or(KernelError::NoDefaultFormat)?;
+        Ok(DocId::new(format!("{pulito}.{ext}")))
     }
 
     // --- cestino -----------------------------------------------------------

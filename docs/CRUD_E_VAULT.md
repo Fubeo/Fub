@@ -112,20 +112,28 @@ dal nome del file togliendo il timbro di D2, riconosciuto dalla forma.
 
 ## Fase 2 — Create + Rename in UI (chiude il CRUD)
 
-- [ ] `Workspace::create_untitled() -> DocId` (D3: nome libero calcolato senza
+- [x] `Workspace::create_untitled() -> DocId` (D3: nome libero calcolato senza
       race, dentro il lock del workspace) — oppure parametro `name` opzionale
       per il flusso "crea nota da link non risolto".
-- [ ] IPC `create_note`, frontend: pulsante "Nuova nota" in cima alla sidebar
+      *(Un metodo solo: `create_note(name: Option<&str>)`. Senza nome cerca il
+      primo libero della famiglia `Senza titolo`; con nome una collisione è un
+      errore — se quel path esistesse, il link da cui arriva la richiesta non
+      sarebbe stato non risolto.)*
+- [x] IPC `create_note`, frontend: pulsante "Nuova nota" in cima alla sidebar
       → crea, seleziona, focus sull'editor.
-- [ ] Frontend rename: voce "Rinomina" nel menu contestuale (input inline o
+- [x] Frontend rename: voce "Rinomina" nel menu contestuale (input inline o
       prompt), con `flushPendingSave()` **prima** di chiamare l'IPC — il
       rename riscrive file di terzi, il buffer va messo in salvo (stessa
       regola flush-before-patch di [M3](milestones/M3-editor-fidelity.md)).
-- [ ] "Crea nota da link non risolto" (chiude la voce M2): click su wikilink
+      *(Input inline nella riga della lista; si rinomina il nome pagina,
+      cartella ed estensione restano — spostare una nota è un'altra cosa.)*
+- [x] "Crea nota da link non risolto" (chiude la voce M2): click su wikilink
       non risolto → `create_note` col nome del `page` + navigazione. Due righe
       ora che il caso generale esiste.
-- [ ] Test: collisioni di nome (`Senza titolo 1`), creazione da link non
+- [x] Test: collisioni di nome (`Senza titolo 1`), creazione da link non
       risolto → il backlink compare (`vault_e2e.rs`, era già nel piano M2).
+      *(I test che creano file lavorano su una copia usa-e-getta del vault di
+      esempio: il fixture lo leggono tutti gli altri.)*
 
 ## Fase 3 — Versioning del vault
 

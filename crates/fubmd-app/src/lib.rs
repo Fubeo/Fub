@@ -177,6 +177,18 @@ fn rename_document(state: State<AppState>, from: String, to: String) -> Result<(
         .map_err(|e| e.to_string())
 }
 
+/// Crea una nota vuota e restituisce il suo id. Senza `name` nasce "Senza
+/// titolo" (o il primo nome libero della famiglia); con `name` è il flusso
+/// "crea nota da link non risolto", e il nome arriva dal wikilink.
+#[tauri::command]
+fn create_note(state: State<AppState>, name: Option<String>) -> Result<String, String> {
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.create_note(name.as_deref())
+        .map(|d| d.0)
+        .map_err(|e| e.to_string())
+}
+
 /// Cancella una nota spostandola nel cestino del vault; restituisce dove è
 /// finita. Il delete dell'app **è** questo spostamento: niente è distrutto
 /// finché l'utente non svuota il cestino.
@@ -305,6 +317,7 @@ pub fn run() {
             read_document,
             write_document,
             rename_document,
+            create_note,
             delete_document,
             list_trash,
             restore_from_trash,

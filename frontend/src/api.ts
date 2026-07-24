@@ -77,6 +77,7 @@ export const api = {
     invoke<void>("write_document", { id, source }),
   renameDocument: (from: string, to: string) =>
     invoke<void>("rename_document", { from, to }),
+  createNote: (name?: string) => invoke<string>("create_note", { name: name ?? null }),
   deleteDocument: (id: string) => invoke<string>("delete_document", { id }),
   listTrash: () => invoke<TrashEntry[]>("list_trash"),
   restoreFromTrash: (id: string, to?: string) =>
