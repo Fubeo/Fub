@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FubMD</title>
+  </head>
+  <body>
+    <div id="app">
+      <header id="topbar">
+        <span class="brand">FubMD</span>
+        <button id="open-vault">Apri vault…</button>
+        <span id="vault-path" class="muted"></span>
+      </header>
+      <main id="layout">
+        <aside id="sidebar">
+          <div class="panel-title">Note</div>
+          <ul id="file-list"></ul>
+        </aside>
+        <section id="editor-pane">
+          <div id="editor"></div>
+        </section>
+        <section id="right-pane">
+          <div class="panel-title">Anteprima</div>
+          <div id="preview" class="markdown-preview"></div>
+          <div class="panel-title">Backlink</div>
+          <div id="backlinks"></div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

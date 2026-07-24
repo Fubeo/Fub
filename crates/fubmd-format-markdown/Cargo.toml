@@ -1,0 +1,21 @@
+[package]
+name = "fubmd-format-markdown"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Il primo FormatProvider nativo: markdown in stile Obsidian (comrak). L'unico crate M1 che sa che il markdown esiste."
+
+[dependencies]
+comrak = "0.54.0"
+fubmd-abi = { workspace = true }
+fubmd-sdk = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = "0.10.0"
+# comrak e il crate YAML vengono aggiunti con `cargo add` (versioni correnti).
+
+[dev-dependencies]
+# solo per il test end-to-end sul vault di esempio: monta il core reale.
+fubmd-kernel = { workspace = true }
+camino = { workspace = true }

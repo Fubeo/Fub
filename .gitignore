@@ -1,0 +1,21 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Tauri
+/crates/fubmd-app/gen
+
+# Editor / OS
+.DS_Store
+*.swp
+
+# insta pending snapshots
+*.snap.new
+
+# dati locali di sviluppo (indici tantivy, ecc.)
+/.fubmd-data
