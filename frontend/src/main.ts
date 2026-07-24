@@ -16,6 +16,7 @@ import {
   findFolder,
   folderNoteOf,
   orderedNames,
+  pageName,
   parentOf,
   type FolderNode,
 } from "./organizer";
@@ -55,9 +56,9 @@ let searchTimer: number | undefined;
 // Ogni ricerca porta il proprio numero d'ordine: una risposta lenta di una
 // query vecchia non deve sovrascrivere i risultati di una più recente.
 let searchSeq = 0;
-// Le estensioni che i provider registrati del backend gestiscono. Serve al
-// solo `pageName`: quale sia l'estensione di un documento lo sanno i
-// `FormatDescriptor`, non la UI — e markdown è il primo formato, non l'unico.
+// Le estensioni che i provider registrati del backend gestiscono: quali siano
+// lo sanno i `FormatDescriptor`, non la UI — e markdown è il primo formato, non
+// l'unico. Servono a riconoscere una folder note (`X/X.<ext>`, `index.<ext>`).
 let handledExtensions: string[] = ["md"];
 // Il versioning è acceso in questa sessione? Spento significa assente (D7):
 // il pannello della cronologia non esiste, e non si interroga.
@@ -164,7 +165,7 @@ function renderChildren(node: FolderNode, ul: HTMLElement) {
     }
     ul.appendChild(li);
   }
-  const fnote = folderNoteOf(node);
+  const fnote = folderNoteOf(node, handledExtensions);
   for (const id of node.notes) {
     if (id === fnote) continue;
     const li = document.createElement("li");
@@ -224,7 +225,7 @@ function folderRow(folder: FolderNode): HTMLElement {
   name.textContent = folder.name;
   row.appendChild(name);
 
-  const fnote = folderNoteOf(folder);
+  const fnote = folderNoteOf(folder, handledExtensions);
   if (fnote) row.classList.add("has-note");
   row.addEventListener("click", () => {
     if (fnote) {
@@ -389,7 +390,7 @@ function pickNewSpace(at: MouseEvent) {
 function openSpaceNote() {
   if (activeSpace === null) return;
   const node = findFolder(buildTree(knownDocs, meta), activeSpace);
-  const fnote = node && folderNoteOf(node);
+  const fnote = node && folderNoteOf(node, handledExtensions);
   if (fnote) selectDoc(fnote);
 }
 
@@ -467,12 +468,16 @@ function pickIcon(at: MouseEvent, path: string) {
 /// `p/X.md` → `p/X/X.md`: la nota diventa la folder note di una cartella nuova
 /// col suo nome. I wikilink entranti li riscrive il rename del kernel; icona e
 /// pin migrano sull'evento `document_renamed`, come per ogni rename.
+///
+/// L'estensione non si sceglie: è quella che la nota ha già (`childName`). Prima
+/// era `.md` cablata, che avrebbe cambiato formato a una nota per il solo fatto
+/// di spostarla in una cartella.
 async function convertToFolder(id: string) {
   const stem = pageName(id);
   const dir = parentOf(id);
   const folderPath = dir ? `${dir}/${stem}` : stem;
   try {
-    await api.renameDocument(id, `${folderPath}/${stem}.md`);
+    await api.renameDocument(id, `${folderPath}/${childName(id)}`);
   } catch (e) {
     console.error(`FubMD: non riesco a convertire ${id} in cartella: ${e}`);
     return;
@@ -1193,20 +1198,6 @@ async function reloadIfClean(id: string) {
   if (id === currentDoc && !dirty && editor.getDoc() !== source) {
     editor.setDoc(source);
   }
-}
-
-/// Il "nome pagina" di un `DocId`: basename senza l'estensione **gestita**.
-///
-/// Rispecchia `DocId::page_name` del kernel, ma senza cablare `.md`: le
-/// estensioni arrivano dai `FormatDescriptor` dei provider registrati
-/// (`VaultInfo.extensions`). Un'estensione che nessun provider gestisce resta
-/// nel nome, perché non è un'estensione — è parte del nome del file.
-function pageName(id: string): string {
-  const base = id.split("/").pop() ?? id;
-  const dot = base.lastIndexOf(".");
-  if (dot <= 0) return base;
-  const ext = base.slice(dot + 1).toLowerCase();
-  return handledExtensions.includes(ext) ? base.slice(0, dot) : base;
 }
 
 init();

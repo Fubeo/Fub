@@ -13,7 +13,8 @@ use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::ui::UiNode;
 use fubmd_features::{
-    build_backlinks_view, SearchIndex, VersionRef, VersionStore, VersioningHandler, VERSIONING_ID,
+    build_backlinks_view, SearchIndex, VersionRef, VersionStore, VersioningHandler, SEARCH_ID,
+    VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, TrashEntry, Workspace};
@@ -110,8 +111,21 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     // del vault e riconcilia ciò che è cambiato mentre non era vivo. Se non si
     // apre, il vault si apre lo stesso senza ricerca: la verità è il vault,
     // l'indice è stato derivato e non deve mai impedire di leggere le note.
-    match SearchIndex::open(&root) {
-        Ok(index) => ws.register_index_provider(Box::new(index)),
+    //
+    // Vive nel proprio spazio dati (`.fubmd-data/plugins/fubmd.search/`), che è
+    // il kernel ad assegnargli: la registrazione lo attiva, e l'attivazione è
+    // il momento in cui ritrova da `data_*` le impronte di ciò che ha già visto.
+    match ws
+        .plugin_data_dir(SEARCH_ID)
+        .and_then(|dir| SearchIndex::open(&dir))
+    {
+        Ok(index) => {
+            if let Err(e) = ws.register_index_provider(SEARCH_ID, Box::new(index)) {
+                // L'indice c'è, ma non ha ritrovato la propria memoria: si
+                // reindicizza tutto. È lento, non sbagliato.
+                eprintln!("indice di ricerca: impronte non ritrovate, reindicizzo: {e}");
+            }
+        }
         Err(e) => eprintln!("indice di ricerca non disponibile: {e}"),
     }
 

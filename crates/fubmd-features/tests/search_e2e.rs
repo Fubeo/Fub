@@ -10,7 +10,7 @@
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{IndexQuery, IndexResult, SearchHit};
-use fubmd_features::SearchIndex;
+use fubmd_features::{SearchIndex, SEARCH_ID};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
 
@@ -44,14 +44,16 @@ impl Vault {
         std::fs::read_to_string(self.root.join(rel)).expect("lettura")
     }
 
-    /// Apre il vault come farebbe l'app: registry markdown + indice su disco,
-    /// registrato prima del `reindex`.
+    /// Apre il vault come farebbe l'app: registry markdown + indice nel proprio
+    /// spazio dati, registrato (e quindi attivato) prima del `reindex`.
     fn open(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry.register(MarkdownProvider::boxed());
         let mut ws = Workspace::new(&self.root, registry);
-        let index = SearchIndex::open(&self.root).expect("indice");
-        ws.register_index_provider(Box::new(index));
+        let dir = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
+        let index = SearchIndex::open(&dir).expect("indice");
+        ws.register_index_provider(SEARCH_ID, Box::new(index))
+            .expect("attivazione dell'indice");
         ws.reindex().expect("reindex");
         ws
     }
@@ -308,11 +310,16 @@ fn incremental_index_matches_one_built_from_scratch() {
 
 /// L'opstamp dell'ultimo commit di tantivy, letto dal manifest dell'indice:
 /// è il contatore che cambia se e solo se qualcosa è stato scritto.
+///
+/// Il manifest vive nello spazio dati del plugin e ci arriva attraverso
+/// `HostApi::data_write`: leggerlo da qui col filesystem è lecito perché questo
+/// è un test che guarda *il risultato*, non un percorso di produzione.
 fn opstamp(vault_root: &Utf8PathBuf) -> u64 {
     let path = vault_root
         .join(".fubmd-data")
-        .join("index")
-        .join("fubmd-manifest.json");
+        .join("plugins")
+        .join(SEARCH_ID)
+        .join("manifest.json");
     let raw = std::fs::read_to_string(path).expect("manifest");
     let v: serde_json::Value = serde_json::from_str(&raw).expect("json");
     v["opstamp"].as_u64().expect("opstamp")

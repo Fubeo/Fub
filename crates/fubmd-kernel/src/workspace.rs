@@ -42,7 +42,9 @@ use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::traits::{
     BacklinkRef, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
+    ViewProvider, ViewSpec,
 };
+use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{Event, PluginError};
 
 use crate::bus::EventBus;
@@ -61,6 +63,23 @@ pub enum GraphUpdate {
     #[default]
     Incremental,
     FullRebuild,
+}
+
+/// Quanto l'host si fida di chi ha prodotto un albero di UI.
+///
+/// Non è una proprietà dell'albero, è una proprietà di **chi lo manda**: lo
+/// stesso `UiNode::Html` è legittimo da una feature ufficiale e inaccettabile da
+/// un plugin sandboxato, perché nella webview principale il contenuto attivo ha
+/// l'IPC con pieni privilegi — passare da lì aggirerebbe l'intera sandbox. Vedi
+/// `docs/architecture/ui-protocol.md`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum Trust {
+    /// Core e feature ufficiali: `Html`/`WebView` ammesse.
+    Trusted,
+    /// Plugin di terzi (a M4 i nativi non-core, a M5 i componenti WASM):
+    /// contenuto attivo rifiutato, in qualunque punto dell'albero.
+    #[default]
+    Untrusted,
 }
 
 /// Tetto di eventi drenati in un singolo `dispatch_pending`: tronca i cicli
@@ -96,7 +115,14 @@ pub struct Workspace {
     /// Indici derivati dal contenuto, alimentati **direttamente** (non via
     /// event bus) dentro le stesse operazioni che aggiornano il grafo — così
     /// un troncamento della coda eventi non può far divergere un indice.
-    indexes: Vec<Box<dyn IndexProvider>>,
+    /// Come per gli handler, l'id è lo spazio dello storage persistente che
+    /// l'[`HostApi`] concede all'indice: è lì che un indice si ricorda di ciò
+    /// che ha già visto.
+    indexes: Vec<(String, Box<dyn IndexProvider>)>,
+    /// View dichiarative registrate, col grado di fiducia di chi le produce.
+    /// Ogni albero di UI che entra nell'host passa da qui: è il punto unico in
+    /// cui [`UiNode::validate_untrusted`] viene applicato.
+    views: Vec<(String, Trust, Box<dyn ViewProvider>)>,
     /// Eventi in attesa di dispatch verso gli handler.
     pending: VecDeque<Event>,
     /// Guardia anti-rientranza: `dispatch_pending` non si annida mai.
@@ -129,6 +155,7 @@ impl Workspace {
             bus: EventBus::new(),
             handlers: Vec::new(),
             indexes: Vec::new(),
+            views: Vec::new(),
             pending: VecDeque::new(),
             dispatching: false,
             pending_jobs: Vec::new(),
@@ -182,13 +209,40 @@ impl Workspace {
         f(&mut host)
     }
 
-    /// Registra un [`IndexProvider`]. Va fatto **prima** di [`reindex`], che è
-    /// il momento in cui l'indice riceve il contenuto del vault e riconcilia
-    /// ciò che è cambiato mentre non era vivo.
+    /// Registra un [`IndexProvider`] sotto un id. Va fatto **prima** di
+    /// [`reindex`], che è il momento in cui l'indice riceve il contenuto del
+    /// vault e riconcilia ciò che è cambiato mentre non era vivo.
+    ///
+    /// La registrazione **è** l'attivazione: l'indice riceve subito un
+    /// [`HostApi`] intestato al proprio id e ricarica da `data_*` ciò che ha
+    /// già visto. Prima di questo momento non può avere ricordi, e dopo il
+    /// primo `on_document_indexed` sarebbe troppo tardi per averli.
+    ///
+    /// L'errore di attivazione arriva al chiamante ma l'indice resta
+    /// registrato: un indice che non ha ritrovato la propria memoria
+    /// reindicizza tutto, che è lento, non sbagliato.
+    ///
+    /// `id` è un nome semplice, senza separatori di path: determina lo spazio
+    /// dati (`.fubmd-data/plugins/<id>/`), come per gli event handler.
     ///
     /// [`reindex`]: Workspace::reindex
-    pub fn register_index_provider(&mut self, index: Box<dyn IndexProvider>) {
-        self.indexes.push(index);
+    pub fn register_index_provider(
+        &mut self,
+        id: impl Into<String>,
+        mut index: Box<dyn IndexProvider>,
+    ) -> std::result::Result<(), PluginError> {
+        let id = id.into();
+        // `index` è ancora una variabile locale: prestare `&mut self` all'host
+        // qui non alias niente.
+        let activated = {
+            let mut host = KernelHost {
+                ws: self,
+                plugin: &id,
+            };
+            index.activate(&mut host)
+        };
+        self.indexes.push((id, index));
+        activated
     }
 
     /// Riparsa tutti i documenti del vault, ricostruisce il grafo e allinea
@@ -211,13 +265,13 @@ impl Workspace {
         self.models = models;
         self.rebuild_graph();
 
-        for index in self.indexes.iter_mut() {
+        for (_, index) in self.indexes.iter_mut() {
             for model in self.models.values() {
                 index.on_document_indexed(model);
             }
         }
         let ids: Vec<DocId> = self.documents();
-        for index in self.indexes.iter_mut() {
+        for (_, index) in self.indexes.iter_mut() {
             index.reconcile(&ids);
         }
         // Gli errori di flush non fanno fallire l'apertura del vault: un
@@ -289,7 +343,7 @@ impl Workspace {
         // Gli indici vedono la modifica nella stessa operazione del grafo:
         // stessa verità, nessun canale che può perdere pezzi per strada.
         let model = &self.models[id];
-        for index in self.indexes.iter_mut() {
+        for (_, index) in self.indexes.iter_mut() {
             index.on_document_indexed(model);
         }
         self.emit_event(Event::DocumentChanged { id: id.clone() });
@@ -335,7 +389,7 @@ impl Workspace {
                 GraphUpdate::Incremental => self.graph.remove(id),
                 GraphUpdate::FullRebuild => self.rebuild_graph(),
             }
-            for index in self.indexes.iter_mut() {
+            for (_, index) in self.indexes.iter_mut() {
                 index.on_document_removed(id);
             }
             self.emit_event(Event::DocumentRemoved { id: id.clone() });
@@ -556,11 +610,11 @@ impl Workspace {
         // Per un indice il rename è remove+add: l'identità è la chiave, e la
         // chiave è cambiata. (Chi tiene stato *per-documento* invece migra la
         // chiave sull'evento `DocumentRenamed`.)
-        for index in self.indexes.iter_mut() {
+        for (_, index) in self.indexes.iter_mut() {
             index.on_document_removed(from);
         }
         let model = &self.models[to];
-        for index in self.indexes.iter_mut() {
+        for (_, index) in self.indexes.iter_mut() {
             index.on_document_indexed(model);
         }
         self.emit_event(Event::DocumentRenamed {
@@ -741,7 +795,7 @@ impl Workspace {
         let mut last = Err(PluginError::BadArgs(
             "nessun IndexProvider registrato".to_string(),
         ));
-        for index in &self.indexes {
+        for (_, index) in &self.indexes {
             match index.query(query.clone()) {
                 Err(PluginError::BadArgs(msg)) => last = Err(PluginError::BadArgs(msg)),
                 other => return other,
@@ -757,14 +811,126 @@ impl Workspace {
     /// L'errore di un indice non fa fallire il chiamante — un indice è stato
     /// *derivato*, la verità è il vault e si ricostruisce. Restituisce gli
     /// errori perché chi ha un canale di notifica possa mostrarli.
+    ///
+    /// È anche il punto in cui un indice **scrive**: riceve un [`HostApi`]
+    /// intestato al proprio id, come gli event handler durante il dispatch.
+    /// Gli indici escono dal workspace per la durata delle chiamate, così
+    /// l'host può prestare `&mut Workspace` senza aliasing.
     pub fn flush_indexes(&mut self) -> Vec<PluginError> {
+        let mut indexes = std::mem::take(&mut self.indexes);
         let mut errors = Vec::new();
-        for index in self.indexes.iter_mut() {
-            if let Err(e) = index.flush() {
+        for (id, index) in indexes.iter_mut() {
+            let mut host = KernelHost {
+                ws: self,
+                plugin: id,
+            };
+            if let Err(e) = index.flush(&mut host) {
                 errors.push(e);
             }
         }
+        // Indici registrati *durante* il flush si accodano in fondo (simmetria
+        // con `deliver_to_handlers`: nessun percorso può perdere una
+        // registrazione solo perché è arrivata nel momento sbagliato).
+        let registered_meanwhile = std::mem::take(&mut self.indexes);
+        self.indexes = indexes;
+        self.indexes.extend(registered_meanwhile);
         errors
+    }
+
+    // --- view dichiarative -------------------------------------------------
+
+    /// Registra un [`ViewProvider`] sotto un id, dichiarando **quanto ci si
+    /// fida** di ciò che produce.
+    ///
+    /// `id` è l'identità del provider, come per gli handler e gli indici:
+    /// determina lo spazio dati che l'[`HostApi`] gli concede.
+    pub fn register_view_provider(
+        &mut self,
+        id: impl Into<String>,
+        trust: Trust,
+        provider: Box<dyn ViewProvider>,
+    ) {
+        self.views.push((id.into(), trust, provider));
+    }
+
+    /// Le view offerte dai provider registrati, in ordine di registrazione.
+    pub fn views(&self) -> Vec<ViewSpec> {
+        self.views.iter().flat_map(|(_, _, p)| p.views()).collect()
+    }
+
+    /// Rende una view e restituisce il suo albero di UI.
+    ///
+    /// **È il punto di enforcement del confine di fiducia della UI.** Ogni
+    /// albero che entra nell'host passa da qui, e da un provider non fidato le
+    /// varianti con contenuto attivo (`Html`, `WebView`) vengono rifiutate a
+    /// qualunque profondità. Oggi tutti i provider registrabili sono fidati e la
+    /// validazione è un no-op: il punto esiste **prima** del primo non fidato,
+    /// perché aggiungerlo dopo significherebbe cercarlo fra N chiamanti.
+    pub fn render_view(&mut self, view: &str) -> std::result::Result<UiNode, PluginError> {
+        let at = self.view_owner(view)?;
+        // I provider escono dal workspace per la durata della chiamata, così
+        // `KernelHost` può prestare `&mut Workspace` senza aliasing (stessa
+        // manovra del dispatch degli eventi).
+        let mut views = std::mem::take(&mut self.views);
+        let (rendered, trust) = {
+            let (id, trust, provider) = &mut views[at];
+            let host = KernelHost {
+                ws: self,
+                plugin: id,
+            };
+            (provider.render_view(view, &host), *trust)
+        };
+        self.restore_views(views);
+        let tree = rendered?;
+        guard_ui(trust, &tree)?;
+        Ok(tree)
+    }
+
+    /// Consegna un'azione della UI al provider della view e restituisce il suo
+    /// aggiornamento. L'albero eventualmente contenuto in
+    /// [`ViewUpdate::Replace`] passa dalla stessa validazione di
+    /// [`render_view`](Workspace::render_view): un provider non fidato non può
+    /// iniettare contenuto attivo *in risposta a un click* invece che al
+    /// rendering.
+    pub fn view_action(
+        &mut self,
+        view: &str,
+        action: UiAction,
+    ) -> std::result::Result<ViewUpdate, PluginError> {
+        let at = self.view_owner(view)?;
+        let mut views = std::mem::take(&mut self.views);
+        let (updated, trust) = {
+            let (id, trust, provider) = &mut views[at];
+            let mut host = KernelHost {
+                ws: self,
+                plugin: id,
+            };
+            (provider.on_action(view, action, &mut host), *trust)
+        };
+        self.restore_views(views);
+        let update = updated?;
+        if let ViewUpdate::Replace { root } = &update {
+            guard_ui(trust, root)?;
+        }
+        // Un handler può aver emesso eventi scrivendo durante `on_action`.
+        self.dispatch_pending();
+        Ok(update)
+    }
+
+    /// Chi possiede una view, per posizione. `UnknownView` se nessuno.
+    fn view_owner(&self, view: &str) -> std::result::Result<usize, PluginError> {
+        self.views
+            .iter()
+            .position(|(_, _, p)| p.views().iter().any(|spec| spec.id == view))
+            .ok_or_else(|| PluginError::UnknownView(view.to_string()))
+    }
+
+    /// Rimette i provider al loro posto, in coda a quelli registrati nel
+    /// frattempo (simmetria con `deliver_to_handlers` e `flush_indexes`).
+    fn restore_views(&mut self, views: Vec<(String, Trust, Box<dyn ViewProvider>)>) {
+        let registered_meanwhile = std::mem::take(&mut self.views);
+        self.views = views;
+        self.views.extend(registered_meanwhile);
     }
 
     // --- eventi ------------------------------------------------------------
@@ -893,6 +1059,24 @@ impl Workspace {
 
     // --- storage persistente dei plugin ------------------------------------
 
+    /// La radice dello spazio dati di un plugin, **come cartella del
+    /// filesystem**.
+    ///
+    /// È un varco per il codice nativo, e per questo è un metodo del workspace
+    /// e non una capacità dell'[`HostApi`]: `data_*` nomina blob, non file, ed è
+    /// tutto ciò che un plugin WASM avrà. Un provider nativo che avvolge un
+    /// motore con un proprio formato su disco (tantivy mmappa i suoi segmenti e
+    /// li rilegge quando gli pare, anche dai thread di merge) ha bisogno di una
+    /// vera cartella: questa è quella cartella, **dentro lo stesso recinto** di
+    /// tutto il resto. A M5 l'equivalente per un componente è un preopen WASI
+    /// sulla stessa radice.
+    ///
+    /// Rifiuta un id che non sia un nome semplice, con la stessa regola dei
+    /// path di `data_*`: il recinto è uno.
+    pub fn plugin_data_dir(&self, plugin: &str) -> std::result::Result<Utf8PathBuf, PluginError> {
+        self.plugin_data_path(plugin, "")
+    }
+
     /// La radice dello spazio dati di un plugin.
     fn plugin_data_root(&self, plugin: &str) -> Utf8PathBuf {
         self.vault
@@ -936,6 +1120,19 @@ impl Workspace {
             path.push(comp);
         }
         Ok(path)
+    }
+}
+
+/// La validazione del confine di fiducia della UI, in un posto solo.
+///
+/// Da un provider fidato passa tutto; da uno non fidato l'albero deve essere
+/// interamente dichiarativo. La funzione è banale **di proposito**: il valore non
+/// è nell'algoritmo (sta in [`UiNode::validate_untrusted`]), è nel fatto che
+/// esista un unico varco attraverso cui gli alberi entrano.
+fn guard_ui(trust: Trust, tree: &UiNode) -> std::result::Result<(), PluginError> {
+    match trust {
+        Trust::Trusted => Ok(()),
+        Trust::Untrusted => tree.validate_untrusted(),
     }
 }
 

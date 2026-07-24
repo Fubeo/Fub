@@ -1,110 +1,420 @@
 //! Conformità abi ↔ WIT (vivo da M2, freeze a M4).
 //!
 //! Questo test rende **verificabile** la "regola d'oro": ogni tipo che attraversa
-//! una firma di trait deve avere una controparte in `wit/fubmd/abi.wit`. La
-//! pressione è su **tre** direzioni:
+//! una firma di trait deve avere una controparte in `wit/fubmd/abi.wit`, con la
+//! **stessa forma** — non solo con lo stesso nome. Quattro pressioni:
 //!
 //! 1. **Il WIT deve essere valido** — il file viene dato in pasto a `wit-parser`.
 //!    Un contratto che non parsa è un test rosso, non un file di testo che
-//!    "sembra giusto". (È il criterio di chiusura del punto 1 del piano di
-//!    aggiustamento: prima di questo test il WIT era invalido e il test verde.)
-//! 2. **Drift lato Rust** → i match/destructuring esaustivi qui sotto NON compilano
-//!    se un enum guadagna una variante o un campo cambia nome: il compilatore
-//!    obbliga ad aggiornare questo file (e quindi a riflettere il cambiamento nel
-//!    WIT).
-//! 3. **Drift lato WIT, nelle due direzioni** — il confronto è fra **insiemi di
-//!    nomi dichiarati** estratti dal parse, non fra sottostringhe del sorgente.
-//!    Un tipo/caso/campo atteso e assente fallisce; un tipo/caso/campo dichiarato
-//!    nel WIT e ignoto all'abi fallisce ugualmente (codice morto del contratto).
+//!    "sembra giusto".
+//! 2. **Drift lato Rust** → i match e i destructuring esaustivi qui sotto NON
+//!    compilano se un enum guadagna una variante o un record un campo; e le
+//!    firme delle funzioni sono **cast dei metodi dei trait a puntatore a
+//!    funzione**, quindi non compilano se un parametro o un tipo di ritorno
+//!    cambia.
+//! 3. **Drift lato WIT, nelle due direzioni** — si confrontano gli **insiemi
+//!    ordinati di nomi e i tipi** estratti dal parse: campi di record, casi di
+//!    variant col tipo del payload, destinazioni degli alias, parametri e
+//!    risultati di ogni funzione. Un tipo dichiarato nel contratto e mai
+//!    rivendicato dall'abi fallisce ugualmente (contratto morto).
+//! 4. **`host` è eliso** — nessuna funzione del WIT può avere un parametro
+//!    `host`: le capacità sono importate dal world, non passate a mano. Le firme
+//!    Rust invece ce l'hanno, e il test verifica che spariscano *esattamente lì*.
 //!
-//! **Perché non basta il substring matching** (com'era prima): `wit.contains("tag")`
-//! è vero grazie a `inline-tag-ref`, `wit.contains("text")` grazie a `full-text`.
-//! Metà dei nomi risultava "coperta" gratis, e nessun campo era davvero verificato.
+//! # Da dove vengono i tipi attesi
+//!
+//! Non sono scritti a mano. `wit(&campo)` deduce la forma WIT **dal tipo Rust
+//! del campo destrutturato** ([`WitType`]): se `SearchHit::score` diventasse
+//! `f64`, l'attesa diventerebbe `f64` e il confronto col contratto (`f32`)
+//! fallirebbe. Lo stesso per le funzioni: [`WitFn`] deriva parametri e risultato
+//! dal tipo del puntatore a funzione, che a sua volta è vincolato al metodo del
+//! trait dal cast. È il "non compila su divergenza" chiesto dal piano, ottenuto
+//! senza generare codice.
+//!
+//! # Alberi ricorsivi
+//!
+//! I tipi che al confine viaggiano come **arena** (`block`, `inline`, `ui-node`,
+//! `document-tree`, `ui-tree`, `span`) si confrontano con
+//! [`fubmd_abi::arena`], che è la loro forma al confine *scritta in Rust* — e la
+//! catena verso gli alberi nativi la tiene il compilatore, perché
+//! `DocumentTree::flatten`/`rebuild` sono match esaustivi su entrambi i lati
+//! (round-trip provato in `arena`). Prima esisteva solo la prosa nei commenti.
 //!
 //! `wit-parser` è una **dev-dependency**: l'invariante architetturale di
-//! `fubmd-abi` riguarda le dipendenze normali (nulla di markdown/tauri/wasm nel
-//! grafo di build della libreria), ed è protetta dal suo test in
+//! `fubmd-abi` riguarda le dipendenze normali, ed è protetta da
 //! `tests/dependency_invariant.rs`.
 //!
-//! Limite noto, dichiarato: si confrontano **nomi**, non ancora **tipi** dei campi
-//! e firme delle funzioni (unica eccezione: gli alias, sotto, dove il tipo *è*
-//! l'informazione). L'estensione ai tipi è prevista a
-//! [M4](../../../docs/milestones/M4-wit-hardening.md).
+//! Limite noto, dichiarato: l'**ordine** dei casi di un variant è confrontato con
+//! l'ordine in cui sono elencati qui, non con quello dell'enum Rust (il
+//! compilatore garantisce che ci siano tutti, non che siano in fila). Riordinare
+//! il WIT è rosso; riordinare l'enum Rust senza toccare questo file, no.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
 
+use fubmd_abi::arena::{self, BlockRef, InlineRef, UiRef};
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Event, EventKind, EventMask};
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
-use fubmd_abi::model::{
-    Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
+use fubmd_abi::format::{
+    FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext, RenderOptions,
 };
+use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span, Tag};
 use fubmd_abi::traits::{
-    BacklinkRef, CommandOutcome, CommandSpec, IndexQuery, IndexResult, JobId, JobSpec,
-    PluginManifest, PluginPermissions, SearchHit, ViewPlacement, ViewSpec,
+    BacklinkRef, CommandOutcome, CommandProvider, CommandSpec, EventHandler, HostApi,
+    IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, Plugin, PluginManifest,
+    PluginPermissions, SearchHit, ViewPlacement, ViewProvider, ViewSpec,
 };
 use fubmd_abi::ui::{ActionId, Axis, Intent, UiAction, UiNode, ViewUpdate};
 
 // CARGO_MANIFEST_DIR = crates/fubmd-abi ; il contratto è alla radice del repo.
 const WIT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../wit/fubmd/abi.wit");
 
+/// Segnaposto per il ricevitore (`&self`): non attraversa il confine.
+const SELF: &str = "«self»";
+/// Segnaposto per l'`HostApi`: nelle firme Rust c'è, nel WIT **non deve
+/// esserci** — è importato dal world.
+const HOST: &str = "«host»";
+
 // ---------------------------------------------------------------------------
-// Il WIT, parsato: nomi DICHIARATI, non sottostringhe
+// La forma WIT di un tipo Rust, dedotta dal tipo
 // ---------------------------------------------------------------------------
 
-/// Un tipo dichiarato nel WIT, ridotto a ciò che questo test confronta.
+/// Come un tipo Rust si scrive nel WIT.
+///
+/// È il cuore del test: implementarla per un tipo è **dichiarare la sua forma al
+/// confine**, e un tipo nuovo in una firma senza questa impl non compila —
+/// quindi non passa inosservato.
+trait WitType {
+    fn wit() -> String;
+}
+
+/// La forma WIT del tipo di `v`. Si passa il valore e non il tipo perché così il
+/// tipo lo deduce il compilatore dal campo destrutturato: nessuna occasione di
+/// scriverne uno diverso da quello vero.
+fn wit<T: WitType + ?Sized>(_v: &T) -> String {
+    T::wit()
+}
+
+/// La forma WIT di un tipo di cui non si ha un valore sotto mano.
+fn wit_of<T: WitType + ?Sized>() -> String {
+    T::wit()
+}
+
+macro_rules! wit_type {
+    ($($ty:ty => $name:expr),+ $(,)?) => {
+        $(impl WitType for $ty {
+            fn wit() -> String {
+                $name.to_string()
+            }
+        })+
+    };
+}
+
+wit_type! {
+    // Primitivi e stringhe.
+    bool => "bool",
+    u8 => "u8",
+    u16 => "u16",
+    u32 => "u32",
+    u64 => "u64",
+    f32 => "f32",
+    f64 => "f64",
+    str => "string",
+    String => "string",
+    // L'unità: nel WIT un `result` senza ok si scrive `result<_, e>`, e una
+    // funzione che non restituisce niente non ha risultato affatto.
+    () => "_",
+    // Il JSON libero (frontmatter, attrs, args, payload, storage) attraversa il
+    // confine come stringa: è la scelta deliberata dell'escape hatch.
+    serde_json::Value => "json",
+    serde_json::Map<String, serde_json::Value> => "json",
+
+    // Alias del contratto: newtype qui, `type x = ...` là.
+    DocId => "doc-id",
+    Frontmatter => "frontmatter",
+    ActionId => "action-id",
+    JobId => "job-id",
+    EventMask => "event-mask",
+    BlockRef => "block-ref",
+    InlineRef => "inline-ref",
+    UiRef => "ui-ref",
+
+    // Record e variant del modello.
+    Span => "span",
+    arena::Span => "span",
+    Heading => "heading",
+    Tag => "tag",
+    Link => "link",
+    LinkTarget => "link-target",
+    DocumentModel => "document-model",
+    arena::Block => "block",
+    arena::Inline => "inline",
+    arena::UiNode => "ui-node",
+    arena::DocumentTree => "document-tree",
+    arena::UiTree => "ui-tree",
+
+    // UI: al confine un albero intero è la sua arena.
+    UiNode => "ui-tree",
+    Axis => "axis",
+    Intent => "intent",
+    UiAction => "ui-action",
+    ViewUpdate => "view-update",
+
+    // Il resto del contratto.
+    FormatDescriptor => "format-descriptor",
+    FormatCapabilities => "format-capabilities",
+    ParseContext => "parse-context",
+    RenderOptions => "render-options",
+    FormatError => "format-error",
+    PluginError => "plugin-error",
+    Event => "event",
+    EventKind => "event-kind",
+    JobSpec => "job-spec",
+    CommandSpec => "command-spec",
+    CommandOutcome => "command-outcome",
+    ViewSpec => "view-spec",
+    ViewPlacement => "view-placement",
+    IndexQuery => "index-query",
+    IndexResult => "index-result",
+    BacklinkRef => "backlink-ref",
+    SearchHit => "search-hit",
+    PluginManifest => "plugin-manifest",
+    PluginPermissions => "plugin-permissions",
+
+    // Ciò che NON attraversa il confine: il ricevitore e le capacità dell'host.
+    dyn HostApi => HOST,
+    dyn FormatProvider => SELF,
+    dyn CommandProvider => SELF,
+    dyn ViewProvider => SELF,
+    dyn IndexProvider => SELF,
+    dyn EventHandler => SELF,
+    dyn Plugin => SELF,
+}
+
+impl<T: WitType + ?Sized> WitType for &T {
+    fn wit() -> String {
+        T::wit()
+    }
+}
+
+impl<T: WitType + ?Sized> WitType for &mut T {
+    fn wit() -> String {
+        T::wit()
+    }
+}
+
+impl<T: WitType> WitType for Option<T> {
+    fn wit() -> String {
+        format!("option<{}>", T::wit())
+    }
+}
+
+impl<T: WitType> WitType for Vec<T> {
+    fn wit() -> String {
+        format!("list<{}>", T::wit())
+    }
+}
+
+impl<T: WitType> WitType for [T] {
+    fn wit() -> String {
+        format!("list<{}>", T::wit())
+    }
+}
+
+impl<T: WitType, E: WitType> WitType for Result<T, E> {
+    fn wit() -> String {
+        format!("result<{}, {}>", T::wit(), E::wit())
+    }
+}
+
+/// Gli alberi nativi che al confine diventano l'**arena intera** e non una lista
+/// di indici.
+///
+/// Serve un trait a parte perché la stessa `Vec<Block>` significa due cose
+/// diverse a due profondità diverse: il corpo di un documento *è* l'arena
+/// (`document-tree`), i figli di una citazione sono indici dentro di essa
+/// (`list<block-ref>`, e quelli li porta `arena::Block`). Restando un trait, il
+/// vincolo è comunque sul tipo: se `DocumentModel::body` cambiasse tipo, questa
+/// impl non ci sarebbe e il test non compilerebbe.
+trait TreeAtBoundary {
+    fn wit_tree() -> String;
+}
+
+impl TreeAtBoundary for Vec<fubmd_abi::model::Block> {
+    fn wit_tree() -> String {
+        "document-tree".to_string()
+    }
+}
+
+fn wit_tree<T: TreeAtBoundary + ?Sized>(_v: &T) -> String {
+    T::wit_tree()
+}
+
+// ---------------------------------------------------------------------------
+// La firma WIT di un metodo, dedotta dal puntatore a funzione
+// ---------------------------------------------------------------------------
+
+/// Una firma come il WIT la vedrebbe: parametri (ricevitore e `host` esclusi) e
+/// risultato.
+struct RustSig {
+    params: Vec<String>,
+    result: Option<String>,
+    /// La firma Rust aveva un `host` da elidere?
+    has_host: bool,
+}
+
+/// Un metodo di trait, visto come puntatore a funzione.
+trait WitFn {
+    fn sig() -> RustSig;
+}
+
+/// Costruisce la firma scartando il ricevitore e l'host.
+fn sig_from(all: Vec<String>, result: String) -> RustSig {
+    let mut it = all.into_iter();
+    let receiver = it.next().expect("un metodo ha almeno il ricevitore");
+    assert!(
+        receiver == SELF || receiver == HOST,
+        "il primo parametro dovrebbe essere il ricevitore, invece è `{receiver}`: \
+         questo test va chiamato con un metodo di trait, non con una funzione libera"
+    );
+    let mut params = Vec::new();
+    let mut has_host = false;
+    for ty in it {
+        if ty == HOST {
+            has_host = true;
+            continue;
+        }
+        assert_ne!(ty, SELF, "un provider non può comparire fra i parametri");
+        params.push(ty);
+    }
+    RustSig {
+        params,
+        result: (result != "_").then_some(result),
+        has_host,
+    }
+}
+
+macro_rules! wit_fn {
+    ($($p:ident),+) => {
+        impl<$($p: WitType,)+ R: WitType> WitFn for fn($($p),+) -> R {
+            fn sig() -> RustSig {
+                sig_from(vec![$($p::wit()),+], R::wit())
+            }
+        }
+    };
+}
+
+wit_fn!(A);
+wit_fn!(A, B);
+wit_fn!(A, B, C);
+wit_fn!(A, B, C, D);
+
+/// I due modi in cui l'`HostApi` compare in una firma Rust. Sono scritti con
+/// lifetime `'static` solo perché un puntatore a funzione con lifetime elisi
+/// sarebbe higher-ranked, e un tipo higher-ranked non può implementare [`WitFn`];
+/// il cast dal metodo del trait resta valido, ed è quello che vincola la firma.
+type Host = &'static mut dyn HostApi;
+type HostRef = &'static dyn HostApi;
+
+// ---------------------------------------------------------------------------
+// Il WIT, parsato: nomi e tipi DICHIARATI, non sottostringhe
+// ---------------------------------------------------------------------------
+
+/// La forma di un tipo dichiarato nel WIT, ridotta a ciò che si confronta.
+enum Shape {
+    /// Campi in ordine: nome → tipo.
+    Record(Vec<(String, String)>),
+    /// Casi in ordine: nome → tipo del payload (`None` = caso nudo).
+    Variant(Vec<(String, Option<String>)>),
+    /// Casi di un `enum`, in ordine.
+    Enum(Vec<String>),
+    /// Destinazione di un alias (`type job-id = u64` → `u64`).
+    Alias(String),
+    /// Qualunque altra cosa: se compare, `finish` la segnala come non rivendicata.
+    Other,
+}
+
+impl Shape {
+    fn kind(&self) -> &'static str {
+        match self {
+            Shape::Record(_) => "record",
+            Shape::Variant(_) => "variant",
+            Shape::Enum(_) => "enum",
+            Shape::Alias(_) => "alias",
+            Shape::Other => "altro",
+        }
+    }
+}
+
 struct Decl {
-    /// `record` | `variant` | `enum` | `flags` | `type` | `list` | …
-    kind: &'static str,
-    /// Campi di un record, casi di un variant/enum. Vuoto per gli alias.
-    members: BTreeSet<String>,
-    /// Destinazione, se è un alias (`type job-id = u64` → `u64`).
-    alias: Option<String>,
+    shape: Shape,
     /// Interfaccia che lo dichiara (solo per i messaggi d'errore).
     interface: String,
+}
+
+/// Una funzione dichiarata nel WIT.
+struct WitSig {
+    params: Vec<(String, String)>,
+    result: Option<String>,
 }
 
 struct Wit {
     /// Tipi dichiarati (i `use` di altre interfacce sono esclusi: sono
     /// importazioni, non dichiarazioni).
     types: BTreeMap<String, Decl>,
-    /// Interfaccia → funzioni dichiarate.
-    functions: BTreeMap<String, BTreeSet<String>>,
+    /// Interfaccia → funzioni dichiarate, con la loro firma.
+    functions: BTreeMap<String, BTreeMap<String, WitSig>>,
     package: String,
     /// world → (interfacce importate, interfacce esportate).
     worlds: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)>,
 
     /// Tipi già confrontati: ciò che resta a fine test è contratto morto.
     covered_types: BTreeSet<String>,
-    /// Interfacce di cui si sono già confrontate le funzioni.
-    covered_ifaces: BTreeSet<String>,
+    /// Interfaccia → funzioni già confrontate.
+    covered_fns: BTreeMap<String, BTreeSet<String>>,
     /// Divergenze accumulate: il test le riporta tutte insieme, non solo la prima.
     errors: Vec<String>,
 }
 
-/// Nome leggibile di un tipo WIT, per confrontare le destinazioni degli alias.
-fn type_name(resolve: &Resolve, ty: &Type) -> String {
-    match ty {
-        Type::Bool => "bool".into(),
-        Type::U8 => "u8".into(),
-        Type::U16 => "u16".into(),
-        Type::U32 => "u32".into(),
-        Type::U64 => "u64".into(),
-        Type::S8 => "s8".into(),
-        Type::S16 => "s16".into(),
-        Type::S32 => "s32".into(),
-        Type::S64 => "s64".into(),
-        Type::F32 => "f32".into(),
-        Type::F64 => "f64".into(),
-        Type::Char => "char".into(),
-        Type::String => "string".into(),
-        Type::ErrorContext => "error-context".into(),
-        Type::Id(id) => match &resolve.types[*id].name {
-            Some(name) => name.clone(),
-            None => format!("<anonimo:{}>", resolve.types[*id].kind.as_str()),
-        },
+/// Il nome WIT di un tipo: quello dichiarato se ce l'ha, altrimenti l'espressione
+/// (`option<list<inline-ref>>`, `result<_, plugin-error>`, …).
+fn render(resolve: &Resolve, ty: &Type) -> String {
+    let id = match ty {
+        Type::Bool => return "bool".into(),
+        Type::U8 => return "u8".into(),
+        Type::U16 => return "u16".into(),
+        Type::U32 => return "u32".into(),
+        Type::U64 => return "u64".into(),
+        Type::S8 => return "s8".into(),
+        Type::S16 => return "s16".into(),
+        Type::S32 => return "s32".into(),
+        Type::S64 => return "s64".into(),
+        Type::F32 => return "f32".into(),
+        Type::F64 => return "f64".into(),
+        Type::Char => return "char".into(),
+        Type::String => return "string".into(),
+        Type::ErrorContext => return "error-context".into(),
+        Type::Id(id) => *id,
+    };
+    let td = &resolve.types[id];
+    if let Some(name) = &td.name {
+        return name.clone();
+    }
+    let opt = |t: &Option<Type>| match t {
+        Some(t) => render(resolve, t),
+        None => "_".to_string(),
+    };
+    match &td.kind {
+        TypeDefKind::Option(t) => format!("option<{}>", render(resolve, t)),
+        TypeDefKind::List(t) => format!("list<{}>", render(resolve, t)),
+        TypeDefKind::Result(r) => format!("result<{}, {}>", opt(&r.ok), opt(&r.err)),
+        TypeDefKind::Tuple(t) => {
+            let inner: Vec<String> = t.types.iter().map(|t| render(resolve, t)).collect();
+            format!("tuple<{}>", inner.join(", "))
+        }
+        TypeDefKind::Type(t) => render(resolve, t),
+        other => format!("<anonimo:{}>", other.as_str()),
     }
 }
 
@@ -116,7 +426,7 @@ fn load(source: &str) -> Wit {
     }
 
     let mut types: BTreeMap<String, Decl> = BTreeMap::new();
-    let mut functions = BTreeMap::new();
+    let mut functions: BTreeMap<String, BTreeMap<String, WitSig>> = BTreeMap::new();
 
     for (_, iface) in resolve.interfaces.iter() {
         let iface_name = iface.name.clone().unwrap_or_else(|| "<inline>".into());
@@ -136,23 +446,30 @@ fn load(source: &str) -> Wit {
                 continue;
             }
 
-            let (members, alias): (BTreeSet<String>, Option<String>) = match &td.kind {
-                TypeDefKind::Record(r) => (r.fields.iter().map(|f| f.name.clone()).collect(), None),
-                TypeDefKind::Variant(v) => (v.cases.iter().map(|c| c.name.clone()).collect(), None),
-                TypeDefKind::Enum(e) => (e.cases.iter().map(|c| c.name.clone()).collect(), None),
-                TypeDefKind::Flags(f) => (f.flags.iter().map(|f| f.name.clone()).collect(), None),
-                TypeDefKind::Type(t) => (BTreeSet::new(), Some(type_name(&resolve, t))),
-                TypeDefKind::List(t) => (
-                    BTreeSet::new(),
-                    Some(format!("list<{}>", type_name(&resolve, t))),
+            let shape = match &td.kind {
+                TypeDefKind::Record(r) => Shape::Record(
+                    r.fields
+                        .iter()
+                        .map(|f| (f.name.clone(), render(&resolve, &f.ty)))
+                        .collect(),
                 ),
-                _ => (BTreeSet::new(), None),
+                TypeDefKind::Variant(v) => Shape::Variant(
+                    v.cases
+                        .iter()
+                        .map(|c| (c.name.clone(), c.ty.as_ref().map(|t| render(&resolve, t))))
+                        .collect(),
+                ),
+                TypeDefKind::Enum(e) => {
+                    Shape::Enum(e.cases.iter().map(|c| c.name.clone()).collect())
+                }
+                TypeDefKind::Type(t) => Shape::Alias(render(&resolve, t)),
+                TypeDefKind::List(t) => Shape::Alias(format!("list<{}>", render(&resolve, t))),
+                TypeDefKind::Option(t) => Shape::Alias(format!("option<{}>", render(&resolve, t))),
+                _ => Shape::Other,
             };
 
             let decl = Decl {
-                kind: td.kind.as_str(),
-                members,
-                alias,
+                shape,
                 interface: iface_name.clone(),
             };
             if let Some(prev) = types.insert(name.clone(), decl) {
@@ -166,10 +483,22 @@ fn load(source: &str) -> Wit {
             }
         }
 
-        functions.insert(
-            iface_name,
-            iface.functions.keys().cloned().collect::<BTreeSet<_>>(),
-        );
+        let sigs = iface
+            .functions
+            .iter()
+            .map(|(name, f)| {
+                let sig = WitSig {
+                    params: f
+                        .params
+                        .iter()
+                        .map(|p| (p.name.clone(), render(&resolve, &p.ty)))
+                        .collect(),
+                    result: f.result.as_ref().map(|t| render(&resolve, t)),
+                };
+                (name.clone(), sig)
+            })
+            .collect();
+        functions.insert(iface_name, sigs);
     }
 
     let package = resolve
@@ -214,8 +543,99 @@ fn load(source: &str) -> Wit {
         package,
         worlds,
         covered_types: BTreeSet::new(),
-        covered_ifaces: BTreeSet::new(),
+        covered_fns: BTreeMap::new(),
         errors: Vec::new(),
+    }
+}
+
+/// Confronta due elenchi ordinati di `nome → tipo`, e dice tutto ciò che non
+/// combacia: nomi assenti, nomi di troppo, tipi diversi, ordine diverso.
+///
+/// L'ordine conta: in un record è la disposizione canonica al confine, in un
+/// variant è il discriminante. Un riordino è un cambio di ABI, non di stile.
+fn diff(
+    what: &str,
+    owner: &str,
+    expected: &[(String, Option<String>)],
+    declared: &[(String, Option<String>)],
+) -> Vec<String> {
+    let mut errors = Vec::new();
+    let names = |v: &[(String, Option<String>)]| -> Vec<String> {
+        v.iter().map(|(n, _)| n.clone()).collect()
+    };
+    let exp_names: BTreeSet<String> = names(expected).into_iter().collect();
+    let dec_names: BTreeSet<String> = names(declared).into_iter().collect();
+
+    let missing: Vec<&String> = exp_names.difference(&dec_names).collect();
+    if !missing.is_empty() {
+        errors.push(format!("`{owner}`: {what} assenti dal WIT {missing:?}"));
+    }
+    let extra: Vec<&String> = dec_names.difference(&exp_names).collect();
+    if !extra.is_empty() {
+        errors.push(format!(
+            "`{owner}`: {what} nel WIT ma ignoti all'abi {extra:?} (contratto morto?)"
+        ));
+    }
+
+    let declared_ty: BTreeMap<&String, &Option<String>> =
+        declared.iter().map(|(n, t)| (n, t)).collect();
+    for (name, ty) in expected {
+        let Some(got) = declared_ty.get(name) else {
+            continue; // già segnalato come assente
+        };
+        if *got != ty {
+            let fmt = |t: &Option<String>| t.clone().unwrap_or_else(|| "(nessun payload)".into());
+            errors.push(format!(
+                "`{owner}.{name}`: nel WIT è `{}`, nell'abi è `{}`",
+                fmt(got),
+                fmt(ty)
+            ));
+        }
+    }
+
+    if missing.is_empty() && extra.is_empty() && names(expected) != names(declared) {
+        errors.push(format!(
+            "`{owner}`: l'ordine dei {what} diverge — abi {:?}, WIT {:?} \
+             (l'ordine è ABI: in un record è la disposizione, in un variant il discriminante)",
+            names(expected),
+            names(declared)
+        ));
+    }
+    errors
+}
+
+/// Un caso di `variant`, con il tipo del payload e — se il payload è un record
+/// dedicato — i suoi campi.
+struct Case {
+    name: &'static str,
+    payload: Option<String>,
+    fields: Option<Vec<(&'static str, String)>>,
+}
+
+/// Caso senza payload (`index-updated`, `none`).
+fn case(name: &'static str) -> Case {
+    Case {
+        name,
+        payload: None,
+        fields: None,
+    }
+}
+
+/// Caso con payload anonimo (`text(string)`, `emph(list<inline-ref>)`).
+fn case_ty(name: &'static str, payload: String) -> Case {
+    Case {
+        name,
+        payload: Some(payload),
+        fields: None,
+    }
+}
+
+/// Caso il cui payload è un record dedicato del WIT.
+fn case_rec(name: &'static str, ty: &'static str, fields: Vec<(&'static str, String)>) -> Case {
+    Case {
+        name,
+        payload: Some(ty.to_string()),
+        fields: Some(fields),
     }
 }
 
@@ -224,88 +644,156 @@ impl Wit {
         self.errors.push(msg);
     }
 
-    /// Confronta i membri dichiarati con quelli attesi, nelle due direzioni.
-    fn check(&mut self, name: &str, kind: &'static str, expected: &[&str]) {
+    fn shape_of(&mut self, name: &str, atteso: &'static str) -> Option<&Shape> {
         self.covered_types.insert(name.to_string());
         let Some(decl) = self.types.get(name) else {
-            self.err(format!("`{name}` ({kind}) manca dal WIT"));
-            return;
+            self.errors
+                .push(format!("`{name}` ({atteso}) manca dal WIT"));
+            return None;
         };
-        let got = decl.kind;
-        let declared = decl.members.clone();
-        if got != kind {
-            self.err(format!("`{name}`: nel WIT è `{got}`, nell'abi è `{kind}`"));
-        }
-        let expected: BTreeSet<String> = expected.iter().map(|s| s.to_string()).collect();
-        let missing: Vec<&String> = expected.difference(&declared).collect();
-        if !missing.is_empty() {
-            let missing = format!("{missing:?}");
-            self.err(format!("`{name}`: assenti dal WIT {missing}"));
-        }
-        let extra: Vec<&String> = declared.difference(&expected).collect();
-        if !extra.is_empty() {
-            let extra = format!("{extra:?}");
-            self.err(format!(
-                "`{name}`: nel WIT ma ignoti all'abi {extra} (contratto morto?)"
+        let got = decl.shape.kind();
+        if got != atteso {
+            self.errors.push(format!(
+                "`{name}`: nel WIT è `{got}`, nell'abi è `{atteso}`"
             ));
+            return None;
         }
+        self.types.get(name).map(|d| &d.shape)
     }
 
-    fn record(&mut self, name: &str, fields: &[&str]) {
-        self.check(name, "record", fields);
+    fn record(&mut self, name: &str, fields: &[(&'static str, String)]) {
+        let expected: Vec<(String, Option<String>)> = fields
+            .iter()
+            .map(|(n, t)| (n.to_string(), Some(t.clone())))
+            .collect();
+        let Some(Shape::Record(declared)) = self.shape_of(name, "record") else {
+            return;
+        };
+        let declared: Vec<(String, Option<String>)> = declared
+            .iter()
+            .map(|(n, t)| (n.clone(), Some(t.clone())))
+            .collect();
+        let errors = diff("campi", name, &expected, &declared);
+        self.errors.extend(errors);
     }
 
     fn enumeration(&mut self, name: &str, cases: &[&str]) {
-        self.check(name, "enum", cases);
+        let expected: Vec<(String, Option<String>)> =
+            cases.iter().map(|c| (c.to_string(), None)).collect();
+        let Some(Shape::Enum(declared)) = self.shape_of(name, "enum") else {
+            return;
+        };
+        let declared: Vec<(String, Option<String>)> =
+            declared.iter().map(|c| (c.clone(), None)).collect();
+        let errors = diff("casi", name, &expected, &declared);
+        self.errors.extend(errors);
     }
 
-    /// Un `variant` più i record di payload dei suoi casi: è qui che il
-    /// confronto smette di essere "il nome compare da qualche parte".
     fn variant(&mut self, name: &str, cases: &[Case]) {
-        let case_names: Vec<&str> = cases.iter().map(|c| c.case).collect();
-        self.check(name, "variant", &case_names);
+        let expected: Vec<(String, Option<String>)> = cases
+            .iter()
+            .map(|c| (c.name.to_string(), c.payload.clone()))
+            .collect();
+        if let Some(Shape::Variant(declared)) = self.shape_of(name, "variant") {
+            let declared = declared.clone();
+            let errors = diff("casi", name, &expected, &declared);
+            self.errors.extend(errors);
+        }
+        // I record di payload sono tipi a sé nel contratto: si verificano come
+        // tali, altrimenti resterebbero "non rivendicati" alla fine.
         for c in cases {
-            if let Some(rec) = &c.payload {
-                self.record(rec.ty, rec.fields);
+            if let (Some(ty), Some(fields)) = (&c.payload, &c.fields) {
+                self.record(ty, fields);
             }
         }
     }
 
-    /// Un alias (`type doc-id = string`): qui il *tipo* è l'informazione, e va
-    /// confrontato — è ciò che tiene onesti gli indici dell'arena (`u32`) e
-    /// la larghezza degli span al confine (`u64`).
-    fn alias(&mut self, name: &str, target: &str) {
-        self.covered_types.insert(name.to_string());
-        let Some(decl) = self.types.get(name) else {
-            self.err(format!("alias `{name}` manca dal WIT"));
+    /// Un alias (`type doc-id = string`): qui il *tipo* è l'informazione, ed è
+    /// ciò che tiene onesti gli indici dell'arena (`u32`) e la larghezza degli
+    /// span al confine (`u64`).
+    fn alias(&mut self, name: &str, target: String) {
+        let Some(Shape::Alias(got)) = self.shape_of(name, "alias") else {
             return;
         };
-        match decl.alias.as_deref() {
-            Some(t) if t == target => {}
-            Some(t) => self.err(format!(
-                "alias `{name}`: nel WIT è `{t}`, atteso `{target}`"
-            )),
-            None => self.err(format!("`{name}` nel WIT è `{}`, non un alias", decl.kind)),
+        if *got != target {
+            let got = got.clone();
+            self.err(format!(
+                "alias `{name}`: nel WIT è `{got}`, nell'abi è `{target}`"
+            ));
         }
     }
 
-    fn interface_functions(&mut self, iface: &str, expected: &[&str]) {
-        self.covered_ifaces.insert(iface.to_string());
-        let Some(funcs) = self.functions.get(iface).cloned() else {
-            self.err(format!("interfaccia `{iface}` assente dal WIT"));
+    /// Un'interfaccia di soli tipi: dichiara che non ci si aspetta funzioni.
+    fn types_only(&mut self, iface: &str) {
+        self.covered_fns.entry(iface.to_string()).or_default();
+    }
+
+    /// Confronta la firma completa di una funzione con quella del metodo Rust
+    /// da cui `f` è stato ricavato.
+    ///
+    /// `param_names` sono i nomi dei parametri nel WIT: i soli dati scritti a
+    /// mano qui, perché il nome di un parametro non esiste a livello di tipo. I
+    /// **tipi** vengono dal puntatore a funzione, e quello viene dal trait.
+    fn method<F: WitFn>(&mut self, iface: &str, name: &str, _f: F, param_names: &[&str]) {
+        self.covered_fns
+            .entry(iface.to_string())
+            .or_default()
+            .insert(name.to_string());
+
+        let rust = F::sig();
+        assert_eq!(
+            rust.params.len(),
+            param_names.len(),
+            "{iface}.{name}: la firma Rust ha {} parametri (host escluso) ma qui \
+             sono stati nominati {} — è questo test da aggiornare",
+            rust.params.len(),
+            param_names.len()
+        );
+
+        let Some(sig) = self.functions.get(iface).and_then(|f| f.get(name)) else {
+            self.err(format!("funzione `{iface}.{name}` assente dal WIT"));
             return;
         };
-        let expected: BTreeSet<String> = expected.iter().map(|s| s.to_string()).collect();
-        let missing: Vec<&String> = expected.difference(&funcs).collect();
-        if !missing.is_empty() {
-            let missing = format!("{missing:?}");
-            self.err(format!("interfaccia `{iface}`: funzioni assenti {missing}"));
+        let declared_params = sig.params.clone();
+        let declared_result = sig.result.clone();
+
+        // `host` non attraversa il confine: le capacità sono importate dal
+        // world, non passate come argomento. Qui si verifica *sul metodo che ce
+        // l'ha*, cioè dove una traduzione ingenua l'avrebbe tenuto; il
+        // controllo generale (nessuna funzione, in nessuna interfaccia) è in
+        // `finish`, e serve per le funzioni che questo test non nominasse.
+        if rust.has_host {
+            if let Some((n, t)) = declared_params.iter().find(|(n, _)| n == "host") {
+                self.err(format!(
+                    "funzione `{iface}.{name}`: il metodo Rust prende un `HostApi` e il WIT \
+                     dichiara `{n}: {t}` — la capacità è importata dal world, va ELISA"
+                ));
+            }
         }
-        let extra: Vec<&String> = funcs.difference(&expected).collect();
-        if !extra.is_empty() {
-            let extra = format!("{extra:?}");
+
+        let expected: Vec<(String, Option<String>)> = param_names
+            .iter()
+            .zip(&rust.params)
+            .map(|(n, t)| (n.to_string(), Some(t.clone())))
+            .collect();
+        let declared: Vec<(String, Option<String>)> = declared_params
+            .iter()
+            .map(|(n, t)| (n.clone(), Some(t.clone())))
+            .collect();
+        let errors = diff(
+            "parametri",
+            &format!("{iface}.{name}"),
+            &expected,
+            &declared,
+        );
+        self.errors.extend(errors);
+
+        if declared_result != rust.result {
+            let fmt = |r: &Option<String>| r.clone().unwrap_or_else(|| "(nessuno)".into());
             self.err(format!(
-                "interfaccia `{iface}`: funzioni nel WIT ma ignote all'abi {extra}"
+                "funzione `{iface}.{name}`: risultato `{}` nel WIT, `{}` nell'abi",
+                fmt(&declared_result),
+                fmt(&rust.result)
             ));
         }
     }
@@ -319,11 +807,44 @@ impl Wit {
                 "tipi dichiarati nel WIT e mai rivendicati dall'abi (contratto morto): {orphan:?}"
             ));
         }
+
+        // Nessuna funzione, in nessuna interfaccia, può nominare un parametro
+        // `host`: l'`HostApi` si importa, non si passa.
+        let intrusi: Vec<String> = self
+            .functions
+            .iter()
+            .flat_map(|(iface, sigs)| {
+                sigs.iter()
+                    .filter(|(_, sig)| sig.params.iter().any(|(p, _)| p == "host"))
+                    .map(move |(name, _)| format!("{iface}.{name}"))
+            })
+            .collect();
+        if !intrusi.is_empty() {
+            self.err(format!(
+                "funzioni del WIT con un parametro `host` {intrusi:?}: le capacità sono \
+                 importate dal world (`import host-api`), non passate come argomento"
+            ));
+        }
+
         let ifaces: BTreeSet<String> = self.functions.keys().cloned().collect();
-        let orphan: Vec<&String> = ifaces.difference(&self.covered_ifaces).collect();
+        let visited: BTreeSet<String> = self.covered_fns.keys().cloned().collect();
+        let orphan: Vec<&String> = ifaces.difference(&visited).collect();
         if !orphan.is_empty() {
             self.err(format!("interfacce del WIT mai verificate qui: {orphan:?}"));
         }
+        for (iface, sigs) in &self.functions {
+            let Some(checked) = self.covered_fns.get(iface) else {
+                continue;
+            };
+            let declared: BTreeSet<String> = sigs.keys().cloned().collect();
+            let orphan: Vec<&String> = declared.difference(checked).collect();
+            if !orphan.is_empty() {
+                self.errors.push(format!(
+                    "interfaccia `{iface}`: funzioni nel WIT ma ignote all'abi {orphan:?}"
+                ));
+            }
+        }
+
         if self.errors.is_empty() {
             Ok(())
         } else {
@@ -336,119 +857,109 @@ impl Wit {
 // Esaustività lato Rust: se un tipo abi cambia, questi non compilano più.
 // ---------------------------------------------------------------------------
 
-/// Un caso di `variant` WIT, con l'eventuale record del suo payload.
-struct Case {
-    case: &'static str,
-    payload: Option<Rec>,
-}
-struct Rec {
-    ty: &'static str,
-    fields: &'static [&'static str],
-}
-
-/// Caso con payload anonimo (`text(string)`) o senza payload.
-fn case(case: &'static str) -> Case {
-    Case {
-        case,
-        payload: None,
-    }
-}
-/// Caso il cui payload è un record dedicato del WIT.
-fn case_rec(case: &'static str, ty: &'static str, fields: &'static [&'static str]) -> Case {
-    Case {
-        case,
-        payload: Some(Rec { ty, fields }),
-    }
-}
-
-fn block_case(b: &Block) -> Case {
+fn block_case(b: &arena::Block) -> Case {
     match b {
-        Block::Heading {
+        arena::Block::Heading {
             level,
             inlines,
             span,
-        } => {
-            let _ = (level, inlines, span);
-            case_rec("heading", "block-heading", &["level", "inlines", "span"])
-        }
-        Block::Paragraph { inlines, span } => {
-            let _ = (inlines, span);
-            case_rec("paragraph", "block-paragraph", &["inlines", "span"])
-        }
-        Block::List {
+        } => case_rec(
+            "heading",
+            "block-heading",
+            vec![
+                ("level", wit(level)),
+                ("inlines", wit(inlines)),
+                ("span", wit(span)),
+            ],
+        ),
+        arena::Block::Paragraph { inlines, span } => case_rec(
+            "paragraph",
+            "block-paragraph",
+            vec![("inlines", wit(inlines)), ("span", wit(span))],
+        ),
+        arena::Block::List {
             ordered,
             items,
             span,
-        } => {
-            let _ = (ordered, items, span);
-            case_rec("list", "block-list", &["ordered", "items", "span"])
-        }
-        Block::CodeBlock { lang, code, span } => {
-            let _ = (lang, code, span);
-            case_rec("code-block", "block-code-block", &["lang", "code", "span"])
-        }
-        Block::Quote { blocks, span } => {
-            let _ = (blocks, span);
-            case_rec("quote", "block-quote", &["blocks", "span"])
-        }
-        Block::ThematicBreak { span } => {
-            let _ = span;
-            case("thematic-break")
-        }
-        Block::Custom {
+        } => case_rec(
+            "list",
+            "block-list",
+            vec![
+                ("ordered", wit(ordered)),
+                ("items", wit(items)),
+                ("span", wit(span)),
+            ],
+        ),
+        arena::Block::CodeBlock { lang, code, span } => case_rec(
+            "code-block",
+            "block-code-block",
+            vec![
+                ("lang", wit(lang)),
+                ("code", wit(code)),
+                ("span", wit(span)),
+            ],
+        ),
+        arena::Block::Quote { blocks, span } => case_rec(
+            "quote",
+            "block-quote",
+            vec![("blocks", wit(blocks)), ("span", wit(span))],
+        ),
+        arena::Block::ThematicBreak { span } => case_ty("thematic-break", wit(span)),
+        arena::Block::Custom {
             custom_kind,
             attrs,
             blocks,
             span,
-        } => {
-            let _ = (custom_kind, attrs, blocks, span);
-            case_rec(
-                "custom",
-                "block-custom",
-                &["custom-kind", "attrs", "blocks", "span"],
-            )
-        }
+        } => case_rec(
+            "custom",
+            "block-custom",
+            vec![
+                ("custom-kind", wit(custom_kind)),
+                ("attrs", wit(attrs)),
+                ("blocks", wit(blocks)),
+                ("span", wit(span)),
+            ],
+        ),
     }
 }
 
-fn inline_case(i: &Inline) -> Case {
+fn inline_case(i: &arena::Inline) -> Case {
     match i {
-        Inline::Text(s) => {
-            let _ = s;
-            case("text")
-        }
-        Inline::Emph(v) => {
-            let _ = v;
-            case("emph")
-        }
-        Inline::Strong(v) => {
-            let _ = v;
-            case("strong")
-        }
-        Inline::Code(s) => {
-            let _ = s;
-            case("code")
-        }
-        Inline::Link {
+        arena::Inline::Text(s) => case_ty("text", wit(s)),
+        arena::Inline::Emph(v) => case_ty("emph", wit(v)),
+        arena::Inline::Strong(v) => case_ty("strong", wit(v)),
+        arena::Inline::Code(s) => case_ty("code", wit(s)),
+        arena::Inline::Link {
             target,
             label,
             span,
-        } => {
-            let _ = (target, label, span);
-            case_rec("link", "inline-link", &["target", "label", "span"])
-        }
-        Inline::TagRef { name, span } => {
-            let _ = (name, span);
-            case_rec("tag-ref", "inline-tag-ref", &["name", "span"])
-        }
-        Inline::Custom {
+        } => case_rec(
+            "link",
+            "inline-link",
+            vec![
+                ("target", wit(target)),
+                ("label", wit(label)),
+                ("span", wit(span)),
+            ],
+        ),
+        arena::Inline::TagRef { name, span } => case_rec(
+            "tag-ref",
+            "inline-tag-ref",
+            vec![("name", wit(name)), ("span", wit(span))],
+        ),
+        arena::Inline::Custom {
             custom_kind,
             attrs,
             span,
-        } => {
-            let _ = (custom_kind, attrs, span);
-            case_rec("custom", "inline-custom", &["custom-kind", "attrs", "span"])
-        }
+        } => case_rec(
+            "custom",
+            "inline-custom",
+            vec![
+                ("custom-kind", wit(custom_kind)),
+                ("attrs", wit(attrs)),
+                ("span", wit(span)),
+            ],
+        ),
     }
 }
 
@@ -459,128 +970,125 @@ fn link_target_case(t: &LinkTarget) -> Case {
             heading,
             block,
             embed,
-        } => {
-            let _ = (page, heading, block, embed);
-            case_rec(
-                "wiki",
-                "link-target-wiki",
-                &["page", "heading", "block", "embed"],
-            )
-        }
-        LinkTarget::Url(s) => {
-            let _ = s;
-            case("url")
-        }
-        LinkTarget::Path(s) => {
-            let _ = s;
-            case("path")
-        }
+        } => case_rec(
+            "wiki",
+            "link-target-wiki",
+            vec![
+                ("page", wit(page)),
+                ("heading", wit(heading)),
+                ("block", wit(block)),
+                ("embed", wit(embed)),
+            ],
+        ),
+        LinkTarget::Url(s) => case_ty("url", wit(s)),
+        LinkTarget::Path(s) => case_ty("path", wit(s)),
     }
 }
 
-fn ui_node_case(n: &UiNode) -> Case {
+fn ui_node_case(n: &arena::UiNode) -> Case {
     match n {
-        UiNode::Stack { dir, gap, children } => {
-            let _ = (dir, gap, children);
-            case_rec("stack", "ui-stack", &["dir", "gap", "children"])
-        }
-        UiNode::Text { content } => {
-            let _ = content;
-            case("text")
-        }
-        UiNode::Heading { level, content } => {
-            let _ = (level, content);
-            case_rec("heading", "ui-heading", &["level", "content"])
-        }
-        UiNode::List { items } => {
-            let _ = items;
-            case("list")
-        }
-        UiNode::ListItem {
+        arena::UiNode::Stack { dir, gap, children } => case_rec(
+            "stack",
+            "ui-stack",
+            vec![
+                ("dir", wit(dir)),
+                ("gap", wit(gap)),
+                ("children", wit(children)),
+            ],
+        ),
+        arena::UiNode::Text { content } => case_ty("text", wit(content)),
+        arena::UiNode::Heading { level, content } => case_rec(
+            "heading",
+            "ui-heading",
+            vec![("level", wit(level)), ("content", wit(content))],
+        ),
+        arena::UiNode::List { items } => case_ty("list", wit(items)),
+        arena::UiNode::ListItem {
             title,
             subtitle,
             action,
-        } => {
-            let _ = (title, subtitle, action);
-            case_rec(
-                "list-item",
-                "ui-list-item",
-                &["title", "subtitle", "action"],
-            )
-        }
-        UiNode::Button {
+        } => case_rec(
+            "list-item",
+            "ui-list-item",
+            vec![
+                ("title", wit(title)),
+                ("subtitle", wit(subtitle)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiNode::Button {
             label,
             intent,
             action,
-        } => {
-            let _ = (label, intent, action);
-            case_rec("button", "ui-button", &["label", "intent", "action"])
-        }
-        UiNode::Html { html } => {
-            let _ = html;
-            case("html")
-        }
-        UiNode::WebView { url, height } => {
-            let _ = (url, height);
-            case_rec("web-view", "ui-web-view", &["url", "height"])
-        }
+        } => case_rec(
+            "button",
+            "ui-button",
+            vec![
+                ("label", wit(label)),
+                ("intent", wit(intent)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiNode::Html { html } => case_ty("html", wit(html)),
+        arena::UiNode::WebView { url, height } => case_rec(
+            "web-view",
+            "ui-web-view",
+            vec![("url", wit(url)), ("height", wit(height))],
+        ),
     }
 }
 
 fn view_update_case(v: &ViewUpdate) -> Case {
     match v {
         // Il payload è l'arena `ui-tree`, non un record omonimo del caso.
-        ViewUpdate::Replace { root } => {
-            let _ = root;
-            case("replace")
-        }
+        ViewUpdate::Replace { root } => case_ty("replace", wit(root)),
         ViewUpdate::None => case("none"),
-        ViewUpdate::Navigate { doc_id } => {
-            let _ = doc_id;
-            case("navigate")
-        }
+        ViewUpdate::Navigate { doc_id } => case_ty("navigate", wit(doc_id)),
     }
 }
 
 fn event_case(e: &Event) -> Case {
     match e {
-        Event::VaultOpened { root } => {
-            let _ = root;
-            case_rec("vault-opened", "event-vault-opened", &["root"])
-        }
-        Event::DocumentChanged { id } => {
-            let _ = id;
-            case_rec("document-changed", "event-document-changed", &["id"])
-        }
-        Event::DocumentRemoved { id } => {
-            let _ = id;
-            case_rec("document-removed", "event-document-removed", &["id"])
-        }
+        Event::VaultOpened { root } => case_rec(
+            "vault-opened",
+            "event-vault-opened",
+            vec![("root", wit(root))],
+        ),
+        Event::DocumentChanged { id } => case_rec(
+            "document-changed",
+            "event-document-changed",
+            vec![("id", wit(id))],
+        ),
+        Event::DocumentRemoved { id } => case_rec(
+            "document-removed",
+            "event-document-removed",
+            vec![("id", wit(id))],
+        ),
         // `from` è keyword WIT: nel contratto è `%from`, e l'identificatore
         // dichiarato resta `from`. Il campo Rust non si rinomina per una
         // questione di sintassi altrui.
-        Event::DocumentRenamed { from, to } => {
-            let _ = (from, to);
-            case_rec(
-                "document-renamed",
-                "event-document-renamed",
-                &["from", "to"],
-            )
-        }
+        Event::DocumentRenamed { from, to } => case_rec(
+            "document-renamed",
+            "event-document-renamed",
+            vec![("from", wit(from)), ("to", wit(to))],
+        ),
         Event::IndexUpdated => case("index-updated"),
         // idem per `result` (`%result` nel WIT).
-        Event::JobDone { id, job, result } => {
-            let _ = (id, job, result);
-            case_rec("job-done", "event-job-done", &["id", "job", "result"])
-        }
-        Event::Overflow { dropped } => {
-            let _ = dropped;
-            case_rec("overflow", "event-overflow", &["dropped"])
-        }
-        Event::Custom { topic, payload } => {
-            let _ = (topic, payload);
-            case_rec("custom", "event-custom", &["topic", "payload"])
-        }
+        Event::JobDone { id, job, result } => case_rec(
+            "job-done",
+            "event-job-done",
+            vec![("id", wit(id)), ("job", wit(job)), ("result", wit(result))],
+        ),
+        Event::Overflow { dropped } => case_rec(
+            "overflow",
+            "event-overflow",
+            vec![("dropped", wit(dropped))],
+        ),
+        Event::Custom { topic, payload } => case_rec(
+            "custom",
+            "event-custom",
+            vec![("topic", wit(topic)), ("payload", wit(payload))],
+        ),
     }
 }
 
@@ -599,85 +1107,45 @@ fn event_kind_name(k: EventKind) -> &'static str {
 
 fn index_query_case(q: &IndexQuery) -> Case {
     match q {
-        IndexQuery::Backlinks { target } => {
-            let _ = target;
-            case("backlinks")
-        }
-        IndexQuery::FullText { query, limit } => {
-            let _ = (query, limit);
-            case_rec("full-text", "index-query-full-text", &["query", "limit"])
-        }
-        IndexQuery::Custom { ns, query } => {
-            let _ = (ns, query);
-            case_rec("custom", "index-query-custom", &["ns", "query"])
-        }
+        IndexQuery::Backlinks { target } => case_ty("backlinks", wit(target)),
+        IndexQuery::FullText { query, limit } => case_rec(
+            "full-text",
+            "index-query-full-text",
+            vec![("query", wit(query)), ("limit", wit(limit))],
+        ),
+        IndexQuery::Custom { ns, query } => case_rec(
+            "custom",
+            "index-query-custom",
+            vec![("ns", wit(ns)), ("query", wit(query))],
+        ),
     }
 }
 
 fn index_result_case(r: &IndexResult) -> Case {
     match r {
-        IndexResult::Backlinks(v) => {
-            let _ = v;
-            case("backlinks")
-        }
-        IndexResult::Search(v) => {
-            let _ = v;
-            case("search")
-        }
-        IndexResult::Custom(v) => {
-            let _ = v;
-            case("custom")
-        }
+        IndexResult::Backlinks(v) => case_ty("backlinks", wit(v)),
+        IndexResult::Search(v) => case_ty("search", wit(v)),
+        IndexResult::Custom(v) => case_ty("custom", wit(v)),
     }
 }
 
 fn format_error_case(e: &FormatError) -> Case {
     match e {
-        FormatError::Parse(s) => {
-            let _ = s;
-            case("parse")
-        }
-        FormatError::Render(s) => {
-            let _ = s;
-            case("render")
-        }
-        FormatError::Serialize(s) => {
-            let _ = s;
-            case("serialize")
-        }
-        FormatError::Unsupported(s) => {
-            let _ = s;
-            case("unsupported")
-        }
+        FormatError::Parse(s) => case_ty("parse", wit(s)),
+        FormatError::Render(s) => case_ty("render", wit(s)),
+        FormatError::Serialize(s) => case_ty("serialize", wit(s)),
+        FormatError::Unsupported(s) => case_ty("unsupported", wit(s)),
     }
 }
 
 fn plugin_error_case(e: &PluginError) -> Case {
     match e {
-        PluginError::UnknownCommand(s) => {
-            let _ = s;
-            case("unknown-command")
-        }
-        PluginError::UnknownView(s) => {
-            let _ = s;
-            case("unknown-view")
-        }
-        PluginError::UnknownJob(s) => {
-            let _ = s;
-            case("unknown-job")
-        }
-        PluginError::BadArgs(s) => {
-            let _ = s;
-            case("bad-args")
-        }
-        PluginError::PermissionDenied(s) => {
-            let _ = s;
-            case("permission-denied")
-        }
-        PluginError::Internal(s) => {
-            let _ = s;
-            case("internal")
-        }
+        PluginError::UnknownCommand(s) => case_ty("unknown-command", wit(s)),
+        PluginError::UnknownView(s) => case_ty("unknown-view", wit(s)),
+        PluginError::UnknownJob(s) => case_ty("unknown-job", wit(s)),
+        PluginError::BadArgs(s) => case_ty("bad-args", wit(s)),
+        PluginError::PermissionDenied(s) => case_ty("permission-denied", wit(s)),
+        PluginError::Internal(s) => case_ty("internal", wit(s)),
     }
 }
 
@@ -712,73 +1180,74 @@ fn view_placement_name(p: ViewPlacement) -> &'static str {
 /// che `wit_conformance_actually_fails_on_drift` possa passarle un contratto
 /// alterato ad arte e verificare che diventi rossa.
 fn conform(source: &str) -> Result<(), String> {
-    let mut wit = load(source);
+    let mut contract = load(source);
 
-    assert_eq!(wit.package, "fubmd:abi@0.1.0", "nome del package");
+    assert_eq!(contract.package, "fubmd:abi@0.1.0", "nome del package");
 
     // --- variant/enum: un rappresentante per caso, esaustività dal compilatore
 
-    wit.variant(
+    let sp = arena::Span::default();
+    contract.variant(
         "block",
         &[
-            block_case(&Block::Heading {
+            block_case(&arena::Block::Heading {
                 level: 1,
                 inlines: vec![],
-                span: Span::EMPTY,
+                span: sp,
             }),
-            block_case(&Block::Paragraph {
+            block_case(&arena::Block::Paragraph {
                 inlines: vec![],
-                span: Span::EMPTY,
+                span: sp,
             }),
-            block_case(&Block::List {
+            block_case(&arena::Block::List {
                 ordered: false,
                 items: vec![],
-                span: Span::EMPTY,
+                span: sp,
             }),
-            block_case(&Block::CodeBlock {
+            block_case(&arena::Block::CodeBlock {
                 lang: None,
                 code: String::new(),
-                span: Span::EMPTY,
+                span: sp,
             }),
-            block_case(&Block::Quote {
+            block_case(&arena::Block::Quote {
                 blocks: vec![],
-                span: Span::EMPTY,
+                span: sp,
             }),
-            block_case(&Block::ThematicBreak { span: Span::EMPTY }),
-            block_case(&Block::Custom {
+            block_case(&arena::Block::ThematicBreak { span: sp }),
+            block_case(&arena::Block::Custom {
                 custom_kind: String::new(),
                 attrs: serde_json::Value::Null,
                 blocks: vec![],
-                span: Span::EMPTY,
+                span: sp,
             }),
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "inline",
         &[
-            inline_case(&Inline::Text(String::new())),
-            inline_case(&Inline::Emph(vec![])),
-            inline_case(&Inline::Strong(vec![])),
-            inline_case(&Inline::Code(String::new())),
-            inline_case(&Inline::Link {
+            inline_case(&arena::Inline::Text(String::new())),
+            inline_case(&arena::Inline::Emph(vec![])),
+            inline_case(&arena::Inline::Strong(vec![])),
+            inline_case(&arena::Inline::Code(String::new())),
+            inline_case(&arena::Inline::Link {
                 target: LinkTarget::wiki("p"),
                 label: None,
-                span: Span::EMPTY,
+                span: sp,
             }),
-            inline_case(&Inline::TagRef {
+            inline_case(&arena::Inline::TagRef {
                 name: String::new(),
-                span: Span::EMPTY,
+                span: sp,
             }),
-            inline_case(&Inline::Custom {
+            inline_case(&arena::Inline::Custom {
                 custom_kind: String::new(),
                 attrs: serde_json::Value::Null,
-                span: Span::EMPTY,
+                span: sp,
             }),
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "link-target",
         &[
             link_target_case(&LinkTarget::wiki("p")),
@@ -787,43 +1256,43 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "ui-node",
         &[
-            ui_node_case(&UiNode::Stack {
+            ui_node_case(&arena::UiNode::Stack {
                 dir: Axis::Row,
                 gap: 0,
                 children: vec![],
             }),
-            ui_node_case(&UiNode::Text {
+            ui_node_case(&arena::UiNode::Text {
                 content: String::new(),
             }),
-            ui_node_case(&UiNode::Heading {
+            ui_node_case(&arena::UiNode::Heading {
                 level: 1,
                 content: String::new(),
             }),
-            ui_node_case(&UiNode::List { items: vec![] }),
-            ui_node_case(&UiNode::ListItem {
+            ui_node_case(&arena::UiNode::List { items: vec![] }),
+            ui_node_case(&arena::UiNode::ListItem {
                 title: String::new(),
                 subtitle: None,
                 action: None,
             }),
-            ui_node_case(&UiNode::Button {
+            ui_node_case(&arena::UiNode::Button {
                 label: String::new(),
                 intent: Intent::Neutral,
                 action: ActionId(String::new()),
             }),
-            ui_node_case(&UiNode::Html {
+            ui_node_case(&arena::UiNode::Html {
                 html: String::new(),
             }),
-            ui_node_case(&UiNode::WebView {
+            ui_node_case(&arena::UiNode::WebView {
                 url: String::new(),
                 height: 0,
             }),
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "view-update",
         &[
             view_update_case(&ViewUpdate::Replace {
@@ -838,7 +1307,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "event",
         &[
             event_case(&Event::VaultOpened {
@@ -868,7 +1337,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "index-query",
         &[
             index_query_case(&IndexQuery::Backlinks {
@@ -885,7 +1354,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "index-result",
         &[
             index_result_case(&IndexResult::Backlinks(vec![])),
@@ -894,7 +1363,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "format-error",
         &[
             format_error_case(&FormatError::Parse(String::new())),
@@ -904,7 +1373,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    wit.variant(
+    contract.variant(
         "plugin-error",
         &[
             plugin_error_case(&PluginError::UnknownCommand(String::new())),
@@ -916,7 +1385,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    wit.enumeration(
+    contract.enumeration(
         "event-kind",
         [
             EventKind::VaultOpened,
@@ -931,14 +1400,14 @@ fn conform(source: &str) -> Result<(), String> {
         .map(event_kind_name)
         .as_slice(),
     );
-    wit.enumeration("axis", [Axis::Row, Axis::Column].map(axis_name).as_slice());
-    wit.enumeration(
+    contract.enumeration("axis", [Axis::Row, Axis::Column].map(axis_name).as_slice());
+    contract.enumeration(
         "intent",
         [Intent::Neutral, Intent::Primary, Intent::Danger]
             .map(intent_name)
             .as_slice(),
     );
-    wit.enumeration(
+    contract.enumeration(
         "view-placement",
         [
             ViewPlacement::LeftSidebar,
@@ -949,7 +1418,8 @@ fn conform(source: &str) -> Result<(), String> {
         .as_slice(),
     );
 
-    // --- record: destructuring esaustivo, un campo aggiunto non compila
+    // --- record: destructuring esaustivo, un campo aggiunto non compila; e il
+    //     tipo atteso lo deduce il compilatore dal campo stesso.
 
     let DocumentModel {
         id,
@@ -960,23 +1430,26 @@ fn conform(source: &str) -> Result<(), String> {
         tags,
         text,
     } = DocumentModel::empty(DocId::new("x.md"));
-    let _ = (id, frontmatter, body, outline, links, tags, text);
-    wit.record(
+    contract.record(
         "document-model",
         &[
-            "id",
-            "frontmatter",
-            "body",
-            "outline",
-            "links",
-            "tags",
-            "text",
+            ("id", wit(&id)),
+            ("frontmatter", wit(&frontmatter)),
+            // L'unico campo la cui forma al confine non è quella del suo tipo:
+            // l'albero diventa l'arena intera.
+            ("body", wit_tree(&body)),
+            ("outline", wit(&outline)),
+            ("links", wit(&links)),
+            ("tags", wit(&tags)),
+            ("text", wit(&text)),
         ],
     );
 
-    let Span { start, end } = Span::EMPTY;
-    let _ = (start, end);
-    wit.record("span", &["start", "end"]);
+    // Lo `span` del WIT è quello del confine (`u64`), non quello nativo
+    // (`usize`): la divergenza è deliberata e vive in `arena`, con le sue
+    // conversioni e i suoi test.
+    let arena::Span { start, end } = arena::Span::default();
+    contract.record("span", &[("start", wit(&start)), ("end", wit(&end))]);
 
     let Heading {
         level,
@@ -989,15 +1462,21 @@ fn conform(source: &str) -> Result<(), String> {
         slug: String::new(),
         span: Span::EMPTY,
     };
-    let _ = (level, text, slug, span);
-    wit.record("heading", &["level", "text", "slug", "span"]);
+    contract.record(
+        "heading",
+        &[
+            ("level", wit(&level)),
+            ("text", wit(&text)),
+            ("slug", wit(&slug)),
+            ("span", wit(&span)),
+        ],
+    );
 
     let Tag { name, span } = Tag {
         name: String::new(),
         span: Span::EMPTY,
     };
-    let _ = (name, span);
-    wit.record("tag", &["name", "span"]);
+    contract.record("tag", &[("name", wit(&name)), ("span", wit(&span))]);
 
     let Link {
         target,
@@ -1008,8 +1487,34 @@ fn conform(source: &str) -> Result<(), String> {
         span: Span::EMPTY,
         context: None,
     };
-    let _ = (target, span, context);
-    wit.record("link", &["target", "span", "context"]);
+    contract.record(
+        "link",
+        &[
+            ("target", wit(&target)),
+            ("span", wit(&span)),
+            ("context", wit(&context)),
+        ],
+    );
+
+    let arena::DocumentTree {
+        blocks,
+        inlines,
+        roots,
+    } = arena::DocumentTree::default();
+    contract.record(
+        "document-tree",
+        &[
+            ("blocks", wit(&blocks)),
+            ("inlines", wit(&inlines)),
+            ("roots", wit(&roots)),
+        ],
+    );
+
+    let arena::UiTree { nodes, root } = arena::UiTree {
+        nodes: Vec::new(),
+        root: UiRef(0),
+    };
+    contract.record("ui-tree", &[("nodes", wit(&nodes)), ("root", wit(&root))]);
 
     let FormatDescriptor {
         id,
@@ -1020,8 +1525,14 @@ fn conform(source: &str) -> Result<(), String> {
         name: String::new(),
         extensions: vec![],
     };
-    let _ = (id, name, extensions);
-    wit.record("format-descriptor", &["id", "name", "extensions"]);
+    contract.record(
+        "format-descriptor",
+        &[
+            ("id", wit(&id)),
+            ("name", wit(&name)),
+            ("extensions", wit(&extensions)),
+        ],
+    );
 
     let FormatCapabilities {
         wikilinks,
@@ -1030,10 +1541,15 @@ fn conform(source: &str) -> Result<(), String> {
         callouts,
         embeds,
     } = FormatCapabilities::default();
-    let _ = (wikilinks, tags, frontmatter, callouts, embeds);
-    wit.record(
+    contract.record(
         "format-capabilities",
-        &["wikilinks", "tags", "frontmatter", "callouts", "embeds"],
+        &[
+            ("wikilinks", wit(&wikilinks)),
+            ("tags", wit(&tags)),
+            ("frontmatter", wit(&frontmatter)),
+            ("callouts", wit(&callouts)),
+            ("embeds", wit(&embeds)),
+        ],
     );
 
     let ParseContext {
@@ -1041,17 +1557,22 @@ fn conform(source: &str) -> Result<(), String> {
         parse_tags,
         parse_wikilinks,
     } = ParseContext::default();
-    let _ = (doc_id, parse_tags, parse_wikilinks);
-    wit.record(
+    contract.record(
         "parse-context",
-        &["doc-id", "parse-tags", "parse-wikilinks"],
+        &[
+            ("doc-id", wit(&doc_id)),
+            ("parse-tags", wit(&parse_tags)),
+            ("parse-wikilinks", wit(&parse_wikilinks)),
+        ],
     );
 
     let RenderOptions {
         wikilinks_as_data_attrs,
     } = RenderOptions::default();
-    let _ = wikilinks_as_data_attrs;
-    wit.record("render-options", &["wikilinks-as-data-attrs"]);
+    contract.record(
+        "render-options",
+        &[("wikilinks-as-data-attrs", wit(&wikilinks_as_data_attrs))],
+    );
 
     let CommandSpec {
         id,
@@ -1062,12 +1583,17 @@ fn conform(source: &str) -> Result<(), String> {
         title: String::new(),
         keybinding: None,
     };
-    let _ = (id, title, keybinding);
-    wit.record("command-spec", &["id", "title", "keybinding"]);
+    contract.record(
+        "command-spec",
+        &[
+            ("id", wit(&id)),
+            ("title", wit(&title)),
+            ("keybinding", wit(&keybinding)),
+        ],
+    );
 
     let CommandOutcome { notify } = CommandOutcome { notify: None };
-    let _ = notify;
-    wit.record("command-outcome", &["notify"]);
+    contract.record("command-outcome", &[("notify", wit(&notify))]);
 
     let ViewSpec {
         id,
@@ -1078,15 +1604,23 @@ fn conform(source: &str) -> Result<(), String> {
         title: String::new(),
         placement: ViewPlacement::Bottom,
     };
-    let _ = (id, title, placement);
-    wit.record("view-spec", &["id", "title", "placement"]);
+    contract.record(
+        "view-spec",
+        &[
+            ("id", wit(&id)),
+            ("title", wit(&title)),
+            ("placement", wit(&placement)),
+        ],
+    );
 
     let BacklinkRef { source, context } = BacklinkRef {
         source: DocId::new("a"),
         context: None,
     };
-    let _ = (source, context);
-    wit.record("backlink-ref", &["source", "context"]);
+    contract.record(
+        "backlink-ref",
+        &[("source", wit(&source)), ("context", wit(&context))],
+    );
 
     let SearchHit {
         doc,
@@ -1099,25 +1633,39 @@ fn conform(source: &str) -> Result<(), String> {
         snippet: String::new(),
         highlights: Vec::new(),
     };
-    let _ = (doc, score, snippet, highlights);
-    wit.record("search-hit", &["doc", "score", "snippet", "highlights"]);
+    contract.record(
+        "search-hit",
+        &[
+            ("doc", wit(&doc)),
+            // La larghezza di un punteggio è parte del contratto: era il caso
+            // che il vecchio confronto per soli nomi non avrebbe visto.
+            ("score", wit(&score)),
+            ("snippet", wit(&snippet)),
+            ("highlights", wit(&highlights)),
+        ],
+    );
 
     let UiAction { action, payload } = UiAction {
         action: ActionId(String::new()),
         payload: serde_json::Value::Null,
     };
-    let _ = (action, payload);
-    wit.record("ui-action", &["action", "payload"]);
+    contract.record(
+        "ui-action",
+        &[("action", wit(&action)), ("payload", wit(&payload))],
+    );
 
     let PluginPermissions {
         read_vault,
         write_vault,
         network,
     } = PluginPermissions::default();
-    let _ = (read_vault, write_vault, network);
-    wit.record(
+    contract.record(
         "plugin-permissions",
-        &["read-vault", "write-vault", "network"],
+        &[
+            ("read-vault", wit(&read_vault)),
+            ("write-vault", wit(&write_vault)),
+            ("network", wit(&network)),
+        ],
     );
 
     let PluginManifest {
@@ -1131,105 +1679,326 @@ fn conform(source: &str) -> Result<(), String> {
         version: String::new(),
         permissions: PluginPermissions::default(),
     };
-    let _ = (id, name, version, permissions);
-    wit.record("plugin-manifest", &["id", "name", "version", "permissions"]);
+    contract.record(
+        "plugin-manifest",
+        &[
+            ("id", wit(&id)),
+            ("name", wit(&name)),
+            ("version", wit(&version)),
+            ("permissions", wit(&permissions)),
+        ],
+    );
 
     let JobSpec { job, payload } = JobSpec {
         job: String::new(),
         payload: serde_json::Value::Null,
     };
-    let _ = (job, payload);
-    wit.record("job-spec", &["job", "payload"]);
+    contract.record(
+        "job-spec",
+        &[("job", wit(&job)), ("payload", wit(&payload))],
+    );
 
-    // --- alias
+    // --- alias: la destinazione è dedotta dal tipo interno del newtype
 
     let DocId(path) = DocId::new("a");
-    let _ = path;
-    wit.alias("doc-id", "string");
+    contract.alias("doc-id", wit(&path));
 
     let Frontmatter(map) = Frontmatter::default();
-    let _ = map;
-    wit.alias("frontmatter", "json");
+    contract.alias("frontmatter", wit(&map));
 
     let ActionId(raw) = ActionId(String::new());
-    let _ = raw;
-    wit.alias("action-id", "string");
+    contract.alias("action-id", wit(&raw));
 
     let JobId(raw) = JobId(0);
-    let _ = raw;
-    wit.alias("job-id", "u64");
+    contract.alias("job-id", wit(&raw));
 
     let EventMask(kinds) = EventMask::all();
-    let _ = kinds;
-    wit.alias("event-mask", "list<event-kind>");
+    contract.alias("event-mask", wit(&kinds));
 
-    // Il JSON libero (frontmatter, attrs, args, storage) attraversa il confine
-    // come stringa: è la scelta deliberata dell'escape hatch.
-    wit.alias("json", "string");
+    let BlockRef(raw) = BlockRef::default();
+    contract.alias("block-ref", wit(&raw));
+    let InlineRef(raw) = InlineRef::default();
+    contract.alias("inline-ref", wit(&raw));
+    let UiRef(raw) = UiRef::default();
+    contract.alias("ui-ref", wit(&raw));
 
-    // --- rappresentazione al confine degli alberi ricorsivi (nessuna
-    // controparte Rust: gli alberi nativi restano alberi, l'arena vive nel
-    // proxy WASM). Vedi docs/architecture/traits.md.
+    // Il JSON libero attraversa il confine come stringa: è l'unico alias senza
+    // controparte Rust, ed è la scelta deliberata dell'escape hatch.
+    contract.alias("json", "string".to_string());
 
-    wit.alias("block-ref", "u32");
-    wit.alias("inline-ref", "u32");
-    wit.alias("ui-ref", "u32");
-    wit.record("document-tree", &["blocks", "inlines", "roots"]);
-    wit.record("ui-tree", &["nodes", "root"]);
+    // --- funzioni: firme complete, ricavate dai metodi dei trait
+    //
+    // Ogni riga fa due cose: il cast vincola la firma scritta a quella del
+    // trait (se il trait cambia, non compila), e da quella firma si deducono i
+    // tipi attesi nel WIT. `host` compare a sinistra e non a destra: è l'unica
+    // verifica dell'elisione.
 
-    // --- funzioni: la superficie dei trait
+    contract.types_only("json");
+    contract.types_only("model");
+    contract.types_only("ui");
+    contract.types_only("jobs");
+    contract.types_only("events");
+    contract.types_only("errors");
 
-    wit.interface_functions("json", &[]);
-    wit.interface_functions("model", &[]);
-    wit.interface_functions("ui", &[]);
-    wit.interface_functions("jobs", &[]);
-    wit.interface_functions("events", &[]);
-    wit.interface_functions("errors", &[]);
-    wit.interface_functions(
+    contract.method(
         "format",
-        &[
-            "descriptor",
-            "capabilities",
-            "parse",
-            "render-html",
-            "serialize",
-        ],
+        "descriptor",
+        <dyn FormatProvider>::descriptor as fn(&'static dyn FormatProvider) -> FormatDescriptor,
+        &[],
     );
-    wit.interface_functions("command", &["commands", "invoke"]);
-    wit.interface_functions(
+    contract.method(
+        "format",
+        "capabilities",
+        <dyn FormatProvider>::capabilities as fn(&'static dyn FormatProvider) -> FormatCapabilities,
+        &[],
+    );
+    contract.method(
+        "format",
+        "parse",
+        <dyn FormatProvider>::parse
+            as fn(
+                &'static dyn FormatProvider,
+                &'static str,
+                &'static ParseContext,
+            ) -> Result<DocumentModel, FormatError>,
+        &["source", "ctx"],
+    );
+    contract.method(
+        "format",
+        "render-html",
+        <dyn FormatProvider>::render_html
+            as fn(
+                &'static dyn FormatProvider,
+                &'static DocumentModel,
+                &'static RenderOptions,
+            ) -> Result<String, FormatError>,
+        &["model", "opts"],
+    );
+    contract.method(
+        "format",
+        "serialize",
+        <dyn FormatProvider>::serialize
+            as fn(
+                &'static dyn FormatProvider,
+                &'static DocumentModel,
+            ) -> Result<String, FormatError>,
+        &["model"],
+    );
+
+    contract.method(
+        "command",
+        "commands",
+        <dyn CommandProvider>::commands as fn(&'static dyn CommandProvider) -> Vec<CommandSpec>,
+        &[],
+    );
+    contract.method(
+        "command",
+        "invoke",
+        <dyn CommandProvider>::invoke
+            as fn(
+                &'static dyn CommandProvider,
+                &'static str,
+                serde_json::Value,
+                Host,
+            ) -> Result<CommandOutcome, PluginError>,
+        &["command", "args"],
+    );
+
+    contract.method(
+        "view",
+        "views",
+        <dyn ViewProvider>::views as fn(&'static dyn ViewProvider) -> Vec<ViewSpec>,
+        &[],
+    );
+    contract.method(
+        "view",
+        "render-view",
+        <dyn ViewProvider>::render_view
+            as fn(&'static dyn ViewProvider, &'static str, HostRef) -> Result<UiNode, PluginError>,
+        &["view"],
+    );
+    contract.method(
+        "view",
+        "on-action",
+        <dyn ViewProvider>::on_action
+            as fn(
+                &'static dyn ViewProvider,
+                &'static str,
+                UiAction,
+                Host,
+            ) -> Result<ViewUpdate, PluginError>,
+        &["view", "action"],
+    );
+
+    contract.method(
         "index",
-        &[
-            "on-document-indexed",
-            "on-document-removed",
-            "reconcile",
-            "flush",
-            "query",
-        ],
+        "activate",
+        <dyn IndexProvider>::activate
+            as fn(&'static mut dyn IndexProvider, Host) -> Result<(), PluginError>,
+        &[],
     );
-    wit.interface_functions("view", &["views", "render-view", "on-action"]);
-    wit.interface_functions(
+    contract.method(
+        "index",
+        "on-document-indexed",
+        <dyn IndexProvider>::on_document_indexed
+            as fn(&'static mut dyn IndexProvider, &'static DocumentModel),
+        &["doc"],
+    );
+    contract.method(
+        "index",
+        "on-document-removed",
+        <dyn IndexProvider>::on_document_removed
+            as fn(&'static mut dyn IndexProvider, &'static DocId),
+        &["id"],
+    );
+    contract.method(
+        "index",
+        "reconcile",
+        <dyn IndexProvider>::reconcile as fn(&'static mut dyn IndexProvider, &'static [DocId]),
+        &["ids"],
+    );
+    contract.method(
+        "index",
+        "flush",
+        <dyn IndexProvider>::flush
+            as fn(&'static mut dyn IndexProvider, Host) -> Result<(), PluginError>,
+        &[],
+    );
+    contract.method(
+        "index",
+        "query",
+        <dyn IndexProvider>::query
+            as fn(&'static dyn IndexProvider, IndexQuery) -> Result<IndexResult, PluginError>,
+        &["query"],
+    );
+
+    contract.method(
         "host-api",
-        &[
-            "read-document",
-            "write-document",
-            "list-documents",
-            "emit",
-            "spawn-job",
-            "storage-get",
-            "storage-set",
-            "data-read",
-            "data-write",
-            "data-remove",
-            "data-list",
-            "now-unix-millis",
-        ],
+        "read-document",
+        <dyn HostApi>::read_document
+            as fn(&'static dyn HostApi, &'static DocId) -> Result<String, PluginError>,
+        &["id"],
     );
-    wit.interface_functions("event-handler", &["subscribed", "handle"]);
-    wit.interface_functions("plugin", &["manifest", "activate", "deactivate", "run-job"]);
+    contract.method(
+        "host-api",
+        "write-document",
+        <dyn HostApi>::write_document
+            as fn(Host, &'static DocId, &'static str) -> Result<(), PluginError>,
+        &["id", "source"],
+    );
+    contract.method(
+        "host-api",
+        "list-documents",
+        <dyn HostApi>::list_documents
+            as fn(&'static dyn HostApi) -> Result<Vec<DocId>, PluginError>,
+        &[],
+    );
+    contract.method(
+        "host-api",
+        "emit",
+        <dyn HostApi>::emit as fn(Host, Event),
+        &["event"],
+    );
+    contract.method(
+        "host-api",
+        "spawn-job",
+        <dyn HostApi>::spawn_job as fn(Host, JobSpec) -> Result<JobId, PluginError>,
+        &["spec"],
+    );
+    contract.method(
+        "host-api",
+        "storage-get",
+        <dyn HostApi>::storage_get
+            as fn(&'static dyn HostApi, &'static str) -> Option<serde_json::Value>,
+        &["key"],
+    );
+    contract.method(
+        "host-api",
+        "storage-set",
+        <dyn HostApi>::storage_set as fn(Host, &'static str, serde_json::Value),
+        &["key", "value"],
+    );
+    contract.method(
+        "host-api",
+        "data-read",
+        <dyn HostApi>::data_read
+            as fn(&'static dyn HostApi, &'static str) -> Result<Option<Vec<u8>>, PluginError>,
+        &["path"],
+    );
+    contract.method(
+        "host-api",
+        "data-write",
+        <dyn HostApi>::data_write
+            as fn(Host, &'static str, &'static [u8]) -> Result<(), PluginError>,
+        &["path", "bytes"],
+    );
+    contract.method(
+        "host-api",
+        "data-remove",
+        <dyn HostApi>::data_remove as fn(Host, &'static str) -> Result<(), PluginError>,
+        &["path"],
+    );
+    contract.method(
+        "host-api",
+        "data-list",
+        <dyn HostApi>::data_list
+            as fn(&'static dyn HostApi, &'static str) -> Result<Vec<String>, PluginError>,
+        &["prefix"],
+    );
+    contract.method(
+        "host-api",
+        "now-unix-millis",
+        <dyn HostApi>::now_unix_millis as fn(&'static dyn HostApi) -> u64,
+        &[],
+    );
+
+    contract.method(
+        "event-handler",
+        "subscribed",
+        <dyn EventHandler>::subscribed as fn(&'static dyn EventHandler) -> EventMask,
+        &[],
+    );
+    contract.method(
+        "event-handler",
+        "handle",
+        <dyn EventHandler>::handle
+            as fn(&'static mut dyn EventHandler, &'static Event, Host) -> Result<(), PluginError>,
+        &["event"],
+    );
+
+    contract.method(
+        "plugin",
+        "manifest",
+        <dyn Plugin>::manifest as fn(&'static dyn Plugin) -> PluginManifest,
+        &[],
+    );
+    contract.method(
+        "plugin",
+        "activate",
+        <dyn Plugin>::activate as fn(&'static mut dyn Plugin, Host) -> Result<(), PluginError>,
+        &[],
+    );
+    contract.method(
+        "plugin",
+        "deactivate",
+        <dyn Plugin>::deactivate as fn(&'static mut dyn Plugin, Host) -> Result<(), PluginError>,
+        &[],
+    );
+    contract.method(
+        "plugin",
+        "run-job",
+        <dyn Plugin>::run_job
+            as fn(
+                &'static dyn Plugin,
+                &'static str,
+                serde_json::Value,
+            ) -> Result<serde_json::Value, PluginError>,
+        &["job", "payload"],
+    );
 
     // --- il world
 
-    let (imports, exports) = wit
+    let (imports, exports) = contract
         .worlds
         .get("plugin-world")
         .cloned()
@@ -1254,7 +2023,7 @@ fn conform(source: &str) -> Result<(), String> {
         "interfacce esportate da `plugin-world`"
     );
 
-    wit.finish()
+    contract.finish()
 }
 
 fn wit_source() -> String {
@@ -1269,12 +2038,27 @@ fn abi_types_are_mirrored_in_wit() {
     }
 }
 
+/// La forma al confine è quella di `arena`, non quella nativa: questo test lo
+/// mette per iscritto, perché è la divergenza deliberata più facile da
+/// dimenticare (e la sola presidiata da conversioni con dei test propri).
+#[test]
+fn the_boundary_shape_of_a_span_is_wider_than_the_native_one() {
+    assert_eq!(wit_of::<arena::Span>(), "span");
+    assert_eq!(wit_of::<Span>(), "span", "lo stesso record, due viste");
+    assert!(
+        std::mem::size_of::<usize>() <= std::mem::size_of::<u64>(),
+        "il nativo non può essere più largo del confine: `usize`→`u64` deve \
+         restare la direzione che non fallisce mai"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Il test del test (criterio di accettazione di M4)
 // ---------------------------------------------------------------------------
 
 /// Un test di conformità che non sa fallire non è un test. Qui si introducono
-/// divergenze ad arte — una per direzione — e si pretende il rosso.
+/// divergenze ad arte — una per ciascuna cosa che il test dovrebbe vedere — e si
+/// pretende il rosso.
 #[test]
 fn wit_conformance_actually_fails_on_drift() {
     let base = wit_source();
@@ -1307,6 +2091,67 @@ fn wit_conformance_actually_fails_on_drift() {
             "alias con la larghezza sbagliata",
             base.replace("    type block-ref = u32;", "    type block-ref = u64;"),
             "block-ref",
+        ),
+        // --- da qui in poi: ciò che il confronto per soli nomi non vedeva
+        (
+            "tipo di un campo cambiato (la larghezza di un punteggio)",
+            base.replace("        score: f32,", "        score: f64,"),
+            "score",
+        ),
+        (
+            "tipo di un campo cambiato in un record annidato",
+            base.replace("        highlights: list<span>,", "        highlights: list<string>,"),
+            "highlights",
+        ),
+        (
+            "payload di un caso di variant cambiato",
+            base.replace("        thematic-break(span),", "        thematic-break(string),"),
+            "thematic-break",
+        ),
+        (
+            "risultato di una funzione cambiato",
+            base.replace("    now-unix-millis: func() -> u64;", "    now-unix-millis: func() -> u32;"),
+            "now-unix-millis",
+        ),
+        (
+            "tipo di un parametro cambiato",
+            base.replace(
+                "    write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;",
+                "    write-document: func(id: doc-id, source: list<u8>) -> result<_, plugin-error>;",
+            ),
+            "source",
+        ),
+        (
+            "parametro rinominato",
+            base.replace(
+                "    query: func(query: index-query) -> result<index-result, plugin-error>;",
+                "    query: func(q: index-query) -> result<index-result, plugin-error>;",
+            ),
+            "query",
+        ),
+        (
+            "l'host NON è eliso: riappare come parametro",
+            base.replace(
+                "    reconcile: func(ids: list<doc-id>);",
+                "    reconcile: func(host: string, ids: list<doc-id>);",
+            ),
+            "host",
+        ),
+        (
+            "campi di un record riordinati (è un cambio di ABI)",
+            base.replace(
+                "    record span {\n        start: u64,\n        end: u64,\n    }",
+                "    record span {\n        end: u64,\n        start: u64,\n    }",
+            ),
+            "ordine",
+        ),
+        (
+            "casi di un enum riordinati (cambia il discriminante)",
+            base.replace(
+                "enum intent { neutral, primary, danger }",
+                "enum intent { primary, neutral, danger }",
+            ),
+            "ordine",
         ),
     ];
 

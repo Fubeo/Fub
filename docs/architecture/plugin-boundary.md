@@ -45,6 +45,17 @@ la radice del vault e non può nominare niente che stia fuori — path assoluti,
 `..` e separatori di sistema sono `PermissionDenied`. Il recinto è una proprietà
 della firma.
 
+**L'unica eccezione, e sta fuori dal contratto.** Un provider **nativo** che
+avvolge un motore con un proprio formato su disco non può passare da `data_*`:
+tantivy mmappa i propri segmenti e li rilegge quando gli pare, anche dai thread
+di merge, e in quei momenti non ha un host da chiamare. Per questi c'è
+`Workspace::plugin_data_dir(id)`, che restituisce **la stessa cartella** del
+recinto come path del filesystem. È un metodo del workspace e non una capacità
+dell'`HostApi`, deliberatamente: così un plugin WASM non ce l'ha, e resta scritto
+nero su bianco *chi* può usarlo. A M5 l'equivalente per un componente è un
+preopen WASI sulla stessa radice — che è la forma in cui il component model
+concede un filesystem, e mantiene il recinto dove è sempre stato.
+
 **Chi assegna `<id>`.** Chi registra il plugin
 (`Workspace::register_event_handler(id, handler)`), mai il plugin: uno che si
 sceglie il proprio recinto non è dentro a un recinto. La verifica sta in
@@ -108,7 +119,9 @@ Quindi, esplicitamente:
 Stesso principio per la UI: un provider non fidato non può emettere
 `UiNode::Html`/`WebView` (iniettano contenuto attivo nella webview privilegiata
 del core, scavalcando la sandbox). L'host lo rifiuta con
-`UiNode::validate_untrusted()` — vedi [ui-protocol.md](ui-protocol.md).
+`UiNode::validate_untrusted()`, in un punto solo — `Workspace::render_view` /
+`view_action`, dove ogni albero entra e dove ogni provider ha dichiarato il
+proprio `Trust`. Vedi [ui-protocol.md](ui-protocol.md).
 
 ## Manifest e permessi (stato attuale)
 

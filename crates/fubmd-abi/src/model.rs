@@ -26,13 +26,22 @@ impl DocId {
         &self.0
     }
 
-    /// Il "nome pagina" (basename senza estensione), usato dalla risoluzione
-    /// dei wikilink in stile Obsidian.
+    /// Il "nome pagina" (basename senza l'ultima estensione), usato dalla
+    /// risoluzione dei wikilink in stile Obsidian e dal display.
+    ///
+    /// La regola è **una sola**, e vale anche per il frontend: si toglie ciò che
+    /// segue l'ultimo punto, a meno che il punto sia il primo carattere del
+    /// basename — un dotfile non ha estensione, il punto è parte del nome. La
+    /// gemella in TypeScript è `pageName` in `frontend/src/organizer.ts`, e le
+    /// due sono identiche per costruzione: nessuna delle due consulta l'elenco
+    /// delle estensioni *gestite*, perché un `DocId` viene dal vault e quindi
+    /// un'estensione gestita ce l'ha già — filtrarci sopra faceva divergere
+    /// risoluzione e display su nomi come `note.backup`.
     pub fn page_name(&self) -> &str {
         let after_slash = self.0.rsplit('/').next().unwrap_or(&self.0);
         match after_slash.rsplit_once('.') {
-            Some((stem, _ext)) => stem,
-            None => after_slash,
+            Some((stem, _ext)) if !stem.is_empty() => stem,
+            _ => after_slash,
         }
     }
 }
@@ -256,6 +265,31 @@ mod tests {
         assert_eq!(DocId::new("note.md").page_name(), "note");
         assert_eq!(DocId::new("a/b/Nota Lunga.md").page_name(), "Nota Lunga");
         assert_eq!(DocId::new("senza-ext").page_name(), "senza-ext");
+    }
+
+    /// I casi ostili, quelli su cui kernel e frontend potevano dissentire.
+    ///
+    /// La gemella TypeScript (`pageName` in `frontend/src/organizer.ts`) applica
+    /// la stessa regola sugli stessi casi: se questa tabella cambia, cambia
+    /// anche là — sono due righe di codice identiche, e questa è la lista che le
+    /// tiene oneste. Prima il frontend toglieva l'estensione *solo se gestita*, e
+    /// per `note.backup` il kernel risolveva `note` mentre la UI mostrava
+    /// `note.backup`.
+    #[test]
+    fn docid_page_name_agrees_with_the_frontend_on_hostile_names() {
+        for (id, atteso) in [
+            ("note.md", "note"),
+            ("note.backup", "note"),
+            ("a.b.md", "a.b"),
+            (".foo", ".foo"),
+            ("dir/.hidden.md", ".hidden"),
+            ("dir/.gitignore", ".gitignore"),
+            ("senza-ext", "senza-ext"),
+            ("dir.con.punti/nota.md", "nota"),
+            ("finisce-con-punto.", "finisce-con-punto"),
+        ] {
+            assert_eq!(DocId::new(id).page_name(), atteso, "page_name di `{id}`");
+        }
     }
 
     #[test]
