@@ -141,6 +141,34 @@ frontend (`frontend/src/main.ts`):
   [M3](../milestones/M3-editor-fidelity.md), dove la live-preview rende il
   problema quotidiano.
 
+Il flush ha smesso di essere "in futuro": ogni operazione che riscrive file lo
+chiama davvero — il rename dalla lista file e il ripristino di una versione
+(vedi [CRUD_E_VAULT.md](../CRUD_E_VAULT.md)). La cancellazione è l'unica
+eccezione, e in una sola direzione: il salvataggio in attesa sul documento
+cestinato viene **disinnescato** invece che eseguito, o farebbe risorgere la
+nota un istante dopo. Il buffer sporco di un documento cancellato muore col
+documento; non è una perdita silenziosa, è l'azione che l'utente ha appena
+confermato.
+
+## Il documento cancellato e il documento di ieri (deciso)
+
+Due meccanismi allargano il discorso della verità senza contraddirlo, perché
+nessuno dei due è una *seconda* copia viva del documento:
+
+- **Il cestino** (`.trash/` dentro il vault, lo stesso di Obsidian). Cancellare
+  dall'app è **spostare**: la sorgente resta sul disco, solo in un posto che il
+  vault non guarda — il filtro dei path ignorati è uno solo, condiviso fra la
+  scansione e il percorso del watcher, ed è ciò che impedisce a una nota
+  cestinata di restare cercabile. Il cestino è piatto perché quello di Obsidian
+  lo è; il ripristino riporta la nota nella radice ed è un `write_document`
+  normale, quindi passa da grafo, indici ed eventi come ogni altra scrittura.
+- **Le versioni** (`.fubmd-data/versions/`). Sono *copie morte*: snapshot
+  timestampati, mai riletti dal kernel, mai in concorrenza con la sorgente.
+  Ripristinarne una non è un canale privilegiato verso il disco ma di nuovo una
+  scrittura normale — è il motivo per cui il ripristino genera a sua volta una
+  versione, cioè è annullabile. Il campionatore è un `EventHandler` esterno al
+  kernel: la verità del documento non cambia perché qualcuno la sta fotografando.
+
 ## `Block` e `Inline` — l'albero
 
 `Block` (tag serde `kind`): `Heading`, `Paragraph`, `List { ordered, items }`,

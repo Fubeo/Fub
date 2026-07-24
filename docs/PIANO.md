@@ -27,6 +27,9 @@ di *implementare gli stessi trait*, non di girare in sandbox WASM).
 | Verità del documento | **La sorgente sul disco**; `serialize` = generazione, mai round-trip | Il modello è lossy per costruzione; riscrivere un file da esso distruggerebbe la formattazione dell'utente. Modifiche programmatiche = patch via `Span`. |
 | Verità del documento **aperto** | **Il buffer dell'editor finché è sporco** | Il disco vale per i documenti chiusi; l'app flusha prima di cambiare documento, riallinea il buffer pulito su cambi esterni, e non lo sovrascrive mai da sporco (merge esplicito a M3) — vedi [data-model.md](architecture/data-model.md), "Le tre copie". |
 | Rename | **Operazione di prima classe**: `DocumentRenamed` + riscrittura chirurgica dei link | L'identità è il path: remove+add perderebbe backlink e stato per-documento. |
+| Delete | **Cestino `.trash/` dentro il vault**, non eliminazione (D1/D2) | È la cartella di Obsidian: un vault condiviso ha *un solo* cestino, zero lock-in. Cancellare è spostare; sulle collisioni il nome prende l'istante della cancellazione, mai una sovrascrittura. Il cestino è piatto, come quello di Obsidian, e il ripristino è un `write_document` normale. |
+| Versioning | **Snapshot per-file + tombstone** in `.fubmd-data/versions/`, come `EventHandler` (D4/D5/D8) | Cronologia per-nota e "vault al tempo T" con un meccanismo solo, senza portarsi in casa git. Ed è dogfooding: usa solo ciò che avrà un plugin di terzi. Un `Overflow` gli fa perdere uno snapshot intermedio, e per un *campionatore* va bene — a differenza dell'indice, che per questo non passa dagli eventi. Il ripristino è una scrittura normale, quindi annullabile. |
+| Spegnibilità | **Il versioning si spegne del tutto** (D7) | Principio non negoziabile ([funzionalita-future.md](appendix/funzionalita-future.md)): spento = l'handler non si registra, la UI non esiste, nel vault non compare nulla. |
 | Case dei path | `DocId` **byte-exact**, risoluzione wikilink **case-insensitive**, rename case-only supportato | Stessa semantica osservabile su FS case-sensitive (Linux) e case-insensitive (macOS/Windows) — vedi [data-model.md](architecture/data-model.md). |
 | Lavoro lungo dei plugin | **Job fuori dal giro sincrono**: `HostApi::spawn_job` → `Plugin::run_job` (senza `HostApi`) → `Event::JobDone` | I trait restano sincroni e **brevi**; rete e calcolo pesante non bloccano mai il kernel; a M5 la deadline tronca solo chi sfora nel giro sincrono — vedi [plugin-boundary.md](architecture/plugin-boundary.md). |
 | Transclusion (embed) | **Placeholder dal provider, composizione kernel+frontend** | `render_html` resta puro per-documento; solo il kernel conosce la topologia del vault. |
@@ -38,7 +41,7 @@ di *implementare gli stessi trait*, non di girare in sandbox WASM).
 | Piattaforme | Linux (primario, Arch) + Windows + macOS | Tauri le supporta; CI multi-OS da subito. |
 
 **Invariante non negoziabile:** `fubmd-kernel` e `fubmd-abi` non dipendono da
-`comrak`, `tauri` o `wasmtime`. Verificata coi test / `cargo tree`.
+`comrak`, `tauri`, `wasmtime` o `tantivy`. Verificata coi test / `cargo tree`.
 
 **Regola d'oro (dal primo giorno):** ogni argomento e ogni valore di ritorno dei
 trait è un tipo di `fubmd-abi`, `Serialize + Deserialize`, esprimibile come record
@@ -83,6 +86,8 @@ come proxy. Il kernel vede solo `dyn Trait`.
 - [CRUD_E_VAULT.md](CRUD_E_VAULT.md) — checklist spuntabile: CRUD delle note
   (create/rename in UI, delete col **cestino** `.trash/` Obsidian-compatibile)
   e **versioning del vault** (snapshot per-file + tombstone, spegnibile).
+  Fasi 0–4 fatte; resta la vista "vault al tempo T", rimandata per scelta a una
+  seconda passata.
 
 **Appendici**:
 - [appendix/ai-autocomplete.md](appendix/ai-autocomplete.md) — design (non milestone) dell'autocompletamento AI.
@@ -96,9 +101,11 @@ come proxy. Il kernel vede solo `dyn Trait`.
   native (anteprima, wikilink, backlink) + file watcher. 33 test verdi, niente WASM.
 - **M2 — Ricerca + graph + rifiniture** (in corso) → [dettaglio](milestones/M2-search-graph.md)
   Fatti: grafo incrementale con full-rebuild come oracolo; full-text (tantivy)
-  via `IndexProvider`, persistente e incrementale, con ricerca nel frontend.
-  Restano: cache metadata/body, graph view (Canvas/WebGL), outline/tag panel,
-  flusso "crea nota".
+  via `IndexProvider`, persistente e incrementale, con ricerca nel frontend;
+  CRUD completo dall'app — creazione (incluso il flusso "crea nota" da link non
+  risolto), rename, cestino — e versioning del vault
+  ([CRUD_E_VAULT.md](CRUD_E_VAULT.md)).
+  Restano: cache metadata/body, graph view (Canvas/WebGL), outline/tag panel.
 - **M3 — Fedeltà editor** → [dettaglio](milestones/M3-editor-fidelity.md)
   Live preview in-editor (decorazioni CodeMirror sugli `Span`), command palette
   (`CommandProvider`), settings dichiarativi, rendering callout/embed/math.
