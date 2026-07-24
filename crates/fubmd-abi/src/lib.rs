@@ -3,7 +3,9 @@
 //! Questo crate è l'unica fonte di verità del contratto tra il core agnostico
 //! e i provider (nativi o, in futuro, plugin WASM di terzi):
 //!
-//! - il **modello di documento comune** ([`model`]), agnostico rispetto al formato;
+//! - il **modello di documento comune** ([`model`]), agnostico rispetto al formato,
+//!   e la sua forma **al confine** ([`arena`]: alberi appiattiti, span a
+//!   larghezza fissa) — la conversione che il proxy WASM di M5 erediterà;
 //! - il trait centrale [`format::FormatProvider`];
 //! - gli altri **trait di estensione** ([`traits`]): comandi, view (UI dichiarativa),
 //!   index (ricerca/backlink), event handler, ciclo di vita del plugin;
@@ -13,6 +15,7 @@
 //! Definendo ogni trait una volta sola qui, l'impl nativa (diretta) e l'impl
 //! WASM-proxy (M5) condividono la stessa firma e il kernel non distingue i due.
 
+pub mod arena;
 pub mod error;
 pub mod event;
 pub mod format;

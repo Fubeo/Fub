@@ -9,7 +9,8 @@
 // `UiNode` lo sono. Al confine viaggiano come ARENA: una lista piatta di nodi
 // più indici `u32` (`block-ref`, `inline-ref`, `ui-ref`) al posto dei
 // riferimenti diretti. I tipi Rust nativi restano alberi veri; la conversione
-// albero↔arena vive nel proxy WASM (M5). Decisione e motivazioni in
+// albero↔arena è `fubmd_abi::arena` (con round-trip sotto test), e il proxy
+// WASM di M5 la chiamerà invece di riscriverla. Decisione e motivazioni in
 // docs/architecture/traits.md, "Alberi ricorsivi al confine".
 //
 // KEYWORD WIT — `list`, `result` e `from` sono parole chiave del linguaggio:
@@ -17,9 +18,16 @@
 // sintassi: l'identificatore dichiarato resta `list`/`result`/`from`, e i tipi
 // Rust non cambiano.
 //
+// HOST-API — `host-api` è IMPORTATO dal world: le sue funzioni non compaiono
+// come parametro di nessun'altra funzione, anche là dove il metodo Rust
+// corrispondente prende un `&mut dyn HostApi`. Il test di conformità verifica
+// l'elisione, non la assume.
+//
 // Stato conformità: `crates/fubmd-abi/tests/wit_conformance.rs` PARSA questo
-// file con `wit-parser` e confronta i nomi dichiarati con i tipi di `fubmd-abi`
-// nelle due direzioni. Un WIT invalido = test rosso.
+// file con `wit-parser` e confronta con `fubmd-abi`, nelle due direzioni, i
+// nomi *e i tipi*: campi dei record (in ordine), payload dei casi di variant,
+// destinazioni degli alias, firme complete delle funzioni. Un WIT invalido =
+// test rosso.
 
 package fubmd:abi@0.1.0;
 
@@ -414,12 +422,19 @@ interface index {
         custom(json),
     }
 
+    /// Carica lo stato persistente: chiamata una volta, alla registrazione,
+    /// prima di qualunque alimentazione. È il punto in cui un indice di terzi
+    /// rilegge da `host-api.data-*` ciò che ha già visto — senza, un index
+    /// provider in WASM non potrebbe persistere nulla. `host-api` è importato
+    /// dal world: non compare fra i parametri.
+    activate: func() -> result<_, plugin-error>;
     on-document-indexed: func(doc: document-model);
     on-document-removed: func(id: doc-id);
     /// Verità completa del vault: ciò che l'indice ha in più è morto.
     /// Non è un rebuild — gli immutati non si reindicizzano.
     reconcile: func(ids: list<doc-id>);
-    /// Punto di consistenza: al ritorno l'accettato è visibile e durevole.
+    /// Punto di consistenza E di persistenza: al ritorno l'accettato è
+    /// visibile alle query e durevole (via `host-api.data-*`).
     flush: func() -> result<_, plugin-error>;
     query: func(query: index-query) -> result<index-result, plugin-error>;
 }

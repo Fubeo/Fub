@@ -27,6 +27,25 @@ export function parentOf(path: string): string {
   return slash === -1 ? "" : path.slice(0, slash);
 }
 
+/// Il "nome pagina" di un `DocId`: basename senza l'ultima estensione.
+///
+/// È la **stessa regola** di `DocId::page_name` nel kernel
+/// (`crates/fubmd-abi/src/model.rs`), riga per riga: si toglie ciò che segue
+/// l'ultimo punto, a meno che il punto sia il primo carattere del basename (un
+/// dotfile non ha estensione). I casi ostili — `note.backup`, `.foo`, `a.b.md`,
+/// `dir/.hidden.md` — sono elencati nel test
+/// `docid_page_name_agrees_with_the_frontend_on_hostile_names`.
+///
+/// Non consulta le estensioni *gestite* (`VaultInfo.extensions`): un `DocId`
+/// arriva dal vault, quindi un'estensione gestita ce l'ha già, e filtrarci sopra
+/// era proprio ciò che faceva dissentire risoluzione e display — per
+/// `note.backup` il kernel risolveva `note` e la UI mostrava `note.backup`.
+export function pageName(id: string): string {
+  const base = childName(id);
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+
 /// L'albero della sidebar, radicato in `rootPath` ("" = tutto il vault; una
 /// cartella = quello spazio, e il resto del vault non esiste). Le cartelle
 /// nascono dai path delle note, non dal filesystem — una cartella senza note
@@ -86,16 +105,25 @@ export function findFolder(root: FolderNode, path: string): FolderNode | null {
   return null;
 }
 
-/// La folder note di una cartella: `X/X.md`, o in mancanza `X/index.md`.
+/// La folder note di una cartella: `X/X.<ext>`, o in mancanza `X/index.<ext>`.
 /// Cliccare la cartella apre questa nota, e la lista dei figli non la mostra.
-export function folderNoteOf(folder: FolderNode): string | null {
+///
+/// `exts` sono le estensioni che i provider registrati gestiscono
+/// (`VaultInfo.extensions`): quale sia l'estensione di una nota lo sanno i
+/// `FormatDescriptor` del backend, non la UI. Cablare `.md` qui sarebbe vero solo
+/// finché markdown è l'unico formato, cioè finché il progetto non fa ciò per cui
+/// esiste.
+export function folderNoteOf(folder: FolderNode, exts: string[]): string | null {
   if (!folder.path) return null;
   const byLower = new Map(folder.notes.map((n) => [n.toLowerCase(), n]));
-  return (
-    byLower.get(`${folder.path}/${folder.name}.md`.toLowerCase()) ??
-    byLower.get(`${folder.path}/index.md`.toLowerCase()) ??
-    null
-  );
+  // Prima il nome della cartella, poi `index`: l'omonima vince, come in make.md.
+  for (const stem of [folder.name, "index"]) {
+    for (const ext of exts) {
+      const hit = byLower.get(`${folder.path}/${stem}.${ext}`.toLowerCase());
+      if (hit) return hit;
+    }
+  }
+  return null;
 }
 
 /// I nomi dei figli di una cartella nell'ordine in cui la sidebar li mostra

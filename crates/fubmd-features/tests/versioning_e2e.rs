@@ -218,3 +218,60 @@ fn the_history_survives_closing_and_reopening_the_vault() {
         "scritta ieri\n"
     );
 }
+
+#[test]
+fn a_real_overflow_reaches_the_handler_and_it_reconciles() {
+    use fubmd_abi::event::{Event, EventMask};
+    use fubmd_abi::traits::{EventHandler, HostApi};
+    use fubmd_abi::PluginError;
+
+    /// Handler che a ogni evento ne emette un altro: fa esaurire il budget del
+    /// dispatch e produce un `Event::Overflow`. È il ping-pong fra plugin che il
+    /// budget esiste per troncare — oggi impossibile (l'unico handler
+    /// registrato non emette), possibile con i plugin di terzi di M4/M5.
+    struct Loudmouth;
+    impl EventHandler for Loudmouth {
+        fn subscribed(&self) -> EventMask {
+            EventMask::all()
+        }
+        fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
+            if !matches!(event, Event::Overflow { .. }) {
+                host.emit(Event::Custom {
+                    topic: "test/eco".into(),
+                    payload: serde_json::Value::Null,
+                });
+            }
+            Ok(())
+        }
+    }
+
+    let v = Vault::new();
+    v.put("Nota.md", "come l'ho trovata\n");
+    let (mut ws, store) = v.open();
+    let nota = DocId::new("Nota.md");
+    assert_eq!(store.list(&nota).len(), 1, "la prima fotografia");
+
+    ws.register_event_handler("test.loudmouth", Box::new(Loudmouth));
+
+    // La nota cambia sul disco e il workspace non ne sa niente: nessun
+    // `DocumentChanged`, quindi nessuno snapshot per la via normale.
+    v.put("Nota.md", "cambiata alle spalle di tutti\n");
+    assert_eq!(store.list(&nota).len(), 1);
+
+    // Un'altra operazione fa traboccare la coda: da qui nasce l'`Event::Overflow`.
+    ws.write_document(&DocId::new("Altra.md"), "qualsiasi cosa\n")
+        .unwrap();
+
+    // L'handler era abbonato, l'overflow gli è arrivato, e la riconciliazione ha
+    // riletto il vault: la versione che l'evento perso non ha prodotto c'è.
+    let versioni = store.list(&nota);
+    assert_eq!(
+        versioni.len(),
+        2,
+        "l'overflow deve aver innescato la riconciliazione: {versioni:?}"
+    );
+    assert_eq!(
+        versione(&mut ws, &store, &nota, versioni[0].ts),
+        "cambiata alle spalle di tutti\n"
+    );
+}

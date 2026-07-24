@@ -12,7 +12,7 @@ use camino::Utf8PathBuf;
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{IndexProvider, IndexQuery, IndexResult, SearchHit};
+use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
 
@@ -55,12 +55,19 @@ impl FormatProvider for PlainProvider {
 /// Una chiamata ricevuta dalla spia.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Call {
+    /// L'attivazione, col contenuto ritrovato nel proprio storage (`None` = mai
+    /// scritto niente): è il punto in cui un indice persistente si ricorda.
+    Activate(Option<String>),
     Indexed(String, String),
     Removed(String),
     Reconcile(Vec<String>),
     Flush,
     Query,
 }
+
+/// Nome del blob con cui la spia si ricorda di sé stessa, nello spazio dati che
+/// l'host le assegna.
+const MEMORIA: &str = "memoria.txt";
 
 /// Spia che registra ciò che il kernel le manda.
 ///
@@ -90,6 +97,18 @@ impl SpyIndex {
 }
 
 impl IndexProvider for SpyIndex {
+    fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        // Un indice persistente si ricorda da `data_*`, ed è l'unico storage
+        // durevole che avrà anche un provider di terzi: la spia lo esercita
+        // come lo eserciterebbe lui.
+        let memoria = host
+            .data_read(MEMORIA)?
+            .map(|b| String::from_utf8_lossy(&b).into_owned());
+        self.record(Call::Activate(memoria));
+        host.data_write(MEMORIA, b"c'ero")?;
+        Ok(())
+    }
+
     fn on_document_indexed(&mut self, doc: &DocumentModel) {
         self.record(Call::Indexed(doc.id.to_string(), doc.text.clone()));
     }
@@ -104,7 +123,7 @@ impl IndexProvider for SpyIndex {
         self.record(Call::Reconcile(ids));
     }
 
-    fn flush(&mut self) -> Result<(), PluginError> {
+    fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         self.record(Call::Flush);
         Ok(())
     }
@@ -163,7 +182,8 @@ fn reindex_feeds_every_document_then_declares_the_full_truth() {
 
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider(Box::new(spy));
+    ws.register_index_provider("test.spia", Box::new(spy))
+        .unwrap();
     ws.reindex().unwrap();
 
     let calls = calls_of(&log);
@@ -195,7 +215,8 @@ fn writes_and_removals_reach_the_index() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider(Box::new(spy));
+    ws.register_index_provider("test.spia", Box::new(spy))
+        .unwrap();
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
@@ -219,7 +240,8 @@ fn a_rename_is_remove_plus_add_for_an_index() {
 
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider(Box::new(spy));
+    ws.register_index_provider("test.spia", Box::new(spy))
+        .unwrap();
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
@@ -240,7 +262,7 @@ fn a_rename_is_remove_plus_add_for_an_index() {
 #[test]
 fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
     use fubmd_abi::event::{Event, EventMask};
-    use fubmd_abi::traits::{EventHandler, HostApi};
+    use fubmd_abi::traits::EventHandler;
 
     /// Handler che a ogni evento ne emette un altro: fa esaurire il budget del
     /// dispatch e produce un `Event::Overflow`.
@@ -263,7 +285,8 @@ fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider(Box::new(spy));
+    ws.register_index_provider("test.spia", Box::new(spy))
+        .unwrap();
     ws.register_event_handler("test.loudmouth", Box::new(Loudmouth));
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
@@ -287,7 +310,8 @@ fn a_file_the_vault_ignores_never_reaches_models_events_or_index() {
 
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider(Box::new(spy));
+    ws.register_index_provider("test.spia", Box::new(spy))
+        .unwrap();
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
     let events = ws.bus().subscribe();
@@ -324,7 +348,8 @@ fn backlinks_never_reach_the_providers() {
 
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider(Box::new(spy));
+    ws.register_index_provider("test.spia", Box::new(spy))
+        .unwrap();
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
@@ -345,8 +370,10 @@ fn a_query_falls_through_providers_that_disown_it() {
     let mut ws = fx.workspace();
     let (mute, mute_log) = SpyIndex::new(false);
     let (answering, answering_log) = SpyIndex::new(true);
-    ws.register_index_provider(Box::new(mute));
-    ws.register_index_provider(Box::new(answering));
+    ws.register_index_provider("test.muta", Box::new(mute))
+        .unwrap();
+    ws.register_index_provider("test.risponde", Box::new(answering))
+        .unwrap();
     ws.reindex().unwrap();
     mute_log.lock().unwrap().clear();
     answering_log.lock().unwrap().clear();
@@ -373,7 +400,8 @@ fn a_query_nobody_owns_reports_bad_args() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (mute, _) = SpyIndex::new(false);
-    ws.register_index_provider(Box::new(mute));
+    ws.register_index_provider("test.muta", Box::new(mute))
+        .unwrap();
     ws.reindex().unwrap();
 
     let r = ws.query_index(IndexQuery::Custom {
@@ -396,4 +424,45 @@ fn with_no_provider_a_search_says_so_instead_of_pretending() {
     // Zero risultati e "nessun indice" sono due cose diverse: la prima è una
     // risposta, la seconda una mancanza, e confonderle nasconderebbe un guasto.
     assert!(matches!(r, Err(PluginError::BadArgs(_))));
+}
+
+#[test]
+fn registering_an_index_activates_it_in_its_own_data_space() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    let (spy, log) = SpyIndex::new(true);
+    ws.register_index_provider("test.spia", Box::new(spy))
+        .unwrap();
+
+    // L'attivazione è la PRIMA cosa che accade, e accade alla registrazione:
+    // dopo il primo `on_document_indexed` sarebbe già troppo tardi per
+    // ricordarsi di ciò che si è già visto.
+    assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
+
+    // E ciò che l'indice scrive finisce nel *suo* recinto, che gli assegna
+    // l'host: il provider ha nominato un blob, non un path.
+    let memoria = fx
+        .root
+        .join(".fubmd-data")
+        .join("plugins")
+        .join("test.spia")
+        .join(MEMORIA);
+    assert_eq!(std::fs::read_to_string(&memoria).unwrap(), "c'ero");
+
+    // Alla riapertura del vault la memoria si ritrova. È esattamente ciò che
+    // un indice persistente deve poter fare — e ciò che, senza host in
+    // `activate`, un provider di terzi non potrebbe fare affatto.
+    let mut riaperto = fx.workspace();
+    let (spy, log) = SpyIndex::new(true);
+    riaperto
+        .register_index_provider("test.spia", Box::new(spy))
+        .unwrap();
+    assert_eq!(calls_of(&log), vec![Call::Activate(Some("c'ero".into()))]);
+
+    // Un altro indice non vede la memoria del primo: il recinto è per-id.
+    let (spy, log) = SpyIndex::new(true);
+    riaperto
+        .register_index_provider("test.altra", Box::new(spy))
+        .unwrap();
+    assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
 }

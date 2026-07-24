@@ -15,6 +15,12 @@ pub mod backlinks;
 pub mod search;
 pub mod versioning;
 
+/// Doppio dell'host per i test unitari delle feature (in memoria, orologio
+/// pilotabile): una feature scritta come la scriverebbe un plugin si prova
+/// contro il **contratto**, non contro il kernel.
+#[cfg(test)]
+mod testing;
+
 pub use backlinks::build_backlinks_view;
-pub use search::SearchIndex;
+pub use search::{SearchIndex, SEARCH_ID};
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};

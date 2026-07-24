@@ -23,37 +23,48 @@ a firme non serializzabili.
 
 Test: [`crates/fubmd-abi/tests/wit_conformance.rs`](../crates/fubmd-abi/tests/wit_conformance.rs).
 
-Il test **parsa** `abi.wit` con `wit-parser` e confronta insiemi di nomi
+Il test **parsa** `abi.wit` con `wit-parser` e confronta nomi **e tipi**
 *dichiarati*, non sottostringhe del sorgente. `wit-parser` è una
 **dev-dependency**: l'invariante di `fubmd-abi` riguarda le dipendenze normali
 (quelle che finiscono nella libreria), ed è presidiata dal suo test in
 [`dependency_invariant.rs`](../crates/fubmd-abi/tests/dependency_invariant.rs).
 
-Pressione su **tre** direzioni:
+Pressione su **quattro** direzioni:
 
 1. **Il WIT deve essere valido →** un contratto che non parsa è un test rosso.
    (Prima non lo era: il WIT era sintatticamente invalido e il test verde.)
 2. **Drift lato Rust →** match e destructuring esaustivi su ogni tipo di
    `fubmd-abi` non compilano più se un enum guadagna una variante o un campo
-   cambia: il compilatore obbliga ad aggiornare il test (e quindi il WIT).
-3. **Drift lato WIT, nelle due direzioni →** un tipo/caso/campo atteso e assente
-   fallisce; uno dichiarato nel WIT e che nessun tipo abi rivendica fallisce
-   ugualmente, perché è contratto morto.
+   cambia; e le funzioni sono **cast dei metodi dei trait a puntatore a
+   funzione**, quindi non compilano se un parametro o un tipo di ritorno cambia.
+   Il compilatore obbliga ad aggiornare il test (e quindi il WIT).
+3. **Drift lato WIT, nelle due direzioni →** un tipo/caso/campo/parametro atteso
+   e assente fallisce; uno dichiarato nel WIT e che nessun tipo abi rivendica
+   fallisce ugualmente, perché è contratto morto. Si confrontano anche i **tipi**
+   (campi in ordine, payload dei casi, firme complete) e l'**ordine**: in un
+   record è la disposizione al confine, in un variant è il discriminante.
+4. **`host` è eliso →** nessuna funzione del WIT può avere un parametro `host`,
+   anche là dove il metodo Rust prende un `&mut dyn HostApi`: le capacità si
+   importano dal world (`import host-api`), non si passano come argomento.
 
-C'è anche il **test del test**: divergenze introdotte ad arte (campo rinominato,
-caso rimosso, funzione sparita, tipo di troppo, alias con la larghezza sbagliata)
-devono farlo diventare rosso, o non sta verificando niente.
+I tipi attesi **non sono scritti a mano**: si deducono dai tipi Rust
+(`wit(&campo)` sul campo destrutturato, `WitFn` sul puntatore a funzione). Se
+`SearchHit::score` diventasse `f64`, l'attesa diventerebbe `f64` e il confronto
+col contratto (`f32`) fallirebbe.
 
-### Limite noto (colmato a M4)
+C'è anche il **test del test**: quattordici divergenze introdotte ad arte — campo
+rinominato, caso rimosso, funzione sparita, tipo di troppo, alias con la
+larghezza sbagliata, tipo di un campo o di un payload cambiato, risultato di una
+funzione cambiato, parametro rinominato o ritipato, `host` riapparso, campi e
+casi riordinati — devono tutte farlo diventare rosso, o non sta verificando
+niente.
 
-Si confrontano i **nomi** di tipi, casi, campi e funzioni, e i **tipi** dei soli
-alias (dove il tipo *è* l'informazione: gli indici dell'arena sono `u32`, gli
-span `u64`). I tipi dei campi di record e le firme complete delle funzioni sono
-lavoro di [M4](../docs/milestones/M4-wit-hardening.md), dove arriva anche la
-generazione di binding con `wit-bindgen` + conversioni `From`/`Into` che non
-compilano su divergenza di forma. Quel tooling vivrà in un crate al confine
-(`fubmd-wasm-host` o un crate di conformità dedicato), **mai** fra le dipendenze
-normali di `fubmd-abi`/`fubmd-kernel`.
+### Limite noto
+
+L'**ordine** dei casi di un variant è confrontato con l'ordine in cui il test li
+elenca, non con quello dell'enum Rust: il compilatore garantisce che ci siano
+tutti, non che siano in fila. Riordinare il WIT è rosso; riordinare l'enum Rust
+senza toccare il test, no.
 
 ## Convenzioni
 
@@ -68,9 +79,11 @@ normali di `fubmd-abi`/`fubmd-kernel`.
   caso.
 - Gli **alberi ricorsivi** (`block`, `inline`, `ui-node`) al confine sono
   un'**arena**: lista piatta di nodi + indici `u32` (`block-ref`, `inline-ref`,
-  `ui-ref`), perché WIT non ammette tipi ricorsivi. I tipi Rust restano alberi;
-  la conversione vive nel proxy WASM. Il perché — e perché non una stringa JSON
-  — è in [docs/architecture/traits.md](../docs/architecture/traits.md),
+  `ui-ref`), perché WIT non ammette tipi ricorsivi. I tipi Rust nativi restano
+  alberi; la conversione è `fubmd_abi::arena` (round-trip, indici fuori range e
+  cicli sotto test), e il proxy WASM di M5 la chiamerà invece di riscriverla. Il
+  perché — e perché non una stringa JSON — è in
+  [docs/architecture/traits.md](../docs/architecture/traits.md),
   "Alberi ricorsivi al confine".
 - `list`, `result` e `from` sono **keyword WIT**: dove sono nomi di variante o di
   campo compaiono con l'escape `%`. I nomi Rust non cambiano.

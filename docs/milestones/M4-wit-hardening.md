@@ -48,19 +48,25 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
 
 ### Test di conformità abi↔WIT
 
-Buona parte è **già fatta** (vedi [todo.md](../todo.md), punto 2, e
-[wit/README.md](../../wit/README.md)): il test parsa `abi.wit` con `wit-parser`,
-confronta insiemi di nomi dichiarati nelle due direzioni — contratto morto
-incluso — e ha il proprio test del test; gira in CI. Resta a M4:
+**È fatta** (vedi [todo.md](../todo.md), punti 1–2 del secondo giro, e
+[wit/README.md](../../wit/README.md)): il test parsa `abi.wit` con `wit-parser` e
+confronta nelle due direzioni — contratto morto incluso — **nomi e tipi**: campi
+dei record in ordine, payload dei casi di variant, destinazioni degli alias,
+firme complete delle funzioni, ed elisione di `host`. I tipi attesi non sono
+scritti a mano: si deducono dai tipi Rust (`wit(&campo)` sul campo destrutturato,
+`WitFn` sul puntatore a funzione, che è un cast del metodo del trait), quindi una
+divergenza di forma **non compila** — la proprietà che si voleva da `wit-bindgen`
++ `From`/`Into`, senza generare codice. Ha il proprio test del test (quattordici
+mutazioni) e gira in CI.
 
-- **I tipi**, non solo i nomi: tipi dei campi di record e firme complete delle
-  funzioni. La strada più probabile è `wit-bindgen` sui tipi + conversioni
-  `From`/`Into` che non compilano su divergenza di forma; l'alternativa è un
-  round-trip di valori campione serde↔WIT-values. La scelta è parte del lavoro
-  M4; il requisito resta che **la CI rompa** su qualunque divergenza.
-- Il tooling vive in un crate al confine, **mai** fra le dipendenze normali di
-  `fubmd-abi`/`fubmd-kernel` (oggi `wit-parser` è una dev-dependency, che
-  l'invariante non tocca).
+Resta a M4, sulla conformità:
+
+- rivalutare se i valori JSON liberi (`attrs`, `args`, storage) restano
+  `type json = string` al freeze (vedi "Punto di attenzione noto" in
+  [traits.md](../architecture/traits.md));
+- il tooling continua a vivere al confine, **mai** fra le dipendenze normali di
+  `fubmd-abi`/`fubmd-kernel` (`wit-parser` è una dev-dependency, che l'invariante
+  non tocca).
 
 ### Primo plugin nativo (`Plugin`/`HostApi`)
 
