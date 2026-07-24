@@ -333,7 +333,7 @@ interface command {
 /// Ricerca e backlink (`IndexProvider`).
 interface index {
     use json.{json};
-    use model.{doc-id, document-model};
+    use model.{doc-id, document-model, span};
     use errors.{plugin-error};
 
     record index-query-full-text {
@@ -355,10 +355,14 @@ interface index {
         source: doc-id,
         context: option<string>,
     }
+    /// `snippet` è testo semplice, mai markup: chi disegna lo inserisce come
+    /// testo. L'evidenziazione passa da `highlights`, intervalli in byte
+    /// DENTRO `snippet` (nessun varco di injection da un provider di terzi).
     record search-hit {
         doc: doc-id,
         score: f32,
         snippet: string,
+        highlights: list<span>,
     }
     variant index-result {
         backlinks(list<backlink-ref>),
@@ -368,6 +372,11 @@ interface index {
 
     on-document-indexed: func(doc: document-model);
     on-document-removed: func(id: doc-id);
+    /// Verità completa del vault: ciò che l'indice ha in più è morto.
+    /// Non è un rebuild — gli immutati non si reindicizzano.
+    reconcile: func(ids: list<doc-id>);
+    /// Punto di consistenza: al ritorno l'accettato è visibile e durevole.
+    flush: func() -> result<_, plugin-error>;
     query: func(query: index-query) -> result<index-result, plugin-error>;
 }
 

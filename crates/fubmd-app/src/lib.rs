@@ -10,9 +10,9 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
-use fubmd_abi::traits::BacklinkRef;
+use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::ui::UiNode;
-use fubmd_features::build_backlinks_view;
+use fubmd_features::{build_backlinks_view, SearchIndex};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
 
@@ -62,6 +62,16 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     registry.register(MarkdownProvider::boxed());
 
     let mut ws = Workspace::new(&root, registry);
+
+    // L'indice va registrato PRIMA di `reindex`: è lì che riceve il contenuto
+    // del vault e riconcilia ciò che è cambiato mentre non era vivo. Se non si
+    // apre, il vault si apre lo stesso senza ricerca: la verità è il vault,
+    // l'indice è stato derivato e non deve mai impedire di leggere le note.
+    match SearchIndex::open(&root) {
+        Ok(index) => ws.register_index_provider(Box::new(index)),
+        Err(e) => eprintln!("indice di ricerca non disponibile: {e}"),
+    }
+
     ws.reindex().map_err(|e| e.to_string())?;
 
     // Ponte eventi kernel → frontend (thread dedicato che vive quanto il bus).
@@ -109,6 +119,12 @@ fn spawn_watcher(
                             let _ = ws.sync_path(&p);
                         }
                     }
+                }
+                // Fine del lotto debounced: è il punto tranquillo in cui
+                // rendere durevoli gli indici. Il kernel non sa quando finisce
+                // un lotto — lo sa il watcher, che il lotto lo ha formato.
+                for e in ws.flush_indexes() {
+                    eprintln!("flush indice: {e}");
                 }
             }
             Err(errors) => {
@@ -209,6 +225,25 @@ fn backlinks_view(state: State<AppState>, id: String) -> Result<UiNode, String> 
     Ok(build_backlinks_view(&ws.backlinks(&DocId::new(id))))
 }
 
+/// Ricerca full-text sul vault.
+///
+/// `snippet` è testo semplice e `highlights` sono intervalli in byte al suo
+/// interno: il frontend evidenzia con i propri elementi, senza mai interpretare
+/// come markup ciò che arriva da un provider (vedi `SearchHit`).
+#[tauri::command]
+fn search(state: State<AppState>, query: String, limit: Option<u32>) -> Result<Vec<SearchHit>, String> {
+    let ws = current(&state)?;
+    let ws = ws.lock().unwrap();
+    let q = IndexQuery::FullText {
+        query,
+        limit: limit.unwrap_or(50),
+    };
+    match ws.query_index(q).map_err(|e| e.to_string())? {
+        IndexResult::Search(hits) => Ok(hits),
+        other => Err(format!("l'indice ha risposto fuori tema: {other:?}")),
+    }
+}
+
 #[tauri::command]
 fn resolve_link(state: State<AppState>, page: String) -> Result<Option<String>, String> {
     let ws = current(&state)?;
@@ -231,6 +266,7 @@ pub fn run() {
             render_embed,
             backlinks,
             backlinks_view,
+            search,
             resolve_link,
         ])
         .run(tauri::generate_context!())

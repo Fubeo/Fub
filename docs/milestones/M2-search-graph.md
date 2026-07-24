@@ -11,26 +11,68 @@ full-rebuild di grafo/indice con un aggiornamento **incrementale**.
 
 ## Design
 
-### Indicizzazione full-text (tantivy, incrementale su disco)
+### Indicizzazione full-text (tantivy, incrementale su disco) — **fatto**
 
-Un `IndexProvider` nativo in `fubmd-features` che avvolge **tantivy**.
+`fubmd_features::SearchIndex`, il primo `IndexProvider` nativo, avvolge
+**tantivy** (`crates/fubmd-features/src/search.rs`).
 
 - **Persistenza:** indice su disco in `.fubmd-data/index/` (già ignorato dal walk
   del vault, vedi `crates/fubmd-kernel/src/vault.rs`). Avvio rapido: niente
   reindicizzazione completa ad ogni apertura.
-- **Schema:** `doc_id` (STRING, stored), `title`/`page_name` (TEXT), `body`
-  (TEXT, dalla proiezione `DocumentModel.text`), `tags` (facet/TEXT). Lo schema è
-  versionato: un bump forza il rebuild.
-- **Aggiornamento incrementale:** i ganci del trait sono già in firma —
-  `on_document_indexed(doc)` fa delete-by-term(`doc_id`) + add; `on_document_removed(id)`
-  fa delete-by-term. Commit debounced (batch) su `IndexUpdated`.
-- **Riconciliazione su `Overflow`:** l'indice deriva il proprio stato dagli
-  eventi; su `Event::Overflow` (coda troncata, eventi persi — mai silenziosi,
-  vedi [traits.md](../architecture/traits.md)) si marca stantio e fa rebuild
-  completo, come dopo un bump di schema.
+- **Schema:** `doc_id` (STRING → termine esatto, è ciò che rende `delete_term`
+  chirurgico), `page_name` (TEXT, con boost ×4: chi cerca "Rust" vuole prima la
+  nota *intitolata* Rust), `body` (TEXT+STORED, dalla proiezione
+  `DocumentModel.text`; STORED perché il generatore di snippet rilegge il
+  testo), `tags` (TEXT). Lo schema è versionato: un bump forza il rebuild.
+- **Aggiornamento incrementale:** `on_document_indexed(doc)` fa
+  delete-by-term(`doc_id`) + add; `on_document_removed(id)` fa delete-by-term.
+  Il commit non è per-documento: si accumula e si committa al `flush` (lo
+  chiama il watcher debounced, che è chi sa quando un lotto è finito) o alla
+  prima query con scritture in sospeso — così chi interroga vede sempre le
+  proprie scritture.
+- **Riapertura senza reindicizzazione:** ogni documento *ripassa* dall'indice
+  all'avvio, ma un'impronta del contenuto (FNV-1a stabile, non
+  `DefaultHasher`: sopravvive su disco fra due avvii) fa saltare gli immutati.
+  Su un vault non toccato la riapertura non produce **nessuna** scrittura — il
+  test lo verifica sull'opstamp di tantivy, non a occhio.
+- **Impronte e indice sono due file che possono divergere** (crash fra il
+  commit e la scrittura del manifest). Il guardiano è l'`opstamp`: il manifest
+  cita quello del commit che descrive, e un manifest di un'altra epoca fa
+  buttare le **impronte** (non l'indice) e reindicizzare — `delete`+`add` è
+  idempotente. Mai il contrario: un manifest creduto valido a sproposito farebbe
+  *saltare* documenti, cioè mentire in silenzio.
 - **Query:** `IndexQuery::FullText { query, limit }` → `IndexResult::Search(Vec<SearchHit>)`
-  con `score` e `snippet` (snippet generator di tantivy). `IndexQuery::Backlinks`
-  può continuare a passare dal grafo o essere servito dall'indice — vedi sotto.
+  con `score`, `snippet` e `highlights`. Congiunzione di default ("rust async"
+  vuole entrambi). Query sintatticamente non valida → `BadArgs`, non un errore
+  interno: chi sta ancora digitando `campo:` non ha rotto niente.
+- **`snippet` è testo puro, `highlights` sono `Span` al suo interno:** un
+  provider non può iniettare markup nella webview privilegiata passando per i
+  risultati (vedi [traits.md](../architecture/traits.md)). Il frontend taglia
+  sui byte e decodifica — con l'italiano accentato gli indici di carattere non
+  coinciderebbero quasi mai.
+
+#### Perché l'indice **non** si alimenta dagli eventi
+
+Il piano originale diceva "l'indice deriva il proprio stato dagli eventi; su
+`Event::Overflow` si marca stantio e fa un rebuild completo". Scrivendolo è
+emersa una soluzione più forte: il `Workspace` **possiede** gli
+`IndexProvider` e li alimenta dentro le stesse operazioni che aggiornano il
+grafo. Un indice non può quindi perdere aggiornamenti, e l'`Overflow` per lui
+non è più un evento interessante — non c'è nessuno stato stantio da
+riconciliare, e nessun rebuild completo da pagare.
+
+Due ragioni indipendenti puntavano nella stessa direzione: (1) un indice che
+perde un aggiornamento non smette di rispondere, risponde *sbagliato*, e
+un'architettura non dovrebbe rendere possibile una bugia silenziosa quando può
+renderla impossibile; (2) `on_document_indexed` riceve il `DocumentModel`, che
+un `EventHandler` non avrebbe modo di ottenere — l'`Event` porta il `DocId` e
+l'`HostApi` dà la sorgente, non il modello parsato.
+
+Resta una sola giuntura: ciò che succede mentre l'indice **non è vivo** (note
+cancellate ad app chiusa). La chiude `IndexProvider::reconcile(ids)`, che
+riceve la verità completa del vault in coda a `reindex`. `Event::Overflow`
+mantiene tutto il suo valore per il *frontend*, che invece deriva davvero il
+proprio stato dagli eventi.
 
 ### Grafo incrementale (insieme all'indice) — **fatto**
 
@@ -116,6 +158,10 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
 | Decisione | Perché |
 |---|---|
 | tantivy **incrementale su disco** | Scala a vault grandi e dà avvio rapido; i ganci `on_document_*` esistono già nel trait. |
+| Indici **posseduti e alimentati dal kernel**, non dagli eventi | Un indice che perde un aggiornamento non tace: risponde sbagliato, in silenzio. La coda eventi ha un budget; questo canale no. Vedi sopra, "Perché l'indice non si alimenta dagli eventi". |
+| `reconcile(ids)` + `flush()` **aggiunti al trait** a M2 | Le due giunture che restano: ciò che cambia ad app chiusa, e il fatto che il kernel scriva un documento alla volta mentre un indice vuole scrivere a lotti. Il freeze è a M4: la firma si corregge ora o mai più. |
+| `snippet` testo + `highlights: Vec<Span>` | Un provider di terzi non deve poter iniettare markup nella webview privilegiata passando per i risultati di ricerca (stessa regola di `UiNode::Html`). |
+| Backlink **serviti dal grafo**, non dall'indice | Il grafo conosce le regole di risoluzione dei wikilink e le ambiguità dell'intero vault: duplicarli creerebbe una seconda verità che può divergere dalla prima. |
 | Grafo **incrementale insieme** all'indice | Stessa natura del problema (delta per-documento); evita due passaggi di refactor sul `Workspace`. |
 | Graph view **Canvas/WebGL**, fuori da `UiNode` | Performance su migliaia di nodi; il dichiarativo non regge il force-directed. |
 | Outline/tag **via `ViewProvider`+`UiNode`** | Sono liste: restano dichiarative, dogfood del protocollo. |
@@ -124,11 +170,13 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
 ## Criteri di accettazione
 
 - Ricerca full-text su un vault di ≥1000 note con risultati rilevanti < 50 ms a
-  query (indice caldo), snippet evidenziati.
-- Riapertura del vault **senza** reindicizzazione completa (indice caricato da disco).
+  query (indice caldo), snippet evidenziati. ✅ funzionante; **il numero non è
+  ancora misurato** su un vault di quella taglia (manca il bench qui sotto).
+- Riapertura del vault **senza** reindicizzazione completa (indice caricato da
+  disco). ✅ verificata sull'opstamp: un vault immutato non produce scritture.
 - Modifica/creazione/cancellazione di una nota: grafo e indice riflettono il
   cambiamento senza full-rebuild, e il risultato è **identico** a quello del
-  full-rebuild.
+  full-rebuild. ✅ per entrambi, ciascuno col proprio oracolo.
 - Graph view naviga (click→apertura), pan/zoom fluidi su vault grande; grafo locale
   n-hop.
 - Outline e tag panel funzionanti; click naviga (heading via `Span`, tag via ricerca).
@@ -136,17 +184,35 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
 
 ## Piano di test
 
-- **Unit:** schema/round-trip dell'indice tantivy; delete-by-term; snippet.
+- **Unit dell'indice** (`crates/fubmd-features/src/search.rs`, in-module): match
+  su corpo/titolo/tag, boost del titolo, congiunzione di default, delete-by-term
+  senza duplicati, `reconcile`, query malformata → `BadArgs`. E i tre casi che
+  contano davvero, perché falliscono in silenzio: riapertura che salta gli
+  immutati, manifest di un'altra epoca (crash simulato fra commit e manifest) e
+  indice corrotto — che si ricostruisce invece di farsi diagnosticare.
+- **Alimentazione degli indici** (`crates/fubmd-kernel/tests/index_feeding.rs`):
+  una spia al posto di tantivy, così il test parla del contratto e non
+  dell'implementazione. Verifica che write/remove/rename arrivino, che
+  `reconcile` arrivi *dopo* l'alimentazione e prima del `flush`, che i backlink
+  non raggiungano mai i provider, che una query attraversi chi risponde
+  `BadArgs` — e che un indice riceva il suo aggiornamento **anche quando la
+  coda eventi trabocca**.
 - **Proprietà:** su una sequenza casuale di write/remove, `grafo_incrementale ==
   LinkGraph::build(tutti)` e `indice_incrementale == indice_da_zero` (oracolo =
   full-rebuild attuale). Per il grafo: `crates/fubmd-kernel/tests/graph_incremental.rs`
   (universo ostile: omonimi a profondità diverse, alias che collidono con i nomi,
   path che collidono a meno dell'estensione; generatore xorshift deterministico,
   niente `proptest`) e `tests/workspace_incremental.rs` per lo stesso confronto
-  passando da disco/provider/eventi.
-- **E2e (estende `crates/fubmd-format-markdown/tests/vault_e2e.rs`):** query
-  full-text sul sample-vault; creazione nota da link non risolto → il backlink
-  compare.
+  passando da disco/provider/eventi. Per l'indice:
+  `crates/fubmd-features/tests/search_e2e.rs`, che ricostruisce lo stato finale
+  in un vault vergine e confronta le risposte.
+- **E2e** (`crates/fubmd-features/tests/search_e2e.rs`): vault vero, markdown
+  vero, tantivy vero. Modifica/cancellazione/rename riflessi nella ricerca
+  (nessun fantasma dopo un rename), riapertura che non scrive nulla su un vault
+  immutato, riapertura che recupera cancellazioni/modifiche/creazioni avvenute
+  ad app chiusa, highlight allineati su testo accentato.
+- **Ancora da fare a M2:** creazione nota da link non risolto → il backlink
+  compare (`crates/fubmd-format-markdown/tests/vault_e2e.rs`).
 - **Bench (facoltativo):** tempi di query e di aggiornamento incrementale vs rebuild
   su vault sintetico grande.
 - `cargo test --workspace` + `cargo clippy` verdi su tutti gli OS (vedi
@@ -156,8 +222,11 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
 
 - **Divergenza incrementale vs rebuild** → test di proprietà con oracolo; fallback a
   rebuild dietro un flag finché il test non è stabile.
-- **Corruzione/lock dell'indice su disco** → schema versionato + rebuild automatico
-  se l'apertura fallisce; commit debounced per ridurre la pressione I/O.
+- **Corruzione/lock dell'indice su disco** → *risolto*: schema versionato,
+  confronto dello schema all'apertura e rebuild automatico se qualcosa non
+  torna. Un indice è stato derivato, non si diagnostica: si butta. Se non si
+  apre affatto, il vault si apre lo stesso **senza ricerca** — la verità è il
+  vault, e un indice guasto non deve impedire di leggere le proprie note.
 - **Perf del force-directed** → soglia note oltre cui si passa a WebGL / si mostra
   solo il grafo locale; **loggare** eventuali cap (niente troncamenti silenziosi).
 - **`IndexProvider` non implementato da nessuno a M1** → M2 è la sua prima prova:

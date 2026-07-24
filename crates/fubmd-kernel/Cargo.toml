@@ -22,3 +22,4 @@ thiserror = { workspace = true }
 # di sequenze è un xorshift deterministico dentro il test).
 fubmd-abi = { workspace = true }
 serde_json = { workspace = true }
+tempfile = "3.27.0"

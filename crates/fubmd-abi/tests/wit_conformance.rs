@@ -527,13 +527,15 @@ fn struct_names() -> Vec<&'static str> {
         doc,
         score,
         snippet,
+        highlights,
     } = SearchHit {
         doc: DocId::new("a"),
         score: 0.0,
         snippet: String::new(),
+        highlights: Vec::new(),
     };
-    let _ = (doc, score, snippet);
-    names.extend(["search-hit", "doc", "score", "snippet"]);
+    let _ = (doc, score, snippet, highlights);
+    names.extend(["search-hit", "doc", "score", "snippet", "highlights"]);
 
     let UiAction { action, payload } = UiAction {
         action: ActionId(String::new()),
@@ -802,6 +804,8 @@ fn abi_types_are_mirrored_in_wit() {
         "storage-set",
         "on-document-indexed",
         "on-document-removed",
+        "reconcile",
+        "flush",
     ]);
 
     expected.sort_unstable();

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::event::{Event, EventMask};
-use crate::model::{DocId, DocumentModel};
+use crate::model::{DocId, DocumentModel, Span};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
 // ---------------------------------------------------------------------------
@@ -149,11 +149,21 @@ pub struct BacklinkRef {
 }
 
 /// Un risultato di ricerca full-text.
+///
+/// `snippet` è **testo semplice**, mai markup: il provider non decora, e chi
+/// disegna lo inserisce come testo (nessun varco di injection da un provider
+/// di terzi — stessa regola di [`UiNode`](crate::ui::UiNode), il contenuto
+/// attivo è riservato al codice fidato). L'evidenziazione passa da
+/// `highlights`: intervalli in **byte dentro `snippet`**, che chi disegna
+/// avvolge con i propri elementi.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SearchHit {
     pub doc: DocId,
     pub score: f32,
     pub snippet: String,
+    /// Porzioni di `snippet` che hanno prodotto il match, in ordine e non
+    /// sovrapposte.
+    pub highlights: Vec<Span>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -165,9 +175,37 @@ pub enum IndexResult {
     Custom(serde_json::Value),
 }
 
+/// Un indice derivato dal contenuto del vault.
+///
+/// Il kernel lo alimenta **direttamente** (non via event bus): ogni documento
+/// che entra o esce dal `Workspace` passa da `on_document_indexed` /
+/// `on_document_removed` dentro la stessa operazione che aggiorna il grafo.
+/// Un indice non può quindi perdere aggiornamenti per un troncamento della
+/// coda eventi ([`Event::Overflow`](crate::Event::Overflow)) — è la ragione
+/// per cui l'alimentazione non passa da [`EventHandler`].
+///
+/// Resta un solo modo di divergere dal vault: ciò che succede mentre l'indice
+/// **non è vivo** (documenti cancellati ad app chiusa, se l'indice è
+/// persistente). Lo chiude [`IndexProvider::reconcile`].
 pub trait IndexProvider: Send + Sync {
     fn on_document_indexed(&mut self, doc: &DocumentModel);
     fn on_document_removed(&mut self, id: &DocId);
+    /// Allinea l'indice alla verità completa del vault: `ids` è l'insieme di
+    /// **tutti** i documenti esistenti, e ciò che l'indice ha in più è morto e
+    /// va cancellato. Il kernel la chiama dopo la scansione del vault.
+    ///
+    /// Non è un rebuild: i documenti già presenti e immutati non vanno
+    /// reindicizzati (è ciò che rende rapida la riapertura di un vault).
+    fn reconcile(&mut self, ids: &[DocId]);
+    /// Punto di consistenza: al ritorno, tutto ciò che è stato accettato
+    /// finora è visibile alle `query` e (se l'indice è persistente) durevole.
+    ///
+    /// Esiste perché il kernel scrive **un documento alla volta** ma un
+    /// indice vuole scrivere **a lotti**: fra un `on_document_*` e il `flush`
+    /// il provider è libero di accumulare. Chi interroga senza aspettare un
+    /// flush vede comunque le proprie scritture — è il provider a garantirlo,
+    /// non il chiamante.
+    fn flush(&mut self) -> Result<(), PluginError>;
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 }
 

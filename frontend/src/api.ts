@@ -41,6 +41,22 @@ export interface EmbedContent {
   html: string;
 }
 
+// Intervallo in byte (rispecchia fubmd_abi::model::Span).
+export interface Span {
+  start: number;
+  end: number;
+}
+
+// Un risultato di ricerca (rispecchia fubmd_abi::traits::SearchHit).
+// `snippet` è testo semplice, MAI markup: si inserisce come testo. Le porzioni
+// da evidenziare sono `highlights`, intervalli in byte dentro `snippet`.
+export interface SearchHit {
+  doc: string;
+  score: number;
+  snippet: string;
+  highlights: Span[];
+}
+
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
@@ -54,6 +70,8 @@ export const api = {
   renderEmbed: (page: string, heading: string | null) =>
     invoke<EmbedContent>("render_embed", { page, heading }),
   backlinksView: (id: string) => invoke<UiNode>("backlinks_view", { id }),
+  search: (query: string, limit?: number) =>
+    invoke<SearchHit[]>("search", { query, limit }),
   resolveLink: (page: string) => invoke<string | null>("resolve_link", { page }),
 };
 
