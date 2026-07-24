@@ -7,7 +7,13 @@ rust-version.workspace = true
 description = "Feature ufficiali come impl native dei trait di estensione: backlink, ricerca, graph, orchestrazione preview."
 
 [dependencies]
+camino.workspace = true
 fubmd-abi = { workspace = true }
 fubmd-kernel = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tantivy = "0.26"
+
+[dev-dependencies]
+fubmd-format-markdown.workspace = true
+tempfile = "3.27.0"

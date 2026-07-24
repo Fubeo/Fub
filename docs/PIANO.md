@@ -30,6 +30,8 @@ di *implementare gli stessi trait*, non di girare in sandbox WASM).
 | Case dei path | `DocId` **byte-exact**, risoluzione wikilink **case-insensitive**, rename case-only supportato | Stessa semantica osservabile su FS case-sensitive (Linux) e case-insensitive (macOS/Windows) — vedi [data-model.md](architecture/data-model.md). |
 | Lavoro lungo dei plugin | **Job fuori dal giro sincrono**: `HostApi::spawn_job` → `Plugin::run_job` (senza `HostApi`) → `Event::JobDone` | I trait restano sincroni e **brevi**; rete e calcolo pesante non bloccano mai il kernel; a M5 la deadline tronca solo chi sfora nel giro sincrono — vedi [plugin-boundary.md](architecture/plugin-boundary.md). |
 | Transclusion (embed) | **Placeholder dal provider, composizione kernel+frontend** | `render_html` resta puro per-documento; solo il kernel conosce la topologia del vault. |
+| Indici (ricerca) | **Posseduti e alimentati dal kernel**, non dagli eventi; backlink serviti dal grafo | Un indice che perde un aggiornamento non tace: risponde *sbagliato*, in silenzio. La coda eventi ha un budget e può troncare, questo canale no. E i backlink hanno già una fonte di verità — il grafo — che conosce le ambiguità dell'intero vault: duplicarli creerebbe una seconda verità divergente. Vedi [M2](milestones/M2-search-graph.md). |
+| Risultati di ricerca | **`snippet` testo puro + `highlights: Vec<Span>`** | Un provider di terzi non deve poter iniettare markup nella webview privilegiata passando per i risultati (stessa regola di `UiNode::Html`); chi disegna avvolge gli intervalli con i propri elementi. |
 | Eventi | **Dispatch a coda anti-rientranza** + varco `Event::Custom` | Un handler che emette/scrive durante `handle` non rientra; i plugin comunicano via topic namespaced. Il budget anti-ping-pong tronca **rumorosamente**: `Event::Overflow { dropped }` avvisa chi deriva stato di riconciliare da zero — mai perdite silenziose. |
 | Sicurezza UI | **`Html`/`WebView` riservati al codice fidato** (`validate_untrusted`) | Contenuto attivo nella webview privilegiata scavalcherebbe la sandbox WASM via UI. |
 | AI autocomplete | **Rimandata**, futuro plugin core (locale + cloud) | Non blocca l'architettura; è un `CommandProvider`/`EventHandler`. |
@@ -51,7 +53,7 @@ fubmd-abi              contratto: modello documento comune + tutti i trait
   ├─ fubmd-kernel      core agnostico: vault, grafo link, registry, event bus
   ├─ fubmd-sdk         helper per scrivere provider (scan #tag / [[wikilink]])
   ├─ fubmd-format-markdown   1° FormatProvider nativo (comrak)
-  ├─ fubmd-features    feature ufficiali (backlink; poi ricerca, graph)
+  ├─ fubmd-features    feature ufficiali (backlink, ricerca full-text; poi graph)
   ├─ fubmd-app         Tauri v2: IPC comandi/eventi, file watcher
   └─ fubmd-wasm-host   (M5) host wasmtime per plugin di terzi
 frontend/              Vite + TS + CodeMirror 6 (+ renderer UiNode)
@@ -87,9 +89,11 @@ come proxy. Il kernel vede solo `dyn Trait`.
 - **M1 — App usabile ✅ (2026-07-24)**
   Core agnostico + `FormatProvider` + provider markdown + editor/vault + feature
   native (anteprima, wikilink, backlink) + file watcher. 33 test verdi, niente WASM.
-- **M2 — Ricerca + graph + rifiniture** → [dettaglio](milestones/M2-search-graph.md)
-  Full-text (tantivy) via `IndexProvider`, grafo+indice incrementali, graph view
-  (Canvas/WebGL), outline/tag panel, flusso "crea nota".
+- **M2 — Ricerca + graph + rifiniture** (in corso) → [dettaglio](milestones/M2-search-graph.md)
+  Fatti: grafo incrementale con full-rebuild come oracolo; full-text (tantivy)
+  via `IndexProvider`, persistente e incrementale, con ricerca nel frontend.
+  Restano: cache metadata/body, graph view (Canvas/WebGL), outline/tag panel,
+  flusso "crea nota".
 - **M3 — Fedeltà editor** → [dettaglio](milestones/M3-editor-fidelity.md)
   Live preview in-editor (decorazioni CodeMirror sugli `Span`), command palette
   (`CommandProvider`), settings dichiarativi, rendering callout/embed/math.

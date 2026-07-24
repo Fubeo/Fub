@@ -1,0 +1,354 @@
+//! Come il kernel alimenta gli [`IndexProvider`].
+//!
+//! La proprietà sotto esame è che **un indice non può perdere aggiornamenti**:
+//! il `Workspace` lo alimenta dentro le stesse operazioni che aggiornano il
+//! grafo, non via event bus (che invece ha un budget e può troncare). Qui non
+//! c'è tantivy: c'è una spia che registra le chiamate ricevute, così il test
+//! parla del *contratto* e non dell'implementazione.
+
+use std::sync::{Arc, Mutex};
+
+use camino::Utf8PathBuf;
+use fubmd_abi::error::{FormatError, PluginError};
+use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::model::{DocId, DocumentModel};
+use fubmd_abi::traits::{IndexProvider, IndexQuery, IndexResult, SearchHit};
+use fubmd_abi::FormatProvider;
+use fubmd_kernel::{FormatRegistry, Workspace};
+
+/// Provider minimo: il documento è il suo testo, niente link né struttura.
+/// All'indice serve solo che `DocumentModel.text` arrivi popolato.
+struct PlainProvider;
+
+impl FormatProvider for PlainProvider {
+    fn descriptor(&self) -> FormatDescriptor {
+        FormatDescriptor {
+            id: "plain".into(),
+            name: "Testo semplice (test)".into(),
+            extensions: vec!["txt".into()],
+        }
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        FormatCapabilities::default()
+    }
+
+    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
+        model.text = source.to_string();
+        Ok(model)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        _opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+}
+
+/// Una chiamata ricevuta dalla spia.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Call {
+    Indexed(String, String),
+    Removed(String),
+    Reconcile(Vec<String>),
+    Flush,
+    Query,
+}
+
+/// Spia che registra ciò che il kernel le manda.
+///
+/// `answers`: cosa risponde alle query. `None` = "non è roba mia"
+/// (`BadArgs`), che è il modo con cui, per contratto, un provider si sfila e
+/// lascia la parola al successivo.
+struct SpyIndex {
+    calls: Arc<Mutex<Vec<Call>>>,
+    answers: bool,
+}
+
+impl SpyIndex {
+    fn new(answers: bool) -> (Self, Arc<Mutex<Vec<Call>>>) {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        (
+            SpyIndex {
+                calls: calls.clone(),
+                answers,
+            },
+            calls,
+        )
+    }
+
+    fn record(&self, call: Call) {
+        self.calls.lock().unwrap().push(call);
+    }
+}
+
+impl IndexProvider for SpyIndex {
+    fn on_document_indexed(&mut self, doc: &DocumentModel) {
+        self.record(Call::Indexed(doc.id.to_string(), doc.text.clone()));
+    }
+
+    fn on_document_removed(&mut self, id: &DocId) {
+        self.record(Call::Removed(id.to_string()));
+    }
+
+    fn reconcile(&mut self, ids: &[DocId]) {
+        let mut ids: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
+        ids.sort();
+        self.record(Call::Reconcile(ids));
+    }
+
+    fn flush(&mut self) -> Result<(), PluginError> {
+        self.record(Call::Flush);
+        Ok(())
+    }
+
+    fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
+        self.record(Call::Query);
+        if self.answers {
+            Ok(IndexResult::Search(vec![SearchHit {
+                doc: DocId::new("risposta.txt"),
+                score: 1.0,
+                snippet: "eccomi".into(),
+                highlights: Vec::new(),
+            }]))
+        } else {
+            Err(PluginError::BadArgs("non è roba mia".into()))
+        }
+    }
+}
+
+struct Fixture {
+    _dir: tempfile::TempDir,
+    root: Utf8PathBuf,
+}
+
+impl Fixture {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+        Fixture { _dir: dir, root }
+    }
+
+    fn write(&self, rel: &str, body: &str) {
+        let path = self.root.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, body).unwrap();
+    }
+
+    fn workspace(&self) -> Workspace {
+        let mut registry = FormatRegistry::new();
+        registry.register(Box::new(PlainProvider));
+        Workspace::new(&self.root, registry)
+    }
+}
+
+fn calls_of(log: &Arc<Mutex<Vec<Call>>>) -> Vec<Call> {
+    log.lock().unwrap().clone()
+}
+
+#[test]
+fn reindex_feeds_every_document_then_declares_the_full_truth() {
+    let fx = Fixture::new();
+    fx.write("a.txt", "alfa");
+    fx.write("sub/b.txt", "beta");
+
+    let mut ws = fx.workspace();
+    let (spy, log) = SpyIndex::new(true);
+    ws.register_index_provider(Box::new(spy));
+    ws.reindex().unwrap();
+
+    let calls = calls_of(&log);
+    assert!(calls.contains(&Call::Indexed("a.txt".into(), "alfa".into())));
+    assert!(calls.contains(&Call::Indexed("sub/b.txt".into(), "beta".into())));
+    // La riconciliazione arriva DOPO l'alimentazione — altrimenti dichiarerebbe
+    // morti documenti che l'indice non ha ancora visto — e prima del flush.
+    let reconcile = calls
+        .iter()
+        .position(|c| matches!(c, Call::Reconcile(_)))
+        .expect("reconcile");
+    let flush = calls.iter().position(|c| *c == Call::Flush).expect("flush");
+    assert!(calls[..reconcile]
+        .iter()
+        .filter(|c| matches!(c, Call::Indexed(..)))
+        .count()
+        == 2);
+    assert!(reconcile < flush);
+    assert_eq!(
+        calls[reconcile],
+        Call::Reconcile(vec!["a.txt".into(), "sub/b.txt".into()])
+    );
+}
+
+#[test]
+fn writes_and_removals_reach_the_index() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    let (spy, log) = SpyIndex::new(true);
+    ws.register_index_provider(Box::new(spy));
+    ws.reindex().unwrap();
+    log.lock().unwrap().clear();
+
+    ws.write_document(&DocId::new("nuova.txt"), "contenuto").unwrap();
+    ws.remove_document(&DocId::new("nuova.txt"));
+
+    assert_eq!(
+        calls_of(&log),
+        vec![
+            Call::Indexed("nuova.txt".into(), "contenuto".into()),
+            Call::Removed("nuova.txt".into()),
+        ]
+    );
+}
+
+#[test]
+fn a_rename_is_remove_plus_add_for_an_index() {
+    let fx = Fixture::new();
+    fx.write("vecchio.txt", "corpo");
+
+    let mut ws = fx.workspace();
+    let (spy, log) = SpyIndex::new(true);
+    ws.register_index_provider(Box::new(spy));
+    ws.reindex().unwrap();
+    log.lock().unwrap().clear();
+
+    ws.rename_document(&DocId::new("vecchio.txt"), &DocId::new("nuovo.txt"))
+        .unwrap();
+
+    // Per l'indice la chiave È l'identità, e la chiave è cambiata: il vecchio
+    // documento va cancellato, altrimenti resterebbe cercabile un fantasma.
+    assert_eq!(
+        calls_of(&log),
+        vec![
+            Call::Removed("vecchio.txt".into()),
+            Call::Indexed("nuovo.txt".into(), "corpo".into()),
+        ]
+    );
+}
+
+#[test]
+fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
+    use fubmd_abi::event::{Event, EventMask};
+    use fubmd_abi::traits::{EventHandler, HostApi};
+
+    /// Handler che a ogni evento ne emette un altro: fa esaurire il budget del
+    /// dispatch e produce un `Event::Overflow`.
+    struct Loudmouth;
+    impl EventHandler for Loudmouth {
+        fn subscribed(&self) -> EventMask {
+            EventMask::all()
+        }
+        fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
+            if !matches!(event, Event::Overflow { .. }) {
+                host.emit(Event::Custom {
+                    topic: "test/eco".into(),
+                    payload: serde_json::Value::Null,
+                });
+            }
+            Ok(())
+        }
+    }
+
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    let (spy, log) = SpyIndex::new(true);
+    ws.register_index_provider(Box::new(spy));
+    ws.register_event_handler(Box::new(Loudmouth));
+    ws.reindex().unwrap();
+    log.lock().unwrap().clear();
+
+    // Questa scrittura fa traboccare la coda eventi...
+    ws.write_document(&DocId::new("a.txt"), "sopravvissuto").unwrap();
+
+    // ...ma l'indice ha ricevuto comunque il suo aggiornamento, perché non
+    // passa dalla coda: è la ragione per cui il kernel lo alimenta da sé.
+    assert_eq!(
+        calls_of(&log),
+        vec![Call::Indexed("a.txt".into(), "sopravvissuto".into())]
+    );
+}
+
+#[test]
+fn backlinks_never_reach_the_providers() {
+    let fx = Fixture::new();
+    fx.write("a.txt", "corpo");
+
+    let mut ws = fx.workspace();
+    let (spy, log) = SpyIndex::new(true);
+    ws.register_index_provider(Box::new(spy));
+    ws.reindex().unwrap();
+    log.lock().unwrap().clear();
+
+    let r = ws.query_index(IndexQuery::Backlinks {
+        target: DocId::new("a.txt"),
+    });
+
+    // Il grafo del kernel è l'unica fonte di verità dei backlink: nessun
+    // provider viene interpellato, non c'è una seconda verità che possa
+    // divergere dalla prima.
+    assert!(matches!(r, Ok(IndexResult::Backlinks(_))));
+    assert!(calls_of(&log).is_empty());
+}
+
+#[test]
+fn a_query_falls_through_providers_that_disown_it() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    let (mute, mute_log) = SpyIndex::new(false);
+    let (answering, answering_log) = SpyIndex::new(true);
+    ws.register_index_provider(Box::new(mute));
+    ws.register_index_provider(Box::new(answering));
+    ws.reindex().unwrap();
+    mute_log.lock().unwrap().clear();
+    answering_log.lock().unwrap().clear();
+
+    let r = ws.query_index(IndexQuery::FullText {
+        query: "qualsiasi".into(),
+        limit: 5,
+    });
+
+    match r {
+        Ok(IndexResult::Search(hits)) => assert_eq!(hits[0].doc, DocId::new("risposta.txt")),
+        other => panic!("atteso Search, trovato {other:?}"),
+    }
+    assert_eq!(calls_of(&mute_log), vec![Call::Query], "interpellato per primo");
+    assert_eq!(calls_of(&answering_log), vec![Call::Query]);
+}
+
+#[test]
+fn a_query_nobody_owns_reports_bad_args() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    let (mute, _) = SpyIndex::new(false);
+    ws.register_index_provider(Box::new(mute));
+    ws.reindex().unwrap();
+
+    let r = ws.query_index(IndexQuery::Custom {
+        ns: "nessuno".into(),
+        query: serde_json::Value::Null,
+    });
+    assert!(matches!(r, Err(PluginError::BadArgs(_))));
+}
+
+#[test]
+fn with_no_provider_a_search_says_so_instead_of_pretending() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    ws.reindex().unwrap();
+
+    let r = ws.query_index(IndexQuery::FullText {
+        query: "qualsiasi".into(),
+        limit: 5,
+    });
+    // Zero risultati e "nessun indice" sono due cose diverse: la prima è una
+    // risposta, la seconda una mancanza, e confonderle nasconderebbe un guasto.
+    assert!(matches!(r, Err(PluginError::BadArgs(_))));
+}
