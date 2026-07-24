@@ -245,8 +245,17 @@ impl Workspace {
 
     /// Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
     /// esiste ed è un formato gestito, rimuove se sparito. Restituisce `true`
-    /// se qualcosa è cambiato. Path fuori dal vault o senza provider: ignorati.
+    /// se qualcosa è cambiato. Path fuori dal vault, ignorati dal vault o senza
+    /// provider: nessun effetto.
+    ///
+    /// Il filtro dei path ignorati è lo **stesso** della scansione
+    /// ([`Vault::is_ignored`]) e non una sua copia: le due porte d'ingresso del
+    /// vault devono avere la stessa idea di cosa sta fuori, altrimenti una nota
+    /// cestinata resterebbe cercabile.
     pub fn sync_path(&mut self, abs: &Utf8Path) -> Result<bool> {
+        if self.vault.is_ignored(abs) {
+            return Ok(false);
+        }
         let id = match self.vault.doc_id_for_path(abs) {
             Ok(id) => id,
             Err(_) => return Ok(false),
