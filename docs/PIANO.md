@@ -79,6 +79,11 @@ come proxy. Il kernel vede solo `dyn Trait`.
 - [milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md) — freeze del contratto, WIT, conformità abi↔WIT, primo plugin nativo.
 - [milestones/M5-wasm-runtime.md](milestones/M5-wasm-runtime.md) — `fubmd-wasm-host`, proxy WASM, applicazione delle capability, plugin di esempio.
 
+**Piani di lavoro**:
+- [CRUD_E_VAULT.md](CRUD_E_VAULT.md) — checklist spuntabile: CRUD delle note
+  (create/rename in UI, delete col **cestino** `.trash/` Obsidian-compatibile)
+  e **versioning del vault** (snapshot per-file + tombstone, spegnibile).
+
 **Appendici**:
 - [appendix/ai-autocomplete.md](appendix/ai-autocomplete.md) — design (non milestone) dell'autocompletamento AI.
 - [appendix/funzionalita-future.md](appendix/funzionalita-future.md) — funzionalità post-M5 (app mobile, sync, flashcard, export editoriale…) raccolte dalle interviste alle personas (`docs/personas/`); include il principio della **spegnibilità totale**.
