@@ -1,0 +1,40 @@
+# FubMD — workspace virtuale.
+# Architettura: core agnostico (fubmd-kernel) + contratto unico (fubmd-abi).
+# Il markdown è solo il PRIMO provider (fubmd-format-markdown); il WASM
+# per i plugin di terzi arriva a M5 (fubmd-wasm-host, non ancora presente).
+[workspace]
+resolver = "2"
+members = [
+    "crates/fubmd-abi",
+    "crates/fubmd-kernel",
+    "crates/fubmd-sdk",
+    "crates/fubmd-format-markdown",
+    "crates/fubmd-features",
+    "crates/fubmd-app",
+    # "crates/fubmd-wasm-host", # M5: host wasmtime per plugin di terzi
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+
+# Versioni condivise: un solo punto di verità per l'intero workspace.
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+regex = "1"
+camino = { version = "1", features = ["serde1"] }
+
+# dipendenze interne
+fubmd-abi = { path = "crates/fubmd-abi" }
+fubmd-kernel = { path = "crates/fubmd-kernel" }
+fubmd-sdk = { path = "crates/fubmd-sdk" }
+fubmd-format-markdown = { path = "crates/fubmd-format-markdown" }
+fubmd-features = { path = "crates/fubmd-features" }
+
+[profile.dev]
+# compilazione più veloce mantenendo debug info utile
+opt-level = 0
