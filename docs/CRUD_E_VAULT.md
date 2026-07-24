@@ -35,21 +35,25 @@ con gli stessi strumenti che avrà un plugin di terzi.
 
 | # | Decisione | Perché | Stato |
 |---|---|---|---|
-| D1 | Cestino in **`.trash/` dentro il vault** | È la cartella che usa Obsidian per "Move to Obsidian trash": un vault condiviso fra le due app ha **un solo cestino**. Zero lock-in, come da principio. | proposta |
-| D2 | Collisione nel cestino → **suffisso timestamp** (`Nota.2026-07-24T15-30-00.md`) | Cancellare due volte "Nota.md" non deve né fallire né sovrascrivere la prima copia. | proposta |
-| D3 | Nota nuova = **`Senza titolo.md`** nella radice; se esiste, `Senza titolo 1.md`, `2`, … | Convenzione nota (Obsidian: "Untitled"); l'utente rinomina subito col rename che già funziona. | proposta |
-| D4 | Versioning = **snapshot per-file** in `.fubmd-data/versions/` + **tombstone** alla cancellazione | Con ogni snapshot timestampato e i tombstone, "il vault al tempo T" è ricostruibile: ultima versione ≤ T di ogni file, esclusi i morti. Si ottengono **entrambe** le cose — cronologia per-nota e ripristino del vault a un istante — con un solo meccanismo, senza portarsi in casa git. | proposta |
-| D5 | Versioning come **`EventHandler`** (`DocumentChanged`/`Renamed`/`Removed` → snapshot via `host.read_document`) | Dogfooding del contratto. Un `Overflow` può fargli perdere uno snapshot intermedio: per un *campionatore* è accettabile (la versione successiva arriva al prossimo salvataggio) — a differenza dell'indice, che per questo non passa dagli eventi. | proposta |
-| D6 | Retention: **dedup per contenuto** (niente snapshot se identico all'ultimo) + potatura a fasce (tutto < 24h, orario < 7gg, giornaliero < 90gg) | Limita la crescita senza perdere la storia recente, che è quella che si ripesca davvero. Parametri regolabili nei settings (M3). | proposta |
+| D1 | Cestino in **`.trash/` dentro il vault** | È la cartella che usa Obsidian per "Move to Obsidian trash": un vault condiviso fra le due app ha **un solo cestino**. Zero lock-in, come da principio. | presa |
+| D2 | Collisione nel cestino → **suffisso timestamp** (`Nota.2026-07-24T15-30-00.md`) | Cancellare due volte "Nota.md" non deve né fallire né sovrascrivere la prima copia. | presa |
+| D3 | Nota nuova = **`Senza titolo.md`** nella radice; se esiste, `Senza titolo 1.md`, `2`, … | Convenzione nota (Obsidian: "Untitled"); l'utente rinomina subito col rename che già funziona. | presa |
+| D4 | Versioning = **snapshot per-file** in `.fubmd-data/versions/` + **tombstone** alla cancellazione | Con ogni snapshot timestampato e i tombstone, "il vault al tempo T" è ricostruibile: ultima versione ≤ T di ogni file, esclusi i morti. Si ottengono **entrambe** le cose — cronologia per-nota e ripristino del vault a un istante — con un solo meccanismo, senza portarsi in casa git. | presa |
+| D5 | Versioning come **`EventHandler`** (`DocumentChanged`/`Renamed`/`Removed` → snapshot via `host.read_document`) | Dogfooding del contratto. Un `Overflow` può fargli perdere uno snapshot intermedio: per un *campionatore* è accettabile (la versione successiva arriva al prossimo salvataggio) — a differenza dell'indice, che per questo non passa dagli eventi. | presa |
+| D6 | Retention: **dedup per contenuto** (niente snapshot se identico all'ultimo) + potatura a fasce (tutto < 24h, orario < 7gg, giornaliero < 90gg) | Limita la crescita senza perdere la storia recente, che è quella che si ripesca davvero. Parametri regolabili nei settings (M3). | presa |
 | D7 | Il versioning è **spegnibile totalmente** | Principio non negoziabile ([funzionalita-future.md](appendix/funzionalita-future.md)): spento = l'handler non si registra, la UI non esiste. | vincolo |
-| D8 | Ripristino di una versione = **scrittura normale** (`write_document`), mai un bypass | Passa da grafo, indici, eventi, watcher come ogni altra modifica: nessun percorso speciale da tenere coerente. Il ripristino stesso genera uno snapshot (si può "annullare il ripristino"). | proposta |
+| D8 | Ripristino di una versione = **scrittura normale** (`write_document`), mai un bypass | Passa da grafo, indici, eventi, watcher come ogni altra modifica: nessun percorso speciale da tenere coerente. Il ripristino stesso genera uno snapshot (si può "annullare il ripristino"). | presa |
 
-Aperto, da decidere strada facendo:
+Aperto, da decidere strada facendo — **deciso**:
 - **Trigger degli snapshot**: a ogni `DocumentChanged` (con dedup D6 il costo è
   basso) oppure con un debounce proprio (es. max 1/minuto per file)? Partire
-  semplice: ogni evento + dedup, misurare.
+  semplice: ogni evento + dedup, misurare. → **ogni evento + dedup**. Un
+  debounce proprio si aggiunge quando una misura dirà che serve; aggiungerlo
+  adesso significherebbe difendersi da un costo che non si è visto.
 - **UI della cronologia**: pannello per-documento ("versioni di questa nota")
-  subito; "vault al tempo T" può aspettare una seconda passata.
+  subito; "vault al tempo T" può aspettare una seconda passata. → **pannello
+  per-documento**; la vista al tempo T resta l'unica voce non fatta di questo
+  piano.
 
 ## Fase 0 — Prerequisiti (bug latenti che il cestino renderebbe reali)
 
@@ -189,13 +193,28 @@ testo nuovo. Chi ha già una storia non paga nulla, nemmeno una lettura.
 
 ## Fase 4 — Chiusura
 
-- [ ] `cargo test --workspace` + clippy + `tsc` verdi; bench invariati.
-- [ ] Docs: aggiornare [PIANO.md](PIANO.md) (decisioni D1–D8 in tabella se
+- [x] `cargo test --workspace` + clippy + `tsc` verdi; bench invariati.
+      *(132 test verdi, 2 ignorati — i due bench, che si eseguono a mano in
+      release. Clippy: 0 warning. `tsc --noEmit`: pulito. Bench: ricerca su
+      2000 note, indice da zero 25 ms, query peggiore 110 µs, riapertura
+      14 ms; grafo incrementale 1404× più economico del rebuild. Invariante di
+      dipendenze verificata con `cargo tree`: né `comrak`, né `tauri`, né
+      `wasmtime`, né `tantivy` nel kernel o nell'abi.)*
+- [x] Docs: aggiornare [PIANO.md](PIANO.md) (decisioni D1–D8 in tabella se
       confermate), [M2](milestones/M2-search-graph.md) (la voce "crea nota" si
       spunta), [data-model.md](architecture/data-model.md) (il cestino e le
       versioni nel discorso "verità del documento").
-- [ ] Aggiornare questo file: spuntare tutto o annotare cosa è slittato e
+- [x] Aggiornare questo file: spuntare tutto o annotare cosa è slittato e
       perché.
+
+Le decisioni D1–D8 passano da *proposta* a **presa**: sono tutte implementate e
+coperte da test. L'unica voce non fatta è la vista "vault al tempo T", rimandata
+per scelta a una seconda passata (era già segnata così nel documento).
+
+`fubmd-abi` e `wit/fubmd/abi.wit` **non sono stati toccati**: cestino e
+versioning sono operazioni di kernel e app, e il versioning gira su
+`EventHandler`, che nel contratto c'era già. Era la verifica che questo lavoro
+non stesse sfondando il confine sbagliato.
 
 ## Criteri di accettazione
 
