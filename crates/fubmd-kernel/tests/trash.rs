@@ -65,7 +65,10 @@ struct SpyIndex(Arc<Mutex<Vec<Call>>>);
 
 impl IndexProvider for SpyIndex {
     fn on_document_indexed(&mut self, doc: &DocumentModel) {
-        self.0.lock().unwrap().push(Call::Indexed(doc.id.to_string()));
+        self.0
+            .lock()
+            .unwrap()
+            .push(Call::Indexed(doc.id.to_string()));
     }
     fn on_document_removed(&mut self, id: &DocId) {
         self.0.lock().unwrap().push(Call::Removed(id.to_string()));
@@ -154,7 +157,11 @@ fn deleting_a_note_moves_it_to_the_trash_and_tells_the_index() {
 
     assert_eq!(trashed, DocId::new(".trash/Idea.txt"));
     assert!(!fx.exists("Idea.txt"), "il file ha lasciato il suo posto");
-    assert_eq!(fx.read(".trash/Idea.txt"), "un'idea", "e non è stato distrutto");
+    assert_eq!(
+        fx.read(".trash/Idea.txt"),
+        "un'idea",
+        "e non è stato distrutto"
+    );
     assert!(ws.documents().is_empty());
     // L'indice deve saperlo, o la nota resta cercabile: un risultato che apre
     // il nulla è peggio di nessun risultato.
@@ -178,7 +185,10 @@ fn the_watcher_seeing_the_file_vanish_does_not_do_the_work_twice() {
     // `.trash/` è comparso qualcosa (vero, e non sono fatti suoi).
     assert!(!ws.sync_path(&fx.root.join("Idea.txt")).unwrap());
     assert!(!ws.sync_path(&fx.root.join(".trash/Idea.txt")).unwrap());
-    assert!(fx.calls().is_empty(), "niente da rifare e niente da disfare");
+    assert!(
+        fx.calls().is_empty(),
+        "niente da rifare e niente da disfare"
+    );
     assert!(fx.exists(".trash/Idea.txt"));
 }
 
@@ -187,13 +197,19 @@ fn deleting_the_same_name_twice_never_overwrites_the_first_copy() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
 
-    ws.write_document(&DocId::new("Idea.txt"), "prima stesura").unwrap();
+    ws.write_document(&DocId::new("Idea.txt"), "prima stesura")
+        .unwrap();
     ws.delete_document(&DocId::new("Idea.txt")).unwrap();
-    ws.write_document(&DocId::new("Idea.txt"), "seconda stesura").unwrap();
+    ws.write_document(&DocId::new("Idea.txt"), "seconda stesura")
+        .unwrap();
     let seconda = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
 
     assert_eq!(fx.trash_files().len(), 2, "due cancellazioni, due copie");
-    assert_eq!(fx.read(".trash/Idea.txt"), "prima stesura", "la prima è intatta");
+    assert_eq!(
+        fx.read(".trash/Idea.txt"),
+        "prima stesura",
+        "la prima è intatta"
+    );
     assert_eq!(fx.read(seconda.as_str()), "seconda stesura");
     // La seconda porta l'istante nel nome, prima dell'estensione: resta un .txt.
     assert!(seconda.as_str().starts_with(".trash/Idea."));
@@ -214,7 +230,10 @@ fn restoring_from_the_trash_brings_the_note_back_everywhere() {
     assert_eq!(tornata, DocId::new("Idea.txt"));
     assert_eq!(ws.documents(), vec![DocId::new("Idea.txt")]);
     assert_eq!(fx.read("Idea.txt"), "un'idea");
-    assert!(!fx.exists(".trash/Idea.txt"), "il cestino l'ha lasciata andare");
+    assert!(
+        !fx.exists(".trash/Idea.txt"),
+        "il cestino l'ha lasciata andare"
+    );
     // Il ripristino è una scrittura normale (D8): l'indice la riceve come
     // riceverebbe qualunque altra modifica, senza percorsi speciali.
     assert_eq!(fx.calls(), vec![Call::Indexed("Idea.txt".into())]);
@@ -243,7 +262,9 @@ fn a_note_deleted_from_a_folder_comes_back_to_the_root() {
     fx.put("appunti/2026/Idea.txt", "un'idea");
     let mut ws = fx.workspace();
 
-    let trashed = ws.delete_document(&DocId::new("appunti/2026/Idea.txt")).unwrap();
+    let trashed = ws
+        .delete_document(&DocId::new("appunti/2026/Idea.txt"))
+        .unwrap();
     let tornata = ws.restore_from_trash(&trashed, None).unwrap();
 
     // Il cestino è piatto perché è quello di Obsidian (D1): la cartella di
@@ -264,8 +285,15 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
         .unwrap();
 
     let err = ws.restore_from_trash(&trashed, None).unwrap_err();
-    assert!(matches!(err, KernelError::AlreadyExists(_)), "trovato {err}");
-    assert_eq!(fx.read("Idea.txt"), "una nuova nota, stesso nome", "intatta");
+    assert!(
+        matches!(err, KernelError::AlreadyExists(_)),
+        "trovato {err}"
+    );
+    assert_eq!(
+        fx.read("Idea.txt"),
+        "una nuova nota, stesso nome",
+        "intatta"
+    );
 
     // È il chiamante a risolvere il conflitto scegliendo un nome: il kernel non
     // inventa nomi al posto dell'utente.
@@ -314,8 +342,14 @@ fn the_trash_lists_the_most_recent_first() {
 
     let entries = ws.list_trash().unwrap();
     assert_eq!(entries.len(), 2);
-    assert!(entries[0].deleted_at >= entries[1].deleted_at, "dal più recente");
+    assert!(
+        entries[0].deleted_at >= entries[1].deleted_at,
+        "dal più recente"
+    );
     let originali: Vec<String> = entries.iter().map(|e| e.original.to_string()).collect();
-    assert!(originali.contains(&"Uno.txt".to_string()), "il timbro non fa parte del nome");
+    assert!(
+        originali.contains(&"Uno.txt".to_string()),
+        "il timbro non fa parte del nome"
+    );
     assert!(originali.contains(&"Due.txt".to_string()));
 }

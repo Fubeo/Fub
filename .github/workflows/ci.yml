@@ -1,0 +1,89 @@
+# CI multi-OS, come previsto da docs/appendix/platforms-ci.md.
+#
+# Il motivo per averla adesso e non "quando servirà": ogni invariante che i
+# documenti dichiarano "verificata dai test" vale solo sulla macchina di chi si
+# ricorda di lanciarli. Linux è la piattaforma primaria di sviluppo; Windows e
+# macOS sono supportati, e una regressione cross-OS deve emergere subito —
+# soprattutto sui path (`camino`/`Utf8Path`) e sui lock file di `.fubmd-data/`.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Le invarianti architetturali sono veloci e non dipendono dall'OS: girano da
+  # sole, così il segnale arriva in un minuto invece che in venti.
+  invariants:
+    name: invarianti (abi↔WIT, dipendenze)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - name: Conformità abi ↔ wit/fubmd/abi.wit
+        run: cargo test -p fubmd-abi --test wit_conformance
+      - name: fubmd-abi e fubmd-kernel restano agnostici
+        run: cargo test -p fubmd-abi --test dependency_invariant
+
+  fmt:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Dipendenze di sistema di Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: build + test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      # Toolchain pinnata all'MSRV del workspace (rust-version = "1.85"): la CI
+      # verifica anche che la promessa dell'MSRV sia vera.
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - name: Dipendenze di sistema di Tauri
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+      - run: cargo build --workspace
+      - run: cargo test --workspace
+
+  frontend:
+    name: frontend (type-check + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      # `vite build` traspila senza controllare i tipi: il type-check è questo.
+      - run: npx tsc --noEmit
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend

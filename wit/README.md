@@ -23,24 +23,37 @@ a firme non serializzabili.
 
 Test: [`crates/fubmd-abi/tests/wit_conformance.rs`](../crates/fubmd-abi/tests/wit_conformance.rs).
 
-È un check **strutturale** e **std-only** (nessuna dipendenza aggiuntiva —
-l'invariante di `fubmd-abi` resta intatto). Crea pressione **bidirezionale**:
+Il test **parsa** `abi.wit` con `wit-parser` e confronta insiemi di nomi
+*dichiarati*, non sottostringhe del sorgente. `wit-parser` è una
+**dev-dependency**: l'invariante di `fubmd-abi` riguarda le dipendenze normali
+(quelle che finiscono nella libreria), ed è presidiata dal suo test in
+[`dependency_invariant.rs`](../crates/fubmd-abi/tests/dependency_invariant.rs).
 
-1. **Drift lato Rust →** match e destructuring esaustivi su ogni tipo di
+Pressione su **tre** direzioni:
+
+1. **Il WIT deve essere valido →** un contratto che non parsa è un test rosso.
+   (Prima non lo era: il WIT era sintatticamente invalido e il test verde.)
+2. **Drift lato Rust →** match e destructuring esaustivi su ogni tipo di
    `fubmd-abi` non compilano più se un enum guadagna una variante o un campo
    cambia: il compilatore obbliga ad aggiornare il test (e quindi il WIT).
-2. **Drift lato WIT →** ogni nome atteso (tipo, variante, campo in kebab-case) deve
-   comparire in `abi.wit`: rinominare o rimuovere qualcosa rende il test rosso.
+3. **Drift lato WIT, nelle due direzioni →** un tipo/caso/campo atteso e assente
+   fallisce; uno dichiarato nel WIT e che nessun tipo abi rivendica fallisce
+   ugualmente, perché è contratto morto.
+
+C'è anche il **test del test**: divergenze introdotte ad arte (campo rinominato,
+caso rimosso, funzione sparita, tipo di troppo, alias con la larghezza sbagliata)
+devono farlo diventare rosso, o non sta verificando niente.
 
 ### Limite noto (colmato a M4)
 
-Il check verifica la **presenza dei nomi**, non che il WIT sia sintatticamente
-valido né che le *forme* (tipi dei campi, cardinalità) combacino. La validazione
-piena — parsing con `wit-parser` e/o generazione di binding con `wit-bindgen` +
-conversioni `From`/`Into` che non compilano su divergenza di forma — è parte del
-lavoro di [M4](../docs/milestones/M4-wit-hardening.md). Quel tooling vivrà in un
-crate al confine (`fubmd-wasm-host` o un crate di conformità dedicato), **mai** in
-`fubmd-abi`/`fubmd-kernel`.
+Si confrontano i **nomi** di tipi, casi, campi e funzioni, e i **tipi** dei soli
+alias (dove il tipo *è* l'informazione: gli indici dell'arena sono `u32`, gli
+span `u64`). I tipi dei campi di record e le firme complete delle funzioni sono
+lavoro di [M4](../docs/milestones/M4-wit-hardening.md), dove arriva anche la
+generazione di binding con `wit-bindgen` + conversioni `From`/`Into` che non
+compilano su divergenza di forma. Quel tooling vivrà in un crate al confine
+(`fubmd-wasm-host` o un crate di conformità dedicato), **mai** fra le dipendenze
+normali di `fubmd-abi`/`fubmd-kernel`.
 
 ## Convenzioni
 
@@ -53,3 +66,11 @@ crate al confine (`fubmd-wasm-host` o un crate di conformità dedicato), **mai**
 - I payload di variante con più campi usano record ausiliari (`block-heading`,
   `link-target-wiki`, `ui-stack`, …) perché una `variant` WIT porta un solo tipo per
   caso.
+- Gli **alberi ricorsivi** (`block`, `inline`, `ui-node`) al confine sono
+  un'**arena**: lista piatta di nodi + indici `u32` (`block-ref`, `inline-ref`,
+  `ui-ref`), perché WIT non ammette tipi ricorsivi. I tipi Rust restano alberi;
+  la conversione vive nel proxy WASM. Il perché — e perché non una stringa JSON
+  — è in [docs/architecture/traits.md](../docs/architecture/traits.md),
+  "Alberi ricorsivi al confine".
+- `list`, `result` e `from` sono **keyword WIT**: dove sono nomi di variante o di
+  campo compaiono con l'escape `%`. I nomi Rust non cambiano.

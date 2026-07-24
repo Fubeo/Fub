@@ -296,7 +296,10 @@ fn handlers_run_queued_not_recursive_and_can_write_documents() {
     let dir = TempDir::new("dispatch");
     let mut ws = workspace(&dir.0);
     let log: Log = Arc::new(Mutex::new(Vec::new()));
-    ws.register_event_handler(Box::new(ChainingHandler { log: log.clone() }));
+    ws.register_event_handler(
+        "test.chaining",
+        Box::new(ChainingHandler { log: log.clone() }),
+    );
 
     ws.write_document(&DocId::new("innesco.lnk"), "").unwrap();
 
@@ -349,9 +352,12 @@ fn dispatch_budget_stops_infinite_event_loops_loudly() {
     let dir = TempDir::new("pingpong");
     let mut ws = workspace(&dir.0);
     let count = Arc::new(Mutex::new(0usize));
-    ws.register_event_handler(Box::new(PingPongHandler {
-        count: count.clone(),
-    }));
+    ws.register_event_handler(
+        "test.pingpong",
+        Box::new(PingPongHandler {
+            count: count.clone(),
+        }),
+    );
 
     let rx = ws.bus().subscribe();
     // L'evento Custom emesso dal handler rialimenta sé stesso: senza budget
@@ -421,9 +427,12 @@ fn jobs_run_outside_the_kernel_and_complete_via_event() {
     let dir = TempDir::new("jobs");
     let mut ws = workspace(&dir.0);
     let job_id = Arc::new(Mutex::new(None));
-    ws.register_event_handler(Box::new(JobRequestingHandler {
-        job_id: job_id.clone(),
-    }));
+    ws.register_event_handler(
+        "test.jobs",
+        Box::new(JobRequestingHandler {
+            job_id: job_id.clone(),
+        }),
+    );
 
     // 1. Il handler chiede il job durante il giro sincrono: il kernel lo
     //    accoda soltanto (niente esecuzione dentro al lock).

@@ -1,11 +1,21 @@
 //! Versioning del vault: snapshot per-file, tombstone, ripristino.
 //!
-//! È **dogfooding del contratto**: il campionatore è un
-//! [`EventHandler`](fubmd_abi::traits::EventHandler) che legge via
-//! [`HostApi`](fubmd_abi::traits::HostApi), cioè con gli stessi strumenti che
-//! avrà un plugin di terzi a M5. Il kernel non sa che esiste — e infatti il
-//! ripristino di una versione non è un'operazione del kernel: è una scrittura
-//! normale (D8), che l'app compone.
+//! È **dogfooding del contratto**, e stavolta fino in fondo: il campionatore è
+//! un [`EventHandler`](fubmd_abi::traits::EventHandler) e lo store scrive
+//! esclusivamente attraverso l'[`HostApi`](fubmd_abi::traits::HostApi) — niente
+//! `std::fs`, niente orologio di sistema, nessuna idea di dove sia il vault.
+//! Sono gli stessi strumenti che avrà un plugin di terzi a M5.
+//!
+//! # Cosa ha trovato il dogfooding
+//!
+//! Nella sua prima versione lo store scriveva `.fubmd-data/versions/` con
+//! `std::fs` e leggeva l'ora da `fubmd_kernel::time`: funzionava benissimo *da
+//! nativo*, e un plugin WASM con l'`HostApi` di allora non avrebbe potuto
+//! scriverlo (lo `storage_get/set` è volatile e a chiave→valore, non uno store
+//! di snapshot). Il buco era **nel contratto**, non nella feature; è stato
+//! chiuso lì, prima del freeze di M4: `data_read/write/remove/list` per lo
+//! storage persistente per-plugin, `now_unix_millis` per il tempo,
+//! `list_documents` per potersi guardare intorno all'apertura del vault.
 //!
 //! # Perché gli eventi qui vanno bene (e all'indice no)
 //!
@@ -18,11 +28,13 @@
 //!
 //! # Lo store, e chi comanda fra store e indice
 //!
+//! Path relativi allo spazio dati che l'host assegna al plugin
+//! (`.fubmd-data/plugins/fubmd.versioning/`):
+//!
 //! ```text
-//! .fubmd-data/versions/
-//!   versions.json                    indice: doc_id → versioni + tombstone
-//!   <dir>/meta.json                  { doc_id, deleted_at }
-//!   <dir>/<ts>.md                    il contenuto di una versione
+//! versions.json                    indice: doc_id → versioni + tombstone
+//! <dir>/meta.json                  { doc_id, deleted_at }
+//! <dir>/<ts>.md                    il contenuto di una versione
 //! ```
 //!
 //! `versions.json` è **derivato**: se manca, non si legge o non torna, si
@@ -35,13 +47,15 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::event::{Event, EventKind, EventMask};
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{EventHandler, HostApi};
 use fubmd_abi::PluginError;
-use fubmd_kernel::time::now_unix_millis;
 use serde::{Deserialize, Serialize};
+
+/// Identità del versioning come plugin: è lo spazio dello storage persistente
+/// che l'host gli concede. Lo assegna chi registra l'handler — non la feature.
+pub const VERSIONING_ID: &str = "fubmd.versioning";
 
 /// Versione del formato dello store. Da incrementare se cambia la struttura
 /// su disco: un indice di un'altra epoca si butta e si ricostruisce.
@@ -97,45 +111,41 @@ struct Meta {
 }
 
 struct Inner {
-    dir: Utf8PathBuf,
     docs: BTreeMap<String, DocVersions>,
 }
 
 /// Lo store delle versioni.
 ///
-/// Clonabile e condiviso: una copia vive dentro il
-/// [`VersioningHandler`] registrato nel workspace, l'altra resta all'app, che
-/// deve poter elencare e rileggere le versioni senza passare dagli eventi.
+/// Clonabile e condiviso: una copia vive dentro il [`VersioningHandler`]
+/// registrato nel workspace, l'altra resta all'app, che deve poter elencare e
+/// rileggere le versioni senza passare dagli eventi. Ciò che l'app **non** ha
+/// più è un canale privilegiato: anche lei passa da un `HostApi`
+/// (`Workspace::with_host`), lo stesso che riceve l'handler.
 #[derive(Clone)]
 pub struct VersionStore {
     inner: Arc<Mutex<Inner>>,
 }
 
 impl VersionStore {
-    /// Apre (o crea) lo store nella cartella dati del vault.
-    pub fn open(vault_root: &Utf8Path) -> Result<Self, PluginError> {
-        Self::open_dir(&vault_root.join(".fubmd-data").join("versions"))
-    }
-
-    pub fn open_dir(dir: &Utf8Path) -> Result<Self, PluginError> {
-        std::fs::create_dir_all(dir).map_err(|e| io_err(dir, e))?;
-        let docs = load_index(dir).unwrap_or_else(|| {
-            let ricostruito = rebuild_from_store(dir);
-            if !ricostruito.is_empty() {
-                eprintln!(
-                    "versioning: indice assente o illeggibile, ricostruito dallo store \
-                     ({} document{})",
-                    ricostruito.len(),
-                    if ricostruito.len() == 1 { "o" } else { "i" }
-                );
+    /// Apre (o crea) lo store nello spazio dati del plugin.
+    pub fn open(host: &mut dyn HostApi) -> Result<Self, PluginError> {
+        let docs = match load_index(host) {
+            Some(docs) => docs,
+            None => {
+                let ricostruito = rebuild_from_store(host)?;
+                if !ricostruito.is_empty() {
+                    eprintln!(
+                        "versioning: indice assente o illeggibile, ricostruito dallo store \
+                         ({} document{})",
+                        ricostruito.len(),
+                        if ricostruito.len() == 1 { "o" } else { "i" }
+                    );
+                }
+                ricostruito
             }
-            ricostruito
-        });
+        };
         Ok(VersionStore {
-            inner: Arc::new(Mutex::new(Inner {
-                dir: dir.to_owned(),
-                docs,
-            })),
+            inner: Arc::new(Mutex::new(Inner { docs })),
         })
     }
 
@@ -143,10 +153,15 @@ impl VersionStore {
     ///
     /// Restituisce `None` quando il dedup (D6) ha deciso che non c'era niente
     /// di nuovo: è il caso normale del salvataggio che riscrive lo stesso testo.
-    pub fn snapshot(&self, id: &DocId, source: &str) -> Result<Option<VersionRef>, PluginError> {
+    pub fn snapshot(
+        &self,
+        id: &DocId,
+        source: &str,
+        host: &mut dyn HostApi,
+    ) -> Result<Option<VersionRef>, PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         let hash = fingerprint(source);
-        let dir_doc = inner.ensure_dir(id)?;
+        let dir_doc = inner.ensure_dir(id, host)?;
 
         {
             let doc = inner.docs.entry(id.to_string()).or_default();
@@ -155,12 +170,11 @@ impl VersionStore {
             }
         }
 
-        let ts = inner.free_ts(id);
-        let path = inner
-            .dir
-            .join(&dir_doc)
-            .join(snapshot_name(ts, id.as_str()));
-        std::fs::write(&path, source).map_err(|e| io_err(&path, e))?;
+        let ts = inner.free_ts(id, host);
+        host.data_write(
+            &blob(&dir_doc, &snapshot_name(ts, id.as_str())),
+            source.as_bytes(),
+        )?;
 
         let version = VersionRef {
             ts,
@@ -173,15 +187,20 @@ impl VersionStore {
         // "il vault al tempo T" la crederebbe cancellata per sempre.
         doc.deleted_at = None;
 
-        inner.prune(id);
-        inner.write_meta(id)?;
-        inner.write_index()?;
+        inner.prune(id, host);
+        inner.write_meta(id, host)?;
+        inner.write_index(host)?;
         Ok(Some(version))
     }
 
     /// Migra le versioni sul nuovo path: l'identità di un documento **è** il
     /// suo path, e un rename la sposta senza spezzare la storia.
-    pub fn rename(&self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
+    pub fn rename(
+        &self,
+        from: &DocId,
+        to: &DocId,
+        host: &mut dyn HostApi,
+    ) -> Result<(), PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         let Some(doc) = inner.docs.remove(from.as_str()) else {
             return Ok(());
@@ -194,22 +213,26 @@ impl VersionStore {
             Some(esistente) => merge(doc, esistente),
         };
         inner.docs.insert(to.to_string(), unito);
-        inner.write_meta(to)?;
-        inner.write_index()
+        inner.write_meta(to, host)?;
+        inner.write_index(host)
     }
 
     /// Segna che il documento, a questo istante, non c'è più.
-    pub fn tombstone(&self, id: &DocId) -> Result<(), PluginError> {
+    pub fn tombstone(&self, id: &DocId, host: &mut dyn HostApi) -> Result<(), PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
+        let now = host.now_unix_millis();
         let Some(doc) = inner.docs.get_mut(id.as_str()) else {
             return Ok(());
         };
-        doc.deleted_at = Some(now_unix_millis());
-        inner.write_meta(id)?;
-        inner.write_index()
+        doc.deleted_at = Some(now);
+        inner.write_meta(id, host)?;
+        inner.write_index(host)
     }
 
     /// Le versioni di un documento, dalla più recente alla più vecchia.
+    ///
+    /// Non serve l'host: l'elenco è in memoria, e l'unica cosa che sta su disco
+    /// è il contenuto ([`VersionStore::read`]).
     pub fn list(&self, id: &DocId) -> Vec<VersionRef> {
         let inner = self.inner.lock().expect("mutex");
         inner
@@ -220,30 +243,29 @@ impl VersionStore {
     }
 
     /// Il contenuto di una versione.
-    pub fn read(&self, id: &DocId, ts: u64) -> Result<String, PluginError> {
+    pub fn read(&self, id: &DocId, ts: u64, host: &dyn HostApi) -> Result<String, PluginError> {
         let inner = self.inner.lock().expect("mutex");
         let doc = inner
             .docs
             .get(id.as_str())
             .ok_or_else(|| PluginError::BadArgs(format!("nessuna versione di {id}")))?;
         if !doc.versions.iter().any(|v| v.ts == ts) {
-            return Err(PluginError::BadArgs(format!("versione {ts} di {id}: non c'è")));
+            return Err(PluginError::BadArgs(format!(
+                "versione {ts} di {id}: non c'è"
+            )));
         }
-        let path = inner
-            .dir
-            .join(&doc.dir)
-            .join(snapshot_name(ts, id.as_str()));
-        std::fs::read_to_string(&path).map_err(|e| io_err(&path, e))
+        let path = blob(&doc.dir, &snapshot_name(ts, id.as_str()));
+        let bytes = host
+            .data_read(&path)?
+            .ok_or_else(|| PluginError::Internal(format!("{path}: il contenuto è sparito")))?;
+        String::from_utf8(bytes).map_err(|e| PluginError::Internal(format!("{path}: {e}")))
     }
 
     /// Questo documento ha già una storia?
     ///
-    /// Serve a chi apre il vault per decidere se scattargli la **prima
-    /// fotografia**: gli snapshot nascono dagli eventi, e l'apertura di un
-    /// vault non ne emette per documento. Senza una prima versione, la prima
-    /// modifica a una nota mai versionata cancellerebbe per sempre lo stato in
-    /// cui l'utente l'ha trovata — l'handler, che gira *dopo* la scrittura,
-    /// vede solo il testo nuovo.
+    /// Serve alla **prima fotografia** del vault (vedi
+    /// [`VersioningHandler`]): chi ha già una storia non paga nulla, nemmeno
+    /// una lettura.
     pub fn has_versions(&self, id: &DocId) -> bool {
         let inner = self.inner.lock().expect("mutex");
         inner
@@ -261,17 +283,18 @@ impl VersionStore {
 }
 
 impl Inner {
-    /// La cartella del documento, creandola se serve.
+    /// La cartella del documento nello spazio dati del plugin.
     ///
     /// Il nome nasce dall'impronta del `doc_id`; se quella cartella è già di
     /// un altro documento — una collisione di impronte, improbabile ma non
     /// impossibile — si prende la successiva libera. Meglio un nome brutto che
     /// due storie mescolate.
-    fn ensure_dir(&mut self, id: &DocId) -> Result<String, PluginError> {
+    ///
+    /// Non crea niente: le directory intermedie nascono alla prima scrittura,
+    /// e uno store senza contenuti non deve lasciare cartelle vuote in giro.
+    fn ensure_dir(&mut self, id: &DocId, host: &dyn HostApi) -> Result<String, PluginError> {
         if let Some(doc) = self.docs.get(id.as_str()) {
             if !doc.dir.is_empty() {
-                let path = self.dir.join(&doc.dir);
-                std::fs::create_dir_all(&path).map_err(|e| io_err(&path, e))?;
                 return Ok(doc.dir.clone());
             }
         }
@@ -282,13 +305,11 @@ impl Inner {
             } else {
                 format!("{base}-{n}")
             };
-            let path = self.dir.join(&nome);
-            let libera = match read_meta(&path) {
+            let libera = match read_meta(&nome, host)? {
                 None => true,
                 Some(meta) => meta.doc_id == id.as_str(),
             };
             if libera {
-                std::fs::create_dir_all(&path).map_err(|e| io_err(&path, e))?;
                 self.docs.entry(id.to_string()).or_default().dir = nome.clone();
                 return Ok(nome);
             }
@@ -298,9 +319,9 @@ impl Inner {
 
     /// Un istante non ancora usato da questo documento: due salvataggi nello
     /// stesso millisecondo sono improbabili, ma sovrascriversi a vicenda no.
-    fn free_ts(&self, id: &DocId) -> u64 {
+    fn free_ts(&self, id: &DocId, host: &dyn HostApi) -> u64 {
         let usati = self.docs.get(id.as_str());
-        let mut ts = now_unix_millis();
+        let mut ts = host.now_unix_millis();
         while usati.is_some_and(|d| d.versions.iter().any(|v| v.ts == ts)) {
             ts += 1;
         }
@@ -309,11 +330,11 @@ impl Inner {
 
     /// Applica le fasce di ritenzione (D6) e **dice quante versioni ha buttato**:
     /// una potatura silenziosa sarebbe indistinguibile da un bug.
-    fn prune(&mut self, id: &DocId) {
+    fn prune(&mut self, id: &DocId, host: &mut dyn HostApi) {
+        let ora = host.now_unix_millis();
         let Some(doc) = self.docs.get(id.as_str()) else {
             return;
         };
-        let ora = now_unix_millis();
         let mut tenute: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
         let mut fasce_viste: Vec<(u8, u64)> = Vec::new();
         // Dalla più recente: dentro ogni fascia vince la più recente.
@@ -349,10 +370,10 @@ impl Inner {
             .filter(|v| !tenute.iter().any(|t| t.ts == v.ts))
             .copied()
             .collect();
-        let dir = self.dir.join(&doc.dir);
+        let dir = doc.dir.clone();
         for v in &da_buttare {
-            let path = dir.join(snapshot_name(v.ts, id.as_str()));
-            if let Err(e) = std::fs::remove_file(&path) {
+            let path = blob(&dir, &snapshot_name(v.ts, id.as_str()));
+            if let Err(e) = host.data_remove(&path) {
                 eprintln!("versioning: non riesco a potare {path}: {e}");
             }
         }
@@ -366,7 +387,7 @@ impl Inner {
         }
     }
 
-    fn write_meta(&self, id: &DocId) -> Result<(), PluginError> {
+    fn write_meta(&self, id: &DocId, host: &mut dyn HostApi) -> Result<(), PluginError> {
         let Some(doc) = self.docs.get(id.as_str()) else {
             return Ok(());
         };
@@ -374,21 +395,19 @@ impl Inner {
             doc_id: id.to_string(),
             deleted_at: doc.deleted_at,
         };
-        let path = self.dir.join(&doc.dir).join(META_FILE);
-        let raw = serde_json::to_string(&meta)
+        let raw = serde_json::to_vec(&meta)
             .map_err(|e| PluginError::Internal(format!("meta versioni: {e}")))?;
-        std::fs::write(&path, raw).map_err(|e| io_err(&path, e))
+        host.data_write(&blob(&doc.dir, META_FILE), &raw)
     }
 
-    fn write_index(&self) -> Result<(), PluginError> {
+    fn write_index(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {
         let index = Index {
             schema_version: SCHEMA_VERSION,
             docs: self.docs.clone(),
         };
-        let raw = serde_json::to_string(&index)
+        let raw = serde_json::to_vec(&index)
             .map_err(|e| PluginError::Internal(format!("indice versioni: {e}")))?;
-        let path = self.dir.join(INDEX_FILE);
-        std::fs::write(&path, raw).map_err(|e| io_err(&path, e))
+        host.data_write(INDEX_FILE, &raw)
     }
 }
 
@@ -406,6 +425,16 @@ fn merge(a: DocVersions, b: DocVersions) -> DocVersions {
     }
 }
 
+/// Il nome di un blob dello store: i path dell'`HostApi` sono relativi allo
+/// spazio del plugin e usano sempre `/`.
+fn blob(dir: &str, name: &str) -> String {
+    if dir.is_empty() {
+        name.to_string()
+    } else {
+        format!("{dir}/{name}")
+    }
+}
+
 fn snapshot_name(ts: u64, doc_id: &str) -> String {
     match doc_id.rsplit_once('.') {
         Some((_, ext)) if !ext.is_empty() && !ext.contains('/') => format!("{ts}.{ext}"),
@@ -413,15 +442,18 @@ fn snapshot_name(ts: u64, doc_id: &str) -> String {
     }
 }
 
-/// L'indice su disco, se c'è ed è della nostra epoca.
-fn load_index(dir: &Utf8Path) -> Option<BTreeMap<String, DocVersions>> {
-    let raw = std::fs::read_to_string(dir.join(INDEX_FILE)).ok()?;
-    let index: Index = serde_json::from_str(&raw).ok()?;
+/// L'indice nello store, se c'è ed è della nostra epoca.
+fn load_index(host: &dyn HostApi) -> Option<BTreeMap<String, DocVersions>> {
+    let raw = host.data_read(INDEX_FILE).ok()??;
+    let index: Index = serde_json::from_slice(&raw).ok()?;
     (index.schema_version == SCHEMA_VERSION).then_some(index.docs)
 }
 
-fn read_meta(dir: &Utf8Path) -> Option<Meta> {
-    serde_json::from_str(&std::fs::read_to_string(dir.join(META_FILE)).ok()?).ok()
+fn read_meta(dir: &str, host: &dyn HostApi) -> Result<Option<Meta>, PluginError> {
+    let Some(raw) = host.data_read(&blob(dir, META_FILE))? else {
+        return Ok(None);
+    };
+    Ok(serde_json::from_slice(&raw).ok())
 }
 
 /// Ricostruisce l'indice leggendo lo store: ogni cartella dice di chi è
@@ -430,32 +462,36 @@ fn read_meta(dir: &Utf8Path) -> Option<Meta> {
 /// È la direzione lecita del dubbio. Costa una lettura di tutti gli snapshot,
 /// ma succede solo quando l'indice è perso — e un indice perso, senza questo,
 /// renderebbe le versioni irraggiungibili per sempre.
-fn rebuild_from_store(dir: &Utf8Path) -> BTreeMap<String, DocVersions> {
-    let mut docs = BTreeMap::new();
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return docs;
-    };
-    for entry in entries.flatten() {
-        let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else {
-            continue;
-        };
-        if !path.is_dir() {
-            continue;
+fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
+    // I blob sono ordinati, quindi quelli di una stessa cartella sono contigui.
+    let mut per_dir: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    let blobs = host.data_list("")?;
+    for path in &blobs {
+        // Solo il primo livello: la struttura dello store è `<dir>/<file>`, e
+        // ciò che sta alla radice (l'indice) non è uno snapshot.
+        if let Some((dir, name)) = path.split_once('/') {
+            if !name.contains('/') {
+                per_dir.entry(dir).or_default().push(name);
+            }
         }
-        let Some(meta) = read_meta(&path) else {
-            eprintln!("versioning: {path} non dice di chi è, la salto");
+    }
+
+    let mut docs = BTreeMap::new();
+    for (dir, names) in per_dir {
+        let Some(meta) = read_meta(dir, host)? else {
+            eprintln!("versioning: {dir} non dice di chi è, la salto");
             continue;
         };
         let mut versions = Vec::new();
-        for file in std::fs::read_dir(&path).into_iter().flatten().flatten() {
-            let Ok(file) = Utf8PathBuf::from_path_buf(file.path()) else {
-                continue;
-            };
-            let Some(stem) = file.file_stem() else { continue };
+        for name in names {
+            let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
             let Ok(ts) = stem.parse::<u64>() else {
                 continue; // meta.json e tutto ciò che non è uno snapshot
             };
-            let Ok(source) = std::fs::read_to_string(&file) else {
+            let Some(bytes) = host.data_read(&blob(dir, name))? else {
+                continue;
+            };
+            let Ok(source) = String::from_utf8(bytes) else {
                 continue;
             };
             versions.push(VersionRef {
@@ -465,17 +501,16 @@ fn rebuild_from_store(dir: &Utf8Path) -> BTreeMap<String, DocVersions> {
             });
         }
         versions.sort_by_key(|v| v.ts);
-        let nome_dir = path.file_name().unwrap_or_default().to_string();
         docs.insert(
             meta.doc_id,
             DocVersions {
-                dir: nome_dir,
+                dir: dir.to_string(),
                 deleted_at: meta.deleted_at,
                 versions,
             },
         );
     }
-    docs
+    Ok(docs)
 }
 
 /// FNV-1a: la stessa impronta stabile fra versioni di Rust e piattaforme che
@@ -491,10 +526,6 @@ fn fingerprint(source: &str) -> u64 {
     h
 }
 
-fn io_err(path: &Utf8Path, e: std::io::Error) -> PluginError {
-    PluginError::Internal(format!("{path}: {e}"))
-}
-
 /// Il campionatore: un [`EventHandler`] come quelli che scriveranno i plugin.
 ///
 /// Non scrive nel vault e non emette eventi — legge e basta — quindi non può
@@ -507,11 +538,41 @@ impl VersioningHandler {
     pub fn new(store: VersionStore) -> Self {
         VersioningHandler { store }
     }
+
+    /// La prima fotografia del vault, all'apertura.
+    ///
+    /// Gli snapshot nascono dagli eventi e l'apertura non ne emette per
+    /// documento: senza questo passaggio, la prima modifica a una nota mai
+    /// versionata cancellerebbe per sempre lo stato in cui l'utente l'ha
+    /// trovata — l'handler gira *dopo* la scrittura e vede solo il testo nuovo.
+    ///
+    /// È **policy della feature**, non del wiring dell'app: viveva in
+    /// `fubmd-app::open_vault`, cioè in un posto dove un plugin non potrebbe
+    /// metterla. Qui è esattamente ciò che farebbe `Plugin::activate`.
+    fn first_snapshot_of_the_vault(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        for id in host.list_documents()? {
+            if self.store.has_versions(&id) {
+                continue;
+            }
+            // Una nota illeggibile o non salvabile non deve impedire
+            // l'apertura del vault: il vault è la verità, le versioni no.
+            match host.read_document(&id) {
+                Ok(source) => {
+                    if let Err(e) = self.store.snapshot(&id, &source, host) {
+                        eprintln!("versioning: prima versione di {id} non salvata: {e}");
+                    }
+                }
+                Err(e) => eprintln!("versioning: {id} non si legge: {e}"),
+            }
+        }
+        Ok(())
+    }
 }
 
 impl EventHandler for VersioningHandler {
     fn subscribed(&self) -> EventMask {
         EventMask(vec![
+            EventKind::VaultOpened,
             EventKind::DocumentChanged,
             EventKind::DocumentRenamed,
             EventKind::DocumentRemoved,
@@ -520,12 +581,13 @@ impl EventHandler for VersioningHandler {
 
     fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
         match event {
+            Event::VaultOpened { .. } => self.first_snapshot_of_the_vault(host)?,
             Event::DocumentChanged { id } => {
                 let source = host.read_document(id)?;
-                self.store.snapshot(id, &source)?;
+                self.store.snapshot(id, &source, host)?;
             }
-            Event::DocumentRenamed { from, to } => self.store.rename(from, to)?,
-            Event::DocumentRemoved { id } => self.store.tombstone(id)?,
+            Event::DocumentRenamed { from, to } => self.store.rename(from, to, host)?,
+            Event::DocumentRemoved { id } => self.store.tombstone(id, host)?,
             _ => {}
         }
         Ok(())
@@ -534,12 +596,101 @@ impl EventHandler for VersioningHandler {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap as Map;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use fubmd_abi::traits::{JobId, JobSpec};
+
     use super::*;
 
-    fn tmp() -> (tempfile::TempDir, Utf8PathBuf) {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = Utf8PathBuf::from_path_buf(dir.path().join("versions")).expect("utf8");
-        (dir, path)
+    /// Un host di prova: lo storage dei blob in memoria e un **orologio che si
+    /// muove a comando**. È il vero guadagno di aver messo il tempo nel
+    /// contratto — le fasce di ritenzione si provano invecchiando l'orologio,
+    /// non piantando timestamp finti nelle strutture interne dello store.
+    #[derive(Default)]
+    struct TestHost {
+        blobs: Mutex<Map<String, Vec<u8>>>,
+        docs: Mutex<Map<String, String>>,
+        now: AtomicU64,
+    }
+
+    impl TestHost {
+        fn new() -> Self {
+            let host = TestHost::default();
+            host.now.store(1_700_000_000_000, Ordering::Relaxed);
+            host
+        }
+
+        fn avanza(&self, ms: u64) {
+            self.now.fetch_add(ms, Ordering::Relaxed);
+        }
+
+        fn con_documento(self, id: &str, source: &str) -> Self {
+            self.docs
+                .lock()
+                .unwrap()
+                .insert(id.to_string(), source.to_string());
+            self
+        }
+    }
+
+    impl HostApi for TestHost {
+        fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
+            self.docs
+                .lock()
+                .unwrap()
+                .get(id.as_str())
+                .cloned()
+                .ok_or_else(|| PluginError::BadArgs(format!("{id} non esiste")))
+        }
+        fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
+            self.docs
+                .lock()
+                .unwrap()
+                .insert(id.to_string(), source.to_string());
+            Ok(())
+        }
+        fn list_documents(&self) -> Result<Vec<DocId>, PluginError> {
+            Ok(self.docs.lock().unwrap().keys().map(DocId::new).collect())
+        }
+        fn emit(&mut self, _event: Event) {}
+        fn spawn_job(&mut self, _spec: JobSpec) -> Result<JobId, PluginError> {
+            Ok(JobId(0))
+        }
+        fn storage_get(&self, _key: &str) -> Option<serde_json::Value> {
+            None
+        }
+        fn storage_set(&mut self, _key: &str, _value: serde_json::Value) {}
+        fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+            Ok(self.blobs.lock().unwrap().get(path).cloned())
+        }
+        fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
+            self.blobs
+                .lock()
+                .unwrap()
+                .insert(path.to_string(), bytes.to_vec());
+            Ok(())
+        }
+        fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
+            self.blobs.lock().unwrap().remove(path);
+            Ok(())
+        }
+        fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
+            // Semantica di *cartella*, come l'host vero (`KernelHost`), non di
+            // prefisso testuale: un finto che si comporta diversamente dal vero
+            // è una trappola che scatta il giorno che si cambia chiamante.
+            Ok(self
+                .blobs
+                .lock()
+                .unwrap()
+                .keys()
+                .filter(|k| prefix.is_empty() || k.starts_with(&format!("{prefix}/")))
+                .cloned()
+                .collect())
+        }
+        fn now_unix_millis(&self) -> u64 {
+            self.now.load(Ordering::Relaxed)
+        }
     }
 
     fn id(s: &str) -> DocId {
@@ -548,28 +699,41 @@ mod tests {
 
     #[test]
     fn every_new_content_becomes_a_version() {
-        let (_g, path) = tmp();
-        let store = VersionStore::open_dir(&path).unwrap();
+        let mut host = TestHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
 
-        store.snapshot(&id("a.md"), "prima").unwrap();
-        store.snapshot(&id("a.md"), "seconda").unwrap();
+        store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
+        host.avanza(1_000);
+        store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
 
         let versioni = store.list(&id("a.md"));
         assert_eq!(versioni.len(), 2);
         // Dalla più recente: è l'ordine in cui si cerca ciò che si vuole
         // ripescare.
-        assert_eq!(store.read(&id("a.md"), versioni[0].ts).unwrap(), "seconda");
-        assert_eq!(store.read(&id("a.md"), versioni[1].ts).unwrap(), "prima");
+        assert_eq!(
+            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            "seconda"
+        );
+        assert_eq!(
+            store.read(&id("a.md"), versioni[1].ts, &host).unwrap(),
+            "prima"
+        );
     }
 
     #[test]
     fn saving_the_same_text_again_is_not_a_new_version() {
-        let (_g, path) = tmp();
-        let store = VersionStore::open_dir(&path).unwrap();
+        let mut host = TestHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
 
-        assert!(store.snapshot(&id("a.md"), "identica").unwrap().is_some());
+        assert!(store
+            .snapshot(&id("a.md"), "identica", &mut host)
+            .unwrap()
+            .is_some());
         assert!(
-            store.snapshot(&id("a.md"), "identica").unwrap().is_none(),
+            store
+                .snapshot(&id("a.md"), "identica", &mut host)
+                .unwrap()
+                .is_none(),
             "il dedup per contenuto è ciò che rende sostenibile uno snapshot a ogni evento"
         );
         assert_eq!(store.list(&id("a.md")).len(), 1);
@@ -577,100 +741,117 @@ mod tests {
 
     #[test]
     fn a_rename_moves_the_history_with_the_note() {
-        let (_g, path) = tmp();
-        let store = VersionStore::open_dir(&path).unwrap();
-        store.snapshot(&id("vecchia.md"), "corpo").unwrap();
+        let mut host = TestHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("vecchia.md"), "corpo", &mut host)
+            .unwrap();
 
-        store.rename(&id("vecchia.md"), &id("nuova.md")).unwrap();
+        store
+            .rename(&id("vecchia.md"), &id("nuova.md"), &mut host)
+            .unwrap();
 
         assert!(store.list(&id("vecchia.md")).is_empty());
         let versioni = store.list(&id("nuova.md"));
         assert_eq!(versioni.len(), 1);
-        assert_eq!(store.read(&id("nuova.md"), versioni[0].ts).unwrap(), "corpo");
+        assert_eq!(
+            store.read(&id("nuova.md"), versioni[0].ts, &host).unwrap(),
+            "corpo"
+        );
     }
 
     #[test]
     fn a_deletion_leaves_a_tombstone_and_the_content_stays_readable() {
-        let (_g, path) = tmp();
-        let store = VersionStore::open_dir(&path).unwrap();
-        store.snapshot(&id("a.md"), "contenuto").unwrap();
+        let mut host = TestHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
 
-        store.tombstone(&id("a.md")).unwrap();
+        store.tombstone(&id("a.md"), &mut host).unwrap();
 
         let versioni = store.list(&id("a.md"));
         assert_eq!(versioni.len(), 1, "cancellare non cancella la storia");
-        assert_eq!(store.read(&id("a.md"), versioni[0].ts).unwrap(), "contenuto");
+        assert_eq!(
+            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            "contenuto"
+        );
         // E la nota che torna in vita non è più morta.
-        store.snapshot(&id("a.md"), "risorta").unwrap();
+        host.avanza(1_000);
+        store.snapshot(&id("a.md"), "risorta", &mut host).unwrap();
         let inner = store.inner.lock().unwrap();
         assert_eq!(inner.docs["a.md"].deleted_at, None);
     }
 
     #[test]
     fn retention_thins_out_the_past_but_never_the_present() {
-        let (_g, path) = tmp();
-        let store = VersionStore::open_dir(&path).unwrap();
-        let ora = now_unix_millis();
+        let mut host = TestHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
 
-        // Versioni piantate a mano in epoche diverse: due nella stessa ora di
-        // tre giorni fa, due nello stesso giorno di un mese fa, una di un anno
-        // fa, più una di adesso.
+        // Una vita di salvataggi, con l'orologio che avanza fra l'uno e
+        // l'altro: due nella stessa ora, poi un mese di distanza, poi un anno.
+        for (n, salto) in [
+            0,
+            60_000,          // stessa ora
+            27 * MS_GIORNO,  // un mese dopo
+            MS_ORA,          // stesso giorno
+            335 * MS_GIORNO, // un anno dopo la prima
+            3 * MS_GIORNO,   // e infine "adesso"
+        ]
+        .into_iter()
+        .enumerate()
         {
-            let mut inner = store.inner.lock().unwrap();
-            let doc = inner.docs.entry("a.md".to_string()).or_default();
-            doc.dir = "prova".to_string();
-            for (n, eta) in [
-                3 * MS_GIORNO,
-                3 * MS_GIORNO + 60_000,
-                30 * MS_GIORNO,
-                30 * MS_GIORNO + MS_ORA,
-                365 * MS_GIORNO,
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                doc.versions.push(VersionRef {
-                    ts: ora - eta,
-                    hash: n as u64,
-                    size: 1,
-                });
-            }
-            doc.versions.sort_by_key(|v| v.ts);
+            host.avanza(salto);
+            store
+                .snapshot(&id("a.md"), &format!("versione {n}"), &mut host)
+                .unwrap();
         }
-        store.snapshot(&id("a.md"), "adesso").unwrap();
 
+        let ora = host.now_unix_millis();
         let tenute = store.list(&id("a.md"));
         let eta: Vec<u64> = tenute.iter().map(|v| ora.saturating_sub(v.ts)).collect();
-        assert_eq!(tenute.len(), 3, "tenute: {eta:?}");
-        assert!(eta[0] < MS_ORA, "la più recente resta sempre");
         assert!(
-            eta.iter().filter(|e| **e < FASCIA_ORARIA).count() == 2,
-            "una sola versione per l'ora di tre giorni fa: {eta:?}"
+            eta[0] < MS_ORA,
+            "la più recente resta sempre, anche se il resto è stato potato: {eta:?}"
         );
         assert!(
             eta.iter().all(|e| *e < FASCIA_GIORNALIERA),
             "oltre l'ultima fascia non si conserva: {eta:?}"
         );
+        assert!(
+            tenute.len() < 6,
+            "le fasce devono aver assottigliato qualcosa: {eta:?}"
+        );
+        // E i contenuti potati non restano a occupare spazio nello store.
+        for v in &tenute {
+            assert!(
+                store.read(&id("a.md"), v.ts, &host).is_ok(),
+                "una versione tenuta deve essere leggibile"
+            );
+        }
     }
 
     #[test]
     fn the_index_is_rebuilt_from_the_store_never_the_other_way_round() {
-        let (_g, path) = tmp();
+        let mut host = TestHost::new();
         let ts;
         {
-            let store = VersionStore::open_dir(&path).unwrap();
-            store.snapshot(&id("nota/Idea.md"), "il contenuto").unwrap();
-            store.tombstone(&id("nota/Idea.md")).unwrap();
+            let store = VersionStore::open(&mut host).unwrap();
+            store
+                .snapshot(&id("nota/Idea.md"), "il contenuto", &mut host)
+                .unwrap();
+            store.tombstone(&id("nota/Idea.md"), &mut host).unwrap();
             ts = store.list(&id("nota/Idea.md"))[0].ts;
         }
         // L'indice si corrompe: è stato derivato, non è la verità.
-        std::fs::write(path.join(INDEX_FILE), b"non sono json").unwrap();
+        host.data_write(INDEX_FILE, b"non sono json").unwrap();
 
-        let store = VersionStore::open_dir(&path).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
         let versioni = store.list(&id("nota/Idea.md"));
         assert_eq!(versioni.len(), 1, "le versioni si ritrovano dallo store");
         assert_eq!(versioni[0].ts, ts);
-        assert_eq!(store.read(&id("nota/Idea.md"), ts).unwrap(), "il contenuto");
+        assert_eq!(
+            store.read(&id("nota/Idea.md"), ts, &host).unwrap(),
+            "il contenuto"
+        );
         // Anche il tombstone sopravvive: vive nella cartella, non nell'indice.
         let inner = store.inner.lock().unwrap();
         assert!(inner.docs["nota/Idea.md"].deleted_at.is_some());
@@ -678,17 +859,49 @@ mod tests {
 
     #[test]
     fn asking_for_a_version_that_never_existed_says_so() {
-        let (_g, path) = tmp();
-        let store = VersionStore::open_dir(&path).unwrap();
-        store.snapshot(&id("a.md"), "contenuto").unwrap();
+        let mut host = TestHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
 
         assert!(matches!(
-            store.read(&id("a.md"), 1),
+            store.read(&id("a.md"), 1, &host),
             Err(PluginError::BadArgs(_))
         ));
         assert!(matches!(
-            store.read(&id("mai-vista.md"), 1),
+            store.read(&id("mai-vista.md"), 1, &host),
             Err(PluginError::BadArgs(_))
         ));
+    }
+
+    #[test]
+    fn opening_the_vault_photographs_what_has_no_history_yet() {
+        let mut host = TestHost::new()
+            .con_documento("a.md", "com'era")
+            .con_documento("b.md", "anche questa");
+        let store = VersionStore::open(&mut host).unwrap();
+        // `b.md` una storia ce l'ha già: non deve guadagnare una versione
+        // gemella solo perché il vault è stato riaperto.
+        store
+            .snapshot(&id("b.md"), "anche questa", &mut host)
+            .unwrap();
+
+        let mut handler = VersioningHandler::new(store.clone());
+        handler
+            .handle(
+                &Event::VaultOpened {
+                    root: "/vault".into(),
+                },
+                &mut host,
+            )
+            .unwrap();
+
+        assert_eq!(store.list(&id("a.md")).len(), 1, "mai vista → fotografata");
+        assert_eq!(
+            store.list(&id("b.md")).len(),
+            1,
+            "già vista → lasciata stare"
+        );
+        let ts = store.list(&id("a.md"))[0].ts;
+        assert_eq!(store.read(&id("a.md"), ts, &host).unwrap(), "com'era");
     }
 }

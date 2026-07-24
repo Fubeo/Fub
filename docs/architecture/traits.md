@@ -73,10 +73,19 @@ in-process; WASM (M5) → proxy che reinoltra come host function.
 pub trait HostApi: Send + Sync {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+    fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
     fn emit(&mut self, event: Event);
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
+    // stato leggero e volatile
     fn storage_get(&self, key: &str) -> Option<serde_json::Value>;
     fn storage_set(&mut self, key: &str, value: serde_json::Value);
+    // storage persistente per-plugin (namespace imposto dall'host)
+    fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError>;
+    fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError>;
+    fn data_remove(&mut self, path: &str) -> Result<(), PluginError>;
+    fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError>;
+    // il tempo è una capacità come le altre
+    fn now_unix_millis(&self) -> u64;
 }
 ```
 
@@ -84,6 +93,32 @@ pub trait HostApi: Send + Sync {
 `spawn_job` accoda e ritorna subito; l'esito arriva come `Event::JobDone` con lo
 stesso `JobId` (il lanciatore lo conserva e riconosce il proprio). Il corpo del
 job è `Plugin::run_job` (vedi sotto), eseguito fuori dal kernel.
+
+**Le ultime tre famiglie di metodi le ha chieste il dogfooding.** Il versioning
+è un `EventHandler` scritto come lo scriverebbe un plugin, e nella sua prima
+stesura scriveva lo store con `std::fs` e leggeva l'ora da `fubmd_kernel::time`:
+funzionava da nativo, e un plugin WASM con l'`HostApi` di allora non avrebbe
+potuto farlo. Il buco era **nel contratto**, ed è stato chiuso lì — prima del
+freeze di M4, non aggirato:
+
+- `data_*` — storage persistente per-plugin. Il plugin nomina **blob** con path
+  relativi; lo spazio (`.fubmd-data/plugins/<id>/`) lo assegna e lo impone
+  l'host, che rifiuta path assoluti, `..` e separatori di sistema con
+  `PermissionDenied`. Vedi [plugin-boundary.md](plugin-boundary.md), "Storage".
+- `now_unix_millis` — l'orologio dell'host. Un componente WASM può non averne
+  uno (WASI lo può negare) e un host che lo fornisce lo rende deterministico nei
+  test: le fasce di ritenzione del versioning si provano avanzando un orologio
+  finto, non piantando timestamp nelle strutture interne dello store.
+- `list_documents` — senza, `read_document` serve solo per gli id che arrivano
+  dagli eventi: nessun plugin potrebbe reagire a `VaultOpened` guardandosi
+  intorno, né costruire alcunché sull'intero vault.
+
+L'identità del plugin (`<id>`) la assegna **chi registra**
+(`Workspace::register_event_handler(id, handler)`), non il plugin: chi si
+sceglie il recinto da sé non è dentro a un recinto. `Workspace::with_host(id, f)`
+presta lo stesso `HostApi` a chi compone le due metà di una feature dall'esterno
+del dispatch — è così che l'app apre lo store delle versioni e ne rilegge una,
+senza un canale privilegiato che un plugin non avrebbe.
 
 ### `CommandProvider` — comandi (M3: command palette)
 
@@ -260,20 +295,20 @@ Ogni tipo che attraversa una firma di trait mappa su un costrutto WIT. Questa
 tabella è il checklist di conformità di M4; il `wit/` vivente di M2 la
 materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 
-| Tipo abi | Costrutto WIT previsto |
+| Tipo abi | Costrutto WIT |
 |---|---|
 | `DocId(String)` | `type doc-id = string` |
-| `Span { start, end }` | `record span { start: u64, end: u64 }` |
+| `Span { start: usize, end: usize }` | `record span { start: u64, end: u64 }` — vedi "Larghezze" sotto |
 | `Frontmatter(Map<String,Value>)` | `type json = string` (JSON serializzato) |
-| `DocumentModel` | `record document-model { … }` |
-| `Block` / `Inline` | `variant block` / `variant inline` |
-| `LinkTarget` | `variant link-target { wiki(wiki-link), url(string), path(string) }` |
+| `DocumentModel` | `record document-model { … }`, con `body: document-tree` |
+| `Block` / `Inline` (alberi) | `variant block` / `variant inline` **in arena**: `list<block-ref>` / `list<inline-ref>` al posto dei figli diretti, nodi in `document-tree` |
+| `LinkTarget` | `variant link-target { wiki(link-target-wiki), url(string), path(string) }` |
 | `Link` / `Heading` / `Tag` | `record` |
 | `FormatDescriptor`/`FormatCapabilities`/`ParseContext`/`RenderOptions` | `record` |
 | `CommandSpec`/`CommandOutcome` | `record` |
 | `ViewSpec`/`ViewPlacement` | `record` / `enum` |
-| `UiNode` | `variant ui-node` (ricorsivo via `list<ui-node>`) |
-| `UiAction`/`ViewUpdate` | `record` / `variant` |
+| `UiNode` (albero) | `variant ui-node` **in arena**: `list<ui-ref>` fra i figli, nodi in `ui-tree` |
+| `UiAction`/`ViewUpdate` | `record` / `variant` (`replace(ui-tree)`) |
 | `IndexQuery`/`IndexResult`/`BacklinkRef`/`SearchHit` | `variant` (incl. `custom(index-query-custom)`) / `record` |
 | `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`) / `enum` / `list<event-kind>` |
 | `JobSpec`/`JobId` | `record job-spec` / `type job-id = u64` (interface `jobs`) |
@@ -284,3 +319,57 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 **Punto di attenzione noto:** i valori JSON liberi (`attrs`, command `args`,
 storage) attraversano il confine come stringa JSON, non come tipo WIT strutturato.
 È una scelta deliberata (mantiene l'escape hatch flessibile) da confermare a M4.
+
+### Alberi ricorsivi al confine: arena, non JSON
+
+`Block`, `Inline` e `UiNode` sono **ricorsivi**, e WIT non ammette tipi
+ricorsivi. La ricorsione via `list<ui-node>` che questa tabella dava per buona è
+una proposta aperta del component model, non una feature: il contratto scritto
+così non passava nemmeno il parser. La contaminazione era transitiva —
+`DocumentModel.body` rendeva inesprimibili `FormatProvider` e
+`on_document_indexed`, `ViewUpdate::Replace` faceva lo stesso con `render_view`.
+
+Le due strade erano l'**arena** e la **stringa JSON**. Si è scelta l'arena:
+
+| | Arena (`list<nodo>` + indici `u32`) | Stringa JSON |
+|---|---|---|
+| Tipi al confine | restano record/variant WIT, campo per campo | un `string` opaco |
+| Conformità abi↔WIT | verificabile: il test confronta campi e casi | niente da confrontare |
+| Costo | una conversione albero↔arena nel proxy | serializzazione + parsing a ogni chiamata |
+
+La stringa JSON avrebbe fatto sparire dal contratto proprio la parte che il
+contratto esiste per fissare: il modello di documento. L'escape hatch JSON resta
+dov'era — `attrs`, `args`, storage — cioè dove il contenuto è **per definizione**
+libero, non dove è la struttura che tutti condividono.
+
+In pratica: `Vec<Inline>` diventa `list<inline-ref>` (`inline-ref = u32`),
+`Vec<Block>` diventa `list<block-ref>`, e i nodi veri vivono in
+`record document-tree { blocks, inlines, roots }` (per l'UI,
+`record ui-tree { nodes, root }`). **I tipi Rust non si toccano**: restano
+alberi veri, con l'ergonomia degli alberi; la conversione vive nel proxy WASM
+(M5), che è l'unico posto che deve conoscerla. Un indice fuori range è un
+modello malformato, e lo tratta il proxy.
+
+### Larghezze e keyword
+
+- **`Span` è `usize` in Rust e `u64` nel WIT.** I campi indicizzano `&str` in
+  memoria; obbligarli a `u64` metterebbe un `as usize` su ogni slice del kernel
+  per compiacere un confine che il kernel non attraversa. `usize`→`u64` è sempre
+  lecita; `u64`→`usize` su wasm32 (`usize` a 32 bit) passa da una conversione
+  controllata nel proxy — un documento oltre i 4 GiB non entrerebbe comunque
+  nella memoria di un modulo.
+- **`list`, `result` e `from` sono keyword WIT** e nel contratto compaiono
+  con l'escape `%` (`%list`, `%result`, `%from`). È sintassi del linguaggio:
+  l'identificatore dichiarato resta quello, e i campi Rust
+  (`Event::DocumentRenamed { from, to }`, `Event::JobDone { result }`) non si
+  rinominano per una questione di grammatica altrui.
+
+### Come la conformità è verificata
+
+`crates/fubmd-abi/tests/wit_conformance.rs` **parsa** `wit/fubmd/abi.wit` con
+`wit-parser` (dev-dependency: l'invariante di `fubmd-abi` riguarda le dipendenze
+normali) e confronta insiemi di **nomi dichiarati**, non sottostringhe del
+sorgente. La pressione è su tre direzioni: un WIT invalido è rosso; un tipo
+Rust che cambia non compila più il test; un tipo/caso/campo presente da una
+parte sola — in *entrambe* le direzioni, contratto morto incluso — fallisce.
+C'è anche il test del test: divergenze introdotte ad arte devono farlo fallire.

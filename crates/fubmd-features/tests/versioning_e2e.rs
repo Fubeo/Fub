@@ -8,7 +8,7 @@
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
-use fubmd_features::{VersionStore, VersioningHandler};
+use fubmd_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
 
@@ -27,21 +27,21 @@ impl Vault {
     /// Apre il vault col versioning acceso, e restituisce anche lo store: è
     /// esattamente la coppia che tiene l'app — una copia dentro l'handler, una
     /// in mano a chi deve elencare e rileggere le versioni.
+    ///
+    /// Non c'è nessun passaggio di "prima fotografia" da fare qui: è policy
+    /// della feature, e scatta sull'evento `VaultOpened` che emette `reindex`.
     fn open(&self) -> (Workspace, VersionStore) {
         let mut registry = FormatRegistry::new();
         registry.register(MarkdownProvider::boxed());
         let mut ws = Workspace::new(&self.root, registry);
-        let store = VersionStore::open(&self.root).expect("store versioni");
-        ws.register_event_handler(Box::new(VersioningHandler::new(store.clone())));
+        let store = ws
+            .with_host(VERSIONING_ID, VersionStore::open)
+            .expect("store versioni");
+        ws.register_event_handler(
+            VERSIONING_ID,
+            Box::new(VersioningHandler::new(store.clone())),
+        );
         ws.reindex().expect("reindex");
-        // La prima fotografia del vault, come la scatta l'app.
-        for id in ws.documents() {
-            if store.has_versions(&id) {
-                continue;
-            }
-            let source = ws.read_source(&id).expect("lettura");
-            store.snapshot(&id, &source).expect("prima versione");
-        }
         (ws, store)
     }
 
@@ -59,6 +59,13 @@ impl Vault {
     }
 }
 
+/// Rileggere una versione passa dall'`HostApi`, come farebbe l'app: lo store
+/// non ha un canale sul filesystem tutto suo.
+fn versione(ws: &mut Workspace, store: &VersionStore, id: &DocId, ts: u64) -> String {
+    ws.with_host(VERSIONING_ID, |host| store.read(id, ts, host))
+        .expect("lettura della versione")
+}
+
 #[test]
 fn every_save_that_changes_something_leaves_a_version_behind() {
     let v = Vault::new();
@@ -72,8 +79,14 @@ fn every_save_that_changes_something_leaves_a_version_behind() {
 
     let versioni = store.list(&nota);
     assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
-    assert_eq!(store.read(&nota, versioni[0].ts).unwrap(), "seconda stesura\n");
-    assert_eq!(store.read(&nota, versioni[1].ts).unwrap(), "prima stesura\n");
+    assert_eq!(
+        versione(&mut ws, &store, &nota, versioni[0].ts),
+        "seconda stesura\n"
+    );
+    assert_eq!(
+        versione(&mut ws, &store, &nota, versioni[1].ts),
+        "prima stesura\n"
+    );
 }
 
 #[test]
@@ -82,12 +95,13 @@ fn restoring_a_version_is_itself_undoable() {
     let (mut ws, store) = v.open();
     let nota = DocId::new("Nota.md");
     ws.write_document(&nota, "quella buona\n").unwrap();
-    ws.write_document(&nota, "quella che ho rovinato\n").unwrap();
+    ws.write_document(&nota, "quella che ho rovinato\n")
+        .unwrap();
 
     // Il ripristino è una scrittura normale (D8): non c'è un percorso speciale
     // che scavalchi grafo, indici ed eventi — e infatti passa dall'handler.
     let vecchia = *store.list(&nota).last().unwrap();
-    let contenuto = store.read(&nota, vecchia.ts).unwrap();
+    let contenuto = versione(&mut ws, &store, &nota, vecchia.ts);
     ws.write_document(&nota, &contenuto).unwrap();
 
     assert_eq!(ws.read_source(&nota).unwrap(), "quella buona\n");
@@ -95,7 +109,7 @@ fn restoring_a_version_is_itself_undoable() {
     assert_eq!(versioni.len(), 3, "il ripristino stesso è una versione");
     // Quindi si può annullare il ripristino: la versione rovinata è ancora lì.
     assert_eq!(
-        store.read(&nota, versioni[1].ts).unwrap(),
+        versione(&mut ws, &store, &nota, versioni[1].ts),
         "quella che ho rovinato\n"
     );
 }
@@ -104,7 +118,8 @@ fn restoring_a_version_is_itself_undoable() {
 fn a_renamed_note_keeps_its_history_under_the_new_name() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
-    ws.write_document(&DocId::new("Bozza.md"), "appunti\n").unwrap();
+    ws.write_document(&DocId::new("Bozza.md"), "appunti\n")
+        .unwrap();
 
     ws.rename_document(&DocId::new("Bozza.md"), &DocId::new("Definitivo.md"))
         .unwrap();
@@ -115,7 +130,12 @@ fn a_renamed_note_keeps_its_history_under_the_new_name() {
     let versioni = store.list(&DocId::new("Definitivo.md"));
     assert_eq!(versioni.len(), 1);
     assert_eq!(
-        store.read(&DocId::new("Definitivo.md"), versioni[0].ts).unwrap(),
+        versione(
+            &mut ws,
+            &store,
+            &DocId::new("Definitivo.md"),
+            versioni[0].ts
+        ),
         "appunti\n"
     );
 }
@@ -125,15 +145,20 @@ fn a_note_thrown_away_can_still_be_read_from_its_history() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
     let nota = DocId::new("Effimera.md");
-    ws.write_document(&nota, "contenuto che vorrò rileggere\n").unwrap();
+    ws.write_document(&nota, "contenuto che vorrò rileggere\n")
+        .unwrap();
 
     ws.delete_document(&nota).unwrap();
 
     assert!(!ws.documents().contains(&nota));
     let versioni = store.list(&nota);
-    assert_eq!(versioni.len(), 1, "il cestino svuota il vault, non la storia");
     assert_eq!(
-        store.read(&nota, versioni[0].ts).unwrap(),
+        versioni.len(),
+        1,
+        "il cestino svuota il vault, non la storia"
+    );
+    assert_eq!(
+        versione(&mut ws, &store, &nota, versioni[0].ts),
         "contenuto che vorrò rileggere\n"
     );
 }
@@ -143,12 +168,14 @@ fn with_versioning_off_the_vault_has_no_trace_of_it() {
     let v = Vault::new();
     let mut ws = v.open_senza_versioning();
 
-    ws.write_document(&DocId::new("Nota.md"), "una stesura\n").unwrap();
-    ws.write_document(&DocId::new("Nota.md"), "un'altra\n").unwrap();
+    ws.write_document(&DocId::new("Nota.md"), "una stesura\n")
+        .unwrap();
+    ws.write_document(&DocId::new("Nota.md"), "un'altra\n")
+        .unwrap();
 
     // Spento = non esiste (D7): nessun handler, e quindi nemmeno la cartella.
     assert!(
-        !v.root.join(".fubmd-data").join("versions").exists(),
+        !v.root.join(".fubmd-data").join("plugins").exists(),
         "il versioning spento non deve scrivere nulla"
     );
 }
@@ -168,7 +195,7 @@ fn the_state_a_note_was_found_in_is_recoverable_after_the_first_edit() {
     let versioni = store.list(&nota);
     assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
     assert_eq!(
-        store.read(&nota, versioni[1].ts).unwrap(),
+        versione(&mut ws, &store, &nota, versioni[1].ts),
         "come l'ho trovata\n"
     );
 }
@@ -182,9 +209,12 @@ fn the_history_survives_closing_and_reopening_the_vault() {
         ws.write_document(&nota, "scritta ieri\n").unwrap();
     }
 
-    let (_ws, store) = v.open();
+    let (mut ws, store) = v.open();
 
     let versioni = store.list(&nota);
     assert_eq!(versioni.len(), 1);
-    assert_eq!(store.read(&nota, versioni[0].ts).unwrap(), "scritta ieri\n");
+    assert_eq!(
+        versione(&mut ws, &store, &nota, versioni[0].ts),
+        "scritta ieri\n"
+    );
 }

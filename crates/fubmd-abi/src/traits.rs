@@ -43,20 +43,63 @@ pub struct JobId(pub u64);
 // ---------------------------------------------------------------------------
 
 /// Le capacità che il kernel concede a un provider/plugin.
+///
+/// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
+/// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
+/// il dogfooding del versioning ha trovato il buco: un `EventHandler` scritto
+/// come lo scriverebbe un plugin non aveva modo di tenere uno store di snapshot
+/// su disco (lo `storage_*` in-memory non basta) né di sapere che ore sono.
 pub trait HostApi: Send + Sync {
     /// Legge la sorgente di un documento dal vault.
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
     /// Scrive la sorgente di un documento nel vault.
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+    /// I documenti del vault, in ordine.
+    ///
+    /// Senza, `read_document` serve solo per gli id che arrivano dagli eventi:
+    /// un plugin non potrebbe rispondere a [`Event::VaultOpened`] guardandosi
+    /// intorno, né costruire alcunché sull'intero vault.
+    ///
+    /// [`Event::VaultOpened`]: crate::Event::VaultOpened
+    fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
     /// Emette un evento sull'event bus.
     fn emit(&mut self, event: Event);
     /// Chiede l'esecuzione in background di un job ([`Plugin::run_job`]).
     /// Ritorna subito con l'identità del job; l'esito arriverà come
     /// [`Event::JobDone`](crate::Event::JobDone) sul giro sincrono normale.
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
-    /// Storage chiave→valore con spazio dei nomi per-plugin (persistente).
+    /// Stato leggero e **volatile** con spazio dei nomi per-plugin: preferenze,
+    /// cursori, ciò che si può ricostruire. Non sopravvive alla chiusura — per
+    /// i dati che devono durare c'è `data_*`.
     fn storage_get(&self, key: &str) -> Option<serde_json::Value>;
     fn storage_set(&mut self, key: &str, value: serde_json::Value);
+
+    // --- storage persistente per-plugin -------------------------------------
+    //
+    // Blob nominati con path relativi dentro uno spazio che l'host assegna e
+    // impone (`.fubmd-data/plugins/<id>/`): il plugin non conosce la radice del
+    // vault, non compone path assoluti e non può uscire dal proprio recinto.
+    // È l'alternativa a un'API filesystem scoped, ed è stata scelta perché il
+    // recinto qui è una proprietà della firma, non una convenzione da
+    // rispettare — vedi docs/architecture/plugin-boundary.md.
+
+    /// Legge un blob. Assente → `Ok(None)` (mancare non è un errore).
+    fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError>;
+    /// Scrive un blob, creando le directory intermedie.
+    fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError>;
+    /// Cancella un blob. Idempotente: cancellare ciò che non c'è riesce.
+    fn data_remove(&mut self, path: &str) -> Result<(), PluginError>;
+    /// I blob sotto un prefisso, path relativi allo spazio del plugin e
+    /// ordinati. Prefisso inesistente → lista vuota.
+    fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError>;
+
+    /// Millisecondi dall'epoca UNIX, secondo l'host.
+    ///
+    /// Il tempo è una capacità come le altre: un componente WASM può non avere
+    /// orologio (WASI lo può negare), e un host che lo fornisce può renderlo
+    /// deterministico nei test. Un plugin che chiamasse `SystemTime::now` per
+    /// conto proprio sarebbe non testabile e, sotto sandbox, non funzionante.
+    fn now_unix_millis(&self) -> u64;
 }
 
 // ---------------------------------------------------------------------------

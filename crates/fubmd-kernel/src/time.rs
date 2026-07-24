@@ -1,8 +1,9 @@
 //! Il minimo di aritmetica del tempo che serve al kernel.
 //!
 //! I file del cestino portano la data nel nome (`Nota.2026-07-24T15-30-00.md`,
-//! vedi `docs/CRUD_E_VAULT.md`, D2) e devono restare leggibili da chi apre il
-//! vault con un file manager — anche da Obsidian, che di FubMD non sa nulla.
+//! vedi `docs/PIANO.md`, "Decisioni (con il perché)") e devono restare
+//! leggibili da chi apre il vault con un file manager — anche da Obsidian, che
+//! di FubMD non sa nulla.
 //!
 //! Scritto a mano invece che con una dipendenza perché la superficie che serve
 //! è tutta qui: un istante UTC in secondi e la sua forma stampabile. Il kernel

@@ -37,7 +37,7 @@
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::traits::{
@@ -49,7 +49,7 @@ use crate::bus::EventBus;
 use crate::error::{KernelError, Result};
 use crate::graph::{normalize, strip_ext, LinkGraph};
 use crate::registry::FormatRegistry;
-use crate::vault::{TrashEntry, Vault};
+use crate::vault::{TrashEntry, Vault, DATA_DIR};
 
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
 ///
@@ -73,6 +73,14 @@ const DISPATCH_BUDGET: usize = 1024;
 /// rinomina subito: è il motivo per cui non vale la pena essere più creativi.
 const UNTITLED: &str = "Senza titolo";
 
+/// Radice dello storage persistente dei plugin, dentro il vault: ogni plugin
+/// ha `<vault>/.fubmd-data/plugins/<id>/` e non vede nient'altro.
+///
+/// Sta nel vault e non nella cartella di configurazione dell'utente perché i
+/// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
+/// metterlo in sync deve portarsi dietro anche loro.
+const PLUGIN_DATA_DIR: &str = "plugins";
+
 pub struct Workspace {
     vault: Vault,
     registry: FormatRegistry,
@@ -80,8 +88,11 @@ pub struct Workspace {
     graph: LinkGraph,
     graph_update: GraphUpdate,
     bus: EventBus,
-    /// Handler registrati (feature ufficiali; a M4/M5 i plugin via registry).
-    handlers: Vec<Box<dyn EventHandler>>,
+    /// Handler registrati, ognuno col proprio id (feature ufficiali; a M4/M5 i
+    /// plugin via registry). L'id non è decorativo: è lo spazio dei nomi dello
+    /// storage che l'`HostApi` concede a quell'handler, e chi lo assegna è il
+    /// kernel — non l'handler, che altrimenti sceglierebbe il proprio recinto.
+    handlers: Vec<(String, Box<dyn EventHandler>)>,
     /// Indici derivati dal contenuto, alimentati **direttamente** (non via
     /// event bus) dentro le stesse operazioni che aggiornano il grafo — così
     /// un troncamento della coda eventi non può far divergere un indice.
@@ -95,9 +106,14 @@ pub struct Workspace {
     pending_jobs: Vec<(JobId, JobSpec)>,
     /// Contatore per l'assegnazione dei [`JobId`].
     next_job_id: u64,
-    /// Storage chiave→valore dell'`HostApi`. In-memory per ora; persistenza e
-    /// namespace per-plugin arrivano col registry dei plugin (M4), vedi
-    /// `docs/architecture/plugin-boundary.md`.
+    /// Lo `storage_get/set` dell'`HostApi`: stato **volatile** a chiave→valore
+    /// (preferenze, cursori, ciò che si ricostruisce). In memoria non è una
+    /// mancanza da colmare — è la sua semantica; ciò che deve durare passa da
+    /// `data_*`, che scrive in `.fubmd-data/plugins/<id>/`. Vedi
+    /// `docs/architecture/plugin-boundary.md`, "Storage".
+    ///
+    /// Il namespace per-plugin su questa mappa arriva col registry dei plugin
+    /// (M4): oggi gli handler registrati sono tutti codice fidato.
     storage: HashMap<String, serde_json::Value>,
 }
 
@@ -138,11 +154,32 @@ impl Workspace {
         self.vault.root()
     }
 
-    /// Registra un [`EventHandler`] (fidato: le feature ufficiali). I plugin di
-    /// terzi passeranno dal registry dei plugin (M4/M5), che applica permessi e
-    /// confine di fiducia prima di arrivare qui.
-    pub fn register_event_handler(&mut self, handler: Box<dyn EventHandler>) {
-        self.handlers.push(handler);
+    /// Registra un [`EventHandler`] (fidato: le feature ufficiali) sotto un id.
+    /// I plugin di terzi passeranno dal registry dei plugin (M4/M5), che
+    /// applica permessi e confine di fiducia prima di arrivare qui.
+    ///
+    /// `id` è l'identità del plugin: determina lo spazio dello storage
+    /// persistente che l'[`HostApi`] gli concede
+    /// (`.fubmd-data/plugins/<id>/`). Deve essere un nome semplice, senza
+    /// separatori di path.
+    pub fn register_event_handler(
+        &mut self,
+        id: impl Into<String>,
+        handler: Box<dyn EventHandler>,
+    ) {
+        self.handlers.push((id.into(), handler));
+    }
+
+    /// Presta un [`HostApi`] intestato a un plugin, per la durata di una
+    /// chiamata.
+    ///
+    /// Serve a chi compone le due metà di una feature dall'esterno del
+    /// dispatch: l'app apre lo store delle versioni e legge una versione con le
+    /// stesse capacità che l'handler usa dentro `handle`, e non con `std::fs`.
+    /// A M4 è anche il modo in cui il registry guiderà `Plugin::activate`.
+    pub fn with_host<R>(&mut self, plugin: &str, f: impl FnOnce(&mut dyn HostApi) -> R) -> R {
+        let mut host = KernelHost { ws: self, plugin };
+        f(&mut host)
     }
 
     /// Registra un [`IndexProvider`]. Va fatto **prima** di [`reindex`], che è
@@ -204,6 +241,19 @@ impl Workspace {
 
     pub fn model(&self, id: &DocId) -> Option<&DocumentModel> {
         self.models.get(id)
+    }
+
+    /// Le estensioni che i provider registrati riconoscono (minuscole, senza
+    /// punto), ordinate.
+    ///
+    /// Serve a chi disegna: il "nome pagina" di un documento è il basename
+    /// senza l'estensione **gestita**, e quale sia dipende dai provider —
+    /// cablare `.md` nel frontend è vero solo finché markdown è l'unico
+    /// formato, cioè finché il progetto non fa ciò per cui esiste.
+    pub fn extensions(&self) -> Vec<String> {
+        let mut exts = self.registry.all_extensions();
+        exts.sort();
+        exts
     }
 
     /// Sorgente grezza di un documento dal disco.
@@ -310,7 +360,7 @@ impl Workspace {
         let id = match name {
             Some(name) => {
                 let id = self.new_note_id(name)?;
-                if self.models.contains_key(&id) || self.vault.exists(&id) {
+                if self.is_taken(&id) {
                     return Err(KernelError::AlreadyExists(id.to_string()));
                 }
                 id
@@ -320,19 +370,48 @@ impl Workspace {
                     .registry
                     .default_extension()
                     .ok_or(KernelError::NoDefaultFormat)?;
-                (0u32..)
-                    .map(|n| match n {
-                        0 => DocId::new(format!("{UNTITLED}.{ext}")),
-                        n => DocId::new(format!("{UNTITLED} {n}.{ext}")),
-                    })
-                    .find(|id| !self.models.contains_key(id) && !self.vault.exists(id))
-                    .expect("la sequenza dei candidati è infinita")
+                self.free_name(&DocId::new(format!("{UNTITLED}.{ext}")))
             }
         };
         // Una nota nuova è una scrittura come le altre: grafo, indici ed eventi
         // la vedono nascere per la via normale.
         self.write_document(&id, "")?;
         Ok(id)
+    }
+
+    /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
+    /// a partire da un [`DocId`] qualsiasi. Se `id` è già libero, è lui.
+    ///
+    /// È la convenzione D3, e vive **qui** perché il workspace è l'unico a
+    /// sapere cosa è occupato — in memoria e su disco. La usa `create_note` per
+    /// la nota senza titolo, e la usa l'app quando il ripristino dal cestino
+    /// trova il path di nuovo occupato e deve proporre un'alternativa. Due
+    /// implementazioni della stessa convenzione (una nel kernel, una nel
+    /// frontend) divergerebbero al primo ritocco.
+    ///
+    /// Non prenota niente: fra la domanda e la scrittura il nome può diventare
+    /// occupato, e a quel punto è la scrittura a dirlo. Per questo `create_note`
+    /// lo calcola dentro di sé e non lo chiede a un chiamante.
+    pub fn free_name(&self, id: &DocId) -> DocId {
+        let (stem, ext) = match id.as_str().rsplit_once('.') {
+            Some((stem, ext)) if !stem.is_empty() && !ext.contains('/') => {
+                (stem, format!(".{ext}"))
+            }
+            _ => (id.as_str(), String::new()),
+        };
+        (0u32..)
+            .map(|n| match n {
+                0 => id.clone(),
+                n => DocId::new(format!("{stem} {n}{ext}")),
+            })
+            .find(|candidato| !self.is_taken(candidato))
+            .expect("la sequenza dei candidati è infinita")
+    }
+
+    /// Questo path è già di qualcuno? Vale sia l'indicizzato sia ciò che sta
+    /// sul disco e il workspace non ha ancora visto.
+    fn is_taken(&self, id: &DocId) -> bool {
+        self.models.contains_key(id) || self.vault.exists(id)
     }
 
     /// Il [`DocId`] di una nota che nasce col nome dato: separatori normalizzati
@@ -344,8 +423,8 @@ impl Workspace {
             return Err(KernelError::BadName(name.to_string()));
         }
         let id = DocId::new(pulito);
-        let ha_estensione = extension_of(&id)
-            .is_some_and(|ext| self.registry.provider_for_ext(&ext).is_some());
+        let ha_estensione =
+            extension_of(&id).is_some_and(|ext| self.registry.provider_for_ext(&ext).is_some());
         if ha_estensione {
             return Ok(id);
         }
@@ -745,11 +824,14 @@ impl Workspace {
     /// può prestare `&mut Workspace` senza aliasing.
     fn deliver_to_handlers(&mut self, event: &Event) {
         let mut handlers = std::mem::take(&mut self.handlers);
-        for handler in handlers.iter_mut() {
+        for (id, handler) in handlers.iter_mut() {
             if !handler.subscribed().contains(event.kind()) {
                 continue;
             }
-            let mut host = KernelHost { ws: self };
+            let mut host = KernelHost {
+                ws: self,
+                plugin: id,
+            };
             // L'errore di un handler non deve far fallire l'operazione
             // che ha emesso l'evento: si ignora (M4: log/notifica).
             let _ = handler.handle(event, &mut host);
@@ -808,6 +890,83 @@ impl Workspace {
     fn rebuild_graph(&mut self) {
         self.graph = LinkGraph::build(self.models.values());
     }
+
+    // --- storage persistente dei plugin ------------------------------------
+
+    /// La radice dello spazio dati di un plugin.
+    fn plugin_data_root(&self, plugin: &str) -> Utf8PathBuf {
+        self.vault
+            .root()
+            .join(DATA_DIR)
+            .join(PLUGIN_DATA_DIR)
+            .join(plugin)
+    }
+
+    /// Traduce un path relativo dello spazio di un plugin in un path assoluto,
+    /// rifiutando **tutto** ciò che proverebbe a uscirne.
+    ///
+    /// Il recinto è qui e in nessun altro posto: il plugin nomina blob, non
+    /// path del filesystem, e non ha modo di sapere dove sia la radice del
+    /// vault. `rel` vuoto è la radice stessa (serve a `data_list`).
+    fn plugin_data_path(
+        &self,
+        plugin: &str,
+        rel: &str,
+    ) -> std::result::Result<Utf8PathBuf, PluginError> {
+        let denied = |why: &str| PluginError::PermissionDenied(format!("`{rel}`: {why}"));
+        if !is_safe_component(plugin) {
+            return Err(PluginError::PermissionDenied(format!(
+                "id di plugin non utilizzabile come spazio dati: `{plugin}`"
+            )));
+        }
+        let mut path = self.plugin_data_root(plugin);
+        if rel.is_empty() {
+            return Ok(path);
+        }
+        // I separatori sono `/` e basta: un `\` su Windows sarebbe un
+        // separatore, e qui deve restare un carattere qualunque — cioè un nome
+        // di file illegale, non una via d'uscita.
+        if rel.contains('\\') {
+            return Err(denied("i separatori di path sono `/`"));
+        }
+        for comp in rel.split('/') {
+            if !is_safe_component(comp) {
+                return Err(denied("path assoluti e risalite non sono ammessi"));
+            }
+            path.push(comp);
+        }
+        Ok(path)
+    }
+}
+
+/// Un componente di path che un plugin può nominare: non vuoto, non `.`, non
+/// `..`, senza separatori e senza il `:` delle lettere di unità Windows.
+fn is_safe_component(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains(':')
+}
+
+/// Elenca ricorsivamente i file sotto `dir`, come path relativi a `root`.
+fn collect_data_files(root: &Utf8Path, dir: &Utf8Path, out: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        // Una cartella che non c'è è una lista vuota, non un errore: chi
+        // interroga uno storage vuoto non sta sbagliando niente.
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else {
+            continue; // path non UTF-8: non è nominabile dal contratto
+        };
+        if path.is_dir() {
+            collect_data_files(root, &path, out);
+        } else if let Some(rel) = path.strip_prefix(root).ok().map(Utf8Path::as_str) {
+            out.push(rel.replace('\\', "/"));
+        }
+    }
 }
 
 /// L'[`HostApi`] del kernel per gli handler fidati: chiamate dirette, costo
@@ -815,6 +974,8 @@ impl Workspace {
 /// plugin — vedi `docs/architecture/plugin-boundary.md`.
 struct KernelHost<'a> {
     ws: &'a mut Workspace,
+    /// Chi sta usando queste capacità: determina lo spazio dati `data_*`.
+    plugin: &'a str,
 }
 
 impl HostApi for KernelHost<'_> {
@@ -828,6 +989,10 @@ impl HostApi for KernelHost<'_> {
         self.ws
             .write_document(id, source)
             .map_err(|e| PluginError::Internal(e.to_string()))
+    }
+
+    fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
+        Ok(self.ws.documents())
     }
 
     fn emit(&mut self, event: Event) {
@@ -847,6 +1012,59 @@ impl HostApi for KernelHost<'_> {
 
     fn storage_set(&mut self, key: &str, value: serde_json::Value) {
         self.ws.storage.insert(key.to_string(), value);
+    }
+
+    fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
+        let path = self.data_blob(path)?;
+        match std::fs::read(&path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            // Mancare non è un errore: chi legge uno store vuoto lo scopre così.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
+        }
+    }
+
+    fn data_write(&mut self, path: &str, bytes: &[u8]) -> std::result::Result<(), PluginError> {
+        let path = self.data_blob(path)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| PluginError::Internal(format!("{parent}: {e}")))?;
+        }
+        std::fs::write(&path, bytes).map_err(|e| PluginError::Internal(format!("{path}: {e}")))
+    }
+
+    fn data_remove(&mut self, path: &str) -> std::result::Result<(), PluginError> {
+        let path = self.data_blob(path)?;
+        match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            // Idempotente: cancellare ciò che non c'è è già il risultato voluto.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
+        }
+    }
+
+    fn data_list(&self, prefix: &str) -> std::result::Result<Vec<String>, PluginError> {
+        let root = self.ws.plugin_data_root(self.plugin);
+        let dir = self.ws.plugin_data_path(self.plugin, prefix)?;
+        let mut out = Vec::new();
+        collect_data_files(&root, &dir, &mut out);
+        out.sort_unstable();
+        Ok(out)
+    }
+
+    fn now_unix_millis(&self) -> u64 {
+        crate::time::now_unix_millis()
+    }
+}
+
+impl KernelHost<'_> {
+    /// Path assoluto di un blob: come [`Workspace::plugin_data_path`], ma il
+    /// nome vuoto non è la radice — è una richiesta malformata.
+    fn data_blob(&self, rel: &str) -> std::result::Result<Utf8PathBuf, PluginError> {
+        if rel.is_empty() {
+            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
+        }
+        self.ws.plugin_data_path(self.plugin, rel)
     }
 }
 
