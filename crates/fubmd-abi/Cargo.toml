@@ -13,3 +13,8 @@ thiserror = { workspace = true }
 
 # INVARIANTE ARCHITETTURALE: questo crate NON deve mai dipendere da
 # comrak/pulldown, tauri, wasmtime, tokio, notify. È il firewall anti-lock-in.
+
+[dev-dependencies]
+# Solo per i test (es. wit_conformance): gli integration test non vedono le
+# dipendenze normali del crate. Nessun impatto sull'invariante.
+serde_json = { workspace = true }

@@ -1,0 +1,399 @@
+// Contratto WIT che rispecchia `fubmd-abi`. VIVO da M2, congelato a M4.
+//
+// Regola d'oro: ogni tipo che attraversa una firma di trait è un record/variant/
+// enum WIT. I valori JSON liberi (frontmatter, attrs, args, storage) passano come
+// stringa JSON (`type json = string`), scelta deliberata per preservare l'escape
+// hatch. Vedi docs/architecture/traits.md per la tabella di mapping.
+//
+// Stato conformità: `crates/fubmd-abi/tests/wit_conformance.rs` verifica in modo
+// strutturale (presenza dei nomi + esaustività sui tipi Rust). La validazione con
+// tooling WIT (wit-parser / wit-bindgen) è cablata a M4.
+
+package fubmd:abi@0.1.0;
+
+/// JSON serializzato come stringa: frontmatter, `attrs` dell'escape hatch,
+/// argomenti dei comandi, storage dei plugin.
+interface json {
+    type json = string;
+}
+
+/// Il modello di documento comune e agnostico rispetto al formato.
+interface model {
+    use json.{json};
+
+    /// Path relativo al vault, separatori `/`, estensione inclusa.
+    type doc-id = string;
+
+    /// Intervallo [start, end) in byte sulla sorgente.
+    record span {
+        start: u64,
+        end: u64,
+    }
+
+    /// Metadati del documento (frontmatter proiettato su JSON).
+    type frontmatter = json;
+
+    /// Un heading estratto (outline e link a heading).
+    record heading {
+        level: u8,
+        text: string,
+        slug: string,
+        span: span,
+    }
+
+    /// Un tag `#foo` / `#foo/bar` estratto.
+    record tag {
+        name: string,
+        span: span,
+    }
+
+    /// Intento di link non risolto; la risoluzione a doc-id è del kernel.
+    record link-target-wiki {
+        page: string,
+        heading: option<string>,
+        block: option<string>,
+        embed: bool,
+    }
+    variant link-target {
+        wiki(link-target-wiki),
+        url(string),
+        path(string),
+    }
+
+    /// Un link estratto, piatto, con span e contesto per i backlink.
+    record link {
+        target: link-target,
+        span: span,
+        context: option<string>,
+    }
+
+    // --- albero a blocchi / inline -------------------------------------------
+
+    record inline-link {
+        target: link-target,
+        label: option<list<inline>>,
+        span: span,
+    }
+    record inline-tag-ref {
+        name: string,
+        span: span,
+    }
+    record inline-custom {
+        custom-kind: string,
+        attrs: json,
+        span: span,
+    }
+    variant inline {
+        text(string),
+        emph(list<inline>),
+        strong(list<inline>),
+        code(string),
+        link(inline-link),
+        tag-ref(inline-tag-ref),
+        custom(inline-custom),
+    }
+
+    record block-heading {
+        level: u8,
+        inlines: list<inline>,
+        span: span,
+    }
+    record block-paragraph {
+        inlines: list<inline>,
+        span: span,
+    }
+    record block-list {
+        ordered: bool,
+        items: list<list<block>>,
+        span: span,
+    }
+    record block-code-block {
+        lang: option<string>,
+        code: string,
+        span: span,
+    }
+    record block-quote {
+        blocks: list<block>,
+        span: span,
+    }
+    /// Escape hatch: callout, math, tabelle, embed.
+    record block-custom {
+        custom-kind: string,
+        attrs: json,
+        blocks: list<block>,
+        span: span,
+    }
+    variant block {
+        heading(block-heading),
+        paragraph(block-paragraph),
+        list(block-list),
+        code-block(block-code-block),
+        quote(block-quote),
+        thematic-break(span),
+        custom(block-custom),
+    }
+
+    /// Il documento parsato nel modello comune.
+    record document-model {
+        id: doc-id,
+        frontmatter: frontmatter,
+        body: list<block>,
+        outline: list<heading>,
+        links: list<link>,
+        tags: list<tag>,
+        text: string,
+    }
+}
+
+/// `FormatProvider`: come si comporta un formato di documento.
+interface format {
+    use json.{json};
+    use model.{document-model};
+
+    record format-descriptor {
+        id: string,
+        name: string,
+        extensions: list<string>,
+    }
+    record format-capabilities {
+        wikilinks: bool,
+        tags: bool,
+        frontmatter: bool,
+        callouts: bool,
+        embeds: bool,
+    }
+    record parse-context {
+        doc-id: string,
+        parse-tags: bool,
+        parse-wikilinks: bool,
+    }
+    record render-options {
+        wikilinks-as-data-attrs: bool,
+    }
+    variant format-error {
+        parse(string),
+        render(string),
+        serialize(string),
+        unsupported(string),
+    }
+
+    descriptor: func() -> format-descriptor;
+    capabilities: func() -> format-capabilities;
+    parse: func(source: string, ctx: parse-context) -> result<document-model, format-error>;
+    render-html: func(model: document-model, opts: render-options) -> result<string, format-error>;
+    serialize: func(model: document-model) -> result<string, format-error>;
+}
+
+/// Protocollo di UI dichiarativa (`UiNode`).
+interface ui {
+    use json.{json};
+
+    type action-id = string;
+
+    enum axis { row, column }
+    enum intent { neutral, primary, danger }
+
+    record ui-stack {
+        dir: axis,
+        gap: u8,
+        children: list<ui-node>,
+    }
+    record ui-heading {
+        level: u8,
+        content: string,
+    }
+    record ui-list-item {
+        title: string,
+        subtitle: option<string>,
+        action: option<action-id>,
+    }
+    record ui-button {
+        label: string,
+        intent: intent,
+        action: action-id,
+    }
+    record ui-web-view {
+        url: string,
+        height: u32,
+    }
+    variant ui-node {
+        stack(ui-stack),
+        text(string),
+        heading(ui-heading),
+        list(list<ui-node>),
+        list-item(ui-list-item),
+        button(ui-button),
+        html(string),
+        web-view(ui-web-view),
+    }
+
+    record ui-action {
+        action: action-id,
+        payload: json,
+    }
+    variant view-update {
+        replace(ui-node),
+        none,
+        navigate(string),
+    }
+}
+
+/// Eventi del ciclo di vita del vault.
+interface events {
+    use model.{doc-id};
+
+    record event-document-changed { id: doc-id }
+    record event-document-removed { id: doc-id }
+    record event-vault-opened { root: string }
+    variant event {
+        vault-opened(event-vault-opened),
+        document-changed(event-document-changed),
+        document-removed(event-document-removed),
+        index-updated,
+    }
+
+    enum event-kind {
+        vault-opened,
+        document-changed,
+        document-removed,
+        index-updated,
+    }
+    type event-mask = list<event-kind>;
+}
+
+/// Comandi.
+interface command {
+    use json.{json};
+    use errors.{plugin-error};
+
+    record command-spec {
+        id: string,
+        title: string,
+        keybinding: option<string>,
+    }
+    record command-outcome {
+        notify: option<string>,
+    }
+
+    commands: func() -> list<command-spec>;
+    invoke: func(command: string, args: json) -> result<command-outcome, plugin-error>;
+}
+
+/// Ricerca e backlink (`IndexProvider`).
+interface index {
+    use model.{doc-id, document-model};
+    use errors.{plugin-error};
+
+    record index-query-full-text {
+        query: string,
+        limit: u32,
+    }
+    variant index-query {
+        backlinks(doc-id),
+        full-text(index-query-full-text),
+    }
+    record backlink-ref {
+        source: doc-id,
+        context: option<string>,
+    }
+    record search-hit {
+        doc: doc-id,
+        score: f32,
+        snippet: string,
+    }
+    variant index-result {
+        backlinks(list<backlink-ref>),
+        search(list<search-hit>),
+    }
+
+    on-document-indexed: func(doc: document-model);
+    on-document-removed: func(id: doc-id);
+    query: func(query: index-query) -> result<index-result, plugin-error>;
+}
+
+/// View dichiarative (`ViewProvider`).
+interface view {
+    use ui.{ui-node, ui-action, view-update};
+    use errors.{plugin-error};
+
+    enum view-placement { left-sidebar, right-sidebar, bottom }
+    record view-spec {
+        id: string,
+        title: string,
+        placement: view-placement,
+    }
+
+    views: func() -> list<view-spec>;
+    render-view: func(view: string) -> result<ui-node, plugin-error>;
+    on-action: func(view: string, action: ui-action) -> result<view-update, plugin-error>;
+}
+
+/// Errore prodotto da un plugin (nativo o WASM).
+interface errors {
+    variant plugin-error {
+        unknown-command(string),
+        unknown-view(string),
+        bad-args(string),
+        permission-denied(string),
+        internal(string),
+    }
+}
+
+/// Capacità concesse dal kernel a un provider/plugin: l'unico varco col mondo.
+interface host-api {
+    use model.{doc-id};
+    use json.{json};
+    use events.{event};
+    use errors.{plugin-error};
+
+    read-document: func(id: doc-id) -> result<string, plugin-error>;
+    write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
+    emit: func(event: event);
+    storage-get: func(key: string) -> option<json>;
+    storage-set: func(key: string, value: json);
+}
+
+/// Reazione agli eventi (`EventHandler`).
+interface event-handler {
+    use events.{event, event-mask};
+    use errors.{plugin-error};
+
+    subscribed: func() -> event-mask;
+    handle: func(event: event) -> result<_, plugin-error>;
+}
+
+/// Ciclo di vita del plugin + manifest e permessi.
+interface plugin {
+    use errors.{plugin-error};
+
+    record plugin-permissions {
+        read-vault: bool,
+        write-vault: bool,
+        network: bool,
+        // Estensione prevista a M4 (vedi docs/architecture/plugin-boundary.md):
+        //   vault-scope: list<string>,
+    }
+    record plugin-manifest {
+        id: string,
+        name: string,
+        version: string,
+        permissions: plugin-permissions,
+    }
+
+    manifest: func() -> plugin-manifest;
+    activate: func() -> result<_, plugin-error>;
+    deactivate: func() -> result<_, plugin-error>;
+}
+
+/// Il mondo di un plugin: importa le capacità del core, esporta i provider che
+/// implementa. Il kernel non distingue nativo da WASM.
+world plugin-world {
+    import host-api;
+
+    export plugin;
+    export format;
+    export command;
+    export view;
+    export index;
+    export event-handler;
+}
