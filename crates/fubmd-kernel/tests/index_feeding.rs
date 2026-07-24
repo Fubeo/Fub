@@ -277,6 +277,43 @@ fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
 }
 
 #[test]
+fn a_file_the_vault_ignores_never_reaches_models_events_or_index() {
+    let fx = Fixture::new();
+    fx.write("viva.txt", "presente");
+
+    let mut ws = fx.workspace();
+    let (spy, log) = SpyIndex::new(true);
+    ws.register_index_provider(Box::new(spy));
+    ws.reindex().unwrap();
+    log.lock().unwrap().clear();
+    let events = ws.bus().subscribe();
+
+    // Questi file esistono, hanno un'estensione gestita e un provider: è solo
+    // il posto in cui si trovano a renderli invisibili al vault. Ed è il
+    // percorso del *watcher* — `sync_path` — non quello della scansione, che
+    // il filtro già lo aveva.
+    let ignorati = [
+        ".trash/cestinata.txt",
+        ".obsidian/workspace.txt",
+        "node_modules/pacchetto/readme.txt",
+    ];
+    for rel in ignorati {
+        fx.write(rel, "roba che il vault non deve guardare");
+        assert!(
+            !ws.sync_path(&fx.root.join(rel)).unwrap(),
+            "{rel} non è roba del vault"
+        );
+    }
+
+    assert_eq!(ws.documents(), vec![DocId::new("viva.txt")]);
+    assert!(
+        calls_of(&log).is_empty(),
+        "l'indice non deve nemmeno sentirne parlare: sarebbe cercabile una nota cestinata"
+    );
+    assert!(events.try_iter().next().is_none(), "nessun evento");
+}
+
+#[test]
 fn backlinks_never_reach_the_providers() {
     let fx = Fixture::new();
     fx.write("a.txt", "corpo");

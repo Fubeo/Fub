@@ -9,7 +9,30 @@ use fubmd_abi::DocId;
 use crate::error::{KernelError, Result};
 
 /// Directory ignorate durante la scansione del vault.
-const IGNORED_DIRS: &[&str] = &[".obsidian", ".git", ".fubmd-data", "node_modules"];
+const IGNORED_DIRS: &[&str] = &[
+    ".obsidian",
+    ".git",
+    ".fubmd-data",
+    ".trash",
+    "node_modules",
+];
+
+/// Nome della cartella cestino dentro il vault.
+///
+/// È la stessa che usa Obsidian per "Move to Obsidian trash": un vault
+/// condiviso fra le due app ha **un solo** cestino (vedi
+/// `docs/CRUD_E_VAULT.md`, D1).
+pub const TRASH_DIR: &str = ".trash";
+
+/// Un componente di path che il vault non deve mai guardare.
+///
+/// Unico punto di verità della regola: la usano sia la scansione
+/// ([`Vault::list_documents`]) sia il percorso del watcher
+/// ([`Vault::is_ignored`]). Finché viveva solo dentro la scansione, ogni file
+/// spostato nel cestino tornava dentro dalla porta di servizio del watcher.
+fn is_ignored_name(name: &str) -> bool {
+    name.starts_with('.') || IGNORED_DIRS.contains(&name)
+}
 
 pub struct Vault {
     root: Utf8PathBuf,
@@ -39,6 +62,19 @@ impl Vault {
         self.root.join(id.as_str())
     }
 
+    /// Il path assoluto cade in una parte del vault che non va guardata?
+    ///
+    /// Vale per **ogni** componente, non solo per l'ultimo: un file dentro
+    /// `.trash/` è invisibile quanto la cartella che lo contiene. Un path fuori
+    /// dal vault non è ignorato — semplicemente non è roba nostra, e a dirlo è
+    /// [`Vault::doc_id_for_path`].
+    pub fn is_ignored(&self, abs: &Utf8Path) -> bool {
+        let Ok(rel) = abs.strip_prefix(&self.root) else {
+            return false;
+        };
+        rel.components().any(|c| is_ignored_name(c.as_str()))
+    }
+
     /// Elenca i documenti del vault le cui estensioni sono tra quelle date
     /// (senza punto, minuscole). Salta le directory ignorate e i file nascosti.
     pub fn list_documents(&self, extensions: &[String]) -> Result<Vec<DocId>> {
@@ -61,7 +97,7 @@ impl Vault {
             let path = entry.path();
             let path = Utf8PathBuf::from_path_buf(path).map_err(KernelError::NonUtf8Path)?;
             let name = path.file_name().unwrap_or_default();
-            if name.starts_with('.') {
+            if is_ignored_name(name) {
                 continue;
             }
             let file_type = entry.file_type().map_err(|e| KernelError::Io {
@@ -69,9 +105,6 @@ impl Vault {
                 source: e,
             })?;
             if file_type.is_dir() {
-                if IGNORED_DIRS.contains(&name) {
-                    continue;
-                }
                 self.walk(&path, exts, out)?;
             } else if file_type.is_file() {
                 if let Some(ext) = path.extension() {

@@ -53,13 +53,19 @@ Aperto, da decidere strada facendo:
 
 ## Fase 0 — Prerequisiti (bug latenti che il cestino renderebbe reali)
 
-- [ ] `sync_path` deve rispettare `IGNORED_DIRS` e i path nascosti: oggi il
+- [x] `sync_path` deve rispettare `IGNORED_DIRS` e i path nascosti: oggi il
       filtro vive solo in `walk()`, quindi un file comparso in `.trash/` o
       `.obsidian/` verrebbe **reindicizzato dal watcher**. Spostare il check in
       un punto solo (es. `Vault::is_ignored(path)`) usato da entrambi.
-- [ ] Aggiungere `.trash` a `IGNORED_DIRS`.
-- [ ] Test: un file creato in `.trash/`/`.obsidian/` non produce eventi, non
+      *(Bug verificato prima di correggerlo: il test falliva su
+      `.trash/cestinata.txt`. La regola vive ora in `is_ignored_name`, usata da
+      `walk()` sul nome e da `Vault::is_ignored` su ogni componente.)*
+- [x] Aggiungere `.trash` a `IGNORED_DIRS`.
+- [x] Test: un file creato in `.trash/`/`.obsidian/` non produce eventi, non
       entra nei modelli, non entra nell'indice (spia + watcher).
+      *(`index_feeding.rs`:
+      `a_file_the_vault_ignores_never_reaches_models_events_or_index`; il
+      "watcher" è `sync_path`, che del watcher è il percorso.)*
 
 ## Fase 1 — Delete col cestino
 
