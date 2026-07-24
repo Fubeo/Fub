@@ -169,9 +169,16 @@ impl SearchIndex {
         }
         let index = index.expect("appena creato se assente");
 
-        let writer: IndexWriter = index
-            .writer(WRITER_HEAP)
-            .map_err(|e| PluginError::Internal(format!("writer indice: {e}")))?;
+        // Il writer prende un lock esclusivo sulla cartella. Fallire qui NON
+        // deve portare a buttare l'indice: la causa quasi certa è che un'altra
+        // istanza di FubMD ha già questo vault aperto, e la sua copia è viva e
+        // corretta. Si rinuncia alla ricerca, non ai dati di qualcun altro.
+        let writer: IndexWriter = index.writer(WRITER_HEAP).map_err(|e| {
+            PluginError::Internal(format!(
+                "writer indice ({dir}): {e} — un'altra istanza di FubMD ha \
+                 forse questo vault già aperto"
+            ))
+        })?;
         let reader = index
             .reader_builder()
             // I commit li decidiamo noi (`flush`, o una query con scritture in

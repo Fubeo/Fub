@@ -170,10 +170,12 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
 ## Criteri di accettazione
 
 - Ricerca full-text su un vault di ≥1000 note con risultati rilevanti < 50 ms a
-  query (indice caldo), snippet evidenziati. ✅ funzionante; **il numero non è
-  ancora misurato** su un vault di quella taglia (manca il bench qui sotto).
+  query (indice caldo), snippet evidenziati. ✅ misurato su 2000 note (release,
+  vocabolario ristretto = caso peggiore): query peggiore **108 µs**, indice
+  costruito da zero in 25 ms.
 - Riapertura del vault **senza** reindicizzazione completa (indice caricato da
-  disco). ✅ verificata sull'opstamp: un vault immutato non produce scritture.
+  disco). ✅ **13,9 ms** per 2000 note, con **zero** scritture sull'indice
+  (verificato sull'opstamp di tantivy, non a occhio).
 - Modifica/creazione/cancellazione di una nota: grafo e indice riflettono il
   cambiamento senza full-rebuild, e il risultato è **identico** a quello del
   full-rebuild. ✅ per entrambi, ciascuno col proprio oracolo.
@@ -213,8 +215,15 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
   ad app chiusa, highlight allineati su testo accentato.
 - **Ancora da fare a M2:** creazione nota da link non risolto → il backlink
   compare (`crates/fubmd-format-markdown/tests/vault_e2e.rs`).
-- **Bench (facoltativo):** tempi di query e di aggiornamento incrementale vs rebuild
-  su vault sintetico grande.
+- **Bench:** ignorati nel giro normale, si eseguono a mano in release.
+  `crates/fubmd-kernel/tests/graph_incremental.rs` per grafo incrementale vs
+  rebuild; `crates/fubmd-features/tests/search_e2e.rs` per la latenza di query
+  e la riapertura a freddo su 2000 note (i numeri nei criteri qui sotto).
+- **Nota emersa dal bench:** un secondo `SearchIndex` sulla stessa cartella
+  trova il lock del writer di tantivy occupato. È il caso di due istanze di
+  FubMD sullo stesso vault: si rinuncia alla ricerca nella seconda, **non** si
+  butta l'indice della prima (che è vivo e corretto). Se il multi-istanza
+  diventerà un requisito, servirà un vero coordinamento — oggi non lo è.
 - `cargo test --workspace` + `cargo clippy` verdi su tutti gli OS (vedi
   [../appendix/platforms-ci.md](../appendix/platforms-ci.md)).
 
