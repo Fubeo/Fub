@@ -14,7 +14,7 @@ use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::ui::UiNode;
 use fubmd_features::{build_backlinks_view, SearchIndex};
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_kernel::{FormatRegistry, TrashEntry, Workspace};
 
 use notify::RecursiveMode;
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
@@ -177,6 +177,49 @@ fn rename_document(state: State<AppState>, from: String, to: String) -> Result<(
         .map_err(|e| e.to_string())
 }
 
+/// Cancella una nota spostandola nel cestino del vault; restituisce dove è
+/// finita. Il delete dell'app **è** questo spostamento: niente è distrutto
+/// finché l'utente non svuota il cestino.
+#[tauri::command]
+fn delete_document(state: State<AppState>, id: String) -> Result<String, String> {
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.delete_document(&DocId::new(id))
+        .map(|d| d.0)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_trash(state: State<AppState>) -> Result<Vec<TrashEntry>, String> {
+    let ws = current(&state)?;
+    let ws = ws.lock().unwrap();
+    ws.list_trash().map_err(|e| e.to_string())
+}
+
+/// Ripristina una voce del cestino, opzionalmente sotto un altro nome (è il
+/// caso in cui il path originale è di nuovo occupato e l'app ha chiesto).
+#[tauri::command]
+fn restore_from_trash(
+    state: State<AppState>,
+    id: String,
+    to: Option<String>,
+) -> Result<String, String> {
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.restore_from_trash(&DocId::new(id), to.map(DocId::new))
+        .map(|d| d.0)
+        .map_err(|e| e.to_string())
+}
+
+/// Svuota il cestino: restituisce quante voci ha cancellato, perché da qui in
+/// poi non sono più recuperabili e l'utente deve poterlo leggere.
+#[tauri::command]
+fn empty_trash(state: State<AppState>) -> Result<usize, String> {
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.empty_trash().map_err(|e| e.to_string())
+}
+
 #[derive(Serialize)]
 struct EmbedContent {
     doc_id: String,
@@ -262,6 +305,10 @@ pub fn run() {
             read_document,
             write_document,
             rename_document,
+            delete_document,
+            list_trash,
+            restore_from_trash,
+            empty_trash,
             render_preview,
             render_embed,
             backlinks,
