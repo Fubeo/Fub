@@ -211,6 +211,10 @@ pub enum IndexQuery {
     Outline {
         doc: DocId,
     },
+    /// I tag dell'intero vault con la loro frequenza, serviti dal **kernel** dai
+    /// modelli (come [`IndexQuery::Outline`], è il canale metadata). Senza
+    /// argomenti: è un'aggregazione su tutto il vault, non su un documento.
+    Tags,
     /// Varco di estensione: query definite da un provider di terzi, con
     /// namespace (`ns` = plugin id). Un provider che non riconosce `ns`
     /// risponde `PluginError::BadArgs`.
@@ -225,6 +229,15 @@ pub enum IndexQuery {
 pub struct BacklinkRef {
     pub source: DocId,
     pub context: Option<String>,
+}
+
+/// Un tag del vault con quante note lo portano (risposta a
+/// [`IndexQuery::Tags`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagCount {
+    /// Nome del tag senza `#`, con la gerarchia intatta (`a/b`).
+    pub name: String,
+    pub count: u32,
 }
 
 /// Un risultato di ricerca full-text.
@@ -253,6 +266,8 @@ pub enum IndexResult {
     /// Gli heading di un documento, in ordine di apparizione (risposta a
     /// [`IndexQuery::Outline`]).
     Outline(Vec<Heading>),
+    /// I tag del vault con la loro frequenza (risposta a [`IndexQuery::Tags`]).
+    Tags(Vec<TagCount>),
     /// Risposta a una [`IndexQuery::Custom`].
     Custom(serde_json::Value),
 }

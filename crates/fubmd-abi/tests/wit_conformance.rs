@@ -63,7 +63,7 @@ use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTar
 use fubmd_abi::traits::{
     BacklinkRef, CommandOutcome, CommandProvider, CommandSpec, EventHandler, HostApi,
     IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, Plugin, PluginManifest,
-    PluginPermissions, SearchHit, ViewPlacement, ViewProvider, ViewSpec,
+    PluginPermissions, SearchHit, TagCount, ViewPlacement, ViewProvider, ViewSpec,
 };
 use fubmd_abi::ui::{ActionId, Axis, Intent, UiAction, UiNode, ViewUpdate};
 
@@ -179,6 +179,7 @@ wit_type! {
     IndexResult => "index-result",
     BacklinkRef => "backlink-ref",
     SearchHit => "search-hit",
+    TagCount => "tag-count",
     PluginManifest => "plugin-manifest",
     PluginPermissions => "plugin-permissions",
 
@@ -1049,6 +1050,7 @@ fn view_update_case(v: &ViewUpdate) -> Case {
             "view-update-reveal",
             vec![("doc-id", wit(doc_id)), ("span", wit(span))],
         ),
+        ViewUpdate::RunSearch { query } => case_ty("run-search", wit(query)),
     }
 }
 
@@ -1119,6 +1121,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
             vec![("query", wit(query)), ("limit", wit(limit))],
         ),
         IndexQuery::Outline { doc } => case_ty("outline", wit(doc)),
+        IndexQuery::Tags => case("tags"),
         IndexQuery::Custom { ns, query } => case_rec(
             "custom",
             "index-query-custom",
@@ -1132,6 +1135,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Backlinks(v) => case_ty("backlinks", wit(v)),
         IndexResult::Search(v) => case_ty("search", wit(v)),
         IndexResult::Outline(v) => case_ty("outline", wit(v)),
+        IndexResult::Tags(v) => case_ty("tags", wit(v)),
         IndexResult::Custom(v) => case_ty("custom", wit(v)),
     }
 }
@@ -1315,6 +1319,9 @@ fn conform(source: &str) -> Result<(), String> {
                 doc_id: String::new(),
                 span: Span::new(0, 0),
             }),
+            view_update_case(&ViewUpdate::RunSearch {
+                query: String::new(),
+            }),
         ],
     );
 
@@ -1361,6 +1368,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_query_case(&IndexQuery::Outline {
                 doc: DocId::new("a"),
             }),
+            index_query_case(&IndexQuery::Tags),
             index_query_case(&IndexQuery::Custom {
                 ns: String::new(),
                 query: serde_json::Value::Null,
@@ -1374,6 +1382,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::Backlinks(vec![])),
             index_result_case(&IndexResult::Search(vec![])),
             index_result_case(&IndexResult::Outline(vec![])),
+            index_result_case(&IndexResult::Tags(vec![])),
             index_result_case(&IndexResult::Custom(serde_json::Value::Null)),
         ],
     );
@@ -1659,6 +1668,12 @@ fn conform(source: &str) -> Result<(), String> {
             ("highlights", wit(&highlights)),
         ],
     );
+
+    let TagCount { name, count } = TagCount {
+        name: String::new(),
+        count: 0,
+    };
+    contract.record("tag-count", &[("name", wit(&name)), ("count", wit(&count))]);
 
     let UiAction { action, payload } = UiAction {
         action: ActionId(String::new()),

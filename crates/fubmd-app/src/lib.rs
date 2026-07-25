@@ -13,8 +13,8 @@ use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
-    BacklinksView, OutlineView, SearchIndex, VersionRef, VersionStore, VersioningHandler,
-    BACKLINKS_ID, OUTLINE_ID, SEARCH_ID, VERSIONING_ID,
+    BacklinksView, OutlineView, SearchIndex, TagPanelView, VersionRef, VersionStore,
+    VersioningHandler, BACKLINKS_ID, OUTLINE_ID, SEARCH_ID, TAGS_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, TrashEntry, Trust, Workspace};
@@ -162,6 +162,9 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     // usare il canale metadata (`IndexQuery::Outline`): legge la struttura del
     // documento attivo dal kernel, non dall'app.
     ws.register_view_provider(OUTLINE_ID, Trust::Trusted, Box::new(OutlineView));
+    // Il pannello tag: aggrega i tag del vault via `IndexQuery::Tags`, click →
+    // ricerca. Terza feature ufficiale sul giro delle view.
+    ws.register_view_provider(TAGS_ID, Trust::Trusted, Box::new(TagPanelView));
 
     ws.reindex().map_err(|e| e.to_string())?;
 

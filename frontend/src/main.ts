@@ -29,6 +29,7 @@ const fileListEl = $("#file-list");
 const previewEl = $("#preview");
 const backlinksEl = $("#backlinks");
 const outlineEl = $("#outline");
+const tagsEl = $("#tags");
 const vaultPathEl = $("#vault-path");
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchPanelEl = $("#search-panel");
@@ -135,6 +136,7 @@ async function openVaultPath(dir: string) {
   outlineEl.innerHTML = "";
   clearSearch();
   renderFileList(info.documents);
+  updateTags();
   if (info.documents.length > 0) selectDoc(info.documents[0]);
 }
 
@@ -1078,6 +1080,13 @@ function showPanel(panel: "files" | "search" | "trash") {
   trashPanelEl.hidden = panel !== "trash";
 }
 
+// Avvia una ricerca da fuori (il pannello tag: click su un tag →
+// `ViewUpdate::RunSearch`): riempie la barra e usa lo stesso giro dell'utente.
+function searchFor(query: string) {
+  searchInputEl.value = query;
+  runSearch();
+}
+
 async function runSearch() {
   const query = searchInputEl.value.trim();
   if (!query) {
@@ -1151,9 +1160,10 @@ function highlighted(snippet: string, highlights: Span[]): DocumentFragment {
   return frag;
 }
 
-// Id delle view (rispecchiano fubmd_features::{BACKLINKS,OUTLINE}_VIEW).
+// Id delle view (rispecchiano fubmd_features::{BACKLINKS,OUTLINE,TAGS}_VIEW).
 const BACKLINKS_VIEW = "backlinks";
 const OUTLINE_VIEW = "outline";
+const TAGS_VIEW = "tags";
 
 // Disegna una view dichiarativa in un contenitore e chiude il giro
 // azione→ViewUpdate: un click torna al provider via `view_action` e la
@@ -1174,6 +1184,9 @@ async function mountView(view: string, target: HTMLElement, node: UiNode) {
           if (update.doc_id !== currentDoc) await selectDoc(update.doc_id);
           editor.revealByteOffset(update.span.start);
           break;
+        case "run_search":
+          searchFor(update.query);
+          break;
         case "replace":
           await mountView(view, target, update.root);
           break;
@@ -1193,9 +1206,17 @@ async function updateOutline() {
   await mountView(OUTLINE_VIEW, outlineEl, await api.renderView(OUTLINE_VIEW));
 }
 
+// I tag sono aggregati sull'intero vault, non sul documento aperto: la view si
+// aggiorna all'apertura e a ogni modifica dell'indice, non a ogni cambio nota.
+async function updateTags() {
+  await mountView(TAGS_VIEW, tagsEl, await api.renderView(TAGS_VIEW));
+}
+
 function handleKernelEvent(e: KernelEvent) {
   if (e.type === "index_updated") {
     api.listDocuments().then(refreshFileList);
+    // I tag sono vault-wide: si aggiornano anche senza un documento aperto.
+    updateTags();
     if (currentDoc) {
       updateOutline();
       updateBacklinks();

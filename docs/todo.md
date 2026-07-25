@@ -95,10 +95,16 @@ kernel, ma le implementazioni del trait erano **zero**. Ora ce n'è una vera:
       ponte che §4 dava per M3 — anticipato qui perché lo scroll lo pretendeva, e
       verificato su testo accentato+emoji). Prova e2e:
       `crates/fubmd-features/tests/outline_view_e2e.rs`.
-- [ ] Le view M2 restanti (tag panel, graph-data) **nascono** come `ViewProvider`
-      sullo stesso giro — vincolo invariato: non cablarle ad-hoc. Il tag panel
-      riuserà il canale metadata (una query sui tag del vault); il graph-data è
-      fuori da `UiNode` (Canvas), superficie privilegiata dichiarata.
+- [x] **Tag panel** è il terzo `ViewProvider` (`fubmd_features::TagPanelView`,
+      2026-07-25): aggrega i tag del vault via `IndexQuery::Tags` (canale
+      metadata, come l'outline; conteggio per **nota**, non per occorrenza) e
+      cliccando un tag chiede una ricerca con un nuovo `ViewUpdate::RunSearch`,
+      che la shell esegue riusando il pannello di ricerca esistente (i tag sono
+      un campo indicizzato: la query è `tags:<nome>`). E2e:
+      `crates/fubmd-features/tests/tags_view_e2e.rs`.
+- [ ] Resta **graph-data** come ultima view M2: è fuori da `UiNode` (Canvas),
+      superficie privilegiata dichiarata — un comando dati + un renderer
+      force-directed nel frontend, non il giro `ViewProvider`/`UiNode`.
 
 ## 3. Rilievi nuovi di questo giro
 

@@ -16,7 +16,9 @@ use std::sync::Mutex;
 
 use fubmd_abi::event::Event;
 use fubmd_abi::model::{DocId, Heading};
-use fubmd_abi::traits::{BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec};
+use fubmd_abi::traits::{
+    BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, TagCount,
+};
 use fubmd_abi::PluginError;
 
 /// Storage dei blob e dei documenti in memoria, più un orologio pilotabile.
@@ -35,6 +37,8 @@ pub struct MemoryHost {
     /// Outline finti per [`HostApi::query_index`], seminati per documento: il
     /// doppio non parsa, come non parsa il kernel dietro `IndexQuery::Outline`.
     outlines: Mutex<BTreeMap<String, Vec<Heading>>>,
+    /// Aggregazione dei tag finta per [`IndexQuery::Tags`].
+    tags: Mutex<Vec<TagCount>>,
 }
 
 impl MemoryHost {
@@ -98,6 +102,19 @@ impl MemoryHost {
             .lock()
             .unwrap()
             .insert(doc.to_string(), headings.to_vec());
+        self
+    }
+
+    /// Semina l'aggregazione dei tag che [`IndexQuery::Tags`] restituirà
+    /// (stile builder): coppie nome→conteggio.
+    pub fn con_tags(self, tags: &[(&str, u32)]) -> Self {
+        *self.tags.lock().unwrap() = tags
+            .iter()
+            .map(|(name, count)| TagCount {
+                name: name.to_string(),
+                count: *count,
+            })
+            .collect();
         self
     }
 }
@@ -194,6 +211,7 @@ impl HostApi for MemoryHost {
                     .cloned()
                     .unwrap_or_default(),
             )),
+            IndexQuery::Tags => Ok(IndexResult::Tags(self.tags.lock().unwrap().clone())),
             // Il doppio non ha un indice: tutto il resto è "non roba mia".
             _ => Err(PluginError::BadArgs(
                 "MemoryHost non ha indici full-text".into(),

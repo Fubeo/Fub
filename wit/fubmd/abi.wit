@@ -301,6 +301,8 @@ interface ui {
         /// `span` è in byte UTF-8, chi disegna lo mappa sull'editor. Usato
         /// dall'outline per saltare a un heading.
         reveal(view-update-reveal),
+        /// Esegui una ricerca e mostrane i risultati (usato dal pannello tag).
+        run-search(string),
     }
 }
 
@@ -414,11 +416,18 @@ interface index {
         /// modelli: è come una view legge la struttura parsata senza avere un
         /// `format-provider`. Documento inesistente → outline vuota.
         outline(doc-id),
+        /// I tag dell'intero vault con la frequenza, serviti dal kernel dai
+        /// modelli. Senza argomenti: è un'aggregazione su tutto il vault.
+        tags,
         custom(index-query-custom),
     }
     record backlink-ref {
         source: doc-id,
         context: option<string>,
+    }
+    record tag-count {
+        name: string,
+        count: u32,
     }
     /// `snippet` è testo semplice, mai markup: chi disegna lo inserisce come
     /// testo. L'evidenziazione passa da `highlights`, intervalli in byte
@@ -433,6 +442,7 @@ interface index {
         backlinks(list<backlink-ref>),
         search(list<search-hit>),
         outline(list<heading>),
+        tags(list<tag-count>),
         custom(json),
     }
 

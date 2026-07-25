@@ -52,6 +52,7 @@ function touchViewUpdate(u: ViewUpdate): void {
     case "none":
     case "navigate":
     case "reveal":
+    case "run_search":
       return;
     default:
       assertNever(u);
