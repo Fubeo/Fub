@@ -48,7 +48,7 @@ impl ViewProvider for BacklinksView {
     }
 
     fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
-        let Some(active) = host.active_document() else {
+        let Some(active) = host.active_view_context().doc else {
             // Nessuna nota aperta: non è un errore, è uno stato.
             return Ok(placeholder("Nessuna nota aperta."));
         };
