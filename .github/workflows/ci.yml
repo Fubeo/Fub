@@ -71,7 +71,7 @@ jobs:
       - run: cargo test --workspace
 
   frontend:
-    name: frontend (type-check + build)
+    name: frontend (type-check + test + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +84,9 @@ jobs:
         working-directory: frontend
       # `vite build` traspila senza controllare i tipi: il type-check è questo.
       - run: npx tsc --noEmit
+        working-directory: frontend
+      # I test di unità del frontend (oggi: il ponte byte↔UTF-16, `offsets.ts`).
+      - run: npm test
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
