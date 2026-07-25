@@ -44,7 +44,8 @@ export type UiNode =
 export type ViewUpdate =
   | { kind: "replace"; root: UiNode }
   | { kind: "none" }
-  | { kind: "navigate"; doc_id: string };
+  | { kind: "navigate"; doc_id: string }
+  | { kind: "reveal"; doc_id: string; span: Span };
 
 // Evento del kernel (rispecchia fubmd_abi::event::Event).
 export type KernelEvent =

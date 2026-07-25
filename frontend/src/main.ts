@@ -28,6 +28,7 @@ const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as
 const fileListEl = $("#file-list");
 const previewEl = $("#preview");
 const backlinksEl = $("#backlinks");
+const outlineEl = $("#outline");
 const vaultPathEl = $("#vault-path");
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchPanelEl = $("#search-panel");
@@ -131,6 +132,7 @@ async function openVaultPath(dir: string) {
   editor.setDoc("");
   previewEl.innerHTML = "";
   backlinksEl.innerHTML = "";
+  outlineEl.innerHTML = "";
   clearSearch();
   renderFileList(info.documents);
   if (info.documents.length > 0) selectDoc(info.documents[0]);
@@ -788,6 +790,7 @@ async function deleteDoc(id: string) {
     editor.setDoc("");
     previewEl.innerHTML = "";
     backlinksEl.innerHTML = "";
+    outlineEl.innerHTML = "";
     const docs = await api.listDocuments();
     renderFileList(docs);
     if (docs.length > 0) await selectDoc(docs[0]);
@@ -917,6 +920,7 @@ async function refreshCurrent() {
   if (!currentDoc) return;
   await Promise.all([
     updatePreview(currentDoc),
+    updateOutline(),
     updateBacklinks(),
     updateHistory(currentDoc),
   ]);
@@ -1147,13 +1151,14 @@ function highlighted(snippet: string, highlights: Span[]): DocumentFragment {
   return frag;
 }
 
-// Id della view backlink (rispecchia fubmd_features::BACKLINKS_VIEW).
+// Id delle view (rispecchiano fubmd_features::{BACKLINKS,OUTLINE}_VIEW).
 const BACKLINKS_VIEW = "backlinks";
+const OUTLINE_VIEW = "outline";
 
 // Disegna una view dichiarativa in un contenitore e chiude il giro
 // azione→ViewUpdate: un click torna al provider via `view_action` e la
 // risposta si interpreta qui. È il percorso generico di ogni ViewProvider —
-// il pannello backlink non ha più nulla di cablato lato app.
+// backlink e outline non hanno nulla di cablato lato app.
 async function mountView(view: string, target: HTMLElement, node: UiNode) {
   target.innerHTML = "";
   target.appendChild(
@@ -1162,6 +1167,12 @@ async function mountView(view: string, target: HTMLElement, node: UiNode) {
       switch (update.kind) {
         case "navigate":
           await selectDoc(update.doc_id);
+          break;
+        case "reveal":
+          // Apri il documento se non è quello aperto, poi porta la vista
+          // sull'intervallo (lo scroll converte byte UTF-8 → posizione editor).
+          if (update.doc_id !== currentDoc) await selectDoc(update.doc_id);
+          editor.revealByteOffset(update.span.start);
           break;
         case "replace":
           await mountView(view, target, update.root);
@@ -1178,10 +1189,17 @@ async function updateBacklinks() {
   await mountView(BACKLINKS_VIEW, backlinksEl, await api.renderView(BACKLINKS_VIEW));
 }
 
+async function updateOutline() {
+  await mountView(OUTLINE_VIEW, outlineEl, await api.renderView(OUTLINE_VIEW));
+}
+
 function handleKernelEvent(e: KernelEvent) {
   if (e.type === "index_updated") {
     api.listDocuments().then(refreshFileList);
-    if (currentDoc) updateBacklinks();
+    if (currentDoc) {
+      updateOutline();
+      updateBacklinks();
+    }
     // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
     // invecchiare sotto gli occhi di chi legge. Vale anche per il cestino, che
     // un'altra app (o un'altra finestra) può aver riempito o svuotato.

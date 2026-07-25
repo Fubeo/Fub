@@ -148,14 +148,22 @@ da fare (graph-data, outline, tag) nascono su questo stesso giro.
   regola dell'escape hatch in [../architecture/ui-protocol.md](../architecture/ui-protocol.md)).
 - Modalità: grafo globale e grafo locale (n-hop dal documento aperto).
 
-### Outline panel e tag panel
+### Outline panel — **fatto** — e tag panel
 
-- **Outline:** `ViewProvider` che legge `DocumentModel.outline` (già popolato: testo
-  + slug + livello) e produce un `UiNode` (`List`/`ListItem`, azione = scroll a
-  heading via `Span`). Nessun nuovo tipo dati.
+- **Outline:** `fubmd_features::OutlineView`, secondo `ViewProvider` vero. Non
+  legge `DocumentModel.outline` direttamente (una view non ha il modello): lo
+  chiede al kernel con **`IndexQuery::Outline`**, il *canale metadata* aperto
+  proprio da qui — senza, un plugin non potrebbe ricavare la struttura di un
+  documento, non avendo un `FormatProvider`. Il click su un heading è un nuovo
+  **`ViewUpdate::Reveal { doc_id, span }`**; il frontend porta l'editor
+  sull'intervallo convertendo byte UTF-8 → code unit UTF-16
+  (`frontend/src/offsets.ts`, verificato su testo accentato+emoji). La gerarchia
+  si vede col rientro nel titolo (spazio EM) in attesa di un eventuale `UiNode`
+  ad albero. E2e: `crates/fubmd-features/tests/outline_view_e2e.rs`.
 - **Tag panel:** aggregazione dei `DocumentModel.tags` su tutto il vault → albero di
-  tag (`#a/b`), click → ricerca per tag. Candidato a un nuovo `UiNode` tree-node se
-  la `List` piatta non basta.
+  tag (`#a/b`), click → ricerca per tag. Nascerà come `ViewProvider` sullo stesso
+  giro, riusando il canale metadata (una query sui tag del vault). Candidato a un
+  nuovo `UiNode` tree-node se la `List` piatta non basta.
 
 ### Flusso "crea nota" (link non risolti) — **fatto**
 
@@ -177,8 +185,8 @@ non viene toccato ed è il grafo a risolverlo di nuovo.
 ## Trait/API coinvolti
 
 - `IndexProvider` (nuova impl nativa, tantivy) — [traits.md](../architecture/traits.md).
-- `ViewProvider` (backlink ✅; graph-data, outline, tag da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
-- `HostApi::query_index` + `HostApi::active_document` — le due capacità che rendono una view un provider vero.
+- `ViewProvider` (backlink ✅, outline ✅; graph-data, tag da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
+- `HostApi::query_index` (incluso `IndexQuery::Outline`, il canale metadata) + `HostApi::active_document` — le capacità che rendono una view un provider vero.
 - `Workspace` in `fubmd-kernel`: nuovi percorsi incrementali per grafo+indice.
 - Eventuale primo `CommandProvider` per "crea nota".
 - Nuovi comandi IPC in `fubmd-app` (search, graph-data, outline, tags, create-note).

@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use fubmd_abi::event::Event;
-use fubmd_abi::model::DocId;
+use fubmd_abi::model::{DocId, Heading};
 use fubmd_abi::traits::{BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec};
 use fubmd_abi::PluginError;
 
@@ -32,6 +32,9 @@ pub struct MemoryHost {
     /// doppio non ha un grafo: risponde solo a ciò che gli è stato messo dentro,
     /// ed è quanto basta a provare una view contro il contratto.
     backlinks: Mutex<BTreeMap<String, Vec<BacklinkRef>>>,
+    /// Outline finti per [`HostApi::query_index`], seminati per documento: il
+    /// doppio non parsa, come non parsa il kernel dietro `IndexQuery::Outline`.
+    outlines: Mutex<BTreeMap<String, Vec<Heading>>>,
 }
 
 impl MemoryHost {
@@ -85,6 +88,16 @@ impl MemoryHost {
             })
             .collect();
         self.backlinks.lock().unwrap().insert(target.to_string(), refs);
+        self
+    }
+
+    /// Semina l'outline che [`HostApi::query_index`] restituirà per `doc`
+    /// (stile builder).
+    pub fn con_outline(self, doc: &str, headings: &[Heading]) -> Self {
+        self.outlines
+            .lock()
+            .unwrap()
+            .insert(doc.to_string(), headings.to_vec());
         self
     }
 }
@@ -168,6 +181,16 @@ impl HostApi for MemoryHost {
                     .lock()
                     .unwrap()
                     .get(target.as_str())
+                    .cloned()
+                    .unwrap_or_default(),
+            )),
+            // Come il kernel: l'outline è servito dai modelli, qui seminato a
+            // mano. Documento senza outline → lista vuota, non un errore.
+            IndexQuery::Outline { doc } => Ok(IndexResult::Outline(
+                self.outlines
+                    .lock()
+                    .unwrap()
+                    .get(doc.as_str())
                     .cloned()
                     .unwrap_or_default(),
             )),

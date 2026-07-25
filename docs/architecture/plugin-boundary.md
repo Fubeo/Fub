@@ -75,11 +75,15 @@ pronti — un dogfooding finto. Le ha chieste, come per lo storage, il primo cas
 reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
 
 - **`query_index(&self, IndexQuery) -> Result<IndexResult, PluginError>`** — la
-  view interroga il vault da sé (backlink, ricerca) invece di riceverli. È la
-  stessa porta di `Workspace::query_index` e lo stesso dispatch (i backlink li
-  serve il grafo, il resto i provider registrati). È `&self`: una query non muta,
-  e così una view la serve sotto il prestito *condiviso* del workspace, senza
-  entrare in conflitto con la direzione della concorrenza (`Mutex`→`RwLock`).
+  view interroga il vault da sé (backlink, ricerca, struttura) invece di
+  riceverli. È la stessa porta di `Workspace::query_index` e lo stesso dispatch:
+  alcune query le serve il **kernel** dalle sue fonti di verità — i backlink dal
+  grafo, l'**outline** (`IndexQuery::Outline`) dai `DocumentModel` — il resto va
+  ai provider registrati. `IndexQuery::Outline` è il **canale metadata**: senza,
+  una view non potrebbe leggere la struttura parsata di un documento, perché non
+  ha un `FormatProvider` con cui parsarlo. È `&self`: una query non muta, e così
+  una view la serve sotto il prestito *condiviso* del workspace, senza entrare in
+  conflitto con la direzione della concorrenza (`Mutex`→`RwLock`).
 
 - **`active_document(&self) -> Option<DocId>`** — il solo contesto di sessione
   che il contratto espone: *quale nota guarda l'utente*. Una view lo **chiede**
