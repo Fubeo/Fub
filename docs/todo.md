@@ -23,6 +23,16 @@ primi due giri: qui non manca una capacità, manca il *posto* dove una famiglia
 intera di FEATURES potrebbe atterrare — e finché non c'è, ogni voce di quella
 famiglia si ritaglia il proprio.
 
+Un quarto giro ha aggiunto §§1.21–1.27, §§2.18–2.20, §3.12 e §4.9, ed è un tipo
+ancora diverso: **varchi che il contratto dichiara aperti e che non reggono il
+primo cliente vero**. Il job esiste ma non vede il vault; `Block::Custom` esiste
+ma nessuno lo disegna; `IndexQuery::Custom` esiste ma il dispatch prova gli
+indici a tentativi; `UiNode` è dichiarativo ma il renderer è uno `switch`
+compilato dentro la shell; il `FormatProvider` si sostituisce ma non si estende.
+Il criterio che le distingue dai tre giri precedenti: qui il posto c'è, ed è la
+sua **forma** a non reggere — che è il caso peggiore dei quattro, perché un
+varco che sembra aperto non lo si va a riguardare.
+
 ## Il criterio
 
 FEATURES.md è impossibile da implementare a mano una voce alla volta. È
@@ -82,6 +92,17 @@ Quindi il lavoro infrastrutturale è di tre tipi, in quest'ordine di urgenza:
 | 9.2 query builder/explain, 9.1 operatori e faccette | la query come AST nel contratto | `FullText { query: String }` va dritta al `QueryParser` di tantivy |
 | 28 settings, 8.2 proprietà, 11.3 editing, 19.3 form | riconciliazione e **chiave** dei nodi | `mountView` fa `innerHTML = ""` a ogni ridisegno (`main.ts:1198`): un input perde il focus |
 | 3.3 workspace salvabili, 8.3 viste salvate, 20.1 settings | tre stati distinti (settings/vista/layout) | nessuno dei tre ha un contenitore: `storage_*` è volatile e a chiave→valore |
+| 17 import/export, 18 sync/backup, 22 AI e RAG, 19.4 publishing, 13.4 trascrizione | lavoro lungo che **vede** il vault | `Plugin::run_job` è senza `HostApi` (`abi/traits.rs:476`): l'input deve stare tutto nel payload |
+| 5.2 (~50 estensioni), 20.1 markdown extensions, 27.3 custom blocks | innestare sintassi su un formato esistente | `FormatRegistry::by_ext` è estensione→**un** provider (`registry.rs:13`): si sostituisce, non si estende |
+| 6.1 mermaid/math/chart, 5.2 callout personalizzati | un renderer per `Block::Custom` | è un `if custom_kind == "callout"` dentro il provider markdown (`render.rs:62`) |
+| 21.1 API condivise, 21.2 moduli che si parlano, 20.1 dipendenze/conflitti | chiamate **tipizzate** fra plugin | solo `Event::Custom` (senza risposta) e `IndexQuery::Custom` |
+| 9.2 query engine, 22.1 vettoriale, 8.2 proprietà, 11 database, 15.1 citazioni | routing delle query verso gli indici | `query_index` li prova **in ordine** finché uno non dice `BadArgs` (`workspace.rs:1064`) |
+| 2.2 UUID, 8.3 Zettelkasten ID, 10.4 calendario, 25.2 collazione | caso, fuso orario, locale come capacità | l'`HostApi` ha `now_unix_millis` e nient'altro (`abi/traits.rs:131`) |
+| 6.3 stampa/PDF, 19.4 pubblicazione, 6.2 CSS per nota, 5.3 sanitizzazione | opzioni di rendering | `RenderOptions` è **un** booleano (`abi/format.rs:62`), ed è argomento di `render_html` |
+| 8.1 note recenti, 24.1 apertura rapida, 18.1 sync differenziale, 3.2 duplicati | mtime, dimensione, impronta per entry | `DocMeta` non li ha (`workspace.rs:125`) e `reindex` riparsa **tutto** (`:341`) |
+| 27.1 CLI, 27.2 API locale, 26.2-26.3 mobile/PWA, 27.4 e2e | un pezzo riusabile più piccolo di "tutto" | `Workspace` è 1750 righe e ~20 campi dietro un lock solo |
+| 20.1 UI di plugin, 21.1 moduli installabili separatamente | far entrare un renderer di terzi nella shell | `renderUiNode` è uno `switch` esaustivo compilato nel bundle (`ui.ts`) |
+| 23.3 SBOM/licenze/CVE, 20.3 reproducible builds, dependency audit | tooling di supply chain | la CI non ha `cargo-deny` né generazione SBOM |
 
 ---
 
@@ -462,6 +483,162 @@ presentazioni), 7.3 (il grafo smette di essere privilegiato), 10.3-10.4, 11.5,
       §2.2 dà `VaultEntry`/asset lato kernel; questo è il varco nel
       **contratto**, e `FormatProvider` è una firma che M4 congela.
 
+### 1.21 Il lavoro lungo non vede il vault
+
+- [ ] **`Plugin::run_job` è deliberatamente senza `HostApi`** — «input nel
+      `payload`, output nel risultato» (`abi/traits.rs:476-483`). Per un
+      calcolo puro è la firma giusta. Ma l'unico modo di dare input a un job
+      diventa che il **chiamante** legga il vault dentro il giro sincrono:
+      cioè faccia lì, in esclusiva sul workspace, esattamente il lavoro che il
+      job doveva togliere da lì.
+- [ ] **Il conto di ciò che con questa firma non è esprimibile**: import ed
+      export (17, ~120 voci), embedding e RAG locale (22.1-22.3), sync (18.1),
+      backup e snapshot (18.2), sito statico (19.4), OCR e trascrizione (13.4),
+      health check e diagnostic bundle (24.2), reindicizzazione (24.1). Tutte
+      camminano il vault, e quasi tutte ci scrivono.
+- [ ] **Il §1.4 ci sta già costruendo sopra**: `http_fetch` «solo dentro un
+      job». Ma un web clipper (14.2) fa fetch *e* scrive una nota *e* scarica
+      gli allegati: con la firma attuale la sola parte che può stare nel job è
+      la fetch, e il resto torna nel giro sincrono. Idem per «import da URL»
+      (17.1) e per i modelli scaricabili (22.3).
+- [ ] **Le due strade, da scegliere ora**: un `JobHost` in **sola lettura** su
+      uno snapshot coerente del vault, oppure scritture differite al `JobDone`
+      con una semantica dichiarata di cosa succede se il vault è cambiato nel
+      frattempo. La seconda domanda è la stessa del §1.16 (l'edit calcolato su
+      una revisione), e va risolta una volta per entrambi. È forma di firma di
+      un trait: dopo il freeze si cambia con una major.
+
+*Sblocca:* 17 per intero, 18.1-18.2, 19.4, 22, 13.4, 14.2, 24.1-24.2, e il
+runner dei job del §2.3, che oggi eseguirebbe soltanto funzioni pure.
+
+### 1.22 Il parser è sostituibile, non estendibile
+
+- [ ] **`FormatRegistry::by_ext` è una mappa estensione → *un* indice**
+      (`kernel/registry.rs:13`) e `register` fa `insert`: chi registra dopo
+      **vince in silenzio** (`:22-28`). Non esiste alcun modo di innestare una
+      regola sintattica su un provider esistente — si può solo rimpiazzarlo.
+- [ ] **Quindi un'estensione di sintassi non può essere un plugin**, ed è
+      l'unico punto in cui l'invariante del progetto — «una feature ufficiale è
+      ciò che scriverà un plugin di terzi» — è **già falsa oggi**. Le ~50
+      estensioni del 5.2 (callout, footnote, definition list, math, mermaid,
+      apici/pedici, tabs, timeline, stepper…), «Plugin markdown extensions»
+      (20.1) e «Custom markdown blocks» (27.3) richiedono un fork di
+      `fubmd-format-markdown`.
+- [ ] **Serve una firma per l'innesto** (`SyntaxExtension`/`BlockRule`
+      registrata contro un `FormatDescriptor`, con l'ordine di applicazione
+      dichiarato) e la regola dei conflitti: due estensioni che rivendicano la
+      stessa sintassi oggi non hanno nemmeno un posto dove collidere.
+- [ ] **È l'altra metà del §1.20**: quello apre le *opzioni* di parse
+      (`ParseContext` chiuso), questo dice **chi aggiunge la sintassi**. Vanno
+      decise insieme, o si ottiene un `ParseContext` aperto che nessun terzo
+      può popolare.
+
+### 1.23 `Block::Custom` non ha un renderer
+
+- [ ] **L'escape hatch del modello esiste, il suo disegno no.** Il rendering di
+      un blocco custom è `if custom_kind == "callout"` dentro il provider
+      markdown (`format-markdown/src/render.rs:62-67`): un `custom_kind` che
+      quel provider non conosce **non produce nulla**, in silenzio.
+- [ ] **La famiglia è grande e ha tutta la stessa forma** — un blocco che il
+      core sa delimitare e non sa disegnare: mermaid, PlantUML, Graphviz, D2,
+      math, chart, embed di database e di query, tabs, accordion, timeline,
+      stepper, file tree (6.1 e 5.2), più «Plugin custom renderers» (20.1).
+- [ ] **Serve un punto d'innesto per `custom_kind`**, registrato come gli altri
+      provider, e va deciso **insieme al §1.13**: se il modello arriva alla
+      shell, una parte di questi si disegna di là (con gli `Span`, quindi
+      interattiva); se resta la stringa HTML, si disegnano tutti di qua, e
+      allora il §3.4 (sanitizzazione) deve coprire anche loro.
+
+### 1.24 I plugin non hanno un canale per parlarsi
+
+- [ ] **Gli unici canali fra provider sono `Event::Custom`** — fire-and-forget,
+      senza risposta — **e `IndexQuery::Custom`**, che è il canale *indice* e
+      passa dal dispatch a tentativi del §2.18. Non esiste una **chiamata**: A
+      non può chiedere qualcosa a B e ricevere un risultato.
+- [ ] **Il capitolo 21 lo dà per scontato a ogni riga**: 21.1 promette «plugin
+      Suite con API condivise»; 21.2 ha FubCharts che disegna dati di FubDB,
+      FubForms che scrive in FubDB, FubCalendar che legge da FubTasks,
+      FubFlashcards che legge blocchi di note. Il 20.1 chiede «dipendenze
+      plugin» e «conflitti plugin», il 20.3 «conflict detection».
+- [ ] **Serve la terna, e va decisa insieme**: `provides`/`requires` nel
+      `PluginManifest` (che oggi ha id, nome, versione, abi, permessi —
+      `abi/traits.rs:426-441`); un `HostApi::call_service(ns, method, args)`
+      sotto permesso; e l'**ordine di attivazione** che ne discende, con la
+      semantica dichiarata del requisito mancante (il dipendente si disattiva?
+      si attiva degradato?). Il §2.3 nomina il registry come tabella di
+      montaggio: qui diventa anche un risolutore di dipendenze.
+- [ ] Senza, i moduli Suite non saranno plugin: saranno crate linkati che si
+      vedono a compile time — cioè il contrario del §4.7.
+
+*Sblocca:* 21.1-21.2 (i moduli Suite come plugin veri), 20.1 (dipendenze,
+conflitti, lifecycle), 11 (colonne e funzioni di query di terzi), 27.2 (API
+plugin), 16.2 (automazioni che compongono feature diverse).
+
+### 1.25 Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato
+
+Il versioning ha trovato `now_unix_millis` con l'argomento giusto: sotto sandbox
+un componente non ha orologio, e uno che chiamasse `SystemTime::now` sarebbe non
+testabile e non funzionante (`abi/traits.rs:125-131`). Lo stesso argomento, non
+applicato, lascia fuori tre cose:
+
+- [ ] **Il caso e gli UUID**: «UUID opzionale per nota» (2.2), Zettelkasten ID e
+      «ID univoco nota» (8.3), id di blocco (5.2, e il §1.5), «ID univoco
+      annotazione» (13.3). Sotto WASI il caso non c'è di default: è
+      letteralmente lo stesso buco dell'orologio, un metodo più in là.
+- [ ] **Il tempo civile e il fuso**: `now_unix_millis` dà millisecondi UTC. Note
+      periodiche e naming automatico (8.3), calendario con «first day of week»,
+      «regional holidays» e «workweek localization» (10.4), promemoria relativi
+      e ricorrenze (10.5, 10.1), «ricerca per date assolute e relative» (9.1)
+      hanno bisogno del fuso e del calendario **dell'utente**, che un
+      componente non può dedurre e che un plugin non deve indovinare.
+- [ ] **Il locale**: è il gemello della decisione del §1.8. Qualunque risposta
+      si dia sulle stringhe di UI, un provider ne ha comunque bisogno per
+      l'ordinamento e la collazione («locale-aware sorting/collation», 25.2) e
+      per formattare numeri, date, valute e unità.
+
+### 1.26 Gli altri enum chiusi — e l'unico che rompe una firma
+
+Il §1.14 ha visto il caso più grosso (`ViewPlacement`). La stessa forma si
+ripete su quattro tipi del contratto, e uno dei quattro **non è additivo**:
+
+- [ ] **`RenderOptions` è un booleano** (`abi/format.rs:61-66`) ed è
+      **argomento di `FormatProvider::render_html`**: allargarlo dopo il freeze
+      rompe la firma di ogni provider, non aggiunge un campo. Ma il rendering
+      ha almeno tre bersagli distinti — schermo/lettura, stampa e PDF (6.3),
+      pubblicazione statica (19.4) — più tema, livello di sanitizzazione (5.3),
+      risoluzione degli asset (13.1) e CSS per nota/cartella/tipo (6.2). È la
+      più urgente delle quattro voci di questa sezione.
+- [ ] **`FormatCapabilities` sono 5 booleani** (`abi/format.rs:30-37`) contro le
+      ~50 sintassi del 5.2: stessa forma del `ParseContext` del §1.20 e stessa
+      risposta (una mappa di capacità con namespace), da decidere con lui e con
+      il §1.22.
+- [ ] **`Trust` ha due varianti** (`kernel/workspace.rs:86-94`) mentre 20.2 e
+      20.3 chiedono verificato, community, locale in sviluppo, revocato — e il
+      §2.10 nota già che si applica alle sole view.
+- [ ] **`PluginPermissions` sono tre booleani** (`abi/traits.rs:414-419`) contro
+      clipboard, camera/microfono, filesystem esterno e rete con allowlist
+      (20.1, 23.1, 20.3 «network allowlist», «file allowlist»).
+
+### 1.27 `list_documents` e `views()` — le metà nel contratto di §2.13 e §1.15
+
+Due voci già nel piano hanno una metà **dentro** il contratto, e quella metà
+scade col freeze mentre l'altra no:
+
+- [ ] **`HostApi::list_documents() -> Vec<DocId>`** (`abi/traits.rs:93`) è il
+      §2.13 visto dal contratto: clona **tutto** il vault a ogni chiamata, e
+      `Workspace::documents` lo riordina ogni volta
+      (`kernel/workspace.rs:380-384`). È il metodo con cui un provider si
+      guarda intorno — il versioning lo chiama a ogni riconciliazione, e ogni
+      feature che riparte da `VaultOpened` lo chiamerà. La paginazione del §1.6
+      va decisa **anche qui**, non solo sull'IPC.
+- [ ] **`ViewProvider::views()` è interrogato a ogni giro**: `view_owner` chiama
+      `p.views()` su *ogni* provider registrato per risolvere un id
+      (`kernel/workspace.rs:1196-1201`), e ogni chiamata rialloca l'elenco. È
+      il gemello del §1.15: con le view istanziabili questa risoluzione
+      lineare-e-riallocante diventa il percorso caldo di ogni render. La
+      domanda di forma: le spec sono **dato di registrazione** (il kernel le
+      tiene, il provider le invalida) o restano una chiamata al provider?
+
 ---
 
 ## 2. Kernel — da "un vault markdown locale" a piattaforma
@@ -690,6 +867,73 @@ auto-spostamento), 6.2 (CSS per cartella), 11.3 (database da cartella), 19.2
       motore. Serve un **AST di query nel contratto**, con il full-text come
       foglia e la stringa libera confinata dentro quella foglia.
 
+### 2.18 Il dispatch delle query è per tentativi
+
+- [ ] **`query_index` prova gli indici in ordine di registrazione finché uno non
+      risponde `BadArgs`** (`workspace.rs:1064-1073`), e l'errore
+      dell'**ultimo interpellato** è quello che arriva al chiamante. Con un
+      indice funziona benissimo. Con quelli che FEATURES chiede — full-text,
+      semantico e vettoriale (22.1), proprietà (8.2), task (10), database (11),
+      citazioni (15.1) — ogni query gira su tutti, e due indici che rivendicano
+      la stessa variante si oscurano a vicenda **in silenzio**.
+- [ ] **Manca un routing dichiarato alla registrazione**: quali varianti e
+      quali `ns` un indice serve. È esattamente la forma che manca al
+      `FormatRegistry` (§1.22, ultimo registrato vince) e alla tabella dei
+      provider (§2.8), ed è il presupposto del §1.6 e del §2.17 — quelli dicono
+      *quali* query esistono e che forma hanno, mai **a chi vanno**.
+- [ ] Con il routing arriva gratis anche la diagnostica che oggi non c'è:
+      «nessuno serve questa query» distinto da «chi la serve ha fallito» — che
+      è il §1.11 applicato al canale più usato dopo la lista documenti.
+
+### 2.19 `Workspace` è un oggetto-dio, e ogni voce di questo piano gli aggiunge un campo
+
+- [ ] **1750 righe e ~20 campi**, che mettono insieme: I/O del vault, registry
+      dei formati, cache dei metadati, grafo, conteggi tag, event bus, coda e
+      dispatcher, **tre** tabelle di provider, storage dei plugin, stato di
+      sessione (`active`), coda dei job. Il §2.8 (`ProviderTable`) e il §2.4
+      (`RwLock`) ne sono le due conseguenze già viste; la causa no, e ha due
+      effetti che il resto del piano dà per risolti:
+      - il `RwLock` del §2.4 **non potrà essere a grana fine**: un lettore che
+        rende una view e uno scrittore che tocca il grafo sono lo stesso
+        `struct` dietro lo stesso lock, quindi "le letture sono le view" resta
+        vero e inutile;
+      - il crate host del §2.15 sarebbe riusabile **tutto o niente**: CLI
+        (27.1), API locale (27.2), e2e headless (27.4), mobile (26.2) e PWA
+        (26.3) prenderebbero comunque il `Workspace` intero, col suo grafo
+        delle dipendenze — che è il §4.7 perso dal lato del kernel.
+- [ ] **E i sottosistemi che questo piano aggiunge sono dodici**: comandi
+      (§1.1), impostazioni (§1.3), lotti (§1.12), edit (§1.16), undo (§1.17),
+      storage (§2.1), allegati (§2.2), registry e job (§2.3), sessioni (§2.7),
+      permessi (§2.10), cartelle (§2.11), ignore policy (§2.16). Dodici campi
+      in più sullo stesso `struct`, e dodici ragioni in più per prendere lo
+      stesso lock.
+- [ ] **La scomposizione va decisa prima di aggiungerli**, non dopo:
+      `DocumentStore` (vault + cache + parse), `MetadataIndex` (grafo + tag +
+      outline), `ProviderRegistry` (§2.8 + §2.9 + §2.10), `Dispatcher` (coda +
+      budget + origine del §1.18), `Session` (attivo + pane del §1.9). È anche
+      il modo di dare al §2.15 un pezzo riusabile che non sia "tutto".
+- [ ] **Ordine**: viene **prima** del §2.15 e del §2.4, o quei due nascono
+      attorno all'oggetto-dio e lo rendono definitivo.
+
+### 2.20 Nessun metadato di entry: né mtime, né dimensione, né impronta
+
+- [ ] **`DocMeta` tiene id, frontmatter, outline e link** (`workspace.rs:125-130`)
+      e il `Vault` non espone uno `stat`. Quindi `reindex` **rilegge e riparsa
+      l'intero vault a ogni apertura** (`workspace.rs:341-351`): «un indice
+      persistente riconosce e salta gli immutati» è vero per l'indice, non per
+      il kernel, che paga comunque lettura + parse di tutto prima ancora di
+      chiedere all'indice se gli interessa.
+- [ ] **Ed è la fonte che manca a un elenco di feature che sembrano
+      indipendenti**: apertura rapida di vault grandi ed enormi (24.1),
+      rilevamento duplicati e deduplicazione (3.2, 13.1), sync differenziale
+      (18.1), verifica d'integrità, checksum e corruption detection (2.1,
+      24.2), «stale notes» (7.2, 9.3) e — le più banali e le più visibili —
+      «note create di recente» e «note modificate di recente» (8.1), che oggi
+      **non hanno alcuna fonte nel kernel**.
+- [ ] È il `VaultEntry` del §2.2 esteso ai **documenti**, non solo agli asset:
+      le due voci sono lo stesso lavoro e vanno fatte insieme, come §2.11 e
+      §2.13.
+
 ---
 
 ## 3. Shell — da `main.ts` a piattaforma UI
@@ -824,6 +1068,33 @@ dove il debito si vede a occhio nudo.
       **nessun modulo della shell importa `@tauri-apps` fuori dalla cucitura**
       — la versione UI della dieta dell'IPC del §4.2.
 
+### 3.12 La UI di un plugin non ha modo di entrare nella shell
+
+- [ ] **`renderUiNode` è uno `switch` esaustivo su un union chiuso** (`ui.ts`),
+      compilato dentro il bundle. Il §1.2 propone
+      `UiNode::Custom { ns, payload, fallback }` con «la shell che conosce `ns`
+      disegna il widget suo» — ma non dice **come** un `ns` di terzi ci arriva.
+      Senza quella risposta, `Custom` significa "riservato a chi è già nel
+      bundle", cioè la superficie privilegiata del §1.14 con un altro nome.
+- [ ] **Il conto è dirimente**: il 21.1 promette che ogni modulo Suite è
+      «installabile separatamente» e «disattivabile», e i moduli che hanno
+      bisogno di un renderer proprio sono FubCanvas, FubDB, FubCharts, FubMaps,
+      FubForms (21.2). Se i loro renderer stanno nel bundle della shell, quella
+      promessa è falsa — e lo è **già** per il grafo (`graph.ts`, §1.14).
+- [ ] **Le tre opzioni non sono equivalenti**, e vanno scelte prima che venti
+      moduli si scrivano contro l'ipotesi implicita:
+      - un registro di web component caricati da un bundle di plugin — è la più
+        potente e sbatte contro «no eval policy» (20.3) e la CSP del §3.4;
+      - un iframe sandboxato con un protocollo di messaggi — regge 20.3 e §3.4,
+        costa un confine in più e una storia di temi/asset per i plugin;
+      - solo prima parte, e tutto il resto dichiarativo — allora il §1.2 deve
+        arrivare fino a tabella, albero, canvas e chart, e `UiNode::Custom`
+        serve al solo core.
+- [ ] È il terzo lato della stessa domanda dei §1.22 e §1.23 — **chi disegna
+      ciò che il core non conosce** — e le tre risposte devono essere coerenti:
+      un plugin che può aggiungere la sintassi ma non il renderer, o il
+      renderer Rust ma non quello della shell, è mezzo plugin.
+
 ---
 
 ## 4. Presidi e tooling — perché il resto non marcisca
@@ -911,6 +1182,26 @@ definitions, plugin linting), 21.1 (moduli Suite con API condivise).
       arena — generare l'uno dall'altro, o almeno gli scheletri — o la
       generazione arriverà dopo il lavoro che doveva alleggerire.
 
+### 4.9 Supply chain e compliance — la sola parte che non si recupera dopo
+
+- [ ] **La CI è buona e non copre questo**: invarianti abi↔WIT e grafo delle
+      dipendenze in un minuto, build e test su tre OS, toolchain pinnata
+      all'MSRV, frontend con type-check + test + build. Il §4 aggiunge fuzzing,
+      corpus, benchmark, e2e e tracing. Nessuno dei due tocca il 23.3: **SBOM,
+      identificatori SPDX, license compliance, dependency audit e advisory
+      CVE** — né il 20.3 (reproducible builds, firma, dependency audit).
+- [ ] **`cargo-deny`** (licenze, advisory, duplicati, sorgenti consentite) e la
+      **generazione dell'SBOM** in CI costano mezz'ora adesso. È l'unico punto
+      di quel capitolo che non si recupera a posteriori: le licenze delle
+      dipendenze entrate nel frattempo si riesaminano una per una, e una
+      incompatibile scoperta a valle si toglie riscrivendo ciò che ci stava
+      sopra. Vale doppio con l'albero che sta per arrivare (tantivy c'è già;
+      §4.7 ne prevede uno per bundle).
+
+*Sblocca:* 23.3 per intero, 20.3 (SBOM plugin, dependency audit, advisory), e
+il capitolo 1.2 di FEATURES — la «licenza chiara» promessa dai principi fondanti
+è verificabile solo se lo è quella delle dipendenze.
+
 ---
 
 ## 5. Debito riportato dal quarto audit
@@ -945,6 +1236,18 @@ eventi, §1.19 grana dell'abbonamento, §1.20 `ParseContext` e parse non-testo,
 titolo ma contratto nella firma). Sono tutte **decisioni di forma**:
 l'implementazione può seguire, la firma no.
 
+Dal quarto giro, con lo stesso statuto: §1.21 il job che vede il vault, §1.22
+l'estendibilità del parser, §1.23 il renderer dei blocchi custom, §1.24 i
+servizi e le dipendenze fra plugin, §1.25 caso/fuso/locale fra le capacità,
+§1.26 gli altri enum chiusi e §1.27 (`list_documents` e `views()`, le metà nel
+contratto di §2.13 e §1.15). Più §2.18, che è kernel nel titolo ma
+**registrazione — cioè firma** — nella sostanza. Due avvertenze sull'ordine
+interno: dentro §1.26, `RenderOptions` viene per primo perché è l'unico dei
+quattro che **rompe una firma** invece di aggiungere un campo; e §1.22, §1.23 e
+§3.12 sono una decisione sola vista da tre lati (chi disegna ciò che il core non
+conosce), quindi vanno prese nella stessa seduta o due terzi della risposta
+saranno inutilizzabili.
+
 **P1 — insieme a M3** (l'editor e la palette sono i primi clienti del §1):
 §1.3 impostazioni, §2.3 registry + runner dei job, §2.8 tabella dei provider
 unica, §2.9 disattivazione, §2.10 permessi e manifest, §2.15 il crate host,
@@ -956,16 +1259,28 @@ la superficie cresce, non dopo: §2.8-§2.10 in particolare vanno **prima** dei
 provider nuovi del §1, o li si scrive tre volte, e §4.8 va **prima** delle P0
 del terzo giro, o quelle si scrivono quattro volte.
 
+Dal quarto giro si aggiungono §2.19 (la scomposizione del `Workspace`) e §3.12
+(come la UI di un plugin entra nella shell). Il §2.19 ha una precedenza dura:
+va **prima** del §2.15 e del §2.4, o il crate host nasce attorno all'oggetto-dio
+e il `RwLock` non potrà mai essere a grana fine. Il §3.12 va deciso insieme a
+§1.2, §1.22 e §1.23, anche se si implementa dopo.
+
 **P2 — quando la scala lo chiede** (nessuno blocca il contratto):
 §2.1 `VaultStorage`, §2.2 allegati, §2.5 durabilità, §2.6 politiche path/testo,
 §2.7 sessioni multiple, §2.11 cartelle, §2.12 versioni di schema, §2.13 canale
 della lista documenti, §2.14 sidecar dell'organizzazione, §2.16 ignore policy,
 §3.3 temi/a11y, §3.5 notifiche, §3.6 virtualizzazione, §3.10 i tre stati,
-§4.3-§4.5. Tre avvertenze: §2.12 costa un campo adesso e un formato da
-indovinare dopo, quindi conviene anticiparlo a ogni formato che nasce; §2.11 e
-§2.13 sono lo stesso lavoro visto da due lati; §3.10 va deciso *insieme* a §1.3
-e §1.9, anche se si implementa dopo, o i tre stati nascono con tre meccanismi
-che non si parlano.
+§4.3-§4.5, più §2.20 (i metadati di entry). Quattro avvertenze: §2.12 costa un
+campo adesso e un formato da indovinare dopo, quindi conviene anticiparlo a ogni
+formato che nasce; §2.11 e §2.13 sono lo stesso lavoro visto da due lati; §2.20
+e §2.2 pure, e vanno fatte nella stessa passata; §3.10 va deciso *insieme* a
+§1.3 e §1.9, anche se si implementa dopo, o i tre stati nascono con tre
+meccanismi che non si parlano.
+
+**Fuori dall'ordine, perché costa mezz'ora e non si recupera dopo:** §4.9
+(`cargo-deny` + SBOM in CI). Non blocca niente e non sblocca niente — è solo
+l'unica voce del piano il cui costo cresce con il numero di dipendenze già
+entrate.
 
 Nota di rotta: le voci con l'effetto leva più alto sono **§1.1 (comandi)**,
 **§1.2 (input in `UiNode`)** e **§2.3 (registry + job)** — insieme spostano dal
@@ -986,3 +1301,17 @@ riscriverlo tutto, ogni feature che tocca il testo perde cursore, selezione e
 undo, e due di loro non si possono comporre — è il prerequisito silenzioso del
 §1.9 (la selezione), del §1.12 (un lotto è una lista di edit) e del §1.17
 (l'inverso di un edit è un edit).
+
+Dal quarto giro se ne aggiungono due dello stesso peso, e vanno sopra tutte le
+altre perché non allargano una capacità: ne rendono una **inesprimibile**.
+**§1.21 (il job che vede il vault)**: finché il lavoro lungo non può leggere il
+vault, i capitoli 17, 18, 22 e 19.4 — cioè il volume maggiore di FEATURES dopo
+l'11 e il 12 — non hanno un posto dove girare, e l'unica alternativa è farli nel
+giro sincrono, con il workspace preso in esclusiva. **§1.22 (il parser
+estendibile)**: è l'unico punto in cui l'invariante «una feature ufficiale è ciò
+che scriverà un plugin» è già falsa oggi — un'estensione di sintassi non può
+essere un plugin, e con le ~50 del capitolo 5.2 in arrivo la falsità diventa la
+regola. Accanto, di poco sotto: **§1.24 (i servizi fra plugin)**, senza cui il
+capitolo 21 descrive crate linkati e non moduli installabili separatamente, e
+**§2.19 (la scomposizione del `Workspace`)**, che è il posto dove tutte le altre
+voci di questo piano andranno ad atterrare — una alla volta, come campi.
