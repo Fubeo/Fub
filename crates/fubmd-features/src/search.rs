@@ -39,11 +39,13 @@ use std::sync::Mutex;
 
 use camino::Utf8Path;
 use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Span};
-use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, SearchHit};
-use fubmd_abi::{Pagination, PluginError};
+use fubmd_abi::traits::{
+    HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, SearchHit, SearchScope,
+};
+use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
-use tantivy::query::QueryParser;
-use tantivy::schema::{Field, Schema, Value, STORED, STRING, TEXT};
+use tantivy::query::{BooleanQuery, Occur, Query, QueryParser, TermQuery};
+use tantivy::schema::{Field, IndexRecordOption, Schema, Value, STORED, STRING, TEXT};
 use tantivy::snippet::SnippetGenerator;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
 
@@ -56,7 +58,9 @@ pub const SEARCH_ID: &str = "fubmd.search";
 /// buttare via l'indice e ricostruirlo da zero.
 ///
 /// v2: `tags` da TEXT tokenizzato a STRING (termine esatto, forma canonica).
-const SCHEMA_VERSION: u32 = 2;
+/// v3: campo `folder` (ogni cartella antenata come termine) per l'ambito di
+/// [`SearchScope`], e impronta sul `DocId` intero invece che sul solo nome.
+const SCHEMA_VERSION: u32 = 3;
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -109,7 +113,10 @@ fn fingerprint(doc: &DocumentModel) -> u64 {
             h = h.wrapping_mul(PRIME);
         }
     };
-    eat(doc.id.page_name().as_bytes());
+    // Il path intero e non il solo nome: da quando l'indice porta la cartella
+    // (`folder`, v3), spostare una nota cambia ciò che è indicizzato anche a
+    // contenuto identico.
+    eat(doc.id.as_str().as_bytes());
     eat(&[0]);
     eat(doc.text.as_bytes());
     eat(&[0]);
@@ -127,6 +134,30 @@ struct Fields {
     page_name: Field,
     body: Field,
     tags: Field,
+    folder: Field,
+}
+
+/// Le cartelle a cui un documento appartiene, dalla radice in giù:
+/// `Progetti/sub/Alpha.md` → `["", "Progetti", "Progetti/sub"]`.
+///
+/// Ogni antenata è un termine a sé, e la radice (`""`) c'è su tutti: è ciò che
+/// rende "cerca in `Progetti`" una singola `TermQuery` che prende anche le
+/// discendenti, invece di un prefisso da valutare su ogni documento.
+fn folders_of(id: &DocId) -> Vec<String> {
+    let mut out = vec![String::new()];
+    let path = id.as_str();
+    let Some((dir, _)) = path.rsplit_once('/') else {
+        return out;
+    };
+    let mut acc = String::new();
+    for part in dir.split('/') {
+        if !acc.is_empty() {
+            acc.push('/');
+        }
+        acc.push_str(part);
+        out.push(acc.clone());
+    }
+    out
 }
 
 fn build_schema() -> (Schema, Fields) {
@@ -144,6 +175,9 @@ fn build_schema() -> (Schema, Fields) {
     // risultati del click non coincidevano mai. Ogni tag entra come termine
     // unico nella forma canonica ([`canonical_tag`]).
     let tags = b.add_text_field("tags", STRING);
+    // Come i tag, la cartella è una CHIAVE: termine esatto, non prosa. Non è
+    // STORED perché non torna mai indietro — serve solo a filtrare.
+    let folder = b.add_text_field("folder", STRING);
     (
         b.build(),
         Fields {
@@ -151,6 +185,7 @@ fn build_schema() -> (Schema, Fields) {
             page_name,
             body,
             tags,
+            folder,
         },
     )
 }
@@ -355,11 +390,26 @@ impl Inner {
         Ok(())
     }
 
-    fn search(&mut self, query: &str, limit: usize) -> Result<Vec<SearchHit>, PluginError> {
+    /// La ricerca vera: query, ambito e finestra.
+    ///
+    /// La finestra si applica **alla sorgente** — `offset`/`limit` vanno al
+    /// collector di tantivy, non a un `Vec` già costruito — ed è la ragione per
+    /// cui un indice pagina meglio di chi lo interroga: la pagina 40 non costa
+    /// come le prime 40 messe insieme. `total` arriva dal collector `Count`
+    /// sulla stessa query, così chi disegna può scrivere "1-20 di 4321".
+    fn search(
+        &mut self,
+        query: &str,
+        scope: &SearchScope,
+        page: Option<Page>,
+    ) -> Result<Paged<SearchHit>, PluginError> {
         // Chi interroga vede le proprie scritture, anche senza flush.
         self.commit()?;
-        if query.trim().is_empty() || limit == 0 {
-            return Ok(Vec::new());
+        if query.trim().is_empty() {
+            // Una ricerca senza termini non è "tutto il vault": elencare le note
+            // è una domanda sui metadati, e la serve il kernel
+            // (`IndexQuery::Properties`).
+            return Ok(Paged::all(Vec::new()));
         }
         // Il campo dei tag è STRING (termine esatto, niente tokenizer che
         // minuscolizzi): il termine digitato o mostrato va portato lui alla
@@ -377,12 +427,37 @@ impl Inner {
             .parse_query(&query)
             .map_err(|e| PluginError::BadArgs(format!("query non valida: {e}")))?;
 
+        // L'ambito è un filtro, non un pezzo di stringa di query: dentro una
+        // famiglia i valori sono in OR, le famiglie fra loro in AND.
+        let scoped = with_scope(parsed.box_clone(), scope, &f);
+
+        let total = searcher
+            .search(&*scoped, &tantivy::collector::Count)
+            .map_err(|e| PluginError::Internal(format!("conteggio: {e}")))?;
+        let (offset, limit) = match page {
+            // Senza finestra si restituisce tutto ciò che combacia: il tetto è
+            // il conteggio, non un numero inventato qui.
+            None => (0usize, total),
+            Some(p) => (p.offset as usize, p.limit as usize),
+        };
+        if limit == 0 || offset >= total {
+            return Ok(Paged {
+                items: Vec::new(),
+                offset: offset as u32,
+                total: total as u32,
+            });
+        }
+
         // `with_limit` va in panico su 0 — intercettato sopra.
-        let collector = tantivy::collector::TopDocs::with_limit(limit).order_by_score();
+        let collector = tantivy::collector::TopDocs::with_limit(limit)
+            .and_offset(offset)
+            .order_by_score();
         let top = searcher
-            .search(&parsed, &collector)
+            .search(&*scoped, &collector)
             .map_err(|e| PluginError::Internal(format!("ricerca: {e}")))?;
 
+        // Gli snippet li genera la query dell'utente, non quella con l'ambito:
+        // evidenziare la cartella non vuol dire niente.
         let mut snippets = SnippetGenerator::create(&searcher, &*parsed, f.body)
             .map_err(|e| PluginError::Internal(format!("snippet: {e}")))?;
         snippets.set_max_num_chars(SNIPPET_CHARS);
@@ -416,8 +491,46 @@ impl Inner {
                 highlights,
             });
         }
-        Ok(hits)
+        Ok(Paged {
+            items: hits,
+            offset: offset as u32,
+            total: total as u32,
+        })
     }
+}
+
+/// Avvolge la query dell'utente nei filtri d'ambito: una famiglia non vuota
+/// diventa una clausola obbligatoria, e dentro la famiglia i valori sono
+/// alternative.
+fn with_scope(query: Box<dyn Query>, scope: &SearchScope, f: &Fields) -> Box<dyn Query> {
+    let mut clauses: Vec<(Occur, Box<dyn Query>)> = vec![(Occur::Must, query)];
+    let mut family = |field: Field, values: &[String], canonical: bool| {
+        if values.is_empty() {
+            return;
+        }
+        let any: Vec<(Occur, Box<dyn Query>)> = values
+            .iter()
+            .map(|v| {
+                let term = if canonical {
+                    canonical_tag(v)
+                } else {
+                    v.clone()
+                };
+                let q: Box<dyn Query> = Box::new(TermQuery::new(
+                    Term::from_field_text(field, &term),
+                    IndexRecordOption::Basic,
+                ));
+                (Occur::Should, q)
+            })
+            .collect();
+        clauses.push((Occur::Must, Box::new(BooleanQuery::new(any))));
+    };
+    family(f.folder, &scope.folders, false);
+    family(f.tags, &scope.tags, true);
+    if clauses.len() == 1 {
+        return clauses.pop().expect("c'è sempre la query dell'utente").1;
+    }
+    Box::new(BooleanQuery::new(clauses))
 }
 
 /// Porta alla forma canonica il termine di ogni `tags:` della query, lasciando
@@ -482,6 +595,11 @@ impl IndexProvider for SearchIndex {
         for tag in &doc.tags {
             td.add_text(f.tags, canonical_tag(&tag.name));
         }
+        // Una cartella per ogni antenata: cercare in `Progetti` prende anche
+        // `Progetti/sub`, e la radice (`""`) è su tutti.
+        for folder in folders_of(&doc.id) {
+            td.add_text(f.folder, folder);
+        }
         if inner.writer.add_document(td).is_err() {
             // Il writer è andato: l'indice non è più affidabile, e mentire è
             // peggio che perdere il documento. Si dimentica l'impronta, così
@@ -529,39 +647,29 @@ impl IndexProvider for SearchIndex {
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         match query {
-            IndexQuery::FullText { query, scope: _, pagination } => {
-                let limit = pagination.map(|p| p.limit as usize).unwrap_or(50);
-                let items = inner.search(&query, limit)?;
-                let total = items.len() as u32;
-                Ok(IndexResult::Search(fubmd_abi::PaginatedResult {
-                    items,
-                    offset: 0,
-                    total,
-                }))
+            IndexQuery::FullText { query, scope, page } => {
+                Ok(IndexResult::Search(inner.search(&query, &scope, page)?))
             }
-            // Backlink e outline hanno una sola fonte di verità, il kernel
-            // (grafo e modelli): duplicarli qui creerebbe una seconda verità che
-            // può divergere. Un indice risponde "non roba mia".
-            IndexQuery::Backlinks { .. } => Err(PluginError::BadArgs(
-                "backlinks: li serve il grafo del kernel".to_string(),
-            )),
+            // Tutto ciò che ha già una fonte di verità nel kernel — grafo,
+            // modelli parsati, frontmatter — non si duplica qui: due verità
+            // sullo stesso dato divergono, e la seconda mente in silenzio. Un
+            // indice risponde "non roba mia".
+            IndexQuery::Backlinks { .. } | IndexQuery::Neighbors { .. } => Err(
+                PluginError::BadArgs("backlink e vicini: li serve il grafo del kernel".to_string()),
+            ),
             IndexQuery::Outline { .. } => Err(PluginError::BadArgs(
                 "outline: la servono i modelli del kernel".to_string(),
             )),
-            IndexQuery::Tags => Err(PluginError::BadArgs(
+            IndexQuery::Tags { .. } => Err(PluginError::BadArgs(
                 "tags: li aggrega il kernel dai modelli".to_string(),
             )),
-            IndexQuery::Neighbors { .. } => Err(PluginError::BadArgs(
-                "neighbors: li serve il grafo del kernel".to_string(),
-            )),
-            IndexQuery::Properties { .. } => Err(PluginError::BadArgs(
-                "properties: non supportate dall'indice full-text".to_string(),
-            )),
-            IndexQuery::PropertyValues { .. } => Err(PluginError::BadArgs(
-                "property values: non supportate dall'indice full-text".to_string(),
-            )),
+            IndexQuery::Properties { .. } | IndexQuery::PropertyValues { .. } => {
+                Err(PluginError::BadArgs(
+                    "proprietà: il frontmatter ce l'ha in cache il kernel".to_string(),
+                ))
+            }
             IndexQuery::VaultHealth { .. } => Err(PluginError::BadArgs(
-                "vault health: non supportato dall'indice full-text".to_string(),
+                "salute del vault: la calcola il kernel da grafo e modelli".to_string(),
             )),
             IndexQuery::Custom { ns, .. } => {
                 Err(PluginError::BadArgs(format!("namespace sconosciuto: {ns}")))
@@ -606,12 +714,22 @@ mod tests {
     }
 
     fn search(idx: &SearchIndex, q: &str) -> Vec<SearchHit> {
+        page_of(idx, q, &SearchScope::default(), Some(Page::first(10))).items
+    }
+
+    /// La ricerca con ambito e finestra, cioè la firma vera del contratto.
+    fn page_of(
+        idx: &SearchIndex,
+        q: &str,
+        scope: &SearchScope,
+        page: Option<Page>,
+    ) -> Paged<SearchHit> {
         match idx.query(IndexQuery::FullText {
             query: q.to_string(),
-            scope: Default::default(),
-            pagination: Some(Pagination::first(10)),
+            scope: scope.clone(),
+            page,
         }) {
-            Ok(IndexResult::Search(paginated)) => paginated.items,
+            Ok(IndexResult::Search(hits)) => hits,
             other => panic!("atteso Search, trovato {other:?}"),
         }
     }
@@ -891,8 +1009,8 @@ mod tests {
         let (idx, _host) = fresh(&path);
         let err = idx.query(IndexQuery::FullText {
             query: "campo_inesistente:valore".to_string(),
-            scope: Default::default(),
-            pagination: Some(Pagination::first(10)),
+            scope: SearchScope::default(),
+            page: Some(Page::first(10)),
         });
         assert!(matches!(err, Err(PluginError::BadArgs(_))));
     }
@@ -905,12 +1023,128 @@ mod tests {
         assert!(search(&idx, "   ").is_empty());
     }
 
+    // --- ambito e finestra (§1.6) ------------------------------------------
+
+    #[test]
+    fn a_folder_scope_takes_the_descendants_too() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        idx.on_document_indexed(&doc("radice.md", "gatto"));
+        idx.on_document_indexed(&doc("Progetti/alpha.md", "gatto"));
+        idx.on_document_indexed(&doc("Progetti/sub/beta.md", "gatto"));
+        idx.on_document_indexed(&doc("Altro/gamma.md", "gatto"));
+
+        let in_folder = |folder: &str| {
+            let scope = SearchScope {
+                folders: vec![folder.to_string()],
+                tags: Vec::new(),
+            };
+            let mut ids: Vec<String> = page_of(&idx, "gatto", &scope, None)
+                .items
+                .into_iter()
+                .map(|h| h.doc.to_string())
+                .collect();
+            ids.sort();
+            ids
+        };
+
+        assert_eq!(
+            in_folder("Progetti"),
+            ["Progetti/alpha.md", "Progetti/sub/beta.md"],
+            "una cartella prende anche le sue discendenti"
+        );
+        assert_eq!(in_folder("Progetti/sub"), ["Progetti/sub/beta.md"]);
+        assert_eq!(
+            in_folder("").len(),
+            4,
+            "la radice è l'intero vault, non le sole note di primo livello"
+        );
+    }
+
+    #[test]
+    fn scoping_by_tag_is_an_and_with_the_query() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        idx.on_document_indexed(&tagged("a.md", "gatto", &["Casa"]));
+        idx.on_document_indexed(&tagged("b.md", "gatto", &["lavoro"]));
+        idx.on_document_indexed(&tagged("c.md", "cane", &["casa"]));
+
+        let scope = SearchScope {
+            folders: Vec::new(),
+            // Grafia diversa dal canonico: l'ambito la normalizza come fa il
+            // pannello dei tag, o "cerca fra le note #Casa" non troverebbe #casa.
+            tags: vec!["Casa".to_string()],
+        };
+        let hits = page_of(&idx, "gatto", &scope, None);
+        assert_eq!(hits.total, 1);
+        assert_eq!(hits.items[0].doc, DocId::new("a.md"));
+    }
+
+    #[test]
+    fn the_window_moves_over_the_matches_and_the_total_stays_the_total() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        for i in 0..5 {
+            idx.on_document_indexed(&doc(&format!("nota{i}.md"), "gatto"));
+        }
+
+        let first = page_of(
+            &idx,
+            "gatto",
+            &SearchScope::default(),
+            Some(Page::new(0, 2)),
+        );
+        assert_eq!(first.items.len(), 2);
+        assert_eq!(
+            (first.offset, first.total),
+            (0, 5),
+            "il totale è quello dei match, non della pagina"
+        );
+
+        let second = page_of(
+            &idx,
+            "gatto",
+            &SearchScope::default(),
+            Some(Page::new(2, 2)),
+        );
+        assert_eq!(second.items.len(), 2);
+        assert_eq!(second.total, 5);
+        let overlap = first
+            .items
+            .iter()
+            .any(|h| second.items.iter().any(|s| s.doc == h.doc));
+        assert!(!overlap, "due pagine consecutive non si sovrappongono");
+
+        let beyond = page_of(
+            &idx,
+            "gatto",
+            &SearchScope::default(),
+            Some(Page::new(99, 2)),
+        );
+        assert!(beyond.items.is_empty(), "oltre la fine è vuoto");
+        assert_eq!(beyond.total, 5, "e il totale resta");
+
+        let all = page_of(&idx, "gatto", &SearchScope::default(), None);
+        assert_eq!(all.items.len(), 5, "senza finestra si prende tutto");
+    }
+
+    #[test]
+    fn moving_a_note_reindexes_it_even_with_the_same_content() {
+        // L'impronta include il path: da quando l'indice porta la cartella,
+        // due note con lo stesso testo in cartelle diverse NON sono la stessa
+        // cosa indicizzata.
+        let a = doc("Progetti/nota.md", "identico");
+        let b = doc("Archivio/nota.md", "identico");
+        assert_ne!(fingerprint(&a), fingerprint(&b));
+    }
+
     #[test]
     fn backlinks_are_not_served_here() {
         let (_g, path) = tmp();
         let (idx, _host) = fresh(&path);
         let r = idx.query(IndexQuery::Backlinks {
             target: DocId::new("a.md"),
+            page: None,
         });
         assert!(matches!(r, Err(PluginError::BadArgs(_))));
     }

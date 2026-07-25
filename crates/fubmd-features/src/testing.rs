@@ -16,7 +16,9 @@ use std::sync::Mutex;
 
 use fubmd_abi::event::Event;
 use fubmd_abi::model::{DocId, Heading};
-use fubmd_abi::traits::{BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, TagCount};
+use fubmd_abi::traits::{
+    BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, Paged, TagCount,
+};
 use fubmd_abi::PluginError;
 
 /// Storage dei blob e dei documenti in memoria, più un orologio pilotabile.
@@ -200,22 +202,18 @@ impl HostApi for MemoryHost {
             // Come il kernel: i backlink sono una risposta del grafo, qui
             // seminata a mano. Un target senza backlink è una lista vuota, non
             // un errore.
-            IndexQuery::Backlinks { target } => {
-                let items = self
-                    .backlinks
+            // La finestra la applica il doppio come la applica il kernel su una
+            // risposta già in memoria (`Paged::window`): una view che paginasse
+            // solo contro il finto non sarebbe provata.
+            IndexQuery::Backlinks { target, page } => Ok(IndexResult::Backlinks(Paged::window(
+                self.backlinks
                     .lock()
                     .unwrap()
                     .get(target.as_str())
                     .cloned()
-                    .unwrap_or_default();
-                let total = items.len() as u32;
-                Ok(IndexResult::Backlinks(fubmd_abi::PaginatedResult {
-                    items,
-                    offset: 0,
-                    total,
-                }))
-            }
-
+                    .unwrap_or_default(),
+                page,
+            ))),
             // Come il kernel: l'outline è servito dai modelli, qui seminato a
             // mano. Documento senza outline → lista vuota, non un errore.
             IndexQuery::Outline { doc } => Ok(IndexResult::Outline(
@@ -226,20 +224,19 @@ impl HostApi for MemoryHost {
                     .cloned()
                     .unwrap_or_default(),
             )),
-            IndexQuery::Tags => Ok(IndexResult::Tags(self.tags.lock().unwrap().clone())),
-            // Il doppio non ha un indice: tutto il resto è "non roba mia".
+            IndexQuery::Tags { page } => Ok(IndexResult::Tags(Paged::window(
+                self.tags.lock().unwrap().clone(),
+                page,
+            ))),
+            // Il doppio non ha né indice né grafo né frontmatter: tutto il resto
+            // è "non roba mia", che è la risposta che darebbe un provider vero.
             _ => Err(PluginError::BadArgs(
-                "MemoryHost non ha indici full-text".into(),
+                "MemoryHost serve solo backlink, outline e tag seminati a mano".into(),
             )),
         }
     }
 
-    fn active_view_context(&self) -> fubmd_abi::ViewContext {
-        fubmd_abi::ViewContext {
-            pane_id: "main".to_string(),
-            doc: self.active.lock().unwrap().clone(),
-            selection: None,
-            mode: None,
-        }
+    fn active_document(&self) -> Option<DocId> {
+        self.active.lock().unwrap().clone()
     }
 }

@@ -48,12 +48,17 @@ impl ViewProvider for BacklinksView {
     }
 
     fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
-        let Some(active) = host.active_view_context().doc else {
+        let Some(active) = host.active_document() else {
             // Nessuna nota aperta: non è un errore, è uno stato.
             return Ok(placeholder("Nessuna nota aperta."));
         };
-        let refs = match host.query_index(IndexQuery::Backlinks { target: active })? {
-            IndexResult::Backlinks(paginated) => paginated,
+        // Senza finestra: il pannello elenca tutti i backlink della nota
+        // aperta, e chi ne ha migliaia ha un problema di vault, non di pagina.
+        let refs = match host.query_index(IndexQuery::Backlinks {
+            target: active,
+            page: None,
+        })? {
+            IndexResult::Backlinks(refs) => refs,
             other => {
                 return Err(PluginError::Internal(format!(
                     "query backlink: risposta fuori tema: {other:?}"

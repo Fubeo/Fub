@@ -49,7 +49,7 @@ impl ViewProvider for OutlineView {
     }
 
     fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
-        let Some(active) = host.active_view_context().doc else {
+        let Some(active) = host.active_document() else {
             return Ok(placeholder("Nessuna nota aperta."));
         };
         let headings = match host.query_index(IndexQuery::Outline { doc: active })? {
@@ -78,7 +78,7 @@ impl ViewProvider for OutlineView {
         };
         // Il documento è quello di cui la view mostra la struttura: l'attivo.
         // Cliccare l'outline non cambia il documento attivo, quindi è ancora lui.
-        match host.active_view_context().doc {
+        match host.active_document() {
             Some(doc) => Ok(ViewUpdate::Reveal {
                 doc_id: doc.as_str().to_string(),
                 span,

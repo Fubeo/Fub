@@ -520,15 +520,116 @@ interface command {
     invoke: func(command: string, args: json) -> result<command-outcome, plugin-error>;
 }
 
-/// Ricerca e backlink (`IndexProvider`).
+/// Il canale dati verso le view: ricerca, backlink, grafo, proprietà, salute
+/// del vault (`IndexProvider`).
+///
+/// Ciò che non è esprimibile qui diventa un comando bespoke dell'app, cioè una
+/// superficie che un plugin non può avere: è la ragione per cui questo enum è
+/// largo. Chi risponde: il KERNEL per ciò di cui è già l'unica fonte di verità
+/// (grafo, modelli, frontmatter), i provider registrati per il resto (il
+/// full-text).
 interface index {
     use json.{json};
-    use model.{doc-id, document-model, span, heading};
+    use model.{doc-id, document-model, span, heading, property-value, property-scalar};
     use errors.{plugin-error};
 
+    /// La finestra chiesta su una risposta: sta nella DOMANDA perché chi la
+    /// serve deve poter troncare prima di costruire il risultato. Assente =
+    /// tutto; `limit: 0` = nessun elemento.
+    record page {
+        offset: u32,
+        limit: u32,
+    }
+
+    /// In che verso si cammina il grafo dei link.
+    enum link-direction { outbound, inbound, both }
+
+    /// DOVE cercare (non cosa): la stringa di query è il linguaggio del
+    /// provider, l'ambito è dato del contratto. Liste vuote = tutto il vault;
+    /// dentro una lista i valori sono in OR.
+    record search-scope {
+        /// Path di cartella senza slash finale (`""` = radice): dentro o
+        /// discendente.
+        folders: list<string>,
+        /// Tag in forma canonica, senza `#`.
+        tags: list<string>,
+    }
+
+    /// Come si mette alla prova una proprietà. Un variant e non operatore+valore
+    /// perché `exists`/`missing` un valore non ce l'hanno.
+    variant property-test {
+        exists,
+        missing,
+        equals(property-value),
+        not-equals(property-value),
+        /// Elenco: contiene lo scalare. Testo: sottostringa. Resto: uguaglianza.
+        contains(property-scalar),
+        /// Fra valori della stessa specie; specie diverse → falso, non errore.
+        greater-than(property-value),
+        less-than(property-value),
+    }
+    /// Più filtri di una query sono in AND (l'OR arriva con la query come AST).
+    record property-filter {
+        key: string,
+        test: property-test,
+    }
+    /// Chi non ha la chiave finisce in fondo in entrambi i versi; a parità vale
+    /// l'ordine dei doc-id, o una risposta paginata non è stabile.
+    record property-sort {
+        key: string,
+        descending: bool,
+    }
+
+    /// Un controllo di salute del vault (7.2): ogni voce è un'interrogazione su
+    /// grafo e modelli già in memoria.
+    enum health-check {
+        /// Link che non risolvono a nessun documento (un URL non è un link rotto).
+        broken-links,
+        /// Note che nessuno nomina: zero riferimenti entranti.
+        orphan-documents,
+    }
+
+    record index-query-backlinks {
+        target: doc-id,
+        page: option<page>,
+    }
     record index-query-full-text {
         query: string,
-        limit: u32,
+        scope: search-scope,
+        page: option<page>,
+    }
+    record index-query-tags {
+        page: option<page>,
+    }
+    /// Il grafo (7.3) nel contratto: `depth: 1` con `outbound` è l'adiacenza
+    /// pura, il mattone con cui si ricostruisce il grafo intero.
+    record index-query-neighbors {
+        doc: doc-id,
+        direction: link-direction,
+        /// Passi di distanza, almeno 1 (`0` → risposta vuota).
+        depth: u8,
+        page: option<page>,
+    }
+    /// La base di 9.1 (ricerca per campo), 8.4 (collezioni), 11 (database su
+    /// file): la serve il kernel, che il frontmatter ce l'ha già in cache.
+    record index-query-properties {
+        filter: list<property-filter>,
+        sort: option<property-sort>,
+        /// Chiavi da restituire; vuoto = tutto il frontmatter.
+        select: list<string>,
+        page: option<page>,
+    }
+    /// Le faccette di 9.1: un elenco contribuisce con ogni suo elemento. I
+    /// filtri sono quelli di `index-query-properties` — le faccette si contano
+    /// sul sottoinsieme già filtrato.
+    record index-query-property-values {
+        key: string,
+        filter: list<property-filter>,
+        page: option<page>,
+    }
+    record index-query-vault-health {
+        check: health-check,
+        page: option<page>,
     }
     /// Varco di estensione: query di provider di terzi, con namespace
     /// (`ns` = plugin id). `ns` sconosciuto → `bad-args`.
@@ -537,24 +638,61 @@ interface index {
         query: json,
     }
     variant index-query {
-        backlinks(doc-id),
+        backlinks(index-query-backlinks),
         full-text(index-query-full-text),
         /// La struttura (heading) di un documento, servita dal kernel dai suoi
         /// modelli: è come una view legge la struttura parsata senza avere un
-        /// `format-provider`. Documento inesistente → outline vuota.
+        /// `format-provider`. Documento inesistente → outline vuota. È l'unica
+        /// senza finestra: cresce con un documento, non col vault.
         outline(doc-id),
         /// I tag dell'intero vault con la frequenza, serviti dal kernel dai
-        /// modelli. Senza argomenti: è un'aggregazione su tutto il vault.
-        tags,
+        /// modelli: aggregazione su tutto il vault, non su un documento.
+        tags(index-query-tags),
+        neighbors(index-query-neighbors),
+        properties(index-query-properties),
+        property-values(index-query-property-values),
+        vault-health(index-query-vault-health),
         custom(index-query-custom),
     }
     record backlink-ref {
         source: doc-id,
         context: option<string>,
     }
+    /// `via` è l'anello precedente del cammino: senza, una risposta con
+    /// `depth > 1` è un sacchetto di nodi; con, è un albero e gli archi si
+    /// ricostruiscono. Arco `via → doc` per gli uscenti, `doc → via` per gli
+    /// entranti.
+    record neighbor-ref {
+        doc: doc-id,
+        via: doc-id,
+        depth: u8,
+    }
     record tag-count {
         name: string,
         count: u32,
+    }
+    record property-entry {
+        key: string,
+        value: property-value,
+    }
+    /// La riga di una collezione (8.4) o di un database su file (11).
+    record document-properties {
+        doc: doc-id,
+        properties: list<property-entry>,
+    }
+    /// La faccetta di 9.1, gemella di `tag-count` per il frontmatter.
+    record property-count {
+        value: property-value,
+        count: u32,
+    }
+    record health-issue {
+        doc: doc-id,
+        check: health-check,
+        /// Per un link rotto: la destinazione COME ERA SCRITTA (è ciò che serve
+        /// per correggerla). Assente quando il problema è il documento stesso.
+        detail: option<string>,
+        /// Dove sta nel sorgente, quando il problema ha un punto.
+        span: option<span>,
     }
     /// `snippet` è testo semplice, mai markup: chi disegna lo inserisce come
     /// testo. L'evidenziazione passa da `highlights`, intervalli in byte
@@ -565,11 +703,56 @@ interface index {
         snippet: string,
         highlights: list<span>,
     }
+
+    // Una risposta a finestra porta gli elementi, da dove cominciano e quanti ce
+    // ne sarebbero IN TUTTO (`total` è il conteggio prima della finestra: senza,
+    // "1-20 di 4321" non si scrive). Lato Rust è un solo `Paged<T>` generico;
+    // qui i generici non esistono, e ogni istanza è un record a sé.
+    record backlinks-page {
+        items: list<backlink-ref>,
+        offset: u32,
+        total: u32,
+    }
+    record search-page {
+        items: list<search-hit>,
+        offset: u32,
+        total: u32,
+    }
+    record tags-page {
+        items: list<tag-count>,
+        offset: u32,
+        total: u32,
+    }
+    record neighbors-page {
+        items: list<neighbor-ref>,
+        offset: u32,
+        total: u32,
+    }
+    record properties-page {
+        items: list<document-properties>,
+        offset: u32,
+        total: u32,
+    }
+    record property-values-page {
+        items: list<property-count>,
+        offset: u32,
+        total: u32,
+    }
+    record vault-health-page {
+        items: list<health-issue>,
+        offset: u32,
+        total: u32,
+    }
+
     variant index-result {
-        backlinks(list<backlink-ref>),
-        search(list<search-hit>),
+        backlinks(backlinks-page),
+        search(search-page),
         outline(list<heading>),
-        tags(list<tag-count>),
+        tags(tags-page),
+        neighbors(neighbors-page),
+        properties(properties-page),
+        property-values(property-values-page),
+        vault-health(vault-health-page),
         custom(json),
     }
 
@@ -678,9 +861,10 @@ interface host-api {
     // è aperto. Vedi docs/architecture/plugin-boundary.md, "Interrogazione e
     // contesto".
 
-    /// Interroga gli indici del vault: backlink (serviti dal grafo) e ricerca
-    /// full-text (dai provider registrati), con la stessa semantica di dispatch
-    /// del kernel.
+    /// Interroga il vault: backlink e grafo (serviti dal grafo del kernel),
+    /// struttura, tag e proprietà (dai modelli in cache), salute del vault, e
+    /// ricerca full-text (dai provider registrati). Stessa semantica di
+    /// dispatch del kernel.
     query-index: func(query: index-query) -> result<index-result, plugin-error>;
     /// Il documento con il focus della sessione di editing, se ce n'è uno. Lo
     /// imposta la shell; una view lo chiede quando ne ha bisogno. Non ha un

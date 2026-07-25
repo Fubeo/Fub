@@ -43,7 +43,9 @@ impl ViewProvider for TagPanelView {
     }
 
     fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
-        let tags = match host.query_index(IndexQuery::Tags)? {
+        // Senza finestra: il pannello mostra la distribuzione intera, ed è la
+        // ragione per cui la `Page` è opzionale invece che obbligatoria.
+        let tags = match host.query_index(IndexQuery::Tags { page: None })? {
             IndexResult::Tags(t) => t,
             other => {
                 return Err(PluginError::Internal(format!(
@@ -51,7 +53,7 @@ impl ViewProvider for TagPanelView {
                 )))
             }
         };
-        Ok(build_tags_view(&tags))
+        Ok(build_tags_view(&tags.items))
     }
 
     fn on_action(

@@ -49,7 +49,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use fubmd_abi::model::{DocId, DocumentModel, Link, LinkTarget};
-use fubmd_abi::traits::BacklinkRef;
+use fubmd_abi::traits::{BacklinkRef, LinkDirection, NeighborRef};
 
 use crate::pathlink;
 
@@ -232,6 +232,66 @@ impl LinkGraph {
     /// Link uscenti risolti da un documento.
     pub fn outgoing(&self, source: &DocId) -> Vec<DocId> {
         self.outgoing.get(source).cloned().unwrap_or_default()
+    }
+
+    /// I documenti raggiungibili da `doc` in al più `depth` passi, nel verso
+    /// chiesto — la camminata che serve a una vista a grafo (7.3) e che
+    /// [`IndexQuery::Neighbors`] espone nel contratto.
+    ///
+    /// È un attraversamento in ampiezza: ogni documento compare **una volta
+    /// sola**, alla distanza minima a cui lo si raggiunge, e `via` è l'anello
+    /// da cui ci si è arrivati (l'albero di visita, non l'insieme di tutti gli
+    /// archi). Il documento di partenza non è vicino di sé stesso, e nemmeno lo
+    /// diventa un ciclo che ci ritorna sopra.
+    ///
+    /// L'ordine è deterministico — distanza crescente, poi `DocId` — perché la
+    /// risposta è paginata: senza un ordine stabile la seconda pagina
+    /// ripeterebbe pezzi della prima.
+    ///
+    /// [`IndexQuery::Neighbors`]: fubmd_abi::traits::IndexQuery::Neighbors
+    pub fn neighbors(&self, doc: &DocId, direction: LinkDirection, depth: u8) -> Vec<NeighborRef> {
+        if depth == 0 {
+            return Vec::new();
+        }
+        let step = |id: &DocId| -> Vec<DocId> {
+            let mut next: BTreeSet<DocId> = BTreeSet::new();
+            if matches!(direction, LinkDirection::Outbound | LinkDirection::Both) {
+                next.extend(self.outgoing(id));
+            }
+            if matches!(direction, LinkDirection::Inbound | LinkDirection::Both) {
+                next.extend(self.backlinks(id).into_iter().map(|b| b.source));
+            }
+            next.into_iter().collect()
+        };
+
+        let mut seen: HashSet<DocId> = HashSet::from([doc.clone()]);
+        let mut out = Vec::new();
+        let mut frontier = vec![doc.clone()];
+        for step_no in 1..=depth {
+            let mut next_frontier = Vec::new();
+            for from in &frontier {
+                for to in step(from) {
+                    if !seen.insert(to.clone()) {
+                        continue;
+                    }
+                    out.push(NeighborRef {
+                        doc: to.clone(),
+                        via: from.clone(),
+                        depth: step_no,
+                    });
+                    next_frontier.push(to);
+                }
+            }
+            if next_frontier.is_empty() {
+                break;
+            }
+            frontier = next_frontier;
+        }
+        // Dentro un anello l'ordine è quello dei `via`, che è già deterministico
+        // (la frontiera nasce ordinata); qui si aggiunge l'ordine per bersaglio,
+        // che è quello che un elenco mostra.
+        out.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| a.doc.cmp(&b.doc)));
+        out
     }
 
     /// I documenti presenti nel grafo, ordinati.
@@ -750,6 +810,104 @@ mod tests {
         graph.upsert(&a);
         assert_eq!(sources(&graph, "Nota.md"), ["a.md", "a.md"]);
         assert_eq!(graph.outgoing(&DocId::new("a.md")).len(), 2);
+    }
+
+    // --- la camminata: `IndexQuery::Neighbors` (§1.6) ----------------------
+
+    /// `a → b → c`, e `d → a`.
+    fn chain() -> Vec<DocumentModel> {
+        vec![
+            doc_with_links("a.md", &["b"]),
+            doc_with_links("b.md", &["c"]),
+            DocumentModel::empty(DocId::new("c.md")),
+            doc_with_links("d.md", &["a"]),
+        ]
+    }
+
+    fn walk(graph: &LinkGraph, from: &str, dir: LinkDirection, depth: u8) -> Vec<(String, u8)> {
+        graph
+            .neighbors(&DocId::new(from), dir, depth)
+            .into_iter()
+            .map(|n| (n.doc.to_string(), n.depth))
+            .collect()
+    }
+
+    #[test]
+    fn one_step_out_is_plain_adjacency() {
+        let docs = chain();
+        let graph = LinkGraph::build(docs.iter());
+        assert_eq!(
+            walk(&graph, "a.md", LinkDirection::Outbound, 1),
+            [("b.md".to_string(), 1)]
+        );
+        assert_eq!(
+            walk(&graph, "a.md", LinkDirection::Inbound, 1),
+            [("d.md".to_string(), 1)],
+            "il verso entrante sono i backlink"
+        );
+    }
+
+    #[test]
+    fn depth_is_a_breadth_first_walk_and_via_rebuilds_the_edges() {
+        let docs = chain();
+        let graph = LinkGraph::build(docs.iter());
+        let found = graph.neighbors(&DocId::new("a.md"), LinkDirection::Outbound, 2);
+        let edges: Vec<(String, String, u8)> = found
+            .iter()
+            .map(|n| (n.via.to_string(), n.doc.to_string(), n.depth))
+            .collect();
+        assert_eq!(
+            edges,
+            [
+                ("a.md".to_string(), "b.md".to_string(), 1),
+                ("b.md".to_string(), "c.md".to_string(), 2),
+            ],
+            "`via` è l'anello precedente: senza, questa risposta sarebbe un sacchetto di nodi"
+        );
+    }
+
+    #[test]
+    fn both_directions_meet_in_the_middle() {
+        let docs = chain();
+        let graph = LinkGraph::build(docs.iter());
+        let names: Vec<String> = walk(&graph, "a.md", LinkDirection::Both, 1)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        assert_eq!(names, ["b.md", "d.md"], "uscenti ed entranti, in ordine");
+    }
+
+    #[test]
+    fn a_cycle_terminates_and_nobody_is_a_neighbour_of_itself() {
+        let a = doc_with_links("a.md", &["b"]);
+        let b = doc_with_links("b.md", &["a"]);
+        let graph = LinkGraph::build([&a, &b]);
+        let found = walk(&graph, "a.md", LinkDirection::Both, 10);
+        assert_eq!(
+            found,
+            [("b.md".to_string(), 1)],
+            "il ciclo torna su a.md, che non è vicino di sé stesso"
+        );
+    }
+
+    #[test]
+    fn a_neighbour_reached_twice_keeps_the_shortest_distance() {
+        // a → b, a → c, b → c: `c` è a un passo, non a due.
+        let a = doc_with_links("a.md", &["b", "c"]);
+        let b = doc_with_links("b.md", &["c"]);
+        let c = DocumentModel::empty(DocId::new("c.md"));
+        let graph = LinkGraph::build([&a, &b, &c]);
+        assert_eq!(
+            walk(&graph, "a.md", LinkDirection::Outbound, 3),
+            [("b.md".to_string(), 1), ("c.md".to_string(), 1)]
+        );
+    }
+
+    #[test]
+    fn depth_zero_is_an_empty_answer() {
+        let docs = chain();
+        let graph = LinkGraph::build(docs.iter());
+        assert!(walk(&graph, "a.md", LinkDirection::Both, 0).is_empty());
     }
 
     // --- link markdown: la seconda specie di arco (§2.21) ------------------
