@@ -40,7 +40,7 @@ use std::sync::Mutex;
 use camino::Utf8Path;
 use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, SearchHit};
-use fubmd_abi::PluginError;
+use fubmd_abi::{Pagination, PluginError};
 use serde::{Deserialize, Serialize};
 use tantivy::query::QueryParser;
 use tantivy::schema::{Field, Schema, Value, STORED, STRING, TEXT};
@@ -529,8 +529,15 @@ impl IndexProvider for SearchIndex {
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         match query {
-            IndexQuery::FullText { query, limit } => {
-                Ok(IndexResult::Search(inner.search(&query, limit as usize)?))
+            IndexQuery::FullText { query, scope: _, pagination } => {
+                let limit = pagination.map(|p| p.limit as usize).unwrap_or(50);
+                let items = inner.search(&query, limit)?;
+                let total = items.len() as u32;
+                Ok(IndexResult::Search(fubmd_abi::PaginatedResult {
+                    items,
+                    offset: 0,
+                    total,
+                }))
             }
             // Backlink e outline hanno una sola fonte di verità, il kernel
             // (grafo e modelli): duplicarli qui creerebbe una seconda verità che
@@ -543,6 +550,18 @@ impl IndexProvider for SearchIndex {
             )),
             IndexQuery::Tags => Err(PluginError::BadArgs(
                 "tags: li aggrega il kernel dai modelli".to_string(),
+            )),
+            IndexQuery::Neighbors { .. } => Err(PluginError::BadArgs(
+                "neighbors: li serve il grafo del kernel".to_string(),
+            )),
+            IndexQuery::Properties { .. } => Err(PluginError::BadArgs(
+                "properties: non supportate dall'indice full-text".to_string(),
+            )),
+            IndexQuery::PropertyValues { .. } => Err(PluginError::BadArgs(
+                "property values: non supportate dall'indice full-text".to_string(),
+            )),
+            IndexQuery::VaultHealth { .. } => Err(PluginError::BadArgs(
+                "vault health: non supportato dall'indice full-text".to_string(),
             )),
             IndexQuery::Custom { ns, .. } => {
                 Err(PluginError::BadArgs(format!("namespace sconosciuto: {ns}")))
@@ -589,9 +608,10 @@ mod tests {
     fn search(idx: &SearchIndex, q: &str) -> Vec<SearchHit> {
         match idx.query(IndexQuery::FullText {
             query: q.to_string(),
-            limit: 10,
+            scope: Default::default(),
+            pagination: Some(Pagination::first(10)),
         }) {
-            Ok(IndexResult::Search(hits)) => hits,
+            Ok(IndexResult::Search(paginated)) => paginated.items,
             other => panic!("atteso Search, trovato {other:?}"),
         }
     }
@@ -871,7 +891,8 @@ mod tests {
         let (idx, _host) = fresh(&path);
         let err = idx.query(IndexQuery::FullText {
             query: "campo_inesistente:valore".to_string(),
-            limit: 10,
+            scope: Default::default(),
+            pagination: Some(Pagination::first(10)),
         });
         assert!(matches!(err, Err(PluginError::BadArgs(_))));
     }

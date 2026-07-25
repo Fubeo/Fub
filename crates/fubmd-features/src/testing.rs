@@ -200,14 +200,22 @@ impl HostApi for MemoryHost {
             // Come il kernel: i backlink sono una risposta del grafo, qui
             // seminata a mano. Un target senza backlink è una lista vuota, non
             // un errore.
-            IndexQuery::Backlinks { target } => Ok(IndexResult::Backlinks(
-                self.backlinks
+            IndexQuery::Backlinks { target } => {
+                let items = self
+                    .backlinks
                     .lock()
                     .unwrap()
                     .get(target.as_str())
                     .cloned()
-                    .unwrap_or_default(),
-            )),
+                    .unwrap_or_default();
+                let total = items.len() as u32;
+                Ok(IndexResult::Backlinks(fubmd_abi::PaginatedResult {
+                    items,
+                    offset: 0,
+                    total,
+                }))
+            }
+
             // Come il kernel: l'outline è servito dai modelli, qui seminato a
             // mano. Documento senza outline → lista vuota, non un errore.
             IndexQuery::Outline { doc } => Ok(IndexResult::Outline(

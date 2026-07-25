@@ -1109,7 +1109,13 @@ impl Workspace {
         // struttura di un documento senza avere un `FormatProvider`.
         match &query {
             IndexQuery::Backlinks { target } => {
-                return Ok(IndexResult::Backlinks(self.graph.backlinks(target)));
+                let items = self.graph.backlinks(target);
+                let total = items.len() as u32;
+                return Ok(IndexResult::Backlinks(fubmd_abi::PaginatedResult {
+                    items,
+                    offset: 0,
+                    total,
+                }));
             }
             IndexQuery::Outline { doc } => {
                 let outline = self
