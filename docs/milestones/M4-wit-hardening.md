@@ -92,6 +92,94 @@ Resta a M4, sulla conformità:
   non portano un host: `SearchIndex` scrive ancora con `std::fs`, e un indice di
   terzi a M5 non potrebbe.
 
+## Checklist del freeze
+
+Le decisioni "gratis prima, breaking dopo" del §1 di [todo.md](../todo.md), che
+è l'elenco autorevole e per intero (§1.1–§1.13, tutte P0); qui stanno quelle che
+hanno una **domanda aperta** e una risposta da mettere a verbale prima di
+chiudere. Le prime sono **già chiuse** in corso d'opera (il costo era una riga
+oggi, una migrazione domani); le altre restano al freeze.
+
+**Chiuse prima del freeze:**
+
+- **Semantica di consegna eventi**: gli eventi arrivano *dopo che la chiamata
+  del provider è tornata*, mai dentro il suo frame (`in_provider_call` nel
+  kernel; contratto documentato su `EventHandler`). Identica a ciò che il
+  proxy WASM può onorare: un plugin che è insieme view e handler non rientra
+  mai nella propria istanza.
+- **`abi_version` nel `PluginManifest`** + regola scritta (`abi_compatible`):
+  major diversa → rifiuto; minor del plugin ≤ minor dell'host → accetto.
+- **`ViewUpdate::Custom { ns, payload }`**: il varco di estensione degli
+  intenti, con degrado garbato ("la shell che non riconosce non fa nulla").
+  L'enum si può dichiarare chiuso al freeze: gli intenti nuovi nascono nel
+  varco e vengono promossi solo se universali.
+- **Discovery e invalidazione delle view**: comando `list_views`, montaggio
+  per `placement`, dichiarazione di interesse `ViewSpec.refresh: EventMask`
+  esercitata dalle tre feature ufficiali.
+- **u64 sull'IPC JSON**: gli u64 identità/impronta attraversano il terzo
+  confine come **stringhe** (`fubmd_abi::ipc`); presidiato dalle fixture dei
+  mirror TS (contratto e app).
+
+**Da chiudere al freeze:**
+
+- [ ] **Il grafo nel contratto**: `LinkGraph` ha `outgoing`/`backlinks` ma
+      `IndexQuery` espone solo `Backlinks`. Per M2 graph-data è superficie
+      privilegiata (comando dati Tauri, dichiarato): al freeze decidere se
+      aggiungere una variante "vicini/archi" (es. `IndexQuery::Neighbors`),
+      o il grafo resta per sempre un comando ad-hoc che un plugin non può
+      interrogare.
+- [ ] **Operazioni strutturali e parità plugin↔nativo**: rename,
+      `create_note`, cestino sono kernel-owned e fuori da `HostApi` (scelta
+      deliberata). Decidere se e quali esporre come capacità con permesso
+      dedicato (`write_vault` non basta: un rename riscrive file di terzi).
+- [ ] **`create_note` in una cartella**: oggi la nota senza nome nasce nella
+      radice; se la creazione diventa capacità di plugin, la firma va decisa
+      insieme al punto sopra (path completo vs cartella+nome).
+- [ ] **Escape hatch `type json = string`**: confermare al freeze, uso per
+      uso (frontmatter, `attrs`, args dei comandi, payload dei job, storage),
+      che l'opacità è accettabile — o promuovere a record WIT tipati dove non
+      lo è. Il costo di tenerla: nessun controllo di forma al confine; il
+      costo di toglierla: il contratto esplode a ogni formato nuovo.
+- [ ] **Canale progresso/streaming dei job**: decidere se `Event::JobDone`
+      basta. Aggiungere un canale dopo è breaking; l'alternativa ponte è un
+      `Event::Custom` con topic convenzionale (`<plugin>/job-progress`), che
+      il varco già permette senza toccare il contratto — se basta quella, la
+      decisione è "JobDone + convenzione documentata".
+- [ ] **Contesto di una view: `active_document()` o `ViewContext`?**
+      ([todo.md §1.9](../todo.md)) Oggi l'host serve **una** `Option<DocId>`, e
+      con schede/split/finestre multiple (3.3, 4.1) ogni provider scritto contro
+      quella firma diventa ambiguo. Nello stesso pacchetto: la **selezione**, che
+      il contratto non ha modo di nominare — senza, slash command sul testo
+      selezionato, commenti inline, annotazioni e "chat con la selezione" non
+      potranno mai essere provider. Cambiare il tipo di ritorno dopo il freeze è
+      una migrazione di ogni provider esistente.
+- [ ] **Identità del documento: il path è per sempre la chiave?**
+      ([todo.md §1.10](../todo.md)) FEATURES chiede uuid opzionale (2.2), stable
+      note ID e redirect da note rinominate (7.1), Zettelkasten ID (8.3), mentre
+      ogni firma prende `DocId` = path. O si dichiara che il path resta la chiave
+      e i redirect sono una feature sopra (tabella di alias persistente), o si
+      introduce ora un `DocRef` a due forme: la seconda strada, dopo, è una major.
+- [ ] **Forma dell'errore al confine** ([todo.md §1.11](../todo.md)):
+      `PluginError`/`KernelError` sono nel contratto e finiscono in `String` su
+      tutti i comandi IPC. Decidere se l'errore porta **codice + parametri** —
+      prerequisito della localizzazione (25.2, §1.8), delle notifiche (10.5) e
+      dei retry delle automazioni (16.3). Un messaggio già composto non si
+      traduce e non si discrimina: la shell oggi indovina.
+- [ ] **Il lotto: serve una variante di evento?** ([todo.md §1.12](../todo.md))
+      Il kernel muta un documento alla volta e ogni scrittura emette i suoi
+      eventi: una rinomina con 200 backlink sono ~400 eventi e altrettanti giri
+      della shell. Decidere se il contratto acquista un `BatchEnded { changed }`
+      (che `ViewSpec.refresh` può dichiarare, e che fa ridisegnare **una** volta
+      invece di N) o se il lotto resta un fatto interno del kernel. Additivo
+      adesso, minor dopo.
+- [ ] **Canale del rendering: solo HTML, o anche il modello?**
+      ([todo.md §1.13](../todo.md)) `render_html` è puro per-documento e la shell
+      riceve una `String`; nessun canale porta il `DocumentModel` al frontend.
+      Sopra la stringa opaca stanno lazy loading, hover popover, scroll sync,
+      rendering incrementale e sanitizzazione (6.1, 5.3), e la sintassi nuova
+      nasce due volte (Rust + Lezer, §3.8). Decidere se l'HTML resta la
+      fast-path e il modello con gli `Span` diventa il canale dell'interattivo.
+
 ## Trait/API coinvolti
 
 - `Plugin`, `HostApi` (prima impl reale end-to-end).
