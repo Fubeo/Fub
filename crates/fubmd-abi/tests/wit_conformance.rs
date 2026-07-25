@@ -1044,6 +1044,11 @@ fn view_update_case(v: &ViewUpdate) -> Case {
         ViewUpdate::Replace { root } => case_ty("replace", wit(root)),
         ViewUpdate::None => case("none"),
         ViewUpdate::Navigate { doc_id } => case_ty("navigate", wit(doc_id)),
+        ViewUpdate::Reveal { doc_id, span } => case_rec(
+            "reveal",
+            "view-update-reveal",
+            vec![("doc-id", wit(doc_id)), ("span", wit(span))],
+        ),
     }
 }
 
@@ -1113,6 +1118,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
             "index-query-full-text",
             vec![("query", wit(query)), ("limit", wit(limit))],
         ),
+        IndexQuery::Outline { doc } => case_ty("outline", wit(doc)),
         IndexQuery::Custom { ns, query } => case_rec(
             "custom",
             "index-query-custom",
@@ -1125,6 +1131,7 @@ fn index_result_case(r: &IndexResult) -> Case {
     match r {
         IndexResult::Backlinks(v) => case_ty("backlinks", wit(v)),
         IndexResult::Search(v) => case_ty("search", wit(v)),
+        IndexResult::Outline(v) => case_ty("outline", wit(v)),
         IndexResult::Custom(v) => case_ty("custom", wit(v)),
     }
 }
@@ -1304,6 +1311,10 @@ fn conform(source: &str) -> Result<(), String> {
             view_update_case(&ViewUpdate::Navigate {
                 doc_id: String::new(),
             }),
+            view_update_case(&ViewUpdate::Reveal {
+                doc_id: String::new(),
+                span: Span::new(0, 0),
+            }),
         ],
     );
 
@@ -1347,6 +1358,9 @@ fn conform(source: &str) -> Result<(), String> {
                 query: String::new(),
                 limit: 0,
             }),
+            index_query_case(&IndexQuery::Outline {
+                doc: DocId::new("a"),
+            }),
             index_query_case(&IndexQuery::Custom {
                 ns: String::new(),
                 query: serde_json::Value::Null,
@@ -1359,6 +1373,7 @@ fn conform(source: &str) -> Result<(), String> {
         &[
             index_result_case(&IndexResult::Backlinks(vec![])),
             index_result_case(&IndexResult::Search(vec![])),
+            index_result_case(&IndexResult::Outline(vec![])),
             index_result_case(&IndexResult::Custom(serde_json::Value::Null)),
         ],
     );

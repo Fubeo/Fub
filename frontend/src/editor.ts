@@ -4,11 +4,15 @@ import { basicSetup } from "codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { indentWithTab } from "@codemirror/commands";
+import { byteToCharIndex } from "./offsets";
 
 export interface Editor {
   setDoc(text: string): void;
   getDoc(): string;
   focus(): void;
+  /// Porta la vista su un offset in **byte UTF-8** del documento (es. l'inizio
+  /// di un heading da `ViewUpdate::Reveal`). Converte al volo byte→code unit.
+  revealByteOffset(byteOffset: number): void;
 }
 
 /// Crea l'editor. `onChange` è invocato a ogni modifica fatta dall'utente
@@ -47,5 +51,16 @@ export function createEditor(
     },
     getDoc: () => view.state.doc.toString(),
     focus: () => view.focus(),
+    revealByteOffset(byteOffset: number) {
+      const pos = Math.min(
+        byteToCharIndex(view.state.doc.toString(), byteOffset),
+        view.state.doc.length,
+      );
+      view.dispatch({
+        selection: { anchor: pos },
+        effects: EditorView.scrollIntoView(pos, { y: "start" }),
+      });
+      view.focus();
+    },
   };
 }

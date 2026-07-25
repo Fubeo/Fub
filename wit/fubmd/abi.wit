@@ -231,6 +231,7 @@ interface format {
 /// Protocollo di UI dichiarativa (`UiNode`).
 interface ui {
     use json.{json};
+    use model.{span};
 
     type action-id = string;
 
@@ -288,10 +289,18 @@ interface ui {
         action: action-id,
         payload: json,
     }
+    record view-update-reveal {
+        doc-id: string,
+        span: span,
+    }
     variant view-update {
         replace(ui-tree),
         none,
         navigate(string),
+        /// Apri (se serve) e porta la vista su un intervallo del documento:
+        /// `span` è in byte UTF-8, chi disegna lo mappa sull'editor. Usato
+        /// dall'outline per saltare a un heading.
+        reveal(view-update-reveal),
     }
 }
 
@@ -385,7 +394,7 @@ interface command {
 /// Ricerca e backlink (`IndexProvider`).
 interface index {
     use json.{json};
-    use model.{doc-id, document-model, span};
+    use model.{doc-id, document-model, span, heading};
     use errors.{plugin-error};
 
     record index-query-full-text {
@@ -401,6 +410,10 @@ interface index {
     variant index-query {
         backlinks(doc-id),
         full-text(index-query-full-text),
+        /// La struttura (heading) di un documento, servita dal kernel dai suoi
+        /// modelli: è come una view legge la struttura parsata senza avere un
+        /// `format-provider`. Documento inesistente → outline vuota.
+        outline(doc-id),
         custom(index-query-custom),
     }
     record backlink-ref {
@@ -419,6 +432,7 @@ interface index {
     variant index-result {
         backlinks(list<backlink-ref>),
         search(list<search-hit>),
+        outline(list<heading>),
         custom(json),
     }
 

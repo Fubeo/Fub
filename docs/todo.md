@@ -84,10 +84,21 @@ kernel, ma le implementazioni del trait erano **zero**. Ora ce n'è una vera:
       giro passa dal contratto e non dall'app è
       `crates/fubmd-features/tests/backlinks_view_e2e.rs` (kernel vero,
       `KernelHost` vero: render legge attivo+grafo, il click torna `Navigate`).
-- [ ] Le view di M2 ancora da fare (outline, tag panel, graph-data) **nascono**
-      come `ViewProvider` sullo stesso giro — il vincolo resta: non cablarle
-      ad-hoc "per fare prima". Ora c'è un esempio da imitare (`BacklinksView`) e
-      i comandi generici già esistono.
+- [x] **Outline** è la seconda view vera (`fubmd_features::OutlineView`,
+      2026-07-25) e la prima a usare il **canale metadata**: una view non ha un
+      `FormatProvider`, quindi non può parsare un documento per ricavarne gli
+      heading. Decisione: li chiede al kernel con `IndexQuery::Outline`, servita
+      dai `DocumentModel` che il kernel già tiene — la stessa porta dei backlink,
+      nessun nuovo metodo `HostApi`. Il salto a un heading è un nuovo
+      `ViewUpdate::Reveal { doc_id, span }` (span in byte UTF-8); il frontend lo
+      esegue convertendo byte→code unit UTF-16 (`frontend/src/offsets.ts`, il
+      ponte che §4 dava per M3 — anticipato qui perché lo scroll lo pretendeva, e
+      verificato su testo accentato+emoji). Prova e2e:
+      `crates/fubmd-features/tests/outline_view_e2e.rs`.
+- [ ] Le view M2 restanti (tag panel, graph-data) **nascono** come `ViewProvider`
+      sullo stesso giro — vincolo invariato: non cablarle ad-hoc. Il tag panel
+      riuserà il canale metadata (una query sui tag del vault); il graph-data è
+      fuori da `UiNode` (Canvas), superficie privilegiata dichiarata.
 
 ## 3. Rilievi nuovi di questo giro
 
@@ -139,10 +150,14 @@ kernel, ma le implementazioni del trait erano **zero**. Ora ce n'è una vera:
       di editing; il merge esplicito di M3 è il momento in cui l'invariante del
       buffer sporco va irrobustito (ed eventualmente rappresentato fuori dal
       client).
-- [ ] **Ponte byte UTF-8 ↔ code unit UTF-16** (M3): gli `Span` sono in byte
-      UTF-8, CodeMirror 6 in UTF-16; il ponte non esiste ancora (`offsets.rs`
-      copre solo riga/colonna→byte). Va costruito e testato su testo multibyte
-      **prima** di cablare le decorazioni della live-preview.
+- [~] **Ponte byte UTF-8 ↔ code unit UTF-16** (M3): gli `Span` sono in byte
+      UTF-8, CodeMirror 6 in UTF-16. La direzione **byte→code unit** ora esiste
+      (`frontend/src/offsets.ts`, `byteToCharIndex`), tirata avanti dallo scroll
+      dell'outline e verificata su testo accentato+emoji. Restano per M3 la
+      direzione inversa (code unit→byte, per mappare le selezioni dell'editor) e
+      soprattutto un **test cablato in CI**: la verifica di `offsets.ts` oggi è
+      stata fatta a mano (manca ancora l'harness frontend, §3), e le decorazioni
+      della live-preview non vanno cablate prima che quel test esista.
 - [ ] Cosmetico: chi ha già aperto un vault con una versione precedente si
       ritrova `.fubmd-data/index/` orfana (l'indice si è spostato nello spazio
       dati del plugin). È stato derivato e si può cancellare a mano; non vale una

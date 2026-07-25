@@ -34,9 +34,15 @@ Tipi di supporto: `Axis { Row, Column }`, `Intent { Neutral, Primary, Danger }`
 3. Il provider risponde con `ViewUpdate`:
    - `Replace { root }` — rimpiazza l'intero albero della view;
    - `None` — nessun cambiamento;
-   - `Navigate { doc_id }` — chiede al core di aprire un documento.
+   - `Navigate { doc_id }` — chiede al core di aprire un documento;
+   - `Reveal { doc_id, span }` — apri (se serve) e porta la vista su un
+     intervallo del documento; `span` è in byte UTF-8, il frontend lo mappa
+     sull'editor col ponte in `frontend/src/offsets.ts`.
 
-Questo giro è già cablato per i backlink (l'azione `open:<DocId>` → navigazione).
+Questo giro è cablato nel renderer generico (`mountView` in `main.ts`) e servito
+dai comandi `render_view`/`view_action`/`set_active_document`. Lo esercitano i
+backlink (`open:<DocId>` → `Navigate`) e l'outline
+(`reveal:<start>:<end>` → `Reveal` sull'heading).
 
 ## La regola dell'escape hatch — e il confine di fiducia
 
