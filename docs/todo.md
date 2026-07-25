@@ -13,6 +13,16 @@ il secondo **forme sbagliate di pezzi che ci sono già** — e sono proprio quel
 che il freeze di M4 rende definitive, perché una firma esistente si cambia solo
 con una migrazione.
 
+Un terzo giro ha aggiunto §§1.14–1.20, §§2.15–2.17, §§3.9–3.11 e §4.8, ed è di
+nuovo il secondo tipo: **enum chiusi troppo presto** (le superfici della UI, i
+tipi di evento, le opzioni di parse), **primitive che non esistono** (modificare
+un pezzo di documento invece di riscriverlo, annullare un'operazione) e
+**cuciture che perdono** (il montaggio dentro un comando Tauri, il dialogo di
+sistema importato da `main.ts`). Il criterio per distinguerle dalle voci dei
+primi due giri: qui non manca una capacità, manca il *posto* dove una famiglia
+intera di FEATURES potrebbe atterrare — e finché non c'è, ogni voce di quella
+famiglia si ritaglia il proprio.
+
 ## Il criterio
 
 FEATURES.md è impossibile da implementare a mano una voce alla volta. È
@@ -59,6 +69,19 @@ Quindi il lavoro infrastrutturale è di tre tipi, in quest'ordine di urgenza:
 | 24.2 error reporting, 25.2 localizzazione, 16.3 retry | errori tipizzati al confine | i 28 comandi restituiscono `Result<_, String>`: la shell indovina (`main.ts:856`) |
 | 27.3 test utilities, 21.1 moduli Suite | un SDK usabile da fuori | `MemoryHost` è `#[cfg(test)]` dentro `fubmd-features` (`features/src/lib.rs:31`) |
 | 2.2 config, 27.4 upgrade migration | versione di schema sui formati persistiti | ce l'ha il solo indice di ricerca (`search.rs:59`), che è **derivato** |
+| 20.1 ribbon/status bar/menu/settings tab, 11-12 database e canvas, 7.3 grafo | superfici di UI oltre le sidebar | `ViewPlacement` ha **3 varianti** (`traits.rs:195`) e l'area principale non è nel contratto |
+| 11.2 viste multiple, 8.3 viste salvate, 9.2 query embed, 3.3 split | view **istanziabili** con parametri | `views()` è un elenco statico e `view_owner` risolve per id (`workspace.rs:1196`) |
+| 4.3, 7.2, 8.2, 10.1, 11.3, 16.1, 19.2, 22.2 | modificare **un pezzo** di documento | esiste solo `write_document(id, source)`: ogni modifica riscrive il file intero |
+| 4.2 undo illimitato, 11.3, 16.3, 17.3 rollback, 3.3 undo toast | un proprietario dell'undo | vive solo in CodeMirror, su **un** `EditorView` riusato per tutte le note |
+| 16.2 trigger, 18 sync, 19.2 collaborazione | origine e causalità sugli eventi | `DocumentChanged { id }` non dice chi ha scritto: la shell indovina (`main.ts:1360`) |
+| 21.2 moduli Suite che si parlano, 24.1 vault grandi | abbonamento a grana fine | maschera su 8 `EventKind`; a `Event::Custom` ci si abbona **tutto o niente** |
+| 5.2 (~50 estensioni), 6.2 per nota/cartella | opzioni di parse aperte | `ParseContext` sono **due booleani** (`format.rs:41`) |
+| 12 canvas, 11.4 CSV/JSON, 13.2 PDF, 2.3 encoding | documenti non-testo | `parse(source: &str)` e `Vault::read -> String`: un formato binario non entra |
+| 27.1 CLI, 27.2 API locale, 26.2-26.3 mobile/PWA, 27.4 e2e | un montaggio riusabile | il composition root è dentro `#[tauri::command] open_vault` (`app/lib.rs:109`) |
+| 3.1 ignore, 3.2 nascosti, 9.1, 18.1, 23.2 esclusioni | politica di esclusione come dato | `IGNORED_DIRS` è una costante di compilazione (`vault.rs:20`) |
+| 9.2 query builder/explain, 9.1 operatori e faccette | la query come AST nel contratto | `FullText { query: String }` va dritta al `QueryParser` di tantivy |
+| 28 settings, 8.2 proprietà, 11.3 editing, 19.3 form | riconciliazione e **chiave** dei nodi | `mountView` fa `innerHTML = ""` a ogni ridisegno (`main.ts:1198`): un input perde il focus |
+| 3.3 workspace salvabili, 8.3 viste salvate, 20.1 settings | tre stati distinti (settings/vista/layout) | nessuno dei tre ha un contenitore: `storage_*` è volatile e a chiave→valore |
 
 ---
 
@@ -308,6 +331,137 @@ database), 16.3 (undo delle automazioni), 17.3 (rollback, resume), 24.1.
       contratto: finché il modello non ha un canale, il secondo livello di
       decorazione del §3.7 resta un'intenzione.
 
+### 1.14 Le superfici della UI sono tre, e chiuse
+
+- [ ] **`ViewPlacement` deve smettere di essere un enum a tre casi**:
+      `LeftSidebar`, `RightSidebar`, `Bottom` (`abi/traits.rs:195`) sono tutto
+      ciò che un provider può occupare. Il capitolo 20.1 chiede alla lettera
+      *ribbon*, *status bar*, *settings tab*, *menu* e *context menu* di
+      plugin: cinque superfici che oggi non hanno nome nel contratto, quindi
+      cinque cose che una feature ufficiale può cablare nella shell e un plugin
+      no.
+- [ ] **L'area principale non esiste nel contratto**: l'editor è cablato in
+      `main.ts` e nessun provider può prendersi quello spazio. È lì che vivono
+      database (11), canvas e slide (12), grafo (7.3), viste task (10.3),
+      dashboard (11.5), calendario (10.4) — cioè i capitoli più grossi di
+      FEATURES. La prova che il buco è reale è già in repo: il grafo è uscito
+      con un comando bespoke (`graph_data`, `app/lib.rs:642`) e un renderer
+      privato (`graph.ts`). Non perché il grafo sia speciale — perché **non
+      c'era un posto dove metterlo**. Con tre placement, ogni capitolo grande
+      ripete quella scappatoia.
+- [ ] **Superficie ≠ disegno**: allargare `ViewPlacement` (o sostituirlo con un
+      `ViewSurface` che nomini area principale, modale, status bar, ribbon,
+      menu contestuale, scheda di impostazioni) è ciò che dà l'**ancoraggio**;
+      cosa ci si disegni dentro è il `UiNode::Custom` del §1.2. Le due voci
+      vanno decise insieme, o si ottiene metà del varco.
+
+*Sblocca:* 20.1 per intero, 11 (database), 12 (canvas, diagrammi,
+presentazioni), 7.3 (il grafo smette di essere privilegiato), 10.3-10.4, 11.5,
+28 (le impostazioni come scheda, non come finestra dell'app).
+
+### 1.15 Le view non si istanziano
+
+- [ ] **`ViewSpec` con parametri e identità d'istanza**: `views()` restituisce
+      un elenco **statico** e `view_owner` risolve per id esatto
+      (`workspace.rs:1196`). Non c'è modo di dire "questa view, con questo
+      parametro". Servono a 11.2 (viste multiple per database), 8.3 (viste
+      salvate, smart folder), 9.2 (query embed, query salvate, parametriche),
+      11.5 (una dashboard per progetto), 12 (un canvas per file), 10.3 (task
+      per tag / per cartella / per data: la stessa view, filtri diversi).
+- [ ] **È l'altra metà del §1.9**: quello risolve *quale documento* guarda una
+      view, questo *quale istanza* è. Due split con due pannelli backlink hanno
+      bisogno di entrambe le risposte, e oggi non ne hanno nessuna.
+- [ ] Firma da decidere ora: `render_view(view, instance, host)` +
+      `open_view(spec, params)` come esito di comando (§1.1). Dopo il freeze è
+      una migrazione di **ogni** `ViewProvider` scritto nel frattempo.
+
+### 1.16 Modificare un pezzo di documento — la primitiva che non c'è
+
+- [ ] **`HostApi::write_document(id, source)` è l'unico modo di cambiare un
+      documento**, nel contratto, nel kernel (`workspace.rs:406`) e sull'IPC:
+      non esiste `apply_edit(doc, [(span, testo)])` da nessuna parte. Ogni
+      modifica riscrive il file intero.
+- [ ] **Il costo è già visibile**: una scrittura del kernel torna alla shell
+      come testo nuovo e `setDoc` sostituisce tutto il documento
+      (`editor.ts:74`) — cursore, selezione e cronologia di undo saltano;
+      `reloadIfClean` e il confronto `editor.getDoc() !== source`
+      (`main.ts:1360`) esistono per limitare i danni, non per risolverli.
+- [ ] **Ora moltiplicalo**: 4.3 (commenti e highlight inline), 7.2 (fix
+      automatico dei link rotti, bulk fix), 8.2 (scrivere una proprietà), 10.1
+      (spuntare un task), 11.3 (editing inline), 16.1 (template con cursor
+      placement), 19.2 (suggestions, track changes), 22.2 (riscrittura AI della
+      selezione), 18.1 (merge, CRDT). Tutte riscriverebbero il file intero, con
+      la stessa perdita, e **nessuna potrebbe comporsi con un'altra**.
+- [ ] **La firma deve dire su cosa si applica**: una lista di `(Span, String)`
+      più il riferimento alla revisione su cui è stata calcolata, o due edit
+      concorrenti (un'automazione e l'utente che scrive) si sovrascrivono in
+      silenzio. È la stessa primitiva su cui poggiano §1.12 (il lotto è una
+      lista di edit), §1.9 (la selezione è uno `Span`) e §1.17 (l'inverso di un
+      edit è un edit).
+
+### 1.17 L'undo non ha un proprietario
+
+- [ ] **Oggi l'undo vive solo dentro CodeMirror**, su un **unico** `EditorView`
+      riusato per tutte le note (`editor.ts:50`): dopo un cambio nota un Ctrl-Z
+      riporta il contenuto della nota *precedente*. È un bug, ma il bug è il
+      sintomo: non c'è un modello di undo, c'è l'undo di una libreria.
+- [ ] **Nessuna mutazione del kernel è annullabile**: rename con riscrittura di
+      N sorgenti (`workspace.rs:696`), ripristino di versione, e domani bulk
+      fix, automazioni, import. FEATURES lo chiede in cinque punti: 4.2 (undo
+      illimitato, cronologia per sessione), 3.3 (undo toast), 11.3 (undo
+      database), 16.3 (undo delle automazioni), 17.3 (rollback dell'import).
+- [ ] **Decidere i due livelli e chi vince dove**: undo del *testo* nell'editor
+      (per-documento, e per-pane col §1.9) e undo delle *operazioni* nel kernel
+      (il journal del §2.5 come meccanismo, l'inverso dichiarato dal lotto del
+      §1.12). È di forma: senza la decisione, `CommandOutcome` e il lotto
+      nascono privi del campo con cui un'operazione dichiara di essere
+      annullabile.
+
+### 1.18 Gli eventi non dicono chi li ha causati
+
+- [ ] **`Event::DocumentChanged { id }` non porta origine né causalità**
+      (`abi/event.rs:17`). La shell già ci gira intorno: confronta il testo per
+      non resettare il cursore sull'eco del proprio salvataggio
+      (`main.ts:1360`).
+- [ ] **Con i trigger diventa un requisito**: 16.2 chiede trigger su creazione,
+      modifica, salvataggio, tag aggiunto, proprietà cambiata, task completato;
+      18 il sync; 19.2 la collaborazione. Un'automazione su-modifica che scrive
+      si richiama da sola, e l'unica difesa oggi è il `DISPATCH_BUDGET` che
+      tronca (`workspace.rs:100`) — una rete di sicurezza, non una semantica.
+- [ ] **Un campo `origin` (utente, watcher, plugin `id`, kernel) e l'id di
+      lotto del §1.12**: costano un campo adesso, e sono ciò che permette a un
+      handler di dire "questa l'ho scritta io, non reagisco" senza tenere una
+      contabilità privata.
+
+### 1.19 L'abbonamento agli eventi non filtra
+
+- [ ] **La maschera è un `Vec<EventKind>` su 8 varianti**, e a
+      [`Event::Custom`] ci si abbona a grana `EventKind::Custom`
+      (`abi/event.rs:42`, consegna in `workspace.rs:1288`): con i moduli
+      FubSuite che si parlano fra loro (21.2), ogni handler si sveglia per
+      **ogni** custom di **ogni** plugin.
+- [ ] **Manca la grana del soggetto**: nessuno può abbonarsi a "i cambiamenti
+      di questa cartella" o "di questo documento", quindi l'evento più caldo
+      (`DocumentChanged`) sveglia tutti, N feature × M documenti. Prefisso di
+      topic per i custom e filtro per documento/cartella per gli altri: la
+      forma della maschera è contratto, e va allargata prima che le famiglie di
+      provider si moltiplichino.
+
+### 1.20 `ParseContext` è chiuso, e `parse` vuole per forza del testo
+
+- [ ] **Due booleani** (`parse_tags`, `parse_wikilinks`, `format.rs:41`) contro
+      le ~50 estensioni sintattiche del capitolo 5.2 — callout, footnote,
+      definition list, math, mermaid, apici/pedici, tabs, timeline — ognuna
+      accendibile per vault (28) o per nota (6.2, classi da frontmatter). Con
+      questa forma ogni estensione è un campo nuovo nel contratto: una minor a
+      testa. Da decidere ora se porta una mappa di opzioni con namespace, come
+      `IndexQuery::Custom`.
+- [ ] **`parse(source: &str)` e `Vault::read -> String` escludono i documenti
+      non-testo**: un `.canvas`, un CSV grande, un PDF trattato come documento
+      (12, 11.4, 13.2) o un file con encoding da rilevare (2.3) non entrano. Il
+      §2.2 dà `VaultEntry`/asset lato kernel; questo è il varco nel
+      **contratto**, e `FormatProvider` è una firma che M4 congela.
+
 ---
 
 ## 2. Kernel — da "un vault markdown locale" a piattaforma
@@ -491,6 +645,51 @@ auto-spostamento), 6.2 (CSS per cartella), 11.3 (database da cartella), 19.2
       spazio dati proprio, migrazione della chiave lato kernel sull'evento
       `DocumentRenamed`, stessa disciplina del resto.
 
+### 2.15 Il montaggio dell'app vive dentro un comando Tauri
+
+- [ ] **`open_vault` (`app/lib.rs:109-208`) È il composition root**: registry
+      dei formati, indice di ricerca, versioning, le tre view, il watcher, il
+      ponte eventi e la sessione si montano lì dentro, in un
+      `#[tauri::command]`, in un crate che dipende da tauri e notify.
+- [ ] **Ma quel montaggio ha già cinque clienti previsti**: la CLI (27.1),
+      l'API/REST locale (27.2), l'headless degli e2e (§4.4 e 27.4), il mobile
+      (26.2) e il PWA (26.3). Nessuno di loro può riusarlo, e ognuno finirebbe
+      per ricopiarlo — cioè per avere una propria idea di quali feature
+      esistono e in che ordine si registrano.
+- [ ] **Serve un crate `fubmd-host`** (sessione, registry del §2.3, runner dei
+      job, watcher dietro un trait, storage del §2.1) con `fubmd-app` ridotto a
+      colla Tauri: comandi IPC, dialoghi, finestre. È il §4.7 visto dall'altro
+      lato — quello divide le feature, questo separa *chi le monta* da *chi
+      disegna*.
+
+### 2.16 La politica di esclusione è una costante di compilazione
+
+- [ ] **`IGNORED_DIRS` (`vault.rs:20`) è un `&[&str]` nel sorgente**, e la
+      regola sta bene in un punto solo (`is_ignored_name`, usata da scansione e
+      watcher). Il problema non è dove sta: è che è **una** politica quando ne
+      servono cinque, e come **codice** quando serve come dato per-vault (§1.3).
+- [ ] **Le cinque, tutte su uno stesso albero**: ignore configurabile e
+      `.gitignore` (3.1), file nascosti visibili su richiesta (3.2), esclusione
+      cartelle dalla ricerca (9.1), esclusione dal sync (18.1), esclusione dal
+      contesto AI (23.2). Sono componibili e hanno scopi diversi: o nascono
+      come un `IgnorePolicy` valutabile e parametrizzato per scopo, o ognuna
+      verrà cablata dove capita, e "questa cartella è esclusa" significherà
+      cinque cose diverse.
+- [ ] È il gemello del §2.6 sul lato **quali file**, non **quali nomi**.
+
+### 2.17 La query è una stringa in un linguaggio di terzi
+
+- [ ] **`IndexQuery::FullText { query: String }` finisce dritta nel
+      `QueryParser` di tantivy** (`search.rs`), e la shell interpreta l'errore
+      come "Query incompleta" (`main.ts:1131`): la sintassi di ricerca che
+      l'utente digita **è** quella di una dipendenza.
+- [ ] Il §1.6 chiede di aggiungere ambito e faccette; il punto più profondo è
+      che finché la query è una stringa opaca non hanno su cosa poggiare né il
+      query builder visuale (9.2), né le query salvate/parametriche/preparate,
+      né l'explain plan e il profiler (9.2), né la possibilità di cambiare
+      motore. Serve un **AST di query nel contratto**, con il full-text come
+      foglia e la stringa libera confinata dentro quella foglia.
+
 ---
 
 ## 3. Shell — da `main.ts` a piattaforma UI
@@ -581,6 +780,50 @@ dove il debito si vede a occhio nudo.
       c'è, "le decorazioni semantiche vengono dal modello" resta un'intenzione e
       la sintassi nuova continua a nascere due volte.
 
+### 3.9 Il view host ridisegna tutto, e i nodi non hanno una chiave
+
+- [ ] **`mountView` fa `target.innerHTML = ""` e ricostruisce**
+      (`main.ts:1198`), e `renderUiNode` crea elementi nuovi a ogni giro
+      (`ui.ts`). Oggi si nota poco: le view sono liste in sola lettura. Con gli
+      input del §1.2 è fatale — un campo di testo perde focus e contenuto a
+      **ogni** `IndexUpdated`, cioè a ogni salvataggio.
+- [ ] **La chiave è contratto, quindi è P0**: il §1.2 nomina
+      `ViewUpdate::Patch { path, node }`, ma un patch indirizzato per *path* si
+      rompe al primo riordino di lista — ed è esattamente il caso che il §1.2
+      cita, il pannello task con 500 righe. Serve una chiave stabile sui nodi
+      (`UiNode.key`), che è ciò su cui un riconciliatore può lavorare.
+- [ ] **Lato shell**: un riconciliatore che aggiorna invece di ricostruire, e
+      la conservazione dello stato di vista (focus, scroll, selezione, sezioni
+      aperte) attraverso il ridisegno. Senza, il §1.2 consegna nodi di input
+      che nella pratica non si possono usare.
+
+### 3.10 Tre stati diversi, zero contenitori
+
+- [ ] **Un `ViewProvider` non ha dove tenere il proprio stato di vista**:
+      scroll, sezioni collassate, filtro corrente, tab attiva. `storage_*` è
+      volatile e a chiave→valore (e senza namespace per-view), `data_*` è per i
+      dati che durano.
+- [ ] **Sono tre cose distinte, e vanno decise insieme o nasceranno con tre
+      meccanismi incompatibili**: le **impostazioni** (durano e viaggiano col
+      vault — §1.3), lo **stato di vista/sessione** (per-macchina, per-pane —
+      §1.9), il **layout** (salvabile e ripristinabile: 3.3 chiede *workspace
+      salvabili*, *switch rapido*, *restore layout all'avvio*). Oggi lo stato di
+      vista della shell sta in `localStorage` (spazio attivo, cartelle
+      espanse), quello dei provider non sta da nessuna parte, e il layout non
+      esiste.
+
+### 3.11 La cucitura con l'host perde da `main.ts`
+
+- [ ] **`api.ts` è l'unica cucitura verso Tauri — tranne `main.ts:2`**, che
+      importa `@tauri-apps/plugin-dialog` per le conferme e il file picker.
+      Basta una riga perché la shell smetta di essere portabile.
+- [ ] **Serve un `host.ts`** (o l'allargamento di `api.ts`) che copra dialoghi,
+      notifiche, clipboard, filesystem e finestre: è il prerequisito del PWA
+      (26.3), del mobile (26.2) e degli e2e della shell (§4.4), che girano
+      contro un host finto. La regola da presidiare con un test è semplice:
+      **nessun modulo della shell importa `@tauri-apps` fuori dalla cucitura**
+      — la versione UI della dieta dell'IPC del §4.2.
+
 ---
 
 ## 4. Presidi e tooling — perché il resto non marcisca
@@ -653,6 +896,21 @@ definitions, plugin linting), 21.1 (moduli Suite con API condivise).
       per bundle (o almeno una cargo feature per bundle, con tantivy dietro la
       sua) è il minimo perché il confine sia reale.
 
+### 4.8 Il contratto si scrive quattro volte a mano
+
+- [ ] **Ogni tipo nuovo tocca quattro posti**: Rust (`fubmd-abi`), WIT
+      (`wit/fubmd/abi.wit`), arena (`abi/src/arena.rs`, per i tipi ricorsivi) e
+      mirror TS (`frontend/src/api.ts` + la fixture). Che non divergano è
+      presidiato — `wit_conformance.rs` parsa il WIT e confronta nomi e tipi
+      nelle due direzioni, ed è uno dei test migliori del repo — ma il presidio
+      verifica il costo, non lo riduce.
+- [ ] **Il conto delle P0 lo rende un collo di bottiglia**: il §1.2 porta una
+      ventina di varianti `UiNode` nuove (in gran parte ricorsive, quindi con
+      l'arena da estendere), più §1.5, §1.6, §1.7, §1.14 e §1.15. Il §4.1 chiede
+      di generare il mirror TS; la stessa domanda va posta **ora** per WIT e
+      arena — generare l'uno dall'altro, o almeno gli scheletri — o la
+      generazione arriverà dopo il lavoro che doveva alleggerire.
+
 ---
 
 ## 5. Debito riportato dal quarto audit
@@ -680,23 +938,34 @@ Voci ancora aperte, con il loro milestone.
 (task e ancore), §1.6 `IndexQuery`, §1.7 trait import/export, §1.8 decisione
 sulle stringhe, §1.9 contesto della view (pane e selezione), §1.10 identità del
 documento, §1.11 errori tipizzati, §1.12 il lotto, §1.13 canale del rendering.
-Sono tutte **decisioni di forma**: l'implementazione può seguire, la firma no.
+Dal terzo giro, con lo stesso statuto: §1.14 superfici della UI, §1.15 view
+istanziabili, §1.16 la primitiva di edit, §1.17 undo, §1.18 origine degli
+eventi, §1.19 grana dell'abbonamento, §1.20 `ParseContext` e parse non-testo,
+§2.17 la query come AST, e la **chiave dei nodi** del §3.9 (che è shell nel
+titolo ma contratto nella firma). Sono tutte **decisioni di forma**:
+l'implementazione può seguire, la firma no.
 
 **P1 — insieme a M3** (l'editor e la palette sono i primi clienti del §1):
 §1.3 impostazioni, §2.3 registry + runner dei job, §2.8 tabella dei provider
-unica, §2.9 disattivazione, §2.10 permessi e manifest, §3.1 smontaggio di
-`main.ts`, §3.2 registro comandi, §3.4 sanitizzazione/CSP, §3.7 editor, §3.8
-decisione sui due parser. Più §4.1, §4.2, §4.6 (SDK) e §4.7 (crate per bundle),
-che vanno messi *mentre* la superficie cresce, non dopo: §2.8-§2.10 in
-particolare vanno **prima** dei provider nuovi del §1, o li si scrive tre volte.
+unica, §2.9 disattivazione, §2.10 permessi e manifest, §2.15 il crate host,
+§3.1 smontaggio di `main.ts`, §3.2 registro comandi, §3.4 sanitizzazione/CSP,
+§3.7 editor, §3.8 decisione sui due parser, §3.9 (la metà shell: il
+riconciliatore), §3.11 la cucitura con l'host. Più §4.1, §4.2, §4.6 (SDK), §4.7
+(crate per bundle) e §4.8 (generazione del contratto), che vanno messi *mentre*
+la superficie cresce, non dopo: §2.8-§2.10 in particolare vanno **prima** dei
+provider nuovi del §1, o li si scrive tre volte, e §4.8 va **prima** delle P0
+del terzo giro, o quelle si scrivono quattro volte.
 
 **P2 — quando la scala lo chiede** (nessuno blocca il contratto):
 §2.1 `VaultStorage`, §2.2 allegati, §2.5 durabilità, §2.6 politiche path/testo,
 §2.7 sessioni multiple, §2.11 cartelle, §2.12 versioni di schema, §2.13 canale
-della lista documenti, §2.14 sidecar dell'organizzazione, §3.3 temi/a11y,
-§3.5 notifiche, §3.6 virtualizzazione, §4.3-§4.5. Due avvertenze: §2.12 costa un
-campo adesso e un formato da indovinare dopo, quindi conviene anticiparlo a ogni
-formato che nasce; §2.11 e §2.13 sono lo stesso lavoro visto da due lati.
+della lista documenti, §2.14 sidecar dell'organizzazione, §2.16 ignore policy,
+§3.3 temi/a11y, §3.5 notifiche, §3.6 virtualizzazione, §3.10 i tre stati,
+§4.3-§4.5. Tre avvertenze: §2.12 costa un campo adesso e un formato da
+indovinare dopo, quindi conviene anticiparlo a ogni formato che nasce; §2.11 e
+§2.13 sono lo stesso lavoro visto da due lati; §3.10 va deciso *insieme* a §1.3
+e §1.9, anche se si implementa dopo, o i tre stati nascono con tre meccanismi
+che non si parlano.
 
 Nota di rotta: le voci con l'effetto leva più alto sono **§1.1 (comandi)**,
 **§1.2 (input in `UiNode`)** e **§2.3 (registry + job)** — insieme spostano dal
@@ -707,3 +976,13 @@ e 22 non potrà mai essere un provider; **§1.12 (il lotto)**, prerequisito
 silenzioso di bulk fix, import, automazioni e database; e **§2.8 + §2.10**, che
 sono il posto dove ogni famiglia di provider futura atterra senza portarsi
 dietro la propria copia della disciplina.
+
+Dal terzo giro se ne aggiungono due dello stesso peso. **§1.14 (le superfici)**:
+senza area principale, status bar, ribbon e menu nel contratto, i capitoli 11,
+12, 7.3, 10.3 e 11.5 — cioè la metà di FEATURES per volume — non hanno un posto
+dove atterrare, e ognuno ripeterà la scappatoia che il grafo ha già fatto.
+**§1.16 (la primitiva di edit)**: finché l'unico modo di cambiare un documento è
+riscriverlo tutto, ogni feature che tocca il testo perde cursore, selezione e
+undo, e due di loro non si possono comporre — è il prerequisito silenzioso del
+§1.9 (la selezione), del §1.12 (un lotto è una lista di edit) e del §1.17
+(l'inverso di un edit è un edit).
