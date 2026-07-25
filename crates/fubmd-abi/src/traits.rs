@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::event::{Event, EventMask};
+use crate::format::FormatDescriptor;
 use crate::model::{DocId, DocumentModel, Heading, Span};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
@@ -545,6 +546,87 @@ pub trait IndexProvider: Send + Sync {
 pub trait EventHandler: Send + Sync {
     fn subscribed(&self) -> EventMask;
     fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError>;
+}
+
+// ---------------------------------------------------------------------------
+// Import/export: migrazione dati fra formati
+// ---------------------------------------------------------------------------
+
+/// Destinazione per l'export di una selezione di documenti.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportTarget {
+    pub id: String,
+    pub name: String,
+    /// Opzioni per il rendering (tema, formato carta, sanitizzazione, etc.).
+    pub options: serde_json::Value,
+}
+
+/// Esito di un'operazione di import: cosa è entrato nel vault e in che stato.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportReport {
+    /// Quanti documenti sono stati importati.
+    pub count: u32,
+    /// Log degli eventi durante l'import (errori, avvisi, info).
+    pub log: Vec<ImportLogEntry>,
+    /// Identificatore del batch, per rollback futuro.
+    pub batch_id: String,
+    /// Stato dell'import: completato, con errori, interrotto.
+    pub status: ImportStatus,
+}
+
+/// Una voce nel log di import.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "level", rename_all = "snake_case")]
+pub enum ImportLogEntry {
+    Info { message: String },
+    Warning { message: String },
+    Error { message: String },
+}
+
+/// Esito finale di un import.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportStatus {
+    /// Tutto OK, niente fallito.
+    #[default]
+    Success,
+    /// Alcuni documenti importati, alcuni errori.
+    PartialSuccess,
+    /// Nulla importato o import interrotto.
+    Failed,
+}
+
+/// Un provider che sa importare documenti da una sorgente.
+pub trait ImportProvider: Send + Sync {
+    /// Questo provider sa leggere il formato descritto? Es: riconosce il MIME
+    /// type o l'estensione.
+    fn can_handle(&self, descriptor: &FormatDescriptor) -> bool;
+    /// Importa documenti dalla sorgente (testo, file, URL, etc.) nel vault.
+    /// `source` è il payload grezzo (es: contenuto di un file, stringa,
+    /// JSON di metadati). Restituisce il rapporto di cosa è entrato e
+    /// in che stato.
+    fn import(
+        &mut self,
+        descriptor: &FormatDescriptor,
+        source: &str,
+        host: &mut dyn HostApi,
+    ) -> Result<ImportReport, PluginError>;
+}
+
+/// Un provider che sa esportare documenti in una destinazione.
+pub trait ExportProvider: Send + Sync {
+    /// Quali destinazioni questo provider sa offrire? Es: PDF, HTML, Pandoc,
+    /// sito statico, etc.
+    fn targets(&self) -> Vec<ExportTarget>;
+    /// Esporta una selezione di documenti verso una destinazione.
+    /// `doc_ids` è la lista di cosa esportare. Ritorna il payload
+    /// (file, testo, JSON, etc.) pronto per scrivere o caricare.
+    fn export(
+        &mut self,
+        doc_ids: Vec<DocId>,
+        target: &ExportTarget,
+        host: &mut dyn HostApi,
+    ) -> Result<Vec<u8>, PluginError>;
 }
 
 // ---------------------------------------------------------------------------

@@ -34,8 +34,9 @@ pub use model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
 };
 pub use traits::{
-    BacklinkRef, CommandProvider, CommandSpec, DocumentMetadata, EventHandler, FullTextScope,
-    GraphDirection, HealthCheckKind, HealthIssue, HostApi, IndexProvider, IndexQuery,
+    BacklinkRef, CommandProvider, CommandSpec, DocumentMetadata, EventHandler, ExportProvider,
+    ExportTarget, FullTextScope, GraphDirection, HealthCheckKind, HealthIssue, HostApi,
+    ImportLogEntry, ImportProvider, ImportReport, ImportStatus, IndexProvider, IndexQuery,
     IndexResult, NeighborRef, Pagination, PaginatedResult, Plugin, PluginManifest, PropertyValue,
     SearchHit, ViewProvider, ViewSpec,
 };
