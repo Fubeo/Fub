@@ -1,0 +1,120 @@
+{
+  "UiNode": [
+    {
+      "node": "stack",
+      "dir": "column",
+      "gap": 8,
+      "children": []
+    },
+    {
+      "node": "text",
+      "content": "t"
+    },
+    {
+      "node": "heading",
+      "level": 2,
+      "content": "h"
+    },
+    {
+      "node": "list",
+      "items": []
+    },
+    {
+      "node": "list_item",
+      "title": "ti",
+      "subtitle": "s",
+      "action": "a"
+    },
+    {
+      "node": "button",
+      "label": "b",
+      "intent": "primary",
+      "action": "a"
+    },
+    {
+      "node": "html",
+      "html": "<i>"
+    },
+    {
+      "node": "web_view",
+      "url": "u",
+      "height": 100
+    }
+  ],
+  "ViewUpdate": [
+    {
+      "kind": "replace",
+      "root": {
+        "node": "text",
+        "content": "t"
+      }
+    },
+    {
+      "kind": "none"
+    },
+    {
+      "kind": "navigate",
+      "doc_id": "d"
+    },
+    {
+      "kind": "reveal",
+      "doc_id": "d",
+      "span": {
+        "start": 0,
+        "end": 3
+      }
+    }
+  ],
+  "KernelEvent": [
+    {
+      "type": "vault_opened",
+      "root": "r"
+    },
+    {
+      "type": "document_changed",
+      "id": "a"
+    },
+    {
+      "type": "document_removed",
+      "id": "a"
+    },
+    {
+      "type": "document_renamed",
+      "from": "a",
+      "to": "b"
+    },
+    {
+      "type": "index_updated"
+    },
+    {
+      "type": "job_done",
+      "id": 1,
+      "job": "j",
+      "result": {
+        "Ok": null
+      }
+    },
+    {
+      "type": "overflow",
+      "dropped": 2
+    },
+    {
+      "type": "custom",
+      "topic": "p/x",
+      "payload": null
+    }
+  ],
+  "Span": [
+    {
+      "start": 3,
+      "end": 7
+    }
+  ],
+  "VersionRef": [
+    {
+      "ts": 1,
+      "hash": 2,
+      "size": 3
+    }
+  ]
+}

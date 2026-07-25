@@ -108,14 +108,20 @@ kernel, ma le implementazioni del trait erano **zero**. Ora ce n'è una vera:
       toccare il test resta verde — ma l'ordine dei casi **è il discriminante
       ABI**. Chiudere il buco prima del freeze: derivare l'ordine atteso
       dall'enum Rust, così un riordino diventa rosso da entrambi i lati.
-- [~] **Drift dei mirror TS↔Rust**: `UiNode`, `ViewUpdate`, `Event`
-      (`KernelEvent`), `Span`, `VersionRef` sono rispecchiati **a mano** in
-      TypeScript. L'**harness frontend ora c'è** (vitest, `npm test` in CI), ma
-      finora copre solo `offsets.ts`: il test che *lega i due lati* dei mirror
-      manca ancora. Il modo robusto è generare fixture dai tipi Rust (serde) e
-      farle validare al lato TS — così un caso di variant aggiunto in Rust e non
-      rispecchiato diventa rosso. Finché non c'è, il confine può divergere in
-      silenzio (stessa lacuna del test gemello di `pageName`).
+- [x] **Drift dei mirror TS↔Rust**: chiuso col meccanismo a **fixture generata
+      dai tipi Rust**. `crates/fubmd-features/tests/ts_mirror.rs` serializza con
+      serde un campione per ogni variante di `UiNode`, `ViewUpdate`,
+      `KernelEvent`/`Event`, `Span`, `VersionRef` e lo confronta con
+      `frontend/src/__fixtures__/mirror-samples.json` (rigenerabile con
+      `UPDATE_MIRROR=1`, e un `match` esaustivo obbliga a campionare le varianti
+      nuove). `frontend/src/mirror.test.ts` prende la stessa fixture e verifica
+      che il mirror TS gestisca ogni discriminante: un `assertNever` scatta a
+      runtime su un caso presente in Rust ma non in TS, e a compile-time obbliga
+      lo `switch` a coprire il tipo. Nessuno dei due lati cambia da solo restando
+      verde — verificato iniettando una variante finta (rossi entrambi). Resta
+      fuori solo il gemello di `pageName` (una funzione, non un tipo:
+      `DocId::page_name` ↔ `pageName`, già allineati e con la loro tabella di
+      casi ostili in `model.rs`).
 - [ ] **UI di produzione = IPC bespoke + canale view generico**: il canale
       core→UI reale è ancora fatto in gran parte di ~24 comandi
       `#[tauri::command]` con tipi propri (`search`, `render_preview`,
