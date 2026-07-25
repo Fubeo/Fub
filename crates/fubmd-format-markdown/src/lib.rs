@@ -11,11 +11,8 @@ mod serialize;
 mod util;
 
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
-use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::{
-    ExportProvider, ExportTarget, FormatError, FormatProvider, HostApi, ImportLogEntry,
-    ImportProvider, ImportReport, ImportStatus, PluginError,
-};
+use fubmd_abi::model::DocumentModel;
+use fubmd_abi::{FormatError, FormatProvider};
 
 /// Provider markdown (dialetto Obsidian).
 #[derive(Default)]
@@ -65,121 +62,6 @@ impl FormatProvider for MarkdownProvider {
 
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
         Ok(serialize::serialize(model))
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Import/export di Markdown
-// ---------------------------------------------------------------------------
-
-/// Provider di import Markdown: legge file markdown e li carica nel vault.
-#[derive(Default)]
-pub struct MarkdownImportProvider;
-
-impl MarkdownImportProvider {
-    pub fn new() -> Self {
-        MarkdownImportProvider
-    }
-
-    pub fn boxed() -> Box<dyn ImportProvider> {
-        Box::new(MarkdownImportProvider)
-    }
-}
-
-impl ImportProvider for MarkdownImportProvider {
-    fn can_handle(&self, descriptor: &FormatDescriptor) -> bool {
-        descriptor.id == "markdown" || descriptor.extensions.iter().any(|e| e == "md" || e == "markdown")
-    }
-
-    fn import(
-        &mut self,
-        _descriptor: &FormatDescriptor,
-        source: &str,
-        _host: &mut dyn HostApi,
-    ) -> Result<ImportReport, PluginError> {
-        // Primo cliente banale: prende il contenuto markdown e lo scrive come
-        // un documento nel vault. Non è una migrazione vera — è il prototipo
-        // che dimostra la firma del trait.
-        // Una migrazione vera (CSV, JSON, Zotero, Obsidian export, etc.)
-        // parsa il source, crea N documenti, gestisce conflitti, etc.
-
-        let mut log = vec![ImportLogEntry::Info {
-            message: "Importazione Markdown avviata".to_string(),
-        }];
-
-        // Fake: in un vero import, qui leggeresti il CSV/JSON/OPML/ZIP e
-        // scriveresti ogni documento via host.write_document().
-        // Per il prototipo, segnaliamo solo che il provider esiste.
-        log.push(ImportLogEntry::Info {
-            message: format!(
-                "Markdown import: {} byte letti",
-                source.len()
-            ),
-        });
-
-        Ok(ImportReport {
-            count: 0,
-            log,
-            batch_id: format!("import-markdown-{}", std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis()),
-            status: ImportStatus::Success,
-        })
-    }
-}
-
-/// Provider di export Markdown: esporta documenti come file markdown.
-#[derive(Default)]
-pub struct MarkdownExportProvider;
-
-impl MarkdownExportProvider {
-    pub fn new() -> Self {
-        MarkdownExportProvider
-    }
-
-    pub fn boxed() -> Box<dyn ExportProvider> {
-        Box::new(MarkdownExportProvider)
-    }
-}
-
-impl ExportProvider for MarkdownExportProvider {
-    fn targets(&self) -> Vec<ExportTarget> {
-        vec![
-            ExportTarget {
-                id: "markdown-folder".to_string(),
-                name: "Cartella Markdown".to_string(),
-                options: serde_json::json!({}),
-            },
-            ExportTarget {
-                id: "markdown-zip".to_string(),
-                name: "ZIP Markdown".to_string(),
-                options: serde_json::json!({}),
-            },
-        ]
-    }
-
-    fn export(
-        &mut self,
-        doc_ids: Vec<DocId>,
-        target: &ExportTarget,
-        host: &mut dyn HostApi,
-    ) -> Result<Vec<u8>, PluginError> {
-        // Primo cliente banale: per ogni documento, leggi il sorgente e
-        // costruisci l'output nel formato richiesto dal target.
-        // Un vero export gestisce la trasformazione, gli asset, lo zip, etc.
-
-        let mut output = String::new();
-        output.push_str(&format!("# Export {} documenti in {}\n\n", doc_ids.len(), target.name));
-
-        for doc_id in doc_ids {
-            let source = host.read_document(&doc_id)?;
-            output.push_str(&format!("## {}\n", doc_id));
-            output.push_str(&source);
-            output.push_str("\n\n");
-        }
-
-        Ok(output.into_bytes())
     }
 }
 

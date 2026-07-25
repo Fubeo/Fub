@@ -66,9 +66,11 @@ use fubmd_abi::model::{
     PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
 };
 use fubmd_abi::traits::{
-    BacklinkRef, CommandOutcome, CommandProvider, CommandSpec, EventHandler, HostApi,
-    IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, Plugin, PluginManifest,
-    PluginPermissions, SearchHit, TagCount, ViewPlacement, ViewProvider, ViewSpec, ABI_VERSION,
+    BacklinkRef, CommandOutcome, CommandProvider, CommandSpec, DocumentProperties, EventHandler,
+    HealthCheck, HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
+    LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
+    PropertyCount, PropertyEntry, PropertyFilter, PropertySort, PropertyTest, SearchHit,
+    SearchScope, TagCount, ViewPlacement, ViewProvider, ViewSpec, ABI_VERSION,
 };
 use fubmd_abi::ui::{ActionId, Axis, Intent, UiAction, UiNode, ViewUpdate};
 
@@ -196,8 +198,31 @@ wit_type! {
     IndexQuery => "index-query",
     IndexResult => "index-result",
     BacklinkRef => "backlink-ref",
+    NeighborRef => "neighbor-ref",
     SearchHit => "search-hit",
     TagCount => "tag-count",
+    Page => "page",
+    LinkDirection => "link-direction",
+    SearchScope => "search-scope",
+    PropertyTest => "property-test",
+    PropertyFilter => "property-filter",
+    PropertySort => "property-sort",
+    PropertyEntry => "property-entry",
+    DocumentProperties => "document-properties",
+    PropertyCount => "property-count",
+    HealthCheck => "health-check",
+    HealthIssue => "health-issue",
+
+    // Le finestre: un solo `Paged<T>` in Rust, un record per istanza nel WIT
+    // (i generici al confine non esistono). L'impl per ciascuna istanza è ciò
+    // che rende impossibile paginarne una nuova senza dichiararla anche là.
+    Paged<BacklinkRef> => "backlinks-page",
+    Paged<SearchHit> => "search-page",
+    Paged<TagCount> => "tags-page",
+    Paged<NeighborRef> => "neighbors-page",
+    Paged<DocumentProperties> => "properties-page",
+    Paged<PropertyCount> => "property-values-page",
+    Paged<HealthIssue> => "vault-health-page",
     PluginManifest => "plugin-manifest",
     PluginPermissions => "plugin-permissions",
 
@@ -1296,14 +1321,68 @@ fn event_kind_name(k: EventKind) -> &'static str {
 
 fn index_query_case(q: &IndexQuery) -> Case {
     match q {
-        IndexQuery::Backlinks { target } => case_ty("backlinks", wit(target)),
-        IndexQuery::FullText { query, limit } => case_rec(
+        IndexQuery::Backlinks { target, page } => case_rec(
+            "backlinks",
+            "index-query-backlinks",
+            vec![("target", wit(target)), ("page", wit(page))],
+        ),
+        IndexQuery::FullText { query, scope, page } => case_rec(
             "full-text",
             "index-query-full-text",
-            vec![("query", wit(query)), ("limit", wit(limit))],
+            vec![
+                ("query", wit(query)),
+                ("scope", wit(scope)),
+                ("page", wit(page)),
+            ],
         ),
         IndexQuery::Outline { doc } => case_ty("outline", wit(doc)),
-        IndexQuery::Tags => case("tags"),
+        IndexQuery::Tags { page } => {
+            case_rec("tags", "index-query-tags", vec![("page", wit(page))])
+        }
+        IndexQuery::Neighbors {
+            doc,
+            direction,
+            depth,
+            page,
+        } => case_rec(
+            "neighbors",
+            "index-query-neighbors",
+            vec![
+                ("doc", wit(doc)),
+                ("direction", wit(direction)),
+                ("depth", wit(depth)),
+                ("page", wit(page)),
+            ],
+        ),
+        IndexQuery::Properties {
+            filter,
+            sort,
+            select,
+            page,
+        } => case_rec(
+            "properties",
+            "index-query-properties",
+            vec![
+                ("filter", wit(filter)),
+                ("sort", wit(sort)),
+                ("select", wit(select)),
+                ("page", wit(page)),
+            ],
+        ),
+        IndexQuery::PropertyValues { key, filter, page } => case_rec(
+            "property-values",
+            "index-query-property-values",
+            vec![
+                ("key", wit(key)),
+                ("filter", wit(filter)),
+                ("page", wit(page)),
+            ],
+        ),
+        IndexQuery::VaultHealth { check, page } => case_rec(
+            "vault-health",
+            "index-query-vault-health",
+            vec![("check", wit(check)), ("page", wit(page))],
+        ),
         IndexQuery::Custom { ns, query } => case_rec(
             "custom",
             "index-query-custom",
@@ -1318,7 +1397,38 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Search(v) => case_ty("search", wit(v)),
         IndexResult::Outline(v) => case_ty("outline", wit(v)),
         IndexResult::Tags(v) => case_ty("tags", wit(v)),
+        IndexResult::Neighbors(v) => case_ty("neighbors", wit(v)),
+        IndexResult::Properties(v) => case_ty("properties", wit(v)),
+        IndexResult::PropertyValues(v) => case_ty("property-values", wit(v)),
+        IndexResult::VaultHealth(v) => case_ty("vault-health", wit(v)),
         IndexResult::Custom(v) => case_ty("custom", wit(v)),
+    }
+}
+
+fn property_test_case(t: &PropertyTest) -> Case {
+    match t {
+        PropertyTest::Exists => case("exists"),
+        PropertyTest::Missing => case("missing"),
+        PropertyTest::Equals(v) => case_ty("equals", wit(v)),
+        PropertyTest::NotEquals(v) => case_ty("not-equals", wit(v)),
+        PropertyTest::Contains(v) => case_ty("contains", wit(v)),
+        PropertyTest::GreaterThan(v) => case_ty("greater-than", wit(v)),
+        PropertyTest::LessThan(v) => case_ty("less-than", wit(v)),
+    }
+}
+
+fn link_direction_name(d: LinkDirection) -> &'static str {
+    match d {
+        LinkDirection::Outbound => "outbound",
+        LinkDirection::Inbound => "inbound",
+        LinkDirection::Both => "both",
+    }
+}
+
+fn health_check_name(c: HealthCheck) -> &'static str {
+    match c {
+        HealthCheck::BrokenLinks => "broken-links",
+        HealthCheck::OrphanDocuments => "orphan-documents",
     }
 }
 
@@ -1355,6 +1465,22 @@ fn intent_name(i: Intent) -> &'static str {
         Intent::Primary => "primary",
         Intent::Danger => "danger",
     }
+}
+
+/// I campi di una finestra, col tipo di `items` dedotto dall'istanza: è così
+/// che `backlinks-page` e `search-page` non possono finire per attendersi la
+/// stessa lista.
+fn paged_fields<T: WitType>(p: &Paged<T>) -> Vec<(&'static str, String)> {
+    let Paged {
+        items,
+        offset,
+        total,
+    } = p;
+    vec![
+        ("items", wit(items)),
+        ("offset", wit(offset)),
+        ("total", wit(total)),
+    ]
 }
 
 fn view_placement_name(p: ViewPlacement) -> &'static str {
@@ -1624,15 +1750,38 @@ fn conform(source: &str) -> Result<(), String> {
         &[
             index_query_case(&IndexQuery::Backlinks {
                 target: DocId::new("a"),
+                page: None,
             }),
             index_query_case(&IndexQuery::FullText {
                 query: String::new(),
-                limit: 0,
+                scope: SearchScope::default(),
+                page: None,
             }),
             index_query_case(&IndexQuery::Outline {
                 doc: DocId::new("a"),
             }),
-            index_query_case(&IndexQuery::Tags),
+            index_query_case(&IndexQuery::Tags { page: None }),
+            index_query_case(&IndexQuery::Neighbors {
+                doc: DocId::new("a"),
+                direction: LinkDirection::Outbound,
+                depth: 1,
+                page: None,
+            }),
+            index_query_case(&IndexQuery::Properties {
+                filter: Vec::new(),
+                sort: None,
+                select: Vec::new(),
+                page: None,
+            }),
+            index_query_case(&IndexQuery::PropertyValues {
+                key: String::new(),
+                filter: Vec::new(),
+                page: None,
+            }),
+            index_query_case(&IndexQuery::VaultHealth {
+                check: HealthCheck::BrokenLinks,
+                page: None,
+            }),
             index_query_case(&IndexQuery::Custom {
                 ns: String::new(),
                 query: serde_json::Value::Null,
@@ -1644,12 +1793,50 @@ fn conform(source: &str) -> Result<(), String> {
         "index-result",
         ("traits.rs", "IndexResult"),
         &[
-            index_result_case(&IndexResult::Backlinks(vec![])),
-            index_result_case(&IndexResult::Search(vec![])),
+            index_result_case(&IndexResult::Backlinks(Paged::all(vec![]))),
+            index_result_case(&IndexResult::Search(Paged::all(vec![]))),
             index_result_case(&IndexResult::Outline(vec![])),
-            index_result_case(&IndexResult::Tags(vec![])),
+            index_result_case(&IndexResult::Tags(Paged::all(vec![]))),
+            index_result_case(&IndexResult::Neighbors(Paged::all(vec![]))),
+            index_result_case(&IndexResult::Properties(Paged::all(vec![]))),
+            index_result_case(&IndexResult::PropertyValues(Paged::all(vec![]))),
+            index_result_case(&IndexResult::VaultHealth(Paged::all(vec![]))),
             index_result_case(&IndexResult::Custom(serde_json::Value::Null)),
         ],
+    );
+
+    contract.variant_src(
+        "property-test",
+        ("traits.rs", "PropertyTest"),
+        &[
+            property_test_case(&PropertyTest::Exists),
+            property_test_case(&PropertyTest::Missing),
+            property_test_case(&PropertyTest::Equals(PropertyValue::Empty)),
+            property_test_case(&PropertyTest::NotEquals(PropertyValue::Empty)),
+            property_test_case(&PropertyTest::Contains(PropertyScalar::Empty)),
+            property_test_case(&PropertyTest::GreaterThan(PropertyValue::Empty)),
+            property_test_case(&PropertyTest::LessThan(PropertyValue::Empty)),
+        ],
+    );
+
+    contract.enumeration_src(
+        "link-direction",
+        ("traits.rs", "LinkDirection"),
+        [
+            LinkDirection::Outbound,
+            LinkDirection::Inbound,
+            LinkDirection::Both,
+        ]
+        .map(link_direction_name)
+        .as_slice(),
+    );
+
+    contract.enumeration_src(
+        "health-check",
+        ("traits.rs", "HealthCheck"),
+        [HealthCheck::BrokenLinks, HealthCheck::OrphanDocuments]
+            .map(health_check_name)
+            .as_slice(),
     );
 
     contract.variant_src(
@@ -2044,6 +2231,128 @@ fn conform(source: &str) -> Result<(), String> {
         count: 0,
     };
     contract.record("tag-count", &[("name", wit(&name)), ("count", wit(&count))]);
+
+    let NeighborRef { doc, via, depth } = NeighborRef {
+        doc: DocId::new("a"),
+        via: DocId::new("b"),
+        depth: 1,
+    };
+    contract.record(
+        "neighbor-ref",
+        &[
+            ("doc", wit(&doc)),
+            ("via", wit(&via)),
+            ("depth", wit(&depth)),
+        ],
+    );
+
+    let Page { offset, limit } = Page::default();
+    contract.record("page", &[("offset", wit(&offset)), ("limit", wit(&limit))]);
+
+    let SearchScope { folders, tags } = SearchScope::default();
+    contract.record(
+        "search-scope",
+        &[("folders", wit(&folders)), ("tags", wit(&tags))],
+    );
+
+    let PropertyFilter { key, test } = PropertyFilter {
+        key: String::new(),
+        test: PropertyTest::Exists,
+    };
+    contract.record(
+        "property-filter",
+        &[("key", wit(&key)), ("test", wit(&test))],
+    );
+
+    let PropertySort { key, descending } = PropertySort {
+        key: String::new(),
+        descending: false,
+    };
+    contract.record(
+        "property-sort",
+        &[("key", wit(&key)), ("descending", wit(&descending))],
+    );
+
+    let PropertyEntry { key, value } = PropertyEntry {
+        key: String::new(),
+        value: PropertyValue::Empty,
+    };
+    contract.record(
+        "property-entry",
+        &[("key", wit(&key)), ("value", wit(&value))],
+    );
+
+    let DocumentProperties { doc, properties } = DocumentProperties {
+        doc: DocId::new("a"),
+        properties: Vec::new(),
+    };
+    contract.record(
+        "document-properties",
+        &[("doc", wit(&doc)), ("properties", wit(&properties))],
+    );
+
+    let PropertyCount { value, count } = PropertyCount {
+        value: PropertyValue::Empty,
+        count: 0,
+    };
+    contract.record(
+        "property-count",
+        &[("value", wit(&value)), ("count", wit(&count))],
+    );
+
+    let HealthIssue {
+        doc,
+        check,
+        detail,
+        span,
+    } = HealthIssue {
+        doc: DocId::new("a"),
+        check: HealthCheck::BrokenLinks,
+        detail: None,
+        span: None,
+    };
+    contract.record(
+        "health-issue",
+        &[
+            ("doc", wit(&doc)),
+            ("check", wit(&check)),
+            ("detail", wit(&detail)),
+            ("span", wit(&span)),
+        ],
+    );
+
+    // Le sette finestre: un solo tipo in Rust, un record per istanza nel WIT.
+    // Il destructuring è generico ma i tipi dei campi li deduce il compilatore
+    // dall'istanza, quindi `items` porta davvero `list<backlink-ref>` e non una
+    // forma scritta a mano.
+    contract.record(
+        "backlinks-page",
+        &paged_fields(&Paged::all(Vec::<BacklinkRef>::new())),
+    );
+    contract.record(
+        "search-page",
+        &paged_fields(&Paged::all(Vec::<SearchHit>::new())),
+    );
+    contract.record(
+        "tags-page",
+        &paged_fields(&Paged::all(Vec::<TagCount>::new())),
+    );
+    contract.record(
+        "neighbors-page",
+        &paged_fields(&Paged::all(Vec::<NeighborRef>::new())),
+    );
+    contract.record(
+        "properties-page",
+        &paged_fields(&Paged::all(Vec::<DocumentProperties>::new())),
+    );
+    contract.record(
+        "property-values-page",
+        &paged_fields(&Paged::all(Vec::<PropertyCount>::new())),
+    );
+    contract.record(
+        "vault-health-page",
+        &paged_fields(&Paged::all(Vec::<HealthIssue>::new())),
+    );
 
     let UiAction { action, payload } = UiAction {
         action: ActionId(String::new()),

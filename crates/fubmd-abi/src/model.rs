@@ -15,6 +15,19 @@
 //! forma di `Custom` non deve reggerne il contenuto. La tabella ha entrambi (una
 //! cella porta inline, e `Custom` porta solo blocchi); footnote e definition
 //! list nessuno dei due.
+//!
+//! # `kind` + `value`: perché il tag qui è adiacente e non interno
+//!
+//! Gli enum di questo modulo le cui varianti portano uno **scalare**
+//! (`Inline::Text(String)`, `LinkTarget::Url(String)`, `PropertyValue::Number`)
+//! sono serializzati `#[serde(tag = "kind", content = "value")]`. Non è
+//! cosmesi: con il tag *interno* — la forma che usano gli enum di sole varianti
+//! a struct (`Block`, `Event`, `UiNode`) — serde non sa dove mettere uno
+//! scalare accanto al tag, e `serde_json::to_string` **fallisce a runtime**
+//! ("cannot serialize tagged newtype variant"). Un tipo del contratto che non
+//! attraversa il JSON non è un tipo del contratto: l'IPC verso la shell è JSON,
+//! e ciò che non ci passa non arriva a nessuna view. Il presidio è il
+//! round-trip in coda a questo modulo, che elenca ogni variante.
 
 use serde::{Deserialize, Serialize};
 
@@ -371,7 +384,9 @@ pub enum ColumnAlign {
 
 /// Nodi inline. Wikilink e link markdown normalizzano entrambi su `Link`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
+// `serde_json` fallirebbe a serializzarle (vedi il § in testa al modulo).
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum Inline {
     Text(String),
     Emph(Vec<Inline>),
@@ -407,7 +422,9 @@ pub enum Inline {
 /// legittimamente rispondere un'altra cosa sulla stessa stringa — con l'effetto
 /// che metà del grafo dipendeva da chi aveva letto il file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
+// `serde_json` fallirebbe a serializzarle (vedi il § in testa al modulo).
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum LinkTarget {
     /// `[[Page#Heading^block]]`.
     Wiki {
@@ -674,7 +691,9 @@ pub mod custom_kind {
 /// La lista di liste — che nel frontmatter di una nota non si scrive — cade in
 /// [`PropertyScalar::Unknown`], che è JSON e quindi non perde niente.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
+// `serde_json` fallirebbe a serializzarle (vedi il § in testa al modulo).
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum PropertyValue {
     /// `chiave:` senza valore (YAML `null`). Diverso da chiave assente.
     Empty,
@@ -693,7 +712,9 @@ pub enum PropertyValue {
 
 /// Il valore di una **voce di elenco**: [`PropertyValue`] meno la lista.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
+// `serde_json` fallirebbe a serializzarle (vedi il § in testa al modulo).
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum PropertyScalar {
     Empty,
     Text(String),
@@ -1119,5 +1140,95 @@ mod tests {
         let mut m2 = serde_json::Map::new();
         m2.insert("alias".into(), serde_json::json!("Solo"));
         assert_eq!(Frontmatter(m2).aliases(), vec!["Solo"]);
+    }
+
+    /// Ogni variante di questi enum deve saper attraversare il JSON: l'IPC
+    /// verso la shell è JSON, e un tipo del contratto che non ci passa non
+    /// arriva a nessuna view. Col tag *interno* — la forma di `Block` e
+    /// `Event`, che hanno solo varianti a struct — le varianti che portano uno
+    /// scalare fallivano a runtime, in silenzio fino al primo cliente vero: le
+    /// proprietà del frontmatter, che il canale dati del §1.6 mette sul filo.
+    #[test]
+    fn every_variant_survives_the_json_boundary() {
+        fn round_trip<T>(what: &str, value: T)
+        where
+            T: Serialize + for<'de> Deserialize<'de> + PartialEq + std::fmt::Debug,
+        {
+            let json = serde_json::to_string(&value)
+                .unwrap_or_else(|e| panic!("{what} non si serializza: {e}"));
+            let back: T = serde_json::from_str(&json)
+                .unwrap_or_else(|e| panic!("{what} non si rilegge da `{json}`: {e}"));
+            assert_eq!(back, value, "{what}: il round-trip cambia il valore");
+        }
+
+        let span = Span::new(0, 1);
+        let date = PropertyDate {
+            year: 2026,
+            month: 7,
+            day: 26,
+            time: Some(PropertyTime {
+                hour: 12,
+                minute: 0,
+                second: 0,
+                offset_minutes: Some(120),
+            }),
+        };
+
+        for t in [
+            LinkTarget::wiki("Pagina"),
+            LinkTarget::Url("https://example.invalid".into()),
+            LinkTarget::Path("note/a.md".into()),
+        ] {
+            round_trip("LinkTarget", t);
+        }
+
+        for s in [
+            PropertyScalar::Empty,
+            PropertyScalar::Text("t".into()),
+            PropertyScalar::Number(1.5),
+            PropertyScalar::Bool(true),
+            PropertyScalar::Date(date),
+            PropertyScalar::Link(LinkTarget::wiki("P")),
+            PropertyScalar::Unknown(serde_json::json!({"a": 1})),
+        ] {
+            round_trip("PropertyScalar", s);
+        }
+
+        for v in [
+            PropertyValue::Empty,
+            PropertyValue::Text("t".into()),
+            PropertyValue::Number(1.5),
+            PropertyValue::Bool(true),
+            PropertyValue::Date(date),
+            PropertyValue::Link(LinkTarget::wiki("P")),
+            PropertyValue::List(vec![PropertyScalar::Text("a".into())]),
+            PropertyValue::Unknown(serde_json::json!({"a": 1})),
+        ] {
+            round_trip("PropertyValue", v);
+        }
+
+        for i in [
+            Inline::Text("t".into()),
+            Inline::Emph(vec![Inline::Text("e".into())]),
+            Inline::Strong(vec![]),
+            Inline::Code("c".into()),
+            Inline::Link {
+                target: LinkTarget::wiki("P"),
+                label: None,
+                embed: false,
+                span,
+            },
+            Inline::TagRef {
+                name: "t".into(),
+                span,
+            },
+            Inline::Custom {
+                custom_kind: "k".into(),
+                attrs: serde_json::Value::Null,
+                span,
+            },
+        ] {
+            round_trip("Inline", i);
+        }
     }
 }

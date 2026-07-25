@@ -75,16 +75,24 @@ pronti — un dogfooding finto. Le ha chieste, come per lo storage, il primo cas
 reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
 
 - **`query_index(&self, IndexQuery) -> Result<IndexResult, PluginError>`** — la
-  view interroga il vault da sé (backlink, ricerca, struttura) invece di
-  riceverli. È la stessa porta di `Workspace::query_index` e lo stesso dispatch:
-  alcune query le serve il **kernel** dalle sue fonti di verità — i backlink dal
-  grafo, l'**outline** (`IndexQuery::Outline`) dai `DocumentModel` — il resto va
-  ai provider registrati. `IndexQuery::Outline` (struttura di un documento) e
-  `IndexQuery::Tags` (i tag del vault) sono il **canale metadata**: senza, una
-  view non potrebbe leggere la struttura parsata, perché non ha un
+  view interroga il vault da sé invece di ricevere i dati già pronti. È la
+  stessa porta di `Workspace::query_index` e lo stesso dispatch: quasi tutte le
+  query le serve il **kernel** dalle proprie fonti di verità — backlink e vicini
+  dal grafo (`Backlinks`, `Neighbors`), outline, tag e proprietà dai
+  `DocumentModel` (`Outline`, `Tags`, `Properties`, `PropertyValues`), la salute
+  del vault da entrambi (`VaultHealth`) — e ai provider registrati va il resto,
+  oggi il full-text. È il **canale metadata**: senza, una view non potrebbe
+  leggere né la struttura parsata né il frontmatter, perché non ha un
   `FormatProvider` con cui parsare. È `&self`: una query non muta, e così
   una view la serve sotto il prestito *condiviso* del workspace, senza entrare in
   conflitto con la direzione della concorrenza (`Mutex`→`RwLock`).
+
+  Le risposte che crescono col vault portano una **finestra** (`Page` nella
+  domanda, `Paged { items, offset, total }` nella risposta): una view che
+  mostra venti righe non fa materializzare centomila righe a chi la serve, e
+  `total` le dice che ce n'è ancora. Ometterla significa "tutto", ed è quello
+  che fanno i pannelli che disegnano un insieme intero (tag, backlink di una
+  nota).
 
 - **`active_document(&self) -> Option<DocId>`** — il solo contesto di sessione
   che il contratto espone: *quale nota guarda l'utente*. Una view lo **chiede**

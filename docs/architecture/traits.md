@@ -209,10 +209,35 @@ pub trait IndexProvider: Send + Sync {
 }
 ```
 
-`IndexQuery { Backlinks { target }, FullText { query, limit }, Custom { ns, query } }`;
-`IndexResult { Backlinks(Vec<BacklinkRef>), Search(Vec<SearchHit>), Custom(Value) }`;
-`BacklinkRef { source, context }`,
-`SearchHit { doc, score, snippet, highlights: Vec<Span> }`.
+`IndexQuery { Backlinks, FullText, Outline, Tags, Neighbors, Properties,
+PropertyValues, VaultHealth, Custom }` — è il **canale dati verso le view**, e
+ciò che non è esprimibile qui diventa un comando bespoke dell'app, cioè una
+superficie che un plugin non potrà mai avere. Le risposte stanno in
+`IndexResult`, con gli stessi nomi.
+
+Le forme che portano: `BacklinkRef { source, context }`,
+`SearchHit { doc, score, snippet, highlights: Vec<Span> }`,
+`NeighborRef { doc, via, depth }`, `TagCount { name, count }`,
+`DocumentProperties { doc, properties: Vec<PropertyEntry> }`,
+`PropertyCount { value, count }`, `HealthIssue { doc, check, detail, span }`.
+
+**La finestra è nella domanda.** `Page { offset, limit }` sta nella query e
+`Paged<T> { items, offset, total }` nella risposta: `None` al posto della `Page`
+significa "tutto", e `total` è il conteggio *prima* della finestra — senza, chi
+disegna non sa se esiste una pagina dopo. Chi sa paginare alla sorgente lo fa
+(tantivy usa `offset`/`limit` del collector e un `Count` per il totale); chi
+risponde da una mappa già in memoria ritaglia con `Paged::window`. L'unica
+risposta senza finestra è `Outline`: cresce con **un** documento, non col vault.
+Al confine WIT i generici non esistono, e ogni istanza è un record a sé
+(`backlinks-page`, `search-page`, …).
+
+**L'ambito è dato, non sintassi.** `FullText` porta uno `SearchScope { folders,
+tags }` accanto alla stringa: la stringa è il linguaggio del provider, l'ambito
+è del contratto — una shell che offre "cerca in questa cartella" non deve
+comporre sintassi altrui, e un provider diverso non può interpretarlo
+diversamente. `PropertyFilter { key, test: PropertyTest }` fa lo stesso per il
+frontmatter: `exists`/`missing`/`equals`/`contains`/`>`/`<` su
+`PropertyValue` (§1.5), in AND fra loro.
 
 **L'alimentazione non passa dagli eventi.** Il `Workspace` possiede gli
 `IndexProvider` registrati e chiama `on_document_*` *dentro* le stesse
@@ -281,16 +306,17 @@ non una capacità del contratto; a M5 il suo equivalente per un componente è un
 preopen WASI sulla stessa radice. Ciò che la firma garantisce è che un provider
 di terzi *possa* persistere, non che tutti persistano allo stesso modo.
 
-**Alcune query le serve il kernel, non i provider.** `Workspace::query_index`
-risponde direttamente a `IndexQuery::Backlinks` (dal grafo), `Outline` (dai
-`DocumentModel` di un documento) e `Tags` (aggregati dai `DocumentModel`
-dell'intero vault): hanno tutte una sola fonte di verità *dentro* il kernel, e
-duplicarla in un indice creerebbe una seconda verità divergente. `Outline` e
-`Tags` sono il **canale metadata** — il modo con cui una view legge la struttura
-parsata (heading, tag) senza avere un `FormatProvider` (che, essendo un plugin,
-non ha): stesso canale (`HostApi::query_index`), stesso dispatch. Tutto il resto
-va ai provider in ordine di registrazione: vince il primo che non risponde
-`BadArgs`, che per contratto significa "non è roba mia".
+**Quasi tutte le query le serve il kernel, non i provider.**
+`Workspace::query_index` risponde direttamente a `Backlinks` e `Neighbors` (dal
+grafo), `Outline` (dai `DocumentModel` di un documento), `Tags` e
+`Properties`/`PropertyValues` (dai metadati dell'intero vault), `VaultHealth`
+(dal grafo e dai link in cache): hanno tutte una sola fonte di verità *dentro*
+il kernel, e duplicarla in un indice creerebbe una seconda verità divergente.
+Sono anche il **canale metadata** — il modo con cui una view legge struttura,
+tag e proprietà senza avere un `FormatProvider` (che, essendo un plugin, non
+ha): stesso canale (`HostApi::query_index`), stesso dispatch. Ai provider, in
+ordine di registrazione, va il resto — oggi il full-text: vince il primo che non
+risponde `BadArgs`, che per contratto significa "non è roba mia".
 
 **`snippet` è testo, mai markup.** L'evidenziazione viaggia separata, in
 `highlights: Vec<Span>` (byte *dentro* `snippet`): un provider di terzi non
@@ -414,7 +440,12 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `ViewSpec`/`ViewPlacement` | `record` / `enum` |
 | `UiNode` (albero) | `variant ui-node` **in arena**: `list<ui-ref>` fra i figli, nodi in `ui-tree` |
 | `UiAction`/`ViewUpdate` | `record` / `variant` (`replace(ui-tree)`) |
-| `IndexQuery`/`IndexResult`/`BacklinkRef`/`SearchHit` | `variant` (incl. `custom(index-query-custom)`) / `record` |
+| `IndexQuery`/`IndexResult` | `variant` — ogni caso con più di un argomento ha il suo record (`index-query-neighbors`, `index-query-properties`, …) |
+| `BacklinkRef`/`SearchHit`/`NeighborRef`/`TagCount`/`DocumentProperties`/`PropertyEntry`/`PropertyCount`/`HealthIssue` | `record` |
+| `Page` / `Paged<T>` | `record page` / **un record per istanza** (`backlinks-page`, `search-page`, `tags-page`, `neighbors-page`, `properties-page`, `property-values-page`, `vault-health-page`): al confine i generici non esistono |
+| `SearchScope`/`PropertyFilter`/`PropertySort` | `record` |
+| `PropertyTest` | `variant` (i casi senza valore — `exists`, `missing` — non portano payload) |
+| `LinkDirection`/`HealthCheck` | `enum` |
 | `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`) / `enum` / `list<event-kind>` |
 | `JobSpec`/`JobId` | `record job-spec` / `type job-id = u64` (interface `jobs`) |
 | `PluginManifest`/`PluginPermissions` | `record` |
