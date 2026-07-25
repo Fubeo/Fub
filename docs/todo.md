@@ -108,14 +108,14 @@ kernel, ma le implementazioni del trait erano **zero**. Ora ce n'è una vera:
       toccare il test resta verde — ma l'ordine dei casi **è il discriminante
       ABI**. Chiudere il buco prima del freeze: derivare l'ordine atteso
       dall'enum Rust, così un riordino diventa rosso da entrambi i lati.
-- [ ] **Drift dei mirror TS↔Rust**: `UiNode`, `ViewUpdate`, `Event`
+- [~] **Drift dei mirror TS↔Rust**: `UiNode`, `ViewUpdate`, `Event`
       (`KernelEvent`), `Span`, `VersionRef` sono rispecchiati **a mano** in
-      TypeScript, senza un test che leghi i due lati; la stessa lacuna del test
-      gemello di `pageName` (aperta dal secondo giro). Manca del tutto un harness
-      di test frontend (`package.json` ha solo `vite` e `tsc`). Introdurlo, e con
-      esso i test che confrontano i tipi TS con la forma dei tipi Rust — è il
-      confine che oggi può divergere in silenzio. (La migrazione dei backlink ha
-      aggiunto `ViewUpdate` a questo elenco.)
+      TypeScript. L'**harness frontend ora c'è** (vitest, `npm test` in CI), ma
+      finora copre solo `offsets.ts`: il test che *lega i due lati* dei mirror
+      manca ancora. Il modo robusto è generare fixture dai tipi Rust (serde) e
+      farle validare al lato TS — così un caso di variant aggiunto in Rust e non
+      rispecchiato diventa rosso. Finché non c'è, il confine può divergere in
+      silenzio (stessa lacuna del test gemello di `pageName`).
 - [ ] **UI di produzione = IPC bespoke + canale view generico**: il canale
       core→UI reale è ancora fatto in gran parte di ~24 comandi
       `#[tauri::command]` con tipi propri (`search`, `render_preview`,
@@ -153,11 +153,10 @@ kernel, ma le implementazioni del trait erano **zero**. Ora ce n'è una vera:
 - [~] **Ponte byte UTF-8 ↔ code unit UTF-16** (M3): gli `Span` sono in byte
       UTF-8, CodeMirror 6 in UTF-16. La direzione **byte→code unit** ora esiste
       (`frontend/src/offsets.ts`, `byteToCharIndex`), tirata avanti dallo scroll
-      dell'outline e verificata su testo accentato+emoji. Restano per M3 la
-      direzione inversa (code unit→byte, per mappare le selezioni dell'editor) e
-      soprattutto un **test cablato in CI**: la verifica di `offsets.ts` oggi è
-      stata fatta a mano (manca ancora l'harness frontend, §3), e le decorazioni
-      della live-preview non vanno cablate prima che quel test esista.
+      dell'outline, ed è **testata in CI** (`offsets.test.ts`, vitest: ASCII,
+      accenti, emoji surrogate, oltre-fine). Resta per M3 la direzione inversa
+      (code unit→byte, per mappare le selezioni dell'editor); le decorazioni
+      della live-preview la richiederanno, con i suoi test.
 - [ ] Cosmetico: chi ha già aperto un vault con una versione precedente si
       ritrova `.fubmd-data/index/` orfana (l'indice si è spostato nello spazio
       dati del plugin). È stato derivato e si può cancellare a mano; non vale una
