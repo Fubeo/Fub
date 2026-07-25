@@ -37,12 +37,13 @@ Tipi di supporto: `Axis { Row, Column }`, `Intent { Neutral, Primary, Danger }`
    - `Navigate { doc_id }` — chiede al core di aprire un documento;
    - `Reveal { doc_id, span }` — apri (se serve) e porta la vista su un
      intervallo del documento; `span` è in byte UTF-8, il frontend lo mappa
-     sull'editor col ponte in `frontend/src/offsets.ts`.
+     sull'editor col ponte in `frontend/src/offsets.ts`;
+   - `RunSearch { query }` — esegui una ricerca e mostrane i risultati.
 
 Questo giro è cablato nel renderer generico (`mountView` in `main.ts`) e servito
 dai comandi `render_view`/`view_action`/`set_active_document`. Lo esercitano i
-backlink (`open:<DocId>` → `Navigate`) e l'outline
-(`reveal:<start>:<end>` → `Reveal` sull'heading).
+backlink (`open:<DocId>` → `Navigate`), l'outline (`reveal:<start>:<end>` →
+`Reveal` sull'heading) e il pannello tag (`tag:<nome>` → `RunSearch`).
 
 ## La regola dell'escape hatch — e il confine di fiducia
 

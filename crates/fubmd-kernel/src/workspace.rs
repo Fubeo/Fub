@@ -42,7 +42,7 @@ use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::traits::{
     BacklinkRef, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
-    ViewProvider, ViewSpec,
+    TagCount, ViewProvider, ViewSpec,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{Event, PluginError};
@@ -831,6 +831,9 @@ impl Workspace {
                     .unwrap_or_default();
                 return Ok(IndexResult::Outline(outline));
             }
+            IndexQuery::Tags => {
+                return Ok(IndexResult::Tags(self.aggregate_tags()));
+            }
             _ => {}
         }
         let mut last = Err(PluginError::BadArgs(
@@ -843,6 +846,27 @@ impl Workspace {
             }
         }
         last
+    }
+
+    /// I tag del vault con quante **note** li portano (non quante occorrenze:
+    /// un tag ripetuto nella stessa nota conta una volta). Ordinati per nome.
+    fn aggregate_tags(&self) -> Vec<TagCount> {
+        let mut counts: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
+        for model in self.models.values() {
+            let mut seen = std::collections::BTreeSet::new();
+            for tag in &model.tags {
+                if seen.insert(tag.name.as_str()) {
+                    *counts.entry(tag.name.as_str()).or_default() += 1;
+                }
+            }
+        }
+        counts
+            .into_iter()
+            .map(|(name, count)| TagCount {
+                name: name.to_string(),
+                count,
+            })
+            .collect()
     }
 
     /// Porta gli indici a un punto di consistenza (vedi

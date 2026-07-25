@@ -87,13 +87,15 @@ fn view_update_samples() -> Vec<Value> {
             doc_id: "d".into(),
             span: Span::new(0, 3),
         },
+        ViewUpdate::RunSearch { query: "q".into() },
     ];
     for u in &all {
         match u {
             ViewUpdate::Replace { .. }
             | ViewUpdate::None
             | ViewUpdate::Navigate { .. }
-            | ViewUpdate::Reveal { .. } => {}
+            | ViewUpdate::Reveal { .. }
+            | ViewUpdate::RunSearch { .. } => {}
         }
     }
     all.iter().map(to_value).collect()
