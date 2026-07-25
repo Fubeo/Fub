@@ -1646,8 +1646,13 @@ impl HostApi for KernelHost<'_> {
         self.ws.query_index(query)
     }
 
-    fn active_document(&self) -> Option<DocId> {
-        self.ws.active_document().cloned()
+    fn active_view_context(&self) -> fubmd_abi::ViewContext {
+        fubmd_abi::ViewContext {
+            pane_id: "main".to_string(),
+            doc: self.ws.active_document().cloned(),
+            selection: None,
+            mode: None,
+        }
     }
 }
 
@@ -1750,8 +1755,13 @@ impl HostApi for ReadHost<'_> {
         self.ws.query_index(query)
     }
 
-    fn active_document(&self) -> Option<DocId> {
-        self.ws.active_document().cloned()
+    fn active_view_context(&self) -> fubmd_abi::ViewContext {
+        fubmd_abi::ViewContext {
+            pane_id: "main".to_string(),
+            doc: self.ws.active_document().cloned(),
+            selection: None,
+            mode: None,
+        }
     }
 }
 

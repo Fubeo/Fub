@@ -60,6 +60,25 @@ impl<'de> Deserialize<'de> for JobId {
 // chiamate come host function attraverso il confine.
 // ---------------------------------------------------------------------------
 
+/// Contesto di una view: quale documento, in quale pane, con quale selezione.
+/// Serve a distinguere fra split, tab e finestre multiple — "il documento
+/// attivo" non è più una variabile globale.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ViewContext {
+    /// Identificatore del pane (sinistra/destra di uno split, tab attiva, etc.).
+    /// Senza questo, due split con pannelli backlink riceverebbero lo stesso
+    /// contesto e mostrerebbero lo stesso documento.
+    pub pane_id: String,
+    /// Il documento con il focus in questo pane.
+    pub doc: Option<DocId>,
+    /// La selezione nel documento attivo, se il documento esiste.
+    /// Uno span `[start, end)` in byte **nel sorgente**.
+    pub selection: Option<Span>,
+    /// Modalità di editing (normal/insert/select), se rilevante per il provider.
+    /// Una view che non ne ha bisogno lo ignora.
+    pub mode: Option<String>,
+}
+
 /// Le capacità che il kernel concede a un provider/plugin.
 ///
 /// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
@@ -148,16 +167,21 @@ pub trait HostApi: Send + Sync {
     /// può servirla sotto prestito condiviso del workspace, come una view.
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 
-    /// Il documento con il focus della sessione di editing, se ce n'è uno.
+    /// Il contesto della view attiva: documento, pane, selezione e modalità.
     ///
-    /// È il solo contesto di sessione che il contratto espone: una view lo
-    /// **chiede** quando ne ha bisogno (un pannello backlink lo fa a ogni
-    /// render), invece di riceverlo come argomento — che costringerebbe *ogni*
-    /// view a portarselo anche quando non le serve (un grafo, un pannello
-    /// impostazioni). Chi lo imposta è la shell, non un plugin: `active_document`
-    /// non ha un gemello che scrive nell'`HostApi`, perché "quale nota guardo"
-    /// è una decisione dell'utente sull'app, non una capacità da concedere.
-    fn active_document(&self) -> Option<DocId>;
+    /// Una view lo **chiede** quando ne ha bisogno (un pannello backlink lo fa
+    /// a ogni render), non lo riceve come argomento — avrebbe costretto
+    /// *ogni* view a portarselo anche se non lo serve (un grafo, impostazioni).
+    ///
+    /// Chi lo imposta è la shell: "quale nota guardo in quale pane" è una
+    /// decisione dell'utente, non una capacità da concedere. Il pane_id
+    /// distingue fra split (sinistra/destra), tab, finestre — due pannelli
+    /// backlink in split distinti vedono il contesto giusto per ciascuno.
+    ///
+    /// La selezione arriva come Span sul sorgente — necessario per comandi
+    /// sulla selezione (4.2, 4.3, 22.2), annotazioni (13.3), riscritture
+    /// guidate (16.1). Dipende dal ponte code unit → byte (§3.7).
+    fn active_view_context(&self) -> ViewContext;
 }
 
 // ---------------------------------------------------------------------------

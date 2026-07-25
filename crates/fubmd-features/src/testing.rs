@@ -234,7 +234,12 @@ impl HostApi for MemoryHost {
         }
     }
 
-    fn active_document(&self) -> Option<DocId> {
-        self.active.lock().unwrap().clone()
+    fn active_view_context(&self) -> fubmd_abi::ViewContext {
+        fubmd_abi::ViewContext {
+            pane_id: "main".to_string(),
+            doc: self.active.lock().unwrap().clone(),
+            selection: None,
+            mode: None,
+        }
     }
 }
