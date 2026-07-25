@@ -27,6 +27,24 @@ const IGNORED_DIRS: &[&str] = &[".obsidian", ".git", DATA_DIR, ".trash", "node_m
 /// `docs/architecture/data-model.md`, "Il cestino").
 pub const TRASH_DIR: &str = ".trash";
 
+/// Cartella (dentro [`DATA_DIR`]) dei sidecar del cestino: per ogni voce
+/// cestinata **da FubMD**, un `<nome-cestinato>.json` con il path d'origine.
+///
+/// Esiste perché il cestino è piatto (D1, interop con Obsidian) e il nome del
+/// file da solo non sa dire da quale cartella veniva: senza sidecar,
+/// ripristinare `progetti/Nota.md` la farebbe tornare come `Nota.md` in
+/// radice — storia del versioning orfana, link per path irrisolti. Obsidian
+/// non scrive sidecar: una voce senza è il degrado garbato al comportamento
+/// di prima (si ripristina in radice col nome de-timbrato).
+const TRASH_META_DIR: &str = "trash";
+
+/// Il contenuto di un sidecar del cestino.
+#[derive(Serialize, Deserialize)]
+struct TrashSidecar {
+    /// Il path (relativo al vault) da cui la voce è stata cestinata.
+    original: String,
+}
+
 /// Un componente di path che il vault non deve mai guardare.
 ///
 /// Unico punto di verità della regola: la usano sia la scansione
@@ -194,7 +212,49 @@ impl Vault {
             path: from,
             source: e,
         })?;
+        // Il sidecar col path d'origine è best-effort: se non si scrive, la
+        // voce degrada al comportamento senza sidecar (ripristino in radice),
+        // ma la cancellazione È riuscita e va detto con un Ok.
+        if let Err(e) = self.write_trash_sidecar(&target, id) {
+            eprintln!("cestino: sidecar di {target} non scritto: {e}");
+        }
         Ok(target)
+    }
+
+    /// La cartella dei sidecar del cestino.
+    fn trash_meta_dir(&self) -> Utf8PathBuf {
+        self.root.join(DATA_DIR).join(TRASH_META_DIR)
+    }
+
+    /// Il path del sidecar di una voce cestinata. La chiave è il **nome** del
+    /// file nel cestino: unico per costruzione (le collisioni sono già state
+    /// timbrate) e ricostruibile senza stato.
+    fn trash_sidecar_path(&self, trashed: &DocId) -> Utf8PathBuf {
+        let name = file_name_of(trashed.as_str());
+        self.trash_meta_dir().join(format!("{name}.json"))
+    }
+
+    fn write_trash_sidecar(&self, trashed: &DocId, original: &DocId) -> Result<()> {
+        let dir = self.trash_meta_dir();
+        std::fs::create_dir_all(&dir).map_err(|e| KernelError::Io {
+            path: dir,
+            source: e,
+        })?;
+        let path = self.trash_sidecar_path(trashed);
+        let json = serde_json::to_string(&TrashSidecar {
+            original: original.to_string(),
+        })
+        .expect("un path è sempre serializzabile");
+        std::fs::write(&path, json).map_err(|e| KernelError::Io { path, source: e })
+    }
+
+    /// Il path d'origine registrato dal sidecar, se è stata FubMD a cestinare
+    /// questa voce. Un sidecar assente o illeggibile non è un errore: è una
+    /// voce cestinata da qualcun altro (Obsidian), o di un'altra epoca.
+    fn trash_sidecar_original(&self, trashed: &DocId) -> Option<DocId> {
+        let raw = std::fs::read_to_string(self.trash_sidecar_path(trashed)).ok()?;
+        let sidecar: TrashSidecar = serde_json::from_str(&raw).ok()?;
+        Some(DocId::new(sidecar.original))
     }
 
     /// Il contenuto del cestino, dal più recente al più vecchio.
@@ -238,7 +298,12 @@ impl Vault {
             let id = self.doc_id_for_path(&path)?;
             let name = file_name_of(id.as_str());
             out.push(TrashEntry {
-                original: DocId::new(strip_stamp(name)),
+                // Il sidecar sa da quale cartella veniva; senza (voce di
+                // Obsidian, o di un'altra epoca) si degrada al nome
+                // de-timbrato nella radice.
+                original: self
+                    .trash_sidecar_original(&id)
+                    .unwrap_or_else(|| DocId::new(strip_stamp(name))),
                 // L'mtime è l'istante dello spostamento nel cestino. Se il
                 // filesystem non lo sa dire, meglio "epoca zero" che rifiutare
                 // di mostrare la riga: la data è un dettaglio, la nota no.
@@ -266,7 +331,11 @@ impl Vault {
         if !path.starts_with(self.root.join(TRASH_DIR)) {
             return Err(KernelError::OutsideVault(path));
         }
-        std::fs::remove_file(&path).map_err(|e| KernelError::Io { path, source: e })
+        std::fs::remove_file(&path).map_err(|e| KernelError::Io { path, source: e })?;
+        // Il sidecar segue la voce; se resta orfano nessuno lo leggerà più
+        // (la chiave è il nome della voce), quindi l'esito non cambia.
+        let _ = std::fs::remove_file(self.trash_sidecar_path(id));
+        Ok(())
     }
 
     /// Svuota il cestino e restituisce quante voci ha cancellato. Le
@@ -283,6 +352,9 @@ impl Vault {
                 source: e,
             })?;
         }
+        // Cestino vuoto = nessun sidecar da ricordare (inclusi eventuali
+        // orfani lasciati da chi ha svuotato il cestino da un'altra app).
+        let _ = std::fs::remove_dir_all(self.trash_meta_dir());
         Ok(entries.len())
     }
 }
@@ -292,7 +364,9 @@ impl Vault {
 pub struct TrashEntry {
     /// Dove il file si trova ora: `.trash/Nota.2026-07-24T15-30-00.md`.
     pub id: DocId,
-    /// Dove tornerebbe un ripristino: il nome originale, nella radice.
+    /// Dove tornerebbe un ripristino: il path d'origine se il sidecar lo
+    /// ricorda (voce cestinata da FubMD), altrimenti il nome de-timbrato
+    /// nella radice.
     pub original: DocId,
     /// Istante della cancellazione (secondi UNIX).
     pub deleted_at: u64,

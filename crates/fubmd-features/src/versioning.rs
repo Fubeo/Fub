@@ -96,8 +96,16 @@ const FASCIA_GIORNALIERA: u64 = 90 * MS_GIORNO;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VersionRef {
     /// Istante dello snapshot (millisecondi UNIX): è anche la sua identità.
+    /// Resta un numero sul confine JSON: i millisecondi non arrivano a 2⁵³ e
+    /// il frontend ci fa aritmetica (`new Date(ts)`).
     pub ts: u64,
-    /// Impronta del contenuto, per il dedup (D6).
+    /// Impronta del contenuto, per il dedup (D6). È un u64 **pieno** (FNV su
+    /// tutti i 64 bit) che si confronta per uguaglianza: sul confine JSON
+    /// viaggia come stringa, o `JSON.parse` ne perderebbe i bit oltre 2⁵³ in
+    /// silenzio — la regola è in `fubmd_abi::ipc`. In lettura il numero nudo
+    /// resta accettato: gli indici persistiti prima della regola non si
+    /// buttano.
+    #[serde(with = "fubmd_abi::ipc::u64_string")]
     pub hash: u64,
     pub size: u64,
 }
@@ -184,6 +192,16 @@ impl VersionStore {
         {
             let doc = inner.docs.entry(id.to_string()).or_default();
             if doc.versions.last().is_some_and(|v| v.hash == hash) {
+                // Niente di nuovo da salvare — ma ci hanno chiesto di
+                // fotografare una nota VIVA: se portava un tombstone
+                // (cestinata e ripristinata con lo stesso identico contenuto)
+                // il tombstone se ne va comunque, o "il vault al tempo T" la
+                // crederebbe cancellata per sempre.
+                let risorta = doc.deleted_at.take().is_some();
+                if risorta {
+                    inner.write_meta(id, host)?;
+                    inner.write_index(host)?;
+                }
                 return Ok(None);
             }
         }
@@ -352,15 +370,20 @@ impl Inner {
         unreachable!("la sequenza dei nomi è infinita")
     }
 
-    /// Un istante non ancora usato da questo documento: due salvataggi nello
-    /// stesso millisecondo sono improbabili, ma sovrascriversi a vicenda no.
+    /// Un istante non ancora usato da questo documento, e **mai prima**
+    /// dell'ultimo: due salvataggi nello stesso millisecondo sono improbabili,
+    /// ma sovrascriversi a vicenda no — e se l'orologio torna indietro fra due
+    /// salvataggi (NTP, fuso, VM), `versions` deve restare ordinato per tempo:
+    /// è dato persistito, e su di esso ragionano "attuale" in `list` e la
+    /// protezione della più recente in `prune`.
     fn free_ts(&self, id: &DocId, host: &dyn HostApi) -> u64 {
-        let usati = self.docs.get(id.as_str());
-        let mut ts = host.now_unix_millis();
-        while usati.is_some_and(|d| d.versions.iter().any(|v| v.ts == ts)) {
-            ts += 1;
-        }
-        ts
+        let ts = host.now_unix_millis();
+        let minimo = self
+            .docs
+            .get(id.as_str())
+            .and_then(|d| d.versions.iter().map(|v| v.ts).max())
+            .map_or(0, |ultimo| ultimo + 1);
+        ts.max(minimo)
     }
 
     /// Applica le fasce di ritenzione (D6) e **dice quante versioni ha buttato**:
@@ -719,6 +742,32 @@ mod tests {
         assert_eq!(
             store.read(&id("a.md"), versioni[1].ts, &host).unwrap(),
             "prima"
+        );
+    }
+
+    #[test]
+    fn a_clock_going_backwards_does_not_disorder_the_history() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+
+        store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
+        // L'orologio torna indietro fra due salvataggi (NTP, fuso, VM).
+        host.arretra(60_000);
+        store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
+
+        let versioni = store.list(&id("a.md"));
+        assert_eq!(versioni.len(), 2);
+        // `versions` è dato persistito e deve restare ordinato per tempo:
+        // su di esso ragionano "attuale" in `list` e la protezione della più
+        // recente in `prune`.
+        assert!(
+            versioni[0].ts > versioni[1].ts,
+            "la versione nuova deve avere ts maggiore anche a orologio arretrato: {versioni:?}"
+        );
+        assert_eq!(
+            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            "seconda",
+            "l'«attuale» è l'ultima salvata, non l'ultima per orologio"
         );
     }
 

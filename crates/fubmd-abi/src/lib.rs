@@ -19,6 +19,7 @@ pub mod arena;
 pub mod error;
 pub mod event;
 pub mod format;
+pub mod ipc;
 pub mod model;
 pub mod traits;
 pub mod ui;

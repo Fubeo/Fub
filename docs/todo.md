@@ -33,6 +33,17 @@ Il criterio che le distingue dai tre giri precedenti: qui il posto c'è, ed è l
 sua **forma** a non reggere — che è il caso peggiore dei quattro, perché un
 varco che sembra aperto non lo si va a riguardare.
 
+Un quinto giro ha aggiunto §§1.28–1.35, §§2.21–2.27 e §4.10, e nasce da tre
+domande che i primi quattro non pongono: **chi vede il modello parsato**, **che
+cosa è una view mentre è viva** e **come si spegne il tutto**. Le risposte di
+oggi sono, nell'ordine: solo il kernel; una funzione pura e sincrona senza
+stato; non si spegne. Il criterio: qui non manca un varco e non è sbagliata una
+forma — manca la *risposta a una domanda che nessuno ha ancora fatto*, e le tre
+sono già decise nelle firme che il freeze di M4 congela. Il quinto giro porta
+anche il primo caso in cui una promessa del prodotto è **falsa oggi e in
+silenzio** (i link markdown non entrano nel grafo: §2.21) e il primo in cui una
+correttezza dichiarata non ha presidio meccanico (§4.10).
+
 ## Il criterio
 
 FEATURES.md è impossibile da implementare a mano una voce alla volta. È
@@ -103,6 +114,20 @@ Quindi il lavoro infrastrutturale è di tre tipi, in quest'ordine di urgenza:
 | 27.1 CLI, 27.2 API locale, 26.2-26.3 mobile/PWA, 27.4 e2e | un pezzo riusabile più piccolo di "tutto" | `Workspace` è 1750 righe e ~20 campi dietro un lock solo |
 | 20.1 UI di plugin, 21.1 moduli installabili separatamente | far entrare un renderer di terzi nella shell | `renderUiNode` è uno `switch` esaustivo compilato nel bundle (`ui.ts`) |
 | 23.3 SBOM/licenze/CVE, 20.3 reproducible builds, dependency audit | tooling di supply chain | la CI non ha `cargo-deny` né generazione SBOM |
+| 10 task, 8.2 proprietà, 15.1 citazioni, 17.2 export, 22.1 chunking | il **modello parsato** in mano a un provider | `HostApi` dà solo la sorgente; il `FormatProvider` sta nel kernel (`workspace.rs:1335`) |
+| 12 canvas, 11.4 CSV/JSON, 13.2 PDF, 8.3 tipi nota | sapere **che formato è** un documento | nessuna capacità restituisce il `FormatDescriptor` di un `DocId` |
+| 11.2-11.3 database, 10.3 task, 9.2 query, 28 settings | una view che tiene lo **stato** | `render_view` **e** `on_action` sono `&self` (`abi/traits.rs:222-228`) |
+| 22 AI, 18 sync, 11.5 dashboard, 24.1 progresso | una view che si fa **ridisegnare** | `refresh` filtra eventi del kernel; nessun push dal provider, nessuno stato "in caricamento" |
+| 3.3 sidebar personalizzabili, 20.1 venti pannelli di plugin | metadati di presentazione di una view | `ViewSpec` ha id, titolo, placement, refresh (`abi/traits.rs:201`) — niente icona, ordine, default |
+| 19.3 form, 8.2 editor proprietà, 11.3 editing | le azioni portano **valori** | `UiAction.payload` non è mai popolato (`main.ts:1197`): i dati stanno dentro l'`ActionId` |
+| 20.1 conflitti plugin, 21.2 moduli che convivono | una regola sugli **spazi di nomi** | `view_owner` prende il primo id che combacia (`workspace.rs:1196`): il secondo è muto |
+| 24.2 safe mode/recovery, 3.1 switch vault, 26.2-26.3 | uno **spegnimento** | `flush_indexes` ha un solo chiamante: il watcher (`app/lib.rs:252`); `deactivate` non ne ha nessuno |
+| 7.1 link markdown/relativi, 7.2 link rotti, 13.1 riferimenti allegati | un grafo che risolve **tutti** i link | `LinkGraph` scarta ogni `LinkTarget` che non sia `Wiki` (`graph.rs:266`) |
+| 24.1 vault enormi, 2.1 corruption detection, 24.2 repair | apertura a fasi e tolleranza per-documento | `reindex` è tutto-o-niente (`workspace.rs:341`): una nota che non parsa chiude il vault |
+| 13.3 annotazioni, 10 task, 11 database, 4.3 commenti | stato **per-documento** migrato dal kernel | ogni feature lo rifà da sé (versioning, `main.ts:638`), col buco del §2.14 |
+| 20.1 pannello plugin, 28 settings, 24.2 diagnostica | inventario delle feature attive | `VaultInfo.versioning` è **un booleano per feature** (`app/lib.rs:57`) |
+| 9.1-9.2 ogni query nuova, 7.3 grafo, 8.4 collezioni | la query sull'**IPC** | quattro comandi Tauri avvolgono lo stesso `query_index` (`app/lib.rs:411`, `:484`, `:505`, `:642`) |
+| 27.3 version compatibility, 20.1 versioning plugin | presidio dell'additività del contratto | `wit_conformance` confronta abi↔WIT **oggi**, mai con la versione precedente |
 
 ---
 
@@ -209,24 +234,99 @@ plugin**. Da decidere una per una, con la risposta a verbale:
 
 ### 1.5 Modello del documento — le lacune che si vedono solo a valle
 
-- [ ] **Task come cittadini di prima classe**: `Block::List` deve portare
+- [x] **Task come cittadini di prima classe**: `Block::List` deve portare
       `checked: Option<bool>` per voce (e lo `Span` del marcatore). Oggi una
       task list è una lista di paragrafi: tutto il capitolo 10 (~90 voci)
       ricomincerebbe dal parsing.
-- [ ] **Ancore stabili**: `^block-id` e id di heading nel modello
+- [x] **Ancore stabili**: `^block-id` e id di heading nel modello
       (`Block::anchor: Option<String>`), con la regola di generazione nel
       contratto come `canonical_tag`. Servono a 7.1 (link a blocco), 5.2 (embed
       di blocchi), 13.3 (deep link ad annotazione), 18.3 (diff a blocchi).
-- [ ] **Footnote, definition list, tabella** promosse da `Custom` a varianti (o
+- [x] **Footnote, definition list, tabella** promosse da `Custom` a varianti (o
       decidere esplicitamente che restano `Custom` con `custom_kind` registrati
       e documentati — la decisione manca, non la variante).
-- [ ] **`LinkTarget` per gli allegati**: oggi un'immagine è `Path`/`Url` e nulla
+- [x] **`LinkTarget` per gli allegati**: oggi un'immagine è `Path`/`Url` e nulla
       distingue "risorsa del vault" da "url esterno" — 13.1 (riferimenti su
       rinomina, orfani, dedup) parte da qui.
-- [ ] **Proprietà tipizzate**: il frontmatter è `serde_json::Map` piatto. 8.2
+- [x] **Proprietà tipizzate**: il frontmatter è `serde_json::Map` piatto. 8.2
       chiede tipi (data, rating, relazione, formula): serve almeno un
       `PropertyValue` normalizzato nel contratto, o ogni consumatore
       reinventerà il parsing delle date.
+
+**Fatto, e con una decisione a verbale per ciascuna.** Il dettaglio sta in
+`docs/architecture/data-model.md`; qui il perché, che è ciò che fra sei mesi non
+si ricostruisce dal diff.
+
+*La task porta il simbolo, non un booleano.* `ListItem { blocks, task, span }`
+con `TaskMarker { symbol: Option<char>, span }` e `checked()` per la lettura
+binaria (`x`/`X`, regola di Obsidian). Gli stati personalizzati — `[/]` in
+corso, `[-]` cancellato, `[>]` rimandato — sono una richiesta esplicita di 10.1,
+e un `bool` avrebbe chiuso quella famiglia al primo parse; comrak li vede solo
+con `relaxed_tasklist_matching`, quindi il modello li apriva e il parser li
+buttava. Lo `span` è quello del **simbolo** e non delle parentesi: spuntare
+diventa la sostituzione di un carattere, che è la patch più piccola scrivibile
+per il gesto più frequente che ci sia.
+
+*L'ancora è indirizzo, non contenuto.* Ogni blocco porta `anchor`, con due
+sintassi e due spazi di nomi: per un heading è lo slug generato (`heading_slug`,
+salito nel contratto da funzione privata del provider — due provider potevano
+dare due id allo stesso titolo), per gli altri l'id esplicito `^abc`
+(`canonical_anchor` + `valid_anchor`, e il `^` va preceduto da spazio o `2^10`
+diventa un'ancora). La tabella piatta `anchors` porta **due** span, blocco e
+marcatore, perché servono a due mestieri (ritagliare un embed / riscrivere l'id).
+Il marcatore sparisce da testo indicizzato e resa, e diventa un `id=` in HTML.
+La forma su riga propria (`^abc` da solo) non è un blocco: appartiene a quello
+che la precede, ed è l'unico modo di indirizzare una lista o una tabella.
+
+*Solo la tabella diventa variante.* Il criterio, dichiarato: serve (a) un
+consumatore trasversale al formato che ne interroghi la struttura e (b) una
+forma che `Custom` non regga. La tabella ha entrambi — 11, 11.4, 17, 6.3, 22.1
+vogliono righe/celle/allineamento come tipo, e `Custom { blocks }` porta solo
+blocchi mentre una cella porta inline. Non era "rappresentata alla grossa": era
+**persa**, `Custom("table")` di `Custom("block")` senza allineamento né celle.
+Footnote e definition list non hanno né l'uno né l'altro e restano `Custom`, con
+i `custom_kind` registrati come costanti nel contratto (`custom_kind::*`) e
+documentati; il parser ora le produce davvero, che è la parte senza la quale la
+decisione sarebbe stata a vuoto. Promuoverle resta additivo; per la tabella no,
+perché lì era già un bug.
+
+*L'embed è del riferimento, non del bersaglio.* `embed` esce da
+`LinkTarget::Wiki` e sale su `Link`/`Inline::Link`: la stessa nota si linka e si
+incorpora nella stessa pagina, e finché il flag stava nella variante wiki
+`![](immagine.png)` non aveva modo di dirlo — infatti **le immagini non entravano
+affatto in `links`**, e il §2.21 lasciava 13.1 fuori portata non perché il path
+non fosse un arco ma perché quell'arco non veniva raccolto. Ora ci entrano. E la
+specie del bersaglio la decide il contratto (`LinkTarget::classify`), non
+`url.contains("://")` dentro un provider: `mailto:` non ha `//`, `C:\foto\a.png`
+sembra avere uno schema, e un secondo provider poteva rispondere un'altra cosa
+sulla stessa stringa.
+
+*Le proprietà non indovinano.* `PropertyValue` (+ `PropertyScalar` per le voci
+di elenco, perché il confine non ammette tipi ricorsivi e per le proprietà
+l'arena sarebbe sproporzionata) normalizza il frontmatter senza sostituirlo: la
+verità grezza resta il JSON. Solo l'ISO-8601 a larghezza fissa è una data
+(`2026-7-5` no: un parser tollerante trasformerebbe in date le stringhe
+dell'utente), la data è scomposta perché 10.4 raggruppa per giorno, il fuso è
+quello scritto — convertirlo vuole una capacità dell'host (§1.4) — e l'unica
+stringa che cambia specie è il wikilink, che è la "proprietà relazione" di 8.2.
+Un URL resta `Text`: 8.2 ha sia "proprietà URL" sia "proprietà testo", e
+sceglierle è lo schema per tipo nota, non un indovinello del parser.
+
+*Il presidio.* `wit_conformance` non compila su divergenza (i match sono
+esaustivi e i tipi attesi li deduce il compilatore) e confronta abi↔WIT nelle
+due direzioni; il round-trip dell'arena copre le forme nuove; venti casi sul
+parser vero misurano span e simboli sulla sorgente. `wit_additivity` è diventato
+rosso — come deve, perché questo commit **cambia la forma di cose già
+pubblicate** (l'ancora dentro ogni record di blocco, `items` della lista,
+`thematic-break` da payload nudo a record, `embed` fuori da `link-target-wiki`)
+— e la linea di base `wit/frozen/0.1.0.wit` è ritagliata qui dentro, che
+pre-freeze è la procedura dichiarata: la rottura si vede in review invece di non
+vedersi affatto. Dopo M4 questa stessa voce sarebbe stata una major.
+
+*Resta fuori, dichiarato:* il kernel non risolve ancora `[[Nota#^ancora]]`
+contro `anchors` (è §1.6/§2.x: qui c'è il dato, non la query), l'HTML grezzo
+entra nel modello come dato ma nessuno lo disegna (5.3), e l'anteprima di un
+allegato resta un segnaposto finché non c'è il modello degli asset (§2.2).
 
 ### 1.6 `IndexQuery` — il canale dati verso le view
 
@@ -639,6 +739,175 @@ scade col freeze mentre l'altra no:
       domanda di forma: le spec sono **dato di registrazione** (il kernel le
       tiene, il provider le invalida) o restano una chiamata al provider?
 
+### 1.28 Il modello parsato non arriva a nessun provider
+
+- [ ] **Un provider vede la sorgente, mai la struttura.** L'`HostApi` dà
+      `read_document -> String` (`abi/traits.rs:83`) e `query_index`; il
+      `FormatProvider` vive nel kernel e non è raggiungibile da fuori
+      (`kernel/workspace.rs:1335-1346`). Le uniche briciole di struttura che
+      escono sono `IndexQuery::Outline` (gli heading) e `IndexQuery::Tags`
+      (l'aggregato). **Il `DocumentModel` non attraversa il contratto in
+      nessuna direzione.**
+- [ ] **Quindi ogni feature che tocca il contenuto strutturato deve
+      riscriversi un parser markdown**, cioè non può essere un plugin: task e
+      spunte (10, ~90 voci), scrittura di una proprietà (8.2), flashcard da
+      blocchi (21.2 FubFlashcards), citazioni e bibliografia (15.1), chunking
+      per l'embedding (22.1), export in qualunque formato (17.2, ~45 voci),
+      TOC e indici automatici (5.2), linting e statistiche (4.3). È lo stesso
+      argomento del §1.22 — un'estensione di sintassi non può essere un plugin
+      — applicato al **consumo** invece che alla produzione.
+- [ ] **È il gemello lato provider del §1.13**, che pone la stessa domanda dal
+      lato della shell: *chi vede il modello?* Oggi la risposta è «solo il
+      kernel», e le due metà vanno decise insieme o si ottiene un modello che
+      arriva alla webview e non al provider che deve lavorarci.
+- [ ] La forma da scegliere ora: `HostApi::document_model(id)` oppure
+      `IndexQuery::Model { doc }` — e con essa la risposta a *quale* modello,
+      visto che la cache tiene i soli metadati (`workspace.rs:125-130`) e il
+      corpo si riparsa dal disco. Un canale che riparsa a ogni chiamata è una
+      firma diversa da uno che serve una cache, e la differenza si vede solo
+      quando il chiamante cammina l'intero vault — cioè in ogni voce del 17.
+
+*Sblocca:* 10 per intero, 8.2, 15.1-15.2, 17.2, 22.1-22.2, 5.2 (TOC, indici),
+4.3, e il §1.7 (un `ExportProvider` senza modello esporta testo grezzo).
+
+### 1.29 Il contratto non dice di che formato è un documento
+
+- [ ] **Nessuna capacità restituisce il `FormatDescriptor` o le
+      `FormatCapabilities` di un `DocId`.** Un provider che riceve una lista da
+      `list_documents` non ha modo di distinguere una nota da un canvas, un
+      CSV, un PDF o un allegato: non può decidere se sa lavorarci, e nemmeno se
+      *deve* ignorarlo.
+- [ ] Oggi non si vede perché il formato è uno solo. Serve appena ne esiste un
+      secondo (12 canvas, 11.4 CSV/JSON, 13.2 PDF) e appena il vault contiene
+      cose che documenti non sono (§2.2), cioè esattamente quando il §1.20
+      aprirà `parse` ai formati non-testo.
+- [ ] Va deciso con il §1.26 (`FormatCapabilities` come mappa con namespace) e
+      con il §1.20: sono la stessa domanda — *cosa so di questo documento senza
+      averlo aperto* — vista dal lato del vault invece che del parser.
+
+### 1.30 Un `ViewProvider` non può avere stato: la firma glielo vieta
+
+- [ ] **`render_view` *e* `on_action` prendono `&self`**
+      (`abi/traits.rs:222-228`). Non è una svista del percorso di lettura: **un
+      provider di view non può mutare sé stesso nemmeno in risposta a un
+      click**. Filtro corrente, tab attiva, pagina, ordinamento, selezione,
+      sezioni aperte, esito di un calcolo: niente ha dove stare, se non dietro
+      interior mutability — cioè un `Mutex` che ogni autore di provider si
+      inventa per conto suo, con la sua idea di cosa succede se il lock è preso
+      durante un render.
+- [ ] **È distinto dal §3.10**, che chiede *dove* vive lo stato di vista
+      (settings, sessione, layout): questo dice che la **firma** lo esclude a
+      monte, e che l'unico contenitore offerto dal contratto — `storage_*` — è
+      volatile, a chiave→valore, senza namespace per-view e **irraggiungibile
+      in scrittura da `render_view`** (che ha un `&dyn HostApi`, non `&mut`).
+- [ ] Con tre pannelli in sola lettura non si nota; con i nodi di input del
+      §1.2 è il caso normale. Le tre strade, da scegliere ora perché `&self` è
+      la firma che il freeze congela: **`&mut self` su `on_action`** — che non
+      costa il prestito condiviso del render, perché `render_view` può restare
+      `&self` (il percorso di lettura del §2.4 resta parallelizzabile) ma
+      richiede al kernel di estrarre il provider come già fa in `view_action`
+      (`workspace.rs:1173`); **uno stato di vista esplicito** passato dall'host
+      a ogni chiamata e restituito modificato, che è la forma più amica del
+      component model di M5; oppure **interior mutability dichiarata come
+      contratto**, con la sua regola di rientranza scritta accanto a quella
+      degli eventi. La terza è ciò che succede da sé se non si sceglie.
+
+### 1.31 Una view non può chiedere di essere ridisegnata, né dire "sto caricando"
+
+- [ ] **Il protocollo di view è pull-only e sincrono.** `ViewSpec.refresh` è una
+      maschera sugli eventi *del kernel* e `ViewUpdate` esiste solo come
+      risposta a `on_action`: un provider che finisce un job (§1.21), riceve
+      dati dalla rete o completa un calcolo **non ha modo di dire
+      «ridisegnami»**. L'unica strada è emettere un `Event::Custom` e
+      dichiararsi interessato a `EventKind::Custom` — cioè svegliare ogni
+      handler e ogni view del sistema (§1.19).
+- [ ] **E non esiste uno stato intermedio**: `render_view` deve rispondere
+      subito con un albero, quindi una view che dipende da lavoro lungo non è
+      esprimibile — né "in caricamento", né "fallito, riprova", né parziale.
+      Con il §1.21 che manda il lavoro lungo nei job, la coppia
+      job→view è **il** percorso normale di 11 (database), 12 (canvas), 22
+      (AI), 18 (stato del sync), 11.5 (dashboard), 24.1 (progresso), e oggi non
+      esiste.
+- [ ] Serve la terna, decisa insieme: un `HostApi::invalidate_view(view)` (o un
+      `ViewUpdate` emesso fuori da `on_action`), una variante di stato nel
+      protocollo (`UiNode::Pending`/`Error`, o `render_view` che può
+      rispondere "non ancora"), e la regola di coalescing — venti inviti a
+      ridisegnare in un giro sono un ridisegno.
+
+*Sblocca:* 22 per intero, 11, 12, 11.5, 18.1 (stato sync visibile), 24.1
+(indexing progress, task manager), 14.2 (il clipper che mostra cosa sta
+scaricando).
+
+### 1.32 `ViewSpec` non dice come si presenta
+
+- [ ] **Id, titolo, placement, refresh** (`abi/traits.rs:201-217`) e nient'altro:
+      niente icona, ordine o priorità, stato di default (aperta/chiusa),
+      dimensione preferita, possibilità di essere nascosta e richiamata a
+      comando. Con tre pannelli decide la shell per conoscenza privata; con i
+      venti di 20.1 e le sidebar personalizzabili, collassabili e a gruppi di
+      3.3, la shell non ha su cosa decidere.
+- [ ] È additivo — un campo oggi, una minor domani — ma è **lo stesso record**
+      che §1.14 (superfici) e §1.15 (istanze) devono toccare, e quei due lo
+      riscrivono: va deciso nella stessa seduta o si aggiunge due volte.
+
+### 1.33 `UiAction.payload` esiste e non lo usa nessuno
+
+- [ ] **La shell non popola mai il payload**: `mountView` chiama
+      `api.viewAction(view, action)` senza (`main.ts:1197-1201`), e le tre
+      feature ufficiali codificano i dati **dentro l'id dell'azione** —
+      `open:a/Uno.md` (`features/src/backlinks.rs:30`), `tag:rust`
+      (`features/src/tags.rs:23`). Funziona, ed è una convenzione privata che
+      sta diventando contratto de facto: il prossimo provider farà string-concat
+      anche lui, perché è ciò che vede fare.
+- [ ] **Il §1.2 dà per scontato che le azioni portino valori** (lo stato di un
+      form). Il canale c'è già ed è inerte: o si formalizza adesso — chi mette
+      cosa nel payload, come si serializza lo stato di un form, chi lo valida —
+      o i nodi di input nasceranno sopra una convenzione che nessuno ha scritto.
+- [ ] Va con il §4.6: il parsing degli `ActionId` è già nell'elenco di ciò che
+      «ogni provider riscriverebbe», e la ragione per cui lo riscrive è questa.
+
+### 1.34 Gli id non sono di nessuno: nessuna regola di namespace, nessuna collisione
+
+- [ ] **`view_owner` risolve un id cercando su tutti i provider e prende il
+      primo** (`kernel/workspace.rs:1196-1201`): due view con lo stesso id e la
+      seconda è irraggiungibile, **in silenzio**. È lo stesso difetto già visto
+      per `FormatRegistry` (§1.22: l'ultimo registrato vince) e per il dispatch
+      delle query (§2.18: per tentativi) — ma quelle sono due istanze di un
+      problema che è generale.
+- [ ] **Gli spazi di nomi del contratto sono otto e nessuno ha una regola**: id
+      di view, `ActionId`, id di comando (§1.1), `custom_kind` dei blocchi
+      (§1.23), topic degli `Event::Custom`, `ns` delle `IndexQuery::Custom` e dei
+      `ViewUpdate::Custom`, chiavi di impostazione (§1.3), nomi dei job. Solo
+      per gli eventi custom c'è una convenzione scritta (`"<plugin-id>/<nome>"`,
+      `abi/event.rs:39-41`), e non è imposta da nulla.
+- [ ] **La decisione è una sola**: l'id è namespaced sull'id del plugin, il
+      kernel lo impone alla registrazione e la collisione è un errore
+      dichiarato — oppure ogni famiglia se lo inventa. Costa una regola adesso;
+      dopo il freeze costa rinominare ogni id già pubblicato, cioè rompere le
+      hotkey, le impostazioni salvate e i link a view di chiunque abbia
+      scritto un plugin nel frattempo. È anche il presupposto di §2.9 (togliere
+      un provider: per id) e §2.18 (routing: per `ns`).
+
+### 1.35 Non c'è un ciclo di vita: si apre e basta
+
+- [ ] **Il contratto non ha uno spegnimento.** `IndexProvider` ha `activate` e
+      `flush` ma **nessun `close`/`deactivate`** (`abi/traits.rs:355-388`);
+      `Plugin::deactivate` esiste (`abi/traits.rs:469`) e **non ha chiamanti**
+      in tutto il repo. Un indice che possiede risorse esterne — tantivy tiene
+      segmenti, lock file e thread di merge — non ha un punto in cui chiuderle,
+      e il kernel non ha modo di chiedergliele.
+- [ ] **L'asimmetria è di firma, quindi scade col freeze**: `activate` senza il
+      suo gemello è un ciclo di vita monco che ogni provider di terzi eredita.
+      La metà implementativa — chi chiama, quando, e cosa succede a metà — è il
+      §2.22.
+- [ ] Va deciso con il §2.9 (disattivazione a runtime) e il §1.21 (un job in
+      volo mentre il provider si spegne): sono tre facce del momento in cui un
+      componente smette, e oggi nessuna delle tre ha una risposta.
+
+*Sblocca:* 24.2 (safe mode, crash recovery, plugin isolation), 3.1 (switch fra
+vault senza perdere scritture), 20.1 (lifecycle, enable/disable), 20.2 (hot
+reload), 26.2-26.3 (dove il watcher non c'è).
+
 ---
 
 ## 2. Kernel — da "un vault markdown locale" a piattaforma
@@ -934,6 +1203,200 @@ auto-spostamento), 6.2 (CSS per cartella), 11.3 (database da cartella), 19.2
       le due voci sono lo stesso lavoro e vanno fatte insieme, come §2.11 e
       §2.13.
 
+### 2.21 Il grafo conosce solo i wikilink — e la promessa vale a metà, in silenzio
+
+- [x] **`LinkGraph::register_links` scarta ogni `LinkTarget` che non sia
+      `Wiki`** (`kernel/graph.rs:266`), e `link_rewrite_plan` fa lo stesso
+      (`kernel/workspace.rs:893`). Quindi per un link markdown ordinario —
+      `[testo](note/altra.md)`, che il 7.1 mette sullo stesso piano del
+      wikilink, insieme a «link relativi» e «link a file allegato» — **non ci
+      sono backlink, non c'è riscrittura su rinomina, non c'è arco nel grafo**.
+- [x] **È la prima voce di questo piano che rende falsa una promessa già fatta,
+      senza dirlo**: «aggiornamento link su rinomina» e «spostamento sicuro»
+      (3.2, 7.2) oggi valgono per una parte dei link e non per l'altra, e la
+      differenza la scopre l'utente quando un link si rompe. Non è un buco di
+      capacità futura: è un comportamento sbagliato adesso.
+- [x] **E senza di esso non esiste tutta la famiglia della salute del vault**:
+      link rotti e loro report, note orfane, allegati inutilizzati, fix
+      automatico (7.2, ~30 voci) — sono tutte interrogazioni sullo stesso grafo,
+      e sono tutte cieche su metà degli archi. Idem 13.1 (riferimenti aggiornati
+      su rinomina di un allegato, orfani, dedup), che non è nemmeno
+      rappresentabile finché un `Path` non è un arco.
+- [x] **La metà nel contratto è il §1.5** (`LinkTarget` che distingua "risorsa
+      del vault" da "url esterno") e va decisa prima; questa è la metà kernel —
+      risoluzione di un `Path` relativo a `DocId` (con le sue regole: relativo a
+      cosa, con o senza estensione, case), archi nel grafo, e riscrittura al
+      rename con la stessa disciplina chirurgica già scritta per i wikilink.
+
+**Fatta la metà kernel.** `crates/fubmd-kernel/src/pathlink.rs` è il posto — e
+l'unico — dove sta scritto cosa significa un path dentro un documento: relativo
+alla **cartella** del sorgente (con lo slash iniziale, alla radice del vault),
+`.` e `..` risolti lì, un `..` di troppo che esce dal vault e quindi non risolve;
+percent-encoding decodificato, così `[t](nota%20uno.md)` e `[t](<nota uno.md>)`
+sono lo stesso arco; frammento (`#heading`, `#^blocco`) staccato prima di
+risolvere e riattaccato dopo. Sull'estensione la regola è **prima l'esatto, poi
+il senza**: `note/a.md` è `note/a.md` e non il `note/a.txt` che gli sta accanto,
+`note/a` ricade sulla chiave dei wikilink, e `note/a.png` che non esiste **non**
+ricade su `note/a.md` — chi scrive un'estensione l'ha scritta apposta. Il caso
+passa dalla stessa `normalize` dei wikilink (trim, NFC, minuscolo), perché il
+vault sincronizzato fra macOS e Linux è lo stesso vault.
+
+Nel grafo la seconda specie di arco entra **senza un secondo meccanismo**: un
+`LinkRef` porta il suo `RefKind`, il path si risolve alla registrazione (da lì in
+poi la chiave è assoluta nel vault e nessuno deve più sapere da dove veniva), e
+`watchers`/`refs_by_key` restano quelli — le due risoluzioni dipendono dallo
+stesso paio di chiavi d'indice, quindi l'invalidazione incrementale non cambia di
+una riga. Con una differenza di sostanza: un link markdown **non ricade su nome e
+alias**. `[t](Mario)` non pesca l'alias "Mario"; è un path, e nei path non ci
+sono alias.
+
+La riscrittura al rename ha un caso in più del wikilink, e non è un dettaglio: un
+path è relativo a chi lo scrive, quindi si rompe anche quando a spostarsi è la
+**sorgente** — muovere `a.md` in `sub/` invalida ogni `[t](altra.md)` che
+conteneva, e nessun backlink lo segnala perché il documento che si rompe è quello
+che si è mosso. Quindi il documento rinominato è sempre fra le sorgenti del
+piano, e i suoi link relativi si ri-basano sulla cartella nuova (quelli dalla
+radice no: la radice non si muove). Il riferimento riscritto è relativo a *ogni*
+sorgente — lo stesso bersaglio diventa `archivio/X.md` da uno e `../archivio/X.md`
+da un altro — è percent-encoded per stare dentro `[]()` senza rompersi, e
+riacquista sempre l'estensione: un path senza è ambiguo per costruzione, e
+riscrivere un link vuol dire garantire che dopo punti ancora dove puntava. Un
+link già rotto non si tocca: riscriverlo sarebbe indovinare.
+
+Le prove: il test di proprietà `graph_incremental.rs` ora genera **entrambe le
+specie** e osserva anche `resolve_path` per ogni coppia (sorgente, destinazione)
+— incrementale e full-rebuild restano indistinguibili su 200 sequenze casuali più
+una da 2 000 passi; dieci casi end-to-end sul rename in `rename_and_events.rs`; e
+uno sul parser vero in `format-markdown/tests/vault_e2e.rs`, perché gli `Span`
+dentro cui la sostituzione ritaglia sono quelli di comrak, non quelli di un
+provider giocattolo.
+
+*Sblocca:* 7.2 e 13.1 sul lato grafo (link rotti, orfani, riferimenti su
+rinomina) — che ora vedono tutti gli archi, non metà.
+
+**Resta aperta la metà modello (§1.5), e non è un residuo formale.** Un
+`LinkTarget::Path` continua a essere una stringa che il kernel interpreta:
+l'unica cosa che distingue una risorsa del vault da un url esterno è
+`classify_url` nel provider markdown (`://` o `mailto:`), e un provider terzo può
+non fare la stessa cosa. Soprattutto: **le immagini non entrano affatto in
+`links`** (`parse.rs:281`), quindi 13.1 sugli allegati — riferimenti su rinomina
+di un allegato, orfani, dedup — resta fuori portata: non perché il `Path` non sia
+un arco, ma perché quell'arco non viene nemmeno raccolto. E in anteprima un
+`.internal-path` porta già il suo `data-path`, ma nessuno lo clicca: la shell non
+naviga né quelli né i wikilink (§3.x). L'arco adesso è vero; il clic no.
+
+### 2.22 Nessuno spegne niente: la durabilità dipende dal watcher
+
+- [ ] **`flush_indexes` ha un solo chiamante in produzione**: il callback del
+      file watcher (`app/lib.rs:249-254`), più `reindex` all'apertura. Nessun
+      altro percorso lo chiama — né `write_document` dall'IPC, né la chiusura
+      del vault, né la chiusura dell'app.
+- [ ] **Quindi la durabilità di un indice dipende da un componente
+      *opzionale***. Dove il watcher non c'è o non funziona — network share e
+      cartelle cloud (2.3, 3.1), PWA (26.3), CLI (27.1), e2e headless (27.4),
+      mobile (26.2) — le scritture dell'indice **non diventano mai durevoli**, e
+      il sintomo è solo una riapertura lenta che reindicizza tutto: nessuno se
+      ne accorge finché non conta.
+- [ ] **E cambiare vault o chiudere l'app non chiude niente**: nessun flush
+      finale, nessun `Plugin::deactivate` (che non ha chiamanti), nessun
+      `close` sugli indici (che non esiste — §1.35). tantivy resta con segmenti
+      non committati e con i suoi lock; un journal (§2.5) resterebbe aperto; un
+      sync (18) resterebbe a metà.
+- [ ] Serve un **ciclo di vita esplicito del workspace** — `open` → `close` —
+      con flush e deactivate di tutti i provider, la semantica di cosa succede
+      se uno fallisce, e un punto di consistenza che **non sia il watcher**: il
+      kernel non sa quando finisce un lotto (è dichiarato, ed è giusto), ma
+      "l'app sta chiudendo" lo sa chi la chiude. Va con §2.7 (sessioni multiple:
+      chiuderne una) e §2.3 (il registry è chi possiede i bundle).
+
+### 2.23 L'apertura del vault è tutto-o-niente, sincrona e senza ritorno
+
+- [ ] **`reindex` fallisce l'intera apertura per un solo documento**: legge e
+      parsa tutto con `?` su ogni passo (`kernel/workspace.rs:341-351`). Una
+      nota illeggibile per i permessi, un file troncato da un crash, un
+      documento che il parser rifiuta — e **il vault non si apre**. È l'opposto
+      di ciò che chiedono 2.1 (corruption detection), 24.2 (vault repair, health
+      check) e del principio per cui il vault è la verità: la verità non si
+      rifiuta di aprire, si apre segnalando cosa non ha letto.
+- [ ] **E succede dentro un comando IPC** (`app/lib.rs:109-208`): scansione,
+      parse di ogni documento, grafo, riconciliazione e flush in una chiamata
+      sincrona che ritorna un `VaultInfo`. Niente progresso, niente
+      cancellazione, niente apertura parziale — «avvio rapido», «indexing
+      progress», «supporto vault enormi» (24.1) non hanno dove attaccarsi.
+- [ ] Le due cose vanno insieme e cambiano la **forma dell'apertura**: da
+      funzione che ritorna un vault a operazione a fasi (vault utilizzabile →
+      indicizzazione in corso → pronto) con errori raccolti per-documento e un
+      esito consultabile. Il §2.4 sposta il lavoro fuori dal lock; questa dice
+      che il lavoro deve poter **fallire in parte**.
+
+### 2.24 Lo stato per-documento: ogni feature se lo migra da sé
+
+- [ ] **Il rename è già un rito che ognuno celebra per conto proprio**: il
+      versioning migra la sua chiave sull'evento `DocumentRenamed`, il sidecar
+      dell'organizzazione la migra in TypeScript (`main.ts:638`), e le prossime
+      — annotazioni (13.3), task (10), commenti (4.3, 19.2), database (11),
+      flashcard (21.2) — la migreranno una terza e una quarta volta, ognuna col
+      proprio buco già annotato al §2.14 (il rename fatto ad app chiusa non lo
+      vede nessuno).
+- [ ] **E nessuno raccoglie**: cancellata una nota per sempre (svuota cestino),
+      chi cancella i dati che la nominavano? Oggi il versioning tiene tombstone
+      per scelta propria; per tutti gli altri lo spazio dati cresce con chiavi
+      morte che nessun GC visita.
+- [ ] **Manca la primitiva**: uno spazio dati **per-documento** namespaced per
+      plugin, che il kernel migra sul rename e ripulisce sulla cancellazione
+      definitiva, con la sua politica di raccolta. Il §2.14 chiede di assorbire
+      *un* sidecar concreto; questa è la forma generale, e va decisa insieme al
+      §1.10 (se l'identità resta il path, la migrazione della chiave è per
+      sempre un problema del kernel; con un id stabile diventa un non-problema).
+
+### 2.25 Nessun inventario di ciò che è attivo
+
+- [ ] **`VaultInfo.versioning: bool`** (`app/lib.rs:57`, mirror in `api.ts:14`)
+      è un booleano **per feature** dentro un record IPC. Con i moduli del 21.2
+      diventano venti booleani, e ognuno è una modifica al record, al mirror e
+      alla fixture (§4.8).
+- [ ] **E la shell non sa comunque nulla del resto**: quali provider, indici,
+      handler e comandi siano registrati, con quale manifest, quale versione,
+      quali permessi, quale `Trust`. Il kernel non conserva i manifest
+      (`register_*` prende una stringa, §2.10), quindi la domanda non ha proprio
+      un destinatario.
+- [ ] Serve un `capabilities()`/`list_plugins` sul confine, alimentato dal
+      registry del §2.3: è ciò su cui poggiano la scheda impostazioni (§1.3), il
+      pannello plugin con enable/disable (20.1), il developer mode (20.2), la
+      diagnostica e il diagnostic bundle (24.2) — e il modo di far sparire i
+      booleani prima che diventino venti.
+
+### 2.26 La query non esiste sull'IPC
+
+- [ ] **Quattro comandi Tauri avvolgono lo stesso `query_index`**: `backlinks`
+      (`app/lib.rs:411`), `search` (`:484`), `list_tags` (`:505`) e — con un
+      canale tutto suo — `graph_data` (`:642`). Un provider può fare qualunque
+      query; **la shell no**: ogni variante nuova del §1.6 (proprietà, faccette,
+      vicinato del grafo, salute del vault) richiederebbe un comando in più.
+- [ ] **Manca il gemello di `render_view`/`view_action`**: un `query_index`
+      generico sull'IPC, con la stessa disciplina (dispatch del §2.18, errori
+      del §1.11, paginazione del §1.6). È la voce che rende **praticabile** la
+      dieta dell'IPC del §4.2: senza, l'allowlist si troverebbe a dire di no a
+      feature legittime che non hanno altra strada.
+- [ ] Con essa i quattro comandi diventano tre righe di `api.ts` e il grafo
+      smette di avere un canale privilegiato (§1.14).
+
+### 2.27 Il ponte degli eventi non ha né freno né raggruppamento
+
+- [ ] **`EventBus` usa canali `std::mpsc` illimitati** (`kernel/bus.rs:14`) e il
+      ponte verso la webview emette **un messaggio IPC per evento**
+      (`app/lib.rs:184-188`). Un subscriber lento non rallenta nessuno: accumula
+      memoria, in silenzio, senza un tetto — l'opposto del `DISPATCH_BUDGET`
+      che protegge gli handler.
+- [ ] **E ogni evento costa un giro di shell**: a ogni `index_updated` la shell
+      rifà `list_documents` e ridisegna ogni view iscritta (`main.ts:1296-1299`).
+      Il §1.12 riduce gli eventi *emessi*; resta che il ponte non ha una
+      politica — coalescing per tipo, finestra temporale, tetto oltre il quale
+      si degrada a "riconcilia tutto", che è poi ciò che `Event::Overflow` già
+      significa per gli handler.
+- [ ] Va con §2.4 (il lavoro lungo emette progresso: sarà il canale più caldo di
+      tutti) e §3.5 (il centro attività è il suo primo cliente).
+
 ---
 
 ## 3. Shell — da `main.ts` a piattaforma UI
@@ -1151,6 +1614,13 @@ dove il debito si vede a occhio nudo.
       un `ViewProvider` che non muta durante `render_view`). È la differenza fra
       "il contratto è documentato" e "il contratto è verificabile da chi lo
       implementa".
+- [ ] La duplicazione non è ipotetica: **le tre feature ufficiali costruiscono
+      già lo stesso albero tre volte** — una lista di `ListItem` con azione, e
+      uno `Stack` con un `Text` come segnaposto vuoto
+      (`features/src/backlinks.rs:96`, `outline.rs`, `tags.rs:77`) — e ognuna ha
+      reinventato la codifica dei dati dentro l'`ActionId` (§1.33). Su tre
+      provider è una convenzione; su venti moduli Suite è un dialetto per
+      modulo.
 
 *Sblocca:* 27.3 (unit/e2e test utilities, template progetto plugin, type
 definitions, plugin linting), 21.1 (moduli Suite con API condivise).
@@ -1184,13 +1654,13 @@ definitions, plugin linting), 21.1 (moduli Suite con API condivise).
 
 ### 4.9 Supply chain e compliance — la sola parte che non si recupera dopo
 
-- [ ] **La CI è buona e non copre questo**: invarianti abi↔WIT e grafo delle
+- [x] **La CI è buona e non copre questo**: invarianti abi↔WIT e grafo delle
       dipendenze in un minuto, build e test su tre OS, toolchain pinnata
       all'MSRV, frontend con type-check + test + build. Il §4 aggiunge fuzzing,
       corpus, benchmark, e2e e tracing. Nessuno dei due tocca il 23.3: **SBOM,
       identificatori SPDX, license compliance, dependency audit e advisory
       CVE** — né il 20.3 (reproducible builds, firma, dependency audit).
-- [ ] **`cargo-deny`** (licenze, advisory, duplicati, sorgenti consentite) e la
+- [x] **`cargo-deny`** (licenze, advisory, duplicati, sorgenti consentite) e la
       **generazione dell'SBOM** in CI costano mezz'ora adesso. È l'unico punto
       di quel capitolo che non si recupera a posteriori: le licenze delle
       dipendenze entrate nel frattempo si riesaminano una per una, e una
@@ -1198,9 +1668,75 @@ definitions, plugin linting), 21.1 (moduli Suite con API condivise).
       sopra. Vale doppio con l'albero che sta per arrivare (tantivy c'è già;
       §4.7 ne prevede uno per bundle).
 
+**Fatto.** `deny.toml` alla radice (politica e motivazioni ci stanno dentro) e il
+job `supply-chain` in CI, che gira anche **a settimana**, perché un advisory
+nuovo non aspetta il prossimo push. Le quattro verifiche sono verdi oggi:
+licenze da elenco chiuso (`MPL-2.0` ammessa consapevolmente — copyleft per file,
+entra con `cssparser`/`selectors` via tauri), advisory e crate yanked rossi,
+duplicati come avviso (con tauri nell'albero non dipendono da noi), sorgenti
+limitate a crates.io. L'SBOM è **SPDX 2.3** (`cargo-sbom`), caricato come
+artefatto: 510 pacchetti con identificatore SPDX e `purl`.
+
+Un difetto latente emerso strada facendo, e chiuso: le dipendenze interne erano
+`{ path = … }` **senza versione**, cioè dipendenze `*` — build non riproducibile
+per chi non ha questo albero, e nessuno dei crate pubblicabile. Il che avrebbe
+reso irraggiungibile proprio ciò che deve esserlo da fuori (`fubmd-abi` e
+`fubmd-sdk`, §4.6). Ora portano `version = "0.1.0"` accanto al path: la
+risoluzione locale non cambia (il path vince sempre).
+
 *Sblocca:* 23.3 per intero, 20.3 (SBOM plugin, dependency audit, advisory), e
 il capitolo 1.2 di FEATURES — la «licenza chiara» promessa dai principi fondanti
 è verificabile solo se lo è quella delle dipendenze.
+
+### 4.10 L'additività del contratto è una promessa senza presidio
+
+- [x] **Nessuno confronta il contratto con la versione precedente.**
+      `abi_compatible` applica la regola a runtime (`abi/traits.rs:453-464`) e
+      `wit_conformance.rs` verifica che Rust e WIT dicano la stessa cosa —
+      **oggi**, fra di loro. Ma la promessa del freeze è un'altra: *post-M4 il
+      contratto cresce solo per aggiunta*. Nessun test la controlla, e non c'è
+      da nessuna parte una copia del contratto com'era.
+- [x] **Il costo di scoprirlo tardi è asimmetrico**: una variante rimossa, un
+      campo rinominato o un enum riordinato non rompono la build del repo —
+      rompono i plugin di terzi, a valle, dopo il rilascio, e la regola
+      `abi_compatible` li avrebbe accettati perché la minor è compatibile. Cioè
+      la rete di sicurezza dice "sì" proprio nel caso che dovrebbe fermare.
+- [x] Serve poco: uno **snapshot del WIT per ogni versione pubblicata** in
+      `wit/frozen/`, e un test che confronti il contratto attuale con l'ultimo
+      snapshot rifiutando rimozioni, rinomine e cambi di forma (le aggiunte
+      passano). Va messo **prima** del freeze, perché è il freeze a fissare la
+      prima riga di base — e va con §4.8, che genererebbe da uno solo dei
+      quattro posti ciò che questo test presidia in tutti e quattro.
+
+**Fatto.** `wit/frozen/0.1.0.wit` è la prima linea di base e
+`crates/fubmd-abi/tests/wit_additivity.rs` il presidio: parsa il contratto
+attuale e ogni snapshot, e verifica che il primo sappia ancora servire ognuno di
+quelli **di cui `abi_compatible` direbbe di sì** (stessa major, minor non
+superiore) — così la regola a runtime e il test guardano lo stesso insieme di
+versioni, invece di due insiemi diversi. La forma di ciò che era pubblicato deve
+essere intatta *e nella stessa posizione*; il nuovo può stare solo in coda. Un
+tipo spostato da un'interfaccia a un'altra conta come rinomina. Regole complete e
+ciclo di vita della cartella in `wit/frozen/README.md`.
+
+Tre proprietà che il test si autopresidia, perché è un presidio che si spegne da
+solo se non ci si bada: **diciannove** rotture introdotte ad arte sul modello
+parsato (tipo rimosso o spostato, campo rinominato/ritipato/riordinato/tolto/
+inserito in mezzo, caso di variant rimosso o riordinato, payload cambiato, alias
+ridiretto, funzione sparita, parametro in più o rinominato, risultato cambiato,
+package rinominato, import di world sparito) devono tutte farlo diventare rosso;
+**sette** aggiunte vere — fra cui proprio quelle che il §1 dovrà fare: una
+superficie in più in `view-placement` (§1.14), una variante in più in
+`index-query` (§1.6), una capacità in più sull'`host-api` (§1.4) — devono
+passare; e `wit/frozen/` vuota, o senza una base con la major corrente, è rossa,
+perché zero snapshot significherebbe zero confronti e quindi verde.
+
+Pre-freeze la superficie resta libera di evolvere: il test non lo impedisce, lo
+rende **visibile** — una rottura deliberata si fa con un commit che tocca
+`wit/frozen/0.1.0.wit`, e in review si vede. Dopo M4 quel file non si tocca più.
+
+*Sblocca:* 27.3 (version compatibility, deprecation policy), 20.1 (versioning
+plugin), 20.2 (canali di aggiornamento) — e rende vera, non sperata, la promessa
+su cui poggia l'intero §1.
 
 ---
 
@@ -1248,6 +1784,19 @@ quattro che **rompe una firma** invece di aggiungere un campo; e §1.22, §1.23 
 conosce), quindi vanno prese nella stessa seduta o due terzi della risposta
 saranno inutilizzabili.
 
+Dal quinto giro, con lo stesso statuto: §1.28 il modello parsato in mano ai
+provider, §1.29 il formato di un documento, §1.30 lo stato di una view (`&self`
+sulle sue due firme), §1.31 invalidazione e stato di caricamento, §1.32 i
+metadati di `ViewSpec`, §1.33 il payload delle azioni, §1.34 la regola degli
+spazi di nomi, §1.35 il gemello di `activate`. Più la **metà modello** del §2.21
+(un `LinkTarget` che il grafo possa risolvere), che è §1.5 visto dal lato degli
+archi. Tre raggruppamenti da decidere in una seduta sola, non voce per voce:
+§1.28 con §1.13 e §1.29 (*chi vede il modello*); §1.30, §1.31, §1.32 e §1.33 con
+§1.2, §1.14 e §1.15 (*cosa è una view*); §1.35 con §2.9 e §1.21 (*come smette un
+componente*). Il §1.34 sta da solo ed è il più urgente in senso stretto: è
+l'unico che non riguarda ciò che scriveremo, ma ciò che avremo **già
+pubblicato**.
+
 **P1 — insieme a M3** (l'editor e la palette sono i primi clienti del §1):
 §1.3 impostazioni, §2.3 registry + runner dei job, §2.8 tabella dei provider
 unica, §2.9 disattivazione, §2.10 permessi e manifest, §2.15 il crate host,
@@ -1265,6 +1814,15 @@ va **prima** del §2.15 e del §2.4, o il crate host nasce attorno all'oggetto-d
 e il `RwLock` non potrà mai essere a grana fine. Il §3.12 va deciso insieme a
 §1.2, §1.22 e §1.23, anche se si implementa dopo.
 
+Dal quinto giro: §2.21 (la metà kernel: il grafo che risolve i link non-wiki —
+**fatta**, il dettaglio in fondo alla voce; resta la metà modello, che è §1.5),
+§2.22 (lo spegnimento, cioè l'implementazione del §1.35), §2.23 (l'apertura a
+fasi e tollerante), §2.25 (l'inventario di ciò che è attivo, che nasce dal
+registry del §2.3) e §2.26 (la query sull'IPC). Due precedenze: §2.26 va
+**prima** del §4.2, o l'allowlist dei comandi si troverebbe a dire di no a
+feature che non hanno altra strada; §2.22 va con §2.7, perché "chiudere una
+sessione" e "chiuderle tutte" sono lo stesso codice.
+
 **P2 — quando la scala lo chiede** (nessuno blocca il contratto):
 §2.1 `VaultStorage`, §2.2 allegati, §2.5 durabilità, §2.6 politiche path/testo,
 §2.7 sessioni multiple, §2.11 cartelle, §2.12 versioni di schema, §2.13 canale
@@ -1277,10 +1835,18 @@ e §2.2 pure, e vanno fatte nella stessa passata; §3.10 va deciso *insieme* a
 §1.3 e §1.9, anche se si implementa dopo, o i tre stati nascono con tre
 meccanismi che non si parlano.
 
+Dal quinto giro si aggiungono §2.24 (lo stato per-documento come primitiva, da
+decidere però *insieme* a §1.10 e §2.14: sono la stessa domanda vista da tre
+distanze) e §2.27 (freno e raggruppamento sul ponte degli eventi, il cui primo
+cliente vero sarà il progresso dei job del §2.4).
+
 **Fuori dall'ordine, perché costa mezz'ora e non si recupera dopo:** §4.9
 (`cargo-deny` + SBOM in CI). Non blocca niente e non sblocca niente — è solo
 l'unica voce del piano il cui costo cresce con il numero di dipendenze già
-entrate.
+entrate. Accanto, con lo stesso statuto e per la stessa ragione, §4.10 (lo
+snapshot del contratto e il test di additività): costa poco adesso, ma la prima
+riga di base la fissa il freeze — dopo, non c'è più un "prima" con cui
+confrontarsi. — **Entrambe fatte**: il dettaglio in fondo a §4.9 e §4.10.
 
 Nota di rotta: le voci con l'effetto leva più alto sono **§1.1 (comandi)**,
 **§1.2 (input in `UiNode`)** e **§2.3 (registry + job)** — insieme spostano dal
@@ -1315,3 +1881,28 @@ regola. Accanto, di poco sotto: **§1.24 (i servizi fra plugin)**, senza cui il
 capitolo 21 descrive crate linkati e non moduli installabili separatamente, e
 **§2.19 (la scomposizione del `Workspace`)**, che è il posto dove tutte le altre
 voci di questo piano andranno ad atterrare — una alla volta, come campi.
+
+Dal quinto giro se ne aggiungono tre, e la prima ha lo stesso statuto delle due
+del quarto — rende inesprimibile, non stretto. **§1.28 (il modello parsato in
+mano ai provider)**: finché il `DocumentModel` non attraversa il contratto,
+chiunque voglia toccare il contenuto *strutturato* — spuntare un task, scrivere
+una proprietà, estrarre una citazione, esportare, fare chunking — deve
+riscriversi un parser markdown, cioè non può essere un plugin. È il §1.22 visto
+dal lato del consumo, ed è insieme a lui il secondo punto in cui l'invariante del
+progetto è già falsa. **§1.30 + §1.31 (una view che non ha stato e non può
+chiedere di ridisegnarsi)**: sono due firme che insieme dicono che una view è una
+funzione pura sincrona, e su quella forma non regge nulla di interattivo né di
+asincrono — cioè i capitoli 11, 12, 11.5 e 22, gli stessi che il §1.14 sta
+cercando un posto dove mettere. **§1.34 (gli spazi di nomi degli id)**: non è la
+più grande, è la più **datata** — è l'unica voce dell'intero piano che non
+riguarda ciò che scriveremo ma ciò che avremo già pubblicato, e il suo costo non
+si misura in lavoro ma in id di terzi da rinominare.
+
+Un'ultima nota, che vale come criterio più che come voce: **§2.21** (i link
+markdown fuori dal grafo) è il primo caso in cui questo piano non descrive un
+limite ma un **difetto** — «aggiornamento link su rinomina» è promesso, spedito,
+e vero solo per metà dei link. Le quattro passate precedenti guardavano cosa non
+si potrà costruire; questa dice di guardare anche cosa è già costruito e non fa
+quello che dice. — Il difetto è **chiuso** (la metà kernel; il dettaglio in fondo
+alla voce), ma il criterio resta, ed è la parte che vale: nei prossimi giri la
+domanda «cosa manca» va accompagnata da «cosa c'è e non mantiene».

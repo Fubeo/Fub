@@ -12,6 +12,10 @@ on:
   push:
     branches: ["**"]
   pull_request:
+  # Un advisory nuovo non aspetta il prossimo push: il job `supply-chain` gira
+  # da solo una volta a settimana (gli altri no — vedi le loro condizioni).
+  schedule:
+    - cron: "0 6 * * 1"
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,7 +24,8 @@ jobs:
   # Le invarianti architetturali sono veloci e non dipendono dall'OS: girano da
   # sole, così il segnale arriva in un minuto invece che in venti.
   invariants:
-    name: invarianti (abi↔WIT, dipendenze)
+    name: invarianti (abi↔WIT, additività, dipendenze)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,11 +33,45 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Conformità abi ↔ wit/fubmd/abi.wit
         run: cargo test -p fubmd-abi --test wit_conformance
+      # La conformità confronta abi e WIT fra di loro, OGGI. Questa confronta il
+      # contratto con wit/frozen/, cioè con com'era quando è stato pubblicato:
+      # è la promessa del freeze di M4 ("si cresce solo per aggiunta") resa
+      # meccanica. Vedi wit/frozen/README.md.
+      - name: Additività del contratto (wit/frozen/)
+        run: cargo test -p fubmd-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fubmd-abi --test dependency_invariant
 
+  # Licenze, advisory e provenienza delle dipendenze, più l'SBOM. È l'unica
+  # parte del piano il cui costo cresce con il numero di dipendenze già entrate:
+  # una licenza incompatibile scoperta a valle si toglie riscrivendo ciò che ci
+  # stava sopra. Politica e motivazioni in `deny.toml`.
+  supply-chain:
+    name: supply chain (licenze, advisory, SBOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-sbom
+      # SPDX 2.3: il formato che il 23.3 di FEATURES chiede per nome
+      # ("identificatori SPDX, license compliance"). L'artefatto è la risposta
+      # alla domanda "cosa c'è dentro questa build", che a valle si fa una volta
+      # sola e sempre troppo tardi.
+      - name: Genera l'SBOM
+        run: cargo sbom --output-format spdx_json_2_3 > fubmd-sbom.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-spdx
+          path: fubmd-sbom.spdx.json
+
   fmt:
     name: fmt + clippy
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

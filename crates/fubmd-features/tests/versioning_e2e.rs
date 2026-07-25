@@ -164,6 +164,60 @@ fn a_note_thrown_away_can_still_be_read_from_its_history() {
 }
 
 #[test]
+fn a_restore_from_a_folder_reunites_the_note_with_its_history() {
+    let v = Vault::new();
+    let (mut ws, store) = v.open();
+    std::fs::create_dir_all(v.root.join("progetti")).unwrap();
+    let nota = DocId::new("progetti/Nota.md");
+    ws.write_document(&nota, "prima del cestino\n").unwrap();
+
+    let trashed = ws.delete_document(&nota).unwrap();
+    let restored = ws.restore_from_trash(&trashed, None).unwrap();
+
+    // Il sidecar riporta la nota NELLA SUA CARTELLA: la storia è ancora sotto
+    // la stessa chiave, con lo snapshot del ripristino in coda — niente storia
+    // orfana in radice, niente tombstone che mente.
+    assert_eq!(restored, nota);
+    let versioni = store.list(&nota);
+    assert!(!store.is_deleted(&nota));
+    assert_eq!(versioni.len(), 1, "versioni: {versioni:?}");
+    assert_eq!(
+        versione(&mut ws, &store, &nota, versioni[0].ts),
+        "prima del cestino\n"
+    );
+}
+
+#[test]
+fn a_restore_under_a_new_name_migrates_the_history() {
+    let v = Vault::new();
+    let (mut ws, store) = v.open();
+    let nota = DocId::new("Nota.md");
+    ws.write_document(&nota, "prima vita\n").unwrap();
+    let trashed = ws.delete_document(&nota).unwrap();
+    // Il path d'origine viene rioccupato: il ripristino dovrà andare altrove.
+    ws.write_document(&nota, "usurpatrice\n").unwrap();
+
+    let restored = ws
+        .restore_from_trash(&trashed, Some(DocId::new("Nota 1.md")))
+        .unwrap();
+
+    assert_eq!(restored, DocId::new("Nota 1.md"));
+    // La storia della prima vita ha seguito la nota sul nuovo path (il
+    // ripristino emette `DocumentRenamed`): non è rimasta orfana con un
+    // tombstone sotto la chiave vecchia — quella ora appartiene all'usurpatrice.
+    let migrate = store.list(&DocId::new("Nota 1.md"));
+    let contenuti: Vec<String> = migrate
+        .iter()
+        .map(|v| versione(&mut ws, &store, &DocId::new("Nota 1.md"), v.ts))
+        .collect();
+    assert!(
+        contenuti.contains(&"prima vita\n".to_string()),
+        "la prima vita deve stare nella storia migrata: {contenuti:?}"
+    );
+    assert!(!store.is_deleted(&DocId::new("Nota 1.md")));
+}
+
+#[test]
 fn with_versioning_off_the_vault_has_no_trace_of_it() {
     let v = Vault::new();
     let mut ws = v.open_senza_versioning();

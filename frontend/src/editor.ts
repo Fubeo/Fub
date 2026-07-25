@@ -1,10 +1,18 @@
-// Editor markdown basato su CodeMirror 6.
+// Editor markdown basato su CodeMirror 6, con l'esperienza in-editor di
+// Obsidian (todo.md §6): comandi e scorciatoie (`editor-commands.ts`),
+// autocompletamento di wikilink e tag (`completions.ts`), live preview dal
+// tree Lezer (`livepreview.ts`). I tre moduli sono autonomi e ricevono i
+// collegamenti col mondo (aprire una nota, cercare un tag, le sorgenti dei
+// completamenti) da chi crea l'editor: qui si compone, non si decide.
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
-import { markdown } from "@codemirror/lang-markdown";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { indentWithTab } from "@codemirror/commands";
 import { byteToCharIndex } from "./offsets";
+import { editingExtensions } from "./editor-commands";
+import { markdownCompletions, type CompletionSources } from "./completions";
+import { livePreview } from "./livepreview";
 
 export interface Editor {
   setDoc(text: string): void;
@@ -15,28 +23,49 @@ export interface Editor {
   revealByteOffset(byteOffset: number): void;
 }
 
-/// Crea l'editor. `onChange` è invocato a ogni modifica fatta dall'utente
-/// (non quando impostiamo il documento a livello di programma).
-export function createEditor(
-  parent: HTMLElement,
-  onChange: (text: string) => void,
-): Editor {
+export interface EditorOptions {
+  /// Invocato a ogni modifica fatta dall'utente (non quando impostiamo il
+  /// documento a livello di programma).
+  onChange(text: string): void;
+  /// Mod-click su un wikilink nella live preview: `page` è la pagina nuda,
+  /// senza alias né `#heading` (stringa vuota per i link interni `[[#…]]`).
+  onOpenWikilink(page: string): void;
+  /// Click su un `#tag` nella live preview: `tag` è il nome senza `#`.
+  onSearchTag(tag: string): void;
+  /// Da dove arrivano i completamenti di `[[` e `#`: la shell passa l'IPC,
+  /// i test passano liste finte.
+  completions: CompletionSources;
+}
+
+/// Crea l'editor.
+export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   let programmatic = false;
 
   const listener = EditorView.updateListener.of((u) => {
     if (u.docChanged && !programmatic) {
-      onChange(u.state.doc.toString());
+      opts.onChange(u.state.doc.toString());
     }
   });
 
   const view = new EditorView({
     parent,
     extensions: [
+      // Le scorciatoie di editing sono già in `Prec.high`: l'ordine rispetto
+      // a `basicSetup` non conta, ma il popup dei completamenti (precedenza
+      // massima) vince comunque su Enter/frecce quando è aperto.
+      editingExtensions(),
       basicSetup,
       keymap.of([indentWithTab]),
-      markdown(),
+      // La base GFM non è un dettaglio: senza, il parser non produce i nodi
+      // di `~~barrato~~`/tabelle/todo e la live preview degrada in silenzio.
+      markdown({ base: markdownLanguage }),
       oneDark,
       EditorView.lineWrapping,
+      livePreview({
+        openWikilink: opts.onOpenWikilink,
+        searchTag: opts.onSearchTag,
+      }),
+      markdownCompletions(opts.completions),
       listener,
     ],
   });

@@ -1,0 +1,95 @@
+# Supply chain — licenze, advisory, duplicati, sorgenti.
+#
+# Perché adesso e non "quando servirà": è l'unica parte del capitolo 23.3 di
+# FEATURES che non si recupera a posteriori. Le licenze delle dipendenze entrate
+# nel frattempo si riesaminano una per una, e una incompatibile scoperta a valle
+# si toglie riscrivendo ciò che ci stava sopra. Oggi l'albero è di ~540 crate e
+# §4.7 del piano ne prevede uno per bundle di feature: il conto cresce, il costo
+# di iniziare no.
+#
+# Girato in CI dal job `supply-chain` (.github/workflows/ci.yml), che genera
+# anche l'SBOM. In locale: `cargo deny check`.
+
+[graph]
+# Le dipendenze che non entrano in nessun binario che spediamo non contano.
+# Restano tutti i target su cui il progetto gira davvero (docs/appendix/platforms-ci.md).
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+all-features = true
+
+[advisories]
+# Vulnerabilità note e crate yanked: rosso. `unmaintained` resta un avviso —
+# un crate senza manutenzione è un rischio da valutare, non un difetto da
+# bloccare, e trattarlo come errore trasforma il presidio in rumore che si
+# impara a ignorare.
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+# Il progetto è `MIT OR Apache-2.0` (Cargo.toml del workspace): la promessa di
+# «licenza chiara» del capitolo 1.2 di FEATURES è verificabile solo se lo è
+# quella di ciò che linka. Elenco chiuso: una licenza nuova nell'albero è rossa
+# finché qualcuno non decide che va bene.
+confidence-threshold = 0.93
+allow = [
+    # Permissive, compatibili con la doppia licenza del progetto.
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "zlib-acknowledgement",
+    "0BSD",
+    "Unlicense",
+    "CC0-1.0",
+    "BSL-1.0",
+    # MIT con la clausola "no false attribution" (fmt2io): resta permissiva.
+    "MITNFA",
+    # Dati Unicode (icu_*, unicode-ident): licenza dei dati, non del codice.
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    # COPYLEFT DEBOLE, per file. Entra con `cssparser`/`selectors` (via tauri),
+    # `option-ext` e `htmlescape`. Linkarla non contamina il resto del progetto,
+    # ma se un giorno MODIFICHIAMO uno di quei file la MPL obbliga a
+    # pubblicarne il sorgente. Ammessa consapevolmente, non per inerzia.
+    "MPL-2.0",
+]
+# Una licenza ammessa che nessuno usa più è una riga da togliere, non da
+# lasciare a coprire un caso che non esiste.
+unused-allowed-license = "warn"
+exceptions = []
+
+[bans]
+# I duplicati sono un avviso: con tauri nell'albero le versioni multiple di
+# `windows-sys` & co. non dipendono da noi. Diventa un errore quando un
+# duplicato lo introduciamo noi (`deny` mirati qui sotto, non una regola
+# generale che si finirebbe per silenziare).
+multiple-versions = "warn"
+# Una dipendenza `"*"` da crates.io è una build non riproducibile (20.3): rossa.
+# Le dipendenze interne del workspace sono `{ path = … }` senza versione, che è
+# la stessa cosa scritta in un altro modo ma con il grafo fissato dal path.
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [
+    # L'invariante architetturale di `fubmd-abi` (niente markdown, tauri, wasm,
+    # tokio, notify fra le dipendenze normali) è presidiata da
+    # crates/fubmd-abi/tests/dependency_invariant.rs, che è il posto giusto:
+    # guarda il grafo per crate, non per workspace. Qui non si duplica.
+]
+
+[sources]
+# Solo crates.io: una dipendenza da git o da un registry privato non entra di
+# nascosto in un rilascio.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

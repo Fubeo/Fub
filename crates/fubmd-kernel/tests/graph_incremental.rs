@@ -14,6 +14,11 @@
 //! L'universo è volutamente piccolo e ostile: omonimi a profondità diverse,
 //! alias che collidono con nomi di pagina, path che collidono a meno
 //! dell'estensione (`nota.md` / `nota.txt`), link a documenti inesistenti.
+//!
+//! Ci sono **entrambe le specie di link** (§2.21), e non per completismo: un
+//! link markdown è relativo alla cartella di chi lo scrive, quindi la stessa
+//! stringa in due documenti è due chiavi diverse — ed è esattamente il genere di
+//! cosa che un aggiornamento incrementale sbaglia e un full-rebuild no.
 
 use std::collections::BTreeMap;
 
@@ -51,6 +56,26 @@ const KEYS: &[&str] = &[
     "",
 ];
 
+/// Le destinazioni che i link markdown possono usare. Sono relative a chi le
+/// scrive: `Nota.md` dentro `sub/a.md` è `sub/Nota.md`, alla radice è un altro
+/// documento — e `../` porta fuori dal vault da metà dei sorgenti.
+const DESTS: &[&str] = &[
+    "Nota.md",
+    "Nota",
+    "sub/Nota.md",
+    "sub/nota.txt",
+    "../Nota.md",
+    "../../Altra.md",
+    "./a.md",
+    "/people/Mario Rossi.md",
+    "deep/Nota.md",
+    "Mario",
+    "Nota.md#heading",
+    "Nota%20B.md",
+    "#solo-ancora",
+    "",
+];
+
 /// Gli alias dichiarabili nel frontmatter: collidono di proposito fra loro e
 /// con i nomi di pagina.
 const ALIASES: &[&str] = &["Mario", "Nota", "Altra", "alias-solo", "a"];
@@ -85,6 +110,7 @@ enum Op {
     Upsert {
         path: &'static str,
         links: Vec<&'static str>,
+        dests: Vec<&'static str>,
         aliases: Vec<&'static str>,
     },
     Remove {
@@ -102,27 +128,38 @@ fn gen_op(rng: &mut Rng) -> Op {
     let links = (0..rng.below(4))
         .map(|_| KEYS[rng.below(KEYS.len())])
         .collect();
+    let dests = (0..rng.below(4))
+        .map(|_| DESTS[rng.below(DESTS.len())])
+        .collect();
     let aliases = (0..rng.below(3))
         .map(|_| ALIASES[rng.below(ALIASES.len())])
         .collect();
     Op::Upsert {
         path,
         links,
+        dests,
         aliases,
     }
 }
 
-fn model(path: &str, links: &[&str], aliases: &[&str]) -> DocumentModel {
+fn model(path: &str, links: &[&str], dests: &[&str], aliases: &[&str]) -> DocumentModel {
     let mut m = DocumentModel::empty(DocId::new(path));
-    m.links = links
+    // I due tipi di link si alternano nell'ordine in cui li teniamo qui: è
+    // l'ordine che finisce in `outgoing` e nei backlink, quindi va fissato.
+    let wiki = links.iter().map(|k| (LinkTarget::wiki(*k), *k));
+    let markdown = dests
         .iter()
+        .map(|d| (LinkTarget::Path((*d).to_string()), *d));
+    m.links = wiki
+        .chain(markdown)
         .enumerate()
-        .map(|(i, key)| Link {
-            target: LinkTarget::wiki(*key),
+        .map(|(i, (target, written))| Link {
+            target,
+            embed: false,
             span: Span::new(i, i + 1),
             // il contesto entra nel BacklinkRef: distinguerlo per posizione
             // rende visibile anche un ordinamento sbagliato dei backlink.
-            context: Some(format!("{path}#{i} → {key}")),
+            context: Some(format!("{path}#{i} → {written}")),
         })
         .collect();
     if !aliases.is_empty() {
@@ -140,6 +177,8 @@ fn model(path: &str, links: &[&str], aliases: &[&str]) -> DocumentModel {
 #[derive(Debug, PartialEq)]
 struct Observed {
     resolved: BTreeMap<String, Option<DocId>>,
+    /// `"<sorgente> → <destinazione>"` → documento, per i link markdown.
+    resolved_from: BTreeMap<String, Option<DocId>>,
     backlinks: BTreeMap<DocId, Vec<(DocId, Option<String>)>>,
     outgoing: BTreeMap<DocId, Vec<DocId>>,
 }
@@ -162,6 +201,15 @@ fn observe(graph: &LinkGraph) -> Observed {
     for alias in ALIASES {
         resolved.insert((*alias).to_string(), graph.resolve_wiki(alias));
     }
+    // I link markdown si risolvono *da qualche parte*: la stessa destinazione
+    // vista da due sorgenti è due domande diverse, e vanno fatte entrambe.
+    let mut resolved_from = BTreeMap::new();
+    for source in PATHS {
+        let id = DocId::new(*source);
+        for dest in DESTS {
+            resolved_from.insert(format!("{source} → {dest}"), graph.resolve_path(&id, dest));
+        }
+    }
 
     let mut backlinks = BTreeMap::new();
     let mut outgoing = BTreeMap::new();
@@ -183,6 +231,7 @@ fn observe(graph: &LinkGraph) -> Observed {
 
     Observed {
         resolved,
+        resolved_from,
         backlinks,
         outgoing,
     }
@@ -205,9 +254,10 @@ fn run_sequence(seed: u64, ops: usize) {
             Op::Upsert {
                 path,
                 links,
+                dests,
                 aliases,
             } => {
-                let m = model(path, links, aliases);
+                let m = model(path, links, dests, aliases);
                 graph.upsert(&m);
                 state.insert(m.id.clone(), m);
             }
@@ -259,10 +309,13 @@ fn upserts_from_empty_match_build() {
             let links: Vec<&str> = (0..rng.below(4))
                 .map(|_| KEYS[rng.below(KEYS.len())])
                 .collect();
+            let dests: Vec<&str> = (0..rng.below(4))
+                .map(|_| DESTS[rng.below(DESTS.len())])
+                .collect();
             let aliases: Vec<&str> = (0..rng.below(3))
                 .map(|_| ALIASES[rng.below(ALIASES.len())])
                 .collect();
-            docs.push(model(path, &links, &aliases));
+            docs.push(model(path, &links, &dests, &aliases));
         }
 
         let mut incremental = LinkGraph::default();
@@ -300,6 +353,7 @@ fn incremental_is_cheaper_than_rebuild() {
                 .iter()
                 .map(|k| Link {
                     target: LinkTarget::wiki(*k),
+                    embed: false,
                     span: Span::EMPTY,
                     context: None,
                 })
@@ -338,7 +392,8 @@ fn removing_everything_empties_the_graph() {
         .iter()
         .map(|p| {
             let links: Vec<&str> = (0..3).map(|_| KEYS[rng.below(KEYS.len())]).collect();
-            model(p, &links, &["Mario"])
+            let dests: Vec<&str> = (0..3).map(|_| DESTS[rng.below(DESTS.len())]).collect();
+            model(p, &links, &dests, &["Mario"])
         })
         .collect();
 

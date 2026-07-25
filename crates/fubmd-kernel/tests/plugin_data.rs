@@ -144,6 +144,35 @@ fn nothing_a_plugin_can_name_escapes_its_own_space() {
 }
 
 #[test]
+fn volatile_storage_is_namespaced_per_plugin() {
+    // Due feature che scelgono la stessa chiave generica ("cursor", "config")
+    // non devono pestarsi: `data_*` ha il recinto in firma, `storage_*` lo ha
+    // nell'implementazione.
+    let (_dir, mut ws) = vault();
+
+    ws.with_host("uno", |host| {
+        host.storage_set("config", serde_json::json!("di uno"))
+    });
+    ws.with_host("due", |host| {
+        host.storage_set("config", serde_json::json!("di due"))
+    });
+
+    assert_eq!(
+        ws.with_host("uno", |host| host.storage_get("config")),
+        Some(serde_json::json!("di uno"))
+    );
+    assert_eq!(
+        ws.with_host("due", |host| host.storage_get("config")),
+        Some(serde_json::json!("di due"))
+    );
+    assert_eq!(
+        ws.with_host("terzo", |host| host.storage_get("config")),
+        None,
+        "chi non ha mai scritto non vede le chiavi altrui"
+    );
+}
+
+#[test]
 fn the_clock_is_a_capability_too() {
     let (_dir, mut ws) = vault();
 

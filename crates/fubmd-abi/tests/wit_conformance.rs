@@ -44,10 +44,12 @@
 //! `fubmd-abi` riguarda le dipendenze normali, ed è protetta da
 //! `tests/dependency_invariant.rs`.
 //!
-//! Limite noto, dichiarato: l'**ordine** dei casi di un variant è confrontato con
-//! l'ordine in cui sono elencati qui, non con quello dell'enum Rust (il
-//! compilatore garantisce che ci siano tutti, non che siano in fila). Riordinare
-//! il WIT è rosso; riordinare l'enum Rust senza toccare questo file, no.
+//! L'**ordine** dei casi è confrontato in tutte e due le direzioni e in tutte
+//! le sedi: il WIT contro l'elenco del test (`diff`), e l'elenco del test
+//! contro la **dichiarazione dell'enum Rust**, parsata dal sorgente con `syn`
+//! (`variant_src`/`enumeration_src`). Il compilatore garantisce l'esaustività
+//! dei match qui sotto, non l'ordine — e l'ordine dei casi è il discriminante
+//! ABI: un riordino è rosso da entrambi i lati, non solo da quello WIT.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -59,11 +61,14 @@ use fubmd_abi::event::{Event, EventKind, EventMask};
 use fubmd_abi::format::{
     FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext, RenderOptions,
 };
-use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span, Tag};
+use fubmd_abi::model::{
+    Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
+    PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
+};
 use fubmd_abi::traits::{
     BacklinkRef, CommandOutcome, CommandProvider, CommandSpec, EventHandler, HostApi,
     IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, Plugin, PluginManifest,
-    PluginPermissions, SearchHit, TagCount, ViewPlacement, ViewProvider, ViewSpec,
+    PluginPermissions, SearchHit, TagCount, ViewPlacement, ViewProvider, ViewSpec, ABI_VERSION,
 };
 use fubmd_abi::ui::{ActionId, Axis, Intent, UiAction, UiNode, ViewUpdate};
 
@@ -118,8 +123,11 @@ wit_type! {
     u16 => "u16",
     u32 => "u32",
     u64 => "u64",
+    i16 => "s16",
+    i32 => "s32",
     f32 => "f32",
     f64 => "f64",
+    char => "char",
     str => "string",
     String => "string",
     // L'unità: nel WIT un `result` senza ok si scrive `result<_, e>`, e una
@@ -145,11 +153,21 @@ wit_type! {
     arena::Span => "span",
     Heading => "heading",
     Tag => "tag",
+    Anchor => "anchor",
     Link => "link",
     LinkTarget => "link-target",
     DocumentModel => "document-model",
+    ColumnAlign => "column-align",
+    PropertyValue => "property-value",
+    PropertyScalar => "property-scalar",
+    PropertyDate => "property-date",
+    PropertyTime => "property-time",
     arena::Block => "block",
     arena::Inline => "inline",
+    arena::ListItem => "list-item",
+    arena::TaskMarker => "task-marker",
+    arena::TableRow => "table-row",
+    arena::TableCell => "table-cell",
     arena::UiNode => "ui-node",
     arena::DocumentTree => "document-tree",
     arena::UiTree => "ui-tree",
@@ -605,6 +623,49 @@ fn diff(
     errors
 }
 
+/// L'ordine di dichiarazione dei casi di un enum Rust, letto dal **sorgente**
+/// (in kebab-case, come i nomi WIT).
+///
+/// È l'anello che mancava: i match esaustivi di questo test obbligano a
+/// elencare *tutti* i casi, ma niente obbligava a elencarli *in fila* —  e
+/// l'ordine dei casi è il discriminante ABI. Qui l'ordine atteso si deriva
+/// dall'enum stesso, così riordinare l'enum Rust senza toccare WIT e test è
+/// rosso quanto riordinare il WIT.
+fn rust_enum_order(file: &str, enum_name: &str) -> Vec<String> {
+    let path = format!("{}/src/{file}", env!("CARGO_MANIFEST_DIR"));
+    let src = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("impossibile leggere {path}: {e}"));
+    let ast: syn::File = syn::parse_file(&src).unwrap_or_else(|e| panic!("{path} non parsa: {e}"));
+    for item in ast.items {
+        if let syn::Item::Enum(e) = item {
+            if e.ident == enum_name {
+                return e
+                    .variants
+                    .iter()
+                    .map(|v| kebab(&v.ident.to_string()))
+                    .collect();
+            }
+        }
+    }
+    panic!("enum `{enum_name}` non trovato fra gli item top-level di {path}");
+}
+
+/// `CodeBlock` → `code-block`: la stessa convenzione di nome del WIT.
+fn kebab(camel: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in camel.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                out.push('-');
+            }
+            out.extend(c.to_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Un caso di `variant`, con il tipo del payload e — se il payload è un record
 /// dedicato — i suoi campi.
 struct Case {
@@ -688,6 +749,39 @@ impl Wit {
             declared.iter().map(|c| (c.clone(), None)).collect();
         let errors = diff("casi", name, &expected, &declared);
         self.errors.extend(errors);
+    }
+
+    /// Come [`variant`](Wit::variant), ma verifica ANCHE che l'ordine dei casi
+    /// elencati dal test coincida con l'ordine di dichiarazione dell'enum Rust
+    /// (`src` = `(file, nome dell'enum)`): l'enum è la verità, e un suo
+    /// riordino deve far fallire il test anche se WIT e test restano uguali.
+    fn variant_src(&mut self, name: &str, src: (&str, &str), cases: &[Case]) {
+        let listed: Vec<String> = cases.iter().map(|c| c.name.to_string()).collect();
+        let declared = rust_enum_order(src.0, src.1);
+        if listed != declared {
+            self.err(format!(
+                "`{name}`: l'ordine dei casi diverge dalla dichiarazione Rust di \
+                 `{}` ({}) — test/WIT {listed:?}, enum {declared:?} \
+                 (l'ordine dei casi è il discriminante ABI)",
+                src.1, src.0
+            ));
+        }
+        self.variant(name, cases);
+    }
+
+    /// Il gemello di [`variant_src`](Wit::variant_src) per gli `enum` WIT.
+    fn enumeration_src(&mut self, name: &str, src: (&str, &str), cases: &[&str]) {
+        let listed: Vec<String> = cases.iter().map(|c| c.to_string()).collect();
+        let declared = rust_enum_order(src.0, src.1);
+        if listed != declared {
+            self.err(format!(
+                "`{name}`: l'ordine dei casi diverge dalla dichiarazione Rust di \
+                 `{}` ({}) — test/WIT {listed:?}, enum {declared:?} \
+                 (l'ordine dei casi è il discriminante ABI)",
+                src.1, src.0
+            ));
+        }
+        self.enumeration(name, cases);
     }
 
     fn variant(&mut self, name: &str, cases: &[Case]) {
@@ -863,6 +957,7 @@ fn block_case(b: &arena::Block) -> Case {
         arena::Block::Heading {
             level,
             inlines,
+            anchor,
             span,
         } => case_rec(
             "heading",
@@ -870,17 +965,27 @@ fn block_case(b: &arena::Block) -> Case {
             vec![
                 ("level", wit(level)),
                 ("inlines", wit(inlines)),
+                ("anchor", wit(anchor)),
                 ("span", wit(span)),
             ],
         ),
-        arena::Block::Paragraph { inlines, span } => case_rec(
+        arena::Block::Paragraph {
+            inlines,
+            anchor,
+            span,
+        } => case_rec(
             "paragraph",
             "block-paragraph",
-            vec![("inlines", wit(inlines)), ("span", wit(span))],
+            vec![
+                ("inlines", wit(inlines)),
+                ("anchor", wit(anchor)),
+                ("span", wit(span)),
+            ],
         ),
         arena::Block::List {
             ordered,
             items,
+            anchor,
             span,
         } => case_rec(
             "list",
@@ -888,28 +993,48 @@ fn block_case(b: &arena::Block) -> Case {
             vec![
                 ("ordered", wit(ordered)),
                 ("items", wit(items)),
+                ("anchor", wit(anchor)),
                 ("span", wit(span)),
             ],
         ),
-        arena::Block::CodeBlock { lang, code, span } => case_rec(
+        arena::Block::CodeBlock {
+            lang,
+            code,
+            anchor,
+            span,
+        } => case_rec(
             "code-block",
             "block-code-block",
             vec![
                 ("lang", wit(lang)),
                 ("code", wit(code)),
+                ("anchor", wit(anchor)),
                 ("span", wit(span)),
             ],
         ),
-        arena::Block::Quote { blocks, span } => case_rec(
+        arena::Block::Quote {
+            blocks,
+            anchor,
+            span,
+        } => case_rec(
             "quote",
             "block-quote",
-            vec![("blocks", wit(blocks)), ("span", wit(span))],
+            vec![
+                ("blocks", wit(blocks)),
+                ("anchor", wit(anchor)),
+                ("span", wit(span)),
+            ],
         ),
-        arena::Block::ThematicBreak { span } => case_ty("thematic-break", wit(span)),
+        arena::Block::ThematicBreak { anchor, span } => case_rec(
+            "thematic-break",
+            "block-thematic-break",
+            vec![("anchor", wit(anchor)), ("span", wit(span))],
+        ),
         arena::Block::Custom {
             custom_kind,
             attrs,
             blocks,
+            anchor,
             span,
         } => case_rec(
             "custom",
@@ -918,9 +1043,61 @@ fn block_case(b: &arena::Block) -> Case {
                 ("custom-kind", wit(custom_kind)),
                 ("attrs", wit(attrs)),
                 ("blocks", wit(blocks)),
+                ("anchor", wit(anchor)),
                 ("span", wit(span)),
             ],
         ),
+        arena::Block::Table {
+            head,
+            rows,
+            align,
+            anchor,
+            span,
+        } => case_rec(
+            "table",
+            "block-table",
+            vec![
+                ("head", wit(head)),
+                ("rows", wit(rows)),
+                ("align", wit(align)),
+                ("anchor", wit(anchor)),
+                ("span", wit(span)),
+            ],
+        ),
+    }
+}
+
+fn property_value_case(p: &PropertyValue) -> Case {
+    match p {
+        PropertyValue::Empty => case("empty"),
+        PropertyValue::Text(s) => case_ty("text", wit(s)),
+        PropertyValue::Number(n) => case_ty("number", wit(n)),
+        PropertyValue::Bool(b) => case_ty("bool", wit(b)),
+        PropertyValue::Date(d) => case_ty("date", wit(d)),
+        PropertyValue::Link(t) => case_ty("link", wit(t)),
+        PropertyValue::List(v) => case_ty("list", wit(v)),
+        PropertyValue::Unknown(v) => case_ty("unknown", wit(v)),
+    }
+}
+
+fn property_scalar_case(p: &PropertyScalar) -> Case {
+    match p {
+        PropertyScalar::Empty => case("empty"),
+        PropertyScalar::Text(s) => case_ty("text", wit(s)),
+        PropertyScalar::Number(n) => case_ty("number", wit(n)),
+        PropertyScalar::Bool(b) => case_ty("bool", wit(b)),
+        PropertyScalar::Date(d) => case_ty("date", wit(d)),
+        PropertyScalar::Link(t) => case_ty("link", wit(t)),
+        PropertyScalar::Unknown(v) => case_ty("unknown", wit(v)),
+    }
+}
+
+fn column_align_name(a: ColumnAlign) -> &'static str {
+    match a {
+        ColumnAlign::None => "none",
+        ColumnAlign::Left => "left",
+        ColumnAlign::Center => "center",
+        ColumnAlign::Right => "right",
     }
 }
 
@@ -933,6 +1110,7 @@ fn inline_case(i: &arena::Inline) -> Case {
         arena::Inline::Link {
             target,
             label,
+            embed,
             span,
         } => case_rec(
             "link",
@@ -940,6 +1118,7 @@ fn inline_case(i: &arena::Inline) -> Case {
             vec![
                 ("target", wit(target)),
                 ("label", wit(label)),
+                ("embed", wit(embed)),
                 ("span", wit(span)),
             ],
         ),
@@ -970,7 +1149,6 @@ fn link_target_case(t: &LinkTarget) -> Case {
             page,
             heading,
             block,
-            embed,
         } => case_rec(
             "wiki",
             "link-target-wiki",
@@ -978,7 +1156,6 @@ fn link_target_case(t: &LinkTarget) -> Case {
                 ("page", wit(page)),
                 ("heading", wit(heading)),
                 ("block", wit(block)),
-                ("embed", wit(embed)),
             ],
         ),
         LinkTarget::Url(s) => case_ty("url", wit(s)),
@@ -1051,6 +1228,11 @@ fn view_update_case(v: &ViewUpdate) -> Case {
             vec![("doc-id", wit(doc_id)), ("span", wit(span))],
         ),
         ViewUpdate::RunSearch { query } => case_ty("run-search", wit(query)),
+        ViewUpdate::Custom { ns, payload } => case_rec(
+            "custom",
+            "view-update-custom",
+            vec![("ns", wit(ns)), ("payload", wit(payload))],
+        ),
     }
 }
 
@@ -1193,49 +1375,121 @@ fn view_placement_name(p: ViewPlacement) -> &'static str {
 fn conform(source: &str) -> Result<(), String> {
     let mut contract = load(source);
 
-    assert_eq!(contract.package, "fubmd:abi@0.1.0", "nome del package");
+    // Il numero del package è la stessa versione che i manifest dichiarano in
+    // `abi-version` e che `abi_compatible` confronta: UNA fonte, `ABI_VERSION`.
+    assert_eq!(
+        contract.package,
+        format!("fubmd:abi@{ABI_VERSION}"),
+        "nome del package"
+    );
 
     // --- variant/enum: un rappresentante per caso, esaustività dal compilatore
 
     let sp = arena::Span::default();
-    contract.variant(
+    let data = PropertyDate {
+        year: 0,
+        month: 1,
+        day: 1,
+        time: None,
+    };
+    contract.variant_src(
         "block",
+        ("arena.rs", "Block"),
         &[
             block_case(&arena::Block::Heading {
                 level: 1,
                 inlines: vec![],
+                anchor: None,
                 span: sp,
             }),
             block_case(&arena::Block::Paragraph {
                 inlines: vec![],
+                anchor: None,
                 span: sp,
             }),
             block_case(&arena::Block::List {
                 ordered: false,
                 items: vec![],
+                anchor: None,
                 span: sp,
             }),
             block_case(&arena::Block::CodeBlock {
                 lang: None,
                 code: String::new(),
+                anchor: None,
                 span: sp,
             }),
             block_case(&arena::Block::Quote {
                 blocks: vec![],
+                anchor: None,
                 span: sp,
             }),
-            block_case(&arena::Block::ThematicBreak { span: sp }),
+            block_case(&arena::Block::ThematicBreak {
+                anchor: None,
+                span: sp,
+            }),
             block_case(&arena::Block::Custom {
                 custom_kind: String::new(),
                 attrs: serde_json::Value::Null,
                 blocks: vec![],
+                anchor: None,
+                span: sp,
+            }),
+            block_case(&arena::Block::Table {
+                head: None,
+                rows: vec![],
+                align: vec![],
+                anchor: None,
                 span: sp,
             }),
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
+        "property-value",
+        ("model.rs", "PropertyValue"),
+        &[
+            property_value_case(&PropertyValue::Empty),
+            property_value_case(&PropertyValue::Text(String::new())),
+            property_value_case(&PropertyValue::Number(0.0)),
+            property_value_case(&PropertyValue::Bool(false)),
+            property_value_case(&PropertyValue::Date(data)),
+            property_value_case(&PropertyValue::Link(LinkTarget::wiki("p"))),
+            property_value_case(&PropertyValue::List(vec![])),
+            property_value_case(&PropertyValue::Unknown(serde_json::Value::Null)),
+        ],
+    );
+
+    contract.variant_src(
+        "property-scalar",
+        ("model.rs", "PropertyScalar"),
+        &[
+            property_scalar_case(&PropertyScalar::Empty),
+            property_scalar_case(&PropertyScalar::Text(String::new())),
+            property_scalar_case(&PropertyScalar::Number(0.0)),
+            property_scalar_case(&PropertyScalar::Bool(false)),
+            property_scalar_case(&PropertyScalar::Date(data)),
+            property_scalar_case(&PropertyScalar::Link(LinkTarget::wiki("p"))),
+            property_scalar_case(&PropertyScalar::Unknown(serde_json::Value::Null)),
+        ],
+    );
+
+    contract.enumeration_src(
+        "column-align",
+        ("model.rs", "ColumnAlign"),
+        [
+            ColumnAlign::None,
+            ColumnAlign::Left,
+            ColumnAlign::Center,
+            ColumnAlign::Right,
+        ]
+        .map(column_align_name)
+        .as_slice(),
+    );
+
+    contract.variant_src(
         "inline",
+        ("arena.rs", "Inline"),
         &[
             inline_case(&arena::Inline::Text(String::new())),
             inline_case(&arena::Inline::Emph(vec![])),
@@ -1244,6 +1498,7 @@ fn conform(source: &str) -> Result<(), String> {
             inline_case(&arena::Inline::Link {
                 target: LinkTarget::wiki("p"),
                 label: None,
+                embed: false,
                 span: sp,
             }),
             inline_case(&arena::Inline::TagRef {
@@ -1258,8 +1513,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
         "link-target",
+        ("model.rs", "LinkTarget"),
         &[
             link_target_case(&LinkTarget::wiki("p")),
             link_target_case(&LinkTarget::Url(String::new())),
@@ -1267,8 +1523,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
         "ui-node",
+        ("arena.rs", "UiNode"),
         &[
             ui_node_case(&arena::UiNode::Stack {
                 dir: Axis::Row,
@@ -1303,8 +1560,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
         "view-update",
+        ("ui.rs", "ViewUpdate"),
         &[
             view_update_case(&ViewUpdate::Replace {
                 root: UiNode::Text {
@@ -1322,11 +1580,16 @@ fn conform(source: &str) -> Result<(), String> {
             view_update_case(&ViewUpdate::RunSearch {
                 query: String::new(),
             }),
+            view_update_case(&ViewUpdate::Custom {
+                ns: String::new(),
+                payload: serde_json::Value::Null,
+            }),
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
         "event",
+        ("event.rs", "Event"),
         &[
             event_case(&Event::VaultOpened {
                 root: String::new(),
@@ -1355,8 +1618,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
         "index-query",
+        ("traits.rs", "IndexQuery"),
         &[
             index_query_case(&IndexQuery::Backlinks {
                 target: DocId::new("a"),
@@ -1376,8 +1640,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
         "index-result",
+        ("traits.rs", "IndexResult"),
         &[
             index_result_case(&IndexResult::Backlinks(vec![])),
             index_result_case(&IndexResult::Search(vec![])),
@@ -1387,8 +1652,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
         "format-error",
+        ("error.rs", "FormatError"),
         &[
             format_error_case(&FormatError::Parse(String::new())),
             format_error_case(&FormatError::Render(String::new())),
@@ -1397,8 +1663,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.variant(
+    contract.variant_src(
         "plugin-error",
+        ("error.rs", "PluginError"),
         &[
             plugin_error_case(&PluginError::UnknownCommand(String::new())),
             plugin_error_case(&PluginError::UnknownView(String::new())),
@@ -1409,8 +1676,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.enumeration(
+    contract.enumeration_src(
         "event-kind",
+        ("event.rs", "EventKind"),
         [
             EventKind::VaultOpened,
             EventKind::DocumentChanged,
@@ -1424,15 +1692,21 @@ fn conform(source: &str) -> Result<(), String> {
         .map(event_kind_name)
         .as_slice(),
     );
-    contract.enumeration("axis", [Axis::Row, Axis::Column].map(axis_name).as_slice());
-    contract.enumeration(
+    contract.enumeration_src(
+        "axis",
+        ("ui.rs", "Axis"),
+        [Axis::Row, Axis::Column].map(axis_name).as_slice(),
+    );
+    contract.enumeration_src(
         "intent",
+        ("ui.rs", "Intent"),
         [Intent::Neutral, Intent::Primary, Intent::Danger]
             .map(intent_name)
             .as_slice(),
     );
-    contract.enumeration(
+    contract.enumeration_src(
         "view-placement",
+        ("traits.rs", "ViewPlacement"),
         [
             ViewPlacement::LeftSidebar,
             ViewPlacement::RightSidebar,
@@ -1452,6 +1726,7 @@ fn conform(source: &str) -> Result<(), String> {
         outline,
         links,
         tags,
+        anchors,
         text,
     } = DocumentModel::empty(DocId::new("x.md"));
     contract.record(
@@ -1465,6 +1740,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("outline", wit(&outline)),
             ("links", wit(&links)),
             ("tags", wit(&tags)),
+            ("anchors", wit(&anchors)),
             ("text", wit(&text)),
         ],
     );
@@ -1502,12 +1778,28 @@ fn conform(source: &str) -> Result<(), String> {
     };
     contract.record("tag", &[("name", wit(&name)), ("span", wit(&span))]);
 
+    let Anchor { id, span, marker } = Anchor {
+        id: String::new(),
+        span: Span::EMPTY,
+        marker: Span::EMPTY,
+    };
+    contract.record(
+        "anchor",
+        &[
+            ("id", wit(&id)),
+            ("span", wit(&span)),
+            ("marker", wit(&marker)),
+        ],
+    );
+
     let Link {
         target,
+        embed,
         span,
         context,
     } = Link {
         target: LinkTarget::wiki("p"),
+        embed: false,
         span: Span::EMPTY,
         context: None,
     };
@@ -1515,8 +1807,83 @@ fn conform(source: &str) -> Result<(), String> {
         "link",
         &[
             ("target", wit(&target)),
+            ("embed", wit(&embed)),
             ("span", wit(&span)),
             ("context", wit(&context)),
+        ],
+    );
+
+    // Le forme del §1.5 che stanno *dentro* i blocchi: la voce di lista col suo
+    // marcatore di task, e le righe/celle della tabella.
+    let arena::ListItem { blocks, task, span } = arena::ListItem {
+        blocks: Vec::new(),
+        task: None,
+        span: arena::Span::default(),
+    };
+    contract.record(
+        "list-item",
+        &[
+            ("blocks", wit(&blocks)),
+            ("task", wit(&task)),
+            ("span", wit(&span)),
+        ],
+    );
+
+    let arena::TaskMarker { symbol, span } = arena::TaskMarker {
+        symbol: None,
+        span: arena::Span::default(),
+    };
+    contract.record(
+        "task-marker",
+        &[("symbol", wit(&symbol)), ("span", wit(&span))],
+    );
+
+    let arena::TableRow { cells } = arena::TableRow { cells: Vec::new() };
+    contract.record("table-row", &[("cells", wit(&cells))]);
+
+    let arena::TableCell { inlines, span } = arena::TableCell {
+        inlines: Vec::new(),
+        span: arena::Span::default(),
+    };
+    contract.record(
+        "table-cell",
+        &[("inlines", wit(&inlines)), ("span", wit(&span))],
+    );
+
+    let PropertyDate {
+        year,
+        month,
+        day,
+        time,
+    } = data;
+    contract.record(
+        "property-date",
+        &[
+            ("year", wit(&year)),
+            ("month", wit(&month)),
+            ("day", wit(&day)),
+            ("time", wit(&time)),
+        ],
+    );
+
+    let PropertyTime {
+        hour,
+        minute,
+        second,
+        offset_minutes,
+    } = PropertyTime {
+        hour: 0,
+        minute: 0,
+        second: 0,
+        offset_minutes: None,
+    };
+    contract.record(
+        "property-time",
+        &[
+            ("hour", wit(&hour)),
+            ("minute", wit(&minute)),
+            ("second", wit(&second)),
+            ("offset-minutes", wit(&offset_minutes)),
         ],
     );
 
@@ -1623,10 +1990,12 @@ fn conform(source: &str) -> Result<(), String> {
         id,
         title,
         placement,
+        refresh,
     } = ViewSpec {
         id: String::new(),
         title: String::new(),
         placement: ViewPlacement::Bottom,
+        refresh: EventMask::default(),
     };
     contract.record(
         "view-spec",
@@ -1634,6 +2003,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("id", wit(&id)),
             ("title", wit(&title)),
             ("placement", wit(&placement)),
+            ("refresh", wit(&refresh)),
         ],
     );
 
@@ -1702,11 +2072,13 @@ fn conform(source: &str) -> Result<(), String> {
         id,
         name,
         version,
+        abi_version,
         permissions,
     } = PluginManifest {
         id: String::new(),
         name: String::new(),
         version: String::new(),
+        abi_version: String::new(),
         permissions: PluginPermissions::default(),
     };
     contract.record(
@@ -1715,6 +2087,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("id", wit(&id)),
             ("name", wit(&name)),
             ("version", wit(&version)),
+            ("abi-version", wit(&abi_version)),
             ("permissions", wit(&permissions)),
         ],
     );
@@ -2081,6 +2454,24 @@ fn abi_types_are_mirrored_in_wit() {
     }
 }
 
+/// Il derivatore d'ordine legge davvero la dichiarazione Rust: se sa leggere
+/// `Intent` (l'enum più piccolo), la stessa strada vale per tutti gli altri.
+#[test]
+fn the_expected_case_order_comes_from_the_rust_declaration() {
+    assert_eq!(
+        rust_enum_order("ui.rs", "Intent"),
+        ["neutral", "primary", "danger"]
+    );
+    assert_eq!(
+        rust_enum_order("ui.rs", "ViewUpdate")
+            .first()
+            .map(String::as_str),
+        Some("replace")
+    );
+    assert_eq!(kebab("CodeBlock"), "code-block");
+    assert_eq!(kebab("Url"), "url");
+}
+
 /// La forma al confine è quella di `arena`, non quella nativa: questo test lo
 /// mette per iscritto, perché è la divergenza deliberata più facile da
 /// dimenticare (e la sola presidiata da conversioni con dei test propri).
@@ -2114,7 +2505,7 @@ fn wit_conformance_actually_fails_on_drift() {
         ),
         (
             "caso di variant rimosso dal WIT",
-            base.replace("        thematic-break(span),\n", ""),
+            base.replace("        thematic-break(block-thematic-break),\n", ""),
             "thematic-break",
         ),
         (
@@ -2148,7 +2539,10 @@ fn wit_conformance_actually_fails_on_drift() {
         ),
         (
             "payload di un caso di variant cambiato",
-            base.replace("        thematic-break(span),", "        thematic-break(string),"),
+            base.replace(
+                "        thematic-break(block-thematic-break),",
+                "        thematic-break(string),",
+            ),
             "thematic-break",
         ),
         (

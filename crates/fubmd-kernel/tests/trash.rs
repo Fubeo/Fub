@@ -177,6 +177,109 @@ fn deleting_a_note_moves_it_to_the_trash_and_tells_the_index() {
 }
 
 #[test]
+fn a_note_trashed_from_a_folder_returns_to_its_folder() {
+    let fx = Fixture::new();
+    fx.put("progetti/Nota.txt", "in cartella");
+    let mut ws = fx.workspace();
+
+    let trashed = ws
+        .delete_document(&DocId::new("progetti/Nota.txt"))
+        .unwrap();
+
+    // Il cestino resta piatto (D1, interop Obsidian)…
+    assert!(trashed.as_str().starts_with(".trash/"));
+    assert!(!trashed.as_str().contains("progetti"));
+    // …ma il sidecar ricorda da dove veniva, e il ripristino torna lì.
+    let entries = ws.list_trash().unwrap();
+    assert_eq!(entries[0].original, DocId::new("progetti/Nota.txt"));
+    let restored = ws.restore_from_trash(&trashed, None).unwrap();
+    assert_eq!(restored, DocId::new("progetti/Nota.txt"));
+    assert_eq!(fx.read("progetti/Nota.txt"), "in cartella");
+}
+
+#[test]
+fn a_foreign_trash_entry_degrades_to_the_stamped_name_in_the_root() {
+    let fx = Fixture::new();
+    let ws = fx.workspace();
+    // Obsidian (o un'altra epoca di FubMD) cestina senza sidecar.
+    fx.put(".trash/Idea.2026-07-24T15-30-00.txt", "di altri");
+
+    let entries = ws.list_trash().unwrap();
+    assert_eq!(
+        entries[0].original,
+        DocId::new("Idea.txt"),
+        "senza sidecar si torna al comportamento di prima: nome de-timbrato in radice"
+    );
+}
+
+#[test]
+fn restoring_under_a_new_name_announces_the_identity_migration() {
+    let fx = Fixture::new();
+    fx.put("progetti/Nota.txt", "prima vita");
+    let mut ws = fx.workspace();
+    let trashed = ws
+        .delete_document(&DocId::new("progetti/Nota.txt"))
+        .unwrap();
+    // Il path d'origine è di nuovo occupato: il ripristino andrà altrove.
+    ws.write_document(&DocId::new("progetti/Nota.txt"), "seconda vita")
+        .unwrap();
+
+    let events = ws.bus().subscribe();
+    let restored = ws
+        .restore_from_trash(&trashed, Some(DocId::new("progetti/Nota 1.txt")))
+        .unwrap();
+
+    assert_eq!(restored, DocId::new("progetti/Nota 1.txt"));
+    // Lo stato per-documento (versioning, meta) vive sotto il path d'origine:
+    // chi lo tiene deve sapere che la chiave è migrata.
+    assert!(events.try_iter().any(|e| e
+        == Event::DocumentRenamed {
+            from: DocId::new("progetti/Nota.txt"),
+            to: DocId::new("progetti/Nota 1.txt"),
+        }));
+}
+
+#[test]
+fn emptying_the_trash_sweeps_the_sidecars_too() {
+    let fx = Fixture::new();
+    fx.put("progetti/Nota.txt", "corpo");
+    let mut ws = fx.workspace();
+    ws.delete_document(&DocId::new("progetti/Nota.txt"))
+        .unwrap();
+    assert!(
+        fx.root.join(".fubmd-data/trash").exists(),
+        "il sidecar è stato scritto"
+    );
+
+    ws.empty_trash().unwrap();
+
+    assert!(
+        !fx.root.join(".fubmd-data/trash").exists(),
+        "cestino vuoto = nessun sidecar da ricordare"
+    );
+}
+
+#[test]
+fn a_restore_target_cannot_escape_the_vault() {
+    let fx = Fixture::new();
+    fx.put("Idea.txt", "un'idea");
+    let mut ws = fx.workspace();
+    let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
+
+    // Il `to` arriva dall'IPC: un path che risale deve essere rifiutato, non
+    // scritto fuori dal vault con un DocId fantasma negli indici.
+    let err = ws
+        .restore_from_trash(&trashed, Some(DocId::new("../fuori.txt")))
+        .unwrap_err();
+    assert!(err.to_string().contains("nome non valido"), "{err}");
+    assert!(
+        fx.exists(".trash/Idea.txt"),
+        "la voce del cestino non si è mossa"
+    );
+    assert!(!fx.root.parent().unwrap().join("fuori.txt").exists());
+}
+
+#[test]
 fn the_watcher_seeing_the_file_vanish_does_not_do_the_work_twice() {
     let fx = Fixture::new();
     fx.put("Idea.txt", "un'idea");
@@ -261,7 +364,7 @@ fn a_note_trashed_by_obsidian_is_restorable_here() {
 }
 
 #[test]
-fn a_note_deleted_from_a_folder_comes_back_to_the_root() {
+fn a_note_deleted_from_a_deep_folder_comes_back_to_it() {
     let fx = Fixture::new();
     fx.put("appunti/2026/Idea.txt", "un'idea");
     let mut ws = fx.workspace();
@@ -271,11 +374,11 @@ fn a_note_deleted_from_a_folder_comes_back_to_the_root() {
         .unwrap();
     let tornata = ws.restore_from_trash(&trashed, None).unwrap();
 
-    // Il cestino è piatto perché è quello di Obsidian (D1): la cartella di
-    // provenienza non sopravvive. Chi la rivuole ha il rename, che i link se li
-    // porta dietro.
-    assert_eq!(tornata, DocId::new("Idea.txt"));
-    assert_eq!(fx.read("Idea.txt"), "un'idea");
+    // Il cestino resta piatto perché è quello di Obsidian (D1), ma il sidecar
+    // ricorda la provenienza: il ripristino ricrea la cartella se serve. (Le
+    // voci senza sidecar — cestinate da Obsidian — degradano alla radice.)
+    assert_eq!(tornata, DocId::new("appunti/2026/Idea.txt"));
+    assert_eq!(fx.read("appunti/2026/Idea.txt"), "un'idea");
 }
 
 #[test]

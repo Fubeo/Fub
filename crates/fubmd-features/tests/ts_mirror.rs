@@ -1,9 +1,10 @@
 //! I mirror TS↔Rust, legati da una **fixture generata dai tipi Rust**.
 //!
-//! `UiNode`, `ViewUpdate`, `KernelEvent`/`Event`, `Span`, `VersionRef` sono
-//! rispecchiati a mano in TypeScript (`frontend/src/api.ts`): il confine può
-//! divergere in silenzio — un caso aggiunto in Rust e non nel mirror, un campo
-//! rinominato. Questo test è metà del presidio: serializza un campione per ogni
+//! `UiNode`, `ViewUpdate`, `KernelEvent`/`Event`, `Span`, `VersionRef`,
+//! `SearchHit`, `BacklinkRef`, `TrashEntry`, `ViewSpec` sono rispecchiati a
+//! mano in TypeScript (`frontend/src/api.ts`): il confine può divergere in
+//! silenzio — un caso aggiunto in Rust e non nel mirror, un campo rinominato.
+//! Questo test è metà del presidio: serializza un campione per ogni
 //! variante/tipo con **serde** (la stessa serializzazione che attraversa l'IPC)
 //! e lo confronta con la fixture committata. L'altra metà è in TypeScript
 //! (`frontend/src/mirror.test.ts`), che prende la stessa fixture e verifica che
@@ -13,13 +14,19 @@
 //! fixture è stantia); rigenerarla (`UPDATE_MIRROR=1`) sposta il rosso di là,
 //! dove il mirror TS non lo gestisce ancora. Nessuno dei due lati può cambiare
 //! da solo restando verde.
+//!
+//! I tipi che il webview riceve dall'**app** (`VaultInfo`, `EmbedContent`,
+//! `WorkspaceMeta`) hanno il test gemello in `fubmd-app`
+//! (`tests/ts_mirror_app.rs`), che scrive la sua fixture accanto a questa:
+//! questo crate non può dipendere da `fubmd-app`.
 
 use fubmd_abi::error::PluginError;
-use fubmd_abi::event::Event;
+use fubmd_abi::event::{Event, EventKind, EventMask};
 use fubmd_abi::model::{DocId, Span};
-use fubmd_abi::traits::JobId;
+use fubmd_abi::traits::{BacklinkRef, JobId, SearchHit, TagCount, ViewPlacement, ViewSpec};
 use fubmd_abi::ui::{ActionId, Axis, Intent, UiNode, ViewUpdate};
 use fubmd_features::VersionRef;
+use fubmd_kernel::TrashEntry;
 use serde_json::{json, Value};
 
 /// Un campione per **ogni** variante di `UiNode`. L'esaustività la garantisce il
@@ -80,14 +87,16 @@ fn view_update_samples() -> Vec<Value> {
             },
         },
         ViewUpdate::None,
-        ViewUpdate::Navigate {
-            doc_id: "d".into(),
-        },
+        ViewUpdate::Navigate { doc_id: "d".into() },
         ViewUpdate::Reveal {
             doc_id: "d".into(),
             span: Span::new(0, 3),
         },
         ViewUpdate::RunSearch { query: "q".into() },
+        ViewUpdate::Custom {
+            ns: "p".into(),
+            payload: Value::Null,
+        },
     ];
     for u in &all {
         match u {
@@ -95,7 +104,8 @@ fn view_update_samples() -> Vec<Value> {
             | ViewUpdate::None
             | ViewUpdate::Navigate { .. }
             | ViewUpdate::Reveal { .. }
-            | ViewUpdate::RunSearch { .. } => {}
+            | ViewUpdate::RunSearch { .. }
+            | ViewUpdate::Custom { .. } => {}
         }
     }
     all.iter().map(to_value).collect()
@@ -104,8 +114,12 @@ fn view_update_samples() -> Vec<Value> {
 fn event_samples() -> Vec<Value> {
     let all = [
         Event::VaultOpened { root: "r".into() },
-        Event::DocumentChanged { id: DocId::new("a") },
-        Event::DocumentRemoved { id: DocId::new("a") },
+        Event::DocumentChanged {
+            id: DocId::new("a"),
+        },
+        Event::DocumentRemoved {
+            id: DocId::new("a"),
+        },
         Event::DocumentRenamed {
             from: DocId::new("a"),
             to: DocId::new("b"),
@@ -151,7 +165,32 @@ fn expected() -> Value {
         "ViewUpdate": view_update_samples(),
         "KernelEvent": event_samples(),
         "Span": [to_value(Span::new(3, 7))],
-        "VersionRef": [to_value(VersionRef { ts: 1, hash: 2, size: 3 })],
+        // `hash` è un u64 pieno: sul confine JSON è una STRINGA (regola in
+        // `fubmd_abi::ipc`) — il campione oltre 2^53 lo dimostra nella fixture.
+        "VersionRef": [to_value(VersionRef { ts: 1, hash: u64::MAX, size: 3 })],
+        "SearchHit": [to_value(SearchHit {
+            doc: DocId::new("a.md"),
+            score: 0.5,
+            snippet: "s".into(),
+            highlights: vec![Span::new(0, 1)],
+        })],
+        "BacklinkRef": [to_value(BacklinkRef {
+            source: DocId::new("b.md"),
+            context: Some("ctx".into()),
+        })],
+        "TrashEntry": [to_value(TrashEntry {
+            id: DocId::new(".trash/Nota.2026-01-01T00-00-00.md"),
+            original: DocId::new("p/Nota.md"),
+            deleted_at: 4,
+            size: 5,
+        })],
+        "TagCount": [to_value(TagCount { name: "rust".into(), count: 2 })],
+        "ViewSpec": [to_value(ViewSpec {
+            id: "v".into(),
+            title: "V".into(),
+            placement: ViewPlacement::RightSidebar,
+            refresh: EventMask(vec![EventKind::IndexUpdated]),
+        })],
     })
 }
 

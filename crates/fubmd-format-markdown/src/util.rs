@@ -1,24 +1,9 @@
 //! Utility: slug per gli heading e escape HTML.
 
-/// Slug in stile Obsidian: minuscolo, spazi → `-`, via la punteggiatura.
-pub fn slugify(text: &str) -> String {
-    let mut slug = String::with_capacity(text.len());
-    let mut last_dash = false;
-    for c in text.chars() {
-        if c.is_alphanumeric() {
-            slug.extend(c.to_lowercase());
-            last_dash = false;
-        } else if (c.is_whitespace() || c == '-' || c == '_') && !last_dash && !slug.is_empty() {
-            slug.push('-');
-            last_dash = true;
-        }
-        // ogni altra punteggiatura viene ignorata
-    }
-    while slug.ends_with('-') {
-        slug.pop();
-    }
-    slug
-}
+// Lo slug degli heading NON sta più qui: è `fubmd_abi::model::heading_slug`.
+// Era una funzione privata di questo provider, e la regola che genera un
+// indirizzo (`[[Nota#Titolo]]`) deve valere per chiunque lo risolva — due
+// provider con due slugify diversi danno due id allo stesso titolo.
 
 /// Escape per contenuto testuale HTML.
 pub fn escape_html(s: &str) -> String {
@@ -44,13 +29,6 @@ pub fn escape_attr(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn slugify_basic() {
-        assert_eq!(slugify("Ciao Mondo!"), "ciao-mondo");
-        assert_eq!(slugify("Sezione   con  spazi"), "sezione-con-spazi");
-        assert_eq!(slugify("A/B & C"), "ab-c");
-    }
 
     #[test]
     fn escape_basic() {

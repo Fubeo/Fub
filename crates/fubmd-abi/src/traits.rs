@@ -33,8 +33,25 @@ pub struct JobSpec {
 
 /// Identità di un job lanciato: chi lo lancia la conserva e riconosce il
 /// proprio esito in [`Event::JobDone`](crate::Event::JobDone).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// Sul confine JSON (IPC verso il frontend) viaggia come **stringa**: è un
+/// u64 pieno usato come identità, e `JSON.parse` perde i bit oltre 2⁵³ in
+/// silenzio — vedi la regola in [`crate::ipc`]. Nel WIT resta `u64` nativo,
+/// che non ha il problema.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct JobId(pub u64);
+
+impl Serialize for JobId {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        crate::ipc::u64_string::serialize(&self.0, s)
+    }
+}
+
+impl<'de> Deserialize<'de> for JobId {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        crate::ipc::u64_string::deserialize(d).map(JobId)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Capability handle: l'unico modo con cui un provider tocca il mondo esterno.
@@ -49,6 +66,18 @@ pub struct JobId(pub u64);
 /// il dogfooding del versioning ha trovato il buco: un `EventHandler` scritto
 /// come lo scriverebbe un plugin non aveva modo di tenere uno store di snapshot
 /// su disco (lo `storage_*` in-memory non basta) né di sapere che ore sono.
+///
+/// # Visibilità durante i callback (contratto)
+///
+/// Durante un callback **in scrittura** (`handle`, `on_action`, `flush`,
+/// `activate`) un provider **non vede sé stesso né i fratelli in corso di
+/// chiamata**: l'host li estrae dal workspace per la durata del giro, quindi
+/// una [`query_index`](HostApi::query_index) fatta da lì dentro può trovare
+/// meno provider di quanti ne esistano — al limite nessuno. Non è un
+/// malfunzionamento: un callback in scrittura risponde da ciò che ha già in
+/// mano, non interrogando il mondo che lo sta chiamando. Il percorso di
+/// **lettura** (`render_view`) invece gira sotto prestito condiviso e vede il
+/// mondo intero, indici compresi.
 pub trait HostApi: Send + Sync {
     /// Legge la sorgente di un documento dal vault.
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
@@ -174,6 +203,17 @@ pub struct ViewSpec {
     pub id: String,
     pub title: String,
     pub placement: ViewPlacement,
+    /// Dichiarazione di interesse: gli eventi al cui arrivo la shell deve
+    /// ridisegnare questa view (chiamare di nuovo `render_view`).
+    ///
+    /// È il pezzo di protocollo che dice *quando* una view invecchia: senza,
+    /// la shell può solo indovinare per conoscenza privata delle feature — e
+    /// per una view di plugin non può indovinare niente. Maschera vuota =
+    /// nessun ridisegno event-driven (la shell ridisegna comunque quando
+    /// cambia il documento attivo, che non è un evento del vault ma una
+    /// decisione sua).
+    #[serde(default)]
+    pub refresh: EventMask,
 }
 
 pub trait ViewProvider: Send + Sync {
@@ -351,6 +391,17 @@ pub trait IndexProvider: Send + Sync {
 // Event handler
 // ---------------------------------------------------------------------------
 
+/// Reazione agli eventi del vault.
+///
+/// # Semantica di consegna (contratto)
+///
+/// Gli eventi arrivano **dopo che la tua chiamata è tornata**, mai dentro di
+/// essa: se durante `handle` (o `on_action`, `flush`, `activate`) emetti
+/// eventi o scrivi documenti via [`HostApi`], gli handler — te compreso — li
+/// ricevono quando il tuo frame si è chiuso. Un provider non è mai rientrato
+/// nella propria istanza. È la semantica che il component model impone a M5
+/// (un'istanza WASM non è rientrante) e vale identica in nativo: contarci
+/// sopra in un senso o nell'altro non è un dettaglio d'implementazione.
 pub trait EventHandler: Send + Sync {
     fn subscribed(&self) -> EventMask;
     fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError>;
@@ -367,12 +418,49 @@ pub struct PluginPermissions {
     pub network: bool,
 }
 
+/// La versione del contratto che QUESTO abi definisce. È la stessa del
+/// `package fubmd:abi@…` nel WIT (il test di conformità le confronta).
+pub const ABI_VERSION: &str = "0.1.0";
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginManifest {
     pub id: String,
     pub name: String,
     pub version: String,
+    /// La versione del contratto (`fubmd:abi@X.Y.Z`) contro cui il plugin è
+    /// stato scritto. È il punto d'appoggio della promessa "cambi additivi
+    /// versionati post-freeze": senza un campo versione fin dal primo
+    /// manifest, il campo aggiunto dopo avrebbe lui stesso bisogno di una
+    /// versione per essere letto.
+    ///
+    /// La regola di caricamento è [`abi_compatible`]: si rifiuta una major
+    /// diversa, si accetta una minor uguale o inferiore a quella dell'host
+    /// (il contratto post-freeze cresce solo per aggiunta).
+    pub abi_version: String,
     pub permissions: PluginPermissions,
+}
+
+/// Un plugin che dichiara `declared` può girare su un host che parla
+/// [`ABI_VERSION`]?
+///
+/// La regola del freeze (M4): **major diversa → rifiuto** (il contratto è
+/// cambiato in modo incompatibile); **minor del plugin ≤ minor dell'host →
+/// accetto** (post-freeze il contratto cresce solo per aggiunta, quindi un
+/// host più nuovo serve ogni plugin più vecchio); minor del plugin maggiore →
+/// rifiuto (il plugin usa cose che questo host non ha). La patch non conta.
+/// Una versione che non parsa si rifiuta: meglio un no chiaro che un runtime
+/// a sorpresa.
+pub fn abi_compatible(declared: &str) -> bool {
+    fn major_minor(v: &str) -> Option<(u64, u64)> {
+        let mut parts = v.trim().split('.');
+        let major = parts.next()?.parse().ok()?;
+        let minor = parts.next()?.parse().ok()?;
+        Some((major, minor))
+    }
+    match (major_minor(declared), major_minor(ABI_VERSION)) {
+        (Some((dmaj, dmin)), Some((hmaj, hmin))) => dmaj == hmaj && dmin <= hmin,
+        _ => false,
+    }
 }
 
 pub trait Plugin: Send + Sync {
@@ -392,5 +480,42 @@ pub trait Plugin: Send + Sync {
     ) -> Result<serde_json::Value, PluginError> {
         let _ = payload;
         Err(PluginError::UnknownJob(job.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_abi_version_rule_rejects_other_majors_and_newer_minors() {
+        assert!(abi_compatible(ABI_VERSION), "l'host accetta sé stesso");
+        assert!(
+            abi_compatible("0.0.9"),
+            "una minor inferiore è servibile: post-freeze si cresce per aggiunta"
+        );
+        assert!(
+            !abi_compatible("0.2.0"),
+            "una minor superiore usa cose che l'host non ha"
+        );
+        assert!(!abi_compatible("1.0.0"), "una major diversa è un rifiuto");
+        assert!(
+            abi_compatible("0.1.999"),
+            "la patch non conta: non cambia il contratto"
+        );
+        assert!(!abi_compatible(""), "una versione che non parsa si rifiuta");
+        assert!(!abi_compatible("abc"));
+        assert!(!abi_compatible("0"));
+    }
+
+    #[test]
+    fn a_job_id_crosses_the_json_boundary_as_a_string() {
+        // u64 pieno: come `number` JS perderebbe i bit oltre 2^53.
+        let id = JobId(u64::MAX);
+        let json = serde_json::to_string(&id).unwrap();
+        assert_eq!(json, format!("\"{}\"", u64::MAX));
+        assert_eq!(serde_json::from_str::<JobId>(&json).unwrap(), id);
+        // I client scritti prima della regola mandavano il numero nudo.
+        assert_eq!(serde_json::from_str::<JobId>("7").unwrap(), JobId(7));
     }
 }

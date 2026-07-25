@@ -175,6 +175,157 @@ fn a_note_created_in_a_folder_stays_there() {
     assert_eq!(ws.resolve_link("Beta"), Some(creata));
 }
 
+/// I link markdown ordinari (§2.21) sul parser vero: gli `Span` sono quelli di
+/// comrak, non quelli di un provider giocattolo, e la riscrittura al rename
+/// ritaglia dentro di essi.
+#[test]
+fn markdown_links_are_edges_and_survive_a_rename() {
+    let (_scratch, mut ws) = open_scratch();
+    let sorgente = DocId::new("Progetti/fonte.md");
+    ws.write_document(
+        &sorgente,
+        concat!(
+            "# Fonte\n\n",
+            // Le due grafie di uno spazio in una destinazione markdown: le
+            // parentesi angolari e il percent-encoding. Devono essere lo stesso
+            // arco, e vanno riscritte entrambe.
+            "Un [link relativo](<../Nota B.md>) e uno [dentro la cartella](Alpha.md).\n",
+            "Un [link con ancora](../Nota%20B.md#sezione) e un [url](https://esempio.test/Nota%20B.md).\n",
+        ),
+    )
+    .unwrap();
+
+    // Archi e backlink: come i wikilink, senza distinzioni.
+    let sorgenti: Vec<String> = ws
+        .backlinks(&DocId::new("Nota B.md"))
+        .iter()
+        .map(|r| r.source.to_string())
+        .collect();
+    assert_eq!(
+        sorgenti
+            .iter()
+            .filter(|s| *s == "Progetti/fonte.md")
+            .count(),
+        2,
+        "i due link a Nota B (nudo e con ancora) sono due archi: {sorgenti:?}"
+    );
+    assert!(ws
+        .backlinks(&DocId::new("Progetti/Alpha.md"))
+        .iter()
+        .any(|r| r.source == sorgente));
+
+    // Rename del bersaglio: i riferimenti si riscrivono relativi alla sorgente,
+    // l'ancora resta, gli spazi si codificano, l'url non si tocca.
+    ws.rename_document(&DocId::new("Nota B.md"), &DocId::new("Archivio/Nota C.md"))
+        .unwrap();
+    let testo = ws.read_source(&sorgente).unwrap();
+    assert!(
+        testo.contains("[link relativo](<../Archivio/Nota%20C.md>)"),
+        "riscrittura mancata: {testo}"
+    );
+    assert!(
+        testo.contains("[link con ancora](../Archivio/Nota%20C.md#sezione)"),
+        "ancora persa: {testo}"
+    );
+    assert!(
+        testo.contains("[url](https://esempio.test/Nota%20B.md)"),
+        "un url non è un arco e non si riscrive: {testo}"
+    );
+    assert!(
+        testo.contains("[dentro la cartella](Alpha.md)"),
+        "il link a un documento che non si è mosso resta com'era: {testo}"
+    );
+
+    // E se a spostarsi è la sorgente, i suoi link relativi si ri-basano.
+    ws.rename_document(&sorgente, &DocId::new("fonte.md"))
+        .unwrap();
+    let testo = ws.read_source(&DocId::new("fonte.md")).unwrap();
+    assert!(
+        testo.contains("[link relativo](<Archivio/Nota%20C.md>)"),
+        "ri-basatura mancata: {testo}"
+    );
+    assert!(
+        testo.contains("[dentro la cartella](Progetti/Alpha.md)"),
+        "ri-basatura mancata: {testo}"
+    );
+    assert!(ws
+        .backlinks(&DocId::new("Progetti/Alpha.md"))
+        .iter()
+        .any(|r| r.source == DocId::new("fonte.md")));
+}
+
+/// Il riferimento **incorporato** alla markdown (`![alt](path)`) è un arco come
+/// gli altri — e prima del §1.5 non esisteva affatto: comrak lo dava come
+/// `Image`, il provider ne teneva l'inline e **non** lo metteva in `links`,
+/// quindi niente backlink e nessuna riscrittura al rename. È il buco che
+/// lasciava 13.1 fuori portata anche dopo che il §2.21 aveva reso i path archi.
+#[test]
+fn an_embedded_reference_is_an_edge_too() {
+    let (_scratch, mut ws) = open_scratch();
+    let sorgente = DocId::new("Progetti/fonte.md");
+    ws.write_document(
+        &sorgente,
+        concat!(
+            "# Fonte\n\n",
+            "Incorporo ![una nota](<../Nota B.md>) e un ![allegato](../allegati/foto.png).\n",
+            "E una ![remota](https://esempio.test/x.png), che non è del vault.\n",
+        ),
+    )
+    .unwrap();
+
+    assert!(ws
+        .backlinks(&DocId::new("Nota B.md"))
+        .iter()
+        .any(|r| r.source == sorgente));
+
+    // E si riscrive al rename come ogni altro riferimento, dentro lo `Span` che
+    // comrak ha dato all'immagine.
+    ws.rename_document(&DocId::new("Nota B.md"), &DocId::new("Archivio/Nota C.md"))
+        .unwrap();
+    let testo = ws.read_source(&sorgente).unwrap();
+    assert!(
+        testo.contains("![una nota](<../Archivio/Nota%20C.md>)"),
+        "riscrittura mancata: {testo}"
+    );
+    assert!(
+        testo.contains("![allegato](../allegati/foto.png)"),
+        "un riferimento a un file che non si è mosso resta com'era: {testo}"
+    );
+    assert!(
+        testo.contains("![remota](https://esempio.test/x.png)"),
+        "un url non è un arco: {testo}"
+    );
+}
+
+/// Quando etichetta e riferimento sono la stessa stringa, la sostituzione deve
+/// prendere quello giusto — e le due sintassi lo mettono da parti opposte.
+#[test]
+fn the_label_is_not_mistaken_for_the_reference() {
+    let (_scratch, mut ws) = open_scratch();
+    let sorgente = DocId::new("fonte.md");
+    ws.write_document(
+        &sorgente,
+        "Un [[Nota B|Nota B]] e un [Progetti/Alpha.md](Progetti/Alpha.md).\n",
+    )
+    .unwrap();
+
+    ws.rename_document(&DocId::new("Nota B.md"), &DocId::new("Nota C.md"))
+        .unwrap();
+    ws.rename_document(
+        &DocId::new("Progetti/Alpha.md"),
+        &DocId::new("Progetti/Beta.md"),
+    )
+    .unwrap();
+
+    let testo = ws.read_source(&sorgente).unwrap();
+    assert_eq!(
+        testo,
+        // Nel wikilink cambia la pagina (la prima), non l'etichetta; nel link
+        // markdown cambia la destinazione (la seconda), non l'etichetta.
+        "Un [[Nota C|Nota B]] e un [Progetti/Alpha.md](Progetti/Beta.md).\n"
+    );
+}
+
 #[test]
 fn creating_a_note_over_an_existing_one_is_refused() {
     let (_scratch, mut ws) = open_scratch();

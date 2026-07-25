@@ -41,7 +41,9 @@ impl Vault {
 fn rows(tree: &UiNode) -> Vec<(String, Option<String>)> {
     fn walk(node: &UiNode, out: &mut Vec<(String, Option<String>)>) {
         match node {
-            UiNode::ListItem { title, subtitle, .. } => out.push((title.clone(), subtitle.clone())),
+            UiNode::ListItem {
+                title, subtitle, ..
+            } => out.push((title.clone(), subtitle.clone())),
             UiNode::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
             UiNode::List { items } => items.iter().for_each(|c| walk(c, out)),
             _ => {}
@@ -60,7 +62,7 @@ fn tags_are_aggregated_across_the_vault_and_counted_per_note() {
     vault.put("A.md", "#rust e ancora #rust qui\n");
     vault.put("B.md", "#rust e #nota\n");
     vault.put("C.md", "niente tag\n");
-    let mut ws = vault.open();
+    let ws = vault.open();
 
     let tree = ws.render_view(TAGS_VIEW).unwrap();
     let rows = rows(&tree);
@@ -72,6 +74,24 @@ fn tags_are_aggregated_across_the_vault_and_counted_per_note() {
             ("#rust".to_string(), Some("2".to_string())),
         ]
     );
+}
+
+#[test]
+fn spellings_of_the_same_tag_are_one_row_with_one_count() {
+    let vault = Vault::new();
+    // `#Rust` e `#rust` sono lo stesso tag (chiave canonica, stile Obsidian):
+    // una riga sola nel pannello, col conteggio che il click poi conferma.
+    vault.put("A.md", "#Rust qui\n");
+    vault.put("B.md", "#rust là\n");
+    let ws = vault.open();
+
+    let tree = ws.render_view(TAGS_VIEW).unwrap();
+    let rows = rows(&tree);
+    assert_eq!(rows.len(), 1, "righe: {rows:?}");
+    assert_eq!(rows[0].1, Some("2".to_string()));
+    // Il display conserva il case di una grafia reale (la minore, per essere
+    // deterministici), non inventa una forma minuscola mai scritta.
+    assert_eq!(rows[0].0, "#Rust");
 }
 
 #[test]

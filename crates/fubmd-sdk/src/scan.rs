@@ -4,7 +4,7 @@
 //! `[[wikilink]]` in stile Obsidian: questi helper coprono quel divario e sono
 //! riusabili da qualsiasi `FormatProvider` basato su testo.
 
-use fubmd_abi::model::{LinkTarget, Span, Tag};
+use fubmd_abi::model::{Span, Tag};
 
 /// Estrae i `#tag` da un frammento di **testo semplice** (il chiamante deve già
 /// aver escluso code span, code block e frontmatter).
@@ -61,49 +61,14 @@ fn prev_char(text: &str, byte_idx: usize) -> Option<char> {
     text[..byte_idx].chars().next_back()
 }
 
-/// Risultato del parsing dell'interno di un wikilink.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ParsedWikilink {
-    pub target: LinkTarget,
-    /// Alias di visualizzazione dopo `|`, se presente.
-    pub alias: Option<String>,
-}
-
-/// Parsa l'interno di un wikilink, cioè il contenuto tra `[[` e `]]`.
-///
-/// Gestisce `Page#Heading^blockid|Alias` e imposta `embed` in base al prefisso
-/// `!` che il chiamante rileva sulla sintassi esterna.
-///
-/// Esempi: `Nota`, `Nota#Sezione`, `Nota^blocco`, `Nota#Sez|testo`, `#SoloHeading`.
-pub fn parse_wikilink_inner(inner: &str, embed: bool) -> ParsedWikilink {
-    // Alias dopo la prima '|'.
-    let (link_part, alias) = match inner.split_once('|') {
-        Some((l, a)) => (l, Some(a.trim().to_string())),
-        None => (inner, None),
-    };
-
-    // Riferimento a blocco `^id` (solo se dopo un eventuale heading).
-    let (link_part, block) = match link_part.split_once('^') {
-        Some((l, b)) => (l, Some(b.trim().to_string())),
-        None => (link_part, None),
-    };
-
-    // Heading dopo '#'.
-    let (page, heading) = match link_part.split_once('#') {
-        Some((p, h)) => (p.trim().to_string(), Some(h.trim().to_string())),
-        None => (link_part.trim().to_string(), None),
-    };
-
-    ParsedWikilink {
-        target: LinkTarget::Wiki {
-            page,
-            heading,
-            block,
-            embed,
-        },
-        alias,
-    }
-}
+/// Il parsing dell'interno di un wikilink **vive nel contratto**
+/// ([`fubmd_abi::model::parse_wikilink_inner`]) ed è ri-esportato qui perché è
+/// da qui che i provider testuali lo prendono: la grammatica di
+/// `Page#Heading^block|Alias` descrive i campi di `LinkTarget::Wiki`, quindi è
+/// una regola di ciò che il contratto dichiara — come `canonical_tag` — e non
+/// del toolkit di chi lo usa. Averla qui significava che una proprietà del
+/// frontmatter non poteva riconoscere una relazione senza dipendere dall'SDK.
+pub use fubmd_abi::model::{parse_wikilink_inner, ParsedWikilink};
 
 #[cfg(test)]
 mod tests {
@@ -133,34 +98,7 @@ mod tests {
         assert_eq!(tags[0].span, Span::new(2, 6));
     }
 
-    #[test]
-    fn wikilink_page_only() {
-        let p = parse_wikilink_inner("Nota", false);
-        assert_eq!(p.target, LinkTarget::wiki("Nota"));
-        assert_eq!(p.alias, None);
-    }
-
-    #[test]
-    fn wikilink_heading_block_alias() {
-        let p = parse_wikilink_inner("Nota#Sezione^blk|Testo", false);
-        assert_eq!(
-            p.target,
-            LinkTarget::Wiki {
-                page: "Nota".into(),
-                heading: Some("Sezione".into()),
-                block: Some("blk".into()),
-                embed: false,
-            }
-        );
-        assert_eq!(p.alias.as_deref(), Some("Testo"));
-    }
-
-    #[test]
-    fn wikilink_embed_flag() {
-        let p = parse_wikilink_inner("Immagine.png", true);
-        match p.target {
-            LinkTarget::Wiki { embed, .. } => assert!(embed),
-            _ => panic!("atteso wiki"),
-        }
-    }
+    // I test del parsing dei wikilink stanno col parsing, cioè nel contratto
+    // (`fubmd_abi::model`): qui resta ciò che l'SDK possiede davvero, la
+    // scansione dei tag.
 }

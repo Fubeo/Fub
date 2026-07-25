@@ -67,6 +67,11 @@
     {
       "kind": "run_search",
       "query": "q"
+    },
+    {
+      "kind": "custom",
+      "ns": "p",
+      "payload": null
     }
   ],
   "KernelEvent": [
@@ -92,7 +97,7 @@
     },
     {
       "type": "job_done",
-      "id": 1,
+      "id": "1",
       "job": "j",
       "result": {
         "Ok": null
@@ -117,8 +122,51 @@
   "VersionRef": [
     {
       "ts": 1,
-      "hash": 2,
+      "hash": "18446744073709551615",
       "size": 3
+    }
+  ],
+  "SearchHit": [
+    {
+      "doc": "a.md",
+      "score": 0.5,
+      "snippet": "s",
+      "highlights": [
+        {
+          "start": 0,
+          "end": 1
+        }
+      ]
+    }
+  ],
+  "BacklinkRef": [
+    {
+      "source": "b.md",
+      "context": "ctx"
+    }
+  ],
+  "TrashEntry": [
+    {
+      "id": ".trash/Nota.2026-01-01T00-00-00.md",
+      "original": "p/Nota.md",
+      "deleted_at": 4,
+      "size": 5
+    }
+  ],
+  "TagCount": [
+    {
+      "name": "rust",
+      "count": 2
+    }
+  ],
+  "ViewSpec": [
+    {
+      "id": "v",
+      "title": "V",
+      "placement": "right_sidebar",
+      "refresh": [
+        "index_updated"
+      ]
     }
   ]
 }

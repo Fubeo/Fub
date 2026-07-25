@@ -107,13 +107,26 @@ come proxy. Il kernel vede solo `dyn Trait`.
 - [milestones/M5-wasm-runtime.md](milestones/M5-wasm-runtime.md) — `fubmd-wasm-host`, proxy WASM, applicazione delle capability, plugin di esempio.
 
 **Piani di lavoro**:
-- [todo.md](todo.md) — piano di aggiustamento dopo il secondo audit
-  architetturale: conformità abi↔WIT sui tipi, `IndexProvider` dogfoodabile,
-  versioning vs `Overflow`, presidi cablati. Punti 1–5 chiusi; il `ViewProvider`
-  è ora esercitato dal primo provider vero (`BacklinksView`), con le due capacità
-  che gli mancavano — `query_index` e `active_document` — aggiunte all'`HostApi`.
-  Restano le decisioni strutturali/di forma del freeze (§1) e il debito già
-  dichiarato.
+- [todo.md](todo.md) — **roadmap infrastrutturale**: quali pezzi mancano perché
+  la massa di [FEATURES.md](FEATURES.md) sia implementabile *come provider*
+  invece che come codice dell'app — e, dal secondo giro, quali pezzi **esistono
+  con la forma sbagliata**, che è la famiglia che il freeze di M4 rende
+  definitiva (una firma che manca si aggiunge, una firma sbagliata si migra).
+  §1 le decisioni di contratto da prendere prima del freeze: comandi vivi,
+  `UiNode` con input, capacità dell'`HostApi`, task/ancore nel modello,
+  `IndexQuery`, import/export, stringhe — più il contesto di una view con la
+  **selezione** (§1.9), l'identità del documento (§1.10), gli errori tipizzati
+  al confine (§1.11), la scrittura **a lotti** (§1.12) e il canale del rendering
+  (§1.13). §2 il kernel: storage astratto, allegati, registry + runner dei job,
+  concorrenza, durabilità, politiche path/testo, sessioni — più una disciplina
+  dei provider sola invece di una per famiglia (§2.8), la disattivazione
+  (§2.9), il punto di applicazione dei permessi (§2.10), le cartelle (§2.11),
+  le versioni di schema dei formati persistiti (§2.12), il canale della lista
+  documenti (§2.13) e il sidecar dell'organizzazione da assorbire (§2.14).
+  §3 la shell, più i due parser per la stessa sintassi (§3.8); §4 presidi e
+  tooling, più l'SDK come superficie di riuso (§4.6) e un crate per bundle di
+  feature (§4.7); §5 il debito riportato dai quattro giri di audit, i cui piani
+  di aggiustamento sono chiusi; §6 l'ordine consigliato (P0 = tutto il §1).
 - [ORGANIZZAZIONE_VAULT.md](ORGANIZZAZIONE_VAULT.md) — organizzazione stile
   make.md nell'app base: sidebar ad albero, icone, folder notes, spazi
   (appuntate, ordinamento drag & drop, cartella come radice), sidecar
@@ -147,6 +160,9 @@ come proxy. Il kernel vede solo `dyn Trait`.
 - **M4 — Hardening del contratto + WIT** → [dettaglio](milestones/M4-wit-hardening.md)
   Freeze della superficie dei trait; `wit/fubmd/*.wit` (già vivo da M2) rispecchia
   `fubmd-abi`; test di conformità; primo plugin nativo via `Plugin`/`HostApi`.
+  La **checklist del freeze** vive lì e rimanda al §1 di [todo.md](todo.md), che
+  è l'elenco autorevole: sul documento di milestone restano le sole decisioni con
+  una domanda ancora aperta e una risposta da mettere a verbale.
 - **M5 — Runtime WASM per plugin di terzi** → [dettaglio](milestones/M5-wasm-runtime.md)
   `fubmd-wasm-host` (wasmtime, component model); proxy per ogni trait; host
   function per `HostApi`; plugin di esempio in `wasm32-wasip2`.
@@ -196,3 +212,12 @@ documenti milestone.
 - **Concorrenza** — tutto il `Workspace` è `&mut` dietro un `Mutex` nell'app: un
   reindex blocca le query. Accettato per ora; se morde, split lettura/scrittura
   a M2/M3 (misura prima di agire).
+- **Il freeze arriva prima delle firme che FEATURES richiede** — è il rischio che
+  [todo.md](todo.md) §1 esiste per chiudere: una capacità che manca al contratto
+  è una famiglia di voci che *non potrà mai* essere un plugin, e dopo M4 si
+  aggiunge solo per minor (o non si aggiunge). Mitigazione: il §1 per intero è
+  P0, e le decisioni con una domanda aperta sono nella checklist di
+  [M4](milestones/M4-wit-hardening.md). Il dogfooding resta lo strumento che le
+  scopre — è così che sono arrivati `data_*`, `now_unix_millis`, `query_index` e
+  `active_document`, ognuno da una feature ufficiale scritta come la scriverebbe
+  un plugin.
