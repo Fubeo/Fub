@@ -22,3 +22,8 @@ serde_json = { workspace = true }
 # Il test di conformità PARSA wit/fubmd/abi.wit invece di cercarci dentro delle
 # sottostringhe: un contratto invalido deve essere un test rosso.
 wit-parser = { version = "0.254", default-features = false, features = ["std"] }
+# L'ordine dei casi di un variant È il discriminante ABI, ma il compilatore
+# garantisce solo l'esaustività, non l'ordine: il test parsa i sorgenti degli
+# enum e deriva l'ordine atteso dalla dichiarazione Rust — un riordino è rosso
+# da entrambi i lati.
+syn = { version = "2", default-features = false, features = ["full", "parsing"] }

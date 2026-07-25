@@ -172,6 +172,7 @@ pub enum Inline {
     Link {
         target: model::LinkTarget,
         label: Option<Vec<InlineRef>>,
+        embed: bool,
         span: Span,
     },
     TagRef {
@@ -185,6 +186,54 @@ pub enum Inline {
     },
 }
 
+/// [`model::ListItem`] con i blocchi sostituiti da indici.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ListItem {
+    pub blocks: Vec<BlockRef>,
+    pub task: Option<TaskMarker>,
+    pub span: Span,
+}
+
+/// [`model::TableCell`] con gli inline sostituiti da indici.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TableCell {
+    pub inlines: Vec<InlineRef>,
+    pub span: Span,
+}
+
+/// [`model::TableRow`] al confine.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TableRow {
+    pub cells: Vec<TableCell>,
+}
+
+/// [`model::TaskMarker`] alla larghezza del confine (lo span cambia tipo).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskMarker {
+    pub symbol: Option<char>,
+    pub span: Span,
+}
+
+impl From<model::TaskMarker> for TaskMarker {
+    fn from(m: model::TaskMarker) -> Self {
+        TaskMarker {
+            symbol: m.symbol,
+            span: m.span.into(),
+        }
+    }
+}
+
+impl TryFrom<TaskMarker> for model::TaskMarker {
+    type Error = ArenaError;
+
+    fn try_from(m: TaskMarker) -> Result<Self, Self::Error> {
+        Ok(model::TaskMarker {
+            symbol: m.symbol,
+            span: m.span.try_into()?,
+        })
+    }
+}
+
 /// [`model::Block`] con i figli sostituiti da indici.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -192,33 +241,47 @@ pub enum Block {
     Heading {
         level: u8,
         inlines: Vec<InlineRef>,
+        anchor: Option<String>,
         span: Span,
     },
     Paragraph {
         inlines: Vec<InlineRef>,
+        anchor: Option<String>,
         span: Span,
     },
     List {
         ordered: bool,
-        items: Vec<Vec<BlockRef>>,
+        items: Vec<ListItem>,
+        anchor: Option<String>,
         span: Span,
     },
     CodeBlock {
         lang: Option<String>,
         code: String,
+        anchor: Option<String>,
         span: Span,
     },
     Quote {
         blocks: Vec<BlockRef>,
+        anchor: Option<String>,
         span: Span,
     },
     ThematicBreak {
+        anchor: Option<String>,
         span: Span,
     },
     Custom {
         custom_kind: String,
         attrs: serde_json::Value,
         blocks: Vec<BlockRef>,
+        anchor: Option<String>,
+        span: Span,
+    },
+    Table {
+        head: Option<TableRow>,
+        rows: Vec<TableRow>,
+        align: Vec<model::ColumnAlign>,
+        anchor: Option<String>,
         span: Span,
     },
 }
@@ -305,54 +368,117 @@ impl DocumentTree {
             Block::Heading {
                 level,
                 inlines,
+                anchor,
                 span,
             } => model::Block::Heading {
                 level: *level,
                 inlines: self.inlines(inlines, &mut Vec::new())?,
+                anchor: anchor.clone(),
                 span: (*span).try_into()?,
             },
-            Block::Paragraph { inlines, span } => model::Block::Paragraph {
+            Block::Paragraph {
+                inlines,
+                anchor,
+                span,
+            } => model::Block::Paragraph {
                 inlines: self.inlines(inlines, &mut Vec::new())?,
+                anchor: anchor.clone(),
                 span: (*span).try_into()?,
             },
             Block::List {
                 ordered,
                 items,
+                anchor,
                 span,
             } => model::Block::List {
                 ordered: *ordered,
                 items: items
                     .iter()
-                    .map(|item| self.blocks(item, path))
-                    .collect::<Result<_, _>>()?,
+                    .map(|item| {
+                        Ok(model::ListItem {
+                            blocks: self.blocks(&item.blocks, path)?,
+                            task: item.task.map(model::TaskMarker::try_from).transpose()?,
+                            span: item.span.try_into()?,
+                        })
+                    })
+                    .collect::<Result<_, ArenaError>>()?,
+                anchor: anchor.clone(),
                 span: (*span).try_into()?,
             },
-            Block::CodeBlock { lang, code, span } => model::Block::CodeBlock {
+            Block::CodeBlock {
+                lang,
+                code,
+                anchor,
+                span,
+            } => model::Block::CodeBlock {
                 lang: lang.clone(),
                 code: code.clone(),
+                anchor: anchor.clone(),
                 span: (*span).try_into()?,
             },
-            Block::Quote { blocks, span } => model::Block::Quote {
+            Block::Quote {
+                blocks,
+                anchor,
+                span,
+            } => model::Block::Quote {
                 blocks: self.blocks(blocks, path)?,
+                anchor: anchor.clone(),
                 span: (*span).try_into()?,
             },
-            Block::ThematicBreak { span } => model::Block::ThematicBreak {
+            Block::ThematicBreak { anchor, span } => model::Block::ThematicBreak {
+                anchor: anchor.clone(),
                 span: (*span).try_into()?,
             },
             Block::Custom {
                 custom_kind,
                 attrs,
                 blocks,
+                anchor,
                 span,
             } => model::Block::Custom {
                 custom_kind: custom_kind.clone(),
                 attrs: attrs.clone(),
                 blocks: self.blocks(blocks, path)?,
+                anchor: anchor.clone(),
+                span: (*span).try_into()?,
+            },
+            Block::Table {
+                head,
+                rows,
+                align,
+                anchor,
+                span,
+            } => model::Block::Table {
+                head: head.as_ref().map(|r| self.row(r)).transpose()?,
+                rows: rows
+                    .iter()
+                    .map(|r| self.row(r))
+                    .collect::<Result<_, ArenaError>>()?,
+                align: align.clone(),
+                anchor: anchor.clone(),
                 span: (*span).try_into()?,
             },
         };
         path.pop();
         Ok(block)
+    }
+
+    /// Una riga di tabella: le celle portano inline, che hanno un'arena loro e
+    /// quindi non possono partecipare a un ciclo fra blocchi (il `path` degli
+    /// inline riparte vuoto a ogni cella, come per gli altri contenitori).
+    fn row(&self, row: &TableRow) -> Result<model::TableRow, ArenaError> {
+        Ok(model::TableRow {
+            cells: row
+                .cells
+                .iter()
+                .map(|c| {
+                    Ok(model::TableCell {
+                        inlines: self.inlines(&c.inlines, &mut Vec::new())?,
+                        span: c.span.try_into()?,
+                    })
+                })
+                .collect::<Result<_, ArenaError>>()?,
+        })
     }
 
     fn blocks(
@@ -384,10 +510,12 @@ impl DocumentTree {
             Inline::Link {
                 target,
                 label,
+                embed,
                 span,
             } => model::Inline::Link {
                 target: target.clone(),
                 label: label.as_ref().map(|v| self.inlines(v, path)).transpose()?,
+                embed: *embed,
                 span: (*span).try_into()?,
             },
             Inline::TagRef { name, span } => model::Inline::TagRef {
@@ -426,49 +554,89 @@ fn tree_push_block(tree: &mut DocumentTree, b: &model::Block) -> BlockRef {
         model::Block::Heading {
             level,
             inlines,
+            anchor,
             span,
         } => Block::Heading {
             level: *level,
             inlines: tree_push_inlines(tree, inlines),
+            anchor: anchor.clone(),
             span: (*span).into(),
         },
-        model::Block::Paragraph { inlines, span } => Block::Paragraph {
+        model::Block::Paragraph {
+            inlines,
+            anchor,
+            span,
+        } => Block::Paragraph {
             inlines: tree_push_inlines(tree, inlines),
+            anchor: anchor.clone(),
             span: (*span).into(),
         },
         model::Block::List {
             ordered,
             items,
+            anchor,
             span,
         } => Block::List {
             ordered: *ordered,
             items: items
                 .iter()
-                .map(|item| tree_push_blocks(tree, item))
+                .map(|item| ListItem {
+                    blocks: tree_push_blocks(tree, &item.blocks),
+                    task: item.task.map(TaskMarker::from),
+                    span: item.span.into(),
+                })
                 .collect(),
+            anchor: anchor.clone(),
             span: (*span).into(),
         },
-        model::Block::CodeBlock { lang, code, span } => Block::CodeBlock {
+        model::Block::CodeBlock {
+            lang,
+            code,
+            anchor,
+            span,
+        } => Block::CodeBlock {
             lang: lang.clone(),
             code: code.clone(),
+            anchor: anchor.clone(),
             span: (*span).into(),
         },
-        model::Block::Quote { blocks, span } => Block::Quote {
+        model::Block::Quote {
+            blocks,
+            anchor,
+            span,
+        } => Block::Quote {
             blocks: tree_push_blocks(tree, blocks),
+            anchor: anchor.clone(),
             span: (*span).into(),
         },
-        model::Block::ThematicBreak { span } => Block::ThematicBreak {
+        model::Block::ThematicBreak { anchor, span } => Block::ThematicBreak {
+            anchor: anchor.clone(),
             span: (*span).into(),
         },
         model::Block::Custom {
             custom_kind,
             attrs,
             blocks,
+            anchor,
             span,
         } => Block::Custom {
             custom_kind: custom_kind.clone(),
             attrs: attrs.clone(),
             blocks: tree_push_blocks(tree, blocks),
+            anchor: anchor.clone(),
+            span: (*span).into(),
+        },
+        model::Block::Table {
+            head,
+            rows,
+            align,
+            anchor,
+            span,
+        } => Block::Table {
+            head: head.as_ref().map(|r| tree_push_row(tree, r)),
+            rows: rows.iter().map(|r| tree_push_row(tree, r)).collect(),
+            align: align.clone(),
+            anchor: anchor.clone(),
             span: (*span).into(),
         },
     };
@@ -481,6 +649,19 @@ fn tree_push_blocks(tree: &mut DocumentTree, blocks: &[model::Block]) -> Vec<Blo
     blocks.iter().map(|b| tree_push_block(tree, b)).collect()
 }
 
+fn tree_push_row(tree: &mut DocumentTree, row: &model::TableRow) -> TableRow {
+    TableRow {
+        cells: row
+            .cells
+            .iter()
+            .map(|c| TableCell {
+                inlines: tree_push_inlines(tree, &c.inlines),
+                span: c.span.into(),
+            })
+            .collect(),
+    }
+}
+
 fn tree_push_inline(tree: &mut DocumentTree, i: &model::Inline) -> InlineRef {
     let node = match i {
         model::Inline::Text(s) => Inline::Text(s.clone()),
@@ -490,10 +671,12 @@ fn tree_push_inline(tree: &mut DocumentTree, i: &model::Inline) -> InlineRef {
         model::Inline::Link {
             target,
             label,
+            embed,
             span,
         } => Inline::Link {
             target: target.clone(),
             label: label.as_ref().map(|v| tree_push_inlines(tree, v)),
+            embed: *embed,
             span: (*span).into(),
         },
         model::Inline::TagRef { name, span } => Inline::TagRef {
@@ -653,7 +836,10 @@ fn ui_push(nodes: &mut Vec<UiNode>, n: &ui::UiNode) -> UiRef {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Block as B, Inline as I, LinkTarget, Span as S};
+    use crate::model::{
+        Block as B, ColumnAlign, Inline as I, LinkTarget, ListItem as LI, Span as S, TableCell,
+        TableRow as TR, TaskMarker,
+    };
     use crate::ui::{ActionId, Axis, Intent, UiNode as U};
 
     /// Un corpo che tocca ogni variante e annida a più livelli: se il
@@ -666,6 +852,7 @@ mod tests {
                     I::Text("Titolo con ".into()),
                     I::Strong(vec![I::Emph(vec![I::Text("enfasi".into())])]),
                 ],
+                anchor: Some("titolo-con-enfasi".into()),
                 span: S::new(0, 30),
             },
             B::Paragraph {
@@ -674,16 +861,24 @@ mod tests {
                     I::Link {
                         target: LinkTarget::wiki("Altra"),
                         label: Some(vec![I::Text("etichetta".into())]),
+                        embed: false,
                         span: S::new(31, 60),
                     },
                     I::Link {
                         target: LinkTarget::Url("https://esempio".into()),
                         label: None,
+                        embed: false,
                         span: S::new(61, 80),
+                    },
+                    I::Link {
+                        target: LinkTarget::Path("allegati/foto.png".into()),
+                        label: None,
+                        embed: true,
+                        span: S::new(81, 90),
                     },
                     I::TagRef {
                         name: "tag/annidato".into(),
-                        span: S::new(81, 94),
+                        span: S::new(91, 94),
                     },
                     I::Custom {
                         custom_kind: "math-inline".into(),
@@ -691,43 +886,103 @@ mod tests {
                         span: S::new(95, 105),
                     },
                 ],
+                anchor: Some("blocco-1".into()),
                 span: S::new(31, 105),
             },
             B::List {
                 ordered: true,
                 items: vec![
-                    vec![B::Paragraph {
-                        inlines: vec![I::Text("primo".into())],
+                    LI {
+                        blocks: vec![B::Paragraph {
+                            inlines: vec![I::Text("primo".into())],
+                            anchor: None,
+                            span: S::new(106, 113),
+                        }],
+                        task: Some(TaskMarker {
+                            symbol: Some('x'),
+                            span: S::new(108, 111),
+                        }),
                         span: S::new(106, 113),
-                    }],
-                    vec![
-                        B::Paragraph {
-                            inlines: vec![I::Text("secondo".into())],
-                            span: S::new(114, 123),
-                        },
-                        B::Quote {
-                            blocks: vec![B::ThematicBreak {
-                                span: S::new(124, 127),
-                            }],
-                            span: S::new(124, 128),
-                        },
-                    ],
+                    },
+                    LI {
+                        blocks: vec![
+                            B::Paragraph {
+                                inlines: vec![I::Text("secondo".into())],
+                                anchor: None,
+                                span: S::new(114, 123),
+                            },
+                            B::Quote {
+                                blocks: vec![B::ThematicBreak {
+                                    anchor: None,
+                                    span: S::new(124, 127),
+                                }],
+                                anchor: None,
+                                span: S::new(124, 128),
+                            },
+                        ],
+                        task: Some(TaskMarker {
+                            symbol: None,
+                            span: S::new(116, 119),
+                        }),
+                        span: S::new(114, 128),
+                    },
+                    LI {
+                        blocks: vec![B::Paragraph {
+                            inlines: vec![I::Text("non è una task".into())],
+                            anchor: None,
+                            span: S::new(129, 145),
+                        }],
+                        task: None,
+                        span: S::new(129, 145),
+                    },
                 ],
-                span: S::new(106, 128),
+                anchor: None,
+                span: S::new(106, 145),
             },
             B::CodeBlock {
                 lang: Some("rust".into()),
                 code: "fn main() {}".into(),
-                span: S::new(129, 160),
+                anchor: None,
+                span: S::new(146, 160),
+            },
+            B::Table {
+                head: Some(TR {
+                    cells: vec![
+                        TableCell {
+                            inlines: vec![I::Text("a".into())],
+                            span: S::new(161, 164),
+                        },
+                        TableCell {
+                            inlines: vec![I::Strong(vec![I::Text("b".into())])],
+                            span: S::new(165, 170),
+                        },
+                    ],
+                }),
+                rows: vec![TR {
+                    cells: vec![TableCell {
+                        inlines: vec![I::Link {
+                            target: LinkTarget::wiki("Nota"),
+                            label: None,
+                            embed: false,
+                            span: S::new(171, 179),
+                        }],
+                        span: S::new(171, 180),
+                    }],
+                }],
+                align: vec![ColumnAlign::Left, ColumnAlign::None],
+                anchor: Some("tabella".into()),
+                span: S::new(161, 181),
             },
             B::Custom {
                 custom_kind: "callout".into(),
                 attrs: serde_json::json!({"tipo": "nota"}),
                 blocks: vec![B::Paragraph {
                     inlines: vec![I::Text("dentro il callout".into())],
-                    span: S::new(170, 190),
+                    anchor: None,
+                    span: S::new(190, 200),
                 }],
-                span: S::new(161, 191),
+                anchor: None,
+                span: S::new(182, 201),
             },
         ]
     }
@@ -803,7 +1058,11 @@ mod tests {
         for (i, block) in tree.blocks.iter().enumerate() {
             let figli: Vec<BlockRef> = match block {
                 Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => blocks.clone(),
-                Block::List { items, .. } => items.iter().flatten().copied().collect(),
+                Block::List { items, .. } => items
+                    .iter()
+                    .flat_map(|it| it.blocks.iter())
+                    .copied()
+                    .collect(),
                 _ => Vec::new(),
             };
             for f in figli {
@@ -828,6 +1087,7 @@ mod tests {
         let mut tree = DocumentTree::flatten(&corpo());
         tree.blocks.push(Block::Quote {
             blocks: vec![BlockRef(7_777)],
+            anchor: None,
             span: Span::default(),
         });
         let at = BlockRef(next_index(tree.blocks.len()) - 1);
@@ -841,6 +1101,7 @@ mod tests {
         let mut tree = DocumentTree::flatten(&corpo());
         tree.blocks.push(Block::Paragraph {
             inlines: vec![InlineRef(4_242)],
+            anchor: None,
             span: Span::default(),
         });
         tree.roots = vec![BlockRef(next_index(tree.blocks.len()) - 1)];
@@ -870,6 +1131,28 @@ mod tests {
         let tree = DocumentTree {
             blocks: vec![Block::Quote {
                 blocks: vec![BlockRef(0)],
+                anchor: None,
+                span: Span::default(),
+            }],
+            inlines: Vec::new(),
+            roots: vec![BlockRef(0)],
+        };
+        assert!(matches!(
+            tree.rebuild(),
+            Err(ArenaError::Cycle { index: 0, .. })
+        ));
+
+        // Anche attraverso una voce di lista, che dal §1.5 è un record e non
+        // più una `Vec` nuda: il `path` deve attraversarla.
+        let tree = DocumentTree {
+            blocks: vec![Block::List {
+                ordered: false,
+                items: vec![ListItem {
+                    blocks: vec![BlockRef(0)],
+                    task: None,
+                    span: Span::default(),
+                }],
+                anchor: None,
                 span: Span::default(),
             }],
             inlines: Vec::new(),
@@ -883,6 +1166,7 @@ mod tests {
         let tree = DocumentTree {
             blocks: vec![Block::Paragraph {
                 inlines: vec![InlineRef(0)],
+                anchor: None,
                 span: Span::default(),
             }],
             inlines: vec![Inline::Emph(vec![InlineRef(0)])],
@@ -915,10 +1199,12 @@ mod tests {
         let tree = DocumentTree {
             blocks: vec![
                 Block::ThematicBreak {
+                    anchor: None,
                     span: Span::default(),
                 },
                 Block::Quote {
                     blocks: vec![BlockRef(0), BlockRef(0)],
+                    anchor: None,
                     span: Span::default(),
                 },
             ],
@@ -930,9 +1216,16 @@ mod tests {
             rebuilt,
             vec![B::Quote {
                 blocks: vec![
-                    B::ThematicBreak { span: S::EMPTY },
-                    B::ThematicBreak { span: S::EMPTY }
+                    B::ThematicBreak {
+                        anchor: None,
+                        span: S::EMPTY
+                    },
+                    B::ThematicBreak {
+                        anchor: None,
+                        span: S::EMPTY
+                    }
                 ],
+                anchor: None,
                 span: S::EMPTY,
             }]
         );
@@ -964,18 +1257,50 @@ mod tests {
         let tree = DocumentTree::flatten(&body);
         let rebuilt = tree.rebuild().unwrap();
         let spans = |bs: &[B]| -> Vec<(usize, usize)> {
-            bs.iter()
-                .map(|b| match b {
-                    B::Heading { span, .. }
-                    | B::Paragraph { span, .. }
-                    | B::List { span, .. }
-                    | B::CodeBlock { span, .. }
-                    | B::Quote { span, .. }
-                    | B::ThematicBreak { span }
-                    | B::Custom { span, .. } => (span.start, span.end),
-                })
-                .collect()
+            bs.iter().map(|b| (b.span().start, b.span().end)).collect()
         };
         assert_eq!(spans(&body), spans(&rebuilt));
+    }
+
+    /// Le forme nuove del §1.5 attraversano e tornano: lo stato di una task, il
+    /// suo marcatore, l'ancora di un blocco, le celle di una tabella.
+    #[test]
+    fn tasks_anchors_and_tables_survive_the_boundary() {
+        let tree = DocumentTree::flatten(&corpo());
+        let rebuilt = tree.rebuild().unwrap();
+
+        let B::List { items, .. } = &rebuilt[2] else {
+            panic!("la terza radice è una lista");
+        };
+        assert_eq!(
+            items
+                .iter()
+                .map(|i| i.task.map(|t| t.checked()))
+                .collect::<Vec<_>>(),
+            vec![Some(true), Some(false), None]
+        );
+        assert_eq!(items[1].task.unwrap().span, S::new(116, 119));
+
+        assert_eq!(rebuilt[0].anchor(), Some("titolo-con-enfasi"));
+        assert_eq!(rebuilt[1].anchor(), Some("blocco-1"));
+        assert_eq!(rebuilt[3].anchor(), None);
+
+        let B::Table {
+            head, rows, align, ..
+        } = &rebuilt[4]
+        else {
+            panic!("la quinta radice è una tabella");
+        };
+        assert_eq!(head.as_ref().unwrap().cells.len(), 2);
+        assert_eq!(align, &vec![ColumnAlign::Left, ColumnAlign::None]);
+        assert_eq!(
+            rows[0].cells[0].inlines,
+            vec![I::Link {
+                target: LinkTarget::wiki("Nota"),
+                label: None,
+                embed: false,
+                span: S::new(171, 179),
+            }]
+        );
     }
 }

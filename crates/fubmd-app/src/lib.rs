@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
-use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
+use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit, TagCount, ViewSpec};
 use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
     BacklinksView, OutlineView, SearchIndex, TagPanelView, VersionRef, VersionStore,
@@ -19,6 +19,7 @@ use fubmd_features::{
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, TrashEntry, Trust, Workspace};
 
+use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::RecursiveMode;
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
 use serde::{Deserialize, Serialize};
@@ -40,18 +41,20 @@ struct AppState {
     session: Mutex<Option<VaultSession>>,
 }
 
+/// Rispecchiato da `VaultInfo` in `frontend/src/api.ts`; il legame è la
+/// fixture di `tests/ts_mirror_app.rs`.
 #[derive(Serialize)]
-struct VaultInfo {
-    root: String,
-    documents: Vec<String>,
+pub struct VaultInfo {
+    pub root: String,
+    pub documents: Vec<String>,
     /// Le estensioni che i provider registrati gestiscono (minuscole, senza
     /// punto). Il frontend le usa per ricavare il "nome pagina" di un `DocId`
     /// senza cablare `.md`: quale sia l'estensione di un documento lo sanno i
     /// `FormatDescriptor`, non la UI.
-    extensions: Vec<String>,
+    pub extensions: Vec<String>,
     /// Il versioning è acceso? Spento significa **assente** (D7): il frontend
     /// non disegna la cronologia, e nel vault non compare nulla.
-    versioning: bool,
+    pub versioning: bool,
 }
 
 /// Il versioning è acceso?
@@ -81,6 +84,13 @@ fn versions_of(state: &AppState) -> Result<VersionStore, String> {
         .as_ref()
         .and_then(|s| s.versions.clone())
         .ok_or_else(|| "Versioning disattivato.".to_string())
+}
+
+/// [`DocId`] da input IPC: la stessa validazione del kernel
+/// (`fubmd_kernel::valid_doc_id`), applicata sul confine — nessun comando
+/// costruisce un `DocId` non sanitizzato da ciò che arriva dal webview.
+fn doc_id(raw: &str) -> Result<DocId, String> {
+    fubmd_kernel::valid_doc_id(raw).map_err(|e| e.to_string())
 }
 
 /// Restituisce un handle clonato al workspace corrente, o errore se nessun
@@ -211,6 +221,25 @@ fn spawn_watcher(
             Ok(events) => {
                 let mut ws = workspace.lock().unwrap();
                 for event in events {
+                    // Un rename accoppiato (`paths = [from, to]`) è una
+                    // migrazione d'identità, non remove+add: la storia del
+                    // versioning resta attaccata alla nota, il frontend migra
+                    // i meta, e `DocumentRenamed` viene emesso anche per i
+                    // rename fatti da Finder/Obsidian/sync. Tutto il resto
+                    // passa dal fallback per-path qui sotto.
+                    if matches!(
+                        event.kind,
+                        EventKind::Modify(ModifyKind::Name(RenameMode::Both))
+                    ) && event.paths.len() == 2
+                    {
+                        if let (Ok(from), Ok(to)) = (
+                            Utf8PathBuf::from_path_buf(event.paths[0].clone()),
+                            Utf8PathBuf::from_path_buf(event.paths[1].clone()),
+                        ) {
+                            let _ = ws.sync_renamed_path(&from, &to);
+                            continue;
+                        }
+                    }
                     for path in &event.paths {
                         if let Ok(p) = Utf8PathBuf::from_path_buf(path.clone()) {
                             let _ = ws.sync_path(&p);
@@ -253,14 +282,14 @@ fn list_documents(state: State<AppState>) -> Result<Vec<String>, String> {
 fn read_document(state: State<AppState>, id: String) -> Result<String, String> {
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
-    ws.read_source(&DocId::new(id)).map_err(|e| e.to_string())
+    ws.read_source(&doc_id(&id)?).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn write_document(state: State<AppState>, id: String, source: String) -> Result<(), String> {
     let ws = current(&state)?;
     let mut ws = ws.lock().unwrap();
-    ws.write_document(&DocId::new(id), &source)
+    ws.write_document(&doc_id(&id)?, &source)
         .map_err(|e| e.to_string())
 }
 
@@ -270,7 +299,7 @@ fn write_document(state: State<AppState>, id: String, source: String) -> Result<
 fn rename_document(state: State<AppState>, from: String, to: String) -> Result<(), String> {
     let ws = current(&state)?;
     let mut ws = ws.lock().unwrap();
-    ws.rename_document(&DocId::new(from), &DocId::new(to))
+    ws.rename_document(&doc_id(&from)?, &doc_id(&to)?)
         .map_err(|e| e.to_string())
 }
 
@@ -293,7 +322,7 @@ fn create_note(state: State<AppState>, name: Option<String>) -> Result<String, S
 fn delete_document(state: State<AppState>, id: String) -> Result<String, String> {
     let ws = current(&state)?;
     let mut ws = ws.lock().unwrap();
-    ws.delete_document(&DocId::new(id))
+    ws.delete_document(&doc_id(&id)?)
         .map(|d| d.0)
         .map_err(|e| e.to_string())
 }
@@ -329,7 +358,8 @@ fn restore_from_trash(
 ) -> Result<String, String> {
     let ws = current(&state)?;
     let mut ws = ws.lock().unwrap();
-    ws.restore_from_trash(&DocId::new(id), to.map(DocId::new))
+    let to = to.as_deref().map(doc_id).transpose()?;
+    ws.restore_from_trash(&doc_id(&id)?, to)
         .map(|d| d.0)
         .map_err(|e| e.to_string())
 }
@@ -343,10 +373,12 @@ fn empty_trash(state: State<AppState>) -> Result<usize, String> {
     ws.empty_trash().map_err(|e| e.to_string())
 }
 
+/// Rispecchiato da `EmbedContent` in `frontend/src/api.ts` (fixture di
+/// `tests/ts_mirror_app.rs`).
 #[derive(Serialize)]
-struct EmbedContent {
-    doc_id: String,
-    html: String,
+pub struct EmbedContent {
+    pub doc_id: String,
+    pub html: String,
 }
 
 /// Contenuto di un embed `![[page#heading]]`: il frontend lo innesta nel
@@ -402,11 +434,24 @@ fn set_active_document(state: State<AppState>, id: Option<String>) -> Result<(),
     Ok(())
 }
 
-/// Rende l'albero `UiNode` di una view registrata.
+/// Le view offerte dai provider registrati, nell'ordine di registrazione.
+///
+/// È la metà "discovery" del protocollo: la shell non cabla gli id — monta
+/// ogni view nel contenitore del suo `placement` e la ridisegna quando arriva
+/// un evento della sua maschera `refresh`. Una view di plugin compare da sola.
+#[tauri::command]
+fn list_views(state: State<AppState>) -> Result<Vec<ViewSpec>, String> {
+    let ws = current(&state)?;
+    let ws = ws.lock().unwrap();
+    Ok(ws.views())
+}
+
+/// Rende l'albero `UiNode` di una view registrata. Il render è una lettura:
+/// prende il workspace in prestito condiviso, non in esclusiva.
 #[tauri::command]
 fn render_view(state: State<AppState>, view: String) -> Result<UiNode, String> {
     let ws = current(&state)?;
-    let mut ws = ws.lock().unwrap();
+    let ws = ws.lock().unwrap();
     ws.render_view(&view).map_err(|e| e.to_string())
 }
 
@@ -450,6 +495,22 @@ fn search(
     };
     match ws.query_index(q).map_err(|e| e.to_string())? {
         IndexResult::Search(hits) => Ok(hits),
+        other => Err(format!("l'indice ha risposto fuori tema: {other:?}")),
+    }
+}
+
+/// I tag del vault con la loro frequenza, per l'autocompletamento `#` in
+/// editor. Il kernel risponde da uno snapshot incrementale (canale metadata,
+/// come l'outline): chiederli a ogni popup è economico, niente cache lato UI.
+#[tauri::command]
+fn list_tags(state: State<AppState>) -> Result<Vec<TagCount>, String> {
+    let ws = current(&state)?;
+    let ws = ws.lock().unwrap();
+    match ws
+        .query_index(IndexQuery::Tags)
+        .map_err(|e| e.to_string())?
+    {
+        IndexResult::Tags(tags) => Ok(tags),
         other => Err(format!("l'indice ha risposto fuori tema: {other:?}")),
     }
 }
@@ -507,22 +568,22 @@ fn restore_version(state: State<AppState>, id: String, ts: u64) -> Result<(), St
 /// le note, path di cartella senza slash finale per le cartelle (`""` è la
 /// radice).
 #[derive(Default, Serialize, Deserialize)]
-struct WorkspaceMeta {
+pub struct WorkspaceMeta {
     /// path → emoji mostrata accanto al nome.
     #[serde(default)]
-    icons: std::collections::BTreeMap<String, String>,
+    pub icons: std::collections::BTreeMap<String, String>,
     /// Note appuntate in cima alla sidebar, nell'ordine scelto.
     #[serde(default)]
-    pinned: Vec<String>,
+    pub pinned: Vec<String>,
     /// cartella → nomi dei figli nell'ordine scelto a mano; chi non compare
     /// segue in ordine alfabetico.
     #[serde(default)]
-    order: std::collections::BTreeMap<String, Vec<String>>,
+    pub order: std::collections::BTreeMap<String, Vec<String>>,
     /// Cartelle registrate come "spazi": la striscia di icone in cima alla
     /// sidebar, nell'ordine in cui appaiono. QUALE spazio è selezionato è
     /// stato di vista, per-macchina: sta al frontend, non qui.
     #[serde(default)]
-    spaces: Vec<String>,
+    pub spaces: Vec<String>,
 }
 
 fn workspace_meta_path(state: &AppState) -> Result<Utf8PathBuf, String> {
@@ -556,6 +617,54 @@ fn write_workspace_meta(state: State<AppState>, meta: WorkspaceMeta) -> Result<(
     std::fs::write(&path, json).map_err(|e| format!("non riesco a scrivere {path}: {e}"))
 }
 
+// --- graph-data --------------------------------------------------------------
+//
+// L'ultima view di M2, e l'unica FUORI da `UiNode`: un grafo force-directed è
+// Canvas, e il protocollo dichiarativo non lo esprime (né deve: è la
+// superficie privilegiata dichiarata nel piano). Da qui esce solo DATO —
+// nodi e archi — e il renderer vive nel frontend. Se a M4 il grafo entrerà
+// nel contratto (`IndexQuery`, vedi la checklist del freeze), questo comando
+// diventerà un client di quella variante.
+
+/// Un arco del grafo: `from` linka `to` (wikilink risolto).
+#[derive(Serialize)]
+pub struct GraphEdge {
+    pub from: String,
+    pub to: String,
+}
+
+/// Il grafo del vault: nodi = documenti indicizzati, archi = wikilink
+/// risolti, deduplicati (la molteplicità non disegna nulla). Rispecchiato da
+/// `GraphData` in `frontend/src/api.ts` (fixture di `tests/ts_mirror_app.rs`).
+#[derive(Serialize)]
+pub struct GraphData {
+    pub nodes: Vec<String>,
+    pub edges: Vec<GraphEdge>,
+}
+
+#[tauri::command]
+fn graph_data(state: State<AppState>) -> Result<GraphData, String> {
+    let ws = current(&state)?;
+    let ws = ws.lock().unwrap();
+    let docs = ws.documents();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut edges = Vec::new();
+    for from in &docs {
+        for to in ws.outgoing(from) {
+            if seen.insert((from.clone(), to.clone())) {
+                edges.push(GraphEdge {
+                    from: from.0.clone(),
+                    to: to.0,
+                });
+            }
+        }
+    }
+    Ok(GraphData {
+        nodes: docs.into_iter().map(|d| d.0).collect(),
+        edges,
+    })
+}
+
 #[tauri::command]
 fn resolve_link(state: State<AppState>, page: String) -> Result<Option<String>, String> {
     let ws = current(&state)?;
@@ -584,9 +693,12 @@ pub fn run() {
             render_embed,
             backlinks,
             set_active_document,
+            list_views,
             render_view,
             view_action,
             search,
+            list_tags,
+            graph_data,
             resolve_link,
             list_versions,
             read_version,

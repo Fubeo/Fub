@@ -1,0 +1,52 @@
+{
+  "VaultInfo": [
+    {
+      "root": "/vault",
+      "documents": [
+        "a.md"
+      ],
+      "extensions": [
+        "md"
+      ],
+      "versioning": true
+    }
+  ],
+  "EmbedContent": [
+    {
+      "doc_id": "a.md",
+      "html": "<p>x</p>"
+    }
+  ],
+  "GraphData": [
+    {
+      "nodes": [
+        "a.md",
+        "b.md"
+      ],
+      "edges": [
+        {
+          "from": "a.md",
+          "to": "b.md"
+        }
+      ]
+    }
+  ],
+  "WorkspaceMeta": [
+    {
+      "icons": {
+        "p": "📁"
+      },
+      "pinned": [
+        "a.md"
+      ],
+      "order": {
+        "": [
+          "a.md"
+        ]
+      },
+      "spaces": [
+        "p"
+      ]
+    }
+  ]
+}

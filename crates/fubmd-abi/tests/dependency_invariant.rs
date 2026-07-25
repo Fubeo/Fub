@@ -63,10 +63,19 @@ const FORBIDDEN: &[&str] = &[
 const ALLOWED_DIRECT: &[(&str, &[&str])] = &[
     // Il contratto: serializzazione e nient'altro.
     ("fubmd-abi", &["serde", "serde_json", "thiserror"]),
-    // Il core: il contratto, serializzazione, path UTF-8.
+    // Il core: il contratto, serializzazione, path UTF-8, e la normalizzazione
+    // Unicode (NFC) delle chiavi di risoluzione dei wikilink — macOS scrive i
+    // nomi file in NFD, i link digitati sono NFC (vedi graph::normalize).
     (
         "fubmd-kernel",
-        &["fubmd-abi", "serde", "serde_json", "camino", "thiserror"],
+        &[
+            "fubmd-abi",
+            "serde",
+            "serde_json",
+            "camino",
+            "thiserror",
+            "unicode-normalization",
+        ],
     ),
 ];
 

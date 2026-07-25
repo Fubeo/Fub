@@ -30,12 +30,17 @@ thiserror = "2"
 regex = "1"
 camino = { version = "1", features = ["serde1"] }
 
-# dipendenze interne
-fubmd-abi = { path = "crates/fubmd-abi" }
-fubmd-kernel = { path = "crates/fubmd-kernel" }
-fubmd-sdk = { path = "crates/fubmd-sdk" }
-fubmd-format-markdown = { path = "crates/fubmd-format-markdown" }
-fubmd-features = { path = "crates/fubmd-features" }
+# Dipendenze interne. La `version` accanto al `path` non cambia la risoluzione
+# locale (il path vince sempre): serve perché un `path` nudo è una dipendenza
+# `*`, cioè una build non riproducibile per chiunque non abbia questo albero, e
+# perché senza di essa nessuno di questi crate si può pubblicare — il che
+# renderebbe irraggiungibile proprio ciò che deve essere raggiungibile da fuori
+# (`fubmd-abi` e `fubmd-sdk`, §4.6 del piano). Presidiata da `deny.toml`.
+fubmd-abi = { path = "crates/fubmd-abi", version = "0.1.0" }
+fubmd-kernel = { path = "crates/fubmd-kernel", version = "0.1.0" }
+fubmd-sdk = { path = "crates/fubmd-sdk", version = "0.1.0" }
+fubmd-format-markdown = { path = "crates/fubmd-format-markdown", version = "0.1.0" }
+fubmd-features = { path = "crates/fubmd-features", version = "0.1.0" }
 
 [profile.dev]
 # compilazione più veloce mantenendo debug info utile

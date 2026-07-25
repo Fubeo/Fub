@@ -10,10 +10,9 @@
 //! sull'intervallo. Nessun pezzo del giro è cablato nell'app.
 
 use fubmd_abi::error::PluginError;
+use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::model::{Heading, Span};
-use fubmd_abi::traits::{
-    HostApi, IndexQuery, IndexResult, ViewPlacement, ViewProvider, ViewSpec,
-};
+use fubmd_abi::traits::{HostApi, IndexQuery, IndexResult, ViewPlacement, ViewProvider, ViewSpec};
 use fubmd_abi::ui::{ActionId, Axis, UiAction, UiNode, ViewUpdate};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
@@ -43,6 +42,9 @@ impl ViewProvider for OutlineView {
             id: OUTLINE_VIEW.to_string(),
             title: "Struttura".to_string(),
             placement: ViewPlacement::RightSidebar,
+            // Gli heading cambiano quando cambia il documento: `IndexUpdated`
+            // copre ogni scrittura (anche quelle arrivate dal watcher).
+            refresh: EventMask(vec![EventKind::IndexUpdated]),
         }]
     }
 
@@ -112,7 +114,11 @@ pub fn build_outline_view(headings: &[Heading]) -> UiNode {
     let items = headings
         .iter()
         .map(|h| UiNode::ListItem {
-            title: format!("{}{}", INDENT.repeat(h.level.saturating_sub(1) as usize), h.text),
+            title: format!(
+                "{}{}",
+                INDENT.repeat(h.level.saturating_sub(1) as usize),
+                h.text
+            ),
             subtitle: None,
             action: Some(ActionId(format!("{REVEAL}{}:{}", h.span.start, h.span.end))),
         })
@@ -161,7 +167,8 @@ mod tests {
 
     #[test]
     fn render_reads_active_doc_and_queries_the_host() {
-        let host = MemoryHost::new().con_outline("nota.md", &[h(1, "Uno", 0, 5), h(2, "Due", 10, 15)]);
+        let host =
+            MemoryHost::new().con_outline("nota.md", &[h(1, "Uno", 0, 5), h(2, "Due", 10, 15)]);
         host.set_active(Some("nota.md"));
         let tree = OutlineView.render_view(OUTLINE_VIEW, &host).unwrap();
         let json = serde_json::to_string(&tree).unwrap();

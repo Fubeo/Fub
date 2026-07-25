@@ -10,6 +10,7 @@
       <header id="topbar">
         <span class="brand">FubMD</span>
         <button id="open-vault">Apri vault…</button>
+        <button id="show-graph" title="Il grafo dei collegamenti del vault">Grafo</button>
         <span id="vault-path" class="muted"></span>
       </header>
       <main id="layout">
@@ -40,6 +41,7 @@
             <ul id="pinned-list" hidden></ul>
             <ul id="file-list"></ul>
           </div>
+          <div id="views-left"></div>
           <div id="trash-panel" hidden>
             <div class="panel-title">
               <span>Cestino</span>
@@ -57,14 +59,11 @@
           <div id="editor"></div>
         </section>
         <section id="right-pane">
-          <div class="panel-title">Struttura</div>
-          <div id="outline"></div>
-          <div class="panel-title">Tag</div>
-          <div id="tags"></div>
+          <!-- Le view dichiarative (Struttura, Tag, Backlink, …) si montano
+               qui per placement: gli id e i titoli li dichiara il backend. -->
+          <div id="views-right"></div>
           <div class="panel-title">Anteprima</div>
           <div id="preview" class="markdown-preview"></div>
-          <div class="panel-title">Backlink</div>
-          <div id="backlinks"></div>
           <div id="history-panel" hidden>
             <div class="panel-title">
               <span>Cronologia</span>
@@ -74,6 +73,7 @@
             <pre id="history-preview" hidden></pre>
           </div>
         </section>
+        <section id="views-bottom" hidden></section>
       </main>
     </div>
     <script type="module" src="/src/main.ts"></script>

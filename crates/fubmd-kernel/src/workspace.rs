@@ -17,6 +17,16 @@
 //! riconcilia da zero. Durante il drenaggio gli handler sono *estratti* dal
 //! workspace, così il `HostApi` può prestare `&mut Workspace` senza aliasing.
 //!
+//! La stessa regola vale per **ogni** chiamata a un provider (`on_action`,
+//! `handle`, `flush`, `activate`, il futuro `invoke`): finché il suo frame è
+//! aperto (`in_provider_call`) il dispatch è rimandato — *gli eventi arrivano
+//! dopo che la tua chiamata è tornata*, mai dentro di essa. Non è una
+//! comodità: a M5 il component model **vieta la rientranza di un'istanza**,
+//! e un plugin che fosse insieme view e handler (il caso versioning)
+//! trapperebbe a runtime se la shell gli consegnasse eventi dentro
+//! `on_action`. La semantica di consegna è contratto dal freeze di M4 in poi
+//! ed è identica a quella che il proxy WASM potrà onorare.
+//!
 //! Il lavoro **lungo** (rete, calcolo pesante) non passa dagli handler: un
 //! provider lo chiede via [`HostApi::spawn_job`], l'host lo esegue fuori dal
 //! lock ([`Workspace::take_pending_jobs`]) e l'esito rientra come
@@ -39,18 +49,20 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::format::{ParseContext, RenderOptions};
-use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
+use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span};
 use fubmd_abi::traits::{
     BacklinkRef, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
-    TagCount, ViewProvider, ViewSpec,
+    ViewProvider, ViewSpec,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{Event, PluginError};
 
 use crate::bus::EventBus;
 use crate::error::{KernelError, Result};
-use crate::graph::{normalize, strip_ext, LinkGraph};
+use crate::graph::{normalize, strip_ext, GraphSource, LinkGraph};
+use crate::pathlink;
 use crate::registry::FormatRegistry;
+use crate::tag_counts::TagCounts;
 use crate::vault::{TrashEntry, Vault, DATA_DIR};
 
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
@@ -100,10 +112,59 @@ const UNTITLED: &str = "Senza titolo";
 /// metterlo in sync deve portarsi dietro anche loro.
 const PLUGIN_DATA_DIR: &str = "plugins";
 
+/// I metadati di un documento tenuti in cache: identità, frontmatter (alias),
+/// outline, link — ciò che le mutazioni devono mantenere e che grafo, canale
+/// metadata e riscrittura dei link consumano.
+///
+/// Il **corpo** (albero dei blocchi) e il **testo piano** non ci sono: è lo
+/// split metadata/body di M2. Il render li riparsa dal disco on demand — è
+/// per-documento e su richiesta, mentre questa cache è per-vault e sempre
+/// calda: tenerci dentro i corpi significava pagare la memoria dell'intero
+/// vault per servire letture che il disco serve benissimo. I tag non ci sono
+/// per lo stesso principio: il loro stato aggregato vive in [`TagCounts`],
+/// mantenuto incrementalmente, e il contributo per-nota lo ricorda lui.
+struct DocMeta {
+    id: DocId,
+    frontmatter: Frontmatter,
+    outline: Vec<Heading>,
+    links: Vec<Link>,
+}
+
+impl From<DocumentModel> for DocMeta {
+    fn from(model: DocumentModel) -> Self {
+        DocMeta {
+            id: model.id,
+            frontmatter: model.frontmatter,
+            outline: model.outline,
+            links: model.links,
+        }
+    }
+}
+
+impl GraphSource for DocMeta {
+    fn graph_id(&self) -> &DocId {
+        &self.id
+    }
+
+    fn graph_aliases(&self) -> Vec<String> {
+        self.frontmatter.aliases()
+    }
+
+    fn graph_links(&self) -> &[Link] {
+        &self.links
+    }
+}
+
 pub struct Workspace {
     vault: Vault,
     registry: FormatRegistry,
-    models: HashMap<DocId, DocumentModel>,
+    /// La cache dei metadati (split metadata/body: vedi [`DocMeta`]). È
+    /// l'insieme dei documenti indicizzati: `contains_key` qui È "il
+    /// workspace lo conosce".
+    metas: HashMap<DocId, DocMeta>,
+    /// I conteggi dei tag, mantenuti incrementalmente in `ingest`/`remove`
+    /// come il grafo: [`IndexQuery::Tags`] risponde da qui, senza O(vault).
+    tags: TagCounts,
     graph: LinkGraph,
     graph_update: GraphUpdate,
     bus: EventBus,
@@ -127,6 +188,14 @@ pub struct Workspace {
     pending: VecDeque<Event>,
     /// Guardia anti-rientranza: `dispatch_pending` non si annida mai.
     dispatching: bool,
+    /// Siamo dentro una chiamata a un provider (view `on_action`, `handle`,
+    /// `flush`, `activate`, futuro `invoke`)? Finché è alzato, il dispatch è
+    /// rimandato: gli eventi arrivano **dopo che la chiamata del provider è
+    /// tornata**, mai dentro il suo frame. È la semantica che il component
+    /// model impone a M5 (un'istanza non è rientrante: un plugin che è sia
+    /// view sia handler trapperebbe), promossa a contratto già in nativo —
+    /// vedi il § "Dispatch degli eventi" qui sopra.
+    in_provider_call: bool,
     /// Job richiesti via [`HostApi::spawn_job`], in attesa che l'host li
     /// esegua fuori dal giro sincrono (vedi [`Workspace::take_pending_jobs`]).
     pending_jobs: Vec<(JobId, JobSpec)>,
@@ -156,7 +225,8 @@ impl Workspace {
         Workspace {
             vault: Vault::open(root),
             registry,
-            models: HashMap::new(),
+            metas: HashMap::new(),
+            tags: TagCounts::default(),
             graph: LinkGraph::default(),
             graph_update: GraphUpdate::default(),
             bus: EventBus::new(),
@@ -165,6 +235,7 @@ impl Workspace {
             views: Vec::new(),
             pending: VecDeque::new(),
             dispatching: false,
+            in_provider_call: false,
             pending_jobs: Vec::new(),
             next_job_id: 0,
             storage: HashMap::new(),
@@ -213,8 +284,14 @@ impl Workspace {
     /// stesse capacità che l'handler usa dentro `handle`, e non con `std::fs`.
     /// A M4 è anche il modo in cui il registry guiderà `Plugin::activate`.
     pub fn with_host<R>(&mut self, plugin: &str, f: impl FnOnce(&mut dyn HostApi) -> R) -> R {
-        let mut host = KernelHost { ws: self, plugin };
-        f(&mut host)
+        // Anche questa è una "chiamata di provider" ai fini della consegna:
+        // ciò che `f` emette arriva agli handler quando `f` è tornata.
+        let result = self.with_provider_call(|ws| {
+            let mut host = KernelHost { ws, plugin };
+            f(&mut host)
+        });
+        self.dispatch_pending();
+        result
     }
 
     /// Registra un [`IndexProvider`] sotto un id. Va fatto **prima** di
@@ -241,15 +318,14 @@ impl Workspace {
     ) -> std::result::Result<(), PluginError> {
         let id = id.into();
         // `index` è ancora una variabile locale: prestare `&mut self` all'host
-        // qui non alias niente.
-        let activated = {
-            let mut host = KernelHost {
-                ws: self,
-                plugin: &id,
-            };
+        // qui non alias niente. `activate` è una chiamata a un provider come
+        // le altre: il dispatch resta rimandato a chiamata tornata.
+        let activated = self.with_provider_call(|ws| {
+            let mut host = KernelHost { ws, plugin: &id };
             index.activate(&mut host)
-        };
+        });
         self.indexes.push((id, index));
+        self.dispatch_pending();
         activated
     }
 
@@ -262,22 +338,26 @@ impl Workspace {
     /// completo, così cancella ciò che è sparito ad app chiusa.
     pub fn reindex(&mut self) -> Result<()> {
         let ids = self.vault.list_documents(&self.registry.all_extensions())?;
-        let mut models = HashMap::with_capacity(ids.len());
+        // Prima si parsa TUTTO, poi si muta: un parse fallito a metà lascia il
+        // workspace com'era. I modelli interi vivono solo qui, il tempo di
+        // alimentare indici e conteggi: in cache restano i metadati.
+        let mut models = Vec::with_capacity(ids.len());
         for id in ids {
-            {
-                let src = self.vault.read(&id)?;
-                let model = self.parse(&id, &src)?;
-                models.insert(id, model);
-            }
+            let src = self.vault.read(&id)?;
+            let model = self.parse(&id, &src)?;
+            models.push((id, model));
         }
-        self.models = models;
+        self.metas.clear();
+        self.tags.clear();
+        for (id, model) in models {
+            for (_, index) in self.indexes.iter_mut() {
+                index.on_document_indexed(&model);
+            }
+            self.tags.upsert(&id, &model.tags);
+            self.metas.insert(id, DocMeta::from(model));
+        }
         self.rebuild_graph();
 
-        for (_, index) in self.indexes.iter_mut() {
-            for model in self.models.values() {
-                index.on_document_indexed(model);
-            }
-        }
         let ids: Vec<DocId> = self.documents();
         for (_, index) in self.indexes.iter_mut() {
             index.reconcile(&ids);
@@ -296,13 +376,9 @@ impl Workspace {
 
     /// Elenco ordinato dei documenti indicizzati.
     pub fn documents(&self) -> Vec<DocId> {
-        let mut ids: Vec<DocId> = self.models.keys().cloned().collect();
+        let mut ids: Vec<DocId> = self.metas.keys().cloned().collect();
         ids.sort();
         ids
-    }
-
-    pub fn model(&self, id: &DocId) -> Option<&DocumentModel> {
-        self.models.get(id)
     }
 
     /// Le estensioni che i provider registrati riconoscono (minuscole, senza
@@ -326,8 +402,13 @@ impl Workspace {
     /// Scrive la sorgente, riparsa il documento, aggiorna il grafo ed emette
     /// gli eventi. Il grafo si aggiorna per-documento ([`GraphUpdate`]).
     pub fn write_document(&mut self, id: &DocId, source: &str) -> Result<()> {
+        // Il parse è puro: farlo PRIMA di scrivere tiene la mutazione atomica.
+        // Nell'ordine inverso un parse fallito lascerebbe il disco avanti
+        // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
+        // pur avendo scritto.
+        let model = self.parse(id, source)?;
         self.vault.write(id, source)?;
-        self.ingest(id, source)?;
+        self.ingest_model(id, model);
         self.dispatch_pending();
         Ok(())
     }
@@ -342,21 +423,32 @@ impl Workspace {
 
     fn ingest(&mut self, id: &DocId, source: &str) -> Result<()> {
         let model = self.parse(id, source)?;
-        self.models.insert(id.clone(), model);
-        match self.graph_update {
-            // borrow disgiunti: `graph` in scrittura, `models` in lettura.
-            GraphUpdate::Incremental => self.graph.upsert(&self.models[id]),
-            GraphUpdate::FullRebuild => self.rebuild_graph(),
-        }
+        self.ingest_model(id, model);
+        Ok(())
+    }
+
+    /// La coda di ogni scrittura: indici, conteggi tag, grafo, metadati in
+    /// cache, eventi. Prende il modello già parsato — è ciò che permette a
+    /// `write_document` di parsare prima di toccare il disco.
+    fn ingest_model(&mut self, id: &DocId, model: DocumentModel) {
         // Gli indici vedono la modifica nella stessa operazione del grafo:
-        // stessa verità, nessun canale che può perdere pezzi per strada.
-        let model = &self.models[id];
+        // stessa verità, nessun canale che può perdere pezzi per strada. E la
+        // vedono ADESSO, sul modello intero: è l'unico momento in cui corpo e
+        // testo esistono — la cache tiene i soli metadati.
         for (_, index) in self.indexes.iter_mut() {
-            index.on_document_indexed(model);
+            index.on_document_indexed(&model);
+        }
+        self.tags.upsert(id, &model.tags);
+        if self.graph_update == GraphUpdate::Incremental {
+            self.graph.upsert(&model);
+        }
+        self.metas.insert(id.clone(), DocMeta::from(model));
+        if self.graph_update == GraphUpdate::FullRebuild {
+            // Il rebuild legge la cache: va aggiornata prima.
+            self.rebuild_graph();
         }
         self.emit_event(Event::DocumentChanged { id: id.clone() });
         self.emit_event(Event::IndexUpdated);
-        Ok(())
     }
 
     /// Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
@@ -384,7 +476,7 @@ impl Workspace {
             self.refresh_from_disk(&id)?;
             Ok(true)
         } else {
-            let existed = self.models.contains_key(&id);
+            let existed = self.metas.contains_key(&id);
             self.remove_document(&id);
             Ok(existed)
         }
@@ -392,7 +484,13 @@ impl Workspace {
 
     /// Rimuove un documento (usato dal file watcher su cancellazione).
     pub fn remove_document(&mut self, id: &DocId) {
-        if self.models.remove(id).is_some() {
+        if self.metas.remove(id).is_some() {
+            // La nota con il focus non esiste più: `active_document` non deve
+            // continuare a nominarla alle view.
+            if self.active.as_ref() == Some(id) {
+                self.active = None;
+            }
+            self.tags.remove(id);
             match self.graph_update {
                 GraphUpdate::Incremental => self.graph.remove(id),
                 GraphUpdate::FullRebuild => self.rebuild_graph(),
@@ -473,18 +571,13 @@ impl Workspace {
     /// Questo path è già di qualcuno? Vale sia l'indicizzato sia ciò che sta
     /// sul disco e il workspace non ha ancora visto.
     fn is_taken(&self, id: &DocId) -> bool {
-        self.models.contains_key(id) || self.vault.exists(id)
+        self.metas.contains_key(id) || self.vault.exists(id)
     }
 
     /// Il [`DocId`] di una nota che nasce col nome dato: separatori normalizzati
     /// e, se il nome non porta già un'estensione gestita, quella di default.
     fn new_note_id(&self, name: &str) -> Result<DocId> {
-        let normalizzato = name.replace('\\', "/");
-        let pulito = normalizzato.trim().trim_start_matches('/').trim_end();
-        if pulito.is_empty() || pulito.split('/').any(|c| c == ".." || c.is_empty()) {
-            return Err(KernelError::BadName(name.to_string()));
-        }
-        let id = DocId::new(pulito);
+        let id = valid_doc_id(name)?;
         let ha_estensione =
             extension_of(&id).is_some_and(|ext| self.registry.provider_for_ext(&ext).is_some());
         if ha_estensione {
@@ -494,7 +587,7 @@ impl Workspace {
             .registry
             .default_extension()
             .ok_or(KernelError::NoDefaultFormat)?;
-        Ok(DocId::new(format!("{pulito}.{ext}")))
+        Ok(DocId::new(format!("{}.{ext}", id.as_str())))
     }
 
     // --- cestino -----------------------------------------------------------
@@ -514,7 +607,7 @@ impl Workspace {
     ///
     /// [`remove_document`]: Workspace::remove_document
     pub fn delete_document(&mut self, id: &DocId) -> Result<DocId> {
-        if !self.models.contains_key(id) {
+        if !self.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
         let trashed = self.vault.trash(id)?;
@@ -546,8 +639,15 @@ impl Workspace {
             .into_iter()
             .find(|e| &e.id == trash_id)
             .ok_or_else(|| KernelError::NotFound(trash_id.to_string()))?;
-        let target = to.unwrap_or(entry.original);
-        if self.models.contains_key(&target) || self.vault.exists(&target) {
+        // `entry.original` nasce da un basename o dal sidecar scritto dal
+        // vault, ed è sano per costruzione; il `to` del chiamante invece
+        // arriva dall'IPC e va validato.
+        let original = entry.original.clone();
+        let target = match to {
+            Some(to) => valid_doc_id(to.as_str())?,
+            None => entry.original,
+        };
+        if self.metas.contains_key(&target) || self.vault.exists(&target) {
             return Err(KernelError::AlreadyExists(target.to_string()));
         }
         let ext = extension_of(&target).unwrap_or_default();
@@ -557,6 +657,19 @@ impl Workspace {
 
         let source = self.vault.read(trash_id)?;
         self.write_document(&target, &source)?;
+        // Se il ripristino approda su un path diverso dall'origine (il path
+        // era di nuovo occupato e l'utente ha scelto un altro nome), lo stato
+        // per-documento — storia del versioning, meta del frontend — vive
+        // ancora sotto la chiave d'origine: è un rename a tutti gli effetti,
+        // anche se il documento non era indicizzato, e chi tiene stato migra
+        // la chiave sull'evento.
+        if target != original {
+            self.emit_event(Event::DocumentRenamed {
+                from: original,
+                to: target.clone(),
+            });
+            self.dispatch_pending();
+        }
         // La copia nel cestino se ne va per ultima: se la cancellazione
         // fallisce restano due copie della nota, il che è un fastidio. Fare il
         // contrario significherebbe rischiare di non averne nessuna.
@@ -579,10 +692,13 @@ impl Workspace {
     /// Emette [`Event::DocumentRenamed`] (non `Removed`+`Changed`): chi tiene
     /// stato per-documento migra la chiave.
     pub fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<()> {
+        // `to` arriva dall'IPC: senza validazione `../fuori.md` sposterebbe il
+        // file fuori dal vault.
+        let to = &valid_doc_id(to.as_str())?;
         if from == to {
             return Ok(());
         }
-        if !self.models.contains_key(from) {
+        if !self.metas.contains_key(from) {
             return Err(KernelError::NotFound(from.to_string()));
         }
         // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
@@ -591,7 +707,7 @@ impl Workspace {
         // omonimo-per-case su filesystem case-sensitive è comunque intercettato
         // da `models` (il vault è l'unica fonte dei DocId, quindi lo conosce).
         let case_only = from.as_str().to_lowercase() == to.as_str().to_lowercase();
-        if self.models.contains_key(to) || (!case_only && self.vault.exists(to)) {
+        if self.metas.contains_key(to) || (!case_only && self.vault.exists(to)) {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
         let ext = extension_of(to).unwrap_or_default();
@@ -606,44 +722,133 @@ impl Workspace {
         self.vault.rename(from, to)?;
         let source = self.vault.read(to)?;
         let model = self.parse(to, &source)?;
-        self.models.remove(from);
-        self.models.insert(to.clone(), model);
-        match self.graph_update {
-            GraphUpdate::Incremental => {
-                self.graph.remove(from);
-                self.graph.upsert(&self.models[to]);
+        self.migrate_identity(from, to, model);
+
+        // Il piano si applica TUTTO, anche se una sorgente fallisce: abortire
+        // a metà lascerebbe link misti vecchio/nuovo senza possibilità di
+        // retry. Gli errori si accumulano per-sorgente e arrivano in coda.
+        let mut falliti: Vec<String> = Vec::new();
+        for (src, new_source) in plan {
+            // write_document riparsa, aggiorna il grafo ed emette gli eventi.
+            if let Err(e) = self.write_document(&src, &new_source) {
+                falliti.push(format!("{src}: {e}"));
             }
-            GraphUpdate::FullRebuild => self.rebuild_graph(),
         }
-        // Per un indice il rename è remove+add: l'identità è la chiave, e la
-        // chiave è cambiata. (Chi tiene stato *per-documento* invece migra la
-        // chiave sull'evento `DocumentRenamed`.)
+        self.emit_event(Event::IndexUpdated);
+        self.dispatch_pending();
+        if !falliti.is_empty() {
+            return Err(KernelError::LinkRewrite(falliti.join("; ")));
+        }
+        Ok(())
+    }
+
+    /// Migra l'identità di un documento il cui file è **già** al path nuovo:
+    /// modelli, documento attivo, grafo, indici, evento [`Event::DocumentRenamed`].
+    ///
+    /// È il tratto comune di [`rename_document`](Workspace::rename_document)
+    /// (che prima sposta il file) e di
+    /// [`sync_renamed_path`](Workspace::sync_renamed_path) (dove il file lo ha
+    /// già spostato qualcun altro).
+    fn migrate_identity(&mut self, from: &DocId, to: &DocId, model: DocumentModel) {
+        self.metas.remove(from);
+        // La nota aperta segue il rename anche qui: senza, `active_document`
+        // risponderebbe col path vecchio e outline/backlink si svuoterebbero
+        // fino al prossimo cambio nota. Va fatto nel kernel, non nella shell:
+        // vale anche per i rename non innescati da lei.
+        if self.active.as_ref() == Some(from) {
+            self.active = Some(to.clone());
+        }
+        // Per tag e indici il rename è remove+add: l'identità è la chiave, e
+        // la chiave è cambiata. (Chi tiene stato *per-documento* invece migra
+        // la chiave sull'evento `DocumentRenamed`.)
+        self.tags.remove(from);
+        self.tags.upsert(to, &model.tags);
         for (_, index) in self.indexes.iter_mut() {
             index.on_document_removed(from);
         }
-        let model = &self.models[to];
         for (_, index) in self.indexes.iter_mut() {
-            index.on_document_indexed(model);
+            index.on_document_indexed(&model);
+        }
+        if self.graph_update == GraphUpdate::Incremental {
+            self.graph.remove(from);
+            self.graph.upsert(&model);
+        }
+        self.metas.insert(to.clone(), DocMeta::from(model));
+        if self.graph_update == GraphUpdate::FullRebuild {
+            self.rebuild_graph();
         }
         self.emit_event(Event::DocumentRenamed {
             from: from.clone(),
             to: to.clone(),
         });
+    }
 
-        for (src, new_source) in plan {
-            // write_document riparsa, aggiorna il grafo ed emette gli eventi.
-            self.write_document(&src, &new_source)?;
+    /// Sincronizza un **rename accoppiato** riferito dal filesystem (`from` →
+    /// `to`, file già spostato da qualcun altro: Finder, Obsidian, sync).
+    ///
+    /// Se `from` era indicizzato e `to` è un documento del vault, è una
+    /// **migrazione d'identità** come quella di
+    /// [`rename_document`](Workspace::rename_document) — versioning, meta del
+    /// frontend e stato per-documento seguono il [`Event::DocumentRenamed`] —
+    /// ma **senza riscrittura dei wikilink entranti**: chi ha rinominato il
+    /// file può averci già pensato (Obsidian lo fa), e riscrivere sorgenti in
+    /// risposta al watcher significherebbe litigare con l'altra app.
+    ///
+    /// Tutti gli altri casi degradano ai percorsi già noti: destinazione
+    /// fuori dal vault/ignorata (es. cestinata da un'altra app) è una
+    /// rimozione; sorgente mai vista è al più un'aggiunta ([`sync_path`]).
+    ///
+    /// [`sync_path`]: Workspace::sync_path
+    pub fn sync_renamed_path(&mut self, from: &Utf8Path, to: &Utf8Path) -> Result<bool> {
+        let from_id = (!self.vault.is_ignored(from))
+            .then(|| self.vault.doc_id_for_path(from).ok())
+            .flatten()
+            .filter(|id| self.metas.contains_key(id));
+        let Some(from_id) = from_id else {
+            // Niente da migrare: al più in `to` è comparso qualcosa.
+            return self.sync_path(to);
+        };
+        let to_id = (!self.vault.is_ignored(to))
+            .then(|| self.vault.doc_id_for_path(to).ok())
+            .flatten()
+            .filter(|id| {
+                let ext = extension_of(id).unwrap_or_default();
+                self.registry.provider_for_ext(&ext).is_some()
+            });
+        let Some(to_id) = to_id else {
+            // Spostato fuori, in una cartella ignorata o in un formato non
+            // gestito: per il workspace è una rimozione.
+            self.remove_document(&from_id);
+            return Ok(true);
+        };
+        if from_id == to_id {
+            return self.sync_path(to);
         }
+        if !to.exists() {
+            self.remove_document(&from_id);
+            return Ok(true);
+        }
+        let source = self.vault.read(&to_id)?;
+        let model = self.parse(&to_id, &source)?;
+        self.migrate_identity(&from_id, &to_id, model);
         self.emit_event(Event::IndexUpdated);
         self.dispatch_pending();
-        Ok(())
+        Ok(true)
     }
 
     /// Per ogni documento che linkava `from` per nome o per path, la nuova
     /// sorgente con i riferimenti riscritti verso `to`. Sostituzione
-    /// chirurgica: si tocca solo il testo-pagina dentro lo `Span` del link,
-    /// mai il resto del documento (heading `#...`, blocco `^...`, alias
+    /// chirurgica: si tocca solo il testo del riferimento dentro lo `Span` del
+    /// link, mai il resto del documento (heading `#...`, blocco `^...`, alias
     /// `|label` e formattazione restano intatti).
+    ///
+    /// Vale per **entrambe le specie di link**, e la seconda ha un caso in più
+    /// della prima. Un wikilink si rompe solo se si sposta il suo bersaglio; un
+    /// link markdown è relativo alla cartella di chi lo scrive, quindi si rompe
+    /// anche se si sposta la **sorgente**: muovere `a.md` in `sub/` invalida
+    /// ogni `[t](altra.md)` che conteneva. Per questo `from` è sempre fra le
+    /// sorgenti del piano — i suoi link uscenti vanno ri-basati sulla cartella
+    /// nuova — e non solo quando linka se stesso.
     fn link_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, String)> {
         let from_name = normalize(from.page_name());
         let from_path = normalize(&strip_ext(from.as_str()));
@@ -653,7 +858,7 @@ impl Workspace {
         // il path senza estensione, che è sempre univoco.
         let to_name = to.page_name();
         let ambiguous = self
-            .models
+            .metas
             .keys()
             .any(|id| id != from && normalize(id.page_name()) == normalize(to_name));
         let new_ref = if ambiguous {
@@ -662,77 +867,158 @@ impl Workspace {
             to_name.to_string()
         };
 
-        let sources: BTreeSet<DocId> = self
+        let mut sources: BTreeSet<DocId> = self
             .graph
             .backlinks(from)
             .into_iter()
             .map(|r| r.source)
             .collect();
+        // Il self-link è escluso dai backlink per scelta, ma al rename va
+        // riscritto come gli altri: `[[Nota]]` dentro la nota stessa resterebbe
+        // dangling — e verrebbe dirottato da chi ricreasse il vecchio nome. Ai
+        // link markdown serve comunque (vedi la nota sopra: sposta la
+        // sorgente), quindi `from` entra sempre e sarà il filtro per-link a
+        // dire se c'è davvero qualcosa da riscrivere.
+        sources.insert(from.clone());
 
         let mut plan = Vec::new();
         for src in sources {
-            let Some(model) = self.models.get(&src) else {
+            let Some(meta) = self.metas.get(&src) else {
                 continue;
             };
             let Ok(source_text) = self.vault.read(&src) else {
                 continue;
             };
-            let mut edits: Vec<Span> = Vec::new();
-            for link in &model.links {
-                let LinkTarget::Wiki { page, .. } = &link.target else {
-                    continue;
+            let mut edits: Vec<(Span, String)> = Vec::new();
+            for link in &meta.links {
+                // `from_end` è la direzione in cui cercare il riferimento
+                // dentro lo span, e non è una preferenza: in `[[Nota|Nota]]` la
+                // pagina è la **prima** delle due occorrenze, in
+                // `[Nota.md](Nota.md)` la destinazione è la **seconda**. Chi
+                // sbaglia direzione riscrive l'etichetta e lascia il link rotto.
+                let (written, replacement, from_end) = match &link.target {
+                    LinkTarget::Wiki { page, .. } => {
+                        // Riscrivi solo se il link puntava davvero a `from`
+                        // (non a un omonimo) e ci arrivava per nome o per path
+                        // — mai per alias.
+                        let key = normalize(page);
+                        let by_name = key == from_name;
+                        let by_path = key == from_path || normalize(&strip_ext(&key)) == from_path;
+                        if !(by_name || by_path) {
+                            continue;
+                        }
+                        if self.graph.resolve_wiki(page).as_ref() != Some(from) {
+                            continue;
+                        }
+                        (page.as_str(), new_ref.clone(), false)
+                    }
+                    LinkTarget::Path(written) => {
+                        let Some(new_target) = self.rebased_path_link(from, to, &src, written)
+                        else {
+                            continue;
+                        };
+                        let (_, fragment) = pathlink::split_fragment(written);
+                        let rewritten = format!("{new_target}{fragment}");
+                        if rewritten == *written {
+                            continue;
+                        }
+                        (written.as_str(), rewritten, true)
+                    }
+                    LinkTarget::Url(_) => continue,
                 };
-                // Riscrivi solo se il link puntava davvero a `from` (non a un
-                // omonimo) e ci arrivava per nome o per path — mai per alias.
-                let key = normalize(page);
-                let by_name = key == from_name;
-                let by_path = key == from_path || normalize(&strip_ext(&key)) == from_path;
-                if !(by_name || by_path) {
-                    continue;
-                }
-                if self.graph.resolve_wiki(page).as_ref() != Some(from) {
-                    continue;
-                }
                 let Some(slice) = source_text.get(link.span.start..link.span.end) else {
                     continue;
                 };
-                let Some(rel) = slice.find(page.as_str()) else {
+                let found = if from_end {
+                    slice.rfind(written)
+                } else {
+                    slice.find(written)
+                };
+                let Some(rel) = found else {
                     continue;
                 };
                 let start = link.span.start + rel;
-                edits.push(Span::new(start, start + page.len()));
+                edits.push((Span::new(start, start + written.len()), replacement));
             }
             if edits.is_empty() {
                 continue;
             }
-            edits.sort_by_key(|s| s.start);
+            edits.sort_by_key(|(s, _)| s.start);
             let mut out = String::with_capacity(source_text.len());
             let mut pos = 0;
-            for span in edits {
+            for (span, replacement) in edits {
                 if span.start < pos {
                     continue; // sovrapposizioni: difensivo, non dovrebbe accadere
                 }
                 out.push_str(&source_text[pos..span.start]);
-                out.push_str(&new_ref);
+                out.push_str(&replacement);
                 pos = span.end;
             }
             out.push_str(&source_text[pos..]);
-            plan.push((src, out));
+            // La sorgente rinominata vive ormai al path nuovo: la sua
+            // riscrittura va applicata lì.
+            let dest = if &src == from { to.clone() } else { src };
+            plan.push((dest, out));
         }
         plan
     }
 
+    /// La destinazione che il link markdown `written`, scritto dentro `src`,
+    /// deve avere dopo il rename `from` → `to`; `None` se non va toccato.
+    ///
+    /// Ci sono tre modi di non toccarlo, e sono tre cose diverse: il link non
+    /// risolve (è già rotto — riscriverlo sarebbe indovinare); né la sorgente
+    /// né il bersaglio si spostano (il path relativo continua a valere); il
+    /// link parte dalla radice del vault e a spostarsi è solo la sorgente (la
+    /// radice non si muove).
+    ///
+    /// L'estensione ricompare sempre nel riferimento nuovo, anche se il
+    /// vecchio ne era privo: vedi [`pathlink::relative_ref`].
+    fn rebased_path_link(
+        &self,
+        from: &DocId,
+        to: &DocId,
+        src: &DocId,
+        written: &str,
+    ) -> Option<String> {
+        let resolved = self.graph.resolve_path(src, written)?;
+        let source_moves = src == from;
+        let target_moves = resolved == *from;
+        if !source_moves && !target_moves {
+            return None;
+        }
+        let (path, _) = pathlink::split_fragment(written);
+        let from_root = path.trim_start().starts_with('/');
+        if from_root {
+            if !target_moves {
+                return None;
+            }
+            // Un link dalla radice resta dalla radice: è una scelta di stile
+            // di chi scrive, e il rename non è il momento di discuterla.
+            return Some(format!("/{}", pathlink::percent_encode_path(to.as_str())));
+        }
+        let src_after = if source_moves { to } else { src };
+        let target_after = if target_moves { to } else { &resolved };
+        Some(pathlink::relative_ref(src_after, target_after))
+    }
+
     /// Rende l'anteprima HTML di un documento tramite il suo provider.
+    ///
+    /// Il corpo non sta in cache (split metadata/body): si rilegge e riparsa
+    /// dal disco. Il render è per-documento e on demand — è esattamente il
+    /// tipo di lettura che il disco serve bene, mentre la cache calda serve
+    /// le mutazioni.
     pub fn render_preview(&self, id: &DocId) -> Result<String> {
-        let model = self
-            .models
-            .get(id)
-            .ok_or_else(|| KernelError::NotFound(id.to_string()))?;
+        if !self.metas.contains_key(id) {
+            return Err(KernelError::NotFound(id.to_string()));
+        }
+        let source = self.vault.read(id)?;
+        let model = self.parse(id, &source)?;
         let provider = self.provider_for(id)?;
         let opts = RenderOptions {
             wikilinks_as_data_attrs: true,
         };
-        Ok(provider.render_html(model, &opts)?)
+        Ok(provider.render_html(&model, &opts)?)
     }
 
     /// Rende il contenuto di un embed `![[page#heading]]`: risolve la pagina
@@ -748,18 +1034,20 @@ impl Workspace {
         let id = self
             .resolve_link(page)
             .ok_or_else(|| KernelError::NotFound(page.to_string()))?;
-        let model = self
-            .models
-            .get(&id)
-            .ok_or_else(|| KernelError::NotFound(id.to_string()))?;
+        if !self.metas.contains_key(&id) {
+            return Err(KernelError::NotFound(id.to_string()));
+        }
+        // Come `render_preview`: il corpo si riparsa dal disco on demand.
+        let source = self.vault.read(&id)?;
+        let model = self.parse(&id, &source)?;
         let provider = self.provider_for(&id)?;
         let opts = RenderOptions {
             wikilinks_as_data_attrs: true,
         };
         let html = match heading {
-            None => provider.render_html(model, &opts)?,
+            None => provider.render_html(&model, &opts)?,
             Some(h) => {
-                let section = section_of(model, h)
+                let section = section_of(&model, h)
                     .ok_or_else(|| KernelError::NotFound(format!("{id}#{h}")))?;
                 provider.render_html(&section, &opts)?
             }
@@ -825,14 +1113,17 @@ impl Workspace {
             }
             IndexQuery::Outline { doc } => {
                 let outline = self
-                    .models
+                    .metas
                     .get(doc)
                     .map(|m| m.outline.clone())
                     .unwrap_or_default();
                 return Ok(IndexResult::Outline(outline));
             }
             IndexQuery::Tags => {
-                return Ok(IndexResult::Tags(self.aggregate_tags()));
+                // Da struttura incrementale ([`TagCounts`]): niente O(vault)
+                // a ogni interrogazione — e il pannello interroga a ogni
+                // `IndexUpdated`, cioè a ogni salvataggio.
+                return Ok(IndexResult::Tags(self.tags.snapshot()));
             }
             _ => {}
         }
@@ -846,27 +1137,6 @@ impl Workspace {
             }
         }
         last
-    }
-
-    /// I tag del vault con quante **note** li portano (non quante occorrenze:
-    /// un tag ripetuto nella stessa nota conta una volta). Ordinati per nome.
-    fn aggregate_tags(&self) -> Vec<TagCount> {
-        let mut counts: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
-        for model in self.models.values() {
-            let mut seen = std::collections::BTreeSet::new();
-            for tag in &model.tags {
-                if seen.insert(tag.name.as_str()) {
-                    *counts.entry(tag.name.as_str()).or_default() += 1;
-                }
-            }
-        }
-        counts
-            .into_iter()
-            .map(|(name, count)| TagCount {
-                name: name.to_string(),
-                count,
-            })
-            .collect()
     }
 
     /// Porta gli indici a un punto di consistenza (vedi
@@ -884,21 +1154,23 @@ impl Workspace {
     pub fn flush_indexes(&mut self) -> Vec<PluginError> {
         let mut indexes = std::mem::take(&mut self.indexes);
         let mut errors = Vec::new();
-        for (id, index) in indexes.iter_mut() {
-            let mut host = KernelHost {
-                ws: self,
-                plugin: id,
-            };
-            if let Err(e) = index.flush(&mut host) {
-                errors.push(e);
+        self.with_provider_call(|ws| {
+            for (id, index) in indexes.iter_mut() {
+                let mut host = KernelHost { ws, plugin: id };
+                if let Err(e) = index.flush(&mut host) {
+                    errors.push(e);
+                }
             }
-        }
+        });
         // Indici registrati *durante* il flush si accodano in fondo (simmetria
         // con `deliver_to_handlers`: nessun percorso può perdere una
         // registrazione solo perché è arrivata nel momento sbagliato).
         let registered_meanwhile = std::mem::take(&mut self.indexes);
         self.indexes = indexes;
         self.indexes.extend(registered_meanwhile);
+        // Ciò che i flush hanno emesso si consegna a chiamate tornate, non
+        // dentro il frame di un provider.
+        self.dispatch_pending();
         errors
     }
 
@@ -931,23 +1203,24 @@ impl Workspace {
     /// qualunque profondità. Oggi tutti i provider registrabili sono fidati e la
     /// validazione è un no-op: il punto esiste **prima** del primo non fidato,
     /// perché aggiungerlo dopo significherebbe cercarlo fra N chiamanti.
-    pub fn render_view(&mut self, view: &str) -> std::result::Result<UiNode, PluginError> {
+    ///
+    /// Prende `&self`: il render è una **lettura**, e gira sotto prestito
+    /// condiviso del workspace — è esattamente il carico che il futuro
+    /// `RwLock` deve poter parallelizzare (N view che si ridisegnano non si
+    /// mettono in coda dietro una scrittura). Ha anche un effetto di
+    /// visibilità: il provider non viene estratto (`mem::take`) per la durata
+    /// della chiamata, quindi durante il render vede il mondo intero — indici
+    /// e view registrate compresi. La mutilazione del mondo osservabile resta
+    /// confinata ai callback in scrittura (vedi il doc di `HostApi`).
+    pub fn render_view(&self, view: &str) -> std::result::Result<UiNode, PluginError> {
         let at = self.view_owner(view)?;
-        // I provider escono dal workspace per la durata della chiamata, così
-        // `KernelHost` può prestare `&mut Workspace` senza aliasing (stessa
-        // manovra del dispatch degli eventi).
-        let mut views = std::mem::take(&mut self.views);
-        let (rendered, trust) = {
-            let (id, trust, provider) = &mut views[at];
-            let host = KernelHost {
-                ws: self,
-                plugin: id,
-            };
-            (provider.render_view(view, &host), *trust)
+        let (id, trust, provider) = &self.views[at];
+        let host = ReadHost {
+            ws: self,
+            plugin: id,
         };
-        self.restore_views(views);
-        let tree = rendered?;
-        guard_ui(trust, &tree)?;
+        let tree = provider.render_view(view, &host)?;
+        guard_ui(*trust, &tree)?;
         Ok(tree)
     }
 
@@ -964,20 +1237,23 @@ impl Workspace {
     ) -> std::result::Result<ViewUpdate, PluginError> {
         let at = self.view_owner(view)?;
         let mut views = std::mem::take(&mut self.views);
-        let (updated, trust) = {
+        // Il flag rimanda il dispatch: se il provider scrive via `HostApi`
+        // dentro `on_action`, gli handler NON girano nel suo frame — girano
+        // nel `dispatch_pending` qui sotto, a chiamata tornata. Senza, un
+        // plugin che è sia view sia handler (il caso versioning) sarebbe
+        // rientrato nella propria istanza: in nativo funziona, a M5 trappa.
+        let (updated, trust) = self.with_provider_call(|ws| {
             let (id, trust, provider) = &mut views[at];
-            let mut host = KernelHost {
-                ws: self,
-                plugin: id,
-            };
+            let mut host = KernelHost { ws, plugin: id };
             (provider.on_action(view, action, &mut host), *trust)
-        };
+        });
         self.restore_views(views);
         let update = updated?;
         if let ViewUpdate::Replace { root } = &update {
             guard_ui(trust, root)?;
         }
-        // Un handler può aver emesso eventi scrivendo durante `on_action`.
+        // Gli eventi accodati durante `on_action` arrivano ADESSO, dopo che la
+        // chiamata del provider è tornata: è il contratto di consegna.
         self.dispatch_pending();
         Ok(update)
     }
@@ -1021,7 +1297,13 @@ impl Workspace {
         // La guardia di rientranza DEVE venire prima del fast-path qui sotto:
         // durante un dispatch gli handler sono estratti (`handlers` è vuoto) e
         // svuotare la coda qui butterebbe via gli eventi appena accodati.
-        if self.dispatching {
+        //
+        // `in_provider_call` è l'altra metà della stessa regola: un provider
+        // che scrive durante `on_action`/`handle`/`flush` accoda, e la coda si
+        // drena quando la SUA chiamata è tornata — mai dentro il suo frame
+        // (a M5 il component model vieta la rientranza di un'istanza; la
+        // semantica di consegna non può cambiare al freeze).
+        if self.dispatching || self.in_provider_call {
             return;
         }
         if self.handlers.is_empty() {
@@ -1050,23 +1332,34 @@ impl Workspace {
         self.dispatching = false;
     }
 
+    /// Esegue `f` col flag `in_provider_call` alzato: qualunque
+    /// `dispatch_pending` innescato dentro `f` (un provider che scrive via
+    /// `HostApi`) viene rimandato. Chi chiama è responsabile di drenare la
+    /// coda **dopo** — è il "dopo che la tua chiamata è tornata" del contratto.
+    fn with_provider_call<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let prev = self.in_provider_call;
+        self.in_provider_call = true;
+        let result = f(self);
+        self.in_provider_call = prev;
+        result
+    }
+
     /// Consegna un singolo evento a tutti gli handler abbonati. Gli handler
     /// escono dal workspace per la durata della chiamata: così `KernelHost`
     /// può prestare `&mut Workspace` senza aliasing.
     fn deliver_to_handlers(&mut self, event: &Event) {
         let mut handlers = std::mem::take(&mut self.handlers);
-        for (id, handler) in handlers.iter_mut() {
-            if !handler.subscribed().contains(event.kind()) {
-                continue;
+        self.with_provider_call(|ws| {
+            for (id, handler) in handlers.iter_mut() {
+                if !handler.subscribed().contains(event.kind()) {
+                    continue;
+                }
+                let mut host = KernelHost { ws, plugin: id };
+                // L'errore di un handler non deve far fallire l'operazione
+                // che ha emesso l'evento: si ignora (M4: log/notifica).
+                let _ = handler.handle(event, &mut host);
             }
-            let mut host = KernelHost {
-                ws: self,
-                plugin: id,
-            };
-            // L'errore di un handler non deve far fallire l'operazione
-            // che ha emesso l'evento: si ignora (M4: log/notifica).
-            let _ = handler.handle(event, &mut host);
-        }
+        });
         // Handler registrati *durante* il dispatch si accodano in fondo.
         let registered_meanwhile = std::mem::take(&mut self.handlers);
         self.handlers = handlers;
@@ -1119,7 +1412,7 @@ impl Workspace {
     }
 
     fn rebuild_graph(&mut self) {
-        self.graph = LinkGraph::build(self.models.values());
+        self.graph = LinkGraph::build(self.metas.values());
     }
 
     // --- storage persistente dei plugin ------------------------------------
@@ -1186,6 +1479,27 @@ impl Workspace {
         }
         Ok(path)
     }
+}
+
+/// Valida un nome/path destinato a diventare (o rimpiazzare) un [`DocId`]:
+/// normalizza i separatori `\` → `/`, toglie spazi e slash iniziali, rifiuta
+/// componenti vuote, `.` e `..`. Un path che risale (`../fuori.md`) uscirebbe
+/// dal vault lasciando un `DocId` fantasma in modelli, grafo e indici.
+///
+/// È la regola di `create_note`, estratta perché OGNI percorso che trasforma
+/// input esterno in un `DocId` deve passarci: rename, restore e i costruttori
+/// usati dai comandi IPC (a M4/M5 quella superficie è dei plugin).
+pub fn valid_doc_id(name: &str) -> Result<DocId> {
+    let normalizzato = name.replace('\\', "/");
+    let pulito = normalizzato.trim().trim_start_matches('/');
+    if pulito.is_empty()
+        || pulito
+            .split('/')
+            .any(|c| c.is_empty() || c == "." || c == "..")
+    {
+        return Err(KernelError::BadName(name.to_string()));
+    }
+    Ok(DocId::new(pulito))
 }
 
 /// La validazione del confine di fiducia della UI, in un posto solo.
@@ -1269,11 +1583,12 @@ impl HostApi for KernelHost<'_> {
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
-        self.ws.storage.get(key).cloned()
+        self.ws.storage.get(&self.storage_key(key)).cloned()
     }
 
     fn storage_set(&mut self, key: &str, value: serde_json::Value) {
-        self.ws.storage.insert(key.to_string(), value);
+        let key = self.storage_key(key);
+        self.ws.storage.insert(key, value);
     }
 
     fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
@@ -1330,7 +1645,120 @@ impl HostApi for KernelHost<'_> {
     }
 }
 
+/// L'[`HostApi`] del percorso di **lettura** ([`Workspace::render_view`]):
+/// presta `&Workspace`, non `&mut`.
+///
+/// Esiste perché `render_view` deve poter girare sotto prestito condiviso (è
+/// il carico che il futuro `RwLock` parallelizza), e un [`KernelHost`] è per
+/// costruzione un prestito esclusivo. Le capacità di lettura delegano al
+/// workspace come farebbe `KernelHost`; quelle di **scrittura** prendono
+/// `&mut self`, che da un `&dyn HostApi` — l'unica forma in cui questo host
+/// viene prestato — non è raggiungibile: se un giorno lo diventasse, sarebbe
+/// un bug del kernel, e il panic lo direbbe subito.
+struct ReadHost<'a> {
+    ws: &'a Workspace,
+    plugin: &'a str,
+}
+
+impl ReadHost<'_> {
+    fn read_only(&self) -> ! {
+        unreachable!(
+            "ReadHost: il percorso di render è in sola lettura (&self); \
+             una capacità di scrittura non può arrivare qui"
+        )
+    }
+}
+
+impl HostApi for ReadHost<'_> {
+    fn read_document(&self, id: &DocId) -> std::result::Result<String, PluginError> {
+        self.ws
+            .read_source(id)
+            .map_err(|e| PluginError::Internal(e.to_string()))
+    }
+
+    fn write_document(
+        &mut self,
+        _id: &DocId,
+        _source: &str,
+    ) -> std::result::Result<(), PluginError> {
+        self.read_only()
+    }
+
+    fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
+        Ok(self.ws.documents())
+    }
+
+    fn emit(&mut self, _event: Event) {
+        self.read_only()
+    }
+
+    fn spawn_job(&mut self, _spec: JobSpec) -> std::result::Result<JobId, PluginError> {
+        self.read_only()
+    }
+
+    fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
+        self.ws
+            .storage
+            .get(&format!("{}/{key}", self.plugin))
+            .cloned()
+    }
+
+    fn storage_set(&mut self, _key: &str, _value: serde_json::Value) {
+        self.read_only()
+    }
+
+    fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
+        }
+        let path = self.ws.plugin_data_path(self.plugin, path)?;
+        match std::fs::read(&path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
+        }
+    }
+
+    fn data_write(&mut self, _path: &str, _bytes: &[u8]) -> std::result::Result<(), PluginError> {
+        self.read_only()
+    }
+
+    fn data_remove(&mut self, _path: &str) -> std::result::Result<(), PluginError> {
+        self.read_only()
+    }
+
+    fn data_list(&self, prefix: &str) -> std::result::Result<Vec<String>, PluginError> {
+        let root = self.ws.plugin_data_root(self.plugin);
+        let dir = self.ws.plugin_data_path(self.plugin, prefix)?;
+        let mut out = Vec::new();
+        collect_data_files(&root, &dir, &mut out);
+        out.sort_unstable();
+        Ok(out)
+    }
+
+    fn now_unix_millis(&self) -> u64 {
+        crate::time::now_unix_millis()
+    }
+
+    fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
+        self.ws.query_index(query)
+    }
+
+    fn active_document(&self) -> Option<DocId> {
+        self.ws.active_document().cloned()
+    }
+}
+
 impl KernelHost<'_> {
+    /// La chiave davvero usata da `storage_get/set`: prefissata dall'id del
+    /// plugin, così due feature che scelgono lo stesso nome generico
+    /// ("cursor", "config") non si pestano. `data_*` ha il recinto in firma;
+    /// qui il recinto sta nell'implementazione. Il separatore `/` non è
+    /// ambiguo: gli id di plugin sono nomi semplici, senza separatori.
+    fn storage_key(&self, key: &str) -> String {
+        format!("{}/{key}", self.plugin)
+    }
+
     /// Path assoluto di un blob: come [`Workspace::plugin_data_path`], ma il
     /// nome vuoto non è la radice — è una richiesta malformata.
     fn data_blob(&self, rel: &str) -> std::result::Result<Utf8PathBuf, PluginError> {
@@ -1363,25 +1791,12 @@ fn section_of(model: &DocumentModel, heading: &str) -> Option<DocumentModel> {
         .body
         .iter()
         .filter(|b| {
-            let s = block_span_start(b);
+            let s = b.span().start;
             s >= start && s < end
         })
         .cloned()
         .collect();
     Some(section)
-}
-
-fn block_span_start(block: &fubmd_abi::model::Block) -> usize {
-    use fubmd_abi::model::Block;
-    match block {
-        Block::Heading { span, .. }
-        | Block::Paragraph { span, .. }
-        | Block::List { span, .. }
-        | Block::CodeBlock { span, .. }
-        | Block::Quote { span, .. }
-        | Block::ThematicBreak { span }
-        | Block::Custom { span, .. } => span.start,
-    }
 }
 
 fn extension_of(id: &DocId) -> Option<String> {

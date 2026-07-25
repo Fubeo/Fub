@@ -16,9 +16,7 @@ use std::sync::Mutex;
 
 use fubmd_abi::event::Event;
 use fubmd_abi::model::{DocId, Heading};
-use fubmd_abi::traits::{
-    BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, TagCount,
-};
+use fubmd_abi::traits::{BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, TagCount};
 use fubmd_abi::PluginError;
 
 /// Storage dei blob e dei documenti in memoria, più un orologio pilotabile.
@@ -51,6 +49,12 @@ impl MemoryHost {
     /// Sposta l'orologio in avanti di `ms`.
     pub fn avanza(&self, ms: u64) {
         self.now.fetch_add(ms, Ordering::Relaxed);
+    }
+
+    /// Sposta l'orologio **indietro** di `ms`: è ciò che fa NTP, un cambio di
+    /// fuso o una VM ripresa — e ciò contro cui il versioning deve difendersi.
+    pub fn arretra(&self, ms: u64) {
+        self.now.fetch_sub(ms, Ordering::Relaxed);
     }
 
     /// Aggiunge un documento al vault finto (stile builder).
@@ -91,7 +95,10 @@ impl MemoryHost {
                 context: None,
             })
             .collect();
-        self.backlinks.lock().unwrap().insert(target.to_string(), refs);
+        self.backlinks
+            .lock()
+            .unwrap()
+            .insert(target.to_string(), refs);
         self
     }
 

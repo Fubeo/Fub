@@ -17,8 +17,14 @@ export interface VaultInfo {
 // Una versione salvata (rispecchia fubmd_features::versioning::VersionRef).
 export interface VersionRef {
   // Istante dello snapshot in millisecondi UNIX: è anche la sua identità.
+  // Resta un number: i millisecondi non arrivano a 2^53 e qui ci si fa
+  // aritmetica (`new Date(ts)`).
   ts: number;
-  hash: number;
+  // Impronta u64 PIENA: attraversa l'IPC come stringa, perché `JSON.parse`
+  // perde i bit oltre 2^53 in silenzio. È la regola di confine per gli u64
+  // identità/impronta (vedi `fubmd_abi::ipc`); si confronta con ===, mai
+  // con l'aritmetica.
+  hash: string;
   size: number;
 }
 
@@ -34,7 +40,7 @@ export type UiNode =
   | { node: "heading"; level: number; content: string }
   | { node: "list"; items: UiNode[] }
   | { node: "list_item"; title: string; subtitle: string | null; action: string | null }
-  | { node: "button"; label: string; intent: string; action: string }
+  | { node: "button"; label: string; intent: "neutral" | "primary" | "danger"; action: string }
   | { node: "html"; html: string }
   | { node: "web_view"; url: string; height: number };
 
@@ -46,7 +52,10 @@ export type ViewUpdate =
   | { kind: "none" }
   | { kind: "navigate"; doc_id: string }
   | { kind: "reveal"; doc_id: string; span: Span }
-  | { kind: "run_search"; query: string };
+  | { kind: "run_search"; query: string }
+  // Varco di estensione: un intento che questa shell non prevede. La shell
+  // che non riconosce `ns` NON FA NULLA (degrado garbato, da contratto).
+  | { kind: "custom"; ns: string; payload: unknown };
 
 // Evento del kernel (rispecchia fubmd_abi::event::Event).
 export type KernelEvent =
@@ -55,11 +64,37 @@ export type KernelEvent =
   | { type: "document_removed"; id: string }
   | { type: "document_renamed"; from: string; to: string }
   | { type: "index_updated" }
-  // Esito di un job in background (HostApi::spawn_job).
-  | { type: "job_done"; id: number; job: string; result: unknown }
+  // Esito di un job in background (HostApi::spawn_job). `id` è un u64
+  // identità: attraversa l'IPC come stringa (vedi VersionRef.hash).
+  | { type: "job_done"; id: string; job: string; result: unknown }
   // Coda eventi troncata: lo stato derivato dagli eventi va riconciliato.
   | { type: "overflow"; dropped: number }
   | { type: "custom"; topic: string; payload: unknown };
+
+// La dichiarazione di una view offerta da un provider (rispecchia
+// fubmd_abi::traits::ViewSpec). `placement` dice DOVE montarla; `refresh`
+// dice QUANDO ridisegnarla: gli eventi del kernel al cui arrivo la shell
+// deve richiedere `render_view` (il cambio di nota attiva non è un evento:
+// la shell ridisegna comunque da sé).
+export interface ViewSpec {
+  id: string;
+  title: string;
+  placement: "left_sidebar" | "right_sidebar" | "bottom";
+  refresh: KernelEvent["type"][];
+}
+
+// Il grafo del vault (rispecchia fubmd_app::GraphData): nodi = documenti,
+// archi = wikilink risolti, deduplicati. È DATO per il renderer canvas
+// (`graph.ts`): la superficie privilegiata fuori da UiNode dichiarata in M2.
+export interface GraphEdge {
+  from: string;
+  to: string;
+}
+
+export interface GraphData {
+  nodes: string[];
+  edges: GraphEdge[];
+}
 
 export interface EmbedContent {
   doc_id: string;
@@ -80,6 +115,13 @@ export interface SearchHit {
   score: number;
   snippet: string;
   highlights: Span[];
+}
+
+// Un tag del vault con quante note lo portano (rispecchia
+// fubmd_abi::traits::TagCount). `name` è senza `#`, gerarchia intatta (`a/b`).
+export interface TagCount {
+  name: string;
+  count: number;
 }
 
 // Una voce del cestino (rispecchia fubmd_kernel::vault::TrashEntry).
@@ -133,11 +175,16 @@ export const api = {
   // sapere cosa la view faccia — è il percorso di un plugin.
   setActiveDocument: (id: string | null) =>
     invoke<void>("set_active_document", { id }),
+  // Le view offerte dai provider registrati: la shell le monta per
+  // `placement`, senza cablare gli id — una view di plugin compare da sola.
+  listViews: () => invoke<ViewSpec[]>("list_views"),
   renderView: (view: string) => invoke<UiNode>("render_view", { view }),
   viewAction: (view: string, action: string, payload?: unknown) =>
     invoke<ViewUpdate>("view_action", { view, action, payload: payload ?? null }),
   search: (query: string, limit?: number) =>
     invoke<SearchHit[]>("search", { query, limit }),
+  listTags: () => invoke<TagCount[]>("list_tags"),
+  graphData: () => invoke<GraphData>("graph_data"),
   resolveLink: (page: string) => invoke<string | null>("resolve_link", { page }),
   listVersions: (id: string) => invoke<VersionRef[]>("list_versions", { id }),
   readVersion: (id: string, ts: number) => invoke<string>("read_version", { id, ts }),
