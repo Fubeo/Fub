@@ -122,12 +122,12 @@ oggi, una migrazione domani); le altre restano al freeze.
 
 **Da chiudere al freeze:**
 
-- [ ] **Il grafo nel contratto**: `LinkGraph` ha `outgoing`/`backlinks` ma
-      `IndexQuery` espone solo `Backlinks`. Per M2 graph-data è superficie
-      privilegiata (comando dati Tauri, dichiarato): al freeze decidere se
-      aggiungere una variante "vicini/archi" (es. `IndexQuery::Neighbors`),
-      o il grafo resta per sempre un comando ad-hoc che un plugin non può
-      interrogare.
+- [x] **Il grafo nel contratto** — fatto col §1.6: `IndexQuery::Neighbors { doc,
+      direction, depth, page }` risponde dal `LinkGraph`, e `NeighborRef` porta
+      il `via` con cui si ricostruiscono gli archi oltre il primo passo. Il
+      comando `graph_data` non è più superficie privilegiata: è il **primo
+      cliente** della variante, e prende gli archi una nota alla volta come farà
+      una vista a grafo di terzi.
 - [ ] **Operazioni strutturali e parità plugin↔nativo**: rename,
       `create_note`, cestino sono kernel-owned e fuori da `HostApi` (scelta
       deliberata). Decidere se e quali esporre come capacità con permesso

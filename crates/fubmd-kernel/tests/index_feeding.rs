@@ -12,7 +12,7 @@ use camino::Utf8PathBuf;
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, SearchHit};
+use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, SearchHit};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
 
@@ -131,12 +131,12 @@ impl IndexProvider for SpyIndex {
     fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
         self.record(Call::Query);
         if self.answers {
-            Ok(IndexResult::Search(vec![SearchHit {
+            Ok(IndexResult::Search(Paged::all(vec![SearchHit {
                 doc: DocId::new("risposta.txt"),
                 score: 1.0,
                 snippet: "eccomi".into(),
                 highlights: Vec::new(),
-            }]))
+            }])))
         } else {
             Err(PluginError::BadArgs("non è roba mia".into()))
         }
@@ -355,6 +355,7 @@ fn backlinks_never_reach_the_providers() {
 
     let r = ws.query_index(IndexQuery::Backlinks {
         target: DocId::new("a.txt"),
+        page: None,
     });
 
     // Il grafo del kernel è l'unica fonte di verità dei backlink: nessun
@@ -380,11 +381,12 @@ fn a_query_falls_through_providers_that_disown_it() {
 
     let r = ws.query_index(IndexQuery::FullText {
         query: "qualsiasi".into(),
-        limit: 5,
+        scope: Default::default(),
+        page: Some(Page::first(5)),
     });
 
     match r {
-        Ok(IndexResult::Search(hits)) => assert_eq!(hits[0].doc, DocId::new("risposta.txt")),
+        Ok(IndexResult::Search(hits)) => assert_eq!(hits.items[0].doc, DocId::new("risposta.txt")),
         other => panic!("atteso Search, trovato {other:?}"),
     }
     assert_eq!(
@@ -419,7 +421,8 @@ fn with_no_provider_a_search_says_so_instead_of_pretending() {
 
     let r = ws.query_index(IndexQuery::FullText {
         query: "qualsiasi".into(),
-        limit: 5,
+        scope: Default::default(),
+        page: Some(Page::first(5)),
     });
     // Zero risultati e "nessun indice" sono due cose diverse: la prima è una
     // risposta, la seconda una mancanza, e confonderle nasconderebbe un guasto.

@@ -163,7 +163,9 @@ impl TryFrom<Span> for model::Span {
 
 /// [`model::Inline`] con i figli sostituiti da indici.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
+// `serde_json` fallirebbe a serializzarle (vedi il § in testa al modulo).
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum Inline {
     Text(String),
     Emph(Vec<InlineRef>),

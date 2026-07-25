@@ -52,7 +52,7 @@ use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span};
 use fubmd_abi::traits::{
     BacklinkRef, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
-    ViewProvider, ViewSpec,
+    Paged, ViewProvider, ViewSpec,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{Event, PluginError};
@@ -60,7 +60,9 @@ use fubmd_abi::{Event, PluginError};
 use crate::bus::EventBus;
 use crate::error::{KernelError, Result};
 use crate::graph::{normalize, strip_ext, GraphSource, LinkGraph};
+use crate::health;
 use crate::pathlink;
+use crate::properties;
 use crate::registry::FormatRegistry;
 use crate::tag_counts::TagCounts;
 use crate::vault::{TrashEntry, Vault, DATA_DIR};
@@ -1091,10 +1093,15 @@ impl Workspace {
 
     /// Interroga gli indici.
     ///
-    /// I **backlink** non passano dai provider: li serve il grafo del kernel,
-    /// che è la loro unica fonte di verità (conosce le regole di risoluzione
-    /// dei wikilink e le ambiguità dell'intero vault). Duplicarli in un indice
-    /// creerebbe una seconda verità che può divergere dalla prima.
+    /// Una buona metà delle query **non passa dai provider**: le serve il
+    /// kernel, perché di quel dato è già l'unica fonte di verità. I backlink e
+    /// il grafo stanno nel [`LinkGraph`] (conosce le regole di risoluzione dei
+    /// wikilink e le ambiguità dell'intero vault); outline e proprietà stanno
+    /// nei metadati parsati che il kernel tiene in cache; la salute del vault è
+    /// un'interrogazione sugli stessi due. Duplicarli in un indice creerebbe una
+    /// seconda verità che può divergere dalla prima — e per una view sarebbe
+    /// comunque irraggiungibile, perché un `FormatProvider` un plugin non ce
+    /// l'ha.
     ///
     /// Tutto il resto va ai provider registrati, in ordine di registrazione:
     /// vince il primo che non risponde [`PluginError::BadArgs`], che è per
@@ -1102,20 +1109,12 @@ impl Workspace {
     /// [`IndexQuery::Custom`]). Se nessuno la riconosce, l'errore dell'ultimo
     /// interpellato arriva al chiamante.
     pub fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        // Query servite dal kernel, non dai provider: hanno già una fonte di
-        // verità qui. I backlink stanno nel grafo (conosce le regole di
-        // risoluzione e le ambiguità del vault); l'outline sta nel modello
-        // parsato che il kernel tiene — è il modo con cui una view legge la
-        // struttura di un documento senza avere un `FormatProvider`.
         match &query {
-            IndexQuery::Backlinks { target } => {
-                let items = self.graph.backlinks(target);
-                let total = items.len() as u32;
-                return Ok(IndexResult::Backlinks(fubmd_abi::PaginatedResult {
-                    items,
-                    offset: 0,
-                    total,
-                }));
+            IndexQuery::Backlinks { target, page } => {
+                return Ok(IndexResult::Backlinks(Paged::window(
+                    self.graph.backlinks(target),
+                    *page,
+                )));
             }
             IndexQuery::Outline { doc } => {
                 let outline = self
@@ -1125,13 +1124,64 @@ impl Workspace {
                     .unwrap_or_default();
                 return Ok(IndexResult::Outline(outline));
             }
-            IndexQuery::Tags => {
+            IndexQuery::Tags { page } => {
                 // Da struttura incrementale ([`TagCounts`]): niente O(vault)
                 // a ogni interrogazione — e il pannello interroga a ogni
                 // `IndexUpdated`, cioè a ogni salvataggio.
-                return Ok(IndexResult::Tags(self.tags.snapshot()));
+                return Ok(IndexResult::Tags(Paged::window(
+                    self.tags.snapshot(),
+                    *page,
+                )));
             }
-            _ => {}
+            IndexQuery::Neighbors {
+                doc,
+                direction,
+                depth,
+                page,
+            } => {
+                return Ok(IndexResult::Neighbors(Paged::window(
+                    self.graph.neighbors(doc, *direction, *depth),
+                    *page,
+                )));
+            }
+            IndexQuery::Properties {
+                filter,
+                sort,
+                select,
+                page,
+            } => {
+                let rows = properties::query(
+                    self.metas.iter().map(|(id, m)| (id, &m.frontmatter)),
+                    filter,
+                    sort.as_ref(),
+                    select,
+                );
+                return Ok(IndexResult::Properties(Paged::window(rows, *page)));
+            }
+            IndexQuery::PropertyValues { key, filter, page } => {
+                let facets = properties::facets(
+                    self.metas.iter().map(|(id, m)| (id, &m.frontmatter)),
+                    key,
+                    filter,
+                );
+                return Ok(IndexResult::PropertyValues(Paged::window(facets, *page)));
+            }
+            IndexQuery::VaultHealth { check, page } => {
+                // In ordine di `DocId`: la cache è una mappa hash, e una
+                // risposta paginata che cambiasse ordine a ogni chiamata
+                // ripeterebbe e salterebbe righe fra una pagina e l'altra.
+                let mut ids: Vec<&DocId> = self.metas.keys().collect();
+                ids.sort();
+                let issues = health::run(
+                    *check,
+                    ids.into_iter()
+                        .map(|id| (id, self.metas[id].links.as_slice())),
+                    &self.graph,
+                    &self.registry.all_extensions(),
+                );
+                return Ok(IndexResult::VaultHealth(Paged::window(issues, *page)));
+            }
+            IndexQuery::FullText { .. } | IndexQuery::Custom { .. } => {}
         }
         let mut last = Err(PluginError::BadArgs(
             "nessun IndexProvider registrato".to_string(),
@@ -1646,13 +1696,8 @@ impl HostApi for KernelHost<'_> {
         self.ws.query_index(query)
     }
 
-    fn active_view_context(&self) -> fubmd_abi::ViewContext {
-        fubmd_abi::ViewContext {
-            pane_id: "main".to_string(),
-            doc: self.ws.active_document().cloned(),
-            selection: None,
-            mode: None,
-        }
+    fn active_document(&self) -> Option<DocId> {
+        self.ws.active_document().cloned()
     }
 }
 
@@ -1755,13 +1800,8 @@ impl HostApi for ReadHost<'_> {
         self.ws.query_index(query)
     }
 
-    fn active_view_context(&self) -> fubmd_abi::ViewContext {
-        fubmd_abi::ViewContext {
-            pane_id: "main".to_string(),
-            doc: self.ws.active_document().cloned(),
-            selection: None,
-            mode: None,
-        }
+    fn active_document(&self) -> Option<DocId> {
+        self.ws.active_document().cloned()
     }
 }
 

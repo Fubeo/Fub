@@ -10,9 +10,10 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
-use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit, TagCount, ViewSpec};
+use fubmd_abi::traits::{
+    BacklinkRef, IndexQuery, IndexResult, LinkDirection, Page, SearchHit, TagCount, ViewSpec,
+};
 use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
-use fubmd_abi::Pagination;
 use fubmd_features::{
     BacklinksView, OutlineView, SearchIndex, TagPanelView, VersionRef, VersionStore,
     VersioningHandler, BACKLINKS_ID, OUTLINE_ID, SEARCH_ID, TAGS_ID, VERSIONING_ID,
@@ -492,11 +493,15 @@ fn search(
     let ws = ws.lock().unwrap();
     let q = IndexQuery::FullText {
         query,
+        // Tutto il vault: l'ambito (cartella, tag) è nel contratto e lo esercita
+        // l'indice; la shell non ha ancora un modo di chiederlo all'utente.
         scope: Default::default(),
-        pagination: Some(Pagination::first(limit.unwrap_or(50))),
+        page: Some(Page::first(limit.unwrap_or(50))),
     };
     match ws.query_index(q).map_err(|e| e.to_string())? {
-        IndexResult::Search(paginated) => Ok(paginated.items),
+        // `total` resta all'indice finché la UI non mostra "1-20 di N": qui
+        // passa la sola pagina, che è ciò che il pannello disegna.
+        IndexResult::Search(hits) => Ok(hits.items),
         other => Err(format!("l'indice ha risposto fuori tema: {other:?}")),
     }
 }
@@ -509,10 +514,10 @@ fn list_tags(state: State<AppState>) -> Result<Vec<TagCount>, String> {
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
     match ws
-        .query_index(IndexQuery::Tags)
+        .query_index(IndexQuery::Tags { page: None })
         .map_err(|e| e.to_string())?
     {
-        IndexResult::Tags(tags) => Ok(tags),
+        IndexResult::Tags(tags) => Ok(tags.items),
         other => Err(format!("l'indice ha risposto fuori tema: {other:?}")),
     }
 }
@@ -624,9 +629,13 @@ fn write_workspace_meta(state: State<AppState>, meta: WorkspaceMeta) -> Result<(
 // L'ultima view di M2, e l'unica FUORI da `UiNode`: un grafo force-directed è
 // Canvas, e il protocollo dichiarativo non lo esprime (né deve: è la
 // superficie privilegiata dichiarata nel piano). Da qui esce solo DATO —
-// nodi e archi — e il renderer vive nel frontend. Se a M4 il grafo entrerà
-// nel contratto (`IndexQuery`, vedi la checklist del freeze), questo comando
-// diventerà un client di quella variante.
+// nodi e archi — e il renderer vive nel frontend.
+//
+// Il grafo però è entrato nel contratto (§1.6: `IndexQuery::Neighbors`), e
+// questo comando ne è il **primo cliente**: gli archi li chiede una nota alla
+// volta al canale dati, con le stesse capacità che avrà una vista a grafo di
+// terzi. Prima li prendeva da `Workspace::outgoing`, che è una scorciatoia che
+// un plugin non ha — cioè la definizione di superficie privilegiata.
 
 /// Un arco del grafo: `from` linka `to` (wikilink risolto).
 #[derive(Serialize)]
@@ -652,11 +661,25 @@ fn graph_data(state: State<AppState>) -> Result<GraphData, String> {
     let mut seen = std::collections::BTreeSet::new();
     let mut edges = Vec::new();
     for from in &docs {
-        for to in ws.outgoing(from) {
-            if seen.insert((from.clone(), to.clone())) {
+        // Adiacenza pura: un passo, verso uscente. A `depth: 1` il `via` di ogni
+        // vicino è il documento interrogato, cioè l'arco è (from → doc).
+        let neighbors = match ws
+            .query_index(IndexQuery::Neighbors {
+                doc: from.clone(),
+                direction: LinkDirection::Outbound,
+                depth: 1,
+                page: None,
+            })
+            .map_err(|e| e.to_string())?
+        {
+            IndexResult::Neighbors(n) => n.items,
+            other => return Err(format!("il grafo ha risposto fuori tema: {other:?}")),
+        };
+        for neighbor in neighbors {
+            if seen.insert((from.clone(), neighbor.doc.clone())) {
                 edges.push(GraphEdge {
                     from: from.0.clone(),
-                    to: to.0,
+                    to: neighbor.doc.0,
                 });
             }
         }

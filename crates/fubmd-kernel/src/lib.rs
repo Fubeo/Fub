@@ -16,7 +16,9 @@
 pub mod bus;
 pub mod error;
 pub mod graph;
+mod health;
 mod pathlink;
+mod properties;
 pub mod registry;
 mod tag_counts;
 pub mod time;

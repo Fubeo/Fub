@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::event::{Event, EventMask};
-use crate::format::FormatDescriptor;
-use crate::model::{DocId, DocumentModel, Heading, Span};
+use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
 // ---------------------------------------------------------------------------
@@ -59,25 +58,6 @@ impl<'de> Deserialize<'de> for JobId {
 // Nativo → oggetto in-process diretto. WASM (M5) → proxy che reinoltra le
 // chiamate come host function attraverso il confine.
 // ---------------------------------------------------------------------------
-
-/// Contesto di una view: quale documento, in quale pane, con quale selezione.
-/// Serve a distinguere fra split, tab e finestre multiple — "il documento
-/// attivo" non è più una variabile globale.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ViewContext {
-    /// Identificatore del pane (sinistra/destra di uno split, tab attiva, etc.).
-    /// Senza questo, due split con pannelli backlink riceverebbero lo stesso
-    /// contesto e mostrerebbero lo stesso documento.
-    pub pane_id: String,
-    /// Il documento con il focus in questo pane.
-    pub doc: Option<DocId>,
-    /// La selezione nel documento attivo, se il documento esiste.
-    /// Uno span `[start, end)` in byte **nel sorgente**.
-    pub selection: Option<Span>,
-    /// Modalità di editing (normal/insert/select), se rilevante per il provider.
-    /// Una view che non ne ha bisogno lo ignora.
-    pub mode: Option<String>,
-}
 
 /// Le capacità che il kernel concede a un provider/plugin.
 ///
@@ -159,29 +139,25 @@ pub trait HostApi: Send + Sync {
     // cosa — le farebbe l'app per lui, cioè un dogfooding finto. Vedi
     // docs/architecture/plugin-boundary.md, "Interrogazione e contesto".
 
-    /// Interroga gli indici del vault: backlink e ricerca full-text passano di
-    /// qui, con la stessa semantica di dispatch del kernel (i backlink li serve
-    /// il grafo, tutto il resto i provider registrati; vedi [`IndexQuery`]).
+    /// Interroga il vault: backlink, grafo, struttura, tag, proprietà, salute e
+    /// ricerca full-text passano tutti di qui, con la stessa semantica di
+    /// dispatch del kernel (ciò di cui il kernel è già l'unica fonte di verità
+    /// lo serve lui, il resto i provider registrati; vedi [`IndexQuery`]).
     ///
     /// È `&self` — una query non muta niente — ed è la ragione per cui un indice
     /// può servirla sotto prestito condiviso del workspace, come una view.
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 
-    /// Il contesto della view attiva: documento, pane, selezione e modalità.
+    /// Il documento con il focus della sessione di editing, se ce n'è uno.
     ///
-    /// Una view lo **chiede** quando ne ha bisogno (un pannello backlink lo fa
-    /// a ogni render), non lo riceve come argomento — avrebbe costretto
-    /// *ogni* view a portarselo anche se non lo serve (un grafo, impostazioni).
-    ///
-    /// Chi lo imposta è la shell: "quale nota guardo in quale pane" è una
-    /// decisione dell'utente, non una capacità da concedere. Il pane_id
-    /// distingue fra split (sinistra/destra), tab, finestre — due pannelli
-    /// backlink in split distinti vedono il contesto giusto per ciascuno.
-    ///
-    /// La selezione arriva come Span sul sorgente — necessario per comandi
-    /// sulla selezione (4.2, 4.3, 22.2), annotazioni (13.3), riscritture
-    /// guidate (16.1). Dipende dal ponte code unit → byte (§3.7).
-    fn active_view_context(&self) -> ViewContext;
+    /// È il solo contesto di sessione che il contratto espone: una view lo
+    /// **chiede** quando ne ha bisogno (un pannello backlink lo fa a ogni
+    /// render), invece di riceverlo come argomento — che costringerebbe *ogni*
+    /// view a portarselo anche quando non le serve (un grafo, un pannello
+    /// impostazioni). Chi lo imposta è la shell, non un plugin: `active_document`
+    /// non ha un gemello che scrive nell'`HostApi`, perché "quale nota guardo"
+    /// è una decisione dell'utente sull'app, non una capacità da concedere.
+    fn active_document(&self) -> Option<DocId>;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,118 +230,330 @@ pub trait ViewProvider: Send + Sync {
 }
 
 // ---------------------------------------------------------------------------
-// Paginazione e filtri
+// Index — il canale dati verso le view
 // ---------------------------------------------------------------------------
+//
+// Qui passa TUTTO ciò che una view sa del vault: full-text, backlink, grafo,
+// proprietà del frontmatter, salute del vault. Ogni domanda che non è
+// esprimibile come `IndexQuery` diventa un comando bespoke dell'app, cioè una
+// superficie privilegiata che un plugin non potrà mai avere — è la ragione per
+// cui questo enum è largo e va deciso prima del freeze di M4.
+//
+// Chi serve cosa: il **kernel** risponde a ciò di cui è già l'unica fonte di
+// verità (grafo, modelli parsati, frontmatter); i **provider registrati** a
+// tutto il resto (oggi: il full-text). La divisione non è di comodo — duplicare
+// il grafo dentro un indice creerebbe una seconda verità che può divergere
+// dalla prima.
 
-/// Parametri di paginazione per le query.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Pagination {
+/// La finestra chiesta su una risposta: da dove cominciare, quanti elementi al
+/// più.
+///
+/// Sta nella **domanda** e non solo nella risposta perché chi serve la query
+/// deve poter troncare *prima* di costruire il risultato: un vault con
+/// centomila note non deve materializzare centomila righe per mostrarne venti
+/// (24.1). `None` al posto di una `Page` significa "tutto": è la forma che
+/// tiene onesti i clienti che davvero vogliono l'insieme intero (il pannello
+/// tag, l'autocompletamento) senza costringerli a inventarsi un tetto.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Page {
+    /// Elementi da saltare. Oltre la fine → pagina vuota, non un errore.
     pub offset: u32,
+    /// Quanti al più restituirne. `0` = nessuno (non "tutti": per quello si
+    /// omette la `Page`).
     pub limit: u32,
 }
 
-impl Pagination {
+impl Page {
+    pub fn new(offset: u32, limit: u32) -> Self {
+        Page { offset, limit }
+    }
+
+    /// I primi `limit` elementi.
     pub fn first(limit: u32) -> Self {
-        Pagination { offset: 0, limit }
+        Page { offset: 0, limit }
     }
 }
 
-/// Direzione di attraversamento nel grafo di collegamento fra documenti.
+/// Una risposta a finestra: gli elementi chiesti, da dove cominciano e quanti
+/// ce ne sarebbero **in tutto**.
+///
+/// `total` non è decorativo: senza, chi disegna non sa se esiste una pagina
+/// dopo, e "1-20 di 4321" — che è ciò che ogni elenco lungo mostra — non si
+/// scrive. È il conteggio *prima* della finestra, non `items.len()`.
+///
+/// Al confine WIT non esistono i generici: ogni istanza di questo tipo è là un
+/// record a sé (`backlinks-page`, `search-page`, …). La ripetizione è il prezzo
+/// dichiarato di avere `total` accanto agli elementi invece che in un canale
+/// separato che si può dimenticare.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Paged<T> {
+    pub items: Vec<T>,
+    pub offset: u32,
+    pub total: u32,
+}
+
+impl<T> Paged<T> {
+    /// Tutto ciò che c'è, senza finestra.
+    pub fn all(items: Vec<T>) -> Self {
+        let total = items.len() as u32;
+        Paged {
+            items,
+            offset: 0,
+            total,
+        }
+    }
+
+    /// Ritaglia una risposta **già in memoria**.
+    ///
+    /// È la strada di chi la finestra non la sa applicare alla fonte (il kernel
+    /// interroga mappe che ha già in mano): il conteggio resta quello vero,
+    /// solo gli elementi si riducono. Un indice che sappia paginare alla
+    /// sorgente — tantivy sa — costruisce il [`Paged`] da sé e non passa di qui.
+    pub fn window(items: Vec<T>, page: Option<Page>) -> Self {
+        let total = items.len() as u32;
+        let Some(page) = page else {
+            return Paged {
+                items,
+                offset: 0,
+                total,
+            };
+        };
+        let items = items
+            .into_iter()
+            .skip(page.offset as usize)
+            .take(page.limit as usize)
+            .collect();
+        Paged {
+            items,
+            offset: page.offset,
+            total,
+        }
+    }
+}
+
+/// In che verso si cammina il grafo dei link.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum GraphDirection {
-    /// Link in entrata (backlink, chi mi referenzia).
-    Inbound,
-    /// Link in uscita (forward link, io referenzio).
-    Outbound,
-    /// Entrambi.
+pub enum LinkDirection {
+    /// I link **uscenti**: le note che questa nomina.
     #[default]
+    Outbound,
+    /// I link **entranti**: le note che nominano questa (i backlink).
+    Inbound,
+    /// Entrambi i versi, come li disegna una vista a grafo.
     Both,
 }
 
-/// Ambito della ricerca full-text.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct FullTextScope {
-    /// Cartella per filtrare (prefisso di path).
-    pub folder: Option<String>,
-    /// Tag per filtrare.
+/// L'ambito di una ricerca full-text: *dove* cercare, non *cosa*.
+///
+/// Vuoto in ogni campo = tutto il vault. È separato dalla stringa di query
+/// perché la stringa è il linguaggio del provider (oggi tantivy, §2.17) mentre
+/// l'ambito è **dato del contratto**: una shell che offre "cerca in questa
+/// cartella" non deve comporre sintassi altrui per ottenerlo, e un provider
+/// diverso non può interpretarlo diversamente.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchScope {
+    /// Cartelle del vault (path relativi senza slash finale; `""` è la radice):
+    /// il documento è in ambito se sta in una di esse **o in una discendente**.
+    /// Più cartelle sono in OR.
+    pub folders: Vec<String>,
+    /// Tag in forma canonica (senza `#`, vedi `canonical_tag`): il documento
+    /// deve portarne almeno uno. Più tag sono in OR.
     pub tags: Vec<String>,
-    /// Tipo di nota (estensione del formato).
-    pub format: Option<String>,
 }
 
-/// Tipo di health check sul vault.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Come si mette alla prova una proprietà del frontmatter.
+///
+/// Un `variant` e non una coppia operatore+valore: `exists` e `missing` un
+/// valore non ce l'hanno, e un campo che in due casi su sette non significa
+/// niente è un invito a riempirlo di `null`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum PropertyTest {
+    /// La chiave c'è (anche con valore vuoto: `chiave:` esiste).
+    Exists,
+    /// La chiave non c'è.
+    Missing,
+    Equals(PropertyValue),
+    NotEquals(PropertyValue),
+    /// Per un elenco: contiene questo scalare. Per un testo: lo contiene come
+    /// sottostringa. Per il resto: uguaglianza.
+    Contains(PropertyScalar),
+    /// Confronti d'ordine fra valori della **stessa specie** (numero, data,
+    /// testo). Specie diverse non si ordinano: la prova è falsa, non un errore
+    /// — un vault vero ha frontmatter disomogeneo e una query non deve morirci.
+    GreaterThan(PropertyValue),
+    LessThan(PropertyValue),
+}
+
+/// Una condizione su una proprietà. Più filtri di una query sono in **AND**:
+/// l'OR e le parentesi arrivano con la query come AST (§2.17), e finché non
+/// c'è è meglio dire chiaramente cosa questa forma esprime.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PropertyFilter {
+    pub key: String,
+    pub test: PropertyTest,
+}
+
+/// Come ordinare i documenti di una [`IndexQuery::Properties`]. Chi non ha la
+/// chiave finisce **in fondo** in entrambi i versi (è assente, non minimo), e a
+/// parità vale l'ordine dei `DocId`: una risposta paginata deve essere stabile,
+/// o la seconda pagina ripete la prima.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PropertySort {
+    pub key: String,
+    pub descending: bool,
+}
+
+/// Una proprietà con il suo valore normalizzato ([`PropertyValue`], §1.5).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PropertyEntry {
+    pub key: String,
+    pub value: PropertyValue,
+}
+
+/// Un documento e le sue proprietà: la riga di una collezione (8.4) o di un
+/// database su file (11).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DocumentProperties {
+    pub doc: DocId,
+    /// In ordine di chiave. Quali chiavi ci sono lo decide `select` nella
+    /// query; vuoto là = tutto il frontmatter del documento.
+    pub properties: Vec<PropertyEntry>,
+}
+
+/// Un valore distinto di una proprietà e quante note lo portano: la faccetta di
+/// 9.1, gemella di [`TagCount`] per il frontmatter.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PropertyCount {
+    pub value: PropertyValue,
+    pub count: u32,
+}
+
+/// Quale controllo di salute del vault si sta chiedendo.
+///
+/// Ogni voce è un'interrogazione sul grafo e sui modelli che il kernel **ha già
+/// in memoria**: 7.2 ne chiede una trentina, e senza questa variante ognuna
+/// sarebbe un comando bespoke sullo stesso dato.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum HealthCheckKind {
-    /// Link che puntano a documenti inesistenti.
-    #[default]
+pub enum HealthCheck {
+    /// Link che non risolvono a nessun documento del vault (wikilink e link
+    /// markdown; un URL non è un link rotto, è un'altra cosa).
     BrokenLinks,
-    /// Documenti senza backlink (orfani).
-    OrphanedDocs,
-    /// Asset referenziati in nessun documento.
-    UnusedAssets,
+    /// Note che nessuno nomina: zero riferimenti entranti.
+    OrphanDocuments,
 }
 
-// ---------------------------------------------------------------------------
-// Index (ricerca, backlink)
-// ---------------------------------------------------------------------------
+/// Un problema trovato da un [`HealthCheck`], sul documento che lo porta.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HealthIssue {
+    /// Il documento in cui sta il problema: la nota che contiene il link rotto,
+    /// la nota orfana.
+    pub doc: DocId,
+    pub check: HealthCheck,
+    /// Il dettaglio leggibile: per un link rotto la destinazione **come era
+    /// scritta**, che è ciò che serve per correggerla. Assente quando il
+    /// problema è il documento stesso (una nota orfana non ha un dettaglio).
+    pub detail: Option<String>,
+    /// Dove sta nel sorgente, quando il problema ha un punto: lo span del link
+    /// rotto. In byte, come ogni span del modello.
+    pub span: Option<Span>,
+}
 
-/// Una interrogazione all'indice. Backlink e full-text passano di qui.
+/// Una interrogazione all'indice: il canale dati unico verso le view.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum IndexQuery {
+    /// I riferimenti entranti verso un documento. Li serve il **kernel** dal
+    /// grafo, che ne è l'unica fonte di verità.
     Backlinks {
         target: DocId,
+        #[serde(default)]
+        page: Option<Page>,
     },
-    /// Ricerca full-text con scope facoltativo e paginazione.
+    /// Ricerca full-text, servita dai provider registrati.
     FullText {
         query: String,
+        /// Dove cercare. `SearchScope::default()` = tutto il vault.
         #[serde(default)]
-        scope: FullTextScope,
+        scope: SearchScope,
         #[serde(default)]
-        pagination: Option<Pagination>,
+        page: Option<Page>,
     },
     /// La struttura (heading) di un documento. Come i backlink, non la serve un
     /// indice ma il **kernel**, dai modelli che già tiene: è il modo con cui una
     /// view legge la struttura parsata di un documento senza avere un
     /// `FormatProvider` (che, essendo un plugin, non ha). Documento inesistente
     /// → outline vuota, non un errore.
-    Outline {
-        doc: DocId,
-    },
+    ///
+    /// È l'unica risposta non paginata dell'enum, e per una ragione: cresce con
+    /// **un** documento, non col vault, e chi la chiede ha già in mano quel
+    /// documento intero.
+    Outline { doc: DocId },
     /// I tag dell'intero vault con la loro frequenza, serviti dal **kernel** dai
-    /// modelli (come [`IndexQuery::Outline`], è il canale metadata). Senza
-    /// argomenti: è un'aggregazione su tutto il vault, non su un documento.
-    Tags,
-    /// Nodi del grafo collegati a un documento con profondità e direzione.
+    /// modelli (come [`IndexQuery::Outline`], è il canale metadata), in ordine
+    /// di chiave canonica. Chi vuole i più usati ordina lui: l'ordine stabile
+    /// è quello che rende paginabile la risposta.
+    Tags {
+        #[serde(default)]
+        page: Option<Page>,
+    },
+    /// I vicini di un documento nel grafo dei link, fino a `depth` passi.
+    ///
+    /// È il grafo (7.3) che entra nel contratto: finché usciva solo da un
+    /// comando dell'app, una vista a grafo di terzi era impossibile e quella
+    /// ufficiale restava superficie privilegiata. `depth: 1` con
+    /// [`LinkDirection::Outbound`] è l'adiacenza pura — il mattone con cui si
+    /// ricostruisce il grafo intero, un documento alla volta.
     Neighbors {
         doc: DocId,
         #[serde(default)]
-        direction: GraphDirection,
-        #[serde(default = "default_neighbor_depth")]
-        depth: u32,
+        direction: LinkDirection,
+        /// Passi di distanza, almeno 1 (`0` → risposta vuota).
+        depth: u8,
         #[serde(default)]
-        pagination: Option<Pagination>,
+        page: Option<Page>,
     },
-    /// Proprietà e metadati dei documenti con filtri e ordinamento.
+    /// I documenti che soddisfano dei filtri sul frontmatter, con le loro
+    /// proprietà: la base di 9.1 (ricerca per campo), 8.4 (collezioni), 11
+    /// (database su file), 16 (template con query). La serve il **kernel**, che
+    /// il frontmatter di ogni nota ce l'ha già in cache.
     Properties {
+        /// In AND fra loro; vuoto = tutti i documenti.
         #[serde(default)]
-        filter: Option<serde_json::Value>,
-        sort: Option<String>,
+        filter: Vec<PropertyFilter>,
         #[serde(default)]
-        pagination: Option<Pagination>,
+        sort: Option<PropertySort>,
+        /// Le chiavi da restituire; vuoto = tutto il frontmatter. Esiste per
+        /// non far viaggiare l'intero frontmatter di mille note quando ne
+        /// servono due colonne — e per non doverlo aggiungere dopo il freeze,
+        /// quando un campo in più a un record è una migrazione.
+        #[serde(default)]
+        select: Vec<String>,
+        #[serde(default)]
+        page: Option<Page>,
     },
-    /// Valori unici di una proprietà con il loro count.
+    /// I valori distinti di una proprietà con quante note li portano: le
+    /// **faccette** di 9.1. Un elenco contribuisce con ogni suo elemento (una
+    /// nota con `autore: [a, b]` conta per `a` e per `b`), che è ciò che una
+    /// faccetta deve fare.
     PropertyValues {
         key: String,
+        /// Gli stessi filtri di [`IndexQuery::Properties`]: le faccette si
+        /// contano **sul sottoinsieme già filtrato**, o la navigazione per
+        /// faccette non converge mai.
         #[serde(default)]
-        pagination: Option<Pagination>,
+        filter: Vec<PropertyFilter>,
+        #[serde(default)]
+        page: Option<Page>,
     },
-    /// Diagnostica dello stato del vault: link rotti, orfani, asset inutilizzati.
+    /// Un controllo di salute del vault (7.2), servito dal **kernel** dal grafo
+    /// e dai modelli in memoria.
     VaultHealth {
+        check: HealthCheck,
         #[serde(default)]
-        check: HealthCheckKind,
+        page: Option<Page>,
     },
     /// Varco di estensione: query definite da un provider di terzi, con
     /// namespace (`ns` = plugin id). Un provider che non riconosce `ns`
@@ -376,15 +564,25 @@ pub enum IndexQuery {
     },
 }
 
-fn default_neighbor_depth() -> u32 {
-    1
-}
-
 /// Un riferimento entrante (backlink) verso un documento.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BacklinkRef {
     pub source: DocId,
     pub context: Option<String>,
+}
+
+/// Un vicino nel grafo (risposta a [`IndexQuery::Neighbors`]).
+///
+/// `via` è l'anello precedente del cammino, e c'è perché senza di esso una
+/// risposta con `depth > 1` è un sacchetto di nodi: con esso è un **albero**, e
+/// gli archi si ricostruiscono. L'arco è `via → doc` per i link uscenti,
+/// `doc → via` per gli entranti; a `depth: 1` `via` è il documento interrogato.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NeighborRef {
+    pub doc: DocId,
+    pub via: DocId,
+    /// Passi dal documento interrogato: 1 = adiacente.
+    pub depth: u8,
 }
 
 /// Un tag del vault con quante note lo portano (risposta a
@@ -414,67 +612,29 @@ pub struct SearchHit {
     pub highlights: Vec<Span>,
 }
 
-/// Un nodo nel grafo di collegamento fra documenti.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct NeighborRef {
-    pub doc: DocId,
-    pub direction: GraphDirection,
-    pub distance: u32,
-}
-
-/// Metadati di un documento (risposta a [`IndexQuery::Properties`]).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DocumentMetadata {
-    pub doc: DocId,
-    pub properties: serde_json::Value,
-}
-
-/// Un valore di proprietà con il suo count.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PropertyValue {
-    pub value: serde_json::Value,
-    pub count: u32,
-}
-
-/// Un problema rilevato dalla diagnostica del vault.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum HealthIssue {
-    BrokenLink { source: DocId, target: String },
-    OrphanedDoc { doc: DocId },
-    UnusedAsset { path: String },
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum IndexResult {
-    Backlinks(PaginatedResult<BacklinkRef>),
-    Search(PaginatedResult<SearchHit>),
+    Backlinks(Paged<BacklinkRef>),
+    Search(Paged<SearchHit>),
     /// Gli heading di un documento, in ordine di apparizione (risposta a
-    /// [`IndexQuery::Outline`]).
+    /// [`IndexQuery::Outline`]). L'unica risposta senza finestra: cresce con un
+    /// documento, non col vault.
     Outline(Vec<Heading>),
     /// I tag del vault con la loro frequenza (risposta a [`IndexQuery::Tags`]).
-    Tags(Vec<TagCount>),
-    /// Nodi del grafo adiacenti (risposta a [`IndexQuery::Neighbors`]).
-    Neighbors(PaginatedResult<NeighborRef>),
-    /// Metadati di documenti (risposta a [`IndexQuery::Properties`]).
-    Properties(PaginatedResult<DocumentMetadata>),
-    /// Valori unici di una proprietà con count (risposta a
-    /// [`IndexQuery::PropertyValues`]).
-    PropertyValues(PaginatedResult<PropertyValue>),
-    /// Problemi rilevati nella salute del vault (risposta a
-    /// [`IndexQuery::VaultHealth`]).
-    VaultHealth(Vec<HealthIssue>),
+    Tags(Paged<TagCount>),
+    /// I vicini nel grafo (risposta a [`IndexQuery::Neighbors`]), per distanza
+    /// crescente e poi per `DocId`.
+    Neighbors(Paged<NeighborRef>),
+    /// I documenti che passano i filtri, con le loro proprietà (risposta a
+    /// [`IndexQuery::Properties`]).
+    Properties(Paged<DocumentProperties>),
+    /// Le faccette di una proprietà (risposta a [`IndexQuery::PropertyValues`]).
+    PropertyValues(Paged<PropertyCount>),
+    /// I problemi trovati (risposta a [`IndexQuery::VaultHealth`]).
+    VaultHealth(Paged<HealthIssue>),
     /// Risposta a una [`IndexQuery::Custom`].
     Custom(serde_json::Value),
-}
-
-/// Un risultato paginato con metadati di paginazione.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PaginatedResult<T> {
-    pub items: Vec<T>,
-    pub offset: u32,
-    pub total: u32,
 }
 
 /// Un indice derivato dal contenuto del vault.
@@ -570,87 +730,6 @@ pub trait IndexProvider: Send + Sync {
 pub trait EventHandler: Send + Sync {
     fn subscribed(&self) -> EventMask;
     fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError>;
-}
-
-// ---------------------------------------------------------------------------
-// Import/export: migrazione dati fra formati
-// ---------------------------------------------------------------------------
-
-/// Destinazione per l'export di una selezione di documenti.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExportTarget {
-    pub id: String,
-    pub name: String,
-    /// Opzioni per il rendering (tema, formato carta, sanitizzazione, etc.).
-    pub options: serde_json::Value,
-}
-
-/// Esito di un'operazione di import: cosa è entrato nel vault e in che stato.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ImportReport {
-    /// Quanti documenti sono stati importati.
-    pub count: u32,
-    /// Log degli eventi durante l'import (errori, avvisi, info).
-    pub log: Vec<ImportLogEntry>,
-    /// Identificatore del batch, per rollback futuro.
-    pub batch_id: String,
-    /// Stato dell'import: completato, con errori, interrotto.
-    pub status: ImportStatus,
-}
-
-/// Una voce nel log di import.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "level", rename_all = "snake_case")]
-pub enum ImportLogEntry {
-    Info { message: String },
-    Warning { message: String },
-    Error { message: String },
-}
-
-/// Esito finale di un import.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ImportStatus {
-    /// Tutto OK, niente fallito.
-    #[default]
-    Success,
-    /// Alcuni documenti importati, alcuni errori.
-    PartialSuccess,
-    /// Nulla importato o import interrotto.
-    Failed,
-}
-
-/// Un provider che sa importare documenti da una sorgente.
-pub trait ImportProvider: Send + Sync {
-    /// Questo provider sa leggere il formato descritto? Es: riconosce il MIME
-    /// type o l'estensione.
-    fn can_handle(&self, descriptor: &FormatDescriptor) -> bool;
-    /// Importa documenti dalla sorgente (testo, file, URL, etc.) nel vault.
-    /// `source` è il payload grezzo (es: contenuto di un file, stringa,
-    /// JSON di metadati). Restituisce il rapporto di cosa è entrato e
-    /// in che stato.
-    fn import(
-        &mut self,
-        descriptor: &FormatDescriptor,
-        source: &str,
-        host: &mut dyn HostApi,
-    ) -> Result<ImportReport, PluginError>;
-}
-
-/// Un provider che sa esportare documenti in una destinazione.
-pub trait ExportProvider: Send + Sync {
-    /// Quali destinazioni questo provider sa offrire? Es: PDF, HTML, Pandoc,
-    /// sito statico, etc.
-    fn targets(&self) -> Vec<ExportTarget>;
-    /// Esporta una selezione di documenti verso una destinazione.
-    /// `doc_ids` è la lista di cosa esportare. Ritorna il payload
-    /// (file, testo, JSON, etc.) pronto per scrivere o caricare.
-    fn export(
-        &mut self,
-        doc_ids: Vec<DocId>,
-        target: &ExportTarget,
-        host: &mut dyn HostApi,
-    ) -> Result<Vec<u8>, PluginError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -752,6 +831,37 @@ mod tests {
         assert!(!abi_compatible(""), "una versione che non parsa si rifiuta");
         assert!(!abi_compatible("abc"));
         assert!(!abi_compatible("0"));
+    }
+
+    #[test]
+    fn a_window_keeps_the_total_of_what_it_did_not_return() {
+        let items: Vec<u32> = (0..10).collect();
+
+        let all = Paged::window(items.clone(), None);
+        assert_eq!(all.items.len(), 10, "senza finestra si restituisce tutto");
+        assert_eq!((all.offset, all.total), (0, 10));
+
+        let page = Paged::window(items.clone(), Some(Page::new(4, 3)));
+        assert_eq!(page.items, vec![4, 5, 6]);
+        assert_eq!(
+            (page.offset, page.total),
+            (4, 10),
+            "`total` è il conteggio PRIMA della finestra: senza, chi disegna \
+             non sa che esiste una pagina dopo"
+        );
+
+        let beyond = Paged::window(items.clone(), Some(Page::new(99, 5)));
+        assert!(
+            beyond.items.is_empty(),
+            "oltre la fine è vuoto, non un errore"
+        );
+        assert_eq!(beyond.total, 10);
+
+        let none = Paged::window(items, Some(Page::first(0)));
+        assert!(
+            none.items.is_empty(),
+            "limite 0 è nessun elemento — «tutti» si chiede omettendo la Page"
+        );
     }
 
     #[test]

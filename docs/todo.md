@@ -330,19 +330,52 @@ allegato resta un segnaposto finché non c'è il modello degli asset (§2.2).
 
 ### 1.6 `IndexQuery` — il canale dati verso le view
 
-- [ ] **Grafo**: `IndexQuery::Neighbors { doc, direction, depth }` — il grafo è
-      già nel kernel ma esce solo da un comando Tauri ad hoc (`graph_data`).
-      Senza variante, il grafo resta per sempre superficie privilegiata (7.3).
-- [ ] **Proprietà**: `IndexQuery::Properties { filter, sort, limit }` e
-      `IndexQuery::PropertyValues { key }` — è la base di 9.1 (field-specific,
-      faceted), 8.4 (collezioni), 11 (database su file), 16 (template con query).
-- [ ] **Full-text con filtri**: la variante attuale prende solo `query: String`.
-      Servono ambito (cartella, tag, tipo nota) e faccette, o il query engine
-      nascerà fuori dal contratto.
-- [ ] **Salute del vault**: link rotti, orfane, allegati inutilizzati — 7.2 ha
-      ~30 voci che sono tutte interrogazioni sullo stesso grafo già in memoria.
-- [ ] **Paginazione** in `IndexResult`: `Vec` nudi non reggono un vault grande
-      (24.1).
+- [x] **Grafo**: `IndexQuery::Neighbors { doc, direction, depth, page }` —
+      camminata in ampiezza sul `LinkGraph`, con `NeighborRef { doc, via, depth }`
+      (il `via` è l'anello precedente: senza, oltre il primo passo la risposta è
+      un sacchetto di nodi invece di un albero). Primo cliente: `graph_data`, che
+      non prende più gli archi da `Workspace::outgoing` — cioè da una scorciatoia
+      che un plugin non ha (7.3).
+- [x] **Proprietà**: `IndexQuery::Properties { filter, sort, select, page }` e
+      `PropertyValues { key, filter, page }`, servite dal kernel dal frontmatter
+      già in cache. `PropertyTest` è un variant (`exists`, `missing`, `equals`,
+      `not_equals`, `contains`, `>`, `<`) su `PropertyValue` del §1.5; le
+      faccette contano **sul sottoinsieme filtrato** e un elenco conta per ogni
+      suo elemento. Regole in un posto solo (`kernel/properties.rs`): specie
+      diverse non si confrontano (falso, non errore), chi non ha la chiave
+      ordina in fondo in entrambi i versi, la parità la rompe il `DocId` — o una
+      risposta paginata non è stabile.
+- [x] **Full-text con ambito**: `FullText { query, scope, page }` con
+      `SearchScope { folders, tags }` applicato **dentro tantivy** (nuovo campo
+      `folder` con ogni cartella antenata, schema v3), non post-filtrato: il
+      totale e le pagine restano veri.
+- [x] **Salute del vault**: `VaultHealth { check, page }` con `broken_links` e
+      `orphan_documents` dal grafo e dai link in cache; `HealthIssue` porta la
+      destinazione **com'era scritta** e lo span, che è ciò che serve per
+      correggerla.
+- [x] **Paginazione**: `Page { offset, limit }` nella domanda, `Paged { items,
+      offset, total }` nella risposta, `None` = tutto. Chi sa paginare alla
+      sorgente lo fa (tantivy: collector con offset + `Count`); il kernel
+      ritaglia con `Paged::window`. Fuori solo `Outline`, che cresce con un
+      documento e non col vault.
+
+*Trovato per strada e chiuso:* gli enum del contratto con tag interno e variante
+a scalare (`PropertyValue::Text`, `LinkTarget::Url`, `Inline::Text`) **non erano
+serializzabili** in JSON — `serde_json` fallisce a runtime su un newtype
+taggato. Latente finché nessuno li metteva sul filo; questa voce li ci mette.
+Ora il tag è adiacente (`kind` + `value`) e un round-trip in `abi/model.rs`
+elenca ogni variante.
+
+*Resta fuori, dichiarato:* le **faccette sul risultato full-text** (contare i
+tag di un insieme di hit) — servono un campo facet in tantivy e la decisione di
+chi le calcola, e oggi la stessa domanda si fa con `Tags`/`PropertyValues`; il
+**join fra full-text e proprietà** ("le note `tipo: progetto` che parlano di
+rust"), che è il query engine del §2.17/9.2 e non un campo in più qui; gli
+**allegati inutilizzati** di 7.2, che presuppongono il modello degli asset
+(§2.2) — oggi un PNG nel kernel non esiste, e infatti un riferimento a un
+allegato non viene contato fra i link rotti (sarebbe un falso positivo per
+immagine); le **ancore rotte** (`[[Nota#^blocco]]` verso un blocco sparito), che
+sono la coda del §1.5.
 
 ### 1.7 Import/export come trait, non come codice dell'app
 
