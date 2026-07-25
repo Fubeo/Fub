@@ -38,6 +38,6 @@ pub use traits::{
     ExportTarget, FullTextScope, GraphDirection, HealthCheckKind, HealthIssue, HostApi,
     ImportLogEntry, ImportProvider, ImportReport, ImportStatus, IndexProvider, IndexQuery,
     IndexResult, NeighborRef, Pagination, PaginatedResult, Plugin, PluginManifest, PropertyValue,
-    SearchHit, ViewProvider, ViewSpec,
+    SearchHit, ViewContext, ViewProvider, ViewSpec,
 };
 pub use ui::{ActionId, UiAction, UiNode, ViewUpdate};
