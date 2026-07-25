@@ -53,14 +53,14 @@ impl ViewProvider for BacklinksView {
             return Ok(placeholder("Nessuna nota aperta."));
         };
         let refs = match host.query_index(IndexQuery::Backlinks { target: active })? {
-            IndexResult::Backlinks(refs) => refs,
+            IndexResult::Backlinks(paginated) => paginated,
             other => {
                 return Err(PluginError::Internal(format!(
                     "query backlink: risposta fuori tema: {other:?}"
                 )))
             }
         };
-        Ok(build_backlinks_view(&refs))
+        Ok(build_backlinks_view(&refs.items))
     }
 
     fn on_action(

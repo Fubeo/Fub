@@ -12,6 +12,7 @@ use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit, TagCount, ViewSpec};
 use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::Pagination;
 use fubmd_features::{
     BacklinksView, OutlineView, SearchIndex, TagPanelView, VersionRef, VersionStore,
     VersioningHandler, BACKLINKS_ID, OUTLINE_ID, SEARCH_ID, TAGS_ID, VERSIONING_ID,
@@ -491,10 +492,11 @@ fn search(
     let ws = ws.lock().unwrap();
     let q = IndexQuery::FullText {
         query,
-        limit: limit.unwrap_or(50),
+        scope: Default::default(),
+        pagination: Some(Pagination::first(limit.unwrap_or(50))),
     };
     match ws.query_index(q).map_err(|e| e.to_string())? {
-        IndexResult::Search(hits) => Ok(hits),
+        IndexResult::Search(paginated) => Ok(paginated.items),
         other => Err(format!("l'indice ha risposto fuori tema: {other:?}")),
     }
 }

@@ -10,6 +10,7 @@
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{IndexQuery, IndexResult, SearchHit};
+use fubmd_abi::Pagination;
 use fubmd_features::{SearchIndex, SEARCH_ID};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
@@ -62,9 +63,10 @@ impl Vault {
 fn search(ws: &Workspace, query: &str) -> Vec<SearchHit> {
     match ws.query_index(IndexQuery::FullText {
         query: query.to_string(),
-        limit: 20,
+        scope: Default::default(),
+        pagination: Some(Pagination::first(20)),
     }) {
-        Ok(IndexResult::Search(hits)) => hits,
+        Ok(IndexResult::Search(paginated)) => paginated.items,
         other => panic!("atteso Search per «{query}», trovato {other:?}"),
     }
 }

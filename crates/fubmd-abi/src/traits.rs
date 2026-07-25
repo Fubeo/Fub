@@ -229,6 +229,60 @@ pub trait ViewProvider: Send + Sync {
 }
 
 // ---------------------------------------------------------------------------
+// Paginazione e filtri
+// ---------------------------------------------------------------------------
+
+/// Parametri di paginazione per le query.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Pagination {
+    pub offset: u32,
+    pub limit: u32,
+}
+
+impl Pagination {
+    pub fn first(limit: u32) -> Self {
+        Pagination { offset: 0, limit }
+    }
+}
+
+/// Direzione di attraversamento nel grafo di collegamento fra documenti.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphDirection {
+    /// Link in entrata (backlink, chi mi referenzia).
+    Inbound,
+    /// Link in uscita (forward link, io referenzio).
+    Outbound,
+    /// Entrambi.
+    #[default]
+    Both,
+}
+
+/// Ambito della ricerca full-text.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct FullTextScope {
+    /// Cartella per filtrare (prefisso di path).
+    pub folder: Option<String>,
+    /// Tag per filtrare.
+    pub tags: Vec<String>,
+    /// Tipo di nota (estensione del formato).
+    pub format: Option<String>,
+}
+
+/// Tipo di health check sul vault.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HealthCheckKind {
+    /// Link che puntano a documenti inesistenti.
+    #[default]
+    BrokenLinks,
+    /// Documenti senza backlink (orfani).
+    OrphanedDocs,
+    /// Asset referenziati in nessun documento.
+    UnusedAssets,
+}
+
+// ---------------------------------------------------------------------------
 // Index (ricerca, backlink)
 // ---------------------------------------------------------------------------
 
@@ -239,9 +293,13 @@ pub enum IndexQuery {
     Backlinks {
         target: DocId,
     },
+    /// Ricerca full-text con scope facoltativo e paginazione.
     FullText {
         query: String,
-        limit: u32,
+        #[serde(default)]
+        scope: FullTextScope,
+        #[serde(default)]
+        pagination: Option<Pagination>,
     },
     /// La struttura (heading) di un documento. Come i backlink, non la serve un
     /// indice ma il **kernel**, dai modelli che già tiene: è il modo con cui una
@@ -255,6 +313,35 @@ pub enum IndexQuery {
     /// modelli (come [`IndexQuery::Outline`], è il canale metadata). Senza
     /// argomenti: è un'aggregazione su tutto il vault, non su un documento.
     Tags,
+    /// Nodi del grafo collegati a un documento con profondità e direzione.
+    Neighbors {
+        doc: DocId,
+        #[serde(default)]
+        direction: GraphDirection,
+        #[serde(default = "default_neighbor_depth")]
+        depth: u32,
+        #[serde(default)]
+        pagination: Option<Pagination>,
+    },
+    /// Proprietà e metadati dei documenti con filtri e ordinamento.
+    Properties {
+        #[serde(default)]
+        filter: Option<serde_json::Value>,
+        sort: Option<String>,
+        #[serde(default)]
+        pagination: Option<Pagination>,
+    },
+    /// Valori unici di una proprietà con il loro count.
+    PropertyValues {
+        key: String,
+        #[serde(default)]
+        pagination: Option<Pagination>,
+    },
+    /// Diagnostica dello stato del vault: link rotti, orfani, asset inutilizzati.
+    VaultHealth {
+        #[serde(default)]
+        check: HealthCheckKind,
+    },
     /// Varco di estensione: query definite da un provider di terzi, con
     /// namespace (`ns` = plugin id). Un provider che non riconosce `ns`
     /// risponde `PluginError::BadArgs`.
@@ -262,6 +349,10 @@ pub enum IndexQuery {
         ns: String,
         query: serde_json::Value,
     },
+}
+
+fn default_neighbor_depth() -> u32 {
+    1
 }
 
 /// Un riferimento entrante (backlink) verso un documento.
@@ -298,18 +389,67 @@ pub struct SearchHit {
     pub highlights: Vec<Span>,
 }
 
+/// Un nodo nel grafo di collegamento fra documenti.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NeighborRef {
+    pub doc: DocId,
+    pub direction: GraphDirection,
+    pub distance: u32,
+}
+
+/// Metadati di un documento (risposta a [`IndexQuery::Properties`]).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DocumentMetadata {
+    pub doc: DocId,
+    pub properties: serde_json::Value,
+}
+
+/// Un valore di proprietà con il suo count.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PropertyValue {
+    pub value: serde_json::Value,
+    pub count: u32,
+}
+
+/// Un problema rilevato dalla diagnostica del vault.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum HealthIssue {
+    BrokenLink { source: DocId, target: String },
+    OrphanedDoc { doc: DocId },
+    UnusedAsset { path: String },
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum IndexResult {
-    Backlinks(Vec<BacklinkRef>),
-    Search(Vec<SearchHit>),
+    Backlinks(PaginatedResult<BacklinkRef>),
+    Search(PaginatedResult<SearchHit>),
     /// Gli heading di un documento, in ordine di apparizione (risposta a
     /// [`IndexQuery::Outline`]).
     Outline(Vec<Heading>),
     /// I tag del vault con la loro frequenza (risposta a [`IndexQuery::Tags`]).
     Tags(Vec<TagCount>),
+    /// Nodi del grafo adiacenti (risposta a [`IndexQuery::Neighbors`]).
+    Neighbors(PaginatedResult<NeighborRef>),
+    /// Metadati di documenti (risposta a [`IndexQuery::Properties`]).
+    Properties(PaginatedResult<DocumentMetadata>),
+    /// Valori unici di una proprietà con count (risposta a
+    /// [`IndexQuery::PropertyValues`]).
+    PropertyValues(PaginatedResult<PropertyValue>),
+    /// Problemi rilevati nella salute del vault (risposta a
+    /// [`IndexQuery::VaultHealth`]).
+    VaultHealth(Vec<HealthIssue>),
     /// Risposta a una [`IndexQuery::Custom`].
     Custom(serde_json::Value),
+}
+
+/// Un risultato paginato con metadati di paginazione.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PaginatedResult<T> {
+    pub items: Vec<T>,
+    pub offset: u32,
+    pub total: u32,
 }
 
 /// Un indice derivato dal contenuto del vault.
