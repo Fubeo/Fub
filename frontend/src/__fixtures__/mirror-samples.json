@@ -63,6 +63,10 @@
         "start": 0,
         "end": 3
       }
+    },
+    {
+      "kind": "run_search",
+      "query": "q"
     }
   ],
   "KernelEvent": [

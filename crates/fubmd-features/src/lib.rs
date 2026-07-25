@@ -10,6 +10,9 @@
 //! - [`outline`] — il pannello struttura come
 //!   [`ViewProvider`](fubmd_abi::traits::ViewProvider): legge gli heading del
 //!   documento attivo dal kernel via `IndexQuery::Outline` (M2).
+//! - [`tags`] — il pannello tag come
+//!   [`ViewProvider`](fubmd_abi::traits::ViewProvider): aggrega i tag del vault
+//!   via `IndexQuery::Tags`, click→ricerca (M2).
 //! - [`search`] — [`IndexProvider`](fubmd_abi::traits::IndexProvider) full-text
 //!   su tantivy, persistente e incrementale (M2).
 //! - [`versioning`] — snapshot per-file del vault come
@@ -19,6 +22,7 @@
 pub mod backlinks;
 pub mod outline;
 pub mod search;
+pub mod tags;
 pub mod versioning;
 
 /// Doppio dell'host per i test unitari delle feature (in memoria, orologio
@@ -29,5 +33,6 @@ mod testing;
 
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
+pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
 pub use search::{SearchIndex, SEARCH_ID};
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};

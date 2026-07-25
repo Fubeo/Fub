@@ -179,8 +179,10 @@ L'outline è il secondo provider e il primo a usare il **canale metadata**: chie
 gli heading del documento attivo con `IndexQuery::Outline` e traduce il click in
 `ViewUpdate::Reveal { doc_id, span }`, che porta l'editor sull'heading (lo `span`
 è in byte UTF-8, il frontend lo mappa su CodeMirror col ponte in
-`frontend/src/offsets.ts`). Prove end-to-end col kernel vero:
-`crates/fubmd-features/tests/{backlinks,outline}_view_e2e.rs`.
+`frontend/src/offsets.ts`). Il tag panel è il terzo: aggrega i tag del vault con
+`IndexQuery::Tags` e traduce il click in `ViewUpdate::RunSearch { query }`, che la
+shell esegue riusando il pannello di ricerca. Prove end-to-end col kernel vero:
+`crates/fubmd-features/tests/{backlinks,outline,tags}_view_e2e.rs`.
 
 **Il varco unico degli alberi di UI.** I provider si registrano con
 `Workspace::register_view_provider(id, trust, provider)`, dove
@@ -279,15 +281,16 @@ non una capacità del contratto; a M5 il suo equivalente per un componente è un
 preopen WASI sulla stessa radice. Ciò che la firma garantisce è che un provider
 di terzi *possa* persistere, non che tutti persistano allo stesso modo.
 
-**Backlink e outline non passano dai provider: li serve il kernel.**
-`Workspace::query_index` risponde a `IndexQuery::Backlinks` dal grafo e a
-`IndexQuery::Outline` dai `DocumentModel` che già tiene — entrambe hanno una sola
-fonte di verità *dentro* il kernel, e duplicarla in un indice creerebbe una
-seconda verità divergente. L'outline in particolare è il modo con cui una view
-legge la **struttura parsata** di un documento senza avere un `FormatProvider`
-(che, essendo un plugin, non ha): stesso canale (`HostApi::query_index`), stesso
-dispatch. Tutto il resto va ai provider in ordine di registrazione: vince il
-primo che non risponde `BadArgs`, che per contratto significa "non è roba mia".
+**Alcune query le serve il kernel, non i provider.** `Workspace::query_index`
+risponde direttamente a `IndexQuery::Backlinks` (dal grafo), `Outline` (dai
+`DocumentModel` di un documento) e `Tags` (aggregati dai `DocumentModel`
+dell'intero vault): hanno tutte una sola fonte di verità *dentro* il kernel, e
+duplicarla in un indice creerebbe una seconda verità divergente. `Outline` e
+`Tags` sono il **canale metadata** — il modo con cui una view legge la struttura
+parsata (heading, tag) senza avere un `FormatProvider` (che, essendo un plugin,
+non ha): stesso canale (`HostApi::query_index`), stesso dispatch. Tutto il resto
+va ai provider in ordine di registrazione: vince il primo che non risponde
+`BadArgs`, che per contratto significa "non è roba mia".
 
 **`snippet` è testo, mai markup.** L'evidenziazione viaggia separata, in
 `highlights: Vec<Span>` (byte *dentro* `snippet`): un provider di terzi non
@@ -377,7 +380,7 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 |---|---|---|---|
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
 | `IndexProvider` | — (backlink via grafo del kernel) | `SearchIndex` (tantivy) **M2** ✅ | `activate`/`flush` con `HostApi`: persiste via `data_*` |
-| `ViewProvider` | `BacklinksView`, `OutlineView` ✅ **M2** | **M2** (graph/tag) | due provider veri; `query_index`+`active_document`; l'outline apre il canale metadata (`IndexQuery::Outline`) e `ViewUpdate::Reveal` |
+| `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView` ✅ **M2** | **M2** (graph-data) | tre provider veri; `query_index`+`active_document`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch` |
 | `CommandProvider` | — | **M3** (command palette) | keybinding non vincolante |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |

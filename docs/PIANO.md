@@ -136,11 +136,11 @@ come proxy. Il kernel vede solo `dyn Trait`.
   risolto), rename, cestino — e versioning del vault (le decisioni D1–D8 sono
   nella tabella qui sopra); organizzazione della sidebar stile
   make.md — albero, icone, folder notes, spazi
-  ([ORGANIZZAZIONE_VAULT.md](ORGANIZZAZIONE_VAULT.md)); backlink e **outline**
-  sono ora `ViewProvider` veri, con le capacità host che mancavano
-  (`query_index` — incluso il canale metadata `IndexQuery::Outline` —,
-  `active_document`) e il giro azione→`ViewUpdate` chiuso (`Navigate`, `Reveal`).
-  Restano: cache metadata/body, graph view (Canvas/WebGL), tag panel.
+  ([ORGANIZZAZIONE_VAULT.md](ORGANIZZAZIONE_VAULT.md)); backlink, **outline** e
+  **tag** sono ora `ViewProvider` veri, con le capacità host che mancavano
+  (`query_index` — col canale metadata `IndexQuery::Outline`/`Tags` —,
+  `active_document`) e il giro azione→`ViewUpdate` chiuso (`Navigate`, `Reveal`,
+  `RunSearch`). Restano: cache metadata/body, graph view (Canvas/WebGL).
 - **M3 — Fedeltà editor** → [dettaglio](milestones/M3-editor-fidelity.md)
   Live preview in-editor (decorazioni CodeMirror sugli `Span`), command palette
   (`CommandProvider`), settings dichiarativi, rendering callout/embed/math.

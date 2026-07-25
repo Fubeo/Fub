@@ -514,6 +514,9 @@ impl IndexProvider for SearchIndex {
             IndexQuery::Outline { .. } => Err(PluginError::BadArgs(
                 "outline: la servono i modelli del kernel".to_string(),
             )),
+            IndexQuery::Tags => Err(PluginError::BadArgs(
+                "tags: li aggrega il kernel dai modelli".to_string(),
+            )),
             IndexQuery::Custom { ns, .. } => {
                 Err(PluginError::BadArgs(format!("namespace sconosciuto: {ns}")))
             }

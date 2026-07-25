@@ -79,9 +79,10 @@ reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
   riceverli. È la stessa porta di `Workspace::query_index` e lo stesso dispatch:
   alcune query le serve il **kernel** dalle sue fonti di verità — i backlink dal
   grafo, l'**outline** (`IndexQuery::Outline`) dai `DocumentModel` — il resto va
-  ai provider registrati. `IndexQuery::Outline` è il **canale metadata**: senza,
-  una view non potrebbe leggere la struttura parsata di un documento, perché non
-  ha un `FormatProvider` con cui parsarlo. È `&self`: una query non muta, e così
+  ai provider registrati. `IndexQuery::Outline` (struttura di un documento) e
+  `IndexQuery::Tags` (i tag del vault) sono il **canale metadata**: senza, una
+  view non potrebbe leggere la struttura parsata, perché non ha un
+  `FormatProvider` con cui parsare. È `&self`: una query non muta, e così
   una view la serve sotto il prestito *condiviso* del workspace, senza entrare in
   conflitto con la direzione della concorrenza (`Mutex`→`RwLock`).
 

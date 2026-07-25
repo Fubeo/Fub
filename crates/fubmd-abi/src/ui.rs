@@ -137,6 +137,12 @@ pub enum ViewUpdate {
         doc_id: String,
         span: crate::model::Span,
     },
+    /// Chiedi al core di eseguire una **ricerca** e mostrarne i risultati (usato
+    /// dal pannello tag: cliccare un tag cerca le note che lo portano). La
+    /// query è la stessa stringa che l'utente potrebbe digitare nella ricerca.
+    RunSearch {
+        query: String,
+    },
 }
 
 #[cfg(test)]
