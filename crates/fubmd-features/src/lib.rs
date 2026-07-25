@@ -33,6 +33,6 @@ mod testing;
 
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
-pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
 pub use search::{SearchIndex, SEARCH_ID};
+pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};

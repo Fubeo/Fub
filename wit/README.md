@@ -7,6 +7,7 @@ WASM di [M5](../docs/milestones/M5-wasm-runtime.md) sia meccanico e non una rinc
 a firme non serializzabili.
 
 - Contratto: [`fubmd/abi.wit`](fubmd/abi.wit) — package `fubmd:abi@0.1.0`.
+- Contratto **com'era**, versione per versione: [`frozen/`](frozen/README.md).
 - Mapping tipo-abi → costrutto WIT: [docs/architecture/traits.md](../docs/architecture/traits.md).
 - Modello dati: [docs/architecture/data-model.md](../docs/architecture/data-model.md).
 
@@ -59,12 +60,21 @@ funzione cambiato, parametro rinominato o ritipato, `host` riapparso, campi e
 casi riordinati — devono tutte farlo diventare rosso, o non sta verificando
 niente.
 
-### Limite noto
+## Additività: l'altra promessa, l'altro test
 
-L'**ordine** dei casi di un variant è confrontato con l'ordine in cui il test li
-elenca, non con quello dell'enum Rust: il compilatore garantisce che ci siano
-tutti, non che siano in fila. Riordinare il WIT è rosso; riordinare l'enum Rust
-senza toccare il test, no.
+Test: [`crates/fubmd-abi/tests/wit_additivity.rs`](../crates/fubmd-abi/tests/wit_additivity.rs).
+
+La conformità dice che abi e WIT concordano **oggi, fra di loro**. Non dice
+niente su ieri: si può rinominare un campo in tutti e due, restare conformi, e
+aver rotto ogni plugin già compilato. E `abi_compatible` — la regola a runtime —
+in quel caso dice **sì**, perché la minor non è cambiata.
+
+Il presidio è una copia del contratto per ogni versione pubblicata in
+[`frozen/`](frozen/README.md), più un test che verifica che il contratto attuale
+sappia ancora servire ognuna di quelle che dichiara di servire: campi, casi,
+alias, firme e world già pubblicati devono essere intatti **e nella stessa
+posizione**; il nuovo può stare solo in coda. Regole complete, e come si aggiorna
+la linea di base, in [`frozen/README.md`](frozen/README.md).
 
 ## Convenzioni
 

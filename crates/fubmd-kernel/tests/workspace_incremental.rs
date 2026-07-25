@@ -51,6 +51,7 @@ impl FormatProvider for LinkListProvider {
             }
             model.links.push(Link {
                 target: LinkTarget::wiki(page),
+                embed: false,
                 span,
                 context: Some(format!("{} → {page}", ctx.doc_id)),
             });

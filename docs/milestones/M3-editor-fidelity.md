@@ -61,7 +61,8 @@ Oggi il provider markdown emette callout/tabelle/embed/math come
   [../architecture/data-model.md](../architecture/data-model.md).
 - Gli `attrs` portano i parametri (tipo di callout, `foldable`, sorgente math).
   I `custom_kind` sconosciuti restano resi come blocco generico.
-- **Embed** (`![[..]]`, `LinkTarget::Wiki { embed: true }`): il protocollo di
+- **Embed** (`![[..]]`, `Link { embed: true }` — il flag sta sul riferimento,
+  non sul bersaglio, così che ci ricada anche `![](immagine.png)`): il protocollo di
   transclusion è **già cablato** (deciso in revisione concettuale, vedi
   [../architecture/ui-protocol.md](../architecture/ui-protocol.md)): il provider
   emette il placeholder `.embed`, il kernel serve `render_embed(page, heading?)`

@@ -140,8 +140,18 @@ pub enum ViewUpdate {
     /// Chiedi al core di eseguire una **ricerca** e mostrarne i risultati (usato
     /// dal pannello tag: cliccare un tag cerca le note che lo portano). La
     /// query è la stessa stringa che l'utente potrebbe digitare nella ricerca.
-    RunSearch {
-        query: String,
+    RunSearch { query: String },
+    /// Varco di estensione, con namespace (`ns` = plugin id): un intento che il
+    /// protocollo non prevede ancora. **La shell che non riconosce `ns` non fa
+    /// nulla** — degrado garbato, stessa semantica degli altri enum di confine
+    /// ([`Event::Custom`](crate::Event::Custom),
+    /// [`IndexQuery::Custom`](crate::traits::IndexQuery::Custom)). È il motivo
+    /// per cui gli intenti nuovi non sono più un cambio di versione: un
+    /// intento sperimentale nasce qui, e solo se si dimostra universale viene
+    /// promosso a variante propria (quello sì, un cambio di minor).
+    Custom {
+        ns: String,
+        payload: serde_json::Value,
     },
 }
 

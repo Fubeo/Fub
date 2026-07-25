@@ -8,6 +8,7 @@
 //! indicizzato).
 
 use fubmd_abi::error::PluginError;
+use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::traits::{
     HostApi, IndexQuery, IndexResult, TagCount, ViewPlacement, ViewProvider, ViewSpec,
 };
@@ -31,7 +32,13 @@ impl ViewProvider for TagPanelView {
         vec![ViewSpec {
             id: TAGS_VIEW.to_string(),
             title: "Tag".to_string(),
-            placement: ViewPlacement::LeftSidebar,
+            // Finché il `placement` era lettera morta la shell metteva il
+            // pannello a destra per conoscenza privata; ora che il montaggio
+            // lo rispetta, la dichiarazione dice la stessa cosa.
+            placement: ViewPlacement::RightSidebar,
+            // I tag sono aggregati vault-wide: invecchiano a ogni modifica
+            // dell'indice, non al cambio di nota.
+            refresh: EventMask(vec![EventKind::IndexUpdated]),
         }]
     }
 
@@ -110,8 +117,14 @@ mod tests {
     #[test]
     fn lists_tags_with_counts_and_search_actions() {
         let tags = [
-            TagCount { name: "rust".into(), count: 3 },
-            TagCount { name: "a/b".into(), count: 1 },
+            TagCount {
+                name: "rust".into(),
+                count: 3,
+            },
+            TagCount {
+                name: "a/b".into(),
+                count: 1,
+            },
         ];
         let json = serde_json::to_string(&build_tags_view(&tags)).unwrap();
         assert!(json.contains("#rust"));
@@ -122,7 +135,8 @@ mod tests {
     #[test]
     fn render_asks_the_host_for_the_vault_tags() {
         let host = MemoryHost::new().con_tags(&[("rust", 2), ("note", 5)]);
-        let json = serde_json::to_string(&TagPanelView.render_view(TAGS_VIEW, &host).unwrap()).unwrap();
+        let json =
+            serde_json::to_string(&TagPanelView.render_view(TAGS_VIEW, &host).unwrap()).unwrap();
         assert!(json.contains("#rust"));
         assert!(json.contains("#note"));
     }
@@ -140,6 +154,11 @@ mod tests {
                 &mut host,
             )
             .unwrap();
-        assert_eq!(update, ViewUpdate::RunSearch { query: "tags:rust".into() });
+        assert_eq!(
+            update,
+            ViewUpdate::RunSearch {
+                query: "tags:rust".into()
+            }
+        );
     }
 }

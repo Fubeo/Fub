@@ -12,6 +12,7 @@
 //! pezzo del percorso è cablato nell'app.
 
 use fubmd_abi::error::PluginError;
+use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::traits::{
     BacklinkRef, HostApi, IndexQuery, IndexResult, ViewPlacement, ViewProvider, ViewSpec,
 };
@@ -39,6 +40,10 @@ impl ViewProvider for BacklinksView {
             id: BACKLINKS_VIEW.to_string(),
             title: "Backlink".to_string(),
             placement: ViewPlacement::RightSidebar,
+            // I backlink invecchiano quando il grafo cambia: ogni modifica al
+            // vault arriva come `IndexUpdated` (il cambio di nota attiva è
+            // della shell, non un evento).
+            refresh: EventMask(vec![EventKind::IndexUpdated]),
         }]
     }
 

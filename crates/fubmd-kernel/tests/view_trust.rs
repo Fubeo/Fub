@@ -43,6 +43,7 @@ impl ViewProvider for Puppet {
             id: self.id.to_string(),
             title: self.id.to_string(),
             placement: ViewPlacement::RightSidebar,
+            refresh: Default::default(),
         }]
     }
 

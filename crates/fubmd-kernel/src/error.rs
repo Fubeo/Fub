@@ -25,6 +25,11 @@ pub enum KernelError {
     AlreadyExists(String),
     #[error("path fuori dal vault: {0}")]
     OutsideVault(Utf8PathBuf),
+    /// Il rename È riuscito (file, grafo, evento), ma la riscrittura dei
+    /// wikilink entranti è fallita in una o più sorgenti — le altre sono
+    /// state comunque completate.
+    #[error("rename riuscito, ma la riscrittura dei link è fallita per: {0}")]
+    LinkRewrite(String),
     #[error("path non UTF-8: {0}")]
     NonUtf8Path(std::path::PathBuf),
     #[error(transparent)]

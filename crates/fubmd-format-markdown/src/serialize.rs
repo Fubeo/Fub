@@ -9,7 +9,9 @@
 //! `Span` (vedi il contratto: `FormatProvider::serialize`). Il frontmatter
 //! mantiene l'ordine delle chiavi (`serde_json` con `preserve_order`).
 
-use fubmd_abi::model::{Block, DocumentModel, Inline, LinkTarget};
+use fubmd_abi::model::{
+    custom_kind, Block, ColumnAlign, DocumentModel, Inline, LinkTarget, TableRow,
+};
 
 pub fn serialize(model: &DocumentModel) -> String {
     let mut out = String::new();
@@ -48,12 +50,61 @@ fn write_block(block: &Block, out: &mut String) {
                 } else {
                     out.push_str("- ");
                 }
+                // Il marcatore si riscrive col **simbolo che aveva**: uno stato
+                // personalizzato (`[/]`, `[-]`) che tornasse `[x]` o `[ ]` sarebbe
+                // una perdita silenziosa, e la lista degli stati non è chiusa.
+                if let Some(t) = &item.task {
+                    out.push('[');
+                    out.push(t.symbol.unwrap_or(' '));
+                    out.push_str("] ");
+                }
                 let mut inner = String::new();
-                for b in item {
+                for b in &item.blocks {
                     write_block(b, &mut inner);
                 }
                 out.push_str(inner.trim_end());
                 out.push('\n');
+            }
+        }
+        Block::Table {
+            head, rows, align, ..
+        } => {
+            let columns = head
+                .iter()
+                .chain(rows.iter())
+                .map(|r| r.cells.len())
+                .max()
+                .unwrap_or(0);
+            let write_row = |row: &TableRow, out: &mut String| {
+                out.push('|');
+                for i in 0..columns {
+                    out.push(' ');
+                    if let Some(c) = row.cells.get(i) {
+                        write_inlines(&c.inlines, out);
+                    }
+                    out.push_str(" |");
+                }
+                out.push('\n');
+            };
+            // La riga di separazione è obbligatoria in GFM: una tabella senza
+            // intestazione si genera con un'intestazione vuota, o non è una
+            // tabella quando la si rilegge.
+            match head {
+                Some(h) => write_row(h, out),
+                None => write_row(&TableRow { cells: Vec::new() }, out),
+            }
+            out.push('|');
+            for i in 0..columns {
+                out.push_str(match align.get(i).copied().unwrap_or(ColumnAlign::None) {
+                    ColumnAlign::None => " --- |",
+                    ColumnAlign::Left => " :-- |",
+                    ColumnAlign::Center => " :-: |",
+                    ColumnAlign::Right => " --: |",
+                });
+            }
+            out.push('\n');
+            for r in rows {
+                write_row(r, out);
             }
         }
         Block::CodeBlock { lang, code, .. } => {
@@ -86,7 +137,14 @@ fn write_block(block: &Block, out: &mut String) {
             blocks,
             ..
         } => {
-            if custom_kind == "callout" {
+            if custom_kind == custom_kind::FOOTNOTE_DEFINITION {
+                let label = attrs.get("label").and_then(|v| v.as_str()).unwrap_or("1");
+                let mut inner = String::new();
+                for b in blocks {
+                    write_block(b, &mut inner);
+                }
+                out.push_str(&format!("[^{label}]: {}\n", inner.trim()));
+            } else if custom_kind == custom_kind::CALLOUT {
                 let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
                 out.push_str(&format!("> [!{}]\n", ty));
                 let mut inner = String::new();
@@ -135,22 +193,33 @@ fn write_inline(inline: &Inline, out: &mut String) {
             out.push('#');
             out.push_str(name);
         }
-        Inline::Link { target, label, .. } => write_link(target, label.as_deref(), out),
+        Inline::Link {
+            target,
+            label,
+            embed,
+            ..
+        } => write_link(target, label.as_deref(), *embed, out),
+        Inline::Custom {
+            custom_kind, attrs, ..
+        } if custom_kind == custom_kind::FOOTNOTE_REFERENCE => {
+            if let Some(label) = attrs.get("label").and_then(|v| v.as_str()) {
+                out.push_str(&format!("[^{label}]"));
+            }
+        }
         Inline::Custom { .. } => {}
     }
 }
 
-fn write_link(target: &LinkTarget, label: Option<&[Inline]>, out: &mut String) {
+fn write_link(target: &LinkTarget, label: Option<&[Inline]>, embed: bool, out: &mut String) {
+    if embed {
+        out.push('!');
+    }
     match target {
         LinkTarget::Wiki {
             page,
             heading,
             block,
-            embed,
         } => {
-            if *embed {
-                out.push('!');
-            }
             out.push_str("[[");
             out.push_str(page);
             if let Some(h) = heading {

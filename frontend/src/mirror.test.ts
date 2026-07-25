@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
-import type { KernelEvent, Span, UiNode, VersionRef, ViewUpdate } from "./api";
-// La fixture è generata dai tipi Rust (serde) —
-// vedi `crates/fubmd-features/tests/ts_mirror.rs`.
+import type {
+  BacklinkRef,
+  EmbedContent,
+  GraphData,
+  KernelEvent,
+  SearchHit,
+  Span,
+  TagCount,
+  TrashEntry,
+  UiNode,
+  VaultInfo,
+  VersionRef,
+  ViewSpec,
+  ViewUpdate,
+  WorkspaceMeta,
+} from "./api";
+// Le fixture sono generate dai tipi Rust (serde) — vedi
+// `crates/fubmd-features/tests/ts_mirror.rs` (tipi del contratto) e
+// `crates/fubmd-app/tests/ts_mirror_app.rs` (tipi dell'app).
 import samples from "./__fixtures__/mirror-samples.json";
+import appSamples from "./__fixtures__/mirror-samples-app.json";
 
 // L'altra metà del presidio dei mirror (la prima è `crates/fubmd-abi`… ehm,
 // `crates/fubmd-features/tests/ts_mirror.rs`): la fixture è generata dai tipi
@@ -19,6 +36,7 @@ import samples from "./__fixtures__/mirror-samples.json";
 // silenzio, che è esattamente il buco che questo confine aveva.
 
 const fixture = samples as unknown as Record<string, unknown[]>;
+const appFixture = appSamples as unknown as Record<string, unknown[]>;
 
 function assertNever(x: never): never {
   throw new Error(`discriminante non gestito nel mirror TS: ${JSON.stringify(x)}`);
@@ -53,6 +71,7 @@ function touchViewUpdate(u: ViewUpdate): void {
     case "navigate":
     case "reveal":
     case "run_search":
+    case "custom":
       return;
     default:
       assertNever(u);
@@ -85,13 +104,51 @@ function keysOf<T extends object>(spec: Record<keyof T, true>): string[] {
 const RECORD_KEYS: Record<string, string[]> = {
   Span: keysOf<Span>({ start: true, end: true }),
   VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
+  SearchHit: keysOf<SearchHit>({ doc: true, score: true, snippet: true, highlights: true }),
+  BacklinkRef: keysOf<BacklinkRef>({ source: true, context: true }),
+  TrashEntry: keysOf<TrashEntry>({ id: true, original: true, deleted_at: true, size: true }),
+  TagCount: keysOf<TagCount>({ name: true, count: true }),
+  ViewSpec: keysOf<ViewSpec>({ id: true, title: true, placement: true, refresh: true }),
+};
+
+// I tipi che arrivano dall'APP (fixture gemella, `mirror-samples-app.json`).
+const APP_RECORD_KEYS: Record<string, string[]> = {
+  VaultInfo: keysOf<VaultInfo>({
+    root: true,
+    documents: true,
+    extensions: true,
+    versioning: true,
+  }),
+  EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true }),
+  GraphData: keysOf<GraphData>({ nodes: true, edges: true }),
+  WorkspaceMeta: keysOf<WorkspaceMeta>({
+    icons: true,
+    pinned: true,
+    order: true,
+    spaces: true,
+  }),
 };
 
 describe("mirror TS↔Rust", () => {
   it("la fixture copre tutti i tipi mirrorati, e nessuno è vuoto", () => {
-    for (const type of ["UiNode", "ViewUpdate", "KernelEvent", "Span", "VersionRef"]) {
+    for (const type of [
+      "UiNode",
+      "ViewUpdate",
+      "KernelEvent",
+      "Span",
+      "VersionRef",
+      "SearchHit",
+      "BacklinkRef",
+      "TrashEntry",
+      "TagCount",
+      "ViewSpec",
+    ]) {
       expect(fixture[type], `manca il tipo ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
+    }
+    for (const type of Object.keys(APP_RECORD_KEYS)) {
+      expect(appFixture[type], `manca il tipo ${type} nella fixture dell'app`).toBeTruthy();
+      expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
   });
 
@@ -112,6 +169,23 @@ describe("mirror TS↔Rust", () => {
       for (const sample of fixture[type]) {
         expect(Object.keys(sample as object).sort()).toEqual(keys);
       }
+    }
+    for (const [type, keys] of Object.entries(APP_RECORD_KEYS)) {
+      for (const sample of appFixture[type]) {
+        expect(Object.keys(sample as object).sort()).toEqual(keys);
+      }
+    }
+  });
+
+  it("gli u64 identità/impronta attraversano l'IPC come stringhe", () => {
+    // La regola di confine (fubmd_abi::ipc): oltre 2^53 un number JS perde
+    // bit in silenzio. Il campione Rust usa u64::MAX apposta.
+    for (const sample of fixture.VersionRef as VersionRef[]) {
+      expect(typeof sample.hash).toBe("string");
+      expect(typeof sample.ts).toBe("number");
+    }
+    for (const e of fixture.KernelEvent as KernelEvent[]) {
+      if (e.type === "job_done") expect(typeof e.id).toBe("string");
     }
   });
 });

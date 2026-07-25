@@ -7,6 +7,7 @@ import {
   type SearchHit,
   type Span,
   type UiNode,
+  type ViewSpec,
   type WorkspaceMeta,
 } from "./api";
 import { createEditor, type Editor } from "./editor";
@@ -22,14 +23,15 @@ import {
   type FolderNode,
 } from "./organizer";
 import { renderUiNode } from "./ui";
+import { openGraph } from "./graph";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
 const fileListEl = $("#file-list");
 const previewEl = $("#preview");
-const backlinksEl = $("#backlinks");
-const outlineEl = $("#outline");
-const tagsEl = $("#tags");
+const viewsLeftEl = $("#views-left");
+const viewsRightEl = $("#views-right");
+const viewsBottomEl = $("#views-bottom");
 const vaultPathEl = $("#vault-path");
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchPanelEl = $("#search-panel");
@@ -87,15 +89,29 @@ let activeSpace: string | null = null;
 let drag: { path: string; kind: "note" | "folder"; parent: string } | null = null;
 
 async function init() {
-  editor = createEditor($("#editor"), () => {
-    dirty = true;
-    scheduleSave();
+  editor = createEditor($("#editor"), {
+    onChange: () => {
+      dirty = true;
+      scheduleSave();
+    },
+    // Mod-click su un wikilink nella live preview: stesso giro dei link
+    // dell'anteprima (risolvi, altrimenti crea la nota che manca).
+    onOpenWikilink: openWikilinkFromEditor,
+    // Click su un #tag: stessa query canonica del pannello tag.
+    onSearchTag: (tag) => searchFor(`tags:${tag}`),
+    // Le sorgenti dei completamenti sono l'IPC, ammorbidite: prima che un
+    // vault sia aperto rispondono vuoto, non con un errore in console.
+    completions: {
+      listNotes: () => api.listDocuments().catch(() => []),
+      listTags: () => api.listTags().catch(() => []),
+    },
   });
   $("#open-vault").addEventListener("click", pickVault);
   $("#new-note").addEventListener("click", () => newNote());
   spaceTitleEl.addEventListener("click", openSpaceNote);
   wireRootDropTarget();
   $("#show-trash").addEventListener("click", openTrash);
+  $("#show-graph").addEventListener("click", () => openGraph(currentDoc, selectDoc));
   $("#close-trash").addEventListener("click", () => showPanel("files"));
   $("#empty-trash").addEventListener("click", emptyTrash);
   searchInputEl.addEventListener("input", scheduleSearch);
@@ -132,11 +148,10 @@ async function openVaultPath(dir: string) {
   currentDoc = null;
   editor.setDoc("");
   previewEl.innerHTML = "";
-  backlinksEl.innerHTML = "";
-  outlineEl.innerHTML = "";
   clearSearch();
   renderFileList(info.documents);
-  updateTags();
+  // Le view dichiarative si scoprono dal backend, non da id cablati.
+  await mountDeclaredViews();
   if (info.documents.length > 0) selectDoc(info.documents[0]);
 }
 
@@ -791,8 +806,7 @@ async function deleteDoc(id: string) {
     await api.setActiveDocument(null);
     editor.setDoc("");
     previewEl.innerHTML = "";
-    backlinksEl.innerHTML = "";
-    outlineEl.innerHTML = "";
+    refreshAllViews();
     const docs = await api.listDocuments();
     renderFileList(docs);
     if (docs.length > 0) await selectDoc(docs[0]);
@@ -922,8 +936,7 @@ async function refreshCurrent() {
   if (!currentDoc) return;
   await Promise.all([
     updatePreview(currentDoc),
-    updateOutline(),
-    updateBacklinks(),
+    refreshAllViews(),
     updateHistory(currentDoc),
   ]);
 }
@@ -995,6 +1008,23 @@ async function updatePreview(id: string) {
   previewEl.innerHTML = html;
   wireWikilinks(previewEl);
   await hydrateEmbeds(previewEl, new Set([id]));
+}
+
+/// Il Mod-click su un wikilink dentro l'editor: risolve e apre, o crea la
+/// nota che manca col nome scritto nel link (come i link dell'anteprima —
+/// il backlink c'è già prima della prima riga, è il grafo a ricucirlo).
+async function openWikilinkFromEditor(page: string) {
+  if (!page) return; // [[#Sezione]]: link interno alla nota, per ora nulla
+  const target = await api.resolveLink(page);
+  if (target) {
+    await selectDoc(target);
+    return;
+  }
+  try {
+    await newNote(page);
+  } catch (e) {
+    console.error(`FubMD: non riesco a creare «${page}»: ${e}`);
+  }
 }
 
 // Navigazione dei wikilink da un frammento di anteprima.
@@ -1160,11 +1190,6 @@ function highlighted(snippet: string, highlights: Span[]): DocumentFragment {
   return frag;
 }
 
-// Id delle view (rispecchiano fubmd_features::{BACKLINKS,OUTLINE,TAGS}_VIEW).
-const BACKLINKS_VIEW = "backlinks";
-const OUTLINE_VIEW = "outline";
-const TAGS_VIEW = "tags";
-
 // Disegna una view dichiarativa in un contenitore e chiude il giro
 // azione→ViewUpdate: un click torna al provider via `view_action` e la
 // risposta si interpreta qui. È il percorso generico di ogni ViewProvider —
@@ -1190,6 +1215,12 @@ async function mountView(view: string, target: HTMLElement, node: UiNode) {
         case "replace":
           await mountView(view, target, update.root);
           break;
+        case "custom":
+          // Intento con namespace che questa shell non prevede: da contratto
+          // non fa nulla (degrado garbato) — un plugin che lo emette conta
+          // su una shell che lo capisce, non su questa.
+          console.info(`FubMD: ViewUpdate custom ignorato (ns: ${update.ns}).`);
+          break;
         case "none":
           break;
       }
@@ -1197,30 +1228,76 @@ async function mountView(view: string, target: HTMLElement, node: UiNode) {
   );
 }
 
-async function updateBacklinks() {
-  // La view legge il documento attivo dal kernel: non le passiamo dati.
-  await mountView(BACKLINKS_VIEW, backlinksEl, await api.renderView(BACKLINKS_VIEW));
+// Le view dichiarative montate, per id: la spec (per sapere QUANDO
+// ridisegnare) e il contenitore (per sapere DOVE).
+const mountedViews = new Map<string, { spec: ViewSpec; container: HTMLElement }>();
+
+function placementContainer(placement: ViewSpec["placement"]): HTMLElement {
+  switch (placement) {
+    case "left_sidebar":
+      return viewsLeftEl;
+    case "right_sidebar":
+      return viewsRightEl;
+    case "bottom":
+      return viewsBottomEl;
+  }
 }
 
-async function updateOutline() {
-  await mountView(OUTLINE_VIEW, outlineEl, await api.renderView(OUTLINE_VIEW));
+// Scopre le view dal backend e le monta nel contenitore del loro placement:
+// nessun id cablato — una view di plugin compare da sola, con il titolo che
+// dichiara. È la metà "discovery" del protocollo (l'altra è `refresh`).
+async function mountDeclaredViews() {
+  mountedViews.clear();
+  viewsLeftEl.innerHTML = "";
+  viewsRightEl.innerHTML = "";
+  viewsBottomEl.innerHTML = "";
+  const specs = await api.listViews();
+  for (const spec of specs) {
+    const host = placementContainer(spec.placement);
+    const title = document.createElement("div");
+    title.className = "panel-title";
+    title.textContent = spec.title;
+    const container = document.createElement("div");
+    container.className = "declared-view";
+    container.dataset.viewId = spec.id;
+    host.append(title, container);
+    mountedViews.set(spec.id, { spec, container });
+  }
+  viewsBottomEl.hidden = viewsBottomEl.childElementCount === 0;
+  await refreshAllViews();
 }
 
-// I tag sono aggregati sull'intero vault, non sul documento aperto: la view si
-// aggiorna all'apertura e a ogni modifica dell'indice, non a ogni cambio nota.
-async function updateTags() {
-  await mountView(TAGS_VIEW, tagsEl, await api.renderView(TAGS_VIEW));
+async function renderDeclaredView(id: string) {
+  const mounted = mountedViews.get(id);
+  if (!mounted) return;
+  try {
+    await mountView(id, mounted.container, await api.renderView(id));
+  } catch (e) {
+    console.error(`FubMD: la view «${id}» non si è ridisegnata: ${e}`);
+  }
+}
+
+// Ridisegna tutto (cambio di nota attiva, riconciliazione dopo un overflow).
+async function refreshAllViews() {
+  await Promise.all([...mountedViews.keys()].map(renderDeclaredView));
+}
+
+// Ridisegna le sole view che hanno dichiarato interesse per questo evento
+// (`ViewSpec.refresh`): il protocollo dice QUANDO una view invecchia, la
+// shell non deve più indovinarlo per conoscenza privata delle feature.
+function refreshViewsFor(eventType: KernelEvent["type"]) {
+  for (const { spec } of mountedViews.values()) {
+    if (spec.refresh.includes(eventType)) renderDeclaredView(spec.id);
+  }
 }
 
 function handleKernelEvent(e: KernelEvent) {
+  // Le view dichiarative si ridisegnano secondo la loro maschera `refresh`,
+  // qualunque sia l'evento: vale per le tre feature ufficiali come per una
+  // futura view di plugin.
+  refreshViewsFor(e.type);
   if (e.type === "index_updated") {
     api.listDocuments().then(refreshFileList);
-    // I tag sono vault-wide: si aggiornano anche senza un documento aperto.
-    updateTags();
-    if (currentDoc) {
-      updateOutline();
-      updateBacklinks();
-    }
     // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
     // invecchiare sotto gli occhi di chi legge. Vale anche per il cestino, che
     // un'altra app (o un'altra finestra) può aver riempito o svuotato.
@@ -1231,11 +1308,31 @@ function handleKernelEvent(e: KernelEvent) {
     // file, anteprima, backlink — va riconciliato da zero, non aggiornato.
     console.warn(`FubMD: ${e.dropped} eventi persi (overflow): riconcilio.`);
     api.listDocuments().then(refreshFileList);
+    refreshAllViews();
     refreshCurrent();
     if (currentDoc) reloadIfClean(currentDoc);
   } else if (e.type === "document_changed" && e.id === currentDoc) {
     updatePreview(currentDoc);
     reloadIfClean(currentDoc);
+  } else if (e.type === "document_removed" && e.id === currentDoc) {
+    // La nota aperta è sparita da fuori (watcher, altra app). Col buffer
+    // sporco il buffer vince — è la verità del documento aperto, e il primo
+    // salvataggio la ricrea: qui la resurrezione è voluta. Col buffer pulito
+    // no: l'editor resterebbe su un contenuto fantasma che il primo autosave
+    // resusciterebbe alle spalle dell'utente.
+    if (dirty) {
+      console.warn(`FubMD: ${e.id} cancellato su disco col buffer sporco: il buffer vince.`);
+      return;
+    }
+    window.clearTimeout(saveTimer);
+    currentDoc = null;
+    // Il kernel azzera già il proprio `active` in remove_document: qui si
+    // riafferma per tenere i due stati esplicitamente allineati.
+    api.setActiveDocument(null);
+    editor.setDoc("");
+    previewEl.innerHTML = "";
+    refreshAllViews();
+    markActive();
   } else if (e.type === "document_renamed") {
     migrateMeta(e.from, e.to);
     // L'identità è il path: il documento aperto segue il rename.

@@ -404,7 +404,11 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `DocumentModel` | `record document-model { … }`, con `body: document-tree` |
 | `Block` / `Inline` (alberi) | `variant block` / `variant inline` **in arena**: `list<block-ref>` / `list<inline-ref>` al posto dei figli diretti, nodi in `document-tree` |
 | `LinkTarget` | `variant link-target { wiki(link-target-wiki), url(string), path(string) }` |
-| `Link` / `Heading` / `Tag` | `record` |
+| `Link` / `Heading` / `Tag` / `Anchor` | `record` |
+| `ListItem` / `TaskMarker` / `TableRow` / `TableCell` | `record` (dentro l'arena: `list-item.blocks` è `list<block-ref>`, `table-cell.inlines` è `list<inline-ref>`) |
+| `ColumnAlign` | `enum column-align { none, left, center, right }` |
+| `PropertyValue` / `PropertyScalar` | `variant` — la lista porta gli scalari, perché WIT non ha tipi ricorsivi |
+| `PropertyDate` / `PropertyTime` | `record` (`s32` per l'anno, `option<s16>` per il fuso) |
 | `FormatDescriptor`/`FormatCapabilities`/`ParseContext`/`RenderOptions` | `record` |
 | `CommandSpec`/`CommandOutcome` | `record` |
 | `ViewSpec`/`ViewPlacement` | `record` / `enum` |

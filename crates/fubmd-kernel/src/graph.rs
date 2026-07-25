@@ -1,8 +1,22 @@
-//! Il grafo dei link del vault: risoluzione dei wikilink in stile Obsidian e
+//! Il grafo dei link del vault: risoluzione dei link in stile Obsidian e
 //! calcolo dei backlink (archi inversi).
 //!
 //! È **agnostico rispetto al formato**: opera solo su [`DocumentModel`] già
 //! parsati. I test lo costruiscono con modelli fatti a mano, senza markdown.
+//!
+//! # Due specie di arco, una sola macchina
+//!
+//! Un [`LinkTarget::Wiki`] porta un *nome di pagina* e si risolve globalmente
+//! (path se contiene `/`, poi nome, poi alias). Un [`LinkTarget::Path`] — il
+//! link markdown ordinario, `[testo](note/altra.md)` — porta un *path relativo
+//! al documento che lo contiene*, e si risolve solo per path: le regole stanno
+//! in [`crate::pathlink`], che è l'unico posto dove la differenza è scritta. Un
+//! [`LinkTarget::Url`] non è un arco e non lo diventa.
+//!
+//! Da qui in giù i due sono indistinguibili: stessa chiave di risoluzione,
+//! stessi `watchers`, stessi backlink. Un link markdown a una nota del vault ha
+//! il backlink, entra nel grafo e viene riscritto al rename esattamente come un
+//! wikilink — perché per l'utente *è* la stessa promessa.
 //!
 //! # Aggiornamento incrementale (M2)
 //!
@@ -34,14 +48,56 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use fubmd_abi::model::{DocId, DocumentModel, LinkTarget};
+use fubmd_abi::model::{DocId, DocumentModel, Link, LinkTarget};
 use fubmd_abi::traits::BacklinkRef;
 
-/// Un wikilink di un documento, già normalizzato a chiave di risoluzione.
+use crate::pathlink;
+
+/// Ciò che il grafo legge di un documento: identità, alias, link.
+///
+/// È l'interfaccia che rende il grafo **autosufficiente** rispetto a come il
+/// chiamante tiene i documenti: il `Workspace` lo alimenta dai soli metadati
+/// in cache (split metadata/body di M2), i test dai `DocumentModel` interi.
+/// Il grafo non guarda mai corpo o testo — dichiararlo nella firma lo rende
+/// un fatto, non una convenzione.
+pub trait GraphSource {
+    fn graph_id(&self) -> &DocId;
+    fn graph_aliases(&self) -> Vec<String>;
+    fn graph_links(&self) -> &[Link];
+}
+
+impl GraphSource for DocumentModel {
+    fn graph_id(&self) -> &DocId {
+        &self.id
+    }
+
+    fn graph_aliases(&self) -> Vec<String> {
+        self.frontmatter.aliases()
+    }
+
+    fn graph_links(&self) -> &[Link] {
+        &self.links
+    }
+}
+
+/// Un link di un documento, già normalizzato a chiave di risoluzione.
 #[derive(Clone, Debug)]
 struct LinkRef {
     key: String,
+    kind: RefKind,
     context: Option<String>,
+}
+
+/// Come si risolve una chiave. Non è un dettaglio di provenienza: è *quali
+/// indici* si consultano, e i due insiemi non coincidono.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RefKind {
+    /// Wikilink: path (se la chiave contiene `/`), poi nome, poi alias.
+    Wiki,
+    /// Link markdown: **solo** path, già risolto contro la cartella del
+    /// documento sorgente. Un `[t](Mario)` non deve pescare l'alias "Mario":
+    /// l'utente ha scritto un path, e nel path non ci sono alias.
+    Path,
 }
 
 /// Le chiavi con cui un documento è raggiungibile dalla risoluzione.
@@ -81,21 +137,24 @@ impl LinkGraph {
     ///
     /// Resta l'**oracolo** dell'aggiornamento incrementale: due fasi, nessuna
     /// invalidazione, nessuna astuzia (vedi `tests/graph_incremental.rs`).
-    pub fn build<'a>(docs: impl IntoIterator<Item = &'a DocumentModel>) -> Self {
-        let docs: Vec<&DocumentModel> = docs.into_iter().collect();
+    pub fn build<'a, S>(docs: impl IntoIterator<Item = &'a S>) -> Self
+    where
+        S: GraphSource + 'a,
+    {
+        let docs: Vec<&S> = docs.into_iter().collect();
         let mut graph = LinkGraph::default();
 
         // Fase 1: indici di nome/alias/path e registrazione dei link (serve
         // conoscere tutti i doc prima di poter risolvere qualsiasi link).
         let mut touched = HashSet::new();
         for doc in &docs {
-            graph.attach_indexes(doc, &mut touched);
-            graph.register_links(doc);
+            graph.attach_indexes(*doc, &mut touched);
+            graph.register_links(*doc);
         }
 
         // Fase 2: risoluzione dei link e archi inversi.
         for doc in &docs {
-            graph.link_document(&doc.id);
+            graph.link_document(doc.graph_id());
         }
         graph
     }
@@ -105,13 +164,14 @@ impl LinkGraph {
     ///
     /// Il risultato osservabile è identico a un [`LinkGraph::build`] su tutti i
     /// documenti presenti dopo l'operazione.
-    pub fn upsert(&mut self, doc: &DocumentModel) {
+    pub fn upsert<S: GraphSource + ?Sized>(&mut self, doc: &S) {
         let mut touched = HashSet::new();
+        let id = doc.graph_id().clone();
 
         // Fuori: vecchie chiavi, vecchi link, vecchi archi uscenti.
-        self.detach_indexes(&doc.id, &mut touched);
-        self.unregister_links(&doc.id);
-        self.unlink_document(&doc.id);
+        self.detach_indexes(&id, &mut touched);
+        self.unregister_links(&id);
+        self.unlink_document(&id);
 
         // Dentro: nuove chiavi e nuovi link (ancora senza risolvere).
         self.attach_indexes(doc, &mut touched);
@@ -119,7 +179,7 @@ impl LinkGraph {
 
         // Ri-collega il documento e chiunque dipendesse dalle chiavi toccate.
         let mut dirty = self.dependents(&touched);
-        dirty.insert(doc.id.clone());
+        dirty.insert(id);
         self.relink_all(dirty);
     }
 
@@ -147,6 +207,17 @@ impl LinkGraph {
     /// più vicino alla radice), infine per alias.
     pub fn resolve_wiki(&self, page: &str) -> Option<DocId> {
         self.resolve_key(&normalize(page))
+    }
+
+    /// Risolve la destinazione di un link markdown (`[t](note/altra.md)`)
+    /// scritta dentro `source`, a cui è **relativa**.
+    ///
+    /// È pubblica perché non serve solo al grafo: la riscrittura al rename e
+    /// (a valle) la navigazione da un'anteprima devono rispondere alla stessa
+    /// domanda con la stessa risposta.
+    pub fn resolve_path(&self, source: &DocId, target: &str) -> Option<DocId> {
+        let path = pathlink::resolve_against(source, target)?;
+        self.resolve_path_key(&normalize(&path))
     }
 
     /// Backlink verso un documento (riferimenti entranti), ordinati per sorgente.
@@ -188,19 +259,34 @@ impl LinkGraph {
         first_of(&self.alias_index, key)
     }
 
+    /// Risoluzione di una chiave di **path** (già normalizzata e già assoluta
+    /// rispetto alla radice del vault).
+    ///
+    /// Prima l'accoppiamento esatto — `note/a.md` è `note/a.md`, non `note/a.txt`
+    /// che gli sta accanto — e solo in sua assenza la chiave senza estensione,
+    /// che è quella dei wikilink. È la regola 2 di [`crate::pathlink`]; qui c'è
+    /// perché `path_index` è indicizzato *senza* estensione e l'esatto va
+    /// cercato fra i suoi candidati.
+    fn resolve_path_key(&self, key: &str) -> Option<DocId> {
+        if key.is_empty() {
+            return None;
+        }
+        if let Some(ids) = self.path_index.get(&strip_ext(key)) {
+            if let Some(id) = ids.iter().find(|id| normalize(id.as_str()) == key) {
+                return Some(id.clone());
+            }
+        }
+        first_of(&self.path_index, key)
+    }
+
     // --- indici di nome/alias/path ----------------------------------------
 
-    fn attach_indexes(&mut self, doc: &DocumentModel, touched: &mut HashSet<String>) {
-        let id = &doc.id;
+    fn attach_indexes<S: GraphSource + ?Sized>(&mut self, doc: &S, touched: &mut HashSet<String>) {
+        let id = doc.graph_id();
         let keys = DocKeys {
             name: normalize(id.page_name()),
             path: normalize(&strip_ext(id.as_str())),
-            aliases: doc
-                .frontmatter
-                .aliases()
-                .iter()
-                .map(|a| normalize(a))
-                .collect(),
+            aliases: doc.graph_aliases().iter().map(|a| normalize(a)).collect(),
         };
         insert_sorted(&mut self.name_index, &keys.name, id);
         insert_sorted(&mut self.path_index, &keys.path, id);
@@ -229,26 +315,35 @@ impl LinkGraph {
 
     // --- registro dei link (chi usa quale chiave) -------------------------
 
-    fn register_links(&mut self, doc: &DocumentModel) {
+    fn register_links<S: GraphSource + ?Sized>(&mut self, doc: &S) {
+        let id = doc.graph_id();
         let mut refs = Vec::new();
-        for link in &doc.links {
-            let LinkTarget::Wiki { page, .. } = &link.target else {
-                continue;
+        for link in doc.graph_links() {
+            let (key, kind) = match &link.target {
+                LinkTarget::Wiki { page, .. } => (normalize(page), RefKind::Wiki),
+                // Il path si risolve **qui**, contro la cartella del sorgente:
+                // da questo punto in poi la chiave è assoluta nel vault e il
+                // resto della macchina non deve più sapere da dove veniva.
+                LinkTarget::Path(target) => match pathlink::resolve_against(id, target) {
+                    Some(path) => (normalize(&path), RefKind::Path),
+                    None => continue,
+                },
+                LinkTarget::Url(_) => continue,
             };
-            let key = normalize(page);
             for dep in dep_keys(&key) {
                 self.watchers.entry(dep).or_default().insert(key.clone());
             }
             self.refs_by_key
                 .entry(key.clone())
                 .or_default()
-                .insert(doc.id.clone());
+                .insert(id.clone());
             refs.push(LinkRef {
                 key,
+                kind,
                 context: link.context.clone(),
             });
         }
-        self.links.insert(doc.id.clone(), refs);
+        self.links.insert(id.clone(), refs);
     }
 
     fn unregister_links(&mut self, id: &DocId) {
@@ -326,7 +421,11 @@ impl LinkGraph {
         };
         let mut out = Vec::with_capacity(refs.len());
         for link in refs {
-            let Some(target) = self.resolve_key(&link.key) else {
+            let resolved = match link.kind {
+                RefKind::Wiki => self.resolve_key(&link.key),
+                RefKind::Path => self.resolve_path_key(&link.key),
+            };
+            let Some(target) = resolved else {
                 continue;
             };
             if target != *id {
@@ -346,14 +445,22 @@ impl LinkGraph {
     }
 }
 
-/// Chiave di risoluzione: trim + minuscolo. Unico punto di normalizzazione.
+/// Chiave di risoluzione: trim + NFC + minuscolo. Unico punto di
+/// normalizzazione.
+///
+/// NFC perché un vault sincronizzato con macOS ha nomi file NFD mentre il
+/// link digitato è NFC: senza, `[[Café]]` non risolve, il backlink non esiste
+/// e per il grafo sono due nodi — e colpisce esattamente le note accentate.
 pub(crate) fn normalize(s: &str) -> String {
-    s.trim().to_lowercase()
+    use unicode_normalization::UnicodeNormalization;
+    s.trim().nfc().collect::<String>().to_lowercase()
 }
 
 /// Le voci d'indice da cui dipende la risoluzione di una chiave di link.
 /// `resolve_key` guarda `path_index[strip_ext(key)]`, `name_index[key]` e
-/// `alias_index[key]`: al più due chiavi distinte.
+/// `alias_index[key]`; `resolve_path_key` guarda `path_index` su entrambe. In
+/// tutti i casi: al più due chiavi distinte, ed è lo stesso paio — per questo
+/// wikilink e link markdown condividono `watchers` senza doversi distinguere.
 fn dep_keys(key: &str) -> Vec<String> {
     let stripped = strip_ext(key);
     if stripped == key {
@@ -415,6 +522,7 @@ mod tests {
             .iter()
             .map(|p| Link {
                 target: LinkTarget::wiki(*p),
+                embed: false,
                 span: Span::EMPTY,
                 context: Some(format!("→ {p}")),
             })
@@ -488,6 +596,22 @@ mod tests {
         let graph = LinkGraph::build([&a]);
         assert_eq!(graph.resolve_wiki("Inesistente"), None);
         assert!(graph.backlinks(&DocId::new("Inesistente.md")).is_empty());
+    }
+
+    #[test]
+    fn nfd_file_names_meet_nfc_links() {
+        // Il nome file come lo scrive macOS (NFD: `e` + combining acute), il
+        // link come lo digita l'utente (NFC: `é` precomposto). Senza NFC nel
+        // punto di normalizzazione sarebbero due chiavi — e due nodi.
+        let target = DocumentModel::empty(DocId::new("Cafe\u{0301}.md"));
+        let a = doc_with_links("a.md", &["Café"]);
+        let graph = LinkGraph::build([&a, &target]);
+
+        assert_eq!(
+            graph.resolve_wiki("Café"),
+            Some(DocId::new("Cafe\u{0301}.md"))
+        );
+        assert_eq!(sources(&graph, "Cafe\u{0301}.md"), ["a.md"]);
     }
 
     #[test]
@@ -626,6 +750,123 @@ mod tests {
         graph.upsert(&a);
         assert_eq!(sources(&graph, "Nota.md"), ["a.md", "a.md"]);
         assert_eq!(graph.outgoing(&DocId::new("a.md")).len(), 2);
+    }
+
+    // --- link markdown: la seconda specie di arco (§2.21) ------------------
+
+    fn doc_with_paths(id: &str, dests: &[&str]) -> DocumentModel {
+        let mut m = DocumentModel::empty(DocId::new(id));
+        m.links = dests
+            .iter()
+            .map(|d| Link {
+                target: LinkTarget::Path((*d).to_string()),
+                embed: false,
+                span: Span::EMPTY,
+                context: Some(format!("→ {d}")),
+            })
+            .collect();
+        m
+    }
+
+    #[test]
+    fn a_path_link_is_relative_to_its_source() {
+        // Stessa stringa, due sorgenti, due documenti: è tutta la differenza
+        // fra un link markdown e un wikilink.
+        let root = doc_with_paths("a.md", &["Nota.md"]);
+        let sub = doc_with_paths("sub/a.md", &["Nota.md"]);
+        let n_root = DocumentModel::empty(DocId::new("Nota.md"));
+        let n_sub = DocumentModel::empty(DocId::new("sub/Nota.md"));
+        let graph = LinkGraph::build([&root, &sub, &n_root, &n_sub]);
+
+        assert_eq!(sources(&graph, "Nota.md"), ["a.md"]);
+        assert_eq!(sources(&graph, "sub/Nota.md"), ["sub/a.md"]);
+    }
+
+    #[test]
+    fn a_path_link_walks_up_and_starts_from_the_root() {
+        let a = doc_with_paths("x/y/a.md", &["../../Nota.md", "/Altra.md"]);
+        let nota = DocumentModel::empty(DocId::new("Nota.md"));
+        let altra = DocumentModel::empty(DocId::new("Altra.md"));
+        let graph = LinkGraph::build([&a, &nota, &altra]);
+
+        assert_eq!(sources(&graph, "Nota.md"), ["x/y/a.md"]);
+        assert_eq!(sources(&graph, "Altra.md"), ["x/y/a.md"]);
+    }
+
+    #[test]
+    fn a_path_link_never_falls_back_to_name_or_alias() {
+        let a = doc_with_paths("a.md", &["Nota.md", "Mario"]);
+        let deep = doc_with_aliases("x/y/Nota.md", &["Mario"]);
+        let graph = LinkGraph::build([&a, &deep]);
+
+        // `[[Nota]]` lo troverebbe per nome, `[[Mario]]` per alias: un path no.
+        assert_eq!(graph.resolve_wiki("Nota"), Some(DocId::new("x/y/Nota.md")));
+        assert!(sources(&graph, "x/y/Nota.md").is_empty());
+    }
+
+    #[test]
+    fn an_explicit_extension_is_taken_seriously() {
+        let md = DocumentModel::empty(DocId::new("sub/nota.md"));
+        let txt = DocumentModel::empty(DocId::new("sub/nota.txt"));
+        let esatto = doc_with_paths("a.md", &["sub/nota.txt"]);
+        let senza = doc_with_paths("b.md", &["sub/nota"]);
+        let sbagliato = doc_with_paths("c.md", &["sub/nota.png"]);
+        let graph = LinkGraph::build([&md, &txt, &esatto, &senza, &sbagliato]);
+
+        // L'esatto vince sull'ordine di priorità; il senza-estensione ricade
+        // sulla chiave dei wikilink; l'estensione inesistente non ricade su
+        // nulla — `c.md` non è backlink di nessuno dei due.
+        assert_eq!(sources(&graph, "sub/nota.txt"), ["a.md"]);
+        assert_eq!(sources(&graph, "sub/nota.md"), ["b.md"]);
+    }
+
+    #[test]
+    fn percent_encoding_and_fragments_do_not_change_the_edge() {
+        let a = doc_with_paths("a.md", &["sub/nota%20uno.md#sezione"]);
+        let target = DocumentModel::empty(DocId::new("sub/nota uno.md"));
+        let graph = LinkGraph::build([&a, &target]);
+        assert_eq!(sources(&graph, "sub/nota uno.md"), ["a.md"]);
+    }
+
+    #[test]
+    fn what_is_not_a_vault_resource_is_not_an_edge() {
+        let mut a = doc_with_paths("a.md", &["../fuori.md", "#solo-ancora", ""]);
+        a.links.push(Link {
+            target: LinkTarget::Url("https://esempio.test/Nota.md".into()),
+            embed: false,
+            span: Span::EMPTY,
+            context: None,
+        });
+        let graph = LinkGraph::build([&a]);
+        assert!(graph.outgoing(&DocId::new("a.md")).is_empty());
+    }
+
+    #[test]
+    fn upsert_resolves_and_steals_path_links_too() {
+        // La stessa proprietà dei wikilink, sull'altra specie: creare il
+        // bersaglio risolve il link pendente, toglierlo lo restituisce.
+        let a = doc_with_paths("a.md", &["sub/Nota.md"]);
+        let mut graph = LinkGraph::build([&a]);
+        assert!(sources(&graph, "sub/Nota.md").is_empty());
+
+        graph.upsert(&DocumentModel::empty(DocId::new("sub/Nota.md")));
+        assert_eq!(sources(&graph, "sub/Nota.md"), ["a.md"]);
+
+        graph.remove(&DocId::new("sub/Nota.md"));
+        assert!(sources(&graph, "sub/Nota.md").is_empty());
+        assert!(graph.outgoing(&DocId::new("a.md")).is_empty());
+    }
+
+    #[test]
+    fn remove_of_the_winner_falls_back_for_an_extensionless_path_link() {
+        let a = doc_with_paths("a.md", &["sub/nota"]);
+        let md = DocumentModel::empty(DocId::new("sub/nota.md"));
+        let txt = DocumentModel::empty(DocId::new("sub/nota.txt"));
+        let mut graph = LinkGraph::build([&a, &md, &txt]);
+        assert_eq!(sources(&graph, "sub/nota.md"), ["a.md"]);
+
+        graph.remove(&DocId::new("sub/nota.md"));
+        assert_eq!(sources(&graph, "sub/nota.txt"), ["a.md"]);
     }
 
     #[test]

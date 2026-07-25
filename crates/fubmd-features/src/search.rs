@@ -38,7 +38,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use camino::Utf8Path;
-use fubmd_abi::model::{DocId, DocumentModel, Span};
+use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,9 @@ pub const SEARCH_ID: &str = "fubmd.search";
 /// Versione dello schema dell'indice. **Va incrementata** ad ogni modifica dei
 /// campi, delle opzioni o del tokenizer: un manifest con versione diversa fa
 /// buttare via l'indice e ricostruirlo da zero.
-const SCHEMA_VERSION: u32 = 1;
+///
+/// v2: `tags` da TEXT tokenizzato a STRING (termine esatto, forma canonica).
+const SCHEMA_VERSION: u32 = 2;
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -136,7 +138,12 @@ fn build_schema() -> (Schema, Fields) {
     // STORED anche il corpo: il generatore di snippet rilegge il testo del
     // documento, non può ricostruirlo dai postings.
     let body = b.add_text_field("body", TEXT | STORED);
-    let tags = b.add_text_field("tags", TEXT);
+    // STRING, non TEXT: un tag è una CHIAVE, non prosa. Tokenizzato,
+    // `tags:rust` matchava anche `#progetto/rust` e `tags:area/lavoro`
+    // diventava una phrase query su due termini — conteggi del pannello e
+    // risultati del click non coincidevano mai. Ogni tag entra come termine
+    // unico nella forma canonica ([`canonical_tag`]).
+    let tags = b.add_text_field("tags", STRING);
     (
         b.build(),
         Fields {
@@ -354,6 +361,10 @@ impl Inner {
         if query.trim().is_empty() || limit == 0 {
             return Ok(Vec::new());
         }
+        // Il campo dei tag è STRING (termine esatto, niente tokenizer che
+        // minuscolizzi): il termine digitato o mostrato va portato lui alla
+        // forma canonica, o `tags:Rust` non troverebbe `#rust`.
+        let query = canonicalize_tag_terms(query);
         let searcher = self.reader.searcher();
         let f = self.fields;
 
@@ -363,7 +374,7 @@ impl Inner {
         // vuole le note che parlano di entrambi.
         parser.set_conjunction_by_default();
         let parsed = parser
-            .parse_query(query)
+            .parse_query(&query)
             .map_err(|e| PluginError::BadArgs(format!("query non valida: {e}")))?;
 
         // `with_limit` va in panico su 0 — intercettato sopra.
@@ -409,6 +420,20 @@ impl Inner {
     }
 }
 
+/// Porta alla forma canonica il termine di ogni `tags:` della query, lasciando
+/// intatto il resto (i campi TEXT hanno il loro tokenizer, che minuscolizza da
+/// sé). Un nome di tag non contiene spazi: basta ragionare per token.
+fn canonicalize_tag_terms(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(|token| match token.strip_prefix("tags:") {
+            Some(term) => format!("tags:{}", canonical_tag(term)),
+            None => token.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// I primi `max` caratteri di `text`, troncati su un confine di carattere e
 /// senza spezzare l'ultima parola quando si può evitare.
 fn head_of(text: &str, max: usize) -> String {
@@ -451,9 +476,11 @@ impl IndexProvider for SearchIndex {
         td.add_text(f.doc_id, doc.id.as_str());
         td.add_text(f.page_name, doc.id.page_name());
         td.add_text(f.body, &doc.text);
-        if !doc.tags.is_empty() {
-            let tags: Vec<&str> = doc.tags.iter().map(|t| t.name.as_str()).collect();
-            td.add_text(f.tags, tags.join(" "));
+        // Un valore per tag (non una stringa unita): col tokenizer raw ogni
+        // valore È un termine, e il termine è la forma canonica — la stessa
+        // chiave con cui il kernel aggrega e il pannello interroga.
+        for tag in &doc.tags {
+            td.add_text(f.tags, canonical_tag(&tag.name));
         }
         if inner.writer.add_document(td).is_err() {
             // Il writer è andato: l'indice non è più affidabile, e mentire è
@@ -625,22 +652,69 @@ mod tests {
         assert_eq!(search(&idx, "rust asincrono").len(), 1);
     }
 
+    fn tagged(id: &str, body: &str, tags: &[&str]) -> DocumentModel {
+        let mut m = doc(id, body);
+        m.tags = tags
+            .iter()
+            .map(|t| Tag {
+                name: t.to_string(),
+                span: Span::EMPTY,
+            })
+            .collect();
+        m
+    }
+
     #[test]
-    fn finds_by_tag() {
+    fn finds_by_tag_as_an_exact_term() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        let mut m = doc("a.md", "niente di rilevante nel corpo");
-        m.tags = vec![Tag {
-            name: "progetto/fubmd".into(),
-            span: Span::EMPTY,
-        }];
-        idx.on_document_indexed(&m);
+        idx.on_document_indexed(&tagged(
+            "a.md",
+            "niente di rilevante nel corpo",
+            &["progetto/fubmd"],
+        ));
 
-        let hits = search(&idx, "fubmd");
+        let hits = search(&idx, "tags:progetto/fubmd");
         assert_eq!(hits.len(), 1);
         // Match fuori dal corpo: nessun highlight, ma uno snippet leggibile.
         assert!(hits[0].highlights.is_empty());
         assert!(!hits[0].snippet.is_empty());
+    }
+
+    #[test]
+    fn a_tag_is_a_key_not_prose() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        idx.on_document_indexed(&tagged("nested.md", "", &["progetto/rust"]));
+        idx.on_document_indexed(&tagged("plain.md", "", &["rust"]));
+        idx.on_document_indexed(&tagged("adiacenti.md", "", &["area", "lavoro"]));
+        idx.on_document_indexed(&tagged("composto.md", "", &["area/lavoro"]));
+
+        // `tags:rust` è un termine esatto: il tag annidato non c'entra.
+        let hits = search(&idx, "tags:rust");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].doc, DocId::new("plain.md"));
+
+        // E `tags:area/lavoro` non è una phrase query: `#area #lavoro`
+        // adiacenti non sono `#area/lavoro`.
+        let hits = search(&idx, "tags:area/lavoro");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].doc, DocId::new("composto.md"));
+    }
+
+    #[test]
+    fn tags_are_case_insensitive_but_exact() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        idx.on_document_indexed(&tagged("a.md", "", &["Rust"]));
+        idx.on_document_indexed(&tagged("b.md", "", &["rust"]));
+
+        // `#Rust` e `#rust` sono lo stesso tag (chiave canonica), qualunque
+        // sia il case della query: il click dal pannello (che mostra la
+        // grafia originale) trova le stesse note del conteggio.
+        for q in ["tags:rust", "tags:Rust", "tags:RUST"] {
+            assert_eq!(search(&idx, q).len(), 2, "query {q}");
+        }
     }
 
     #[test]
