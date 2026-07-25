@@ -13,8 +13,8 @@ use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{BacklinkRef, IndexQuery, IndexResult, SearchHit};
 use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
-    BacklinksView, SearchIndex, VersionRef, VersionStore, VersioningHandler, BACKLINKS_ID,
-    SEARCH_ID, VERSIONING_ID,
+    BacklinksView, OutlineView, SearchIndex, VersionRef, VersionStore, VersioningHandler,
+    BACKLINKS_ID, OUTLINE_ID, SEARCH_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, TrashEntry, Trust, Workspace};
@@ -158,6 +158,10 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     // documento attivo e riferimenti dall'`HostApi`. L'app non gli fa più da
     // tramite — il giro render/azione passa dai comandi generici qui sotto.
     ws.register_view_provider(BACKLINKS_ID, Trust::Trusted, Box::new(BacklinksView));
+    // L'outline è la seconda feature ufficiale sul giro delle view, e la prima a
+    // usare il canale metadata (`IndexQuery::Outline`): legge la struttura del
+    // documento attivo dal kernel, non dall'app.
+    ws.register_view_provider(OUTLINE_ID, Trust::Trusted, Box::new(OutlineView));
 
     ws.reindex().map_err(|e| e.to_string())?;
 

@@ -814,8 +814,24 @@ impl Workspace {
     /// [`IndexQuery::Custom`]). Se nessuno la riconosce, l'errore dell'ultimo
     /// interpellato arriva al chiamante.
     pub fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        if let IndexQuery::Backlinks { target } = &query {
-            return Ok(IndexResult::Backlinks(self.graph.backlinks(target)));
+        // Query servite dal kernel, non dai provider: hanno già una fonte di
+        // verità qui. I backlink stanno nel grafo (conosce le regole di
+        // risoluzione e le ambiguità del vault); l'outline sta nel modello
+        // parsato che il kernel tiene — è il modo con cui una view legge la
+        // struttura di un documento senza avere un `FormatProvider`.
+        match &query {
+            IndexQuery::Backlinks { target } => {
+                return Ok(IndexResult::Backlinks(self.graph.backlinks(target)));
+            }
+            IndexQuery::Outline { doc } => {
+                let outline = self
+                    .models
+                    .get(doc)
+                    .map(|m| m.outline.clone())
+                    .unwrap_or_default();
+                return Ok(IndexResult::Outline(outline));
+            }
+            _ => {}
         }
         let mut last = Err(PluginError::BadArgs(
             "nessun IndexProvider registrato".to_string(),

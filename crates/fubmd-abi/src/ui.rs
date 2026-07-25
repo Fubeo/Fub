@@ -128,6 +128,15 @@ pub enum ViewUpdate {
     None,
     /// Chiedi al core di navigare a un documento (usato dai backlink).
     Navigate { doc_id: String },
+    /// Chiedi al core di **rivelare** un intervallo di un documento: aprirlo se
+    /// non è quello attivo e portare la vista sull'intervallo (usato
+    /// dall'outline per saltare a un heading). `span` è in **byte UTF-8**, come
+    /// ogni [`Span`](crate::model::Span) del modello; è chi disegna a mapparlo
+    /// sulle posizioni dell'editor.
+    Reveal {
+        doc_id: String,
+        span: crate::model::Span,
+    },
 }
 
 #[cfg(test)]

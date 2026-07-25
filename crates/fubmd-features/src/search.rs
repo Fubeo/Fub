@@ -505,10 +505,14 @@ impl IndexProvider for SearchIndex {
             IndexQuery::FullText { query, limit } => {
                 Ok(IndexResult::Search(inner.search(&query, limit as usize)?))
             }
-            // I backlink hanno una sola fonte di verità, il grafo del kernel:
-            // duplicarli qui creerebbe una seconda verità che può divergere.
+            // Backlink e outline hanno una sola fonte di verità, il kernel
+            // (grafo e modelli): duplicarli qui creerebbe una seconda verità che
+            // può divergere. Un indice risponde "non roba mia".
             IndexQuery::Backlinks { .. } => Err(PluginError::BadArgs(
                 "backlinks: li serve il grafo del kernel".to_string(),
+            )),
+            IndexQuery::Outline { .. } => Err(PluginError::BadArgs(
+                "outline: la servono i modelli del kernel".to_string(),
             )),
             IndexQuery::Custom { ns, .. } => {
                 Err(PluginError::BadArgs(format!("namespace sconosciuto: {ns}")))

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::event::{Event, EventMask};
-use crate::model::{DocId, DocumentModel, Span};
+use crate::model::{DocId, DocumentModel, Heading, Span};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
 // ---------------------------------------------------------------------------
@@ -203,6 +203,14 @@ pub enum IndexQuery {
         query: String,
         limit: u32,
     },
+    /// La struttura (heading) di un documento. Come i backlink, non la serve un
+    /// indice ma il **kernel**, dai modelli che già tiene: è il modo con cui una
+    /// view legge la struttura parsata di un documento senza avere un
+    /// `FormatProvider` (che, essendo un plugin, non ha). Documento inesistente
+    /// → outline vuota, non un errore.
+    Outline {
+        doc: DocId,
+    },
     /// Varco di estensione: query definite da un provider di terzi, con
     /// namespace (`ns` = plugin id). Un provider che non riconosce `ns`
     /// risponde `PluginError::BadArgs`.
@@ -242,6 +250,9 @@ pub struct SearchHit {
 pub enum IndexResult {
     Backlinks(Vec<BacklinkRef>),
     Search(Vec<SearchHit>),
+    /// Gli heading di un documento, in ordine di apparizione (risposta a
+    /// [`IndexQuery::Outline`]).
+    Outline(Vec<Heading>),
     /// Risposta a una [`IndexQuery::Custom`].
     Custom(serde_json::Value),
 }
