@@ -231,6 +231,12 @@ impl VersionStore {
 
     /// Migra le versioni sul nuovo path: l'identità di un documento **è** il
     /// suo path, e un rename la sposta senza spezzare la storia.
+    ///
+    /// Migra anche i **contenuti**, non solo l'indice. [`VersionStore::read`]
+    /// interroga due sorgenti diverse — all'indice chiede se una versione
+    /// esiste, al disco cosa contiene — e l'unico modo perché non si
+    /// contraddicano è che la storia unita finisca tutta sotto una cartella
+    /// sola, coi nomi che `read` andrà davvero a cercare.
     pub fn rename(
         &self,
         from: &DocId,
@@ -238,19 +244,28 @@ impl VersionStore {
         host: &mut dyn HostApi,
     ) -> Result<(), PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
-        let Some(doc) = inner.docs.remove(from.as_str()) else {
+        let Some(doc) = inner.docs.get(from.as_str()).cloned() else {
             return Ok(());
         };
-        // Se il nuovo nome aveva già una storia (una nota cancellata e poi
-        // rimpiazzata), le due si uniscono in ordine di tempo: buttarne una
-        // sarebbe perdere versioni senza dirlo.
-        let unito = match inner.docs.remove(to.as_str()) {
-            None => doc,
-            Some(esistente) => merge(doc, esistente),
-        };
-        inner.docs.insert(to.to_string(), unito);
+        // Se il nuovo nome aveva già una storia (una nota cestinata, il cui
+        // path viene rioccupato, e che si ripristina sotto un altro nome), le
+        // due si uniscono in ordine di tempo: buttarne una sarebbe perdere
+        // versioni senza dirlo.
+        let esistente = inner.docs.get(to.as_str()).cloned();
+        let trasloco = trasloca(&doc, from, esistente.as_ref(), to, host)?;
+        // Da qui l'indice si muove, e si muove su contenuti già al loro posto.
+        inner.docs.remove(from.as_str());
+        inner.docs.insert(to.to_string(), trasloco.doc);
         inner.write_meta(to, host)?;
-        inner.write_index(host)
+        inner.write_index(host)?;
+        // Ultimo ciò che resta indietro: è spazio sprecato, non una bugia, e
+        // non vale la pena di far fallire un rename già andato a buon fine.
+        for path in trasloco.da_ripulire {
+            if let Err(e) = host.data_remove(&path) {
+                eprintln!("versioning: {path} è rimasto indietro e non se ne va: {e}");
+            }
+        }
+        Ok(())
     }
 
     /// Segna che il documento, a questo istante, non c'è più.
@@ -469,18 +484,117 @@ impl Inner {
     }
 }
 
-/// Unisce due storie sullo stesso path, in ordine di tempo.
-fn merge(a: DocVersions, b: DocVersions) -> DocVersions {
-    let mut versions = a.versions;
-    versions.extend(b.versions);
-    versions.sort_by_key(|v| v.ts);
-    versions.dedup_by_key(|v| v.ts);
-    DocVersions {
-        dir: a.dir,
-        // Il documento è vivo: è appena arrivato qui con un rename.
-        deleted_at: None,
-        versions,
+/// L'esito di un trasloco: la storia unita, e i blob rimasti indietro.
+struct Trasloco {
+    doc: DocVersions,
+    da_ripulire: Vec<String>,
+}
+
+/// Unisce due storie sullo stesso path, in ordine di tempo, e porta i contenuti
+/// dove il nuovo path li farà cercare.
+///
+/// Un blob non sta dove il suo `ts` dice, ma dove lo mettono **la cartella del
+/// documento e l'estensione del suo path** (vedi [`blob`] e [`snapshot_name`]):
+/// tenere l'indice di due storie e la cartella di una sola era il modo di
+/// scrivere nell'indice versioni il cui contenuto non è mai stato lì.
+///
+/// Prima si **copia**, poi chi chiama scrive l'indice, e solo alla fine si
+/// cancella ciò che è rimasto indietro. Se una copia fallisce, l'indice non si è
+/// ancora mosso e gli originali sono tutti al loro posto; l'ordine inverso
+/// lascerebbe, al primo errore, un indice che nomina contenuti spariti — cioè
+/// il modo in cui il versioning fallisce senza sembrare rotto.
+fn trasloca(
+    doc: &DocVersions,
+    from: &DocId,
+    esistente: Option<&DocVersions>,
+    to: &DocId,
+    host: &mut dyn HostApi,
+) -> Result<Trasloco, PluginError> {
+    // Dove sta ogni contenuto adesso: la storia che arriva è ancora sotto la
+    // sua cartella e col nome che le dava il path vecchio, quella che c'era già
+    // sta sotto una cartella tutta sua.
+    let mut candidate: Vec<(String, VersionRef)> = doc
+        .versions
+        .iter()
+        .map(|v| (blob(&doc.dir, &snapshot_name(v.ts, from.as_str())), *v))
+        .collect();
+    if let Some(esistente) = esistente {
+        candidate.extend(
+            esistente
+                .versions
+                .iter()
+                .map(|v| (blob(&esistente.dir, &snapshot_name(v.ts, to.as_str())), *v)),
+        );
     }
+    // Ordinamento stabile: a parità di istante la storia che arriva viene
+    // prima, ed è quella che si tiene il suo `ts`.
+    candidate.sort_by_key(|(_, v)| v.ts);
+
+    // La cartella che sopravvive è quella della storia che arriva. Una sola
+    // cartella per documento non è un vezzo: `rebuild_from_store` si fida di
+    // `meta.json`, e due cartelle che dichiarano lo stesso `doc_id` si
+    // sovrascriverebbero a vicenda, con una delle due storie persa in silenzio.
+    let dir = match (doc.dir.is_empty(), esistente) {
+        (true, Some(esistente)) => esistente.dir.clone(),
+        _ => doc.dir.clone(),
+    };
+    let mut versions: Vec<VersionRef> = Vec::with_capacity(candidate.len());
+    let mut destinazioni: Vec<String> = Vec::with_capacity(candidate.len());
+    let mut da_ripulire: Vec<String> = Vec::new();
+
+    for (origine, mut v) in candidate {
+        match versions.last() {
+            // Stesso istante e stesso contenuto: è la stessa fotografia
+            // arrivata da due storie, non due versioni.
+            Some(u) if u.ts == v.ts && u.hash == v.hash => {
+                da_ripulire.push(origine);
+                continue;
+            }
+            // Stesso istante ma contenuti diversi: sono due fotografie davvero
+            // distinte, e `ts` è l'identità di una versione. Slitta di un
+            // millisecondo — sparire in silenzio è ciò che non deve fare.
+            Some(u) if v.ts <= u.ts => v.ts = u.ts + 1,
+            _ => {}
+        }
+        let destinazione = blob(&dir, &snapshot_name(v.ts, to.as_str()));
+        if destinazione != origine {
+            let Some(bytes) = host.data_read(&origine)? else {
+                // L'indice nominava un contenuto che non c'è più: non lo si
+                // porta dietro, o continuerebbe a mentire sotto la chiave nuova.
+                eprintln!(
+                    "versioning: {origine} non c'è più, la versione {} esce dalla storia di {to}",
+                    v.ts
+                );
+                continue;
+            };
+            host.data_write(&destinazione, &bytes)?;
+            da_ripulire.push(origine);
+        }
+        destinazioni.push(destinazione);
+        versions.push(v);
+    }
+
+    // La cartella abbandonata non deve restare a dire di chi è: un `meta.json`
+    // sopravvissuto lì farebbe rinascere una seconda storia sullo stesso
+    // `doc_id` la prima volta che l'indice va ricostruito.
+    if let Some(esistente) = esistente {
+        if esistente.dir != dir {
+            da_ripulire.push(blob(&esistente.dir, META_FILE));
+        }
+    }
+    // Un contenuto che serve ancora non si cancella, per quanto il suo vecchio
+    // nome sia finito nella lista.
+    da_ripulire.retain(|p| !destinazioni.contains(p));
+
+    Ok(Trasloco {
+        doc: DocVersions {
+            dir,
+            // Il documento è vivo: è appena arrivato qui con un rename.
+            deleted_at: None,
+            versions,
+        },
+        da_ripulire,
+    })
 }
 
 /// Il nome di un blob dello store: i path dell'`HostApi` sono relativi allo
@@ -809,6 +923,150 @@ mod tests {
             store.read(&id("nuova.md"), versioni[0].ts, &host).unwrap(),
             "corpo"
         );
+    }
+
+    /// Due storie che si uniscono possono portare due fotografie dello stesso
+    /// millisecondo: succede tutte le volte che l'orologio non fa in tempo a
+    /// muoversi fra un'operazione e l'altra.
+    #[test]
+    fn two_photographs_of_the_same_instant_do_not_swallow_each_other() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        // Orologio fermo: due storie diverse, lo stesso identico istante.
+        store
+            .snapshot(&id("a.md"), "la storia che arriva", &mut host)
+            .unwrap();
+        store
+            .snapshot(&id("b.md"), "la storia che c'era", &mut host)
+            .unwrap();
+
+        store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
+
+        let versioni = store.list(&id("b.md"));
+        assert_eq!(
+            versioni.len(),
+            2,
+            "contenuti diversi sono versioni diverse anche a parità di istante: {versioni:?}"
+        );
+        let contenuti: Vec<String> = versioni
+            .iter()
+            .map(|v| store.read(&id("b.md"), v.ts, &host).unwrap())
+            .collect();
+        assert!(contenuti.contains(&"la storia che arriva".to_string()));
+        assert!(contenuti.contains(&"la storia che c'era".to_string()));
+    }
+
+    /// Il nome di un blob porta l'estensione del documento: se il contenuto non
+    /// segue il path, l'indice resta a nominare un `<ts>.md` che `read` andrà a
+    /// cercare come `<ts>.txt`.
+    #[test]
+    fn a_rename_that_changes_the_extension_still_finds_the_old_contents() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("appunti.md"), "il corpo", &mut host)
+            .unwrap();
+
+        store
+            .rename(&id("appunti.md"), &id("appunti.txt"), &mut host)
+            .unwrap();
+
+        let versioni = store.list(&id("appunti.txt"));
+        assert_eq!(versioni.len(), 1);
+        assert_eq!(
+            store
+                .read(&id("appunti.txt"), versioni[0].ts, &host)
+                .unwrap(),
+            "il corpo"
+        );
+    }
+
+    /// La storia che migra su un path che ne aveva già una: è il ripristino
+    /// sotto un nome nuovo, e il caso in cui le due metà dello store possono
+    /// contraddirsi.
+    #[test]
+    fn a_history_arriving_where_another_lived_brings_its_contents_along() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+
+        // La prima vita di Nota.md, il cestino, e il path che viene rioccupato.
+        store
+            .snapshot(&id("Nota.md"), "prima vita\n", &mut host)
+            .unwrap();
+        host.avanza(1);
+        store.tombstone(&id("Nota.md"), &mut host).unwrap();
+        host.avanza(1);
+        store
+            .snapshot(&id("Nota.md"), "usurpatrice\n", &mut host)
+            .unwrap();
+
+        // Il ripristino è una scrittura normale (D8): sul nuovo path nasce
+        // *prima* una storia sua — con una cartella sua — e solo dopo arriva il
+        // `DocumentRenamed` che ci porta quella vecchia.
+        host.avanza(1);
+        store
+            .snapshot(&id("Nota 1.md"), "prima vita\n", &mut host)
+            .unwrap();
+        store
+            .rename(&id("Nota.md"), &id("Nota 1.md"), &mut host)
+            .unwrap();
+
+        // L'indice nomina tre versioni: devono essere tre contenuti leggibili.
+        // Un indice che nomina un contenuto inesistente è il modo in cui il
+        // versioning fallisce in modo indistinguibile dal funzionare.
+        let versioni = store.list(&id("Nota 1.md"));
+        assert_eq!(versioni.len(), 3, "versioni: {versioni:?}");
+        let contenuti: Vec<String> = versioni
+            .iter()
+            .map(|v| {
+                store
+                    .read(&id("Nota 1.md"), v.ts, &host)
+                    .unwrap_or_else(|e| panic!("versione {}: {e}", v.ts))
+            })
+            .collect();
+        assert!(contenuti.contains(&"prima vita\n".to_string()));
+        assert!(contenuti.contains(&"usurpatrice\n".to_string()));
+    }
+
+    /// Dopo un'unione la cartella abbandonata non deve restare a dire di chi
+    /// era: `rebuild_from_store` si fida di `meta.json`, e due cartelle che
+    /// dichiarano lo stesso `doc_id` diventano una storia sola.
+    #[test]
+    fn the_abandoned_folder_does_not_come_back_as_a_second_history() {
+        let mut host = MemoryHost::new();
+        let atteso;
+        {
+            let store = VersionStore::open(&mut host).unwrap();
+            store
+                .snapshot(&id("Nota.md"), "prima vita\n", &mut host)
+                .unwrap();
+            host.avanza(1);
+            store
+                .snapshot(&id("Nota 1.md"), "ripristinata\n", &mut host)
+                .unwrap();
+            store
+                .rename(&id("Nota.md"), &id("Nota 1.md"), &mut host)
+                .unwrap();
+            atteso = store.list(&id("Nota 1.md"));
+            assert_eq!(atteso.len(), 2);
+        }
+
+        // L'indice si perde: si ricostruisce dallo store, che è la verità.
+        host.data_write(INDEX_FILE, b"non sono json").unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+
+        assert_eq!(
+            store.list(&id("Nota 1.md")).len(),
+            atteso.len(),
+            "la storia unita deve sopravvivere intera alla ricostruzione"
+        );
+        for v in &atteso {
+            assert!(
+                store.read(&id("Nota 1.md"), v.ts, &host).is_ok(),
+                "versione {} irraggiungibile dopo la ricostruzione",
+                v.ts
+            );
+        }
     }
 
     #[test]
