@@ -534,6 +534,44 @@ body[data-mode="reading"] #editor {
   text-overflow: ellipsis;
 }
 
+/* Ciò che il core non conosce (decisione 0017).
+
+   `.ui-slot` è il buco dove la shell monta una parte DICHIARATIVA: il blocco di
+   un plugin arriva come albero `UiNode` e si disegna con lo stesso renderer
+   delle view, quindi qui non c'è niente da vestire — solo il posto in cui sta.
+   `.block-*` resta il degrado di un `custom_kind` che nessuno rivendica, e ha un
+   bordo tratteggiato perché *si deve vedere* che è un blocco non disegnato: un
+   degrado invisibile è indistinguibile da una resa riuscita. */
+.markdown-preview .ui-slot {
+  display: block;
+  margin: 8px 0;
+}
+.markdown-preview [class^="block-"],
+.markdown-preview [class*=" block-"] {
+  border: 1px dashed var(--doc-rule-soft);
+  border-radius: 5px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  white-space: pre-wrap;
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+}
+/* La formula: c'è il blocco, non c'è il compositore — e si vede. */
+.markdown-preview .math-block {
+  display: block;
+  margin: 8px 0;
+  padding: 8px 12px;
+  text-align: center;
+  background: var(--doc-fill-soft);
+  border-radius: 5px;
+  font-family: var(--mono, monospace);
+}
+.markdown-preview .inline-highlight {
+  background: var(--doc-fill-soft);
+  box-shadow: 0 0 0 2px var(--doc-fill-soft);
+  border-radius: 2px;
+}
+
 /* Transclusion (embed idratati dal kernel): stanno dentro il documento, quindi
    prendono i colori del documento. */
 .embed {

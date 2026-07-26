@@ -19,12 +19,13 @@ use fubmd_abi::traits::{
 };
 use fubmd_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
-    BacklinksView, CoreCommands, OutlineView, SearchIndex, StatsView, TagPanelView, VersionRef,
-    VersionStore, VersioningHandler, BACKLINKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID,
-    TAGS_ID, VERSIONING_ID,
+    BacklinksView, CoreCommands, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer,
+    MathRule, OutlineView, SearchIndex, StatsView, TagPanelView, VersionRef, VersionStore,
+    VersioningHandler, BACKLINKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID,
+    VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, TrashEntry, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, RenderedDocument, TrashEntry, Trust, Workspace};
 
 use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::RecursiveMode;
@@ -133,7 +134,13 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     drop(state.session.lock().unwrap().take());
 
     let mut registry = FormatRegistry::new();
-    registry.register(MarkdownProvider::boxed());
+    // Il primo registrato è anche quello che dà l'estensione alle note nuove
+    // (`FormatRegistry::default_extension`). Un conflitto qui è impossibile con
+    // un provider solo, e resta gestito lo stesso: il giorno che ce ne sono due,
+    // il silenzio sarebbe un file che si apre col parser sbagliato.
+    if let Err(e) = registry.register(MarkdownProvider::boxed()) {
+        return Err(format!("provider di formato in conflitto: {e}"));
+    }
 
     let mut ws = Workspace::new(&root, registry);
 
@@ -187,22 +194,58 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     // (produce solo UI dichiarativa, niente `Html`/`WebView`), si prende
     // documento attivo e riferimenti dall'`HostApi`. L'app non gli fa più da
     // tramite — il giro render/azione passa dai comandi generici qui sotto.
-    ws.register_view_provider(BACKLINKS_ID, Trust::Trusted, Box::new(BacklinksView));
+    ws.register_view_provider(BACKLINKS_ID, Trust::Core, Box::new(BacklinksView));
     // L'outline è la seconda feature ufficiale sul giro delle view, e la prima a
     // usare il canale metadata (`IndexQuery::Outline`): legge la struttura del
     // documento attivo dal kernel, non dall'app.
-    ws.register_view_provider(OUTLINE_ID, Trust::Trusted, Box::new(OutlineView));
+    ws.register_view_provider(OUTLINE_ID, Trust::Core, Box::new(OutlineView));
     // Il pannello tag: aggrega i tag del vault via `IndexQuery::Tags`, click →
     // ricerca. Terza feature ufficiale sul giro delle view.
-    ws.register_view_provider(TAGS_ID, Trust::Trusted, Box::new(TagPanelView::default()));
+    ws.register_view_provider(TAGS_ID, Trust::Core, Box::new(TagPanelView::default()));
     // Le statistiche: quarta feature sul giro delle view, e la prima a leggere
     // il **contesto di sessione** per intero — selezione e modalità, non solo
     // quale nota è aperta (decisione 0007).
-    ws.register_view_provider(STATS_ID, Trust::Trusted, Box::new(StatsView));
+    ws.register_view_provider(STATS_ID, Trust::Core, Box::new(StatsView));
     // I comandi ufficiali: la prima feature sul giro del **registro** (decisione 0009).
     // Da qui in poi un'azione nuova non è un comando Tauri in più — è una riga
     // in un `CommandProvider`, e la palette la trova da sola.
     ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands));
+
+    // Le sintassi ufficiali (decisione 0017). Nessuna di loro tocca il provider
+    // markdown: si **innestano** su di lui, che è la strada che il §3.1 ha
+    // aperto e che prima non esisteva — l'unica alternativa era forkare
+    // `fubmd-format-markdown`.
+    //
+    // Un conflitto qui non è fatale ma non è nemmeno silenzioso: la sintassi che
+    // perde non si registra, e chi monta l'app lo legge. È tutta la differenza
+    // con «l'ultimo registrato vince», che è ciò che il registro faceva prima.
+    for rule in [
+        Box::new(DiagramRule) as Box<dyn fubmd_abi::custom::SyntaxRule>,
+        Box::new(MathRule),
+        Box::new(HighlightRule),
+    ] {
+        if let Err(e) = ws.register_syntax_rule(rule) {
+            eprintln!("sintassi non innestata: {e}");
+        }
+    }
+    // E chi le disegna (§3.2). Il diagramma esce come albero `UiNode` e arriva
+    // alla shell; la formula esce come HTML. `Trust::Core` perché sono feature
+    // ufficiali — un renderer di terzi passerebbe dalla stessa porta con un
+    // grado più basso, e il suo albero verrebbe validato.
+    for renderer in [
+        Box::new(DiagramRenderer) as Box<dyn fubmd_abi::custom::CustomRenderer>,
+        Box::new(MathRenderer),
+    ] {
+        if let Err(e) = ws.register_custom_renderer(Trust::Core, renderer) {
+            eprintln!("renderer non registrato: {e}");
+        }
+    }
+    // Ciò che qualcuno produce e nessuno disegna: il conto che il §3.2 chiedeva
+    // di poter fare. Oggi è vuoto; il giorno che non lo è, è un blocco che
+    // l'utente legge crudo.
+    for kind in ws.undrawn_kinds() {
+        eprintln!("`{kind}` non ha un renderer: degraderà alla resa generica");
+    }
 
     ws.reindex().map_err(|e| e.to_string())?;
 
@@ -359,10 +402,16 @@ fn propose_free_name(state: State<AppState>, id: String) -> Result<String, Strin
 
 /// Rispecchiato da `EmbedContent` in `frontend/src/host/contract.ts` (fixture di
 /// `tests/ts_mirror_app.rs`).
+///
+/// Porta un [`RenderedDocument`] e non una stringa perché un embed passa dai
+/// renderer registrati come l'anteprima: un diagramma dentro una nota trasclusa
+/// resta un diagramma, e le sue parti dichiarative vanno montate dal frontend
+/// dentro il segnaposto che ha appena idratato.
 #[derive(Serialize)]
 pub struct EmbedContent {
     pub doc_id: String,
-    pub html: String,
+    #[serde(flatten)]
+    pub content: RenderedDocument,
 }
 
 /// Contenuto di un embed `![[page#heading]]`: il frontend lo innesta nel
@@ -375,17 +424,17 @@ fn render_embed(
 ) -> Result<EmbedContent, String> {
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
-    let (doc_id, html) = ws
+    let (doc_id, content) = ws
         .render_embed(&page, heading.as_deref())
         .map_err(|e| e.to_string())?;
     Ok(EmbedContent {
         doc_id: doc_id.0,
-        html,
+        content,
     })
 }
 
 #[tauri::command]
-fn render_preview(state: State<AppState>, id: String) -> Result<String, String> {
+fn render_preview(state: State<AppState>, id: String) -> Result<RenderedDocument, String> {
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
     ws.render_preview(&DocId::new(id))

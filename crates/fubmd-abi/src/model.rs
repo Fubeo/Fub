@@ -659,6 +659,13 @@ pub mod custom_kind {
     pub const FOOTNOTE_DEFINITION: &str = "footnote-definition";
     /// Il richiamo nel testo (inline). `attrs: { label: string }`.
     pub const FOOTNOTE_REFERENCE: &str = "footnote-reference";
+    /// Un diagramma a blocco recintato: mermaid, PlantUML, Graphviz, D2.
+    /// `attrs: { engine: string, source: string }`. Il core lo **delimita** e
+    /// non lo disegna: chi lo disegna è un renderer registrato (§3.2), e il
+    /// motore sta negli `attrs` perché il kind è la famiglia, non il dialetto.
+    pub const DIAGRAM: &str = "diagram";
+    /// `==evidenziato==` (inline). `attrs: { text: string }`.
+    pub const HIGHLIGHT: &str = "highlight";
     /// Definition list: i figli sono `DEFINITION_TERM` e `DEFINITION_DESCRIPTION`
     /// alternati, nell'ordine della sorgente.
     pub const DEFINITION_LIST: &str = "definition-list";

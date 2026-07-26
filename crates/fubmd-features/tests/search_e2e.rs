@@ -48,7 +48,9 @@ impl Vault {
     /// spazio dati, registrato (e quindi attivato) prima del `reindex`.
     fn open(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
-        registry.register(MarkdownProvider::boxed());
+        registry
+            .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
         let dir = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
         let index = SearchIndex::open(&dir).expect("indice");

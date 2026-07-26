@@ -60,16 +60,22 @@ use fubmd_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     InvokeMode, ParamKind, ParamSpec, PlannedEdit,
 };
+use fubmd_abi::custom::{
+    CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
+    SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+};
 use fubmd_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
 use fubmd_abi::format::{
-    FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext, RenderOptions,
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
+    RenderOptions, RenderTarget, SourceKind,
 };
 use fubmd_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
     PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
 };
+use fubmd_abi::options::OptionMap;
 use fubmd_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,
@@ -209,7 +215,24 @@ wit_type! {
     FormatCapabilities => "format-capabilities",
     ParseContext => "parse-context",
     RenderOptions => "render-options",
+    RenderTarget => "render-target",
+    SourceKind => "source-kind",
+    DocumentSource => "document-source",
     FormatError => "format-error",
+
+    // La mappa con namespace: al confine è una lista di coppie, perché WIT non
+    // ha mappe. È lo stesso tipo in tutte e quattro le sedi del §3.5 — e che
+    // sia lo STESSO è metà della risposta.
+    OptionMap => "option-map",
+
+    // I due innesti del §3.1 e del §3.2.
+    SyntaxTrigger => "syntax-trigger",
+    SyntaxRuleSpec => "syntax-rule-spec",
+    SyntaxMatch => "syntax-match",
+    SyntaxProduct => "syntax-product",
+    CustomRendererSpec => "custom-renderer-spec",
+    CustomBlock => "custom-block",
+    CustomRendering => "custom-rendering",
     PluginError => "plugin-error",
     Event => "event",
     EventKind => "event-kind",
@@ -308,6 +331,8 @@ wit_type! {
     dyn Plugin => SELF,
     dyn ImportProvider => SELF,
     dyn ExportProvider => SELF,
+    dyn SyntaxRule => SELF,
+    dyn CustomRenderer => SELF,
 }
 
 impl<T: WitType + ?Sized> WitType for &T {
@@ -317,6 +342,14 @@ impl<T: WitType + ?Sized> WitType for &T {
 }
 
 impl<T: WitType + ?Sized> WitType for &mut T {
+    fn wit() -> String {
+        T::wit()
+    }
+}
+
+/// Un `Box` è una scelta di **layout**, non di forma al confine: `Box<UiNode>`
+/// si serializza e si dichiara nel WIT esattamente come `UiNode`.
+impl<T: WitType + ?Sized> WitType for Box<T> {
     fn wit() -> String {
         T::wit()
     }
@@ -2796,62 +2829,229 @@ fn conform(source: &str) -> Result<(), String> {
     };
     contract.record("ui-tree", &[("nodes", wit(&nodes)), ("root", wit(&root))]);
 
+    // La mappa con namespace: al confine una lista di coppie. È l'alias che
+    // tiene onesto il §3.5 — se tornasse a essere `json`, l'entry sparirebbe e
+    // il contratto smetterebbe di dire che le opzioni sono una STRUTTURA e non
+    // una stringa da parsare.
+    contract.record(
+        "option-entry",
+        &[
+            ("key", wit_of::<String>()),
+            ("value", wit_of::<serde_json::Value>()),
+        ],
+    );
+    contract.alias("option-map", "list<option-entry>".to_string());
+
+    contract.enumeration_src(
+        "source-kind",
+        ("format.rs", "SourceKind"),
+        &["text", "bytes"],
+    );
+
+    let document_source_case = |s: &DocumentSource| match s {
+        DocumentSource::Text(t) => case_ty("text", wit(t)),
+        DocumentSource::Bytes(b) => case_ty("bytes", wit(b)),
+    };
+    contract.variant_src(
+        "document-source",
+        ("format.rs", "DocumentSource"),
+        &[
+            document_source_case(&DocumentSource::Text(String::new())),
+            document_source_case(&DocumentSource::Bytes(vec![])),
+        ],
+    );
+
     let FormatDescriptor {
         id,
         name,
         extensions,
-    } = FormatDescriptor {
-        id: String::new(),
-        name: String::new(),
-        extensions: vec![],
-    };
+        source,
+    } = FormatDescriptor::text("", "", &[]);
     contract.record(
         "format-descriptor",
         &[
             ("id", wit(&id)),
             ("name", wit(&name)),
             ("extensions", wit(&extensions)),
+            ("source", wit(&source)),
         ],
     );
 
-    let FormatCapabilities {
-        wikilinks,
-        tags,
-        frontmatter,
-        callouts,
-        embeds,
-    } = FormatCapabilities::default();
-    contract.record(
-        "format-capabilities",
-        &[
-            ("wikilinks", wit(&wikilinks)),
-            ("tags", wit(&tags)),
-            ("frontmatter", wit(&frontmatter)),
-            ("callouts", wit(&callouts)),
-            ("embeds", wit(&embeds)),
-        ],
-    );
+    let FormatCapabilities { syntax } = FormatCapabilities::default();
+    contract.record("format-capabilities", &[("syntax", wit(&syntax))]);
 
-    let ParseContext {
-        doc_id,
-        parse_tags,
-        parse_wikilinks,
-    } = ParseContext::default();
+    let ParseContext { doc_id, options } = ParseContext::default();
     contract.record(
         "parse-context",
+        &[("doc-id", wit(&doc_id)), ("options", wit(&options))],
+    );
+
+    contract.enumeration_src(
+        "render-target",
+        ("format.rs", "RenderTarget"),
+        &["screen", "print", "pdf", "static-site"],
+    );
+
+    let RenderOptions { target, options } = RenderOptions::default();
+    contract.record(
+        "render-options",
+        &[("target", wit(&target)), ("options", wit(&options))],
+    );
+
+    // --- i due innesti: chi aggiunge la sintassi (§3.1), chi disegna il blocco
+    //     che ne esce (§3.2)
+
+    let syntax_trigger_case = |t: &SyntaxTrigger| match t {
+        SyntaxTrigger::Fence { info } => {
+            case_rec("fence", "syntax-trigger-fence", vec![("info", wit(info))])
+        }
+        SyntaxTrigger::Inline { open, close } => case_rec(
+            "inline",
+            "syntax-trigger-inline",
+            vec![("open", wit(open)), ("close", wit(close))],
+        ),
+    };
+    contract.variant_src(
+        "syntax-trigger",
+        ("custom.rs", "SyntaxTrigger"),
         &[
-            ("doc-id", wit(&doc_id)),
-            ("parse-tags", wit(&parse_tags)),
-            ("parse-wikilinks", wit(&parse_wikilinks)),
+            syntax_trigger_case(&SyntaxTrigger::Fence { info: vec![] }),
+            syntax_trigger_case(&SyntaxTrigger::Inline {
+                open: String::new(),
+                close: String::new(),
+            }),
         ],
     );
 
-    let RenderOptions {
-        wikilinks_as_data_attrs,
-    } = RenderOptions::default();
+    let SyntaxRuleSpec {
+        id,
+        format,
+        trigger,
+        order,
+        option,
+        produces,
+    } = SyntaxRuleSpec {
+        id: String::new(),
+        format: String::new(),
+        trigger: SyntaxTrigger::Fence { info: vec![] },
+        order: 0,
+        option: None,
+        produces: vec![],
+    };
     contract.record(
-        "render-options",
-        &[("wikilinks-as-data-attrs", wit(&wikilinks_as_data_attrs))],
+        "syntax-rule-spec",
+        &[
+            ("id", wit(&id)),
+            ("format", wit(&format)),
+            ("trigger", wit(&trigger)),
+            ("order", wit(&order)),
+            ("option", wit(&option)),
+            ("produces", wit(&produces)),
+        ],
+    );
+
+    let SyntaxMatch {
+        trigger,
+        text,
+        span,
+    } = SyntaxMatch {
+        trigger: String::new(),
+        text: String::new(),
+        span: Span::new(0, 0),
+    };
+    contract.record(
+        "syntax-match",
+        &[
+            ("trigger", wit(&trigger)),
+            ("text", wit(&text)),
+            ("span", wit(&span)),
+        ],
+    );
+
+    // `blocks` è l'ARENA e non una lista di indici: una regola produce un
+    // sottoalbero intero, non riferimenti dentro un'arena che non possiede.
+    let syntax_product_case = |p: &SyntaxProduct| match p {
+        SyntaxProduct::Block {
+            custom_kind,
+            attrs,
+            blocks,
+        } => case_rec(
+            "block",
+            "syntax-product-block",
+            vec![
+                ("custom-kind", wit(custom_kind)),
+                ("attrs", wit(attrs)),
+                ("blocks", wit_tree(blocks)),
+            ],
+        ),
+        SyntaxProduct::Inline { custom_kind, attrs } => case_rec(
+            "inline",
+            "syntax-product-inline",
+            vec![("custom-kind", wit(custom_kind)), ("attrs", wit(attrs))],
+        ),
+    };
+    contract.variant_src(
+        "syntax-product",
+        ("custom.rs", "SyntaxProduct"),
+        &[
+            syntax_product_case(&SyntaxProduct::Block {
+                custom_kind: String::new(),
+                attrs: serde_json::Value::Null,
+                blocks: vec![],
+            }),
+            syntax_product_case(&SyntaxProduct::Inline {
+                custom_kind: String::new(),
+                attrs: serde_json::Value::Null,
+            }),
+        ],
+    );
+
+    let CustomRendererSpec { id, kinds } = CustomRendererSpec {
+        id: String::new(),
+        kinds: vec![],
+    };
+    contract.record(
+        "custom-renderer-spec",
+        &[("id", wit(&id)), ("kinds", wit(&kinds))],
+    );
+
+    let CustomBlock {
+        custom_kind,
+        attrs,
+        blocks,
+        anchor,
+        span,
+    } = CustomBlock {
+        custom_kind: String::new(),
+        attrs: serde_json::Value::Null,
+        blocks: vec![],
+        anchor: None,
+        span: Span::new(0, 0),
+    };
+    contract.record(
+        "custom-block",
+        &[
+            ("custom-kind", wit(&custom_kind)),
+            ("attrs", wit(&attrs)),
+            ("blocks", wit_tree(&blocks)),
+            ("anchor", wit(&anchor)),
+            ("span", wit(&span)),
+        ],
+    );
+
+    let custom_rendering_case = |r: &CustomRendering| match r {
+        CustomRendering::Html(h) => case_ty("html", wit(h)),
+        CustomRendering::Ui(n) => case_ty("ui", wit(n)),
+        CustomRendering::Fallback => case("fallback"),
+    };
+    contract.variant_src(
+        "custom-rendering",
+        ("custom.rs", "CustomRendering"),
+        &[
+            custom_rendering_case(&CustomRendering::Html(String::new())),
+            custom_rendering_case(&CustomRendering::Ui(Box::new(UiNode::text("")))),
+            custom_rendering_case(&CustomRendering::Fallback),
+        ],
     );
 
     // --- i comandi (decisione 0009 il registro, decisione 0010 il chiamante non umano)
@@ -3347,19 +3547,8 @@ fn conform(source: &str) -> Result<(), String> {
     };
     contract.record("ui-node", &[("key", wit(&key)), ("kind", wit(&kind))]);
 
-    let PluginPermissions {
-        read_vault,
-        write_vault,
-        network,
-    } = PluginPermissions::default();
-    contract.record(
-        "plugin-permissions",
-        &[
-            ("read-vault", wit(&read_vault)),
-            ("write-vault", wit(&write_vault)),
-            ("network", wit(&network)),
-        ],
-    );
+    let PluginPermissions { granted } = PluginPermissions::default();
+    contract.record("plugin-permissions", &[("granted", wit(&granted))]);
 
     let PluginManifest {
         id,
@@ -3589,6 +3778,7 @@ fn conform(source: &str) -> Result<(), String> {
     // verifica dell'elisione.
 
     contract.types_only("json");
+    contract.types_only("options");
     contract.types_only("model");
     contract.types_only("ui");
     contract.types_only("jobs");
@@ -3616,7 +3806,7 @@ fn conform(source: &str) -> Result<(), String> {
         <dyn FormatProvider>::parse
             as fn(
                 &'static dyn FormatProvider,
-                &'static str,
+                &'static DocumentSource,
                 &'static ParseContext,
             ) -> Result<DocumentModel, FormatError>,
         &["source", "ctx"],
@@ -3641,6 +3831,42 @@ fn conform(source: &str) -> Result<(), String> {
                 &'static DocumentModel,
             ) -> Result<String, FormatError>,
         &["model"],
+    );
+
+    contract.method(
+        "syntax",
+        "spec",
+        <dyn SyntaxRule>::spec as fn(&'static dyn SyntaxRule) -> SyntaxRuleSpec,
+        &[],
+    );
+    contract.method(
+        "syntax",
+        "apply",
+        <dyn SyntaxRule>::apply
+            as fn(
+                &'static dyn SyntaxRule,
+                &'static SyntaxMatch,
+                &'static ParseContext,
+            ) -> Result<Option<SyntaxProduct>, FormatError>,
+        &["m", "ctx"],
+    );
+
+    contract.method(
+        "renderer",
+        "spec",
+        <dyn CustomRenderer>::spec as fn(&'static dyn CustomRenderer) -> CustomRendererSpec,
+        &[],
+    );
+    contract.method(
+        "renderer",
+        "render",
+        <dyn CustomRenderer>::render
+            as fn(
+                &'static dyn CustomRenderer,
+                &'static CustomBlock,
+                &'static RenderOptions,
+            ) -> Result<CustomRendering, FormatError>,
+        &["block", "opts"],
     );
 
     contract.method(
@@ -3978,6 +4204,11 @@ fn conform(source: &str) -> Result<(), String> {
     let expected_exports: BTreeSet<String> = [
         "plugin",
         "format",
+        // I due innesti del §3.1 e del §3.2: separati da `format` perché un
+        // plugin può implementarne uno senza l'altro — ed è esattamente ciò che
+        // «mezzo plugin» significa.
+        "syntax",
+        "renderer",
         "command",
         "view",
         "index",

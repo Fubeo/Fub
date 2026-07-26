@@ -63,6 +63,7 @@ deliberate stia in un posto solo e non solo nei commenti dei singoli punti:
 | [decisione 0012](../../docs/decisions/0012-origine-degli-eventi.md) | `event-handler.handle` prende un `notice` e non più un `event` nudo |
 | [decisione 0013](../../docs/decisions/0013-elenco-delle-capacita.md) | `host-api.storage-get` / `storage-set` **tolte** (lo stato volatile a chiave→valore non ha più casi d'uso: vedi il commento in `0.1.0.wit` e il verbale) |
 | [decisione 0016](../../docs/decisions/0016-cosa-e-una-view.md) | `ui-node` da `variant` a `record { key, kind }` (la chiave, §2.8); l'azione dei nodi da `action-id` a `action-ref` (il payload, §2.7); `view-placement` → `view-surface` e `view-spec.placement` → `surface` (le dieci superfici, §2.2); primo parametro di `render-view`/`on-action` da `string` a `view-instance` (le istanze, §2.3) |
+| [decisione 0017](../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) | i quattro tipi che erano N booleani passano a una mappa con namespace: `format-capabilities` (5), `parse-context` (2), `render-options` (1), `plugin-permissions` (3) — ciò che scade col freeze non è la loro larghezza ma la **forma** (§3.5); e `format.parse` prende un `document-source` invece di una `string`, o i documenti non-testo non entrano affatto (§3.4) |
 
 **Dopo il freeze** un file già qui non si tocca più. Alla pubblicazione di una
 versione nuova:

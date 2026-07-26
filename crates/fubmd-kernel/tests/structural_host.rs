@@ -23,8 +23,11 @@ use fubmd_abi::command::{
 };
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Actor, Event};
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
+use fubmd_abi::options::syntax;
 use fubmd_abi::traits::{CommandProvider, HostApi};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
@@ -34,18 +37,19 @@ struct PlainProvider;
 
 impl FormatProvider for PlainProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "plain".into(),
-            name: "Testo piatto (test)".into(),
-            extensions: vec!["md".into()],
-        }
+        FormatDescriptor::text("plain", "Testo piatto (test)", &["md"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.to_string();
         Ok(model)
@@ -72,21 +76,19 @@ struct LinkLineProvider;
 
 impl FormatProvider for LinkLineProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "link-lines".into(),
-            name: "Una riga, un wikilink (test)".into(),
-            extensions: vec!["md".into()],
-        }
+        FormatDescriptor::text("link-lines", "Una riga, un wikilink (test)", &["md"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities {
-            wikilinks: true,
-            ..FormatCapabilities::default()
-        }
+        FormatCapabilities::of(&[syntax::WIKILINKS])
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         let mut offset = 0usize;
         for line in source.lines() {
@@ -132,7 +134,9 @@ fn vault(provider: Box<dyn FormatProvider>) -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     let mut registry = FormatRegistry::new();
-    registry.register(provider);
+    registry
+        .register(provider)
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
     ws.reindex().expect("reindex");
     (dir, ws)

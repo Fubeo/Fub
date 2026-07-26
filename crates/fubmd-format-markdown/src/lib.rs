@@ -11,8 +11,11 @@ mod serialize;
 mod transfer;
 mod util;
 
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::DocumentModel;
+use fubmd_abi::options::syntax;
 use fubmd_abi::{FormatError, FormatProvider};
 
 pub use transfer::{MarkdownExport, MarkdownImport, TARGET_FILES, TARGET_SINGLE};
@@ -34,25 +37,38 @@ impl MarkdownProvider {
 
 impl FormatProvider for MarkdownProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "markdown".to_string(),
-            name: "Markdown (Obsidian)".to_string(),
-            extensions: vec!["md".to_string(), "markdown".to_string()],
-        }
+        FormatDescriptor::text("markdown", "Markdown (Obsidian)", &["md", "markdown"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities {
-            wikilinks: true,
-            tags: true,
-            frontmatter: true,
-            callouts: true,
-            embeds: true,
-        }
+        // Le sintassi che questo provider sa leggere **da sé**. Ciò che gli
+        // arriva innestato da una `SyntaxRule` non sta qui: quelle capacità
+        // sono del vault, non del provider, e chiederle a lui darebbe una
+        // risposta diversa a seconda di cosa è installato.
+        FormatCapabilities::of(&[
+            syntax::WIKILINKS,
+            syntax::TAGS,
+            syntax::FRONTMATTER,
+            syntax::CALLOUTS,
+            syntax::EMBEDS,
+            syntax::FOOTNOTES,
+            syntax::DEFINITION_LISTS,
+        ])
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
-        parse::parse_markdown(source, ctx)
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        // Un provider testuale non indovina l'encoding: dei byte sono un «non
+        // so», non un tentativo. Vedi `FormatDescriptor::source`.
+        let text = source.text().ok_or_else(|| {
+            FormatError::Unsupported(
+                "il provider markdown vuole testo UTF-8, non byte grezzi".to_string(),
+            )
+        })?;
+        parse::parse_markdown(text, ctx)
     }
 
     fn render_html(
@@ -75,7 +91,7 @@ mod tests {
 
     fn parse(src: &str) -> DocumentModel {
         MarkdownProvider::new()
-            .parse(src, &ParseContext::obsidian("nota.md"))
+            .parse(&src.into(), &ParseContext::obsidian("nota.md"))
             .unwrap()
     }
 
@@ -196,12 +212,7 @@ mod tests {
     fn renders_wikilink_as_data_attr() {
         let doc = parse("[[Nota Due]]");
         let html = MarkdownProvider::new()
-            .render_html(
-                &doc,
-                &RenderOptions {
-                    wikilinks_as_data_attrs: true,
-                },
-            )
+            .render_html(&doc, &RenderOptions::preview())
             .unwrap();
         assert!(
             html.contains("data-wikilink-page=\"Nota Due\""),
@@ -216,12 +227,7 @@ mod tests {
         // qui deve uscire solo il placeholder, mai il contenuto del target.
         let doc = parse("![[Altra Nota#Sezione]]");
         let html = MarkdownProvider::new()
-            .render_html(
-                &doc,
-                &RenderOptions {
-                    wikilinks_as_data_attrs: true,
-                },
-            )
+            .render_html(&doc, &RenderOptions::preview())
             .unwrap();
         assert!(html.contains("class=\"embed\""), "html: {html}");
         assert!(html.contains("data-embed-page=\"Altra Nota\""));

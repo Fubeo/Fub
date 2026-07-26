@@ -7,6 +7,7 @@ import type {
   CommandSpec,
   EmbedContent,
   GraphData,
+  RenderedDocument,
   Actor,
   KernelEvent,
   KernelNotice,
@@ -284,7 +285,8 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     extensions: true,
     versioning: true,
   }),
-  EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true }),
+  EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true, parts: true }),
+  RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
   GraphData: keysOf<GraphData>({ nodes: true, edges: true }),
   WorkspaceMeta: keysOf<WorkspaceMeta>({
     icons: true,

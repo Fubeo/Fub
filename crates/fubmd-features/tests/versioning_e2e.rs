@@ -33,7 +33,9 @@ impl Vault {
     /// della feature, e scatta sull'evento `VaultOpened` che emette `reindex`.
     fn open(&self) -> (Workspace, VersionStore) {
         let mut registry = FormatRegistry::new();
-        registry.register(MarkdownProvider::boxed());
+        registry
+            .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
         let store = ws
             .with_host(VERSIONING_ID, VersionStore::open)
@@ -53,7 +55,9 @@ impl Vault {
     /// Apre il vault col versioning **spento** (D7): l'handler non si registra.
     fn open_senza_versioning(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
-        registry.register(MarkdownProvider::boxed());
+        registry
+            .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
         ws.reindex().expect("reindex");
         ws

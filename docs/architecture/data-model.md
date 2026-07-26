@@ -302,11 +302,24 @@ tutti e due i posti prima di usarlo:
 | `definition-list` | — | figli: `definition-term` e `definition-description` alternati |
 | `definition-term` / `definition-description` | — | corpo in `blocks` |
 | `html` | `{ "html": string }` | HTML grezzo della sorgente: resta **dato**, non torna markup (5.3) |
-| `math` | `{ "source": string, "display": bool }` | riservato (M3) |
+| `math` | `{ "source": string, "display": bool }` | prodotto dalla regola `fubmd:math` (recinto `math`/`latex`/`tex`), reso da `MathRenderer` |
+| `diagram` | `{ "engine": string, "source": string }` | mermaid, PlantUML, Graphviz, D2. Il motore sta negli `attrs` perché il kind è la **famiglia**: chi li disegna vuole un innesto solo |
+| `highlight` | `{ "text": string }` | **inline**, `==…==` |
 | `block` | — | ciò che il provider non sa nominare |
 
+**Chi emette un kind, e chi lo disegna.** Dalla
+[decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) i
+kind non arrivano più solo dal provider: una `SyntaxRule` innestata può
+produrne, e un `CustomRenderer` registrato può disegnarli. Il **namespace** li
+divide — i kind del core non hanno prefisso (sono in questa tabella), quelli di
+terzi portano `ns:`. `Workspace::undrawn_kinds()` dice quali sono prodotti e mai
+disegnati.
+
 I kind **sconosciuti** degradano sempre a resa generica
-(`<div class="block-{kind}">`), mai a errore.
+(`<div class="block-{kind}">` per un blocco, `<span class="inline-{kind}">` col
+`text` degli `attrs` per un inline), mai a errore. Il degrado inline **non
+esisteva** prima della 0017: un `Inline::Custom` sconosciuto non veniva reso
+affatto, quindi il testo spariva in silenzio.
 
 ## `LinkTarget` — intento non risolto
 

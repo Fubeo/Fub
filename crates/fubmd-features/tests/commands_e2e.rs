@@ -35,7 +35,9 @@ impl Vault {
 
     fn open(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
-        registry.register(MarkdownProvider::boxed());
+        registry
+            .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
         ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands));
         ws.reindex().expect("reindex");

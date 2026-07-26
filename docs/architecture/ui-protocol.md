@@ -197,7 +197,10 @@ si guardi, ed è il caso che la maschera esiste per servire.
 
 - **`Html`** — un frammento già renderizzato dal core (es. l'anteprima HTML di un
   backlink prodotta dal `FormatProvider`). Non è codice del plugin, è output del
-  core reinserito nell'albero.
+  core reinserito nell'albero. Passa **comunque** dal punto unico di
+  sanitizzazione (`ui/sanitize.ts`, §3.6): i due presidi rispondono a due domande
+  diverse — il kernel dice *chi* può mandare markup, il sanitizer *quale* markup
+  entra nella webview — e il codice fidato non è codice infallibile.
 - **`WebView`** — iframe isolato (`sandbox="allow-scripts"`). È l'unico punto in
   cui gira codice arbitrario del plugin. Regola: **si usa solo quando la resa
   dichiarativa non basta davvero** e il contenuto richiede un canvas/DOM proprio.
@@ -223,6 +226,29 @@ memoria isolata ma `<script>` iniettato nel core. Quindi:
 - `WebView` tornerà disponibile ai plugin solo quando esisteranno una **asset
   story** (da dove viene `url`? asset del plugin serviti dall'host, non URL
   arbitrari) e una **CSP** dedicate — da progettare a M5, non prima.
+
+## L'HTML entra da un punto solo
+
+Ogni frammento di HTML che finisce nella webview passa da
+`frontend/src/ui/sanitize.ts` (§3.6): `UiNode::Html`, l'anteprima del documento,
+il contenuto di un embed. Prima erano tre punti e nessuno sapeva degli altri.
+
+Il sanitizer restituisce un `DocumentFragment` e non una stringa **di
+proposito**: una stringa ripulita che il chiamante rimetta in `innerHTML` viene
+parsata due volte, e la doppia parsatura è la classe di difetti che i sanitizer
+pagano più cara. La **politica** — quale tag, quale attributo, quale URL — è un
+pugno di funzioni pure sotto test; il cammino sul DOM no, perché questa shell non
+ha un ambiente DOM nei test (§17.2).
+
+Due regole che vale la pena ricordare, perché non sono simmetriche:
+
+- un **link** è navigazione e un `https://` esterno passa: è l'utente a decidere
+  se seguirlo (e riceve `rel="noopener noreferrer"`);
+- una **risorsa** (`src`) è caricamento: parte da sola e dice a chi la serve che
+  quella nota è aperta, quindi il remoto è bloccato di default (5.3, 23.2).
+
+La CSP in `tauri.conf.json` è l'altra metà: il sanitizer decide *cosa entra* nel
+DOM, la CSP *cosa può fare* una volta entrato.
 
 ## Transclusion (embed): placeholder + composizione
 
@@ -293,8 +319,18 @@ parte diversa, ed è così che si è scoperto se regge:
   update» — è mantenuto così: la chiave sta **sul nodo** (non un `id` a parte),
   `mountTree` riconcilia invece di ricostruire, e un campo che ha il focus non
   si sovrascrive col valore del provider.
+- **Fatto (decisione 0017)** — il protocollo dichiarativo **arriva ai blocchi
+  custom** e non solo alle view: `render_preview` restituisce un
+  `RenderedDocument { html, parts }`, l'HTML porta un buco `data-ui-slot="N"` e la
+  shell ci monta la parte con lo stesso `mountTree`. È così che il blocco di un
+  plugin arriva a schermo **senza una riga in questo bundle**, ed è la terza delle
+  tre opzioni del §3.3 (l'iframe sandboxato col protocollo di messaggi resta la
+  strada del widget vero, e va a M5 con l'asset story di `WebView`).
 - **Resta aperto** — la virtualizzazione delle liste lunghe
   ([§2.9](../roadmap/02-cosa-e-una-view.md)) e il ramo «la shell conosce `ns`» di
-  `Custom`, che arriverà col suo primo cliente.
+  `Custom`. Il primo cliente è arrivato — il diagramma, `ns: "fubmd:diagram"` — e
+  ha mostrato che quel ramo **ancora non serve**: il `fallback` dichiarativo è la
+  resa giusta finché non c'è un motore da invocare, e costruire il registro adesso
+  sarebbe costruirlo per un cliente che non lo usa.
 - Ogni nuovo `UiNode` deve restare esprimibile in WIT (vedi la tabella in
   [traits.md](traits.md)).

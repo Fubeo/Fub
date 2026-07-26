@@ -8,7 +8,9 @@
 //! in `frontend/src/host/mirror.test.ts`. Rigenerazione: `UPDATE_MIRROR=1 cargo
 //! test -p fubmd-app --test ts_mirror_app`.
 
+use fubmd_abi::ui::UiNode;
 use fubmd_app_lib::{EmbedContent, GraphData, GraphEdge, VaultInfo, WorkspaceMeta};
+use fubmd_kernel::{RenderedDocument, RenderedPart};
 use serde_json::{json, Value};
 
 fn to_value<T: serde::Serialize>(v: T) -> Value {
@@ -27,7 +29,18 @@ fn expected() -> Value {
         })],
         "EmbedContent": [to_value(EmbedContent {
             doc_id: "a.md".into(),
-            html: "<p>x</p>".into(),
+            content: RenderedDocument::html("<p>x</p>"),
+        })],
+        // Il campione ha una parte: una `RenderedDocument` senza parti è
+        // esattamente la stringa di prima, e non proverebbe il canale che
+        // questa seduta apre (§3.2, §3.3).
+        "RenderedDocument": [to_value(RenderedDocument {
+            html: "<p>a</p><div class=\"ui-slot\" data-ui-slot=\"0\" data-custom-kind=\"fubmd:diagram\"></div>".into(),
+            parts: vec![RenderedPart {
+                slot: 0,
+                kind: "fubmd:diagram".into(),
+                node: UiNode::text("graph TD;"),
+            }],
         })],
         "GraphData": [to_value(GraphData {
             nodes: vec!["a.md".into(), "b.md".into()],

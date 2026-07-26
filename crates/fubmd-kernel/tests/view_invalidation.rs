@@ -109,7 +109,7 @@ fn a_provider_can_ask_for_a_redraw_and_the_invitation_carries_its_origin() {
     ws.register_event_handler("ascoltatore", Box::new(Ascoltatore(log.clone())));
     ws.register_view_provider(
         "test.lenta",
-        Trust::Untrusted,
+        Trust::Community,
         Box::new(LavoroLungo(log.clone())),
     );
 
@@ -145,7 +145,7 @@ fn an_invitation_without_an_instance_means_all_of_them() {
     ws.register_event_handler("ascoltatore", Box::new(Ascoltatore(log.clone())));
     ws.register_view_provider(
         "test.lenta",
-        Trust::Untrusted,
+        Trust::Community,
         Box::new(LavoroLungo(log.clone())),
     );
 

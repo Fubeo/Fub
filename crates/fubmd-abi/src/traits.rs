@@ -1234,18 +1234,50 @@ pub trait EventHandler: Send + Sync {
 // Ciclo di vita del plugin (bundle nativo o WASM)
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Cosa un plugin dichiara di voler fare.
+///
+/// Erano tre booleani — leggere, scrivere, rete — contro ciò che il 20.1, il
+/// 23.1 e il 20.3 chiedono: appunti, camera e microfono, filesystem esterno, e
+/// soprattutto **rete con allowlist** e **file con allowlist**, cioè permessi
+/// che hanno un *parametro*. Un booleano non ha dove metterlo, e il permesso
+/// «rete» senza allowlist è o tutto o niente.
+///
+/// Le chiavi del core stanno in [`permission`](crate::options::permission); il
+/// valore è il parametro (una lista di host, un elenco di prefissi di path).
+/// Un permesso con un namespace di terzi resta nella mappa e attraversa il
+/// confine intatto: un host che non lo conosce può **rifiutarlo**, che è
+/// esattamente ciò che un enum chiuso non gli avrebbe permesso di fare.
+///
+/// Il **punto di applicazione non esiste ancora** ed è il §7.3: qui c'è la
+/// forma, che è la metà che scade col freeze.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PluginPermissions {
-    pub read_vault: bool,
-    pub write_vault: bool,
-    pub network: bool,
+    pub granted: crate::options::OptionMap,
+}
+
+impl PluginPermissions {
+    /// I permessi che dichiarano questi nomi, senza parametro.
+    pub fn of(names: &[&str]) -> Self {
+        PluginPermissions {
+            granted: names
+                .iter()
+                .fold(crate::options::OptionMap::new(), |m, n| m.on(*n)),
+        }
+    }
+
+    pub fn has(&self, name: &str) -> bool {
+        self.granted.enabled(name)
+    }
 }
 
 /// La versione del contratto che QUESTO abi definisce. È la stessa del
 /// `package fubmd:abi@…` nel WIT (il test di conformità le confronta).
 pub const ABI_VERSION: &str = "0.1.0";
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+// Niente `Eq`: i permessi portano un parametro JSON, e `serde_json::Value` non
+// è `Eq` (contiene numeri in virgola mobile). È lo stesso motivo per cui
+// `Block::Custom` si ferma a `PartialEq`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PluginManifest {
     pub id: String,
     pub name: String,

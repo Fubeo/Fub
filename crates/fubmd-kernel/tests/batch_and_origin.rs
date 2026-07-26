@@ -25,8 +25,11 @@ use camino::Utf8PathBuf;
 use fubmd_abi::edit::{EditRequest, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice};
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
+use fubmd_abi::options::syntax;
 use fubmd_abi::traits::{EventHandler, HostApi};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
@@ -38,21 +41,19 @@ struct LinkListProvider;
 
 impl FormatProvider for LinkListProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "linklist".into(),
-            name: "Lista di link (test)".into(),
-            extensions: vec!["lnk".into()],
-        }
+        FormatDescriptor::text("linklist", "Lista di link (test)", &["lnk"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities {
-            wikilinks: true,
-            ..FormatCapabilities::default()
-        }
+        FormatCapabilities::of(&[syntax::WIKILINKS])
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         let mut offset = 0usize;
         for line in source.lines() {
@@ -107,7 +108,9 @@ impl Drop for TempDir {
 
 fn workspace(dir: &Utf8PathBuf) -> Workspace {
     let mut registry = FormatRegistry::new();
-    registry.register(Box::new(LinkListProvider));
+    registry
+        .register(Box::new(LinkListProvider))
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(dir, registry);
     ws.reindex().expect("reindex vault vuoto");
     ws

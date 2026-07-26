@@ -15,7 +15,9 @@ use std::sync::{Arc, Mutex};
 use camino::Utf8PathBuf;
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{EventMask, Notice};
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{EventHandler, HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
@@ -27,18 +29,19 @@ struct PlainProvider;
 
 impl FormatProvider for PlainProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "plain".into(),
-            name: "Testo piatto (test)".into(),
-            extensions: vec!["md".into()],
-        }
+        FormatDescriptor::text("plain", "Testo piatto (test)", &["md"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.to_string();
         Ok(model)
@@ -116,7 +119,9 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     let mut registry = FormatRegistry::new();
-    registry.register(Box::new(PlainProvider));
+    registry
+        .register(Box::new(PlainProvider))
+        .expect("nessun conflitto di estensioni");
     let ws = Workspace::new(&root, registry);
     (dir, ws)
 }
@@ -126,11 +131,7 @@ fn events_emitted_inside_on_action_are_delivered_after_the_call_returns() {
     let (_dir, mut ws) = vault();
     let log: Log = Arc::default();
     ws.register_event_handler("recorder", Box::new(Recorder(log.clone())));
-    ws.register_view_provider(
-        "scrivente",
-        Trust::Trusted,
-        Box::new(WritingView(log.clone())),
-    );
+    ws.register_view_provider("scrivente", Trust::Core, Box::new(WritingView(log.clone())));
 
     ws.view_action(&ViewInstance::only("scrivente"), UiAction::new("scrivi"))
         .expect("l'azione riesce");

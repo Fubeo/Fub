@@ -112,7 +112,7 @@ provider **condivisi** (`Arc`) invece che estratti dal workspace per la durata
 della chiamata: un comando che invoca deve trovare gli altri comandi, compresi
 quelli del proprio provider.
 
-**Dove sta il permesso.** `PluginPermissions.write_vault` esiste e **non lo
+**Dove sta il permesso.** `PluginPermissions` porta `fubmd:write-vault` e **non lo
 legge nessuno** — non per dimenticanza: questo kernel non ha plugin, ha provider
 registrati per id, e `Plugin::manifest()` non viene mai chiamata perché non c'è
 niente che installi, abiliti o verifichi. Applicare `write_vault` oggi vorrebbe
@@ -491,35 +491,46 @@ proprio `Trust`. Vedi [ui-protocol.md](ui-protocol.md).
 ## Manifest e permessi (stato attuale)
 
 ```rust
-pub struct PluginManifest { pub id, pub name, pub version, pub permissions: PluginPermissions }
-pub struct PluginPermissions { pub read_vault: bool, pub write_vault: bool, pub network: bool }
+pub struct PluginManifest { pub id, pub name, pub version, pub abi_version, pub permissions: PluginPermissions }
+pub struct PluginPermissions { pub granted: OptionMap }   // `ns:nome` → parametro
 ```
+
+Erano **tre booleani** fino alla
+[decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md), ed è
+la forma che è cambiata, non la larghezza: un booleano non ha dove mettere il
+**parametro** di un permesso, e «rete» senza allowlist è o tutto o niente —
+mentre 20.3 chiede proprio l'allowlist, di rete e di file. Le chiavi del core
+stanno in `options::permission`; un permesso con un namespace di terzi attraversa
+il confine intatto, e un host che non lo conosce può **rifiutarlo** — che è
+esattamente ciò che un enum chiuso non gli avrebbe permesso di fare.
 
 ## Modello capability: **ibrido** (deciso)
 
-Il modello scelto è **grana grossa (booleani) + allowlist opzionale di path/glob**
-per lo scope del vault. Non grana fine con prompt di consenso runtime (troppo costo
-host/UI per il valore), non solo booleani (troppo poco per limitare *dove* un
-plugin legge/scrive).
+Il modello scelto è **grana grossa (un permesso per capacità) + allowlist come
+parametro del permesso**. Non grana fine con prompt di consenso runtime (troppo
+costo host/UI per il valore), non permessi nudi (troppo poco per limitare *dove*
+un plugin legge, scrive o si connette).
 
-- **Concessione all'installazione:** i tre booleani (`read_vault`, `write_vault`,
-  `network`) sono mostrati e accettati quando il plugin viene installato/attivato.
-- **Scope opzionale del vault:** un plugin può dichiarare un'**allowlist di
-  path/glob** (es. `Templates/**`, `Daily/**`); se presente, `HostApi.read_document`
-  / `write_document` la applicano e negano (`PluginError::PermissionDenied`) tutto
-  ciò che sta fuori. Se assente, valgono i booleani sull'intero vault.
+L'allowlist non è più un campo a parte: è il **valore** della voce, ed è la
+ragione per cui i tre booleani sono diventati una mappa.
+
+- **Concessione all'installazione:** le voci di `granted` sono mostrate e
+  accettate quando il plugin viene installato/attivato.
+- **Scope del vault:** `fubmd:read-vault` / `fubmd:write-vault` con un elenco di
+  prefissi (es. `["Templates/", "Daily/"]`); `HostApi.read_document` /
+  `write_document` lo applicano e negano (`PluginError::PermissionDenied`) tutto
+  ciò che sta fuori. Senza parametro, la voce vale sull'intero vault.
+- **Rete e filesystem esterno:** `fubmd:network` con l'allowlist di host,
+  `fubmd:external-fs` con quella dei path (20.3).
 - **Enforcement in un solo punto:** i controlli vivono nell'implementazione di
-  `HostApi`, così valgono identici per plugin nativi e WASM.
-
-Estensione prevista del manifest (da introdurre a M4, congelare in WIT):
+  `HostApi`, così valgono identici per plugin nativi e WASM. **Quel punto non
+  esiste ancora**, ed è il §7.3: la 0017 ha fissato la forma, che è la metà che
+  scade col freeze.
 
 ```rust
-pub struct PluginPermissions {
-    pub read_vault: bool,
-    pub write_vault: bool,
-    pub network: bool,
-    pub vault_scope: Vec<String>,   // glob; vuoto = intero vault (soggetto ai bool)
-}
+PluginPermissions::of(&[permission::READ_VAULT])          // tutto il vault, in lettura
+    .granted
+    .with(permission::NETWORK, json!(["api.esempio.com"])) // rete, con allowlist
 ```
 
 `PluginError` ha già la variante `PermissionDenied(String)` per veicolare i rifiuti

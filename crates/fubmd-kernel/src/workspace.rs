@@ -50,8 +50,9 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode};
+use fubmd_abi::custom::{CustomRenderer, SyntaxRule};
 use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
-use fubmd_abi::format::{ParseContext, RenderOptions};
+use fubmd_abi::format::{DocumentSource, ParseContext, RenderOptions, SourceKind};
 use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span};
 use fubmd_abi::session::{ContextMask, ViewContext};
 use fubmd_abi::traits::{
@@ -72,6 +73,8 @@ use crate::health;
 use crate::pathlink;
 use crate::properties;
 use crate::registry::FormatRegistry;
+use crate::renderer::{self, RenderedDocument, RendererConflict, RendererRegistry};
+use crate::syntax::{SyntaxConflict, SyntaxRegistry};
 use crate::tag_counts::TagCounts;
 use crate::vault::{TrashEntry, Vault, DATA_DIR};
 
@@ -105,21 +108,60 @@ pub enum GraphUpdate {
     FullRebuild,
 }
 
-/// Quanto l'host si fida di chi ha prodotto un albero di UI.
+/// Quanto l'host si fida di chi ha prodotto un albero di UI — o un blocco
+/// custom, che dal punto di vista del confine è la stessa cosa.
 ///
 /// Non è una proprietà dell'albero, è una proprietà di **chi lo manda**: lo
 /// stesso `UiNode::Html` è legittimo da una feature ufficiale e inaccettabile da
 /// un plugin sandboxato, perché nella webview principale il contenuto attivo ha
 /// l'IPC con pieni privilegi — passare da lì aggirerebbe l'intera sandbox. Vedi
 /// `docs/architecture/ui-protocol.md`.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+///
+/// **Erano due varianti** (§3.5), e 20.2 e 20.3 ne chiedono quattro: verificato,
+/// community, locale in sviluppo, revocato. È l'unico dei quattro tipi di quella
+/// voce che vive nel kernel e non nell'abi — la sua forma non scade col freeze —
+/// e sta lì perché la domanda è la stessa: un `enum` a due casi dove ciò che
+/// arriva ha una coda. La differenza con gli altri tre è che qui i casi sono
+/// **ordinati e esclusivi**, quindi la risposta non è una mappa: è un grado.
+///
+/// L'ordine è dal più fidato al meno, e conta: `>=` fra due gradi è una domanda
+/// che si fa davvero (`trust <= Trust::Development` = «lo eseguo?»).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Trust {
     /// Core e feature ufficiali: `Html`/`WebView` ammesse.
-    Trusted,
-    /// Plugin di terzi (a M4 i nativi non-core, a M5 i componenti WASM):
-    /// contenuto attivo rifiutato, in qualunque punto dell'albero.
+    Core,
+    /// Firmato da una catena che l'host riconosce (20.2). Non è codice del
+    /// core: contenuto attivo rifiutato lo stesso.
+    Verified,
+    /// Pubblicato ma non verificato. È il default, ed è deliberato che il grado
+    /// più restrittivo fra quelli che *girano* sia ciò che si ottiene
+    /// dimenticandosi di dichiararlo.
     #[default]
-    Untrusted,
+    Community,
+    /// Locale, in sviluppo (20.3). Gira, e l'host lo sa: è il grado che una UI
+    /// deve poter mostrare diversamente dagli altri, non un sinonimo di
+    /// community.
+    Development,
+    /// Revocato: **non gira affatto**. Non è un grado di fiducia più basso, è
+    /// l'assenza del permesso di essere eseguito.
+    Revoked,
+}
+
+impl Trust {
+    /// Può emettere contenuto attivo (`Html`, `WebView`)? Solo il core.
+    ///
+    /// La regola non si allarga con i gradi nuovi, ed è il punto: `Verified`
+    /// dice che *si sa chi è*, non che il suo `<script>` sia benvenuto nella
+    /// webview che ha l'IPC. Quel varco si apre con l'asset story e la CSP di
+    /// M5, non con una firma.
+    pub fn allows_active_content(self) -> bool {
+        self == Trust::Core
+    }
+
+    /// Gira? Tutto tranne il revocato.
+    pub fn runs(self) -> bool {
+        self != Trust::Revoked
+    }
 }
 
 /// Tetto di eventi drenati in un singolo `dispatch_pending`: tronca i cicli
@@ -186,6 +228,13 @@ impl GraphSource for DocMeta {
 pub struct Workspace {
     vault: Vault,
     registry: FormatRegistry,
+    /// Le sintassi innestate sui provider (§3.1). Girano dopo il parse, sul
+    /// modello: è ciò che le rende innestabili su un provider che non le
+    /// conosce.
+    syntax: SyntaxRegistry,
+    /// Chi disegna quale `custom_kind` (§3.2). Il registro che l'escape hatch
+    /// del modello non aveva.
+    renderers: RendererRegistry,
     /// La cache dei metadati (split metadata/body: vedi [`DocMeta`]). È
     /// l'insieme dei documenti indicizzati: `contains_key` qui È "il
     /// workspace lo conosce".
@@ -310,6 +359,8 @@ impl Workspace {
         Workspace {
             vault: Vault::open(root),
             registry,
+            syntax: SyntaxRegistry::new(),
+            renderers: RendererRegistry::new(),
             metas: HashMap::new(),
             tags: TagCounts::default(),
             graph: LinkGraph::default(),
@@ -1182,23 +1233,65 @@ impl Workspace {
         Some(pathlink::relative_ref(src_after, target_after))
     }
 
-    /// Rende l'anteprima HTML di un documento tramite il suo provider.
+    /// Innesta una sintassi su un provider (§3.1), o dice **perché no**.
+    ///
+    /// Il `Result` non è cerimonia: due regole che rivendicano la stessa
+    /// sintassi sono un conflitto, e il modo in cui questo registro sbagliava
+    /// prima era proprio non avere dove dirlo.
+    pub fn register_syntax_rule(
+        &mut self,
+        rule: Box<dyn SyntaxRule>,
+    ) -> std::result::Result<(), SyntaxConflict> {
+        self.syntax.register(rule)
+    }
+
+    /// Registra chi disegna un `custom_kind` (§3.2).
+    ///
+    /// Il [`Trust`] è quello delle view e per la stessa ragione: un
+    /// `CustomRendering::Ui` è un albero di UI, e da chi non è il core il
+    /// contenuto attivo si rifiuta a qualunque profondità.
+    pub fn register_custom_renderer(
+        &mut self,
+        trust: Trust,
+        renderer: Box<dyn CustomRenderer>,
+    ) -> std::result::Result<(), RendererConflict> {
+        self.renderers.register(trust, renderer)
+    }
+
+    /// I `custom_kind` che qualcuno **produce** e nessuno **disegna**.
+    ///
+    /// È il conto che il §3.2 chiedeva di poter fare: ogni nome qui dentro è un
+    /// blocco che l'utente leggerà crudo — il degrado generico funziona, ma
+    /// nessuno ha detto chi lo disegnerebbe. Chi monta l'app può guardarlo; oggi
+    /// non c'è ancora una superficie dove mostrarlo (§20.4).
+    pub fn undrawn_kinds(&self) -> Vec<String> {
+        let drawn = self.renderers.rendered_kinds();
+        self.syntax
+            .produced_kinds()
+            .into_iter()
+            .filter(|k| !drawn.contains(k))
+            .collect()
+    }
+
+    /// Rende l'anteprima di un documento: l'HTML del provider, e le parti
+    /// **dichiarative** che i renderer registrati hanno prodotto.
     ///
     /// Il corpo non sta in cache (split metadata/body): si rilegge e riparsa
-    /// dal disco. Il render è per-documento e on demand — è esattamente il
-    /// tipo di lettura che il disco serve bene, mentre la cache calda serve
-    /// le mutazioni.
-    pub fn render_preview(&self, id: &DocId) -> Result<String> {
+    /// dal disco, nella forma che il provider ha dichiarato (§3.4). Il render è
+    /// per-documento e on demand — è esattamente il tipo di lettura che il disco
+    /// serve bene, mentre la cache calda serve le mutazioni.
+    pub fn render_preview(&self, id: &DocId) -> Result<RenderedDocument> {
         if !self.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
-        let source = self.vault.read(id)?;
-        let model = self.parse(id, &source)?;
+        let model = self.parse_from_disk(id)?;
         let provider = self.provider_for(id)?;
-        let opts = RenderOptions {
-            wikilinks_as_data_attrs: true,
-        };
-        Ok(provider.render_html(&model, &opts)?)
+        Ok(renderer::compose(
+            &model,
+            provider,
+            &self.renderers,
+            &RenderOptions::preview(),
+        )?)
     }
 
     /// Rende il contenuto di un embed `![[page#heading]]`: risolve la pagina
@@ -1210,7 +1303,11 @@ impl Workspace {
     /// innesta l'HTML nel placeholder. Ricorsione, profondità massima e cicli
     /// sono gestiti dal chiamante, che conosce la catena di embed corrente
     /// (vedi `docs/architecture/ui-protocol.md`).
-    pub fn render_embed(&self, page: &str, heading: Option<&str>) -> Result<(DocId, String)> {
+    pub fn render_embed(
+        &self,
+        page: &str,
+        heading: Option<&str>,
+    ) -> Result<(DocId, RenderedDocument)> {
         let id = self
             .resolve_link(page)
             .ok_or_else(|| KernelError::NotFound(page.to_string()))?;
@@ -1218,21 +1315,23 @@ impl Workspace {
             return Err(KernelError::NotFound(id.to_string()));
         }
         // Come `render_preview`: il corpo si riparsa dal disco on demand.
-        let source = self.vault.read(&id)?;
-        let model = self.parse(&id, &source)?;
+        let model = self.parse_from_disk(&id)?;
         let provider = self.provider_for(&id)?;
-        let opts = RenderOptions {
-            wikilinks_as_data_attrs: true,
-        };
-        let html = match heading {
-            None => provider.render_html(&model, &opts)?,
+        let opts = RenderOptions::preview();
+        let model = match heading {
+            None => model,
             Some(h) => {
-                let section = section_of(&model, h)
-                    .ok_or_else(|| KernelError::NotFound(format!("{id}#{h}")))?;
-                provider.render_html(&section, &opts)?
+                section_of(&model, h).ok_or_else(|| KernelError::NotFound(format!("{id}#{h}")))?
             }
         };
-        Ok((id, html))
+        // Anche un embed passa dai renderer: un diagramma dentro una nota
+        // trascluso resta un diagramma. Gli slot delle parti sono numerati
+        // dentro QUESTA composizione, e il frontend li monta dentro il
+        // segnaposto dell'embed che ha appena idratato.
+        Ok((
+            id,
+            renderer::compose(&model, provider, &self.renderers, &opts)?,
+        ))
     }
 
     /// Backlink verso un documento.
@@ -2163,10 +2262,36 @@ impl Workspace {
 
     // --- interni ---------------------------------------------------------
 
+    /// Parsa una sorgente che il chiamante ha già in mano.
+    ///
+    /// Ha per forza del testo: chi la chiama è appena passato da una scrittura o
+    /// da un `Vault::read`. Per un documento che sta solo sul disco c'è
+    /// [`Workspace::parse_from_disk`], che legge nella forma che il provider ha
+    /// dichiarato.
     fn parse(&self, id: &DocId, source: &str) -> Result<DocumentModel> {
+        self.parse_source(id, DocumentSource::Text(source.to_string()))
+    }
+
+    /// Legge e parsa un documento **nella forma che il suo provider chiede**:
+    /// testo decodificato o byte grezzi (§3.4).
+    fn parse_from_disk(&self, id: &DocId) -> Result<DocumentModel> {
+        let source = match self.provider_for(id)?.descriptor().source {
+            SourceKind::Text => DocumentSource::Text(self.vault.read(id)?),
+            SourceKind::Bytes => DocumentSource::Bytes(self.vault.read_bytes(id)?),
+        };
+        self.parse_source(id, source)
+    }
+
+    fn parse_source(&self, id: &DocId, source: DocumentSource) -> Result<DocumentModel> {
         let provider = self.provider_for(id)?;
         let ctx = ParseContext::obsidian(id.as_str());
-        Ok(provider.parse(source, &ctx)?)
+        let mut model = provider.parse(&source, &ctx)?;
+        // L'innesto del §3.1: le regole sintattiche registrate girano DOPO il
+        // provider, sul modello. È ciò che le rende innestabili su un provider
+        // che non le conosce — vedi `syntax::apply_rules`.
+        self.syntax
+            .apply(&mut model, &ctx, &provider.descriptor().id);
+        Ok(model)
     }
 
     fn provider_for(&self, id: &DocId) -> Result<&dyn fubmd_abi::FormatProvider> {
@@ -2305,9 +2430,10 @@ fn plugin_error(e: KernelError) -> PluginError {
 /// è nell'algoritmo (sta in [`UiNode::validate_untrusted`]), è nel fatto che
 /// esista un unico varco attraverso cui gli alberi entrano.
 fn guard_ui(trust: Trust, tree: &UiNode) -> std::result::Result<(), PluginError> {
-    match trust {
-        Trust::Trusted => Ok(()),
-        Trust::Untrusted => tree.validate_untrusted(),
+    if trust.allows_active_content() {
+        Ok(())
+    } else {
+        tree.validate_untrusted()
     }
 }
 

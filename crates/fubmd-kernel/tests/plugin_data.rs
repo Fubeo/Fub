@@ -171,7 +171,9 @@ fn a_plugin_can_look_around_the_vault_not_only_react_to_events() {
     std::fs::write(root.join("Altro.txt"), "altro").unwrap();
 
     let mut registry = FormatRegistry::new();
-    registry.register(Box::new(TxtProvider));
+    registry
+        .register(Box::new(TxtProvider))
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
     ws.reindex().unwrap();
 
@@ -191,7 +193,9 @@ fn a_plugin_can_look_around_the_vault_not_only_react_to_events() {
 // --- provider minimo, solo per avere dei documenti da elencare ---------------
 
 use fubmd_abi::error::FormatError;
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::FormatProvider;
 
@@ -199,16 +203,17 @@ struct TxtProvider;
 
 impl FormatProvider for TxtProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "txt".into(),
-            name: "Testo semplice (test)".into(),
-            extensions: vec!["txt".into()],
-        }
+        FormatDescriptor::text("txt", "Testo semplice (test)", &["txt"])
     }
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()
     }
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.to_string();
         Ok(model)

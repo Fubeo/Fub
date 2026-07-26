@@ -22,11 +22,16 @@
 //!   [`CommandProvider`](fubmd_abi::traits::CommandProvider): cerca, wikilink
 //!   sulla selezione, sostituzione in blocco con anteprima del piano (decisione 0009,
 //!   decisione 0010).
+//! - [`blocks`] — le sintassi e i renderer ufficiali come
+//!   [`SyntaxRule`](fubmd_abi::custom::SyntaxRule) e
+//!   [`CustomRenderer`](fubmd_abi::custom::CustomRenderer): diagrammi, formule
+//!   ed evidenziato entrano **senza toccare il provider markdown** (decisione 0017).
 //! - [`versioning`] — snapshot per-file del vault come
 //!   [`EventHandler`](fubmd_abi::traits::EventHandler): il dogfooding più
 //!   completo del contratto, perché usa solo ciò che avrà un plugin di terzi.
 
 pub mod backlinks;
+pub mod blocks;
 pub mod commands;
 pub mod outline;
 pub mod search;
@@ -41,6 +46,10 @@ pub mod versioning;
 mod testing;
 
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
+pub use blocks::{
+    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, DIAGRAMS_RULE, DIAGRAM_NS,
+    DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER, MATH_RULE,
+};
 pub use commands::{
     occurrences, CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TRASH, SEARCH_OPEN,
     SELECTION_WIKILINK, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,

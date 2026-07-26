@@ -110,7 +110,7 @@ fn a_trusted_provider_may_return_active_content() {
     let mut ws = fx.workspace();
     ws.register_view_provider(
         "core.fidato",
-        Trust::Trusted,
+        Trust::Core,
         Puppet::boxed("fidata", html(), ViewUpdate::None),
     );
 
@@ -129,7 +129,7 @@ fn an_untrusted_provider_cannot_smuggle_active_content() {
     let mut ws = fx.workspace();
     ws.register_view_provider(
         "terzi.ostile",
-        Trust::Untrusted,
+        Trust::Community,
         Puppet::boxed("ostile", html(), ViewUpdate::None),
     );
 
@@ -148,7 +148,7 @@ fn an_untrusted_provider_may_still_describe_a_ui() {
     let mut ws = fx.workspace();
     ws.register_view_provider(
         "terzi.perbene",
-        Trust::Untrusted,
+        Trust::Community,
         Puppet::boxed("perbene", dichiarativo(), ViewUpdate::None),
     );
 
@@ -166,7 +166,7 @@ fn the_same_guard_applies_to_what_comes_back_from_an_action() {
     let mut ws = fx.workspace();
     ws.register_view_provider(
         "terzi.tardivo",
-        Trust::Untrusted,
+        Trust::Community,
         Puppet::boxed(
             "tardivo",
             dichiarativo(),
@@ -189,7 +189,7 @@ fn navigate_and_none_are_not_trees_and_pass() {
     let mut ws = fx.workspace();
     ws.register_view_provider(
         "terzi.navigante",
-        Trust::Untrusted,
+        Trust::Community,
         Puppet::boxed(
             "navigante",
             dichiarativo(),
@@ -216,7 +216,7 @@ fn an_action_reaches_the_provider_with_its_own_data_space() {
     let mut ws = fx.workspace();
     ws.register_view_provider(
         "terzi.diario",
-        Trust::Untrusted,
+        Trust::Community,
         Puppet::boxed("diario", dichiarativo(), ViewUpdate::None),
     );
 
@@ -241,7 +241,7 @@ fn a_view_nobody_offers_is_unknown_not_empty() {
     let mut ws = fx.workspace();
     ws.register_view_provider(
         "core.una",
-        Trust::Trusted,
+        Trust::Core,
         Puppet::boxed("una", dichiarativo(), ViewUpdate::None),
     );
 

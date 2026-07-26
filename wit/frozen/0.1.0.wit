@@ -37,6 +37,20 @@ interface json {
     type json = string;
 }
 
+/// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): questa interfaccia non
+/// esisteva. Ci sta perché i quattro tipi qui sotto la nominano dopo il ritaglio;
+/// la sua aggiunta al contratto corrente è additiva e non avrebbe richiesto
+/// nulla.
+interface options {
+    use json.{json};
+
+    record option-entry {
+        key: string,
+        value: json,
+    }
+    type option-map = list<option-entry>;
+}
+
 /// Il modello di documento comune e agnostico rispetto al formato.
 interface model {
     use json.{json};
@@ -308,26 +322,50 @@ interface model {
 interface format {
     use json.{json};
     use model.{document-model};
+    use options.{option-map};
 
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): non esisteva, e
+    /// `parse` prendeva una `string`. Con quella firma un `.canvas`, un CSV
+    /// grande, un PDF trattato come documento (13.2) o un file con encoding da
+    /// rilevare (2.3) non entravano affatto (§3.4).
+    variant document-source {
+        text(string),
+        bytes(list<u8>),
+    }
     record format-descriptor {
         id: string,
         name: string,
         extensions: list<string>,
     }
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): erano cinque
+    /// booleani (`wikilinks`, `tags`, `frontmatter`, `callouts`, `embeds`)
+    /// contro le ~50 sintassi del 5.2 — e con quella forma ogni sintassi era un
+    /// campo nuovo del contratto. Il vocabolario è ora lo stesso di
+    /// `parse-context`, perché «cosa so fare» e «cosa devi accendere» sono la
+    /// stessa domanda vista da due lati (§3.5 con §3.4).
     record format-capabilities {
-        wikilinks: bool,
-        tags: bool,
-        frontmatter: bool,
-        callouts: bool,
-        embeds: bool,
+        syntax: option-map,
     }
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): erano `parse-tags`
+    /// e `parse-wikilinks`, due booleani dove la coda è aperta (§3.4).
     record parse-context {
         doc-id: string,
-        parse-tags: bool,
-        parse-wikilinks: bool,
+        options: option-map,
     }
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): non esisteva. Il
+    /// rendering ha almeno tre bersagli distinti — schermo, stampa e PDF (6.3),
+    /// pubblicazione statica (19.4) — e un booleano non ne distingueva due.
+    enum render-target {
+        screen,
+        print,
+        pdf,
+        static-site,
+    }
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): era il solo
+    /// `wikilinks-as-data-attrs: bool` (§3.5).
     record render-options {
-        wikilinks-as-data-attrs: bool,
+        target: render-target,
+        options: option-map,
     }
     variant format-error {
         parse(string),
@@ -338,7 +376,9 @@ interface format {
 
     descriptor: func() -> format-descriptor;
     capabilities: func() -> format-capabilities;
-    parse: func(source: string, ctx: parse-context) -> result<document-model, format-error>;
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): `source` era una
+    /// `string` (§3.4).
+    parse: func(source: document-source, ctx: parse-context) -> result<document-model, format-error>;
     render-html: func(model: document-model, opts: render-options) -> result<string, format-error>;
     /// Generazione, non round-trip: la fonte di verità di un documento
     /// esistente è la sorgente; il kernel non riscrive mai un file da qui.
@@ -1182,13 +1222,14 @@ interface event-handler {
 interface plugin {
     use errors.{plugin-error};
     use json.{json};
+    use options.{option-map};
 
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): erano tre booleani
+    /// (`read-vault`, `write-vault`, `network`). Un booleano non ha dove mettere
+    /// il PARAMETRO di un permesso, e «rete» senza allowlist è o tutto o niente
+    /// — mentre 20.3 chiede proprio l'allowlist, di rete e di file (§3.5).
     record plugin-permissions {
-        read-vault: bool,
-        write-vault: bool,
-        network: bool,
-        // Estensione prevista a M4 (vedi docs/architecture/plugin-boundary.md):
-        //   vault-scope: list<string>,
+        granted: option-map,
     }
     record plugin-manifest {
         id: string,

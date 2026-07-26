@@ -17,7 +17,9 @@
 use camino::Utf8PathBuf;
 use fubmd_abi::error::FormatError;
 use fubmd_abi::event::{EventKind, EventMask};
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel, Span};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
@@ -33,18 +35,19 @@ struct TestoNudo;
 
 impl FormatProvider for TestoNudo {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "testo".into(),
-            name: "Testo nudo (test)".into(),
-            extensions: vec!["md".into()],
-        }
+        FormatDescriptor::text("testo", "Testo nudo (test)", &["md"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.to_string();
         Ok(model)
@@ -116,7 +119,7 @@ impl Fixture {
         let mut ws = Workspace::new(&self.root, FormatRegistry::new());
         ws.register_view_provider(
             "test.doc",
-            Trust::Trusted,
+            Trust::Core,
             Box::new(Spia {
                 id: "solo-doc",
                 follows: ContextMask::document(),
@@ -124,7 +127,7 @@ impl Fixture {
         );
         ws.register_view_provider(
             "test.sel",
-            Trust::Trusted,
+            Trust::Core,
             Box::new(Spia {
                 id: "doc-e-selezione",
                 follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
@@ -132,7 +135,7 @@ impl Fixture {
         );
         ws.register_view_provider(
             "test.sorda",
-            Trust::Trusted,
+            Trust::Core,
             Box::new(Spia {
                 id: "sorda",
                 follows: ContextMask::default(),
@@ -220,7 +223,9 @@ fn the_shortcut_for_a_single_pane_shell_clears_the_selection() {
 
 fn con_provider(root: &Utf8PathBuf) -> Workspace {
     let mut registry = FormatRegistry::new();
-    registry.register(Box::new(TestoNudo));
+    registry
+        .register(Box::new(TestoNudo))
+        .expect("nessun conflitto di estensioni");
     Workspace::new(root, registry)
 }
 

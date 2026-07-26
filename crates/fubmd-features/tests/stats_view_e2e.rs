@@ -28,9 +28,11 @@ impl Vault {
 
     fn open(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
-        registry.register(MarkdownProvider::boxed());
+        registry
+            .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_view_provider(STATS_ID, Trust::Trusted, Box::new(StatsView));
+        ws.register_view_provider(STATS_ID, Trust::Core, Box::new(StatsView));
         ws.reindex().expect("reindex");
         ws
     }

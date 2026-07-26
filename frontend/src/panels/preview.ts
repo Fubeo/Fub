@@ -14,8 +14,11 @@
 // documento, che a sua volta mostra questo in Lettura. Importarsi a vicenda
 // sarebbe un ciclo, e la forma iniettata è la stessa dei tre moduli
 // dell'editor.
+import type { RenderedDocument } from "../host/contract";
 import { api } from "../host/ipc";
 import { $ } from "../ui/dom";
+import { mountTree } from "../ui/node";
+import { setSanitizedHtml } from "../ui/sanitize";
 
 const previewEl = $("#preview");
 
@@ -42,12 +45,46 @@ export function clearPreview(): void {
   previewEl.innerHTML = "";
 }
 
-/// Chiede al kernel il documento reso e lo innesta, ricucendo link ed embed.
+/// Chiede al kernel il documento reso e lo innesta, ricucendo link, parti ed
+/// embed.
 export async function updatePreview(id: string): Promise<void> {
-  const html = await api.renderPreview(id);
-  previewEl.innerHTML = html;
-  wireWikilinks(previewEl);
+  const reso = await api.renderPreview(id);
+  innesta(previewEl, reso);
   await hydrateEmbeds(previewEl, new Set([id]));
+}
+
+/// Innesta un documento reso: l'HTML **sanitizzato**, e poi le parti
+/// dichiarative dentro i loro buchi.
+///
+/// L'ordine conta: i buchi sono nell'HTML, quindi prima si innesta e poi si
+/// cerca. E l'HTML passa dal punto unico (§3.6) come tutto ciò che entra nella
+/// webview — anche se qui a produrlo è il nostro provider, perché la regola vale
+/// per chi lo produce oggi e per chi lo produrrà.
+function innesta(container: HTMLElement, reso: RenderedDocument): void {
+  setSanitizedHtml(container, reso.html);
+  wireWikilinks(container);
+  mountParts(container, reso);
+}
+
+/// Monta le parti dichiarative di un documento reso (§3.2, §3.3).
+///
+/// È il momento in cui il blocco di un plugin diventa DOM **senza che questo
+/// bundle sappia cosa sia**: la parte è un albero `UiNode`, e si disegna con lo
+/// stesso `mountTree` delle view. Un `UiKind::Custom` di cui la shell non
+/// conosce l'`ns` disegna il suo `fallback`, che è ciò che il contratto chiede a
+/// chi non lo conosce.
+///
+/// Le azioni non sono cablate: una parte è un **disegno**, e non ha un
+/// `ViewProvider` a cui mandare un click — chi lo vorrà passerà da una view
+/// sulla superficie principale. Un `onAction` che non fa niente è la risposta
+/// onesta, e non un `TODO` che finisce in un errore a runtime.
+function mountParts(container: HTMLElement, reso: RenderedDocument): void {
+  for (const part of reso.parts) {
+    const slot = container.querySelector<HTMLElement>(`[data-ui-slot="${part.slot}"]`);
+    if (!slot) continue; // il buco non c'è più: il documento è cambiato sotto
+    slot.dataset.kind = part.kind;
+    mountTree(slot, part.node, async () => {});
+  }
 }
 
 /// Navigazione dei wikilink dentro un frammento reso.
@@ -90,9 +127,11 @@ async function hydrateEmbeds(container: HTMLElement, chain: Set<string>): Promis
           slot.classList.add("embed-cycle");
           return;
         }
-        slot.innerHTML = content.html;
+        // Un embed passa dagli stessi renderer dell'anteprima: un diagramma
+        // dentro una nota trasclusa resta un diagramma. `innesta` fa le tre cose
+        // che servono — sanitizza, ricuce i link, monta le parti.
+        innesta(slot, content);
         slot.classList.add("embed-loaded");
-        wireWikilinks(slot);
         await hydrateEmbeds(slot, new Set([...chain, content.doc_id]));
       } catch {
         slot.classList.add("unresolved");

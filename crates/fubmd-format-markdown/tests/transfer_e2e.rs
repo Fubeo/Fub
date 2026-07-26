@@ -42,7 +42,9 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     write("Diario.md", "Nessun frontmatter qui.\n");
 
     let mut registry = FormatRegistry::new();
-    registry.register(MarkdownProvider::boxed());
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
     ws.register_import_provider("fubmd.markdown", MarkdownImport::boxed());
     ws.register_export_provider("fubmd.markdown", MarkdownExport::boxed());
@@ -424,7 +426,9 @@ fn what_goes_out_comes_back_in_identical() {
     let root = Utf8PathBuf::from_path_buf(dir.path().join("vuoto")).expect("utf8");
     std::fs::create_dir_all(&root).unwrap();
     let mut registry = FormatRegistry::new();
-    registry.register(MarkdownProvider::boxed());
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
     let mut altro = Workspace::new(&root, registry);
     altro.register_import_provider("fubmd.markdown", MarkdownImport::boxed());
     altro.reindex().expect("reindex");
