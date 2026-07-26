@@ -5,6 +5,23 @@
   box-sizing: border-box;
 }
 
+/* `hidden` vuol dire nascosto, e qui è l'unico posto in cui `!important` è la
+   risposta giusta.
+   L'attributo `hidden` è nascosto da una regola dello **user-agent**
+   (`[hidden] { display: none }`), e qualunque regola d'autore che imposti
+   `display` su quell'elemento la revoca — in silenzio, perché l'autore non ha
+   scritto niente sulla visibilità: ha scritto `display: flex` per il layout.
+   È già successo, e in un modo che i test non vedevano: `#views-modal` è
+   `position: fixed; inset: 0` e la sua regola di layout lo teneva **acceso
+   sopra tutta la finestra** anche da vuoto, quindi la webview riceveva ogni
+   click al posto della UI sotto — l'app sembrava congelata pur essendo viva.
+   Con questa riga il modo con cui la shell nasconde le cose (`el.hidden = …`,
+   che è quello che usano `ui/views.ts` e i pannelli) torna a valere per
+   costruzione, anche per le superfici che verranno. */
+[hidden] {
+  display: none !important;
+}
+
 html, body, #app {
   margin: 0;
   height: 100%;

@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 // Config allineata a Tauri: porta fissa 1420, niente clear screen.
 export default defineConfig({
@@ -11,5 +11,15 @@ export default defineConfig({
     target: "es2021",
     outDir: "dist",
     emptyOutDir: true,
+  },
+  test: {
+    // Vitest, per difetto, **non** processa i CSS: ogni `import` di un foglio
+    // di stile diventa la stringa vuota, `?raw` compreso. Andrebbe benissimo
+    // finché nessuno li legge — ma il presidio di `hidden`
+    // (`src/ui/hidden.test.ts`) legge `style.css` come testo, e con i CSS
+    // svuotati passerebbe **a vuoto**: cercherebbe una regola dentro una
+    // stringa di zero caratteri, non la troverebbe mai, e non lo direbbe a
+    // nessuno. Un presidio che non può fallire è peggio di nessun presidio.
+    css: true,
   },
 });
