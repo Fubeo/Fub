@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::edit::{EditReport, EditRequest, Revision};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask};
 use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
@@ -83,7 +84,43 @@ pub trait HostApi: Send + Sync {
     /// Legge la sorgente di un documento dal vault.
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
     /// Scrive la sorgente di un documento nel vault.
+    ///
+    /// È la scrittura di chi il documento intero ce l'ha in mano: l'editor che
+    /// salva il proprio buffer, un importer che crea una nota. Chi vuole
+    /// cambiarne **un pezzo** usa [`apply_edit`](HostApi::apply_edit) — non per
+    /// eleganza, ma perché una riscrittura totale non dice cosa è cambiato e
+    /// non si accorge di chi ha scritto nel frattempo.
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+
+    /// La revisione del sorgente di un documento: l'identità del testo su cui
+    /// si sta per calcolare una modifica.
+    ///
+    /// È una capacità e non un calcolo perché la [`Revision`] è **opaca** (solo
+    /// l'uguaglianza è contratto) e come l'host la derivi non è promesso a
+    /// nessuno: un provider che se la ricavasse da sé dal sorgente si legherebbe
+    /// a questa implementazione. Vedi [`crate::edit`].
+    fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError>;
+
+    /// Cambia **un pezzo** di documento: gli edit della richiesta, tutti o
+    /// nessuno, sul sorgente che la sua `base` nomina.
+    ///
+    /// È la primitiva su cui poggia ogni modifica programmatica che non sia la
+    /// riscrittura di un file intero — spuntare un task, scrivere una proprietà,
+    /// correggere un link, inserire un template — e senza la quale ognuna di
+    /// esse rileggerebbe e riscriverebbe tutto, perdendo per strada cosa è
+    /// cambiato e chi altro stava scrivendo.
+    ///
+    /// [`PluginError::Conflict`] = il documento è cambiato da quando gli edit
+    /// sono stati calcolati, e non è stato scritto niente: chi chiama rilegge,
+    /// ricalcola e riprova. [`PluginError::BadArgs`] = gli edit non stanno in
+    /// piedi (fuori dal sorgente, a metà di un carattere, sovrapposti).
+    ///
+    /// Il rapporto torna nelle coordinate del testo **nuovo** e porta ciò che
+    /// era stato sostituito: è quanto serve a mettere il cursore dove l'utente
+    /// se lo aspetta, e a costruire l'edit inverso
+    /// ([`EditReport::inverse`](crate::edit::EditReport::inverse)).
+    fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
+
     /// I documenti del vault, in ordine.
     ///
     /// Senza, `read_document` serve solo per gli id che arrivano dagli eventi:

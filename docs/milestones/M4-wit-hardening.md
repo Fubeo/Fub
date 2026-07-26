@@ -140,6 +140,19 @@ oggi, una migrazione domani); le altre restano al freeze.
       da un cliente vero. Restano aperti sopra questa firma il §1.12 (rollback e
       lotto), il §1.21 (l'import come lavoro lungo) e il §1.28 (il modello a un
       exporter).
+- [x] **Modificare un pezzo di documento** — fatto col §1.16:
+      `HostApi::apply_edit(id, EditRequest { base, edits })` e
+      `HostApi::document_revision(id)` (interface `edit` nel WIT), con la
+      riscrittura dei link su rename come **primo cliente** vero. La decisione
+      che il freeze avrebbe reso definitiva è che la richiesta porta la
+      **revisione su cui è stata calcolata**, e non come campo opzionale: senza,
+      due modifiche concorrenti si sovrascrivono in silenzio, e aggiungerla dopo
+      sarebbe una migrazione di ogni chiamante. Con essa: `PluginError::Conflict`
+      come caso a sé (l'unico errore che si **riprova** invece di correggerlo) e
+      un rapporto in coordinate nuove da cui l'inverso di un edit è un edit.
+      Restano aperti sopra questa firma il §1.12 (il lotto su più documenti), il
+      §1.17 (chi possiede l'undo) e il §1.18 (l'edit sull'evento, senza cui la
+      shell deve ricaricare il documento invece di applicarlo al buffer).
 - [ ] **Operazioni strutturali e parità plugin↔nativo**: rename,
       `create_note`, cestino sono kernel-owned e fuori da `HostApi` (scelta
       deliberata). Decidere se e quali esporre come capacità con permesso

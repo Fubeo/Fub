@@ -92,7 +92,7 @@ Quindi il lavoro infrastrutturale è di tre tipi, in quest'ordine di urgenza:
 | 2.2 config, 27.4 upgrade migration | versione di schema sui formati persistiti | ce l'ha il solo indice di ricerca (`search.rs:59`), che è **derivato** |
 | 20.1 ribbon/status bar/menu/settings tab, 11-12 database e canvas, 7.3 grafo | superfici di UI oltre le sidebar | `ViewPlacement` ha **3 varianti** (`traits.rs:195`) e l'area principale non è nel contratto |
 | 11.2 viste multiple, 8.3 viste salvate, 9.2 query embed, 3.3 split | view **istanziabili** con parametri | `views()` è un elenco statico e `view_owner` risolve per id (`workspace.rs:1196`) |
-| 4.3, 7.2, 8.2, 10.1, 11.3, 16.1, 19.2, 22.2 | modificare **un pezzo** di documento | esiste solo `write_document(id, source)`: ogni modifica riscrive il file intero |
+| ~~4.3, 7.2, 8.2, 10.1, 11.3, 16.1, 19.2, 22.2~~ | ~~modificare **un pezzo** di documento~~ | **chiuso (§1.16)**: `HostApi::apply_edit(id, EditRequest { base, edits })`, con la revisione nella firma e `Conflict` invece della sovrascrittura silenziosa |
 | 4.2 undo illimitato, 11.3, 16.3, 17.3 rollback, 3.3 undo toast | un proprietario dell'undo | vive solo in CodeMirror, su **un** `EditorView` riusato per tutte le note |
 | 16.2 trigger, 18 sync, 19.2 collaborazione | origine e causalità sugli eventi | `DocumentChanged { id }` non dice chi ha scritto: la shell indovina (`main.ts:1360`) |
 | 21.2 moduli Suite che si parlano, 24.1 vault grandi | abbonamento a grana fine | maschera su 8 `EventKind`; a `Event::Custom` ci si abbona **tutto o niente** |
@@ -707,27 +707,84 @@ presentazioni), 7.3 (il grafo smette di essere privilegiato), 10.3-10.4, 11.5,
 
 ### 1.16 Modificare un pezzo di documento — la primitiva che non c'è
 
-- [ ] **`HostApi::write_document(id, source)` è l'unico modo di cambiare un
-      documento**, nel contratto, nel kernel (`workspace.rs:406`) e sull'IPC:
-      non esiste `apply_edit(doc, [(span, testo)])` da nessuna parte. Ogni
-      modifica riscrive il file intero.
-- [ ] **Il costo è già visibile**: una scrittura del kernel torna alla shell
-      come testo nuovo e `setDoc` sostituisce tutto il documento
-      (`editor.ts:74`) — cursore, selezione e cronologia di undo saltano;
-      `reloadIfClean` e il confronto `editor.getDoc() !== source`
-      (`main.ts:1360`) esistono per limitare i danni, non per risolverli.
-- [ ] **Ora moltiplicalo**: 4.3 (commenti e highlight inline), 7.2 (fix
-      automatico dei link rotti, bulk fix), 8.2 (scrivere una proprietà), 10.1
-      (spuntare un task), 11.3 (editing inline), 16.1 (template con cursor
-      placement), 19.2 (suggestions, track changes), 22.2 (riscrittura AI della
-      selezione), 18.1 (merge, CRDT). Tutte riscriverebbero il file intero, con
-      la stessa perdita, e **nessuna potrebbe comporsi con un'altra**.
-- [ ] **La firma deve dire su cosa si applica**: una lista di `(Span, String)`
-      più il riferimento alla revisione su cui è stata calcolata, o due edit
-      concorrenti (un'automazione e l'utente che scrive) si sovrascrivono in
-      silenzio. È la stessa primitiva su cui poggiano §1.12 (il lotto è una
-      lista di edit), §1.9 (la selezione è uno `Span`) e §1.17 (l'inverso di un
-      edit è un edit).
+- [x] **La primitiva c'è**: `HostApi::apply_edit(id, EditRequest)` con
+      `EditRequest { base: Revision, edits: Vec<TextEdit> }` e
+      `TextEdit { span, text }` (`abi/edit.rs`, interface `edit` nel WIT).
+      Accanto, `HostApi::document_revision(id)`: la base la si **chiede**,
+      perché la revisione è opaca e derivarla è affare dell'host.
+- [x] **La firma dice su cosa si applica**, e non come campo opzionale: senza
+      base non si scrive. Chi arriva secondo riceve `PluginError::Conflict` —
+      caso nuovo del contratto, additivo — rilegge e ricalcola, invece di
+      cancellare il lavoro di chi ha scritto per primo.
+- [x] **Un cliente vero nello stesso giro**: la riscrittura dei wikilink su
+      rename. `link_rewrite_plan` calcolava già gli span dei link e poi ne
+      ricomponeva la sorgente intera; ora produce un `EditRequest` per sorgente
+      e `rename_document` lo applica. Il guadagno è visibile in un test: se un
+      handler scrive in una delle sorgenti del piano mentre il piano è in corso,
+      la sua riga **resta** e il rename nomina la sorgente che non ha potuto
+      riscrivere, invece di sovrascriverla in silenzio.
+- [x] **L'inverso di un edit è un edit**: `EditReport { revision, applied }`
+      torna nelle coordinate del testo nuovo e porta ciò che era stato
+      sostituito, quindi `inverse()` è una `EditRequest` come le altre — con per
+      base la revisione appena prodotta.
+
+*Sblocca:* 4.3, 7.2 (bulk fix), 8.2, 10.1, 11.3, 16.1 (cursor placement), 19.2,
+22.2; ed è la primitiva su cui poggiano §1.12 (il lotto è una lista di edit) e
+§1.17 (l'undo).
+
+**Fatto, con quattro decisioni e un debito dichiarato.**
+
+*La base non è opzionale.* Poteva esserlo — un `Option<Revision>` con `None` =
+«applica e basta» avrebbe fatto contenti i chiamanti che il documento l'hanno
+appena letto. Ma la corsa che questa voce descrive è **invisibile**: chi
+sovrascrive il lavoro di un altro non se ne accorge, e un campo che si può
+omettere lo si omette proprio nel caso lungo (l'automazione che calcola per un
+minuto), che è l'unico in cui serve. Il prezzo dichiarato: una chiamata in più
+(`document_revision`) per chi vuole scrivere in fondo a una nota senza averla
+letta.
+
+*La revisione è un'impronta del contenuto, ed è opaca.* Opaca perché di essa è
+contratto **solo l'uguaglianza**: un host che la derivasse da un digest o da
+`mtime+size` sarebbe conforme uguale, e per questo un provider la chiede invece
+di calcolarla (`Revision::of` esiste, ma è come la deriva *questo* host — sta
+nell'abi perché kernel e doppi dei test ne abbiano una sola implementazione).
+Impronta e non contatore perché la domanda vera è "*è ancora quel testo?*", non
+"*quante volte è stato scritto?*": chi digita una lettera e la cancella riporta
+il documento a com'era, e un edit calcolato allora è ancora valido. Il caso non
+è teorico — è la stessa proprietà per cui il piano di rename, calcolato sul
+sorgente al path vecchio, si applica al path nuovo: un rename sposta il file, non
+lo cambia.
+
+*Gli edit sono un insieme in coordinate della base.* Non una sequenza di passi:
+chi li calcola non deve tenere il conto di quanto il testo si sposta per via
+degli altri — li elenca in qualunque ordine, l'host ordina e applica in un colpo
+solo. Ciò che non sta in piedi (fuori dal sorgente, **a metà di un carattere**,
+sovrapposti, due nello stesso punto) è `BadArgs`, mai un documento modificato a
+metà: un taglio dentro un UTF-8 non produce un documento sbagliato, produce byte
+che non sono testo e una nota che non si riapre.
+
+*Il conflitto è un errore, non un campo del rapporto.* La stessa ragione del
+`dirty: bool` scartato al §1.9: un `applied: false` dentro un esito riuscito si
+dimentica di leggere. Ed è un caso a sé di `PluginError` e non un `BadArgs`
+perché è l'unico errore del confine che **non è una colpa di chi chiama** — gli
+argomenti erano giusti quando li ha calcolati, e la risposta giusta è
+ricalcolare, non correggere. Chi non li distingue riprova all'infinito una
+richiesta malformata, o rinuncia a una che sarebbe riuscita.
+
+*Resta fuori, dichiarato:* il **lotto su più documenti** (§1.12 — una richiesta
+nomina un documento solo, e N documenti restano N scritture con N eventi: il
+rename ne è la prova, e il lotto sarà una lista di edit *sopra* questa firma);
+la **proprietà dell'undo** (§1.17 — qui c'è la forma dell'inverso, non chi la
+usa); l'**edit sull'evento** (§1.18), e con esso il costo che questa voce
+descriveva dal lato della shell: finché `DocumentChanged` dice *che* un
+documento è cambiato e non *come*, l'editor che lo ha aperto deve ricaricarlo
+intero (`reloadIfClean`) e il cursore salta lo stesso — la primitiva non basta
+da sola, serve che il kernel racconti la modifica; la **superficie IPC**, perché
+i clienti di shell che ci sarebbero (spuntare un task, correggere un link
+dall'anteprima) chiedono al modello lo stato di spunta (§1.5) e alla UI dei
+campi di input con un payload vero (§1.2/§3.9), e nessuno dei due c'è; la
+**fusione** di due edit concorrenti (18.1): qui il conflitto si dichiara, non si
+risolve.
 
 ### 1.17 L'undo non ha un proprietario
 
@@ -746,6 +803,10 @@ presentazioni), 7.3 (il grafo smette di essere privilegiato), 10.3-10.4, 11.5,
       §1.12). È di forma: senza la decisione, `CommandOutcome` e il lotto
       nascono privi del campo con cui un'operazione dichiara di essere
       annullabile.
+- [ ] Il §1.16 ha già dato la **forma dell'inverso** di una modifica al testo
+      (`EditReport::inverse()` è una `EditRequest` come le altre, con per base la
+      revisione appena prodotta): quello che manca è chi la conserva, per quanto,
+      e chi vince fra le due pile.
 
 ### 1.18 Gli eventi non dicono chi li ha causati
 

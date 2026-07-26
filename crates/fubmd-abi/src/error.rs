@@ -31,4 +31,14 @@ pub enum PluginError {
     PermissionDenied(String),
     #[error("errore interno del plugin: {0}")]
     Internal(String),
+    /// Il sorgente su cui l'operazione era stata calcolata non è più quello
+    /// (vedi [`EditRequest::base`](crate::edit::EditRequest::base)).
+    ///
+    /// È un caso a sé e non un [`BadArgs`](PluginError::BadArgs) perché è
+    /// l'unico errore del confine che **non è una colpa di chi chiama**: gli
+    /// argomenti erano giusti quando li ha calcolati, e la risposta giusta è
+    /// ricalcolare, non correggere. Chi non li distingue riprova all'infinito
+    /// una richiesta malformata, o rinuncia a una che sarebbe riuscita.
+    #[error("il documento è cambiato nel frattempo: {0}")]
+    Conflict(String),
 }
