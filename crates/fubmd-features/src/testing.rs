@@ -21,7 +21,8 @@ use fubmd_abi::format::DocumentFormat;
 use fubmd_abi::model::{DocId, DocumentModel, Heading, Span};
 use fubmd_abi::session::{PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
-    BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, Paged, TagCount, TrashEntry,
+    BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, TagCount,
+    TrashEntry,
 };
 use fubmd_abi::PluginError;
 
@@ -237,8 +238,13 @@ impl HostApi for MemoryHost {
         Ok(report)
     }
 
-    fn list_documents(&self) -> Result<Vec<DocId>, PluginError> {
-        Ok(self.docs.lock().unwrap().keys().map(DocId::new).collect())
+    /// In ordine di id e a finestra, come il kernel: un doppio che
+    /// restituisse tutto in ordine di hash farebbe passare i test a chi si
+    /// affida a un ordine che in produzione non c'è.
+    fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
+        let mut ids: Vec<DocId> = self.docs.lock().unwrap().keys().map(DocId::new).collect();
+        ids.sort();
+        Ok(Paged::window(ids, page))
     }
 
     /// Il modello **seminato**, non uno parsato: un documento che esiste ma di
@@ -423,13 +429,15 @@ impl HostApi for MemoryHost {
                     .cloned()
                     .unwrap_or_default(),
             )),
-            IndexQuery::Tags { page } => Ok(IndexResult::Tags(Paged::window(
+            IndexQuery::Tags { page, .. } => Ok(IndexResult::Tags(Paged::window(
                 self.tags.lock().unwrap().clone(),
                 page,
             ))),
-            // Il doppio non ha né indice né grafo né frontmatter: tutto il resto
-            // è "non roba mia", che è la risposta che darebbe un provider vero.
-            _ => Err(PluginError::BadArgs(
+            // Il doppio non ha né indice né grafo né frontmatter: per tutto il
+            // resto non c'è nessuno che serva la domanda, ed è quella la
+            // risposta — non un `BadArgs`, che direbbe che la domanda è
+            // malposta.
+            _ => Err(PluginError::Unserved(
                 "MemoryHost serve solo backlink, outline e tag seminati a mano".into(),
             )),
         }

@@ -144,7 +144,7 @@ pub trait HostApi: Send + Sync {
     // … e un pezzo solo, sopra la revisione su cui è stato calcolato
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError>;
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
-    fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
+    fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError>;
     fn free_name(&self, id: &DocId) -> DocId;
     // la STRUTTURA ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)): il modello parsato, e di che formato è
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError>;
@@ -214,7 +214,7 @@ freeze di M4, non aggirato:
   uno (WASI lo può negare) e un host che lo fornisce lo rende deterministico nei
   test: le fasce di ritenzione del versioning si provano avanzando un orologio
   finto, non piantando timestamp nelle strutture interne dello store.
-- `list_documents` — senza, `read_document` serve solo per gli id che arrivano
+- `list_documents` — **a finestra**: senza, `read_document` serve solo per gli id che arrivano
   dagli eventi: nessun plugin potrebbe reagire a `VaultOpened` guardandosi
   intorno, né costruire alcunché sull'intero vault.
 
@@ -457,6 +457,7 @@ dire cercarlo fra N chiamanti (vedi `crates/fubmd-kernel/tests/view_trust.rs`).
 
 ```rust
 pub trait IndexProvider: Send + Sync {
+    fn routes(&self) -> Vec<QueryRoute>;
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn on_document_indexed(&mut self, doc: &DocumentModel);
     fn on_document_removed(&mut self, id: &DocId);
@@ -466,17 +467,28 @@ pub trait IndexProvider: Send + Sync {
 }
 ```
 
-`IndexQuery { Backlinks, FullText, Outline, Tags, Neighbors, Properties,
-PropertyValues, VaultHealth, Custom }` — è il **canale dati verso le view**, e
-ciò che non è esprimibile qui diventa un comando bespoke dell'app, cioè una
-superficie che un plugin non potrà mai avere. Le risposte stanno in
-`IndexResult`, con gli stessi nomi.
+`IndexQuery { Documents, Backlinks, Outline, Tags, Neighbors, PropertyValues,
+VaultHealth, Custom }` — è il **canale dati verso le view**, e ciò che non è
+esprimibile qui diventa un comando bespoke dell'app, cioè una superficie che un
+plugin non potrà mai avere. Le risposte stanno in `IndexResult`, con gli stessi
+nomi.
 
-Le forme che portano: `BacklinkRef { source, context }`,
-`SearchHit { doc, score, snippet, highlights: Vec<Span> }`,
-`NeighborRef { doc, via, depth }`, `TagCount { name, count }`,
-`DocumentProperties { doc, properties: Vec<PropertyEntry> }`,
-`PropertyCount { value, count }`, `HealthIssue { doc, check, detail, span }`.
+Le forme che portano: `DocumentMatch { doc, score?, snippet?, highlights,
+properties }`, `BacklinkRef { source, context }`, `NeighborRef { doc, via,
+depth }`, `TagCount { name, count }`, `PropertyCount { value, count }`,
+`HealthIssue { doc, check, detail, span }`.
+
+**La query è un albero, non una stringa** ([decisione 0019](../decisions/0019-il-canale-dati.md)).
+`Documents { matching: QueryExpr, … }` porta un OR di clausole, ogni clausola un
+AND di letterali, ogni letterale un `QueryPredicate` eventualmente negato: testo,
+proprietà, tag, cartella, relazione di link, un elenco di documenti, o un
+predicato di terzi con namespace. La stringa libera vive **dentro** la foglia
+`Text` (con `TextMode` e i campi in cui cercare), e non è più la sintassi di una
+dipendenza — è ciò che rende esprimibile «le note `tipo: progetto` che parlano di
+rust», che con `FullText` e `Properties` come varianti separate erano due domande
+e un'intersezione fatta a mano. Due livelli e non un albero qualunque: al confine
+i tipi ricorsivi passano solo per arena, e la forma normale disgiuntiva esprime
+ogni combinazione booleana ed è già quella che un query builder disegna.
 
 **La finestra è nella domanda.** `Page { offset, limit }` sta nella query e
 `Paged<T> { items, offset, total }` nella risposta: `None` al posto della `Page`
@@ -486,15 +498,20 @@ disegna non sa se esiste una pagina dopo. Chi sa paginare alla sorgente lo fa
 risponde da una mappa già in memoria ritaglia con `Paged::window`. L'unica
 risposta senza finestra è `Outline`: cresce con **un** documento, non col vault.
 Al confine WIT i generici non esistono, e ogni istanza è un record a sé
-(`backlinks-page`, `search-page`, …).
+(`backlinks-page`, `documents-page`, …). Anche `HostApi::list_documents` ha la
+sua finestra: è il metodo con cui un provider si guarda intorno, e senza clonava
+tutto il vault a ogni chiamata.
 
-**L'ambito è dato, non sintassi.** `FullText` porta uno `SearchScope { folders,
-tags }` accanto alla stringa: la stringa è il linguaggio del provider, l'ambito
-è del contratto — una shell che offre "cerca in questa cartella" non deve
-comporre sintassi altrui, e un provider diverso non può interpretarlo
-diversamente. `PropertyFilter { key, test: PropertyTest }` fa lo stesso per il
-frontmatter: `exists`/`missing`/`equals`/`contains`/`>`/`<` su
-`PropertyValue` ([decisione 0003](../decisions/0003-modello-del-documento.md)), in AND fra loro.
+**Chi serve cosa è dichiarato** (`routes`). Una **famiglia** (`QueryKind`) ha un
+proprietario solo — lì la risposta si *compone*, e due autori vorrebbero dire che
+vince l'ordine di montaggio: registrarne una già rivendicata è un conflitto, e
+sostituire si chiede per nome. Una **foglia** (`PredicateKind`) può averne più
+d'uno, perché è un fatto sul vault e chi la rivendica promette la stessa risposta
+degli altri: è ciò che permette a tantivy di dichiarare `Tag` e `Folder`, che ha
+indicizzato apposta, e al pianificatore di consegnargli `testo AND cartella` come
+una clausola sola invece di spezzarla — cioè il filtro **dentro** il motore.
+Quello che nessuno ha dichiarato torna al chiamante come
+`PluginError::Unserved`, che è distinguibile da «chi la serve ha fallito».
 
 **L'alimentazione non passa dagli eventi.** Il `Workspace` possiede gli
 `IndexProvider` registrati e chiama `on_document_*` *dentro* le stesse
@@ -566,17 +583,26 @@ non una capacità del contratto; a M5 il suo equivalente per un componente è un
 preopen WASI sulla stessa radice. Ciò che la firma garantisce è che un provider
 di terzi *possa* persistere, non che tutti persistano allo stesso modo.
 
-**Quasi tutte le query le serve il kernel, non i provider.**
-`Workspace::query_index` risponde direttamente a `Backlinks` e `Neighbors` (dal
-grafo), `Outline` (dai `DocumentModel` di un documento), `Tags` e
-`Properties`/`PropertyValues` (dai metadati dell'intero vault), `VaultHealth`
-(dal grafo e dai link in cache): hanno tutte una sola fonte di verità *dentro*
-il kernel, e duplicarla in un indice creerebbe una seconda verità divergente.
-Sono anche il **canale metadata** — il modo con cui una view legge struttura,
-tag e proprietà senza avere un `FormatProvider` (che, essendo un plugin, non
-ha): stesso canale (`HostApi::query_index`), stesso dispatch. Ai provider, in
-ordine di registrazione, va il resto — oggi il full-text: vince il primo che non
-risponde `BadArgs`, che per contratto significa "non è roba mia".
+**Anche le risposte del kernel sono un `IndexProvider`.** `CoreIndex`
+(`kernel/src/index/core.rs`) è registrato per primo e serve `Backlinks` e
+`Neighbors` (dal grafo), `Outline` (dai metadati di un documento), `Tags` e
+`PropertyValues` (dai metadati dell'intero vault), `VaultHealth` (dal grafo e dai
+link in cache), più le foglie `Property`/`Tag`/`Folder`/`Linked`: hanno tutte una
+sola fonte di verità *dentro* il kernel, e duplicarla creerebbe una seconda
+verità divergente. Sono anche il **canale metadata** — il modo con cui una view
+legge struttura, tag e proprietà senza avere un `FormatProvider` (che, essendo un
+plugin, non ha). La differenza col passato è che questa scelta è **dichiarata**
+invece che cablata: chi la volesse contraddire trova un conflitto di
+registrazione, e chi la vuole sostituire lo chiede per nome
+(`Workspace::replace_index_provider`).
+
+**Il pianificatore** (`kernel/src/index/plan.rs`) è chi mette insieme una domanda
+le cui foglie hanno proprietari diversi: manda ogni sottoalbero a chi lo sa
+valutare, spinge giù una clausola intera quando è tutta di un motore, e ricompone
+con le combinazioni che stanno nel **contratto** (`QueryEvaluator`) — cosa
+significhino AND, OR e la negazione non deve poter divergere fra il kernel e chi
+implementa un indice. Ciò che il destinatario non saprebbe valutare gli arriva
+già risolto, dentro un `QueryPredicate::Docs`.
 
 **`snippet` è testo, mai markup.** L'evidenziazione viaggia separata, in
 `highlights: Vec<Span>` (byte *dentro* `snippet`): un provider di terzi non
@@ -773,7 +799,7 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | Trait | Impl M1 | Prossima impl | Note |
 |---|---|---|---|
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
-| `IndexProvider` | — (backlink via grafo del kernel) | `SearchIndex` (tantivy) **M2** ✅ | `activate`/`flush` con `HostApi`: persiste via `data_*` |
+| `IndexProvider` | `CoreIndex` (grafo, metadati, tag) ✅ | `SearchIndex` (tantivy) **M2** ✅ | `routes` dichiarate alla registrazione; `activate`/`flush` con `HostApi`: persiste via `data_*` |
 | `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` ✅ **M2** | **M2** (graph-data) | quattro provider veri; `query_index`+`active_context`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch`; `ViewSpec.follows` per il contesto |
 | `CommandProvider` | — | `CoreCommands` ✅ **M2** ([decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md), [decisione 0013](../decisions/0013-elenco-delle-capacita.md)) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura; nove comandi, cinque dei quali strutturali (le azioni che la shell cablava) e uno che compone (`vault.archive` via `run_command`) |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
@@ -826,9 +852,10 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `UiNode` (albero) | `variant ui-node` **in arena**: `list<ui-ref>` fra i figli, nodi in `ui-tree` |
 | `UiAction`/`ViewUpdate` | `record` / `variant` (`replace(ui-tree)`) |
 | `IndexQuery`/`IndexResult` | `variant` — ogni caso con più di un argomento ha il suo record (`index-query-neighbors`, `index-query-properties`, …) |
-| `BacklinkRef`/`SearchHit`/`NeighborRef`/`TagCount`/`DocumentProperties`/`PropertyEntry`/`PropertyCount`/`HealthIssue` | `record` |
+| `BacklinkRef`/`DocumentMatch`/`NeighborRef`/`TagCount`/`PropertyEntry`/`PropertyCount`/`HealthIssue` | `record` |
 | `Page` / `Paged<T>` | `record page` / **un record per istanza** (`backlinks-page`, `search-page`, `tags-page`, `neighbors-page`, `properties-page`, `property-values-page`, `vault-health-page`): al confine i generici non esistono |
-| `SearchScope`/`PropertyFilter`/`PropertySort` | `record` |
+| `QueryExpr`/`QueryClause`/`QueryLiteral`/`TextQuery`/`PropertyFilter`/`PropertySort` | `record` |
+| `QueryPredicate`/`PropertySelect`/`QueryKind`/`PredicateKind`/`QueryRoute` | `variant` |
 | `PropertyTest` | `variant` (i casi senza valore — `exists`, `missing` — non portano payload) |
 | `LinkDirection`/`HealthCheck` | `enum` |
 | `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`, `batch-ended`) / `enum` / `list<event-kind>` |
@@ -941,7 +968,7 @@ Quattro pressioni:
 Il punto delicato è **da dove vengono i tipi attesi**: non sono scritti a mano.
 `wit(&campo)` deduce la forma WIT dal tipo Rust del campo destrutturato, e
 `WitFn` deduce parametri e risultato dal tipo del puntatore a funzione. Se
-`SearchHit::score` diventasse `f64`, l'attesa diventerebbe `f64` e il confronto
+`DocumentMatch::score` diventasse `f64`, l'attesa diventerebbe `f64` e il confronto
 col contratto (`f32`) fallirebbe — è il caso che il vecchio confronto per soli
 nomi non avrebbe visto. È il "non compila su divergenza" chiesto dall'audit,
 ottenuto senza generare codice.

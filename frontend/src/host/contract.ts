@@ -450,20 +450,6 @@ export interface ViewContext {
   mode: PaneMode;
 }
 
-// Il grafo del vault (rispecchia fubmd_app::GraphData): nodi = documenti,
-// archi = wikilink risolti, deduplicati. È DATO per il renderer canvas
-// (`panels/graph.ts`): la superficie privilegiata fuori da UiNode dichiarata
-// in M2.
-export interface GraphEdge {
-  from: string;
-  to: string;
-}
-
-export interface GraphData {
-  nodes: string[];
-  edges: GraphEdge[];
-}
-
 // Un documento **reso**: l'HTML, e le parti dichiarative che la shell monta da
 // sé (rispecchia `fubmd_kernel::RenderedDocument`).
 //
@@ -496,15 +482,170 @@ export interface Span {
   end: number;
 }
 
-// Un risultato di ricerca (rispecchia fubmd_abi::traits::SearchHit).
+// ---------------------------------------------------------------------------
+// Il canale dati (§5.3, §5.4): la query è un albero, non una stringa
+// ---------------------------------------------------------------------------
+//
+// La shell non ha più `search`, `list_tags` e `graph_data`: ha `query_index`,
+// come un plugin. Questi tipi rispecchiano `fubmd_abi::query` e la parte index
+// di `fubmd_abi::traits`, e il presidio è la fixture generata da Rust
+// (`mirror.test.ts`): una variante aggiunta là non può restare non gestita qui.
+//
+// La stringa che l'utente digita non è più una sintassi: è il campo `text` di
+// una foglia. Quello che prima era «Query incompleta» — l'errore del parser di
+// una dipendenza mostrato all'utente — non esiste più, perché fra la casella e
+// i risultati non c'è più nessun parser di terzi.
+
+// In che verso si cammina il grafo dei link.
+export type LinkDirection = "outbound" | "inbound" | "both";
+
+// Come si intende la stringa di una `TextQuery`.
+export type TextMode = "terms" | "phrase";
+
+// Dove cercare il testo. Vuoto = i campi che il provider indicizza.
+export type TextField = "name" | "body" | "tags";
+
+export interface TextQuery {
+  text: string;
+  mode: TextMode;
+  fields: TextField[];
+}
+
+// Una prova su una proprietà del frontmatter. `test` resta opaco per la shell
+// finché non ci sarà un query builder (9.2): la costruisce chi la conosce.
+export interface PropertyFilter {
+  key: string;
+  test: unknown;
+}
+
+// Le foglie del linguaggio (rispecchia fubmd_abi::query::QueryPredicate).
+export type QueryPredicate =
+  | ({ kind: "text" } & TextQuery)
+  | { kind: "property"; filter: PropertyFilter }
+  | { kind: "tag"; name: string; descendants: boolean }
+  | { kind: "folder"; path: string; descendants: boolean }
+  | { kind: "linked"; doc: string; direction: LinkDirection }
+  | { kind: "docs"; docs: string[] }
+  | { kind: "custom"; ns: string; predicate: unknown };
+
+export interface QueryLiteral {
+  negated: boolean;
+  predicate: QueryPredicate;
+}
+
+// I letterali sono in AND; vuota = ogni documento.
+export interface QueryClause {
+  all: QueryLiteral[];
+}
+
+// Le clausole sono in OR; vuoto = ogni documento.
+export interface QueryExpr {
+  any: QueryClause[];
+}
+
+// Ogni documento del vault: la query da cui parte chi non ha filtri.
+export const OGNI_DOCUMENTO: QueryExpr = { any: [] };
+
+// Il testo che l'utente ha digitato, ovunque il provider guardi.
+export function testoCercato(text: string): QueryExpr {
+  return {
+    any: [{ all: [{ negated: false, predicate: { kind: "text", text, mode: "terms", fields: [] } }] }],
+  };
+}
+
+// Quali proprietà del frontmatter portarsi dietro in una risposta.
+export type PropertySelect = { kind: "none" } | { kind: "all" } | { kind: "keys"; keys: string[] };
+
+export interface Page {
+  offset: number;
+  limit: number;
+}
+
+// Una risposta a finestra: `total` è il conteggio PRIMA della finestra.
+export interface Paged<T> {
+  items: T[];
+  offset: number;
+  total: number;
+}
+
+// Un documento che ha combaciato (rispecchia fubmd_abi::traits::DocumentMatch).
 // `snippet` è testo semplice, MAI markup: si inserisce come testo. Le porzioni
 // da evidenziare sono `highlights`, intervalli in byte dentro `snippet`.
-export interface SearchHit {
+// I campi opzionali sono **omessi** quando non ci sono: una selezione senza
+// pertinenza non ha né rilevanza né estratto.
+export interface DocumentMatch {
   doc: string;
-  score: number;
-  snippet: string;
-  highlights: Span[];
+  score?: number;
+  snippet?: string;
+  highlights?: Span[];
+  properties?: { key: string; value: unknown }[];
 }
+
+// Un vicino nel grafo: `via` è l'anello precedente, ed è ciò che rende la
+// risposta un albero invece che un sacchetto di nodi. A `depth: 1` l'arco è
+// (via → doc) per gli uscenti: sono esattamente gli archi del grafo.
+export interface NeighborRef {
+  doc: string;
+  via: string;
+  depth: number;
+}
+
+// Un problema trovato da un controllo di salute del vault.
+export interface HealthIssue {
+  doc: string;
+  check: string;
+  detail: string | null;
+  span: Span | null;
+}
+
+export interface PropertyCount {
+  value: unknown;
+  count: number;
+}
+
+// Un heading dell'outline di un documento.
+export interface Heading {
+  level: number;
+  text: string;
+  slug: string;
+  span: Span;
+}
+
+// Una interrogazione (rispecchia fubmd_abi::traits::IndexQuery).
+export type IndexQuery =
+  | {
+      kind: "documents";
+      matching: QueryExpr;
+      sort?: { key: string; descending: boolean } | null;
+      select?: PropertySelect;
+      page?: Page | null;
+    }
+  | { kind: "backlinks"; target: string; page?: Page | null }
+  | { kind: "outline"; doc: string }
+  | { kind: "tags"; matching: QueryExpr; page?: Page | null }
+  | {
+      kind: "neighbors";
+      seeds: QueryExpr;
+      direction: LinkDirection;
+      depth: number;
+      page?: Page | null;
+    }
+  | { kind: "property_values"; key: string; matching: QueryExpr; page?: Page | null }
+  | { kind: "vault_health"; check: string; page?: Page | null }
+  | { kind: "custom"; ns: string; query: unknown };
+
+// La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
+// (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
+// il JSON col tag interno.
+export type IndexResult =
+  | { kind: "documents"; value: Paged<DocumentMatch> }
+  | { kind: "backlinks"; value: Paged<BacklinkRef> }
+  | { kind: "outline"; value: Heading[] }
+  | { kind: "tags"; value: Paged<TagCount> }
+  | { kind: "neighbors"; value: Paged<NeighborRef> }
+  | { kind: "property_values"; value: Paged<PropertyCount> }
+  | { kind: "vault_health"; value: Paged<HealthIssue> }
+  | { kind: "custom"; value: unknown };
 
 // Un tag del vault con quante note lo portano (rispecchia
 // fubmd_abi::traits::TagCount). `name` è senza `#`, gerarchia intatta (`a/b`).

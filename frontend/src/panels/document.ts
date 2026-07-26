@@ -16,6 +16,7 @@
 // inventarsi da dove viene la risposta.
 import { createEditor, type Editor } from "../editor/editor";
 import { api } from "../host/ipc";
+import { tagDelVault } from "../host/query";
 import type { PaneMode, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { emit, saveMode, state } from "../state/store";
@@ -59,7 +60,7 @@ export function mountDocument(deps: DocumentDeps): void {
     // vault sia aperto rispondono vuoto, non con un errore in console.
     completions: {
       listNotes: () => api.listDocuments().catch(() => []),
-      listTags: () => api.listTags().catch(() => []),
+      listTags: () => tagDelVault().catch(() => []),
     },
   });
 

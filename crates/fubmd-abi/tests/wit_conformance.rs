@@ -76,13 +76,16 @@ use fubmd_abi::model::{
     PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
 };
 use fubmd_abi::options::OptionMap;
+use fubmd_abi::query::{
+    QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
+};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
-    BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,
-    HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef,
-    Page, Paged, Plugin, PluginManifest, PluginPermissions, PropertyCount, PropertyEntry,
-    PropertyFilter, PropertySort, PropertyTest, SearchHit, SearchScope, TagCount, TrashEntry,
-    ViewInstance, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
+    BacklinkRef, CommandProvider, DocumentMatch, EventHandler, HealthCheck, HealthIssue, HostApi,
+    IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef, Page,
+    Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry,
+    PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, TagCount,
+    TrashEntry, ViewInstance, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -277,17 +280,26 @@ wit_type! {
     IndexResult => "index-result",
     BacklinkRef => "backlink-ref",
     NeighborRef => "neighbor-ref",
-    SearchHit => "search-hit",
+    DocumentMatch => "document-match",
     TagCount => "tag-count",
     TrashEntry => "trash-entry",
     Page => "page",
     LinkDirection => "link-direction",
-    SearchScope => "search-scope",
+    QueryExpr => "query-expr",
+    QueryClause => "query-clause",
+    QueryLiteral => "query-literal",
+    QueryPredicate => "query-predicate",
+    TextQuery => "text-query",
+    TextMode => "text-mode",
+    TextField => "text-field",
+    QueryKind => "query-kind",
+    PredicateKind => "predicate-kind",
+    QueryRoute => "query-route",
+    PropertySelect => "property-select",
     PropertyTest => "property-test",
     PropertyFilter => "property-filter",
     PropertySort => "property-sort",
     PropertyEntry => "property-entry",
-    DocumentProperties => "document-properties",
     PropertyCount => "property-count",
     HealthCheck => "health-check",
     HealthIssue => "health-issue",
@@ -313,10 +325,10 @@ wit_type! {
     // (i generici al confine non esistono). L'impl per ciascuna istanza è ciò
     // che rende impossibile paginarne una nuova senza dichiararla anche là.
     Paged<BacklinkRef> => "backlinks-page",
-    Paged<SearchHit> => "search-page",
+    Paged<DocumentMatch> => "documents-page",
+    Paged<DocId> => "doc-ids-page",
     Paged<TagCount> => "tags-page",
     Paged<NeighborRef> => "neighbors-page",
-    Paged<DocumentProperties> => "properties-page",
     Paged<PropertyCount> => "property-values-page",
     Paged<HealthIssue> => "vault-health-page",
     PluginManifest => "plugin-manifest",
@@ -1727,26 +1739,34 @@ fn actor_case(a: &Actor) -> Case {
 
 fn index_query_case(q: &IndexQuery) -> Case {
     match q {
+        IndexQuery::Documents {
+            matching,
+            sort,
+            select,
+            page,
+        } => case_rec(
+            "documents",
+            "index-query-documents",
+            vec![
+                ("matching", wit(matching)),
+                ("sort", wit(sort)),
+                ("select", wit(select)),
+                ("page", wit(page)),
+            ],
+        ),
         IndexQuery::Backlinks { target, page } => case_rec(
             "backlinks",
             "index-query-backlinks",
             vec![("target", wit(target)), ("page", wit(page))],
         ),
-        IndexQuery::FullText { query, scope, page } => case_rec(
-            "full-text",
-            "index-query-full-text",
-            vec![
-                ("query", wit(query)),
-                ("scope", wit(scope)),
-                ("page", wit(page)),
-            ],
-        ),
         IndexQuery::Outline { doc } => case_ty("outline", wit(doc)),
-        IndexQuery::Tags { page } => {
-            case_rec("tags", "index-query-tags", vec![("page", wit(page))])
-        }
+        IndexQuery::Tags { matching, page } => case_rec(
+            "tags",
+            "index-query-tags",
+            vec![("matching", wit(matching)), ("page", wit(page))],
+        ),
         IndexQuery::Neighbors {
-            doc,
+            seeds,
             direction,
             depth,
             page,
@@ -1754,33 +1774,22 @@ fn index_query_case(q: &IndexQuery) -> Case {
             "neighbors",
             "index-query-neighbors",
             vec![
-                ("doc", wit(doc)),
+                ("seeds", wit(seeds)),
                 ("direction", wit(direction)),
                 ("depth", wit(depth)),
                 ("page", wit(page)),
             ],
         ),
-        IndexQuery::Properties {
-            filter,
-            sort,
-            select,
+        IndexQuery::PropertyValues {
+            key,
+            matching,
             page,
         } => case_rec(
-            "properties",
-            "index-query-properties",
-            vec![
-                ("filter", wit(filter)),
-                ("sort", wit(sort)),
-                ("select", wit(select)),
-                ("page", wit(page)),
-            ],
-        ),
-        IndexQuery::PropertyValues { key, filter, page } => case_rec(
             "property-values",
             "index-query-property-values",
             vec![
                 ("key", wit(key)),
-                ("filter", wit(filter)),
+                ("matching", wit(matching)),
                 ("page", wit(page)),
             ],
         ),
@@ -1797,14 +1806,84 @@ fn index_query_case(q: &IndexQuery) -> Case {
     }
 }
 
+fn query_predicate_case(p: &QueryPredicate) -> Case {
+    match p {
+        QueryPredicate::Text(q) => case_ty("text", wit(q)),
+        QueryPredicate::Property { filter } => case_ty("property", wit(filter)),
+        QueryPredicate::Tag { name, descendants } => case_rec(
+            "tag",
+            "tag-predicate",
+            vec![("name", wit(name)), ("descendants", wit(descendants))],
+        ),
+        QueryPredicate::Folder { path, descendants } => case_rec(
+            "folder",
+            "folder-predicate",
+            vec![("path", wit(path)), ("descendants", wit(descendants))],
+        ),
+        QueryPredicate::Linked { doc, direction } => case_rec(
+            "linked",
+            "linked-predicate",
+            vec![("doc", wit(doc)), ("direction", wit(direction))],
+        ),
+        QueryPredicate::Docs { docs } => {
+            case_rec("docs", "docs-predicate", vec![("docs", wit(docs))])
+        }
+        QueryPredicate::Custom { ns, predicate } => case_rec(
+            "custom",
+            "custom-predicate",
+            vec![("ns", wit(ns)), ("predicate", wit(predicate))],
+        ),
+    }
+}
+
+fn property_select_case(s: &PropertySelect) -> Case {
+    match s {
+        PropertySelect::None => case("none"),
+        PropertySelect::All => case("all"),
+        PropertySelect::Keys { keys } => {
+            case_rec("keys", "property-select-keys", vec![("keys", wit(keys))])
+        }
+    }
+}
+
+fn query_kind_case(k: &QueryKind) -> Case {
+    match k {
+        QueryKind::Documents => case("documents"),
+        QueryKind::Backlinks => case("backlinks"),
+        QueryKind::Outline => case("outline"),
+        QueryKind::Tags => case("tags"),
+        QueryKind::Neighbors => case("neighbors"),
+        QueryKind::PropertyValues => case("property-values"),
+        QueryKind::VaultHealth => case("vault-health"),
+        QueryKind::Custom(ns) => case_ty("custom", wit(ns)),
+    }
+}
+
+fn predicate_kind_case(k: &PredicateKind) -> Case {
+    match k {
+        PredicateKind::Text => case("text"),
+        PredicateKind::Property => case("property"),
+        PredicateKind::Tag => case("tag"),
+        PredicateKind::Folder => case("folder"),
+        PredicateKind::Linked => case("linked"),
+        PredicateKind::Custom(ns) => case_ty("custom", wit(ns)),
+    }
+}
+
+fn query_route_case(r: &QueryRoute) -> Case {
+    match r {
+        QueryRoute::Query(k) => case_ty("query", wit(k)),
+        QueryRoute::Predicate(k) => case_ty("predicate", wit(k)),
+    }
+}
+
 fn index_result_case(r: &IndexResult) -> Case {
     match r {
         IndexResult::Backlinks(v) => case_ty("backlinks", wit(v)),
-        IndexResult::Search(v) => case_ty("search", wit(v)),
+        IndexResult::Documents(v) => case_ty("documents", wit(v)),
         IndexResult::Outline(v) => case_ty("outline", wit(v)),
         IndexResult::Tags(v) => case_ty("tags", wit(v)),
         IndexResult::Neighbors(v) => case_ty("neighbors", wit(v)),
-        IndexResult::Properties(v) => case_ty("properties", wit(v)),
         IndexResult::PropertyValues(v) => case_ty("property-values", wit(v)),
         IndexResult::VaultHealth(v) => case_ty("vault-health", wit(v)),
         IndexResult::Custom(v) => case_ty("custom", wit(v)),
@@ -1913,6 +1992,7 @@ fn plugin_error_case(e: &PluginError) -> Case {
         PluginError::PermissionDenied(s) => case_ty("permission-denied", wit(s)),
         PluginError::Internal(s) => case_ty("internal", wit(s)),
         PluginError::Conflict(s) => case_ty("conflict", wit(s)),
+        PluginError::Unserved(s) => case_ty("unserved", wit(s)),
     }
 }
 
@@ -2422,34 +2502,32 @@ fn conform(source: &str) -> Result<(), String> {
         "index-query",
         ("traits.rs", "IndexQuery"),
         &[
-            index_query_case(&IndexQuery::Backlinks {
-                target: DocId::new("a"),
+            index_query_case(&IndexQuery::Documents {
+                matching: QueryExpr::all(),
+                sort: None,
+                select: PropertySelect::None,
                 page: None,
             }),
-            index_query_case(&IndexQuery::FullText {
-                query: String::new(),
-                scope: SearchScope::default(),
+            index_query_case(&IndexQuery::Backlinks {
+                target: DocId::new("a"),
                 page: None,
             }),
             index_query_case(&IndexQuery::Outline {
                 doc: DocId::new("a"),
             }),
-            index_query_case(&IndexQuery::Tags { page: None }),
+            index_query_case(&IndexQuery::Tags {
+                matching: QueryExpr::all(),
+                page: None,
+            }),
             index_query_case(&IndexQuery::Neighbors {
-                doc: DocId::new("a"),
+                seeds: QueryExpr::all(),
                 direction: LinkDirection::Outbound,
                 depth: 1,
                 page: None,
             }),
-            index_query_case(&IndexQuery::Properties {
-                filter: Vec::new(),
-                sort: None,
-                select: Vec::new(),
-                page: None,
-            }),
             index_query_case(&IndexQuery::PropertyValues {
                 key: String::new(),
-                filter: Vec::new(),
+                matching: QueryExpr::all(),
                 page: None,
             }),
             index_query_case(&IndexQuery::VaultHealth {
@@ -2467,16 +2545,101 @@ fn conform(source: &str) -> Result<(), String> {
         "index-result",
         ("traits.rs", "IndexResult"),
         &[
+            index_result_case(&IndexResult::Documents(Paged::all(vec![]))),
             index_result_case(&IndexResult::Backlinks(Paged::all(vec![]))),
-            index_result_case(&IndexResult::Search(Paged::all(vec![]))),
             index_result_case(&IndexResult::Outline(vec![])),
             index_result_case(&IndexResult::Tags(Paged::all(vec![]))),
             index_result_case(&IndexResult::Neighbors(Paged::all(vec![]))),
-            index_result_case(&IndexResult::Properties(Paged::all(vec![]))),
             index_result_case(&IndexResult::PropertyValues(Paged::all(vec![]))),
             index_result_case(&IndexResult::VaultHealth(Paged::all(vec![]))),
             index_result_case(&IndexResult::Custom(serde_json::Value::Null)),
         ],
+    );
+
+    contract.variant_src(
+        "query-predicate",
+        ("query.rs", "QueryPredicate"),
+        &[
+            query_predicate_case(&QueryPredicate::Text(TextQuery::terms(""))),
+            query_predicate_case(&QueryPredicate::Property {
+                filter: PropertyFilter {
+                    key: String::new(),
+                    test: PropertyTest::Exists,
+                },
+            }),
+            query_predicate_case(&QueryPredicate::Tag {
+                name: String::new(),
+                descendants: false,
+            }),
+            query_predicate_case(&QueryPredicate::Folder {
+                path: String::new(),
+                descendants: false,
+            }),
+            query_predicate_case(&QueryPredicate::Linked {
+                doc: DocId::new("a"),
+                direction: LinkDirection::Outbound,
+            }),
+            query_predicate_case(&QueryPredicate::Docs { docs: vec![] }),
+            query_predicate_case(&QueryPredicate::Custom {
+                ns: String::new(),
+                predicate: serde_json::Value::Null,
+            }),
+        ],
+    );
+
+    contract.variant_src(
+        "property-select",
+        ("traits.rs", "PropertySelect"),
+        &[
+            property_select_case(&PropertySelect::None),
+            property_select_case(&PropertySelect::All),
+            property_select_case(&PropertySelect::Keys { keys: vec![] }),
+        ],
+    );
+
+    contract.variant_src(
+        "query-kind",
+        ("traits.rs", "QueryKind"),
+        &[
+            query_kind_case(&QueryKind::Documents),
+            query_kind_case(&QueryKind::Backlinks),
+            query_kind_case(&QueryKind::Outline),
+            query_kind_case(&QueryKind::Tags),
+            query_kind_case(&QueryKind::Neighbors),
+            query_kind_case(&QueryKind::PropertyValues),
+            query_kind_case(&QueryKind::VaultHealth),
+            query_kind_case(&QueryKind::Custom(String::new())),
+        ],
+    );
+
+    contract.variant_src(
+        "predicate-kind",
+        ("traits.rs", "PredicateKind"),
+        &[
+            predicate_kind_case(&PredicateKind::Text),
+            predicate_kind_case(&PredicateKind::Property),
+            predicate_kind_case(&PredicateKind::Tag),
+            predicate_kind_case(&PredicateKind::Folder),
+            predicate_kind_case(&PredicateKind::Linked),
+            predicate_kind_case(&PredicateKind::Custom(String::new())),
+        ],
+    );
+
+    contract.variant_src(
+        "query-route",
+        ("traits.rs", "QueryRoute"),
+        &[
+            query_route_case(&QueryRoute::Query(QueryKind::Documents)),
+            query_route_case(&QueryRoute::Predicate(PredicateKind::Text)),
+        ],
+    );
+
+    contract.enumeration_src("text-mode", ("query.rs", "TextMode"), &["terms", "phrase"]);
+
+    contract.enumeration_src(
+        "text-field",
+        ("query.rs", "TextField"),
+        &["name", "body", "tags"],
     );
 
     contract.variant_src(
@@ -2535,6 +2698,7 @@ fn conform(source: &str) -> Result<(), String> {
             plugin_error_case(&PluginError::PermissionDenied(String::new())),
             plugin_error_case(&PluginError::Internal(String::new())),
             plugin_error_case(&PluginError::Conflict(String::new())),
+            plugin_error_case(&PluginError::Unserved(String::new())),
         ],
     );
 
@@ -2635,7 +2799,10 @@ fn conform(source: &str) -> Result<(), String> {
         &[
             export_selection_case(&ExportSelection::Documents(vec![])),
             export_selection_case(&ExportSelection::Folder(String::new())),
-            export_selection_case(&ExportSelection::Query(IndexQuery::Tags { page: None })),
+            export_selection_case(&ExportSelection::Query(IndexQuery::Tags {
+                matching: QueryExpr::all(),
+                page: None,
+            })),
         ],
     );
 
@@ -3356,19 +3523,15 @@ fn conform(source: &str) -> Result<(), String> {
         &[("source", wit(&source)), ("context", wit(&context))],
     );
 
-    let SearchHit {
+    let DocumentMatch {
         doc,
         score,
         snippet,
         highlights,
-    } = SearchHit {
-        doc: DocId::new("a"),
-        score: 0.0,
-        snippet: String::new(),
-        highlights: Vec::new(),
-    };
+        properties,
+    } = DocumentMatch::of(DocId::new("a"));
     contract.record(
-        "search-hit",
+        "document-match",
         &[
             ("doc", wit(&doc)),
             // La larghezza di un punteggio è parte del contratto: era il caso
@@ -3376,6 +3539,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("score", wit(&score)),
             ("snippet", wit(&snippet)),
             ("highlights", wit(&highlights)),
+            ("properties", wit(&properties)),
         ],
     );
 
@@ -3402,10 +3566,29 @@ fn conform(source: &str) -> Result<(), String> {
     let Page { offset, limit } = Page::default();
     contract.record("page", &[("offset", wit(&offset)), ("limit", wit(&limit))]);
 
-    let SearchScope { folders, tags } = SearchScope::default();
+    let QueryExpr { any } = QueryExpr::all();
+    contract.record("query-expr", &[("any", wit(&any))]);
+
+    let QueryClause { all } = QueryClause::default();
+    contract.record("query-clause", &[("all", wit(&all))]);
+
+    let QueryLiteral { negated, predicate } = QueryLiteral {
+        negated: false,
+        predicate: QueryPredicate::Docs { docs: Vec::new() },
+    };
     contract.record(
-        "search-scope",
-        &[("folders", wit(&folders)), ("tags", wit(&tags))],
+        "query-literal",
+        &[("negated", wit(&negated)), ("predicate", wit(&predicate))],
+    );
+
+    let TextQuery { text, mode, fields } = TextQuery::terms("");
+    contract.record(
+        "text-query",
+        &[
+            ("text", wit(&text)),
+            ("mode", wit(&mode)),
+            ("fields", wit(&fields)),
+        ],
     );
 
     let PropertyFilter { key, test } = PropertyFilter {
@@ -3433,15 +3616,6 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record(
         "property-entry",
         &[("key", wit(&key)), ("value", wit(&value))],
-    );
-
-    let DocumentProperties { doc, properties } = DocumentProperties {
-        doc: DocId::new("a"),
-        properties: Vec::new(),
-    };
-    contract.record(
-        "document-properties",
-        &[("doc", wit(&doc)), ("properties", wit(&properties))],
     );
 
     let PropertyCount { value, count } = PropertyCount {
@@ -3474,7 +3648,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    // Le sette finestre: un solo tipo in Rust, un record per istanza nel WIT.
+    // Le finestre: un solo tipo in Rust, un record per istanza nel WIT.
     // Il destructuring è generico ma i tipi dei campi li deduce il compilatore
     // dall'istanza, quindi `items` porta davvero `list<backlink-ref>` e non una
     // forma scritta a mano.
@@ -3483,8 +3657,12 @@ fn conform(source: &str) -> Result<(), String> {
         &paged_fields(&Paged::all(Vec::<BacklinkRef>::new())),
     );
     contract.record(
-        "search-page",
-        &paged_fields(&Paged::all(Vec::<SearchHit>::new())),
+        "documents-page",
+        &paged_fields(&Paged::all(Vec::<DocumentMatch>::new())),
+    );
+    contract.record(
+        "doc-ids-page",
+        &paged_fields(&Paged::all(Vec::<DocId>::new())),
     );
     contract.record(
         "tags-page",
@@ -3493,10 +3671,6 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record(
         "neighbors-page",
         &paged_fields(&Paged::all(Vec::<NeighborRef>::new())),
-    );
-    contract.record(
-        "properties-page",
-        &paged_fields(&Paged::all(Vec::<DocumentProperties>::new())),
     );
     contract.record(
         "property-values-page",
@@ -3937,6 +4111,12 @@ fn conform(source: &str) -> Result<(), String> {
 
     contract.method(
         "index",
+        "routes",
+        <dyn IndexProvider>::routes as fn(&'static dyn IndexProvider) -> Vec<QueryRoute>,
+        &[],
+    );
+    contract.method(
+        "index",
         "activate",
         <dyn IndexProvider>::activate
             as fn(&'static mut dyn IndexProvider, Host) -> Result<(), PluginError>,
@@ -4009,8 +4189,8 @@ fn conform(source: &str) -> Result<(), String> {
         "host-api",
         "list-documents",
         <dyn HostApi>::list_documents
-            as fn(&'static dyn HostApi) -> Result<Vec<DocId>, PluginError>,
-        &[],
+            as fn(&'static dyn HostApi, Option<Page>) -> Result<Paged<DocId>, PluginError>,
+        &["page"],
     );
     contract.method(
         "host-api",
@@ -4344,7 +4524,7 @@ fn wit_conformance_actually_fails_on_drift() {
         // --- da qui in poi: ciò che il confronto per soli nomi non vedeva
         (
             "tipo di un campo cambiato (la larghezza di un punteggio)",
-            base.replace("        score: f32,", "        score: f64,"),
+            base.replace("        score: option<f32>,", "        score: option<f64>,"),
             "score",
         ),
         (

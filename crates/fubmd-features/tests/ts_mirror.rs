@@ -1,7 +1,8 @@
 //! I mirror TS↔Rust, legati da una **fixture generata dai tipi Rust**.
 //!
 //! `UiNode`, `ViewUpdate`, `KernelEvent`/`Event`, `Span`, `VersionRef`,
-//! `SearchHit`, `BacklinkRef`, `TrashEntry`, `ViewSpec` sono rispecchiati a
+//! `IndexQuery`/`IndexResult`, `DocumentMatch`, `BacklinkRef`, `TrashEntry`,
+//! `ViewSpec` sono rispecchiati a
 //! mano in TypeScript (`frontend/src/host/contract.ts`): il confine può divergere in
 //! silenzio — un caso aggiunto in Rust e non nel mirror, un campo rinominato.
 //! Questo test è metà del presidio: serializza un campione per ogni
@@ -28,9 +29,12 @@ use fubmd_abi::edit::{EditRequest, Revision, TextEdit};
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
 use fubmd_abi::model::{DocId, Span};
+use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
-    BacklinkRef, JobId, SearchHit, TagCount, ViewInstance, ViewSpec, ViewSurface,
+    BacklinkRef, DocumentMatch, HealthCheck, IndexQuery, IndexResult, JobId, LinkDirection,
+    NeighborRef, Page, Paged, PropertyEntry, PropertySelect, TagCount, ViewInstance, ViewSpec,
+    ViewSurface,
 };
 use fubmd_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
@@ -494,6 +498,119 @@ fn to_value<T: serde::Serialize>(v: T) -> Value {
     serde_json::to_value(v).expect("serializza")
 }
 
+/// Un campione per **ogni** variante del canale dati, domanda e risposta.
+/// L'esaustività la garantisce il `match` senza `_`.
+fn index_query_samples() -> Vec<Value> {
+    // Una query composta: testo AND tag negato. È la forma che il §5.3 rende
+    // esprimibile, ed è quella che il mirror deve saper costruire.
+    let composta = QueryExpr {
+        any: vec![QueryClause {
+            all: vec![
+                QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Text(TextQuery::terms("rust")),
+                },
+                QueryLiteral {
+                    negated: true,
+                    predicate: QueryPredicate::Tag {
+                        name: "archivio".into(),
+                        descendants: true,
+                    },
+                },
+            ],
+        }],
+    };
+    let all = [
+        IndexQuery::Documents {
+            matching: composta,
+            sort: None,
+            select: PropertySelect::None,
+            page: Some(Page::first(20)),
+        },
+        IndexQuery::Backlinks {
+            target: DocId::new("a.md"),
+            page: None,
+        },
+        IndexQuery::Outline {
+            doc: DocId::new("a.md"),
+        },
+        IndexQuery::Tags {
+            matching: QueryExpr::all(),
+            page: None,
+        },
+        IndexQuery::Neighbors {
+            seeds: QueryExpr::all(),
+            direction: LinkDirection::Outbound,
+            depth: 1,
+            page: None,
+        },
+        IndexQuery::PropertyValues {
+            key: "tipo".into(),
+            matching: QueryExpr::all(),
+            page: None,
+        },
+        IndexQuery::VaultHealth {
+            check: HealthCheck::BrokenLinks,
+            page: None,
+        },
+        IndexQuery::Custom {
+            ns: "terzi".into(),
+            query: json!({"x": 1}),
+        },
+    ];
+    // Il `match` esaustivo è la guardia: una variante nuova non compila finché
+    // non ha un campione qui.
+    for q in &all {
+        match q {
+            IndexQuery::Documents { .. }
+            | IndexQuery::Backlinks { .. }
+            | IndexQuery::Outline { .. }
+            | IndexQuery::Tags { .. }
+            | IndexQuery::Neighbors { .. }
+            | IndexQuery::PropertyValues { .. }
+            | IndexQuery::VaultHealth { .. }
+            | IndexQuery::Custom { .. } => {}
+        }
+    }
+    all.into_iter().map(to_value).collect()
+}
+
+fn index_result_samples() -> Vec<Value> {
+    let all = [
+        IndexResult::Documents(Paged::all(vec![DocumentMatch::of(DocId::new("a.md"))])),
+        IndexResult::Backlinks(Paged::all(vec![BacklinkRef {
+            source: DocId::new("b.md"),
+            context: None,
+        }])),
+        IndexResult::Outline(vec![]),
+        IndexResult::Tags(Paged::all(vec![TagCount {
+            name: "rust".into(),
+            count: 2,
+        }])),
+        IndexResult::Neighbors(Paged::all(vec![NeighborRef {
+            doc: DocId::new("b.md"),
+            via: DocId::new("a.md"),
+            depth: 1,
+        }])),
+        IndexResult::PropertyValues(Paged::all(vec![])),
+        IndexResult::VaultHealth(Paged::all(vec![])),
+        IndexResult::Custom(json!({"x": 1})),
+    ];
+    for r in &all {
+        match r {
+            IndexResult::Documents(_)
+            | IndexResult::Backlinks(_)
+            | IndexResult::Outline(_)
+            | IndexResult::Tags(_)
+            | IndexResult::Neighbors(_)
+            | IndexResult::PropertyValues(_)
+            | IndexResult::VaultHealth(_)
+            | IndexResult::Custom(_) => {}
+        }
+    }
+    all.into_iter().map(to_value).collect()
+}
+
 /// La fixture attesa, costruita dai tipi Rust.
 fn expected() -> Value {
     // Un errore concreto per provare che anche `PluginError` (dentro `JobDone`)
@@ -508,12 +625,32 @@ fn expected() -> Value {
         // `hash` è un u64 pieno: sul confine JSON è una STRINGA (regola in
         // `fubmd_abi::ipc`) — il campione oltre 2^53 lo dimostra nella fixture.
         "VersionRef": [to_value(VersionRef { ts: 1, hash: u64::MAX, size: 3 })],
-        "SearchHit": [to_value(SearchHit {
-            doc: DocId::new("a.md"),
-            score: 0.5,
-            snippet: "s".into(),
-            highlights: vec![Span::new(0, 1)],
+        // La riga di una risposta: quella "nuda" (una selezione senza
+        // pertinenza) e quella piena, perché i campi opzionali sono **omessi**
+        // dalla serializzazione e il mirror TS deve reggere entrambe le forme.
+        "DocumentMatch": [
+            to_value(DocumentMatch::of(DocId::new("a.md"))),
+            to_value(DocumentMatch {
+                doc: DocId::new("b.md"),
+                score: Some(0.5),
+                snippet: Some("s".into()),
+                highlights: vec![Span::new(0, 1)],
+                properties: vec![PropertyEntry {
+                    key: "tipo".into(),
+                    value: fubmd_abi::model::PropertyValue::Text("nota".into()),
+                }],
+            }),
+        ],
+        "NeighborRef": [to_value(NeighborRef {
+            doc: DocId::new("b.md"),
+            via: DocId::new("a.md"),
+            depth: 1,
         })],
+        // Il canale dati generico (§5.4): la shell **costruisce** queste query
+        // e legge queste risposte, quindi ogni variante aggiunta in Rust deve
+        // trovare il proprio ramo di qua.
+        "IndexQuery": index_query_samples(),
+        "IndexResult": index_result_samples(),
         "BacklinkRef": [to_value(BacklinkRef {
             source: DocId::new("b.md"),
             context: Some("ctx".into()),

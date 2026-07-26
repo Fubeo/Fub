@@ -417,7 +417,7 @@ pub enum ExportSelection {
     Documents(Vec<DocId>),
     /// Una cartella e tutte le sue discendenti; `""` è la radice, cioè il vault
     /// intero. Stessa regola di appartenenza di
-    /// [`SearchScope::folders`](crate::traits::SearchScope).
+    /// [`QueryPredicate::Folder`](crate::query::QueryPredicate::Folder).
     Folder(String),
     /// L'esito di un'interrogazione dell'indice (decisione 0005).
     Query(IndexQuery),
@@ -444,15 +444,15 @@ impl ExportSelection {
         let mut docs = match self {
             ExportSelection::Documents(ids) => ids.clone(),
             ExportSelection::Folder(folder) => host
-                .list_documents()?
+                .list_documents(None)?
+                .items
                 .into_iter()
                 .filter(|doc| in_folder(doc, folder))
                 .collect(),
             ExportSelection::Query(query) => match host.query_index(query.clone())? {
                 IndexResult::Backlinks(p) => p.items.into_iter().map(|b| b.source).collect(),
-                IndexResult::Search(p) => p.items.into_iter().map(|h| h.doc).collect(),
+                IndexResult::Documents(p) => p.items.into_iter().map(|d| d.doc).collect(),
                 IndexResult::Neighbors(p) => p.items.into_iter().map(|n| n.doc).collect(),
-                IndexResult::Properties(p) => p.items.into_iter().map(|d| d.doc).collect(),
                 IndexResult::VaultHealth(p) => p.items.into_iter().map(|i| i.doc).collect(),
                 other => {
                     return Err(PluginError::BadArgs(format!(

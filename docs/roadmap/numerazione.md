@@ -46,6 +46,11 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.13 · §4.1 | [0018 — Chi vede il modello parsato](../decisions/0018-chi-vede-il-modello-parsato.md) |
 | §1.28 · §4.2 | [0018 — Chi vede il modello parsato](../decisions/0018-chi-vede-il-modello-parsato.md) |
 | §1.29 · §4.3 | [0018 — Chi vede il modello parsato](../decisions/0018-chi-vede-il-modello-parsato.md) |
+| §2.28 · §5.1 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
+| §2.18 · §5.2 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
+| §2.17 · §5.3 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
+| §2.26 · §5.4 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
+| §1.27 · §5.5 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -76,7 +81,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §1.21 | **§9.1** | Il lavoro lungo non vede il vault |
 | §1.24 | **§7.5** | I plugin non hanno un canale per parlarsi |
 | §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
-| §1.27 | **§5.5** | `list_documents` e `views()` — le metà nel contratto di §2.13 e §1.15 |
 | §1.34 | **§7.4** | Gli id non sono di nessuno: nessuna regola di namespace, nessuna collisione |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §1.37 | **§6.1** | Le regole che il contratto promette vivono nel kernel, private |
@@ -97,17 +101,13 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.14 | **§11.3** | Il sidecar dell'organizzazione, da assorbire |
 | §2.15 | **§8.2** | Il montaggio dell'app vive dentro un comando Tauri |
 | §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
-| §2.17 | **§5.3** | La query è una stringa in un linguaggio di terzi |
-| §2.18 | **§5.2** | Il dispatch delle query è per tentativi |
 | §2.19 | **§8.1** | `Workspace` è un oggetto-dio, e ogni voce di questo piano gli aggiunge un campo |
 | §2.20 | **§14.2** | Nessun metadato di entry: né mtime, né dimensione, né impronta |
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
 | §2.24 | **§13.2** | Lo stato per-documento: ogni feature se lo migra da sé |
 | §2.25 | **§7.6** | Nessun inventario di ciò che è attivo |
-| §2.26 | **§5.4** | La query non esiste sull'IPC |
 | §2.27 | **§10.2** | Il ponte degli eventi non ha né freno né raggruppamento |
-| §2.28 | **§5.1** | Sette varianti su nove di `IndexQuery` non arrivano a nessun provider |
 | §2.29 | **§15.4** | I dati persistiti non hanno né una mappa né una classe |
 | §3.1 | **§1.2** | Smontare il monolite |
 | §3.2 | **§18.2** | Comandi e tastiera |

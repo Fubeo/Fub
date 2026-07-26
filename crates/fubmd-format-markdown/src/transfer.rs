@@ -98,7 +98,7 @@ impl ImportProvider for MarkdownImport {
             .about(source.name.clone()),
         );
 
-        let taken = host.list_documents()?;
+        let taken = host.list_documents(None)?.items;
         let occupied = taken.contains(&wanted);
         let (doc, outcome) = match (occupied, request.on_conflict) {
             (false, _) => (wanted, ImportOutcome::Created),

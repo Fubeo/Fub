@@ -9,9 +9,10 @@
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::{DocId, PropertyValue};
+use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate};
 use fubmd_abi::traits::{
-    HealthCheck, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter, PropertySort,
-    PropertyTest,
+    HealthCheck, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter, PropertySelect,
+    PropertySort, PropertyTest,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
@@ -72,7 +73,7 @@ fn the_graph_answers_through_the_contract() {
     let IndexResult::Neighbors(out) = query(
         &ws,
         IndexQuery::Neighbors {
-            doc: DocId::new("Progetti/Beta.md"),
+            seeds: QueryExpr::docs(vec![DocId::new("Progetti/Beta.md")]),
             direction: LinkDirection::Inbound,
             depth: 1,
             page: None,
@@ -93,7 +94,7 @@ fn the_graph_answers_through_the_contract() {
     let IndexResult::Neighbors(walk) = query(
         &ws,
         IndexQuery::Neighbors {
-            doc: DocId::new("Archivio/Gamma.md"),
+            seeds: QueryExpr::docs(vec![DocId::new("Archivio/Gamma.md")]),
             direction: LinkDirection::Outbound,
             depth: 2,
             page: None,
@@ -132,9 +133,26 @@ fn filter(key: &str, test: PropertyTest) -> PropertyFilter {
     }
 }
 
+/// I filtri di prima, che erano una lista in AND, sono adesso i **letterali di
+/// una clausola**: la stessa domanda, in un linguaggio che sa dire anche l'OR e
+/// la negazione.
+fn all_of(filters: Vec<PropertyFilter>) -> QueryExpr {
+    QueryExpr {
+        any: vec![QueryClause {
+            all: filters
+                .into_iter()
+                .map(|f| QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Property { filter: f },
+                })
+                .collect(),
+        }],
+    }
+}
+
 fn rows(ws: &Workspace, q: IndexQuery) -> (Vec<String>, u32) {
-    let IndexResult::Properties(page) = query(ws, q) else {
-        panic!("attese proprietà");
+    let IndexResult::Documents(page) = query(ws, q) else {
+        panic!("attesi documenti");
     };
     (
         page.items.iter().map(|r| r.doc.to_string()).collect(),
@@ -143,21 +161,21 @@ fn rows(ws: &Workspace, q: IndexQuery) -> (Vec<String>, u32) {
 }
 
 #[test]
-fn properties_filter_sort_and_select_like_a_collection_would() {
+fn documents_filter_sort_and_select_like_a_collection_would() {
     let (_g, ws) = vault();
 
     let (ids, total) = rows(
         &ws,
-        IndexQuery::Properties {
-            filter: vec![filter(
+        IndexQuery::Documents {
+            matching: all_of(vec![filter(
                 "tipo",
                 PropertyTest::Equals(PropertyValue::Text("progetto".into())),
-            )],
+            )]),
             sort: Some(PropertySort {
                 key: "priorita".to_string(),
                 descending: true,
             }),
-            select: vec!["stato".to_string()],
+            select: PropertySelect::keys(&["stato"]),
             page: None,
         },
     );
@@ -170,19 +188,19 @@ fn properties_filter_sort_and_select_like_a_collection_would() {
 
     // `select` è la lista delle colonne: la riga porta quella, non tutto il
     // frontmatter.
-    let IndexResult::Properties(page) = query(
+    let IndexResult::Documents(page) = query(
         &ws,
-        IndexQuery::Properties {
-            filter: vec![filter(
+        IndexQuery::Documents {
+            matching: all_of(vec![filter(
                 "tipo",
                 PropertyTest::Equals(PropertyValue::Text("progetto".into())),
-            )],
+            )]),
             sort: None,
-            select: vec!["stato".to_string()],
+            select: PropertySelect::keys(&["stato"]),
             page: None,
         },
     ) else {
-        panic!("attese proprietà");
+        panic!("attesi documenti");
     };
     let keys: Vec<&str> = page.items[0]
         .properties
@@ -193,12 +211,12 @@ fn properties_filter_sort_and_select_like_a_collection_would() {
 }
 
 #[test]
-fn a_page_of_properties_is_a_window_over_a_stable_order() {
+fn a_page_of_documents_is_a_window_over_a_stable_order() {
     let (_g, ws) = vault();
-    let all = IndexQuery::Properties {
-        filter: Vec::new(),
+    let all = IndexQuery::Documents {
+        matching: QueryExpr::all(),
         sort: None,
-        select: Vec::new(),
+        select: PropertySelect::None,
         page: None,
     };
     let (everything, total) = rows(&ws, all);
@@ -208,10 +226,10 @@ fn a_page_of_properties_is_a_window_over_a_stable_order() {
     for offset in [0, 2] {
         let (ids, page_total) = rows(
             &ws,
-            IndexQuery::Properties {
-                filter: Vec::new(),
+            IndexQuery::Documents {
+                matching: QueryExpr::all(),
                 sort: None,
-                select: Vec::new(),
+                select: PropertySelect::None,
                 page: Some(Page::new(offset, 2)),
             },
         );
@@ -231,7 +249,7 @@ fn property_values_are_the_facets_of_a_field() {
         &ws,
         IndexQuery::PropertyValues {
             key: "tipo".to_string(),
-            filter: Vec::new(),
+            matching: QueryExpr::all(),
             page: None,
         },
     ) else {
@@ -256,10 +274,10 @@ fn property_values_are_the_facets_of_a_field() {
         &ws,
         IndexQuery::PropertyValues {
             key: "tipo".to_string(),
-            filter: vec![filter(
+            matching: all_of(vec![filter(
                 "stato",
                 PropertyTest::Equals(PropertyValue::Text("attivo".into())),
-            )],
+            )]),
             page: None,
         },
     ) else {
@@ -343,7 +361,13 @@ fn backlinks_and_tags_keep_their_answer_and_gain_a_window() {
     assert_eq!(page.items.len(), 1, "una pagina da uno");
     assert_eq!(page.total, 2, "ma i backlink sono due");
 
-    let IndexResult::Tags(tags) = query(&ws, IndexQuery::Tags { page: None }) else {
+    let IndexResult::Tags(tags) = query(
+        &ws,
+        IndexQuery::Tags {
+            matching: QueryExpr::all(),
+            page: None,
+        },
+    ) else {
         panic!("attesi tag");
     };
     let names: Vec<(&str, u32)> = tags

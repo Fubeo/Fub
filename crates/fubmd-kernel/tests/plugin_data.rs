@@ -178,11 +178,11 @@ fn a_plugin_can_look_around_the_vault_not_only_react_to_events() {
     ws.reindex().unwrap();
 
     let visti = ws
-        .with_host("prova.plugin", |host| host.list_documents())
+        .with_host("prova.plugin", |host| host.list_documents(None))
         .unwrap();
 
     assert_eq!(
-        visti.iter().map(|d| d.0.as_str()).collect::<Vec<_>>(),
+        visti.items.iter().map(|d| d.0.as_str()).collect::<Vec<_>>(),
         vec!["Altro.txt", "Appunto.txt"],
         "senza `list_documents` un plugin può leggere solo gli id che gli \
          arrivano dagli eventi: niente risposta a `vault-opened`, niente \

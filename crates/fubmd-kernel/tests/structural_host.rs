@@ -290,8 +290,9 @@ fn the_trash_round_trip_closes_without_touching_the_workspace() {
         );
         assert!(
             !host
-                .list_documents()
+                .list_documents(None)
                 .expect("elenca")
+                .items
                 .contains(&DocId::new("nota.md")),
             "una nota cestinata non è più un documento del vault"
         );

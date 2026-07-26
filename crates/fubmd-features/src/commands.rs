@@ -403,7 +403,7 @@ fn vault_replace(
 
     let targets = match args.documents("docs") {
         Some(docs) => docs,
-        None => host.list_documents()?,
+        None => host.list_documents(None)?.items,
     };
 
     let mut planned = Vec::new();

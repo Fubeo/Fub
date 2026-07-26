@@ -121,9 +121,11 @@ cinque volte.
       primo** (`kernel/workspace.rs:1566-1571`): due view con lo stesso id e la
       seconda è irraggiungibile, **in silenzio**. È lo stesso difetto che il
       `FormatRegistry` aveva (§3.1: l'ultimo registrato vinceva) e che il
-      dispatch delle query ha ancora (§5.2: per tentativi). Il primo è chiuso
-      dalla [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md),
-      e la forma della risposta è quella da riusare qui: la registrazione
+      dispatch delle query aveva (per tentativi). Sono chiusi tutti e due — con
+      la [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+      e con la [0019](../decisions/0019-il-canale-dati.md) — e questa è l'ultima
+      famiglia che risolve un id per tentativi: la forma della risposta è la
+      stessa da riusare qui, la registrazione
       restituisce un `Result`, il perdente **non si registra affatto**, e
       sostituire resta possibile ma si chiede per nome.
 - [ ] **Gli spazi di nomi del contratto sono otto e nessuno ha una regola**: id
@@ -141,16 +143,20 @@ cinque volte.
       dopo il freeze costa rinominare ogni id già pubblicato, cioè rompere le
       hotkey, le impostazioni salvate e i link a view di chiunque abbia
       scritto un plugin nel frattempo. È anche il presupposto di §9.4 (togliere
-      un provider: per id) e §5.2 (routing: per `ns`).
+      un provider: per id) e del routing dichiarato della
+      [decisione 0019](../decisions/0019-il-canale-dati.md), dove un `ns` è già
+      una rotta.
 
 ### 7.5 I plugin non hanno un canale per parlarsi
 
 *ex §1.24 · contratto · **P1** — leva altissima, ma **additiva**: non scade col freeze*
 
 - [ ] **Gli unici canali fra provider sono `Event::Custom`** — fire-and-forget,
-      senza risposta — **e `IndexQuery::Custom`**, che è il canale *indice* e
-      passa dal dispatch a tentativi del §5.2. Non esiste una **chiamata**: A
-      non può chiedere qualcosa a B e ricevere un risultato.
+      senza risposta — **e `IndexQuery::Custom`**, che è il canale *indice*:
+      dalla [decisione 0019](../decisions/0019-il-canale-dati.md) ha un
+      destinatario dichiarato per `ns` invece di un giro di tentativi, ma resta
+      una domanda all'indice. Non esiste una **chiamata**: A non può chiedere
+      qualcosa a B e ricevere un risultato.
 - [ ] **Il capitolo 21 lo dà per scontato a ogni riga**: 21.1 promette «plugin
       Suite con API condivise»; 21.2 ha FubCharts che disegna dati di FubDB,
       FubForms che scrive in FubDB, FubCalendar che legge da FubTasks,

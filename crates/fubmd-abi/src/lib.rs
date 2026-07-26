@@ -14,6 +14,10 @@
 //!   domanda ha una coda aperta;
 //! - gli altri **trait di estensione** ([`traits`]): comandi, view (UI dichiarativa),
 //!   index (ricerca/backlink), event handler, ciclo di vita del plugin;
+//! - il **linguaggio delle interrogazioni** ([`query`]): quali documenti, detto
+//!   con un albero di predicati invece che con una stringa nella sintassi di una
+//!   dipendenza — e chi valuta cosa, dichiarato invece che scoperto per
+//!   tentativi;
 //! - i **comandi** ([`command`]): un'azione descritta a una macchina — argomenti
 //!   dichiarati, raggio dichiarato, e la simulazione come modo di invocarla;
 //! - i trait di **import ed export** ([`transfer`]): come i dati entrano nel
@@ -39,6 +43,7 @@ pub mod format;
 pub mod ipc;
 pub mod model;
 pub mod options;
+pub mod query;
 pub mod session;
 pub mod traits;
 pub mod transfer;
@@ -64,13 +69,17 @@ pub use model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
 };
 pub use options::OptionMap;
+pub use query::{
+    Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TextField,
+    TextMode, TextQuery,
+};
 pub use session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 pub use traits::{
-    BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,
-    HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged,
-    Plugin, PluginManifest, PropertyCount, PropertyEntry, PropertyFilter, PropertySort,
-    PropertyTest, SearchHit, SearchScope, TrashEntry, ViewInstance, ViewProvider, ViewSpec,
-    ViewSurface,
+    BacklinkRef, CommandProvider, DocumentMatch, EventHandler, HealthCheck, HealthIssue, HostApi,
+    IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged, Plugin,
+    PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
+    PropertySort, PropertyTest, QueryKind, QueryRoute, TrashEntry, ViewInstance, ViewProvider,
+    ViewSpec, ViewSurface,
 };
 pub use transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,

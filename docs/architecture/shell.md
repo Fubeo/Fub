@@ -35,6 +35,7 @@ frontend/src/
   host/          la cucitura con l'esterno, e nient'altro
     contract.ts    i tipi rispecchiati dal Rust (nessun @tauri-apps)
     ipc.ts         `api` + il canale eventi: i comandi del backend
+    query.ts       il canale dati: si costruisce una query, si apre una risposta
     dialog.ts      le superfici di SISTEMA: conferme, selettore di cartella
 
   state/         lo stato condiviso e ciò che lo cambia

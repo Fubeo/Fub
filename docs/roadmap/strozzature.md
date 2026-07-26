@@ -14,7 +14,7 @@ Una riga per **famiglia di FEATURES**: cosa servirebbe perché quelle voci siano
 | 13 allegati, 12 canvas, 11.4 CSV/JSON, 6.1 media | entry di vault che non sono documenti | `Vault::list_documents` filtra per estensione dei `FormatProvider` (`vault.rs:101`): un PNG **non esiste** |
 | 18 sync, 23.1 cifratura at-rest, 26.3 PWA/OPFS, 3.1 vault read-only | astrazione sullo storage | `std::fs` diretto in `vault.rs` e in `workspace.rs` (storage plugin) |
 | 10 task, 5.2 id di blocco, 7.1 link a blocco | modello con task e ancore stabili | `Block::List` non porta lo stato di spunta; nessun `^block-id` |
-| 9.1 faceted/field search, 9.2 query engine, 8.4 collezioni | canale query su **proprietà** | `IndexQuery` ha full-text, backlink, outline, tag — niente frontmatter, niente archi del grafo |
+| 9.1 faceted/field search, 9.2 query engine, 8.4 collezioni | canale query su **proprietà** | c'è (0005) e adesso si **compone** col testo (0019): resta da disegnare chi lo usa — il builder e le viste salvate |
 | 17 import/export/migration (~120 voci) | trait `ImportProvider`/`ExportProvider` | non esistono: ogni formato sarebbe codice nell'app |
 | 24.1 task manager, 22 AI, 14.2 clipper | lavoro in background reale | `take_pending_jobs` (`workspace.rs:1312`) **non ha chiamanti fuori dai test**: `spawn_job` in produzione non esegue nulla |
 | 3.1 vault multipli, 3.3 finestre multiple, 26 piattaforme | sessioni multiple | `AppState` tiene **una** `Option<VaultSession>` (`app/lib.rs:39`) |
@@ -40,13 +40,13 @@ Una riga per **famiglia di FEATURES**: cosa servirebbe perché quelle voci siano
 | 12 canvas, 11.4 CSV/JSON, 13.2 PDF, 2.3 encoding | documenti non-testo | `parse(source: &str)` e `Vault::read -> String`: un formato binario non entra |
 | 27.1 CLI, 27.2 API locale, 26.2-26.3 mobile/PWA, 27.4 e2e | un montaggio riusabile | il composition root è dentro `#[tauri::command] open_vault` (`app/lib.rs:109`) |
 | 3.1 ignore, 3.2 nascosti, 9.1, 18.1, 23.2 esclusioni | politica di esclusione come dato | `IGNORED_DIRS` è una costante di compilazione (`vault.rs:20`) |
-| 9.2 query builder/explain, 9.1 operatori e faccette | la query come AST nel contratto | `FullText { query: String }` va dritta al `QueryParser` di tantivy |
+| 9.2 query builder/explain, 9.1 operatori e faccette | la query come albero nel contratto | c'è (0019): resta la **superficie** — un builder nella shell, e un explain plan che attraversi il confine quando il profiler avrà dei clienti |
 | 28 settings, 8.2 proprietà, 11.3 editing, 19.3 form | riconciliazione e **chiave** dei nodi | `mountView` fa `innerHTML = ""` a ogni ridisegno (`main.ts:1198`): un input perde il focus |
 | 3.3 workspace salvabili, 8.3 viste salvate, 20.1 settings | tre stati distinti (settings/vista/layout) | nessuno dei tre ha un contenitore: resta il solo `data_*` (persistente, viaggia col vault), e lo `storage_*` volatile è stato ritirato (0013) |
 | 17 import/export, 18 sync/backup, 22 AI e RAG, 19.4 publishing, 13.4 trascrizione | lavoro lungo che **vede** il vault | `Plugin::run_job` è senza `HostApi` (`abi/traits.rs:476`): l'input deve stare tutto nel payload |
 | 5.2 (~50 estensioni), 20.1 markdown extensions, 27.3 custom blocks | innestare sintassi su un formato esistente | `FormatRegistry::by_ext` è estensione→**un** provider (`registry.rs:13`): si sostituisce, non si estende |
 | 6.1 mermaid/math/chart, 5.2 callout personalizzati | un renderer per `Block::Custom` | è un `if custom_kind == "callout"` dentro il provider markdown (`render.rs:62`) |
-| 21.1 API condivise, 21.2 moduli che si parlano, 20.1 dipendenze/conflitti | chiamate **tipizzate** fra plugin | solo `Event::Custom` (senza risposta) e `IndexQuery::Custom` |
+| 21.1 API condivise, 21.2 moduli che si parlano, 20.1 dipendenze/conflitti | chiamate **tipizzate** fra plugin | solo `Event::Custom` (senza risposta) e `IndexQuery::Custom` (che dalla 0019 ha un destinatario dichiarato, ma resta una domanda all'indice) |
 | 9.2 query engine, 22.1 vettoriale, 8.2 proprietà, 11 database, 15.1 citazioni | routing delle query verso gli indici | `query_index` li prova **in ordine** finché uno non dice `BadArgs` (`workspace.rs:1064`) |
 | 2.2 UUID, 8.3 Zettelkasten ID, 10.4 calendario, 25.2 collazione | caso, fuso orario, locale come capacità | l'`HostApi` ha `now_unix_millis` e nient'altro (`abi/traits.rs:131`) |
 | 6.3 stampa/PDF, 19.4 pubblicazione, 6.2 CSS per nota, 5.3 sanitizzazione | opzioni di rendering | `RenderOptions` è **un** booleano (`abi/format.rs:62`), ed è argomento di `render_html` |

@@ -39,14 +39,17 @@ use std::sync::Mutex;
 
 use camino::Utf8Path;
 use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Span};
+use fubmd_abi::query::{QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery};
 use fubmd_abi::traits::{
-    HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, SearchHit, SearchScope,
+    DocumentMatch, HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, PredicateKind,
+    QueryRoute,
 };
 use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
-use tantivy::query::{BooleanQuery, Occur, Query, QueryParser, TermQuery};
+use tantivy::query::{AllQuery, BooleanQuery, BoostQuery, Occur, PhraseQuery, Query, TermQuery};
 use tantivy::schema::{Field, IndexRecordOption, Schema, Value, STORED, STRING, TEXT};
 use tantivy::snippet::SnippetGenerator;
+use tantivy::tokenizer::TokenStream;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
 
 /// Identità della ricerca come plugin: è lo spazio dati che l'host le concede.
@@ -58,9 +61,12 @@ pub const SEARCH_ID: &str = "fubmd.search";
 /// buttare via l'indice e ricostruirlo da zero.
 ///
 /// v2: `tags` da TEXT tokenizzato a STRING (termine esatto, forma canonica).
-/// v3: campo `folder` (ogni cartella antenata come termine) per l'ambito di
-/// [`SearchScope`], e impronta sul `DocId` intero invece che sul solo nome.
-const SCHEMA_VERSION: u32 = 3;
+/// v3: campo `folder` (ogni cartella antenata come termine) per l'ambito della
+/// ricerca, e impronta sul `DocId` intero invece che sul solo nome.
+/// v4: `folder_exact` e `tag_paths`, cioè le due forme che i predicati del
+/// linguaggio (§5.3) chiedono e che i campi di prima non sapevano distinguere —
+/// «in questa cartella» contro «in questa o sotto», e lo stesso per un tag.
+const SCHEMA_VERSION: u32 = 4;
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -133,31 +139,16 @@ struct Fields {
     doc_id: Field,
     page_name: Field,
     body: Field,
+    /// I tag esatti, in forma canonica.
     tags: Field,
+    /// I tag e ogni loro antenato (`progetto/casa` mette anche `progetto`): è
+    /// ciò che rende `Tag { descendants: true }` una `TermQuery` invece di un
+    /// prefisso da valutare documento per documento.
+    tag_paths: Field,
+    /// Ogni cartella antenata, radice compresa.
     folder: Field,
-}
-
-/// Le cartelle a cui un documento appartiene, dalla radice in giù:
-/// `Progetti/sub/Alpha.md` → `["", "Progetti", "Progetti/sub"]`.
-///
-/// Ogni antenata è un termine a sé, e la radice (`""`) c'è su tutti: è ciò che
-/// rende "cerca in `Progetti`" una singola `TermQuery` che prende anche le
-/// discendenti, invece di un prefisso da valutare su ogni documento.
-fn folders_of(id: &DocId) -> Vec<String> {
-    let mut out = vec![String::new()];
-    let path = id.as_str();
-    let Some((dir, _)) = path.rsplit_once('/') else {
-        return out;
-    };
-    let mut acc = String::new();
-    for part in dir.split('/') {
-        if !acc.is_empty() {
-            acc.push('/');
-        }
-        acc.push_str(part);
-        out.push(acc.clone());
-    }
-    out
+    /// La sola cartella che contiene il documento.
+    folder_exact: Field,
 }
 
 fn build_schema() -> (Schema, Fields) {
@@ -175,9 +166,11 @@ fn build_schema() -> (Schema, Fields) {
     // risultati del click non coincidevano mai. Ogni tag entra come termine
     // unico nella forma canonica ([`canonical_tag`]).
     let tags = b.add_text_field("tags", STRING);
+    let tag_paths = b.add_text_field("tag_paths", STRING);
     // Come i tag, la cartella è una CHIAVE: termine esatto, non prosa. Non è
     // STORED perché non torna mai indietro — serve solo a filtrare.
     let folder = b.add_text_field("folder", STRING);
+    let folder_exact = b.add_text_field("folder_exact", STRING);
     (
         b.build(),
         Fields {
@@ -185,7 +178,9 @@ fn build_schema() -> (Schema, Fields) {
             page_name,
             body,
             tags,
+            tag_paths,
             folder,
+            folder_exact,
         },
     )
 }
@@ -390,49 +385,41 @@ impl Inner {
         Ok(())
     }
 
-    /// La ricerca vera: query, ambito e finestra.
+    /// La ricerca vera: l'albero della query, tradotto, e la finestra.
     ///
     /// La finestra si applica **alla sorgente** — `offset`/`limit` vanno al
     /// collector di tantivy, non a un `Vec` già costruito — ed è la ragione per
     /// cui un indice pagina meglio di chi lo interroga: la pagina 40 non costa
     /// come le prime 40 messe insieme. `total` arriva dal collector `Count`
     /// sulla stessa query, così chi disegna può scrivere "1-20 di 4321".
+    ///
+    /// Prima qui arrivava una **stringa**, e finiva dritta nel `QueryParser` di
+    /// tantivy: la sintassi di ricerca che l'utente digitava era quella di una
+    /// dipendenza, e un errore di parsing di tantivy diventava «Query
+    /// incompleta» nella shell. Adesso arriva un albero, e questo modulo lo
+    /// **traduce**: la stringa libera sopravvive solo dentro la foglia di testo,
+    /// dove è quello che è — dei termini da cercare.
     fn search(
         &mut self,
-        query: &str,
-        scope: &SearchScope,
+        matching: &QueryExpr,
         page: Option<Page>,
-    ) -> Result<Paged<SearchHit>, PluginError> {
+    ) -> Result<Paged<DocumentMatch>, PluginError> {
         // Chi interroga vede le proprie scritture, anche senza flush.
         self.commit()?;
-        if query.trim().is_empty() {
-            // Una ricerca senza termini non è "tutto il vault": elencare le note
-            // è una domanda sui metadati, e la serve il kernel
-            // (`IndexQuery::Properties`).
-            return Ok(Paged::all(Vec::new()));
-        }
-        // Il campo dei tag è STRING (termine esatto, niente tokenizer che
-        // minuscolizzi): il termine digitato o mostrato va portato lui alla
-        // forma canonica, o `tags:Rust` non troverebbe `#rust`.
-        let query = canonicalize_tag_terms(query);
-        let searcher = self.reader.searcher();
         let f = self.fields;
-
-        let mut parser = QueryParser::for_index(&self.index, vec![f.page_name, f.body, f.tags]);
-        parser.set_field_boost(f.page_name, PAGE_NAME_BOOST);
-        // Più termini = più stretto, come si aspetta chi cerca: "rust async"
-        // vuole le note che parlano di entrambi.
-        parser.set_conjunction_by_default();
-        let parsed = parser
-            .parse_query(&query)
-            .map_err(|e| PluginError::BadArgs(format!("query non valida: {e}")))?;
-
-        // L'ambito è un filtro, non un pezzo di stringa di query: dentro una
-        // famiglia i valori sono in OR, le famiglie fra loro in AND.
-        let scoped = with_scope(parsed.box_clone(), scope, &f);
+        let mut text_parts: Vec<Box<dyn Query>> = Vec::new();
+        let query = self.translate(matching, &mut text_parts)?;
+        // Una ricerca senza termini non è "tutto il vault" solo perché la
+        // stringa è vuota: se l'albero non seleziona niente, non seleziona
+        // niente — ed è il pianificatore a sapere se il resto della domanda ha
+        // altri rami.
+        let Some(query) = query else {
+            return Ok(Paged::all(Vec::new()));
+        };
+        let searcher = self.reader.searcher();
 
         let total = searcher
-            .search(&*scoped, &tantivy::collector::Count)
+            .search(&*query, &tantivy::collector::Count)
             .map_err(|e| PluginError::Internal(format!("conteggio: {e}")))?;
         let (offset, limit) = match page {
             // Senza finestra si restituisce tutto ciò che combacia: il tetto è
@@ -453,14 +440,28 @@ impl Inner {
             .and_offset(offset)
             .order_by_score();
         let top = searcher
-            .search(&*scoped, &collector)
+            .search(&*query, &collector)
             .map_err(|e| PluginError::Internal(format!("ricerca: {e}")))?;
 
-        // Gli snippet li genera la query dell'utente, non quella con l'ambito:
-        // evidenziare la cartella non vuol dire niente.
-        let mut snippets = SnippetGenerator::create(&searcher, &*parsed, f.body)
-            .map_err(|e| PluginError::Internal(format!("snippet: {e}")))?;
-        snippets.set_max_num_chars(SNIPPET_CHARS);
+        // Gli snippet li generano le sole foglie di **testo**: evidenziare la
+        // cartella o il tag per cui una nota è stata selezionata non vuol dire
+        // niente. Senza foglie di testo non c'è nessuna rilevanza da mostrare —
+        // e infatti la risposta non porta né `score` né `snippet`.
+        let mut snippets = match text_parts.is_empty() {
+            true => None,
+            false => {
+                let text_query: Box<dyn Query> = Box::new(BooleanQuery::new(
+                    text_parts
+                        .into_iter()
+                        .map(|q| (Occur::Should, q))
+                        .collect::<Vec<_>>(),
+                ));
+                let mut gen = SnippetGenerator::create(&searcher, &*text_query, f.body)
+                    .map_err(|e| PluginError::Internal(format!("snippet: {e}")))?;
+                gen.set_max_num_chars(SNIPPET_CHARS);
+                Some(gen)
+            }
+        };
 
         let mut hits = Vec::with_capacity(top.len());
         for (score, address) in top {
@@ -470,26 +471,27 @@ impl Inner {
             let Some(id) = doc.get_first(f.doc_id).and_then(|v| v.as_str()) else {
                 continue;
             };
-            let body = doc.get_first(f.body).and_then(|v| v.as_str()).unwrap_or("");
-            let snippet = snippets.snippet_from_doc(&doc);
-            let (text, highlights) = if snippet.fragment().is_empty() {
-                // Match sul solo titolo o sui soli tag: nessun frammento da
-                // evidenziare, ma un incipit è meglio di una riga vuota.
-                (head_of(body, SNIPPET_CHARS), Vec::new())
-            } else {
-                let ranges = snippet
-                    .highlighted()
-                    .iter()
-                    .map(|r| Span::new(r.start, r.end))
-                    .collect();
-                (snippet.fragment().to_string(), ranges)
-            };
-            hits.push(SearchHit {
-                doc: DocId::new(id),
-                score,
-                snippet: text,
-                highlights,
-            });
+            let mut hit = DocumentMatch::of(DocId::new(id));
+            if let Some(snippets) = snippets.as_mut() {
+                let body = doc.get_first(f.body).and_then(|v| v.as_str()).unwrap_or("");
+                let snippet = snippets.snippet_from_doc(&doc);
+                let (text, highlights) = if snippet.fragment().is_empty() {
+                    // Match sul solo titolo o sui soli tag: nessun frammento da
+                    // evidenziare, ma un incipit è meglio di una riga vuota.
+                    (head_of(body, SNIPPET_CHARS), Vec::new())
+                } else {
+                    let ranges = snippet
+                        .highlighted()
+                        .iter()
+                        .map(|r| Span::new(r.start, r.end))
+                        .collect();
+                    (snippet.fragment().to_string(), ranges)
+                };
+                hit.score = Some(score);
+                hit.snippet = Some(text);
+                hit.highlights = highlights;
+            }
+            hits.push(hit);
         }
         Ok(Paged {
             items: hits,
@@ -497,54 +499,227 @@ impl Inner {
             total: total as u32,
         })
     }
-}
 
-/// Avvolge la query dell'utente nei filtri d'ambito: una famiglia non vuota
-/// diventa una clausola obbligatoria, e dentro la famiglia i valori sono
-/// alternative.
-fn with_scope(query: Box<dyn Query>, scope: &SearchScope, f: &Fields) -> Box<dyn Query> {
-    let mut clauses: Vec<(Occur, Box<dyn Query>)> = vec![(Occur::Must, query)];
-    let mut family = |field: Field, values: &[String], canonical: bool| {
-        if values.is_empty() {
-            return;
+    /// L'albero del contratto → l'albero di tantivy.
+    ///
+    /// `text_parts` raccoglie le sole foglie di testo: servono al generatore di
+    /// snippet, che deve evidenziare ciò che l'utente ha cercato e non i filtri
+    /// che gli stanno intorno.
+    ///
+    /// `None` significa «questa espressione non seleziona niente», che non è la
+    /// stessa cosa di «tutto»: una clausola con una foglia di testo vuota è
+    /// vuota, mentre un'espressione senza clausole è tutto il vault.
+    fn translate(
+        &self,
+        expr: &QueryExpr,
+        text_parts: &mut Vec<Box<dyn Query>>,
+    ) -> Result<Option<Box<dyn Query>>, PluginError> {
+        if expr.any.is_empty() {
+            return Ok(Some(Box::new(AllQuery)));
         }
-        let any: Vec<(Occur, Box<dyn Query>)> = values
-            .iter()
-            .map(|v| {
-                let term = if canonical {
-                    canonical_tag(v)
-                } else {
-                    v.clone()
-                };
-                let q: Box<dyn Query> = Box::new(TermQuery::new(
-                    Term::from_field_text(field, &term),
-                    IndexRecordOption::Basic,
-                ));
-                (Occur::Should, q)
-            })
-            .collect();
-        clauses.push((Occur::Must, Box::new(BooleanQuery::new(any))));
-    };
-    family(f.folder, &scope.folders, false);
-    family(f.tags, &scope.tags, true);
-    if clauses.len() == 1 {
-        return clauses.pop().expect("c'è sempre la query dell'utente").1;
+        let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+        for clause in &expr.any {
+            if let Some(q) = self.translate_clause(clause, text_parts)? {
+                clauses.push((Occur::Should, q));
+            }
+        }
+        match clauses.len() {
+            0 => Ok(None),
+            1 => Ok(Some(clauses.pop().expect("ce n'è una").1)),
+            _ => Ok(Some(Box::new(BooleanQuery::new(clauses)))),
+        }
     }
-    Box::new(BooleanQuery::new(clauses))
+
+    fn translate_clause(
+        &self,
+        clause: &QueryClause,
+        text_parts: &mut Vec<Box<dyn Query>>,
+    ) -> Result<Option<Box<dyn Query>>, PluginError> {
+        if clause.all.is_empty() {
+            return Ok(Some(Box::new(AllQuery)));
+        }
+        let mut parts: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+        let mut only_negated = true;
+        for literal in &clause.all {
+            let translated = self.translate_predicate(&literal.predicate, text_parts)?;
+            match (literal.negated, translated) {
+                // Un letterale positivo che non seleziona niente svuota l'AND.
+                (false, None) => return Ok(None),
+                (false, Some(q)) => {
+                    only_negated = false;
+                    parts.push((Occur::Must, q));
+                }
+                // Negare ciò che non seleziona niente non toglie niente.
+                (true, None) => {}
+                (true, Some(q)) => parts.push((Occur::MustNot, q)),
+            }
+        }
+        if parts.is_empty() {
+            return Ok(Some(Box::new(AllQuery)));
+        }
+        if only_negated {
+            // Un booleano di soli `MustNot` non ha da cosa sottrarre.
+            parts.push((Occur::Must, Box::new(AllQuery)));
+        }
+        Ok(Some(Box::new(BooleanQuery::new(parts))))
+    }
+
+    fn translate_predicate(
+        &self,
+        predicate: &QueryPredicate,
+        text_parts: &mut Vec<Box<dyn Query>>,
+    ) -> Result<Option<Box<dyn Query>>, PluginError> {
+        let f = self.fields;
+        match predicate {
+            QueryPredicate::Text(text) => {
+                let Some(q) = self.text_query(text)? else {
+                    return Ok(None);
+                };
+                text_parts.push(q.box_clone());
+                Ok(Some(q))
+            }
+            QueryPredicate::Tag { name, descendants } => {
+                let field = if *descendants { f.tag_paths } else { f.tags };
+                Ok(Some(term_query(field, &canonical_tag(name))))
+            }
+            QueryPredicate::Folder { path, descendants } => {
+                let field = if *descendants {
+                    f.folder
+                } else {
+                    f.folder_exact
+                };
+                Ok(Some(term_query(field, path.trim_end_matches('/'))))
+            }
+            QueryPredicate::Docs { docs } => {
+                if docs.is_empty() {
+                    return Ok(None);
+                }
+                Ok(Some(Box::new(BooleanQuery::new(
+                    docs.iter()
+                        .map(|d| (Occur::Should, term_query(f.doc_id, d.as_str())))
+                        .collect::<Vec<_>>(),
+                ))))
+            }
+            // Il routing non manda qui ciò che non è stato dichiarato: se
+            // succede è un errore del kernel, non una domanda malposta.
+            other => Err(PluginError::Unserved(format!(
+                "la ricerca non valuta questa foglia: {other:?}"
+            ))),
+        }
+    }
+
+    /// La foglia di testo: dei **termini**, non un linguaggio.
+    ///
+    /// I termini si ricavano col tokenizer del campo — lo stesso che ha
+    /// indicizzato il documento — invece che spezzando la stringa a mano: è
+    /// l'unico modo perché «Rust» trovi `rust` senza replicare qui le regole
+    /// dell'analizzatore.
+    fn text_query(&self, text: &TextQuery) -> Result<Option<Box<dyn Query>>, PluginError> {
+        let f = self.fields;
+        let wanted: Vec<(Field, f32)> = if text.fields.is_empty() {
+            vec![(f.page_name, PAGE_NAME_BOOST), (f.body, 1.0), (f.tags, 1.0)]
+        } else {
+            text.fields
+                .iter()
+                .map(|field| match field {
+                    TextField::Name => (f.page_name, PAGE_NAME_BOOST),
+                    TextField::Body => (f.body, 1.0),
+                    TextField::Tags => (f.tags, 1.0),
+                })
+                .collect()
+        };
+        if text.text.trim().is_empty() {
+            return Ok(None);
+        }
+
+        let mut per_field: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+        let mut per_term: Vec<Vec<(Occur, Box<dyn Query>)>> = Vec::new();
+        for (field, boost) in wanted {
+            let terms = self.terms_of(field, &text.text)?;
+            if terms.is_empty() {
+                continue;
+            }
+            match text.mode {
+                // La frase: la sequenza esatta, in un campo alla volta. Con un
+                // termine solo non c'è nessuna sequenza da rispettare, e
+                // `PhraseQuery` va in panico: è un termine.
+                TextMode::Phrase => {
+                    let q: Box<dyn Query> = if terms.len() == 1 {
+                        Box::new(TermQuery::new(
+                            terms[0].clone(),
+                            IndexRecordOption::WithFreqs,
+                        ))
+                    } else {
+                        Box::new(PhraseQuery::new(terms))
+                    };
+                    per_field.push((Occur::Should, boosted(q, boost)));
+                }
+                // I termini: ognuno deve comparire (in qualche campo), che è
+                // ciò che si aspetta chi digita due parole.
+                TextMode::Terms => {
+                    for (at, term) in terms.into_iter().enumerate() {
+                        let q: Box<dyn Query> =
+                            Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
+                        if per_term.len() <= at {
+                            per_term.push(Vec::new());
+                        }
+                        per_term[at].push((Occur::Should, boosted(q, boost)));
+                    }
+                }
+            }
+        }
+
+        match text.mode {
+            TextMode::Phrase => match per_field.len() {
+                0 => Ok(None),
+                _ => Ok(Some(Box::new(BooleanQuery::new(per_field)))),
+            },
+            TextMode::Terms => {
+                if per_term.is_empty() {
+                    return Ok(None);
+                }
+                let all: Vec<(Occur, Box<dyn Query>)> = per_term
+                    .into_iter()
+                    .map(|alternatives| {
+                        let q: Box<dyn Query> = Box::new(BooleanQuery::new(alternatives));
+                        (Occur::Must, q)
+                    })
+                    .collect();
+                Ok(Some(Box::new(BooleanQuery::new(all))))
+            }
+        }
+    }
+
+    /// I termini di un testo secondo il tokenizer del campo. Per un campo
+    /// `STRING` (i tag) il tokenizer è `raw`, e il termine è la stringa intera —
+    /// che è esattamente ciò che serve.
+    fn terms_of(&self, field: Field, text: &str) -> Result<Vec<Term>, PluginError> {
+        let mut analyzer = self
+            .index
+            .tokenizer_for_field(field)
+            .map_err(|e| PluginError::Internal(format!("tokenizer: {e}")))?;
+        let mut terms = Vec::new();
+        let mut stream = analyzer.token_stream(text);
+        while let Some(token) = stream.next() {
+            terms.push(Term::from_field_text(field, &token.text));
+        }
+        Ok(terms)
+    }
 }
 
-/// Porta alla forma canonica il termine di ogni `tags:` della query, lasciando
-/// intatto il resto (i campi TEXT hanno il loro tokenizer, che minuscolizza da
-/// sé). Un nome di tag non contiene spazi: basta ragionare per token.
-fn canonicalize_tag_terms(query: &str) -> String {
-    query
-        .split_whitespace()
-        .map(|token| match token.strip_prefix("tags:") {
-            Some(term) => format!("tags:{}", canonical_tag(term)),
-            None => token.to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+fn term_query(field: Field, value: &str) -> Box<dyn Query> {
+    Box::new(TermQuery::new(
+        Term::from_field_text(field, value),
+        IndexRecordOption::Basic,
+    ))
+}
+
+fn boosted(query: Box<dyn Query>, boost: f32) -> Box<dyn Query> {
+    if boost == 1.0 {
+        query
+    } else {
+        Box::new(BoostQuery::new(query, boost))
+    }
 }
 
 /// I primi `max` caratteri di `text`, troncati su un confine di carattere e
@@ -567,6 +742,22 @@ fn head_of(text: &str, max: usize) -> String {
 }
 
 impl IndexProvider for SearchIndex {
+    /// Tre foglie, nessuna famiglia.
+    ///
+    /// Il testo è l'unica che sa solo lui — il kernel non indicizza il corpo —
+    /// mentre tag e cartelle le sa anche il kernel: dichiararle **non** è una
+    /// rivendicazione contro di lui, è ciò che permette al pianificatore di
+    /// consegnare a questo indice una clausola intera (`testo AND cartella`)
+    /// invece di spezzarla e intersecare a mano. È il filtro dentro il motore
+    /// della decisione 0005, e adesso è il motore a dichiarare di saperlo fare.
+    fn routes(&self) -> Vec<QueryRoute> {
+        vec![
+            QueryRoute::Predicate(PredicateKind::Text),
+            QueryRoute::Predicate(PredicateKind::Tag),
+            QueryRoute::Predicate(PredicateKind::Folder),
+        ]
+    }
+
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
         self.inner.get_mut().expect("mutex").load_manifest(host)
     }
@@ -593,13 +784,21 @@ impl IndexProvider for SearchIndex {
         // valore È un termine, e il termine è la forma canonica — la stessa
         // chiave con cui il kernel aggrega e il pannello interroga.
         for tag in &doc.tags {
-            td.add_text(f.tags, canonical_tag(&tag.name));
+            let canonical = canonical_tag(&tag.name);
+            // Ogni antenato è un termine a sé: `#progetto/casa` si lascia
+            // trovare da `progetto` con `descendants`, senza che nessuno debba
+            // valutare un prefisso documento per documento.
+            for ancestor in fubmd_abi::query::tag_ancestors(&canonical) {
+                td.add_text(f.tag_paths, &ancestor);
+            }
+            td.add_text(f.tags, &canonical);
         }
         // Una cartella per ogni antenata: cercare in `Progetti` prende anche
         // `Progetti/sub`, e la radice (`""`) è su tutti.
-        for folder in folders_of(&doc.id) {
+        for folder in fubmd_abi::query::folders_of(&doc.id) {
             td.add_text(f.folder, folder);
         }
+        td.add_text(f.folder_exact, fubmd_abi::query::folder_of(&doc.id));
         if inner.writer.add_document(td).is_err() {
             // Il writer è andato: l'indice non è più affidabile, e mentire è
             // peggio che perdere il documento. Si dimentica l'impronta, così
@@ -647,33 +846,36 @@ impl IndexProvider for SearchIndex {
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         match query {
-            IndexQuery::FullText { query, scope, page } => {
-                Ok(IndexResult::Search(inner.search(&query, &scope, page)?))
+            IndexQuery::Documents {
+                matching,
+                sort,
+                select,
+                page,
+            } => {
+                // Il pianificatore non chiede a un indice ciò che l'indice non
+                // sa fare: ordinare per una proprietà del frontmatter e
+                // riempire le colonne è roba di chi il frontmatter ce l'ha in
+                // cache. Se arrivasse comunque, rispondere ignorandolo sarebbe
+                // mentire in silenzio.
+                if sort.is_some() || !select.is_none() {
+                    return Err(PluginError::BadArgs(
+                        "la ricerca seleziona: ordinare per proprietà e scegliere \
+                         le colonne li fa chi ha il frontmatter"
+                            .to_string(),
+                    ));
+                }
+                Ok(IndexResult::Documents(inner.search(&matching, page)?))
             }
-            // Tutto ciò che ha già una fonte di verità nel kernel — grafo,
-            // modelli parsati, frontmatter — non si duplica qui: due verità
-            // sullo stesso dato divergono, e la seconda mente in silenzio. Un
-            // indice risponde "non roba mia".
-            IndexQuery::Backlinks { .. } | IndexQuery::Neighbors { .. } => Err(
-                PluginError::BadArgs("backlink e vicini: li serve il grafo del kernel".to_string()),
-            ),
-            IndexQuery::Outline { .. } => Err(PluginError::BadArgs(
-                "outline: la servono i modelli del kernel".to_string(),
-            )),
-            IndexQuery::Tags { .. } => Err(PluginError::BadArgs(
-                "tags: li aggrega il kernel dai modelli".to_string(),
-            )),
-            IndexQuery::Properties { .. } | IndexQuery::PropertyValues { .. } => {
-                Err(PluginError::BadArgs(
-                    "proprietà: il frontmatter ce l'ha in cache il kernel".to_string(),
-                ))
-            }
-            IndexQuery::VaultHealth { .. } => Err(PluginError::BadArgs(
-                "salute del vault: la calcola il kernel da grafo e modelli".to_string(),
-            )),
-            IndexQuery::Custom { ns, .. } => {
-                Err(PluginError::BadArgs(format!("namespace sconosciuto: {ns}")))
-            }
+            // Tutto il resto ha già una fonte di verità nel kernel — grafo,
+            // modelli parsati, frontmatter — e non si duplica qui: due verità
+            // sullo stesso dato divergono, e la seconda mente in silenzio.
+            // Prima questo `match` doveva dirlo variante per variante con dei
+            // `BadArgs`, perché era così che si scopriva chi servisse cosa;
+            // adesso il routing è dichiarato e questo ramo è irraggiungibile.
+            other => Err(PluginError::Unserved(format!(
+                "la ricerca non serve questa famiglia: {:?}",
+                other.kind()
+            ))),
         }
     }
 }
@@ -684,6 +886,8 @@ mod tests {
     use crate::testing::MemoryHost;
     use camino::Utf8PathBuf;
     use fubmd_abi::model::Tag;
+    use fubmd_abi::query::QueryLiteral;
+    use fubmd_abi::traits::PropertySelect;
 
     fn doc(id: &str, text: &str) -> DocumentModel {
         let mut m = DocumentModel::empty(DocId::new(id));
@@ -713,24 +917,46 @@ mod tests {
         (idx, host)
     }
 
-    fn search(idx: &SearchIndex, q: &str) -> Vec<SearchHit> {
-        page_of(idx, q, &SearchScope::default(), Some(Page::first(10))).items
+    fn search(idx: &SearchIndex, q: &str) -> Vec<DocumentMatch> {
+        page_of(idx, text(q), Some(Page::first(10))).items
     }
 
-    /// La ricerca con ambito e finestra, cioè la firma vera del contratto.
-    fn page_of(
-        idx: &SearchIndex,
-        q: &str,
-        scope: &SearchScope,
-        page: Option<Page>,
-    ) -> Paged<SearchHit> {
-        match idx.query(IndexQuery::FullText {
-            query: q.to_string(),
-            scope: scope.clone(),
+    /// Una clausola sola: i letterali in AND, che è la forma in cui il
+    /// pianificatore consegna una clausola a questo indice.
+    fn clause(literals: Vec<QueryLiteral>) -> QueryExpr {
+        QueryExpr {
+            any: vec![QueryClause { all: literals }],
+        }
+    }
+
+    fn lit(predicate: QueryPredicate) -> QueryLiteral {
+        QueryLiteral {
+            negated: false,
+            predicate,
+        }
+    }
+
+    fn text(q: &str) -> QueryExpr {
+        clause(vec![lit(QueryPredicate::Text(TextQuery::terms(q)))])
+    }
+
+    fn tag(name: &str, descendants: bool) -> QueryExpr {
+        clause(vec![lit(QueryPredicate::Tag {
+            name: name.to_string(),
+            descendants,
+        })])
+    }
+
+    /// L'interrogazione con la finestra, cioè la firma vera del contratto.
+    fn page_of(idx: &SearchIndex, matching: QueryExpr, page: Option<Page>) -> Paged<DocumentMatch> {
+        match idx.query(IndexQuery::Documents {
+            matching,
+            sort: None,
+            select: PropertySelect::None,
             page,
         }) {
-            Ok(IndexResult::Search(hits)) => hits,
-            other => panic!("atteso Search, trovato {other:?}"),
+            Ok(IndexResult::Documents(hits)) => hits,
+            other => panic!("attesi documenti, trovato {other:?}"),
         }
     }
 
@@ -759,9 +985,10 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].doc, DocId::new("a.md"));
         // Lo snippet è testo puro e gli highlight cadono sul termine cercato.
-        assert!(!hits[0].snippet.contains('<'));
+        assert!(!hits[0].snippet.as_deref().unwrap_or_default().contains('<'));
         let h = hits[0].highlights.first().expect("un highlight");
-        assert_eq!(&hits[0].snippet[h.start..h.end], "gatto");
+        let snippet = hits[0].snippet.as_deref().expect("un match di testo");
+        assert_eq!(&snippet[h.start..h.end], "gatto");
     }
 
     #[test]
@@ -812,11 +1039,15 @@ mod tests {
             &["progetto/fubmd"],
         ));
 
-        let hits = search(&idx, "tags:progetto/fubmd");
+        let hits = page_of(&idx, tag("progetto/fubmd", false), None).items;
         assert_eq!(hits.len(), 1);
-        // Match fuori dal corpo: nessun highlight, ma uno snippet leggibile.
+        // Selezionata da un fatto e non da una pertinenza: niente rilevanza,
+        // niente estratto, niente highlight. Prima un `tags:` nella stringa
+        // produceva un punteggio, ed era il punteggio di una domanda che non
+        // era una ricerca.
         assert!(hits[0].highlights.is_empty());
-        assert!(!hits[0].snippet.is_empty());
+        assert!(hits[0].score.is_none());
+        assert!(hits[0].snippet.is_none());
     }
 
     #[test]
@@ -828,14 +1059,36 @@ mod tests {
         idx.on_document_indexed(&tagged("adiacenti.md", "", &["area", "lavoro"]));
         idx.on_document_indexed(&tagged("composto.md", "", &["area/lavoro"]));
 
-        // `tags:rust` è un termine esatto: il tag annidato non c'entra.
-        let hits = search(&idx, "tags:rust");
+        // Un tag è un termine esatto: senza `descendants`, quello annidato non
+        // c'entra.
+        let hits = page_of(&idx, tag("rust", false), None).items;
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].doc, DocId::new("plain.md"));
 
-        // E `tags:area/lavoro` non è una phrase query: `#area #lavoro`
-        // adiacenti non sono `#area/lavoro`.
-        let hits = search(&idx, "tags:area/lavoro");
+        // Con `descendants`, invece, la gerarchia c'è tutta — ed è la stessa
+        // regola che applica il kernel sui suoi conteggi.
+        let mut ids: Vec<String> = page_of(&idx, tag("rust", true), None)
+            .items
+            .into_iter()
+            .map(|h| h.doc.to_string())
+            .collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            ["plain.md"],
+            "`rust` non è antenato di `progetto/rust`"
+        );
+        let mut ids: Vec<String> = page_of(&idx, tag("progetto", true), None)
+            .items
+            .into_iter()
+            .map(|h| h.doc.to_string())
+            .collect();
+        ids.sort();
+        assert_eq!(ids, ["nested.md"]);
+
+        // E `area/lavoro` non è una phrase query: `#area #lavoro` adiacenti non
+        // sono `#area/lavoro`.
+        let hits = page_of(&idx, tag("area/lavoro", false), None).items;
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].doc, DocId::new("composto.md"));
     }
@@ -850,8 +1103,8 @@ mod tests {
         // `#Rust` e `#rust` sono lo stesso tag (chiave canonica), qualunque
         // sia il case della query: il click dal pannello (che mostra la
         // grafia originale) trova le stesse note del conteggio.
-        for q in ["tags:rust", "tags:Rust", "tags:RUST"] {
-            assert_eq!(search(&idx, q).len(), 2, "query {q}");
+        for q in ["rust", "Rust", "RUST"] {
+            assert_eq!(page_of(&idx, tag(q, false), None).items.len(), 2, "tag {q}");
         }
     }
 
@@ -1003,16 +1256,25 @@ mod tests {
         assert_eq!(search(&idx, "contenuto").len(), 1);
     }
 
+    /// **Non esiste più una query malformata.** Prima `campo:valore` andava nel
+    /// parser di tantivy e un campo sconosciuto era un `BadArgs` che la shell
+    /// mostrava come «Query incompleta»: la sintassi di ricerca dell'utente era
+    /// quella di una dipendenza. Adesso quella stringa è ciò che sembra — dei
+    /// termini — e la risposta è un elenco, eventualmente vuoto.
     #[test]
-    fn nonsense_query_is_bad_args_not_a_crash() {
+    fn what_used_to_be_a_syntax_error_is_now_just_terms() {
         let (_g, path) = tmp();
-        let (idx, _host) = fresh(&path);
-        let err = idx.query(IndexQuery::FullText {
-            query: "campo_inesistente:valore".to_string(),
-            scope: SearchScope::default(),
-            page: Some(Page::first(10)),
-        });
-        assert!(matches!(err, Err(PluginError::BadArgs(_))));
+        let (mut idx, _host) = fresh(&path);
+        idx.on_document_indexed(&doc("a.md", "qui c'è scritto campo_inesistente:valore"));
+        idx.on_document_indexed(&doc("b.md", "qui no"));
+
+        let hits = search(&idx, "campo_inesistente:valore");
+        assert_eq!(
+            hits.len(),
+            1,
+            "i due token sono termini, e il documento che li contiene combacia"
+        );
+        assert_eq!(hits[0].doc, DocId::new("a.md"));
     }
 
     #[test]
@@ -1035,11 +1297,14 @@ mod tests {
         idx.on_document_indexed(&doc("Altro/gamma.md", "gatto"));
 
         let in_folder = |folder: &str| {
-            let scope = SearchScope {
-                folders: vec![folder.to_string()],
-                tags: Vec::new(),
-            };
-            let mut ids: Vec<String> = page_of(&idx, "gatto", &scope, None)
+            let matching = clause(vec![
+                lit(QueryPredicate::Text(TextQuery::terms("gatto"))),
+                lit(QueryPredicate::Folder {
+                    path: folder.to_string(),
+                    descendants: true,
+                }),
+            ]);
+            let mut ids: Vec<String> = page_of(&idx, matching, None)
                 .items
                 .into_iter()
                 .map(|h| h.doc.to_string())
@@ -1069,13 +1334,16 @@ mod tests {
         idx.on_document_indexed(&tagged("b.md", "gatto", &["lavoro"]));
         idx.on_document_indexed(&tagged("c.md", "cane", &["casa"]));
 
-        let scope = SearchScope {
-            folders: Vec::new(),
-            // Grafia diversa dal canonico: l'ambito la normalizza come fa il
-            // pannello dei tag, o "cerca fra le note #Casa" non troverebbe #casa.
-            tags: vec!["Casa".to_string()],
-        };
-        let hits = page_of(&idx, "gatto", &scope, None);
+        // Grafia diversa dal canonico: il predicato la normalizza come fa il
+        // pannello dei tag, o "cerca fra le note #Casa" non troverebbe #casa.
+        let matching = clause(vec![
+            lit(QueryPredicate::Text(TextQuery::terms("gatto"))),
+            lit(QueryPredicate::Tag {
+                name: "Casa".to_string(),
+                descendants: false,
+            }),
+        ]);
+        let hits = page_of(&idx, matching, None);
         assert_eq!(hits.total, 1);
         assert_eq!(hits.items[0].doc, DocId::new("a.md"));
     }
@@ -1088,12 +1356,7 @@ mod tests {
             idx.on_document_indexed(&doc(&format!("nota{i}.md"), "gatto"));
         }
 
-        let first = page_of(
-            &idx,
-            "gatto",
-            &SearchScope::default(),
-            Some(Page::new(0, 2)),
-        );
+        let first = page_of(&idx, text("gatto"), Some(Page::new(0, 2)));
         assert_eq!(first.items.len(), 2);
         assert_eq!(
             (first.offset, first.total),
@@ -1101,12 +1364,7 @@ mod tests {
             "il totale è quello dei match, non della pagina"
         );
 
-        let second = page_of(
-            &idx,
-            "gatto",
-            &SearchScope::default(),
-            Some(Page::new(2, 2)),
-        );
+        let second = page_of(&idx, text("gatto"), Some(Page::new(2, 2)));
         assert_eq!(second.items.len(), 2);
         assert_eq!(second.total, 5);
         let overlap = first
@@ -1115,16 +1373,11 @@ mod tests {
             .any(|h| second.items.iter().any(|s| s.doc == h.doc));
         assert!(!overlap, "due pagine consecutive non si sovrappongono");
 
-        let beyond = page_of(
-            &idx,
-            "gatto",
-            &SearchScope::default(),
-            Some(Page::new(99, 2)),
-        );
+        let beyond = page_of(&idx, text("gatto"), Some(Page::new(99, 2)));
         assert!(beyond.items.is_empty(), "oltre la fine è vuoto");
         assert_eq!(beyond.total, 5, "e il totale resta");
 
-        let all = page_of(&idx, "gatto", &SearchScope::default(), None);
+        let all = page_of(&idx, text("gatto"), None);
         assert_eq!(all.items.len(), 5, "senza finestra si prende tutto");
     }
 
@@ -1138,15 +1391,26 @@ mod tests {
         assert_ne!(fingerprint(&a), fingerprint(&b));
     }
 
+    /// Ciò che ha già una fonte di verità nel kernel non si duplica qui. Prima
+    /// questo indice doveva **dirlo** con un `BadArgs` per ogni famiglia,
+    /// perché era così che il dispatch scopriva chi servisse cosa; adesso le
+    /// rotte sono dichiarate e questa domanda non gli arriva. La risposta resta
+    /// per chi lo chiamasse fuori dal kernel, e dice la cosa giusta: non che la
+    /// domanda è malposta, ma che non la serve lui.
     #[test]
     fn backlinks_are_not_served_here() {
         let (_g, path) = tmp();
         let (idx, _host) = fresh(&path);
+        assert!(
+            !idx.routes()
+                .contains(&QueryRoute::Query(fubmd_abi::traits::QueryKind::Backlinks)),
+            "e soprattutto non li rivendica"
+        );
         let r = idx.query(IndexQuery::Backlinks {
             target: DocId::new("a.md"),
             page: None,
         });
-        assert!(matches!(r, Err(PluginError::BadArgs(_))));
+        assert!(matches!(r, Err(PluginError::Unserved(_))));
     }
 
     #[test]

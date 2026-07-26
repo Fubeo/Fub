@@ -1,6 +1,7 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
-import { api } from "../host/ipc";
-import type { SearchHit, Span } from "../host/contract";
+import type { DocumentMatch, Span } from "../host/contract";
+import { testoCercato } from "../host/contract";
+import { documentiCheCombaciano } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { registerPanel } from "../ui/panel-host";
@@ -67,12 +68,15 @@ async function runSearch(): Promise<void> {
     return;
   }
   const seq = ++searchSeq;
-  let hits: SearchHit[];
+  let hits: DocumentMatch[];
   try {
-    hits = await api.search(query);
+    // Ciò che l'utente digita è **testo cercato**, non una sintassi: la stringa
+    // è il campo di una foglia, e non c'è più un parser di terzi che possa
+    // rifiutarla a metà parola (§5.3).
+    hits = (await documentiCheCombaciano(testoCercato(query), { offset: 0, limit: 50 })).items;
   } catch (e) {
-    // Query sintatticamente non valida (l'utente sta ancora digitando
-    // `campo:`): non è un errore da mostrare, è un risultato non ancora dato.
+    // Resta il caso in cui **nessuno** serve la ricerca: un vault aperto senza
+    // indice full-text. È una mancanza, non zero risultati, e va detta.
     if (seq === searchSeq) showSearchResults([], String(e));
     return;
   }
@@ -80,10 +84,10 @@ async function runSearch(): Promise<void> {
   showSearchResults(hits, null);
 }
 
-function showSearchResults(hits: SearchHit[], error: string | null): void {
+function showSearchResults(hits: DocumentMatch[], error: string | null): void {
   showPanel("search");
   searchSummaryEl.textContent = error
-    ? "Query incompleta"
+    ? "Ricerca non disponibile"
     : hits.length === 0
       ? "Nessun risultato"
       : `${hits.length} risultat${hits.length === 1 ? "o" : "i"}`;
@@ -99,7 +103,7 @@ function showSearchResults(hits: SearchHit[], error: string | null): void {
 
     const snippet = document.createElement("span");
     snippet.className = "hit-snippet";
-    snippet.appendChild(highlighted(hit.snippet, hit.highlights));
+    snippet.appendChild(highlighted(hit.snippet ?? "", hit.highlights ?? []));
 
     li.append(title, snippet);
     li.addEventListener("click", () => void openDocument(hit.doc));
@@ -111,7 +115,7 @@ function showSearchResults(hits: SearchHit[], error: string | null): void {
 ///
 /// Due invarianti in una funzione sola:
 /// - il testo del provider entra **solo** come `textContent`/nodo di testo, mai
-///   come HTML: un provider non può iniettare markup (vedi `SearchHit`);
+///   come HTML: un provider non può iniettare markup (vedi `DocumentMatch`);
 /// - gli offset arrivano in **byte UTF-8** (è la valuta degli `Span` in tutto
 ///   il modello) mentre le stringhe JS sono UTF-16: si taglia sui byte e si
 ///   decodifica, invece di fingere che gli indici coincidano — con l'italiano

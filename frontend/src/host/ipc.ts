@@ -12,12 +12,11 @@ import type {
   CommandSpec,
   EmbedContent,
   FieldValue,
-  GraphData,
+  IndexQuery,
+  IndexResult,
   InvokeMode,
   KernelNotice,
   RenderedDocument,
-  SearchHit,
-  TagCount,
   TrashEntry,
   UiNode,
   VaultInfo,
@@ -94,10 +93,12 @@ export const api = {
       args: args ?? null,
       mode: mode ?? null,
     }),
-  search: (query: string, limit?: number) =>
-    invoke<SearchHit[]>("search", { query, limit }),
-  listTags: () => invoke<TagCount[]>("list_tags"),
-  graphData: () => invoke<GraphData>("graph_data"),
+  // Il canale dati, **generico**: il gemello di renderView/viewAction. Erano
+  // quattro comandi (`search`, `list_tags`, `graph_data`, `backlinks`), e il
+  // quarto scavalcava perfino il canale chiamando il grafo del kernel diretto.
+  // Adesso la shell ha le stesse capacità di un plugin, e una variante nuova
+  // del contratto non chiede un comando in più.
+  queryIndex: (query: IndexQuery) => invoke<IndexResult>("query_index", { query }),
   resolveLink: (page: string) => invoke<string | null>("resolve_link", { page }),
   listVersions: (id: string) => invoke<VersionRef[]>("list_versions", { id }),
   readVersion: (id: string, ts: number) => invoke<string>("read_version", { id, ts }),

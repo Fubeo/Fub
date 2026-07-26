@@ -5,14 +5,17 @@ import type {
   CommandOutcome,
   CommandScope,
   CommandSpec,
+  DocumentMatch,
   EmbedContent,
-  GraphData,
+  IndexQuery,
+  IndexResult,
+  NeighborRef,
   RenderedDocument,
   Actor,
   KernelEvent,
   KernelNotice,
+  QueryExpr,
   PaneMode,
-  SearchHit,
   Selection,
   Span,
   TagCount,
@@ -227,6 +230,72 @@ function touchActor(a: Actor): void {
   }
 }
 
+/// Ogni domanda che il kernel sa fare ha un ramo di qua: la shell le
+/// **costruisce**, e una variante aggiunta in Rust che qui non esistesse
+/// resterebbe una domanda che la shell non può porre — cioè il §5.4 riaperto.
+function touchIndexQuery(q: IndexQuery): void {
+  switch (q.kind) {
+    case "documents":
+      touchQueryExpr(q.matching);
+      return;
+    case "backlinks":
+    case "outline":
+      return;
+    case "tags":
+      touchQueryExpr(q.matching);
+      return;
+    case "neighbors":
+      touchQueryExpr(q.seeds);
+      return;
+    case "property_values":
+      touchQueryExpr(q.matching);
+      return;
+    case "vault_health":
+    case "custom":
+      return;
+    default:
+      assertNever(q);
+  }
+}
+
+/// E ogni **foglia** del linguaggio: è il pezzo che un query builder dovrà
+/// disegnare, e quello che un predicato nuovo in Rust deve far diventare rosso.
+function touchQueryExpr(e: QueryExpr): void {
+  for (const clause of e.any) {
+    for (const literal of clause.all) {
+      const p = literal.predicate;
+      switch (p.kind) {
+        case "text":
+        case "property":
+        case "tag":
+        case "folder":
+        case "linked":
+        case "docs":
+        case "custom":
+          continue;
+        default:
+          assertNever(p);
+      }
+    }
+  }
+}
+
+function touchIndexResult(r: IndexResult): void {
+  switch (r.kind) {
+    case "documents":
+    case "backlinks":
+    case "outline":
+    case "tags":
+    case "neighbors":
+    case "property_values":
+    case "vault_health":
+    case "custom":
+      return;
+    default:
+      assertNever(r);
+  }
+}
+
 /// L'insieme esatto delle chiavi di un record TS: `Record<keyof T, true>`
 /// obbliga il literal ad avere **tutte e sole** le chiavi di `T`, così se il
 /// tipo TS cambia senza aggiornare questa lista non compila.
@@ -237,7 +306,7 @@ function keysOf<T extends object>(spec: Record<keyof T, true>): string[] {
 const RECORD_KEYS: Record<string, string[]> = {
   Span: keysOf<Span>({ start: true, end: true }),
   VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
-  SearchHit: keysOf<SearchHit>({ doc: true, score: true, snippet: true, highlights: true }),
+  NeighborRef: keysOf<NeighborRef>({ doc: true, via: true, depth: true }),
   BacklinkRef: keysOf<BacklinkRef>({ source: true, context: true }),
   TrashEntry: keysOf<TrashEntry>({ id: true, original: true, deleted_at: true, size: true }),
   TagCount: keysOf<TagCount>({ name: true, count: true }),
@@ -277,6 +346,23 @@ const RECORD_KEYS: Record<string, string[]> = {
   CommandOutcome: keysOf<CommandOutcome>({ notify: true, effect: true }),
 };
 
+/// I record con campi **facoltativi**, che serde omette quando non ci sono: il
+/// controllo è che ogni chiave sia dichiarata dal tipo TS e che le obbligatorie
+/// ci siano, non che ci siano tutte. Un campo aggiunto in Rust e non qui resta
+/// comunque rosso — arriva nella fixture e non è fra le chiavi dichiarate.
+const PARTIAL_RECORD_KEYS: Record<string, { all: string[]; required: string[] }> = {
+  DocumentMatch: {
+    all: keysOf<Required<DocumentMatch>>({
+      doc: true,
+      score: true,
+      snippet: true,
+      highlights: true,
+      properties: true,
+    }),
+    required: ["doc"],
+  },
+};
+
 // I tipi che arrivano dall'APP (fixture gemella, `mirror-samples-app.json`).
 const APP_RECORD_KEYS: Record<string, string[]> = {
   VaultInfo: keysOf<VaultInfo>({
@@ -287,7 +373,6 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   }),
   EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true, parts: true }),
   RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
-  GraphData: keysOf<GraphData>({ nodes: true, edges: true }),
   WorkspaceMeta: keysOf<WorkspaceMeta>({
     icons: true,
     pinned: true,
@@ -305,7 +390,10 @@ describe("mirror TS↔Rust", () => {
       "KernelNotice",
       "Span",
       "VersionRef",
-      "SearchHit",
+      "DocumentMatch",
+      "NeighborRef",
+      "IndexQuery",
+      "IndexResult",
       "BacklinkRef",
       "TrashEntry",
       "TagCount",
@@ -324,6 +412,23 @@ describe("mirror TS↔Rust", () => {
       expect(appFixture[type], `manca il tipo ${type} nella fixture dell'app`).toBeTruthy();
       expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
+  });
+
+  it("ogni domanda e ogni risposta del canale dati sono gestite dal mirror", () => {
+    for (const q of fixture.IndexQuery) touchIndexQuery(q as IndexQuery);
+    for (const r of fixture.IndexResult) touchIndexResult(r as IndexResult);
+  });
+
+  it("una riga di risposta senza pertinenza non porta i campi che non ha", () => {
+    // I campi opzionali sono **omessi** da serde, non `null`: il mirror deve
+    // reggere entrambe le forme, o la prima riga di una selezione senza testo
+    // stamperebbe «undefined» a schermo.
+    const nuda = fixture.DocumentMatch[0] as DocumentMatch;
+    expect(nuda.score).toBeUndefined();
+    expect(nuda.snippet).toBeUndefined();
+    const piena = fixture.DocumentMatch[1] as DocumentMatch;
+    expect(piena.score).toBeTypeOf("number");
+    expect(piena.snippet).toBeTypeOf("string");
   });
 
   it("ogni UiNode prodotto da Rust è una variante gestita dal mirror", () => {
@@ -397,6 +502,13 @@ describe("mirror TS↔Rust", () => {
     for (const [type, keys] of Object.entries(RECORD_KEYS)) {
       for (const sample of fixture[type]) {
         expect(Object.keys(sample as object).sort()).toEqual(keys);
+      }
+    }
+    for (const [type, { all, required }] of Object.entries(PARTIAL_RECORD_KEYS)) {
+      for (const sample of fixture[type]) {
+        const keys = Object.keys(sample as object);
+        for (const key of keys) expect(all, `${type}.${key} non è nel mirror`).toContain(key);
+        for (const key of required) expect(keys, `${type}.${key} manca`).toContain(key);
       }
     }
     for (const [type, keys] of Object.entries(APP_RECORD_KEYS)) {

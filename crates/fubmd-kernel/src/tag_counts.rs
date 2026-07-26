@@ -111,6 +111,58 @@ impl TagCounts {
             })
             .collect()
     }
+
+    /// I tag di un **sottoinsieme** di documenti: le faccette di un risultato.
+    ///
+    /// Stesse regole dello snapshot intero (chiave canonica, conteggio per
+    /// note, grafia minore fra quelle vive) applicate ai soli contributi dei
+    /// documenti chiesti — è ciò che rende `Tags { matching }` una faccetta
+    /// invece che una seconda aggregazione con una sua idea di cosa sia un tag.
+    pub(crate) fn snapshot_of<'a>(&self, docs: impl Iterator<Item = &'a DocId>) -> Vec<TagCount> {
+        let mut per_key: BTreeMap<String, (BTreeSet<String>, u32)> = BTreeMap::new();
+        for doc in docs {
+            let Some(contribution) = self.docs.get(doc) else {
+                continue;
+            };
+            for (key, grafie) in contribution {
+                let entry = per_key.entry(key.clone()).or_default();
+                entry.0.extend(grafie.iter().cloned());
+                entry.1 += 1;
+            }
+        }
+        per_key
+            .into_values()
+            .map(|(grafie, count)| TagCount {
+                name: grafie.first().expect("almeno una grafia").clone(),
+                count,
+            })
+            .collect()
+    }
+
+    /// I documenti che portano una chiave canonica; con `descendants`, anche
+    /// quelli che portano una sua sottochiave (`progetto` prende
+    /// `progetto/casa`).
+    pub(crate) fn docs_with(&self, canonical: &str, descendants: bool) -> Vec<DocId> {
+        let mut found: Vec<DocId> = self
+            .docs
+            .iter()
+            .filter(|(_, contribution)| {
+                contribution
+                    .keys()
+                    .any(|key| key == canonical || (descendants && is_sub_tag(key, canonical)))
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        found.sort();
+        found
+    }
+}
+
+/// `progetto/casa` sta sotto `progetto`. La regola è una sola e sta qui perché
+/// la chiedono in due (il predicato del linguaggio e il conteggio).
+pub(crate) fn is_sub_tag(key: &str, ancestor: &str) -> bool {
+    key.strip_prefix(ancestor)
+        .is_some_and(|rest| rest.starts_with('/'))
 }
 
 #[cfg(test)]

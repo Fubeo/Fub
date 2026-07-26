@@ -133,12 +133,12 @@ reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
 
 - **`query_index(&self, IndexQuery) -> Result<IndexResult, PluginError>`** — la
   view interroga il vault da sé invece di ricevere i dati già pronti. È la
-  stessa porta di `Workspace::query_index` e lo stesso dispatch: quasi tutte le
-  query le serve il **kernel** dalle proprie fonti di verità — backlink e vicini
-  dal grafo (`Backlinks`, `Neighbors`), outline, tag e proprietà dai
-  `DocumentModel` (`Outline`, `Tags`, `Properties`, `PropertyValues`), la salute
-  del vault da entrambi (`VaultHealth`) — e ai provider registrati va il resto,
-  oggi il full-text. È il **canale metadata**: senza, una view non potrebbe
+  stessa porta di `Workspace::query_index` e lo stesso dispatch: chi serve cosa è
+  **dichiarato alla registrazione** ([decisione 0019](../decisions/0019-il-canale-dati.md)),
+  e le risposte di cui il kernel è l'unica fonte di verità — backlink e vicini
+  dal grafo, outline, tag e faccette dai metadati in cache, la salute del vault da
+  entrambi — le serve `CoreIndex`, che è un `IndexProvider` registrato per primo
+  e non un ramo privilegiato. È il **canale metadata**: senza, una view non potrebbe
   leggere né la struttura parsata né il frontmatter, perché non ha un
   `FormatProvider` con cui parsare — e resta il canale di ciò che il kernel
   tiene **in cache**, che è il motivo per cui una view lo usa a ogni ridisegno

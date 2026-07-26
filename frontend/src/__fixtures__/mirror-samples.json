@@ -429,9 +429,12 @@
       "size": 3
     }
   ],
-  "SearchHit": [
+  "DocumentMatch": [
     {
-      "doc": "a.md",
+      "doc": "a.md"
+    },
+    {
+      "doc": "b.md",
       "score": 0.5,
       "snippet": "s",
       "highlights": [
@@ -439,7 +442,186 @@
           "start": 0,
           "end": 1
         }
+      ],
+      "properties": [
+        {
+          "key": "tipo",
+          "value": {
+            "kind": "text",
+            "value": "nota"
+          }
+        }
       ]
+    }
+  ],
+  "NeighborRef": [
+    {
+      "doc": "b.md",
+      "via": "a.md",
+      "depth": 1
+    }
+  ],
+  "IndexQuery": [
+    {
+      "kind": "documents",
+      "matching": {
+        "any": [
+          {
+            "all": [
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "text",
+                  "text": "rust",
+                  "mode": "terms",
+                  "fields": []
+                }
+              },
+              {
+                "negated": true,
+                "predicate": {
+                  "kind": "tag",
+                  "name": "archivio",
+                  "descendants": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sort": null,
+      "select": {
+        "kind": "none"
+      },
+      "page": {
+        "offset": 0,
+        "limit": 20
+      }
+    },
+    {
+      "kind": "backlinks",
+      "target": "a.md",
+      "page": null
+    },
+    {
+      "kind": "outline",
+      "doc": "a.md"
+    },
+    {
+      "kind": "tags",
+      "matching": {
+        "any": []
+      },
+      "page": null
+    },
+    {
+      "kind": "neighbors",
+      "seeds": {
+        "any": []
+      },
+      "direction": "outbound",
+      "depth": 1,
+      "page": null
+    },
+    {
+      "kind": "property_values",
+      "key": "tipo",
+      "matching": {
+        "any": []
+      },
+      "page": null
+    },
+    {
+      "kind": "vault_health",
+      "check": "broken_links",
+      "page": null
+    },
+    {
+      "kind": "custom",
+      "ns": "terzi",
+      "query": {
+        "x": 1
+      }
+    }
+  ],
+  "IndexResult": [
+    {
+      "kind": "documents",
+      "value": {
+        "items": [
+          {
+            "doc": "a.md"
+          }
+        ],
+        "offset": 0,
+        "total": 1
+      }
+    },
+    {
+      "kind": "backlinks",
+      "value": {
+        "items": [
+          {
+            "source": "b.md",
+            "context": null
+          }
+        ],
+        "offset": 0,
+        "total": 1
+      }
+    },
+    {
+      "kind": "outline",
+      "value": []
+    },
+    {
+      "kind": "tags",
+      "value": {
+        "items": [
+          {
+            "name": "rust",
+            "count": 2
+          }
+        ],
+        "offset": 0,
+        "total": 1
+      }
+    },
+    {
+      "kind": "neighbors",
+      "value": {
+        "items": [
+          {
+            "doc": "b.md",
+            "via": "a.md",
+            "depth": 1
+          }
+        ],
+        "offset": 0,
+        "total": 1
+      }
+    },
+    {
+      "kind": "property_values",
+      "value": {
+        "items": [],
+        "offset": 0,
+        "total": 0
+      }
+    },
+    {
+      "kind": "vault_health",
+      "value": {
+        "items": [],
+        "offset": 0,
+        "total": 0
+      }
+    },
+    {
+      "kind": "custom",
+      "value": {
+        "x": 1
+      }
     }
   ],
   "BacklinkRef": [

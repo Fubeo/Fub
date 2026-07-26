@@ -333,7 +333,10 @@ fn a_query_that_does_not_name_documents_is_a_bad_argument() {
     let (_g, ws) = vault();
     let out = ws.export(&ExportRequest::new(
         TARGET_FILES,
-        ExportSelection::Query(IndexQuery::Tags { page: None }),
+        ExportSelection::Query(IndexQuery::Tags {
+            matching: fubmd_abi::query::QueryExpr::all(),
+            page: None,
+        }),
     ));
     assert!(
         matches!(out, Err(PluginError::BadArgs(_))),

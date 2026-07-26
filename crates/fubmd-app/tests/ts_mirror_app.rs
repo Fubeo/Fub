@@ -9,7 +9,7 @@
 //! test -p fubmd-app --test ts_mirror_app`.
 
 use fubmd_abi::ui::UiNode;
-use fubmd_app_lib::{EmbedContent, GraphData, GraphEdge, VaultInfo, WorkspaceMeta};
+use fubmd_app_lib::{EmbedContent, VaultInfo, WorkspaceMeta};
 use fubmd_kernel::{RenderedDocument, RenderedPart};
 use serde_json::{json, Value};
 
@@ -42,10 +42,11 @@ fn expected() -> Value {
                 node: UiNode::text("graph TD;"),
             }],
         })],
-        "GraphData": [to_value(GraphData {
-            nodes: vec!["a.md".into(), "b.md".into()],
-            edges: vec![GraphEdge { from: "a.md".into(), to: "b.md".into() }],
-        })],
+        // `GraphData` non c'è più: il grafo non ha un tipo dell'app perché non
+        // ha più un comando dell'app (§5.4). I nodi sono una `index-query`
+        // `documents`, gli archi una `neighbors` con i semi su tutto il vault,
+        // e le due risposte sono tipi del **contratto** — quindi stanno nella
+        // fixture gemella, non qui.
         "WorkspaceMeta": [to_value(WorkspaceMeta {
             icons: [("p".to_string(), "📁".to_string())].into_iter().collect(),
             pinned: vec!["a.md".into()],
