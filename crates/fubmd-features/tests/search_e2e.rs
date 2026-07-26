@@ -9,7 +9,8 @@
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
-use fubmd_abi::traits::{IndexQuery, IndexResult, Page, SearchHit};
+use fubmd_abi::query::{QueryExpr, QueryPredicate, TextQuery};
+use fubmd_abi::traits::{DocumentMatch, IndexQuery, IndexResult, Page, PropertySelect};
 use fubmd_features::{SearchIndex, SEARCH_ID};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
@@ -61,14 +62,22 @@ impl Vault {
     }
 }
 
-fn search(ws: &Workspace, query: &str) -> Vec<SearchHit> {
-    match ws.query_index(IndexQuery::FullText {
-        query: query.to_string(),
-        scope: Default::default(),
+fn search(ws: &Workspace, query: &str) -> Vec<DocumentMatch> {
+    matching(
+        ws,
+        QueryExpr::of(QueryPredicate::Text(TextQuery::terms(query))),
+    )
+}
+
+fn matching(ws: &Workspace, matching: QueryExpr) -> Vec<DocumentMatch> {
+    match ws.query_index(IndexQuery::Documents {
+        matching,
+        sort: None,
+        select: PropertySelect::None,
         page: Some(Page::first(20)),
     }) {
-        Ok(IndexResult::Search(hits)) => hits.items,
-        other => panic!("atteso Search per «{query}», trovato {other:?}"),
+        Ok(IndexResult::Documents(hits)) => hits.items,
+        other => panic!("attesi documenti, trovato {other:?}"),
     }
 }
 
@@ -114,8 +123,12 @@ fn highlights_land_on_the_right_bytes_in_accented_text() {
     assert_eq!(hits.len(), 1);
     let hit = &hits[0];
     let span = hit.highlights.first().expect("un highlight");
-    assert_eq!(&hit.snippet[span.start..span.end], "metropoli");
-    assert!(!hit.snippet.contains('<'), "lo snippet è testo, non markup");
+    let snippet = hit
+        .snippet
+        .as_deref()
+        .expect("un match di testo ha un estratto");
+    assert_eq!(&snippet[span.start..span.end], "metropoli");
+    assert!(!snippet.contains('<'), "lo snippet è testo, non markup");
 }
 
 #[test]

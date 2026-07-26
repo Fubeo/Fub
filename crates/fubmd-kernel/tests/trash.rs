@@ -67,6 +67,11 @@ enum Call {
 struct SpyIndex(Arc<Mutex<Vec<Call>>>);
 
 impl IndexProvider for SpyIndex {
+    /// Una spia che guarda passare i documenti e non risponde a niente: adesso
+    /// lo **dichiara** invece di dirlo con un `BadArgs` a ogni domanda.
+    fn routes(&self) -> Vec<fubmd_abi::traits::QueryRoute> {
+        Vec::new()
+    }
     fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
@@ -84,7 +89,7 @@ impl IndexProvider for SpyIndex {
         Ok(())
     }
     fn query(&self, _q: IndexQuery) -> Result<IndexResult, PluginError> {
-        Err(PluginError::BadArgs("spia".into()))
+        Err(PluginError::Unserved("la spia non serve niente".into()))
     }
 }
 

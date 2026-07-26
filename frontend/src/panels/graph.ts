@@ -11,7 +11,8 @@
 // un vault personale (centinaia di note) l'O(n²) della repulsione è ben sotto
 // il frame budget, e la semplicità vale più di un quadtree.
 
-import { api } from "../host/ipc";
+import { OGNI_DOCUMENTO } from "../host/contract";
+import { archiDelVault, documentiCheCombaciano } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { state } from "../state/store";
 import { $ } from "../ui/dom";
@@ -80,7 +81,23 @@ export async function openGraph(): Promise<void> {
 
   document.getElementById(OVERLAY_ID)?.remove();
 
-  const data = await api.graphData();
+  // Due domande al canale dati, con le stesse capacità che avrà una vista a
+  // grafo di terzi: i nodi sono i documenti che combaciano con «tutti», gli
+  // archi i vicini a un passo di ognuno. Prima era un comando dell'app che
+  // prendeva gli archi una nota alla volta — cioè una superficie privilegiata,
+  // che è la definizione del §5.4.
+  const [documenti, archi] = await Promise.all([
+    documentiCheCombaciano(OGNI_DOCUMENTO),
+    archiDelVault(),
+  ]);
+  const data = {
+    nodes: documenti.items.map((d) => d.doc),
+    // Deduplicati: la molteplicità di un link non disegna nulla.
+    edges: [...new Set(archi.map((n) => `${n.via}\u0000${n.doc}`))].map((k) => {
+      const [from, to] = k.split("\u0000");
+      return { from, to };
+    }),
+  };
 
   const overlay = document.createElement("div");
   overlay.id = OVERLAY_ID;

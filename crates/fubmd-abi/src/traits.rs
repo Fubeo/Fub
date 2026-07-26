@@ -15,6 +15,7 @@ use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
 use crate::format::DocumentFormat;
 use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
+use crate::query::{QueryExpr, QueryPredicate};
 use crate::session::{ContextMask, ViewContext};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
@@ -149,14 +150,23 @@ pub trait HostApi: Send + Sync {
     /// ([`EditReport::inverse`](crate::edit::EditReport::inverse)).
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
 
-    /// I documenti del vault, in ordine.
+    /// I documenti del vault, in ordine di id, **a finestra**.
     ///
     /// Senza, `read_document` serve solo per gli id che arrivano dagli eventi:
     /// un plugin non potrebbe rispondere a [`Event::VaultOpened`] guardandosi
     /// intorno, né costruire alcunché sull'intero vault.
     ///
+    /// La [`Page`] non è un ornamento e non è simmetria con [`IndexQuery`]: è il
+    /// metodo con cui un provider si guarda intorno, e senza finestra clona
+    /// **tutto** il vault a ogni chiamata — il versioning lo chiama a ogni
+    /// riconciliazione, e ogni feature che riparte da [`Event::VaultOpened`] lo
+    /// chiamerà. `None` resta "tutto", perché chi ha davvero bisogno
+    /// dell'insieme intero non deve inventarsi un tetto (è la stessa regola di
+    /// [`Page`] nelle query); ma adesso chi ne vuole venti chiede venti, e il
+    /// `total` gli dice quanti sono in tutto.
+    ///
     /// [`Event::VaultOpened`]: crate::Event::VaultOpened
-    fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
+    fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError>;
     /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
     /// a partire da un id qualsiasi. Se l'id è già libero, è lui.
     ///
@@ -790,11 +800,19 @@ pub trait ViewProvider: Send + Sync {
 // superficie privilegiata che un plugin non potrà mai avere — è la ragione per
 // cui questo enum è largo e va deciso prima del freeze di M4.
 //
-// Chi serve cosa: il **kernel** risponde a ciò di cui è già l'unica fonte di
-// verità (grafo, modelli parsati, frontmatter); i **provider registrati** a
-// tutto il resto (oggi: il full-text). La divisione non è di comodo — duplicare
-// il grafo dentro un indice creerebbe una seconda verità che può divergere
-// dalla prima.
+// Chi serve cosa **si dichiara** ([`QueryRoute`]), e chi risponde è un
+// [`IndexProvider`] — anche quando è il kernel. Ciò di cui il kernel è già
+// l'unica fonte di verità (grafo, metadati parsati, frontmatter) lo serve il
+// suo indice interno, che è registrato per primo e non è privilegiato: si
+// dichiara come gli altri, e chi vuole sostituirlo lo chiede per nome. Prima
+// erano sette varianti su nove a cui il kernel rispondeva con un `return`
+// anticipato, e a cui nessun provider registrato arrivava mai: il canale era
+// "dati verso le view" per chiunque, ma "dati **da** chiunque" per due varianti
+// su nove.
+//
+// Che il grafo non si duplichi dentro un altro indice resta vero, e adesso ha
+// dove essere detto: chi lo volesse servire dichiarerebbe la stessa rotta, e la
+// registrazione lo direbbe invece di lasciar vincere l'ordine di montaggio.
 //
 // # Dove finisce questo canale, e comincia una lettura
 //
@@ -803,12 +821,13 @@ pub trait ViewProvider: Send + Sync {
 // solo (i backlink, i vicini). Il documento **in sé** — la sua sorgente, la sua
 // struttura, di che formato è — non passa di qui ma dall'[`HostApi`]
 // (`read_document`, `read_model`, `format_of`), e la ragione è
-// duplice. La prima: una `IndexQuery` ha un dispatch *per tentativi* fra i
-// provider registrati, e una variante che il kernel serve sempre da sé
-// aggiungerebbe l'ottava su nove che a un provider non arriva mai — cioè
-// crescerebbe esattamente il difetto del §5.1. La seconda: `IndexResult` è
-// l'enum su cui ogni indice fa `match`, e infilarci un `DocumentModel` intero
-// vorrebbe dire farlo attraversare la firma di chi non lo ha chiesto.
+// duplice. La prima: una variante che il kernel servisse **sempre** da sé
+// sarebbe una rotta che nessun altro può dichiarare, cioè il difetto che il
+// routing (decisione 0019) è servito a togliere — allora era la regola, e
+// riportarcelo dentro per un documento singolo sarebbe ricominciare. La
+// seconda: `IndexResult` è l'enum su cui ogni indice fa `match`, e infilarci un
+// `DocumentModel` intero vorrebbe dire farlo attraversare la firma di chi non
+// lo ha chiesto.
 //
 // [`IndexQuery::Outline`] e [`IndexQuery::Tags`] stanno di qua e restano di
 // qua: sono **proiezioni** che il kernel tiene in cache, e servirle costa una
@@ -914,24 +933,6 @@ pub enum LinkDirection {
     Both,
 }
 
-/// L'ambito di una ricerca full-text: *dove* cercare, non *cosa*.
-///
-/// Vuoto in ogni campo = tutto il vault. È separato dalla stringa di query
-/// perché la stringa è il linguaggio del provider (oggi tantivy, §5.3) mentre
-/// l'ambito è **dato del contratto**: una shell che offre "cerca in questa
-/// cartella" non deve comporre sintassi altrui per ottenerlo, e un provider
-/// diverso non può interpretarlo diversamente.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SearchScope {
-    /// Cartelle del vault (path relativi senza slash finale; `""` è la radice):
-    /// il documento è in ambito se sta in una di esse **o in una discendente**.
-    /// Più cartelle sono in OR.
-    pub folders: Vec<String>,
-    /// Tag in forma canonica (senza `#`, vedi `canonical_tag`): il documento
-    /// deve portarne almeno uno. Più tag sono in OR.
-    pub tags: Vec<String>,
-}
-
 /// Come si mette alla prova una proprietà del frontmatter.
 ///
 /// Un `variant` e non una coppia operatore+valore: `exists` e `missing` un
@@ -956,9 +957,12 @@ pub enum PropertyTest {
     LessThan(PropertyValue),
 }
 
-/// Una condizione su una proprietà. Più filtri di una query sono in **AND**:
-/// l'OR e le parentesi arrivano con la query come AST (§5.3), e finché non
-/// c'è è meglio dire chiaramente cosa questa forma esprime.
+/// Una condizione su una proprietà: la foglia
+/// [`QueryPredicate::Property`](crate::query::QueryPredicate::Property).
+///
+/// L'OR e la negazione non stanno qui e non ci sono mai stati: li porta il
+/// linguaggio che sta intorno ([`crate::query`]), che è il posto dove valgono
+/// per **ogni** foglia e non solo per il frontmatter.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PropertyFilter {
     pub key: String,
@@ -975,6 +979,41 @@ pub struct PropertySort {
     pub descending: bool,
 }
 
+/// Quali proprietà del frontmatter portarsi dietro in una risposta.
+///
+/// Era un `Vec<String>` con la convenzione «vuoto = tutte», e la convenzione si
+/// è rotta quando le due domande sono diventate una: un elenco di risultati di
+/// ricerca che si trascina l'intero frontmatter di mille note è il default
+/// sbagliato, e «tutte» non si può dire con una lista di chiavi che non si
+/// conoscono. Sono tre casi, e adesso si nominano.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PropertySelect {
+    /// Nessuna: la riga è il documento e basta. È il default, ed è ciò che
+    /// vuole chi disegna un elenco di titoli.
+    #[default]
+    None,
+    /// Tutto il frontmatter: l'ispettore delle proprietà, l'esportatore.
+    All,
+    /// Queste chiavi, in ordine di chiave. Una chiave chiesta e assente non
+    /// compare: l'assenza è un fatto, non un valore da inventare.
+    Keys { keys: Vec<String> },
+}
+
+impl PropertySelect {
+    /// Le chiavi nominate, per chi deve decidere se vale la pena guardare il
+    /// frontmatter.
+    pub fn is_none(&self) -> bool {
+        matches!(self, PropertySelect::None)
+    }
+
+    pub fn keys(names: &[&str]) -> Self {
+        PropertySelect::Keys {
+            keys: names.iter().map(|k| k.to_string()).collect(),
+        }
+    }
+}
+
 /// Una proprietà con il suo valore normalizzato ([`PropertyValue`], decisione 0003).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PropertyEntry {
@@ -982,14 +1021,87 @@ pub struct PropertyEntry {
     pub value: PropertyValue,
 }
 
-/// Un documento e le sue proprietà: la riga di una collezione (8.4) o di un
-/// database su file (11).
+/// Un documento che ha combaciato, con ciò che la query gli ha attaccato
+/// addosso: la riga di una collezione (8.4), di un database su file (11) o di
+/// un elenco di risultati di ricerca.
+///
+/// **È un tipo solo dove prima erano due** (`SearchHit` e `DocumentProperties`),
+/// ed è la conseguenza visibile del linguaggio: finché «cerca» e «filtra» erano
+/// due varianti, i loro risultati erano due tipi e il join fra i due era
+/// inesprimibile — le note `tipo: progetto` che parlano di rust dovevano essere
+/// due domande e un'intersezione fatta a mano da chi disegna. Adesso sono una
+/// domanda sola, e la sua riga porta ciò che ha da portare: la rilevanza e
+/// l'estratto se un ramo di testo ha contribuito, le proprietà se sono state
+/// chieste.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DocumentProperties {
+pub struct DocumentMatch {
     pub doc: DocId,
+    /// Rilevanza, quando a selezionare è stato (anche) un
+    /// [`QueryPredicate::Text`](crate::query::QueryPredicate::Text). Assente per
+    /// una selezione che non ha niente da ordinare per pertinenza: `tipo:
+    /// progetto` non è più o meno vero su una nota che su un'altra.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score: Option<f32>,
+    /// L'estratto attorno al match, **testo semplice** e mai markup: chi disegna
+    /// lo inserisce come testo (nessun varco di injection da un provider di
+    /// terzi — stessa regola di [`UiNode`](crate::ui::UiNode)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    /// Porzioni di `snippet` che hanno prodotto il match, in ordine e non
+    /// sovrapposte. Intervalli in **byte dentro `snippet`**, che chi disegna
+    /// avvolge con i propri elementi.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub highlights: Vec<Span>,
     /// In ordine di chiave. Quali chiavi ci sono lo decide `select` nella
-    /// query; vuoto là = tutto il frontmatter del documento.
+    /// query; vuoto là = niente, non "tutto il frontmatter" — un elenco di
+    /// risultati non deve trascinarsi dietro il frontmatter di mille note per
+    /// mostrarne il titolo.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub properties: Vec<PropertyEntry>,
+}
+
+impl DocumentMatch {
+    /// Un documento selezionato e basta: nessuna rilevanza, nessun estratto.
+    pub fn of(doc: DocId) -> Self {
+        DocumentMatch {
+            doc,
+            score: None,
+            snippet: None,
+            highlights: Vec::new(),
+            properties: Vec::new(),
+        }
+    }
+
+    pub fn with_score(mut self, score: f32) -> Self {
+        self.score = Some(score);
+        self
+    }
+
+    /// Fonde ciò che un altro ramo sa dello stesso documento.
+    ///
+    /// La rilevanza che resta è la **maggiore**, e la scelta è deliberata: il
+    /// kernel non è un motore di ranking, e sommare le rilevanze di due rami
+    /// vorrebbe dire inventare uno scoring che nessuno ha misurato. Comporle
+    /// davvero è mestiere di chi indicizza, e ci arriva quando l'intera clausola
+    /// gli viene consegnata (il pushdown del pianificatore). L'estratto è il
+    /// primo che c'è: due estratti dello stesso documento sono due finestre
+    /// sullo stesso testo, e mostrarne due sarebbe rumore.
+    pub fn absorb(&mut self, other: DocumentMatch) {
+        self.score = match (self.score, other.score) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
+        if self.snippet.is_none() {
+            self.snippet = other.snippet;
+            self.highlights = other.highlights;
+        }
+        for entry in other.properties {
+            if !self.properties.iter().any(|e| e.key == entry.key) {
+                self.properties.push(entry);
+            }
+        }
+        self.properties.sort_by(|a, b| a.key.cmp(&b.key));
+    }
 }
 
 /// Un valore distinto di una proprietà e quante note lo portano: la faccetta di
@@ -1032,75 +1144,91 @@ pub struct HealthIssue {
 }
 
 /// Una interrogazione all'indice: il canale dati unico verso le view.
+///
+/// Ogni variante che seleziona documenti lo fa con lo stesso linguaggio
+/// ([`QueryExpr`]), e ogni variante arriva a **qualcuno**: chi la serve è
+/// dichiarato alla registrazione ([`QueryRoute`]), non scoperto provando in
+/// ordine finché uno non dice di no.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum IndexQuery {
-    /// I riferimenti entranti verso un documento. Li serve il **kernel** dal
-    /// grafo, che ne è l'unica fonte di verità.
+    /// **I documenti che combaciano.** È la variante che ha sostituito
+    /// `full_text` e `properties`: erano due modi di chiedere la stessa cosa —
+    /// quali note — in due lingue che non si potevano comporre.
+    ///
+    /// Copre 9.1 (ricerca per campo), 8.4 (collezioni), 11 (database su file),
+    /// 16 (template con query) e la ricerca vera e propria, e le mette **in
+    /// congiunzione fra loro**: `matching` è un'espressione, non un filtro.
+    Documents {
+        #[serde(default)]
+        matching: QueryExpr,
+        /// Assente = per rilevanza se c'è (l'ordine di chi ha cercato),
+        /// altrimenti per `DocId`.
+        #[serde(default)]
+        sort: Option<PropertySort>,
+        /// Quali proprietà del frontmatter portarsi dietro: esiste per non far
+        /// viaggiare l'intero frontmatter di mille note quando ne servono due
+        /// colonne.
+        #[serde(default)]
+        select: PropertySelect,
+        #[serde(default)]
+        page: Option<Page>,
+    },
+    /// I riferimenti entranti verso un documento, col loro contesto.
+    ///
+    /// Resta una variante sua e non una `Documents` con
+    /// [`QueryPredicate::Linked`](crate::query::QueryPredicate::Linked) perché
+    /// la risposta è **diversa**: porta il frammento di testo in cui il link
+    /// compare, che è ciò che un pannello backlink mostra. La forma senza
+    /// contesto — «le note che nominano questa, in AND con altro» — è la foglia.
     Backlinks {
         target: DocId,
         #[serde(default)]
         page: Option<Page>,
     },
-    /// Ricerca full-text, servita dai provider registrati.
-    FullText {
-        query: String,
-        /// Dove cercare. `SearchScope::default()` = tutto il vault.
-        #[serde(default)]
-        scope: SearchScope,
-        #[serde(default)]
-        page: Option<Page>,
-    },
-    /// La struttura (heading) di un documento. Come i backlink, non la serve un
-    /// indice ma il **kernel**, dai modelli che già tiene: è il modo con cui una
-    /// view legge la struttura parsata di un documento senza avere un
-    /// `FormatProvider` (che, essendo un plugin, non ha). Documento inesistente
-    /// → outline vuota, non un errore.
+    /// La struttura (heading) di un documento: il modo con cui una view legge la
+    /// struttura parsata senza avere un `FormatProvider` (che, essendo un
+    /// plugin, non ha). Documento inesistente → outline vuota, non un errore.
     ///
     /// È l'unica risposta non paginata dell'enum, e per una ragione: cresce con
     /// **un** documento, non col vault, e chi la chiede ha già in mano quel
     /// documento intero.
     Outline { doc: DocId },
-    /// I tag dell'intero vault con la loro frequenza, serviti dal **kernel** dai
-    /// modelli (come [`IndexQuery::Outline`], è il canale metadata), in ordine
-    /// di chiave canonica. Chi vuole i più usati ordina lui: l'ordine stabile
-    /// è quello che rende paginabile la risposta.
+    /// I tag con la loro frequenza, in ordine di chiave canonica. Chi vuole i
+    /// più usati ordina lui: l'ordine stabile è quello che rende paginabile la
+    /// risposta.
+    ///
+    /// `matching` restringe **su quali documenti** si conta: vuoto = tutto il
+    /// vault (il pannello dei tag, l'autocompletamento), altrimenti sono le
+    /// **faccette** di un risultato — «quali tag hanno le note che parlano di
+    /// rust» — che la decisione 0005 aveva dichiarato fuori portata perché
+    /// avrebbero voluto un campo facet nel motore. Con un linguaggio non lo
+    /// vogliono: il sottoinsieme è una query, e i tag li conta chi li ha in
+    /// cache.
     Tags {
+        #[serde(default)]
+        matching: QueryExpr,
         #[serde(default)]
         page: Option<Page>,
     },
-    /// I vicini di un documento nel grafo dei link, fino a `depth` passi.
+    /// I vicini nel grafo dei link, fino a `depth` passi.
     ///
     /// È il grafo (7.3) che entra nel contratto: finché usciva solo da un
     /// comando dell'app, una vista a grafo di terzi era impossibile e quella
-    /// ufficiale restava superficie privilegiata. `depth: 1` con
-    /// [`LinkDirection::Outbound`] è l'adiacenza pura — il mattone con cui si
-    /// ricostruisce il grafo intero, un documento alla volta.
+    /// ufficiale restava superficie privilegiata.
+    ///
+    /// I **semi** sono un'espressione e non un documento solo, ed è ciò che
+    /// rende esprimibile il grafo intero in una domanda sola (`seeds` vuota =
+    /// tutto il vault, `depth: 1`, uscenti: sono esattamente gli archi) invece
+    /// che in una domanda per nota — che sull'IPC vorrebbe dire mille viaggi
+    /// per disegnare un grafo, cioè un comando bespoke.
     Neighbors {
-        doc: DocId,
+        #[serde(default)]
+        seeds: QueryExpr,
         #[serde(default)]
         direction: LinkDirection,
         /// Passi di distanza, almeno 1 (`0` → risposta vuota).
         depth: u8,
-        #[serde(default)]
-        page: Option<Page>,
-    },
-    /// I documenti che soddisfano dei filtri sul frontmatter, con le loro
-    /// proprietà: la base di 9.1 (ricerca per campo), 8.4 (collezioni), 11
-    /// (database su file), 16 (template con query). La serve il **kernel**, che
-    /// il frontmatter di ogni nota ce l'ha già in cache.
-    Properties {
-        /// In AND fra loro; vuoto = tutti i documenti.
-        #[serde(default)]
-        filter: Vec<PropertyFilter>,
-        #[serde(default)]
-        sort: Option<PropertySort>,
-        /// Le chiavi da restituire; vuoto = tutto il frontmatter. Esiste per
-        /// non far viaggiare l'intero frontmatter di mille note quando ne
-        /// servono due colonne — e per non doverlo aggiungere dopo il freeze,
-        /// quando un campo in più a un record è una migrazione.
-        #[serde(default)]
-        select: Vec<String>,
         #[serde(default)]
         page: Option<Page>,
     },
@@ -1110,28 +1238,194 @@ pub enum IndexQuery {
     /// faccetta deve fare.
     PropertyValues {
         key: String,
-        /// Gli stessi filtri di [`IndexQuery::Properties`]: le faccette si
-        /// contano **sul sottoinsieme già filtrato**, o la navigazione per
-        /// faccette non converge mai.
+        /// Su quale sottoinsieme contare: le faccette si contano **sui documenti
+        /// già selezionati**, o la navigazione per faccette non converge mai.
         #[serde(default)]
-        filter: Vec<PropertyFilter>,
+        matching: QueryExpr,
         #[serde(default)]
         page: Option<Page>,
     },
-    /// Un controllo di salute del vault (7.2), servito dal **kernel** dal grafo
-    /// e dai modelli in memoria.
+    /// Un controllo di salute del vault (7.2), dal grafo e dai modelli in
+    /// memoria.
     VaultHealth {
         check: HealthCheck,
         #[serde(default)]
         page: Option<Page>,
     },
     /// Varco di estensione: query definite da un provider di terzi, con
-    /// namespace (`ns` = plugin id). Un provider che non riconosce `ns`
-    /// risponde `PluginError::BadArgs`.
+    /// namespace (`ns` = plugin id). Chi non ha dichiarato quel `ns` non la
+    /// riceve mai, e se non l'ha dichiarato nessuno il chiamante riceve
+    /// [`PluginError::Unserved`] — non l'errore dell'ultimo interpellato.
     Custom {
         ns: String,
         query: serde_json::Value,
     },
+}
+
+impl IndexQuery {
+    /// La finestra chiesta, se la variante ne ha una.
+    pub fn page(&self) -> Option<Page> {
+        match self {
+            IndexQuery::Documents { page, .. }
+            | IndexQuery::Backlinks { page, .. }
+            | IndexQuery::Tags { page, .. }
+            | IndexQuery::Neighbors { page, .. }
+            | IndexQuery::PropertyValues { page, .. }
+            | IndexQuery::VaultHealth { page, .. } => *page,
+            IndexQuery::Outline { .. } | IndexQuery::Custom { .. } => None,
+        }
+    }
+
+    /// L'espressione che la variante porta, se ne porta una: è ciò che il
+    /// pianificatore deve risolvere **prima** di consegnare la query a chi la
+    /// serve.
+    pub fn expression(&self) -> Option<&QueryExpr> {
+        match self {
+            IndexQuery::Documents { matching, .. }
+            | IndexQuery::Tags { matching, .. }
+            | IndexQuery::PropertyValues { matching, .. } => Some(matching),
+            IndexQuery::Neighbors { seeds, .. } => Some(seeds),
+            IndexQuery::Backlinks { .. }
+            | IndexQuery::Outline { .. }
+            | IndexQuery::VaultHealth { .. }
+            | IndexQuery::Custom { .. } => None,
+        }
+    }
+
+    /// Rimpiazza l'espressione con una già risolta (`Docs { … }`), lasciando
+    /// tutto il resto com'era.
+    pub fn with_expression(self, resolved: QueryExpr) -> IndexQuery {
+        match self {
+            IndexQuery::Documents {
+                sort, select, page, ..
+            } => IndexQuery::Documents {
+                matching: resolved,
+                sort,
+                select,
+                page,
+            },
+            IndexQuery::Tags { page, .. } => IndexQuery::Tags {
+                matching: resolved,
+                page,
+            },
+            IndexQuery::PropertyValues { key, page, .. } => IndexQuery::PropertyValues {
+                key,
+                matching: resolved,
+                page,
+            },
+            IndexQuery::Neighbors {
+                direction,
+                depth,
+                page,
+                ..
+            } => IndexQuery::Neighbors {
+                seeds: resolved,
+                direction,
+                depth,
+                page,
+            },
+            other => other,
+        }
+    }
+
+    /// La famiglia di questa query: ciò che si dichiara di servire.
+    pub fn kind(&self) -> QueryKind {
+        match self {
+            IndexQuery::Documents { .. } => QueryKind::Documents,
+            IndexQuery::Backlinks { .. } => QueryKind::Backlinks,
+            IndexQuery::Outline { .. } => QueryKind::Outline,
+            IndexQuery::Tags { .. } => QueryKind::Tags,
+            IndexQuery::Neighbors { .. } => QueryKind::Neighbors,
+            IndexQuery::PropertyValues { .. } => QueryKind::PropertyValues,
+            IndexQuery::VaultHealth { .. } => QueryKind::VaultHealth,
+            IndexQuery::Custom { ns, .. } => QueryKind::Custom(ns.clone()),
+        }
+    }
+}
+
+/// La famiglia di una [`IndexQuery`]: ciò che un indice dichiara di **servire**.
+///
+/// Non è il `kind` della serializzazione con un nome diverso: `Custom` porta il
+/// namespace, perché due plugin che estendono il canale non si contendono la
+/// stessa casella.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum QueryKind {
+    Documents,
+    Backlinks,
+    Outline,
+    Tags,
+    Neighbors,
+    PropertyValues,
+    VaultHealth,
+    Custom(String),
+}
+
+/// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
+/// **valutare**.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum PredicateKind {
+    Text,
+    Property,
+    Tag,
+    Folder,
+    Linked,
+    Custom(String),
+}
+
+impl PredicateKind {
+    pub fn of(predicate: &QueryPredicate) -> Option<PredicateKind> {
+        match predicate {
+            QueryPredicate::Text(_) => Some(PredicateKind::Text),
+            QueryPredicate::Property { .. } => Some(PredicateKind::Property),
+            QueryPredicate::Tag { .. } => Some(PredicateKind::Tag),
+            QueryPredicate::Folder { .. } => Some(PredicateKind::Folder),
+            QueryPredicate::Linked { .. } => Some(PredicateKind::Linked),
+            QueryPredicate::Custom { ns, .. } => Some(PredicateKind::Custom(ns.clone())),
+            // `Docs` non ha proprietario: è già la risposta, e chiunque riceva
+            // un'espressione deve saperla leggere (è la forma in cui il
+            // pianificatore consegna ciò che ha risolto per conto suo).
+            QueryPredicate::Docs { .. } => None,
+        }
+    }
+}
+
+/// Cosa un [`IndexProvider`] dichiara di servire, **alla registrazione**.
+///
+/// Prima non si dichiarava niente: il kernel provava gli indici in ordine finché
+/// uno non rispondeva `BadArgs`, e di `BadArgs` arrivava al chiamante quello
+/// dell'**ultimo** interpellato mentre ogni altro errore tornava dal **primo**
+/// che lo dava — da fuori i due casi non si distinguevano. Con un indice
+/// funzionava benissimo; con quelli che FEATURES chiede (full-text, semantico e
+/// vettoriale, proprietà, task, database, citazioni) ogni query gira su tutti, e
+/// due indici che rivendicano la stessa cosa si oscurano a vicenda **in
+/// silenzio**.
+///
+/// # Le due specie, e perché una sola ha un padrone
+///
+/// - Una **variante** ([`Query`](QueryRoute::Query)) ha un proprietario solo. Lì
+///   la risposta si **compone** — il conteggio dei tag, l'elenco dei backlink,
+///   il verdetto di un controllo di salute — e due autori per la stessa risposta
+///   vuol dire che vince chi si è registrato prima, cioè un dettaglio di
+///   montaggio. Registrare una variante già rivendicata è un conflitto, con la
+///   stessa disciplina del `FormatRegistry` (decisione 0017): si rifiuta, e chi
+///   vuole **sostituire** lo chiede per nome.
+/// - Un **predicato** ([`Predicate`](QueryRoute::Predicate)) può averne più
+///   d'uno, e non è una tolleranza: un predicato è un *fatto sul vault*, e `#rust`
+///   seleziona le stesse note per chiunque le conti. Chi indicizza il testo
+///   conosce anche cartelle e tag — li ha indicizzati per poter filtrare senza
+///   uscire dal motore — e dichiararlo è ciò che permette al pianificatore di
+///   consegnargli l'intera clausola invece di ricomporla a mano. Chi rivendica
+///   una foglia promette la **stessa** risposta degli altri; a chi sia andata
+///   davvero risponde il piano, che è visibile.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "route", rename_all = "snake_case")]
+pub enum QueryRoute {
+    /// «Rispondo io a questa famiglia di domande.»
+    Query(QueryKind),
+    /// «So valutare questa foglia.»
+    Predicate(PredicateKind),
 }
 
 /// Un riferimento entrante (backlink) verso un documento.
@@ -1164,47 +1458,69 @@ pub struct TagCount {
     pub count: u32,
 }
 
-/// Un risultato di ricerca full-text.
+/// La risposta a una [`IndexQuery`].
 ///
-/// `snippet` è **testo semplice**, mai markup: il provider non decora, e chi
-/// disegna lo inserisce come testo (nessun varco di injection da un provider
-/// di terzi — stessa regola di [`UiNode`](crate::ui::UiNode), il contenuto
-/// attivo è riservato al codice fidato). L'evidenziazione passa da
-/// `highlights`: intervalli in **byte dentro `snippet`**, che chi disegna
-/// avvolge con i propri elementi.
+/// Tag **adiacente** (`kind` + `value`) e non interno, e non è una scelta di
+/// gusto: `Outline` porta una lista e `Custom` può portare uno scalare, e un
+/// `variant` con tag interno e payload che non è una mappa **non si
+/// serializza** — `serde_json` fallisce a runtime, non in compilazione. Era
+/// latente finché nessuno metteva un `IndexResult` sul filo; il canale dati
+/// generico sull'IPC (§5.4) ce lo mette a ogni ricerca. È lo stesso difetto che
+/// la decisione 0005 aveva trovato su `PropertyValue`, `LinkTarget` e `Inline`,
+/// nello stesso modo: mettendoli in un test che li serializza tutti.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct SearchHit {
-    pub doc: DocId,
-    pub score: f32,
-    pub snippet: String,
-    /// Porzioni di `snippet` che hanno prodotto il match, in ordine e non
-    /// sovrapposte.
-    pub highlights: Vec<Span>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum IndexResult {
+    /// I documenti che combaciano (risposta a [`IndexQuery::Documents`]).
+    Documents(Paged<DocumentMatch>),
     Backlinks(Paged<BacklinkRef>),
-    Search(Paged<SearchHit>),
     /// Gli heading di un documento, in ordine di apparizione (risposta a
     /// [`IndexQuery::Outline`]). L'unica risposta senza finestra: cresce con un
     /// documento, non col vault.
     Outline(Vec<Heading>),
-    /// I tag del vault con la loro frequenza (risposta a [`IndexQuery::Tags`]).
+    /// I tag con la loro frequenza (risposta a [`IndexQuery::Tags`]).
     Tags(Paged<TagCount>),
     /// I vicini nel grafo (risposta a [`IndexQuery::Neighbors`]), per distanza
     /// crescente e poi per `DocId`.
     Neighbors(Paged<NeighborRef>),
-    /// I documenti che passano i filtri, con le loro proprietà (risposta a
-    /// [`IndexQuery::Properties`]).
-    Properties(Paged<DocumentProperties>),
     /// Le faccette di una proprietà (risposta a [`IndexQuery::PropertyValues`]).
     PropertyValues(Paged<PropertyCount>),
     /// I problemi trovati (risposta a [`IndexQuery::VaultHealth`]).
     VaultHealth(Paged<HealthIssue>),
     /// Risposta a una [`IndexQuery::Custom`].
     Custom(serde_json::Value),
+}
+
+impl IndexResult {
+    /// I documenti di una risposta a [`IndexQuery::Documents`], o l'errore che
+    /// dice cosa è arrivato invece.
+    ///
+    /// Esiste perché il `match` con un ramo «l'indice ha risposto fuori tema»
+    /// era scritto in ogni chiamante, ogni volta con un messaggio diverso: è la
+    /// forma minima del §16.6 applicata al canale più usato.
+    pub fn documents(self) -> Result<Paged<DocumentMatch>, PluginError> {
+        match self {
+            IndexResult::Documents(docs) => Ok(docs),
+            other => Err(PluginError::Internal(format!(
+                "risposta fuori tema: attesi dei documenti, arrivato {}",
+                other.kind_name()
+            ))),
+        }
+    }
+
+    /// Il nome della variante, per i messaggi d'errore.
+    pub fn kind_name(&self) -> &'static str {
+        match self {
+            IndexResult::Documents(_) => "documents",
+            IndexResult::Backlinks(_) => "backlinks",
+            IndexResult::Outline(_) => "outline",
+            IndexResult::Tags(_) => "tags",
+            IndexResult::Neighbors(_) => "neighbors",
+            IndexResult::PropertyValues(_) => "property-values",
+            IndexResult::VaultHealth(_) => "vault-health",
+            IndexResult::Custom(_) => "custom",
+        }
+    }
 }
 
 /// Un indice derivato dal contenuto del vault.
@@ -1248,6 +1564,29 @@ pub enum IndexResult {
 /// `'static` (la regola d'oro vieta i lifetime nelle firme) e l'host del kernel
 /// **è** un prestito `&mut Workspace`, che `'static` non può essere.
 pub trait IndexProvider: Send + Sync {
+    /// **Cosa serve**, dichiarato una volta alla registrazione.
+    ///
+    /// È la metà che mancava: senza, il kernel non poteva fare altro che
+    /// interpellare tutti in ordine e dedurre da un errore chi fosse il
+    /// destinatario. Con essa il dispatch è una lettura di tabella, un
+    /// conflitto si vede **al montaggio** invece che come una risposta
+    /// plausibile e sbagliata, e «nessuno serve questa domanda»
+    /// ([`PluginError::Unserved`]) è distinguibile da «chi la serve ha
+    /// fallito» — che è il §12.2 applicato al canale più usato dopo la lista
+    /// documenti.
+    ///
+    /// Dichiarare una famiglia è impegnativo: chi dichiara
+    /// [`QueryKind::Tags`] riceverà **ogni** interrogazione sui tag, e nessun
+    /// altro la vedrà. Dichiarare un predicato lo è meno — un predicato è un
+    /// fatto, e più d'uno lo può verificare — ma chi lo fa promette la stessa
+    /// risposta degli altri. Vedi [`QueryRoute`].
+    ///
+    /// Un elenco vuoto è legittimo e vuol dire una cosa sola: questo indice
+    /// **non risponde a niente**, si limita a stare dietro all'alimentazione.
+    /// È il caso di chi accumula per esportare, e non è più un indice muto per
+    /// sbaglio — lo è per dichiarazione.
+    fn routes(&self) -> Vec<QueryRoute>;
+
     /// Carica lo stato persistente dell'indice. Il kernel la chiama **una
     /// volta**, quando l'indice viene registrato, prima di qualunque
     /// alimentazione.
@@ -1279,6 +1618,23 @@ pub trait IndexProvider: Send + Sync {
     /// È l'unico punto in cui un indice scrive, e per questo riceve l'host:
     /// ciò che deve sopravvivere alla chiusura passa da `data_*`.
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
+
+    /// Risponde a una query **che è stata dichiarata**.
+    ///
+    /// Il kernel non manda qui domande che [`routes`](IndexProvider::routes) non
+    /// rivendica: non c'è nessun «non è roba mia» da restituire, e il `BadArgs`
+    /// che serviva a dirlo è tornato a significare quello che dice — gli
+    /// argomenti non stanno in piedi.
+    ///
+    /// Ciò che arriva è **già risolto**: un'espressione contiene solo foglie che
+    /// questo provider ha dichiarato di saper valutare, oppure una
+    /// [`QueryPredicate::Docs`](crate::query::QueryPredicate::Docs) in cui il
+    /// pianificatore ha messo il risultato di ciò che sapeva valutare qualcun
+    /// altro. La **struttura** invece resta da leggere: OR, AND e negazione
+    /// hanno un'implementazione sola, ed è
+    /// [`QueryEvaluator`](crate::query::QueryEvaluator) — chi non vuole
+    /// tradurla nel proprio motore implementa le due foglie e lascia fare a
+    /// quella.
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 }
 

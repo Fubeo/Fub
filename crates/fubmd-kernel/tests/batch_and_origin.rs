@@ -512,7 +512,7 @@ impl EventHandler for Spia {
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let quanti = host.list_documents()?.len();
+        let quanti = host.list_documents(None)?.items.len();
         self.0
             .lock()
             .unwrap()

@@ -199,7 +199,8 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   perché una firma che manca si aggiunge e una firma sbagliata si migra; **cosa
   c'è e non mantiene**, cioè una promessa vera a metà e in silenzio (la
   [decisione 0004](decisions/0004-il-grafo-e-i-link-non-wiki.md), i link markdown
-  fuori dal grafo, e poi il §5.1); e, dal **sesto giro**, **quante volte è
+  fuori dal grafo, e poi il canale dati della
+  [0019](decisions/0019-il-canale-dati.md)); e, dal **sesto giro**, **quante volte è
   scritto e da cosa cresce quel numero** — il moltiplicatore invece della
   migrazione, che non si paga aggiungendo la voce ma a ogni voce successiva: le
   regole del contratto chiuse in `mod` privati del kernel (§6.1), l'`HostApi`
@@ -343,7 +344,8 @@ documenti milestone.
   console della webview, che l'app stessa dichiara di non poter aprire quando è
   impacchettata). Mitigazione in [todo.md](todo.md), seduta 20 — con l'unica
   metà che scade col freeze, l'esito sull'alimentazione degli indici (§20.1),
-  che il §5.1 estenderà a tutto il canale dati.
+  che la [decisione 0019](decisions/0019-il-canale-dati.md) ha già esteso a tutto
+  il canale dati.
 - **Plugin lenti nel giro sincrono** — risolto per contratto: il lavoro lungo
   passa dai **job** (`spawn_job`/`run_job`/`JobDone`), eseguiti fuori dal lock
   del workspace; il giro sincrono resta breve per definizione (vedi
@@ -358,16 +360,19 @@ documenti milestone.
 - **Concorrenza** — tutto il `Workspace` è `&mut` dietro un `Mutex` nell'app: un
   reindex blocca le query. Accettato per ora; se morde, split lettura/scrittura
   a M2/M3 (misura prima di agire).
-- **Il canale dati è servito dal kernel, non instradato** — `query_index`
-  risponde da sé a **sette varianti su nove** e ritorna prima del ciclo sui
-  provider: grafo, proprietà, outline, tag e salute del vault sono kernel-owned
-  e non scavalcabili, quindi ogni famiglia che vorrebbe estenderli (7.3, 8.2,
-  7.2, 10, 15.1) ha una strada sola, `IndexQuery::Custom`. È la forma del
-  «parser sostituibile e non estendibile» applicata al canale dati, ed è la
-  seconda promessa che vale a metà **in silenzio** dopo i link markdown fuori
-  dal grafo. Mitigazione: le risposte del kernel diventano un `IndexProvider`
-  registrato come gli altri ([todo.md](todo.md) §5.1), **insieme** alla
-  scomposizione del `Workspace` (§8.1) e **prima** del routing (§5.2).
+- **Il canale dati era servito dal kernel, non instradato** — **risolto** con la
+  [decisione 0019](decisions/0019-il-canale-dati.md). `query_index` rispondeva da
+  sé a **sette varianti su nove** e ritornava prima del ciclo sui provider:
+  grafo, proprietà, outline, tag e salute del vault erano kernel-owned e non
+  scavalcabili, quindi ogni famiglia che volesse estenderli (7.3, 8.2, 7.2, 10,
+  15.1) aveva una strada sola, `IndexQuery::Custom`. Era la forma del «parser
+  sostituibile e non estendibile» applicata al canale dati, ed è stata la seconda
+  promessa che valeva a metà **in silenzio** dopo i link markdown fuori dal
+  grafo. Adesso le risposte del kernel sono un `IndexProvider` registrato per
+  primo, chi serve cosa è dichiarato alla registrazione, e la query è un albero
+  del contratto invece di una stringa nella sintassi di una dipendenza. Resta la
+  metà della scomposizione del `Workspace` (§8.1), che quella voce doveva
+  accompagnare.
 - **Il costo di una capacità non è la firma, è il numero di host** — `HostApi`
   ha ventidue metodi e **quattro** implementazioni scritte a mano (`KernelHost`,
   `ReadHost`, `ReadOnlyHost`, `MemoryHost`); a M5 sono cinque, e i permessi del

@@ -713,7 +713,7 @@ impl VersioningHandler {
 
     /// Una passata sull'intero vault, e chi fotografare.
     fn sweep(&self, host: &mut dyn HostApi, chi: Passata) -> Result<(), PluginError> {
-        for id in host.list_documents()? {
+        for id in host.list_documents(None)?.items {
             if matches!(chi, Passata::SoloNuovi) && self.store.has_versions(&id) {
                 continue;
             }
@@ -762,8 +762,12 @@ impl VersioningHandler {
     /// può essere un rename o una copia, e una storia unita per sbaglio sarebbe
     /// peggio di una spezzata per onestà.
     fn reconcile_after_overflow(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let vivi: std::collections::BTreeSet<String> =
-            host.list_documents()?.into_iter().map(|id| id.0).collect();
+        let vivi: std::collections::BTreeSet<String> = host
+            .list_documents(None)?
+            .items
+            .into_iter()
+            .map(|id| id.0)
+            .collect();
         let mut sepolti = 0usize;
         for id in self.store.documents() {
             if vivi.contains(id.as_str()) || self.store.is_deleted(&id) {

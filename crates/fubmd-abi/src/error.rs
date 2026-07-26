@@ -41,4 +41,14 @@ pub enum PluginError {
     /// una richiesta malformata, o rinuncia a una che sarebbe riuscita.
     #[error("il documento è cambiato nel frattempo: {0}")]
     Conflict(String),
+    /// **Nessuno serve questa domanda**: nessun indice registrato ha dichiarato
+    /// la rotta che servirebbe (vedi [`QueryRoute`](crate::traits::QueryRoute)).
+    ///
+    /// È un caso a sé, e distinguerlo è metà del valore del routing dichiarato:
+    /// prima «nessuno la serve» e «chi la serve ha fallito» arrivavano al
+    /// chiamante nella stessa forma — un `BadArgs`, per giunta quello
+    /// dell'ultimo interpellato — e chi disegna non poteva sapere se mostrare
+    /// «installa un indice» o «qualcosa è andato storto».
+    #[error("nessun indice serve questa domanda: {0}")]
+    Unserved(String),
 }

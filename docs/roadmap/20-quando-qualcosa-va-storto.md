@@ -70,13 +70,16 @@ dell'attesa non cresce, è già massimo.
       ripete quasi parola per parola. L'argomento è giusto e la conclusione è
       mezza: il **canale** non tronca, ma il **destinatario** può rifiutare, e la
       firma rende quel rifiuto indicibile. È la forma della
-      [decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) e del §5.1 — una promessa che vale a metà, in silenzio — applicata
+      [decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) e della
+      [0019](../decisions/0019-il-canale-dati.md) — una promessa che vale a metà, in silenzio — applicata
       al punto in cui il piano dichiarava di averla già mantenuta.
-- [ ] **Il conto cresce con il §5.1.** Oggi l'unico `IndexProvider` in
-      produzione è la ricerca. La chiusura del §5.1 fa diventare
-      `IndexProvider` anche le risposte del kernel (grafo, proprietà, outline,
-      tag, salute del vault): da lì in poi passa da questa firma **tutto il
-      canale dati**, non solo il full-text. Farla dopo significa migrarne due.
+- [ ] **Il conto è già cresciuto.** Non c'è più un solo `IndexProvider` in
+      produzione: con la [decisione 0019](../decisions/0019-il-canale-dati.md) lo
+      sono anche le risposte del kernel (grafo, proprietà, outline, tag, salute
+      del vault), quindi da questa firma passa **tutto il canale dati** e non
+      solo il full-text. La voce non è cambiata di forma — è cambiata di
+      **portata**, e in peggio: adesso un'alimentazione che fallisce in silenzio
+      può falsare anche ciò di cui il kernel è l'unica fonte.
 - [ ] La forma da decidere ora, e non è ovvia: un `Result<(), PluginError>` su
       ognuno dei tre (semplice, ma obbliga il kernel a decidere cosa fare di un
       errore per-documento in mezzo a `reindex`, che è il §15.7), oppure un
@@ -89,7 +92,9 @@ dell'attesa non cresce, è già massimo.
 *Sblocca:* 9.1 (ricerca, ~74 voci) e 9.2 nel senso stretto che oggi possono
 mentire; e ogni indice futuro — 22.1 (semantico e vettoriale), 10 (indice dei
 task), 11 (database), 15.1 (citazioni), 8.2 (proprietà calcolate e rollup) —
-che nascerebbe con lo stesso buco. Con il §5.1, anche le risposte del kernel.
+che nascerebbe con lo stesso buco — e, dalla
+[decisione 0019](../decisions/0019-il-canale-dati.md), anche le risposte del
+kernel.
 
 ### 20.2 Ciò che va storto ha un canale nel contratto e nessuna destinazione
 

@@ -25,6 +25,7 @@
 
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
+use fubmd_abi::query::QueryExpr;
 use fubmd_abi::session::ContextMask;
 use fubmd_abi::traits::{
     HostApi, IndexQuery, IndexResult, TagCount, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
@@ -128,7 +129,10 @@ impl TagPanelView {
     fn tree(&self, host: &dyn HostApi) -> Result<UiNode, PluginError> {
         // Senza finestra: il pannello mostra la distribuzione intera, ed è la
         // ragione per cui la `Page` è opzionale invece che obbligatoria.
-        let tags = match host.query_index(IndexQuery::Tags { page: None })? {
+        let tags = match host.query_index(IndexQuery::Tags {
+            matching: QueryExpr::all(),
+            page: None,
+        })? {
             IndexResult::Tags(t) => t,
             other => {
                 return Err(PluginError::Internal(format!(

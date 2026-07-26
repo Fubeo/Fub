@@ -40,8 +40,11 @@ nasce prima di lui nasce senza presidio, e il capitolo 15 da solo ne porta sei.
       questo che non vede le *regole* con cui il kernel la interroga, e resta
       aperto: avere il modello in mano non dice come il kernel ne deriva
       proprietà e tag. E si compone col
-      §5.1: finché il canale dati è kernel-owned la seconda implementazione non
-      esiste, quindi il difetto non si vede; appena il canale si apre, esiste.
+      canale dati, che la [decisione 0019](../decisions/0019-il-canale-dati.md)
+      ha appena aperto: finché era kernel-owned la seconda implementazione non
+      esisteva, quindi il difetto non si vedeva. Adesso un indice di terzi può
+      servire proprietà e tag, e la sua idea di «maggiore di» non ha nulla che
+      la leghi a quella del kernel.
 - [ ] **Il precedente è già in repo, e va letto come tale**: la [decisione 0003](../decisions/0003-modello-del-documento.md) ha fatto
       salire `heading_slug` e `canonical_tag` nel contratto **da funzioni
       private del provider markdown**, per la ragione identica — due provider
@@ -58,8 +61,9 @@ nasce prima di lui nasce senza presidio, e il capitolo 15 da solo ne porta sei.
 
 *Sblocca:* 9.2 (query di terzi che rispondono come il kernel), 22.1 (indice
 semantico e vettoriale), 11 (colonne e funzioni di database), 15.1, 21.2 — e
-rende utile il §5.1, che senza regole condivise sposterebbe soltanto il
-problema dentro il primo provider che arriva.
+rende utile la [decisione 0019](../decisions/0019-il-canale-dati.md), che
+senza regole condivise ha soltanto spostato il problema dentro il primo
+provider che arriverà a servirle.
 
 ### 6.2 I *tipi* al confine hanno un presidio; le *regole* no
 
@@ -89,8 +93,10 @@ problema dentro il primo provider che arriva.
       Quello che manca non è un presidio ma una decisione — *il kernel espone
       un ordine di presentazione, o l'ordine di presentazione è della shell?* —
       e finché non la si prende, `IndexQuery` pagina su una chiave che nessuna
-      UI mostrerà mai in quell'ordine (§5.5, e la paginazione della
-      [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md)).
+      UI mostrerà mai in quell'ordine (la paginazione della
+      [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md), e adesso
+      anche la finestra sulla lista documenti della
+      [0019](../decisions/0019-il-canale-dati.md)).
 - [ ] **Una sola delle cinque ha un test che le lega**
       (`docid_page_name_agrees_with_the_frontend_on_hostile_names`), scritto a
       mano, e il commento sopra `pageName` dice «è la stessa regola, riga per
@@ -104,7 +110,10 @@ problema dentro il primo provider che arriva.
       mentre si digita, live preview, ordinamento della sidebar) nasce in due
       copie. In arrivo: path policy e nomi riservati (§15.5), ignore policy
       (§15.6), slugify e ancore ([decisione 0003](../decisions/0003-modello-del-documento.md)), la convenzione `free_name` D3,
-      canonicalizzazione dei tag, l'AST di query (§5.3). Sono altre sei.
+      canonicalizzazione dei tag, e l'albero delle query — che la
+      [decisione 0019](../decisions/0019-il-canale-dati.md) ha appena portato nel
+      contratto, con le regole delle sue foglie (cartella, tag gerarchico) in un
+      posto solo e nessuna fixture che le leghi al frontend. Sono altre sei.
 - [ ] **Il minimo, che si fa adesso e vale per tutte quelle future**: un
       `crates/fubmd-abi/tests/rules_mirror.rs` che genera
       `frontend/src/__fixtures__/rules-*.json` — casi input→output — con il

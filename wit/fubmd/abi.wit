@@ -1156,18 +1156,97 @@ interface index {
     /// In che verso si cammina il grafo dei link.
     enum link-direction { outbound, inbound, both }
 
-    /// DOVE cercare (non cosa): la stringa di query è il linguaggio del
-    /// provider, l'ambito è dato del contratto. Liste vuote = tutto il vault;
-    /// dentro una lista i valori sono in OR.
-    record search-scope {
-        /// Path di cartella senza slash finale (`""` = radice): dentro o
-        /// discendente.
-        folders: list<string>,
-        /// Tag in forma canonica, senza `#`.
-        tags: list<string>,
+    // --- il linguaggio delle interrogazioni (§5.3) -------------------------
+    //
+    // Prima qui c'era una stringa (`index-query-full-text.query`) e un ambito
+    // accanto: la sintassi che l'utente digitava era quella del motore, e
+    // «testo» e «proprietà» erano due domande che non si potevano comporre.
+    // Adesso la domanda è un albero a due livelli in forma normale disgiuntiva
+    // — OR di clausole, AND di letterali — e la stringa libera vive dentro una
+    // foglia sola. Due livelli e non un albero qualunque: qui i tipi ricorsivi
+    // passano solo per arena, e la DNF esprime ogni combinazione booleana ed è
+    // già la forma che un query builder disegna.
+
+    /// Come si intende la stringa di `text-query`.
+    enum text-mode {
+        /// Tutti i termini, in qualunque ordine.
+        terms,
+        /// La sequenza esatta.
+        phrase,
+    }
+    /// Dove cercare il testo. Vuoto = i campi che il provider indicizza.
+    enum text-field { name, body, tags }
+    /// La foglia di testo: l'UNICA stringa libera del contratto.
+    record text-query {
+        text: string,
+        mode: text-mode,
+        fields: list<text-field>,
+    }
+    /// Un tag canonico (senza `#`); con `descendants` prende la sua gerarchia.
+    record tag-predicate {
+        name: string,
+        descendants: bool,
+    }
+    /// Una cartella (senza slash finale, `""` = radice); con `descendants`
+    /// prende anche le sottocartelle.
+    record folder-predicate {
+        path: string,
+        descendants: bool,
+    }
+    /// I documenti in relazione di link: `inbound` = quelli che nominano `doc`.
+    record linked-predicate {
+        doc: doc-id,
+        direction: link-direction,
+    }
+    /// Questi documenti, per nome: è la forma in cui il pianificatore consegna
+    /// un sottoalbero che il destinatario non saprebbe valutare.
+    record docs-predicate {
+        docs: list<doc-id>,
+    }
+    /// Un predicato di terzi, con namespace. Chi non lo rivendica non lo riceve.
+    record custom-predicate {
+        ns: string,
+        predicate: json,
+    }
+    /// Le foglie: ognuna è un fatto sul vault che qualcuno sa verificare.
+    variant query-predicate {
+        text(text-query),
+        property(property-filter),
+        tag(tag-predicate),
+        folder(folder-predicate),
+        linked(linked-predicate),
+        docs(docs-predicate),
+        custom(custom-predicate),
+    }
+    /// Un predicato, eventualmente negato: in forma normale la negazione finisce
+    /// sulle foglie, ed è la casella «diverso da» di un builder.
+    record query-literal {
+        negated: bool,
+        predicate: query-predicate,
+    }
+    /// I letterali sono in AND; vuota = ogni documento.
+    record query-clause {
+        all: list<query-literal>,
+    }
+    /// Le clausole sono in OR; vuoto = ogni documento (la query da cui parte un
+    /// builder che non ha ancora nessun filtro).
+    record query-expr {
+        any: list<query-clause>,
     }
 
-    /// Come si mette alla prova una proprietà. Un variant e non operatore+valore
+    /// Quali proprietà del frontmatter portarsi dietro in una risposta. Tre
+    /// casi, perché «vuoto = tutte» è il default sbagliato per un elenco di
+    /// risultati e «tutte» non si dice con una lista di chiavi ignote.
+    variant property-select {
+        none,
+        all,
+        keys(property-select-keys),
+    }
+    record property-select-keys {
+        keys: list<string>,
+    }
+
+    /// Come si mette alla prova una proprietà.    /// Come si mette alla prova una proprietà. Un variant e non operatore+valore
     /// perché `exists`/`missing` un valore non ce l'hanno.
     variant property-test {
         exists,
@@ -1205,38 +1284,38 @@ interface index {
         target: doc-id,
         page: option<page>,
     }
-    record index-query-full-text {
-        query: string,
-        scope: search-scope,
+    /// I documenti che combaciano: la variante che ha sostituito `full-text` e
+    /// `properties`, che erano due modi di chiedere la stessa cosa in due lingue
+    /// che non si potevano comporre.
+    record index-query-documents {
+        matching: query-expr,
+        /// Assente = per rilevanza se c'è, altrimenti per doc-id.
+        sort: option<property-sort>,
+        select: property-select,
         page: option<page>,
     }
+    /// `matching` vuoto = tutto il vault; altrimenti sono le FACCETTE di un
+    /// risultato (quali tag hanno le note che parlano di rust).
     record index-query-tags {
+        matching: query-expr,
         page: option<page>,
     }
-    /// Il grafo (7.3) nel contratto: `depth: 1` con `outbound` è l'adiacenza
-    /// pura, il mattone con cui si ricostruisce il grafo intero.
+    /// Il grafo (7.3) nel contratto. I semi sono un'espressione e non un
+    /// documento solo: il grafo intero è `seeds` vuota, `depth: 1`, uscenti —
+    /// una domanda sola invece di una per nota.
     record index-query-neighbors {
-        doc: doc-id,
+        seeds: query-expr,
         direction: link-direction,
         /// Passi di distanza, almeno 1 (`0` → risposta vuota).
         depth: u8,
         page: option<page>,
     }
-    /// La base di 9.1 (ricerca per campo), 8.4 (collezioni), 11 (database su
-    /// file): la serve il kernel, che il frontmatter ce l'ha già in cache.
-    record index-query-properties {
-        filter: list<property-filter>,
-        sort: option<property-sort>,
-        /// Chiavi da restituire; vuoto = tutto il frontmatter.
-        select: list<string>,
-        page: option<page>,
-    }
-    /// Le faccette di 9.1: un elenco contribuisce con ogni suo elemento. I
-    /// filtri sono quelli di `index-query-properties` — le faccette si contano
-    /// sul sottoinsieme già filtrato.
+    /// Le faccette di 9.1: un elenco contribuisce con ogni suo elemento. Si
+    /// contano sui documenti già selezionati, o la navigazione per faccette non
+    /// converge mai.
     record index-query-property-values {
         key: string,
-        filter: list<property-filter>,
+        matching: query-expr,
         page: option<page>,
     }
     record index-query-vault-health {
@@ -1244,28 +1323,59 @@ interface index {
         page: option<page>,
     }
     /// Varco di estensione: query di provider di terzi, con namespace
-    /// (`ns` = plugin id). `ns` sconosciuto → `bad-args`.
+    /// (`ns` = plugin id). Chi non l'ha dichiarato non la riceve; se non l'ha
+    /// dichiarato nessuno, il chiamante riceve `unserved`.
     record index-query-custom {
         ns: string,
         query: json,
     }
     variant index-query {
+        documents(index-query-documents),
         backlinks(index-query-backlinks),
-        full-text(index-query-full-text),
-        /// La struttura (heading) di un documento, servita dal kernel dai suoi
-        /// modelli: è come una view legge la struttura parsata senza avere un
+        /// La struttura (heading) di un documento, servita dai modelli in
+        /// cache: è come una view legge la struttura parsata senza avere un
         /// `format-provider`. Documento inesistente → outline vuota. È l'unica
         /// senza finestra: cresce con un documento, non col vault.
         outline(doc-id),
-        /// I tag dell'intero vault con la frequenza, serviti dal kernel dai
-        /// modelli: aggregazione su tutto il vault, non su un documento.
         tags(index-query-tags),
         neighbors(index-query-neighbors),
-        properties(index-query-properties),
         property-values(index-query-property-values),
         vault-health(index-query-vault-health),
         custom(index-query-custom),
     }
+
+    /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
+    /// `custom` porta il namespace — due plugin che estendono il canale non si
+    /// contendono la stessa casella.
+    variant query-kind {
+        documents,
+        backlinks,
+        outline,
+        tags,
+        neighbors,
+        property-values,
+        vault-health,
+        custom(string),
+    }
+    /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
+    variant predicate-kind {
+        text,
+        property,
+        tag,
+        folder,
+        linked,
+        custom(string),
+    }
+    /// Cosa un indice dichiara alla registrazione. Una FAMIGLIA ha un
+    /// proprietario solo (lì la risposta si compone, e due autori vorrebbero
+    /// dire che vince l'ordine di montaggio); una FOGLIA può averne più d'uno,
+    /// perché è un fatto sul vault e chi la rivendica promette la stessa
+    /// risposta degli altri.
+    variant query-route {
+        query(query-kind),
+        predicate(predicate-kind),
+    }
+
     record backlink-ref {
         source: doc-id,
         context: option<string>,
@@ -1287,9 +1397,21 @@ interface index {
         key: string,
         value: property-value,
     }
-    /// La riga di una collezione (8.4) o di un database su file (11).
-    record document-properties {
+    /// Un documento che ha combaciato, con ciò che la query gli ha attaccato
+    /// addosso: la riga di una collezione (8.4), di un database su file (11) o
+    /// di un elenco di risultati. È UN tipo dove prima erano due (`search-hit` e
+    /// `document-properties`): finché «cerca» e «filtra» erano due varianti, il
+    /// join fra le due era inesprimibile.
+    ///
+    /// `snippet` è testo semplice, mai markup: chi disegna lo inserisce come
+    /// testo. L'evidenziazione passa da `highlights`, intervalli in byte DENTRO
+    /// `snippet` (nessun varco di injection da un provider di terzi).
+    record document-match {
         doc: doc-id,
+        /// Presente quando a selezionare è stato (anche) del testo.
+        score: option<f32>,
+        snippet: option<string>,
+        highlights: list<span>,
         properties: list<property-entry>,
     }
     /// La faccetta di 9.1, gemella di `tag-count` per il frontmatter.
@@ -1306,27 +1428,23 @@ interface index {
         /// Dove sta nel sorgente, quando il problema ha un punto.
         span: option<span>,
     }
-    /// `snippet` è testo semplice, mai markup: chi disegna lo inserisce come
-    /// testo. L'evidenziazione passa da `highlights`, intervalli in byte
-    /// DENTRO `snippet` (nessun varco di injection da un provider di terzi).
-    record search-hit {
-        doc: doc-id,
-        score: f32,
-        snippet: string,
-        highlights: list<span>,
-    }
-
     // Una risposta a finestra porta gli elementi, da dove cominciano e quanti ce
     // ne sarebbero IN TUTTO (`total` è il conteggio prima della finestra: senza,
     // "1-20 di 4321" non si scrive). Lato Rust è un solo `Paged<T>` generico;
     // qui i generici non esistono, e ogni istanza è un record a sé.
+    /// La finestra sulla lista dei documenti (`host-api.list-documents`).
+    record doc-ids-page {
+        items: list<doc-id>,
+        offset: u32,
+        total: u32,
+    }
     record backlinks-page {
         items: list<backlink-ref>,
         offset: u32,
         total: u32,
     }
-    record search-page {
-        items: list<search-hit>,
+    record documents-page {
+        items: list<document-match>,
         offset: u32,
         total: u32,
     }
@@ -1337,11 +1455,6 @@ interface index {
     }
     record neighbors-page {
         items: list<neighbor-ref>,
-        offset: u32,
-        total: u32,
-    }
-    record properties-page {
-        items: list<document-properties>,
         offset: u32,
         total: u32,
     }
@@ -1357,17 +1470,22 @@ interface index {
     }
 
     variant index-result {
+        documents(documents-page),
         backlinks(backlinks-page),
-        search(search-page),
         outline(list<heading>),
         tags(tags-page),
         neighbors(neighbors-page),
-        properties(properties-page),
         property-values(property-values-page),
         vault-health(vault-health-page),
         custom(json),
     }
 
+    /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel
+    /// non può che interpellare tutti in ordine e dedurre da un errore chi era
+    /// il destinatario — e due indici che rivendicano la stessa cosa si
+    /// oscurano a vicenda in silenzio. Elenco vuoto = questo indice non
+    /// risponde a niente, e lo dice.
+    routes: func() -> list<query-route>;
     /// Carica lo stato persistente: chiamata una volta, alla registrazione,
     /// prima di qualunque alimentazione. È il punto in cui un indice di terzi
     /// rilegge da `host-api.data-*` ciò che ha già visto — senza, un index
@@ -1581,6 +1699,11 @@ interface errors {
         /// errore che non è una colpa di chi chiama: gli argomenti erano giusti
         /// quando li ha calcolati, e la risposta giusta è ricalcolare.
         conflict(string),
+        /// NESSUNO serve questa domanda: nessun indice ha dichiarato la rotta
+        /// che servirebbe. Distinguerlo da «chi la serve ha fallito» è metà del
+        /// valore del routing dichiarato — chi disegna deve poter scegliere fra
+        /// «installa un indice» e «qualcosa è andato storto».
+        unserved(string),
     }
 }
 
@@ -1592,7 +1715,7 @@ interface host-api {
     use events.{event};
     use errors.{plugin-error};
     use jobs.{job-id, job-spec};
-    use index.{index-query, index-result};
+    use index.{doc-ids-page, index-query, index-result, page};
     use session.{view-context};
     use edit.{revision, edit-request, edit-report};
     use command.{command-outcome};
@@ -1622,9 +1745,12 @@ interface host-api {
     /// ricalcola); `bad-args` = gli edit non stanno in piedi (fuori dal
     /// sorgente, a metà di un carattere, sovrapposti, due nello stesso punto).
     apply-edit: func(id: doc-id, request: edit-request) -> result<edit-report, plugin-error>;
-    /// I documenti del vault, in ordine. Senza, `read-document` serve solo per
-    /// gli id che arrivano dagli eventi.
-    list-documents: func() -> result<list<doc-id>, plugin-error>;
+    /// I documenti del vault, in ordine di id, A FINESTRA. Senza,
+    /// `read-document` serve solo per gli id che arrivano dagli eventi; senza
+    /// finestra, è il metodo con cui un provider si guarda intorno e clona
+    /// TUTTO il vault a ogni chiamata. `none` resta "tutto": chi ha davvero
+    /// bisogno dell'insieme intero non deve inventarsi un tetto.
+    list-documents: func(page: option<page>) -> result<doc-ids-page, plugin-error>;
     /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, … a partire da
     /// un id qualsiasi. È una capacità e non un calcolo perché il vault è
     /// l'unico a sapere cosa è occupato (l'indicizzato E ciò che sta sul disco)
@@ -1735,10 +1861,10 @@ interface host-api {
     // è aperto. Vedi docs/architecture/plugin-boundary.md, "Interrogazione e
     // contesto".
 
-    /// Interroga il vault: backlink e grafo (serviti dal grafo del kernel),
-    /// struttura, tag e proprietà (dai modelli in cache), salute del vault, e
-    /// ricerca full-text (dai provider registrati). Stessa semantica di
-    /// dispatch del kernel.
+    /// Interroga il vault: documenti che combaciano, backlink, grafo,
+    /// struttura, tag, faccette, salute del vault. Chi serve cosa è dichiarato
+    /// (`query-route`), non scoperto per tentativi: ciò che nessuno serve torna
+    /// come `unserved`, che è distinguibile da «chi la serve ha fallito».
     query-index: func(query: index-query) -> result<index-result, plugin-error>;
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `none` = la shell non ne ha ancora
@@ -1941,7 +2067,7 @@ interface exporter {
     variant export-selection {
         documents(list<doc-id>),
         /// Cartella e discendenti; `""` è la radice. Stessa regola di
-        /// appartenenza di `search-scope.folders`.
+        /// appartenenza di `query-predicate.folder`.
         folder(string),
         query(index-query),
     }

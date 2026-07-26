@@ -15,7 +15,11 @@ use fubmd_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, SearchHit};
+use fubmd_abi::query::{QueryExpr, QueryPredicate, TextQuery};
+use fubmd_abi::traits::{
+    DocumentMatch, HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, PredicateKind,
+    PropertySelect, QueryRoute,
+};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
 
@@ -101,6 +105,17 @@ impl SpyIndex {
 }
 
 impl IndexProvider for SpyIndex {
+    /// Una spia che risponde dichiara di saper valutare il **testo**; una muta
+    /// non dichiara niente — e non è più un indice che dice «non è roba mia» a
+    /// ogni domanda, è un indice che non ne riceve nessuna.
+    fn routes(&self) -> Vec<QueryRoute> {
+        if self.answers {
+            vec![QueryRoute::Predicate(PredicateKind::Text)]
+        } else {
+            Vec::new()
+        }
+    }
+
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
         // Un indice persistente si ricorda da `data_*`, ed è l'unico storage
         // durevole che avrà anche un provider di terzi: la spia lo esercita
@@ -134,16 +149,10 @@ impl IndexProvider for SpyIndex {
 
     fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
         self.record(Call::Query);
-        if self.answers {
-            Ok(IndexResult::Search(Paged::all(vec![SearchHit {
-                doc: DocId::new("risposta.txt"),
-                score: 1.0,
-                snippet: "eccomi".into(),
-                highlights: Vec::new(),
-            }])))
-        } else {
-            Err(PluginError::BadArgs("non è roba mia".into()))
-        }
+        Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(
+            DocId::new("risposta.txt"),
+        )
+        .with_score(1.0)])))
     }
 }
 
@@ -372,8 +381,10 @@ fn backlinks_never_reach_the_providers() {
     assert!(calls_of(&log).is_empty());
 }
 
+/// Chi non ha dichiarato una rotta **non viene interpellato**: non c'è nessuna
+/// caduta in avanti da provocare, e la spia muta non vede passare niente.
 #[test]
-fn a_query_falls_through_providers_that_disown_it() {
+fn a_provider_that_declared_nothing_is_never_asked() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (mute, mute_log) = SpyIndex::new(false);
@@ -386,26 +397,32 @@ fn a_query_falls_through_providers_that_disown_it() {
     mute_log.lock().unwrap().clear();
     answering_log.lock().unwrap().clear();
 
-    let r = ws.query_index(IndexQuery::FullText {
-        query: "qualsiasi".into(),
-        scope: Default::default(),
+    let r = ws.query_index(IndexQuery::Documents {
+        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("qualsiasi"))),
+        sort: None,
+        select: PropertySelect::None,
         page: Some(Page::first(5)),
     });
 
     match r {
-        Ok(IndexResult::Search(hits)) => assert_eq!(hits.items[0].doc, DocId::new("risposta.txt")),
-        other => panic!("atteso Search, trovato {other:?}"),
+        Ok(IndexResult::Documents(hits)) => {
+            assert_eq!(hits.items[0].doc, DocId::new("risposta.txt"))
+        }
+        other => panic!("attesi dei documenti, trovato {other:?}"),
     }
-    assert_eq!(
-        calls_of(&mute_log),
-        vec![Call::Query],
-        "interpellato per primo"
+    assert!(
+        calls_of(&mute_log).is_empty(),
+        "prima veniva interpellata per prima e rispondeva `BadArgs`: il \
+         dispatch per tentativi faceva girare ogni query su ogni indice"
     );
     assert_eq!(calls_of(&answering_log), vec![Call::Query]);
 }
 
+/// «Nessuno la serve» è una risposta a sé, e non l'errore dell'ultimo
+/// interpellato: chi disegna deve poter scegliere fra «installa un indice» e
+/// «qualcosa è andato storto».
 #[test]
-fn a_query_nobody_owns_reports_bad_args() {
+fn a_query_nobody_declared_is_unserved() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (mute, _) = SpyIndex::new(false);
@@ -417,7 +434,7 @@ fn a_query_nobody_owns_reports_bad_args() {
         ns: "nessuno".into(),
         query: serde_json::Value::Null,
     });
-    assert!(matches!(r, Err(PluginError::BadArgs(_))));
+    assert!(matches!(r, Err(PluginError::Unserved(_))), "{r:?}");
 }
 
 #[test]
@@ -426,14 +443,85 @@ fn with_no_provider_a_search_says_so_instead_of_pretending() {
     let mut ws = fx.workspace();
     ws.reindex().unwrap();
 
-    let r = ws.query_index(IndexQuery::FullText {
-        query: "qualsiasi".into(),
-        scope: Default::default(),
+    let r = ws.query_index(IndexQuery::Documents {
+        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("qualsiasi"))),
+        sort: None,
+        select: PropertySelect::None,
         page: Some(Page::first(5)),
     });
-    // Zero risultati e "nessun indice" sono due cose diverse: la prima è una
-    // risposta, la seconda una mancanza, e confonderle nasconderebbe un guasto.
-    assert!(matches!(r, Err(PluginError::BadArgs(_))));
+    // Zero risultati e "nessun indice sa cercare nel testo" sono due cose
+    // diverse: la prima è una risposta, la seconda una mancanza, e confonderle
+    // nasconderebbe un guasto.
+    assert!(matches!(r, Err(PluginError::Unserved(_))), "{r:?}");
+}
+
+/// Due indici che rivendicano la stessa famiglia: prima vinceva il primo
+/// registrato **in silenzio**, adesso il secondo non si registra e lo dice.
+#[test]
+fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
+    struct Rivale;
+    impl IndexProvider for Rivale {
+        fn routes(&self) -> Vec<QueryRoute> {
+            vec![QueryRoute::Query(fubmd_abi::traits::QueryKind::Tags)]
+        }
+        fn activate(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+        fn on_document_indexed(&mut self, _d: &DocumentModel) {}
+        fn on_document_removed(&mut self, _id: &DocId) {}
+        fn reconcile(&mut self, _ids: &[DocId]) {}
+        fn flush(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+        fn query(&self, _q: IndexQuery) -> Result<IndexResult, PluginError> {
+            Ok(IndexResult::Tags(Paged::all(vec![
+                fubmd_abi::traits::TagCount {
+                    name: "dal-rivale".into(),
+                    count: 1,
+                },
+            ])))
+        }
+    }
+
+    let fx = Fixture::new();
+    fx.write("a.txt", "#gatto");
+    let mut ws = fx.workspace();
+    let err = ws
+        .register_index_provider("test.rivale", Box::new(Rivale))
+        .expect_err("i tag sono già dell'indice del kernel");
+    assert!(matches!(err, fubmd_kernel::IndexError::Route(_)), "{err}");
+    ws.reindex().unwrap();
+
+    // E chi c'era risponde ancora: il perdente non si è registrato a metà.
+    let r = ws.query_index(IndexQuery::Tags {
+        matching: QueryExpr::all(),
+        page: None,
+    });
+    match r {
+        Ok(IndexResult::Tags(tags)) => assert!(
+            !tags.items.iter().any(|t| t.name == "dal-rivale"),
+            "risponde ancora l'indice del kernel: il perdente non si è \
+             registrato nemmeno a metà"
+        ),
+        other => panic!("attesi dei tag, trovato {other:?}"),
+    }
+
+    // Sostituirlo resta possibile, ma si chiede per nome.
+    ws.replace_index_provider("test.rivale", Box::new(Rivale))
+        .expect("la sostituzione dichiarata non è un conflitto");
+    let r = ws.query_index(IndexQuery::Tags {
+        matching: QueryExpr::all(),
+        page: None,
+    });
+    match r {
+        Ok(IndexResult::Tags(tags)) => assert_eq!(
+            tags.items.first().map(|t| t.name.as_str()),
+            Some("dal-rivale"),
+            "adesso risponde il rivale, e il kernel non è più il primo \
+             rispondente non scavalcabile"
+        ),
+        other => panic!("attesi dei tag, trovato {other:?}"),
+    }
 }
 
 #[test]

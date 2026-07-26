@@ -33,20 +33,6 @@
       ]
     }
   ],
-  "GraphData": [
-    {
-      "nodes": [
-        "a.md",
-        "b.md"
-      ],
-      "edges": [
-        {
-          "from": "a.md",
-          "to": "b.md"
-        }
-      ]
-    }
-  ],
   "WorkspaceMeta": [
     {
       "icons": {

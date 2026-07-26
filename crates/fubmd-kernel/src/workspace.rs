@@ -45,7 +45,7 @@
 //! (cancellazioni ad app chiusa): lo chiude [`IndexProvider::reconcile`] in
 //! [`Workspace::reindex`].
 
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -55,11 +55,11 @@ use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, ParseContext, RenderOptions, SourceKind,
 };
-use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span};
+use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::session::{ContextMask, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
-    JobId, JobSpec, Paged, ViewInstance, ViewProvider, ViewSpec,
+    JobId, JobSpec, Page, Paged, QueryRoute, ViewInstance, ViewProvider, ViewSpec,
 };
 use fubmd_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -70,14 +70,13 @@ use fubmd_abi::{Actor, BatchId, Event, Notice, Origin, PluginError};
 
 use crate::bus::EventBus;
 use crate::error::{KernelError, Result};
-use crate::graph::{normalize, strip_ext, GraphSource, LinkGraph};
-use crate::health;
+use crate::graph::{normalize, strip_ext};
+use crate::index::plan::QueryPlan;
+use crate::index::{IndexError, Indexes};
 use crate::pathlink;
-use crate::properties;
 use crate::registry::FormatRegistry;
 use crate::renderer::{self, RenderedDocument, RendererConflict, RendererRegistry};
 use crate::syntax::{SyntaxConflict, SyntaxRegistry};
-use crate::tag_counts::TagCounts;
 use crate::vault::{TrashEntry, Vault, DATA_DIR};
 
 /// Il pannello di una shell che ne ha uno solo.
@@ -183,53 +182,9 @@ const UNTITLED: &str = "Senza titolo";
 /// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
 /// metterlo in sync deve portarsi dietro anche loro.
 const PLUGIN_DATA_DIR: &str = "plugins";
-
-/// I metadati di un documento tenuti in cache: identità, frontmatter (alias),
-/// outline, link — ciò che le mutazioni devono mantenere e che grafo, canale
-/// metadata e riscrittura dei link consumano.
-///
-/// Il **corpo** (albero dei blocchi) e il **testo piano** non ci sono: è lo
-/// split metadata/body di M2. Il render li riparsa dal disco on demand — è
-/// per-documento e su richiesta, mentre questa cache è per-vault e sempre
-/// calda: tenerci dentro i corpi significava pagare la memoria dell'intero
-/// vault per servire letture che il disco serve benissimo. I tag non ci sono
-/// per lo stesso principio: il loro stato aggregato vive in [`TagCounts`],
-/// mantenuto incrementalmente, e il contributo per-nota lo ricorda lui.
-struct DocMeta {
-    id: DocId,
-    frontmatter: Frontmatter,
-    outline: Vec<Heading>,
-    links: Vec<Link>,
-}
-
-impl From<DocumentModel> for DocMeta {
-    fn from(model: DocumentModel) -> Self {
-        DocMeta {
-            id: model.id,
-            frontmatter: model.frontmatter,
-            outline: model.outline,
-            links: model.links,
-        }
-    }
-}
-
-impl GraphSource for DocMeta {
-    fn graph_id(&self) -> &DocId {
-        &self.id
-    }
-
-    fn graph_aliases(&self) -> Vec<String> {
-        self.frontmatter.aliases()
-    }
-
-    fn graph_links(&self) -> &[Link] {
-        &self.links
-    }
-}
-
 pub struct Workspace {
     vault: Vault,
-    registry: FormatRegistry,
+    registry: Arc<FormatRegistry>,
     /// Le sintassi innestate sui provider (§3.1). Girano dopo il parse, sul
     /// modello: è ciò che le rende innestabili su un provider che non le
     /// conosce.
@@ -237,28 +192,21 @@ pub struct Workspace {
     /// Chi disegna quale `custom_kind` (§3.2). Il registro che l'escape hatch
     /// del modello non aveva.
     renderers: RendererRegistry,
-    /// La cache dei metadati (split metadata/body: vedi [`DocMeta`]). È
-    /// l'insieme dei documenti indicizzati: `contains_key` qui È "il
-    /// workspace lo conosce".
-    metas: HashMap<DocId, DocMeta>,
-    /// I conteggi dei tag, mantenuti incrementalmente in `ingest`/`remove`
-    /// come il grafo: [`IndexQuery::Tags`] risponde da qui, senza O(vault).
-    tags: TagCounts,
-    graph: LinkGraph,
-    graph_update: GraphUpdate,
     bus: EventBus,
     /// Handler registrati, ognuno col proprio id (feature ufficiali; a M4/M5 i
     /// plugin via registry). L'id non è decorativo: è lo spazio dei nomi dello
     /// storage che l'`HostApi` concede a quell'handler, e chi lo assegna è il
     /// kernel — non l'handler, che altrimenti sceglierebbe il proprio recinto.
     handlers: Vec<(String, Box<dyn EventHandler>)>,
-    /// Indici derivati dal contenuto, alimentati **direttamente** (non via
-    /// event bus) dentro le stesse operazioni che aggiornano il grafo — così
-    /// un troncamento della coda eventi non può far divergere un indice.
-    /// Come per gli handler, l'id è lo spazio dello storage persistente che
-    /// l'[`HostApi`] concede all'indice: è lì che un indice si ricorda di ciò
-    /// che ha già visto.
-    indexes: Vec<(String, Box<dyn IndexProvider>)>,
+    /// Il canale dati: l'indice del kernel (metadati, tag, grafo), quelli
+    /// registrati e la tabella che dice a chi va cosa (§5.1, §5.2).
+    ///
+    /// Sono alimentati **direttamente** (non via event bus) dentro la stessa
+    /// operazione che aggiorna il vault — così un troncamento della coda eventi
+    /// non può far divergere un indice — e l'id di ognuno è lo spazio dello
+    /// storage persistente che l'[`HostApi`] gli concede: è lì che un indice si
+    /// ricorda di ciò che ha già visto.
+    indexes: Indexes,
     /// Provider di import, interpellati **in ordine**: il primo che riconosce
     /// una sorgente la prende (vedi [`Workspace::import`]). Come per handler e
     /// indici, l'id è lo spazio dati che l'[`HostApi`] concede al provider.
@@ -269,7 +217,7 @@ pub struct Workspace {
     /// View dichiarative registrate, col grado di fiducia di chi le produce.
     /// Ogni albero di UI che entra nell'host passa da qui: è il punto unico in
     /// cui [`UiNode::validate_untrusted`] viene applicato.
-    views: Vec<(String, Trust, Box<dyn ViewProvider>)>,
+    views: Vec<RegisteredView>,
     /// Provider di comandi, in ordine di registrazione. Senza [`Trust`], a
     /// differenza delle view: la fiducia serve dove passa **contenuto attivo**
     /// (`Html`/`WebView`), e da un comando non passa un albero di UI — l'unica
@@ -285,7 +233,7 @@ pub struct Workspace {
     /// comporre — nemmeno quelli di provider diversi dal suo. `invoke` prende
     /// `&self`, quindi condividere il puntatore basta e il prestito esclusivo
     /// del workspace resta libero per l'host.
-    commands: Vec<(String, Arc<dyn CommandProvider>)>,
+    commands: Vec<RegisteredCommand>,
     /// La catena dei comandi in corso, dal più esterno al più interno: serve a
     /// rifiutare una ricorsione **nominandola** (`a → b → a`) invece di
     /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
@@ -341,6 +289,40 @@ pub struct Workspace {
     next_batch_id: u64,
 }
 
+/// Un provider registrato, con **ciò che ha dichiarato al momento della
+/// registrazione**.
+///
+/// Le spec sono dato di registrazione e non una chiamata al provider, ed è la
+/// metà kernel del §5.5. Prima `view_owner` chiamava `views()` su *ogni*
+/// provider per risolvere un id, e `check_params` la richiamava sul vincitore
+/// per convalidare i parametri: due giri di allocazioni per azione, sul
+/// percorso caldo di ogni render — e con le istanze (decisione 0016) quel
+/// percorso è diventato quello di ogni click. Lo stesso valeva per i comandi,
+/// con la stessa riga.
+///
+/// La domanda che questo risolve non è di prestazioni ma di **forma**: chi
+/// possiede la verità su cosa un provider offre. La risposta è il kernel, dal
+/// momento in cui il provider gliel'ha detta; un provider che cambia idea lo
+/// dichiara ([`Workspace::refresh_specs`]), invece di farlo scoprire a chi
+/// interroga.
+struct RegisteredView {
+    id: String,
+    provider: Box<dyn ViewProvider>,
+    specs: Vec<ViewSpec>,
+    /// Quanto ci si fida di ciò che produce. Sta qui e non fra le spec perché è
+    /// una proprietà di **chi manda**, non di ciò che ha dichiarato: lo stesso
+    /// albero è legittimo da una feature ufficiale e inaccettabile da un plugin
+    /// sandboxato. I comandi non ce l'hanno, e non è una dimenticanza — da un
+    /// comando non passa un albero di UI (vedi il campo `commands`).
+    trust: Trust,
+}
+
+struct RegisteredCommand {
+    id: String,
+    provider: Arc<dyn CommandProvider>,
+    specs: Vec<CommandSpec>,
+}
+
 /// Un lotto aperto: la sua identità e cosa ha toccato.
 struct BatchState {
     id: BatchId,
@@ -358,18 +340,18 @@ struct BatchState {
 impl Workspace {
     /// Crea un workspace su una radice con un registry di provider già popolato.
     pub fn new(root: impl AsRef<Utf8Path>, registry: FormatRegistry) -> Self {
+        // Il registry è condiviso con l'indice del kernel invece che copiato:
+        // "quali estensioni sono documenti" è una domanda sola (vedi
+        // `CoreIndex::registry`).
+        let registry = Arc::new(registry);
         Workspace {
             vault: Vault::open(root),
-            registry,
+            registry: Arc::clone(&registry),
             syntax: SyntaxRegistry::new(),
             renderers: RendererRegistry::new(),
-            metas: HashMap::new(),
-            tags: TagCounts::default(),
-            graph: LinkGraph::default(),
-            graph_update: GraphUpdate::default(),
             bus: EventBus::new(),
             handlers: Vec::new(),
-            indexes: Vec::new(),
+            indexes: Indexes::new(registry),
             imports: Vec::new(),
             exports: Vec::new(),
             views: Vec::new(),
@@ -389,11 +371,11 @@ impl Workspace {
 
     /// Sceglie la strategia di aggiornamento del grafo (default: incrementale).
     pub fn set_graph_update(&mut self, mode: GraphUpdate) {
-        self.graph_update = mode;
+        self.indexes.core.graph_update = mode;
     }
 
     pub fn graph_update(&self) -> GraphUpdate {
-        self.graph_update
+        self.indexes.core.graph_update
     }
 
     pub fn bus(&self) -> &EventBus {
@@ -451,9 +433,10 @@ impl Workspace {
     /// già visto. Prima di questo momento non può avere ricordi, e dopo il
     /// primo `on_document_indexed` sarebbe troppo tardi per averli.
     ///
-    /// L'errore di attivazione arriva al chiamante ma l'indice resta
-    /// registrato: un indice che non ha ritrovato la propria memoria
-    /// reindicizza tutto, che è lento, non sbagliato.
+    /// I due esiti sono **diversi**, e li distingue chi chiama: un conflitto di
+    /// rotte vuol dire che l'indice non è registrato affatto; un errore di
+    /// attivazione che è registrato ma non ha ritrovato la propria memoria —
+    /// reindicizzerà tutto, che è lento, non sbagliato.
     ///
     /// `id` è un nome semplice, senza separatori di path: determina lo spazio
     /// dati (`.fubmd-data/plugins/<id>/`), come per gli event handler.
@@ -462,9 +445,42 @@ impl Workspace {
     pub fn register_index_provider(
         &mut self,
         id: impl Into<String>,
-        mut index: Box<dyn IndexProvider>,
-    ) -> std::result::Result<(), PluginError> {
+        index: Box<dyn IndexProvider>,
+    ) -> std::result::Result<(), IndexError> {
         let id = id.into();
+        self.indexes
+            .declare(&id, index.as_ref())
+            .map_err(IndexError::Route)?;
+        self.activate_index(id, index)
+    }
+
+    /// Registra un indice **sostituendo** chi rivendicava le stesse famiglie di
+    /// domande.
+    ///
+    /// È l'operazione che il dispatch per tentativi faceva senza dirlo — vinceva
+    /// chi si era registrato prima, e non c'era modo di accorgersene — e che
+    /// adesso si chiede per nome. È anche il modo in cui l'indice del kernel si
+    /// scavalca: `Backlinks`, `Tags` e gli altri non sono più un ramo prima del
+    /// ciclo, sono rotte come le altre.
+    pub fn replace_index_provider(
+        &mut self,
+        id: impl Into<String>,
+        index: Box<dyn IndexProvider>,
+    ) -> std::result::Result<(), IndexError> {
+        let id = id.into();
+        self.indexes.declare_replacing(index.as_ref());
+        self.activate_index(id, index)
+    }
+
+    /// La registrazione **è** l'attivazione: l'indice riceve subito un
+    /// [`HostApi`] intestato al proprio id e ricarica da `data_*` ciò che ha già
+    /// visto. Prima di questo momento non può avere ricordi, e dopo il primo
+    /// `on_document_indexed` sarebbe troppo tardi per averli.
+    fn activate_index(
+        &mut self,
+        id: String,
+        mut index: Box<dyn IndexProvider>,
+    ) -> std::result::Result<(), IndexError> {
         // `index` è ancora una variabile locale: prestare `&mut self` all'host
         // qui non alias niente. `activate` è una chiamata a un provider come
         // le altre: il dispatch resta rimandato a chiamata tornata.
@@ -476,9 +492,9 @@ impl Workspace {
             };
             index.activate(&mut host)
         });
-        self.indexes.push((id, index));
+        self.indexes.providers.push((id, index));
         self.dispatch_pending();
-        activated
+        activated.map_err(IndexError::Activate)
     }
 
     /// Riparsa tutti i documenti del vault, ricostruisce il grafo e allinea
@@ -499,21 +515,19 @@ impl Workspace {
             let model = self.parse(&id, &src)?;
             models.push((id, model));
         }
-        self.metas.clear();
-        self.tags.clear();
-        for (id, model) in models {
-            for (_, index) in self.indexes.iter_mut() {
-                index.on_document_indexed(&model);
-            }
-            self.tags.upsert(&id, &model.tags);
-            self.metas.insert(id, DocMeta::from(model));
+        self.indexes.core.clear();
+        for (_, model) in &models {
+            self.indexes.on_document_indexed(model);
         }
-        self.rebuild_graph();
+        drop(models);
+        // L'apertura ricostruisce il grafo in blocco anche in modalità
+        // incrementale: gli `upsert` uno per uno l'hanno già costruito, ma la
+        // risoluzione dei wikilink dipende dall'insieme intero (un alias
+        // dichiarato dall'ultima nota vale anche per la prima).
+        self.indexes.core.rebuild_graph();
 
         let ids: Vec<DocId> = self.documents();
-        for (_, index) in self.indexes.iter_mut() {
-            index.reconcile(&ids);
-        }
+        self.indexes.reconcile(&ids);
         // Gli errori di flush non fanno fallire l'apertura del vault: un
         // indice è stato derivato, il vault è la verità (M4: notifica).
         let _ = self.flush_indexes();
@@ -531,10 +545,32 @@ impl Workspace {
     }
 
     /// Elenco ordinato dei documenti indicizzati.
+    ///
+    /// L'ordine non si impone più a ogni chiamata: la cache dei metadati è
+    /// ordinata per costruzione (§5.5). Chi ne vuole una **finestra** non passa
+    /// di qui ma da [`HostApi::list_documents`], che non materializza il resto.
     pub fn documents(&self) -> Vec<DocId> {
-        let mut ids: Vec<DocId> = self.metas.keys().cloned().collect();
-        ids.sort();
-        ids
+        self.indexes.core.documents()
+    }
+
+    /// Una finestra sui documenti indicizzati, col conto di quanti sono.
+    pub fn documents_page(&self, page: Option<Page>) -> Paged<DocId> {
+        let total = self.indexes.core.metas.len() as u32;
+        let Some(page) = page else {
+            return Paged::all(self.indexes.core.documents());
+        };
+        Paged {
+            items: self
+                .indexes
+                .core
+                .ids()
+                .skip(page.offset as usize)
+                .take(page.limit as usize)
+                .cloned()
+                .collect(),
+            offset: page.offset,
+            total,
+        }
     }
 
     /// Le estensioni che i provider registrati riconoscono (minuscole, senza
@@ -637,17 +673,10 @@ impl Workspace {
         // stessa verità, nessun canale che può perdere pezzi per strada. E la
         // vedono ADESSO, sul modello intero: è l'unico momento in cui corpo e
         // testo esistono — la cache tiene i soli metadati.
-        for (_, index) in self.indexes.iter_mut() {
-            index.on_document_indexed(&model);
-        }
-        self.tags.upsert(id, &model.tags);
-        if self.graph_update == GraphUpdate::Incremental {
-            self.graph.upsert(&model);
-        }
-        self.metas.insert(id.clone(), DocMeta::from(model));
-        if self.graph_update == GraphUpdate::FullRebuild {
+        self.indexes.on_document_indexed(&model);
+        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
             // Il rebuild legge la cache: va aggiornata prima.
-            self.rebuild_graph();
+            self.indexes.core.rebuild_graph();
         }
         // Il sorgente sotto la selezione è cambiato: gli offset pubblicati
         // dalla shell erano di un altro testo. La shell ne ripubblicherà uno
@@ -685,7 +714,7 @@ impl Workspace {
             Ok(true)
         } else {
             self.as_actor(Actor::Watcher, |ws| {
-                let existed = ws.metas.contains_key(&id);
+                let existed = ws.indexes.core.metas.contains_key(&id);
                 ws.remove_document(&id);
                 Ok(existed)
             })
@@ -694,17 +723,13 @@ impl Workspace {
 
     /// Rimuove un documento (usato dal file watcher su cancellazione).
     pub fn remove_document(&mut self, id: &DocId) {
-        if self.metas.remove(id).is_some() {
+        if self.indexes.core.contains(id) {
             // La nota con il focus non esiste più: `active_context` non deve
             // continuare a nominarla alle view (né tenerne una selezione).
             self.invalidate_context(id, ContextChange::Gone);
-            self.tags.remove(id);
-            match self.graph_update {
-                GraphUpdate::Incremental => self.graph.remove(id),
-                GraphUpdate::FullRebuild => self.rebuild_graph(),
-            }
-            for (_, index) in self.indexes.iter_mut() {
-                index.on_document_removed(id);
+            self.indexes.on_document_removed(id);
+            if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+                self.indexes.core.rebuild_graph();
             }
             self.emit_event(Event::DocumentRemoved { id: id.clone() });
             self.emit_event(Event::IndexUpdated);
@@ -779,7 +804,7 @@ impl Workspace {
     /// Questo path è già di qualcuno? Vale sia l'indicizzato sia ciò che sta
     /// sul disco e il workspace non ha ancora visto.
     fn is_taken(&self, id: &DocId) -> bool {
-        self.metas.contains_key(id) || self.vault.exists(id)
+        self.indexes.core.metas.contains_key(id) || self.vault.exists(id)
     }
 
     /// Il [`DocId`] di una nota che nasce col nome dato: separatori normalizzati
@@ -815,7 +840,7 @@ impl Workspace {
     ///
     /// [`remove_document`]: Workspace::remove_document
     pub fn delete_document(&mut self, id: &DocId) -> Result<DocId> {
-        if !self.metas.contains_key(id) {
+        if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
         let trashed = self.vault.trash(id)?;
@@ -855,7 +880,7 @@ impl Workspace {
             Some(to) => valid_doc_id(to.as_str())?,
             None => entry.original,
         };
-        if self.metas.contains_key(&target) || self.vault.exists(&target) {
+        if self.indexes.core.metas.contains_key(&target) || self.vault.exists(&target) {
             return Err(KernelError::AlreadyExists(target.to_string()));
         }
         let ext = extension_of(&target).unwrap_or_default();
@@ -916,7 +941,7 @@ impl Workspace {
         if from == to {
             return Ok(());
         }
-        if !self.metas.contains_key(from) {
+        if !self.indexes.core.metas.contains_key(from) {
             return Err(KernelError::NotFound(from.to_string()));
         }
         // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
@@ -925,7 +950,7 @@ impl Workspace {
         // omonimo-per-case su filesystem case-sensitive è comunque intercettato
         // da `models` (il vault è l'unica fonte dei DocId, quindi lo conosce).
         let case_only = from.as_str().to_lowercase() == to.as_str().to_lowercase();
-        if self.metas.contains_key(to) || (!case_only && self.vault.exists(to)) {
+        if self.indexes.core.metas.contains_key(to) || (!case_only && self.vault.exists(to)) {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
         let ext = extension_of(to).unwrap_or_default();
@@ -981,30 +1006,19 @@ impl Workspace {
     /// [`sync_renamed_path`](Workspace::sync_renamed_path) (dove il file lo ha
     /// già spostato qualcun altro).
     fn migrate_identity(&mut self, from: &DocId, to: &DocId, model: DocumentModel) {
-        self.metas.remove(from);
         // La nota aperta segue il rename anche qui: senza, `active_context`
         // risponderebbe col path vecchio e outline/backlink si svuoterebbero
         // fino al prossimo cambio nota. Va fatto nel kernel, non nella shell:
         // vale anche per i rename non innescati da lei.
         self.invalidate_context(from, ContextChange::Renamed(to.clone()));
-        // Per tag e indici il rename è remove+add: l'identità è la chiave, e
-        // la chiave è cambiata. (Chi tiene stato *per-documento* invece migra
-        // la chiave sull'evento `DocumentRenamed`.)
-        self.tags.remove(from);
-        self.tags.upsert(to, &model.tags);
-        for (_, index) in self.indexes.iter_mut() {
-            index.on_document_removed(from);
-        }
-        for (_, index) in self.indexes.iter_mut() {
-            index.on_document_indexed(&model);
-        }
-        if self.graph_update == GraphUpdate::Incremental {
-            self.graph.remove(from);
-            self.graph.upsert(&model);
-        }
-        self.metas.insert(to.clone(), DocMeta::from(model));
-        if self.graph_update == GraphUpdate::FullRebuild {
-            self.rebuild_graph();
+        // Per ogni indice — quello del kernel compreso — il rename è
+        // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
+        // tiene stato *per-documento* invece migra la chiave sull'evento
+        // `DocumentRenamed`.)
+        self.indexes.on_document_removed(from);
+        self.indexes.on_document_indexed(&model);
+        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+            self.indexes.core.rebuild_graph();
         }
         self.emit_event(Event::DocumentRenamed {
             from: from.clone(),
@@ -1036,7 +1050,7 @@ impl Workspace {
         let from_id = (!self.vault.is_ignored(from))
             .then(|| self.vault.doc_id_for_path(from).ok())
             .flatten()
-            .filter(|id| self.metas.contains_key(id));
+            .filter(|id| self.indexes.core.metas.contains_key(id));
         let Some(from_id) = from_id else {
             // Niente da migrare: al più in `to` è comparso qualcosa.
             return self.sync_path(to);
@@ -1097,6 +1111,8 @@ impl Workspace {
         // il path senza estensione, che è sempre univoco.
         let to_name = to.page_name();
         let ambiguous = self
+            .indexes
+            .core
             .metas
             .keys()
             .any(|id| id != from && normalize(id.page_name()) == normalize(to_name));
@@ -1107,6 +1123,8 @@ impl Workspace {
         };
 
         let mut sources: BTreeSet<DocId> = self
+            .indexes
+            .core
             .graph
             .backlinks(from)
             .into_iter()
@@ -1122,7 +1140,7 @@ impl Workspace {
 
         let mut plan = Vec::new();
         for src in sources {
-            let Some(meta) = self.metas.get(&src) else {
+            let Some(meta) = self.indexes.core.metas.get(&src) else {
                 continue;
             };
             let Ok(source_text) = self.vault.read(&src) else {
@@ -1146,7 +1164,7 @@ impl Workspace {
                         if !(by_name || by_path) {
                             continue;
                         }
-                        if self.graph.resolve_wiki(page).as_ref() != Some(from) {
+                        if self.indexes.core.graph.resolve_wiki(page).as_ref() != Some(from) {
                             continue;
                         }
                         (page.as_str(), new_ref.clone(), false)
@@ -1214,7 +1232,7 @@ impl Workspace {
         src: &DocId,
         written: &str,
     ) -> Option<String> {
-        let resolved = self.graph.resolve_path(src, written)?;
+        let resolved = self.indexes.core.graph.resolve_path(src, written)?;
         let source_moves = src == from;
         let target_moves = resolved == *from;
         if !source_moves && !target_moves {
@@ -1289,7 +1307,7 @@ impl Workspace {
     /// stessa di `render_preview`: la cache dei metadati **è** l'insieme dei
     /// documenti indicizzati.
     pub fn read_model(&self, id: &DocId) -> Result<DocumentModel> {
-        if !self.metas.contains_key(id) {
+        if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
         self.parse_from_disk(id)
@@ -1329,7 +1347,7 @@ impl Workspace {
     /// per-documento e on demand — è esattamente il tipo di lettura che il disco
     /// serve bene, mentre la cache calda serve le mutazioni.
     pub fn render_preview(&self, id: &DocId) -> Result<RenderedDocument> {
-        if !self.metas.contains_key(id) {
+        if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
         let model = self.parse_from_disk(id)?;
@@ -1359,7 +1377,7 @@ impl Workspace {
         let id = self
             .resolve_link(page)
             .ok_or_else(|| KernelError::NotFound(page.to_string()))?;
-        if !self.metas.contains_key(&id) {
+        if !self.indexes.core.metas.contains_key(&id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
         // Come `render_preview`: il corpo si riparsa dal disco on demand.
@@ -1384,17 +1402,17 @@ impl Workspace {
 
     /// Backlink verso un documento.
     pub fn backlinks(&self, id: &DocId) -> Vec<BacklinkRef> {
-        self.graph.backlinks(id)
+        self.indexes.core.graph.backlinks(id)
     }
 
     /// Link uscenti risolti da un documento.
     pub fn outgoing(&self, id: &DocId) -> Vec<DocId> {
-        self.graph.outgoing(id)
+        self.indexes.core.graph.outgoing(id)
     }
 
     /// Risolve il nome di un wikilink a un documento esistente.
     pub fn resolve_link(&self, page: &str) -> Option<DocId> {
-        self.graph.resolve_wiki(page)
+        self.indexes.core.graph.resolve_wiki(page)
     }
 
     // --- sessione ----------------------------------------------------------
@@ -1478,108 +1496,43 @@ impl Workspace {
 
     // --- indici -----------------------------------------------------------
 
-    /// Interroga gli indici.
+    /// Interroga il canale dati.
     ///
-    /// Una buona metà delle query **non passa dai provider**: le serve il
-    /// kernel, perché di quel dato è già l'unica fonte di verità. I backlink e
-    /// il grafo stanno nel [`LinkGraph`] (conosce le regole di risoluzione dei
-    /// wikilink e le ambiguità dell'intero vault); outline e proprietà stanno
-    /// nei metadati parsati che il kernel tiene in cache; la salute del vault è
-    /// un'interrogazione sugli stessi due. Duplicarli in un indice creerebbe una
-    /// seconda verità che può divergere dalla prima — e per una view sarebbe
-    /// comunque irraggiungibile, perché un `FormatProvider` un plugin non ce
-    /// l'ha.
+    /// **Un percorso di dispatch solo.** Prima erano due e mezzo: sette varianti
+    /// su nove le serviva il kernel con un `return` anticipato, e le altre due
+    /// giravano su tutti gli indici registrati in ordine finché uno non
+    /// rispondeva `BadArgs`. Adesso chi serve cosa è dichiarato
+    /// ([`QueryRoute`](fubmd_abi::traits::QueryRoute)), le risposte del kernel
+    /// sono un indice registrato per primo, e ciò che nessuno serve torna come
+    /// [`PluginError::Unserved`] invece che come l'errore dell'ultimo
+    /// interpellato.
     ///
-    /// Tutto il resto va ai provider registrati, in ordine di registrazione:
-    /// vince il primo che non risponde [`PluginError::BadArgs`], che è per
-    /// contratto il modo di dire "non è roba mia" (vedi
-    /// [`IndexQuery::Custom`]). Se nessuno la riconosce, l'errore dell'ultimo
-    /// interpellato arriva al chiamante.
+    /// Chi compone la risposta quando la domanda ha foglie di proprietari
+    /// diversi è il pianificatore (vedi [`crate::index::plan`]).
     pub fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        match &query {
-            IndexQuery::Backlinks { target, page } => {
-                return Ok(IndexResult::Backlinks(Paged::window(
-                    self.graph.backlinks(target),
-                    *page,
-                )));
-            }
-            IndexQuery::Outline { doc } => {
-                let outline = self
-                    .metas
-                    .get(doc)
-                    .map(|m| m.outline.clone())
-                    .unwrap_or_default();
-                return Ok(IndexResult::Outline(outline));
-            }
-            IndexQuery::Tags { page } => {
-                // Da struttura incrementale ([`TagCounts`]): niente O(vault)
-                // a ogni interrogazione — e il pannello interroga a ogni
-                // `IndexUpdated`, cioè a ogni salvataggio.
-                return Ok(IndexResult::Tags(Paged::window(
-                    self.tags.snapshot(),
-                    *page,
-                )));
-            }
-            IndexQuery::Neighbors {
-                doc,
-                direction,
-                depth,
-                page,
-            } => {
-                return Ok(IndexResult::Neighbors(Paged::window(
-                    self.graph.neighbors(doc, *direction, *depth),
-                    *page,
-                )));
-            }
-            IndexQuery::Properties {
-                filter,
-                sort,
-                select,
-                page,
-            } => {
-                let rows = properties::query(
-                    self.metas.iter().map(|(id, m)| (id, &m.frontmatter)),
-                    filter,
-                    sort.as_ref(),
-                    select,
-                );
-                return Ok(IndexResult::Properties(Paged::window(rows, *page)));
-            }
-            IndexQuery::PropertyValues { key, filter, page } => {
-                let facets = properties::facets(
-                    self.metas.iter().map(|(id, m)| (id, &m.frontmatter)),
-                    key,
-                    filter,
-                );
-                return Ok(IndexResult::PropertyValues(Paged::window(facets, *page)));
-            }
-            IndexQuery::VaultHealth { check, page } => {
-                // In ordine di `DocId`: la cache è una mappa hash, e una
-                // risposta paginata che cambiasse ordine a ogni chiamata
-                // ripeterebbe e salterebbe righe fra una pagina e l'altra.
-                let mut ids: Vec<&DocId> = self.metas.keys().collect();
-                ids.sort();
-                let issues = health::run(
-                    *check,
-                    ids.into_iter()
-                        .map(|id| (id, self.metas[id].links.as_slice())),
-                    &self.graph,
-                    &self.registry.all_extensions(),
-                );
-                return Ok(IndexResult::VaultHealth(Paged::window(issues, *page)));
-            }
-            IndexQuery::FullText { .. } | IndexQuery::Custom { .. } => {}
-        }
-        let mut last = Err(PluginError::BadArgs(
-            "nessun IndexProvider registrato".to_string(),
-        ));
-        for (_, index) in &self.indexes {
-            match index.query(query.clone()) {
-                Err(PluginError::BadArgs(msg)) => last = Err(PluginError::BadArgs(msg)),
-                other => return other,
-            }
-        }
-        last
+        self.indexes.query(query)
+    }
+
+    /// Chi risponderebbe a questa domanda, e come: il piano.
+    ///
+    /// Serve a due cose che valgono adesso — **provare** il routing invece di
+    /// descriverlo, e dire in un messaggio chi avrebbe dovuto rispondere. Non è
+    /// l'explain plan di 9.2, che è una superficie con altri clienti.
+    pub fn query_plan(&self, query: &IndexQuery) -> QueryPlan {
+        self.indexes.plan_of(query)
+    }
+
+    /// Le rotte dichiarate: chi serve cosa, oggi, in questo montaggio.
+    ///
+    /// Non attraversa il contratto — l'inventario di ciò che è attivo è il §7.6
+    /// — ma è ciò che rende il routing ispezionabile invece che descritto.
+    pub fn query_routes(&self) -> Vec<(QueryRoute, String)> {
+        self.indexes
+            .routes
+            .declared()
+            .into_iter()
+            .map(|(route, target)| (route, self.indexes.name_of(target)))
+            .collect()
     }
 
     /// Porta gli indici a un punto di consistenza (vedi
@@ -1595,7 +1548,7 @@ impl Workspace {
     /// Gli indici escono dal workspace per la durata delle chiamate, così
     /// l'host può prestare `&mut Workspace` senza aliasing.
     pub fn flush_indexes(&mut self) -> Vec<PluginError> {
-        let mut indexes = std::mem::take(&mut self.indexes);
+        let mut indexes = std::mem::take(&mut self.indexes.providers);
         let mut errors = Vec::new();
         self.with_provider_call(|ws| {
             for (id, index) in indexes.iter_mut() {
@@ -1612,9 +1565,9 @@ impl Workspace {
         // Indici registrati *durante* il flush si accodano in fondo (simmetria
         // con `deliver_to_handlers`: nessun percorso può perdere una
         // registrazione solo perché è arrivata nel momento sbagliato).
-        let registered_meanwhile = std::mem::take(&mut self.indexes);
-        self.indexes = indexes;
-        self.indexes.extend(registered_meanwhile);
+        let registered_meanwhile = std::mem::take(&mut self.indexes.providers);
+        self.indexes.providers = indexes;
+        self.indexes.providers.extend(registered_meanwhile);
         // Ciò che i flush hanno emesso si consegna a chiamate tornate, non
         // dentro il frame di un provider.
         self.dispatch_pending();
@@ -1634,12 +1587,38 @@ impl Workspace {
         trust: Trust,
         provider: Box<dyn ViewProvider>,
     ) {
-        self.views.push((id.into(), trust, provider));
+        self.views.push(RegisteredView {
+            id: id.into(),
+            specs: provider.views(),
+            provider,
+            trust,
+        });
+    }
+
+    /// Rilegge ciò che un provider dichiara: view e comandi.
+    ///
+    /// È l'altra metà di «le spec sono dato di registrazione»: il kernel tiene
+    /// la verità, e chi cambia idea **lo dice**. Non è una capacità
+    /// dell'[`HostApi`] e non attraversa il contratto, per la regola della
+    /// decisione 0013 — una capacità entra quando la chiede un cliente vero, e
+    /// oggi nessun provider cambia il proprio elenco a runtime. Il giorno che
+    /// succederà (un plugin che registra una view per ogni database aperto) è un
+    /// metodo additivo, e questa è la sua metà kernel già in piedi.
+    pub fn refresh_specs(&mut self, id: &str) {
+        for view in self.views.iter_mut().filter(|v| v.id == id) {
+            view.specs = view.provider.views();
+        }
+        for command in self.commands.iter_mut().filter(|c| c.id == id) {
+            command.specs = command.provider.commands();
+        }
     }
 
     /// Le view offerte dai provider registrati, in ordine di registrazione.
     pub fn views(&self) -> Vec<ViewSpec> {
-        self.views.iter().flat_map(|(_, _, p)| p.views()).collect()
+        self.views
+            .iter()
+            .flat_map(|r| r.specs.iter().cloned())
+            .collect()
     }
 
     /// Rende una view e restituisce il suo albero di UI.
@@ -1661,14 +1640,14 @@ impl Workspace {
     /// confinata ai callback in scrittura (vedi il doc di `HostApi`).
     pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
         let at = self.view_owner(&instance.view)?;
-        let (id, trust, provider) = &self.views[at];
+        let registered = &self.views[at];
         self.check_params(at, instance)?;
         let host = ReadHost {
             ws: self,
-            plugin: id,
+            plugin: &registered.id,
         };
-        let tree = provider.render_view(instance, &host)?;
-        guard_ui(*trust, &tree)?;
+        let tree = registered.provider.render_view(instance, &host)?;
+        guard_ui(registered.trust, &tree)?;
         Ok(tree)
     }
 
@@ -1685,20 +1664,22 @@ impl Workspace {
     ) -> std::result::Result<ViewUpdate, PluginError> {
         let at = self.view_owner(&instance.view)?;
         self.check_params(at, instance)?;
+        // Prima del `take`: dopo, il registro è vuoto.
+        let trust = self.views[at].trust;
         let mut views = std::mem::take(&mut self.views);
         // Il flag rimanda il dispatch: se il provider scrive via `HostApi`
         // dentro `on_action`, gli handler NON girano nel suo frame — girano
         // nel `dispatch_pending` qui sotto, a chiamata tornata. Senza, un
         // plugin che è sia view sia handler (il caso versioning) sarebbe
         // rientrato nella propria istanza: in nativo funziona, a M5 trappa.
-        let (updated, trust) = self.with_provider_call(|ws| {
-            let (id, trust, provider) = &mut views[at];
+        let updated = self.with_provider_call(|ws| {
+            let registered = &mut views[at];
             let mut host = KernelHost {
                 ws,
-                plugin: id,
+                plugin: &registered.id,
                 mode: InvokeMode::Apply,
             };
-            (provider.on_action(instance, action, &mut host), *trust)
+            registered.provider.on_action(instance, action, &mut host)
         });
         self.restore_views(views);
         let update = updated?;
@@ -1722,10 +1703,9 @@ impl Workspace {
         at: usize,
         instance: &ViewInstance,
     ) -> std::result::Result<(), PluginError> {
-        let (_, _, provider) = &self.views[at];
-        let spec = provider
-            .views()
-            .into_iter()
+        let spec = self.views[at]
+            .specs
+            .iter()
             .find(|spec| spec.id == instance.view)
             .ok_or_else(|| PluginError::UnknownView(instance.view.clone()))?;
         spec.validate_params(&instance.params)
@@ -1735,13 +1715,13 @@ impl Workspace {
     fn view_owner(&self, view: &str) -> std::result::Result<usize, PluginError> {
         self.views
             .iter()
-            .position(|(_, _, p)| p.views().iter().any(|spec| spec.id == view))
+            .position(|r| r.specs.iter().any(|spec| spec.id == view))
             .ok_or_else(|| PluginError::UnknownView(view.to_string()))
     }
 
     /// Rimette i provider al loro posto, in coda a quelli registrati nel
     /// frattempo (simmetria con `deliver_to_handlers` e `flush_indexes`).
-    fn restore_views(&mut self, views: Vec<(String, Trust, Box<dyn ViewProvider>)>) {
+    fn restore_views(&mut self, views: Vec<RegisteredView>) {
         let registered_meanwhile = std::mem::take(&mut self.views);
         self.views = views;
         self.views.extend(registered_meanwhile);
@@ -1766,7 +1746,11 @@ impl Workspace {
         // La firma resta `Box` — è quella degli altri `register_*`, e chi
         // registra non deve sapere perché qui dentro serve un `Arc` (decisione 0013:
         // `run_command` rientra nel registro mentre il registro è in uso).
-        self.commands.push((id.into(), Arc::from(provider)));
+        self.commands.push(RegisteredCommand {
+            id: id.into(),
+            specs: provider.commands(),
+            provider: Arc::from(provider),
+        });
     }
 
     /// I comandi offerti dai provider registrati, in ordine di registrazione.
@@ -1778,7 +1762,7 @@ impl Workspace {
     pub fn commands(&self) -> Vec<CommandSpec> {
         self.commands
             .iter()
-            .flat_map(|(_, p)| p.commands())
+            .flat_map(|r| r.specs.iter().cloned())
             .collect()
     }
 
@@ -1869,11 +1853,11 @@ impl Workspace {
     ) -> std::result::Result<CommandOutcome, PluginError> {
         let at = self.command_owner(command)?;
         let spec = self.commands[at]
-            .1
-            .commands()
-            .into_iter()
+            .specs
+            .iter()
             .find(|s| s.id == command)
-            .expect("il proprietario è stato trovato dichiarando questo comando");
+            .expect("il proprietario è stato trovato dichiarando questo comando")
+            .clone();
         spec.validate_args(&args)?;
 
         // Il giro (decisione 0013). Un comando che rientra su sé stesso non è una
@@ -1892,7 +1876,8 @@ impl Workspace {
         // il campo `commands`). È ciò che permette a `run_command` di trovare
         // gli altri comandi — e anche gli altri comandi dello stesso provider —
         // mentre questo è in corso.
-        let (owner, provider) = self.commands[at].clone();
+        let owner = self.commands[at].id.clone();
+        let provider = Arc::clone(&self.commands[at].provider);
         self.command_stack.push(command.to_string());
         let outcome = if spec.scope.writes && mode == InvokeMode::Apply {
             self.with_provider_call(|ws| {
@@ -1933,7 +1918,7 @@ impl Workspace {
     fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
         self.commands
             .iter()
-            .position(|(_, p)| p.commands().iter().any(|spec| spec.id == command))
+            .position(|r| r.specs.iter().any(|spec| spec.id == command))
             .ok_or_else(|| PluginError::UnknownCommand(command.to_string()))
     }
 
@@ -2349,10 +2334,6 @@ impl Workspace {
             .ok_or(KernelError::NoProvider(ext))
     }
 
-    fn rebuild_graph(&mut self) {
-        self.graph = LinkGraph::build(self.metas.values());
-    }
-
     // --- storage persistente dei plugin ------------------------------------
 
     /// La radice dello spazio dati di un plugin, **come cartella del
@@ -2568,8 +2549,8 @@ impl HostApi for KernelHost<'_> {
         self.ws.apply_edit(&id, request).map_err(plugin_error)
     }
 
-    fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
-        Ok(self.ws.documents())
+    fn list_documents(&self, page: Option<Page>) -> std::result::Result<Paged<DocId>, PluginError> {
+        Ok(self.ws.documents_page(page))
     }
 
     fn free_name(&self, id: &DocId) -> DocId {
@@ -2773,8 +2754,8 @@ impl HostApi for ReadHost<'_> {
         self.read_only()
     }
 
-    fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
-        Ok(self.ws.documents())
+    fn list_documents(&self, page: Option<Page>) -> std::result::Result<Paged<DocId>, PluginError> {
+        Ok(self.ws.documents_page(page))
     }
 
     fn free_name(&self, id: &DocId) -> DocId {
@@ -2966,8 +2947,8 @@ impl HostApi for ReadOnlyHost<'_> {
         self.denied(&format!("modificare `{id}`"))
     }
 
-    fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
-        self.reading().list_documents()
+    fn list_documents(&self, page: Option<Page>) -> std::result::Result<Paged<DocId>, PluginError> {
+        self.reading().list_documents(page)
     }
 
     fn free_name(&self, id: &DocId) -> DocId {

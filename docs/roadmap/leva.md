@@ -79,10 +79,12 @@ il criterio di questo file applicato a sé stesso — inesprimibile sta sopra
 stretto — e vale la pena che la retrocessione si veda, perché la voce era stata
 messa in cima con una frase che nessuno aveva verificato.
 
-Dal sesto giro se ne aggiunge una sola dello stesso peso, e stava accanto al
-§3.1 per la stessa ragione — con quello chiuso, è la voce a leva più alta che
-resta insieme al §9.1: **§5.1 (sette varianti su nove di
-`IndexQuery` non arrivano a nessun provider)**. Non allarga una capacità: ne
+Dal sesto giro se ne aggiungeva una sola dello stesso peso, e stava accanto al
+§3.1 per la stessa ragione: **§5.1 (sette varianti su nove di `IndexQuery` non
+arrivano a nessun provider)** — **chiusa** con la
+[decisione 0019](../decisions/0019-il-canale-dati.md), insieme al resto della
+seduta 5. Vale la pena leggerne l'argomento, perché è il criterio di questa
+pagina applicato bene: Non allarga una capacità: ne
 rende una inesprimibile, e lo fa su un canale che la [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) ha appena chiamato
 «il canale dati verso le view» — grafo, proprietà e salute del vault sono
 kernel-owned e non scavalcabili, quindi tutte le famiglie che vorrebbero
@@ -110,8 +112,9 @@ nel provider di ricerca, con il commento che spiega perché mentire sarebbe pegg
 e nessun valore di ritorno con cui non mentire. Non allarga una capacità: rende
 inesprimibile «l'indice non ha accettato questa nota», su un canale che il piano
 aveva scelto di alimentare dal kernel **proprio** per non poterla perdere in
-silenzio. Con il §5.1 quella firma diventa la strada di tutto il canale dati, non
-del solo full-text.
+silenzio. E con la [decisione 0019](../decisions/0019-il-canale-dati.md) quella
+firma è **già** diventata la strada di tutto il canale dati, non del solo
+full-text: la voce non è cambiata di forma, è cresciuta di portata.
 
 Le altre tre voci della [seduta 20](20-quando-qualcosa-va-storto.md) non hanno
 leva alta per il criterio di questa pagina, e vanno lette con un criterio
@@ -126,8 +129,9 @@ rimandato: sono le voci il cui prezzo si paga in difetti che non lasciano
 traccia, oggi, e un difetto che non lascia traccia non entra in nessuna lista di
 priorità perché nessuno lo ha visto.
 
-Il sesto giro ha applicato quel criterio e ha trovato il secondo caso: **§5.1**.
-La forma è la stessa della [decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) — una promessa che vale a metà e in silenzio, e
+Il sesto giro ha applicato quel criterio e ha trovato il secondo caso, **§5.1**,
+adesso chiuso con la [decisione 0019](../decisions/0019-il-canale-dati.md).
+La forma era la stessa della [decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) — una promessa che vale a metà e in silenzio, e
 la metà mancante non la scopre chi legge il contratto ma chi prova a usarlo.
 Accanto, il criterio proprio di questo giro, da portare avanti allo stesso modo:
 alla domanda «cosa manca» e «cosa non mantiene» va aggiunta **«quante volte è

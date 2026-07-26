@@ -5,9 +5,9 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sette giri sulla stessa domanda hanno prodotto novantanove voci. Trentadue
+Sette giri sulla stessa domanda hanno prodotto novantanove voci. Trentasette
 sono chiuse, e i loro verbali stanno in [docs/decisions/](decisions/README.md);
-le altre sessantasette sono qui, e questo file è il loro **indice**.
+le altre sessantadue sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -66,12 +66,14 @@ di nuove, e vanno fatte in quest'ordine:
 
 E una quinta, che il quinto giro ha aggiunto e nessuno aveva ancora fatto: **la
 risposta a una domanda che nessuno ha posto** — chi vede il modello parsato, che
-cosa è una view mentre è viva, come si spegne il tutto. Le risposte che i giri
-hanno trovato scritte nelle firme erano, nell'ordine: solo il kernel; una
-funzione pura e sincrona senza stato; non si spegne. Le prime due sono state
-riaperte e decise ([0018](decisions/0018-chi-vede-il-modello-parsato.md) e
-[0016](decisions/0016-cosa-e-una-view.md)); la terza è ancora quella, e sta
-nella [seduta 9](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md).
+cosa è una view mentre è viva, chi può rispondere a una query, come si spegne il
+tutto. Le risposte che i giri hanno trovato scritte nelle firme erano,
+nell'ordine: solo il kernel; una funzione pura e sincrona senza stato; il kernel
+per sette varianti su nove, e nessuno poteva scavalcarlo; non si spegne. Le prime
+tre sono state riaperte e decise ([0018](decisions/0018-chi-vede-il-modello-parsato.md),
+[0016](decisions/0016-cosa-e-una-view.md) e [0019](decisions/0019-il-canale-dati.md));
+la quarta è ancora quella, e sta nella
+[seduta 9](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md).
 
 E una sesta, dal **settimo giro**: **cosa fallisce senza produrre nessun
 segnale** — quale sbaglio di un plugin, del kernel, dell'utente o di un'altra
@@ -93,7 +95,7 @@ messaggio arrivato.
 | **2** | [Cosa è una view](roadmap/02-cosa-e-una-view.md) | le firme dicono insieme che una view è una funzione pura, sincrona, senza stato | — | — |
 | **3** | [Chi disegna ciò che il core non conosce](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md) | una decisione sola vista da tre lati: sintassi, blocco, renderer nella shell | — | — |
 | **4** | [Chi vede il modello parsato](roadmap/04-chi-vede-il-modello-parsato.md) | *chi vede la struttura di un documento?* Deciso con la [0018](decisions/0018-chi-vede-il-modello-parsato.md) | — | — |
-| **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | chi risponde a una query, e chi la instrada — nell'ordine | 5 | 3 |
+| **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | *chi risponde a una query, e chi la instrada?* Deciso con la [0019](decisions/0019-il-canale-dati.md) | — | — |
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | la stessa regola serve a provider, shell e a M5 a un guest WASM | 2 | — |
 | **7** | [Il confine: quante volte si scrive la disciplina](roadmap/07-il-confine.md) | la disciplina del confine, da chi lo attraversa e da chi lo presta | 6 | 2 |
 | **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio va scomposto **prima** di ciò che gli atterra sopra | 3 | — |
@@ -112,7 +114,7 @@ messaggio arrivato.
 
 ## Le voci
 
-Sessantasette. Il numero è quello con cui le nomina il resto del repo.
+Sessantadue. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -160,11 +162,6 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
-| **§5.1** | [Sette varianti su nove di `IndexQuery` non arrivano a nessun provider](roadmap/05-il-canale-dati.md#51-sette-varianti-su-nove-di-indexquery-non-arrivano-a-nessun-provider) | 5. Il canale dati: chi risponde, e chi instrada | kernel | **P1** |
-| **§5.2** | [Il dispatch delle query è per tentativi](roadmap/05-il-canale-dati.md#52-il-dispatch-delle-query-è-per-tentativi) | 5. Il canale dati: chi risponde, e chi instrada | kernel | **P0** |
-| **§5.3** | [La query è una stringa in un linguaggio di terzi](roadmap/05-il-canale-dati.md#53-la-query-è-una-stringa-in-un-linguaggio-di-terzi) | 5. Il canale dati: chi risponde, e chi instrada | kernel | **P0** |
-| **§5.4** | [La query non esiste sull'IPC](roadmap/05-il-canale-dati.md#54-la-query-non-esiste-sullipc) | 5. Il canale dati: chi risponde, e chi instrada | kernel | **P1** |
-| **§5.5** | [`list_documents` e `views()` — le metà nel contratto di §14.4 e delle istanze](roadmap/05-il-canale-dati.md#55-list_documents-e-views--le-metà-nel-contratto-di-144-e-delle-istanze) | 5. Il canale dati: chi risponde, e chi instrada | contratto | **P0** |
 | **§6.1** | [Le regole che il contratto promette vivono nel kernel, private](roadmap/06-le-regole-in-un-posto-solo.md#61-le-regole-che-il-contratto-promette-vivono-nel-kernel-private) | 6. Le regole in un posto solo | contratto | **P1** |
 | **§6.2** | [I *tipi* al confine hanno un presidio; le *regole* no](roadmap/06-le-regole-in-un-posto-solo.md#62-i-tipi-al-confine-hanno-un-presidio-le-regole-no) | 6. Le regole in un posto solo | presidi | **P1** |
 | **§7.1** | [Una capacità dell'`HostApi` si implementa quattro volte a mano](roadmap/07-il-confine.md#71-una-capacità-dellhostapi-si-implementa-quattro-volte-a-mano) | 7. Il confine: quante volte si scrive la disciplina | contratto | **P0** |
@@ -234,7 +231,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — diciotto, uno per
+- [I verbali delle decisioni chiuse](decisions/README.md) — diciannove, uno per
   file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

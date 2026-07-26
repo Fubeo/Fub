@@ -32,39 +32,8 @@ use std::collections::BTreeMap;
 
 use fubmd_abi::model::{DocId, Frontmatter, PropertyDate, PropertyScalar, PropertyValue};
 use fubmd_abi::traits::{
-    DocumentProperties, PropertyCount, PropertyEntry, PropertyFilter, PropertySort, PropertyTest,
+    PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertyTest,
 };
-
-/// I documenti che passano tutti i filtri, con le proprietà chieste.
-///
-/// `select` vuoto = tutto il frontmatter. L'ordine è quello di `sort` se c'è,
-/// altrimenti quello dei `DocId`.
-pub fn query<'a>(
-    docs: impl Iterator<Item = (&'a DocId, &'a Frontmatter)>,
-    filter: &[PropertyFilter],
-    sort: Option<&PropertySort>,
-    select: &[String],
-) -> Vec<DocumentProperties> {
-    let mut matching: Vec<(&DocId, &Frontmatter)> =
-        docs.filter(|(_, fm)| matches(fm, filter)).collect();
-
-    match sort {
-        None => matching.sort_by_key(|(id, _)| *id),
-        Some(sort) => matching.sort_by(|(a_id, a_fm), (b_id, b_fm)| {
-            let a = a_fm.property(&sort.key);
-            let b = b_fm.property(&sort.key);
-            order_of(a.as_ref(), b.as_ref(), sort.descending).then_with(|| a_id.cmp(b_id))
-        }),
-    }
-
-    matching
-        .into_iter()
-        .map(|(id, fm)| DocumentProperties {
-            doc: id.clone(),
-            properties: entries(fm, select),
-        })
-        .collect()
-}
 
 /// I valori distinti di una proprietà fra i documenti che passano i filtri, coi
 /// rispettivi conteggi: le faccette. In ordine di frequenza decrescente, poi
@@ -73,13 +42,12 @@ pub fn query<'a>(
 pub fn facets<'a>(
     docs: impl Iterator<Item = (&'a DocId, &'a Frontmatter)>,
     key: &str,
-    filter: &[PropertyFilter],
 ) -> Vec<PropertyCount> {
     // Chiave di raggruppamento: la serializzazione del valore normalizzato. Un
     // `PropertyValue` porta un `f64`, quindi non è `Hash` né `Ord`; la sua forma
     // JSON sì, ed è la stessa che attraversa il confine.
     let mut counts: BTreeMap<String, (PropertyValue, u32)> = BTreeMap::new();
-    for (_, fm) in docs.filter(|(_, fm)| matches(fm, filter)) {
+    for (_, fm) in docs {
         let Some(value) = fm.property(key) else {
             continue;
         };
@@ -109,12 +77,13 @@ pub fn facets<'a>(
         .collect()
 }
 
-/// Il frontmatter passa **tutti** i filtri? (vuoto = sì)
-fn matches(fm: &Frontmatter, filter: &[PropertyFilter]) -> bool {
-    filter.iter().all(|f| test(fm, f))
-}
-
-fn test(fm: &Frontmatter, filter: &PropertyFilter) -> bool {
+/// Il frontmatter passa questa prova?
+///
+/// È la foglia [`QueryPredicate::Property`](fubmd_abi::query::QueryPredicate::Property)
+/// valutata: prima era dentro un filtro in AND che solo questo modulo sapeva
+/// applicare, adesso è una funzione che il linguaggio chiama una volta per
+/// letterale — e l'AND, l'OR e la negazione stanno nel contratto.
+pub fn test(fm: &Frontmatter, filter: &PropertyFilter) -> bool {
     let value = fm.property(&filter.key);
     match (&filter.test, value) {
         (PropertyTest::Exists, v) => v.is_some(),
@@ -164,7 +133,11 @@ fn compare(a: &PropertyValue, b: &PropertyValue) -> Option<Ordering> {
 /// L'ordine fra due documenti secondo la chiave di ordinamento: chi non ha la
 /// chiave, o ha un valore non confrontabile, finisce **in fondo** in entrambi i
 /// versi.
-fn order_of(a: Option<&PropertyValue>, b: Option<&PropertyValue>, descending: bool) -> Ordering {
+pub fn order_of(
+    a: Option<&PropertyValue>,
+    b: Option<&PropertyValue>,
+    descending: bool,
+) -> Ordering {
     match (a, b) {
         (None, None) => Ordering::Equal,
         (None, Some(_)) => Ordering::Greater,
@@ -213,17 +186,21 @@ fn days_from_civil(year: i64, month: u8, day: u8) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// Le proprietà da restituire, in ordine di chiave. `select` vuoto = tutte;
-/// una chiave chiesta e assente non compare (l'assenza è un fatto, non un
-/// valore da inventare).
-fn entries(fm: &Frontmatter, select: &[String]) -> Vec<PropertyEntry> {
-    let mut entries: Vec<PropertyEntry> = if select.is_empty() {
-        fm.properties()
+/// Le proprietà da restituire, in ordine di chiave. Una chiave chiesta e
+/// assente non compare: l'assenza è un fatto, non un valore da inventare.
+pub fn entries(fm: &Frontmatter, select: &PropertySelect) -> Vec<PropertyEntry> {
+    let select = match select {
+        PropertySelect::None => return Vec::new(),
+        PropertySelect::All => None,
+        PropertySelect::Keys { keys } => Some(keys),
+    };
+    let mut entries: Vec<PropertyEntry> = match select {
+        None => fm
+            .properties()
             .into_iter()
             .map(|(key, value)| PropertyEntry { key, value })
-            .collect()
-    } else {
-        select
+            .collect(),
+        Some(keys) => keys
             .iter()
             .filter_map(|key| {
                 fm.property(key).map(|value| PropertyEntry {
@@ -231,7 +208,7 @@ fn entries(fm: &Frontmatter, select: &[String]) -> Vec<PropertyEntry> {
                     value,
                 })
             })
-            .collect()
+            .collect(),
     };
     entries.sort_by(|a, b| a.key.cmp(&b.key));
     entries
@@ -241,6 +218,8 @@ fn entries(fm: &Frontmatter, select: &[String]) -> Vec<PropertyEntry> {
 mod tests {
     use super::*;
     use fubmd_abi::model::PropertyTime;
+    use fubmd_abi::query::Matches;
+    use fubmd_abi::traits::{DocumentMatch, PropertySort};
 
     fn fm(json: serde_json::Value) -> Frontmatter {
         Frontmatter(json.as_object().expect("oggetto").clone())
@@ -264,17 +243,32 @@ mod tests {
         ]
     }
 
-    fn ids(rows: &[DocumentProperties]) -> Vec<&str> {
+    fn ids(rows: &[DocumentMatch]) -> Vec<&str> {
         rows.iter().map(|r| r.doc.as_str()).collect()
     }
 
+    /// Il giro completo come lo fa il kernel: i filtri sono letterali in AND
+    /// (valutati da [`test`]), e ordine, colonne e finestra li mette
+    /// [`crate::index::plan::finish`]. Passa da lì e non da una composizione
+    /// locale perché è **quella** la composizione che gira in produzione.
     fn run(
         filter: &[PropertyFilter],
         sort: Option<&PropertySort>,
-        select: &[String],
-    ) -> Vec<DocumentProperties> {
+        select: &PropertySelect,
+    ) -> Vec<DocumentMatch> {
         let vault = vault();
-        query(vault.iter().map(|(id, fm)| (id, fm)), filter, sort, select)
+        let matches: Matches = vault
+            .iter()
+            .filter(|(_, fm)| filter.iter().all(|f| test(fm, f)))
+            .map(|(id, _)| DocumentMatch::of(id.clone()))
+            .collect();
+        crate::index::plan::finish(matches, sort, select, None, |id| {
+            vault
+                .iter()
+                .find(|(other, _)| other == id)
+                .map(|(_, fm)| fm)
+        })
+        .items
     }
 
     fn filter(key: &str, test: PropertyTest) -> PropertyFilter {
@@ -298,11 +292,15 @@ mod tests {
                 ),
             ],
             None,
-            &[],
+            &PropertySelect::None,
         );
         assert_eq!(ids(&rows), vec!["b.md"]);
 
-        let rows = run(&[filter("assente", PropertyTest::Missing)], None, &[]);
+        let rows = run(
+            &[filter("assente", PropertyTest::Missing)],
+            None,
+            &PropertySelect::None,
+        );
         assert_eq!(ids(&rows), vec!["a.md", "b.md", "c.md"]);
 
         let rows = run(
@@ -311,7 +309,7 @@ mod tests {
                 PropertyTest::NotEquals(PropertyValue::Text("x".into())),
             )],
             None,
-            &[],
+            &PropertySelect::None,
         );
         assert!(
             rows.is_empty(),
@@ -329,7 +327,7 @@ mod tests {
                 PropertyTest::LessThan(PropertyValue::Number(5.0)),
             )],
             None,
-            &[],
+            &PropertySelect::None,
         );
         assert_eq!(ids(&rows), vec!["a.md"]);
     }
@@ -342,7 +340,7 @@ mod tests {
                 PropertyTest::Contains(PropertyScalar::Text("lucia".into())),
             )],
             None,
-            &[],
+            &PropertySelect::None,
         );
         assert_eq!(ids(&rows), vec!["a.md"], "appartenenza all'elenco");
 
@@ -352,7 +350,7 @@ mod tests {
                 PropertyTest::Contains(PropertyScalar::Text("TAN".into())),
             )],
             None,
-            &[],
+            &PropertySelect::None,
         );
         assert_eq!(ids(&rows), vec!["c.md"], "sottostringa, maiuscole a parte");
     }
@@ -363,7 +361,7 @@ mod tests {
             key: "autore".to_string(),
             descending: false,
         };
-        let rows = run(&[], Some(&sort), &[]);
+        let rows = run(&[], Some(&sort), &PropertySelect::None);
         assert_eq!(
             ids(&rows).last(),
             Some(&"c.md"),
@@ -374,7 +372,7 @@ mod tests {
             key: "autore".to_string(),
             descending: true,
         };
-        let rows = run(&[], Some(&sort), &[]);
+        let rows = run(&[], Some(&sort), &PropertySelect::None);
         assert_eq!(ids(&rows).last(), Some(&"c.md"));
     }
 
@@ -386,7 +384,7 @@ mod tests {
             key: "tipo".to_string(),
             descending: false,
         };
-        let rows = run(&[], Some(&sort), &[]);
+        let rows = run(&[], Some(&sort), &PropertySelect::None);
         assert_eq!(ids(&rows), vec!["c.md", "a.md", "b.md"], "idea < nota");
     }
 
@@ -395,7 +393,7 @@ mod tests {
         let rows = run(
             &[filter("tipo", PropertyTest::Exists)],
             None,
-            &["peso".to_string(), "assente".to_string()],
+            &PropertySelect::keys(&["peso", "assente"]),
         );
         let keys: Vec<&str> = rows[0].properties.iter().map(|p| p.key.as_str()).collect();
         assert_eq!(
@@ -408,7 +406,7 @@ mod tests {
     #[test]
     fn a_facet_counts_every_element_of_a_list() {
         let vault = vault();
-        let facets = facets(vault.iter().map(|(id, fm)| (id, fm)), "autore", &[]);
+        let facets = facets(vault.iter().map(|(id, fm)| (id, fm)), "autore");
         let seen: Vec<(String, u32)> = facets
             .iter()
             .map(|f| match &f.value {
@@ -423,14 +421,22 @@ mod tests {
         );
     }
 
+    /// Le faccette si contano sul **sottoinsieme già selezionato**, o la
+    /// navigazione per faccette non converge mai. Chi seleziona non è più un
+    /// campo `filter` di questa funzione: è l'espressione della query, e a
+    /// valutarla è chi la possiede — qui il sottoinsieme arriva già scelto.
     #[test]
-    fn facets_count_on_the_already_filtered_subset() {
+    fn facets_count_on_the_already_selected_subset() {
         let vault = vault();
         let only_b = [filter(
             "peso",
             PropertyTest::GreaterThan(PropertyValue::Number(5.0)),
         )];
-        let facets = facets(vault.iter().map(|(id, fm)| (id, fm)), "autore", &only_b);
+        let selected = vault
+            .iter()
+            .filter(|(_, fm)| only_b.iter().all(|f| test(fm, f)))
+            .map(|(id, fm)| (id, fm));
+        let facets = facets(selected, "autore");
         assert_eq!(facets.len(), 1);
         assert_eq!(facets[0].count, 1, "solo b.md è nel sottoinsieme");
     }

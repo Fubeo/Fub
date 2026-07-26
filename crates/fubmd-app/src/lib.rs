@@ -13,10 +13,7 @@ use fubmd_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::event::Actor;
 use fubmd_abi::model::DocId;
 use fubmd_abi::session::ViewContext;
-use fubmd_abi::traits::{
-    BacklinkRef, IndexQuery, IndexResult, LinkDirection, Page, SearchHit, TagCount, ViewInstance,
-    ViewSpec,
-};
+use fubmd_abi::traits::{IndexQuery, IndexResult, ViewInstance, ViewSpec};
 use fubmd_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
     BacklinksView, CoreCommands, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer,
@@ -441,13 +438,6 @@ fn render_preview(state: State<AppState>, id: String) -> Result<RenderedDocument
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-fn backlinks(state: State<AppState>, id: String) -> Result<Vec<BacklinkRef>, String> {
-    let ws = current(&state)?;
-    let ws = ws.lock().unwrap();
-    Ok(ws.backlinks(&DocId::new(id)))
-}
-
 // --- view dichiarative (protocollo generico) -------------------------------
 //
 // Il canale core→UI dei `ViewProvider`: la shell chiede l'albero di una view e
@@ -605,48 +595,24 @@ fn invoke_command(
     .map_err(|e| e.to_string())
 }
 
-/// Ricerca full-text sul vault.
+/// Il canale dati, **generico**: il gemello di `render_view`/`view_action`.
 ///
-/// `snippet` è testo semplice e `highlights` sono intervalli in byte al suo
-/// interno: il frontend evidenzia con i propri elementi, senza mai interpretare
-/// come markup ciò che arriva da un provider (vedi `SearchHit`).
+/// Erano quattro comandi — `search`, `list_tags`, `graph_data` e `backlinks` —
+/// e i primi tre avvolgevano lo stesso `query_index` mentre il quarto lo
+/// **scavalcava**, chiamando il grafo del kernel diretto. Il problema non era la
+/// ripetizione: era che un provider può fare qualunque query e la shell no, e
+/// che ogni variante nuova del canale dati avrebbe richiesto un comando in più.
+///
+/// Con questo comando la shell ha le stesse capacità di un plugin: il grafo
+/// smette di avere un canale privilegiato, i backlink smettono di avere il
+/// proprio, e la dieta dell'IPC (§16.6) diventa praticabile — un'allowlist che
+/// vieta i comandi bespoke non deve più dire di no a feature che non hanno altra
+/// strada.
 #[tauri::command]
-fn search(
-    state: State<AppState>,
-    query: String,
-    limit: Option<u32>,
-) -> Result<Vec<SearchHit>, String> {
+fn query_index(state: State<AppState>, query: IndexQuery) -> Result<IndexResult, String> {
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
-    let q = IndexQuery::FullText {
-        query,
-        // Tutto il vault: l'ambito (cartella, tag) è nel contratto e lo esercita
-        // l'indice; la shell non ha ancora un modo di chiederlo all'utente.
-        scope: Default::default(),
-        page: Some(Page::first(limit.unwrap_or(50))),
-    };
-    match ws.query_index(q).map_err(|e| e.to_string())? {
-        // `total` resta all'indice finché la UI non mostra "1-20 di N": qui
-        // passa la sola pagina, che è ciò che il pannello disegna.
-        IndexResult::Search(hits) => Ok(hits.items),
-        other => Err(format!("l'indice ha risposto fuori tema: {other:?}")),
-    }
-}
-
-/// I tag del vault con la loro frequenza, per l'autocompletamento `#` in
-/// editor. Il kernel risponde da uno snapshot incrementale (canale metadata,
-/// come l'outline): chiederli a ogni popup è economico, niente cache lato UI.
-#[tauri::command]
-fn list_tags(state: State<AppState>) -> Result<Vec<TagCount>, String> {
-    let ws = current(&state)?;
-    let ws = ws.lock().unwrap();
-    match ws
-        .query_index(IndexQuery::Tags { page: None })
-        .map_err(|e| e.to_string())?
-    {
-        IndexResult::Tags(tags) => Ok(tags.items),
-        other => Err(format!("l'indice ha risposto fuori tema: {other:?}")),
-    }
+    ws.query_index(query).map_err(|e| e.to_string())
 }
 
 // --- versioning ------------------------------------------------------------
@@ -751,72 +717,6 @@ fn write_workspace_meta(state: State<AppState>, meta: WorkspaceMeta) -> Result<(
     std::fs::write(&path, json).map_err(|e| format!("non riesco a scrivere {path}: {e}"))
 }
 
-// --- graph-data --------------------------------------------------------------
-//
-// L'ultima view di M2, e l'unica FUORI da `UiNode`: un grafo force-directed è
-// Canvas, e il protocollo dichiarativo non lo esprime (né deve: è la
-// superficie privilegiata dichiarata nel piano). Da qui esce solo DATO —
-// nodi e archi — e il renderer vive nel frontend.
-//
-// Il grafo però è entrato nel contratto (decisione 0005: `IndexQuery::Neighbors`), e
-// questo comando ne è il **primo cliente**: gli archi li chiede una nota alla
-// volta al canale dati, con le stesse capacità che avrà una vista a grafo di
-// terzi. Prima li prendeva da `Workspace::outgoing`, che è una scorciatoia che
-// un plugin non ha — cioè la definizione di superficie privilegiata.
-
-/// Un arco del grafo: `from` linka `to` (wikilink risolto).
-#[derive(Serialize)]
-pub struct GraphEdge {
-    pub from: String,
-    pub to: String,
-}
-
-/// Il grafo del vault: nodi = documenti indicizzati, archi = wikilink
-/// risolti, deduplicati (la molteplicità non disegna nulla). Rispecchiato da
-/// `GraphData` in `frontend/src/host/contract.ts` (fixture di `tests/ts_mirror_app.rs`).
-#[derive(Serialize)]
-pub struct GraphData {
-    pub nodes: Vec<String>,
-    pub edges: Vec<GraphEdge>,
-}
-
-#[tauri::command]
-fn graph_data(state: State<AppState>) -> Result<GraphData, String> {
-    let ws = current(&state)?;
-    let ws = ws.lock().unwrap();
-    let docs = ws.documents();
-    let mut seen = std::collections::BTreeSet::new();
-    let mut edges = Vec::new();
-    for from in &docs {
-        // Adiacenza pura: un passo, verso uscente. A `depth: 1` il `via` di ogni
-        // vicino è il documento interrogato, cioè l'arco è (from → doc).
-        let neighbors = match ws
-            .query_index(IndexQuery::Neighbors {
-                doc: from.clone(),
-                direction: LinkDirection::Outbound,
-                depth: 1,
-                page: None,
-            })
-            .map_err(|e| e.to_string())?
-        {
-            IndexResult::Neighbors(n) => n.items,
-            other => return Err(format!("il grafo ha risposto fuori tema: {other:?}")),
-        };
-        for neighbor in neighbors {
-            if seen.insert((from.clone(), neighbor.doc.clone())) {
-                edges.push(GraphEdge {
-                    from: from.0.clone(),
-                    to: neighbor.doc.0,
-                });
-            }
-        }
-    }
-    Ok(GraphData {
-        nodes: docs.into_iter().map(|d| d.0).collect(),
-        edges,
-    })
-}
-
 #[tauri::command]
 fn resolve_link(state: State<AppState>, page: String) -> Result<Option<String>, String> {
     let ws = current(&state)?;
@@ -838,16 +738,13 @@ pub fn run() {
             propose_free_name,
             render_preview,
             render_embed,
-            backlinks,
             set_active_context,
             list_views,
             render_view,
             view_action,
             list_commands,
             invoke_command,
-            search,
-            list_tags,
-            graph_data,
+            query_index,
             resolve_link,
             list_versions,
             read_version,
