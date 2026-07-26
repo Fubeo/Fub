@@ -91,6 +91,22 @@ pub trait HostApi: Send + Sync {
     ///
     /// [`Event::VaultOpened`]: crate::Event::VaultOpened
     fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
+    /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
+    /// a partire da un id qualsiasi. Se l'id è già libero, è lui.
+    ///
+    /// È una capacità e non un calcolo perché il vault è l'unico a sapere cosa
+    /// è occupato — l'indicizzato **e** ciò che sta sul disco e nessuno ha
+    /// ancora visto — e perché la convenzione dei nomi (D3) deve restare una
+    /// sola: la usano `create_note`, il ripristino dal cestino e ogni
+    /// [`ImportProvider`](crate::transfer::ImportProvider) che risolva un
+    /// conflitto con
+    /// [`ConflictPolicy::Rename`](crate::transfer::ConflictPolicy::Rename).
+    /// Con ~50 importer in FEATURES 17.1, l'alternativa è cinquanta
+    /// convenzioni.
+    ///
+    /// Non prenota niente: fra la domanda e la scrittura il nome può diventare
+    /// occupato, e a quel punto è la scrittura a dirlo.
+    fn free_name(&self, id: &DocId) -> DocId;
     /// Emette un evento sull'event bus.
     fn emit(&mut self, event: Event);
     /// Chiede l'esecuzione in background di un job ([`Plugin::run_job`]).

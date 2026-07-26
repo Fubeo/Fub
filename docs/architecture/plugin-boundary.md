@@ -115,6 +115,39 @@ all'host → un click torna come `on_action` e il provider risponde con un
 `ViewUpdate` (`Navigate` per i backlink), che la shell esegue. La prova end-to-end
 attraverso il kernel vero è `crates/fubmd-features/tests/backlinks_view_e2e.rs`.
 
+## Import ed export: il confine è di byte, non di path (deciso)
+
+Il capitolo 17 di FEATURES (~120 voci) è, in ogni altra applicazione, quello che
+il filesystem lo tocca più di tutti: aprire uno zip, leggere una cartella,
+scrivere un sito statico. Qui **nessuna delle due firme nomina un percorso**:
+
+- `ImportProvider::import(source, request, host)` riceve
+  `ImportSource { name, media_type, bytes }` — la sorgente **già letta**. Il
+  `name` è quello che l'utente conosce (`vault.zip`), non un path: viene da
+  fuori, e `ImportSource::stem()` lo riduce a un componente solo perché
+  `../../.ssh/config.md` non diventi una scrittura fuori dal vault.
+- `ExportProvider::export(request, host)` restituisce
+  `ExportArtifact { path, media_type, bytes }`, dove `path` è il posto **dentro
+  l'esito** (un albero relativo), non sul disco.
+
+Chi apre il dialogo di sistema e chi posa i byte è **l'host**, che è già l'unico
+a sapere dove sia il vault. La conseguenza è che import ed export non chiedono
+nessuna capacità nuova all'`HostApi` oltre a `free_name` (la convenzione dei nomi
+sui conflitti), e che a M5 la sandbox **non deve concedere niente**: la riga
+"Filesystem: nessun accesso diretto" resta vera senza eccezioni.
+
+Il prezzo è dichiarato: sorgente e artefatti stanno in memoria. Un export di
+vault enorme è lavoro lungo, e il lavoro lungo non vede ancora il vault (§1.21
+del piano); ma la firma non lo preclude — uno `stream` al confine è additivo, un
+`path: string` sarebbe stato una porta aperta da richiudere con una major.
+
+**Il recinto, dove sta.** `KernelHost::read_document`/`write_document` validano
+il `DocId` con la stessa regola dei comandi IPC (`valid_doc_id`) e rispondono
+`PermissionDenied` a una risalita — lo stesso errore di `data_*`. Il controllo
+sta sul confine delle capacità e non dentro i provider: `ImportSource::stem()`
+serve a non finirci contro per distrazione, il recinto serve perché non ci si
+possa andare apposta (`fubmd-kernel/tests/transfer_dispatch.rs`).
+
 ## Lavoro lungo: i job (deciso)
 
 I trait sono sincroni e il `Workspace` vive dietro un lock: **qualunque cosa
@@ -219,6 +252,10 @@ al frontend/all'IPC.
 - **Filesystem:** nessun accesso diretto; i documenti passano da
   `read_document`/`write_document`/`list_documents`, quindi soggetti a booleani
   + `vault_scope`; i dati del plugin passano da `data_*`, dentro al suo spazio.
+  **Import ed export non fanno eccezione**, ed è una proprietà della firma e non
+  della buona volontà: una sorgente da importare arriva già letta
+  (`ImportSource.bytes`) e un export esce come `ExportArtifact.bytes` — vedi
+  "Import ed export" sotto.
 - **Storage per-plugin:** deciso e implementato, vedi "Storage" sopra —
   `storage_get/set` volatile a chiave, `data_*` persistente a blob dentro
   `.fubmd-data/plugins/<id>/`.
@@ -242,7 +279,8 @@ al frontend/all'IPC.
    componente).
 2. Mostra/richiede i permessi; costruisce un `HostApi` **con i permessi applicati**.
 3. Chiama `Plugin::activate(host)`; il plugin registra i suoi provider
-   (`Command`/`View`/`Index`/`EventHandler`) presso il registry del kernel.
+   (`Command`/`View`/`Index`/`EventHandler`/`Import`/`Export`) presso il
+   registry del kernel.
 4. Alla disattivazione, `Plugin::deactivate(host)` e deregistrazione.
 
 Il **primo plugin nativo** (M4) esercita esattamente questo percorso senza WASM,

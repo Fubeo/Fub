@@ -54,6 +54,10 @@ use fubmd_abi::traits::{
     BacklinkRef, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
     Paged, ViewProvider, ViewSpec,
 };
+use fubmd_abi::transfer::{
+    ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
+    ImportRequest, ImportSource,
+};
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{Event, PluginError};
 
@@ -182,6 +186,13 @@ pub struct Workspace {
     /// l'[`HostApi`] concede all'indice: è lì che un indice si ricorda di ciò
     /// che ha già visto.
     indexes: Vec<(String, Box<dyn IndexProvider>)>,
+    /// Provider di import, interpellati **in ordine**: il primo che riconosce
+    /// una sorgente la prende (vedi [`Workspace::import`]). Come per handler e
+    /// indici, l'id è lo spazio dati che l'[`HostApi`] concede al provider.
+    imports: Vec<(String, Box<dyn ImportProvider>)>,
+    /// Provider di export. Non hanno un ordine che conta: una richiesta nomina
+    /// una destinazione, e la destinazione ha un proprietario solo.
+    exports: Vec<(String, Box<dyn ExportProvider>)>,
     /// View dichiarative registrate, col grado di fiducia di chi le produce.
     /// Ogni albero di UI che entra nell'host passa da qui: è il punto unico in
     /// cui [`UiNode::validate_untrusted`] viene applicato.
@@ -234,6 +245,8 @@ impl Workspace {
             bus: EventBus::new(),
             handlers: Vec::new(),
             indexes: Vec::new(),
+            imports: Vec::new(),
+            exports: Vec::new(),
             views: Vec::new(),
             pending: VecDeque::new(),
             dispatching: false,
@@ -1330,6 +1343,107 @@ impl Workspace {
         self.views.extend(registered_meanwhile);
     }
 
+    // --- import ed export ---------------------------------------------------
+    //
+    // Il kernel non sa cosa sia un formato di scambio: sa scegliere chi lo sa e
+    // prestargli le capacità. Vedi `fubmd_abi::transfer`.
+
+    /// Registra un [`ImportProvider`] sotto un id. L'ordine di registrazione è
+    /// l'ordine in cui i provider vengono interpellati da
+    /// [`import`](Workspace::import).
+    ///
+    /// Come per gli altri provider, `id` è un nome semplice e determina lo
+    /// spazio dati (`.fubmd-data/plugins/<id>/`).
+    pub fn register_import_provider(&mut self, id: impl Into<String>, p: Box<dyn ImportProvider>) {
+        self.imports.push((id.into(), p));
+    }
+
+    /// Registra un [`ExportProvider`] sotto un id.
+    pub fn register_export_provider(&mut self, id: impl Into<String>, p: Box<dyn ExportProvider>) {
+        self.exports.push((id.into(), p));
+    }
+
+    /// Fa entrare una sorgente esterna nel vault, col **primo** provider
+    /// registrato che la riconosce.
+    ///
+    /// Il dispatch è lo stesso di `query_index` visto da vicino: interpellare in
+    /// ordine e fermarsi al primo che risponde. Qui però la domanda «è roba
+    /// tua?» è esplicita ([`ImportProvider::can_handle`]) invece di essere
+    /// dedotta da un `BadArgs`, perché una sorgente si può riconoscere **senza**
+    /// provare a importarla — e provare, per un import, vuol dire scrivere.
+    ///
+    /// Nessun provider la riconosce → `BadArgs`: il kernel non ha un formato di
+    /// riserva, e fingere di averlo produrrebbe note vuote.
+    ///
+    /// Gli eventi che l'import genera (una `DocumentChanged` per documento,
+    /// oggi) arrivano **dopo** che la chiamata del provider è tornata, come per
+    /// ogni altro callback in scrittura. Che siano N e non uno è il debito del
+    /// §1.12 (il lotto), non una scelta di qui.
+    pub fn import(
+        &mut self,
+        source: &ImportSource,
+        request: &ImportRequest,
+    ) -> std::result::Result<ImportReport, PluginError> {
+        let at = self
+            .imports
+            .iter()
+            .position(|(_, p)| p.can_handle(source))
+            .ok_or_else(|| {
+                PluginError::BadArgs(format!(
+                    "nessun ImportProvider registrato riconosce `{}`",
+                    source.name
+                ))
+            })?;
+        // Stessa disciplina di `view_action`: i provider escono dal workspace
+        // per la durata della chiamata (così `KernelHost` può prestare
+        // `&mut Workspace`), e chi si registra nel frattempo si accoda in fondo.
+        let mut imports = std::mem::take(&mut self.imports);
+        let report = self.with_provider_call(|ws| {
+            let (id, provider) = &mut imports[at];
+            let mut host = KernelHost { ws, plugin: id };
+            provider.import(source, request, &mut host)
+        });
+        let registered_meanwhile = std::mem::take(&mut self.imports);
+        self.imports = imports;
+        self.imports.extend(registered_meanwhile);
+        self.dispatch_pending();
+        report
+    }
+
+    /// Le destinazioni di export offerte dai provider registrati.
+    pub fn export_targets(&self) -> Vec<ExportTarget> {
+        self.exports.iter().flat_map(|(_, p)| p.targets()).collect()
+    }
+
+    /// Esporta secondo la richiesta, col provider che possiede la destinazione.
+    ///
+    /// Prende `&self`, come [`render_view`](Workspace::render_view) e per la
+    /// stessa ragione: un export è una lettura, e le letture girano sotto
+    /// prestito condiviso invece di mettersi in fila dietro una scrittura. Il
+    /// provider non viene quindi estratto dal workspace e durante l'export vede
+    /// il mondo intero — indici compresi, che è ciò che serve a una selezione
+    /// per query.
+    pub fn export(
+        &self,
+        request: &ExportRequest,
+    ) -> std::result::Result<ExportReport, PluginError> {
+        let (id, provider) = self
+            .exports
+            .iter()
+            .find(|(_, p)| p.targets().iter().any(|t| t.id == request.target))
+            .ok_or_else(|| {
+                PluginError::BadArgs(format!(
+                    "destinazione di export ignota: `{}`",
+                    request.target
+                ))
+            })?;
+        let host = ReadHost {
+            ws: self,
+            plugin: id,
+        };
+        provider.export(request, &host)
+    }
+
     // --- eventi ------------------------------------------------------------
 
     /// Unico punto di emissione: ponte verso i subscriber esterni + coda per
@@ -1558,6 +1672,21 @@ pub fn valid_doc_id(name: &str) -> Result<DocId> {
     Ok(DocId::new(pulito))
 }
 
+/// Il [`DocId`] con cui un **plugin** può nominare un documento, o
+/// `PermissionDenied`.
+///
+/// È [`valid_doc_id`] applicata sul confine delle capacità: stessa regola dei
+/// comandi IPC, altro varco. L'errore è `PermissionDenied` e non `BadArgs`
+/// perché è la stessa risposta che `data_*` dà a una risalita — per chi la
+/// riceve, i due recinti si comportano allo stesso modo.
+fn fenced_doc_id(id: &DocId) -> std::result::Result<DocId, PluginError> {
+    valid_doc_id(id.as_str()).map_err(|_| {
+        PluginError::PermissionDenied(format!(
+            "`{id}`: un documento si nomina con un path relativo dentro il vault"
+        ))
+    })
+}
+
 /// La validazione del confine di fiducia della UI, in un posto solo.
 ///
 /// Da un provider fidato passa tutto; da uno non fidato l'albero deve essere
@@ -1612,19 +1741,32 @@ struct KernelHost<'a> {
 
 impl HostApi for KernelHost<'_> {
     fn read_document(&self, id: &DocId) -> std::result::Result<String, PluginError> {
+        let id = fenced_doc_id(id)?;
         self.ws
-            .read_source(id)
+            .read_source(&id)
             .map_err(|e| PluginError::Internal(e.to_string()))
     }
 
     fn write_document(&mut self, id: &DocId, source: &str) -> std::result::Result<(), PluginError> {
+        // Il recinto del vault, sul confine dei plugin e in un punto solo. Fino
+        // al §1.7 l'unico input esterno che diventava un `DocId` arrivava dai
+        // comandi IPC, che lo sanitizzano; un `ImportProvider` invece nomina i
+        // documenti a partire dal **nome di una sorgente**, cioè da una stringa
+        // che l'utente non ha scritto (un'entrata di zip, un campo di JSON).
+        // `../../.ssh/authorized_keys` non è un `DocId` fantasma: è una
+        // scrittura fuori dal vault.
+        let id = fenced_doc_id(id)?;
         self.ws
-            .write_document(id, source)
+            .write_document(&id, source)
             .map_err(|e| PluginError::Internal(e.to_string()))
     }
 
     fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
         Ok(self.ws.documents())
+    }
+
+    fn free_name(&self, id: &DocId) -> DocId {
+        self.ws.free_name(id)
     }
 
     fn emit(&mut self, event: Event) {
@@ -1727,8 +1869,9 @@ impl ReadHost<'_> {
 
 impl HostApi for ReadHost<'_> {
     fn read_document(&self, id: &DocId) -> std::result::Result<String, PluginError> {
+        let id = fenced_doc_id(id)?;
         self.ws
-            .read_source(id)
+            .read_source(&id)
             .map_err(|e| PluginError::Internal(e.to_string()))
     }
 
@@ -1742,6 +1885,10 @@ impl HostApi for ReadHost<'_> {
 
     fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
         Ok(self.ws.documents())
+    }
+
+    fn free_name(&self, id: &DocId) -> DocId {
+        self.ws.free_name(id)
     }
 
     fn emit(&mut self, _event: Event) {

@@ -9,6 +9,8 @@
 //! - il trait centrale [`format::FormatProvider`];
 //! - gli altri **trait di estensione** ([`traits`]): comandi, view (UI dichiarativa),
 //!   index (ricerca/backlink), event handler, ciclo di vita del plugin;
+//! - i trait di **import ed export** ([`transfer`]): come i dati entrano nel
+//!   vault e come ne escono, a byte e non a path;
 //! - il protocollo di **UI dichiarativa** ([`ui`]) e gli **eventi** ([`event`]).
 //!
 //! **Invariante:** nessuna dipendenza da markdown, tauri, wasmtime o tokio.
@@ -22,6 +24,7 @@ pub mod format;
 pub mod ipc;
 pub mod model;
 pub mod traits;
+pub mod transfer;
 pub mod ui;
 
 // Re-export dei tipi più usati, per import ergonomici.
@@ -38,5 +41,10 @@ pub use traits::{
     HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page,
     Paged, Plugin, PluginManifest, PropertyCount, PropertyEntry, PropertyFilter, PropertySort,
     PropertyTest, SearchHit, SearchScope, ViewProvider, ViewSpec,
+};
+pub use transfer::{
+    ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
+    ExportTarget, ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest,
+    ImportSource, ImportedDocument, NoteLevel, TransferNote,
 };
 pub use ui::{ActionId, UiAction, UiNode, ViewUpdate};

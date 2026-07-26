@@ -128,6 +128,18 @@ oggi, una migrazione domani); le altre restano al freeze.
       comando `graph_data` non è più superficie privilegiata: è il **primo
       cliente** della variante, e prende gli archi una nota alla volta come farà
       una vista a grafo di terzi.
+- [x] **Import ed export nel contratto** — fatto col §1.7:
+      `ImportProvider`/`ExportProvider` in `abi/transfer.rs`, con
+      `MarkdownImport`/`MarkdownExport` come **primo cliente** vero attraverso
+      il kernel. La decisione che il freeze avrebbe reso definitiva è la forma
+      della sorgente: **byte, non path** (`ImportSource.bytes`,
+      `ExportArtifact.bytes`), che è ciò per cui il capitolo 17 non chiede
+      nessuna capacità filesystem e la sandbox di M5 non deve concedere niente.
+      Con essa: `ImportMode::Preview` invece di un `MigrationPlan` gemello, e
+      `HostApi::free_name` — una capacità in più nell'elenco del §1.4, trovata
+      da un cliente vero. Restano aperti sopra questa firma il §1.12 (rollback e
+      lotto), il §1.21 (l'import come lavoro lungo) e il §1.28 (il modello a un
+      exporter).
 - [ ] **Operazioni strutturali e parità plugin↔nativo**: rename,
       `create_note`, cestino sono kernel-owned e fuori da `HostApi` (scelta
       deliberata). Decidere se e quali esporre come capacità con permesso

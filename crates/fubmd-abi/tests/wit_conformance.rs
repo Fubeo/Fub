@@ -72,6 +72,11 @@ use fubmd_abi::traits::{
     PropertyCount, PropertyEntry, PropertyFilter, PropertySort, PropertyTest, SearchHit,
     SearchScope, TagCount, ViewPlacement, ViewProvider, ViewSpec, ABI_VERSION,
 };
+use fubmd_abi::transfer::{
+    ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
+    ExportTarget, ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest,
+    ImportSource, ImportedDocument, NoteLevel, TransferNote,
+};
 use fubmd_abi::ui::{ActionId, Axis, Intent, UiAction, UiNode, ViewUpdate};
 
 // CARGO_MANIFEST_DIR = crates/fubmd-abi ; il contratto è alla radice del repo.
@@ -213,6 +218,23 @@ wit_type! {
     HealthCheck => "health-check",
     HealthIssue => "health-issue",
 
+    // Import ed export: la sorgente arriva a byte e gli artefatti escono a
+    // byte, quindi al confine non compare nessun percorso di filesystem.
+    NoteLevel => "note-level",
+    TransferNote => "transfer-note",
+    ImportSource => "import-source",
+    ImportMode => "import-mode",
+    ConflictPolicy => "conflict-policy",
+    ImportRequest => "import-request",
+    ImportOutcome => "import-outcome",
+    ImportedDocument => "imported-document",
+    ImportReport => "import-report",
+    ExportTarget => "export-target",
+    ExportSelection => "export-selection",
+    ExportRequest => "export-request",
+    ExportArtifact => "export-artifact",
+    ExportReport => "export-report",
+
     // Le finestre: un solo `Paged<T>` in Rust, un record per istanza nel WIT
     // (i generici al confine non esistono). L'impl per ciascuna istanza è ciò
     // che rende impossibile paginarne una nuova senza dichiararla anche là.
@@ -234,6 +256,8 @@ wit_type! {
     dyn IndexProvider => SELF,
     dyn EventHandler => SELF,
     dyn Plugin => SELF,
+    dyn ImportProvider => SELF,
+    dyn ExportProvider => SELF,
 }
 
 impl<T: WitType + ?Sized> WitType for &T {
@@ -1491,6 +1515,46 @@ fn view_placement_name(p: ViewPlacement) -> &'static str {
     }
 }
 
+fn note_level_name(l: NoteLevel) -> &'static str {
+    match l {
+        NoteLevel::Info => "info",
+        NoteLevel::Warning => "warning",
+        NoteLevel::Error => "error",
+    }
+}
+
+fn import_mode_name(m: ImportMode) -> &'static str {
+    match m {
+        ImportMode::Preview => "preview",
+        ImportMode::Apply => "apply",
+    }
+}
+
+fn conflict_policy_name(p: ConflictPolicy) -> &'static str {
+    match p {
+        ConflictPolicy::Skip => "skip",
+        ConflictPolicy::Replace => "replace",
+        ConflictPolicy::Rename => "rename",
+    }
+}
+
+fn import_outcome_case(o: &ImportOutcome) -> Case {
+    match o {
+        ImportOutcome::Created => case("created"),
+        ImportOutcome::Replaced => case("replaced"),
+        ImportOutcome::Skipped => case("skipped"),
+        ImportOutcome::Failed(why) => case_ty("failed", wit(why)),
+    }
+}
+
+fn export_selection_case(s: &ExportSelection) -> Case {
+    match s {
+        ExportSelection::Documents(ids) => case_ty("documents", wit(ids)),
+        ExportSelection::Folder(f) => case_ty("folder", wit(f)),
+        ExportSelection::Query(q) => case_ty("query", wit(q)),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Il confronto vero e proprio
 // ---------------------------------------------------------------------------
@@ -1901,6 +1965,51 @@ fn conform(source: &str) -> Result<(), String> {
         ]
         .map(view_placement_name)
         .as_slice(),
+    );
+
+    contract.enumeration_src(
+        "note-level",
+        ("transfer.rs", "NoteLevel"),
+        [NoteLevel::Info, NoteLevel::Warning, NoteLevel::Error]
+            .map(note_level_name)
+            .as_slice(),
+    );
+    contract.enumeration_src(
+        "import-mode",
+        ("transfer.rs", "ImportMode"),
+        [ImportMode::Preview, ImportMode::Apply]
+            .map(import_mode_name)
+            .as_slice(),
+    );
+    contract.enumeration_src(
+        "conflict-policy",
+        ("transfer.rs", "ConflictPolicy"),
+        [
+            ConflictPolicy::Skip,
+            ConflictPolicy::Replace,
+            ConflictPolicy::Rename,
+        ]
+        .map(conflict_policy_name)
+        .as_slice(),
+    );
+    contract.variant_src(
+        "import-outcome",
+        ("transfer.rs", "ImportOutcome"),
+        &[
+            import_outcome_case(&ImportOutcome::Created),
+            import_outcome_case(&ImportOutcome::Replaced),
+            import_outcome_case(&ImportOutcome::Skipped),
+            import_outcome_case(&ImportOutcome::Failed(String::new())),
+        ],
+    );
+    contract.variant_src(
+        "export-selection",
+        ("transfer.rs", "ExportSelection"),
+        &[
+            export_selection_case(&ExportSelection::Documents(vec![])),
+            export_selection_case(&ExportSelection::Folder(String::new())),
+            export_selection_case(&ExportSelection::Query(IndexQuery::Tags { page: None })),
+        ],
     );
 
     // --- record: destructuring esaustivo, un campo aggiunto non compila; e il
@@ -2410,6 +2519,140 @@ fn conform(source: &str) -> Result<(), String> {
         &[("job", wit(&job)), ("payload", wit(&payload))],
     );
 
+    // Import/export. Nessun campo porta un percorso di filesystem: la sorgente
+    // è `bytes` e l'esito è `bytes`, e chi apre e chi posa è l'host.
+    let TransferNote {
+        level,
+        message,
+        entry,
+    } = TransferNote::info("");
+    contract.record(
+        "transfer-note",
+        &[
+            ("level", wit(&level)),
+            ("message", wit(&message)),
+            ("entry", wit(&entry)),
+        ],
+    );
+
+    let ImportSource {
+        name,
+        media_type,
+        bytes,
+    } = ImportSource::default();
+    contract.record(
+        "import-source",
+        &[
+            ("name", wit(&name)),
+            ("media-type", wit(&media_type)),
+            ("bytes", wit(&bytes)),
+        ],
+    );
+
+    let ImportRequest {
+        mode,
+        folder,
+        on_conflict,
+        options,
+    } = ImportRequest::preview();
+    contract.record(
+        "import-request",
+        &[
+            ("mode", wit(&mode)),
+            ("folder", wit(&folder)),
+            ("on-conflict", wit(&on_conflict)),
+            ("options", wit(&options)),
+        ],
+    );
+
+    let ImportedDocument {
+        doc,
+        outcome,
+        entry,
+    } = ImportedDocument {
+        doc: DocId::new("x.md"),
+        outcome: ImportOutcome::Created,
+        entry: None,
+    };
+    contract.record(
+        "imported-document",
+        &[
+            ("doc", wit(&doc)),
+            ("outcome", wit(&outcome)),
+            ("entry", wit(&entry)),
+        ],
+    );
+
+    let ImportReport {
+        mode,
+        documents,
+        log,
+    } = ImportReport::default();
+    contract.record(
+        "import-report",
+        &[
+            ("mode", wit(&mode)),
+            ("documents", wit(&documents)),
+            ("log", wit(&log)),
+        ],
+    );
+
+    let ExportTarget {
+        id,
+        name,
+        extension,
+    } = ExportTarget {
+        id: String::new(),
+        name: String::new(),
+        extension: None,
+    };
+    contract.record(
+        "export-target",
+        &[
+            ("id", wit(&id)),
+            ("name", wit(&name)),
+            ("extension", wit(&extension)),
+        ],
+    );
+
+    let ExportRequest {
+        selection,
+        target,
+        options,
+    } = ExportRequest::default();
+    contract.record(
+        "export-request",
+        &[
+            ("selection", wit(&selection)),
+            ("target", wit(&target)),
+            ("options", wit(&options)),
+        ],
+    );
+
+    let ExportArtifact {
+        path,
+        media_type,
+        bytes,
+    } = ExportArtifact {
+        path: String::new(),
+        media_type: String::new(),
+        bytes: Vec::new(),
+    };
+    contract.record(
+        "export-artifact",
+        &[
+            ("path", wit(&path)),
+            ("media-type", wit(&media_type)),
+            ("bytes", wit(&bytes)),
+        ],
+    );
+
+    let ExportReport { artifacts, log } = ExportReport::default();
+    contract.record(
+        "export-report",
+        &[("artifacts", wit(&artifacts)), ("log", wit(&log))],
+    );
+
     // --- alias: la destinazione è dedotta dal tipo interno del newtype
 
     let DocId(path) = DocId::new("a");
@@ -2451,6 +2694,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("jobs");
     contract.types_only("events");
     contract.types_only("errors");
+    contract.types_only("transfer");
 
     contract.method(
         "format",
@@ -2607,6 +2851,12 @@ fn conform(source: &str) -> Result<(), String> {
     );
     contract.method(
         "host-api",
+        "free-name",
+        <dyn HostApi>::free_name as fn(&'static dyn HostApi, &'static DocId) -> DocId,
+        &["id"],
+    );
+    contract.method(
+        "host-api",
         "emit",
         <dyn HostApi>::emit as fn(Host, Event),
         &["event"],
@@ -2721,6 +2971,44 @@ fn conform(source: &str) -> Result<(), String> {
         &["job", "payload"],
     );
 
+    contract.method(
+        "importer",
+        "can-handle",
+        <dyn ImportProvider>::can_handle
+            as fn(&'static dyn ImportProvider, &'static ImportSource) -> bool,
+        &["source"],
+    );
+    contract.method(
+        "importer",
+        "import",
+        <dyn ImportProvider>::import
+            as fn(
+                &'static mut dyn ImportProvider,
+                &'static ImportSource,
+                &'static ImportRequest,
+                Host,
+            ) -> Result<ImportReport, PluginError>,
+        &["source", "request"],
+    );
+
+    contract.method(
+        "exporter",
+        "targets",
+        <dyn ExportProvider>::targets as fn(&'static dyn ExportProvider) -> Vec<ExportTarget>,
+        &[],
+    );
+    contract.method(
+        "exporter",
+        "export",
+        <dyn ExportProvider>::export
+            as fn(
+                &'static dyn ExportProvider,
+                &'static ExportRequest,
+                HostRef,
+            ) -> Result<ExportReport, PluginError>,
+        &["request"],
+    );
+
     // --- il world
 
     let (imports, exports) = contract
@@ -2739,6 +3027,8 @@ fn conform(source: &str) -> Result<(), String> {
         "view",
         "index",
         "event-handler",
+        "importer",
+        "exporter",
     ]
     .iter()
     .map(|s| s.to_string())
