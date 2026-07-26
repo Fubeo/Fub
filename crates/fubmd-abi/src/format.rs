@@ -133,6 +133,39 @@ impl FormatCapabilities {
     }
 }
 
+/// Che cosa si sa di un documento **senza averlo aperto**: chi lo tratterebbe,
+/// e che sintassi capirebbe.
+///
+/// È la risposta del §4.3, ed è una risposta sul **nome** e non sul file: la dà
+/// il registro dei formati guardando l'estensione, senza leggere un byte. Chi
+/// riceve una lista da [`HostApi::list_documents`](crate::traits::HostApi::list_documents)
+/// non aveva modo di distinguere una nota da un canvas, un CSV, un PDF o un
+/// allegato — cioè non poteva decidere se sa lavorarci, e nemmeno se *deve*
+/// ignorarlo. Con un formato solo non si vedeva; il §3.4 ha aperto `parse` ai
+/// documenti non-testo, quindi si vede da adesso.
+///
+/// I due campi stanno **insieme** e non in due capacità perché sono la stessa
+/// domanda: chiederli separatamente vorrebbe dire poter ricevere il descrittore
+/// di un provider e le capacità di un altro, che è uno stato che nessuno sa
+/// gestire e che nessun chiamante ha chiesto.
+///
+/// # Le capacità sono quelle **effettive**
+///
+/// [`capabilities`](DocumentFormat::capabilities) è ciò che quel documento
+/// capirebbe *qui, adesso*: le sintassi del provider **più** quelle che le
+/// [`SyntaxRule`](crate::custom::SyntaxRule) registrate gli innestano sopra
+/// (§3.1). Rispondere le sole capacità del provider sarebbe rispondere una
+/// verità di laboratorio — `==evidenziato==` non è del provider markdown e
+/// funziona lo stesso — e rimetterebbe in piedi le due categorie di estensioni
+/// che la [decisione 0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+/// ha rifiutato: chi accende una sintassi non deve sapere da dove viene, e chi
+/// chiede cosa è acceso nemmeno.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DocumentFormat {
+    pub descriptor: FormatDescriptor,
+    pub capabilities: FormatCapabilities,
+}
+
 /// Config a livello di vault (28), di cartella o di nota (6.2, classi da
 /// frontmatter) passata al parse.
 ///

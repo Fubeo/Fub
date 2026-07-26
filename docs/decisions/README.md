@@ -28,6 +28,7 @@ cronologico di chiusura.
 | [0015](0015-la-forma-della-shell.md) | La forma della shell, e l'unica porta verso l'host | §1.1 + §1.3 | 2026-07-26 |
 | [0016](0016-cosa-e-una-view.md) | Cosa è una view | §2.1–§2.8 | 2026-07-26 |
 | [0017](0017-chi-disegna-cio-che-il-core-non-conosce.md) | Chi disegna ciò che il core non conosce | §3.1–§3.6 | 2026-07-26 |
+| [0018](0018-chi-vede-il-modello-parsato.md) | Chi vede il modello parsato | §4.1–§4.3 | 2026-07-27 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

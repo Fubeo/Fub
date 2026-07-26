@@ -67,9 +67,10 @@ riconciliare, e nessun rebuild completo da pagare.
 Due ragioni indipendenti puntavano nella stessa direzione: (1) un indice che
 perde un aggiornamento non smette di rispondere, risponde *sbagliato*, e
 un'architettura non dovrebbe rendere possibile una bugia silenziosa quando può
-renderla impossibile; (2) `on_document_indexed` riceve il `DocumentModel`, che
-un `EventHandler` non avrebbe modo di ottenere — l'`Event` porta il `DocId` e
-l'`HostApi` dà la sorgente, non il modello parsato.
+renderla impossibile; (2) `on_document_indexed` riceve il `DocumentModel` già
+parsato — l'`Event` porta il solo `DocId`, e chiederlo (`HostApi::read_model`,
+[decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)) costa una
+rilettura e un parse per evento.
 
 Resta una sola giuntura: ciò che succede mentre l'indice **non è vivo** (note
 cancellate ad app chiusa). La chiude `IndexProvider::reconcile(ids)`, che
@@ -303,7 +304,7 @@ link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
   `CoreCommands`, anticipata da M3.
 - `ViewProvider` (backlink ✅, outline ✅, tag ✅; graph-data da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
 - `HostApi::query_index` (col canale metadata `IndexQuery::Outline`/`Tags`) + `HostApi::active_context` — le capacità che rendono una view un provider vero.
-- `HostApi` **chiusa** ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)): strutturali + `run_command` dentro, `storage_*` fuori — 22 metodi.
+- `HostApi` **chiusa** ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)): strutturali + `run_command` dentro, `storage_*` fuori — 22 metodi, poi 24 con `read_model` e `format_of` ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)).
 - `Workspace` in `fubmd-kernel`: nuovi percorsi incrementali per grafo+indice.
 - `CommandProvider` per "crea nota" — fatto: `note.create`, e con esso gli altri
   quattro strutturali ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).

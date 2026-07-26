@@ -32,7 +32,7 @@ in lavoro ma in id di terzi da rinominare.
 
 *ex §1.38 · contratto · **P0** — P0 se sotto-trait, P1 se solo wrapper — leva alta in entrambi i casi*
 
-- [ ] **22 metodi, 4 implementazioni complete**: `KernelHost`
+- [ ] **24 metodi, 4 implementazioni complete**: `KernelHost`
       (`workspace.rs:2339`), `ReadHost` (`:2535`), `ReadOnlyHost` (`:2720`) e
       `MemoryHost` (`features/src/testing.rs:179`). Il proxy WASM di M5 è la
       quinta. Ottantotto corpi di metodo, più il WIT, più l'arena.
@@ -43,7 +43,7 @@ in lavoro ma in id di terzi da rinominare.
       si paga a ogni implementazione futura dell'host.
 - [ ] **Il §7.3 lo moltiplica, non lo eredita.** I permessi vogliono politiche
       *combinatorie* — `write_vault` × `network` × `Trust` × manifest — e con
-      questa forma ogni politica è un'altra impl da 22 metodi. `ReadOnlyHost` è
+      questa forma ogni politica è un'altra impl da 24 metodi. `ReadOnlyHost` è
       già la prova: esiste solo per dire «no» a sei capacità, e per dirlo ha
       dovuto riscriverne ventidue (sedici delle quali delegano a `ReadHost`
       riga per riga, e il commento in cima lo dice).

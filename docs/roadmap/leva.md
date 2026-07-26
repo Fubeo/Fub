@@ -67,7 +67,9 @@ riguarda ciò che scriveremo ma ciò che avremo già pubblicato, e il suo costo 
 si misura in lavoro ma in id di terzi da rinominare.
 
 In questo scaglione il quinto giro ne aveva messa una terza, la **§4.2 (il
-modello parsato in mano ai provider)**, ed è **scesa**: diceva che il
+modello parsato in mano ai provider — ora chiusa con la
+[decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md))**, ed era
+**scesa** prima di chiudersi: diceva che il
 `DocumentModel` non attraversa il contratto in nessuna direzione, e non è vero —
 `IndexProvider::on_document_indexed` lo spinge a ogni indicizzazione. Chi può
 stare dentro un indice (task, flashcard, citazioni, chunking) è servito, quindi

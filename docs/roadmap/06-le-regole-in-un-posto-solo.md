@@ -34,8 +34,12 @@ nasce prima di lui nasce senza presidio, e il capitolo 15 da solo ne porta sei.
       diversamente alla stessa query, e la differenza non la vede nessun test,
       perché i due non si confrontano mai.
 - [ ] **È il §4.2 visto dal lato delle regole invece che dei dati**: quello
-      dice che un provider non vede la *struttura* di un documento, questo che
-      non vede le *regole* con cui il kernel la interroga. E si compone col
+      diceva che un provider non vede la *struttura* di un documento — ed è
+      chiuso, la struttura si chiede
+      ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)) —
+      questo che non vede le *regole* con cui il kernel la interroga, e resta
+      aperto: avere il modello in mano non dice come il kernel ne deriva
+      proprietà e tag. E si compone col
       §5.1: finché il canale dati è kernel-owned la seconda implementazione non
       esiste, quindi il difetto non si vede; appena il canale si apre, esiste.
 - [ ] **Il precedente è già in repo, e va letto come tale**: la [decisione 0003](../decisions/0003-modello-del-documento.md) ha fatto

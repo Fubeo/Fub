@@ -17,7 +17,8 @@ use std::sync::Mutex;
 use fubmd_abi::command::CommandOutcome;
 use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::event::Event;
-use fubmd_abi::model::{DocId, Heading, Span};
+use fubmd_abi::format::DocumentFormat;
+use fubmd_abi::model::{DocId, DocumentModel, Heading, Span};
 use fubmd_abi::session::{PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, Paged, TagCount, TrashEntry,
@@ -42,6 +43,15 @@ pub struct MemoryHost {
     outlines: Mutex<BTreeMap<String, Vec<Heading>>>,
     /// Aggregazione dei tag finta per [`IndexQuery::Tags`].
     tags: Mutex<Vec<TagCount>>,
+    /// Modelli finti per [`HostApi::read_model`], seminati per documento. Il
+    /// doppio **non parsa** — come non parsa per l'outline — e la ragione è la
+    /// stessa: un host in memoria che si portasse dentro un `FormatProvider`
+    /// proverebbe la feature contro *quel* provider invece che contro il
+    /// contratto. Chi vuole il parse vero ha i test end-to-end col kernel.
+    models: Mutex<BTreeMap<String, DocumentModel>>,
+    /// Formati finti per [`HostApi::format_of`], seminati per **estensione**
+    /// senza il punto — che è la chiave con cui risponde anche il registro vero.
+    formats: Mutex<BTreeMap<String, DocumentFormat>>,
     /// Il cestino: id nel cestino → (voce, sorgente). È in memoria come il
     /// resto, ma ha la stessa forma di quello vero — due id per voce, e il
     /// ripristino che rifiuta un path occupato — perché è quella forma che le
@@ -174,6 +184,20 @@ impl MemoryHost {
             .collect();
         self
     }
+
+    /// Semina il modello che [`HostApi::read_model`] restituirà per `doc`
+    /// (stile builder).
+    pub fn con_modello(self, doc: &str, model: DocumentModel) -> Self {
+        self.models.lock().unwrap().insert(doc.to_string(), model);
+        self
+    }
+
+    /// Semina il formato che [`HostApi::format_of`] restituirà per i documenti
+    /// con questa estensione (stile builder).
+    pub fn con_formato(self, ext: &str, format: DocumentFormat) -> Self {
+        self.formats.lock().unwrap().insert(ext.to_string(), format);
+        self
+    }
 }
 
 impl HostApi for MemoryHost {
@@ -215,6 +239,26 @@ impl HostApi for MemoryHost {
 
     fn list_documents(&self) -> Result<Vec<DocId>, PluginError> {
         Ok(self.docs.lock().unwrap().keys().map(DocId::new).collect())
+    }
+
+    /// Il modello **seminato**, non uno parsato: un documento che esiste ma di
+    /// cui nessuno ha seminato il modello risponde come uno che non esiste — chi
+    /// prova una feature sul modello deve dire quale modello sta provando.
+    fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
+        self.models
+            .lock()
+            .unwrap()
+            .get(id.as_str())
+            .cloned()
+            .ok_or_else(|| PluginError::Internal(format!("{id}: nessun modello seminato")))
+    }
+
+    fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
+        let ext = id
+            .as_str()
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_lowercase())?;
+        self.formats.lock().unwrap().get(&ext).cloned()
     }
 
     /// La convenzione D3 su ciò che questo host ha in memoria: `nome.md`,
@@ -405,5 +449,48 @@ impl HostApi for MemoryHost {
         _args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
         Err(PluginError::UnknownCommand(command.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fubmd_abi::format::{FormatCapabilities, FormatDescriptor};
+
+    /// Il doppio risponde per **estensione**, che è la stessa chiave del
+    /// registro vero: una feature che si prova qui e poi gira sul kernel deve
+    /// trovare la stessa regola, o il doppio starebbe provando un'altra cosa.
+    #[test]
+    fn the_double_answers_the_format_by_extension_and_none_for_what_nobody_claims() {
+        let host = MemoryHost::new().con_formato(
+            "md",
+            DocumentFormat {
+                descriptor: FormatDescriptor::text("markdown", "Markdown", &["md"]),
+                capabilities: FormatCapabilities::default(),
+            },
+        );
+
+        let markdown = host
+            .format_of(&DocId::new("Progetti/Nota.md"))
+            .expect("`.md` è seminato");
+        assert_eq!(markdown.descriptor.id, "markdown");
+        assert!(
+            host.format_of(&DocId::new("allegato.pdf")).is_none(),
+            "nessuno rivendica `.pdf`: `none` è una risposta, non un errore"
+        );
+        assert!(
+            host.format_of(&DocId::new("LICENSE")).is_none(),
+            "un nome senza estensione non ha niente da chiedere al registro"
+        );
+    }
+
+    /// Un modello non seminato è un errore, non un modello vuoto: chi prova una
+    /// feature sul modello deve dire **quale** modello sta provando, o proverebbe
+    /// il caso «documento vuoto» credendo di provare il proprio.
+    #[test]
+    fn the_double_refuses_to_invent_a_model_nobody_seeded() {
+        let host = MemoryHost::new().con_documento("nota.md", "# c'è");
+        let esito = host.read_model(&DocId::new("nota.md"));
+        assert!(matches!(esito, Err(PluginError::Internal(msg)) if msg.contains("nota.md")));
     }
 }

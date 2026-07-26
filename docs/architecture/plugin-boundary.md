@@ -140,7 +140,10 @@ reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
   del vault da entrambi (`VaultHealth`) — e ai provider registrati va il resto,
   oggi il full-text. È il **canale metadata**: senza, una view non potrebbe
   leggere né la struttura parsata né il frontmatter, perché non ha un
-  `FormatProvider` con cui parsare. È `&self`: una query non muta, e così
+  `FormatProvider` con cui parsare — e resta il canale di ciò che il kernel
+  tiene **in cache**, che è il motivo per cui una view lo usa a ogni ridisegno
+  senza toccare il disco (il corpo del documento non passa di qui: sta in
+  `read_model`, qui sotto). È `&self`: una query non muta, e così
   una view la serve sotto il prestito *condiviso* del workspace, senza entrare in
   conflitto con la direzione della concorrenza (`Mutex`→`RwLock`).
 
@@ -173,6 +176,33 @@ reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
   stessa risposta, sbagliata per uno dei due. Il `PaneId` dentro il contesto è
   ciò che permette di distinguerli già ora; **legare** una view a un pannello
   fisso è l'altra metà, e arriva con le istanze di view.
+
+### La struttura, e di che formato è (deciso, [decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md))
+
+Due capacità che stanno accanto a `read_document` e non dentro `query_index`,
+perché sono una **lettura del vault** e non qualcosa di derivato:
+
+- **`read_model(&self, id) -> Result<DocumentModel, PluginError>`** — la
+  struttura, con gli `Span`. È il verso che mancava: uno c'era ed è
+  `IndexProvider::on_document_indexed`, **spinto**, a chi indicizza, quando lo
+  decide il kernel. Tagliato fuori era il percorso **one-shot** — chi vuole il
+  modello di *questa* nota *adesso*: un comando che spunta il task sotto il
+  cursore, un `ExportProvider` su un documento solo, un linter su richiesta.
+  **Rilegge e riparsa dal disco a ogni chiamata**, e sta nella firma: la cache
+  del kernel tiene i soli metadati, quindi un modello servito dalla cache sarebbe
+  una cache che non esiste. Il modello è quello del **file** — un buffer non
+  salvato non lo conosce nessuno al di qua del confine — ed è la stessa regola
+  dello span qui sotto, vista dall'altro lato.
+- **`format_of(&self, id) -> Option<DocumentFormat>`** — chi tratterebbe quel
+  documento e che sintassi capirebbe, **senza aprirlo**: è una domanda sul nome,
+  risolta sull'estensione. `None` = nessun provider lo rivendica, ed è così che
+  chi cammina una lista sa cosa ignorare invece di dedurlo da un errore. Vale
+  anche per un documento che non esiste ancora.
+
+Il recinto: `read_model` lo applica come `read_document` (stesso
+`valid_doc_id`, stesso `PermissionDenied` a una risalita); `format_of` no, e non
+perché sia meno controllato — non legge niente, e l'estensione di un path che non
+nomina un documento è una domanda senza risposta, non un varco.
 
 ### La regola dello span: coordinate del sorgente che il kernel conosce
 
@@ -519,7 +549,10 @@ ragione per cui i tre booleani sono diventati una mappa.
 - **Scope del vault:** `fubmd:read-vault` / `fubmd:write-vault` con un elenco di
   prefissi (es. `["Templates/", "Daily/"]`); `HostApi.read_document` /
   `write_document` lo applicano e negano (`PluginError::PermissionDenied`) tutto
-  ciò che sta fuori. Senza parametro, la voce vale sull'intero vault.
+  ciò che sta fuori. Senza parametro, la voce vale sull'intero vault. Sotto
+  `read-vault` ci va anche `read_model`, che è una lettura come l'altra e dà **di
+  più** di una sorgente; `format_of` no, perché non legge niente — dice solo chi
+  tratterebbe un nome.
 - **Rete e filesystem esterno:** `fubmd:network` con l'allowlist di host,
   `fubmd:external-fs` con quella dei path (20.3).
 - **Enforcement in un solo punto:** i controlli vivono nell'implementazione di
@@ -545,8 +578,8 @@ al frontend/all'IPC.
 - **Rete:** negata di default; concessa solo se `network = true`. WASI networking
   abilitato selettivamente.
 - **Filesystem:** nessun accesso diretto; i documenti passano da
-  `read_document`/`write_document`/`list_documents`, quindi soggetti a booleani
-  + `vault_scope`; i dati del plugin passano da `data_*`, dentro al suo spazio.
+  `read_document`/`read_model`/`write_document`/`list_documents`, quindi soggetti
+  a booleani + `vault_scope`; i dati del plugin passano da `data_*`, dentro al suo spazio.
   **Import ed export non fanno eccezione**, ed è una proprietà della firma e non
   della buona volontà: una sorgente da importare arriva già letta
   (`ImportSource.bytes`) e un export esce come `ExportArtifact.bytes` — vedi
