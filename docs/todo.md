@@ -128,6 +128,9 @@ Quindi il lavoro infrastrutturale è di tre tipi, in quest'ordine di urgenza:
 | 20.1 pannello plugin, 28 settings, 24.2 diagnostica | inventario delle feature attive | `VaultInfo.versioning` è **un booleano per feature** (`app/lib.rs:57`) |
 | 9.1-9.2 ogni query nuova, 7.3 grafo, 8.4 collezioni | la query sull'**IPC** | quattro comandi Tauri avvolgono lo stesso `query_index` (`app/lib.rs:411`, `:484`, `:505`, `:642`) |
 | 27.3 version compatibility, 20.1 versioning plugin | presidio dell'additività del contratto | `wit_conformance` confronta abi↔WIT **oggi**, mai con la versione precedente |
+| ~~22.4 centro di comando LLM, 27.1 CLI, 27.2 API locale, 16.2 automazioni~~ | ~~comandi descritti a una **macchina**~~ | **chiuso (§1.1 + §1.36)**: `CommandSpec { id, title, description, keybinding, params, scope }`, e l'host convalida gli argomenti contro la spec prima di chiamare il comando |
+| ~~22.4 anteprima del piano, 7.2 bulk fix, 17.3 rollback, 16.3 undo~~ | ~~invocare **senza applicare** (dry-run)~~ | **chiuso (§1.36)**: `invoke(…, InvokeMode::DryRun)` → `CommandPlan` (i `DocId` impattati e un `EditRequest` per documento), con l'host che presta un `HostApi` in sola lettura — il non-scrivere è garantito, non promesso |
+| 22.4 approvazione per operazione, 20.3 sandbox, 23.1 | il **consenso** dell'utente distinto dal permesso | il giro dry-run→piano→apply c'è (§1.36) e la shell lo usa; ciò che manca è chi lo **impone** a un chiamante che non vuole simulare — è una policy del §2.10 sopra la firma |
 
 ---
 
@@ -139,23 +142,59 @@ tutte risposte alla stessa domanda: *cosa può dire e fare un plugin?*
 
 ### 1.1 Comandi — il trait più importante che nessuno usa
 
-- [ ] **Registro comandi nel `Workspace`**: `register_command_provider(id, trust,
-      Box<dyn CommandProvider>)`, `commands()` e `invoke_command(id, args)` con
-      la stessa disciplina delle view (`in_provider_call` alzato, dispatch
-      differito, `Trust` per l'albero di ritorno).
-- [ ] **Comandi sull'IPC**: `list_commands` / `invoke_command`, gemelli di
+- [x] **Registro comandi nel `Workspace`**: `register_command_provider(id,
+      provider)`, `commands()` e `invoke_command(id, args, mode)` con la stessa
+      disciplina delle view (`in_provider_call` alzato, dispatch differito,
+      provider estratto per la durata della chiamata).
+- [x] **Comandi sull'IPC**: `list_commands` / `invoke_command`, gemelli di
       `list_views` / `view_action`. Da qui in poi una feature nuova **non deve
       poter aggiungere un comando Tauri** (§4.2).
-- [ ] **`CommandOutcome` sufficiente**: oggi ha solo `notify`. Servono almeno
-      `ViewUpdate`-like (navigare, rivelare, cercare) e la richiesta di input —
-      altrimenti "rinomina nota" da palette non può chiedere il nome nuovo.
-- [ ] **Migrare a comandi le azioni già cablate nella shell** (crea/rinomina/
-      cestina nota, apri ricerca, toggle pannelli): è il dogfooding che dice se
-      la firma regge, e va fatto *prima* del freeze.
+- [x] **`CommandOutcome` sufficiente**: `{ notify, effect }` con
+      `CommandEffect { Done, Navigate, Reveal, RunSearch, Plan, Custom }`.
+- [x] **Un cliente vero nello stesso giro**: `CoreCommands` (`search.open`,
+      `selection.wikilink`, `vault.replace`) e la **palette** nella shell, che
+      non cabla nessun id — legge le spec, chiede i parametri dichiarati, mostra
+      il piano quando il raggio lo merita, e onora le scorciatoie che i comandi
+      dichiarano.
 
 *Sblocca:* 4.2 (slash commands, scorciatoie), 16.2 (macro, catene, trigger),
 20.1 (comandi/hotkey plugin), 27.1 (CLI: la CLI è un client dello stesso
 registro), 3.3 (quick actions, command palette).
+
+**Fatto insieme al §1.36, con tre decisioni e un residuo dichiarato.**
+
+*Niente `Trust` nel registro.* Le view lo hanno perché da esse passa **contenuto
+attivo** (`Html`/`WebView`), e il varco di validazione esiste prima del primo
+provider non fidato. Da un comando non passa un albero: l'unica stringa che
+arriva all'utente (`notify`) è testo semplice, come lo snippet di una ricerca.
+Ciò che a un comando serve è un *permesso* — «questo componente può scrivere nel
+vault?» — che è il §2.10, un'altra domanda con un altro posto. Un campo `trust`
+qui sarebbe stato registrato da tutti e letto da nessuno.
+
+*La richiesta di input non è un esito, è una dichiarazione.* Il §1.1 la chiedeva
+come variante di `CommandOutcome` («rinomina nota da palette non può chiedere il
+nome nuovo»); con i `params` del §1.36 la palette **chiede prima di invocare**, e
+un chiamante non interattivo — che a una domanda a metà esecuzione non saprebbe
+rispondere — compila e basta. Il prezzo dichiarato: un comando non può porre una
+seconda domanda che dipende dalla prima; quel dialogo è del §1.2 (i form) e del
+16.1 (i prompt dei template), non di questa firma.
+
+*Le azioni migrate sono quelle che le capacità permettono.* «Apri la ricerca» è
+diventata `search.open` (effetto per la shell, nessuna scrittura). Crea, rinomina
+e cestina **non** sono migrate, e non per fretta: l'`HostApi` non ha le capacità
+strutturali, che il §1.4 vuole decidere una per una a verbale. Un comando
+ufficiale che le ottenesse per una via privilegiata avrebbe provato che il
+registro funziona *per chi non è un plugin*, cioè l'unica cosa che non c'era
+bisogno di provare.
+
+*Resta fuori, dichiarato:* i **comandi strutturali** (§1.4); i **comandi della
+shell** (toggle dei pannelli, cambio modalità): il registro vive nel kernel e il
+frontend non può registrarvisi — è il §3.2, e finché non c'è, quelle azioni
+restano bottoni; la **tastiera configurabile** (§3.2: oggi la shell onora il
+`keybinding` *dichiarato*, e ignora quelli senza modificatori perché ruberebbero
+una lettera a chi scrive); **chi possiede un id** (§1.34: due provider che
+dichiarano lo stesso comando sono risolti dall'ordine di registrazione, come per
+le view).
 
 ### 1.2 `UiNode` — senza input, metà di FEATURES non è dichiarativa
 
@@ -1178,6 +1217,113 @@ scaricando).
 vault senza perdere scritture), 20.1 (lifecycle, enable/disable), 20.2 (hot
 reload), 26.2-26.3 (dove il watcher non c'è).
 
+### 1.36 Un comando si descrive a un umano, non a una macchina
+
+Il capitolo 22.4 (centro di comando LLM) chiede una cosa che nessun'altra voce
+di FEATURES chiede: che un **chiamante non umano** scelga fra i comandi
+disponibili, li invochi con argomenti che non gli sono stati insegnati, e lo
+faccia su *più note insieme* o sulle impostazioni. Il §1.1 gli dà il registro;
+quello che manca è tutto ciò che rende un registro utilizzabile da chi non ha
+letto il codice.
+
+- [x] **`CommandSpec` descrive gli argomenti**: `{ id, title, description,
+      keybinding, params: Vec<ParamSpec>, scope }` in `abi/command.rs`, con
+      `ParamKind { Text, Number, Bool, Document, Documents, Choice }`. Uno
+      schema a sé e **non** i nodi del §1.2: dichiarare *cosa serve* e disegnare
+      *come lo si chiede* sono due domande, e solo la prima ha senso per una CLI
+      o per un modello, che non disegnano niente.
+- [x] **Un comando dichiara il proprio raggio**: `CommandScope { writes, reach:
+      CommandReach, reversible }`, con `reach` ordinato (`session` < `document`
+      < `documents` < `vault` < `settings`) perché chi decide se chiedere
+      conferma confronta.
+- [x] **La simulazione è un modo di invocare**: `invoke(…, InvokeMode::DryRun)`
+      → `CommandEffect::Plan(CommandPlan { summary, docs, edits })`, un
+      `EditRequest` per documento (§1.16). E non è una cortesia di chi
+      implementa: durante un dry-run l'host presta un `HostApi` in **sola
+      lettura**, quindi un comando che ci prova riceve `PermissionDenied`. La
+      stessa leva vale per `writes: false`.
+- [x] **Il consenso non è il permesso** — ma non è nemmeno una capacità: è il
+      giro *dry-run → piano → approvazione → apply*, e chi decide *quando*
+      chiederlo è chi invoca, sul raggio dichiarato (vedi il verbale sotto).
+- [ ] **Le impostazioni scrivibili da un programma sono un sottoinsieme
+      dichiarato**: lo schema del §1.3 deve dire quali chiavi sono modificabili
+      da un comando e quali no. La riga non negoziabile è che le impostazioni di
+      privacy e dell'AI stessa non siano fra quelle: un componente che può
+      allargarsi i permessi da sé non ha permessi. *(Il vocabolario c'è —
+      `CommandReach::Settings` — lo schema no: non ci sono ancora impostazioni.)*
+- [ ] **L'attribuzione va nel lotto, non nel log dell'app**: chi ha chiesto
+      l'operazione (utente, comando, modello, prompt) è il §1.18 (origine degli
+      eventi) applicato al §1.12 (il lotto). L'audit trail di 22.4 è quel campo
+      più il journal del §2.5; senza il campo, «cosa ha cambiato l'AI ieri» si
+      può solo indovinare dai timestamp.
+
+Nessuna di queste è "infrastruttura per l'AI": sono la differenza fra un
+registro comandi leggibile e uno **eseguibile da terzi**, e i primi clienti
+sono la CLI (27.1), l'API locale (27.2) e le automazioni (16.2) — l'LLM è
+l'ultimo ad arrivare e il primo a rendere il buco visibile, perché è l'unico
+chiamante che non si può correggere leggendo il codice.
+
+*Sblocca:* 22.4 per intero, 27.1 (una CLI che scopre i comandi invece di
+elencarli a mano), 27.2 (API locale), 16.2-16.3 (automazioni con anteprima e
+undo), 7.2 (bulk fix con dry-run), 17.3 (rollback dell'import).
+
+**Fatto insieme al §1.1, con quattro decisioni e due voci ancora aperte.**
+
+*Uno schema di parametri a sé, non i nodi del §1.2.* Riusare i nodi di input
+avrebbe tenuto una definizione sola di "campo tipato" nel contratto, ed è
+l'argomento che sembra più forte finché non si guarda chi legge: una CLI, uno
+script, un modello non disegnano niente e non hanno bisogno di sapere *come* si
+chiede un valore — hanno bisogno di sapere *cosa* è. Legare la descrizione di un
+comando all'evoluzione di `UiNode` avrebbe fatto dipendere il primo dal secondo
+senza che il secondo servisse. Quando i nodi arriveranno saranno la **resa** di
+un `ParamSpec`; il contrario no. Il prezzo dichiarato: il vocabolario è piccolo
+(sei specie), e ciò che non esprime viaggia come testo con il comando che lo
+interpreta — cioè fuori dalla convalida dell'host.
+
+*Il modo sta nella firma, e rompe `invoke`.* Era la scelta che il M4 chiamava
+"della famiglia di `RenderOptions`: da fare per prima o mai", e va fatta adesso
+(linea di base ritagliata in `wit/frozen/0.1.0.wit`). La ragione non è
+l'eleganza: con il modo nella firma, il non-scrivere lo può garantire l'**host**,
+prestando un `HostApi` in sola lettura. Un `CommandOutcome::Plan` da solo avrebbe
+lasciato il dry-run alla buona volontà di chi implementa, cioè a una convenzione
+che un comando di terzi non onora — e proprio nel momento in cui il chiamante si
+fida di lui (l'anteprima prima di toccare 40 note). La stessa leva rende
+`writes: false` vincolante invece che decorativo: chi si dichiara innocuo riceve
+lo stesso host e fallisce se ci prova. È l'unica parte del raggio che si può far
+rispettare: quante note un comando tocchi si sa solo eseguendolo, e "reversibile"
+è una promessa sul mondo, non sul confine.
+
+*Il consenso non è una capacità dell'`HostApi`.* Il §1.36 lo dava per scontato
+(«è una capacità dell'`HostApi`, §1.4: la conferma»), e questo giro dice di no,
+per due ragioni. La prima è che **questo host non può fermarsi a chiedere**: il
+kernel è chiamato *dalla* shell e ne tiene il lock, quindi una conferma sincrona
+dovrebbe risalire nella webview che sta aspettando la risposta — e una capacità
+che ogni host dovrà onorare e nessuno onora è peggio che assente. La seconda è
+che **un piano si legge e una domanda no**: «approvi queste 40 note?» mostra ciò
+che il comando sceglie di dire, un `CommandPlan` mostra i `DocId` e gli edit, e
+li mostra prima. Il consenso è quindi il giro dry-run → piano → approvazione →
+apply; *quando* chiederlo lo decide chi invoca dal raggio dichiarato (`needsPlan`
+nella palette: più di una nota, o non reversibile). Una CLI in uno script può
+avere un'altra politica sullo stesso dato — è per questo che il raggio sta nella
+spec e la politica no. Ciò che resta scoperto, e va detto: nessuno **obbliga** un
+chiamante a simulare prima. L'obbligo, se sarà, è una policy del §2.10 sopra
+questa firma, non un pezzo di firma in più.
+
+*L'insieme impattato lo completa l'host.* `CommandPlan.docs` è la verità che
+l'utente approva, e un piano che tocca una nota senza nominarla sarebbe un
+consenso strappato: l'host ci aggiunge i documenti degli `edits` invece di
+fidarsi che chi ha scritto il piano se ne sia ricordato. E le `base` delle
+richieste sono le revisioni di **adesso**: se un documento cambia fra il piano e
+l'approvazione, applicarlo fallisce con `Conflict` (§1.16) invece di
+sovrascrivere — l'anteprima non è un'ipotesi vaga, è una promessa verificabile.
+
+*Resta fuori, dichiarato:* le **impostazioni scrivibili da un programma** (§1.3:
+c'è il vocabolario, non lo schema); l'**attribuzione** (§1.18 + §1.12: un campo
+`origin` scritto da chi invoca e letto da nessuno non è un audit trail); il
+**limite massimo di note per operazione** e la **conferma rafforzata** di 22.4,
+che sono politiche sopra il raggio dichiarato, non firme; l'**esecuzione
+parziale** e l'**interruzione a metà** (22.4), che chiedono il lotto (§1.12).
+
 ---
 
 ## 2. Kernel — da "un vault markdown locale" a piattaforma
@@ -2071,6 +2217,16 @@ componente*). Il §1.34 sta da solo ed è il più urgente in senso stretto: è
 l'unico che non riguarda ciò che scriveremo, ma ciò che avremo **già
 pubblicato**.
 
+Fuori dai giri, dallo stesso statuto P0 perché è firma: **§1.36** (un comando
+descritto a una macchina: schema dei parametri, raggio dichiarato, dry-run,
+consenso). Nasce dal capitolo 22.4 di FEATURES, ma va deciso **nella stessa
+seduta del §1.1** — è `CommandSpec` e `invoke` visti dal lato di un chiamante
+che non ha letto il codice, e dopo il freeze il descrittore di un comando non si
+allarga più. Le sue due metà implementative sono il §2.10 (permessi) e il §2.5
+(journal per l'audit). — **Fatti entrambi, nella stessa seduta**: il verbale in
+fondo a §1.1 e a §1.36; restano aperte le due voci che dipendono da firme che
+non ci sono (impostazioni scrivibili → §1.3, attribuzione → §1.18 + §1.12).
+
 **P1 — insieme a M3** (l'editor e la palette sono i primi clienti del §1):
 §1.3 impostazioni, §2.3 registry + runner dei job, §2.8 tabella dei provider
 unica, §2.9 disattivazione, §2.10 permessi e manifest, §2.15 il crate host,
@@ -2122,10 +2278,10 @@ snapshot del contratto e il test di additività): costa poco adesso, ma la prima
 riga di base la fissa il freeze — dopo, non c'è più un "prima" con cui
 confrontarsi. — **Entrambe fatte**: il dettaglio in fondo a §4.9 e §4.10.
 
-Nota di rotta: le voci con l'effetto leva più alto sono **§1.1 (comandi)**,
-**§1.2 (input in `UiNode`)** e **§2.3 (registry + job)** — insieme spostano dal
-"cablato nell'app" al "registrato" praticamente ogni capitolo di FEATURES dal 4
-al 22, e sono le tre che il freeze di M4 rende definitive. Accanto a quelle, dal
+Nota di rotta: le voci con l'effetto leva più alto sono **§1.1 (comandi —
+fatto)**, **§1.2 (input in `UiNode`)** e **§2.3 (registry + job)** — insieme
+spostano dal "cablato nell'app" al "registrato" praticamente ogni capitolo di
+FEATURES dal 4 al 22, e sono le tre che il freeze di M4 rende definitive. Accanto a quelle, dal
 secondo giro: **§1.9 (contesto e selezione)**, senza cui metà dei capitoli 4, 13
 e 22 non potrà mai essere un provider; **§1.12 (il lotto)**, prerequisito
 silenzioso di bulk fix, import, automazioni e database; e **§2.8 + §2.10**, che

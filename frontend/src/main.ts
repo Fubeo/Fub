@@ -3,6 +3,8 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import {
   api,
   onKernelEvent,
+  type CommandEffect,
+  type CommandSpec,
   type KernelEvent,
   type PaneMode,
   type SearchHit,
@@ -10,6 +12,7 @@ import {
   type UiNode,
   type ViewContext,
   type ViewSpec,
+  type ViewUpdate,
   type WorkspaceMeta,
 } from "./api";
 import { createEditor, type Editor } from "./editor";
@@ -26,6 +29,7 @@ import {
 } from "./organizer";
 import { renderUiNode } from "./ui";
 import { openGraph } from "./graph";
+import { findByBinding, openCommandPalette, startCommand } from "./palette";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -87,6 +91,11 @@ let expanded = new Set<string>();
 // Lo spazio selezionato nella striscia (null = "home", tutto il vault).
 // Anche questo è vista, non organizzazione: localStorage, come `expanded`.
 let activeSpace: string | null = null;
+// I comandi dichiarati dal kernel, per le scorciatoie: quali esistano lo dice
+// il registro (`list_commands`), non questa shell. La palette li richiede da
+// sé quando si apre — qui servono a riconoscere una combinazione di tasti
+// senza un giro sull'IPC a ogni pressione.
+let commandSpecs: CommandSpec[] = [];
 // Il drag in corso nella sidebar, se c'è.
 let drag: { path: string; kind: "note" | "folder"; parent: string } | null = null;
 // La modalità del pannello (FEATURES 4.1). Questa shell ha un pannello solo —
@@ -153,6 +162,21 @@ async function init() {
   searchInputEl.addEventListener("keydown", (e) => {
     if (e.key === "Escape") clearSearch();
   });
+  // La tastiera dei comandi, in un punto solo: la palette, e le scorciatoie
+  // che i comandi **dichiarano**. La shell non ne cabla nessuna — se un domani
+  // un plugin dichiara `Mod-Shift-t`, funziona senza toccare questo file.
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "p") {
+      e.preventDefault();
+      void openCommandPalette(paletteHost);
+      return;
+    }
+    const spec = findByBinding(commandSpecs, e);
+    if (spec) {
+      e.preventDefault();
+      startCommand(spec, paletteHost);
+    }
+  });
   onKernelEvent(handleKernelEvent);
   document.body.dataset.mode = mode;
   const initial = await api.initialVault();
@@ -192,8 +216,12 @@ async function openVaultPath(dir: string) {
   previewEl.innerHTML = "";
   clearSearch();
   renderFileList(info.documents);
-  // Le view dichiarative si scoprono dal backend, non da id cablati.
+  // Le view dichiarative si scoprono dal backend, non da id cablati. E come le
+  // view, i comandi: l'elenco serve alle scorciatoie dichiarate: la palette lo
+  // richiede da sé a ogni apertura, perché è il momento in cui costa nulla ed è
+  // l'unico in cui deve essere fresco.
   await mountDeclaredViews();
+  commandSpecs = await api.listCommands().catch(() => []);
   if (info.documents.length > 0) selectDoc(info.documents[0]);
 }
 
@@ -1325,34 +1353,77 @@ async function mountView(view: string, target: HTMLElement, node: UiNode) {
   target.appendChild(
     renderUiNode(node, async (action) => {
       const update = await api.viewAction(view, action);
-      switch (update.kind) {
-        case "navigate":
-          await selectDoc(update.doc_id);
-          break;
-        case "reveal":
-          // Apri il documento se non è quello aperto, poi porta la vista
-          // sull'intervallo (lo scroll converte byte UTF-8 → posizione editor).
-          if (update.doc_id !== currentDoc) await selectDoc(update.doc_id);
-          editor.revealByteOffset(update.span.start);
-          break;
-        case "run_search":
-          searchFor(update.query);
-          break;
-        case "replace":
-          await mountView(view, target, update.root);
-          break;
-        case "custom":
-          // Intento con namespace che questa shell non prevede: da contratto
-          // non fa nulla (degrado garbato) — un plugin che lo emette conta
-          // su una shell che lo capisce, non su questa.
-          console.info(`FubMD: ViewUpdate custom ignorato (ns: ${update.ns}).`);
-          break;
-        case "none":
-          break;
+      if (update.kind === "replace") {
+        await mountView(view, target, update.root);
+        return;
       }
+      await applyIntent(update);
     }),
   );
 }
+
+// Gli intenti che la shell sa eseguire: navigare, rivelare, cercare.
+//
+// Arrivano da due parti — un `ViewUpdate` di una view e un `CommandEffect` di
+// un comando — e sono gli stessi perché sono intenti della **shell**, non di
+// chi li manda. Una copia per sorgente sarebbe una copia da tenere allineata:
+// il giorno che la si dimentica, un comando naviga e una view no.
+// I due tipi veri del confine, meno il caso che qui non c'entra: `replace`
+// riguarda la view che lo ha mandato, e lo gestisce chi la monta. Scritti come
+// unione dei tipi rispecchiati e non a mano, così un caso nuovo in Rust arriva
+// fin qui.
+type ShellIntent = Exclude<ViewUpdate, { kind: "replace" }> | CommandEffect;
+
+async function applyIntent(intent: ShellIntent) {
+  switch (intent.kind) {
+    case "navigate":
+      await selectDoc("doc" in intent ? intent.doc : intent.doc_id);
+      break;
+    case "reveal": {
+      // Apri il documento se non è quello aperto, poi porta la vista
+      // sull'intervallo (lo scroll converte byte UTF-8 → posizione editor).
+      const doc = "doc" in intent ? intent.doc : intent.doc_id;
+      if (doc !== currentDoc) await selectDoc(doc);
+      editor.revealByteOffset(intent.span.start);
+      break;
+    }
+    case "run_search":
+      searchFor(intent.query);
+      break;
+    case "custom":
+      // Intento con namespace che questa shell non prevede: da contratto
+      // non fa nulla (degrado garbato) — chi lo emette conta su una shell
+      // che lo capisce, non su questa.
+      console.info(`FubMD: intento custom ignorato (ns: ${intent.ns}).`);
+      break;
+    case "plan":
+      // Un piano arrivato fuori dal giro dell'anteprima: non si applica da
+      // sé, e la palette lo ha già mostrato quando l'ha chiesto.
+      break;
+    case "none":
+    case "done":
+      break;
+  }
+}
+
+/// Un messaggio all'utente che non richiede una risposta: l'esito di un
+/// comando, un errore che non blocca. Testo semplice — ciò che arriva da un
+/// provider non diventa mai markup.
+function notify(message: string) {
+  document.getElementById("toast")?.remove();
+  const toast = document.createElement("div");
+  toast.id = "toast";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 4000);
+}
+
+/// Ciò che la palette chiede alla shell.
+const paletteHost = {
+  onEffect: (effect: CommandEffect) => applyIntent(effect),
+  notify,
+  listDocuments: () => api.listDocuments().catch(() => []),
+};
 
 // Le view dichiarative montate, per id: la spec (per sapere QUANDO
 // ridisegnare) e il contenitore (per sapere DOVE).

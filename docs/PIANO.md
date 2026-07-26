@@ -40,6 +40,7 @@ di *implementare gli stessi trait*, non di girare in sandbox WASM).
 | Eventi | **Dispatch a coda anti-rientranza** + varco `Event::Custom` | Un handler che emette/scrive durante `handle` non rientra; i plugin comunicano via topic namespaced. Il budget anti-ping-pong tronca **rumorosamente**: `Event::Overflow { dropped }` avvisa chi deriva stato di riconciliare da zero — mai perdite silenziose. |
 | Sicurezza UI | **`Html`/`WebView` riservati al codice fidato**, con un **punto di enforcement unico**: `Workspace::render_view`/`view_action`, dove ogni provider ha dichiarato il proprio `Trust` | Contenuto attivo nella webview privilegiata scavalcherebbe la sandbox WASM via UI. La regola era scritta e non applicata (`validate_untrusted` non aveva chiamanti): il varco esiste ora, con i suoi test, perché aggiungerlo al primo provider non fidato vorrebbe dire cercarlo fra N chiamanti. Vale anche per l'albero che torna da un'azione, non solo dal rendering. |
 | AI autocomplete | **Rimandata**, futuro plugin core (locale + cloud) | Non blocca l'architettura; è un `CommandProvider`/`EventHandler`. |
+| AI che *agisce* (centro di comando LLM, [FEATURES](FEATURES.md) 22.4) | **Rimandata come feature; il contratto è chiuso** ([todo.md](todo.md) §1.1 + §1.36) | Un'AI che modifica N note o le impostazioni non è un provider in più: è il primo **chiamante non umano** del registro comandi — e i primi ad arrivare sono la CLI (27.1) e le automazioni (16.2). Un comando dichiara ora argomenti (`ParamSpec`), prosa (`description`) e raggio (`CommandScope`), e si invoca **senza applicare** (`InvokeMode::DryRun` → `CommandPlan`: i `DocId` impattati e un `EditRequest` per documento). Il consenso non è una capacità dell'host ma il giro *dry-run → piano → approvazione → apply*: un host chiamato *dalla* shell non può fermarsi a chiedere, e un piano si legge mentre «sei sicuro?» no. Ciò che l'host fa rispettare è il resto: argomenti convalidati contro la spec, e un `HostApi` in sola lettura a chi simula o si è dichiarato tale. |
 | Piattaforme | Linux (primario, Arch) + Windows + macOS | Tauri le supporta; CI multi-OS da subito. |
 
 **Invariante non negoziabile:** `fubmd-kernel` e `fubmd-abi` non dipendono da
@@ -122,7 +123,9 @@ come proxy. Il kernel vede solo `dyn Trait`.
   dei provider sola invece di una per famiglia (§2.8), la disattivazione
   (§2.9), il punto di applicazione dei permessi (§2.10), le cartelle (§2.11),
   le versioni di schema dei formati persistiti (§2.12), il canale della lista
-  documenti (§2.13) e il sidecar dell'organizzazione da assorbire (§2.14).
+  documenti (§2.13) e il sidecar dell'organizzazione da assorbire (§2.14) —
+  più, dal capitolo 22.4 di FEATURES, il comando descritto a una **macchina**
+  (§1.36: schema dei parametri, dry-run, consenso — chiuso col §1.1).
   §3 la shell, più i due parser per la stessa sintassi (§3.8); §4 presidi e
   tooling, più l'SDK come superficie di riuso (§4.6) e un crate per bundle di
   feature (§4.7); §5 il debito riportato dai quattro giri di audit, i cui piani
@@ -154,11 +157,15 @@ come proxy. Il kernel vede solo `dyn Trait`.
   (`query_index` — col canale metadata `IndexQuery::Outline`/`Tags` —,
   `active_context`: pannello, documento, **selezione** e modalità) e il giro
   azione→`ViewUpdate` chiuso (`Navigate`, `Reveal`, `RunSearch`). Il quarto
-  provider, le **statistiche**, è il primo cliente della selezione. Restano:
-  cache metadata/body, graph view (Canvas/WebGL).
+  provider, le **statistiche**, è il primo cliente della selezione. Col §1.1 +
+  §1.36 è vivo anche il **registro dei comandi** — spec con argomenti, prosa e
+  raggio dichiarati, invocazione che può **simulare** senza scrivere, palette
+  nella shell — e con esso l'anticipo della command palette che stava a M3.
+  Restano: cache metadata/body, graph view (Canvas/WebGL).
 - **M3 — Fedeltà editor** → [dettaglio](milestones/M3-editor-fidelity.md)
-  Live preview in-editor (decorazioni CodeMirror sugli `Span`), command palette
-  (`CommandProvider`), settings dichiarativi, rendering callout/embed/math.
+  Live preview in-editor (decorazioni CodeMirror sugli `Span`), settings
+  dichiarativi, rendering callout/embed/math. La command palette
+  (`CommandProvider`) è **anticipata a M2** col §1.1.
 - **M4 — Hardening del contratto + WIT** → [dettaglio](milestones/M4-wit-hardening.md)
   Freeze della superficie dei trait; `wit/fubmd/*.wit` (già vivo da M2) rispecchia
   `fubmd-abi`; test di conformità; primo plugin nativo via `Plugin`/`HostApi`.
@@ -169,6 +176,10 @@ come proxy. Il kernel vede solo `dyn Trait`.
   `fubmd-wasm-host` (wasmtime, component model); proxy per ogni trait; host
   function per `HostApi`; plugin di esempio in `wasm32-wasip2`.
 - **Futuro** — autocompletamento AI come plugin core → [appendice](appendix/ai-autocomplete.md);
+  centro di comando LLM ([FEATURES](FEATURES.md) 22.4), che è la stessa famiglia
+  ma con la scrittura: feature di Fase 4, con il contratto già chiuso
+  ([todo.md](todo.md) §1.1 + §1.36) — un centro di comando è un chiamante del
+  registro, non una superficie in più;
   candidati post-M5 dalle interviste utente (mobile, sync, flashcard, export…) →
   [appendice](appendix/funzionalita-future.md). Principio per tutto ciò che è oltre
   il core: **spegnibilità totale** — feature disattivata = feature che non esiste

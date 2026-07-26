@@ -9,6 +9,8 @@
 //! - il trait centrale [`format::FormatProvider`];
 //! - gli altri **trait di estensione** ([`traits`]): comandi, view (UI dichiarativa),
 //!   index (ricerca/backlink), event handler, ciclo di vita del plugin;
+//! - i **comandi** ([`command`]): un'azione descritta a una macchina — argomenti
+//!   dichiarati, raggio dichiarato, e la simulazione come modo di invocarla;
 //! - i trait di **import ed export** ([`transfer`]): come i dati entrano nel
 //!   vault e come ne escono, a byte e non a path;
 //! - la **modifica chirurgica** di un documento ([`edit`]): l'edit come coppia
@@ -22,6 +24,7 @@
 //! WASM-proxy (M5) condividono la stessa firma e il kernel non distingue i due.
 
 pub mod arena;
+pub mod command;
 pub mod edit;
 pub mod error;
 pub mod event;
@@ -34,6 +37,10 @@ pub mod transfer;
 pub mod ui;
 
 // Re-export dei tipi più usati, per import ergonomici.
+pub use command::{
+    Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
+    CommandSpec, InvokeMode, ParamKind, ParamSpec, PlannedEdit,
+};
 pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 pub use error::{FormatError, PluginError};
 pub use event::{Event, EventKind, EventMask};
@@ -45,9 +52,9 @@ pub use model::{
 };
 pub use session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 pub use traits::{
-    BacklinkRef, CommandProvider, CommandSpec, DocumentProperties, EventHandler, HealthCheck,
-    HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page,
-    Paged, Plugin, PluginManifest, PropertyCount, PropertyEntry, PropertyFilter, PropertySort,
+    BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,
+    HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged,
+    Plugin, PluginManifest, PropertyCount, PropertyEntry, PropertyFilter, PropertySort,
     PropertyTest, SearchHit, SearchScope, ViewProvider, ViewSpec,
 };
 pub use transfer::{

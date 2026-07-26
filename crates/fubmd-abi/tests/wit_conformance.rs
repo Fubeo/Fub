@@ -56,6 +56,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
 
 use fubmd_abi::arena::{self, BlockRef, InlineRef, UiRef};
+use fubmd_abi::command::{
+    Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
+    InvokeMode, ParamKind, ParamSpec, PlannedEdit,
+};
 use fubmd_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Event, EventKind, EventMask};
@@ -68,11 +72,11 @@ use fubmd_abi::model::{
 };
 use fubmd_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
-    BacklinkRef, CommandOutcome, CommandProvider, CommandSpec, DocumentProperties, EventHandler,
-    HealthCheck, HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
-    LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
-    PropertyCount, PropertyEntry, PropertyFilter, PropertySort, PropertyTest, SearchHit,
-    SearchScope, TagCount, ViewPlacement, ViewProvider, ViewSpec, ABI_VERSION,
+    BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,
+    HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef,
+    Page, Paged, Plugin, PluginManifest, PluginPermissions, PropertyCount, PropertyEntry,
+    PropertyFilter, PropertySort, PropertyTest, SearchHit, SearchScope, TagCount, ViewPlacement,
+    ViewProvider, ViewSpec, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -198,8 +202,19 @@ wit_type! {
     Event => "event",
     EventKind => "event-kind",
     JobSpec => "job-spec",
+
+    // I comandi: la dichiarazione (§1.36) e l'invocazione (§1.1).
     CommandSpec => "command-spec",
     CommandOutcome => "command-outcome",
+    CommandEffect => "command-effect",
+    CommandPlan => "command-plan",
+    PlannedEdit => "planned-edit",
+    CommandScope => "command-scope",
+    CommandReach => "command-reach",
+    ParamSpec => "param-spec",
+    ParamKind => "param-kind",
+    Choice => "choice",
+    InvokeMode => "invoke-mode",
     ViewSpec => "view-spec",
     ViewPlacement => "view-placement",
 
@@ -395,6 +410,7 @@ wit_fn!(A);
 wit_fn!(A, B);
 wit_fn!(A, B, C);
 wit_fn!(A, B, C, D);
+wit_fn!(A, B, C, D, E);
 
 /// I due modi in cui l'`HostApi` compare in una firma Rust. Sono scritti con
 /// lifetime `'static` solo perché un puntatore a funzione con lifetime elisi
@@ -1474,6 +1490,42 @@ fn health_check_name(c: HealthCheck) -> &'static str {
     }
 }
 
+fn command_reach_name(r: CommandReach) -> &'static str {
+    match r {
+        CommandReach::Session => "session",
+        CommandReach::Document => "document",
+        CommandReach::Documents => "documents",
+        CommandReach::Vault => "vault",
+        CommandReach::Settings => "settings",
+    }
+}
+
+fn invoke_mode_name(m: InvokeMode) -> &'static str {
+    match m {
+        InvokeMode::Apply => "apply",
+        InvokeMode::DryRun => "dry-run",
+    }
+}
+
+fn command_effect_case(e: &CommandEffect) -> Case {
+    match e {
+        CommandEffect::Done => case("done"),
+        CommandEffect::Navigate { doc } => case_ty("navigate", wit(doc)),
+        CommandEffect::Reveal { doc, span } => case_rec(
+            "reveal",
+            "command-effect-reveal",
+            vec![("doc", wit(doc)), ("span", wit(span))],
+        ),
+        CommandEffect::RunSearch { query } => case_ty("run-search", wit(query)),
+        CommandEffect::Plan(plan) => case_ty("plan", wit(plan)),
+        CommandEffect::Custom { ns, payload } => case_rec(
+            "custom",
+            "command-effect-custom",
+            vec![("ns", wit(ns)), ("payload", wit(payload))],
+        ),
+    }
+}
+
 fn pane_mode_name(m: PaneMode) -> &'static str {
     match m {
         PaneMode::Source => "source",
@@ -2297,26 +2349,146 @@ fn conform(source: &str) -> Result<(), String> {
         &[("wikilinks-as-data-attrs", wit(&wikilinks_as_data_attrs))],
     );
 
+    // --- i comandi (§1.1 il registro, §1.36 il chiamante non umano)
+
     let CommandSpec {
         id,
         title,
+        description,
         keybinding,
-    } = CommandSpec {
-        id: String::new(),
-        title: String::new(),
-        keybinding: None,
-    };
+        params,
+        scope,
+    } = CommandSpec::new("", "");
     contract.record(
         "command-spec",
         &[
             ("id", wit(&id)),
             ("title", wit(&title)),
+            ("description", wit(&description)),
             ("keybinding", wit(&keybinding)),
+            ("params", wit(&params)),
+            ("scope", wit(&scope)),
         ],
     );
 
-    let CommandOutcome { notify } = CommandOutcome { notify: None };
-    contract.record("command-outcome", &[("notify", wit(&notify))]);
+    let ParamSpec {
+        name,
+        title,
+        description,
+        kind,
+        required,
+    } = ParamSpec::new("", "", ParamKind::Text);
+    contract.record(
+        "param-spec",
+        &[
+            ("name", wit(&name)),
+            ("title", wit(&title)),
+            ("description", wit(&description)),
+            ("kind", wit(&kind)),
+            ("required", wit(&required)),
+        ],
+    );
+
+    let Choice { value, title } = Choice::new("", "");
+    contract.record("choice", &[("value", wit(&value)), ("title", wit(&title))]);
+
+    contract.variant_src(
+        "param-kind",
+        ("command.rs", "ParamKind"),
+        &[
+            case("text"),
+            case("number"),
+            case("bool"),
+            case("document"),
+            case("documents"),
+            case_ty("choice", wit(&Vec::<Choice>::new())),
+        ],
+    );
+
+    let CommandScope {
+        writes,
+        reach,
+        reversible,
+    } = CommandScope::read_only();
+    contract.record(
+        "command-scope",
+        &[
+            ("writes", wit(&writes)),
+            ("reach", wit(&reach)),
+            ("reversible", wit(&reversible)),
+        ],
+    );
+
+    contract.enumeration_src(
+        "command-reach",
+        ("command.rs", "CommandReach"),
+        [
+            CommandReach::Session,
+            CommandReach::Document,
+            CommandReach::Documents,
+            CommandReach::Vault,
+            CommandReach::Settings,
+        ]
+        .map(command_reach_name)
+        .as_slice(),
+    );
+
+    contract.enumeration_src(
+        "invoke-mode",
+        ("command.rs", "InvokeMode"),
+        [InvokeMode::Apply, InvokeMode::DryRun]
+            .map(invoke_mode_name)
+            .as_slice(),
+    );
+
+    let CommandOutcome { notify, effect } = CommandOutcome::done();
+    contract.record(
+        "command-outcome",
+        &[("notify", wit(&notify)), ("effect", wit(&effect))],
+    );
+
+    contract.variant_src(
+        "command-effect",
+        ("command.rs", "CommandEffect"),
+        &[
+            command_effect_case(&CommandEffect::Done),
+            command_effect_case(&CommandEffect::Navigate {
+                doc: DocId::new(""),
+            }),
+            command_effect_case(&CommandEffect::Reveal {
+                doc: DocId::new(""),
+                span: Span::EMPTY,
+            }),
+            command_effect_case(&CommandEffect::RunSearch {
+                query: String::new(),
+            }),
+            command_effect_case(&CommandEffect::Plan(CommandPlan::default())),
+            command_effect_case(&CommandEffect::Custom {
+                ns: String::new(),
+                payload: serde_json::Value::Null,
+            }),
+        ],
+    );
+
+    let CommandPlan {
+        summary,
+        docs,
+        edits,
+    } = CommandPlan::default();
+    contract.record(
+        "command-plan",
+        &[
+            ("summary", wit(&summary)),
+            ("docs", wit(&docs)),
+            ("edits", wit(&edits)),
+        ],
+    );
+
+    let PlannedEdit { doc, edit } = PlannedEdit::new(
+        DocId::new(""),
+        EditRequest::new(Revision::default(), Vec::new()),
+    );
+    contract.record("planned-edit", &[("doc", wit(&doc)), ("edit", wit(&edit))]);
 
     let ViewSpec {
         id,
@@ -2872,9 +3044,10 @@ fn conform(source: &str) -> Result<(), String> {
                 &'static dyn CommandProvider,
                 &'static str,
                 serde_json::Value,
+                InvokeMode,
                 Host,
             ) -> Result<CommandOutcome, PluginError>,
-        &["command", "args"],
+        &["command", "args", "mode"],
     );
 
     contract.method(

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type {
   BacklinkRef,
+  CommandEffect,
+  CommandOutcome,
+  CommandScope,
+  CommandSpec,
   EmbedContent,
   GraphData,
   KernelEvent,
@@ -81,6 +85,52 @@ function touchViewUpdate(u: ViewUpdate): void {
   }
 }
 
+function touchCommandEffect(e: CommandEffect): void {
+  switch (e.kind) {
+    case "done":
+    case "navigate":
+    case "reveal":
+    case "run_search":
+    case "plan":
+    case "custom":
+      return;
+    default:
+      assertNever(e);
+  }
+}
+
+/// Ogni specie di parametro dev'essere disegnabile: un `param_kind` nuovo in
+/// Rust deve arrivare qui come rosso, non come un campo che la palette non
+/// mostra.
+function touchParamKind(k: CommandSpec["params"][number]["kind"]): void {
+  switch (k.kind) {
+    case "text":
+    case "number":
+    case "bool":
+    case "document":
+    case "documents":
+      return;
+    case "choice":
+      k.value.forEach((c) => c.title);
+      return;
+    default:
+      assertNever(k);
+  }
+}
+
+function touchReach(r: CommandScope["reach"]): void {
+  switch (r) {
+    case "session":
+    case "document":
+    case "documents":
+    case "vault":
+    case "settings":
+      return;
+    default:
+      assertNever(r);
+  }
+}
+
 function touchEvent(e: KernelEvent): void {
   switch (e.type) {
     case "vault_opened":
@@ -123,6 +173,17 @@ const RECORD_KEYS: Record<string, string[]> = {
   // `undefined` e serde lo rifiuterebbe a runtime, non in compilazione.
   ViewContext: keysOf<ViewContext>({ pane: true, doc: true, selection: true, mode: true }),
   Selection: keysOf<Selection>({ span: true, text: true }),
+  // I comandi: la palette disegna ciò che la spec dichiara, quindi un campo
+  // nuovo in Rust non deve poter restare invisibile di qua.
+  CommandSpec: keysOf<CommandSpec>({
+    id: true,
+    title: true,
+    description: true,
+    keybinding: true,
+    params: true,
+    scope: true,
+  }),
+  CommandOutcome: keysOf<CommandOutcome>({ notify: true, effect: true }),
 };
 
 // I tipi che arrivano dall'APP (fixture gemella, `mirror-samples-app.json`).
@@ -158,6 +219,8 @@ describe("mirror TS↔Rust", () => {
       "ViewSpec",
       "ViewContext",
       "Selection",
+      "CommandSpec",
+      "CommandOutcome",
     ]) {
       expect(fixture[type], `manca il tipo ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
@@ -178,6 +241,20 @@ describe("mirror TS↔Rust", () => {
 
   it("ogni KernelEvent prodotto da Rust è una variante gestita dal mirror", () => {
     for (const s of fixture.KernelEvent) touchEvent(s as KernelEvent);
+  });
+
+  it("ogni effetto e ogni specie di parametro prodotti da Rust sono gestiti dal mirror", () => {
+    for (const s of fixture.CommandOutcome) touchCommandEffect((s as CommandOutcome).effect);
+    for (const s of fixture.CommandSpec) {
+      const spec = s as CommandSpec;
+      spec.params.forEach((p) => touchParamKind(p.kind));
+      touchReach(spec.scope.reach);
+    }
+    // Il campione «tutte le specie» esiste apposta: senza, un `param_kind`
+    // nuovo passerebbe di qui senza essere toccato da nessuno.
+    const ricco = (fixture.CommandSpec as CommandSpec[]).find((s) => s.params.length > 1);
+    expect(ricco, "manca il campione con un parametro per specie").toBeTruthy();
+    expect(ricco!.params.some((p) => p.kind.kind === "choice")).toBe(true);
   });
 
   it("i record hanno esattamente le chiavi del tipo TS", () => {

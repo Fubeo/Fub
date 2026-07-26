@@ -181,15 +181,47 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
   (altrimenti cablato nell'app fino a M3).
 
 Chiuso (vedi [PIANO.md](../PIANO.md), "Decisioni"): `Workspace::create_note`
-+ comando IPC `create_note`, cablato nell'app — il `CommandProvider` resta a M3,
-che è quando arriva la command palette che gli dà un senso. La nota nasce vuota,
++ comando IPC `create_note`, cablato nell'app — e cablato è **rimasto** anche
+dopo che il registro dei comandi è arrivato (vedi qui sotto): creare una nota è
+una capacità che l'`HostApi` non ha, ed è il §1.4 a doverla decidere. La nota
+nasce vuota,
 non da uno scheletro: un template è una preferenza, e le preferenze arrivano coi
 settings. Il backlink compare da solo, perché il link nel documento di partenza
 non viene toccato ed è il grafo a risolverlo di nuovo.
 
+### Registro dei comandi e palette (§1.1 + §1.36) — **fatto**, anticipato da M3
+
+Il `CommandProvider` era l'unico trait del contratto senza un solo chiamante:
+esisteva la firma, non il registro. Ora il `Workspace` ha
+`register_command_provider`/`commands`/`invoke_command`, l'IPC ha
+`list_commands`/`invoke_command` (gemelli di `list_views`/`view_action`), e la
+shell ha una **palette** che non cabla nessun id — legge le spec, disegna un
+campo per ogni parametro dichiarato, mostra il piano quando il raggio lo merita.
+
+È stato fatto insieme al §1.36 (un comando descritto a una **macchina**) perché
+sono la stessa firma vista da due lati, e le firme costano un campo prima del
+freeze e una migrazione dopo: `CommandSpec` porta ora descrizione, parametri
+tipati e raggio dichiarato, e `invoke` prende un `InvokeMode` — la rottura di
+firma fatta adesso, con la linea di base ritagliata in `wit/frozen/0.1.0.wit`.
+
+Le due cose che l'host **fa rispettare**, e che sono la differenza fra un
+registro leggibile e uno eseguibile da terzi: gli argomenti sono convalidati
+contro la spec prima che il comando venga chiamato, e chi simula (o si è
+dichiarato di sola lettura) riceve un `HostApi` che rifiuta le scritture — quindi
+il dry-run non è una convenzione fra chiamante e comando. Il verbale delle
+decisioni, con ciò che resta fuori, è in [todo.md](../todo.md) §1.1 e §1.36.
+
+Clienti veri nello stesso giro: `CoreCommands` (`search.open`,
+`selection.wikilink` — che compone contesto di sessione §1.9 ed edit chirurgico
+§1.16 —, `vault.replace` con anteprima del piano su N note) e la palette.
+E2e: `crates/fubmd-kernel/tests/invoke_command.rs`,
+`crates/fubmd-features/tests/commands_e2e.rs`.
+
 ## Trait/API coinvolti
 
 - `IndexProvider` (nuova impl nativa, tantivy) — [traits.md](../architecture/traits.md).
+- `CommandProvider` (registro, dry-run, palette: §1.1 + §1.36) — prima impl
+  `CoreCommands`, anticipata da M3.
 - `ViewProvider` (backlink ✅, outline ✅, tag ✅; graph-data da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
 - `HostApi::query_index` (col canale metadata `IndexQuery::Outline`/`Tags`) + `HostApi::active_context` — le capacità che rendono una view un provider vero.
 - `Workspace` in `fubmd-kernel`: nuovi percorsi incrementali per grafo+indice.

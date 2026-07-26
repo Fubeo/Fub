@@ -502,22 +502,137 @@ interface events {
     type event-mask = list<event-kind>;
 }
 
-/// Comandi.
+/// Comandi: le azioni del vault dette in una forma che chi non ha letto il
+/// codice può scegliere, compilare e invocare.
+///
+/// La palette si accontenterebbe di `{id, title}` — a scegliere e a compilare è
+/// un umano. Tutto il resto di questa interfaccia esiste per gli **altri**
+/// chiamanti dello stesso registro: la CLI (27.1), l'API locale (27.2), le
+/// automazioni (16.2) e il centro di comando LLM (22.4). Vedi
+/// `crates/fubmd-abi/src/command.rs`.
 interface command {
     use json.{json};
+    use model.{doc-id, span};
+    use edit.{edit-request};
     use errors.{plugin-error};
 
+    /// La specie di un argomento. Vocabolario chiuso e piccolo: sono le specie
+    /// che un chiamante qualunque sa produrre senza conoscere il comando. NON
+    /// sono i nodi di input della UI (§1.2): questi dicono *cosa* è un valore,
+    /// quelli diranno *come* lo si chiede.
+    variant param-kind {
+        text,
+        number,
+        %bool,
+        /// L'id di un documento: chi disegna un form può offrire il vault, chi
+        /// valida sa che una stringa qualunque non va bene.
+        document,
+        /// Più documenti: la forma con cui si chiede un'operazione su *queste*
+        /// note.
+        documents,
+        /// Uno fra valori dichiarati — dichiarati QUI, perché chi non ha letto
+        /// il codice deve poterli vedere.
+        choice(list<choice>),
+    }
+    /// Una scelta: il valore che viaggia e l'etichetta che si legge.
+    record choice {
+        value: string,
+        title: string,
+    }
+    /// Un argomento di un comando. Un parametro non obbligatorio assente non ha
+    /// un default nel contratto: cosa farne lo decide il comando, che è l'unico
+    /// a saperlo.
+    record param-spec {
+        name: string,
+        title: string,
+        description: string,
+        kind: param-kind,
+        required: bool,
+    }
+
+    /// Fin dove arriva un comando, in ordine di raggio crescente: chi decide se
+    /// chiedere conferma confronta.
+    enum command-reach { session, document, documents, vault, settings }
+    /// Il raggio dichiarato. `writes` è l'unico campo che l'host fa rispettare
+    /// (chi si dichiara di sola lettura riceve un host che rifiuta le
+    /// scritture); gli altri due sono dichiarazioni, e il piano del dry-run è
+    /// ciò che le smentisce.
+    record command-scope {
+        writes: bool,
+        reach: command-reach,
+        reversible: bool,
+    }
+
+    /// Un comando offerto da un provider. `description` è inutile alla palette
+    /// (c'è il titolo) ed è l'unico ingrediente su cui un chiamante non umano
+    /// sceglie.
     record command-spec {
         id: string,
         title: string,
+        description: string,
         keybinding: option<string>,
+        params: list<param-spec>,
+        scope: command-scope,
     }
+
+    /// Come si sta invocando. Nessun default: un `apply` implicito è l'errore
+    /// che questo enum esiste per rendere impossibile.
+    enum invoke-mode {
+        apply,
+        /// Dimmi cosa faresti. L'host presta un `host-api` in SOLA LETTURA: non
+        /// è una richiesta di buona condotta, è una garanzia.
+        dry-run,
+    }
+
+    /// La modifica che un comando propone per UN documento.
+    record planned-edit {
+        doc: doc-id,
+        edit: edit-request,
+    }
+    /// Cosa succederebbe. `docs` è la verità completa (ci sta anche ciò che un
+    /// `edit-request` non esprime: creare, cestinare, rinominare); `edits` è il
+    /// dettaglio mostrabile come diff. L'host completa `docs` con i documenti
+    /// degli `edits`: quell'elenco è ciò che l'utente approva.
+    record command-plan {
+        summary: string,
+        docs: list<doc-id>,
+        edits: list<planned-edit>,
+    }
+
+    record command-effect-reveal {
+        doc: doc-id,
+        span: span,
+    }
+    record command-effect-custom {
+        ns: string,
+        payload: json,
+    }
+    /// Ciò che la shell deve fare dopo. Parente di `view-update` e non lo stesso
+    /// tipo: da un comando non esiste una view da ridisegnare.
+    variant command-effect {
+        done,
+        navigate(doc-id),
+        reveal(command-effect-reveal),
+        run-search(string),
+        plan(command-plan),
+        /// Varco di estensione con namespace: la shell che non riconosce `ns`
+        /// non fa nulla (degrado garbato, come per `view-update`).
+        custom(command-effect-custom),
+    }
+
+    /// L'esito: cosa dire all'utente e cosa deve fare la shell. Un record e non
+    /// un enum perché le due cose capitano insieme. `notify` è TESTO SEMPLICE,
+    /// mai markup.
     record command-outcome {
         notify: option<string>,
+        effect: command-effect,
     }
 
     commands: func() -> list<command-spec>;
-    invoke: func(command: string, args: json) -> result<command-outcome, plugin-error>;
+    /// Esegue (o simula) un comando. Gli argomenti arrivano già convalidati
+    /// contro la `command-spec`: i `params` dichiarati sono la difesa del
+    /// comando, e chi sbaglia riceve un `bad-args` che dice cosa manca.
+    invoke: func(command: string, args: json, mode: invoke-mode) -> result<command-outcome, plugin-error>;
 }
 
 /// Il canale dati verso le view: ricerca, backlink, grafo, proprietà, salute
