@@ -52,7 +52,7 @@ dipendono da `comrak`, `tauri` o `wasmtime`. Il core non sa cosa sia il markdown
 
 ## Come si avvia
 
-Prerequisiti: Rust ≥ 1.85, Node ≥ 20, e le dipendenze Tauri v2 per Linux
+Prerequisiti: Rust ≥ 1.88, Node ≥ 20, e le dipendenze Tauri v2 per Linux
 (`webkit2gtk-4.1`).
 
 ```bash
