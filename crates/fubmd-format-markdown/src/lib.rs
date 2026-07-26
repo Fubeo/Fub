@@ -8,11 +8,14 @@ mod offsets;
 mod parse;
 mod render;
 mod serialize;
+mod transfer;
 mod util;
 
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::DocumentModel;
 use fubmd_abi::{FormatError, FormatProvider};
+
+pub use transfer::{MarkdownExport, MarkdownImport, TARGET_FILES, TARGET_SINGLE};
 
 /// Provider markdown (dialetto Obsidian).
 #[derive(Default)]

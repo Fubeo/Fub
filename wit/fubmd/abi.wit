@@ -821,6 +821,13 @@ interface host-api {
     /// I documenti del vault, in ordine. Senza, `read-document` serve solo per
     /// gli id che arrivano dagli eventi.
     list-documents: func() -> result<list<doc-id>, plugin-error>;
+    /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, … a partire da
+    /// un id qualsiasi. È una capacità e non un calcolo perché il vault è
+    /// l'unico a sapere cosa è occupato (l'indicizzato E ciò che sta sul disco)
+    /// e perché la convenzione D3 deve restare una sola: con ~50 importer in
+    /// FEATURES 17.1, l'alternativa sono cinquanta convenzioni. Non prenota
+    /// niente.
+    free-name: func(id: doc-id) -> doc-id;
     emit: func(event: event);
     /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
     /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
@@ -915,6 +922,158 @@ interface plugin {
     run-job: func(job: string, payload: json) -> result<json, plugin-error>;
 }
 
+/// Ciò che i due versi del trasferimento hanno in comune. Sta in un'interfaccia
+/// sua per la stessa ragione di `jobs` e `errors`: un tipo condiviso da due
+/// interfacce deve essere dichiarato in una terza, o "spostarlo" dopo sarebbe
+/// una rinomina qualificata, cioè una rottura.
+interface transfer {
+    /// Gravità di una riga di giornale.
+    enum note-level { info, warning, error }
+
+    /// I *migration logs* / *migration audit* di FEATURES 17.3. `entry` dice a
+    /// COSA si riferisce la riga nei termini della sorgente (il nome dentro lo
+    /// zip, la riga del CSV): senza, un giornale di quattromila righe è vero e
+    /// inservibile.
+    record transfer-note {
+        level: note-level,
+        message: string,
+        entry: option<string>,
+    }
+}
+
+/// `ImportProvider`: come i dati ENTRANO nel vault.
+///
+/// La sorgente arriva **già letta** (`bytes`), mai come percorso: chi apre il
+/// file è l'host. È ciò che rende il capitolo 17 esprimibile senza concedere a
+/// un plugin una capacità filesystem — la sandbox di M5 non deve aggiungere
+/// nulla. Il prezzo dichiarato: la sorgente sta in memoria (lo streaming è
+/// additivo, un `path: string` non lo sarebbe).
+interface importer {
+    use json.{json};
+    use model.{doc-id};
+    use errors.{plugin-error};
+    use transfer.{transfer-note};
+
+    /// I byte stanno nella sorgente, e non solo nel parametro di `import`,
+    /// perché `.docx`, `.epub`, `.odt` e mezzo mondo dei backup sono LO STESSO
+    /// contenitore zip: un dispatch sul solo nome sceglierebbe il provider
+    /// sbagliato. Il costo è una copia per candidato interpellato.
+    record import-source {
+        /// Come l'utente conosce la sorgente. NON è un doc-id: sta fuori dal
+        /// vault.
+        name: string,
+        media-type: option<string>,
+        bytes: list<u8>,
+    }
+
+    /// La *preview* di 17.3 senza un secondo tipo: in `preview` il provider fa
+    /// tutto tranne le scritture e restituisce lo stesso `import-report`. Il
+    /// piano È il rapporto di una prova a vuoto.
+    enum import-mode { preview, apply }
+
+    /// Il *duplicate handling* di 17.3. `rename` usa `host-api.free-name`: la
+    /// convenzione dei nomi la decide l'host, non l'importer.
+    enum conflict-policy { skip, replace, rename }
+
+    record import-request {
+        mode: import-mode,
+        /// Cartella del vault in cui atterrano i documenti; vuota = radice.
+        folder: string,
+        on-conflict: conflict-policy,
+        /// Opzioni del singolo importer: l'escape hatch JSON, senza namespace
+        /// perché il provider è già stato scelto.
+        options: json,
+    }
+
+    variant import-outcome {
+        created,
+        replaced,
+        skipped,
+        /// Un import può riuscire con dei falliti dentro: `plugin-error`
+        /// significa «non ho potuto cominciare», questo «questo pezzo no».
+        failed(string),
+    }
+    record imported-document {
+        doc: doc-id,
+        outcome: import-outcome,
+        /// Da quale entrata della sorgente viene.
+        entry: option<string>,
+    }
+    /// Nessun conteggio (`documents` lo è già) e nessun id di lotto: il
+    /// rollback è del §1.12 del piano, e un campo che nessuno consuma è peggio
+    /// di un campo assente.
+    record import-report {
+        mode: import-mode,
+        documents: list<imported-document>,
+        log: list<transfer-note>,
+    }
+
+    /// Il dispatch: il kernel interpella i provider in ordine e il primo che
+    /// dice di sì la prende. `false` non è un errore.
+    can-handle: func(source: import-source) -> bool;
+    /// Le scritture passano da `host-api.write-document` (importato dal world):
+    /// un importer non tocca il filesystem.
+    %import: func(source: import-source, request: import-request) -> result<import-report, plugin-error>;
+}
+
+/// `ExportProvider`: come i dati ESCONO dal vault.
+///
+/// Un export è una **lettura**: nessuna delle ~45 voci di 17.2 scrive nel
+/// vault, e dirlo nella firma è ciò che permette al kernel di servirlo sotto
+/// prestito condiviso, come `view.render-view` e `index.query`.
+interface exporter {
+    use json.{json};
+    use model.{doc-id};
+    use errors.{plugin-error};
+    use index.{index-query};
+    use transfer.{transfer-note};
+
+    record export-target {
+        /// Id stabile col prefisso di chi lo offre (`markdown.files`).
+        id: string,
+        name: string,
+        /// Estensione dell'artefatto quando l'esito è UN FILE SOLO (`pdf`,
+        /// `zip`); assente quando è un albero di file (una cartella markdown,
+        /// un sito statico). Un campo per due domande, di proposito: chi apre
+        /// il dialogo di sistema deve sapere prima se chiedere un file o una
+        /// cartella, e due campi indipendenti ammetterebbero combinazioni che
+        /// non esistono.
+        extension: option<string>,
+    }
+
+    /// Le tre domande di 17.2: note selezionate, cartella (la radice = vault
+    /// intero), risultati di una query. L'ultima non è un lusso: senza,
+    /// esportare una ricerca vuol dire che l'APP materializza la lista, cioè
+    /// che un plugin non potrebbe fare la stessa cosa.
+    variant export-selection {
+        documents(list<doc-id>),
+        /// Cartella e discendenti; `""` è la radice. Stessa regola di
+        /// appartenenza di `search-scope.folders`.
+        folder(string),
+        query(index-query),
+    }
+    record export-request {
+        selection: export-selection,
+        /// L'id di una delle destinazioni di `targets`.
+        target: string,
+        options: json,
+    }
+    /// Byte, non un file: chi li posa sul disco è l'host.
+    record export-artifact {
+        /// Path relativo DENTRO l'esito.
+        path: string,
+        media-type: string,
+        bytes: list<u8>,
+    }
+    record export-report {
+        artifacts: list<export-artifact>,
+        log: list<transfer-note>,
+    }
+
+    targets: func() -> list<export-target>;
+    %export: func(request: export-request) -> result<export-report, plugin-error>;
+}
+
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che
 /// implementa. Il kernel non distingue nativo da WASM.
 world plugin-world {
@@ -926,4 +1085,6 @@ world plugin-world {
     export view;
     export index;
     export event-handler;
+    export importer;
+    export exporter;
 }
