@@ -57,11 +57,11 @@ review si vede; è tutta la differenza con oggi, dove non si vedrebbe affatto.
 **I ritagli fatti finora**, in ordine, così che l'elenco delle rotture
 deliberate stia in un posto solo e non solo nei commenti dei singoli punti:
 
-| Giro | Cosa è stato ritagliato |
+| Decisione | Cosa è stato ritagliato |
 |---|---|
-| §1.5 | `anchor` dentro ogni record di blocco, `items` della lista, `thematic-break` da payload nudo a record, `embed` fuori da `link-target-wiki` |
-| §1.18 | `event-handler.handle` prende un `notice` e non più un `event` nudo |
-| §1.4 | `host-api.storage-get` / `storage-set` **tolte** (lo stato volatile a chiave→valore non ha più casi d'uso: vedi il commento in `0.1.0.wit` e `docs/todo.md` §1.4) |
+| [decisione 0003](../../docs/decisions/0003-modello-del-documento.md) | `anchor` dentro ogni record di blocco, `items` della lista, `thematic-break` da payload nudo a record, `embed` fuori da `link-target-wiki` |
+| [decisione 0012](../../docs/decisions/0012-origine-degli-eventi.md) | `event-handler.handle` prende un `notice` e non più un `event` nudo |
+| [decisione 0013](../../docs/decisions/0013-elenco-delle-capacita.md) | `host-api.storage-get` / `storage-set` **tolte** (lo stato volatile a chiave→valore non ha più casi d'uso: vedi il commento in `0.1.0.wit` e il verbale) |
 
 **Dopo il freeze** un file già qui non si tocca più. Alla pubblicazione di una
 versione nuova:

@@ -147,7 +147,7 @@ fn the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so() {
     ));
 
     // Qualcun altro riscrive la nota: il kernel lascia cadere lo span, perché
-    // quelle coordinate erano di un altro testo (§1.9).
+    // quelle coordinate erano di un altro testo (decisione 0007).
     ws.write_document(&nota, "un testo completamente diverso\n")
         .expect("scrive");
 
@@ -213,7 +213,7 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
 }
 
 // ---------------------------------------------------------------------------
-// Il lotto (§1.12) e l'origine (§1.18) su un comando vero
+// Il lotto (decisione 0011) e l'origine (decisione 0012) su un comando vero
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -291,19 +291,19 @@ fn a_dry_run_opens_no_batch_because_it_touches_nothing() {
         rx.try_iter().count(),
         0,
         "una simulazione non emette niente, nemmeno un terminale di lotto: il \
-         non-scrivere del §1.36 vale anche per gli eventi, o la shell \
+         non-scrivere della decisione 0010 vale anche per gli eventi, o la shell \
          ridisegnerebbe per un'anteprima"
     );
 }
 
 // ---------------------------------------------------------------------------
-// I comandi strutturali (§1.4): il giro che la shell faceva coi comandi Tauri
+// I comandi strutturali (decisione 0013): il giro che la shell faceva coi comandi Tauri
 // ---------------------------------------------------------------------------
 
 /// Il ciclo di vita completo di una nota, chiesto **solo** al registro: creare,
 /// rinominare, cestinare, ripristinare, svuotare.
 ///
-/// È il dogfooding che il §1.1 non aveva potuto fare: nessuna riga qui chiama
+/// È il dogfooding che la decisione 0009 non aveva potuto fare: nessuna riga qui chiama
 /// un metodo di `Workspace` per cambiare il vault. Se un giorno una di queste
 /// azioni tornasse a passare per una via privilegiata, questo test resterebbe
 /// verde — ed è per questo che il suo compagno è la sparizione dei comandi
@@ -449,7 +449,7 @@ fn the_plan_of_a_rename_names_the_notes_that_link_it() {
 }
 
 // ---------------------------------------------------------------------------
-// vault.archive: comporre comandi (§1.4, `run_command`)
+// vault.archive: comporre comandi (decisione 0013, `run_command`)
 // ---------------------------------------------------------------------------
 
 #[test]

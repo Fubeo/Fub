@@ -1,4 +1,4 @@
-//! I trait del §1.7 su un vault vero: una sorgente che entra, degli artefatti
+//! I trait della decisione 0006 su un vault vero: una sorgente che entra, degli artefatti
 //! che escono, e in mezzo il kernel.
 //!
 //! Sta qui e non fra i test del kernel per la stessa ragione di
@@ -306,7 +306,7 @@ fn the_empty_folder_is_the_whole_vault() {
 #[test]
 fn a_query_selects_the_documents_to_export() {
     let (_g, ws) = vault();
-    // «Export query results» (17.2): la selezione è il canale del §1.6, e chi
+    // «Export query results» (17.2): la selezione è il canale della decisione 0005, e chi
     // esporta non ha bisogno che l'app gli materializzi la lista.
     let report = ws
         .export(&ExportRequest::new(
@@ -408,7 +408,7 @@ fn a_document_that_vanishes_is_a_log_line_and_not_a_failed_export() {
 
 #[test]
 fn what_goes_out_comes_back_in_identical() {
-    // Il round-trip che il §4.3 del piano chiede «appena i trait del §1.7
+    // Il round-trip che il §17.1 del piano chiede «appena i trait della decisione 0006
     // esistono». Non è una proprietà del markdown: è la prova che i due versi
     // del trasferimento si parlano — e che nessuno dei due passa da
     // `serialize`, che è lossy per costruzione.

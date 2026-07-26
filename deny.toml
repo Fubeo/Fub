@@ -4,7 +4,7 @@
 # FEATURES che non si recupera a posteriori. Le licenze delle dipendenze entrate
 # nel frattempo si riesaminano una per una, e una incompatibile scoperta a valle
 # si toglie riscrivendo ciò che ci stava sopra. Oggi l'albero è di ~540 crate e
-# §4.7 del piano ne prevede uno per bundle di feature: il conto cresce, il costo
+# §16.3 del piano ne prevede uno per bundle di feature: il conto cresce, il costo
 # di iniziare no.
 #
 # Girato in CI dal job `supply-chain` (.github/workflows/ci.yml), che genera

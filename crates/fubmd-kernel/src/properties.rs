@@ -10,7 +10,7 @@
 //!
 //! # Le regole, in un posto solo
 //!
-//! - **I valori sono quelli normalizzati** ([`PropertyValue`], §1.5): la data è
+//! - **I valori sono quelli normalizzati** ([`PropertyValue`], decisione 0003): la data è
 //!   una data, il `[[wikilink]]` è una relazione, il resto è JSON. Chi
 //!   interroga non riparsa niente.
 //! - **Specie diverse non si confrontano**: `>` fra un numero e un testo è
@@ -193,7 +193,7 @@ fn instant_of(d: &PropertyDate) -> i64 {
             let local = t.hour as i64 * 60 + t.minute as i64;
             // Senza fuso l'orario è "come era scritto": confrontarlo con uno che
             // il fuso ce l'ha è il meglio che si possa fare senza indovinare il
-            // fuso dell'utente, che è una capacità dell'host (§1.4).
+            // fuso dell'utente, che è una capacità dell'host (decisione 0013).
             local - t.offset_minutes.unwrap_or(0) as i64
         }
     };

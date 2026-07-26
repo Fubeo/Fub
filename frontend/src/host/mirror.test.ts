@@ -23,12 +23,12 @@ import type {
   ViewSpec,
   ViewUpdate,
   WorkspaceMeta,
-} from "./api";
+} from "./contract";
 // Le fixture sono generate dai tipi Rust (serde) — vedi
 // `crates/fubmd-features/tests/ts_mirror.rs` (tipi del contratto) e
 // `crates/fubmd-app/tests/ts_mirror_app.rs` (tipi dell'app).
-import samples from "./__fixtures__/mirror-samples.json";
-import appSamples from "./__fixtures__/mirror-samples-app.json";
+import samples from "../__fixtures__/mirror-samples.json";
+import appSamples from "../__fixtures__/mirror-samples-app.json";
 
 // L'altra metà del presidio dei mirror (la prima è `crates/fubmd-abi`… ehm,
 // `crates/fubmd-features/tests/ts_mirror.rs`): la fixture è generata dai tipi
@@ -260,7 +260,7 @@ describe("mirror TS↔Rust", () => {
   });
 
   // Ciò che il ponte Tauri consegna davvero non è un evento nudo ma un
-  // `KernelNotice`: l'evento e la sua origine (§1.18). Un mirror che avesse
+  // `KernelNotice`: l'evento e la sua origine (decisione 0012). Un mirror che avesse
   // continuato a dichiarare la forma vecchia sarebbe rimasto verde in
   // compilazione e `e.type` sarebbe stato `undefined` a runtime.
   it("ogni attore prodotto da Rust è gestito, e il notice porta l'evento dentro", () => {

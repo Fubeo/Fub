@@ -27,7 +27,7 @@ use fubmd_abi::model::DocId;
 /// Divide un target markdown in path e **frammento** (`#heading`, `#^blocco`).
 ///
 /// Il frammento non partecipa alla risoluzione — l'ancora dentro un documento è
-/// roba del §1.5 — ma va conservato: una riscrittura al rename che lo perdesse
+/// roba della decisione 0003 — ma va conservato: una riscrittura al rename che lo perdesse
 /// romperebbe il link in un modo diverso da quello che stava riparando.
 pub(crate) fn split_fragment(raw: &str) -> (&str, &str) {
     match raw.find('#') {

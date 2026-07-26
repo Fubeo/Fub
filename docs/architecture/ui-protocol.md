@@ -5,7 +5,7 @@ Un plugin (o una feature ufficiale) **descrive** la propria UI come albero
 **disegna** con i suoi componenti nativi. Risultato: temi coerenti, niente JS nei
 plugin, stessa strada per feature native e plugin di terzi.
 
-Definizione: `crates/fubmd-abi/src/ui.rs`. Renderer: `frontend/src/ui.ts`.
+Definizione: `crates/fubmd-abi/src/ui.rs`. Renderer: `frontend/src/ui/node.ts`.
 
 Torna a [../PIANO.md](../PIANO.md) · vedi [traits.md](traits.md).
 
@@ -37,7 +37,7 @@ Tipi di supporto: `Axis { Row, Column }`, `Intent { Neutral, Primary, Danger }`
    - `Navigate { doc_id }` — chiede al core di aprire un documento;
    - `Reveal { doc_id, span }` — apri (se serve) e porta la vista su un
      intervallo del documento; `span` è in byte UTF-8, il frontend lo mappa
-     sull'editor col ponte in `frontend/src/offsets.ts`;
+     sull'editor col ponte in `frontend/src/rules/offsets.ts`;
    - `RunSearch { query }` — esegui una ricerca e mostrane i risultati.
 
 Questo giro è cablato nel renderer generico (`mountView` in `main.ts`) e servito

@@ -15,7 +15,7 @@ import {
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
-import { childName, pageName } from "./organizer";
+import { childName, pageName } from "../rules/organizer";
 
 /// Le sorgenti dati dei completamenti. `listNotes` restituisce i DocId del
 /// vault; `listTags` i tag con la frequenza (mirror di `TagCount`).

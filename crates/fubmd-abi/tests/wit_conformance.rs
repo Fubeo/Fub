@@ -207,7 +207,7 @@ wit_type! {
     Notice => "notice",
     JobSpec => "job-spec",
 
-    // I comandi: la dichiarazione (§1.36) e l'invocazione (§1.1).
+    // I comandi: la dichiarazione (decisione 0010) e l'invocazione (decisione 0009).
     CommandSpec => "command-spec",
     CommandOutcome => "command-outcome",
     CommandEffect => "command-effect",
@@ -2233,7 +2233,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    // Le forme del §1.5 che stanno *dentro* i blocchi: la voce di lista col suo
+    // Le forme della decisione 0003 che stanno *dentro* i blocchi: la voce di lista col suo
     // marcatore di task, e le righe/celle della tabella.
     let arena::ListItem { blocks, task, span } = arena::ListItem {
         blocks: Vec::new(),
@@ -2385,7 +2385,7 @@ fn conform(source: &str) -> Result<(), String> {
         &[("wikilinks-as-data-attrs", wit(&wikilinks_as_data_attrs))],
     );
 
-    // --- i comandi (§1.1 il registro, §1.36 il chiamante non umano)
+    // --- i comandi (decisione 0009 il registro, decisione 0010 il chiamante non umano)
 
     let CommandSpec {
         id,
@@ -2550,7 +2550,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    // --- l'edit chirurgico (§1.16)
+    // --- l'edit chirurgico (decisione 0008)
 
     let TextEdit { span, text } = TextEdit::insert(0, "");
     contract.record("text-edit", &[("span", wit(&span)), ("text", wit(&text))]);
@@ -2576,7 +2576,7 @@ fn conform(source: &str) -> Result<(), String> {
         &[("revision", wit(&revision)), ("applied", wit(&applied))],
     );
 
-    // --- il contesto di sessione (§1.9)
+    // --- il contesto di sessione (decisione 0007)
 
     let Selection { span, text } = Selection::default();
     contract.record("selection", &[("span", wit(&span)), ("text", wit(&text))]);
@@ -2854,7 +2854,7 @@ fn conform(source: &str) -> Result<(), String> {
         &[("job", wit(&job)), ("payload", wit(&payload))],
     );
 
-    // L'origine di un evento (§1.18) e il lotto di cui fa parte (§1.12). I
+    // L'origine di un evento (decisione 0012) e il lotto di cui fa parte (decisione 0011). I
     // record di payload dei due variant (`actor-plugin`, `event-batch-ended`)
     // se li rivendica `variant_src` qui sopra; questi due invece sono record a
     // sé, e senza rivendicarli il contratto li darebbe per morti.

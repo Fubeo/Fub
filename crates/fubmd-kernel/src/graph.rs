@@ -812,7 +812,7 @@ mod tests {
         assert_eq!(graph.outgoing(&DocId::new("a.md")).len(), 2);
     }
 
-    // --- la camminata: `IndexQuery::Neighbors` (§1.6) ----------------------
+    // --- la camminata: `IndexQuery::Neighbors` (decisione 0005) ----------------------
 
     /// `a → b → c`, e `d → a`.
     fn chain() -> Vec<DocumentModel> {
@@ -910,7 +910,7 @@ mod tests {
         assert!(walk(&graph, "a.md", LinkDirection::Both, 0).is_empty());
     }
 
-    // --- link markdown: la seconda specie di arco (§2.21) ------------------
+    // --- link markdown: la seconda specie di arco (decisione 0004) ------------------
 
     fn doc_with_paths(id: &str, dests: &[&str]) -> DocumentModel {
         let mut m = DocumentModel::empty(DocId::new(id));

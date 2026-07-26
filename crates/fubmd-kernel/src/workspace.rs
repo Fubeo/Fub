@@ -224,11 +224,11 @@ pub struct Workspace {
     /// (`Html`/`WebView`), e da un comando non passa un albero di UI — l'unica
     /// stringa che l'esito porta all'utente (`notify`) è testo semplice, come
     /// lo snippet di una ricerca. Ciò che serve a un comando è un *permesso*
-    /// (§2.10), che è un'altra domanda e ha un altro posto.
+    /// (§7.3), che è un'altra domanda e ha un altro posto.
     ///
     /// Sono `Arc` e non `Box` — soli fra i provider — perché sono gli unici che
     /// devono restare **raggiungibili durante una propria chiamata**: col
-    /// `run_command` del §1.4 un comando ne invoca un altro, e se il registro
+    /// `run_command` della decisione 0013 un comando ne invoca un altro, e se il registro
     /// fosse svuotato per la durata dell'invocazione (la disciplina di view,
     /// indici e handler) la macro non troverebbe nessuno dei comandi che deve
     /// comporre — nemmeno quelli di provider diversi dal suo. `invoke` prende
@@ -273,14 +273,14 @@ pub struct Workspace {
     /// stantio è peggio di uno span assente — chi lo usasse taglierebbe i byte
     /// sbagliati.
     context: Option<ViewContext>,
-    /// Chi ha **chiesto** ciò che il workspace sta facendo adesso (§1.18): è
+    /// Chi ha **chiesto** ciò che il workspace sta facendo adesso (decisione 0012): è
     /// l'attore che finisce sull'origine di ogni evento emesso da qui in poi.
     /// Il valore a riposo è [`Actor::User`] perché a riposo il kernel è chiamato
     /// dalla shell; lo cambiano, per la durata di una chiamata,
     /// [`as_actor`](Workspace::as_actor) e i suoi tre chiamanti (il watcher, il
     /// dispatch verso un handler, l'invocazione di un comando).
     actor: Actor,
-    /// Il lotto aperto (§1.12), se c'è. Uno solo: un `rename_document` dentro un
+    /// Il lotto aperto (decisione 0011), se c'è. Uno solo: un `rename_document` dentro un
     /// comando non apre un secondo lotto, entra in quello che c'è — chiuderne
     /// uno interno farebbe arrivare un `batch-ended` mentre l'operazione esterna
     /// è ancora in corso. Per questo non serve contare le aperture: chi trova il
@@ -466,7 +466,7 @@ impl Workspace {
         let _ = self.flush_indexes();
 
         // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
-        // dichiara di esistere (§1.18).
+        // dichiara di esistere (decisione 0012).
         self.as_actor(Actor::Kernel, |ws| {
             ws.emit_event(Event::VaultOpened {
                 root: ws.vault.root().to_string(),
@@ -517,7 +517,7 @@ impl Workspace {
     }
 
     /// La revisione del sorgente di un documento: l'identità del testo su cui
-    /// una modifica chirurgica va calcolata (§1.16).
+    /// una modifica chirurgica va calcolata (decisione 0008).
     ///
     /// Si legge dal **disco**, come ogni altra lettura del kernel: la verità di
     /// un documento è il file, e una revisione derivata da una cache sarebbe
@@ -558,7 +558,7 @@ impl Workspace {
 
     /// Riparsa un documento già presente sul disco (usato dal file watcher).
     ///
-    /// L'origine è [`Actor::Watcher`] (§1.18): questa modifica non è passata da
+    /// L'origine è [`Actor::Watcher`] (decisione 0012): questa modifica non è passata da
     /// noi, e chi la riceve — la shell col buffer aperto, un'automazione — deve
     /// poterla distinguere da una scrittura che ha chiesto lui.
     pub fn refresh_from_disk(&mut self, id: &DocId) -> Result<()> {
@@ -847,7 +847,7 @@ impl Workspace {
     /// Emette [`Event::DocumentRenamed`] (non `Removed`+`Changed`): chi tiene
     /// stato per-documento migra la chiave.
     ///
-    /// È un **lotto** (§1.12), ed è il caso che ha fatto nascere la voce: una
+    /// È un **lotto** (decisione 0011), ed è il caso che ha fatto nascere la voce: una
     /// nota con 200 backlink riscrive 200 sorgenti, e prima di questo giro erano
     /// 200 `index-updated` — cioè 200 ridisegni completi della shell, con 200
     /// `list_documents`, per un'operazione che l'utente ha chiesto una volta.
@@ -912,7 +912,7 @@ impl Workspace {
         // Il lotto non annulla: le sorgenti riscritte restano riscritte anche
         // se una è fallita, ed è la scelta giusta *per il rename* — abortire a
         // metà lascerebbe link misti senza possibilità di retry. Chi vuole il
-        // contrario (import, migrazioni) vuole il journal del §2.5, non un
+        // contrario (import, migrazioni) vuole il journal del §15.2, non un
         // campo in più qui.
         if !falliti.is_empty() {
             return Err(KernelError::LinkRewrite(falliti.join("; ")));
@@ -1024,7 +1024,7 @@ impl Workspace {
     ///
     /// Il piano è fatto di [`EditRequest`], non di sorgenti intere: è lo stesso
     /// calcolo di prima — gli span dei link li dava già il modello — detto nella
-    /// forma che il contratto ora ha (§1.16). La `base` di ognuna è la revisione
+    /// forma che il contratto ora ha (decisione 0008). La `base` di ognuna è la revisione
     /// del sorgente **letto qui**, ed è ciò che impedisce che una riscrittura
     /// arrivata nel frattempo venga cancellata dal piano.
     ///
@@ -1580,7 +1580,7 @@ impl Workspace {
 
     // --- comandi -----------------------------------------------------------
     //
-    // Il registro del §1.1: un'azione si dichiara una volta e la chiedono tutti
+    // Il registro della decisione 0009: un'azione si dichiara una volta e la chiedono tutti
     // — la palette, la tastiera, una macro, la CLI, il centro di comando. Il
     // kernel non sa cosa faccia un comando; sa scegliere chi lo possiede,
     // convalidare ciò che gli si passa e decidere **quali capacità** prestargli.
@@ -1595,7 +1595,7 @@ impl Workspace {
         provider: Box<dyn CommandProvider>,
     ) {
         // La firma resta `Box` — è quella degli altri `register_*`, e chi
-        // registra non deve sapere perché qui dentro serve un `Arc` (§1.4:
+        // registra non deve sapere perché qui dentro serve un `Arc` (decisione 0013:
         // `run_command` rientra nel registro mentre il registro è in uso).
         self.commands.push((id.into(), Arc::from(provider)));
     }
@@ -1631,8 +1631,8 @@ impl Workspace {
     ///    non manterrebbe), ed è per la stessa ragione che `writes: false` non è
     ///    una decorazione: dichiararsi innocuo è vincolante.
     ///
-    /// 3. **L'invocazione è un lotto, intestato a chi l'ha chiesta** (§1.12 +
-    ///    §1.18). Un `Apply` è, per definizione, *una* cosa che qualcuno ha
+    /// 3. **L'invocazione è un lotto, intestato a chi l'ha chiesta** (decisione 0011 +
+    ///    decisione 0012). Un `Apply` è, per definizione, *una* cosa che qualcuno ha
     ///    chiesto: `vault.replace` su 40 note emette un `batch-ended` solo, e
     ///    ogni evento che ne nasce porta `by` come attore. Che `by` sia un
     ///    parametro e non un default è la stessa scelta di [`InvokeMode`]:
@@ -1646,7 +1646,7 @@ impl Workspace {
     /// [`CommandProvider::invoke`](fubmd_abi::traits::CommandProvider::invoke):
     /// l'origine è ciò che l'host **appone**, non ciò che il comando legge, e un
     /// comando che si comportasse diversamente a seconda di chi lo chiama
-    /// sarebbe una policy (§2.10) nascosta dentro un'implementazione. Il giorno
+    /// sarebbe una policy (§7.3) nascosta dentro un'implementazione. Il giorno
     /// che servirà leggerla, è un metodo additivo sull'`HostApi`.
     ///
     /// Il resto è la disciplina di sempre: il provider esce dal workspace per la
@@ -1668,13 +1668,13 @@ impl Workspace {
     /// [`HostApi::run_command`](fubmd_abi::traits::HostApi::run_command).
     ///
     /// Differisce da [`invoke_command`](Workspace::invoke_command) per le due
-    /// cose che non fa, ed è lì che sta la semantica del §1.4:
+    /// cose che non fa, ed è lì che sta la semantica della decisione 0013:
     ///
     /// - **non cambia attore**: chi ha chiesto è chi è entrato nel kernel, e
     ///   invocare non è entrare. Un comando che si intestasse le scritture
     ///   fatte per conto dell'utente direbbe all'automazione che le ha chieste
     ///   lei, e un'automazione che non riconosce chi ha chiesto si richiama da
-    ///   sola (è il caso che il §1.18 esiste per evitare, letto dall'altro
+    ///   sola (è il caso che la decisione 0012 esiste per evitare, letto dall'altro
     ///   verso).
     /// - **non apre un lotto**: si unisce a quello aperto (se non ce n'è uno —
     ///   un handler che invoca un comando — lo apre, perché anche lì è *una*
@@ -1707,7 +1707,7 @@ impl Workspace {
             .expect("il proprietario è stato trovato dichiarando questo comando");
         spec.validate_args(&args)?;
 
-        // Il giro (§1.4). Un comando che rientra su sé stesso non è una
+        // Il giro (decisione 0013). Un comando che rientra su sé stesso non è una
         // profondità da limitare con un numero: è un errore di chi lo ha
         // scritto, e l'unica risposta utile lo nomina.
         if self.command_stack.iter().any(|c| c == command) {
@@ -1803,7 +1803,7 @@ impl Workspace {
     /// Gli eventi che l'import genera (una `DocumentChanged` per documento,
     /// oggi) arrivano **dopo** che la chiamata del provider è tornata, come per
     /// ogni altro callback in scrittura. Che siano N e non uno è il debito del
-    /// §1.12 (il lotto), non una scelta di qui.
+    /// decisione 0011 (il lotto), non una scelta di qui.
     pub fn import(
         &mut self,
         source: &ImportSource,
@@ -1878,8 +1878,8 @@ impl Workspace {
     /// Unico punto di emissione: ponte verso i subscriber esterni + coda per
     /// gli handler registrati.
     ///
-    /// È anche il punto unico in cui l'origine (§1.18) viene apposta e in cui il
-    /// lotto (§1.12) fa il proprio lavoro. Che siano la stessa riga non è
+    /// È anche il punto unico in cui l'origine (decisione 0012) viene apposta e in cui il
+    /// lotto (decisione 0011) fa il proprio lavoro. Che siano la stessa riga non è
     /// economia: un secondo posto da cui emettere sarebbe un posto da cui uscire
     /// senza origine o fuori dal lotto, e un evento non attribuito è
     /// indistinguibile da uno attribuito male.
@@ -1924,7 +1924,7 @@ impl Workspace {
         result
     }
 
-    /// Esegue `f` dentro un **lotto** (§1.12): ciò che vi succede è una cosa
+    /// Esegue `f` dentro un **lotto** (decisione 0011): ciò che vi succede è una cosa
     /// sola.
     ///
     /// Cosa cambia, dentro: gli eventi portano l'id del lotto sulla propria
@@ -1939,7 +1939,7 @@ impl Workspace {
     ///
     /// **Non è una transazione.** Se una delle scritture dentro `f` fallisce, le
     /// altre restano fatte: il lotto non annulla niente e non lo promette (il
-    /// tutto-o-niente vuole il journal del §2.5). Ciò che è andato storto lo
+    /// tutto-o-niente vuole il journal del §15.2). Ciò che è andato storto lo
     /// riporta `f` col proprio valore di ritorno, che questa funzione passa
     /// intatto.
     ///
@@ -2070,7 +2070,7 @@ impl Workspace {
     /// escono dal workspace per la durata della chiamata: così `KernelHost`
     /// può prestare `&mut Workspace` senza aliasing.
     ///
-    /// Per la durata di `handle` l'attore è il **plugin** (§1.18): ciò che
+    /// Per la durata di `handle` l'attore è il **plugin** (decisione 0012): ciò che
     /// scrive lì dentro lo ha chiesto lui, di propria iniziativa, ed è così che
     /// alla prossima consegna riconosce le proprie scritture senza tenerne una
     /// contabilità privata. L'origine dell'evento che sta *ricevendo* è un'altra
@@ -2266,7 +2266,7 @@ fn fenced_doc_id(id: &DocId) -> std::result::Result<DocId, PluginError> {
 /// conflitto è la sola cosa che chi chiama deve **riprovare** (rileggendo e
 /// ricalcolando), un edit malformato la sola che deve **correggere**.
 /// Appiattirli su un errore interno lascerebbe quella distinzione a chi legge il
-/// messaggio, cioè a una stringa italiana — che è il debito del §1.11, non un
+/// messaggio, cioè a una stringa italiana — che è il debito del §12.2, non un
 /// posto dove aggiungerne.
 fn plugin_error(e: KernelError) -> PluginError {
     match e {
@@ -2346,7 +2346,7 @@ impl HostApi for KernelHost<'_> {
 
     fn write_document(&mut self, id: &DocId, source: &str) -> std::result::Result<(), PluginError> {
         // Il recinto del vault, sul confine dei plugin e in un punto solo. Fino
-        // al §1.7 l'unico input esterno che diventava un `DocId` arrivava dai
+        // alla decisione 0006 l'unico input esterno che diventava un `DocId` arrivava dai
         // comandi IPC, che lo sanitizzano; un `ImportProvider` invece nomina i
         // documenti a partire dal **nome di una sorgente**, cioè da una stringa
         // che l'utente non ha scritto (un'entrata di zip, un campo di JSON).
@@ -2753,9 +2753,9 @@ impl HostApi for ReadOnlyHost<'_> {
         self.reading().free_name(id)
     }
 
-    // Le operazioni strutturali del §1.4 sono negate qui **tutte**, ed è
+    // Le operazioni strutturali della decisione 0013 sono negate qui **tutte**, ed è
     // l'unico punto del kernel in cui oggi un permesso di scrittura viene
-    // davvero applicato. Il §2.10 non dovrà inventare il varco: dovrà solo
+    // davvero applicato. Il §7.3 non dovrà inventare il varco: dovrà solo
     // decidere una seconda ragione per attraversarlo.
 
     fn create_document(

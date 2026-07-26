@@ -27,7 +27,7 @@ pub const STATS_ID: &str = "fubmd.stats";
 pub const STATS_VIEW: &str = "stats";
 
 /// Parole al minuto di una lettura media. È una costante dichiarata e non un
-/// parametro perché finché non ci sono impostazioni (§1.3) un numero
+/// parametro perché finché non ci sono impostazioni (§11.1) un numero
 /// configurabile sarebbe configurabile solo nel codice.
 const WPM: usize = 200;
 
@@ -49,7 +49,7 @@ pub struct TextStats {
 ///
 /// Conta il **sorgente**, sintassi markdown compresa: contare il testo reso
 /// vorrebbe il modello parsato al di qua del confine, che è il canale che
-/// ancora non c'è (§1.13). È una differenza di pochi punti percentuali su una
+/// ancora non c'è (§4.1). È una differenza di pochi punti percentuali su una
 /// nota vera, e dichiararla costa meno che fingere una precisione che non c'è.
 pub fn count(text: &str) -> TextStats {
     TextStats {

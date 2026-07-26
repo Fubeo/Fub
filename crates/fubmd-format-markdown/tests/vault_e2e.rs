@@ -175,7 +175,7 @@ fn a_note_created_in_a_folder_stays_there() {
     assert_eq!(ws.resolve_link("Beta"), Some(creata));
 }
 
-/// I link markdown ordinari (§2.21) sul parser vero: gli `Span` sono quelli di
+/// I link markdown ordinari (decisione 0004) sul parser vero: gli `Span` sono quelli di
 /// comrak, non quelli di un provider giocattolo, e la riscrittura al rename
 /// ritaglia dentro di essi.
 #[test]
@@ -255,10 +255,10 @@ fn markdown_links_are_edges_and_survive_a_rename() {
 }
 
 /// Il riferimento **incorporato** alla markdown (`![alt](path)`) è un arco come
-/// gli altri — e prima del §1.5 non esisteva affatto: comrak lo dava come
+/// gli altri — e prima della decisione 0003 non esisteva affatto: comrak lo dava come
 /// `Image`, il provider ne teneva l'inline e **non** lo metteva in `links`,
 /// quindi niente backlink e nessuna riscrittura al rename. È il buco che
-/// lasciava 13.1 fuori portata anche dopo che il §2.21 aveva reso i path archi.
+/// lasciava 13.1 fuori portata anche dopo che la decisione 0004 aveva reso i path archi.
 #[test]
 fn an_embedded_reference_is_an_edge_too() {
     let (_scratch, mut ws) = open_scratch();

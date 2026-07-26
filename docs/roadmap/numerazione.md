@@ -1,0 +1,114 @@
+# Corrispondenza fra la numerazione vecchia e questa
+
+I messaggi di commit, i commenti nel codice e i documenti di architettura nominano i numeri di prima della riorganizzazione. Qui si traducono, ed è l'unico posto del repo dove quei numeri restano validi.
+
+[← indice](../todo.md)
+
+---
+
+I messaggi di commit, i commenti nel codice e i documenti di architettura
+nominano i numeri vecchi. Questa tabella li traduce, e non va rinumerata: è
+l'unico posto del repo dove i numeri vecchi restano validi.
+
+**Voci chiuse** — il verbale sta in [docs/decisions/](../decisions/README.md):
+
+| Vecchio | Decisione |
+|---|---|
+| §1.1 | [0009 — Il registro dei comandi](../decisions/0009-registro-dei-comandi.md) |
+| §1.4 | [0013 — L'elenco delle capacità](../decisions/0013-elenco-delle-capacita.md) |
+| §1.5 | [0003 — Il modello del documento](../decisions/0003-modello-del-documento.md) |
+| §1.6 | [0005 — Il canale dati verso le view](../decisions/0005-canale-dati-verso-le-view.md) |
+| §1.7 | [0006 — Import/export come trait](../decisions/0006-import-export-come-trait.md) |
+| §1.9 | [0007 — Il contesto di sessione](../decisions/0007-contesto-di-sessione.md) |
+| §1.12 | [0011 — Il lotto](../decisions/0011-il-lotto.md) |
+| §1.16 | [0008 — La modifica chirurgica](../decisions/0008-modifica-chirurgica.md) |
+| §1.18 | [0012 — L'origine degli eventi](../decisions/0012-origine-degli-eventi.md) |
+| §1.36 | [0010 — Un comando descritto a una macchina](../decisions/0010-comando-descritto-a-una-macchina.md) |
+| §2.21 | [0004 — Il grafo e i link non-wiki](../decisions/0004-il-grafo-e-i-link-non-wiki.md) |
+| §3.11 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
+| §3.13 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
+| §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
+| §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
+| §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
+
+**Voci aperte** — hanno un numero nuovo in questo documento:
+
+| Vecchio | Nuovo | Voce |
+|---|---|---|
+| §1.2 | **§2.1** | `UiNode` — senza input, metà di FEATURES non è dichiarativa |
+| §1.3 | **§11.1** | Impostazioni e spegnibilità — oggi sono variabili d'ambiente |
+| §1.8 | **§12.1** | Stringhe e localizzazione al confine — decisione, non implementazione |
+| §1.10 | **§13.1** | Identità del documento — il path, e l'eventuale seconda chiave |
+| §1.11 | **§12.2** | Errori tipizzati al confine, non `String` |
+| §1.13 | **§4.1** | Il canale del rendering — stringa HTML o modello? |
+| §1.14 | **§2.2** | Le superfici della UI sono tre, e chiuse |
+| §1.15 | **§2.3** | Le view non si istanziano |
+| §1.17 | **§13.3** | L'undo non ha un proprietario |
+| §1.19 | **§10.1** | L'abbonamento agli eventi non filtra |
+| §1.20 | **§3.4** | `ParseContext` è chiuso, e `parse` vuole per forza del testo |
+| §1.21 | **§9.1** | Il lavoro lungo non vede il vault |
+| §1.22 | **§3.1** | Il parser è sostituibile, non estendibile |
+| §1.23 | **§3.2** | `Block::Custom` non ha un renderer |
+| §1.24 | **§7.5** | I plugin non hanno un canale per parlarsi |
+| §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
+| §1.26 | **§3.5** | Gli altri enum chiusi — e l'unico che rompe una firma |
+| §1.27 | **§5.5** | `list_documents` e `views()` — le metà nel contratto di §2.13 e §1.15 |
+| §1.28 | **§4.2** | Il modello parsato non arriva a nessun provider |
+| §1.29 | **§4.3** | Il contratto non dice di che formato è un documento |
+| §1.30 | **§2.4** | Un `ViewProvider` non può avere stato: la firma glielo vieta |
+| §1.31 | **§2.5** | Una view non può chiedere di essere ridisegnata, né dire "sto caricando" |
+| §1.32 | **§2.6** | `ViewSpec` non dice come si presenta |
+| §1.33 | **§2.7** | `UiAction.payload` esiste e non lo usa nessuno |
+| §1.34 | **§7.4** | Gli id non sono di nessuno: nessuna regola di namespace, nessuna collisione |
+| §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
+| §1.37 | **§6.1** | Le regole che il contratto promette vivono nel kernel, private |
+| §1.38 | **§7.1** | Una capacità dell'`HostApi` si implementa quattro volte a mano |
+| §2.1 | **§15.1** | Astrazione sullo storage |
+| §2.2 | **§14.1** | Il vault non è solo documenti |
+| §2.3 | **§9.3** | Registry di plugin/feature e runner dei job |
+| §2.4 | **§8.3** | Concorrenza |
+| §2.5 | **§15.2** | Durabilità e recovery |
+| §2.6 | **§15.5** | Politica dei path e del testo, in un modulo solo |
+| §2.7 | **§9.6** | Sessioni multiple |
+| §2.8 | **§7.2** | Una disciplina dei provider sola, non una per famiglia |
+| §2.9 | **§9.4** | Disattivazione — oggi si può solo *non registrare* |
+| §2.10 | **§7.3** | Permessi e manifest — il punto di applicazione non esiste |
+| §2.11 | **§14.3** | Le cartelle non esistono nel kernel |
+| §2.12 | **§15.3** | Una versione di schema su ogni formato persistito |
+| §2.13 | **§14.4** | Il canale della lista documenti |
+| §2.14 | **§11.3** | Il sidecar dell'organizzazione, da assorbire |
+| §2.15 | **§8.2** | Il montaggio dell'app vive dentro un comando Tauri |
+| §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
+| §2.17 | **§5.3** | La query è una stringa in un linguaggio di terzi |
+| §2.18 | **§5.2** | Il dispatch delle query è per tentativi |
+| §2.19 | **§8.1** | `Workspace` è un oggetto-dio, e ogni voce di questo piano gli aggiunge un campo |
+| §2.20 | **§14.2** | Nessun metadato di entry: né mtime, né dimensione, né impronta |
+| §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
+| §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
+| §2.24 | **§13.2** | Lo stato per-documento: ogni feature se lo migra da sé |
+| §2.25 | **§7.6** | Nessun inventario di ciò che è attivo |
+| §2.26 | **§5.4** | La query non esiste sull'IPC |
+| §2.27 | **§10.2** | Il ponte degli eventi non ha né freno né raggruppamento |
+| §2.28 | **§5.1** | Sette varianti su nove di `IndexQuery` non arrivano a nessun provider |
+| §2.29 | **§15.4** | I dati persistiti non hanno né una mappa né una classe |
+| §3.1 | **§1.2** | Smontare il monolite |
+| §3.2 | **§18.2** | Comandi e tastiera |
+| §3.3 | **§12.4** | Tema, token, accessibilità |
+| §3.4 | **§3.6** | Sanitizzazione e CSP in un punto solo |
+| §3.5 | **§10.3** | Notifiche e attività in background |
+| §3.6 | **§2.9** | Prestazioni della UI |
+| §3.7 | **§18.1** | Editor |
+| §3.8 | **§4.4** | Due parser per la stessa sintassi |
+| §3.9 | **§2.8** | Il view host ridisegna tutto, e i nodi non hanno una chiave |
+| §3.10 | **§11.2** | Tre stati diversi, zero contenitori |
+| §3.12 | **§3.3** | La UI di un plugin non ha modo di entrare nella shell |
+| §4.1 | **§16.5** | Mirror TS↔Rust generati, non scritti |
+| §4.2 | **§16.6** | Dieta dell'IPC |
+| §4.3 | **§17.1** | Corpus, fuzzing, prestazioni |
+| §4.4 | **§17.2** | Test della shell |
+| §4.5 | **§17.3** | Osservabilità |
+| §4.6 | **§16.1** | L'SDK come superficie di riuso — oggi è quasi vuoto |
+| §4.7 | **§16.3** | Un crate per bundle di feature |
+| §4.8 | **§16.4** | Il contratto si scrive quattro volte a mano |
+| §4.11 | **§6.2** | I *tipi* al confine hanno un presidio; le *regole* no |
+| §4.12 | **§16.2** | Il banco di prova del kernel è copiato diciotto volte |

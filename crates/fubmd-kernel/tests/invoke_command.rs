@@ -1,5 +1,5 @@
-//! Il registro dei comandi (§1.1) e ciò che l'host garantisce a chi lo usa
-//! senza aver letto il codice dei comandi (§1.36).
+//! Il registro dei comandi (decisione 0009) e ciò che l'host garantisce a chi lo usa
+//! senza aver letto il codice dei comandi (decisione 0010).
 //!
 //! Le due garanzie non sono di cortesia: sono ciò che distingue un registro
 //! **eseguibile da terzi** da un elenco di funzioni con un nome.
@@ -140,8 +140,8 @@ impl CommandProvider for AlwaysWrites {
     }
 }
 
-/// Un comando che prova **ogni capacità strutturale** del §1.4 e annota cosa
-/// gli ha risposto l'host. Serve a una cosa sola: che il varco del §1.36 copra
+/// Un comando che prova **ogni capacità strutturale** della decisione 0013 e annota cosa
+/// gli ha risposto l'host. Serve a una cosa sola: che il varco della decisione 0010 copra
 /// anche le capacità nuove, e che non ne resti una scoperta il giorno che
 /// qualcuno ne aggiunge un'altra senza pensarci.
 struct TriesEverything {

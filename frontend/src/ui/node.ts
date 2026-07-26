@@ -1,7 +1,7 @@
 // Renderer del protocollo di UI dichiarativa (UiNode) in elementi DOM nativi.
 // È lo stesso percorso che useranno i plugin: il core descrive, il frontend
 // disegna con i suoi componenti e il suo tema.
-import type { UiNode } from "./api";
+import type { UiNode } from "../host/contract";
 
 export type ActionHandler = (action: string) => void;
 

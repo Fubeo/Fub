@@ -15,7 +15,7 @@
 //!   documento). Segnalarlo come rotto vorrebbe dire riempire il rapporto di
 //!   falsi positivi, uno per immagine; ignorarlo in silenzio vorrebbe dire
 //!   mentire. Si ignora **dichiarandolo**: gli allegati orfani e i riferimenti
-//!   rotti agli allegati sono 13.1, e nascono col modello degli asset (§2.2).
+//!   rotti agli allegati sono 13.1, e nascono col modello degli asset (§14.1).
 //!
 //! Restano rotti: i wikilink che non risolvono a nessuna nota e i link markdown
 //! a documenti (path senza estensione, o con un'estensione di documento) che
@@ -83,7 +83,7 @@ fn broken_target(
         LinkTarget::Wiki { page, .. } => {
             // L'ancora (`#titolo`, `#^blocco`) non entra nel giudizio: risolverla
             // contro heading e ancore del bersaglio è la voce dichiarata in coda
-            // al §1.5, e un link a una nota che esiste non è rotto perché punta a
+            // alla decisione 0003, e un link a una nota che esiste non è rotto perché punta a
             // un titolo che non c'è più — è un'altra diagnosi.
             graph.resolve_wiki(page).is_none().then(|| page.clone())
         }
@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn an_attachment_is_not_a_broken_link() {
-        // Un PNG nel kernel non esiste (§2.2): segnalarlo riempirebbe il
+        // Un PNG nel kernel non esiste (§14.1): segnalarlo riempirebbe il
         // rapporto di falsi positivi, uno per immagine.
         let docs = vec![doc(
             "a.md",

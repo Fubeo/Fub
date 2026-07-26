@@ -15,13 +15,13 @@
 //!   via `IndexQuery::Tags`, click→ricerca (M2).
 //! - [`stats`] — il pannello statistiche come
 //!   [`ViewProvider`](fubmd_abi::traits::ViewProvider): parole, caratteri,
-//!   selezione e tempo di lettura dal **contesto di sessione** (M2, §1.9).
+//!   selezione e tempo di lettura dal **contesto di sessione** (M2, decisione 0007).
 //! - [`search`] — [`IndexProvider`](fubmd_abi::traits::IndexProvider) full-text
 //!   su tantivy, persistente e incrementale (M2).
 //! - [`commands`] — i comandi ufficiali come
 //!   [`CommandProvider`](fubmd_abi::traits::CommandProvider): cerca, wikilink
-//!   sulla selezione, sostituzione in blocco con anteprima del piano (§1.1,
-//!   §1.36).
+//!   sulla selezione, sostituzione in blocco con anteprima del piano (decisione 0009,
+//!   decisione 0010).
 //! - [`versioning`] — snapshot per-file del vault come
 //!   [`EventHandler`](fubmd_abi::traits::EventHandler): il dogfooding più
 //!   completo del contratto, perché usa solo ciò che avrà un plugin di terzi.

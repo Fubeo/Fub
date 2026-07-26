@@ -62,7 +62,7 @@ impl<'de> Deserialize<'de> for JobId {
 
 /// Una voce del cestino del vault.
 ///
-/// Sale nel contratto col §1.4 perché [`HostApi::list_trash`] la restituisce:
+/// Sale nel contratto con la decisione 0013 perché [`HostApi::list_trash`] la restituisce:
 /// prima viveva nel kernel, dove il solo lettore era la shell attraverso un
 /// comando Tauri. Porta **due** id perché sono due domande diverse — dove il
 /// file si trova ora (`id`, ed è quello che si passa a
@@ -93,7 +93,7 @@ pub struct TrashEntry {
 /// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
 /// il dogfooding del versioning ha trovato il buco: un `EventHandler` scritto
 /// come lo scriverebbe un plugin non aveva modo di tenere uno store di snapshot
-/// su disco né di sapere che ore sono. Il §1.4 ha chiuso l'elenco: dopo il
+/// su disco né di sapere che ore sono. La decisione 0013 ha chiuso l'elenco: dopo il
 /// freeze un metodo **aggiunto** qui è una minor, uno **tolto** è una major.
 ///
 /// # Visibilità durante i callback (contratto)
@@ -176,13 +176,13 @@ pub trait HostApi: Send + Sync {
     // --- operazioni strutturali sul vault -----------------------------------
     //
     // Creare, rinominare, cestinare: le tre cose che si fanno a un documento
-    // *senza aprirlo*. Fino al §1.4 erano kernel-owned e fuori dal contratto, e
+    // *senza aprirlo*. Fino alla decisione 0013 erano kernel-owned e fuori dal contratto, e
     // la conseguenza era che template, daily note, import, auto-archiviazione e
     // cleanup wizard (FEATURES 16, 17, 8.3, 7.2) non potevano essere un plugin:
     // il vault sapeva farle, il confine no.
     //
-    // Sono le capacità che il §2.10 metterà sotto `write_vault`. Oggi il varco
-    // che le rifiuta è quello del §1.36: un comando in sola lettura, o
+    // Sono le capacità che il §7.3 metterà sotto `write_vault`. Oggi il varco
+    // che le rifiuta è quello della decisione 0010: un comando in sola lettura, o
     // simulato, le riceve tutte negate.
 
     /// Crea un documento **nuovo** con il sorgente dato, e fallisce se quel
@@ -214,7 +214,7 @@ pub trait HostApi: Send + Sync {
     /// parametro in più su una capacità nuova, non un secondo significato di
     /// questo nome.
     ///
-    /// Ne segue che una rinomina è un **lotto** (§1.12): N sorgenti riscritti,
+    /// Ne segue che una rinomina è un **lotto** (decisione 0011): N sorgenti riscritti,
     /// un solo [`Event::BatchEnded`](crate::Event::BatchEnded). Chiamata da
     /// dentro un lotto già aperto — un comando, per esempio — vi si unisce
     /// invece di aprirne un altro.
@@ -332,10 +332,10 @@ pub trait HostApi: Send + Sync {
     /// stessa domanda e riceverebbero la stessa risposta, sbagliata per uno dei
     /// due. Il [`PaneId`](crate::session::PaneId) dentro il contesto è ciò che
     /// permette di distinguerli già ora; legarli a un pannello *fisso* è
-    /// l'altra metà del problema, e arriva con le istanze di view (§1.15).
+    /// l'altra metà del problema, e arriva con le istanze di view (§2.3).
     fn active_context(&self) -> Option<ViewContext>;
 
-    /// Invoca un comando del registro (§1.1).
+    /// Invoca un comando del registro (decisione 0009).
     ///
     /// È la capacità che rende **componibili** macro e automazioni (16.2, 16.3):
     /// senza, ogni plugin che voglia fare ciò che un altro sa già fare deve
@@ -349,7 +349,7 @@ pub trait HostApi: Send + Sync {
     ///   riceve il *piano* di ciò che il comando invocato farebbe; il piano di
     ///   una macro è l'unione dei piani dei suoi passi. Se il modo fosse un
     ///   argomento, una simulazione potrebbe diventare reale invocando
-    ///   qualcuno — che è esattamente il buco che il §1.36 ha chiuso.
+    ///   qualcuno — che è esattamente il buco che la decisione 0010 ha chiuso.
     /// - **Non prende un [`Actor`](crate::event::Actor)**: l'attore non si
     ///   riazzera invocando. È chi ha chiesto, cioè chi è *entrato* nel kernel
     ///   (l'utente dalla IPC, il watcher, il plugin da un handler), e resta lui
@@ -435,7 +435,7 @@ pub struct ViewSpec {
     /// Una view che dichiara
     /// [`IndexUpdated`](crate::event::EventKind::IndexUpdated) deve dichiarare
     /// anche [`BatchEnded`](crate::event::EventKind::BatchEnded): dentro un
-    /// lotto (§1.12) il primo non arriva, e il secondo è ciò che le fa fare
+    /// lotto (decisione 0011) il primo non arriva, e il secondo è ciò che le fa fare
     /// **un** ridisegno dove prima ne faceva N. Vale a rovescio per una view che
     /// segue i documenti: quelli passano tutti, lotto o no.
     #[serde(default)]
@@ -584,7 +584,7 @@ pub enum LinkDirection {
 /// L'ambito di una ricerca full-text: *dove* cercare, non *cosa*.
 ///
 /// Vuoto in ogni campo = tutto il vault. È separato dalla stringa di query
-/// perché la stringa è il linguaggio del provider (oggi tantivy, §2.17) mentre
+/// perché la stringa è il linguaggio del provider (oggi tantivy, §5.3) mentre
 /// l'ambito è **dato del contratto**: una shell che offre "cerca in questa
 /// cartella" non deve comporre sintassi altrui per ottenerlo, e un provider
 /// diverso non può interpretarlo diversamente.
@@ -624,7 +624,7 @@ pub enum PropertyTest {
 }
 
 /// Una condizione su una proprietà. Più filtri di una query sono in **AND**:
-/// l'OR e le parentesi arrivano con la query come AST (§2.17), e finché non
+/// l'OR e le parentesi arrivano con la query come AST (§5.3), e finché non
 /// c'è è meglio dire chiaramente cosa questa forma esprime.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PropertyFilter {
@@ -642,7 +642,7 @@ pub struct PropertySort {
     pub descending: bool,
 }
 
-/// Una proprietà con il suo valore normalizzato ([`PropertyValue`], §1.5).
+/// Una proprietà con il suo valore normalizzato ([`PropertyValue`], decisione 0003).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PropertyEntry {
     pub key: String,
@@ -965,7 +965,7 @@ pub trait IndexProvider: Send + Sync {
 /// (un'istanza WASM non è rientrante) e vale identica in nativo: contarci
 /// sopra in un senso o nell'altro non è un dettaglio d'implementazione.
 ///
-/// # Cosa arriva: l'evento e la sua origine (§1.18)
+/// # Cosa arriva: l'evento e la sua origine (decisione 0012)
 ///
 /// [`handle`](EventHandler::handle) riceve un [`Notice`], non un [`Event`] nudo:
 /// accanto a *cosa* è successo c'è **chi lo ha chiesto**

@@ -52,16 +52,16 @@
 //! servono a chi deve poi mettere il cursore: 16.1) e **cosa c'era prima**.
 //! Sono i due pezzi con cui [`EditReport::inverse`] costruisce la modifica che
 //! riporta il documento com'era: una [`EditRequest`] come le altre. Non è l'undo
-//! (di chi sia la proprietà dell'undo è il §1.17 del piano, e non lo decide
+//! (di chi sia la proprietà dell'undo è il §13.3 del piano, e non lo decide
 //! questa firma): è la *forma* senza la quale quella decisione nascerebbe già
 //! zoppa.
 //!
 //! # Cosa resta deliberatamente fuori
 //!
-//! - **Il lotto su più documenti** (§1.12): una richiesta nomina un documento
+//! - **Il lotto su più documenti** (decisione 0011): una richiesta nomina un documento
 //!   solo, e N documenti sono N scritture con N eventi. Il lotto è una lista di
 //!   edit *sopra* questa firma, non una firma diversa.
-//! - **L'edit sull'evento** (§1.18): chi riceve `DocumentChanged` sa che il
+//! - **L'edit sull'evento** (decisione 0012): chi riceve `DocumentChanged` sa che il
 //!   documento è cambiato, non *come*. Finché è così, una shell che ha il
 //!   documento aperto non può applicare al proprio buffer la modifica che il
 //!   kernel ha appena fatto — deve ricaricare, e ricaricare costa il cursore.

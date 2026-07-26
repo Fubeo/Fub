@@ -11,8 +11,8 @@
 // un vault personale (centinaia di note) l'O(n²) della repulsione è ben sotto
 // il frame budget, e la semplicità vale più di un quadtree.
 
-import { api } from "./api";
-import { pageName } from "./organizer";
+import { api } from "../host/ipc";
+import { pageName } from "../rules/organizer";
 
 interface SimNode {
   id: string;

@@ -248,7 +248,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // §1.5 — ciò che il modello non sapeva dire
+    // decisione 0003 — ciò che il modello non sapeva dire
     // -----------------------------------------------------------------------
 
     /// Prima, una task list era una lista di **paragrafi**: lo stato viveva nel

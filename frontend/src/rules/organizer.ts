@@ -2,7 +2,7 @@
 // kernel (path tipo `Progetti/Alpha.md`) all'albero di cartelle e note, con
 // l'ordinamento scelto a mano nel sidecar (`WorkspaceMeta`). Solo logica: il
 // DOM sta in main.ts, e il kernel non sa nulla di tutto questo.
-import type { WorkspaceMeta } from "./api";
+import type { WorkspaceMeta } from "../host/contract";
 
 export interface FolderNode {
   /// L'ultimo segmento del path ("" per la radice del vault).

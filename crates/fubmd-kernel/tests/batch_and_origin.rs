@@ -1,7 +1,7 @@
-//! Il **lotto** (§1.12) e l'**origine degli eventi** (§1.18) nel kernel.
+//! Il **lotto** (decisione 0011) e l'**origine degli eventi** (decisione 0012) nel kernel.
 //!
-//! Le due voci sono una sola perché il §1.18 dice esso stesso che il campo è
-//! «origin *e* l'id di lotto del §1.12»: deciderle separate significa deciderle
+//! Le due voci sono una sola perché la decisione 0012 dice essa stessa che il campo è
+//! «origin *e* l'id di lotto della decisione 0011»: deciderle separate significa deciderle
 //! due volte, e la seconda volta con la prima già congelata.
 //!
 //! Cinque invarianti, e ognuna corrisponde a una decisione del verbale:
@@ -276,7 +276,7 @@ fn a_batch_does_not_roll_back_and_says_so_by_closing_anyway() {
     ws.write_document(&a, "prima").unwrap();
     ws.write_document(&b, "prima").unwrap();
     // Una base calcolata adesso e resa stantia da una scrittura che arriva
-    // prima che il lotto la usi: è il caso di un'automazione lunga (§1.16).
+    // prima che il lotto la usi: è il caso di un'automazione lunga (decisione 0008).
     let base_vecchia = ws.document_revision(&b).unwrap();
     ws.write_document(&b, "qualcun altro").unwrap();
     let rx = ws.bus().subscribe();
@@ -299,7 +299,7 @@ fn a_batch_does_not_roll_back_and_says_so_by_closing_anyway() {
         ws.read_source(&a).unwrap(),
         "dopo",
         "e ciò che era riuscito resta fatto: un lotto non annulla niente. Il \
-         tutto-o-niente vuole il journal del §2.5, e prometterlo con un nome \
+         tutto-o-niente vuole il journal del §15.2, e prometterlo con un nome \
          (`transaction`, `rollback`) sarebbe farlo credere a chi legge solo la \
          firma"
     );
@@ -307,7 +307,7 @@ fn a_batch_does_not_roll_back_and_says_so_by_closing_anyway() {
         ws.read_source(&b).unwrap(),
         "qualcun altro",
         "e la scrittura dell'altro non è stata cancellata: il conflitto del \
-         §1.16 vale dentro un lotto come fuori"
+         decisione 0008 vale dentro un lotto come fuori"
     );
 
     let terminali: Vec<Event> = rx
@@ -408,7 +408,7 @@ fn an_on_change_automation_recognises_its_own_writes_by_the_origin() {
         senza > 100,
         "senza la guardia dell'origine l'automazione si richiama da sola fino \
          al troncamento della coda ({senza} scritture): è esattamente il buco \
-         che il §1.18 esiste per chiudere, e un guardiano di CONTENUTO qui non \
+         che la decisione 0012 esiste per chiudere, e un guardiano di CONTENUTO qui non \
          funzionerebbe — il diario è ogni volta diverso"
     );
 }

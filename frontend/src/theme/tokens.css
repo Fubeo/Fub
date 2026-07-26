@@ -1,0 +1,50 @@
+/* I token della shell: i colori (e le due proprietà tipografiche) da cui tutto
+   il resto deriva con `var(…)`.
+   
+   Stanno in un file loro perché il §1.1 nomina `theme/` come il contenitore che
+   non esisteva: 950 righe di CSS con diciotto custom property non sono un
+   sistema di token, e senza un posto dove metterli i temi (6.2), gli snippet
+   CSS dell'utente e l'alto contrasto (25.1) sarebbero finiti dentro
+   `style.css`, cioè dentro le regole dei componenti.
+   
+   Questo file è la METÀ che si poteva fare oggi: il contenitore, e i valori di
+   adesso spostati dentro senza toccarli. Il sistema vero — scala di token
+   semantici, chiaro/scuro/sistema, override per vault e per nota — è 6.2/25.1,
+   e va deciso lì; qui c'è il posto dove atterrerà. */
+:root {
+  --bg: #1e1e24;
+  --bg-elev: #26262e;
+  --bg-input: #2d2d38;
+  --border: #35353f;
+  --text: #e6e6ea;
+  --muted: #9a9aa8;
+  --accent: #6d5efc;
+  --accent-soft: #8a7dff;
+
+  /* La tavolozza della **superficie del documento**: i colori con cui la nota
+     si scrive (il tema dell'editor) e con cui si legge. Stanno qui, in un
+     posto solo, perché le tre modalità di 4.1 devono essere la stessa nota
+     vista in tre modi — non tre note diverse. I valori vengono dal tema
+     dell'editor (oneDark); li usano sia `.markdown-preview` (Lettura) sia il
+     tema della live preview in `livepreview.ts`, che li legge come `var(…)`.
+     Cambiarli qui li cambia in tutte e tre le modalità insieme. */
+  --doc-bg: #282c34;
+  --doc-fg: #abb2bf;
+  --doc-link: #82aaff;
+  /* I titoli hanno un colore, e ce l'hanno anche in scrittura: è il tema di
+     sintassi dell'editor a darglielo (oneDark colora i marcatori `#`). Senza
+     questa riga, passare in Lettura spegneva i titoli — la differenza più
+     visibile fra le due superfici. */
+  --doc-heading: #e06c75;
+  --doc-danger: #e06c75;
+  /* Riempimenti e righe in alpha su grigio: reggono su qualunque fondo, ed è
+     il motivo per cui la live preview li usava già così. */
+  --doc-fill: rgba(135, 135, 135, 0.16);
+  --doc-fill-soft: rgba(135, 135, 135, 0.1);
+  --doc-rule: rgba(135, 135, 135, 0.45);
+  --doc-rule-soft: rgba(135, 135, 135, 0.28);
+  --doc-highlight: rgba(255, 205, 0, 0.28);
+
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+}

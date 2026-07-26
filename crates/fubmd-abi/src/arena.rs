@@ -1144,7 +1144,7 @@ mod tests {
             Err(ArenaError::Cycle { index: 0, .. })
         ));
 
-        // Anche attraverso una voce di lista, che dal §1.5 è un record e non
+        // Anche attraverso una voce di lista, che dalla decisione 0003 è un record e non
         // più una `Vec` nuda: il `path` deve attraversarla.
         let tree = DocumentTree {
             blocks: vec![Block::List {
@@ -1264,7 +1264,7 @@ mod tests {
         assert_eq!(spans(&body), spans(&rebuilt));
     }
 
-    /// Le forme nuove del §1.5 attraversano e tornano: lo stato di una task, il
+    /// Le forme nuove della decisione 0003 attraversano e tornano: lo stato di una task, il
     /// suo marcatore, l'ancora di un blocco, le celle di una tabella.
     #[test]
     fn tasks_anchors_and_tables_survive_the_boundary() {

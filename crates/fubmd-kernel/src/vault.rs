@@ -359,7 +359,7 @@ impl Vault {
     }
 }
 
-/// Una voce del cestino. Vive nel **contratto** dal §1.4, da quando
+/// Una voce del cestino. Vive nel **contratto** dalla decisione 0013, da quando
 /// `HostApi::list_trash` la restituisce: qui resta il nome con cui il vault la
 /// costruisce.
 pub use fubmd_abi::traits::TrashEntry;

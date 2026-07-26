@@ -1,4 +1,4 @@
-//! La regola del lotto (§1.12) sulle maschere `refresh`, resa **meccanica**.
+//! La regola del lotto (decisione 0011) sulle maschere `refresh`, resa **meccanica**.
 //!
 //! Il lotto è additivo dappertutto tranne in un punto: dentro di esso
 //! `index-updated` non viene emesso, e al suo posto arriva `batch-ended`. Chi

@@ -2,10 +2,10 @@
 //! [`EventHandler`](crate::traits::EventHandler) vi si abbonano tramite una
 //! [`EventMask`], e ricevono un [`Notice`]: l'evento **e chi lo ha causato**.
 //!
-//! # Il lotto (§1.12): N scritture che sono una cosa sola
+//! # Il lotto (decisione 0011): N scritture che sono una cosa sola
 //!
 //! Il kernel muta un documento alla volta, e questo è giusto: la primitiva di
-//! scrittura è per-documento (§1.16) e non c'è ragione di cambiarla. Ciò che
+//! scrittura è per-documento (decisione 0008) e non c'è ragione di cambiarla. Ciò che
 //! manca è il modo di dire che N di quelle mutazioni sono **una** operazione.
 //! Il caso non è ipotetico: rinominare una nota con 200 backlink riscrive 200
 //! sorgenti, ognuna con il suo [`Event::DocumentChanged`] e il suo
@@ -40,14 +40,14 @@
 //! Non annulla niente. Se una delle N scritture fallisce, le altre restano
 //! fatte, e chi ha aperto il lotto se ne accorge dal proprio `Result` — non da
 //! un rollback che non c'è. È una scelta a verbale e non una mancanza: il
-//! tutto-o-niente vuole un **journal** (§2.5) che sappia rimettere a posto
+//! tutto-o-niente vuole un **journal** (§15.2) che sappia rimettere a posto
 //! anche se il processo muore nel mezzo, e prometterlo con un nome —
 //! `transaction`, `tx`, `rollback` — significherebbe farlo credere a chi legge
 //! solo la firma. Il materiale per costruirlo c'è già
 //! ([`EditReport::inverse`](crate::edit::EditReport::inverse)); il meccanismo è
-//! un'altra milestone, e di chi vinca fra le pile decide il §1.17.
+//! un'altra milestone, e di chi vinca fra le pile decide il §13.3.
 //!
-//! # L'origine (§1.18): chi ha causato un evento
+//! # L'origine (decisione 0012): chi ha causato un evento
 //!
 //! `DocumentChanged { id }` non diceva chi lo aveva provocato, e la shell già ci
 //! girava intorno confrontando il testo per non resettare il cursore sull'eco
@@ -64,7 +64,7 @@
 //!
 //! # Cosa resta deliberatamente fuori
 //!
-//! - **L'annullamento** di un lotto (§2.5 + §1.17): vedi sopra.
+//! - **L'annullamento** di un lotto (§15.2 + §13.3): vedi sopra.
 //! - **Il lotto aperto da un plugin**: `HostApi` non offre `batch(|…|)` perché
 //!   uno scope a chiusura garantita non attraversa il confine dei componenti —
 //!   un plugin che aprisse un lotto e non lo chiudesse (o morisse) lo lascerebbe
@@ -73,10 +73,10 @@
 //! - **Quale comando** ha causato l'operazione: `Origin` porta l'attore e il
 //!   lotto, non l'id del comando né il prompt che lo ha generato. Sono i campi
 //!   dell'audit trail di 22.4, e vogliono un posto che li conservi (il journal
-//!   del §2.5): un campo che nessuno rilegge dopo la fine del giro non è un
+//!   del §15.2): un campo che nessuno rilegge dopo la fine del giro non è un
 //!   audit trail, è una decorazione. Additivo il giorno che il posto c'è.
 //! - **L'edit sull'evento**: chi riceve `DocumentChanged` sa che il documento è
-//!   cambiato, non *come*. Resta il §1.16 a dare la forma e questa voce a non
+//!   cambiato, non *come*. Resta la decisione 0008 a dare la forma e questa voce a non
 //!   usarla ancora.
 
 use serde::{Deserialize, Serialize};
@@ -85,7 +85,7 @@ use crate::error::PluginError;
 use crate::model::DocId;
 use crate::traits::JobId;
 
-/// Identità di un lotto (§1.12): le N scritture che la portano sono una cosa
+/// Identità di un lotto (decisione 0011): le N scritture che la portano sono una cosa
 /// sola.
 ///
 /// Come [`JobId`], sul confine JSON viaggia come **stringa** — è un u64 pieno
@@ -94,7 +94,7 @@ use crate::traits::JobId;
 ///
 /// È opaca e non ordinabile per contratto: due lotti diversi hanno id diversi, e
 /// nient'altro è promesso. Chi la confronta con `<` sta assumendo un ordine che
-/// un host con più sessioni (§2.7) non deve al suo chiamante.
+/// un host con più sessioni (§9.6) non deve al suo chiamante.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BatchId(pub u64);
 
@@ -153,7 +153,7 @@ impl Actor {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Origin {
     pub actor: Actor,
-    /// Il lotto (§1.12) dentro cui l'evento è stato emesso, se ce n'è uno.
+    /// Il lotto (decisione 0011) dentro cui l'evento è stato emesso, se ce n'è uno.
     /// `None` non significa "non importante": significa che questa scrittura sta
     /// da sola.
     pub batch: Option<BatchId>,
@@ -243,7 +243,7 @@ pub enum Event {
         topic: String,
         payload: serde_json::Value,
     },
-    /// Un lotto (§1.12) si è chiuso: le N scritture che lo compongono sono una
+    /// Un lotto (decisione 0011) si è chiuso: le N scritture che lo compongono sono una
     /// cosa sola, e `changed` sono i documenti che ha toccato — creati,
     /// riscritti, rimossi o rinominati — in ordine di prima apparizione e senza
     /// ripetizioni.

@@ -54,7 +54,7 @@ impl DocId {
     /// La regola è **una sola**, e vale anche per il frontend: si toglie ciò che
     /// segue l'ultimo punto, a meno che il punto sia il primo carattere del
     /// basename — un dotfile non ha estensione, il punto è parte del nome. La
-    /// gemella in TypeScript è `pageName` in `frontend/src/organizer.ts`, e le
+    /// gemella in TypeScript è `pageName` in `frontend/src/rules/organizer.ts`, e le
     /// due sono identiche per costruzione: nessuna delle due consulta l'elenco
     /// delle estensioni *gestite*, perché un `DocId` viene dal vault e quindi
     /// un'estensione gestita ce l'ha già — filtrarci sopra faceva divergere
@@ -249,7 +249,7 @@ pub enum Block {
         anchor: Option<String>,
         span: Span,
     },
-    /// La tabella è l'unica delle tre candidate del §1.5 promossa a variante, e
+    /// La tabella è l'unica delle tre candidate della decisione 0003 promossa a variante, e
     /// il criterio è dichiarato: (a) chi la consuma è **trasversale al
     /// formato** — database su file, import/export CSV/JSON, Pandoc/Typst,
     /// stampa, chunking per il RAG — e ha bisogno di righe, celle e
@@ -635,7 +635,7 @@ pub fn heading_slug(text: &str) -> String {
     slug
 }
 
-/// Il registro dei `custom_kind` noti — la metà "decisa" della voce §1.5 sulle
+/// Il registro dei `custom_kind` noti — la metà "decisa" della decisione 0003 sulle
 /// varianti mancanti.
 ///
 /// `custom_kind` è una stringa, e una stringa senza registro è un accordo
@@ -744,7 +744,7 @@ pub struct PropertyDate {
 ///
 /// `offset_minutes` è `None` per un orario locale-senza-fuso: convertirlo
 /// richiederebbe sapere il fuso dell'utente, che è una capacità dell'host
-/// (§1.4) e non un fatto del documento. Il modello non indovina.
+/// (decisione 0013) e non un fatto del documento. Il modello non indovina.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertyTime {
     pub hour: u8,
@@ -905,7 +905,7 @@ mod tests {
 
     /// I casi ostili, quelli su cui kernel e frontend potevano dissentire.
     ///
-    /// La gemella TypeScript (`pageName` in `frontend/src/organizer.ts`) applica
+    /// La gemella TypeScript (`pageName` in `frontend/src/rules/organizer.ts`) applica
     /// la stessa regola sugli stessi casi: se questa tabella cambia, cambia
     /// anche là — sono due righe di codice identiche, e questa è la lista che le
     /// tiene oneste. Prima il frontend toglieva l'estensione *solo se gestita*, e
@@ -1147,7 +1147,7 @@ mod tests {
     /// arriva a nessuna view. Col tag *interno* — la forma di `Block` e
     /// `Event`, che hanno solo varianti a struct — le varianti che portano uno
     /// scalare fallivano a runtime, in silenzio fino al primo cliente vero: le
-    /// proprietà del frontmatter, che il canale dati del §1.6 mette sul filo.
+    /// proprietà del frontmatter, che il canale dati della decisione 0005 mette sul filo.
     #[test]
     fn every_variant_survives_the_json_boundary() {
         fn round_trip<T>(what: &str, value: T)

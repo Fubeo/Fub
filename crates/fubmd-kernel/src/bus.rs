@@ -4,7 +4,7 @@
 //! watcher nell'app — possano emettere eventi. Il frontend riceve gli eventi
 //! via il ponte Tauri, che fa da subscriber.
 //!
-//! Ciò che viaggia è un [`Notice`] — l'evento **e la sua origine** (§1.18) — la
+//! Ciò che viaggia è un [`Notice`] — l'evento **e la sua origine** (decisione 0012) — la
 //! stessa cosa che ricevono gli `EventHandler`: due canali che portassero forme
 //! diverse dello stesso fatto sarebbero due verità da tenere allineate a mano.
 

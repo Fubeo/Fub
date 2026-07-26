@@ -780,7 +780,7 @@ fn le_aggiunte_in_coda_passano() {
             }),
         ),
         (
-            "un caso in fondo a un enum (§1.14: una superficie di UI in più)",
+            "un caso in fondo a un enum (§2.2: una superficie di UI in più)",
             Box::new(|c: &mut Contract| {
                 let Some(Shape::Enum(cases)) = c.types.get_mut("view::view-placement") else {
                     panic!("view::view-placement è un enum");
@@ -789,7 +789,7 @@ fn le_aggiunte_in_coda_passano() {
             }),
         ),
         (
-            "un caso in fondo a un variant (§1.6: una query in più)",
+            "un caso in fondo a un variant (decisione 0005: una query in più)",
             Box::new(|c: &mut Contract| {
                 let Some(Shape::Variant(cases)) = c.types.get_mut("index::index-query") else {
                     panic!("index::index-query è un variant");
@@ -800,7 +800,7 @@ fn le_aggiunte_in_coda_passano() {
         (
             "un tipo nuovo",
             Box::new(|c: &mut Contract| {
-                // Un tipo che il contratto NON ha (il §1.10 lo prevede): il
+                // Un tipo che il contratto NON ha (il §13.1 lo prevede): il
                 // segnaposto precedente era `property-value`, che nel frattempo
                 // è nato davvero — e un tipo che esiste non è un'aggiunta.
                 c.types
@@ -808,7 +808,7 @@ fn le_aggiunte_in_coda_passano() {
             }),
         ),
         (
-            "una funzione nuova (§1.4: una capacità in più)",
+            "una funzione nuova (decisione 0013: una capacità in più)",
             Box::new(|c: &mut Contract| {
                 c.functions.insert(
                     "host-api::notify".into(),

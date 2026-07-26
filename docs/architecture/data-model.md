@@ -142,7 +142,7 @@ commenti YAML. Ne discendono tre regole:
 2. Il kernel **non riscrive mai un file esistente** passando da `serialize`.
 3. Le modifiche programmatiche a un documento esistente (rename dei link,
    inserimenti, refactoring) si fanno come **patch chirurgiche sulla sorgente**,
-   guidate dagli `Span` del modello. Dal §1.16 la patch è una primitiva del
+   guidate dagli `Span` del modello. Dalla [decisione 0008](../decisions/0008-modifica-chirurgica.md) la patch è una primitiva del
    contratto e non un pattern da rifare a mano:
    `HostApi::apply_edit(id, EditRequest { base, edits })`, con `edits` una lista
    di `(Span, String)` in coordinate della base. **Guardia delle patch:** gli
@@ -160,7 +160,7 @@ documento aperto le copie sono tre — sorgente sul disco, `DocumentModel`,
 **buffer dell'editor** — e il buffer con modifiche non salvate è **la verità**
 di quel documento. La riconciliazione è dell'**app layer** (il kernel resta
 ignaro dei buffer, come è ignaro della UI); le regole, implementate nel
-frontend (`frontend/src/main.ts`):
+frontend (`frontend/src/panels/document.ts`):
 
 - **flush prima di cedere il passo**: cambio di documento (e in futuro ogni
   operazione che riscrive file, come il rename da palette) salva prima il
