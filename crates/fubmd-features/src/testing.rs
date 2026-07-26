@@ -150,6 +150,26 @@ impl HostApi for MemoryHost {
         Ok(self.docs.lock().unwrap().keys().map(DocId::new).collect())
     }
 
+    /// La convenzione D3 su ciò che questo host ha in memoria: `nome.md`,
+    /// `nome 1.md`, … Nel kernel la stessa risposta guarda anche il disco
+    /// (`Workspace::free_name`), che qui non c'è.
+    fn free_name(&self, id: &DocId) -> DocId {
+        let docs = self.docs.lock().unwrap();
+        let (stem, ext) = match id.as_str().rsplit_once('.') {
+            Some((stem, ext)) if !stem.is_empty() && !ext.contains('/') => {
+                (stem, format!(".{ext}"))
+            }
+            _ => (id.as_str(), String::new()),
+        };
+        (0u32..)
+            .map(|n| match n {
+                0 => id.clone(),
+                n => DocId::new(format!("{stem} {n}{ext}")),
+            })
+            .find(|c| !docs.contains_key(c.as_str()))
+            .expect("la sequenza dei candidati è infinita")
+    }
+
     fn emit(&mut self, _event: Event) {}
 
     fn spawn_job(&mut self, _spec: JobSpec) -> Result<JobId, PluginError> {

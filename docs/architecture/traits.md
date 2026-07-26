@@ -29,7 +29,7 @@ Questa regola non è più solo un'asserzione: da **M2** un `wit/fubmd/*.wit` viv
 la rende verificabile ad ogni commit (vedi [M4](../milestones/M4-wit-hardening.md)
 per il congelamento formale).
 
-## I sette trait
+## I nove trait
 
 Le firme qui sotto sono la copia fedele del contratto (`fubmd-abi`). Se il codice
 diverge, il codice ha ragione: aggiornare questo documento.
@@ -74,6 +74,7 @@ pub trait HostApi: Send + Sync {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
     fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
+    fn free_name(&self, id: &DocId) -> DocId;
     fn emit(&mut self, event: Event);
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
     // stato leggero e volatile
@@ -131,6 +132,22 @@ provider, è un guscio che l'app riempie:
   (`render_view(&self)` è immutabile) e l'argomento di `render_view` (obbligo per
   ogni view a portarsi un contesto che non usa) — vedi
   [plugin-boundary.md](plugin-boundary.md), "Interrogazione e contesto".
+
+**E l'ultima l'ha chiesta l'import** (§1.7), con lo stesso meccanismo:
+
+- `free_name` — il primo nome libero della famiglia `<nome>`, `<nome> 1`, … La
+  convenzione (D3) la sa solo il vault, che conosce l'occupato **in memoria e
+  sul disco**; un `ImportProvider` che risolvesse un conflitto rifacendola
+  darebbe nomi diversi da `create_note` e dal ripristino dal cestino. Con ~50
+  importer nel solo capitolo 17.1, l'alternativa erano cinquanta convenzioni.
+
+**Il recinto del vault vale anche qui.** `read_document`/`write_document`
+validano il `DocId` con la stessa regola dei comandi IPC
+(`fubmd_kernel::valid_doc_id`) e rispondono `PermissionDenied` a una risalita —
+lo stesso errore di `data_*`, così i due recinti si comportano allo stesso modo.
+Prima del §1.7 l'unico input esterno che diventava un `DocId` passava dall'IPC,
+che lo sanitizza; un importer invece nomina i documenti a partire dal **nome di
+una sorgente**, cioè da una stringa che l'utente non ha scritto.
 
 L'identità del plugin (`<id>`) la assegna **chi registra**
 (`Workspace::register_event_handler(id, handler)`), non il plugin: chi si
@@ -379,6 +396,83 @@ così l'`HostApi` presta `&mut Workspace` senza aliasing (il nodo di ownership
 che rendeva il dispatch il punto più delicato del contratto). Vedi
 `workspace.rs` e `tests/rename_and_events.rs`.
 
+### `ImportProvider` / `ExportProvider` — import ed export (`src/transfer.rs`)
+
+```rust
+pub trait ImportProvider: Send + Sync {
+    fn can_handle(&self, source: &ImportSource) -> bool;
+    fn import(&mut self, source: &ImportSource, request: &ImportRequest,
+              host: &mut dyn HostApi) -> Result<ImportReport, PluginError>;
+}
+
+pub trait ExportProvider: Send + Sync {
+    fn targets(&self) -> Vec<ExportTarget>;
+    fn export(&self, request: &ExportRequest, host: &dyn HostApi)
+        -> Result<ExportReport, PluginError>;
+}
+```
+
+Il capitolo 17 di FEATURES è ~120 voci: o ognuna è un provider, o il capitolo 17
+*è* l'app. Quattro decisioni sono nella forma dei tipi, e valgono per tutte e
+centoventi.
+
+**Il confine è di byte, non di path.** `ImportSource { name, media_type, bytes }`
+arriva **già letta**; `ExportReport { artifacts, log }` esce come
+`ExportArtifact { path, media_type, bytes }`, dove `path` è il posto *dentro
+l'esito* e non sul disco. Chi apre il dialogo di sistema e chi posa i byte è
+l'host. È ciò che rende import ed export esprimibili **senza** una capacità
+filesystem: a M5 la sandbox non deve concedere niente di nuovo proprio per il
+capitolo che, altrove, il filesystem lo tocca più di tutti. Prezzo dichiarato:
+sorgente e artefatti stanno in memoria — lo streaming è additivo, un
+`path: String` non lo sarebbe.
+
+**Il piano è il rapporto di una prova a vuoto.** Niente `MigrationPlan` gemello
+di `ImportReport`: c'è `ImportMode { Preview, Apply }`, e in `Preview` lo stesso
+import restituisce lo stesso rapporto senza scrivere. Due tipi che dicono la
+stessa cosa in due momenti divergono al primo campo aggiunto a uno solo.
+
+**L'errore è "non ho potuto cominciare".** `Err(PluginError)` per la sorgente
+illeggibile o la destinazione ignota; tutto ciò che riguarda *un pezzo* di un
+trasferimento riuscito a metà sta nel rapporto (`ImportOutcome`,
+`TransferNote { level, message, entry }`). Un import di 4000 note che ne perde 3
+è riuscito con tre problemi.
+
+**L'import scrive, l'export legge — e si vede dalla firma.** `import` è
+`&mut self` (17.3 chiede *resume* e *retry*: un provider che riprende ricorda) e
+riceve un host in scrittura; `export` è `&self` con `&dyn HostApi`, quindi il
+kernel lo serve sotto prestito **condiviso** del workspace come `render_view` —
+un export lungo non mette in coda le letture dell'app.
+
+Tipi di supporto: `ImportRequest { mode, folder, on_conflict, options }` con
+`ConflictPolicy { Skip, Replace, Rename }` (il *duplicate handling* di 17.3;
+`Rename` usa `HostApi::free_name`), `ImportReport { mode, documents, log }` con
+`ImportedDocument { doc, outcome, entry }` e
+`ImportOutcome { Created, Replaced, Skipped, Failed(String) }`;
+`ExportTarget { id, name, extension: Option<String> }` (assente = l'esito è un
+albero di file, e chi apre il dialogo chiede una cartella),
+`ExportRequest { selection, target, options }` con
+`ExportSelection { Documents, Folder, Query(IndexQuery) }` — e
+`ExportSelection::resolve(host)` sta nel contratto, come `heading_slug`, perché
+«cosa c'è in questa cartella» deve avere una risposta sola.
+
+**I provider veri: `MarkdownImport` e `MarkdownExport`** (`fubmd-format-markdown`),
+registrati con `Workspace::register_import_provider(id, p)` /
+`register_export_provider(id, p)`. `Workspace::import` sceglie il **primo**
+provider il cui `can_handle` dice sì (la domanda è esplicita, e non dedotta da un
+`BadArgs` come in `query_index`: una sorgente si riconosce senza provare a
+importarla, e provare vorrebbe dire scrivere); `Workspace::export` risolve la
+destinazione sul suo proprietario. Prove: `tests/transfer_e2e.rs` nel crate
+markdown (import, preview, conflitti, selezioni, round-trip) e
+`fubmd-kernel/tests/transfer_dispatch.rs` per il protocollo (dispatch, consegna
+degli eventi a chiamata tornata, recinto del vault).
+
+Resta fuori, dichiarato: **rollback e resume** (l'inverso di un lotto, §1.12,
+sopra il journal del §2.5 — il rapporto nomina i documenti toccati, che è
+l'input che servirà), il **lavoro lungo** che vede il vault (§1.21: oggi un
+import gira nel giro sincrono), il **modello parsato** a un exporter (§1.28: un
+export PDF/Typst dovrebbe riparsare) e la **superficie IPC** (senza dialoghi di
+sistema sarebbero due comandi Tauri senza chiamanti).
+
 ### `Plugin` — ciclo di vita (M4/M5)
 
 ```rust
@@ -409,8 +503,10 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView` ✅ **M2** | **M2** (graph-data) | tre provider veri; `query_index`+`active_document`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch` |
 | `CommandProvider` | — | **M3** (command palette) | keybinding non vincolante |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
+| `ImportProvider` | — | `MarkdownImport` ✅ **M2** (§1.7) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
+| `ExportProvider` | — | `MarkdownExport` ✅ **M2** (§1.7) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | storage in-memory per ora |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | storage in-memory per ora; `free_name` chiesto dall'import |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore
@@ -447,6 +543,12 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `PropertyTest` | `variant` (i casi senza valore — `exists`, `missing` — non portano payload) |
 | `LinkDirection`/`HealthCheck` | `enum` |
 | `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`) / `enum` / `list<event-kind>` |
+| `TransferNote`/`NoteLevel` | `record` / `enum` (interface `transfer`: due interfacce le condividono, quindi il tipo sta in una terza) |
+| `ImportSource`/`ImportRequest`/`ImportedDocument`/`ImportReport` | `record` (interface `importer`); `bytes: list<u8>` — nessun campo porta un percorso |
+| `ImportMode`/`ConflictPolicy` | `enum` |
+| `ImportOutcome` | `variant` (solo `failed` porta un payload) |
+| `ExportTarget`/`ExportRequest`/`ExportArtifact`/`ExportReport` | `record` (interface `exporter`) |
+| `ExportSelection` | `variant { documents(list<doc-id>), folder(string), query(index-query) }` |
 | `JobSpec`/`JobId` | `record job-spec` / `type job-id = u64` (interface `jobs`) |
 | `PluginManifest`/`PluginPermissions` | `record` |
 | `FormatError`/`PluginError` | `variant` (mappati su `result<_, error>` WIT) |
