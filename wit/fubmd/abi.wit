@@ -1089,6 +1089,17 @@ interface host-api {
     use index.{index-query, index-result};
     use session.{view-context};
     use edit.{revision, edit-request, edit-report};
+    use command.{command-outcome};
+
+    /// Una voce del cestino. Due id perché sono due domande: dove il file si
+    /// trova ora (ed è quello che si passa a `restore-document`) e dove
+    /// tornerebbe un ripristino.
+    record trash-entry {
+        id: doc-id,
+        original: doc-id,
+        deleted-at: u64,
+        size: u64,
+    }
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
     /// Scrive il documento INTERO: è la scrittura di chi il testo intero ce l'ha
@@ -1115,15 +1126,44 @@ interface host-api {
     /// FEATURES 17.1, l'alternativa sono cinquanta convenzioni. Non prenota
     /// niente.
     free-name: func(id: doc-id) -> doc-id;
+
+    // --- operazioni strutturali sul vault ------------------------------------
+    //
+    // Creare, rinominare, cestinare: ciò che si fa a un documento senza
+    // aprirlo. Erano kernel-owned e fuori dal contratto, e la conseguenza era
+    // che template, daily note, import e auto-archiviazione non potevano
+    // essere un plugin. Sotto `write-vault` quando il §2.10 lo leggerà; oggi
+    // il varco che le rifiuta è quello del §1.36 (comando di sola lettura o
+    // simulato).
+
+    /// Crea un documento NUOVO, e fallisce se il path è occupato. È il rifiuto
+    /// a distinguerla da `write-document`, che sovrascrive: un template che
+    /// sbaglia la data cancellerebbe una nota vera. Chi vuole un nome comunque
+    /// libero lo chiede a `free-name` e passa quello.
+    create-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
+    /// Rinomina/sposta preservando l'identità E riscrivendo i wikilink
+    /// entranti: è il rename del kernel, non ce n'è un secondo "nudo". È un
+    /// lotto (§1.12), e dentro un lotto già aperto vi si unisce.
+    rename-document: func(%from: doc-id, to: doc-id) -> result<_, plugin-error>;
+    /// Sposta nel cestino e dice dov'è finito: l'id restituito è quello con cui
+    /// si ripristina. Non distrugge — l'unica che distrugge è `empty-trash`.
+    trash-document: func(id: doc-id) -> result<doc-id, plugin-error>;
+    /// Il contenuto del cestino, dal più recente al più vecchio. Sta qui e non
+    /// in `index-query` perché il cestino non è indicizzato: una nota cestinata
+    /// non ha modello, né tag, né archi.
+    list-trash: func() -> result<list<trash-entry>, plugin-error>;
+    /// Riporta nel vault una voce del cestino (`entry` è il suo `id`) e
+    /// restituisce con quale path è tornata. Path d'origine occupato e nessun
+    /// `to` = errore, non un nome scelto d'ufficio: chi chiama ha `free-name`.
+    restore-document: func(entry: doc-id, to: option<doc-id>) -> result<doc-id, plugin-error>;
+    /// Svuota il cestino e dice quante voci ha distrutto. L'unica capacità del
+    /// contratto da cui non si torna indietro, e per questo una capacità a sé.
+    empty-trash: func() -> result<u64, plugin-error>;
+
     emit: func(event: event);
     /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
     /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
     spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
-    /// Stato leggero e volatile del plugin (preferenze, cursori): vive in
-    /// memoria, non sopravvive alla chiusura. Per i dati che devono durare
-    /// c'è lo storage persistente qui sotto.
-    storage-get: func(key: string) -> option<json>;
-    storage-set: func(key: string, value: json);
 
     // --- storage persistente per-plugin --------------------------------------
     //
@@ -1168,6 +1208,18 @@ interface host-api {
     /// a un plugin. Un `doc-id` nudo non basterebbe: con schede e split il
     /// documento attivo smette di essere una variabile globale.
     active-context: func() -> option<view-context>;
+
+    /// Invoca un comando del registro (§1.1): è ciò che rende componibili macro
+    /// e automazioni senza che un plugin debba conoscere gli altri.
+    ///
+    /// Non prende un `invoke-mode`: il modo è dell'host, non della chiamata —
+    /// chi si sta simulando invoca in simulazione e riceve il PIANO, e il piano
+    /// di una macro è l'unione dei piani dei suoi passi. Non prende un `actor`:
+    /// l'attore è chi è ENTRATO nel kernel e resta lui per tutta la catena. Non
+    /// apre un lotto suo: si unisce a quello aperto, così una macro di tre
+    /// comandi è un `batch-ended` solo. Un comando non può invocare sé stesso,
+    /// nemmeno per giro: `bad-args` nomina il ciclo.
+    run-command: func(command: string, args: json) -> result<command-outcome, plugin-error>;
 }
 
 /// Reazione agli eventi (`EventHandler`).

@@ -647,6 +647,10 @@ type Log = Arc<Mutex<Vec<String>>>;
 /// custom e scrive un documento derivato — il caso rientrante per eccellenza.
 struct ChainingHandler {
     log: Log,
+    /// Ha già reagito? Era una chiave dello `storage_*` dell'host finché quello
+    /// esisteva; adesso è un campo — che è il punto per cui il §1.4 lo ha
+    /// tolto, perché un handler è un oggetto vivo e la memoria ce l'ha già.
+    fatto: bool,
 }
 
 impl EventHandler for ChainingHandler {
@@ -662,8 +666,8 @@ impl EventHandler for ChainingHandler {
                 // Reagisce solo al documento "innesco", altrimenti la scrittura
                 // qui sotto rigenererebbe l'evento all'infinito (il budget del
                 // kernel tronca comunque, ma il test vuole un ciclo che converge).
-                if id.as_str() == "innesco.lnk" && host.storage_get("done").is_none() {
-                    host.storage_set("done", serde_json::Value::Bool(true));
+                if id.as_str() == "innesco.lnk" && !self.fatto {
+                    self.fatto = true;
                     host.emit(Event::Custom {
                         topic: "test/derivato".into(),
                         payload: serde_json::json!({ "da": id.as_str() }),
@@ -688,7 +692,10 @@ fn handlers_run_queued_not_recursive_and_can_write_documents() {
     let log: Log = Arc::new(Mutex::new(Vec::new()));
     ws.register_event_handler(
         "test.chaining",
-        Box::new(ChainingHandler { log: log.clone() }),
+        Box::new(ChainingHandler {
+            log: log.clone(),
+            fatto: false,
+        }),
     );
 
     ws.write_document(&DocId::new("innesco.lnk"), "").unwrap();

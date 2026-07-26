@@ -57,6 +57,31 @@ impl<'de> Deserialize<'de> for JobId {
 }
 
 // ---------------------------------------------------------------------------
+// Cestino: la forma di ciò che è stato cancellato ma non distrutto.
+// ---------------------------------------------------------------------------
+
+/// Una voce del cestino del vault.
+///
+/// Sale nel contratto col §1.4 perché [`HostApi::list_trash`] la restituisce:
+/// prima viveva nel kernel, dove il solo lettore era la shell attraverso un
+/// comando Tauri. Porta **due** id perché sono due domande diverse — dove il
+/// file si trova ora (`id`, ed è quello che si passa a
+/// [`restore_document`](HostApi::restore_document)) e dove tornerebbe
+/// (`original`) — e un cestino che sapesse solo la prima non saprebbe
+/// ripristinare.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrashEntry {
+    /// Dove il file si trova ora: `.trash/Nota.2026-07-24T15-30-00.md`.
+    pub id: DocId,
+    /// Dove tornerebbe un ripristino: il path d'origine se il vault lo
+    /// ricorda, altrimenti il nome de-timbrato nella radice.
+    pub original: DocId,
+    /// Istante della cancellazione (secondi UNIX).
+    pub deleted_at: u64,
+    pub size: u64,
+}
+
+// ---------------------------------------------------------------------------
 // Capability handle: l'unico modo con cui un provider tocca il mondo esterno.
 // Nativo → oggetto in-process diretto. WASM (M5) → proxy che reinoltra le
 // chiamate come host function attraverso il confine.
@@ -68,7 +93,8 @@ impl<'de> Deserialize<'de> for JobId {
 /// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
 /// il dogfooding del versioning ha trovato il buco: un `EventHandler` scritto
 /// come lo scriverebbe un plugin non aveva modo di tenere uno store di snapshot
-/// su disco (lo `storage_*` in-memory non basta) né di sapere che ore sono.
+/// su disco né di sapere che ore sono. Il §1.4 ha chiuso l'elenco: dopo il
+/// freeze un metodo **aggiunto** qui è una minor, uno **tolto** è una major.
 ///
 /// # Visibilità durante i callback (contratto)
 ///
@@ -146,17 +172,101 @@ pub trait HostApi: Send + Sync {
     /// Non prenota niente: fra la domanda e la scrittura il nome può diventare
     /// occupato, e a quel punto è la scrittura a dirlo.
     fn free_name(&self, id: &DocId) -> DocId;
+
+    // --- operazioni strutturali sul vault -----------------------------------
+    //
+    // Creare, rinominare, cestinare: le tre cose che si fanno a un documento
+    // *senza aprirlo*. Fino al §1.4 erano kernel-owned e fuori dal contratto, e
+    // la conseguenza era che template, daily note, import, auto-archiviazione e
+    // cleanup wizard (FEATURES 16, 17, 8.3, 7.2) non potevano essere un plugin:
+    // il vault sapeva farle, il confine no.
+    //
+    // Sono le capacità che il §2.10 metterà sotto `write_vault`. Oggi il varco
+    // che le rifiuta è quello del §1.36: un comando in sola lettura, o
+    // simulato, le riceve tutte negate.
+
+    /// Crea un documento **nuovo** con il sorgente dato, e fallisce se quel
+    /// path è già occupato.
+    ///
+    /// È questo rifiuto a distinguerla da [`write_document`](HostApi::write_document),
+    /// che crea ciò che non c'è e sovrascrive ciò che c'è: un plugin di
+    /// template che scrivesse la nota di oggi con `write_document` e sbagliasse
+    /// la data **cancellerebbe** una nota dell'utente, senza che niente nel
+    /// codice sembri una cancellazione. Chi vuole un nome comunque libero lo
+    /// chiede a [`free_name`](HostApi::free_name) e passa quello: due capacità
+    /// che si compongono dicono cosa succede, una che rinomina in silenzio no.
+    ///
+    /// L'id è quello del chiamante e non un nome da cui l'host deriva un path:
+    /// un importer o un template sanno *dove* va la nota (`Diario/2026-07-26.md`),
+    /// e un host che scegliesse la cartella al posto loro renderebbe
+    /// inesprimibile metà del capitolo 16.
+    fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+
+    /// Rinomina/sposta un documento **preservando l'identità**, e riscrive i
+    /// wikilink entranti che puntavano al vecchio nome.
+    ///
+    /// È il rename del kernel, non un rename "nudo": non ce ne sono due. Un
+    /// rename che lasciasse i backlink rotti non è una versione più semplice
+    /// della stessa operazione — è un'operazione che mette il vault in uno
+    /// stato che l'utente non ha chiesto, e che nessuna delle due firme
+    /// direbbe. Chi davvero vuole spostare un file senza toccare nessun altro
+    /// documento oggi non ha un chiamante; il giorno che l'avrà, sarà un
+    /// parametro in più su una capacità nuova, non un secondo significato di
+    /// questo nome.
+    ///
+    /// Ne segue che una rinomina è un **lotto** (§1.12): N sorgenti riscritti,
+    /// un solo [`Event::BatchEnded`](crate::Event::BatchEnded). Chiamata da
+    /// dentro un lotto già aperto — un comando, per esempio — vi si unisce
+    /// invece di aprirne un altro.
+    fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError>;
+
+    /// Sposta un documento nel cestino e restituisce dov'è finito.
+    ///
+    /// Si chiama `trash_` e non `delete_` perché è ciò che fa: il documento
+    /// esce dal vault (e dagli indici, e da
+    /// [`list_documents`](HostApi::list_documents)) ma non è distrutto, e l'id
+    /// restituito è quello con cui si ripristina. L'unica capacità che
+    /// distrugge è [`empty_trash`](HostApi::empty_trash), e si chiama così.
+    fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError>;
+
+    /// Il contenuto del cestino, dal più recente al più vecchio.
+    ///
+    /// Sta qui accanto a [`list_documents`](HostApi::list_documents) e non
+    /// dentro [`IndexQuery`] perché il cestino **non è indicizzato**: una nota
+    /// cestinata non ha modello, né tag, né archi nel grafo — è esattamente
+    /// ciò che l'indice non contiene. Interrogarlo dal canale dati sarebbe
+    /// promettere che il canale dati sappia rispondere su ciò che non ha
+    /// letto.
+    fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError>;
+
+    /// Riporta nel vault una voce del cestino (`entry` è il suo
+    /// [`TrashEntry::id`]) e restituisce il [`DocId`] con cui è tornata: il suo
+    /// path d'origine, oppure `to` se il chiamante ne sceglie un altro.
+    ///
+    /// Il ripristino è una scrittura normale — parse, grafo, indici, eventi —
+    /// e quindi è a sua volta annullabile. Se il path d'origine è di nuovo
+    /// occupato e `to` non è stato dato, è un errore e non un nome scelto
+    /// d'ufficio: chi chiama ha [`free_name`](HostApi::free_name) e decide.
+    fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError>;
+
+    /// Svuota il cestino e dice quante voci ha distrutto.
+    ///
+    /// È l'unica capacità del contratto da cui non si torna indietro, e per
+    /// questo è una capacità a sé e non un `trash_document(force: true)`: un
+    /// booleano che cambia "sposta" in "distruggi" è il tipo di parametro che
+    /// si passa sbagliato una volta sola.
+    ///
+    /// Il conteggio è un `u64` e non un `usize`: al confine il guest può essere
+    /// a 32 bit, e un tipo che cambia larghezza a seconda di chi lo compila non
+    /// è un tipo del contratto.
+    fn empty_trash(&mut self) -> Result<u64, PluginError>;
+
     /// Emette un evento sull'event bus.
     fn emit(&mut self, event: Event);
     /// Chiede l'esecuzione in background di un job ([`Plugin::run_job`]).
     /// Ritorna subito con l'identità del job; l'esito arriverà come
     /// [`Event::JobDone`](crate::Event::JobDone) sul giro sincrono normale.
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
-    /// Stato leggero e **volatile** con spazio dei nomi per-plugin: preferenze,
-    /// cursori, ciò che si può ricostruire. Non sopravvive alla chiusura — per
-    /// i dati che devono durare c'è `data_*`.
-    fn storage_get(&self, key: &str) -> Option<serde_json::Value>;
-    fn storage_set(&mut self, key: &str, value: serde_json::Value);
 
     // --- storage persistente per-plugin -------------------------------------
     //
@@ -224,6 +334,42 @@ pub trait HostApi: Send + Sync {
     /// permette di distinguerli già ora; legarli a un pannello *fisso* è
     /// l'altra metà del problema, e arriva con le istanze di view (§1.15).
     fn active_context(&self) -> Option<ViewContext>;
+
+    /// Invoca un comando del registro (§1.1).
+    ///
+    /// È la capacità che rende **componibili** macro e automazioni (16.2, 16.3):
+    /// senza, ogni plugin che voglia fare ciò che un altro sa già fare deve
+    /// conoscerlo, dipenderne e rifarlo. Con, ne conosce l'id — che è l'unica
+    /// cosa che una `CommandSpec` promette di non cambiare.
+    ///
+    /// Tre cose che questa firma dice *non* dicendole:
+    ///
+    /// - **Non prende un [`InvokeMode`]**: il modo è dell'host, non della
+    ///   chiamata. Un comando che si sta simulando invoca in simulazione, e
+    ///   riceve il *piano* di ciò che il comando invocato farebbe; il piano di
+    ///   una macro è l'unione dei piani dei suoi passi. Se il modo fosse un
+    ///   argomento, una simulazione potrebbe diventare reale invocando
+    ///   qualcuno — che è esattamente il buco che il §1.36 ha chiuso.
+    /// - **Non prende un [`Actor`](crate::event::Actor)**: l'attore non si
+    ///   riazzera invocando. È chi ha chiesto, cioè chi è *entrato* nel kernel
+    ///   (l'utente dalla IPC, il watcher, il plugin da un handler), e resta lui
+    ///   per tutta la catena. Un comando che si intestasse le scritture che
+    ///   compie per conto dell'utente direbbe all'automazione che le ha chieste
+    ///   lei — e un'automazione che non riconosce più chi ha chiesto è quella
+    ///   che si richiama da sola.
+    /// - **Non apre un lotto suo**: si unisce a quello aperto. Una macro di tre
+    ///   comandi è *una* cosa che qualcuno ha chiesto, quindi un
+    ///   [`Event::BatchEnded`](crate::Event::BatchEnded) solo, quindi un
+    ///   ridisegno solo.
+    ///
+    /// Un comando non può invocare sé stesso, nemmeno per giro: la catena è
+    /// nota all'host, e una ricorsione risponde
+    /// [`PluginError::BadArgs`](crate::PluginError::BadArgs) nominando il giro.
+    fn run_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+    ) -> Result<CommandOutcome, PluginError>;
 }
 
 // ---------------------------------------------------------------------------

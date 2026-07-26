@@ -153,15 +153,31 @@ oggi, una migrazione domani); le altre restano al freeze.
       Restano aperti sopra questa firma il §1.12 (il lotto su più documenti), il
       §1.17 (chi possiede l'undo) e il §1.18 (l'edit sull'evento, senza cui la
       shell deve ricaricare il documento invece di applicarlo al buffer).
-- [ ] **Operazioni strutturali e parità plugin↔nativo**: rename,
-      `create_note`, cestino sono kernel-owned e fuori da `HostApi` (scelta
-      deliberata). Decidere se e quali esporre come capacità con permesso
-      dedicato (`write_vault` non basta: un rename riscrive file di terzi).
-- [ ] **`create_note` in una cartella**: oggi la nota senza nome nasce nella
-      radice; se la creazione diventa capacità di plugin, la firma va decisa
-      insieme al punto sopra (path completo vs cartella+nome).
+- [x] **Operazioni strutturali e parità plugin↔nativo** — fatto col §1.4, che ha
+      **chiuso l'elenco** delle capacità: `create_document`, `rename_document`,
+      `trash_document`, `list_trash`, `restore_document`, `empty_trash`,
+      `run_command`; via `storage_get`/`storage_set`; ventidue metodi in tutto.
+      Primo cliente vero: le cinque azioni strutturali della shell migrate a
+      `CoreCommands`, con **sei comandi Tauri spariti**, più `vault.archive` che
+      compone via `run_command`. Le decisioni che il freeze avrebbe reso
+      definitive: il rename del contratto è quello che **riscrive i backlink**
+      (non ce n'è uno nudo), `create_document` **rifiuta** un path occupato (è
+      l'unica differenza con `write_document`, ed è quella che impedisce a un
+      template di cancellare una nota), `list_trash` sta accanto a
+      `list_documents` e non in `IndexQuery` (il cestino non è indicizzato), e
+      `run_command` non prende né modo né attore né lotto — li eredita tutti e
+      tre. `wit/frozen/0.1.0.wit` **ritagliato** (`storage-*` era pubblicata).
+      Verbale capacità per capacità, incluse quelle che restano fuori, in
+      [todo.md §1.4](../todo.md).
+- [x] **`create_note` in una cartella** — deciso col punto sopra:
+      `create_document` prende un **`DocId` completo**, non un nome da cui
+      l'host deriva il path. Un importer o un template sanno dove va la nota, e
+      un host che scegliesse la cartella per loro renderebbe inesprimibile metà
+      del capitolo 16. La nota senza titolo la costruisce il *comando*
+      (`note.create` compone `free_name` + `create_document`), non il contratto.
 - [ ] **Escape hatch `type json = string`**: confermare al freeze, uso per
-      uso (frontmatter, `attrs`, args dei comandi, payload dei job, storage),
+      uso (frontmatter, `attrs`, args dei comandi e di `run-command`, payload
+      dei job),
       che l'opacità è accettabile — o promuovere a record WIT tipati dove non
       lo è. Il costo di tenerla: nessun controllo di forma al confine; il
       costo di toglierla: il contratto esplode a ogni formato nuovo.
@@ -169,7 +185,11 @@ oggi, una migrazione domani); le altre restano al freeze.
       basta. Aggiungere un canale dopo è breaking; l'alternativa ponte è un
       `Event::Custom` con topic convenzionale (`<plugin>/job-progress`), che
       il varco già permette senza toccare il contratto — se basta quella, la
-      decisione è "JobDone + convenzione documentata".
+      decisione è "JobDone + convenzione documentata". Il §1.4 ha già deciso la
+      **forma**: se un canale ci sarà, sarà un **evento** e non una capacità —
+      ciò che si limita a informare non è qualcosa di cui il chiamante aspetta
+      la risposta. Resta da decidere se serve una variante dedicata o basta
+      `Custom`.
 - [x] **Contesto di una view: `active_document()` o `ViewContext`?** — **deciso
       pre-freeze**: `HostApi::active_context() -> Option<ViewContext>`, con
       `ViewContext { pane, doc, selection, mode }` (interface `session` nel
@@ -277,11 +297,11 @@ oggi, una migrazione domani); le altre restano al freeze.
          che il comando sceglie di dire. Il §2.10 resta la domanda gemella e
          diversa: non «l'utente approva questa esecuzione?» ma «questo componente
          può, in generale?».
-      Resta aperto sopra questa firma, dichiarato: l'**attribuzione** (§1.18 +
-      §1.12), le **impostazioni scrivibili da un programma** (§1.3: il
-      vocabolario c'è, `CommandReach::Settings`, lo schema no), i **comandi
-      strutturali** (crea/rinomina/cestina, che sono capacità del §1.4) e i
-      **comandi della shell** (toggle dei pannelli: il registro vive nel kernel e
+      Resta aperto sopra questa firma, dichiarato: ~~l'**attribuzione**~~
+      (fatta, §1.18 + §1.12), le **impostazioni scrivibili da un programma**
+      (§1.3: il vocabolario c'è, `CommandReach::Settings`, lo schema no),
+      ~~i **comandi strutturali**~~ (fatti, §1.4: cinque comandi, sei comandi
+      Tauri in meno) e i **comandi della shell** (toggle dei pannelli: il registro vive nel kernel e
       il frontend non può registrarvisi — §3.2).
 
 ## Trait/API coinvolti
@@ -296,7 +316,8 @@ oggi, una migrazione domani); le altre restano al freeze.
 |---|---|
 | WIT **vivo da M2**, freeze a M4 | La regola d'oro diventa verificabile ad ogni commit, non un atto di fede a fine corsa. |
 | Primo plugin **nativo** prima del WASM | Separa "il confine è giusto?" da "il runtime WASM funziona?"; M5 resta meccanico. |
-| JSON libero come `string` in WIT | Preserva l'escape hatch (`attrs`/`args`/storage) senza esplodere il contratto. |
+| JSON libero come `string` in WIT | Preserva l'escape hatch (`attrs`/`args`) senza esplodere il contratto. |
+| L'`HostApi` è **chiusa** dal §1.4 | Ventidue metodi, e ogni capacità esclusa ha una ragione scritta: dopo il freeze, una capacità mancante è una feature che non potrà mai essere un plugin, e "non ci avevamo pensato" non è un motivo che si possa leggere fra sei mesi. |
 | Cambi additivi versionati post-freeze | Stabilità per i plugin di terzi senza bloccare l'evoluzione. |
 
 ## Criteri di accettazione
@@ -305,7 +326,9 @@ oggi, una migrazione domani); le altre restano al freeze.
   abi↔WIT è verde e **rompe** su una divergenza introdotta ad arte.
 - Il primo plugin nativo si attiva, registra i suoi provider, funziona end-to-end e
   rispetta i permessi (un accesso fuori `vault_scope` è negato con
-  `PermissionDenied`).
+  `PermissionDenied`). I permessi sono la metà che il §1.4 ha lasciato al §2.10:
+  il **rifiuto** esiste già ed è provato su tutte le strutturali; manca il
+  registro dei manifest che dica *a chi* concedere.
 - La superficie dei trait è dichiarata **congelata**; policy di versioning documentata.
 
 ## Piano di test

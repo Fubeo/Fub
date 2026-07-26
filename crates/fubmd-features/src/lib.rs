@@ -42,7 +42,8 @@ mod testing;
 
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 pub use commands::{
-    occurrences, CoreCommands, COMMANDS_ID, SEARCH_OPEN, SELECTION_WIKILINK, VAULT_REPLACE,
+    occurrences, CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TRASH, SEARCH_OPEN,
+    SELECTION_WIKILINK, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
 };
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
 pub use search::{SearchIndex, SEARCH_ID};

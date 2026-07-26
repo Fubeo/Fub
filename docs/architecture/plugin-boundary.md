@@ -22,16 +22,24 @@ applicare i permessi.
   nel core e ritorna. La firma è identica: per questo la regola d'oro impone tipi
   serializzabili.
 
-### Storage: due, e diversi apposta (deciso)
+### Storage: uno, dopo che il §1.4 ne ha tolto uno (deciso)
 
-Un plugin ha due modi di ricordare, e la differenza non è un dettaglio
-implementativo — è nella firma, così che nessuno debba indovinare:
+Un plugin ricorda in un modo solo: `data_read/write/remove/list`, path → blob di
+byte, persistente.
 
-| | `storage_get/set` | `data_read/write/remove/list` |
-|---|---|---|
-| Forma | chiave → JSON | path → blob di byte |
-| Durata | **volatile**, muore con la sessione | persistente |
-| Per cosa | preferenze, cursori, ciò che si ricostruisce | ciò che è la verità di quel plugin |
+Ce n'erano **due**. `storage_get/set` — chiave → JSON, volatile, "per le
+preferenze e i cursori" — è stato tolto dal contratto col §1.4, ritagliando la
+linea di base (`wit/frozen/0.1.0.wit`), che è la sola rottura di quel giro. La
+ragione, per esteso in `docs/todo.md` §1.4: con `data_*` da una parte e le
+impostazioni del §1.3 dall'altra, allo store volatile non restava un caso d'uso
+— e il caso che sembrava suo, "ricordare qualcosa per la durata della sessione",
+il chiamante lo aveva già risolto senza saperlo. Un provider è un **oggetto
+vivo** nel workspace (`handle` prende `&mut self`), e a M5 un componente WASM ha
+la propria memoria lineare: una capacità che l'host fornisce per qualcosa che il
+chiamante possiede già è superficie da mantenere, da documentare e da sandboxare
+per sempre. Il primo cliente vero a dimostrarlo è stato un test del kernel, dove
+un handler usava una chiave dello storage come flag "l'ho già fatto": adesso è
+un campo, ed è più corto.
 
 Lo spazio persistente è `.fubmd-data/plugins/<id>/`, **dentro al vault**: i dati
 derivati da un vault appartengono a quel vault, e copiarlo o metterlo in sync se
@@ -66,6 +74,55 @@ dogfooding del versioning, che è un `EventHandler` come quelli di terzi e con
 l'`HostApi` precedente non avrebbe potuto tenere il proprio store — vedi
 [traits.md](traits.md), `HostApi`. Il buco è stato chiuso nel contratto prima
 del freeze di M4, e `VersionStore` è la prova che la firma regge un caso reale.
+
+### Operazioni strutturali e composizione (deciso, §1.4)
+
+Sette capacità aggiunte prima del freeze, e la chiusura dell'elenco: dal §1.4 la
+superficie dell'`HostApi` è dichiarata **completa**, e ciò che non c'è è fuori
+per una ragione scritta (`docs/todo.md` §1.4, capacità per capacità).
+
+- **`create_document(id, source)`** — crea, e **rifiuta** un path occupato. È
+  l'unica differenza con `write_document`, ed è tutta la ragione per cui sono
+  due: un template che sbaglia la data e usa `write_document` cancella una nota
+  vera, e nel codice non sembra una cancellazione. Chi vuole comunque un nome
+  libero compone con `free_name`.
+- **`rename_document(from, to)`** — quella del kernel: identità preservata **e
+  wikilink entranti riscritti**. Non ce n'è una versione "nuda": due semantiche
+  sotto lo stesso nome sarebbero una trappola, e la nuda produce un vault che
+  nessuno ha chiesto. Ne segue che è un lotto (§1.12), e dentro un lotto aperto
+  vi si unisce.
+- **`trash_document(id) -> DocId`**, **`list_trash()`**,
+  **`restore_document(entry, to)`**, **`empty_trash() -> u64`** — il giro del
+  cestino. `trash_` e non `delete_` perché non distrugge: restituisce l'id con
+  cui si ripristina, e l'unica capacità che distrugge si chiama `empty_trash`.
+  `list_trash` sta qui accanto a `list_documents` e **non** in `IndexQuery`: il
+  cestino non è indicizzato — una nota cestinata non ha modello, né tag, né
+  archi — e chiederlo al canale dati significherebbe promettere che quel canale
+  sappia rispondere su ciò che non ha letto.
+- **`run_command(command, args) -> CommandOutcome`** — invoca un comando del
+  registro (§1.1). Non prende un `InvokeMode` (il modo è dell'host: chi si sta
+  simulando invoca in simulazione e riceve il *piano*, e il piano di una macro è
+  l'unione dei piani dei suoi passi), non prende un `Actor` (l'attore è chi è
+  *entrato* nel kernel e resta lui per tutta la catena), non apre un lotto suo.
+  Un comando non può invocare sé stesso nemmeno per giro: la catena è nota
+  all'host e il rifiuto nomina il ciclo.
+
+`run_command` è anche la ragione per cui i `CommandProvider` sono gli unici
+provider **condivisi** (`Arc`) invece che estratti dal workspace per la durata
+della chiamata: un comando che invoca deve trovare gli altri comandi, compresi
+quelli del proprio provider.
+
+**Dove sta il permesso.** `PluginPermissions.write_vault` esiste e **non lo
+legge nessuno** — non per dimenticanza: questo kernel non ha plugin, ha provider
+registrati per id, e `Plugin::manifest()` non viene mai chiamata perché non c'è
+niente che installi, abiliti o verifichi. Applicare `write_vault` oggi vorrebbe
+dire inventare il registro che tiene i manifest, cioè il §2.10 e M5. Il varco
+però esiste già, ed è quello del §1.36: un comando in **sola lettura** o
+**simulato** riceve un host che nega *tutte* e sei le strutturali con un errore
+che dice perché (`crates/fubmd-kernel/tests/invoke_command.rs`,
+`every_structural_capability_is_refused_by_the_same_gate`). Il giorno che
+`write_vault` diventerà vincolante non dovrà costruire il rifiuto: dovrà
+aggiungere una seconda ragione per negare.
 
 ### Interrogazione e contesto (deciso)
 
@@ -483,9 +540,11 @@ al frontend/all'IPC.
   della buona volontà: una sorgente da importare arriva già letta
   (`ImportSource.bytes`) e un export esce come `ExportArtifact.bytes` — vedi
   "Import ed export" sotto.
-- **Storage per-plugin:** deciso e implementato, vedi "Storage" sopra —
-  `storage_get/set` volatile a chiave, `data_*` persistente a blob dentro
-  `.fubmd-data/plugins/<id>/`.
+- **Storage per-plugin:** deciso e implementato, vedi "Storage" sopra — `data_*`
+  a blob dentro `.fubmd-data/plugins/<id>/`, e nient'altro.
+- **Operazioni strutturali:** `create_document`, `rename_document`,
+  `trash_document`, `list_trash`, `restore_document`, `empty_trash` — vedi
+  "Operazioni strutturali" sopra. Sono ciò che `write_vault` dovrà governare.
 - **Tempo:** `now_unix_millis` viene dall'host. WASI può negare l'orologio a un
   componente, e un tempo che passa dal confine è anche un tempo che i test
   possono fermare.

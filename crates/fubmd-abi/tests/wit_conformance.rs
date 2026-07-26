@@ -75,8 +75,8 @@ use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,
     HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef,
     Page, Paged, Plugin, PluginManifest, PluginPermissions, PropertyCount, PropertyEntry,
-    PropertyFilter, PropertySort, PropertyTest, SearchHit, SearchScope, TagCount, ViewPlacement,
-    ViewProvider, ViewSpec, ABI_VERSION,
+    PropertyFilter, PropertySort, PropertyTest, SearchHit, SearchScope, TagCount, TrashEntry,
+    ViewPlacement, ViewProvider, ViewSpec, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -243,6 +243,7 @@ wit_type! {
     NeighborRef => "neighbor-ref",
     SearchHit => "search-hit",
     TagCount => "tag-count",
+    TrashEntry => "trash-entry",
     Page => "page",
     LinkDirection => "link-direction",
     SearchScope => "search-scope",
@@ -2616,6 +2617,27 @@ fn conform(source: &str) -> Result<(), String> {
         .as_slice(),
     );
 
+    let TrashEntry {
+        id,
+        original,
+        deleted_at,
+        size,
+    } = TrashEntry {
+        id: DocId::new(".trash/a.2026"),
+        original: DocId::new("a.md"),
+        deleted_at: 0,
+        size: 0,
+    };
+    contract.record(
+        "trash-entry",
+        &[
+            ("id", wit(&id)),
+            ("original", wit(&original)),
+            ("deleted-at", wit(&deleted_at)),
+            ("size", wit(&size)),
+        ],
+    );
+
     let BacklinkRef { source, context } = BacklinkRef {
         source: DocId::new("a"),
         context: None,
@@ -3212,6 +3234,46 @@ fn conform(source: &str) -> Result<(), String> {
     );
     contract.method(
         "host-api",
+        "create-document",
+        <dyn HostApi>::create_document
+            as fn(Host, &'static DocId, &'static str) -> Result<(), PluginError>,
+        &["id", "source"],
+    );
+    contract.method(
+        "host-api",
+        "rename-document",
+        <dyn HostApi>::rename_document
+            as fn(Host, &'static DocId, &'static DocId) -> Result<(), PluginError>,
+        &["from", "to"],
+    );
+    contract.method(
+        "host-api",
+        "trash-document",
+        <dyn HostApi>::trash_document as fn(Host, &'static DocId) -> Result<DocId, PluginError>,
+        &["id"],
+    );
+    contract.method(
+        "host-api",
+        "list-trash",
+        <dyn HostApi>::list_trash
+            as fn(&'static dyn HostApi) -> Result<Vec<TrashEntry>, PluginError>,
+        &[],
+    );
+    contract.method(
+        "host-api",
+        "restore-document",
+        <dyn HostApi>::restore_document
+            as fn(Host, &'static DocId, Option<DocId>) -> Result<DocId, PluginError>,
+        &["entry", "to"],
+    );
+    contract.method(
+        "host-api",
+        "empty-trash",
+        <dyn HostApi>::empty_trash as fn(Host) -> Result<u64, PluginError>,
+        &[],
+    );
+    contract.method(
+        "host-api",
         "emit",
         <dyn HostApi>::emit as fn(Host, Event),
         &["event"],
@@ -3221,19 +3283,6 @@ fn conform(source: &str) -> Result<(), String> {
         "spawn-job",
         <dyn HostApi>::spawn_job as fn(Host, JobSpec) -> Result<JobId, PluginError>,
         &["spec"],
-    );
-    contract.method(
-        "host-api",
-        "storage-get",
-        <dyn HostApi>::storage_get
-            as fn(&'static dyn HostApi, &'static str) -> Option<serde_json::Value>,
-        &["key"],
-    );
-    contract.method(
-        "host-api",
-        "storage-set",
-        <dyn HostApi>::storage_set as fn(Host, &'static str, serde_json::Value),
-        &["key", "value"],
     );
     contract.method(
         "host-api",
@@ -3280,6 +3329,13 @@ fn conform(source: &str) -> Result<(), String> {
         "active-context",
         <dyn HostApi>::active_context as fn(&'static dyn HostApi) -> Option<ViewContext>,
         &[],
+    );
+    contract.method(
+        "host-api",
+        "run-command",
+        <dyn HostApi>::run_command
+            as fn(Host, &'static str, serde_json::Value) -> Result<CommandOutcome, PluginError>,
+        &["command", "args"],
     );
 
     contract.method(

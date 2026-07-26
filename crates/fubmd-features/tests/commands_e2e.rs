@@ -14,7 +14,10 @@ use fubmd_abi::event::{Actor, Event, EventKind, Notice};
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::session::{Selection, ViewContext};
 use fubmd_abi::PluginError;
-use fubmd_features::{CoreCommands, COMMANDS_ID, SELECTION_WIKILINK, VAULT_REPLACE};
+use fubmd_features::{
+    CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TRASH, SELECTION_WIKILINK,
+    TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
+};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace, MAIN_PANE};
 
@@ -192,7 +195,7 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
     let vault = Vault::new();
     let ws = vault.open();
     let specs = ws.commands();
-    assert_eq!(specs.len(), 3, "i tre comandi ufficiali");
+    assert_eq!(specs.len(), 9, "i nove comandi ufficiali");
     let replace = specs
         .iter()
         .find(|s| s.id == VAULT_REPLACE)
@@ -290,5 +293,272 @@ fn a_dry_run_opens_no_batch_because_it_touches_nothing() {
         "una simulazione non emette niente, nemmeno un terminale di lotto: il \
          non-scrivere del §1.36 vale anche per gli eventi, o la shell \
          ridisegnerebbe per un'anteprima"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// I comandi strutturali (§1.4): il giro che la shell faceva coi comandi Tauri
+// ---------------------------------------------------------------------------
+
+/// Il ciclo di vita completo di una nota, chiesto **solo** al registro: creare,
+/// rinominare, cestinare, ripristinare, svuotare.
+///
+/// È il dogfooding che il §1.1 non aveva potuto fare: nessuna riga qui chiama
+/// un metodo di `Workspace` per cambiare il vault. Se un giorno una di queste
+/// azioni tornasse a passare per una via privilegiata, questo test resterebbe
+/// verde — ed è per questo che il suo compagno è la sparizione dei comandi
+/// Tauri, che si vede nel diff e non in un assert.
+#[test]
+fn the_whole_life_of_a_note_goes_through_the_registry() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+
+    let outcome = ws
+        .invoke_command(
+            NOTE_CREATE,
+            serde_json::json!({ "name": "Progetti/Idee" }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("crea");
+    let CommandEffect::Navigate { doc } = outcome.effect else {
+        panic!("creare risponde con dove andare, che è anche l'id della nota nuova")
+    };
+    assert_eq!(
+        doc.as_str(),
+        "Progetti/Idee.md",
+        "un nome senza estensione diventa una nota markdown"
+    );
+    assert_eq!(ws.documents(), vec![doc.clone()]);
+
+    // Ricrearla sopra è rifiutato: è la differenza fra `create_document` e
+    // `write_document`, vista dal comando.
+    let e = ws
+        .invoke_command(
+            NOTE_CREATE,
+            serde_json::json!({ "name": "Progetti/Idee.md" }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("il path è occupato");
+    assert!(matches!(e, PluginError::Internal(_)), "{e}");
+
+    ws.invoke_command(
+        NOTE_RENAME,
+        serde_json::json!({ "doc": "Progetti/Idee.md", "to": "Progetti/Idee vecchie.md" }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("rinomina");
+    assert_eq!(ws.documents(), vec![DocId::new("Progetti/Idee vecchie.md")]);
+
+    ws.invoke_command(
+        NOTE_TRASH,
+        serde_json::json!({ "doc": "Progetti/Idee vecchie.md" }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("cestina");
+    assert!(ws.documents().is_empty());
+
+    let voce = ws.list_trash().expect("cestino")[0].id.clone();
+    let outcome = ws
+        .invoke_command(
+            TRASH_RESTORE,
+            serde_json::json!({ "entry": voce.as_str() }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("ripristina");
+    assert_eq!(
+        outcome.effect,
+        CommandEffect::Navigate {
+            doc: DocId::new("Progetti/Idee vecchie.md")
+        },
+        "il ripristino dice con che path la nota è tornata: è ciò che la shell \
+         usa al posto del valore di ritorno che un comando non ha"
+    );
+
+    // E infine il cestino, che è vuoto e lo dice.
+    let outcome = ws
+        .invoke_command(
+            TRASH_EMPTY,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("svuota");
+    assert!(outcome.notify.expect("dice quante").contains('0'));
+}
+
+#[test]
+fn trashing_without_an_argument_takes_the_note_the_user_is_looking_at() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("aperta.md"), "x")
+        .expect("scrive");
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new("aperta.md"))),
+    ));
+
+    ws.invoke_command(
+        NOTE_TRASH,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("cestina la nota attiva");
+    assert!(ws.documents().is_empty());
+}
+
+/// Il piano di una rinomina nomina **anche** le note che la linkano.
+///
+/// Senza, l'utente approverebbe «rinomina una nota» e ne verrebbero toccate
+/// quaranta: il raggio dichiarato (`documents`) dice che succede, e il piano
+/// dice a *chi*.
+#[test]
+fn the_plan_of_a_rename_names_the_notes_that_link_it() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("bersaglio.md"), "sono io")
+        .expect("scrive");
+    ws.write_document(&DocId::new("chi-linka.md"), "vedi [[bersaglio]]")
+        .expect("scrive");
+
+    let outcome = ws
+        .invoke_command(
+            NOTE_RENAME,
+            serde_json::json!({ "doc": "bersaglio.md", "to": "nuovo.md" }),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .expect("simula");
+    let CommandEffect::Plan(plan) = outcome.effect else {
+        panic!("un dry-run risponde con un piano")
+    };
+    assert!(
+        plan.docs.contains(&DocId::new("chi-linka.md")),
+        "la nota che linka è impattata e il piano la nomina: {:?}",
+        plan.docs
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("bersaglio.md")).expect("legge"),
+        "sono io",
+        "e simulare non ha rinominato niente"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// vault.archive: comporre comandi (§1.4, `run_command`)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn archiving_n_notes_is_n_renames_one_batch_and_one_actor() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    for nome in ["a.md", "b.md", "c.md"] {
+        ws.write_document(&DocId::new(nome), "x").expect("scrive");
+    }
+    ws.write_document(&DocId::new("indice.md"), "vedi [[a]] e [[b]]")
+        .expect("scrive");
+    let rx = ws.bus().subscribe();
+
+    ws.invoke_command(
+        VAULT_ARCHIVE,
+        serde_json::json!({ "docs": ["a.md", "b.md", "c.md"] }),
+        InvokeMode::Apply,
+        Actor::Plugin {
+            id: "automazione".into(),
+        },
+    )
+    .expect("archivia");
+
+    let mut docs = ws.documents();
+    docs.sort();
+    assert_eq!(
+        docs,
+        vec![
+            DocId::new("Archivio/a.md"),
+            DocId::new("Archivio/b.md"),
+            DocId::new("Archivio/c.md"),
+            DocId::new("indice.md"),
+        ]
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("indice.md")).expect("legge"),
+        "vedi [[a]] e [[b]]",
+        "i wikilink per nome pagina restano validi: li ha gestiti `note.rename`, \
+         che questa macro non ha riscritto"
+    );
+
+    let notices: Vec<Notice> = rx.try_iter().collect();
+    let batches: Vec<&Notice> = notices
+        .iter()
+        .filter(|n| n.kind() == EventKind::BatchEnded)
+        .collect();
+    assert_eq!(
+        batches.len(),
+        1,
+        "tre comandi invocati dentro un comando sono UN lotto: l'utente ha \
+         chiesto una cosa, e la shell ridisegna una volta"
+    );
+    assert_eq!(
+        batches[0].origin.actor,
+        Actor::Plugin {
+            id: "automazione".into()
+        },
+        "invocare non riazzera l'attore"
+    );
+}
+
+/// Simulare una macro simula i suoi passi, e il piano che ne esce è l'unione
+/// dei loro. È la prova che il **modo viaggia con l'host**: `vault.archive` non
+/// dice mai a `note.rename` che si sta simulando.
+#[test]
+fn the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    for nome in ["a.md", "b.md"] {
+        ws.write_document(&DocId::new(nome), "x").expect("scrive");
+    }
+    ws.write_document(&DocId::new("indice.md"), "vedi [[a]]")
+        .expect("scrive");
+
+    let outcome = ws
+        .invoke_command(
+            VAULT_ARCHIVE,
+            serde_json::json!({ "docs": ["a.md", "b.md"], "folder": "Vecchie" }),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .expect("simula");
+    let CommandEffect::Plan(plan) = outcome.effect else {
+        panic!("un dry-run risponde con un piano")
+    };
+
+    for atteso in ["a.md", "b.md", "Vecchie/a.md", "Vecchie/b.md", "indice.md"] {
+        assert!(
+            plan.docs.contains(&DocId::new(atteso)),
+            "il piano della macro contiene ciò che ogni passo avrebbe toccato — \
+             manca {atteso}: {:?}",
+            plan.docs
+        );
+    }
+    assert!(
+        plan.summary.contains("Vecchie"),
+        "il riassunto è della macro, non dell'ultimo passo: {}",
+        plan.summary
+    );
+
+    let mut docs = ws.documents();
+    docs.sort();
+    assert_eq!(
+        docs,
+        vec![
+            DocId::new("a.md"),
+            DocId::new("b.md"),
+            DocId::new("indice.md")
+        ],
+        "e simulare non ha spostato niente, nemmeno attraverso i comandi invocati"
     );
 }

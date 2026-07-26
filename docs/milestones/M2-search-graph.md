@@ -181,10 +181,11 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
   (altrimenti cablato nell'app fino a M3).
 
 Chiuso (vedi [PIANO.md](../PIANO.md), "Decisioni"): `Workspace::create_note`
-+ comando IPC `create_note`, cablato nell'app — e cablato è **rimasto** anche
-dopo che il registro dei comandi è arrivato (vedi qui sotto): creare una nota è
-una capacità che l'`HostApi` non ha, ed è il §1.4 a doverla decidere. La nota
-nasce vuota,
++ comando IPC `create_note`, cablato nell'app — e cablato è **rimasto** finché
+l'`HostApi` non ha avuto le capacità per farne un comando vero. Col §1.4 le ha:
+adesso è `note.create` (`free_name` + `create_document`), il comando IPC non
+esiste più, e il click su un link non risolto è il chiamante che questa voce
+aspettava dal principio. La nota nasce vuota,
 non da uno scheletro: un template è una preferenza, e le preferenze arrivano coi
 settings. Il backlink compare da solo, perché il link nel documento di partenza
 non viene toccato ed è il grafo a risolverlo di nuovo.
@@ -257,6 +258,44 @@ distingue «un'altra applicazione ha scritto questo file» da «lo abbiamo riscr
 noi». E2e: `crates/fubmd-kernel/tests/batch_and_origin.rs`,
 `crates/fubmd-features/tests/{commands_e2e,view_refresh_masks}.rs`.
 
+### Le capacità dell'`HostApi`, chiuse (§1.4) — **fatto**, prima del freeze
+
+La superficie più esposta del contratto è quella che il freeze rende definitiva
+nel modo più caro: una capacità che manca è una feature che non potrà mai essere
+un plugin, aggiungerne una dopo costa una minor e toglierne una una major.
+L'elenco è stato chiuso deciso **una voce per volta e a verbale**, comprese
+quelle che restano fuori — perché una saltata in silenzio è indistinguibile, fra
+sei mesi, da una scartata apposta.
+
+Dentro: le **operazioni strutturali** (`create_document`, `rename_document`,
+`trash_document`, `list_trash`, `restore_document`, `empty_trash`) e
+`run_command`. Fuori: `storage_get`/`storage_set`, **tolte** — la sola rottura
+del giro, con la linea di base ritagliata in `wit/frozen/0.1.0.wit`.
+
+Le decisioni che il freeze avrebbe reso definitive, in breve: `create_document`
+**rifiuta** un path occupato (è l'unica differenza con `write_document`, ed è
+quella che impedisce a un template che sbaglia la data di cancellare una nota
+vera); di rename ce n'è **uno**, quello che riscrive i backlink, perché due
+semantiche sotto lo stesso nome sono la trappola in cui un plugin scritto contro
+l'una si comporta come l'altra; `list_trash` sta accanto a `list_documents` e non
+in `IndexQuery`, perché il cestino non è indicizzato; `run_command` non prende né
+modo né attore né lotto — li **eredita**, così una simulazione non diventa reale
+invocando qualcuno e una macro di tre comandi resta una cosa sola. Il permesso
+`write_vault` resta al §2.10, ma il varco che **nega** copre già tutte e sei le
+strutturali: manca il registro dei manifest, non il rifiuto.
+
+Il verbale completo, capacità per capacità e con le ragioni di ciò che non
+entra, è in [todo.md](../todo.md) §1.4.
+
+Cliente vero nello stesso giro: le cinque azioni strutturali della shell migrate
+a `CoreCommands` (`note.create`, `note.rename`, `note.trash`, `trash.restore`,
+`trash.empty`), con **sei comandi Tauri spariti** — ed è quella sparizione a
+rendere vera la regola del §4.2 anche per le feature che toccano il vault — più
+`vault.archive`, che sposta N note invocando `note.rename` e non nomina un solo
+link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
+`crates/fubmd-kernel/tests/invoke_command.rs`,
+`crates/fubmd-features/tests/commands_e2e.rs`.
+
 ## Trait/API coinvolti
 
 - `IndexProvider` (nuova impl nativa, tantivy) — [traits.md](../architecture/traits.md).
@@ -264,9 +303,13 @@ noi». E2e: `crates/fubmd-kernel/tests/batch_and_origin.rs`,
   `CoreCommands`, anticipata da M3.
 - `ViewProvider` (backlink ✅, outline ✅, tag ✅; graph-data da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
 - `HostApi::query_index` (col canale metadata `IndexQuery::Outline`/`Tags`) + `HostApi::active_context` — le capacità che rendono una view un provider vero.
+- `HostApi` **chiusa** (§1.4): strutturali + `run_command` dentro, `storage_*` fuori — 22 metodi.
 - `Workspace` in `fubmd-kernel`: nuovi percorsi incrementali per grafo+indice.
-- Eventuale primo `CommandProvider` per "crea nota".
-- Nuovi comandi IPC in `fubmd-app` (search, graph-data, outline, tags, create-note).
+- `CommandProvider` per "crea nota" — fatto: `note.create`, e con esso gli altri
+  quattro strutturali (§1.4).
+- Comandi IPC in `fubmd-app`: search, graph-data, outline, tags — e **sei in
+  meno**, perché crea/rinomina/cestina/ripristina/svuota/proponi-nome sono
+  diventati comandi del registro.
 
 ## Decisioni (con il perché)
 

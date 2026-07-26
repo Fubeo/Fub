@@ -2,6 +2,7 @@ import "./style.css";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import {
   api,
+  COMANDI,
   onKernelEvent,
   type CommandEffect,
   type CommandSpec,
@@ -569,7 +570,10 @@ async function convertToFolder(id: string) {
   const dir = parentOf(id);
   const folderPath = dir ? `${dir}/${stem}` : stem;
   try {
-    await api.renameDocument(id, `${folderPath}/${childName(id)}`);
+    await api.invokeCommand(COMANDI.rinomina, {
+      doc: id,
+      to: `${folderPath}/${childName(id)}`,
+    });
   } catch (e) {
     console.error(`FubMD: non riesco a convertire ${id} in cartella: ${e}`);
     return;
@@ -664,7 +668,7 @@ async function moveIntoFolder(id: string, folderPath: string) {
   const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
   if (to === id) return;
   try {
-    await api.renameDocument(id, to);
+    await api.invokeCommand(COMANDI.rinomina, { doc: id, to });
   } catch (e) {
     console.error(`FubMD: non riesco a spostare ${id} in ${folderPath || "radice"}: ${e}`);
     return;
@@ -748,10 +752,16 @@ function saveExpanded() {
 
 // --- crea e rinomina -------------------------------------------------------
 
+/// Crea una nota e la apre.
+///
+/// L'id della nota nuova non torna come valore del comando ma come **effetto**
+/// (`navigate`): un `CommandOutcome` non porta dati, porta ciò che la shell
+/// deve fare dopo — ed è la stessa strada che percorre `trash.restore`, o un
+/// comando di un plugin che crei una nota da un template.
 async function newNote(name?: string) {
-  const id = await api.createNote(name);
+  const outcome = await api.invokeCommand(COMANDI.crea, name ? { name } : undefined);
   renderFileList(await api.listDocuments());
-  await selectDoc(id);
+  if (outcome.effect.kind === "navigate") await selectDoc(outcome.effect.doc);
   editor.focus();
 }
 
@@ -804,7 +814,7 @@ async function renameDoc(from: string, newPageName: string) {
   // riscrittura del kernel finirebbe sotto una copia più vecchia.
   await flushPendingSave();
   try {
-    await api.renameDocument(from, to);
+    await api.invokeCommand(COMANDI.rinomina, { doc: from, to });
   } catch (e) {
     console.error(`FubMD: rinomina di ${from} in ${to} rifiutata: ${e}`);
     renderFileList(knownDocs);
@@ -869,7 +879,7 @@ async function deleteDoc(id: string) {
     return;
   }
 
-  await api.deleteDocument(id);
+  await api.invokeCommand(COMANDI.cestina, { doc: id });
   if (id === currentDoc) {
     // Il buffer sporco di un documento cancellato muore col documento: non è
     // una perdita silenziosa, è l'azione che l'utente ha appena confermato.
@@ -921,10 +931,27 @@ async function refreshTrash() {
   }
 }
 
+/// `trash.restore`, e da dove esce il path con cui la nota è tornata.
+///
+/// Il comando non risponde con un id — non è ciò che un `CommandOutcome` sa
+/// fare — ma con l'effetto `navigate`, che è *anche* ciò che la shell deve fare
+/// dopo. Un effetto diverso qui sarebbe un comando che ha cambiato semantica
+/// sotto i piedi di chi lo invoca, e vale la pena dirlo invece di ignorarlo.
+async function ripristina(trashId: string, to?: string): Promise<string> {
+  const outcome = await api.invokeCommand(COMANDI.ripristina, {
+    entry: trashId,
+    ...(to ? { to } : {}),
+  });
+  if (outcome.effect.kind !== "navigate") {
+    throw new Error(`${COMANDI.ripristina} non ha detto dove è tornata la nota`);
+  }
+  return outcome.effect.doc;
+}
+
 async function restoreFromTrash(trashId: string, original: string) {
   let restored: string;
   try {
-    restored = await api.restoreFromTrash(trashId);
+    restored = await ripristina(trashId);
   } catch {
     // Il path originale è di nuovo occupato: il kernel non inventa nomi al
     // posto dell'utente, quindi l'app ne propone uno e chiede.
@@ -936,7 +963,7 @@ async function restoreFromTrash(trashId: string, original: string) {
       { title: "Ripristina nota", okLabel: "Ripristina", cancelLabel: "Annulla" },
     );
     if (!ok) return;
-    restored = await api.restoreFromTrash(trashId, proposta);
+    restored = await ripristina(trashId, proposta);
   }
   await refreshTrash();
   showPanel("files");
@@ -952,8 +979,8 @@ async function emptyTrash() {
     { title: "Svuota cestino", kind: "warning", okLabel: "Svuota", cancelLabel: "Annulla" },
   );
   if (!ok) return;
-  const quanti = await api.emptyTrash();
-  console.info(`FubMD: cestino svuotato, ${quanti} element${quanti === 1 ? "o" : "i"} cancellati.`);
+  const outcome = await api.invokeCommand(COMANDI.svuota);
+  console.info(`FubMD: ${outcome.notify ?? "cestino svuotato"}`);
   await refreshTrash();
 }
 
