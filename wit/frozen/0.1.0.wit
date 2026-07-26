@@ -500,6 +500,30 @@ interface events {
         custom,
     }
     type event-mask = list<event-kind>;
+
+    // LINEA DI BASE RITAGLIATA (pre-freeze, §1.18). Questi tipi entrano nella
+    // baseline perché `event-handler.handle` — la firma che il §1.18 ha rotto
+    // apposta, e che è documentata sotto — li nomina: una baseline che non
+    // parsa non è una baseline. Ciò che il §1.18 ha aggiunto in modo davvero
+    // additivo (il caso `batch-ended` di `event` e di `event-kind`, e il record
+    // `event-batch-ended`) NON sta qui: deve restare una crescita che il test di
+    // additività vede come tale.
+    type batch-id = u64;
+    record actor-plugin { id: string }
+    variant actor {
+        user,
+        watcher,
+        kernel,
+        plugin(actor-plugin),
+    }
+    record origin {
+        actor: actor,
+        batch: option<batch-id>,
+    }
+    record notice {
+        event: event,
+        origin: origin,
+    }
 }
 
 /// Comandi: le azioni del vault dette in una forma che chi non ha letto il
@@ -1092,12 +1116,20 @@ interface host-api {
 }
 
 /// Reazione agli eventi (`EventHandler`).
+///
+/// LINEA DI BASE RITAGLIATA (pre-freeze, §1.18): `handle` prendeva un `event`
+/// nudo. Adesso prende un `notice`, che è l'evento PIÙ la sua origine — chi ha
+/// chiesto l'operazione e di quale lotto fa parte. È una rottura, e sta qui
+/// perché si veda: senza l'origine sul parametro, un'automazione su-modifica che
+/// scrive non ha modo di riconoscere le proprie scritture e si richiama da sé.
+/// Aggiungerla dopo il freeze sarebbe costato una major, o una seconda funzione
+/// accanto alla prima con la stessa semantica e un argomento in più.
 interface event-handler {
-    use events.{event, event-mask};
+    use events.{notice, event-mask};
     use errors.{plugin-error};
 
     subscribed: func() -> event-mask;
-    handle: func(event: event) -> result<_, plugin-error>;
+    handle: func(notice: notice) -> result<_, plugin-error>;
 }
 
 /// Ciclo di vita del plugin + manifest e permessi.

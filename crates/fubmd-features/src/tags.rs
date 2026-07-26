@@ -39,7 +39,7 @@ impl ViewProvider for TagPanelView {
             placement: ViewPlacement::RightSidebar,
             // I tag sono aggregati vault-wide: invecchiano a ogni modifica
             // dell'indice, non al cambio di nota.
-            refresh: EventMask(vec![EventKind::IndexUpdated]),
+            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
             // …e non invecchiano per niente col contesto: la distribuzione dei
             // tag del vault è la stessa da qualunque nota la si guardi. È il
             // caso che la maschera esiste per servire — senza, questo pannello

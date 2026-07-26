@@ -7,6 +7,7 @@
 //! (D8), genera a sua volta una versione, quindi si può annullare.
 
 use camino::Utf8PathBuf;
+use fubmd_abi::event::Notice;
 use fubmd_abi::model::DocId;
 use fubmd_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fubmd_format_markdown::MarkdownProvider;
@@ -288,7 +289,8 @@ fn a_real_overflow_reaches_the_handler_and_it_reconciles() {
         fn subscribed(&self) -> EventMask {
             EventMask::all()
         }
-        fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+            let event = &notice.event;
             if !matches!(event, Event::Overflow { .. }) {
                 host.emit(Event::Custom {
                     topic: "test/eco".into(),

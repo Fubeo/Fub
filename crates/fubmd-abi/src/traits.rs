@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::command::{CommandOutcome, CommandSpec, InvokeMode};
 use crate::edit::{EditReport, EditRequest, Revision};
 use crate::error::PluginError;
-use crate::event::{Event, EventMask};
+use crate::event::{Event, EventMask, Notice};
 use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
 use crate::session::{ContextMask, ViewContext};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
@@ -285,6 +285,13 @@ pub struct ViewSpec {
     /// la shell può solo indovinare per conoscenza privata delle feature — e
     /// per una view di plugin non può indovinare niente. Maschera vuota =
     /// nessun ridisegno event-driven.
+    ///
+    /// Una view che dichiara
+    /// [`IndexUpdated`](crate::event::EventKind::IndexUpdated) deve dichiarare
+    /// anche [`BatchEnded`](crate::event::EventKind::BatchEnded): dentro un
+    /// lotto (§1.12) il primo non arriva, e il secondo è ciò che le fa fare
+    /// **un** ridisegno dove prima ne faceva N. Vale a rovescio per una view che
+    /// segue i documenti: quelli passano tutti, lotto o no.
     #[serde(default)]
     pub refresh: EventMask,
     /// L'altra metà della stessa dichiarazione, per ciò che **non è un evento
@@ -811,9 +818,29 @@ pub trait IndexProvider: Send + Sync {
 /// nella propria istanza. È la semantica che il component model impone a M5
 /// (un'istanza WASM non è rientrante) e vale identica in nativo: contarci
 /// sopra in un senso o nell'altro non è un dettaglio d'implementazione.
+///
+/// # Cosa arriva: l'evento e la sua origine (§1.18)
+///
+/// [`handle`](EventHandler::handle) riceve un [`Notice`], non un [`Event`] nudo:
+/// accanto a *cosa* è successo c'è **chi lo ha chiesto**
+/// ([`Origin::actor`](crate::event::Origin::actor)) e di quale **lotto** fa
+/// parte ([`Origin::batch`](crate::event::Origin::batch)). È ciò che rende
+/// scrivibile un'automazione su-modifica: senza,
+/// [`Actor::is_plugin`](crate::event::Actor::is_plugin) non avrebbe niente da
+/// leggere e ogni handler che scrive dovrebbe riconoscere le proprie scritture
+/// dal loro *contenuto* — cioè richiamarsi da solo finché il budget del dispatch
+/// non lo tronca.
+///
+/// # E cosa non arriva: `index-updated` dentro un lotto
+///
+/// Chi dichiara [`EventKind::IndexUpdated`](crate::event::EventKind::IndexUpdated)
+/// deve dichiarare anche
+/// [`EventKind::BatchEnded`](crate::event::EventKind::BatchEnded): dentro un
+/// lotto è il solo dei due che arriva (vedi [`crate::event`]). Gli eventi
+/// **per-documento** invece passano tutti, dentro un lotto come fuori.
 pub trait EventHandler: Send + Sync {
     fn subscribed(&self) -> EventMask;
-    fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError>;
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError>;
 }
 
 // ---------------------------------------------------------------------------

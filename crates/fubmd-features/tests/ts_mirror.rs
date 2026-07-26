@@ -26,7 +26,7 @@ use fubmd_abi::command::{
 };
 use fubmd_abi::edit::{EditRequest, Revision, TextEdit};
 use fubmd_abi::error::PluginError;
-use fubmd_abi::event::{Event, EventKind, EventMask};
+use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{BacklinkRef, JobId, SearchHit, TagCount, ViewPlacement, ViewSpec};
@@ -141,6 +141,10 @@ fn event_samples() -> Vec<Value> {
             topic: "p/x".into(),
             payload: Value::Null,
         },
+        Event::BatchEnded {
+            batch: BatchId(u64::MAX),
+            changed: vec![DocId::new("a"), DocId::new("b")],
+        },
     ];
     for e in &all {
         match e {
@@ -151,10 +155,49 @@ fn event_samples() -> Vec<Value> {
             | Event::IndexUpdated
             | Event::JobDone { .. }
             | Event::Overflow { .. }
-            | Event::Custom { .. } => {}
+            | Event::Custom { .. }
+            | Event::BatchEnded { .. } => {}
         }
     }
     all.iter().map(to_value).collect()
+}
+
+/// Un campione per ogni **attore** (§1.18), dentro il `Notice` che è ciò che il
+/// ponte Tauri consegna davvero alla webview.
+///
+/// Il frontend non riceve più un `Event` nudo: senza questo campione il mirror
+/// TS potrebbe continuare a dichiarare la forma vecchia e restare verde mentre
+/// a runtime `e.type` è `undefined`.
+fn notice_samples() -> Vec<Value> {
+    let all = [
+        Actor::User,
+        Actor::Watcher,
+        Actor::Kernel,
+        Actor::Plugin {
+            id: "fubmd.versioning".into(),
+        },
+    ];
+    for a in &all {
+        match a {
+            Actor::User | Actor::Watcher | Actor::Kernel | Actor::Plugin { .. } => {}
+        }
+    }
+    let mut out: Vec<Value> = all
+        .into_iter()
+        .map(|actor| {
+            to_value(Notice::new(
+                Event::DocumentChanged {
+                    id: DocId::new("a"),
+                },
+                // `batch` come stringa: è un u64 pieno, come `VersionRef.hash`.
+                Origin::by(actor).in_batch(Some(BatchId(u64::MAX))),
+            ))
+        })
+        .collect();
+    // Fuori da un lotto: `batch` è `null`, non assente — chi legge il mirror
+    // deve trattarlo come `string | null`.
+    out.push(to_value(Notice::of(Event::IndexUpdated)));
+    out
 }
 
 /// Una spec che porta **ogni specie di parametro**: il mirror TS deve saperle
@@ -247,6 +290,7 @@ fn expected() -> Value {
         "UiNode": ui_node_samples(),
         "ViewUpdate": view_update_samples(),
         "KernelEvent": event_samples(),
+        "KernelNotice": notice_samples(),
         "Span": [to_value(Span::new(3, 7))],
         // `hash` è un u64 pieno: sul confine JSON è una STRINGA (regola in
         // `fubmd_abi::ipc`) — il campione oltre 2^53 lo dimostra nella fixture.
@@ -272,7 +316,7 @@ fn expected() -> Value {
             id: "v".into(),
             title: "V".into(),
             placement: ViewPlacement::RightSidebar,
-            refresh: EventMask(vec![EventKind::IndexUpdated]),
+            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
             follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
         })],
         // Il contesto di sessione viaggia nel verso opposto agli altri: lo

@@ -214,8 +214,9 @@ Le intenzioni sono le stesse di `ViewUpdate` perché sono intenzioni della
 **shell**, non di chi le manda; `Replace` non c'è, perché da un comando non
 esiste una view da ridisegnare.
 
-**Le due cose che l'host garantisce** (`Workspace::invoke_command`), e che sono
-la differenza fra un registro leggibile e uno eseguibile da terzi:
+**Le tre cose che l'host garantisce**
+(`Workspace::invoke_command(command, args, mode, by: Actor)`), e che sono la
+differenza fra un registro leggibile e uno eseguibile da terzi:
 
 1. **Gli argomenti sono convalidati contro la spec prima del comando**
    (`CommandSpec::validate_args`): obbligatori presenti, specie giuste, e un
@@ -228,6 +229,15 @@ la differenza fra un registro leggibile e uno eseguibile da terzi:
    rifiuta le scritture con `PermissionDenied`. Il dry-run non è quindi una
    convenzione fra chiamante e comando (che un comando di terzi non onora), e
    `writes: false` non è una decorazione.
+3. **L'invocazione è un lotto, intestato a chi l'ha chiesta** (§1.12 + §1.18).
+   Un `Apply` è per definizione *una* cosa che qualcuno ha chiesto: `vault.replace`
+   su 40 note emette un `batch-ended` solo, e ogni evento che ne nasce porta `by`
+   come attore. Che `by` sia un parametro e non un default è la scelta di
+   `InvokeMode` un'altra volta: attribuire all'utente ciò che ha chiesto
+   un'automazione è l'errore che 16.2 esiste per non fare. `by` **non** arriva
+   fino a `CommandProvider::invoke` — l'origine è ciò che l'host appone, non ciò
+   che il comando legge, e un comando che si comportasse diversamente a seconda
+   di chi lo chiama sarebbe una policy (§2.10) nascosta in un'implementazione.
 
 Il piano (`CommandPlan { summary, docs, edits }`) è un `EditRequest` per
 documento (§1.16), con le revisioni **di adesso**: se il documento cambia fra il
@@ -262,8 +272,12 @@ pub trait ViewProvider: Send + Sync {
 ContextMask }` con `ViewPlacement { LeftSidebar, RightSidebar, Bottom }`. Le due
 maschere dicono **quando** una view invecchia: `refresh` per gli eventi del
 vault, `follows` per le parti del contesto di sessione (documento, selezione,
-modalità). `UiNode`/`UiAction`/`ViewUpdate` sono in
-[ui-protocol.md](ui-protocol.md).
+modalità). Chi dichiara `IndexUpdated` in `refresh` deve dichiarare anche
+`BatchEnded`: dentro un lotto (§1.12) il primo non arriva, e il secondo è ciò che
+fa fare **un** ridisegno dove prima ne faceva N — la regola è
+`EventMask::misses_batches()`, verificata su ogni view ufficiale in
+`fubmd-features/tests/view_refresh_masks.rs`.
+`UiNode`/`UiAction`/`ViewUpdate` sono in [ui-protocol.md](ui-protocol.md).
 
 **I provider veri: `BacklinksView` e `OutlineView`.** Il pannello backlink è
 passato da funzione libera a `ViewProvider` (`fubmd-features`), ed è ciò che ha
@@ -438,15 +452,35 @@ di proprie. `ns` sconosciuto → `PluginError::BadArgs`.
 ```rust
 pub trait EventHandler: Send + Sync {
     fn subscribed(&self) -> EventMask;
-    fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError>;
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError>;
 }
 ```
 
+`Notice { event: Event, origin: Origin }`,
+`Origin { actor: Actor, batch: Option<BatchId> }`,
+`Actor { User, Watcher, Kernel, Plugin { id } }`,
 `Event { VaultOpened { root }, DocumentChanged { id }, DocumentRemoved { id },
 DocumentRenamed { from, to }, IndexUpdated, JobDone { id, job, result },
-Overflow { dropped }, Custom { topic, payload } }`,
+Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed } }`,
 `EventKind` (stesso set, senza payload), `EventMask(Vec<EventKind>)`.
 
+- `Origin` dice **chi ha chiesto** l'operazione (§1.18), non chi l'ha eseguita:
+  un comando invocato da un'automazione porta l'origine dell'automazione. È
+  l'unica lettura per cui il campo esiste — `Actor::is_plugin(id)` risponde a
+  «questa l'ho scritta io?» — e senza di essa un'automazione su-modifica che
+  scrive si richiama da sola finché il budget del dispatch non tronca.
+  `Watcher` è l'unico attore che dice «il vault è cambiato senza passare da
+  noi». Quale *comando* abbia chiesto l'operazione non c'è: è l'audit trail di
+  22.4, e vuole un posto che lo conservi (§2.5), non un campo che nessuno rilegge.
+- `BatchEnded { batch, changed }` chiude un **lotto** (§1.12): N scritture che
+  sono una cosa sola, con l'elenco dei documenti toccati. Dentro un lotto
+  `IndexUpdated` **non viene emesso** — è l'unico evento senza payload, quindi
+  l'unico di cui N copie dicono quanto ne dice una — mentre gli eventi
+  per-documento passano tutti. Da qui la regola, ed è l'unico punto non additivo
+  della voce: *chi dichiara `IndexUpdated` dichiara anche `BatchEnded`*,
+  verificabile con `EventMask::misses_batches()`. Un lotto **non è una
+  transazione**: non annulla niente, e chi lo ha aperto scopre cosa non è andato
+  dal proprio valore di ritorno.
 - `DocumentRenamed` esiste perché **l'identità è il path**: un rename non è
   remove+add (vedi [data-model.md](data-model.md), "Identità e rename").
 - `JobDone { id, job, result }` è il rientro dei **job** (vedi `HostApi` sopra
@@ -481,6 +515,15 @@ terminazione). Durante il drenaggio gli handler sono estratti dal workspace,
 così l'`HostApi` presta `&mut Workspace` senza aliasing (il nodo di ownership
 che rendeva il dispatch il punto più delicato del contratto). Vedi
 `workspace.rs` e `tests/rename_and_events.rs`.
+
+**Dentro un lotto il drenaggio è rimandato alla chiusura** (§1.12), per la stessa
+ragione per cui è rimandato dentro la chiamata a un provider: a metà di
+un'operazione il vault è in uno stato che non è mai esistito per nessuno, e un
+handler che vi reagisse reagirebbe a quello. La conseguenza vale la pena dirla:
+un handler non può più creare un conflitto di `base` (§1.16) scrivendo *dentro*
+una rinomina, perché quando gira la rinomina è finita. La guardia della base
+resta per chi scrive fuori dal giro — un'altra app, un job che rientra. Prove:
+`fubmd-kernel/tests/batch_and_origin.rs`.
 
 ### `ImportProvider` / `ExportProvider` — import ed export (`src/transfer.rs`)
 
@@ -636,7 +679,10 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `SearchScope`/`PropertyFilter`/`PropertySort` | `record` |
 | `PropertyTest` | `variant` (i casi senza valore — `exists`, `missing` — non portano payload) |
 | `LinkDirection`/`HealthCheck` | `enum` |
-| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`) / `enum` / `list<event-kind>` |
+| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`, `batch-ended`) / `enum` / `list<event-kind>` |
+| `Notice`/`Origin` | `record` (interface `events`): è ciò che `event-handler.handle` riceve — l'evento **e** chi lo ha chiesto |
+| `Actor` | `variant { user, watcher, kernel, plugin(actor-plugin) }` — il payload è un record col solo `id`, come ogni altro caso di variant del contratto |
+| `BatchId` | `type batch-id = u64` — sul confine JSON è una **stringa** (regola di `fubmd_abi::ipc`), come `job-id` |
 | `TransferNote`/`NoteLevel` | `record` / `enum` (interface `transfer`: due interfacce le condividono, quindi il tipo sta in una terza) |
 | `ImportSource`/`ImportRequest`/`ImportedDocument`/`ImportReport` | `record` (interface `importer`); `bytes: list<u8>` — nessun campo porta un percorso |
 | `ImportMode`/`ConflictPolicy` | `enum` |

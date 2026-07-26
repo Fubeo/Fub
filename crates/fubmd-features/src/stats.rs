@@ -75,7 +75,7 @@ impl ViewProvider for StatsView {
             placement: ViewPlacement::Bottom,
             // Il conteggio del documento invecchia a ogni scrittura (anche
             // quelle del watcher): `IndexUpdated` le copre tutte.
-            refresh: EventMask(vec![EventKind::IndexUpdated]),
+            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
             // Del contesto segue tutto: quale nota (di chi sono i conteggi),
             // la selezione (il conteggio della selezione) e la modalità (in
             // lettura il pannello dice un'altra cosa).

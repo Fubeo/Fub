@@ -65,7 +65,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use fubmd_abi::event::{Event, EventKind, EventMask};
+use fubmd_abi::event::{Event, EventKind, EventMask, Notice};
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{EventHandler, HostApi};
 use fubmd_abi::PluginError;
@@ -696,8 +696,8 @@ impl EventHandler for VersioningHandler {
         ])
     }
 
-    fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        match event {
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        match &notice.event {
             Event::VaultOpened { .. } => self.first_snapshot_of_the_vault(host)?,
             Event::DocumentChanged { id } => {
                 let source = host.read_document(id)?;
@@ -952,7 +952,7 @@ mod tests {
 
         host.avanza(5_000);
         handler
-            .handle(&Event::Overflow { dropped: 7 }, &mut host)
+            .handle(&Notice::of(Event::Overflow { dropped: 7 }), &mut host)
             .unwrap();
 
         // Senza tombstone la vista "vault al tempo T" mentirebbe: direbbe che
@@ -977,7 +977,7 @@ mod tests {
         host.avanza(10 * MS_GIORNO);
         let mut handler = VersioningHandler::new(store.clone());
         handler
-            .handle(&Event::Overflow { dropped: 1 }, &mut host)
+            .handle(&Notice::of(Event::Overflow { dropped: 1 }), &mut host)
             .unwrap();
 
         // L'istante della morte è un fatto: una riconciliazione che ripassa
@@ -1004,7 +1004,7 @@ mod tests {
         host.rinomina_di_nascosto("vecchia.md", "nuova.md");
         host.avanza(1_000);
         handler
-            .handle(&Event::Overflow { dropped: 3 }, &mut host)
+            .handle(&Notice::of(Event::Overflow { dropped: 3 }), &mut host)
             .unwrap();
 
         // La cronologia si spezza — è il costo dell'evento perso, e non si prova
@@ -1035,7 +1035,7 @@ mod tests {
         host.write_document(&id("a.md"), "seconda").unwrap();
         host.avanza(1_000);
         handler
-            .handle(&Event::Overflow { dropped: 2 }, &mut host)
+            .handle(&Notice::of(Event::Overflow { dropped: 2 }), &mut host)
             .unwrap();
 
         let versioni = store.list(&id("a.md"));
@@ -1049,7 +1049,7 @@ mod tests {
         // che rilegge tutto.
         host.avanza(1_000);
         handler
-            .handle(&Event::Overflow { dropped: 2 }, &mut host)
+            .handle(&Notice::of(Event::Overflow { dropped: 2 }), &mut host)
             .unwrap();
         assert_eq!(store.list(&id("a.md")).len(), 2);
     }
@@ -1069,9 +1069,9 @@ mod tests {
         let mut handler = VersioningHandler::new(store.clone());
         handler
             .handle(
-                &Event::VaultOpened {
+                &Notice::of(Event::VaultOpened {
                     root: "/vault".into(),
-                },
+                }),
                 &mut host,
             )
             .unwrap();
