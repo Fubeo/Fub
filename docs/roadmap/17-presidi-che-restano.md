@@ -34,7 +34,19 @@ ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuov
 
 - [ ] **E2E** dell'app reale (tauri-driver/Playwright) sui flussi critici:
       apri vault, scrivi, rinomina, cerca, ripristina.
-- [ ] **Check di accessibilità** automatico sui pannelli.
+- [ ] **Il check di accessibilità automatico è stato spostato al
+      [§12.4](12-stringhe-errori-locale.md#124-tema-token-accessibilità)**, che
+      possiede già l'argomento («passata di accessibilità strutturale: ruoli
+      ARIA, focus visibile, focus trap, navigazione da tastiera, skip link»). Due
+      ragioni. La prima è che un presidio senza la passata che deve presidiare
+      non ha niente da tenere fermo: si scrive **dopo**, e allora si scrive dove
+      sta lei. La seconda è **il criterio di questa seduta applicato a se
+      stesso**: qui si tiene ciò il cui costo *cresce* con l'attesa, e questo è
+      l'unico caso in cui **cala**. I pannelli sono alberi `UiNode`, e il §2.1 ci
+      aggiunge una ventina di varianti, il §2.2 chiude le tre superfici, il §2.6
+      definisce come si presentano: un check scritto oggi presidia un DOM che le
+      P0 della [seduta 2](02-cosa-e-una-view.md) stanno per sostituire, e il
+      lavoro andrebbe rifatto da capo su una resa che nel frattempo è cambiata.
 
 ### 17.3 Osservabilità
 

@@ -78,4 +78,14 @@ applicato, lascia fuori tre cose:
 - [ ] **Passata di accessibilità strutturale**: ruoli ARIA, focus visibile,
       focus trap nei modali, navigazione da tastiera nei pannelli, skip link.
       Farla ora costa poco; rifarla su 30 pannelli costa trenta volte.
+- [ ] **E il suo presidio, che arriva con lei** (veniva dal §17.2, dove era
+      un'altra voce): un **check di accessibilità automatico** sui pannelli, in
+      CI. Sta qui e non fra i presidi perché una passata senza presidio decade
+      alla prima view nuova — è la regola della
+      [decisione 0014](../decisions/0014-i-verbali-fuori-da-todo.md), *«una
+      promessa senza presidio meccanico decade»* — e un presidio senza la passata
+      non ha niente da tenere fermo. **Vanno prese nella stessa seduta, in
+      quest'ordine**, e dopo che il §2.1/§2.2/§2.6 hanno fissato di che forma
+      sono i pannelli: prima di allora il check presidierebbe una resa che sta
+      per essere sostituita.
 - [ ] **Catalogo stringhe** e `t()` (dipende dalla decisione del §12.1).

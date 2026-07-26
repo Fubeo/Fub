@@ -20,16 +20,27 @@ si apre segnalando cosa non ha letto.
 
 ### 15.1 Astrazione sullo storage
 
-*ex §2.1 · kernel · **P2** — sblocca cifratura, sync, PWA e i test veloci in un colpo solo*
+*ex §2.1 · kernel · **P2** — sblocca cifratura, sync e PWA in un colpo solo; **non** è una voce sui test*
 
 - [ ] **`trait VaultStorage`** (list, read, write atomico, rename, remove, stat,
       exists) con impl `FsStorage` di default; `Vault` e lo storage dei plugin
       (`workspace.rs:1530-1560`) ci passano sopra invece di chiamare `std::fs`.
-- [ ] Impl `MemStorage` per i test (oggi ogni test e2e tocca il disco).
+- [ ] **Un `MemStorage`, ma non come banco di prova dei test e2e.** Il movente
+      «oggi ogni test e2e tocca il disco» era scritto qui e va tolto, perché
+      **lavora contro il §15.2**: tutto il punto del §15.2 è temp+rename+fsync
+      sulla directory, cioè durabilità che esiste solo su un filesystem vero. Un
+      `MemStorage` per costruzione non la modella, quindi una suite spostata
+      sopra di lui smetterebbe di esercitare **esattamente** la proprietà che il
+      §15.2 esiste per aggiungere — e il presidio della durabilità diventerebbe
+      verde su un supporto che non ha durabilità. Il `MemStorage` serve come
+      **seconda impl** che tiene onesto il trait (un'astrazione con un solo
+      cliente non è un'astrazione) e per i test *unitari* di chi ci sta sopra;
+      i test di durabilità restano su `FsStorage`, e il banco condiviso è un
+      altro problema — è il [§16.2](16-crate-sdk-banchi-di-prova.md#162-il-banco-di-prova-del-kernel-è-copiato-diciotto-volte).
 
 *Sblocca, in un colpo solo:* 23.1 (cifratura at-rest = uno storage che cifra),
 18.1 (vault remoti/sync), 26.3 (PWA su OPFS), 3.1 (vault read-only, vault su
-network share), 2.3 (drive rimovibili), e i test veloci.
+network share), 2.3 (drive rimovibili).
 
 ### 15.2 Durabilità e recovery
 
