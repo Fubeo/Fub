@@ -157,14 +157,16 @@ oggi, una migrazione domani); le altre restano al freeze.
       `Event::Custom` con topic convenzionale (`<plugin>/job-progress`), che
       il varco già permette senza toccare il contratto — se basta quella, la
       decisione è "JobDone + convenzione documentata".
-- [ ] **Contesto di una view: `active_document()` o `ViewContext`?**
-      ([todo.md §1.9](../todo.md)) Oggi l'host serve **una** `Option<DocId>`, e
-      con schede/split/finestre multiple (3.3, 4.1) ogni provider scritto contro
-      quella firma diventa ambiguo. Nello stesso pacchetto: la **selezione**, che
-      il contratto non ha modo di nominare — senza, slash command sul testo
-      selezionato, commenti inline, annotazioni e "chat con la selezione" non
-      potranno mai essere provider. Cambiare il tipo di ritorno dopo il freeze è
-      una migrazione di ogni provider esistente.
+- [x] **Contesto di una view: `active_document()` o `ViewContext`?** — **deciso
+      pre-freeze**: `HostApi::active_context() -> Option<ViewContext>`, con
+      `ViewContext { pane, doc, selection, mode }` (interface `session` nel
+      WIT). La selezione attraversa il confine come
+      `Selection { span: Option<Span>, text: String }`: il testo sempre, lo span
+      solo quando le sue coordinate valgono anche per il sorgente del kernel.
+      `ViewSpec` guadagna `follows: ContextMask`, o "ridisegna al cambio di nota
+      attiva" diventerebbe "ridisegna a ogni battuta di tasto". Verbale in
+      [todo.md §1.9](../todo.md); `wit/frozen/0.1.0.wit` **ritagliato** (la
+      firma di `active-document` era pubblicata).
 - [ ] **Identità del documento: il path è per sempre la chiave?**
       ([todo.md §1.10](../todo.md)) FEATURES chiede uuid opzionale (2.2), stable
       note ID e redirect da note rinominate (7.1), Zettelkasten ID (8.3), mentre

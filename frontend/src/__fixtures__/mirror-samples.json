@@ -166,7 +166,49 @@
       "placement": "right_sidebar",
       "refresh": [
         "index_updated"
+      ],
+      "follows": [
+        "document",
+        "selection"
       ]
+    }
+  ],
+  "ViewContext": [
+    {
+      "pane": "main",
+      "doc": "a.md",
+      "selection": {
+        "span": {
+          "start": 3,
+          "end": 7
+        },
+        "text": "ciao"
+      },
+      "mode": "reading"
+    },
+    {
+      "pane": "main",
+      "doc": null,
+      "selection": null,
+      "mode": "live_preview"
+    },
+    {
+      "pane": "main",
+      "doc": "a.md",
+      "selection": {
+        "span": null,
+        "text": "ciao"
+      },
+      "mode": "live_preview"
+    }
+  ],
+  "Selection": [
+    {
+      "span": {
+        "start": 0,
+        "end": 4
+      },
+      "text": "ciao"
     }
   ]
 }

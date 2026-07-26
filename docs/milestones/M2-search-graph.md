@@ -130,11 +130,12 @@ azione→`ViewUpdate`.
 Per esserlo servivano due capacità che l'`HostApi` non aveva, ed è la
 migrazione ad averle fatte emergere (stesso meccanismo del dogfooding del
 versioning): `query_index` (la view chiede i backlink al vault, non li riceve) e
-`active_document` (la view sa quale nota è aperta). Le decisioni — perché una
+`active_context` (la view sa quale nota è aperta, dove sta il cursore e in che
+modalità si legge). Le decisioni — perché una
 capacità di lettura e non un evento, perché non un argomento di `render_view` —
 sono in [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md),
 "Interrogazione e contesto". Il giro chiude nel renderer generico del frontend
-(comandi `render_view`/`view_action`/`set_active_document`), non più nel comando
+(comandi `render_view`/`view_action`/`set_active_context`), non più nel comando
 ad-hoc `backlinks_view` né nel parsing `open:` lato client. Le view di M2 ancora
 da fare (graph-data, outline, tag) nascono su questo stesso giro.
 
@@ -190,7 +191,7 @@ non viene toccato ed è il grafo a risolverlo di nuovo.
 
 - `IndexProvider` (nuova impl nativa, tantivy) — [traits.md](../architecture/traits.md).
 - `ViewProvider` (backlink ✅, outline ✅, tag ✅; graph-data da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
-- `HostApi::query_index` (col canale metadata `IndexQuery::Outline`/`Tags`) + `HostApi::active_document` — le capacità che rendono una view un provider vero.
+- `HostApi::query_index` (col canale metadata `IndexQuery::Outline`/`Tags`) + `HostApi::active_context` — le capacità che rendono una view un provider vero.
 - `Workspace` in `fubmd-kernel`: nuovi percorsi incrementali per grafo+indice.
 - Eventuale primo `CommandProvider` per "crea nota".
 - Nuovi comandi IPC in `fubmd-app` (search, graph-data, outline, tags, create-note).

@@ -81,7 +81,7 @@ Quindi il lavoro infrastrutturale è di tre tipi, in quest'ordine di urgenza:
 | 5.3 sicurezza markdown, 23 privacy | sanitizzazione e CSP in un punto | `ui.ts:63-67` fa `innerHTML` su `UiNode::Html`; nessun sanitizer, nessuna policy contenuti remoti |
 | 25 accessibilità e localizzazione | tema a token + catalogo stringhe | stringhe italiane cablate **anche dentro i provider** (le view producono testo di UI) |
 | 2.1 recovery/journaling, 24.2 affidabilità | scrittura durevole | `Vault::write` è `std::fs::write` (`vault.rs:146`): niente temp+rename, niente fsync |
-| 3.3 split/finestre, 4.2-4.3 azioni sulla selezione, 13.3, 22.2 | contesto per-pane e **selezione** nel contratto | `HostApi::active_document()` è **una** `Option<DocId>` (`traits.rs:159`); la selezione non attraversa il confine |
+| ~~3.3 split/finestre, 4.2-4.3 azioni sulla selezione, 13.3, 22.2~~ | ~~contesto per-pane e **selezione** nel contratto~~ | **chiuso (§1.9)**: `HostApi::active_context() -> Option<ViewContext>` con pannello, documento, selezione e modalità |
 | 7.2 bulk fix, 11.3 editing bulk, 16.3 undo, 17.3 rollback | scrittura **a lotti** | il kernel muta un documento alla volta: N scritture = N eventi (`workspace.rs:735`) |
 | 3.2 cartelle, 8.2 metadata di cartella, 6.2 CSS per cartella | la cartella come cittadino del kernel | `metas` è una mappa piatta (`workspace.rs:163`): l'albero esiste solo in `organizer.ts` |
 | 20.1 enable/disable, 20.2 hot reload, 24.2 safe mode | disattivare un provider | `register_*` fa solo `push`: `unregister` non esiste |
@@ -484,27 +484,119 @@ già previsto dal §2.8.
 
 ### 1.9 Contesto di una view — `active_document()` non regge tab, split né selezione
 
-- [ ] **Decidere la forma del contesto**: `HostApi::active_document() -> Option<DocId>`
-      (`abi/traits.rs:159`) è servito da **una** `Option<DocId>` nel workspace
-      (`workspace.rs:218`) e da **una** `currentDoc` nella shell (`main.ts:53`).
-      Con schede, split e finestre multiple (3.3, 4.1) "il documento attivo"
-      smette di essere una variabile globale, e ogni provider già scritto contro
-      quella firma diventa ambiguo: *quale* dei due pannelli backlink?
-      L'alternativa è un `ViewContext { pane, doc, selection, mode }` che la view
-      chiede all'host — e va scelta ora, perché cambiare il tipo di ritorno di
-      `active_document` dopo il freeze è una migrazione di ogni provider.
-- [ ] **La selezione deve attraversare il confine**: oggi il contratto non ha
-      modo di nominarla, quindi **nessuna** di queste può essere un provider —
-      slash command sul testo selezionato (4.2), commenti e highlight inline
-      (4.3), annotazioni (13.3), "chat con la selezione" (22.2), variabile
-      `selection` dei template (16.1), "nota da selezione PDF" (13.2). Dipende
-      dal ponte code unit → byte del §3.7: senza quello, uno `Span` di selezione
-      non si sa nemmeno costruire.
-- [ ] **Chi imposta il contesto resta la shell** (come oggi `set_active_document`),
-      ma la chiave diventa il pane: senza, due split mostrano lo stesso backlink.
+- [x] **Forma del contesto decisa**: `HostApi::active_context() -> Option<ViewContext>`
+      con `ViewContext { pane: PaneId, doc: Option<DocId>, selection:
+      Option<Selection>, mode: PaneMode }` (`abi/session.rs`, interface `session`
+      nel WIT). `active_document` non esiste più: due firme per la stessa
+      domanda sarebbero state la trappola che questa voce descrive.
+- [x] **La selezione attraversa il confine**: `Selection { span: Option<Span>,
+      text: String }`. Il ponte inverso code unit → byte del §3.7
+      (`charToByteIndex` in `frontend/src/offsets.ts`) è stato scritto qui, con
+      i suoi test: era il prerequisito, e senza di esso lo `Span` non si sapeva
+      nemmeno costruire.
+- [x] **Chi imposta il contesto resta la shell**, e la chiave è il pannello:
+      `Workspace::set_active_context(Option<ViewContext>) -> Vec<String>` (gli id
+      delle view da ridisegnare), comando IPC `set_active_context`. Il
+      `PaneId` è nel contesto anche se questa shell ha un pannello solo: quando
+      ne avrà due, il contratto non cambia.
+- [x] **`ViewSpec.follows: ContextMask`**: la metà mancante del protocollo.
+      Senza, "la shell ridisegna al cambio di nota attiva" diventa "ridisegna a
+      ogni battuta di tasto" appena il contesto porta la selezione.
+- [x] Clienti veri nello stesso giro: l'**outline** segna la sezione in cui sta
+      il cursore, il pannello **statistiche** (`fubmd-features/src/stats.rs`,
+      quarto `ViewProvider` ufficiale) conta le parole della selezione e cambia
+      faccia in lettura. La shell pubblica il contesto vero: tre modalità
+      (Sorgente / Live / Lettura) commutabili dalla barra.
 
 *Sblocca:* 3.3 (tab, split, finestre, note history per pane), 4.1 (modalità
 per-nota e per-pane), 4.2-4.3 (azioni sulla selezione), 13.3, 22.2.
+
+**Fatto, con cinque decisioni e un debito dichiarato.**
+
+*Il contesto è un record, quindi si riempie adesso.* Un caso in fondo a un enum
+dopo il freeze è una minor; **un campo in più a un record è una migrazione di
+ogni provider che lo riceve**. I quattro campi sono perciò tutti qui — pannello,
+documento, selezione, modalità — e non un sottoinsieme da completare dopo. È la
+stessa ragione per cui `select` è entrato in `IndexQuery::Properties` al §1.6.
+
+*La regola dello span: `text` sempre, `span` solo se vero.* Una selezione ha
+coordinate del **buffer**; il kernel conosce il **file salvato**. Finché
+coincidono lo span c'è; appena il buffer è sporco lo span sparisce e resta il
+testo. Non è prudenza: un contratto che desse sempre lo span inviterebbe ogni
+consumatore a fare `read_document` + ritaglio, cioè a tagliare i byte sbagliati
+**proprio mentre l'utente scrive** — che è l'unico momento in cui la selezione
+serve. Scartato un `dirty: bool` accanto allo span: un flag che chiunque può
+dimenticare di leggere protegge meno di un campo che, quando non è vero, non
+c'è. L'invariante è tenuta dai due lati: la shell non pubblica lo span a buffer
+sporco, il kernel lo lascia cadere quando il sorgente sotto cambia, viene
+rinominato o sparisce (`invalidate_context`), e la shell lo ripubblica al
+salvataggio successivo.
+
+*Le maschere sono due perché i fatti sono di due specie.* `refresh: EventMask`
+sono gli eventi del **vault**; `follows: ContextMask` (documento, selezione,
+modalità) sono i fatti della **sessione**. Tenere il contesto fuori dall'event
+bus non è pulizia: farlo passare di là significherebbe consegnare ogni movimento
+del cursore a ogni `EventHandler` registrato — versioning compreso. Nessun caso
+per il pannello: cambiare pannello vale come cambio di tutto, e un caso a parte
+inviterebbe a dichiarare di seguire il pannello senza seguirne il contenuto. La
+prova che la maschera serve è il pannello tag, che dichiara **niente**: la
+distribuzione dei tag del vault è la stessa da ogni punto di ogni nota.
+
+*Chi ridisegna cosa lo dice il kernel.* `set_active_context` restituisce gli id
+delle view da ridisegnare. Il conto poteva stare nella shell — ha già il
+contesto precedente — ma la regola sarebbe esistita in due copie, una in
+TypeScript e una a M5 in qualunque altro host, e sarebbero divergite. La shell
+resta padrona del *quando* (pubblica lei, con un debounce di 150 ms sul cursore)
+e ignara del *chi*: `refreshAllViews()` a ogni salvataggio è sparito dal
+frontend, ed era il ridisegno cieco che il §1.2 imputa alla shell.
+
+*La modalità è un enum chiuso a tre.* Sorgente, Live Preview, Lettura: le tre
+esclusive di 4.1. Focus mode, zen, typewriter, schermo intero non sono modalità
+ma disposizioni della shell — non cambiano *cosa* un provider deve fare. Una
+quarta esclusiva (WYSIWYG, block editor) è un caso in fondo, cioè additiva. Per
+non lasciare il campo senza produttore vero, la shell ha ora il commutatore a
+tre: Sorgente spegne la resa inline (un `Compartment` di CodeMirror, niente
+editor ricostruito), Lettura mette il documento **reso** al posto dell'editor,
+nello stesso spazio. Con questo il **pannello anteprima sparisce dalla colonna
+di destra**: era una seconda superficie sullo stesso documento, sempre accesa e
+sempre da tenere allineata, mentre "esclusive" è ciò che `PaneMode` dichiara.
+Entrare in lettura fa prima un flush del buffer, perché il documento reso lo
+produce il kernel dal sorgente salvato e leggere la nota di un minuto fa non
+sarebbe leggerla. E i colori sono **gli stessi** — fondo, testo e titoli: la
+tavolozza della superficie
+del documento (`--doc-*` in `style.css`) è ora l'unico posto dove sono scritti,
+e la legge sia la resa di Lettura sia il tema della live preview sia il fondo
+dell'editor — tre modalità della stessa nota non possono essere di tre colori
+diversi, e due copie degli stessi hex divergono al primo ritocco.
+
+*Trovato per strada e chiuso (guardando l'app girare):* riaprire **lo stesso
+vault** dal dialogo piantava l'app per sempre. `open_vault` costruiva la
+sessione nuova e solo alla fine sostituiva la vecchia, ma l'indice di ricerca
+tiene un lock esclusivo di scrittura sulla propria cartella e tantivy quel lock
+lo aspetta *bloccando*: nessun errore, nessun log, la finestra a metà. Ora la
+sessione vecchia si chiude prima che la nuova si apra — col prezzo dichiarato
+che se l'apertura fallisce non si torna indietro. Nello stesso giro: un avvio
+che fallisce non muore più in silenzio (`init().catch`), e la **modalità del
+pannello** si ricorda fra le sessioni in `localStorage`, come le cartelle aperte
+e lo spazio selezionato (è stato di vista, non organizzazione del vault).
+
+*Trovato per strada e chiuso:* il **ponte inverso** del §3.7 non c'era.
+`offsets.ts` sapeva solo byte → code unit; senza l'inversa nessuna azione
+dell'editor può nominare uno `Span`, ed è per questo che il §1.9 aveva quel
+prerequisito. Ora c'è (`charToByteIndex`), con i test che provano l'andata e il
+ritorno su accenti ed emoji.
+
+*Resta fuori, dichiarato:* **legare una view a un pannello** (due pannelli
+backlink affiancati) è il §1.15 — questo giro dà l'identità del pannello nel
+contesto, non le istanze di view; l'**evidenziazione** della sezione corrente
+nell'outline usa il sottotitolo di un `ListItem` perché `UiNode` non ha una
+nozione di elemento corrente, ed è roba del §1.2/§3.9; il **multi-cursore e le
+selezioni multiple** (4.2) — `Selection` ne porta una, e la seconda sarebbe
+`list<selection>`, cioè additiva solo cambiando il tipo del campo: qui la scelta
+è dichiarata, non dimenticata (una shell con più cursori pubblica quello
+primario finché non arriva 4.2); il **conflitto buffer↔disco** (§3.7), che resta
+custodito da un flag della shell — il contesto ne subisce l'effetto (niente
+span) ma non lo risolve.
 
 ### 1.10 Identità del documento — il path, e l'eventuale seconda chiave
 
@@ -1580,9 +1672,10 @@ dove il debito si vede a occhio nudo.
 
 ### 3.7 Editor
 
-- [ ] **Ponte inverso code unit → byte** (`offsets.ts`): la direzione byte→UTF-16
-      c'è ed è testata; senza l'inversa, nessuna azione dell'editor può parlare
-      di `Span` al kernel (selezione → comando, patch, annotazioni).
+- [x] **Ponte inverso code unit → byte** (`offsets.ts`): fatto col §1.9
+      (`charToByteIndex`, testato su accenti ed emoji in andata e ritorno), che
+      ne aveva bisogno per far attraversare il confine alla selezione. Le due
+      direzioni stanno in un punto solo.
 - [ ] **Due livelli di decorazione dichiarati**: sintassi dal tree Lezer
       (già fatto), semantica dagli `Span` del modello (embed risolti, callout,
       math) — con la regola di chi vince dove.

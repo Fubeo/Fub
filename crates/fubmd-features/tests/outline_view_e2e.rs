@@ -8,11 +8,12 @@
 //! risponde `ViewUpdate::Reveal` sull'intervallo dell'heading.
 
 use camino::Utf8PathBuf;
-use fubmd_abi::model::DocId;
+use fubmd_abi::model::{DocId, Span};
+use fubmd_abi::session::{Selection, ViewContext};
 use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{OutlineView, OUTLINE_ID, OUTLINE_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, Trust, Workspace, MAIN_PANE};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -117,5 +118,72 @@ fn clicking_a_heading_reveals_its_span_back_through_the_kernel() {
             doc_id: "Nota.md".to_string(),
             span: fubmd_abi::model::Span::new(0, 8),
         }
+    );
+}
+
+/// I sottotitoli, in ordine: è lì che l'outline segna la sezione del cursore.
+fn subtitles(tree: &UiNode) -> Vec<Option<String>> {
+    fn walk(node: &UiNode, out: &mut Vec<Option<String>>) {
+        match node {
+            UiNode::ListItem { subtitle, .. } => out.push(subtitle.clone()),
+            UiNode::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
+            UiNode::List { items } => items.iter().for_each(|c| walk(c, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(tree, &mut out);
+    out
+}
+
+/// Il giro intero della selezione: la shell pubblica un contesto col cursore,
+/// il kernel lo custodisce, la view lo legge dall'`HostApi` e ci si orienta.
+/// È ciò che prima non aveva un canale — e senza cui slash command, commenti
+/// inline e annotazioni non potevano essere provider.
+#[test]
+fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
+    let vault = Vault::new();
+    vault.put("Nota.md", "# Titolo\n\ntesto\n\n## Sezione\n\naltro\n");
+    let mut ws = vault.open();
+
+    let doc = DocId::new("Nota.md");
+    let cursore = |byte: usize| {
+        ViewContext::new(MAIN_PANE)
+            .with_doc(Some(doc.clone()))
+            .with_selection(Some(Selection::caret(Some(Span::new(byte, byte)))))
+    };
+
+    // Il cursore è nel corpo della prima sezione.
+    let da_ridisegnare = ws.set_active_context(Some(cursore(12)));
+    assert_eq!(
+        da_ridisegnare,
+        vec![OUTLINE_VIEW.to_string()],
+        "l'outline dichiara di seguire documento e selezione: è l'unica \
+         registrata qui, e va ridisegnata"
+    );
+    assert_eq!(
+        subtitles(&ws.render_view(OUTLINE_VIEW).unwrap()),
+        vec![Some("cursore qui".to_string()), None]
+    );
+
+    // Il cursore scende nella seconda sezione: il segno lo segue.
+    let source = std::fs::read_to_string(vault.root.join("Nota.md")).unwrap();
+    let byte = source.find("altro").unwrap();
+    ws.set_active_context(Some(cursore(byte)));
+    assert_eq!(
+        subtitles(&ws.render_view(OUTLINE_VIEW).unwrap()),
+        vec![None, Some("cursore qui".to_string())]
+    );
+
+    // Il buffer diventa sporco: la shell pubblica il testo senza lo span, e la
+    // view non segna niente invece di segnare la sezione sbagliata.
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE)
+            .with_doc(Some(doc.clone()))
+            .with_selection(Some(Selection::caret(None))),
+    ));
+    assert_eq!(
+        subtitles(&ws.render_view(OUTLINE_VIEW).unwrap()),
+        vec![None, None]
     );
 }

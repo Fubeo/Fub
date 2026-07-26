@@ -11,6 +11,16 @@
         <span class="brand">FubMD</span>
         <button id="open-vault">Apri vault…</button>
         <button id="show-graph" title="Il grafo dei collegamenti del vault">Grafo</button>
+        <!-- Le tre modalità esclusive del pannello (FEATURES 4.1). Non sono
+             decorazione della shell: la modalità attraversa il confine dentro
+             `ViewContext`, e le view che la seguono cambiano di conseguenza. -->
+        <span id="mode-switch">
+          <button data-mode="source" title="Solo sorgente, nessuna resa inline">Sorgente</button>
+          <button data-mode="live_preview" class="active" title="Sorgente con resa inline">
+            Live
+          </button>
+          <button data-mode="reading" title="Sola lettura, senza editor">Lettura</button>
+        </span>
         <span id="vault-path" class="muted"></span>
       </header>
       <main id="layout">
@@ -57,13 +67,16 @@
         </aside>
         <section id="editor-pane">
           <div id="editor"></div>
+          <!-- La modalità Lettura: lo stesso documento reso, non editabile.
+               Non è un pannello sempre acceso accanto all'editor — è l'editor
+               che lascia il posto, ed è perché `PaneMode` è un enum di
+               modalità **esclusive**. -->
+          <div id="preview" class="markdown-preview" hidden></div>
         </section>
         <section id="right-pane">
           <!-- Le view dichiarative (Struttura, Tag, Backlink, …) si montano
                qui per placement: gli id e i titoli li dichiara il backend. -->
           <div id="views-right"></div>
-          <div class="panel-title">Anteprima</div>
-          <div id="preview" class="markdown-preview"></div>
           <div id="history-panel" hidden>
             <div class="panel-title">
               <span>Cronologia</span>

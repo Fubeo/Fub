@@ -10,13 +10,14 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
+use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{
     BacklinkRef, IndexQuery, IndexResult, LinkDirection, Page, SearchHit, TagCount, ViewSpec,
 };
 use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
-    BacklinksView, OutlineView, SearchIndex, TagPanelView, VersionRef, VersionStore,
-    VersioningHandler, BACKLINKS_ID, OUTLINE_ID, SEARCH_ID, TAGS_ID, VERSIONING_ID,
+    BacklinksView, OutlineView, SearchIndex, StatsView, TagPanelView, VersionRef, VersionStore,
+    VersioningHandler, BACKLINKS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, TrashEntry, Trust, Workspace};
@@ -114,6 +115,19 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
         return Err(format!("Non è una cartella valida: {root}"));
     }
 
+    // La sessione precedente si chiude **prima** che la nuova si apra, e non
+    // dopo: l'indice di ricerca tiene un lock esclusivo di scrittura sulla
+    // propria cartella, e tantivy quel lock lo aspetta *bloccando*. Aprendo la
+    // nuova sessione sullo stesso vault mentre la vecchia è ancora viva, il
+    // comando si pianta per sempre — nessun errore, nessun log, la finestra
+    // resta a metà. Succede riaprendo lo stesso vault dal dialogo, e in
+    // sviluppo a ogni ricarica della pagina.
+    //
+    // Prezzo dichiarato: se l'apertura nuova fallisce, non si torna alla
+    // vecchia. È la scelta onesta — la sessione vecchia ha già un watcher e un
+    // indice su un vault che l'utente ha detto di voler lasciare.
+    drop(state.session.lock().unwrap().take());
+
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed());
 
@@ -177,6 +191,10 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     // Il pannello tag: aggrega i tag del vault via `IndexQuery::Tags`, click →
     // ricerca. Terza feature ufficiale sul giro delle view.
     ws.register_view_provider(TAGS_ID, Trust::Trusted, Box::new(TagPanelView));
+    // Le statistiche: quarta feature sul giro delle view, e la prima a leggere
+    // il **contesto di sessione** per intero — selezione e modalità, non solo
+    // quale nota è aperta (§1.9).
+    ws.register_view_provider(STATS_ID, Trust::Trusted, Box::new(StatsView));
 
     ws.reindex().map_err(|e| e.to_string())?;
 
@@ -425,15 +443,23 @@ fn backlinks(state: State<AppState>, id: String) -> Result<Vec<BacklinkRef>, Str
 // per feature. L'enforcement del confine di fiducia (`Html`/`WebView` solo dal
 // codice fidato) è dentro `render_view`/`view_action`, in un punto solo.
 
-/// Documento con il focus della sessione: lo imposta la shell a ogni
-/// navigazione, e le view lo leggono via `HostApi::active_document`. `None`
-/// azzera (nessuna nota aperta).
+/// Contesto del pannello con il focus: quale nota, cosa c'è selezionato, in che
+/// modalità. Lo pubblica la shell a ogni navigazione, movimento del cursore o
+/// cambio di modalità; le view lo leggono via `HostApi::active_context`.
+///
+/// Restituisce **gli id delle view da ridisegnare** — quelle la cui
+/// `ViewSpec.follows` interseca ciò che è cambiato. Il conto lo fa il kernel e
+/// non la shell perché la regola deve essere una sola: la shell sa *quando*
+/// pubblicare, non *chi* segue cosa. `None` = nessun pannello (all'avvio, o
+/// dopo che l'ultima nota è stata chiusa).
 #[tauri::command]
-fn set_active_document(state: State<AppState>, id: Option<String>) -> Result<(), String> {
+fn set_active_context(
+    state: State<AppState>,
+    context: Option<ViewContext>,
+) -> Result<Vec<String>, String> {
     let ws = current(&state)?;
     let mut ws = ws.lock().unwrap();
-    ws.set_active_document(id.map(DocId::new));
-    Ok(())
+    Ok(ws.set_active_context(context))
 }
 
 /// Le view offerte dai provider registrati, nell'ordine di registrazione.
@@ -717,7 +743,7 @@ pub fn run() {
             render_preview,
             render_embed,
             backlinks,
-            set_active_document,
+            set_active_context,
             list_views,
             render_view,
             view_action,

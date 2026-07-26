@@ -152,8 +152,10 @@ come proxy. Il kernel vede solo `dyn Trait`.
   ([ORGANIZZAZIONE_VAULT.md](ORGANIZZAZIONE_VAULT.md)); backlink, **outline** e
   **tag** sono ora `ViewProvider` veri, con le capacità host che mancavano
   (`query_index` — col canale metadata `IndexQuery::Outline`/`Tags` —,
-  `active_document`) e il giro azione→`ViewUpdate` chiuso (`Navigate`, `Reveal`,
-  `RunSearch`). Restano: cache metadata/body, graph view (Canvas/WebGL).
+  `active_context`: pannello, documento, **selezione** e modalità) e il giro
+  azione→`ViewUpdate` chiuso (`Navigate`, `Reveal`, `RunSearch`). Il quarto
+  provider, le **statistiche**, è il primo cliente della selezione. Restano:
+  cache metadata/body, graph view (Canvas/WebGL).
 - **M3 — Fedeltà editor** → [dettaglio](milestones/M3-editor-fidelity.md)
   Live preview in-editor (decorazioni CodeMirror sugli `Span`), command palette
   (`CommandProvider`), settings dichiarativi, rendering callout/embed/math.
@@ -192,8 +194,11 @@ documenti milestone.
   dalle conversioni del confine già scritte e testate in `fubmd_abi::arena`: il
   proxy di M5 le chiamerà, non le inventerà (vedi
   [traits.md](architecture/traits.md)).
-- **Live-preview in-editor (M3)** — de-rischiato tenendo un pannello anteprima HTML
-  in M1; gli `Span` nel modello rendono M3 meccanico.
+- **Live-preview in-editor (M3)** — de-rischiato tenendo un'anteprima HTML dalla
+  M1; gli `Span` nel modello rendono M3 meccanico. Da §1.9 quell'anteprima non è
+  più un pannello sempre acceso di fianco all'editor ma **la modalità Lettura**
+  (`PaneMode::Reading`): le modalità sono esclusive, e due superfici sullo stesso
+  documento erano due verità da tenere allineate.
 - **Edge case markdown Obsidian** — corpus di fixture + snapshot test.
 - **Rientranza del dispatch eventi** — risolto per costruzione: coda + budget nel
   `Workspace`; l'esaurimento del budget emette `Event::Overflow` (mai troncamenti
@@ -218,6 +223,6 @@ documenti milestone.
   aggiunge solo per minor (o non si aggiunge). Mitigazione: il §1 per intero è
   P0, e le decisioni con una domanda aperta sono nella checklist di
   [M4](milestones/M4-wit-hardening.md). Il dogfooding resta lo strumento che le
-  scopre — è così che sono arrivati `data_*`, `now_unix_millis`, `query_index` e
-  `active_document`, ognuno da una feature ufficiale scritta come la scriverebbe
-  un plugin.
+  scopre — è così che sono arrivati `data_*`, `now_unix_millis`, `query_index`,
+  `free_name` e `active_context`, ognuno da una feature ufficiale scritta come la
+  scriverebbe un plugin.

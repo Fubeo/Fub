@@ -89,7 +89,7 @@ pub trait HostApi: Send + Sync {
     fn now_unix_millis(&self) -> u64;
     // interrogazione del vault e contesto della sessione (le ha chieste la view)
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
-    fn active_document(&self) -> Option<DocId>;
+    fn active_context(&self) -> Option<ViewContext>;
 }
 ```
 
@@ -126,12 +126,18 @@ provider, è un guscio che l'app riempie:
   dispatch (backlink dal grafo, resto dai provider registrati). `&self`: una
   query non muta, e così una view la serve sotto prestito condiviso, dalla parte
   giusta della concorrenza.
-- `active_document` — il documento con il focus della sessione, l'unico contesto
-  di sessione che il contratto espone. La view lo **chiede**; a scriverlo è solo
-  la shell (`Workspace::set_active_document`), mai un plugin. Scartati l'evento
-  (`render_view(&self)` è immutabile) e l'argomento di `render_view` (obbligo per
-  ogni view a portarsi un contesto che non usa) — vedi
-  [plugin-boundary.md](plugin-boundary.md), "Interrogazione e contesto".
+- `active_context` — il contesto di sessione: pannello, documento, selezione,
+  modalità (`ViewContext`, in `fubmd_abi::session`). La view lo **chiede**; a
+  scriverlo è solo la shell (`Workspace::set_active_context`), mai un plugin.
+  Scartati l'evento (`render_view(&self)` è immutabile) e l'argomento di
+  `render_view` (obbligo per ogni view a portarsi un contesto che non usa) —
+  vedi [plugin-boundary.md](plugin-boundary.md), "Interrogazione e contesto".
+
+  Era `active_document() -> Option<DocId>`, e non regge schede né split: con
+  due pannelli aperti "il documento attivo" non è più una variabile globale.
+  `Selection` porta il testo **sempre** e lo span **solo a buffer pulito** — la
+  regola sta in plugin-boundary.md, "La regola dello span", ed è ciò che
+  impedisce di ritagliare il file salvato con gli offset del buffer.
 
 **E l'ultima l'ha chiesta l'import** (§1.7), con lo stesso meccanismo:
 
@@ -180,17 +186,21 @@ pub trait ViewProvider: Send + Sync {
 }
 ```
 
-`ViewSpec { id, title, placement: ViewPlacement }` con
-`ViewPlacement { LeftSidebar, RightSidebar, Bottom }`. `UiNode`/`UiAction`/
-`ViewUpdate` sono in [ui-protocol.md](ui-protocol.md).
+`ViewSpec { id, title, placement: ViewPlacement, refresh: EventMask, follows:
+ContextMask }` con `ViewPlacement { LeftSidebar, RightSidebar, Bottom }`. Le due
+maschere dicono **quando** una view invecchia: `refresh` per gli eventi del
+vault, `follows` per le parti del contesto di sessione (documento, selezione,
+modalità). `UiNode`/`UiAction`/`ViewUpdate` sono in
+[ui-protocol.md](ui-protocol.md).
 
 **I provider veri: `BacklinksView` e `OutlineView`.** Il pannello backlink è
 passato da funzione libera a `ViewProvider` (`fubmd-features`), ed è ciò che ha
-esercitato il trait per intero — e fatto emergere `query_index`/`active_document`
-nell'`HostApi`. Non riceve dati: in `render_view` chiede il documento attivo e i
-suoi backlink all'host, in `on_action` traduce il click in `ViewUpdate::Navigate`.
-Il giro chiude nel renderer generico del frontend (comandi `render_view`/
-`view_action`/`set_active_document`), non più in un comando ad-hoc.
+esercitato il trait per intero — e fatto emergere `query_index`/`active_context`
+nell'`HostApi`. Non riceve dati: in `render_view` chiede il contesto e i backlink
+della nota che guarda all'host, in `on_action` traduce il click in
+`ViewUpdate::Navigate`. Il giro chiude nel renderer generico del frontend
+(comandi `render_view`/`view_action`/`set_active_context`), non più in un comando
+ad-hoc.
 
 L'outline è il secondo provider e il primo a usare il **canale metadata**: chiede
 gli heading del documento attivo con `IndexQuery::Outline` e traduce il click in
@@ -198,8 +208,12 @@ gli heading del documento attivo con `IndexQuery::Outline` e traduce il click in
 è in byte UTF-8, il frontend lo mappa su CodeMirror col ponte in
 `frontend/src/offsets.ts`). Il tag panel è il terzo: aggrega i tag del vault con
 `IndexQuery::Tags` e traduce il click in `ViewUpdate::RunSearch { query }`, che la
-shell esegue riusando il pannello di ricerca. Prove end-to-end col kernel vero:
-`crates/fubmd-features/tests/{backlinks,outline,tags}_view_e2e.rs`.
+shell esegue riusando il pannello di ricerca. Il quarto è il pannello
+**statistiche**, primo cliente della **selezione**: conta parole e caratteri del
+documento e di ciò che è selezionato, e in modalità di lettura mostra il tempo
+di lettura invece — è la view che dimostra perché `Selection` porta il testo e
+non solo lo span. Prove end-to-end col kernel vero:
+`crates/fubmd-features/tests/{backlinks,outline,tags,stats}_view_e2e.rs`.
 
 **Il varco unico degli alberi di UI.** I provider si registrano con
 `Workspace::register_view_provider(id, trust, provider)`, dove
@@ -500,7 +514,7 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 |---|---|---|---|
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
 | `IndexProvider` | — (backlink via grafo del kernel) | `SearchIndex` (tantivy) **M2** ✅ | `activate`/`flush` con `HostApi`: persiste via `data_*` |
-| `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView` ✅ **M2** | **M2** (graph-data) | tre provider veri; `query_index`+`active_document`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch` |
+| `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` ✅ **M2** | **M2** (graph-data) | quattro provider veri; `query_index`+`active_context`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch`; `ViewSpec.follows` per il contesto |
 | `CommandProvider` | — | **M3** (command palette) | keybinding non vincolante |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** (§1.7) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
@@ -534,6 +548,9 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `FormatDescriptor`/`FormatCapabilities`/`ParseContext`/`RenderOptions` | `record` |
 | `CommandSpec`/`CommandOutcome` | `record` |
 | `ViewSpec`/`ViewPlacement` | `record` / `enum` |
+| `ViewContext`/`Selection` | `record` (interface `session`); `selection.span` è `option<span>` — c'è solo a buffer pulito |
+| `PaneId`/`PaneMode` | `type pane-id = string` / `enum pane-mode { source, live-preview, reading }` |
+| `ContextKind`/`ContextMask` | `enum context-kind` / `type context-mask = list<context-kind>` (come `event-mask`) |
 | `UiNode` (albero) | `variant ui-node` **in arena**: `list<ui-ref>` fra i figli, nodi in `ui-tree` |
 | `UiAction`/`ViewUpdate` | `record` / `variant` (`replace(ui-tree)`) |
 | `IndexQuery`/`IndexResult` | `variant` — ogni caso con più di un argomento ha il suo record (`index-query-neighbors`, `index-query-properties`, …) |
