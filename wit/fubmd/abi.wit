@@ -820,6 +820,53 @@ interface session {
     type context-mask = list<context-kind>;
 }
 
+/// Modificare **un pezzo** di documento: l'edit come coppia (span, testo) sopra
+/// la revisione su cui è stato calcolato. Vedi `crates/fubmd-abi/src/edit.rs`.
+interface edit {
+    use model.{span};
+
+    /// L'identità del sorgente su cui un edit è stato calcolato. OPACA: solo
+    /// l'uguaglianza è contratto — non è un numero d'ordine, non ci si legge
+    /// dentro, e come l'host la derivi (impronta, digest, `mtime+size`) non è
+    /// promesso a nessuno. La si ottiene da `host-api.document-revision`.
+    type revision = string;
+
+    /// Una sostituzione: i byte dentro `span` diventano `text`. Inserire è uno
+    /// span vuoto, cancellare è un testo vuoto — un enum a tre casi avrebbe
+    /// costretto ogni consumatore a distinguerle per poi trattarle uguali.
+    record text-edit {
+        /// In byte del sorgente della BASE, mai del testo in corso di
+        /// produzione: gli edit sono un insieme, non una sequenza di passi.
+        span: span,
+        text: string,
+    }
+
+    /// Gli edit, e il sorgente su cui sono stati calcolati. La base non è
+    /// opzionale: un edit senza base è la corsa che questa firma esiste per
+    /// rendere visibile (due modifiche concorrenti che si sovrascrivono in
+    /// silenzio). Base che non combacia → `plugin-error.conflict`, e niente
+    /// scritto.
+    record edit-request {
+        base: revision,
+        edits: list<text-edit>,
+    }
+
+    /// Un edit applicato: dov'è finito nel testo NUOVO (serve a mettere il
+    /// cursore) e cosa c'era prima (serve a costruire l'inverso, che è un edit
+    /// come gli altri).
+    record applied-edit {
+        span: span,
+        replaced: string,
+    }
+
+    /// L'esito: la revisione nuova — con cui si concatena un secondo edit senza
+    /// rileggere il documento — e cosa è stato fatto, in ordine di documento.
+    record edit-report {
+        revision: revision,
+        applied: list<applied-edit>,
+    }
+}
+
 /// View dichiarative (`ViewProvider`).
 interface view {
     use ui.{ui-tree, ui-action, view-update};
@@ -856,6 +903,11 @@ interface errors {
         bad-args(string),
         permission-denied(string),
         internal(string),
+        /// Il sorgente su cui l'operazione era stata calcolata non è più quello
+        /// (`edit-request.base`). Caso a sé e non `bad-args` perché è l'unico
+        /// errore che non è una colpa di chi chiama: gli argomenti erano giusti
+        /// quando li ha calcolati, e la risposta giusta è ricalcolare.
+        conflict(string),
     }
 }
 
@@ -868,9 +920,23 @@ interface host-api {
     use jobs.{job-id, job-spec};
     use index.{index-query, index-result};
     use session.{view-context};
+    use edit.{revision, edit-request, edit-report};
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
+    /// Scrive il documento INTERO: è la scrittura di chi il testo intero ce l'ha
+    /// in mano (l'editor che salva, un importer che crea una nota). Chi ne
+    /// cambia un pezzo usa `apply-edit`.
     write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
+    /// La revisione del sorgente di un documento: l'identità del testo su cui si
+    /// sta per calcolare una modifica. È una capacità e non un calcolo perché la
+    /// revisione è opaca e la sua derivazione non è promessa a nessuno.
+    document-revision: func(id: doc-id) -> result<revision, plugin-error>;
+    /// Cambia un PEZZO di documento: gli edit della richiesta, tutti o nessuno,
+    /// sul sorgente che la sua `base` nomina. `conflict` = il documento è
+    /// cambiato nel frattempo e non è stato scritto niente (si rilegge e si
+    /// ricalcola); `bad-args` = gli edit non stanno in piedi (fuori dal
+    /// sorgente, a metà di un carattere, sovrapposti, due nello stesso punto).
+    apply-edit: func(id: doc-id, request: edit-request) -> result<edit-report, plugin-error>;
     /// I documenti del vault, in ordine. Senza, `read-document` serve solo per
     /// gli id che arrivano dagli eventi.
     list-documents: func() -> result<list<doc-id>, plugin-error>;

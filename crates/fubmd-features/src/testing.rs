@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
+use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::event::Event;
 use fubmd_abi::model::{DocId, Heading, Span};
 use fubmd_abi::session::{PaneMode, Selection, ViewContext};
@@ -183,6 +184,25 @@ impl HostApi for MemoryHost {
             .unwrap()
             .insert(id.to_string(), source.to_string());
         Ok(())
+    }
+
+    fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
+        Ok(Revision::of(&self.read_document(id)?))
+    }
+
+    /// La modifica chirurgica come la fa l'host vero: la base si verifica, gli
+    /// edit si applicano tutti o nessuno, e il documento nuovo è una scrittura
+    /// normale. Un doppio che qui accettasse qualunque base non proverebbe
+    /// niente proprio della cosa che questa firma esiste per rendere
+    /// impossibile.
+    fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
+        let source = self.read_document(id)?;
+        let (next, report) = request.apply_to(&source)?;
+        if report.is_empty() {
+            return Ok(report);
+        }
+        self.write_document(id, &next)?;
+        Ok(report)
     }
 
     fn list_documents(&self) -> Result<Vec<DocId>, PluginError> {

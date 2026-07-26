@@ -48,6 +48,7 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span};
 use fubmd_abi::session::{ContextMask, ViewContext};
@@ -454,6 +455,46 @@ impl Workspace {
         Ok(())
     }
 
+    /// La revisione del sorgente di un documento: l'identità del testo su cui
+    /// una modifica chirurgica va calcolata (§1.16).
+    ///
+    /// Si legge dal **disco**, come ogni altra lettura del kernel: la verità di
+    /// un documento è il file, e una revisione derivata da una cache sarebbe
+    /// vera solo finché la cache lo è.
+    pub fn document_revision(&self, id: &DocId) -> Result<Revision> {
+        Ok(Revision::of(&self.read_source(id)?))
+    }
+
+    /// Applica una modifica chirurgica: gli edit della richiesta, tutti o
+    /// nessuno, sul sorgente che la sua `base` nomina.
+    ///
+    /// È l'altra scrittura del kernel accanto a
+    /// [`write_document`](Workspace::write_document), e la differenza non è di
+    /// comodo: qui la firma dice **su cosa** la modifica è stata calcolata,
+    /// quindi due scritture concorrenti non possono sovrascriversi in silenzio
+    /// — la seconda trova una base che non combacia e fallisce
+    /// ([`KernelError::Stale`]) senza toccare niente.
+    ///
+    /// Il resto è la coda di sempre: il testo nuovo passa da `write_document`,
+    /// quindi parse prima del disco, indici, grafo ed eventi come qualunque
+    /// altra modifica. Una richiesta **senza edit** non è una scrittura: non
+    /// tocca il file e non emette eventi.
+    pub fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport> {
+        let source = self.read_source(id)?;
+        let (next, report) = request.apply_to(&source).map_err(|e| match e {
+            PluginError::Conflict(_) => KernelError::Stale(id.to_string()),
+            other => KernelError::BadEdit {
+                doc: id.to_string(),
+                why: other.to_string(),
+            },
+        })?;
+        if report.is_empty() {
+            return Ok(report);
+        }
+        self.write_document(id, &next)?;
+        Ok(report)
+    }
+
     /// Riparsa un documento già presente sul disco (usato dal file watcher).
     pub fn refresh_from_disk(&mut self, id: &DocId) -> Result<()> {
         let src = self.vault.read(id)?;
@@ -773,9 +814,13 @@ impl Workspace {
         // a metà lascerebbe link misti vecchio/nuovo senza possibilità di
         // retry. Gli errori si accumulano per-sorgente e arrivano in coda.
         let mut falliti: Vec<String> = Vec::new();
-        for (src, new_source) in plan {
-            // write_document riparsa, aggiorna il grafo ed emette gli eventi.
-            if let Err(e) = self.write_document(&src, &new_source) {
+        for (src, request) in plan {
+            // `apply_edit` riparsa, aggiorna il grafo ed emette gli eventi come
+            // ogni scrittura — con in più la base: se qualcuno ha riscritto una
+            // di queste sorgenti da quando il piano è stato calcolato, quella
+            // riscrittura non viene cancellata in silenzio, il suo link resta
+            // vecchio e il fallimento è nominato qui sotto.
+            if let Err(e) = self.apply_edit(&src, request) {
                 falliti.push(format!("{src}: {e}"));
             }
         }
@@ -879,11 +924,17 @@ impl Workspace {
         Ok(true)
     }
 
-    /// Per ogni documento che linkava `from` per nome o per path, la nuova
-    /// sorgente con i riferimenti riscritti verso `to`. Sostituzione
+    /// Per ogni documento che linkava `from` per nome o per path, la
+    /// **modifica** che riscrive i suoi riferimenti verso `to`. Sostituzione
     /// chirurgica: si tocca solo il testo del riferimento dentro lo `Span` del
     /// link, mai il resto del documento (heading `#...`, blocco `^...`, alias
     /// `|label` e formattazione restano intatti).
+    ///
+    /// Il piano è fatto di [`EditRequest`], non di sorgenti intere: è lo stesso
+    /// calcolo di prima — gli span dei link li dava già il modello — detto nella
+    /// forma che il contratto ora ha (§1.16). La `base` di ognuna è la revisione
+    /// del sorgente **letto qui**, ed è ciò che impedisce che una riscrittura
+    /// arrivata nel frattempo venga cancellata dal piano.
     ///
     /// Vale per **entrambe le specie di link**, e la seconda ha un caso in più
     /// della prima. Un wikilink si rompe solo se si sposta il suo bersaglio; un
@@ -892,7 +943,7 @@ impl Workspace {
     /// ogni `[t](altra.md)` che conteneva. Per questo `from` è sempre fra le
     /// sorgenti del piano — i suoi link uscenti vanno ri-basati sulla cartella
     /// nuova — e non solo quando linka se stesso.
-    fn link_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, String)> {
+    fn link_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
         let from_name = normalize(from.page_name());
         let from_path = normalize(&strip_ext(from.as_str()));
 
@@ -932,7 +983,7 @@ impl Workspace {
             let Ok(source_text) = self.vault.read(&src) else {
                 continue;
             };
-            let mut edits: Vec<(Span, String)> = Vec::new();
+            let mut edits: Vec<TextEdit> = Vec::new();
             for link in &meta.links {
                 // `from_end` è la direzione in cui cercare il riferimento
                 // dentro lo span, e non è una preferenza: in `[[Nota|Nota]]` la
@@ -981,27 +1032,21 @@ impl Workspace {
                     continue;
                 };
                 let start = link.span.start + rel;
-                edits.push((Span::new(start, start + written.len()), replacement));
+                edits.push(TextEdit::replace(
+                    Span::new(start, start + written.len()),
+                    replacement,
+                ));
             }
             if edits.is_empty() {
                 continue;
             }
-            edits.sort_by_key(|(s, _)| s.start);
-            let mut out = String::with_capacity(source_text.len());
-            let mut pos = 0;
-            for (span, replacement) in edits {
-                if span.start < pos {
-                    continue; // sovrapposizioni: difensivo, non dovrebbe accadere
-                }
-                out.push_str(&source_text[pos..span.start]);
-                out.push_str(&replacement);
-                pos = span.end;
-            }
-            out.push_str(&source_text[pos..]);
             // La sorgente rinominata vive ormai al path nuovo: la sua
-            // riscrittura va applicata lì.
+            // riscrittura va applicata lì — e la base resta valida, perché un
+            // rename sposta il file senza toccarne il contenuto. È una proprietà
+            // della revisione-impronta: un contatore per-documento, qui, avrebbe
+            // detto che il documento è cambiato.
             let dest = if &src == from { to.clone() } else { src };
-            plan.push((dest, out));
+            plan.push((dest, EditRequest::new(Revision::of(&source_text), edits)));
         }
         plan
     }
@@ -1777,6 +1822,22 @@ fn fenced_doc_id(id: &DocId) -> std::result::Result<DocId, PluginError> {
     })
 }
 
+/// Un errore del kernel come lo vede un provider.
+///
+/// Le due specie della modifica chirurgica non finiscono in `Internal`: un
+/// conflitto è la sola cosa che chi chiama deve **riprovare** (rileggendo e
+/// ricalcolando), un edit malformato la sola che deve **correggere**.
+/// Appiattirli su un errore interno lascerebbe quella distinzione a chi legge il
+/// messaggio, cioè a una stringa italiana — che è il debito del §1.11, non un
+/// posto dove aggiungerne.
+fn plugin_error(e: KernelError) -> PluginError {
+    match e {
+        KernelError::Stale(doc) => PluginError::Conflict(doc),
+        KernelError::BadEdit { doc, why } => PluginError::BadArgs(format!("{doc}: {why}")),
+        other => PluginError::Internal(other.to_string()),
+    }
+}
+
 /// La validazione del confine di fiducia della UI, in un posto solo.
 ///
 /// Da un provider fidato passa tutto; da uno non fidato l'albero deve essere
@@ -1849,6 +1910,20 @@ impl HostApi for KernelHost<'_> {
         self.ws
             .write_document(&id, source)
             .map_err(|e| PluginError::Internal(e.to_string()))
+    }
+
+    fn document_revision(&self, id: &DocId) -> std::result::Result<Revision, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws.document_revision(&id).map_err(plugin_error)
+    }
+
+    fn apply_edit(
+        &mut self,
+        id: &DocId,
+        request: EditRequest,
+    ) -> std::result::Result<EditReport, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws.apply_edit(&id, request).map_err(plugin_error)
     }
 
     fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
@@ -1970,6 +2045,22 @@ impl HostApi for ReadHost<'_> {
         _id: &DocId,
         _source: &str,
     ) -> std::result::Result<(), PluginError> {
+        self.read_only()
+    }
+
+    /// Leggere una revisione è una lettura: una view che prepara una modifica
+    /// (calcolare gli edit è la parte lunga) può farlo mentre disegna, e
+    /// consegnarla poi da `on_action`, dove l'host sa scrivere.
+    fn document_revision(&self, id: &DocId) -> std::result::Result<Revision, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws.document_revision(&id).map_err(plugin_error)
+    }
+
+    fn apply_edit(
+        &mut self,
+        _id: &DocId,
+        _request: EditRequest,
+    ) -> std::result::Result<EditReport, PluginError> {
         self.read_only()
     }
 

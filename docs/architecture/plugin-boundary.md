@@ -157,6 +157,50 @@ esegue. Le prove end-to-end attraverso il kernel vero sono
 `outline_view_e2e.rs` (il cursore che arriva alla view) e `stats_view_e2e.rs`
 (il testo selezionato che vale anche a buffer sporco).
 
+## Scrivere un pezzo: l'edit porta la revisione (deciso)
+
+Un plugin ha due modi di cambiare un documento, e la differenza sta nella firma:
+
+| | `write_document(id, source)` | `apply_edit(id, request)` |
+|---|---|---|
+| Cosa manda | il documento **intero** | una lista di `(span, testo)` |
+| Su cosa si applica | su qualunque cosa ci sia adesso | sul sorgente che `request.base` nomina |
+| Chi ha scritto nel frattempo | viene sovrascritto **in silenzio** | fa fallire la richiesta (`Conflict`), niente scritto |
+| Chi lo usa | chi il testo intero ce l'ha in mano: l'editor che salva, un importer che crea | tutti gli altri |
+
+`EditRequest { base: Revision, edits: Vec<TextEdit> }`. La base **non è
+opzionale**: un edit è una coppia di offset calcolata su *un* testo, e senza
+dire quale, due modifiche concorrenti — un'automazione e l'utente che scrive —
+si cancellano a vicenda senza che nessuna delle due lo sappia. Con la base, la
+seconda riceve `PluginError::Conflict`, rilegge e ricalcola.
+
+La `Revision` è **opaca**: solo l'uguaglianza è contratto. Non è un numero
+d'ordine, non ci si legge dentro, e come l'host la derivi (impronta del
+contenuto, digest, `mtime+size`) non è promesso a nessuno — la si chiede con
+`document_revision`. Questo host usa l'impronta del contenuto, e la scelta si
+vede in un caso vero: chi scrive un carattere e lo cancella riporta il documento
+al testo di prima, e un edit calcolato allora è ancora valido; un contatore
+direbbe di no.
+
+Gli span della richiesta sono in byte del sorgente della base — mai del testo in
+corso di produzione: chi calcola gli edit li elenca e basta, l'host li ordina e
+li applica in un colpo solo. Ciò che non sta in piedi (fuori dal sorgente, a
+metà di un carattere, sovrapposti, due nello stesso punto) è `BadArgs`, e non
+lascia mai un documento modificato a metà.
+
+Il rapporto (`EditReport { revision, applied }`) torna nelle coordinate del
+testo **nuovo** e porta ciò che è stato sostituito: con quei due pezzi si mette
+il cursore dove l'utente se lo aspetta (16.1) e si costruisce l'edit **inverso**,
+che è un edit come gli altri (`EditReport::inverse`). Di chi sia la proprietà
+dell'undo resta una domanda aperta (§1.17 del piano); la forma con cui si
+esprimerà è questa.
+
+Il primo cliente è il kernel stesso: la riscrittura dei wikilink su rename
+(`Workspace::rename_document`) applica ora un `EditRequest` per sorgente invece
+di riscrivere N file interi — quindi una nota che qualcun altro ha toccato fra
+il calcolo del piano e la sua applicazione non viene più sovrascritta, e il
+fallimento si nomina.
+
 ## Import ed export: il confine è di byte, non di path (deciso)
 
 Il capitolo 17 di FEATURES (~120 voci) è, in ogni altra applicazione, quello che

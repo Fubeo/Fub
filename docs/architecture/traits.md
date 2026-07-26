@@ -72,7 +72,11 @@ in-process; WASM (M5) → proxy che reinoltra come host function.
 ```rust
 pub trait HostApi: Send + Sync {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
+    // il documento intero (chi ce l'ha in mano) …
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+    // … e un pezzo solo, sopra la revisione su cui è stato calcolato
+    fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError>;
+    fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
     fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
     fn free_name(&self, id: &DocId) -> DocId;
     fn emit(&mut self, event: Event);
@@ -138,6 +142,23 @@ provider, è un guscio che l'app riempie:
   `Selection` porta il testo **sempre** e lo span **solo a buffer pulito** — la
   regola sta in plugin-boundary.md, "La regola dello span", ed è ciò che
   impedisce di ritagliare il file salvato con gli offset del buffer.
+
+**E le due dopo le ha chieste la modifica chirurgica** (§1.16). Finché
+`write_document` era l'unico modo di cambiare un documento, ogni feature che ne
+tocca un pezzo — spuntare un task, scrivere una proprietà, correggere un link,
+inserire un template — avrebbe riletto e riscritto il file intero, e due di esse
+non avrebbero potuto convivere:
+
+- `apply_edit` — gli edit della richiesta, tutti o nessuno, sul sorgente che la
+  sua `base` nomina. La base **non è opzionale**, ed è ciò che trasforma una
+  sovrascrittura silenziosa in un `PluginError::Conflict`. Il rapporto torna
+  nelle coordinate del testo nuovo e porta ciò che era stato sostituito: da lì
+  si ricava l'edit inverso, che è un edit come gli altri.
+- `document_revision` — l'identità del sorgente su cui si sta per calcolare.
+  È una capacità e non un calcolo perché la `Revision` è opaca (solo
+  l'uguaglianza è contratto): un provider che se la derivasse da sé si legherebbe
+  a *questo* host. Vedi [plugin-boundary.md](plugin-boundary.md), "Scrivere un
+  pezzo".
 
 **E l'ultima l'ha chiesta l'import** (§1.7), con lo stesso meccanismo:
 
@@ -520,7 +541,7 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** (§1.7) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** (§1.7) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | storage in-memory per ora; `free_name` chiesto dall'import |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | storage in-memory per ora; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica (§1.16) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore
@@ -548,6 +569,8 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `FormatDescriptor`/`FormatCapabilities`/`ParseContext`/`RenderOptions` | `record` |
 | `CommandSpec`/`CommandOutcome` | `record` |
 | `ViewSpec`/`ViewPlacement` | `record` / `enum` |
+| `TextEdit`/`EditRequest`/`AppliedEdit`/`EditReport` | `record` (interface `edit`) |
+| `Revision` | `type revision = string` — **opaca**: solo l'uguaglianza è contratto, la derivazione è dell'host |
 | `ViewContext`/`Selection` | `record` (interface `session`); `selection.span` è `option<span>` — c'è solo a buffer pulito |
 | `PaneId`/`PaneMode` | `type pane-id = string` / `enum pane-mode { source, live-preview, reading }` |
 | `ContextKind`/`ContextMask` | `enum context-kind` / `type context-mask = list<context-kind>` (come `event-mask`) |
