@@ -270,11 +270,15 @@ oggi, una migrazione domani); le altre restano al freeze.
       1. **Come si dichiara un parametro** → uno **schema a sé**
          (`ParamSpec { name, title, description, kind, required }`,
          `ParamKind { text, number, bool, document, documents, choice }`), non i
-         nodi del §2.1. La ragione non è che i nodi non basterebbero: è che
+         nodi di input del protocollo di UI. La ragione non è che i nodi non
+         basterebbero: è che
          dichiarare *cosa serve* e disegnare *come lo si chiede* sono due
          domande, e solo la prima ha senso per la CLI, per un'automazione e per
          un modello, che non disegnano niente. Quando arriveranno i nodi di
-         input, saranno la **resa** di un `ParamSpec`. E sì: `CommandSpec`
+         input, saranno la **resa** di un `ParamSpec` — e ora che ci sono
+         ([decisione 0016](../decisions/0016-cosa-e-una-view.md)) la promessa è
+         verificabile: `ViewSpec::params` dichiara gli stessi `ParamSpec`, e la
+         convalida è letteralmente la stessa funzione. E sì: `CommandSpec`
          acquista la `description` in prosa, che la palette non usa e senza cui
          un chiamante non umano sceglie a caso.
       2. **Dove vive il dry-run** → un argomento `mode: InvokeMode` su `invoke`,

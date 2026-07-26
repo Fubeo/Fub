@@ -92,7 +92,7 @@ Cosa resta a M3:
 - **La mappa dei tasti come dato**: oggi la shell onora il `keybinding`
   *dichiarato* dal comando e ignora quelli senza modificatori; la mappa
   configurabile dall'utente è nei settings (§11.1 + §18.2).
-- **Il form dei parametri con i nodi del §2.1**: la palette disegna i campi da
+- **Il form dei parametri con i nodi di input** ([decisione 0016](../decisions/0016-cosa-e-una-view.md)): la palette disegna i campi da
   sé; quando i nodi di input esisteranno, saranno la resa dei `ParamSpec` — non
   un secondo modo di dichiararli.
 

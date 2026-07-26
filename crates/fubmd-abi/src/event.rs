@@ -258,6 +258,33 @@ pub enum Event {
     /// ha aperto, dal proprio errore. Un campo `ok: bool` qui sarebbe una
     /// promessa di atomicità che nessuno mantiene.
     BatchEnded { batch: BatchId, changed: Vec<DocId> },
+    /// Una view è **invecchiata** per un motivo che il vault non conosce: un job
+    /// finito, una risposta dalla rete, un calcolo completato (§2.5).
+    ///
+    /// Prima di questo evento il protocollo di view era pull-only: `refresh` è
+    /// una maschera sugli eventi *del kernel* e `ViewUpdate` esiste solo come
+    /// risposta a `on_action`, quindi un provider che finiva un lavoro lungo non
+    /// aveva **modo di dire «ridisegnami»** se non emettendo un
+    /// [`Custom`](Event::Custom) — cioè svegliando ogni handler e ogni view del
+    /// sistema.
+    ///
+    /// Che sia un evento e non una capacità `invalidate_view` non è una scelta
+    /// di comodo: è la regola della decisione 0013 — *una capacità è ciò di cui
+    /// il chiamante ha bisogno della risposta per proseguire; ciò che si limita
+    /// a informare è un evento*. Da evento guadagna anche l'origine
+    /// ([`Origin::actor`]), che una capacità avrebbe dovuto farsi dichiarare da
+    /// chi la chiama.
+    ///
+    /// `instance` assente = **tutte** le istanze di quella view: è ciò che
+    /// serve a chi ha ricalcolato un dato che vale per tutte, e chi ne ha
+    /// invecchiata una sola la nomina.
+    ///
+    /// La regola di coalescing è di chi disegna, ed è scritta accanto a lui:
+    /// venti inviti a ridisegnare in un giro sono **un** ridisegno.
+    ViewInvalidated {
+        view: String,
+        instance: Option<String>,
+    },
 }
 
 impl Event {
@@ -272,6 +299,7 @@ impl Event {
             Event::Overflow { .. } => EventKind::Overflow,
             Event::Custom { .. } => EventKind::Custom,
             Event::BatchEnded { .. } => EventKind::BatchEnded,
+            Event::ViewInvalidated { .. } => EventKind::ViewInvalidated,
         }
     }
 
@@ -308,6 +336,8 @@ pub enum EventKind {
     /// [`IndexUpdated`](EventKind::IndexUpdated) deve abbonarsi anche a questo:
     /// dentro un lotto è il solo dei due che arriva.
     BatchEnded,
+    /// Una view è invecchiata per un motivo che il vault non conosce (§2.5).
+    ViewInvalidated,
 }
 
 /// Insieme di tipi di evento a cui un handler è abbonato.
@@ -326,6 +356,7 @@ impl EventMask {
             EventKind::Overflow,
             EventKind::Custom,
             EventKind::BatchEnded,
+            EventKind::ViewInvalidated,
         ])
     }
 

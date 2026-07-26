@@ -18,8 +18,8 @@
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::session::{ContextMask, PaneMode, Selection};
-use fubmd_abi::traits::{HostApi, ViewPlacement, ViewProvider, ViewSpec};
-use fubmd_abi::ui::{Axis, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::traits::{HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const STATS_ID: &str = "fubmd.stats";
@@ -69,21 +69,32 @@ pub fn reading_minutes(words: usize) -> usize {
 
 impl ViewProvider for StatsView {
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec {
-            id: STATS_VIEW.to_string(),
-            title: "Statistiche".to_string(),
-            placement: ViewPlacement::Bottom,
-            // Il conteggio del documento invecchia a ogni scrittura (anche
-            // quelle del watcher): `IndexUpdated` le copre tutte.
-            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
-            // Del contesto segue tutto: quale nota (di chi sono i conteggi),
-            // la selezione (il conteggio della selezione) e la modalità (in
-            // lettura il pannello dice un'altra cosa).
-            follows: ContextMask::all(),
-        }]
+        vec![
+            // Sta nella **barra di stato**, e ci sta da questa seduta: prima le
+            // superfici erano tre e questo pannello finiva "in basso", cioè in
+            // un riquadro largo quanto la finestra per due conteggi. Il §2.2
+            // nomina proprio questo caso — ciò che informa senza interrompere —
+            // ed è il primo cliente di una superficie nuova.
+            ViewSpec::new(STATS_VIEW, "Statistiche", ViewSurface::StatusBar)
+                // Il conteggio del documento invecchia a ogni scrittura (anche
+                // quelle del watcher): `IndexUpdated` le copre tutte.
+                .refreshing(EventMask(vec![
+                    EventKind::IndexUpdated,
+                    EventKind::BatchEnded,
+                ]))
+                // Del contesto segue tutto: quale nota (di chi sono i
+                // conteggi), la selezione (il conteggio della selezione) e la
+                // modalità (in lettura il pannello dice un'altra cosa).
+                .following(ContextMask::all())
+                .open_by_default(),
+        ]
     }
 
-    fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
+    fn render_view(
+        &self,
+        _instance: &ViewInstance,
+        host: &dyn HostApi,
+    ) -> Result<UiNode, PluginError> {
         let Some(doc) = host.active_context().and_then(|c| c.doc) else {
             return Ok(riga("Nessuna nota aperta."));
         };
@@ -102,8 +113,8 @@ impl ViewProvider for StatsView {
     }
 
     fn on_action(
-        &self,
-        _view: &str,
+        &mut self,
+        _instance: &ViewInstance,
         _action: UiAction,
         _host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
@@ -143,14 +154,7 @@ pub fn build_stats_view(doc: TextStats, selection: Option<TextStats>, mode: Pane
         )),
         (_, None) => {}
     }
-    UiNode::Stack {
-        dir: Axis::Row,
-        gap: 12,
-        children: righe
-            .into_iter()
-            .map(|content| UiNode::Text { content })
-            .collect(),
-    }
+    UiNode::row(12, righe.into_iter().map(UiNode::text).collect())
 }
 
 fn plurale(n: usize, uno: &str, molti: &str) -> String {
@@ -158,28 +162,23 @@ fn plurale(n: usize, uno: &str, molti: &str) -> String {
 }
 
 fn riga(testo: &str) -> UiNode {
-    UiNode::Stack {
-        dir: Axis::Row,
-        gap: 12,
-        children: vec![UiNode::Text {
-            content: testo.to_string(),
-        }],
-    }
+    UiNode::row(12, vec![UiNode::text(testo)])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testing::MemoryHost;
+    use fubmd_abi::ui::UiKind;
 
     fn testi(tree: &UiNode) -> Vec<String> {
-        let UiNode::Stack { children, .. } = tree else {
+        let UiKind::Stack { children, .. } = &tree.kind else {
             panic!("il pannello è uno stack")
         };
         children
             .iter()
-            .map(|c| match c {
-                UiNode::Text { content } => content.clone(),
+            .map(|c| match &c.kind {
+                UiKind::Text { content } => content.clone(),
                 other => panic!("nodo inatteso: {other:?}"),
             })
             .collect()
@@ -219,7 +218,9 @@ mod tests {
                     text: "quattro cinque".into(),
                 })),
         ));
-        let tree = StatsView.render_view(STATS_VIEW, &host).unwrap();
+        let tree = StatsView
+            .render_view(&ViewInstance::only(STATS_VIEW), &host)
+            .unwrap();
         assert_eq!(
             testi(&tree),
             vec![
@@ -238,7 +239,11 @@ mod tests {
         host.set_active(Some("nota.md"));
         host.set_caret(Some(3));
         assert_eq!(
-            testi(&StatsView.render_view(STATS_VIEW, &host).unwrap()),
+            testi(
+                &StatsView
+                    .render_view(&ViewInstance::only(STATS_VIEW), &host)
+                    .unwrap()
+            ),
             vec!["2 parole · 10 caratteri".to_string()],
             "un cursore senza testo non è una selezione da contare"
         );
@@ -251,7 +256,11 @@ mod tests {
         host.set_selection(0, "una nota");
         host.set_mode(PaneMode::Reading);
         assert_eq!(
-            testi(&StatsView.render_view(STATS_VIEW, &host).unwrap()),
+            testi(
+                &StatsView
+                    .render_view(&ViewInstance::only(STATS_VIEW), &host)
+                    .unwrap()
+            ),
             vec![
                 "3 parole · 14 caratteri".to_string(),
                 "~1 min di lettura".to_string()
@@ -263,7 +272,11 @@ mod tests {
     fn without_a_document_it_says_so() {
         let host = MemoryHost::new();
         assert_eq!(
-            testi(&StatsView.render_view(STATS_VIEW, &host).unwrap()),
+            testi(
+                &StatsView
+                    .render_view(&ViewInstance::only(STATS_VIEW), &host)
+                    .unwrap()
+            ),
             vec!["Nessuna nota aperta.".to_string()]
         );
     }

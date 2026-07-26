@@ -15,8 +15,11 @@ import type {
   Selection,
   Span,
   TagCount,
+  FieldValue,
   TrashEntry,
+  UiAction,
   UiNode,
+  ViewInstance,
   VaultInfo,
   VersionRef,
   ViewContext,
@@ -59,15 +62,71 @@ function touchUiNode(n: UiNode): void {
     case "list":
       n.items.forEach(touchUiNode);
       return;
+    case "section":
+    case "tab":
+      n.children.forEach(touchUiNode);
+      return;
+    case "tree_item":
+      n.children.forEach(touchUiNode);
+      return;
+    case "table":
+      n.rows.forEach(touchUiNode);
+      return;
+    case "row":
+      n.cells.forEach(touchUiNode);
+      return;
+    case "tree":
+      n.roots.forEach(touchUiNode);
+      return;
+    case "tabs":
+      n.tabs.forEach(touchUiNode);
+      return;
+    case "form":
+      n.children.forEach(touchUiNode);
+      return;
+    case "custom":
+      n.fallback.forEach(touchUiNode);
+      return;
     case "text":
     case "heading":
     case "list_item":
     case "button":
     case "html":
     case "web_view":
+    case "badge":
+    case "icon":
+    case "progress":
+    case "separator":
+    case "empty_state":
+    case "key_value":
+    case "text_input":
+    case "text_area":
+    case "number":
+    case "checkbox":
+    case "select":
+    case "radio":
+    case "slider":
+    case "date_picker":
+    case "pending":
+    case "failed":
       return;
     default:
       assertNever(n);
+  }
+}
+
+/// Ogni specie di valore di campo dev'essere costruibile da questa parte: è la
+/// metà del §2.7 che la shell **scrive**, e un tipo nuovo in Rust che qui non
+/// arrivasse sarebbe un campo che il provider riceve vuoto.
+function touchUiValue(v: FieldValue["value"]): void {
+  switch (v.type) {
+    case "text":
+    case "number":
+    case "bool":
+    case "choices":
+      return;
+    default:
+      assertNever(v);
   }
 }
 
@@ -82,6 +141,9 @@ function touchViewUpdate(u: ViewUpdate): void {
     case "run_search":
     case "custom":
       return;
+    case "patch":
+      touchUiNode(u.node);
+      return;
     default:
       assertNever(u);
   }
@@ -95,6 +157,7 @@ function touchCommandEffect(e: CommandEffect): void {
     case "run_search":
     case "plan":
     case "custom":
+    case "open_view":
       return;
     default:
       assertNever(e);
@@ -144,6 +207,7 @@ function touchEvent(e: KernelEvent): void {
     case "overflow":
     case "custom":
     case "batch_ended":
+    case "view_invalidated":
       return;
     default:
       assertNever(e);
@@ -179,10 +243,21 @@ const RECORD_KEYS: Record<string, string[]> = {
   ViewSpec: keysOf<ViewSpec>({
     id: true,
     title: true,
-    placement: true,
+    surface: true,
     refresh: true,
     follows: true,
+    params: true,
+    icon: true,
+    order: true,
+    open_by_default: true,
+    preferred_size: true,
+    closable: true,
   }),
+  // L'esemplare vivo che la shell manda a ogni render (§2.3): la costruisce
+  // lei, quindi vale la stessa ragione del contesto di sessione — un campo
+  // dimenticato di qua è un errore di serde a runtime.
+  ViewInstance: keysOf<ViewInstance>({ view: true, instance: true, params: true }),
+  UiAction: keysOf<UiAction>({ action: true, payload: true, fields: true }),
   // Il contesto di sessione viaggia dalla shell al kernel: qui il mirror serve
   // due volte, perché un campo che il TS dimenticasse di mandare arriverebbe
   // `undefined` e serde lo rifiuterebbe a runtime, non in compilazione.
@@ -233,6 +308,8 @@ describe("mirror TS↔Rust", () => {
       "TrashEntry",
       "TagCount",
       "ViewSpec",
+      "ViewInstance",
+      "UiAction",
       "ViewContext",
       "Selection",
       "CommandSpec",
@@ -253,6 +330,24 @@ describe("mirror TS↔Rust", () => {
 
   it("ogni ViewUpdate prodotto da Rust è una variante gestita dal mirror", () => {
     for (const s of fixture.ViewUpdate) touchViewUpdate(s as ViewUpdate);
+  });
+
+  it("ogni specie di valore di campo prodotta da Rust è gestita dal mirror", () => {
+    const azioni = fixture.UiAction as UiAction[];
+    for (const a of azioni) a.fields.forEach((f) => touchUiValue(f.value));
+    // Il campione «tutte le specie» esiste apposta: senza, un `ui_value` nuovo
+    // passerebbe di qui senza essere toccato da nessuno.
+    const ricca = azioni.find((a) => a.fields.length > 1);
+    expect(ricca, "manca il campione con un campo per specie").toBeTruthy();
+    expect(ricca!.fields.map((f) => f.value.type)).toContain("choices");
+  });
+
+  it("la chiave viaggia accanto alla specie, non dentro", () => {
+    // È la forma su cui poggia il riconciliatore (§2.8): `key` è un campo del
+    // nodo, opzionale, e non un livello di annidamento in più.
+    const conChiave = (fixture.UiNode as UiNode[]).filter((n) => n.key !== undefined);
+    expect(conChiave.length, "manca un campione con la chiave").toBeGreaterThan(0);
+    for (const n of conChiave) expect(typeof n.key).toBe("string");
   });
 
   it("ogni KernelEvent prodotto da Rust è una variante gestita dal mirror", () => {

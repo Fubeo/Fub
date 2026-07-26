@@ -41,11 +41,12 @@ export function onEvent<T extends EventType>(type: T, handler: TypedHandler<T>):
 
 /// Iscrive un ascoltatore a **tutti** gli eventi.
 ///
-/// Serve a chi reagisce per *maschera dichiarata* invece che per tipo noto: le
-/// view del protocollo (`ViewSpec.refresh`) decidono a runtime, e l'elenco dei
-/// tipi che le interessano non lo conosce questa shell. È l'unico caso
-/// legittimo — un pannello che si iscrive qui per comodità sta ricostruendo il
-/// vecchio smistatore.
+/// Serve a chi reagisce per *maschera dichiarata* invece che per tipo noto:
+/// l'host dei pannelli (`ui/panel-host.ts`) chiama chi ha dichiarato interesse
+/// per quell'evento, e l'elenco dei tipi non lo conosce questa shell — per una
+/// view del protocollo lo porta il `ViewSpec` a runtime. È l'unico caso
+/// legittimo, e infatti l'unico chiamante: un pannello che si iscrive qui per
+/// comodità sta ricostruendo il vecchio smistatore.
 export function onAnyEvent(handler: (n: KernelNotice) => void): void {
   perQualsiasi.push(handler);
 }

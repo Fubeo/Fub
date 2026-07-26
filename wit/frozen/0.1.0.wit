@@ -367,21 +367,40 @@ interface ui {
         level: u8,
         content: string,
     }
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0016): l'azione di un
+    /// nodo era il solo `action-id`, e i dati che servivano a servire il click
+    /// ci finivano concatenati dentro (`open:a/Uno.md`) — una convenzione
+    /// privata delle tre feature ufficiali che stava diventando contratto de
+    /// facto. Ora porta un payload del provider (§2.7).
+    record action-ref {
+        action: action-id,
+        payload: json,
+    }
     record ui-list-item {
         title: string,
         subtitle: option<string>,
-        action: option<action-id>,
+        action: option<action-ref>,
+        /// È l'elemento CORRENTE? Non è stile: è l'unica cosa che una lista non
+        /// sa dire di sé, e senza chi ce l'ha se la scrive nel titolo — il §2.7
+        /// in un'altra forma.
+        selected: bool,
     }
     record ui-button {
         label: string,
         intent: intent,
-        action: action-id,
+        action: action-ref,
     }
     record ui-web-view {
         url: string,
         height: u32,
     }
-    variant ui-node {
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0016): `ui-node` era
+    /// questo `variant`, e ora è il record `{ key, kind }` che lo contiene. La
+    /// chiave è ciò su cui un riconciliatore lavora (§2.8): senza, l'identità di
+    /// un nodo è la sua posizione, e una lista che si riordina sposta il focus e
+    /// la selezione insieme alle righe — con i nodi di input del §2.1, un campo
+    /// di testo che si svuota a ogni salvataggio.
+    variant ui-kind {
         stack(ui-stack),
         text(string),
         heading(ui-heading),
@@ -393,6 +412,10 @@ interface ui {
         /// iniettare contenuto attivo nella webview principale.
         html(string),
         web-view(ui-web-view),
+    }
+    record ui-node {
+        key: option<string>,
+        kind: ui-kind,
     }
 
     /// Arena dell'albero UI: `root` indicizza `nodes`. Lato Rust è un
@@ -1009,15 +1032,31 @@ interface edit {
 /// View dichiarative (`ViewProvider`).
 interface view {
     use ui.{ui-tree, ui-action, view-update};
+    use json.{json};
     use events.{event-mask};
     use session.{context-mask};
     use errors.{plugin-error};
 
-    enum view-placement { left-sidebar, right-sidebar, bottom }
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0016): si chiamava
+    /// `view-placement`. Una voce di menu o una scheda di impostazioni non è un
+    /// *posto in un layout* ma una superficie a cui ci si attacca, e con tre
+    /// soli casi ogni capitolo grande di FEATURES doveva uscire dal contratto
+    /// per avere dove stare (§2.2). I tre di prima restano in testa e
+    /// nell'ordine: è lo stesso discriminante.
+    enum view-surface { left-sidebar, right-sidebar, bottom }
+    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0016): `render-view` e
+    /// `on-action` prendevano il solo id della view, quindi una view era
+    /// un esemplare unico e statico — niente "questa view, con questo
+    /// parametro" (§2.3).
+    record view-instance {
+        view: string,
+        instance: string,
+        params: json,
+    }
     record view-spec {
         id: string,
         title: string,
-        placement: view-placement,
+        surface: view-surface,
         /// Dichiarazione di interesse: gli eventi al cui arrivo la shell deve
         /// ridisegnare la view. Vuota = nessun ridisegno event-driven.
         refresh: event-mask,
@@ -1029,8 +1068,8 @@ interface view {
     }
 
     views: func() -> list<view-spec>;
-    render-view: func(view: string) -> result<ui-tree, plugin-error>;
-    on-action: func(view: string, action: ui-action) -> result<view-update, plugin-error>;
+    render-view: func(instance: view-instance) -> result<ui-tree, plugin-error>;
+    on-action: func(instance: view-instance, action: ui-action) -> result<view-update, plugin-error>;
 }
 
 /// Errore prodotto da un plugin (nativo o WASM).

@@ -8,7 +8,8 @@
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
 use fubmd_abi::session::{PaneMode, Selection, ViewContext};
-use fubmd_abi::ui::UiNode;
+use fubmd_abi::traits::ViewInstance;
+use fubmd_abi::ui::{UiKind, UiNode};
 use fubmd_features::{StatsView, STATS_ID, STATS_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Trust, Workspace, MAIN_PANE};
@@ -36,13 +37,13 @@ impl Vault {
 }
 
 fn testi(tree: &UiNode) -> Vec<String> {
-    let UiNode::Stack { children, .. } = tree else {
+    let UiKind::Stack { children, .. } = &tree.kind else {
         panic!("il pannello è uno stack")
     };
     children
         .iter()
-        .filter_map(|c| match c {
-            UiNode::Text { content } => Some(content.clone()),
+        .filter_map(|c| match &c.kind {
+            UiKind::Text { content } => Some(content.clone()),
             _ => None,
         })
         .collect()
@@ -67,7 +68,7 @@ fn the_selection_text_survives_a_dirty_buffer_where_a_span_would_not() {
             })),
     ));
     assert_eq!(
-        testi(&ws.render_view(STATS_VIEW).unwrap()),
+        testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
         vec![
             "4 parole · 18 caratteri".to_string(),
             "selezione: 3 parole · 21 caratteri".to_string()
@@ -83,7 +84,7 @@ fn the_selection_text_survives_a_dirty_buffer_where_a_span_would_not() {
             .with_mode(PaneMode::Reading),
     ));
     assert_eq!(
-        testi(&ws.render_view(STATS_VIEW).unwrap()),
+        testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
         vec![
             "4 parole · 18 caratteri".to_string(),
             "~1 min di lettura".to_string()
@@ -109,7 +110,7 @@ fn a_write_makes_the_kernel_drop_the_selection_under_it() {
     ws.write_document(&doc, "seconda versione, più lunga\n")
         .expect("riscrive");
     assert_eq!(
-        testi(&ws.render_view(STATS_VIEW).unwrap()),
+        testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
         vec!["4 parole · 28 caratteri".to_string()],
         "il sorgente sotto la selezione è cambiato: la selezione cade, e col \
          conteggio se ne va anche la riga che la mostrava"

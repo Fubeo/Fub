@@ -1,6 +1,7 @@
 {
   "UiNode": [
     {
+      "key": "k",
       "node": "stack",
       "dir": "column",
       "gap": 8,
@@ -23,13 +24,22 @@
       "node": "list_item",
       "title": "ti",
       "subtitle": "s",
-      "action": "a"
+      "action": {
+        "action": "a",
+        "payload": {
+          "doc": "a.md"
+        }
+      },
+      "selected": true
     },
     {
       "node": "button",
       "label": "b",
       "intent": "primary",
-      "action": "a"
+      "action": {
+        "action": "a",
+        "payload": null
+      }
     },
     {
       "node": "html",
@@ -39,6 +49,215 @@
       "node": "web_view",
       "url": "u",
       "height": 100
+    },
+    {
+      "node": "section",
+      "title": "s",
+      "collapsed": true,
+      "children": []
+    },
+    {
+      "node": "table",
+      "columns": [
+        {
+          "title": "c",
+          "align": "end"
+        }
+      ],
+      "rows": []
+    },
+    {
+      "node": "row",
+      "cells": [
+        {
+          "node": "text",
+          "content": "c"
+        }
+      ],
+      "action": {
+        "action": "a",
+        "payload": {
+          "doc": "a.md"
+        }
+      }
+    },
+    {
+      "node": "tree",
+      "roots": []
+    },
+    {
+      "node": "tree_item",
+      "label": "l",
+      "expanded": true,
+      "action": {
+        "action": "a",
+        "payload": {
+          "doc": "a.md"
+        }
+      },
+      "selected": false,
+      "children": []
+    },
+    {
+      "node": "tabs",
+      "active": 1,
+      "tabs": []
+    },
+    {
+      "node": "tab",
+      "label": "t",
+      "action": null,
+      "children": []
+    },
+    {
+      "node": "badge",
+      "label": "b",
+      "intent": "danger"
+    },
+    {
+      "node": "icon",
+      "name": "i"
+    },
+    {
+      "node": "progress",
+      "value": 0.5,
+      "label": "p"
+    },
+    {
+      "node": "separator"
+    },
+    {
+      "node": "empty_state",
+      "title": "vuoto",
+      "detail": "d",
+      "action": {
+        "action": "a",
+        "payload": {
+          "doc": "a.md"
+        }
+      }
+    },
+    {
+      "node": "key_value",
+      "entries": [
+        {
+          "label": "k",
+          "value": "v"
+        }
+      ]
+    },
+    {
+      "node": "text_input",
+      "field": "f",
+      "label": "l",
+      "value": "v",
+      "placeholder": "p",
+      "action": null
+    },
+    {
+      "node": "text_area",
+      "field": "f",
+      "label": null,
+      "value": "v",
+      "rows": 4,
+      "action": null
+    },
+    {
+      "node": "number",
+      "field": "f",
+      "label": null,
+      "value": 1.5,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.5,
+      "action": null
+    },
+    {
+      "node": "checkbox",
+      "field": "f",
+      "label": "l",
+      "value": true,
+      "action": null
+    },
+    {
+      "node": "select",
+      "field": "f",
+      "label": null,
+      "value": [
+        "u"
+      ],
+      "options": [
+        {
+          "value": "u",
+          "label": "Uno"
+        }
+      ],
+      "multiple": false,
+      "action": null
+    },
+    {
+      "node": "radio",
+      "field": "f",
+      "label": null,
+      "value": "u",
+      "options": [
+        {
+          "value": "u",
+          "label": "Uno"
+        }
+      ],
+      "action": null
+    },
+    {
+      "node": "slider",
+      "field": "f",
+      "label": null,
+      "value": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.1,
+      "action": null
+    },
+    {
+      "node": "date_picker",
+      "field": "f",
+      "label": null,
+      "value": "2026-07-26",
+      "action": null
+    },
+    {
+      "node": "form",
+      "children": [],
+      "submit_label": "Salva",
+      "submit": {
+        "action": "submit",
+        "payload": null
+      }
+    },
+    {
+      "node": "custom",
+      "ns": "p",
+      "payload": {
+        "x": 1
+      },
+      "fallback": [
+        {
+          "node": "text",
+          "content": "f"
+        }
+      ]
+    },
+    {
+      "node": "pending",
+      "label": "carico"
+    },
+    {
+      "node": "failed",
+      "message": "m",
+      "retry": {
+        "action": "riprova",
+        "payload": null
+      }
     }
   ],
   "ViewUpdate": [
@@ -72,6 +291,15 @@
       "kind": "custom",
       "ns": "p",
       "payload": null
+    },
+    {
+      "kind": "patch",
+      "key": "k",
+      "node": {
+        "key": "k",
+        "node": "text",
+        "content": "t"
+      }
     }
   ],
   "KernelEvent": [
@@ -119,6 +347,11 @@
         "a",
         "b"
       ]
+    },
+    {
+      "type": "view_invalidated",
+      "view": "v",
+      "instance": "v#2"
     }
   ],
   "KernelNotice": [
@@ -229,11 +462,57 @@
       "count": 2
     }
   ],
+  "UiAction": [
+    {
+      "action": "nuda",
+      "payload": null,
+      "fields": []
+    },
+    {
+      "action": "piena",
+      "payload": {
+        "doc": "a.md"
+      },
+      "fields": [
+        {
+          "field": "f0",
+          "value": {
+            "type": "text",
+            "value": "t"
+          }
+        },
+        {
+          "field": "f1",
+          "value": {
+            "type": "number",
+            "value": 1.5
+          }
+        },
+        {
+          "field": "f2",
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        },
+        {
+          "field": "f3",
+          "value": {
+            "type": "choices",
+            "value": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      ]
+    }
+  ],
   "ViewSpec": [
     {
       "id": "v",
       "title": "V",
-      "placement": "right_sidebar",
+      "surface": "right_sidebar",
       "refresh": [
         "index_updated",
         "batch_ended"
@@ -241,7 +520,37 @@
       "follows": [
         "document",
         "selection"
-      ]
+      ],
+      "params": [
+        {
+          "name": "tag",
+          "title": "Tag",
+          "description": "",
+          "kind": {
+            "kind": "text"
+          },
+          "required": false
+        }
+      ],
+      "icon": "tag",
+      "order": 2,
+      "open_by_default": false,
+      "preferred_size": 280,
+      "closable": true
+    }
+  ],
+  "ViewInstance": [
+    {
+      "view": "v",
+      "instance": "v",
+      "params": null
+    },
+    {
+      "view": "v",
+      "instance": "v#2",
+      "params": {
+        "tag": "rust"
+      }
     }
   ],
   "ViewContext": [
@@ -434,6 +743,16 @@
         "kind": "custom",
         "ns": "p",
         "payload": null
+      }
+    },
+    {
+      "notify": "fatto",
+      "effect": {
+        "kind": "open_view",
+        "view": "v",
+        "params": {
+          "tag": "rust"
+        }
       }
     }
   ]

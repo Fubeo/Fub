@@ -5,47 +5,161 @@ Un plugin (o una feature ufficiale) **descrive** la propria UI come albero
 **disegna** con i suoi componenti nativi. Risultato: temi coerenti, niente JS nei
 plugin, stessa strada per feature native e plugin di terzi.
 
-Definizione: `crates/fubmd-abi/src/ui.rs`. Renderer: `frontend/src/ui/node.ts`.
+Definizione: `crates/fubmd-abi/src/ui.rs`. Renderer e riconciliatore:
+`frontend/src/ui/node.ts`. Cosa è una view, e perché:
+[decisione 0016](../decisions/0016-cosa-e-una-view.md).
 
 Torna a [../PIANO.md](../PIANO.md) · vedi [traits.md](traits.md).
 
-## Nodi supportati
+## Un nodo è una chiave e una specie
 
-| Variante `UiNode` | Campi | Reso dal frontend come |
+`UiNode` è il record `{ key, kind }`. La **chiave** è l'identità del nodo
+attraverso due ridisegni: deve essere stabile e unica **fra i fratelli** (l'id di
+un documento, non l'indice nella lista), ed è ciò su cui il riconciliatore
+lavora. Senza, l'identità di un nodo è la sua posizione — e una lista che si
+riordina si porta dietro il focus e la selezione di qualcun altro. Chi non ha
+liste che si riordinano può ometterla.
+
+## Le specie di nodo
+
+**Struttura di base**
+
+| Specie | Campi | Reso dal frontend come |
 |---|---|---|
 | `Stack` | `dir: Axis`, `gap: u8`, `children` | `div` flex (row/column) |
 | `Text` | `content` | `div.ui-text` |
 | `Heading` | `level: u8`, `content` | `h1..h6` |
 | `List` | `items` | `div.ui-list` |
-| `ListItem` | `title`, `subtitle: Option`, `action: Option<ActionId>` | riga cliccabile |
-| `Button` | `label`, `intent: Intent`, `action: ActionId` | `button.intent-*` |
+| `ListItem` | `title`, `subtitle`, `action: Option<ActionRef>`, `selected` | riga cliccabile |
+| `Button` | `label`, `intent: Intent`, `action: ActionRef` | `button.intent-*` |
 | `Html` | `html` | `div.ui-html` (frammento già renderizzato) — **solo codice fidato** |
 | `WebView` | `url`, `height: u32` | `iframe` sandboxed (`allow-scripts`) — **solo codice fidato** |
 
+**Nodi strutturali**
+
+| Specie | Campi | Reso come |
+|---|---|---|
+| `Section` | `title`, `collapsed`, `children` | `details`/`summary` (la piega è della shell) |
+| `Table` | `columns: Vec<TableColumn>`, `rows` | `table` (le righe sono nodi: hanno una chiave) |
+| `Row` | `cells`, `action` | `tr` cliccabile |
+| `Tree` | `roots` | `div.ui-tree` |
+| `TreeItem` | `label`, `expanded`, `action`, `selected`, `children` | voce annidata |
+| `Tabs` | `active: u32`, `tabs` | linguette + corpo (cambiare scheda non disturba il provider) |
+| `Tab` | `label`, `action`, `children` | il corpo di una scheda |
+| `Badge` | `label`, `intent` | `span.ui-badge` |
+| `Icon` | `name` | icona del repertorio della shell; un nome ignoto non disegna nulla |
+| `Progress` | `value: Option<f32>`, `label` | `progress` (assente = indeterminato) |
+| `Separator` | — | `hr` |
+| `EmptyState` | `title`, `detail`, `action` | il vuoto, e cosa si può fare |
+| `KeyValue` | `entries` | `dl` |
+
+**Nodi di input.** Ognuno porta il `field` (la chiave sotto cui il valore torna
+in `UiAction::fields`), il `value` che il provider vuole vederci **adesso** — il
+protocollo resta senza stato lato shell — e un'`action` opzionale che scatta
+quando il valore si assesta.
+
+`TextInput`, `TextArea`, `Number`, `Checkbox`, `Select`, `Radio`, `Slider`,
+`DatePicker` (data civile ISO-8601: una stringa, non un istante — il tempo
+civile è il §12.3), e `Form { children, submit_label, submit }`, che inviando
+manda **tutti** i campi contenuti.
+
+**Il varco, e i due stati**
+
+| Specie | A cosa serve |
+|---|---|
+| `Custom { ns, payload, fallback }` | la shell che conosce `ns` disegna il suo widget, chi non lo conosce disegna il `fallback` dichiarativo |
+| `Pending { label }` | «non ancora»: il dato lo sta preparando qualcuno |
+| `Failed { message, retry }` | «non ce l'ho fatta», con l'invito a riprovare |
+
+`Pending`/`Failed` sono **nodi** e non risposte di `render_view` perché il caso
+normale è parziale: la testata c'è, la tabella arriva.
+
 Tipi di supporto: `Axis { Row, Column }`, `Intent { Neutral, Primary, Danger }`
 (i plugin scelgono **intenti semantici, non colori**: il tema è del core),
-`ActionId(String)`.
+`Align`, `ActionId(String)`, `ActionRef { action, payload }`,
+`UiValue { Text | Number | Bool | Choices }`, `FieldValue { field, value }`,
+`UiOption`, `KeyValueEntry`, `TableColumn`.
+
+## Chi mette cosa in un'azione
+
+Un'azione ha **due metà con due proprietari**, e nessuno dei due fonde l'oggetto
+dell'altro:
+
+- il **provider** attacca al nodo un `ActionRef`: l'id e il `payload` che gli
+  serve per riconoscere *su cosa* si è cliccato. Torna a lui intatto;
+- la **shell** riempie `UiAction::fields` con lo stato dei campi in vigore —
+  quelli del `Form` che contiene l'azione, o quelli della view intera fuori da un
+  form. Un campo dichiarato due volte compare una volta sola, con l'ultimo
+  valore.
+
+L'`ActionId` è quindi **opaco**: non è un canale dati. La convenzione privata di
+prima — i dati concatenati dentro l'id (`open:a/Uno.md`, `tag:rust`,
+`reveal:10:15`) — era una convenzione che stava diventando contratto de facto, e
+il prossimo provider avrebbe fatto string-concat perché era ciò che vedeva fare.
 
 ## Ciclo azione → aggiornamento
 
-1. Il frontend rende l'albero via `renderUiNode(node, onAction)`.
-2. Un click su `ListItem`/`Button` con `action` emette l'`ActionId` verso il
-   `ViewProvider` come `UiAction { action, payload }`.
-3. Il provider risponde con `ViewUpdate`:
-   - `Replace { root }` — rimpiazza l'intero albero della view;
+1. Il frontend monta l'albero via `mountTree(container, node, onAction)`: la
+   prima volta disegna, dalle successive **riconcilia**.
+2. Un click (o il cambio di un campo) manda al `ViewProvider`
+   `UiAction { action, payload, fields }`, insieme all'istanza che lo ha emesso.
+3. Il provider — che qui prende `&mut self`, e può quindi ricordare — risponde
+   con `ViewUpdate`:
+   - `Replace { root }` — rimpiazza l'albero della view (che la shell
+     riconcilia, non ricostruisce);
+   - `Patch { key, node }` — rimpiazza **il solo nodo** con quella chiave; una
+     chiave che non si trova non è un errore, è una view cambiata sotto;
    - `None` — nessun cambiamento;
    - `Navigate { doc_id }` — chiede al core di aprire un documento;
    - `Reveal { doc_id, span }` — apri (se serve) e porta la vista su un
      intervallo del documento; `span` è in byte UTF-8, il frontend lo mappa
      sull'editor col ponte in `frontend/src/rules/offsets.ts`;
-   - `RunSearch { query }` — esegui una ricerca e mostrane i risultati.
+   - `RunSearch { query }` — esegui una ricerca e mostrane i risultati;
+   - `Custom { ns, payload }` — intento che questa shell non prevede: chi non
+     riconosce `ns` non fa nulla.
 
-Questo giro è cablato nel renderer generico (`mountView` in `main.ts`) e servito
-dai comandi `render_view`/`view_action`/`set_active_context`. Lo esercitano i
-backlink (`open:<DocId>` → `Navigate`), l'outline (`reveal:<start>:<end>` →
-`Reveal` sull'heading) e il pannello tag (`tag:<nome>` → `RunSearch`).
+Il giro è servito dai comandi `render_view`/`view_action`/`set_active_context` e
+montato in `frontend/src/ui/views.ts`. Lo esercitano i backlink (`open` col
+`DocId` nel payload → `Navigate`), l'outline (`reveal` con lo span nel payload →
+`Reveal`), il pannello tag (`search` col tag nel payload → `RunSearch`, più il
+campo `filter` che è il collaudo dello stato) e le statistiche.
 
-## Quando una view invecchia: due maschere, non una
+## Le istanze: quale esemplare sta disegnando
+
+`render_view` e `on_action` ricevono una `ViewInstance { view, instance,
+params }`. `views()` resta un elenco **statico** di specie; un esemplare è
+un'altra cosa, e serve a dire *questa view, con questo parametro* — le viste
+multiple di un database, le viste salvate, le query embed parametriche, i task
+per tag / per cartella / per data.
+
+I `params` sono dichiarati in `ViewSpec::params` con gli **stessi `ParamSpec` dei
+comandi**, e la convalida è la stessa funzione (`command::validate_params`): chi
+apre una view da un comando e chi la apre a mano ricevono la stessa risposta
+sullo stesso argomento sbagliato. Il punto di applicazione è uno, il kernel, e il
+provider riceve parametri già buoni.
+
+Chi apre un'istanza è un comando (`CommandEffect::OpenView { view, params }`).
+La shell monta da sé l'**esemplare unico** di ogni view dichiarata: si chiama
+come la sua specie e non ha parametri.
+
+## Le superfici: dove una view si ancora
+
+`ViewSurface` ne nomina dieci: `LeftSidebar`, `RightSidebar`, `Bottom`, `Main`
+(l'area principale), `Modal`, `StatusBar`, `Ribbon`, `Menu`, `ContextMenu`,
+`SettingsTab`. Non è un modello di layout: dice **a cosa ci si attacca**, non
+come lo spazio è diviso.
+
+Questa shell ne ospita sei; area principale, menu, menu contestuale e scheda di
+impostazioni vogliono rispettivamente il modello di layout (feature 3.3), un menu
+applicativo, un menu contestuale estendibile e il pannello di impostazioni
+(§11.1). Una view che le chiede **riceve un avviso che la nomina** invece di
+sparire in silenzio.
+
+`ViewSpec` porta anche come si presenta: `icon`, `order` (crescente, i pari
+merito nell'ordine di registrazione), `open_by_default`, `preferred_size`
+(vale alla prima apertura) e `closable`.
+
+## Quando una view invecchia: due maschere e un invito
 
 `ViewSpec` dichiara `refresh: EventMask` **e** `follows: ContextMask`. La prima
 sono gli eventi del **vault** al cui arrivo serve un nuovo `render_view`; la
@@ -59,6 +173,16 @@ view da ridisegnare**: il conto lo fa il kernel, che conosce le `follows`. Senza
 questa metà del protocollo l'unica strada sarebbe ridisegnarle tutte a ogni
 movimento del cursore — cioè una `query_index` per battuta di tasto sul pannello
 tag e sulla vista a grafo.
+
+La terza strada è l'**invito**: un provider che finisce un lavoro lungo — un
+job, una risposta dalla rete, un calcolo — emette
+`Event::ViewInvalidated { view, instance }`. È un evento e non una capacità
+`invalidate_view` per la regola della
+[decisione 0013](../decisions/0013-elenco-delle-capacita.md): *una capacità è ciò
+di cui il chiamante ha bisogno della risposta per proseguire; ciò che si limita a
+informare è un evento*. `instance` assente = tutte le istanze. Il **freno** è di
+chi disegna: venti inviti in un giro sono un ridisegno, e la finestra è un
+microtask.
 
 Cosa dichiarano le quattro view ufficiali: i backlink solo `Document` (i
 backlink di una nota sono gli stessi da ogni punto di essa), l'outline
@@ -138,28 +262,39 @@ prestazioni il claim "le feature native sono di fatto plugin" va letto con
 questo limite dichiarato — finché `WebView` non apre ai terzi, un plugin non
 può costruire una graph view alternativa.
 
-## Dogfooding: il pannello backlink
+## Dogfooding: le quattro view ufficiali
 
-La prima feature ufficiale espressa nel protocollo è il pannello backlink
-(`crates/fubmd-features/src/backlinks.rs`): `build_backlinks_view(&[BacklinkRef])
--> UiNode` produce uno `Stack` con un `Heading` ("N backlink") e una `List` di
-`ListItem` (titolo = `page_name`, sottotitolo = contesto, azione =
-`open:<DocId>`). È esattamente la strada che percorrerà un plugin di terzi: se il
-protocollo è insufficiente per le feature ufficiali, lo è anche per i plugin — per
-questo lo si tiene "affamato" e lo si estende solo su necessità reale.
+Sono la strada che percorrerà un plugin di terzi: se il protocollo è
+insufficiente per le feature ufficiali, lo è anche per i plugin — per questo lo
+si tiene "affamato" e lo si estende solo su necessità reale. Ognuna esercita una
+parte diversa, ed è così che si è scoperto se regge:
+
+- **backlink** (`backlinks.rs`) — il payload al posto della concatenazione
+  nell'id, e la **chiave** su ogni riga (il `DocId` sorgente);
+- **outline** (`outline.rs`) — un `Tree` vero. Prima la gerarchia degli heading
+  si vedeva rientrando il titolo con uno spazio EM: la struttura di un documento
+  attraversava il confine come *spaziatura*. E «figlio» è *di livello maggiore*,
+  non *di livello esattamente uno in più* — una nota che salta un livello non
+  deve perdere heading;
+- **tag** (`tags.rs`) — un **filtro**: un campo di testo il cui contenuto
+  sopravvive fra due render, cioè il collaudo dello stato su `on_action` e del
+  riconciliatore insieme;
+- **statistiche** (`stats.rs`) — il primo cliente di una superficie nuova, la
+  barra di stato.
 
 ## Evoluzione prevista
 
 - **M2** — nuove view (`ViewProvider`): outline panel, tag panel; nuovi `UiNode`
   solo se una di queste li richiede (candidati: input di ricerca, tree-node).
-- **M3** — form dichiarativi per i settings: probabile aggiunta di nodi input
-  (text/toggle/select) al protocollo, congelati poi a [M4](../milestones/M4-wit-hardening.md).
-  **Vincolo già deciso:** `ViewUpdate::Replace` rimpiazza l'albero, e un albero
-  con input non può perdere lo stato locale (focus, testo a metà digitazione,
-  scroll) a ogni update. I nodi input avranno un **`id` stabile** e il renderer
-  **riconcilia per id** (aggiorna il DOM esistente invece di ricrearlo) — la
-  semantica di `Replace` resta l'unica del protocollo, ma il rendering è una
-  riconciliazione, non una ricostruzione. Da fissare con i nodi input a M3,
-  prima del freeze.
+- **Fatto (decisione 0016)** — i nodi di input, le superfici, le istanze, lo
+  stato su `on_action`, il «non ancora», i metadati della `ViewSpec`, il payload
+  delle azioni e la chiave col riconciliatore. Il vincolo che questa sezione
+  dichiarava — «un albero con input non può perdere lo stato locale a ogni
+  update» — è mantenuto così: la chiave sta **sul nodo** (non un `id` a parte),
+  `mountTree` riconcilia invece di ricostruire, e un campo che ha il focus non
+  si sovrascrive col valore del provider.
+- **Resta aperto** — la virtualizzazione delle liste lunghe
+  ([§2.9](../roadmap/02-cosa-e-una-view.md)) e il ramo «la shell conosce `ns`» di
+  `Custom`, che arriverà col suo primo cliente.
 - Ogni nuovo `UiNode` deve restare esprimibile in WIT (vedi la tabella in
   [traits.md](traits.md)).

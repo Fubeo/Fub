@@ -231,7 +231,8 @@ comando (22.4).
 
 `ParamKind { Text, Number, Bool, Document, Documents, Choice(Vec<Choice>) }` è un
 vocabolario chiuso e piccolo: le specie che un chiamante qualunque sa produrre.
-**Non** sono i nodi di input del §2.1 — questi dicono *cosa* è un valore, quelli
+**Non** sono i nodi di input del protocollo di UI — questi dicono *cosa* è un
+valore, quelli
 diranno *come* lo si chiede; quando arriveranno saranno la resa di un
 `ParamSpec`, non un secondo modo di dichiararlo.
 

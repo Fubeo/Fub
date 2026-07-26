@@ -18,7 +18,8 @@ import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
 import { notify } from "./ui/notify";
 import { findByBinding, openCommandPalette, startCommand } from "./ui/palette";
-import { mountDeclaredViews, mountViewHost } from "./ui/views";
+import { mountPanelHost } from "./ui/panel-host";
+import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
 import {
   closeDocument,
   mountDocument,
@@ -27,7 +28,7 @@ import {
   setMode,
 } from "./panels/document";
 import { mountExplorer } from "./panels/explorer";
-import { openGraph } from "./panels/graph";
+import { mountGraph } from "./panels/graph";
 import { mountHistory } from "./panels/history";
 import { configurePreview } from "./panels/preview";
 import { clearSearch, mountSearch, searchFor } from "./panels/search";
@@ -46,24 +47,33 @@ async function init(): Promise<void> {
   state.mode = loadMode();
   document.body.dataset.mode = state.mode;
 
-  // I due collegamenti iniettati, e la ragione per cui lo sono: il pannello del
+  // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
   // documento mostra l'anteprima (in Lettura) e l'anteprima apre i documenti;
   // il pannello del documento manda a cercare un tag e la ricerca apre i
-  // documenti. In entrambi i casi importarsi a vicenda sarebbe un ciclo, e in
-  // un bundle ESM un ciclo è un `undefined` all'avvio che non dice da dove
-  // viene. È la stessa forma con cui i tre moduli dell'editor ricevono il
-  // mondo.
+  // documenti; il grafo apre la nota di un nodo. In tutti i casi importarsi a
+  // vicenda sarebbe un ciclo, e in un bundle ESM un ciclo è un `undefined`
+  // all'avvio che non dice da dove viene. È la stessa forma con cui i tre
+  // moduli dell'editor ricevono il mondo.
   mountDocument({ searchTag: (tag) => searchFor(`tags:${tag}`) });
   configurePreview({ openPage: openWikilink });
 
-  mountViewHost();
+  // L'host dei pannelli per primo: da qui in poi ogni pannello — nativo o
+  // dichiarato dal backend — si presenta al registro invece di iscriversi da
+  // sé agli eventi, ed è l'host a decidere quando ridisegnarlo (§1.2).
+  mountPanelHost();
+  // L'invito a ridisegnare che arriva da un provider (§2.5): sta accanto
+  // all'host dei pannelli perché è l'altra metà della stessa domanda — quando
+  // una view è invecchiata. Una la dichiara la view (`refresh`/`follows`),
+  // l'altra la dice il provider quando ha finito qualcosa che il vault non
+  // vede.
+  mountViewInvalidation();
   mountExplorer();
   mountSearch();
   mountTrash();
   mountHistory();
+  mountGraph({ openNote: (id) => void openDocument(id) });
 
   $("#open-vault").addEventListener("click", () => void pickVault());
-  $("#show-graph").addEventListener("click", () => openGraph(state.currentDoc, openDocument));
 
   // La tastiera dei comandi, in un punto solo: la palette, e le scorciatoie
   // che i comandi **dichiarano**. La shell non ne cabla nessuna — se un domani

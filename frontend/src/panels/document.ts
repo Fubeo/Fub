@@ -275,8 +275,9 @@ function paneContext(): ViewContext {
 }
 
 /// Pubblica il contesto e annuncia **quali** view il kernel ha dichiarato
-/// invecchiate. Chi le ridisegna è `ui/views.ts`: il verso passa dal bus e non
-/// da una chiamata, perché quel modulo, per montarle, dipende già da questo.
+/// invecchiate. Chi le ridisegna è l'host dei pannelli (`ui/panel-host.ts`): il
+/// verso passa dal bus e non da una chiamata, perché la catena che le monta
+/// dipende già da questo modulo.
 export async function publishContext(): Promise<void> {
   window.clearTimeout(contextTimer);
   try {

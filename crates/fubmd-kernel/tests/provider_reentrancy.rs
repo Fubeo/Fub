@@ -17,8 +17,8 @@ use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{EventMask, Notice};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{EventHandler, HostApi, ViewPlacement, ViewProvider, ViewSpec};
-use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::traits::{EventHandler, HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Trust, Workspace};
 
@@ -84,24 +84,24 @@ struct WritingView(Log);
 
 impl ViewProvider for WritingView {
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec {
-            id: "scrivente".into(),
-            title: "Scrivente".into(),
-            placement: ViewPlacement::RightSidebar,
-            refresh: EventMask::default(),
-            follows: Default::default(),
-        }]
+        vec![ViewSpec::new(
+            "scrivente",
+            "Scrivente",
+            ViewSurface::RightSidebar,
+        )]
     }
 
-    fn render_view(&self, _view: &str, _host: &dyn HostApi) -> Result<UiNode, PluginError> {
-        Ok(UiNode::Text {
-            content: "ok".into(),
-        })
+    fn render_view(
+        &self,
+        _instance: &ViewInstance,
+        _host: &dyn HostApi,
+    ) -> Result<UiNode, PluginError> {
+        Ok(UiNode::text("ok"))
     }
 
     fn on_action(
-        &self,
-        _view: &str,
+        &mut self,
+        _instance: &ViewInstance,
         _action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
@@ -132,14 +132,8 @@ fn events_emitted_inside_on_action_are_delivered_after_the_call_returns() {
         Box::new(WritingView(log.clone())),
     );
 
-    ws.view_action(
-        "scrivente",
-        UiAction {
-            action: ActionId("scrivi".into()),
-            payload: serde_json::Value::Null,
-        },
-    )
-    .expect("l'azione riesce");
+    ws.view_action(&ViewInstance::only("scrivente"), UiAction::new("scrivi"))
+        .expect("l'azione riesce");
 
     let log = log.lock().unwrap();
     let fine = log

@@ -56,7 +56,7 @@ use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTar
 use fubmd_abi::session::{ContextMask, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
-    JobId, JobSpec, Paged, ViewProvider, ViewSpec,
+    JobId, JobSpec, Paged, ViewInstance, ViewProvider, ViewSpec,
 };
 use fubmd_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -1512,14 +1512,15 @@ impl Workspace {
     /// della chiamata, quindi durante il render vede il mondo intero — indici
     /// e view registrate compresi. La mutilazione del mondo osservabile resta
     /// confinata ai callback in scrittura (vedi il doc di `HostApi`).
-    pub fn render_view(&self, view: &str) -> std::result::Result<UiNode, PluginError> {
-        let at = self.view_owner(view)?;
+    pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
+        let at = self.view_owner(&instance.view)?;
         let (id, trust, provider) = &self.views[at];
+        self.check_params(at, instance)?;
         let host = ReadHost {
             ws: self,
             plugin: id,
         };
-        let tree = provider.render_view(view, &host)?;
+        let tree = provider.render_view(instance, &host)?;
         guard_ui(*trust, &tree)?;
         Ok(tree)
     }
@@ -1532,10 +1533,11 @@ impl Workspace {
     /// rendering.
     pub fn view_action(
         &mut self,
-        view: &str,
+        instance: &ViewInstance,
         action: UiAction,
     ) -> std::result::Result<ViewUpdate, PluginError> {
-        let at = self.view_owner(view)?;
+        let at = self.view_owner(&instance.view)?;
+        self.check_params(at, instance)?;
         let mut views = std::mem::take(&mut self.views);
         // Il flag rimanda il dispatch: se il provider scrive via `HostApi`
         // dentro `on_action`, gli handler NON girano nel suo frame — girano
@@ -1549,7 +1551,7 @@ impl Workspace {
                 plugin: id,
                 mode: InvokeMode::Apply,
             };
-            (provider.on_action(view, action, &mut host), *trust)
+            (provider.on_action(instance, action, &mut host), *trust)
         });
         self.restore_views(views);
         let update = updated?;
@@ -1560,6 +1562,26 @@ impl Workspace {
         // chiamata del provider è tornata: è il contratto di consegna.
         self.dispatch_pending();
         Ok(update)
+    }
+
+    /// I parametri di questa istanza reggono la spec della sua view?
+    ///
+    /// È l'unico punto di convalida, e sta qui per la stessa ragione per cui ci
+    /// stanno gli argomenti di un comando: uno schema che a farlo rispettare è
+    /// chi lo pubblica non è uno schema, è un commento. Il provider riceve
+    /// `params` già buoni e non deve difendersi da chi apre.
+    fn check_params(
+        &self,
+        at: usize,
+        instance: &ViewInstance,
+    ) -> std::result::Result<(), PluginError> {
+        let (_, _, provider) = &self.views[at];
+        let spec = provider
+            .views()
+            .into_iter()
+            .find(|spec| spec.id == instance.view)
+            .ok_or_else(|| PluginError::UnknownView(instance.view.clone()))?;
+        spec.validate_params(&instance.params)
     }
 
     /// Chi possiede una view, per posizione. `UnknownView` se nessuno.

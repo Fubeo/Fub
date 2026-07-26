@@ -18,7 +18,8 @@ successiva, e quella che è *datata* — cioè che non riguarda ciò che scriver
 ma ciò che abbiamo già pubblicato.
 
 Nota di rotta: le voci con l'effetto leva più alto sono **[decisione 0009](../decisions/0009-registro-dei-comandi.md) (comandi —
-fatta)**, **§2.1 (input in `UiNode`)** e **§9.3 (registry + job)** — insieme
+fatta)**, **[decisione 0016](../decisions/0016-cosa-e-una-view.md) (i nodi di
+input in `UiNode` — fatta)** e **§9.3 (registry + job)** — insieme
 spostano dal "cablato nell'app" al "registrato" praticamente ogni capitolo di
 FEATURES dal 4 al 22, e sono le tre che il freeze di M4 rende definitive. Accanto a quelle, dal
 secondo giro: **[decisione 0007](../decisions/0007-contesto-di-sessione.md) (contesto e selezione)**, senza cui metà dei capitoli 4, 13
@@ -27,10 +28,13 @@ prerequisito silenzioso di bulk fix, import, automazioni e database; e **§7.2 +
 sono il posto dove ogni famiglia di provider futura atterra senza portarsi
 dietro la propria copia della disciplina.
 
-Dal terzo giro se ne aggiungono due dello stesso peso. **§2.2 (le superfici)**:
-senza area principale, status bar, ribbon e menu nel contratto, i capitoli 11,
-12, 7.3, 10.3 e 11.5 — cioè la metà di FEATURES per volume — non hanno un posto
-dove atterrare, e ognuno ripeterà la scappatoia che il grafo ha già fatto.
+Dal terzo giro se ne aggiungono due dello stesso peso. **Le superfici
+([decisione 0016](../decisions/0016-cosa-e-una-view.md) — fatta)**: senza area
+principale, status bar, ribbon e menu nel contratto, i capitoli 11, 12, 7.3,
+10.3 e 11.5 — cioè la metà di FEATURES per volume — non avevano un posto dove
+atterrare, e ognuno avrebbe ripetuto la scappatoia che il grafo ha già fatto.
+Ora il contratto le nomina; **ospitarle** tutte è un'altra cosa, ed è il modello
+di layout del §1.2.
 **[decisione 0008](../decisions/0008-modifica-chirurgica.md) (la primitiva di edit)**: finché l'unico modo di cambiare un documento è
 riscriverlo tutto, ogni feature che tocca il testo perde cursore, selezione e
 undo, e due di loro non si possono comporre — è il prerequisito silenzioso della
@@ -51,11 +55,12 @@ capitolo 21 descrive crate linkati e non moduli installabili separatamente, e
 **§8.1 (la scomposizione del `Workspace`)**, che è il posto dove tutte le altre
 voci di questo piano andranno ad atterrare — una alla volta, come campi.
 
-Dal quinto giro se ne aggiungono due. **§2.4 + §2.5 (una view che non ha stato e non può
-chiedere di ridisegnarsi)**: sono due firme che insieme dicono che una view è una
-funzione pura sincrona, e su quella forma non regge nulla di interattivo né di
-asincrono — cioè i capitoli 11, 12, 11.5 e 22, gli stessi che il §2.2 sta
-cercando un posto dove mettere. **§7.4 (gli spazi di nomi degli id)**: non è la
+Dal quinto giro se ne aggiungono due. **Una view che non ha stato e non può
+chiedere di ridisegnarsi ([decisione 0016](../decisions/0016-cosa-e-una-view.md)
+— fatta)**: erano due firme che insieme dicevano che una view è una funzione
+pura sincrona, e su quella forma non reggeva nulla di interattivo né di
+asincrono — cioè i capitoli 11, 12, 11.5 e 22, gli stessi che le superfici
+stavano cercando dove mettere. **§7.4 (gli spazi di nomi degli id)**: non è la
 più grande, è la più **datata** — è l'unica voce dell'intero piano che non
 riguarda ciò che scriveremo ma ciò che avremo già pubblicato, e il suo costo non
 si misura in lavoro ma in id di terzi da rinominare.

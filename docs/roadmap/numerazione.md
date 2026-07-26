@@ -10,7 +10,10 @@ I messaggi di commit, i commenti nel codice e i documenti di architettura
 nominano i numeri vecchi. Questa tabella li traduce, e non va rinumerata: è
 l'unico posto del repo dove i numeri vecchi restano validi.
 
-**Voci chiuse** — il verbale sta in [docs/decisions/](../decisions/README.md):
+**Voci chiuse** — il verbale sta in [docs/decisions/](../decisions/README.md).
+Dove la riga ne porta due, il primo è il numero del primo giro e il secondo
+quello della riorganizzazione in sedute: una voce chiusa dopo la
+riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 
 | Vecchio | Decisione |
 |---|---|
@@ -27,6 +30,14 @@ l'unico posto del repo dove i numeri vecchi restano validi.
 | §2.21 | [0004 — Il grafo e i link non-wiki](../decisions/0004-il-grafo-e-i-link-non-wiki.md) |
 | §3.11 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §3.13 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
+| §1.2 · §2.1 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
+| §1.14 · §2.2 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
+| §1.15 · §2.3 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
+| §1.30 · §2.4 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
+| §1.31 · §2.5 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
+| §1.32 · §2.6 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
+| §1.33 · §2.7 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
+| §3.9 · §2.8 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -35,14 +46,11 @@ l'unico posto del repo dove i numeri vecchi restano validi.
 
 | Vecchio | Nuovo | Voce |
 |---|---|---|
-| §1.2 | **§2.1** | `UiNode` — senza input, metà di FEATURES non è dichiarativa |
 | §1.3 | **§11.1** | Impostazioni e spegnibilità — oggi sono variabili d'ambiente |
 | §1.8 | **§12.1** | Stringhe e localizzazione al confine — decisione, non implementazione |
 | §1.10 | **§13.1** | Identità del documento — il path, e l'eventuale seconda chiave |
 | §1.11 | **§12.2** | Errori tipizzati al confine, non `String` |
 | §1.13 | **§4.1** | Il canale del rendering — stringa HTML o modello? |
-| §1.14 | **§2.2** | Le superfici della UI sono tre, e chiuse |
-| §1.15 | **§2.3** | Le view non si istanziano |
 | §1.17 | **§13.3** | L'undo non ha un proprietario |
 | §1.19 | **§10.1** | L'abbonamento agli eventi non filtra |
 | §1.20 | **§3.4** | `ParseContext` è chiuso, e `parse` vuole per forza del testo |
@@ -55,10 +63,6 @@ l'unico posto del repo dove i numeri vecchi restano validi.
 | §1.27 | **§5.5** | `list_documents` e `views()` — le metà nel contratto di §2.13 e §1.15 |
 | §1.28 | **§4.2** | Il modello parsato non arriva a nessun provider |
 | §1.29 | **§4.3** | Il contratto non dice di che formato è un documento |
-| §1.30 | **§2.4** | Un `ViewProvider` non può avere stato: la firma glielo vieta |
-| §1.31 | **§2.5** | Una view non può chiedere di essere ridisegnata, né dire "sto caricando" |
-| §1.32 | **§2.6** | `ViewSpec` non dice come si presenta |
-| §1.33 | **§2.7** | `UiAction.payload` esiste e non lo usa nessuno |
 | §1.34 | **§7.4** | Gli id non sono di nessuno: nessuna regola di namespace, nessuna collisione |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §1.37 | **§6.1** | Le regole che il contratto promette vivono nel kernel, private |
@@ -99,7 +103,6 @@ l'unico posto del repo dove i numeri vecchi restano validi.
 | §3.6 | **§2.9** | Prestazioni della UI |
 | §3.7 | **§18.1** | Editor |
 | §3.8 | **§4.4** | Due parser per la stessa sintassi |
-| §3.9 | **§2.8** | Il view host ridisegna tutto, e i nodi non hanno una chiave |
 | §3.10 | **§11.2** | Tre stati diversi, zero contenitori |
 | §3.12 | **§3.3** | La UI di un plugin non ha modo di entrare nella shell |
 | §4.1 | **§16.5** | Mirror TS↔Rust generati, non scritti |

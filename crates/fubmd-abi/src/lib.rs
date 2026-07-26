@@ -56,11 +56,15 @@ pub use traits::{
     BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,
     HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged,
     Plugin, PluginManifest, PropertyCount, PropertyEntry, PropertyFilter, PropertySort,
-    PropertyTest, SearchHit, SearchScope, TrashEntry, ViewProvider, ViewSpec,
+    PropertyTest, SearchHit, SearchScope, TrashEntry, ViewInstance, ViewProvider, ViewSpec,
+    ViewSurface,
 };
 pub use transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
     ExportTarget, ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest,
     ImportSource, ImportedDocument, NoteLevel, TransferNote,
 };
-pub use ui::{ActionId, UiAction, UiNode, ViewUpdate};
+pub use ui::{
+    ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,
+    UiKind, UiNode, UiOption, UiValue, ViewUpdate,
+};

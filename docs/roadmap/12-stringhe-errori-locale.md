@@ -87,7 +87,9 @@ applicato, lascia fuori tre cose:
       [decisione 0014](../decisions/0014-i-verbali-fuori-da-todo.md), *«una
       promessa senza presidio meccanico decade»* — e un presidio senza la passata
       non ha niente da tenere fermo. **Vanno prese nella stessa seduta, in
-      quest'ordine**, e dopo che il §2.1/§2.2/§2.6 hanno fissato di che forma
-      sono i pannelli: prima di allora il check presidierebbe una resa che sta
-      per essere sostituita.
+      quest'ordine**. Di che forma siano i pannelli è ormai fissato — la
+      [decisione 0016](../decisions/0016-cosa-e-una-view.md) ha chiuso nodi,
+      superfici e metadati —, quindi il vincolo che teneva ferma questa voce non
+      c'è più: prima, un check scritto avrebbe presidiato una resa che stava per
+      essere sostituita.
 - [ ] **Catalogo stringhe** e `t()` (dipende dalla decisione del §12.1).

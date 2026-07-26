@@ -115,9 +115,10 @@ outline compila un motore di ricerca. La seconda va dopo il §16.2, o i venti
 bundle di 21.2 si portano dietro venti copie del banco di prova.
 
 Anche `frontend/` è un albero, non un elenco di file, ed è stato dichiarato
-prima che il §2.1 ci riversi venti nodi nuovi: la mappa sta in
-[architecture/shell.md](architecture/shell.md), il perché nella
-[decisione 0015](decisions/0015-la-forma-della-shell.md).
+**prima** che la seduta 2 ci riversasse venticinque specie di nodo nuove: la
+mappa sta in [architecture/shell.md](architecture/shell.md), il perché nella
+[decisione 0015](decisions/0015-la-forma-della-shell.md), e cosa ci è atterrato
+sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
 
 ## Mappa dei documenti
 

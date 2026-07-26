@@ -24,8 +24,10 @@ fn open_sample() -> Workspace {
 
 /// Una copia usa-e-getta del vault di esempio.
 ///
-/// I test che *creano* file passano di qui: il fixture lo leggono tutti gli
-/// altri, e una nota dimenticata dentro lo farebbe mentire.
+/// **Ogni test che tocca il disco passa di qui** — crei un file o ne modifichi
+/// uno che c'è già. Il fixture lo leggono tutti gli altri, in parallelo: una
+/// nota dimenticata dentro lo farebbe mentire, e una modifica *temporanea* lo fa
+/// mentire lo stesso, per la durata della finestra in cui è in piedi.
 fn open_scratch() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
@@ -103,22 +105,28 @@ fn renders_preview_with_wikilink_data_attrs() {
 
 #[test]
 fn edit_updates_graph_and_backlinks() {
-    let mut ws = open_sample();
+    // Sulla **copia**, non sul fixture: questo test scrive, e i test di questo
+    // binario girano in parallelo. Scriveva sul fixture condiviso ripristinando
+    // il contenuto alla fine — che non è una difesa, perché nella finestra fra
+    // la scrittura e il ripristino chi legge lo stesso file legge un vault
+    // diverso da quello che si aspetta. Il sintomo era
+    // `computes_backlinks_with_context` rosso circa una volta su cinque, senza
+    // che nulla nel suo codice fosse cambiato: il difetto peggiore, quello che
+    // si prende per rumore e si rilancia finché passa.
+    let (_scratch, mut ws) = open_scratch();
     let daily = DocId::new("Daily/2026-07-24.md");
     // Prima: Daily non punta a index.
     assert!(!ws
         .backlinks(&DocId::new("index.md"))
         .iter()
         .any(|r| r.source == daily));
-    // Scrive un nuovo contenuto che aggiunge un link a index (poi ripristina).
-    let original = ws.read_source(&daily).unwrap();
+    // Scrive un nuovo contenuto che aggiunge un link a index.
     ws.write_document(&daily, "# Diario\n\nAdesso punto a [[index]].\n")
         .unwrap();
     assert!(ws
         .backlinks(&DocId::new("index.md"))
         .iter()
         .any(|r| r.source == daily));
-    ws.write_document(&daily, &original).unwrap();
 }
 
 #[test]

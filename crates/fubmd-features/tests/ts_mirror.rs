@@ -29,68 +29,266 @@ use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
-use fubmd_abi::traits::{BacklinkRef, JobId, SearchHit, TagCount, ViewPlacement, ViewSpec};
-use fubmd_abi::ui::{ActionId, Axis, Intent, UiNode, ViewUpdate};
+use fubmd_abi::traits::{
+    BacklinkRef, JobId, SearchHit, TagCount, ViewInstance, ViewSpec, ViewSurface,
+};
+use fubmd_abi::ui::{
+    ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
+    UiNode, UiOption, UiValue, ViewUpdate,
+};
 use fubmd_features::VersionRef;
 use fubmd_kernel::TrashEntry;
 use serde_json::{json, Value};
 
-/// Un campione per **ogni** variante di `UiNode`. L'esaustività la garantisce il
-/// `match` senza `_`: aggiungere una variante non compila finché non è qui.
+/// Un campione per **ogni** specie di nodo. L'esaustività la garantisce il
+/// `match` senza `_`: aggiungerne una non compila finché non è qui.
 fn ui_node_samples() -> Vec<Value> {
+    let azione = || Some(ActionRef::with("a", json!({"doc": "a.md"})));
     let all = [
-        UiNode::Stack {
+        UiKind::Stack {
             dir: Axis::Column,
             gap: 8,
             children: vec![],
         },
-        UiNode::Text {
+        UiKind::Text {
             content: "t".into(),
         },
-        UiNode::Heading {
+        UiKind::Heading {
             level: 2,
             content: "h".into(),
         },
-        UiNode::List { items: vec![] },
-        UiNode::ListItem {
+        UiKind::List { items: vec![] },
+        UiKind::ListItem {
             title: "ti".into(),
             subtitle: Some("s".into()),
-            action: Some(ActionId("a".into())),
+            action: azione(),
+            selected: true,
         },
-        UiNode::Button {
+        UiKind::Button {
             label: "b".into(),
             intent: Intent::Primary,
-            action: ActionId("a".into()),
+            action: ActionRef::new("a"),
         },
-        UiNode::Html { html: "<i>".into() },
-        UiNode::WebView {
+        UiKind::Html { html: "<i>".into() },
+        UiKind::WebView {
             url: "u".into(),
             height: 100,
         },
+        UiKind::Section {
+            title: "s".into(),
+            collapsed: true,
+            children: vec![],
+        },
+        UiKind::Table {
+            columns: vec![TableColumn::aligned("c", Align::End)],
+            rows: vec![],
+        },
+        UiKind::Row {
+            cells: vec![UiNode::text("c")],
+            action: azione(),
+        },
+        UiKind::Tree { roots: vec![] },
+        UiKind::TreeItem {
+            label: "l".into(),
+            expanded: true,
+            action: azione(),
+            selected: false,
+            children: vec![],
+        },
+        UiKind::Tabs {
+            active: 1,
+            tabs: vec![],
+        },
+        UiKind::Tab {
+            label: "t".into(),
+            action: None,
+            children: vec![],
+        },
+        UiKind::Badge {
+            label: "b".into(),
+            intent: Intent::Danger,
+        },
+        UiKind::Icon { name: "i".into() },
+        UiKind::Progress {
+            value: Some(0.5),
+            label: Some("p".into()),
+        },
+        UiKind::Separator,
+        UiKind::EmptyState {
+            title: "vuoto".into(),
+            detail: Some("d".into()),
+            action: azione(),
+        },
+        UiKind::KeyValue {
+            entries: vec![KeyValueEntry {
+                label: "k".into(),
+                value: "v".into(),
+            }],
+        },
+        UiKind::TextInput {
+            field: "f".into(),
+            label: Some("l".into()),
+            value: "v".into(),
+            placeholder: Some("p".into()),
+            action: None,
+        },
+        UiKind::TextArea {
+            field: "f".into(),
+            label: None,
+            value: "v".into(),
+            rows: 4,
+            action: None,
+        },
+        UiKind::Number {
+            field: "f".into(),
+            label: None,
+            value: Some(1.5),
+            min: Some(0.0),
+            max: Some(2.0),
+            step: Some(0.5),
+            action: None,
+        },
+        UiKind::Checkbox {
+            field: "f".into(),
+            label: "l".into(),
+            value: true,
+            action: None,
+        },
+        UiKind::Select {
+            field: "f".into(),
+            label: None,
+            value: vec!["u".into()],
+            options: vec![UiOption::new("u", "Uno")],
+            multiple: false,
+            action: None,
+        },
+        UiKind::Radio {
+            field: "f".into(),
+            label: None,
+            value: Some("u".into()),
+            options: vec![UiOption::new("u", "Uno")],
+            action: None,
+        },
+        UiKind::Slider {
+            field: "f".into(),
+            label: None,
+            value: 0.5,
+            min: 0.0,
+            max: 1.0,
+            step: 0.1,
+            action: None,
+        },
+        UiKind::DatePicker {
+            field: "f".into(),
+            label: None,
+            value: Some("2026-07-26".into()),
+            action: None,
+        },
+        UiKind::Form {
+            children: vec![],
+            submit_label: "Salva".into(),
+            submit: ActionRef::new("submit"),
+        },
+        UiKind::Custom {
+            ns: "p".into(),
+            payload: json!({"x": 1}),
+            fallback: vec![UiNode::text("f")],
+        },
+        UiKind::Pending {
+            label: Some("carico".into()),
+        },
+        UiKind::Failed {
+            message: "m".into(),
+            retry: Some(ActionRef::new("riprova")),
+        },
     ];
-    // Il `match` esaustivo che rende un test rosso su una variante nuova non
+    // Il `match` esaustivo che rende un test rosso su una specie nuova non
     // campionata (il compilatore obbliga ad aggiungerla sopra).
     for n in &all {
         match n {
-            UiNode::Stack { .. }
-            | UiNode::Text { .. }
-            | UiNode::Heading { .. }
-            | UiNode::List { .. }
-            | UiNode::ListItem { .. }
-            | UiNode::Button { .. }
-            | UiNode::Html { .. }
-            | UiNode::WebView { .. } => {}
+            UiKind::Stack { .. }
+            | UiKind::Text { .. }
+            | UiKind::Heading { .. }
+            | UiKind::List { .. }
+            | UiKind::ListItem { .. }
+            | UiKind::Button { .. }
+            | UiKind::Html { .. }
+            | UiKind::WebView { .. }
+            | UiKind::Section { .. }
+            | UiKind::Table { .. }
+            | UiKind::Row { .. }
+            | UiKind::Tree { .. }
+            | UiKind::TreeItem { .. }
+            | UiKind::Tabs { .. }
+            | UiKind::Tab { .. }
+            | UiKind::Badge { .. }
+            | UiKind::Icon { .. }
+            | UiKind::Progress { .. }
+            | UiKind::Separator
+            | UiKind::EmptyState { .. }
+            | UiKind::KeyValue { .. }
+            | UiKind::TextInput { .. }
+            | UiKind::TextArea { .. }
+            | UiKind::Number { .. }
+            | UiKind::Checkbox { .. }
+            | UiKind::Select { .. }
+            | UiKind::Radio { .. }
+            | UiKind::Slider { .. }
+            | UiKind::DatePicker { .. }
+            | UiKind::Form { .. }
+            | UiKind::Custom { .. }
+            | UiKind::Pending { .. }
+            | UiKind::Failed { .. } => {}
         }
     }
-    all.iter().map(to_value).collect()
+    // Il primo campione porta anche la **chiave**, che viaggia accanto alla
+    // specie: senza, il mirror TS non vedrebbe mai il campo che il
+    // riconciliatore usa.
+    all.iter()
+        .enumerate()
+        .map(|(i, kind)| {
+            let node = UiNode::new(kind.clone());
+            to_value(&if i == 0 { node.with_key("k") } else { node })
+        })
+        .collect()
+}
+
+/// Un campione per ogni specie di valore di campo, e per l'azione che li porta:
+/// è la metà del §2.7 che la shell **scrive**, e il TS la costruisce da sé.
+fn ui_action_samples() -> Vec<Value> {
+    let all = [
+        UiValue::Text("t".into()),
+        UiValue::Number(1.5),
+        UiValue::Bool(true),
+        UiValue::Choices(vec!["a".into(), "b".into()]),
+    ];
+    for v in &all {
+        match v {
+            UiValue::Text(_) | UiValue::Number(_) | UiValue::Bool(_) | UiValue::Choices(_) => {}
+        }
+    }
+    vec![
+        to_value(UiAction::new("nuda")),
+        to_value(
+            UiAction::new("piena")
+                .with_payload(json!({"doc": "a.md"}))
+                .with_fields(
+                    all.iter()
+                        .enumerate()
+                        .map(|(i, value)| FieldValue {
+                            field: format!("f{i}"),
+                            value: value.clone(),
+                        })
+                        .collect(),
+                ),
+        ),
+    ]
 }
 
 fn view_update_samples() -> Vec<Value> {
     let all = [
         ViewUpdate::Replace {
-            root: UiNode::Text {
-                content: "t".into(),
-            },
+            root: UiNode::text("t"),
         },
         ViewUpdate::None,
         ViewUpdate::Navigate { doc_id: "d".into() },
@@ -103,6 +301,10 @@ fn view_update_samples() -> Vec<Value> {
             ns: "p".into(),
             payload: Value::Null,
         },
+        ViewUpdate::Patch {
+            key: "k".into(),
+            node: UiNode::text("t").with_key("k"),
+        },
     ];
     for u in &all {
         match u {
@@ -111,7 +313,8 @@ fn view_update_samples() -> Vec<Value> {
             | ViewUpdate::Navigate { .. }
             | ViewUpdate::Reveal { .. }
             | ViewUpdate::RunSearch { .. }
-            | ViewUpdate::Custom { .. } => {}
+            | ViewUpdate::Custom { .. }
+            | ViewUpdate::Patch { .. } => {}
         }
     }
     all.iter().map(to_value).collect()
@@ -145,6 +348,10 @@ fn event_samples() -> Vec<Value> {
             batch: BatchId(u64::MAX),
             changed: vec![DocId::new("a"), DocId::new("b")],
         },
+        Event::ViewInvalidated {
+            view: "v".into(),
+            instance: Some("v#2".into()),
+        },
     ];
     for e in &all {
         match e {
@@ -155,6 +362,7 @@ fn event_samples() -> Vec<Value> {
             | Event::IndexUpdated
             | Event::JobDone { .. }
             | Event::Overflow { .. }
+            | Event::ViewInvalidated { .. }
             | Event::Custom { .. }
             | Event::BatchEnded { .. } => {}
         }
@@ -261,6 +469,10 @@ fn command_outcome_samples() -> Vec<Value> {
             ns: "p".into(),
             payload: Value::Null,
         },
+        CommandEffect::OpenView {
+            view: "v".into(),
+            params: json!({"tag": "rust"}),
+        },
     ];
     for e in &all {
         match e {
@@ -269,7 +481,8 @@ fn command_outcome_samples() -> Vec<Value> {
             | CommandEffect::Reveal { .. }
             | CommandEffect::RunSearch { .. }
             | CommandEffect::Plan(_)
-            | CommandEffect::Custom { .. } => {}
+            | CommandEffect::Custom { .. }
+            | CommandEffect::OpenView { .. } => {}
         }
     }
     all.into_iter()
@@ -312,13 +525,26 @@ fn expected() -> Value {
             size: 5,
         })],
         "TagCount": [to_value(TagCount { name: "rust".into(), count: 2 })],
-        "ViewSpec": [to_value(ViewSpec {
-            id: "v".into(),
-            title: "V".into(),
-            placement: ViewPlacement::RightSidebar,
-            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
-            follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
-        })],
+        "UiAction": ui_action_samples(),
+        "ViewSpec": [to_value(
+            ViewSpec::new("v", "V", ViewSurface::RightSidebar)
+                .refreshing(EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]))
+                .following(ContextMask(vec![ContextKind::Document, ContextKind::Selection]))
+                .with_params(vec![fubmd_abi::command::ParamSpec::new(
+                    "tag",
+                    "Tag",
+                    fubmd_abi::command::ParamKind::Text,
+                )])
+                .with_icon("tag")
+                .ordered(2)
+                .sized(280),
+        )],
+        // Un esemplare vivo: è ciò che la shell manda a ogni `render_view`, e
+        // il campo `params` è il varco che il §2.3 apre.
+        "ViewInstance": [
+            to_value(ViewInstance::only("v")),
+            to_value(ViewInstance::new("v", "v#2", json!({"tag": "rust"}))),
+        ],
         // Il contesto di sessione viaggia nel verso opposto agli altri: lo
         // COSTRUISCE il frontend e lo consuma il kernel. Il mirror serve
         // quindi due volte — un campo che il TS non manda arriva `undefined`,

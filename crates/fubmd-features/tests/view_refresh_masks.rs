@@ -19,7 +19,7 @@ fn ogni_view() -> Vec<ViewSpec> {
     let providers: Vec<Box<dyn ViewProvider>> = vec![
         Box::new(BacklinksView),
         Box::new(OutlineView),
-        Box::new(TagPanelView),
+        Box::new(TagPanelView::default()),
         Box::new(StatsView),
     ];
     providers.iter().flat_map(|p| p.views()).collect()

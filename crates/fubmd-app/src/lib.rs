@@ -14,9 +14,10 @@ use fubmd_abi::event::Actor;
 use fubmd_abi::model::DocId;
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{
-    BacklinkRef, IndexQuery, IndexResult, LinkDirection, Page, SearchHit, TagCount, ViewSpec,
+    BacklinkRef, IndexQuery, IndexResult, LinkDirection, Page, SearchHit, TagCount, ViewInstance,
+    ViewSpec,
 };
-use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
     BacklinksView, CoreCommands, OutlineView, SearchIndex, StatsView, TagPanelView, VersionRef,
     VersionStore, VersioningHandler, BACKLINKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID,
@@ -193,7 +194,7 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     ws.register_view_provider(OUTLINE_ID, Trust::Trusted, Box::new(OutlineView));
     // Il pannello tag: aggrega i tag del vault via `IndexQuery::Tags`, click →
     // ricerca. Terza feature ufficiale sul giro delle view.
-    ws.register_view_provider(TAGS_ID, Trust::Trusted, Box::new(TagPanelView));
+    ws.register_view_provider(TAGS_ID, Trust::Trusted, Box::new(TagPanelView::default()));
     // Le statistiche: quarta feature sul giro delle view, e la prima a leggere
     // il **contesto di sessione** per intero — selezione e modalità, non solo
     // quale nota è aperta (decisione 0007).
@@ -437,34 +438,70 @@ fn list_views(state: State<AppState>) -> Result<Vec<ViewSpec>, String> {
     Ok(ws.views())
 }
 
-/// Rende l'albero `UiNode` di una view registrata. Il render è una lettura:
+/// Rende l'albero `UiNode` di **un'istanza** di view. Il render è una lettura:
 /// prende il workspace in prestito condiviso, non in esclusiva.
+///
+/// L'istanza arriva dalla shell, che è chi apre: `instance` la distingue dalle
+/// sorelle e `params` sono i suoi argomenti (§2.3). Per la view che la shell
+/// monta da sé — una sola, senza parametri — è
+/// [`ViewInstance::only`](fubmd_abi::traits::ViewInstance::only), e questo
+/// comando accetta i due campi assenti proprio per non obbligarla a costruirla.
 #[tauri::command]
-fn render_view(state: State<AppState>, view: String) -> Result<UiNode, String> {
+fn render_view(
+    state: State<AppState>,
+    view: String,
+    instance: Option<String>,
+    params: Option<serde_json::Value>,
+) -> Result<UiNode, String> {
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
-    ws.render_view(&view).map_err(|e| e.to_string())
+    ws.render_view(&istanza(view, instance, params))
+        .map_err(|e| e.to_string())
 }
 
 /// Consegna un'azione della UI al provider della view e restituisce il suo
-/// aggiornamento (`Replace`/`Navigate`/`None`), che il frontend interpreta.
+/// aggiornamento (`Replace`/`Patch`/`Navigate`/`None`), che il frontend
+/// interpreta.
+///
+/// `payload` è ciò che il provider aveva attaccato al nodo; `fields` è lo stato
+/// dei campi di input che la shell ha raccolto. Sono due cose con due
+/// proprietari (§2.7), e il fatto che arrivino come due argomenti distinti è
+/// ciò che impedisce alla shell di riscrivere il primo.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn view_action(
     state: State<AppState>,
     view: String,
+    instance: Option<String>,
+    params: Option<serde_json::Value>,
     action: String,
     payload: Option<serde_json::Value>,
+    fields: Option<Vec<FieldValue>>,
 ) -> Result<ViewUpdate, String> {
     let ws = current(&state)?;
     let mut ws = ws.lock().unwrap();
     ws.view_action(
-        &view,
+        &istanza(view, instance, params),
         UiAction {
             action: ActionId(action),
             payload: payload.unwrap_or(serde_json::Value::Null),
+            fields: fields.unwrap_or_default(),
         },
     )
     .map_err(|e| e.to_string())
+}
+
+/// L'istanza che la shell nomina, con i due default dell'esemplare unico.
+fn istanza(
+    view: String,
+    instance: Option<String>,
+    params: Option<serde_json::Value>,
+) -> ViewInstance {
+    ViewInstance {
+        instance: instance.unwrap_or_else(|| view.clone()),
+        view,
+        params: params.unwrap_or(serde_json::Value::Null),
+    }
 }
 
 // --- comandi (protocollo generico) -----------------------------------------

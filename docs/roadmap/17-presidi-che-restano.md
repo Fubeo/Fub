@@ -42,11 +42,13 @@ ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuov
       non ha niente da tenere fermo: si scrive **dopo**, e allora si scrive dove
       sta lei. La seconda è **il criterio di questa seduta applicato a se
       stesso**: qui si tiene ciò il cui costo *cresce* con l'attesa, e questo è
-      l'unico caso in cui **cala**. I pannelli sono alberi `UiNode`, e il §2.1 ci
-      aggiunge una ventina di varianti, il §2.2 chiude le tre superfici, il §2.6
-      definisce come si presentano: un check scritto oggi presidia un DOM che le
-      P0 della [seduta 2](02-cosa-e-una-view.md) stanno per sostituire, e il
-      lavoro andrebbe rifatto da capo su una resa che nel frattempo è cambiata.
+      l'unico caso in cui **cala**. I pannelli sono alberi `UiNode`, e la
+      [decisione 0016](../decisions/0016-cosa-e-una-view.md) ci ha aggiunto
+      venticinque specie di nodo, dieci superfici e i metadati di come una view
+      si presenta: un check scritto prima avrebbe presidiato un DOM che quella
+      seduta ha sostituito. Ora la resa è ferma, e la passata di accessibilità
+      ha finalmente qualcosa di stabile su cui girare — resta il fatto che si
+      scrive **dopo** la passata, dove sta lei.
 
 ### 17.3 Osservabilità
 

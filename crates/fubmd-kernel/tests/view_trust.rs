@@ -13,8 +13,8 @@
 
 use camino::Utf8PathBuf;
 use fubmd_abi::error::PluginError;
-use fubmd_abi::traits::{HostApi, ViewPlacement, ViewProvider, ViewSpec};
-use fubmd_abi::ui::{ActionId, Axis, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::traits::{HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_kernel::{FormatRegistry, Trust, Workspace};
 
 /// Un provider che restituisce ciò che gli si dice di restituire, e che scrive
@@ -39,25 +39,23 @@ impl Puppet {
 
 impl ViewProvider for Puppet {
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec {
-            id: self.id.to_string(),
-            title: self.id.to_string(),
-            placement: ViewPlacement::RightSidebar,
-            refresh: Default::default(),
-            follows: Default::default(),
-        }]
+        vec![ViewSpec::new(self.id, self.id, ViewSurface::RightSidebar)]
     }
 
-    fn render_view(&self, view: &str, _host: &dyn HostApi) -> Result<UiNode, PluginError> {
-        if view != self.id {
-            return Err(PluginError::UnknownView(view.to_string()));
+    fn render_view(
+        &self,
+        instance: &ViewInstance,
+        _host: &dyn HostApi,
+    ) -> Result<UiNode, PluginError> {
+        if instance.view != self.id {
+            return Err(PluginError::UnknownView(instance.view.clone()));
         }
         Ok(self.tree.clone())
     }
 
     fn on_action(
-        &self,
-        _view: &str,
+        &mut self,
+        _instance: &ViewInstance,
         action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
@@ -87,27 +85,23 @@ impl Fixture {
 
 fn html() -> UiNode {
     // Annidato di proposito: il rifiuto non deve dipendere dalla posizione.
-    UiNode::Stack {
-        dir: Axis::Column,
-        gap: 0,
-        children: vec![UiNode::List {
-            items: vec![UiNode::Html {
-                html: "<script>ipc()</script>".into(),
-            }],
-        }],
-    }
+    UiNode::column(
+        0,
+        vec![UiNode::list(vec![UiNode::new(UiKind::Html {
+            html: "<script>ipc()</script>".into(),
+        })])],
+    )
 }
 
 fn dichiarativo() -> UiNode {
-    UiNode::Stack {
-        dir: Axis::Column,
-        gap: 4,
-        children: vec![UiNode::ListItem {
-            title: "voce".into(),
-            subtitle: None,
-            action: Some(ActionId("open:a.md".into())),
-        }],
-    }
+    UiNode::column(
+        4,
+        vec![UiNode::list_item(
+            "voce",
+            None,
+            Some(ActionRef::with("open", serde_json::json!({"doc": "a.md"}))),
+        )],
+    )
 }
 
 #[test]
@@ -122,7 +116,11 @@ fn a_trusted_provider_may_return_active_content() {
 
     // Le feature ufficiali *usano* `Html` (l'anteprima di un backlink lo è):
     // vietarlo a tutti non sarebbe sicurezza, sarebbe rompere il core.
-    assert_eq!(ws.render_view("fidata").expect("albero fidato"), html());
+    assert_eq!(
+        ws.render_view(&ViewInstance::only("fidata"))
+            .expect("albero fidato"),
+        html()
+    );
 }
 
 #[test]
@@ -135,7 +133,9 @@ fn an_untrusted_provider_cannot_smuggle_active_content() {
         Puppet::boxed("ostile", html(), ViewUpdate::None),
     );
 
-    let err = ws.render_view("ostile").expect_err("deve essere rifiutato");
+    let err = ws
+        .render_view(&ViewInstance::only("ostile"))
+        .expect_err("deve essere rifiutato");
     assert!(
         matches!(err, PluginError::PermissionDenied(_)),
         "atteso permesso negato, trovato {err:?}"
@@ -154,7 +154,10 @@ fn an_untrusted_provider_may_still_describe_a_ui() {
 
     // Il confine non è "i plugin non disegnano": è "i plugin descrivono, il core
     // disegna". Tutto il dichiarativo passa.
-    assert_eq!(ws.render_view("perbene").unwrap(), dichiarativo());
+    assert_eq!(
+        ws.render_view(&ViewInstance::only("perbene")).unwrap(),
+        dichiarativo()
+    );
 }
 
 #[test]
@@ -173,15 +176,9 @@ fn the_same_guard_applies_to_what_comes_back_from_an_action() {
 
     // Un albero pulito al rendering e sporco al primo click sarebbe la strada
     // più ovvia per aggirare un controllo fatto solo in `render_view`.
-    assert!(ws.render_view("tardivo").is_ok());
+    assert!(ws.render_view(&ViewInstance::only("tardivo")).is_ok());
     let err = ws
-        .view_action(
-            "tardivo",
-            UiAction {
-                action: ActionId("click".into()),
-                payload: serde_json::Value::Null,
-            },
-        )
+        .view_action(&ViewInstance::only("tardivo"), UiAction::new("click"))
         .expect_err("anche l'aggiornamento deve essere validato");
     assert!(matches!(err, PluginError::PermissionDenied(_)));
 }
@@ -203,13 +200,7 @@ fn navigate_and_none_are_not_trees_and_pass() {
     );
 
     let update = ws
-        .view_action(
-            "navigante",
-            UiAction {
-                action: ActionId("open:a.md".into()),
-                payload: serde_json::Value::Null,
-            },
-        )
+        .view_action(&ViewInstance::only("navigante"), UiAction::new("open"))
         .expect("navigare non è iniettare");
     assert_eq!(
         update,
@@ -229,14 +220,8 @@ fn an_action_reaches_the_provider_with_its_own_data_space() {
         Puppet::boxed("diario", dichiarativo(), ViewUpdate::None),
     );
 
-    ws.view_action(
-        "diario",
-        UiAction {
-            action: ActionId("premuto".into()),
-            payload: serde_json::Value::Null,
-        },
-    )
-    .unwrap();
+    ws.view_action(&ViewInstance::only("diario"), UiAction::new("premuto"))
+        .unwrap();
 
     let scritto = fx
         .root
@@ -263,7 +248,7 @@ fn a_view_nobody_offers_is_unknown_not_empty() {
     // "Non esiste" e "è vuota" sono due risposte diverse: confonderle
     // nasconderebbe un id sbagliato dietro un pannello vuoto.
     assert!(matches!(
-        ws.render_view("inesistente"),
+        ws.render_view(&ViewInstance::only("inesistente")),
         Err(PluginError::UnknownView(_))
     ));
     assert_eq!(
