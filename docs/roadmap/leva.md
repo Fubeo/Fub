@@ -46,10 +46,11 @@ altre perché non allargano una capacità: ne rendono una **inesprimibile**.
 **§9.1 (il job che vede il vault)**: finché il lavoro lungo non può leggere il
 vault, i capitoli 17, 18, 22 e 19.4 — cioè il volume maggiore di FEATURES dopo
 l'11 e il 12 — non hanno un posto dove girare, e l'unica alternativa è farli nel
-giro sincrono, con il workspace preso in esclusiva. **§3.1 (il parser
-estendibile)**: è l'unico punto in cui l'invariante «una feature ufficiale è ciò
-che scriverà un plugin» è già falsa oggi — un'estensione di sintassi non può
-essere un plugin, e con le ~50 del capitolo 5.2 in arrivo la falsità diventa la
+giro sincrono, con il workspace preso in esclusiva. ~~**§3.1 (il parser
+estendibile)**~~ — **chiusa** dalla [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md),
+e resta qui perché era la sola voce di cui si potesse dire *«l'invariante del
+progetto è già falsa»*: un'estensione di sintassi non poteva essere un plugin, e
+con le ~50 del capitolo 5.2 in arrivo la falsità diventava la
 regola. Accanto, di poco sotto: **§7.5 (i servizi fra plugin)**, senza cui il
 capitolo 21 descrive crate linkati e non moduli installabili separatamente, e
 **§8.1 (la scomposizione del `Workspace`)**, che è il posto dove tutte le altre
@@ -76,8 +77,9 @@ il criterio di questo file applicato a sé stesso — inesprimibile sta sopra
 stretto — e vale la pena che la retrocessione si veda, perché la voce era stata
 messa in cima con una frase che nessuno aveva verificato.
 
-Dal sesto giro se ne aggiunge una sola dello stesso peso, e sta accanto al
-§3.1 per la stessa ragione: **§5.1 (sette varianti su nove di
+Dal sesto giro se ne aggiunge una sola dello stesso peso, e stava accanto al
+§3.1 per la stessa ragione — con quello chiuso, è la voce a leva più alta che
+resta insieme al §9.1: **§5.1 (sette varianti su nove di
 `IndexQuery` non arrivano a nessun provider)**. Non allarga una capacità: ne
 rende una inesprimibile, e lo fa su un canale che la [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) ha appena chiamato
 «il canale dati verso le view» — grafo, proprietà e salute del vault sono

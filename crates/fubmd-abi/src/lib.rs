@@ -6,7 +6,12 @@
 //! - il **modello di documento comune** ([`model`]), agnostico rispetto al formato,
 //!   e la sua forma **al confine** ([`arena`]: alberi appiattiti, span a
 //!   larghezza fissa) — la conversione che il proxy WASM di M5 erediterà;
-//! - il trait centrale [`format::FormatProvider`];
+//! - il trait centrale [`format::FormatProvider`], e i due innesti con cui **ciò
+//!   che il core non conosce** entra lo stesso ([`custom`]): chi aggiunge la
+//!   sintassi e chi disegna il blocco che ne esce;
+//! - la mappa con namespace ([`options`]) con cui si dichiara *cosa è acceso, e
+//!   con quale parametro* — la forma che sostituisce i booleani là dove la
+//!   domanda ha una coda aperta;
 //! - gli altri **trait di estensione** ([`traits`]): comandi, view (UI dichiarativa),
 //!   index (ricerca/backlink), event handler, ciclo di vita del plugin;
 //! - i **comandi** ([`command`]): un'azione descritta a una macchina — argomenti
@@ -26,12 +31,14 @@
 
 pub mod arena;
 pub mod command;
+pub mod custom;
 pub mod edit;
 pub mod error;
 pub mod event;
 pub mod format;
 pub mod ipc;
 pub mod model;
+pub mod options;
 pub mod session;
 pub mod traits;
 pub mod transfer;
@@ -42,15 +49,21 @@ pub use command::{
     Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
     CommandSpec, InvokeMode, ParamKind, ParamSpec, PlannedEdit,
 };
+pub use custom::{
+    CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
+    SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+};
 pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 pub use error::{FormatError, PluginError};
 pub use event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
 pub use format::{
-    FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext, RenderOptions,
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
+    RenderOptions, RenderTarget, SourceKind,
 };
 pub use model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
 };
+pub use options::OptionMap;
 pub use session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 pub use traits::{
     BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,

@@ -143,6 +143,19 @@ impl Vault {
         std::fs::read_to_string(&path).map_err(|e| KernelError::Io { path, source: e })
     }
 
+    /// I byte grezzi, per i provider che hanno dichiarato
+    /// [`SourceKind::Bytes`](fubmd_abi::format::SourceKind::Bytes).
+    ///
+    /// «Leggi il file» e «decodificalo come UTF-8» erano la stessa operazione, e
+    /// per un `.canvas`, un CSV con un encoding suo o un PDF la seconda metà è
+    /// sbagliata — o fallisce, o corrompe. Restano due funzioni e non una che
+    /// decodifica opzionalmente, perché chi legge testo non deve poter
+    /// dimenticare di decodificare.
+    pub fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
+        let path = self.path_for(id);
+        std::fs::read(&path).map_err(|e| KernelError::Io { path, source: e })
+    }
+
     pub fn write(&self, id: &DocId, source: &str) -> Result<()> {
         let path = self.path_for(id);
         if let Some(parent) = path.parent() {

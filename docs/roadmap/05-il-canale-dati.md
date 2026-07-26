@@ -33,9 +33,10 @@ troverebbe a dire di no a feature che non hanno altra strada.
       le altre sette non c'è nessun ordine da sistemare, perché non c'è nessun
       tentativo. Il routing dichiarato che il §5.2 chiede, senza questa voce,
       nascerebbe su un canale che per tre quarti non è instradabile.
-- [ ] **È la forma del §3.1 applicata al canale dati.** Là il parser è
-      sostituibile e non estendibile; qui il canale dati non è nemmeno
-      sostituibile: il kernel non è il provider di default, è il **primo**
+- [ ] **È la forma del §3.1 applicata al canale dati**, e adesso quello ha una
+      risposta ([decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md))
+      mentre questo no. Là il parser era sostituibile e non estendibile, e ora si
+      **innesta**; qui il canale dati non è nemmeno sostituibile: il kernel non è il provider di default, è il **primo**
       rispondente e non lo si scavalca. Ricadono fuori portata, e nessuna se ne
       accorgerebbe leggendo il contratto: grafo semantico, concept graph ed
       entity graph (7.3), proprietà calcolate, rollup e formula (8.2), health
@@ -76,9 +77,11 @@ troverebbe a dire di no a feature che non hanno altra strada.
       citazioni (15.1) — ogni query gira su tutti, e due indici che rivendicano
       la stessa variante si oscurano a vicenda **in silenzio**.
 - [ ] **Manca un routing dichiarato alla registrazione**: quali varianti e
-      quali `ns` un indice serve. È esattamente la forma che manca al
-      `FormatRegistry` (§3.1, ultimo registrato vince) e alla tabella dei
-      provider (§7.2), ed è il presupposto della [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) e del §5.3 — quelli dicono
+      quali `ns` un indice serve. È esattamente la forma che mancava al
+      `FormatRegistry` — dove «l'ultimo registrato vince, in silenzio» è stato
+      chiuso dalla [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md),
+      che quindi è il **precedente** da seguire qui — e che manca ancora alla
+      tabella dei provider (§7.2), ed è il presupposto della [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) e del §5.3 — quelli dicono
       *quali* query esistono e che forma hanno, mai **a chi vanno**.
 - [ ] Con il routing arriva gratis anche la diagnostica che oggi non c'è:
       «nessuno serve questa query» distinto da «chi la serve ha fallito» — che

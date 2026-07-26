@@ -14,7 +14,23 @@
   "EmbedContent": [
     {
       "doc_id": "a.md",
-      "html": "<p>x</p>"
+      "html": "<p>x</p>",
+      "parts": []
+    }
+  ],
+  "RenderedDocument": [
+    {
+      "html": "<p>a</p><div class=\"ui-slot\" data-ui-slot=\"0\" data-custom-kind=\"fubmd:diagram\"></div>",
+      "parts": [
+        {
+          "slot": 0,
+          "kind": "fubmd:diagram",
+          "node": {
+            "node": "text",
+            "content": "graph TD;"
+          }
+        }
+      ]
     }
   ],
   "GraphData": [

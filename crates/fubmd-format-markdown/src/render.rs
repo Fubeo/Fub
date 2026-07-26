@@ -6,6 +6,7 @@ use fubmd_abi::format::RenderOptions;
 use fubmd_abi::model::{
     custom_kind, Block, ColumnAlign, DocumentModel, Inline, LinkTarget, TableRow,
 };
+use fubmd_abi::options::render_option;
 
 use crate::util::{escape_attr, escape_html};
 
@@ -214,8 +215,36 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
                 escape_html(label)
             ));
         }
-        Inline::Custom { .. } => {}
+        // Il degrado generico degli inline. **Prima non c'era**: un
+        // `Inline::Custom` che il provider non riconosceva spariva dalla
+        // resa, in silenzio — ed era il gemello inline del difetto che il
+        // §3.2 nomina sui blocchi, con l'aggravante che qui non restava
+        // nemmeno il testo. Un kind che porta il proprio `text` (è la forma
+        // che una `SyntaxRule` inline produce) lo mostra dentro uno span con
+        // la sua classe: chi ha un tema lo veste, chi non ce l'ha lo legge.
+        Inline::Custom {
+            custom_kind, attrs, ..
+        } => {
+            let text = attrs.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            out.push_str(&format!(
+                "<span class=\"inline-{}\">{}</span>",
+                escape_attr(&class_of(custom_kind)),
+                escape_html(text)
+            ));
+        }
     }
+}
+
+/// La classe CSS di un `custom_kind`: il nome senza il namespace, perché il
+/// namespace serve a evitare le collisioni fra estensioni, non a finire in un
+/// selettore. Due estensioni omonime restano distinguibili dal `data-kind` che
+/// il blocco porta; una classe è per il tema.
+fn class_of(custom_kind: &str) -> String {
+    custom_kind
+        .rsplit_once(':')
+        .map(|(_, name)| name)
+        .unwrap_or(custom_kind)
+        .to_string()
 }
 
 fn render_link(
@@ -256,7 +285,7 @@ fn render_link(
                 escape_attr(page),
                 heading_attr
             ));
-            if opts.wikilinks_as_data_attrs {
+            if opts.enabled(render_option::WIKILINKS_AS_DATA_ATTRS) {
                 out.push_str(" href=\"#\"");
             }
             out.push('>');

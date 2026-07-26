@@ -15,6 +15,7 @@ import type {
   GraphData,
   InvokeMode,
   KernelNotice,
+  RenderedDocument,
   SearchHit,
   TagCount,
   TrashEntry,
@@ -43,7 +44,7 @@ export const api = {
   // Il primo nome libero della famiglia «Nota», «Nota 1», … (D3). La
   // convenzione vive nel kernel: chiederla evita di averne due versioni.
   proposeFreeName: (id: string) => invoke<string>("propose_free_name", { id }),
-  renderPreview: (id: string) => invoke<string>("render_preview", { id }),
+  renderPreview: (id: string) => invoke<RenderedDocument>("render_preview", { id }),
   renderEmbed: (page: string, heading: string | null) =>
     invoke<EmbedContent>("render_embed", { page, heading }),
   // View dichiarative (protocollo generico). La shell pubblica il contesto del

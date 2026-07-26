@@ -5,9 +5,9 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sette giri sulla stessa domanda hanno prodotto novantacinque voci. Ventiquattro
+Sette giri sulla stessa domanda hanno prodotto novantanove voci. Ventinove
 sono chiuse, e i loro verbali stanno in [docs/decisions/](decisions/README.md);
-le altre settantacinque sono qui, e questo file è il loro **indice**.
+le altre settanta sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -88,7 +88,7 @@ messaggio arrivato.
 |---|---|---|---|---|
 | **1** | [La forma della shell](roadmap/01-forma-della-shell.md) | dove sta cosa, prima che la superficie cresca | 1 | — |
 | **2** | [Cosa è una view](roadmap/02-cosa-e-una-view.md) | le firme dicono insieme che una view è una funzione pura, sincrona, senza stato | 1 | — |
-| **3** | [Chi disegna ciò che il core non conosce](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md) | una decisione sola vista da tre lati: sintassi, blocco, renderer nella shell | 6 | 4 |
+| **3** | [Chi disegna ciò che il core non conosce](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md) | una decisione sola vista da tre lati: sintassi, blocco, renderer nella shell | 1 | — |
 | **4** | [Chi vede il modello parsato](roadmap/04-chi-vede-il-modello-parsato.md) | *chi vede la struttura di un documento?* Oggi: il kernel, e chi indicizza | 4 | 3 |
 | **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | chi risponde a una query, e chi la instrada — nell'ordine | 5 | 3 |
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | la stessa regola serve a provider, shell e a M5 a un guest WASM | 2 | — |
@@ -109,7 +109,7 @@ messaggio arrivato.
 
 ## Le voci
 
-Settantacinque. Il numero è quello con cui le nomina il resto del repo.
+Settanta. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -120,8 +120,10 @@ mentre una riga che non c'è più è stata tolta da chi ha spostato il verbale.
 Dentro il file di una seduta le caselle ci sono, e dicono a che punto è la
 singola voce: oggi ne hanno di spuntate la [§1.2](roadmap/01-forma-della-shell.md#12-smontare-il-monolite)
 (tre punti su quattro — l'albero dei moduli, il modo unico di montare un
-pannello, e da questo giro anche il protocollo di disegno che la seduta 2 le
-bloccava; l'ultimo è una feature) e la
+pannello, e il protocollo di disegno che la seduta 2 le bloccava; l'ultimo è una
+feature), la [§3.3](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell)
+(la **decisione** è presa con la [0017](decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+e resta il grafo, che è l'ultimo pannello nativo) e la
 [§18.1](roadmap/18-editor-e-tastiera.md#181-editor) (il ponte inverso, chiuso
 con la [decisione 0007](decisions/0007-contesto-di-sessione.md)).
 
@@ -138,12 +140,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 |---|---|---|---|---|
 | **§1.2** | [Smontare il monolite](roadmap/01-forma-della-shell.md#12-smontare-il-monolite) | 1. La forma della shell | shell | **P1** |
 | **§2.9** | [Prestazioni della UI](roadmap/02-cosa-e-una-view.md#29-prestazioni-della-ui) | 2. Cosa è una view | shell | **P2** |
-| **§3.1** | [Il parser è sostituibile, non estendibile](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#31-il-parser-è-sostituibile-non-estendibile) | 3. Chi disegna ciò che il core non conosce | contratto | **P0** |
-| **§3.2** | [`Block::Custom` non ha un renderer](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#32-blockcustom-non-ha-un-renderer) | 3. Chi disegna ciò che il core non conosce | contratto | **P0** |
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 3. Chi disegna ciò che il core non conosce | shell | **P1** |
-| **§3.4** | [`ParseContext` è chiuso, e `parse` vuole per forza del testo](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#34-parsecontext-è-chiuso-e-parse-vuole-per-forza-del-testo) | 3. Chi disegna ciò che il core non conosce | contratto | **P0** |
-| **§3.5** | [Gli altri tipi chiusi troppo presto](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#35-gli-altri-tipi-chiusi-troppo-presto) | 3. Chi disegna ciò che il core non conosce | contratto | **P0** |
-| **§3.6** | [Sanitizzazione e CSP in un punto solo](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#36-sanitizzazione-e-csp-in-un-punto-solo) | 3. Chi disegna ciò che il core non conosce | shell | **P2** |
 | **§4.1** | [Il canale del rendering — stringa HTML o modello?](roadmap/04-chi-vede-il-modello-parsato.md#41-il-canale-del-rendering--stringa-html-o-modello) | 4. Chi vede il modello parsato | contratto | **P0** |
 | **§4.2** | [Il modello parsato si riceve, non si chiede](roadmap/04-chi-vede-il-modello-parsato.md#42-il-modello-parsato-si-riceve-non-si-chiede) | 4. Chi vede il modello parsato | contratto | **P0** |
 | **§4.3** | [Il contratto non dice di che formato è un documento](roadmap/04-chi-vede-il-modello-parsato.md#43-il-contratto-non-dice-di-che-formato-è-un-documento) | 4. Chi vede il modello parsato | contratto | **P0** |
@@ -222,7 +219,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — sedici, uno per
+- [I verbali delle decisioni chiuse](decisions/README.md) — diciassette, uno per
   file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

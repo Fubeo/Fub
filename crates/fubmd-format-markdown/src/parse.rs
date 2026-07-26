@@ -8,6 +8,7 @@ use fubmd_abi::model::{
     DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, ListItem, Span, TableCell,
     TableRow, Tag, TaskMarker,
 };
+use fubmd_abi::options::syntax;
 use fubmd_abi::FormatError;
 use fubmd_sdk::scan;
 
@@ -33,7 +34,7 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     // affatto sarebbe stata presa a vuoto.
     o.extension.footnotes = true;
     o.extension.description_lists = true;
-    if ctx.parse_wikilinks {
+    if ctx.enabled(syntax::WIKILINKS) {
         o.extension.wikilinks_title_after_pipe = true;
     }
     o
@@ -609,7 +610,7 @@ fn push_text_features(
     acc: &mut Acc,
     out: &mut Vec<Inline>,
 ) {
-    let embeds = if ctx.parse_wikilinks {
+    let embeds = if ctx.enabled(syntax::WIKILINKS) {
         find_embeds(slice)
     } else {
         Vec::new()
@@ -708,7 +709,7 @@ fn push_plain_or_tags(
     acc: &mut Acc,
     out: &mut Vec<Inline>,
 ) {
-    let tags: Vec<Tag> = if ctx.parse_tags {
+    let tags: Vec<Tag> = if ctx.enabled(syntax::TAGS) {
         scan::extract_tags(slice)
             .into_iter()
             // Sul sorgente gli pseudo-tag si riconoscono: `\#` è sotto escape,

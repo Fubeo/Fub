@@ -22,7 +22,9 @@ use fubmd_abi::command::{
 use fubmd_abi::edit::{EditRequest, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Actor, EventMask, Notice};
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel, Span};
 use fubmd_abi::traits::{CommandProvider, EventHandler, HostApi};
 use fubmd_abi::FormatProvider;
@@ -33,18 +35,19 @@ struct PlainProvider;
 
 impl FormatProvider for PlainProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "plain".into(),
-            name: "Testo piatto (test)".into(),
-            extensions: vec!["md".into()],
-        }
+        FormatDescriptor::text("plain", "Testo piatto (test)", &["md"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.to_string();
         Ok(model)
@@ -67,7 +70,9 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     let mut registry = FormatRegistry::new();
-    registry.register(Box::new(PlainProvider));
+    registry
+        .register(Box::new(PlainProvider))
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
     ws.reindex().expect("reindex");
     (dir, ws)

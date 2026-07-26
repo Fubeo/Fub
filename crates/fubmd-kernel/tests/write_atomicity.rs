@@ -5,7 +5,9 @@
 
 use camino::Utf8PathBuf;
 use fubmd_abi::error::FormatError;
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
@@ -17,18 +19,19 @@ struct FallibleProvider;
 
 impl FormatProvider for FallibleProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "fallibile".into(),
-            name: "Formato fallibile (test)".into(),
-            extensions: vec!["fal".into()],
-        }
+        FormatDescriptor::text("fallibile", "Formato fallibile (test)", &["fal"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         if source.contains("BOOM") {
             return Err(FormatError::Parse("sorgente rifiutato".into()));
         }
@@ -54,7 +57,9 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     let mut registry = FormatRegistry::new();
-    registry.register(Box::new(FallibleProvider));
+    registry
+        .register(Box::new(FallibleProvider))
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
     ws.reindex().expect("reindex vault vuoto");
     (dir, ws)
@@ -96,7 +101,7 @@ fn a_failed_overwrite_leaves_the_old_content_everywhere() {
         "prima versione"
     );
     assert_eq!(
-        ws.render_preview(&DocId::new("nota.fal")).unwrap(),
+        ws.render_preview(&DocId::new("nota.fal")).unwrap().html,
         "prima versione"
     );
 }

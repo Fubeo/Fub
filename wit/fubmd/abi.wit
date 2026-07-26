@@ -13,10 +13,10 @@
 // WASM di M5 la chiamerà invece di riscriverla. Decisione e motivazioni in
 // docs/architecture/traits.md, "Alberi ricorsivi al confine".
 //
-// KEYWORD WIT — `list`, `result` e `from` sono parole chiave del linguaggio:
-// dove sono nomi di variante o di campo compaiono con l'escape `%`. È solo
-// sintassi: l'identificatore dichiarato resta `list`/`result`/`from`, e i tipi
-// Rust non cambiano.
+// KEYWORD WIT — `list`, `result`, `from` e `option` sono parole chiave del
+// linguaggio: dove sono nomi di variante o di campo compaiono con l'escape `%`.
+// È solo sintassi: l'identificatore dichiarato resta `list`/`result`/`from`/
+// `option`, e i tipi Rust non cambiano.
 //
 // HOST-API — `host-api` è IMPORTATO dal world: le sue funzioni non compaiono
 // come parametro di nessun'altra funzione, anche là dove il metodo Rust
@@ -35,6 +35,32 @@ package fubmd:abi@0.1.0;
 /// argomenti dei comandi, storage dei plugin.
 interface json {
     type json = string;
+}
+
+/// *Cosa è acceso, e con quale parametro.*
+///
+/// La risposta comune ai quattro tipi che il §3.5 nomina insieme — uno, tre o
+/// cinque booleani dove la domanda che arriva ha una coda aperta: le ~50
+/// sintassi del 5.2, i bersagli di rendering del 6.3, i permessi del 20.3.
+/// Quello che scade col freeze non è la LARGHEZZA di quei tipi (un campo in
+/// fondo a un record è additivo) ma la loro FORMA: sostituire N booleani con una
+/// mappa è la sola cosa che dopo non si fa più.
+///
+/// Chiave: `ns:nome`. Il namespace è di chi definisce la voce — `fubmd` per il
+/// core, l'id del plugin per gli altri — così due estensioni che vogliono
+/// chiamarsi allo stesso modo hanno due chiavi diverse.
+///
+/// Presente = acceso, e il valore è il parametro; un `false` esplicito spegne.
+/// Qui è una LISTA perché WIT non ha mappe: lato Rust è una `BTreeMap`, e
+/// l'ordine stabile è ciò che rende questa lista confrontabile.
+interface options {
+    use json.{json};
+
+    record option-entry {
+        key: string,
+        value: json,
+    }
+    type option-map = list<option-entry>;
 }
 
 /// Il modello di documento comune e agnostico rispetto al formato.
@@ -308,26 +334,48 @@ interface model {
 interface format {
     use json.{json};
     use model.{document-model};
+    use options.{option-map};
 
+    /// In che forma un provider vuole la sorgente. Senza questo campo "leggi il
+    /// file" e "decodificalo come UTF-8" restavano la stessa operazione, e i
+    /// documenti non-testo (canvas 12, CSV/JSON 11.4, PDF 13.2, encoding da
+    /// rilevare 2.3) non avevano modo di entrare.
+    enum source-kind {
+        text,
+        bytes,
+    }
+    variant document-source {
+        text(string),
+        bytes(list<u8>),
+    }
     record format-descriptor {
         id: string,
         name: string,
         extensions: list<string>,
+        source: source-kind,
     }
+    /// Che sintassi sa leggere un provider: un elenco di NOMI, non cinque
+    /// booleani — e lo stesso vocabolario di `parse-context.options`, perché
+    /// «cosa so fare» e «cosa devi accendere» sono la stessa domanda vista da
+    /// due lati (§3.4 e §3.5).
     record format-capabilities {
-        wikilinks: bool,
-        tags: bool,
-        frontmatter: bool,
-        callouts: bool,
-        embeds: bool,
+        syntax: option-map,
     }
     record parse-context {
         doc-id: string,
-        parse-tags: bool,
-        parse-wikilinks: bool,
+        options: option-map,
+    }
+    /// Per CHI si sta rendendo. È un enum e non una voce della mappa perché i
+    /// bersagli sono esclusivi: si rende per uno solo alla volta.
+    enum render-target {
+        screen,
+        print,
+        pdf,
+        static-site,
     }
     record render-options {
-        wikilinks-as-data-attrs: bool,
+        target: render-target,
+        options: option-map,
     }
     variant format-error {
         parse(string),
@@ -338,11 +386,127 @@ interface format {
 
     descriptor: func() -> format-descriptor;
     capabilities: func() -> format-capabilities;
-    parse: func(source: string, ctx: parse-context) -> result<document-model, format-error>;
+    parse: func(source: document-source, ctx: parse-context) -> result<document-model, format-error>;
     render-html: func(model: document-model, opts: render-options) -> result<string, format-error>;
     /// Generazione, non round-trip: la fonte di verità di un documento
     /// esistente è la sorgente; il kernel non riscrive mai un file da qui.
     serialize: func(model: document-model) -> result<string, format-error>;
+}
+
+/// `SyntaxRule`: una sintassi INNESTATA su un formato che non la conosce (§3.1).
+///
+/// Prima, `format-registry` era una mappa estensione → UN provider e chi
+/// registrava dopo vinceva in silenzio: l'unico modo di aggiungere una sintassi
+/// al markdown era sostituire il provider markdown. Era l'unico punto in cui
+/// l'invariante del progetto — «una feature ufficiale è ciò che scriverà un
+/// plugin di terzi» — era già falsa.
+///
+/// Una regola agisce sul MODELLO, dopo il parse del provider, e questo è ciò che
+/// la rende innestabile su chi non la conosce. Il prezzo, dichiarato: non può
+/// cambiare come la grammatica di base spezza il testo. Può fare ciò che i
+/// trigger dicono — prendersi un recinto che il provider ha già riconosciuto
+/// come tale, o un tratto di testo fra due delimitatori.
+interface syntax {
+    use json.{json};
+    use model.{span, document-tree};
+    use format.{parse-context, format-error};
+
+    record syntax-trigger-fence {
+        info: list<string>,
+    }
+    record syntax-trigger-inline {
+        open: string,
+        close: string,
+    }
+    variant syntax-trigger {
+        fence(syntax-trigger-fence),
+        inline(syntax-trigger-inline),
+    }
+
+    record syntax-rule-spec {
+        id: string,
+        format: string,
+        trigger: syntax-trigger,
+        order: s32,
+        /// La chiave di `parse-context.options` che la accende; assente =
+        /// sempre attiva. È il ponte col §3.4: una regola si spegne per vault,
+        /// cartella o nota senza che nessuno la disinstalli.
+        %option: option<string>,
+        /// I `custom-kind` che emette. Un kind prodotto e mai rivendicato da un
+        /// renderer è un blocco che l'utente leggerà crudo — e adesso si può
+        /// contare.
+        produces: list<string>,
+    }
+
+    record syntax-match {
+        trigger: string,
+        text: string,
+        /// Lo riempie il kernel, non la regola: una regola che dichiarasse il
+        /// proprio span potrebbe mentire sull'identità di un blocco.
+        span: span,
+    }
+
+    /// Una regola produce SEMPRE l'escape hatch, mai un nodo del vocabolario
+    /// centrale: nessuno innesta una sintassi che finge di essere un heading.
+    record syntax-product-block {
+        custom-kind: string,
+        attrs: json,
+        blocks: document-tree,
+    }
+    record syntax-product-inline {
+        custom-kind: string,
+        attrs: json,
+    }
+    variant syntax-product {
+        block(syntax-product-block),
+        inline(syntax-product-inline),
+    }
+
+    spec: func() -> syntax-rule-spec;
+    /// `none` = «non è roba mia dopo tutto», e il nodo resta com'era: è il modo
+    /// con cui una regola declina senza fallire.
+    apply: func(m: syntax-match, ctx: parse-context) -> result<option<syntax-product>, format-error>;
+}
+
+/// `CustomRenderer`: il punto d'innesto che `block.custom` non aveva (§3.2).
+///
+/// L'escape hatch del modello esisteva, il suo disegno no: era un
+/// `if custom-kind == callout` dentro il provider markdown, e ogni altro kind
+/// cadeva in un ramo generico. Quel ramo non è il difetto — è il DEGRADO, e
+/// serve; il difetto era che fosse tutto, e che non ci fosse modo di dire chi lo
+/// disegnerebbe.
+interface renderer {
+    use json.{json};
+    use model.{span, document-tree};
+    use ui.{ui-tree};
+    use format.{render-options, format-error};
+
+    record custom-renderer-spec {
+        id: string,
+        kinds: list<string>,
+    }
+
+    record custom-block {
+        custom-kind: string,
+        attrs: json,
+        blocks: document-tree,
+        anchor: option<string>,
+        span: span,
+    }
+
+    /// Le due strade non sono equivalenti, e la differenza è il §3.6: `html` è
+    /// HTML che entra nella webview e passa dal punto unico di sanitizzazione;
+    /// `ui` è sicura per costruzione e viaggia fino alla shell, che la monta
+    /// con lo stesso `mount-tree` delle view. È la strada per cui la UI di un
+    /// plugin entra nella shell SENZA codice nel bundle (§3.3).
+    variant custom-rendering {
+        html(string),
+        ui(ui-tree),
+        fallback,
+    }
+
+    spec: func() -> custom-renderer-spec;
+    render: func(block: custom-block, opts: render-options) -> result<custom-rendering, format-error>;
 }
 
 /// Protocollo di UI dichiarativa (`UiNode`).
@@ -1570,13 +1734,19 @@ interface event-handler {
 interface plugin {
     use errors.{plugin-error};
     use json.{json};
+    use options.{option-map};
 
+    /// Cosa un plugin dichiara di voler fare. Erano tre booleani — leggere,
+    /// scrivere, rete — contro ciò che 20.1, 23.1 e 20.3 chiedono: appunti,
+    /// camera e microfono, filesystem esterno, e soprattutto rete CON ALLOWLIST
+    /// e file CON ALLOWLIST, cioè permessi che hanno un parametro. Un booleano
+    /// non ha dove metterlo, e «rete» senza allowlist è o tutto o niente.
+    ///
+    /// Un permesso con un namespace di terzi attraversa il confine intatto: un
+    /// host che non lo conosce può RIFIUTARLO, che è ciò che un enum chiuso non
+    /// gli avrebbe permesso di fare. Il punto di applicazione resta il §7.3.
     record plugin-permissions {
-        read-vault: bool,
-        write-vault: bool,
-        network: bool,
-        // Estensione prevista a M4 (vedi docs/architecture/plugin-boundary.md):
-        //   vault-scope: list<string>,
+        granted: option-map,
     }
     record plugin-manifest {
         id: string,
@@ -1758,6 +1928,12 @@ world plugin-world {
 
     export plugin;
     export format;
+    /// I due innesti del §3.1 e del §3.2: chi aggiunge la sintassi, e chi
+    /// disegna il blocco che ne esce. Sono esportati separatamente da `format`
+    /// perché un plugin può implementarne uno senza implementare l'altro — ed è
+    /// esattamente ciò che «mezzo plugin» significa.
+    export syntax;
+    export renderer;
     export command;
     export view;
     export index;

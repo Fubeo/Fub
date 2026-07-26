@@ -11,7 +11,9 @@ use std::sync::{Arc, Mutex};
 use camino::Utf8PathBuf;
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::Notice;
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, SearchHit};
 use fubmd_abi::FormatProvider;
@@ -23,18 +25,19 @@ struct PlainProvider;
 
 impl FormatProvider for PlainProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "plain".into(),
-            name: "Testo semplice (test)".into(),
-            extensions: vec!["txt".into()],
-        }
+        FormatDescriptor::text("plain", "Testo semplice (test)", &["txt"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.to_string();
         Ok(model)
@@ -166,7 +169,9 @@ impl Fixture {
 
     fn workspace(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
-        registry.register(Box::new(PlainProvider));
+        registry
+            .register(Box::new(PlainProvider))
+            .expect("nessun conflitto di estensioni");
         Workspace::new(&self.root, registry)
     }
 }

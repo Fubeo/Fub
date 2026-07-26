@@ -51,7 +51,9 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     );
 
     let mut registry = FormatRegistry::new();
-    registry.register(MarkdownProvider::boxed());
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
     ws.reindex().expect("reindex");
     (dir, ws)

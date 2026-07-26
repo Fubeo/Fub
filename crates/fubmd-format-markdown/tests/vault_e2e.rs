@@ -12,7 +12,9 @@ fn sample_root() -> Utf8PathBuf {
 
 fn open(root: &Utf8PathBuf) -> Workspace {
     let mut registry = FormatRegistry::new();
-    registry.register(MarkdownProvider::boxed());
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(root, registry);
     ws.reindex().expect("reindex del vault di esempio");
     ws
@@ -95,7 +97,7 @@ fn computes_backlinks_with_context() {
 #[test]
 fn renders_preview_with_wikilink_data_attrs() {
     let ws = open_sample();
-    let html = ws.render_preview(&DocId::new("index.md")).unwrap();
+    let html = ws.render_preview(&DocId::new("index.md")).unwrap().html;
     assert!(
         html.contains("data-wikilink-page=\"Nota B\""),
         "html: {html}"

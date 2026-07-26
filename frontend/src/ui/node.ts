@@ -31,6 +31,7 @@
 // parallelo è la seconda verità che diverge appena il riconciliatore tocca un
 // nodo, ed è esattamente ciò che questo file esiste per evitare.
 import type { ActionRef, FieldValue, UiNode, UiValue } from "../host/contract";
+import { setSanitizedHtml } from "./sanitize";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -437,7 +438,13 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
       const el = div("ui-html");
       // Riservato al codice fidato: il kernel rifiuta questa variante da un
       // provider non fidato (`UiNode::validate_untrusted`), in un punto solo.
-      el.innerHTML = node.html;
+      //
+      // E passa comunque dal sanitizer (§3.6): i due presidi rispondono a due
+      // domande diverse — il kernel dice *chi* può mandare markup, questo dice
+      // *quale* markup entra nella webview. Il codice fidato non è codice
+      // infallibile, e la fonte di un frammento «già escapato lato Rust» può
+      // essere un embed o un tema.
+      setSanitizedHtml(el, node.html);
       return el;
     }
     case "web_view": {

@@ -18,7 +18,9 @@ use std::sync::{Arc, Mutex};
 use camino::Utf8PathBuf;
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Event, EventMask, Notice};
-use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
+use fubmd_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{EventHandler, HostApi};
 use fubmd_abi::transfer::{
@@ -33,18 +35,19 @@ struct PlainProvider;
 
 impl FormatProvider for PlainProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor {
-            id: "plain".into(),
-            name: "Testo semplice (test)".into(),
-            extensions: vec!["txt".into()],
-        }
+        FormatDescriptor::text("plain", "Testo semplice (test)", &["txt"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()
     }
 
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source = source.text().unwrap_or_default();
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.to_string();
         Ok(model)
@@ -177,7 +180,9 @@ fn workspace() -> (tempfile::TempDir, Workspace) {
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("esistente.txt"), "ciao").unwrap();
     let mut registry = FormatRegistry::new();
-    registry.register(Box::new(PlainProvider));
+    registry
+        .register(Box::new(PlainProvider))
+        .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
     ws.reindex().expect("reindex");
     (dir, ws)

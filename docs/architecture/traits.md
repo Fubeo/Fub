@@ -43,16 +43,83 @@ provider (nativo, `fubmd-format-markdown`).
 pub trait FormatProvider: Send + Sync {
     fn descriptor(&self) -> FormatDescriptor;
     fn capabilities(&self) -> FormatCapabilities;
-    fn parse(&self, source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError>;
+    fn parse(&self, source: &DocumentSource, ctx: &ParseContext) -> Result<DocumentModel, FormatError>;
     fn render_html(&self, model: &DocumentModel, opts: &RenderOptions) -> Result<String, FormatError>;
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError>;
 }
 ```
 
-Tipi di supporto: `FormatDescriptor { id, name, extensions }`,
-`FormatCapabilities { wikilinks, tags, frontmatter, callouts, embeds }`,
-`ParseContext { doc_id, parse_tags, parse_wikilinks }` (helper `::obsidian(id)`),
-`RenderOptions { wikilinks_as_data_attrs }`.
+Tipi di supporto: `FormatDescriptor { id, name, extensions, source }`,
+`FormatCapabilities { syntax: OptionMap }`,
+`ParseContext { doc_id, options: OptionMap }` (helper `::obsidian(id)`),
+`RenderOptions { target: RenderTarget, options: OptionMap }`.
+
+**La mappa con namespace** ([decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)).
+Tre di quei quattro tipi erano N booleani, e con quella forma ogni sintassi del
+capitolo 5.2 costava un campo del contratto. `OptionMap` è `ns:nome` → parametro:
+**presente = acceso**, il valore è il dettaglio, un `false` esplicito spegne. Il
+namespace è di chi definisce la voce (`fubmd` per il core, l'id del plugin per
+gli altri), e le chiavi del core stanno in `options::{syntax, render_option,
+permission}`.
+
+`FormatCapabilities` e `ParseContext` **condividono il vocabolario** (`syntax`):
+«cosa so fare» e «cosa devi accendere» sono la stessa domanda vista da due lati,
+e tenuti separati la terza sintassi li avrebbe fatti divergere. `RenderTarget`
+invece resta un `enum` (`Screen`, `Print`, `Pdf`, `StaticSite`) perché i bersagli
+sono **esclusivi**: la mappa serve a ciò che è additivo e concorrente, non a ciò
+che è alternativo.
+
+**La sorgente ha una forma dichiarata.** `FormatDescriptor::source` dice se il
+provider vuole testo UTF-8 o byte grezzi, e il kernel legge di conseguenza:
+«leggi il file» e «decodificalo come UTF-8» erano la stessa operazione, e per un
+canvas (12), un CSV con un encoding suo (11.4, 2.3) o un PDF (13.2) la seconda
+metà è sbagliata. Un provider testuale che riceva dei byte risponde
+`Unsupported`, non indovina.
+
+### `SyntaxRule` e `CustomRenderer` — ciò che il core non conosce
+
+Il perno è il `custom_kind`: un nome con namespace lo produce, lo stesso nome lo
+disegna, lo stesso nome arriva alla shell dentro `UiKind::Custom { ns }`.
+
+```rust
+pub trait SyntaxRule: Send + Sync {
+    fn spec(&self) -> SyntaxRuleSpec;   // id, formato, trigger, ordine, opzione, kind prodotti
+    fn apply(&self, m: &SyntaxMatch, ctx: &ParseContext)
+        -> Result<Option<SyntaxProduct>, FormatError>;
+}
+
+pub trait CustomRenderer: Send + Sync {
+    fn spec(&self) -> CustomRendererSpec;   // id, i custom_kind rivendicati
+    fn render(&self, block: &CustomBlock, opts: &RenderOptions)
+        -> Result<CustomRendering, FormatError>;
+}
+```
+
+- Una regola **si innesta** su un provider che non la conosce, e agisce sul
+  **modello** dopo il parse. Prima l'unico modo di aggiungere una sintassi al
+  markdown era sostituire il provider markdown. Il prezzo, dichiarato: non può
+  cambiare come la grammatica di base spezza il testo — può prendersi un recinto
+  che il provider ha già riconosciuto (`SyntaxTrigger::Fence`) o un tratto fra
+  due delimitatori (`SyntaxTrigger::Inline`).
+- Una regola produce **solo l'escape hatch**: `Block::Custom` o `Inline::Custom`,
+  mai un nodo del vocabolario centrale. Nessuno innesta una sintassi che finge di
+  essere un heading.
+- Un renderer risponde `Html` (markup, e passa dalla sanitizzazione), `Ui` (un
+  albero `UiNode`, **sicuro per costruzione**, che arriva alla shell) o
+  `Fallback` («non lo disegno io», che è diverso da un errore).
+- **I conflitti non sono silenziosi.** `FormatRegistry::register`,
+  `register_syntax_rule` e `register_custom_renderer` restituiscono un `Result`;
+  il perdente non si registra affatto, nemmeno per le sintassi libere che
+  portava. Sostituire un provider resta possibile e si chiede per nome
+  (`FormatRegistry::replace`).
+- `Workspace::undrawn_kinds()` dice quali kind qualcuno **produce** e nessuno
+  **disegna**: ogni nome lì è un blocco che l'utente leggerà crudo.
+
+La composizione la fa il kernel: `render_preview` restituisce un
+`RenderedDocument { html, parts }`, dove l'HTML porta un buco
+`data-ui-slot="N"` e la parte con quel numero ci va dentro. Il provider non sa
+che i renderer esistono — se lo sapesse, aggiungerne uno vorrebbe dire toccare
+ogni provider.
 
 Due semantiche fissate nel contratto:
 
@@ -350,8 +417,8 @@ non solo lo span. Prove end-to-end col kernel vero:
 
 **Il varco unico degli alberi di UI.** I provider si registrano con
 `Workspace::register_view_provider(id, trust, provider)`, dove
-`Trust { Trusted, Untrusted }` dice **di chi** ci si fida (non *cosa* è
-ammesso: lo stesso `UiNode::Html` è legittimo da una feature ufficiale e
+`Trust { Core, Verified, Community, Development, Revoked }` dice **di chi** ci si
+fida (non *cosa* è ammesso: lo stesso `UiNode::Html` è legittimo da una feature ufficiale e
 inaccettabile da un plugin sandboxato). Ogni albero entra nell'host da
 `Workspace::render_view` / `Workspace::view_action`, e lì — in un punto solo —
 `UiNode::validate_untrusted` rifiuta il contenuto attivo di un provider non
@@ -708,6 +775,13 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `PropertyValue` / `PropertyScalar` | `variant` — la lista porta gli scalari, perché WIT non ha tipi ricorsivi |
 | `PropertyDate` / `PropertyTime` | `record` (`s32` per l'anno, `option<s16>` per il fuso) |
 | `FormatDescriptor`/`FormatCapabilities`/`ParseContext`/`RenderOptions` | `record` |
+| `SourceKind`/`RenderTarget` | `enum source-kind { text, bytes }` / `enum render-target { screen, print, pdf, static-site }` |
+| `DocumentSource` | `variant document-source { text(string), bytes(list<u8>) }` |
+| `OptionMap` | `type option-map = list<option-entry>` (interface `options`) — al confine è una **lista di coppie**, perché WIT non ha mappe; lato Rust è una `BTreeMap`, e l'ordine stabile è ciò che la rende confrontabile |
+| `SyntaxRuleSpec`/`SyntaxMatch` | `record` (interface `syntax`) |
+| `SyntaxTrigger`/`SyntaxProduct` | `variant` — ogni caso ha il suo record (`syntax-trigger-fence`, `syntax-product-block`, …) |
+| `CustomRendererSpec`/`CustomBlock` | `record` (interface `renderer`) |
+| `CustomRendering` | `variant custom-rendering { html(string), ui(ui-tree), fallback }` |
 | `CommandSpec`/`ParamSpec`/`Choice`/`CommandScope`/`CommandOutcome`/`CommandPlan`/`PlannedEdit` | `record` (interface `command`) |
 | `ParamKind` | `variant` (solo `choice` porta un payload: `list<choice>`) — tag **adiacente** su JSON, come `PropertyValue`, perché una variante che porta una sequenza non è serializzabile col tag interno |
 | `CommandReach`/`InvokeMode` | `enum command-reach { session, document, documents, vault, settings }` / `enum invoke-mode { apply, dry-run }` |

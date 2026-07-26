@@ -29,8 +29,11 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
   (tabella di esprimibilità in [../architecture/traits.md](../architecture/traits.md)).
 - Da qui: **cambi additivi versionati**; le modifiche breaking richiedono un bump di
   versione del contratto. Documentare la policy di compatibilità.
-- Consolidare le estensioni introdotte in corso d'opera: `PluginPermissions.vault_scope`
-  (vedi [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md)), i
+- Consolidare le estensioni introdotte in corso d'opera: lo **scope del vault**
+  nei permessi — che dalla [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+  non è più un campo da aggiungere ma il *parametro* della voce
+  `fubmd:read-vault` / `fubmd:write-vault` (vedi
+  [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md)), i
   nodi input di `UiNode` aggiunti a [M3](M3-editor-fidelity.md), e il modello dei
   **job** (`JobSpec`/`JobId`, `spawn_job`/`run_job`, `Event::JobDone`/`Overflow`)
   già nel contratto e nel `wit/` da M2. Prima del freeze va deciso se ai job

@@ -98,11 +98,17 @@ e toglie l'`IndexProvider`-specchio dalla strada di 15.1, 21.2 e 22.1, che oggi
       *deve* ignorarlo.
 - [ ] Oggi non si vede perché il formato è uno solo. Serve appena ne esiste un
       secondo (12 canvas, 11.4 CSV/JSON, 13.2 PDF) e appena il vault contiene
-      cose che documenti non sono (§14.1), cioè esattamente quando il §3.4
-      aprirà `parse` ai formati non-testo.
-- [ ] Va deciso con il §3.5 (`FormatCapabilities` come mappa con namespace) e
-      con il §3.4: sono la stessa domanda — *cosa so di questo documento senza
-      averlo aperto* — vista dal lato del vault invece che del parser.
+      cose che documenti non sono (§14.1) — cioè **da adesso**, perché il §3.4 ha
+      aperto `parse` ai formati non-testo
+      ([decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)).
+- [ ] **Metà della risposta è già scritta, e questa voce eredita la sua forma.**
+      Il §3.5 ha reso `FormatCapabilities` una mappa con namespace, e il
+      `FormatDescriptor` dichiara ora in che forma vuole la sorgente
+      (`SourceKind`). Ciò che manca è solo il **canale**: nessuna capacità
+      restituisce quei due per un `DocId`, e finché non c'è, il kernel è l'unico
+      che sa di che formato è un documento. Era la stessa domanda del §3.4 e del
+      §3.5 — *cosa so di questo documento senza averlo aperto* — vista dal lato
+      del vault invece che del parser, e ora è l'unico lato rimasto.
 
 ### 4.4 Due parser per la stessa sintassi
 

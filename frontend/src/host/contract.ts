@@ -464,9 +464,30 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
-export interface EmbedContent {
-  doc_id: string;
+// Un documento **reso**: l'HTML, e le parti dichiarative che la shell monta da
+// sé (rispecchia `fubmd_kernel::RenderedDocument`).
+//
+// Non è una stringa sola perché un blocco custom può uscire come albero `UiNode`
+// invece che come markup (§3.2): l'HTML porta un buco `data-ui-slot="N"` e la
+// parte con quel numero ci va dentro, montata con lo stesso `mountTree` delle
+// view. È così che il blocco di un plugin arriva a schermo senza una riga in
+// questo bundle.
+export interface RenderedDocument {
   html: string;
+  parts: RenderedPart[];
+}
+
+export interface RenderedPart {
+  slot: number;
+  /// Il `custom_kind` che l'ha prodotta: serve al CSS e a chi legge un log.
+  kind: string;
+  node: UiNode;
+}
+
+// `EmbedContent` porta un `RenderedDocument` appiattito (`#[serde(flatten)]`):
+// un embed passa dai renderer come l'anteprima.
+export interface EmbedContent extends RenderedDocument {
+  doc_id: string;
 }
 
 // Intervallo in byte (rispecchia fubmd_abi::model::Span).

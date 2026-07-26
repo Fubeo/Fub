@@ -38,6 +38,11 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.32 · §2.6 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
 | §1.33 · §2.7 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
 | §3.9 · §2.8 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
+| §1.20 · §3.4 | [0017 — Chi disegna ciò che il core non conosce](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) |
+| §1.22 · §3.1 | [0017 — Chi disegna ciò che il core non conosce](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) |
+| §1.23 · §3.2 | [0017 — Chi disegna ciò che il core non conosce](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) |
+| §1.26 · §3.5 | [0017 — Chi disegna ciò che il core non conosce](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) |
+| §3.4 (vecchio) · §3.6 | [0017 — Chi disegna ciò che il core non conosce](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -53,13 +58,9 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.13 | **§4.1** | Il canale del rendering — stringa HTML o modello? |
 | §1.17 | **§13.3** | L'undo non ha un proprietario |
 | §1.19 | **§10.1** | L'abbonamento agli eventi non filtra |
-| §1.20 | **§3.4** | `ParseContext` è chiuso, e `parse` vuole per forza del testo |
 | §1.21 | **§9.1** | Il lavoro lungo non vede il vault |
-| §1.22 | **§3.1** | Il parser è sostituibile, non estendibile |
-| §1.23 | **§3.2** | `Block::Custom` non ha un renderer |
 | §1.24 | **§7.5** | I plugin non hanno un canale per parlarsi |
 | §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
-| §1.26 | **§3.5** | Gli altri enum chiusi — e l'unico che rompe una firma |
 | §1.27 | **§5.5** | `list_documents` e `views()` — le metà nel contratto di §2.13 e §1.15 |
 | §1.28 | **§4.2** | Il modello parsato non arriva a nessun provider |
 | §1.29 | **§4.3** | Il contratto non dice di che formato è un documento |
@@ -98,7 +99,6 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §3.1 | **§1.2** | Smontare il monolite |
 | §3.2 | **§18.2** | Comandi e tastiera |
 | §3.3 | **§12.4** | Tema, token, accessibilità |
-| §3.4 | **§3.6** | Sanitizzazione e CSP in un punto solo |
 | §3.5 | **§10.3** | Notifiche e attività in background |
 | §3.6 | **§2.9** | Prestazioni della UI |
 | §3.7 | **§18.1** | Editor |

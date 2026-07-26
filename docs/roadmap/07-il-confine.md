@@ -119,13 +119,19 @@ cinque volte.
 
 - [ ] **`view_owner` risolve un id cercando su tutti i provider e prende il
       primo** (`kernel/workspace.rs:1566-1571`): due view con lo stesso id e la
-      seconda è irraggiungibile, **in silenzio**. È lo stesso difetto già visto
-      per `FormatRegistry` (§3.1: l'ultimo registrato vince) e per il dispatch
-      delle query (§5.2: per tentativi) — ma quelle sono due istanze di un
-      problema che è generale.
+      seconda è irraggiungibile, **in silenzio**. È lo stesso difetto che il
+      `FormatRegistry` aveva (§3.1: l'ultimo registrato vinceva) e che il
+      dispatch delle query ha ancora (§5.2: per tentativi). Il primo è chiuso
+      dalla [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md),
+      e la forma della risposta è quella da riusare qui: la registrazione
+      restituisce un `Result`, il perdente **non si registra affatto**, e
+      sostituire resta possibile ma si chiede per nome.
 - [ ] **Gli spazi di nomi del contratto sono otto e nessuno ha una regola**: id
       di view, `ActionId`, id di comando ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), `custom_kind` dei blocchi
-      (§3.2), topic degli `Event::Custom`, `ns` delle `IndexQuery::Custom` e dei
+      — dove la [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+      ha già fissato *core senza prefisso, terzi con `ns:`* e la fa rispettare
+      agli id di regole e renderer, ma non ancora ai kind —, topic degli
+      `Event::Custom`, `ns` delle `IndexQuery::Custom` e dei
       `ViewUpdate::Custom`, chiavi di impostazione (§11.1), nomi dei job. Solo
       per gli eventi custom c'è una convenzione scritta (`"<plugin-id>/<nome>"`,
       `abi/event.rs:39-41`), e non è imposta da nulla.
