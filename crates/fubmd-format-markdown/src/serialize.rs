@@ -146,7 +146,7 @@ fn write_block(block: &Block, out: &mut String) {
                 out.push_str(&format!("[^{label}]: {}\n", inner.trim()));
             } else if custom_kind == custom_kind::CALLOUT {
                 let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
-                out.push_str(&format!("> [!{}]\n", ty));
+                out.push_str(&format!("> [!{ty}]\n"));
                 let mut inner = String::new();
                 for b in blocks {
                     write_block(b, &mut inner);
