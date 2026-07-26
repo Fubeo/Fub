@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
+use fubmd_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::model::DocId;
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{
@@ -16,8 +17,9 @@ use fubmd_abi::traits::{
 };
 use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
-    BacklinksView, OutlineView, SearchIndex, StatsView, TagPanelView, VersionRef, VersionStore,
-    VersioningHandler, BACKLINKS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID, VERSIONING_ID,
+    BacklinksView, CoreCommands, OutlineView, SearchIndex, StatsView, TagPanelView, VersionRef,
+    VersionStore, VersioningHandler, BACKLINKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID,
+    TAGS_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, TrashEntry, Trust, Workspace};
@@ -195,6 +197,10 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     // il **contesto di sessione** per intero — selezione e modalità, non solo
     // quale nota è aperta (§1.9).
     ws.register_view_provider(STATS_ID, Trust::Trusted, Box::new(StatsView));
+    // I comandi ufficiali: la prima feature sul giro del **registro** (§1.1).
+    // Da qui in poi un'azione nuova non è un comando Tauri in più — è una riga
+    // in un `CommandProvider`, e la palette la trova da sola.
+    ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands));
 
     ws.reindex().map_err(|e| e.to_string())?;
 
@@ -504,6 +510,49 @@ fn view_action(
     .map_err(|e| e.to_string())
 }
 
+// --- comandi (protocollo generico) -----------------------------------------
+//
+// L'altro giro discovery+invoke accanto a quello delle view, e la ragione per
+// cui questo file non deve più crescere di un comando Tauri per feature (§4.2):
+// un'azione nuova si dichiara in un `CommandProvider` e arriva alla palette da
+// sola, con i suoi parametri e il suo raggio.
+
+/// I comandi offerti dai provider registrati.
+///
+/// La shell non ne cabla nessuno: disegna ciò che legge, chiede i parametri che
+/// la spec dichiara e decide se chiedere conferma dal raggio dichiarato. Sono
+/// le stesse informazioni che leggerebbero una CLI (27.1) o un chiamante
+/// programmatico (22.4) — questo comando IPC è solo il primo dei suoi clienti.
+#[tauri::command]
+fn list_commands(state: State<AppState>) -> Result<Vec<CommandSpec>, String> {
+    let ws = current(&state)?;
+    let ws = ws.lock().unwrap();
+    Ok(ws.commands())
+}
+
+/// Esegue — o simula — un comando.
+///
+/// `mode` assente significa `apply`: è la scelta di **questo** confine, non del
+/// contratto (dove un default non esiste apposta). Il webview è codice nostro e
+/// il caso normale è eseguire; chi vuole il piano lo chiede, e riceve un
+/// `CommandOutcome` con dentro l'effetto `plan`.
+#[tauri::command]
+fn invoke_command(
+    state: State<AppState>,
+    command: String,
+    args: Option<serde_json::Value>,
+    mode: Option<InvokeMode>,
+) -> Result<CommandOutcome, String> {
+    let ws = current(&state)?;
+    let mut ws = ws.lock().unwrap();
+    ws.invoke_command(
+        &command,
+        args.unwrap_or(serde_json::Value::Null),
+        mode.unwrap_or(InvokeMode::Apply),
+    )
+    .map_err(|e| e.to_string())
+}
+
 /// Ricerca full-text sul vault.
 ///
 /// `snippet` è testo semplice e `highlights` sono intervalli in byte al suo
@@ -747,6 +796,8 @@ pub fn run() {
             list_views,
             render_view,
             view_action,
+            list_commands,
+            invoke_command,
             search,
             list_tags,
             graph_data,

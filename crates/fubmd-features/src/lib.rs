@@ -18,11 +18,16 @@
 //!   selezione e tempo di lettura dal **contesto di sessione** (M2, §1.9).
 //! - [`search`] — [`IndexProvider`](fubmd_abi::traits::IndexProvider) full-text
 //!   su tantivy, persistente e incrementale (M2).
+//! - [`commands`] — i comandi ufficiali come
+//!   [`CommandProvider`](fubmd_abi::traits::CommandProvider): cerca, wikilink
+//!   sulla selezione, sostituzione in blocco con anteprima del piano (§1.1,
+//!   §1.36).
 //! - [`versioning`] — snapshot per-file del vault come
 //!   [`EventHandler`](fubmd_abi::traits::EventHandler): il dogfooding più
 //!   completo del contratto, perché usa solo ciò che avrà un plugin di terzi.
 
 pub mod backlinks;
+pub mod commands;
 pub mod outline;
 pub mod search;
 pub mod stats;
@@ -36,6 +41,9 @@ pub mod versioning;
 mod testing;
 
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
+pub use commands::{
+    occurrences, CoreCommands, COMMANDS_ID, SEARCH_OPEN, SELECTION_WIKILINK, VAULT_REPLACE,
+};
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
 pub use search::{SearchIndex, SEARCH_ID};
 pub use stats::{

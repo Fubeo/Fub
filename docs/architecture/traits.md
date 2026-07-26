@@ -183,18 +183,69 @@ presta lo stesso `HostApi` a chi compone le due metà di una feature dall'estern
 del dispatch — è così che l'app apre lo store delle versioni e ne rilegge una,
 senza un canale privilegiato che un plugin non avrebbe.
 
-### `CommandProvider` — comandi (M3: command palette)
+### `CommandProvider` — comandi (M2: registro, palette, dry-run)
 
 ```rust
 pub trait CommandProvider: Send + Sync {
     fn commands(&self) -> Vec<CommandSpec>;
-    fn invoke(&self, command: &str, args: serde_json::Value, host: &mut dyn HostApi)
-        -> Result<CommandOutcome, PluginError>;
+    fn invoke(&self, command: &str, args: serde_json::Value, mode: InvokeMode,
+              host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError>;
 }
 ```
 
-`CommandSpec { id, title, keybinding: Option<String> }`,
-`CommandOutcome { notify: Option<String> }`.
+`CommandSpec { id, title, description, keybinding, params: Vec<ParamSpec>, scope:
+CommandScope }`. I tre campi oltre `{id, title}` esistono per il chiamante che
+**non ha letto il codice** (§1.36): la `description` è l'unico ingrediente su cui
+un chiamante non umano sceglie, i `params` sono ciò che gli permette di comporre
+un'invocazione, lo `scope { writes, reach, reversible }` è il dato su cui si
+decide se chiedere conferma. Una palette si accontenterebbe di `{id, title}` —
+non la CLI (27.1), l'API locale (27.2), le automazioni (16.2), il centro di
+comando (22.4).
+
+`ParamKind { Text, Number, Bool, Document, Documents, Choice(Vec<Choice>) }` è un
+vocabolario chiuso e piccolo: le specie che un chiamante qualunque sa produrre.
+**Non** sono i nodi di input del §1.2 — questi dicono *cosa* è un valore, quelli
+diranno *come* lo si chiede; quando arriveranno saranno la resa di un
+`ParamSpec`, non un secondo modo di dichiararlo.
+
+`CommandOutcome { notify: Option<String>, effect: CommandEffect }` con
+`CommandEffect { Done, Navigate, Reveal, RunSearch, Plan(CommandPlan), Custom }`.
+Le intenzioni sono le stesse di `ViewUpdate` perché sono intenzioni della
+**shell**, non di chi le manda; `Replace` non c'è, perché da un comando non
+esiste una view da ridisegnare.
+
+**Le due cose che l'host garantisce** (`Workspace::invoke_command`), e che sono
+la differenza fra un registro leggibile e uno eseguibile da terzi:
+
+1. **Gli argomenti sono convalidati contro la spec prima del comando**
+   (`CommandSpec::validate_args`): obbligatori presenti, specie giuste, e un
+   argomento **non dichiarato è un errore**, non un argomento ignorato — per chi
+   non può leggere il codice, l'argomento ignorato in silenzio è il modo peggiore
+   di sbagliare.
+2. **Le capacità dipendono da ciò che il comando ha dichiarato.** Scrive solo un
+   `InvokeMode::Apply` di un comando con `scope.writes`; in ogni altro caso —
+   dry-run, o comando che si è dichiarato di sola lettura — l'host prestato
+   rifiuta le scritture con `PermissionDenied`. Il dry-run non è quindi una
+   convenzione fra chiamante e comando (che un comando di terzi non onora), e
+   `writes: false` non è una decorazione.
+
+Il piano (`CommandPlan { summary, docs, edits }`) è un `EditRequest` per
+documento (§1.16), con le revisioni **di adesso**: se il documento cambia fra il
+piano e l'approvazione, applicarlo fallisce con `Conflict` invece di
+sovrascrivere. `docs` è l'insieme impattato completo — ci sta anche ciò che un
+`EditRequest` non esprime — e **lo completa l'host** con i documenti degli edit:
+quell'elenco è ciò che l'utente approva.
+
+**I provider veri: `CoreCommands`** (`fubmd-features/src/commands.rs`) —
+`search.open` (nessuna scrittura, un effetto per la shell), `selection.wikilink`
+(contesto di sessione §1.9 + modifica chirurgica §1.16 su una nota),
+`vault.replace` (N note, quattro specie di parametri, piano prima di applicare).
+Restano fuori i comandi **strutturali** (crea/rinomina/cestina): l'`HostApi` non
+ha quelle capacità, ed è il §1.4 a doverle decidere una per una — un comando
+ufficiale che le ottenesse per una via privilegiata sarebbe un dogfooding finto.
+Prove: `crates/fubmd-kernel/tests/invoke_command.rs` (le due garanzie, con
+comandi che provano *apposta* a violarle) e
+`crates/fubmd-features/tests/commands_e2e.rs`.
 
 ### `ViewProvider` — UI dichiarativa (M2: graph/outline/tag panel)
 
@@ -536,7 +587,7 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
 | `IndexProvider` | — (backlink via grafo del kernel) | `SearchIndex` (tantivy) **M2** ✅ | `activate`/`flush` con `HostApi`: persiste via `data_*` |
 | `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` ✅ **M2** | **M2** (graph-data) | quattro provider veri; `query_index`+`active_context`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch`; `ViewSpec.follows` per il contesto |
-| `CommandProvider` | — | **M3** (command palette) | keybinding non vincolante |
+| `CommandProvider` | — | `CoreCommands` ✅ **M2** (§1.1, §1.36) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** (§1.7) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** (§1.7) | `&self`: un export è una lettura, gira sotto prestito condiviso |
@@ -567,7 +618,10 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `PropertyValue` / `PropertyScalar` | `variant` — la lista porta gli scalari, perché WIT non ha tipi ricorsivi |
 | `PropertyDate` / `PropertyTime` | `record` (`s32` per l'anno, `option<s16>` per il fuso) |
 | `FormatDescriptor`/`FormatCapabilities`/`ParseContext`/`RenderOptions` | `record` |
-| `CommandSpec`/`CommandOutcome` | `record` |
+| `CommandSpec`/`ParamSpec`/`Choice`/`CommandScope`/`CommandOutcome`/`CommandPlan`/`PlannedEdit` | `record` (interface `command`) |
+| `ParamKind` | `variant` (solo `choice` porta un payload: `list<choice>`) — tag **adiacente** su JSON, come `PropertyValue`, perché una variante che porta una sequenza non è serializzabile col tag interno |
+| `CommandReach`/`InvokeMode` | `enum command-reach { session, document, documents, vault, settings }` / `enum invoke-mode { apply, dry-run }` |
+| `CommandEffect` | `variant` (`plan(command-plan)`; `reveal`/`custom` hanno il loro record) |
 | `ViewSpec`/`ViewPlacement` | `record` / `enum` |
 | `TextEdit`/`EditRequest`/`AppliedEdit`/`EditReport` | `record` (interface `edit`) |
 | `Revision` | `type revision = string` — **opaca**: solo l'uguaglianza è contratto, la derivazione è dell'host |

@@ -71,15 +71,30 @@ Oggi il provider markdown emette callout/tabelle/embed/math come
   su cicli e profondità. M3 estende la resa (immagini, blocchi `^id`, stile) —
   non il meccanismo.
 
-### Command palette (`CommandProvider`)
+### Command palette (`CommandProvider`) — **anticipata a M2** (§1.1 + §1.36)
 
-- Prima impl reale di `CommandProvider` (firma in
-  [../architecture/traits.md](../architecture/traits.md)): raccoglie i `CommandSpec`
-  registrati, palette fuzzy nel frontend, `invoke(command, args, host)` con
-  `CommandOutcome.notify` per il feedback.
-- Comandi di base: crea/rinomina/sposta nota, apri ricerca, toggle pannelli, "crea
-  nota" (migrato qui da [M2](M2-search-graph.md) se lì era cablato nell'app).
-- `keybinding` dei `CommandSpec` come suggerimento; la mappa reale è nei settings.
+Il registro, la palette e il dry-run sono stati fatti a M2 insieme al §1.36: il
+motivo è che `CommandSpec` e `invoke` sono **firme**, e le firme costano un campo
+prima del freeze e una migrazione dopo. Cosa è già lì:
+`register_command_provider`/`commands`/`invoke_command` nel kernel,
+`list_commands`/`invoke_command` sull'IPC, `CoreCommands` in `fubmd-features`, la
+palette in `frontend/src/palette.ts` (filtro, form dai `ParamSpec`, anteprima del
+piano prima di applicare, scorciatoie **dichiarate** dai comandi).
+
+Cosa resta a M3:
+
+- **I comandi strutturali** (crea/rinomina/sposta/cestina nota): non sono
+  migrati perché l'`HostApi` non ha quelle capacità — è il §1.4 a doverle
+  decidere una per una, e senza di esse un comando ufficiale le otterrebbe per
+  una via privilegiata che un plugin non ha.
+- **I comandi della shell** (toggle pannelli, cambio modalità): il registro vive
+  nel kernel e il frontend non può registrarvisi (§3.2).
+- **La mappa dei tasti come dato**: oggi la shell onora il `keybinding`
+  *dichiarato* dal comando e ignora quelli senza modificatori; la mappa
+  configurabile dall'utente è nei settings (§1.3 + §3.2).
+- **Il form dei parametri con i nodi del §1.2**: la palette disegna i campi da
+  sé; quando i nodi di input esisteranno, saranno la resa dei `ParamSpec` — non
+  un secondo modo di dichiararli.
 
 ### Settings via form dichiarativi
 

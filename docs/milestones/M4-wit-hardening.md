@@ -95,7 +95,7 @@ Resta a M4, sulla conformità:
 ## Checklist del freeze
 
 Le decisioni "gratis prima, breaking dopo" del §1 di [todo.md](../todo.md), che
-è l'elenco autorevole e per intero (§1.1–§1.13, tutte P0); qui stanno quelle che
+è l'elenco autorevole e per intero (§1.1–§1.36, tutte P0); qui stanno quelle che
 hanno una **domanda aperta** e una risposta da mettere a verbale prima di
 chiudere. Le prime sono **già chiuse** in corso d'opera (il costo era una riga
 oggi, una migrazione domani); le altre restano al freeze.
@@ -206,6 +206,49 @@ oggi, una migrazione domani); le altre restano al freeze.
       rendering incrementale e sanitizzazione (6.1, 5.3), e la sintassi nuova
       nasce due volte (Rust + Lezer, §3.8). Decidere se l'HTML resta la
       fast-path e il modello con gli `Span` diventa il canale dell'interattivo.
+- [x] **Un comando invocato da chi non ha letto il codice** — fatto col §1.1 +
+      §1.36: registro nel `Workspace` (`register_command_provider`, `commands`,
+      `invoke_command`), `list_commands`/`invoke_command` sull'IPC, interface
+      `command` riscritta nel WIT, e `CoreCommands` + la **palette** come primi
+      clienti. Le tre domande, con la risposta a verbale:
+      1. **Come si dichiara un parametro** → uno **schema a sé**
+         (`ParamSpec { name, title, description, kind, required }`,
+         `ParamKind { text, number, bool, document, documents, choice }`), non i
+         nodi del §1.2. La ragione non è che i nodi non basterebbero: è che
+         dichiarare *cosa serve* e disegnare *come lo si chiede* sono due
+         domande, e solo la prima ha senso per la CLI, per un'automazione e per
+         un modello, che non disegnano niente. Quando arriveranno i nodi di
+         input, saranno la **resa** di un `ParamSpec`. E sì: `CommandSpec`
+         acquista la `description` in prosa, che la palette non usa e senza cui
+         un chiamante non umano sceglie a caso.
+      2. **Dove vive il dry-run** → un argomento `mode: InvokeMode` su `invoke`,
+         cioè la **rottura di firma fatta adesso** (linea di base ritagliata in
+         `wit/frozen/0.1.0.wit`, come per il §1.9). La variante
+         `CommandOutcome::Plan` da sola sarebbe stata una convenzione fra
+         chiamante e comando; con il modo nella firma, l'host può *far
+         rispettare* la simulazione — presta un `HostApi` in sola lettura, e un
+         comando che ci prova riceve `PermissionDenied`. La stessa leva vale per
+         `scope.writes`: chi si dichiara di sola lettura riceve lo stesso host,
+         quindi la dichiarazione è vincolante e non decorativa.
+      3. **Dove vive il consenso** → **né** in una capacità `HostApi` **né** in
+         un `Confirm` sull'outcome: è il giro *dry-run → piano → approvazione →
+         apply*, e a decidere quando chiederlo è **chi invoca**, sulla base del
+         raggio dichiarato (`needsPlan` nella palette; una CLI può avere un'altra
+         politica sullo stesso dato). Una conferma sincrona nell'host non è
+         implementabile da questo host — il kernel è chiamato *dalla* shell e ne
+         tiene il lock, quindi dovrebbe risalire nella webview che sta aspettando
+         la risposta — e una firma che ogni host dovrà onorare e nessuno onora è
+         peggio che assente. In più il piano si **legge**: mostra i `DocId`
+         impattati e gli `EditRequest` proposti, mentre «sei sicuro?» mostra ciò
+         che il comando sceglie di dire. Il §2.10 resta la domanda gemella e
+         diversa: non «l'utente approva questa esecuzione?» ma «questo componente
+         può, in generale?».
+      Resta aperto sopra questa firma, dichiarato: l'**attribuzione** (§1.18 +
+      §1.12), le **impostazioni scrivibili da un programma** (§1.3: il
+      vocabolario c'è, `CommandReach::Settings`, lo schema no), i **comandi
+      strutturali** (crea/rinomina/cestina, che sono capacità del §1.4) e i
+      **comandi della shell** (toggle dei pannelli: il registro vive nel kernel e
+      il frontend non può registrarvisi — §3.2).
 
 ## Trait/API coinvolti
 

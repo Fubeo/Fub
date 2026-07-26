@@ -210,5 +210,160 @@
       },
       "text": "ciao"
     }
+  ],
+  "CommandSpec": [
+    {
+      "id": "test.every",
+      "title": "Tutte le specie",
+      "description": "Un comando con un parametro per specie.",
+      "keybinding": "Mod-k",
+      "params": [
+        {
+          "name": "p0",
+          "title": "P",
+          "description": "un parametro",
+          "kind": {
+            "kind": "text"
+          },
+          "required": false
+        },
+        {
+          "name": "p1",
+          "title": "P",
+          "description": "un parametro",
+          "kind": {
+            "kind": "number"
+          },
+          "required": false
+        },
+        {
+          "name": "p2",
+          "title": "P",
+          "description": "un parametro",
+          "kind": {
+            "kind": "bool"
+          },
+          "required": false
+        },
+        {
+          "name": "p3",
+          "title": "P",
+          "description": "un parametro",
+          "kind": {
+            "kind": "document"
+          },
+          "required": false
+        },
+        {
+          "name": "p4",
+          "title": "P",
+          "description": "un parametro",
+          "kind": {
+            "kind": "documents"
+          },
+          "required": false
+        },
+        {
+          "name": "p5",
+          "title": "P",
+          "description": "un parametro",
+          "kind": {
+            "kind": "choice",
+            "value": [
+              {
+                "value": "uno",
+                "title": "Uno"
+              }
+            ]
+          },
+          "required": false
+        }
+      ],
+      "scope": {
+        "writes": true,
+        "reach": "documents",
+        "reversible": false
+      }
+    },
+    {
+      "id": "test.min",
+      "title": "Minimo",
+      "description": "",
+      "keybinding": null,
+      "params": [],
+      "scope": {
+        "writes": false,
+        "reach": "session",
+        "reversible": true
+      }
+    }
+  ],
+  "CommandOutcome": [
+    {
+      "notify": "fatto",
+      "effect": {
+        "kind": "done"
+      }
+    },
+    {
+      "notify": "fatto",
+      "effect": {
+        "kind": "navigate",
+        "doc": "a.md"
+      }
+    },
+    {
+      "notify": "fatto",
+      "effect": {
+        "kind": "reveal",
+        "doc": "a.md",
+        "span": {
+          "start": 3,
+          "end": 7
+        }
+      }
+    },
+    {
+      "notify": "fatto",
+      "effect": {
+        "kind": "run_search",
+        "query": "q"
+      }
+    },
+    {
+      "notify": "fatto",
+      "effect": {
+        "kind": "plan",
+        "summary": "una nota",
+        "docs": [
+          "a.md"
+        ],
+        "edits": [
+          {
+            "doc": "a.md",
+            "edit": {
+              "base": "af63f54c86021707",
+              "edits": [
+                {
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "text": "y"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "notify": "fatto",
+      "effect": {
+        "kind": "custom",
+        "ns": "p",
+        "payload": null
+      }
+    }
   ]
 }

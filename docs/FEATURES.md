@@ -2663,6 +2663,9 @@
 - [ ] Nessun invio dati obbligatorio
 - [ ] Prompt personalizzati
 - [ ] AI commands
+- [ ] Centro di comando LLM
+- [ ] Operazioni multi-nota guidate da AI
+- [ ] Gestione impostazioni via AI con conferma
 
 ### FubDev
 - [ ] Code notebook
@@ -2830,6 +2833,89 @@
 - [ ] AI data access scope
 - [ ] AI exclusion rules
 - [ ] AI auditability
+
+## 22.4 Centro di comando LLM
+
+- [ ] Centro di comando LLM
+- [ ] Comandi in linguaggio naturale
+- [ ] Barra comando AI dedicata
+- [ ] Chat operativa (non solo conversazionale)
+- [ ] AI come esecutore di comandi del command registry
+- [ ] Nessuna capacità implicita: solo comandi esposti esplicitamente
+- [ ] Operazioni su nota singola
+- [ ] Operazioni su più note
+- [ ] Operazioni su selezione di note
+- [ ] Operazioni su risultati di ricerca
+- [ ] Operazioni su risultati di query
+- [ ] Operazioni su cartella
+- [ ] Operazioni su tag
+- [ ] Operazioni su intero vault
+- [ ] Creazione note in blocco
+- [ ] Modifica contenuto in blocco
+- [ ] Rinomina in blocco
+- [ ] Spostamento in blocco
+- [ ] Eliminazione in blocco (con cestino)
+- [ ] Modifica frontmatter/proprietà in blocco
+- [ ] Aggiunta/rimozione tag in blocco
+- [ ] Riscrittura link in blocco
+- [ ] Riorganizzazione struttura cartelle
+- [ ] Applicazione template in blocco
+- [ ] Split/merge note guidati da AI
+- [ ] Gestione allegati in blocco
+- [ ] Lettura impostazioni
+- [ ] Modifica impostazioni su richiesta
+- [ ] Modifica impostazioni vault
+- [ ] Modifica impostazioni editor/tema/hotkey
+- [ ] Gestione plugin (abilita/disabilita) su richiesta
+- [ ] Creazione automazioni da linguaggio naturale
+- [ ] Creazione query/view da linguaggio naturale
+- [ ] Impostazioni protette non modificabili dall'AI
+- [ ] Impostazioni privacy/AI mai auto-modificabili
+- [ ] Piano di esecuzione prima dell'azione
+- [ ] Anteprima del piano in linguaggio naturale
+- [ ] Elenco file impattati
+- [ ] Dry-run obbligatorio opzionale
+- [ ] Diff per singola nota prima dell'applicazione
+- [ ] Approvazione esplicita dell'utente
+- [ ] Approvazione per singola operazione
+- [ ] Approvazione in blocco
+- [ ] Modifica manuale del piano prima dell'esecuzione
+- [ ] Esecuzione parziale/selettiva
+- [ ] Interruzione a metà esecuzione
+- [ ] Modalità step-by-step
+- [ ] Modalità autonoma opt-in esplicita
+- [ ] Nessuna scrittura senza consenso
+- [ ] Transazione atomica per operazione batch
+- [ ] Rollback completo dell'operazione
+- [ ] Undo di un intero comando AI
+- [ ] Snapshot/checkpoint pre-esecuzione
+- [ ] Integrazione con versioning note
+- [ ] Integrazione con cestino
+- [ ] Limite massimo di note per operazione
+- [ ] Conferma rafforzata per operazioni distruttive
+- [ ] Ambito di scrittura configurabile (scope)
+- [ ] Whitelist/blacklist cartelle
+- [ ] Note escluse dalle operazioni AI
+- [ ] Permessi granulari per tipo di operazione
+- [ ] Permessi separati lettura/scrittura/impostazioni
+- [ ] Centro di comando disattivabile
+- [ ] Centro di comando disattivabile per vault
+- [ ] Funziona con LLM locale
+- [ ] Funziona con BYO API key
+- [ ] Nessun invio contenuto oltre lo scope dichiarato
+- [ ] Redaction prima dell'invio
+- [ ] Log completo dei comandi eseguiti
+- [ ] Log delle modifiche applicate
+- [ ] Audit trail esportabile
+- [ ] Cronologia comandi AI
+- [ ] Ripetizione di un comando precedente
+- [ ] Salvataggio comando come macro
+- [ ] Comandi AI riutilizzabili come automazione
+- [ ] Gestione errori e report finale
+- [ ] Report riepilogativo post-esecuzione
+- [ ] API plugin per esporre comandi all'AI
+- [ ] Plugin dichiarano capacità e permessi
+- [ ] Rate limit sulle operazioni AI
 
 ---
 
@@ -3585,6 +3671,7 @@
 - [ ] AI locale
 - [ ] Ricerca semantica
 - [ ] AI Q&A sul vault
+- [ ] Centro di comando LLM
 - [ ] Automazioni avanzate
 - [ ] Pubblicazione statica avanzata
 - [ ] Self-hosted services

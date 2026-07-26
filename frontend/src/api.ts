@@ -86,6 +86,108 @@ export interface ViewSpec {
   follows: ContextKind[];
 }
 
+// --- comandi (rispecchia fubmd_abi::command) --------------------------------
+//
+// Il registro: la shell non cabla nessun comando — legge le spec, chiede i
+// parametri che dichiarano e decide dal raggio dichiarato se mostrare prima il
+// piano. È lo stesso elenco che leggerebbero una CLI o un chiamante
+// programmatico: qui la palette è solo il primo dei suoi clienti.
+
+// Una scelta di un parametro `choice`: il valore che viaggia, l'etichetta che
+// si legge.
+export interface Choice {
+  value: string;
+  title: string;
+}
+
+// La specie di un argomento. Tag ADIACENTE (`kind`/`value`), come
+// PropertyValue: una variante che porta una sequenza non è serializzabile col
+// tag interno.
+export type ParamKind =
+  | { kind: "text" }
+  | { kind: "number" }
+  | { kind: "bool" }
+  | { kind: "document" }
+  | { kind: "documents" }
+  | { kind: "choice"; value: Choice[] };
+
+export interface ParamSpec {
+  name: string;
+  title: string;
+  description: string;
+  kind: ParamKind;
+  required: boolean;
+}
+
+// Fin dove arriva un comando, in ordine di raggio crescente.
+export type CommandReach = "session" | "document" | "documents" | "vault" | "settings";
+
+// Il raggio dichiarato. `writes` lo fa rispettare il kernel (chi si dichiara di
+// sola lettura riceve un host che rifiuta le scritture); gli altri due sono
+// dichiarazioni su cui CHI INVOCA decide se chiedere conferma.
+export interface CommandScope {
+  writes: boolean;
+  reach: CommandReach;
+  reversible: boolean;
+}
+
+export interface CommandSpec {
+  id: string;
+  title: string;
+  // Cosa fa, in prosa: inutile alla palette (c'è il titolo), indispensabile a
+  // un chiamante che non ha letto il codice.
+  description: string;
+  keybinding: string | null;
+  params: ParamSpec[];
+  scope: CommandScope;
+}
+
+// Come si invoca: eseguire, o chiedere cosa succederebbe.
+export type InvokeMode = "apply" | "dry_run";
+
+// La modifica chirurgica (rispecchia fubmd_abi::edit): `base` è la revisione
+// OPACA del sorgente su cui gli span sono stati calcolati — si confronta, non
+// si interpreta.
+export interface TextEdit {
+  span: Span;
+  text: string;
+}
+
+export interface EditRequest {
+  base: string;
+  edits: TextEdit[];
+}
+
+export interface PlannedEdit {
+  doc: string;
+  edit: EditRequest;
+}
+
+// Cosa succederebbe: `docs` è la verità completa (ci sta anche ciò che un
+// EditRequest non esprime), `edits` il dettaglio mostrabile come diff.
+export interface CommandPlan {
+  summary: string;
+  docs: string[];
+  edits: PlannedEdit[];
+}
+
+// Ciò che la shell deve fare dopo un comando. `plan` arriva col contenuto del
+// piano appiattito accanto al tag, come ogni variant-record del confine.
+export type CommandEffect =
+  | { kind: "done" }
+  | { kind: "navigate"; doc: string }
+  | { kind: "reveal"; doc: string; span: Span }
+  | { kind: "run_search"; query: string }
+  | ({ kind: "plan" } & CommandPlan)
+  // Varco di estensione: la shell che non riconosce `ns` NON FA NULLA.
+  | { kind: "custom"; ns: string; payload: unknown };
+
+export interface CommandOutcome {
+  // Testo semplice, mai markup: si inserisce come testo (regola di confine).
+  notify: string | null;
+  effect: CommandEffect;
+}
+
 // --- contesto di sessione (rispecchia fubmd_abi::session) -------------------
 //
 // L'unico tipo che viaggia nel verso opposto agli altri: lo COSTRUISCE la
@@ -220,6 +322,18 @@ export const api = {
   renderView: (view: string) => invoke<UiNode>("render_view", { view }),
   viewAction: (view: string, action: string, payload?: unknown) =>
     invoke<ViewUpdate>("view_action", { view, action, payload: payload ?? null }),
+  // Comandi (protocollo generico, gemello di listViews/viewAction). La palette
+  // legge questo elenco e non cabla nessun id: un comando di plugin comparirà
+  // da solo, coi suoi parametri e il suo raggio.
+  listCommands: () => invoke<CommandSpec[]>("list_commands"),
+  // `mode` assente = `apply`: è la scelta di questo confine, non del contratto
+  // (dove un default non esiste apposta).
+  invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) =>
+    invoke<CommandOutcome>("invoke_command", {
+      command,
+      args: args ?? null,
+      mode: mode ?? null,
+    }),
   search: (query: string, limit?: number) =>
     invoke<SearchHit[]>("search", { query, limit }),
   listTags: () => invoke<TagCount[]>("list_tags"),
