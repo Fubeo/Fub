@@ -131,6 +131,8 @@ Quindi il lavoro infrastrutturale è di tre tipi, in quest'ordine di urgenza:
 | ~~22.4 centro di comando LLM, 27.1 CLI, 27.2 API locale, 16.2 automazioni~~ | ~~comandi descritti a una **macchina**~~ | **chiuso (§1.1 + §1.36)**: `CommandSpec { id, title, description, keybinding, params, scope }`, e l'host convalida gli argomenti contro la spec prima di chiamare il comando |
 | ~~22.4 anteprima del piano, 7.2 bulk fix, 17.3 rollback, 16.3 undo~~ | ~~invocare **senza applicare** (dry-run)~~ | **chiuso (§1.36)**: `invoke(…, InvokeMode::DryRun)` → `CommandPlan` (i `DocId` impattati e un `EditRequest` per documento), con l'host che presta un `HostApi` in sola lettura — il non-scrivere è garantito, non promesso |
 | 22.4 approvazione per operazione, 20.3 sandbox, 23.1 | il **consenso** dell'utente distinto dal permesso | il giro dry-run→piano→apply c'è (§1.36) e la shell lo usa; ciò che manca è chi lo **impone** a un chiamante che non vuole simulare — è una policy del §2.10 sopra la firma |
+| ~~7.2 bulk fix, 17.3 import, 11.3 editing bulk, 24.1 progresso~~ | ~~N scritture che sono **una cosa sola**~~ | **chiuso (§1.12)**: `Workspace::batch(\|ws\| …)` coalizza `index-updated` e chiude con `Event::BatchEnded { batch, changed }` — una rinomina con 200 backlink passa da 201 ridisegni completi a 1, e gli eventi per-documento passano tutti. Non è una transazione: il tutto-o-niente resta al journal del §2.5 |
+| ~~16.2 trigger su-modifica, 18 sync, 19.2 collaborazione~~ | ~~un evento che dice **chi lo ha causato**~~ | **chiuso (§1.18)**: `handle` riceve un `Notice { event, origin }` con `Origin { actor, batch }`; `Actor::is_plugin(id)` è come un'automazione che scrive evita di richiamarsi da sola — prima l'unica difesa era il `DISPATCH_BUDGET` che tronca |
 
 ---
 
@@ -666,24 +668,101 @@ span) ma non lo risolve.
 
 ### 1.12 Il lotto — il kernel muta **un documento alla volta**
 
-- [ ] **`Workspace::batch(|tx| …)` con un evento terminale**: il caso reale c'è
-      già. `rename_document` scrive N sorgenti e ognuna emette `DocumentChanged`
-      + `IndexUpdated` drenando la coda (`workspace.rs:735`); sul confine una
-      rinomina con 200 backlink sono ~400 eventi, e la shell reagisce a
+- [x] **`Workspace::batch(|ws| …)` con un evento terminale**: il caso reale c'è
+      già. `rename_document` scriveva N sorgenti e ognuna emetteva
+      `DocumentChanged` + `IndexUpdated` drenando la coda; sul confine una
+      rinomina con 200 backlink erano ~400 eventi, e la shell reagiva a
       **ciascun** `index_updated` con un `list_documents` più il ridisegno di
-      ogni view iscritta (`main.ts:1299`). Non è un problema di UI: è che il
-      kernel non ha modo di dire "queste N scritture sono una cosa sola".
-- [ ] **Semantica di annullamento**: `rename_document` applica tutto il piano
-      anche se una sorgente fallisce — scelta dichiarata e giusta *per il
-      rename*. Per import, bulk fix e migrazioni serve quella opposta, ed è il
-      punto in cui il journal del §2.5 diventa il meccanismo e non un extra.
-- [ ] **Variante di evento nel contratto** (`BatchEnded { changed }` o
-      equivalente): è ciò che permette a una view di ridisegnarsi **una volta**
-      invece di N, e a `ViewSpec.refresh` di dichiararlo. Additivo: costa oggi
-      una variante, dopo il freeze una minor.
+      ogni view iscritta. Non è un problema di UI: è che il kernel non aveva
+      modo di dire "queste N scritture sono una cosa sola".
+- [x] **Semantica di annullamento**: decisa, ed è *nessuna* — a verbale, sotto.
+- [x] **Variante di evento nel contratto**: `Event::BatchEnded { batch, changed }`
+      + `EventKind::BatchEnded` (additivi, in coda), che `ViewSpec.refresh`
+      dichiara come ogni altro.
+- [x] **Un cliente vero nello stesso giro**: `rename_document` (che *è* un
+      lotto), ogni `invoke_command(…, Apply)` — quindi `vault.replace` su N note
+      — e la shell, che ridisegna una volta.
 
 *Sblocca:* 7.2 (bulk fix, cleanup wizard, ~30 voci), 11.3 (editing bulk, undo
 database), 16.3 (undo delle automazioni), 17.3 (rollback, resume), 24.1.
+
+**Fatto insieme al §1.18, con quattro decisioni e un residuo dichiarato.**
+
+*Un lotto è uno scope del kernel, non una capacità del confine.* `Workspace::batch(|ws| …)`
+c'è; `HostApi::batch` no, e non per parsimonia: uno scope a chiusura garantita
+**non attraversa il confine dei componenti**. Un plugin che aprisse un lotto e
+non lo chiudesse — perché sbaglia, perché trappa, perché a M5 la sua istanza
+muore — lo lascerebbe aperto per sempre, e con esso ogni evento del vault
+sospeso in attesa di un terminale che non arriva. Il lotto di un plugin è quindi
+la sua **invocazione di comando**, che l'host apre e chiude per lui: è anche la
+risposta giusta nel merito, perché «una cosa che qualcuno ha chiesto» è
+esattamente cosa significa invocare un comando. Chi lo apre, oggi: il kernel per
+sé (`rename_document`) e `invoke_command` per ogni `Apply`. Annidato, un lotto
+**entra** in quello che c'è invece di aprirne un secondo — chiudere l'interno
+farebbe arrivare un `batch-ended` mentre l'operazione esterna è ancora in corso.
+
+*Il lotto coalizza `index-updated` e nient'altro.* È l'unico evento del contratto
+**senza payload**, cioè l'unico di cui N copie dicono esattamente quanto ne dice
+una; gli eventi per-documento continuano a passare tutti, quindi **nessun
+handler esistente deve cambiare una riga**. La misura sul caso vero: una rinomina
+con 200 backlink passa da ~401 eventi e **201 ridisegni completi** a 201 eventi e
+**1 ridisegno**. Non è "400 eventi → 1", ed è giusto che non lo sia: i 200
+`document-changed` sono l'unica cosa che dice a chi tiene stato per-documento
+*quale* documento; a costare erano i ridisegni, e quelli sono uno.
+
+Il prezzo, ed è l'unico punto non additivo di tutta la voce: chi si era abbonato
+al **solo** `index-updated`, dentro un lotto non riceve più niente — e il sintomo
+sarebbe il peggiore possibile, un pannello che smette di aggiornarsi *soltanto*
+dopo una rinomina con backlink o una sostituzione in blocco. L'alternativa
+(emettere tutti e due) avrebbe fatto costare a ogni lotto due ridisegni completi,
+cioè il costo che la voce esiste per togliere. Perciò la regola è una sola —
+*chi dichiara `index-updated` dichiara anche `batch-ended`* — e non è una nota
+nella prosa: è `EventMask::misses_batches()` nel contratto e un test su ogni view
+ufficiale (`fubmd-features/tests/view_refresh_masks.rs`), con la stessa funzione
+che un plugin chiama sulla propria maschera.
+
+*Un lotto non è una transazione, e non si chiama come una.* Niente `tx`, niente
+`rollback`: se una delle N scritture fallisce le altre restano fatte, e chi ha
+aperto il lotto se ne accorge dal **proprio valore di ritorno**, che `batch` gli
+passa intatto. La ragione non è che il tutto-o-niente non serva — serve a import,
+bulk fix e migrazioni, e il §1.12 lo diceva — ma che **non è promettibile senza
+il journal del §2.5**: un annullamento che non sopravvive alla morte del processo
+non è un annullamento, e prometterlo con un nome significherebbe farlo credere a
+chi legge solo la firma. Chi sceglie, quindi, resta chi apre il lotto e conosce
+il proprio caso: `rename_document` applica tutto e nomina i falliti (giusto per
+lui: abortire a metà lascia link misti senza retry), e il giorno che l'importer
+vorrà l'opposto avrà il journal, non un `bool` qui. Il materiale c'è già —
+`EditReport::inverse()` del §1.16 — e la decisione di chi lo conservi è il §1.17.
+
+*Il dispatch è rimandato alla chiusura, e questo ha cambiato un comportamento
+esistente.* Dentro un lotto il vault è a metà di un'operazione, e un handler che
+vi reagisse vedrebbe uno stato che non è mai esistito per nessuno. La conseguenza
+si vede su un test del §1.16 che ora dice l'opposto di prima
+(`apply_edit.rs`): un handler che scriveva in una sorgente mentre la rinomina non
+l'aveva ancora riscritta ne rendeva stantia la `base`, e la rinomina falliva *per
+quella sorgente*. Era il comportamento giusto per il contratto di allora — la
+corsa esisteva davvero, e il §1.16 la rendeva visibile invece di far sparire una
+riga in silenzio. Il lotto la toglie **a monte**: le due scritture adesso
+riescono tutte e due invece di dover scegliere. La guardia della `base` non è
+diventata inutile — copre chi scrive *fuori* dal giro (un'altra app, un job che
+rientra) — e resta provata.
+
+*Un lotto troncato dall'`Overflow` non ha una garanzia in più.* Il terminale sta
+in coda come ogni altro evento, e se il budget del dispatch si esaurisce può
+essere fra i persi. L'`Overflow` che arriva al suo posto dice «riconcilia da
+zero», che è una richiesta **più forte** di «ridisegna questi documenti»: una
+garanzia speciale per il solo `batch-ended` sarebbe una seconda promessa più
+debole accanto a una che già copre il caso.
+
+*Resta fuori, dichiarato:* l'**annullamento** e il **resume** (§2.5 + §1.17: il
+journal è il meccanismo, e questa voce ne prepara la forma senza prenderne la
+decisione); il **lotto aperto da un plugin** (vedi sopra: è la sua invocazione di
+comando); il **lotto che attraversa il giro sincrono** (§1.21: un import gira
+dentro una chiamata, e un lotto che durasse quanto un job terrebbe gli eventi
+sospesi per minuti); lo **snapshot per lotto** del versioning (§1.17 — oggi il
+versioning fa uno snapshot per `document-changed`, che dentro un lotto sono
+ancora N: raggrupparli in una voce sola di cronologia vuole un campo nel formato
+persistito, cioè una `SCHEMA_VERSION` nuova, e non è una firma).
 
 ### 1.13 Il canale del rendering — stringa HTML o modello?
 
@@ -849,19 +928,80 @@ risolve.
 
 ### 1.18 Gli eventi non dicono chi li ha causati
 
-- [ ] **`Event::DocumentChanged { id }` non porta origine né causalità**
-      (`abi/event.rs:17`). La shell già ci gira intorno: confronta il testo per
-      non resettare il cursore sull'eco del proprio salvataggio
-      (`main.ts:1360`).
-- [ ] **Con i trigger diventa un requisito**: 16.2 chiede trigger su creazione,
-      modifica, salvataggio, tag aggiunto, proprietà cambiata, task completato;
-      18 il sync; 19.2 la collaborazione. Un'automazione su-modifica che scrive
-      si richiama da sola, e l'unica difesa oggi è il `DISPATCH_BUDGET` che
-      tronca (`workspace.rs:100`) — una rete di sicurezza, non una semantica.
-- [ ] **Un campo `origin` (utente, watcher, plugin `id`, kernel) e l'id di
-      lotto del §1.12**: costano un campo adesso, e sono ciò che permette a un
-      handler di dire "questa l'ho scritta io, non reagisco" senza tenere una
-      contabilità privata.
+- [x] **`Event::DocumentChanged { id }` non portava origine né causalità.** Ora
+      un handler riceve un `Notice { event, origin }`, e la shell l'origine la
+      **legge**: `document_changed` con `actor: watcher` significa «un'altra
+      applicazione ha scritto questo file», che col buffer sporco è un avviso
+      diverso da «l'abbiamo riscritto noi».
+- [x] **Con i trigger diventa un requisito**: la difesa non è più il
+      `DISPATCH_BUDGET` che tronca. `Actor::is_plugin(id)` risponde alla domanda
+      «questa l'ho scritta io?», ed è provata su un'automazione che senza di essa
+      si richiama da sola fino al troncamento
+      (`fubmd-kernel/tests/batch_and_origin.rs`).
+- [x] **Un campo `origin`**: `Origin { actor: Actor, batch: Option<BatchId> }`,
+      con `Actor { User, Watcher, Kernel, Plugin { id } }` — l'elenco che questa
+      voce chiedeva — e l'id di lotto del §1.12 sullo stesso record.
+
+*Sblocca:* 16.2 (trigger su-modifica che non si richiamano da soli), 18 (sync),
+19.2 (collaborazione), 22.4 (l'attribuzione, di cui questo è il primo pezzo).
+
+**Fatto insieme al §1.12, con tre decisioni e una firma pubblicata ritagliata.**
+
+*L'origine viaggia su OGNI evento, in un record accanto ad esso.* Non solo sul
+terminale del lotto: il requisito di 16.2 è che un handler decida **mentre
+reagisce**, e un'origine che arrivasse solo alla fine gli direbbe chi è stato
+dopo che ha già riscritto. E in un `Notice { event, origin }` invece che in un
+campo dentro ogni variante, perché l'origine è ortogonale a *cosa* è successo:
+ripeterla in nove casi avrebbe costretto ogni `match` a destrutturarla anche dove
+non la guarda.
+
+*L'attore è chi ha CHIESTO, non chi ha eseguito.* È la decisione che dà al campo
+il suo unico lettore vero. Quando un'automazione invoca `vault.replace`, i
+documenti li scrive il comando — ma se l'origine dicesse "il comando", quella
+automazione non riconoscerebbe le proprie scritture e si richiamerebbe da sola,
+che è esattamente il caso per cui il campo esiste. Perciò: un `EventHandler` che
+scrive di propria iniziativa è `Plugin { id }`; un comando invocato è l'attore
+del **chiamante**; il watcher è `Watcher` perché quella scrittura non è passata
+da noi; e ciò che il kernel fa per conto suo (apertura, `job-done`, `overflow`) è
+`Kernel` — intestarlo a chi stava scrivendo direbbe a un'automazione «questa
+l'hai causata tu» proprio nel momento in cui le si chiede di riconciliare.
+
+*L'origine accompagna l'invocazione di un comando — e sì, si fa adesso.* Era la
+quinta domanda, quella che tocca una firma già pubblicata:
+`invoke_command(command, args, mode, by: Actor)`. Sì, per la ragione del
+paragrafo sopra: senza, ogni invocazione sarebbe attribuita a chi la esegue o a
+un default, e la CLI (27.1), l'API locale (27.2) e le automazioni (16.2) —
+cioè i chiamanti per cui il registro del §1.1 esiste — nascerebbero tutti
+travestiti da utente. Che sia un parametro e non un default è la stessa scelta di
+`InvokeMode`: un'attribuzione implicita è l'errore che il tipo esiste per rendere
+impossibile. Sul confine Tauri l'attore **non** è un parametro dell'IPC ma è
+fissato a `User`: da quel canale passa la webview, e un chiamante che potesse
+firmarsi come vuole avrebbe aggirato l'unica difesa che 16.2 ha.
+
+Ciò che invece **non** cambia è `CommandProvider::invoke`: l'origine è ciò che
+l'host *appone*, non ciò che il comando *legge*, e un comando che si comportasse
+diversamente a seconda di chi lo chiama sarebbe una policy (§2.10) nascosta
+dentro un'implementazione. Il giorno che servirà leggerla, è un metodo additivo
+sull'`HostApi` — non una firma da riaprire.
+
+*La linea di base è stata ritagliata, e si vede in review.* `event-handler.handle`
+prendeva un `event` nudo e adesso prende un `notice`: è l'unica rottura del giro,
+sta in `wit/frozen/0.1.0.wit` con la ragione accanto, e il test di additività la
+tratta come tale. Aggiungerla dopo il freeze sarebbe costata una major, o una
+seconda funzione accanto alla prima con la stessa semantica e un argomento in
+più. Tutto il resto è additivo: `batch-ended` in coda a `event` e a `event-kind`,
+e i tipi nuovi (`notice`, `origin`, `actor`, `batch-id`, `event-batch-ended`).
+
+*Resta fuori, dichiarato:* **quale comando** ha causato l'operazione, e con esso
+il **prompt** e il **modello** di 22.4 — `Origin` porta l'attore e il lotto, non
+l'id del comando: sono i campi di un audit trail, e un audit trail vuole un posto
+che li **conservi** (il journal del §2.5), mentre un campo che nessuno rilegge
+dopo la fine del giro è una decorazione. Additivo il giorno che il posto c'è, ed
+è la ragione per cui la voce «attribuzione» del §1.36 resta aperta a metà: il
+campo ha un lettore vero (l'automazione che salta le proprie scritture), l'audit
+no. Fuori anche la **causalità a catena** (quale evento ha causato quale: `Origin`
+dice chi, non da cosa) e l'**edit sull'evento** (chi riceve `document-changed` sa
+che il documento è cambiato, non *come*).
 
 ### 1.19 L'abbonamento agli eventi non filtra
 
@@ -1256,6 +1396,18 @@ letto il codice.
       eventi) applicato al §1.12 (il lotto). L'audit trail di 22.4 è quel campo
       più il journal del §2.5; senza il campo, «cosa ha cambiato l'AI ieri» si
       può solo indovinare dai timestamp.
+      *Metà fatta (§1.12 + §1.18), e la spunta resta giù apposta.* Fatto: chi
+      invoca lo dichiara (`invoke_command(…, by: Actor)`) e ogni evento che
+      l'invocazione genera porta `Origin { actor, batch }` — con un lettore vero
+      e provato, l'automazione che salta le proprie scritture
+      (`fubmd-kernel/tests/batch_and_origin.rs`) e la shell che distingue
+      un'altra applicazione da sé. Non fatto: **quale** comando, con quale
+      modello e quale prompt. E ciò che manca lì non è un campo, è un **posto**:
+      l'origine vive quanto il giro sincrono, e «cosa ha cambiato l'AI ieri»
+      chiede che qualcuno l'abbia scritta da qualche parte — il journal del §2.5.
+      Metterli in `Origin` adesso sarebbe stato aggiungere due campi scritti da
+      chi invoca e riletti da nessuno, cioè l'errore che questa stessa voce
+      nominava prima che il §1.18 esistesse.
 
 Nessuna di queste è "infrastruttura per l'AI": sono la differenza fra un
 registro comandi leggibile e uno **eseguibile da terzi**, e i primi clienti
@@ -1804,12 +1956,15 @@ naviga né quelli né i wikilink (§3.x). L'arco adesso è vero; il clic no.
       (`app/lib.rs:184-188`). Un subscriber lento non rallenta nessuno: accumula
       memoria, in silenzio, senza un tetto — l'opposto del `DISPATCH_BUDGET`
       che protegge gli handler.
-- [ ] **E ogni evento costa un giro di shell**: a ogni `index_updated` la shell
-      rifà `list_documents` e ridisegna ogni view iscritta (`main.ts:1296-1299`).
-      Il §1.12 riduce gli eventi *emessi*; resta che il ponte non ha una
-      politica — coalescing per tipo, finestra temporale, tetto oltre il quale
-      si degrada a "riconcilia tutto", che è poi ciò che `Event::Overflow` già
-      significa per gli handler.
+- [ ] **E ogni evento costa un giro di shell**: a ogni `index_updated` (o
+      `batch_ended`) la shell rifà `list_documents` e ridisegna ogni view
+      iscritta. Il §1.12 ha ridotto gli eventi *che costano un ridisegno* —
+      dentro un lotto ne arriva uno solo, e una rinomina con 200 backlink è
+      passata da 201 giri a 1 — ma non ha toccato il **numero di messaggi IPC**:
+      i 200 `document_changed` attraversano il ponte lo stesso, uno per uno.
+      Resta che il ponte non ha una politica sua — coalescing per tipo, finestra
+      temporale, tetto oltre il quale si degrada a "riconcilia tutto", che è poi
+      ciò che `Event::Overflow` già significa per gli handler.
 - [ ] Va con §2.4 (il lavoro lungo emette progresso: sarà il canale più caldo di
       tutti) e §3.5 (il centro attività è il suo primo cliente).
 
@@ -2184,10 +2339,11 @@ Voci ancora aperte, con il loro milestone.
 §1.1 comandi, §1.2 `UiNode` con input, §1.4 capacità `HostApi`, §1.5 modello
 (task e ancore), §1.6 `IndexQuery`, §1.7 trait import/export, §1.8 decisione
 sulle stringhe, §1.9 contesto della view (pane e selezione), §1.10 identità del
-documento, §1.11 errori tipizzati, §1.12 il lotto, §1.13 canale del rendering.
+documento, §1.11 errori tipizzati, ~~§1.12 il lotto~~ (**fatto**), §1.13 canale
+del rendering.
 Dal terzo giro, con lo stesso statuto: §1.14 superfici della UI, §1.15 view
-istanziabili, §1.16 la primitiva di edit, §1.17 undo, §1.18 origine degli
-eventi, §1.19 grana dell'abbonamento, §1.20 `ParseContext` e parse non-testo,
+istanziabili, §1.16 la primitiva di edit, §1.17 undo, ~~§1.18 origine degli
+eventi~~ (**fatta, col §1.12**), §1.19 grana dell'abbonamento, §1.20 `ParseContext` e parse non-testo,
 §2.17 la query come AST, e la **chiave dei nodi** del §3.9 (che è shell nel
 titolo ma contratto nella firma). Sono tutte **decisioni di forma**:
 l'implementazione può seguire, la firma no.
@@ -2225,7 +2381,9 @@ che non ha letto il codice, e dopo il freeze il descrittore di un comando non si
 allarga più. Le sue due metà implementative sono il §2.10 (permessi) e il §2.5
 (journal per l'audit). — **Fatti entrambi, nella stessa seduta**: il verbale in
 fondo a §1.1 e a §1.36; restano aperte le due voci che dipendono da firme che
-non ci sono (impostazioni scrivibili → §1.3, attribuzione → §1.18 + §1.12).
+non ci sono (impostazioni scrivibili → §1.3) e la voce dell'attribuzione, ora
+mezza chiusa dal §1.18 + §1.12: il campo c'è e ha un lettore, il *posto* dove
+conservarlo è il journal del §2.5.
 
 **P1 — insieme a M3** (l'editor e la palette sono i primi clienti del §1):
 §1.3 impostazioni, §2.3 registry + runner dei job, §2.8 tabella dei provider
@@ -2283,8 +2441,8 @@ fatto)**, **§1.2 (input in `UiNode`)** e **§2.3 (registry + job)** — insieme
 spostano dal "cablato nell'app" al "registrato" praticamente ogni capitolo di
 FEATURES dal 4 al 22, e sono le tre che il freeze di M4 rende definitive. Accanto a quelle, dal
 secondo giro: **§1.9 (contesto e selezione)**, senza cui metà dei capitoli 4, 13
-e 22 non potrà mai essere un provider; **§1.12 (il lotto)**, prerequisito
-silenzioso di bulk fix, import, automazioni e database; e **§2.8 + §2.10**, che
+e 22 non potrà mai essere un provider; **§1.12 (il lotto — fatto, col §1.18)**,
+prerequisito silenzioso di bulk fix, import, automazioni e database; e **§2.8 + §2.10**, che
 sono il posto dove ogni famiglia di provider futura atterra senza portarsi
 dietro la propria copia della disciplina.
 

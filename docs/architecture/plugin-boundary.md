@@ -157,6 +157,69 @@ esegue. Le prove end-to-end attraverso il kernel vero sono
 `outline_view_e2e.rs` (il cursore che arriva alla view) e `stats_view_e2e.rs`
 (il testo selezionato che vale anche a buffer sporco).
 
+## Il lotto e l'origine: N scritture come una cosa sola, e chi le ha chieste (deciso)
+
+Un `EventHandler` non riceve un `Event` nudo ma un
+**`Notice { event, origin }`**, e `Origin { actor, batch }` risponde alle due
+domande che il confine non sapeva porre.
+
+**Chi ha chiesto** — `Actor { User, Watcher, Kernel, Plugin { id } }`. È *chi ha
+chiesto*, non chi ha eseguito: un comando invocato da un'automazione scrive con
+l'origine dell'automazione. È l'unica lettura per cui il campo esiste, e la
+difficoltà che risolve è concreta: un'automazione su-modifica **che scrive** si
+richiama da sola, e prima di questo campo l'unica difesa era il budget del
+dispatch, che tronca — cioè una rete di sicurezza al posto di una semantica. La
+forma di quella difesa è una riga:
+
+```rust
+fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    if notice.origin.actor.is_plugin(MIO_ID) {
+        return Ok(()); // questa l'ho scritta io
+    }
+    // …
+}
+```
+
+Riconoscerle dal **contenuto** non è equivalente e non è un ripiego accettabile:
+funziona finché la scrittura cambia il proprio innesco, e smette di funzionare
+proprio nel caso normale di un'automazione che appende (un diario, un log, un
+sommario) — dove ogni scrittura è diversa dalla precedente e nessuna guardia di
+contenuto la ferma.
+
+**Di quale lotto fa parte** — `batch: Option<BatchId>` (§1.12). Un lotto è uno
+scope del kernel dentro cui N scritture sono *una* cosa: il caso vero è una
+rinomina con 200 backlink, che riscrive 200 sorgenti. Dentro un lotto:
+
+- `IndexUpdated` **non viene emesso**, e al suo posto la chiusura emette un
+  `BatchEnded { batch, changed }` con l'elenco dei documenti toccati. È l'unico
+  evento coalizzato, perché è l'unico senza payload — N copie dicono quanto ne
+  dice una. Gli eventi **per-documento passano tutti**: chi li segue non deve
+  cambiare una riga.
+- il **dispatch è rimandato** alla chiusura, come dentro la chiamata a un
+  provider: a metà di un'operazione il vault è in uno stato che non è mai
+  esistito per nessuno.
+
+La regola che ne segue, ed è l'unico punto in cui la voce non è additiva: *chi
+dichiara `IndexUpdated` in `ViewSpec.refresh` deve dichiarare anche
+`BatchEnded`*. `EventMask::misses_batches()` la verifica, ed è la stessa funzione
+che chiama il test sulle view ufficiali — non una seconda idea della regola.
+
+**Un plugin non apre un lotto**, e non è parsimonia: uno scope a chiusura
+garantita non attraversa il confine dei componenti, e un lotto lasciato aperto da
+un'istanza morta terrebbe sospesi gli eventi del vault per sempre. Il lotto di un
+plugin è la sua **invocazione di comando**, che l'host apre e chiude per lui — che
+è anche la risposta giusta nel merito.
+
+**Un lotto non è una transazione.** Non annulla niente, e il nome lo dice: se una
+scrittura fallisce le altre restano fatte, e chi lo ha aperto lo scopre dal
+proprio valore di ritorno. Il tutto-o-niente vuole il journal del §2.5, e
+prometterlo con un nome (`transaction`, `rollback`) significherebbe farlo credere
+a chi legge solo la firma.
+
+Prove: `crates/fubmd-kernel/tests/batch_and_origin.rs` (incluso il confronto fra
+un'automazione che si difende con l'origine e la stessa che non lo fa),
+`crates/fubmd-features/tests/{commands_e2e,view_refresh_masks}.rs`.
+
 ## Scrivere un pezzo: l'edit porta la revisione (deciso)
 
 Un plugin ha due modi di cambiare un documento, e la differenza sta nella firma:
@@ -235,6 +298,23 @@ difende da solo e chi sbaglia riceve un `BadArgs` che dice *cosa* manca. Un
 argomento non dichiarato è un errore e non un argomento ignorato: per un
 chiamante che non può leggere il codice, «ho chiesto una cosa, ne è successa
 un'altra, e non me ne accorgo» è il peggiore dei fallimenti.
+
+**Chi invoca dice anche chi è**, e l'host apre un lotto:
+`invoke_command(command, args, mode, by: Actor)`. Un `Apply` è per definizione
+*una* cosa che qualcuno ha chiesto, quindi `vault.replace` su 40 note emette un
+`batch-ended` solo, e ogni evento che ne nasce porta `by` come attore. Il
+parametro non ha un default per la stessa ragione per cui non ce l'ha
+`InvokeMode`: attribuire all'utente ciò che ha chiesto un'automazione le
+toglierebbe l'unica difesa che ha contro il richiamarsi da sola. Sul confine
+Tauri l'attore è fissato a `User` invece di essere un parametro dell'IPC — da lì
+passa la webview, e un chiamante che potesse firmarsi come vuole avrebbe aggirato
+quella difesa dall'altra parte.
+
+`by` **non** arriva fino a `CommandProvider::invoke`: l'origine è ciò che l'host
+appone, non ciò che il comando legge. Un comando che si comportasse diversamente
+a seconda di chi lo chiama sarebbe una policy nascosta in un'implementazione, e
+le policy hanno un posto (§2.10). Il giorno che servirà **leggerla**, è un metodo
+additivo sull'`HostApi`, non una firma da riaprire.
 
 ### Il consenso non è una capacità
 

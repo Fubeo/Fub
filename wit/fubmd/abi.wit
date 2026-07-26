@@ -478,6 +478,15 @@ interface events {
     /// Coda eventi troncata (budget anti-ping-pong): `dropped` eventi persi.
     /// Chi deriva stato dagli eventi deve riconciliare da zero. Mai silenzioso.
     record event-overflow { dropped: u64 }
+    /// Un lotto (§1.12) si è chiuso: le N scritture che lo compongono sono una
+    /// cosa sola, e `changed` sono i documenti toccati — in ordine di prima
+    /// apparizione, senza ripetizioni. Sostituisce l'`index-updated` che ognuna
+    /// di quelle scritture avrebbe emesso: chi ridisegna lo fa UNA volta.
+    ///
+    /// Non dice se il lotto è riuscito per intero: un lotto non è una
+    /// transazione (il tutto-o-niente vuole il journal del §2.5), e ciò che non
+    /// è andato lo sa chi lo ha aperto, dal proprio errore.
+    record event-batch-ended { batch: batch-id, changed: list<doc-id> }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -487,6 +496,7 @@ interface events {
         job-done(event-job-done),
         overflow(event-overflow),
         custom(event-custom),
+        batch-ended(event-batch-ended),
     }
 
     enum event-kind {
@@ -498,8 +508,51 @@ interface events {
         job-done,
         overflow,
         custom,
+        /// Chi si abbona a `index-updated` si abbona anche a questo: dentro un
+        /// lotto è il solo dei due che arriva.
+        batch-ended,
     }
     type event-mask = list<event-kind>;
+
+    /// Identità di un lotto (§1.12). Come `job-id`, sul confine JSON viaggia
+    /// come stringa; qui resta `u64`, che non ha il problema dei 2⁵³.
+    ///
+    /// Opaca e non ordinabile per contratto: due lotti diversi hanno id diversi,
+    /// e nient'altro è promesso.
+    type batch-id = u64;
+
+    /// Chi ha CHIESTO l'operazione da cui un evento nasce (§1.18) — non chi
+    /// l'ha eseguita. Un comando invocato da un'automazione scrive con l'origine
+    /// dell'automazione: è la sola lettura per cui il campo esiste, «questa l'ho
+    /// scritta io?», e leggerlo come "chi ha toccato il disco" darebbe la
+    /// risposta sbagliata proprio nel caso di 16.2.
+    record actor-plugin { id: string }
+    variant actor {
+        /// La persona davanti allo schermo, per il tramite della shell.
+        user,
+        /// Il filesystem: un'altra app, un sync, una copia da terminale.
+        watcher,
+        /// Il kernel stesso: apertura del vault, esito di un job, troncamento.
+        kernel,
+        /// Un plugin che ha agito di propria iniziativa.
+        plugin(actor-plugin),
+    }
+
+    /// Da dove viene un evento: chi lo ha chiesto, e di quale lotto fa parte.
+    record origin {
+        actor: actor,
+        batch: option<batch-id>,
+    }
+
+    /// Un evento E la sua origine: ciò che un handler riceve.
+    ///
+    /// Un record e non un campo dentro ogni variante: l'origine è ortogonale a
+    /// *cosa* è successo, e ripeterla in nove casi avrebbe costretto ogni match
+    /// a destrutturarla anche dove non la guarda.
+    record notice {
+        event: event,
+        origin: origin,
+    }
 }
 
 /// Comandi: le azioni del vault dette in una forma che chi non ha letto il
@@ -1118,12 +1171,17 @@ interface host-api {
 }
 
 /// Reazione agli eventi (`EventHandler`).
+///
+/// `handle` riceve un `notice`, non un `event` nudo: accanto a *cosa* è successo
+/// c'è chi lo ha chiesto e di quale lotto fa parte (§1.18). Senza, un'automazione
+/// su-modifica che scrive si richiama da sé, e l'unica difesa sarebbe il budget
+/// del dispatch — che tronca, cioè è una rete di sicurezza e non una semantica.
 interface event-handler {
-    use events.{event, event-mask};
+    use events.{notice, event-mask};
     use errors.{plugin-error};
 
     subscribed: func() -> event-mask;
-    handle: func(event: event) -> result<_, plugin-error>;
+    handle: func(notice: notice) -> result<_, plugin-error>;
 }
 
 /// Ciclo di vita del plugin + manifest e permessi.

@@ -58,7 +58,7 @@ impl ViewProvider for OutlineView {
             placement: ViewPlacement::RightSidebar,
             // Gli heading cambiano quando cambia il documento: `IndexUpdated`
             // copre ogni scrittura (anche quelle arrivate dal watcher).
-            refresh: EventMask(vec![EventKind::IndexUpdated]),
+            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
             // Del contesto segue il documento (di chi è la struttura) e la
             // selezione (in quale sezione sta il cursore). Non la modalità: in
             // lettura la selezione sparisce, e sparisce con lei il segno.

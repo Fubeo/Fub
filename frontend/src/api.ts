@@ -63,13 +63,45 @@ export type KernelEvent =
   | { type: "document_changed"; id: string }
   | { type: "document_removed"; id: string }
   | { type: "document_renamed"; from: string; to: string }
+  // NB: dentro un lotto questo NON arriva — arriva `batch_ended`. Chi reagisce
+  // a `index_updated` deve reagire anche a quello, o dopo una rinomina con
+  // backlink non si ridisegna più (fubmd_abi::event, §1.12).
   | { type: "index_updated" }
   // Esito di un job in background (HostApi::spawn_job). `id` è un u64
   // identità: attraversa l'IPC come stringa (vedi VersionRef.hash).
   | { type: "job_done"; id: string; job: string; result: unknown }
   // Coda eventi troncata: lo stato derivato dagli eventi va riconciliato.
   | { type: "overflow"; dropped: number }
-  | { type: "custom"; topic: string; payload: unknown };
+  | { type: "custom"; topic: string; payload: unknown }
+  // Un lotto si è chiuso (§1.12): N scritture che sono UNA cosa sola, e
+  // `changed` sono le note toccate. È ciò che permette alla shell di ridisegnare
+  // una volta invece di una per nota — una rinomina con 200 backlink faceva 200
+  // giri di `list_documents` più il ridisegno di ogni view iscritta.
+  // `batch` è un u64 identità: attraversa l'IPC come stringa.
+  | { type: "batch_ended"; batch: string; changed: string[] };
+
+// Chi ha CHIESTO l'operazione da cui un evento nasce (rispecchia
+// fubmd_abi::event::Actor). Non chi l'ha eseguita: un comando invocato da
+// un'automazione porta l'origine dell'automazione.
+export type Actor =
+  | { kind: "user" }
+  | { kind: "watcher" }
+  | { kind: "kernel" }
+  | { kind: "plugin"; id: string };
+
+// Da dove viene un evento (fubmd_abi::event::Origin). `batch` è `null` fuori da
+// un lotto.
+export interface Origin {
+  actor: Actor;
+  batch: string | null;
+}
+
+// Ciò che il ponte Tauri consegna davvero: l'evento E la sua origine
+// (fubmd_abi::event::Notice, §1.18).
+export interface KernelNotice {
+  event: KernelEvent;
+  origin: Origin;
+}
 
 // La dichiarazione di una view offerta da un provider (rispecchia
 // fubmd_abi::traits::ViewSpec). `placement` dice DOVE montarla; `refresh` e
@@ -348,7 +380,7 @@ export const api = {
 };
 
 export function onKernelEvent(
-  handler: (e: KernelEvent) => void,
+  handler: (n: KernelNotice) => void,
 ): Promise<UnlistenFn> {
-  return listen<KernelEvent>("fubmd://event", (evt) => handler(evt.payload));
+  return listen<KernelNotice>("fubmd://event", (evt) => handler(evt.payload));
 }

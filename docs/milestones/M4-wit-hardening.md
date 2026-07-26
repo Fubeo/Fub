@@ -192,13 +192,47 @@ oggi, una migrazione domani); le altre restano al freeze.
       prerequisito della localizzazione (25.2, §1.8), delle notifiche (10.5) e
       dei retry delle automazioni (16.3). Un messaggio già composto non si
       traduce e non si discrimina: la shell oggi indovina.
-- [ ] **Il lotto: serve una variante di evento?** ([todo.md §1.12](../todo.md))
-      Il kernel muta un documento alla volta e ogni scrittura emette i suoi
-      eventi: una rinomina con 200 backlink sono ~400 eventi e altrettanti giri
-      della shell. Decidere se il contratto acquista un `BatchEnded { changed }`
-      (che `ViewSpec.refresh` può dichiarare, e che fa ridisegnare **una** volta
-      invece di N) o se il lotto resta un fatto interno del kernel. Additivo
-      adesso, minor dopo.
+- [x] **Il lotto: serve una variante di evento?** — sì, fatto col §1.12 + §1.18:
+      `Event::BatchEnded { batch, changed }` e `EventKind::BatchEnded` (additivi,
+      in coda), `Workspace::batch(|ws| …)` nel kernel, e tre clienti veri —
+      `rename_document`, ogni `invoke_command(…, Apply)` e la shell. Le quattro
+      domande, con la risposta a verbale:
+      1. **Cosa coalizza** → solo `index-updated`, l'unico evento senza payload,
+         cioè l'unico di cui N copie dicono quanto ne dice una. Gli eventi
+         per-documento passano tutti, quindi nessun handler esistente deve
+         cambiare. Misura sul caso vero: 201 ridisegni completi → 1.
+      2. **Chi lo apre** → il kernel per sé e `invoke_command` per ogni `Apply`.
+         **Non** un plugin: uno scope a chiusura garantita non attraversa il
+         confine dei componenti, e un lotto lasciato aperto da un'istanza morta
+         sospenderebbe gli eventi del vault per sempre. Il lotto di un plugin è
+         la sua invocazione di comando.
+      3. **Semantica di annullamento** → **nessuna**, e il nome lo dice (`batch`,
+         non `transaction`): il tutto-o-niente vuole il journal del §2.5, e un
+         annullamento che non sopravvive alla morte del processo non è un
+         annullamento. Chi apre il lotto sceglie per il proprio caso, dal proprio
+         valore di ritorno.
+      4. **Il lotto troncato dall'`Overflow`** → nessuna garanzia in più: il
+         terminale sta in coda come gli altri, e l'`Overflow` che arriva al suo
+         posto chiede *di più* («riconcilia da zero») di quanto chiederebbe lui.
+
+      Il prezzo, e l'unico punto non additivo: chi dichiarava il solo
+      `index-updated` dentro un lotto non riceve più niente. Presidiato da
+      `EventMask::misses_batches()` nel contratto e da un test su ogni view
+      ufficiale, non da una nota nella prosa.
+- [x] **L'origine degli eventi** — fatta col §1.18, ed è **l'unica rottura di una
+      firma già pubblicata** di questo giro: `event-handler.handle` prendeva un
+      `event` nudo e adesso prende un `notice` (evento + origine). Linea di base
+      ritagliata in `wit/frozen/0.1.0.wit`, con la ragione accanto: senza
+      l'origine sul parametro, un'automazione su-modifica che scrive non
+      riconosce le proprie scritture e si richiama da sé finché il
+      `DISPATCH_BUDGET` non tronca — cioè una rete di sicurezza al posto di una
+      semantica. `Origin { actor, batch }` con
+      `Actor { User, Watcher, Kernel, Plugin { id } }`, e l'attore è **chi ha
+      chiesto**, non chi ha eseguito. Toccata anche
+      `Workspace::invoke_command(…, by: Actor)` — che non è superficie di plugin,
+      ma è l'ultimo momento in cui costa un parametro invece di una minor;
+      `CommandProvider::invoke` resta com'era, perché l'origine l'host la
+      **appone** e il comando non la legge.
 - [ ] **Canale del rendering: solo HTML, o anche il modello?**
       ([todo.md §1.13](../todo.md)) `render_html` è puro per-documento e la shell
       riceve una `String`; nessun canale porta il `DocumentModel` al frontend.

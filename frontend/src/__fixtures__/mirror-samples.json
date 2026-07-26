@@ -111,6 +111,76 @@
       "type": "custom",
       "topic": "p/x",
       "payload": null
+    },
+    {
+      "type": "batch_ended",
+      "batch": "18446744073709551615",
+      "changed": [
+        "a",
+        "b"
+      ]
+    }
+  ],
+  "KernelNotice": [
+    {
+      "event": {
+        "type": "document_changed",
+        "id": "a"
+      },
+      "origin": {
+        "actor": {
+          "kind": "user"
+        },
+        "batch": "18446744073709551615"
+      }
+    },
+    {
+      "event": {
+        "type": "document_changed",
+        "id": "a"
+      },
+      "origin": {
+        "actor": {
+          "kind": "watcher"
+        },
+        "batch": "18446744073709551615"
+      }
+    },
+    {
+      "event": {
+        "type": "document_changed",
+        "id": "a"
+      },
+      "origin": {
+        "actor": {
+          "kind": "kernel"
+        },
+        "batch": "18446744073709551615"
+      }
+    },
+    {
+      "event": {
+        "type": "document_changed",
+        "id": "a"
+      },
+      "origin": {
+        "actor": {
+          "kind": "plugin",
+          "id": "fubmd.versioning"
+        },
+        "batch": "18446744073709551615"
+      }
+    },
+    {
+      "event": {
+        "type": "index_updated"
+      },
+      "origin": {
+        "actor": {
+          "kind": "user"
+        },
+        "batch": null
+      }
     }
   ],
   "Span": [
@@ -165,7 +235,8 @@
       "title": "V",
       "placement": "right_sidebar",
       "refresh": [
-        "index_updated"
+        "index_updated",
+        "batch_ended"
       ],
       "follows": [
         "document",

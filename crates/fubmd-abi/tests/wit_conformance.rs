@@ -62,7 +62,7 @@ use fubmd_abi::command::{
 };
 use fubmd_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
-use fubmd_abi::event::{Event, EventKind, EventMask};
+use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
 use fubmd_abi::format::{
     FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext, RenderOptions,
 };
@@ -156,6 +156,7 @@ wit_type! {
     Frontmatter => "frontmatter",
     ActionId => "action-id",
     JobId => "job-id",
+    BatchId => "batch-id",
     EventMask => "event-mask",
     BlockRef => "block-ref",
     InlineRef => "inline-ref",
@@ -201,6 +202,9 @@ wit_type! {
     PluginError => "plugin-error",
     Event => "event",
     EventKind => "event-kind",
+    Actor => "actor",
+    Origin => "origin",
+    Notice => "notice",
     JobSpec => "job-spec",
 
     // I comandi: la dichiarazione (§1.36) e l'invocazione (§1.1).
@@ -1361,6 +1365,11 @@ fn event_case(e: &Event) -> Case {
             "event-custom",
             vec![("topic", wit(topic)), ("payload", wit(payload))],
         ),
+        Event::BatchEnded { batch, changed } => case_rec(
+            "batch-ended",
+            "event-batch-ended",
+            vec![("batch", wit(batch)), ("changed", wit(changed))],
+        ),
     }
 }
 
@@ -1374,6 +1383,16 @@ fn event_kind_name(k: EventKind) -> &'static str {
         EventKind::JobDone => "job-done",
         EventKind::Overflow => "overflow",
         EventKind::Custom => "custom",
+        EventKind::BatchEnded => "batch-ended",
+    }
+}
+
+fn actor_case(a: &Actor) -> Case {
+    match a {
+        Actor::User => case("user"),
+        Actor::Watcher => case("watcher"),
+        Actor::Kernel => case("kernel"),
+        Actor::Plugin { id } => case_rec("plugin", "actor-plugin", vec![("id", wit(id))]),
     }
 }
 
@@ -1892,6 +1911,21 @@ fn conform(source: &str) -> Result<(), String> {
                 topic: String::new(),
                 payload: serde_json::Value::Null,
             }),
+            event_case(&Event::BatchEnded {
+                batch: BatchId(0),
+                changed: Vec::new(),
+            }),
+        ],
+    );
+
+    contract.variant_src(
+        "actor",
+        ("event.rs", "Actor"),
+        &[
+            actor_case(&Actor::User),
+            actor_case(&Actor::Watcher),
+            actor_case(&Actor::Kernel),
+            actor_case(&Actor::Plugin { id: String::new() }),
         ],
     );
 
@@ -2027,6 +2061,7 @@ fn conform(source: &str) -> Result<(), String> {
             EventKind::JobDone,
             EventKind::Overflow,
             EventKind::Custom,
+            EventKind::BatchEnded,
         ]
         .map(event_kind_name)
         .as_slice(),
@@ -2797,6 +2832,19 @@ fn conform(source: &str) -> Result<(), String> {
         &[("job", wit(&job)), ("payload", wit(&payload))],
     );
 
+    // L'origine di un evento (§1.18) e il lotto di cui fa parte (§1.12). I
+    // record di payload dei due variant (`actor-plugin`, `event-batch-ended`)
+    // se li rivendica `variant_src` qui sopra; questi due invece sono record a
+    // sé, e senza rivendicarli il contratto li darebbe per morti.
+    let Origin { actor, batch } = Origin::default();
+    contract.record("origin", &[("actor", wit(&actor)), ("batch", wit(&batch))]);
+
+    let Notice { event, origin } = Notice::of(Event::IndexUpdated);
+    contract.record(
+        "notice",
+        &[("event", wit(&event)), ("origin", wit(&origin))],
+    );
+
     // Import/export. Nessun campo porta un percorso di filesystem: la sorgente
     // è `bytes` e l'esito è `bytes`, e chi apre e chi posa è l'host.
     let TransferNote {
@@ -2944,6 +2992,9 @@ fn conform(source: &str) -> Result<(), String> {
 
     let JobId(raw) = JobId(0);
     contract.alias("job-id", wit(&raw));
+
+    let BatchId(raw) = BatchId(0);
+    contract.alias("batch-id", wit(&raw));
 
     let EventMask(kinds) = EventMask::all();
     contract.alias("event-mask", wit(&kinds));
@@ -3241,8 +3292,8 @@ fn conform(source: &str) -> Result<(), String> {
         "event-handler",
         "handle",
         <dyn EventHandler>::handle
-            as fn(&'static mut dyn EventHandler, &'static Event, Host) -> Result<(), PluginError>,
-        &["event"],
+            as fn(&'static mut dyn EventHandler, &'static Notice, Host) -> Result<(), PluginError>,
+        &["notice"],
     );
 
     contract.method(
