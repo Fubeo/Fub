@@ -6,7 +6,8 @@
 //! occorrenze, e che il click chiede una ricerca (`ViewUpdate::RunSearch`).
 
 use camino::Utf8PathBuf;
-use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::traits::ViewInstance;
+use fubmd_abi::ui::{UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_features::{TagPanelView, TAGS_ID, TAGS_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Trust, Workspace};
@@ -31,7 +32,7 @@ impl Vault {
         let mut registry = FormatRegistry::new();
         registry.register(MarkdownProvider::boxed());
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_view_provider(TAGS_ID, Trust::Trusted, Box::new(TagPanelView));
+        ws.register_view_provider(TAGS_ID, Trust::Trusted, Box::new(TagPanelView::default()));
         ws.reindex().expect("reindex");
         ws
     }
@@ -40,12 +41,12 @@ impl Vault {
 /// (titolo, sottotitolo) di ogni voce, in ordine: `("#tag", "count")`.
 fn rows(tree: &UiNode) -> Vec<(String, Option<String>)> {
     fn walk(node: &UiNode, out: &mut Vec<(String, Option<String>)>) {
-        match node {
-            UiNode::ListItem {
+        match &node.kind {
+            UiKind::ListItem {
                 title, subtitle, ..
             } => out.push((title.clone(), subtitle.clone())),
-            UiNode::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
-            UiNode::List { items } => items.iter().for_each(|c| walk(c, out)),
+            UiKind::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
+            UiKind::List { items } => items.iter().for_each(|c| walk(c, out)),
             _ => {}
         }
     }
@@ -64,7 +65,7 @@ fn tags_are_aggregated_across_the_vault_and_counted_per_note() {
     vault.put("C.md", "niente tag\n");
     let ws = vault.open();
 
-    let tree = ws.render_view(TAGS_VIEW).unwrap();
+    let tree = ws.render_view(&ViewInstance::only(TAGS_VIEW)).unwrap();
     let rows = rows(&tree);
     // ordinati per nome dal kernel: nota (1), rust (2)
     assert_eq!(
@@ -85,7 +86,7 @@ fn spellings_of_the_same_tag_are_one_row_with_one_count() {
     vault.put("B.md", "#rust là\n");
     let ws = vault.open();
 
-    let tree = ws.render_view(TAGS_VIEW).unwrap();
+    let tree = ws.render_view(&ViewInstance::only(TAGS_VIEW)).unwrap();
     let rows = rows(&tree);
     assert_eq!(rows.len(), 1, "righe: {rows:?}");
     assert_eq!(rows[0].1, Some("2".to_string()));
@@ -102,11 +103,8 @@ fn clicking_a_tag_asks_the_shell_to_search_for_it() {
 
     let update = ws
         .view_action(
-            TAGS_VIEW,
-            UiAction {
-                action: ActionId("tag:rust".into()),
-                payload: serde_json::Value::Null,
-            },
+            &ViewInstance::only(TAGS_VIEW),
+            UiAction::new("search").with_payload(serde_json::json!({"tag": "rust"})),
         )
         .expect("view_action");
     assert_eq!(

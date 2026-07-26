@@ -76,26 +76,33 @@ capitolo 4, quindi va decisa qui e non altrove.
 
 *ex §3.12 · shell · **P1** — decisione P0, implementazione P1*
 
-- [ ] **`renderUiNode` è uno `switch` esaustivo su un union chiuso** (`ui.ts`),
-      compilato dentro il bundle. Il §2.1 propone
-      `UiNode::Custom { ns, payload, fallback }` con «la shell che conosce `ns`
-      disegna il widget suo» — ma non dice **come** un `ns` di terzi ci arriva.
-      Senza quella risposta, `Custom` significa "riservato a chi è già nel
-      bundle", cioè la superficie privilegiata del §2.2 con un altro nome.
+- [ ] **`renderUiNode` è uno `switch` esaustivo su un union chiuso**
+      (`ui/node.ts`), compilato dentro il bundle. `UiKind::Custom { ns, payload,
+      fallback }` **ora esiste** ([decisione 0016](../decisions/0016-cosa-e-una-view.md)),
+      e con esso la metà che si poteva fare senza rispondere a questa voce: chi
+      non conosce `ns` disegna il `fallback` dichiarativo, ed è ciò che il
+      contratto chiede. Quello che manca è **come un `ns` di terzi arriva alla
+      shell**: finché non c'è una risposta, `Custom` significa "riservato a chi è
+      già nel bundle" — cioè la superficie privilegiata di prima con un altro
+      nome. La differenza rispetto a ieri è che ora il varco è nel contratto e
+      il debito è tutto di qua.
 - [ ] **Il conto è dirimente**: il 21.1 promette che ogni modulo Suite è
       «installabile separatamente» e «disattivabile», e i moduli che hanno
       bisogno di un renderer proprio sono FubCanvas, FubDB, FubCharts, FubMaps,
       FubForms (21.2). Se i loro renderer stanno nel bundle della shell, quella
-      promessa è falsa — e lo è **già** per il grafo (`graph.ts`, §2.2).
+      promessa è falsa — e lo è **già** per il grafo (`panels/graph.ts`), che
+      resta un pannello nativo anche ora che il contratto avrebbe dove metterlo
+      (l'area principale) e come disegnarlo (`Custom`).
 - [ ] **Le tre opzioni non sono equivalenti**, e vanno scelte prima che venti
       moduli si scrivano contro l'ipotesi implicita:
       - un registro di web component caricati da un bundle di plugin — è la più
         potente e sbatte contro «no eval policy» (20.3) e la CSP del §3.6;
       - un iframe sandboxato con un protocollo di messaggi — regge 20.3 e §3.6,
         costa un confine in più e una storia di temi/asset per i plugin;
-      - solo prima parte, e tutto il resto dichiarativo — allora il §2.1 deve
-        arrivare fino a tabella, albero, canvas e chart, e `UiNode::Custom`
-        serve al solo core.
+      - solo prima parte, e tutto il resto dichiarativo — allora il protocollo
+        deve arrivare fino a canvas e chart (tabella e albero ci sono arrivati
+        con la [decisione 0016](../decisions/0016-cosa-e-una-view.md)), e
+        `Custom` serve al solo core.
 - [ ] È il terzo lato della stessa domanda dei §3.1 e §3.2 — **chi disegna
       ciò che il core non conosce** — e le tre risposte devono essere coerenti:
       un plugin che può aggiungere la sintassi ma non il renderer, o il
@@ -122,7 +129,8 @@ capitolo 4, quindi va decisa qui e non altrove.
 
 *ex §1.26 · contratto · **P0** — i quattro in blocco: stessa forma, stessa risposta, nessuna precedenza interna*
 
-Il §2.2 ha visto il caso più grosso (`ViewPlacement`). La stessa forma si
+La [decisione 0016](../decisions/0016-cosa-e-una-view.md) ha visto il caso più
+grosso (`ViewPlacement`, ora `ViewSurface` con dieci casi). La stessa forma si
 ripete su quattro tipi del contratto — un booleano, o tre, o cinque, dove la
 domanda che arriva ha una coda aperta:
 

@@ -76,14 +76,17 @@ use fubmd_abi::traits::{
     HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef,
     Page, Paged, Plugin, PluginManifest, PluginPermissions, PropertyCount, PropertyEntry,
     PropertyFilter, PropertySort, PropertyTest, SearchHit, SearchScope, TagCount, TrashEntry,
-    ViewPlacement, ViewProvider, ViewSpec, ABI_VERSION,
+    ViewInstance, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
     ExportTarget, ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest,
     ImportSource, ImportedDocument, NoteLevel, TransferNote,
 };
-use fubmd_abi::ui::{ActionId, Axis, Intent, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::ui::{
+    ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,
+    UiNode, UiOption, UiValue, ViewUpdate,
+};
 
 // CARGO_MANIFEST_DIR = crates/fubmd-abi ; il contratto è alla radice del repo.
 const WIT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../wit/fubmd/abi.wit");
@@ -183,6 +186,7 @@ wit_type! {
     arena::TableRow => "table-row",
     arena::TableCell => "table-cell",
     arena::UiNode => "ui-node",
+    arena::UiKind => "ui-kind",
     arena::DocumentTree => "document-tree",
     arena::UiTree => "ui-tree",
 
@@ -191,6 +195,13 @@ wit_type! {
     Axis => "axis",
     Intent => "intent",
     UiAction => "ui-action",
+    ActionRef => "action-ref",
+    UiValue => "ui-value",
+    FieldValue => "field-value",
+    UiOption => "ui-option",
+    KeyValueEntry => "key-value-entry",
+    TableColumn => "table-column",
+    Align => "align",
     ViewUpdate => "view-update",
 
     // Il resto del contratto.
@@ -220,7 +231,8 @@ wit_type! {
     Choice => "choice",
     InvokeMode => "invoke-mode",
     ViewSpec => "view-spec",
-    ViewPlacement => "view-placement",
+    ViewSurface => "view-surface",
+    ViewInstance => "view-instance",
 
     // L'edit chirurgico: la coppia (span, testo) e la revisione su cui è stata
     // calcolata.
@@ -1251,9 +1263,9 @@ fn link_target_case(t: &LinkTarget) -> Case {
     }
 }
 
-fn ui_node_case(n: &arena::UiNode) -> Case {
+fn ui_kind_case(n: &arena::UiKind) -> Case {
     match n {
-        arena::UiNode::Stack { dir, gap, children } => case_rec(
+        arena::UiKind::Stack { dir, gap, children } => case_rec(
             "stack",
             "ui-stack",
             vec![
@@ -1262,17 +1274,18 @@ fn ui_node_case(n: &arena::UiNode) -> Case {
                 ("children", wit(children)),
             ],
         ),
-        arena::UiNode::Text { content } => case_ty("text", wit(content)),
-        arena::UiNode::Heading { level, content } => case_rec(
+        arena::UiKind::Text { content } => case_ty("text", wit(content)),
+        arena::UiKind::Heading { level, content } => case_rec(
             "heading",
             "ui-heading",
             vec![("level", wit(level)), ("content", wit(content))],
         ),
-        arena::UiNode::List { items } => case_ty("list", wit(items)),
-        arena::UiNode::ListItem {
+        arena::UiKind::List { items } => case_ty("list", wit(items)),
+        arena::UiKind::ListItem {
             title,
             subtitle,
             action,
+            selected,
         } => case_rec(
             "list-item",
             "ui-list-item",
@@ -1280,9 +1293,10 @@ fn ui_node_case(n: &arena::UiNode) -> Case {
                 ("title", wit(title)),
                 ("subtitle", wit(subtitle)),
                 ("action", wit(action)),
+                ("selected", wit(selected)),
             ],
         ),
-        arena::UiNode::Button {
+        arena::UiKind::Button {
             label,
             intent,
             action,
@@ -1295,12 +1309,280 @@ fn ui_node_case(n: &arena::UiNode) -> Case {
                 ("action", wit(action)),
             ],
         ),
-        arena::UiNode::Html { html } => case_ty("html", wit(html)),
-        arena::UiNode::WebView { url, height } => case_rec(
+        arena::UiKind::Html { html } => case_ty("html", wit(html)),
+        arena::UiKind::WebView { url, height } => case_rec(
             "web-view",
             "ui-web-view",
             vec![("url", wit(url)), ("height", wit(height))],
         ),
+        arena::UiKind::Section {
+            title,
+            collapsed,
+            children,
+        } => case_rec(
+            "section",
+            "ui-section",
+            vec![
+                ("title", wit(title)),
+                ("collapsed", wit(collapsed)),
+                ("children", wit(children)),
+            ],
+        ),
+        arena::UiKind::Table { columns, rows } => case_rec(
+            "table",
+            "ui-table",
+            vec![("columns", wit(columns)), ("rows", wit(rows))],
+        ),
+        arena::UiKind::Row { cells, action } => case_rec(
+            "row",
+            "ui-row",
+            vec![("cells", wit(cells)), ("action", wit(action))],
+        ),
+        arena::UiKind::Tree { roots } => case_ty("tree", wit(roots)),
+        arena::UiKind::TreeItem {
+            label,
+            expanded,
+            action,
+            selected,
+            children,
+        } => case_rec(
+            "tree-item",
+            "ui-tree-item",
+            vec![
+                ("label", wit(label)),
+                ("expanded", wit(expanded)),
+                ("action", wit(action)),
+                ("selected", wit(selected)),
+                ("children", wit(children)),
+            ],
+        ),
+        arena::UiKind::Tabs { active, tabs } => case_rec(
+            "tabs",
+            "ui-tabs",
+            vec![("active", wit(active)), ("tabs", wit(tabs))],
+        ),
+        arena::UiKind::Tab {
+            label,
+            action,
+            children,
+        } => case_rec(
+            "tab",
+            "ui-tab",
+            vec![
+                ("label", wit(label)),
+                ("action", wit(action)),
+                ("children", wit(children)),
+            ],
+        ),
+        arena::UiKind::Badge { label, intent } => case_rec(
+            "badge",
+            "ui-badge",
+            vec![("label", wit(label)), ("intent", wit(intent))],
+        ),
+        arena::UiKind::Icon { name } => case_ty("icon", wit(name)),
+        arena::UiKind::Progress { value, label } => case_rec(
+            "progress",
+            "ui-progress",
+            vec![("value", wit(value)), ("label", wit(label))],
+        ),
+        arena::UiKind::Separator => case("separator"),
+        arena::UiKind::EmptyState {
+            title,
+            detail,
+            action,
+        } => case_rec(
+            "empty-state",
+            "ui-empty-state",
+            vec![
+                ("title", wit(title)),
+                ("detail", wit(detail)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::KeyValue { entries } => case_ty("key-value", wit(entries)),
+        arena::UiKind::TextInput {
+            field,
+            label,
+            value,
+            placeholder,
+            action,
+        } => case_rec(
+            "text-input",
+            "ui-text-input",
+            vec![
+                ("field", wit(field)),
+                ("label", wit(label)),
+                ("value", wit(value)),
+                ("placeholder", wit(placeholder)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::TextArea {
+            field,
+            label,
+            value,
+            rows,
+            action,
+        } => case_rec(
+            "text-area",
+            "ui-text-area",
+            vec![
+                ("field", wit(field)),
+                ("label", wit(label)),
+                ("value", wit(value)),
+                ("rows", wit(rows)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::Number {
+            field,
+            label,
+            value,
+            min,
+            max,
+            step,
+            action,
+        } => case_rec(
+            "number",
+            "ui-number",
+            vec![
+                ("field", wit(field)),
+                ("label", wit(label)),
+                ("value", wit(value)),
+                ("min", wit(min)),
+                ("max", wit(max)),
+                ("step", wit(step)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::Checkbox {
+            field,
+            label,
+            value,
+            action,
+        } => case_rec(
+            "checkbox",
+            "ui-checkbox",
+            vec![
+                ("field", wit(field)),
+                ("label", wit(label)),
+                ("value", wit(value)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::Select {
+            field,
+            label,
+            value,
+            options,
+            multiple,
+            action,
+        } => case_rec(
+            "select",
+            "ui-select",
+            vec![
+                ("field", wit(field)),
+                ("label", wit(label)),
+                ("value", wit(value)),
+                ("options", wit(options)),
+                ("multiple", wit(multiple)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::Radio {
+            field,
+            label,
+            value,
+            options,
+            action,
+        } => case_rec(
+            "radio",
+            "ui-radio",
+            vec![
+                ("field", wit(field)),
+                ("label", wit(label)),
+                ("value", wit(value)),
+                ("options", wit(options)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::Slider {
+            field,
+            label,
+            value,
+            min,
+            max,
+            step,
+            action,
+        } => case_rec(
+            "slider",
+            "ui-slider",
+            vec![
+                ("field", wit(field)),
+                ("label", wit(label)),
+                ("value", wit(value)),
+                ("min", wit(min)),
+                ("max", wit(max)),
+                ("step", wit(step)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::DatePicker {
+            field,
+            label,
+            value,
+            action,
+        } => case_rec(
+            "date-picker",
+            "ui-date-picker",
+            vec![
+                ("field", wit(field)),
+                ("label", wit(label)),
+                ("value", wit(value)),
+                ("action", wit(action)),
+            ],
+        ),
+        arena::UiKind::Form {
+            children,
+            submit_label,
+            submit,
+        } => case_rec(
+            "form",
+            "ui-form",
+            vec![
+                ("children", wit(children)),
+                ("submit-label", wit(submit_label)),
+                ("submit", wit(submit)),
+            ],
+        ),
+        arena::UiKind::Custom {
+            ns,
+            payload,
+            fallback,
+        } => case_rec(
+            "custom",
+            "ui-custom",
+            vec![
+                ("ns", wit(ns)),
+                ("payload", wit(payload)),
+                ("fallback", wit(fallback)),
+            ],
+        ),
+        arena::UiKind::Pending { label } => case_ty("pending", wit(label)),
+        arena::UiKind::Failed { message, retry } => case_rec(
+            "failed",
+            "ui-failed",
+            vec![("message", wit(message)), ("retry", wit(retry))],
+        ),
+    }
+}
+
+fn ui_value_case(v: &UiValue) -> Case {
+    match v {
+        UiValue::Text(s) => case_ty("text", wit(s)),
+        UiValue::Number(n) => case_ty("number", wit(n)),
+        UiValue::Bool(b) => case_ty("bool", wit(b)),
+        UiValue::Choices(c) => case_ty("choices", wit(c)),
     }
 }
 
@@ -1320,6 +1602,12 @@ fn view_update_case(v: &ViewUpdate) -> Case {
             "custom",
             "view-update-custom",
             vec![("ns", wit(ns)), ("payload", wit(payload))],
+        ),
+        // Il nodo è l'arena `ui-tree`, come la radice di `replace`.
+        ViewUpdate::Patch { key, node } => case_rec(
+            "patch",
+            "view-update-patch",
+            vec![("key", wit(key)), ("node", wit(node))],
         ),
     }
 }
@@ -1371,6 +1659,11 @@ fn event_case(e: &Event) -> Case {
             "event-batch-ended",
             vec![("batch", wit(batch)), ("changed", wit(changed))],
         ),
+        Event::ViewInvalidated { view, instance } => case_rec(
+            "view-invalidated",
+            "event-view-invalidated",
+            vec![("view", wit(view)), ("instance", wit(instance))],
+        ),
     }
 }
 
@@ -1385,6 +1678,7 @@ fn event_kind_name(k: EventKind) -> &'static str {
         EventKind::Overflow => "overflow",
         EventKind::Custom => "custom",
         EventKind::BatchEnded => "batch-ended",
+        EventKind::ViewInvalidated => "view-invalidated",
     }
 }
 
@@ -1543,6 +1837,11 @@ fn command_effect_case(e: &CommandEffect) -> Case {
             "command-effect-custom",
             vec![("ns", wit(ns)), ("payload", wit(payload))],
         ),
+        CommandEffect::OpenView { view, params } => case_rec(
+            "open-view",
+            "command-effect-open-view",
+            vec![("view", wit(view)), ("params", wit(params))],
+        ),
     }
 }
 
@@ -1614,11 +1913,26 @@ fn paged_fields<T: WitType>(p: &Paged<T>) -> Vec<(&'static str, String)> {
     ]
 }
 
-fn view_placement_name(p: ViewPlacement) -> &'static str {
+fn align_name(a: Align) -> &'static str {
+    match a {
+        Align::Start => "start",
+        Align::Center => "center",
+        Align::End => "end",
+    }
+}
+
+fn view_surface_name(p: ViewSurface) -> &'static str {
     match p {
-        ViewPlacement::LeftSidebar => "left-sidebar",
-        ViewPlacement::RightSidebar => "right-sidebar",
-        ViewPlacement::Bottom => "bottom",
+        ViewSurface::LeftSidebar => "left-sidebar",
+        ViewSurface::RightSidebar => "right-sidebar",
+        ViewSurface::Bottom => "bottom",
+        ViewSurface::Main => "main",
+        ViewSurface::Modal => "modal",
+        ViewSurface::StatusBar => "status-bar",
+        ViewSurface::Ribbon => "ribbon",
+        ViewSurface::Menu => "menu",
+        ViewSurface::ContextMenu => "context-menu",
+        ViewSurface::SettingsTab => "settings-tab",
     }
 }
 
@@ -1821,38 +2135,161 @@ fn conform(source: &str) -> Result<(), String> {
     );
 
     contract.variant_src(
-        "ui-node",
-        ("arena.rs", "UiNode"),
+        "ui-kind",
+        ("arena.rs", "UiKind"),
         &[
-            ui_node_case(&arena::UiNode::Stack {
+            ui_kind_case(&arena::UiKind::Stack {
                 dir: Axis::Row,
                 gap: 0,
                 children: vec![],
             }),
-            ui_node_case(&arena::UiNode::Text {
+            ui_kind_case(&arena::UiKind::Text {
                 content: String::new(),
             }),
-            ui_node_case(&arena::UiNode::Heading {
+            ui_kind_case(&arena::UiKind::Heading {
                 level: 1,
                 content: String::new(),
             }),
-            ui_node_case(&arena::UiNode::List { items: vec![] }),
-            ui_node_case(&arena::UiNode::ListItem {
+            ui_kind_case(&arena::UiKind::List { items: vec![] }),
+            ui_kind_case(&arena::UiKind::ListItem {
                 title: String::new(),
                 subtitle: None,
                 action: None,
+                selected: false,
             }),
-            ui_node_case(&arena::UiNode::Button {
+            ui_kind_case(&arena::UiKind::Button {
                 label: String::new(),
                 intent: Intent::Neutral,
-                action: ActionId(String::new()),
+                action: ActionRef::new(""),
             }),
-            ui_node_case(&arena::UiNode::Html {
+            ui_kind_case(&arena::UiKind::Html {
                 html: String::new(),
             }),
-            ui_node_case(&arena::UiNode::WebView {
+            ui_kind_case(&arena::UiKind::WebView {
                 url: String::new(),
                 height: 0,
+            }),
+            ui_kind_case(&arena::UiKind::Section {
+                title: String::new(),
+                collapsed: false,
+                children: vec![],
+            }),
+            ui_kind_case(&arena::UiKind::Table {
+                columns: vec![],
+                rows: vec![],
+            }),
+            ui_kind_case(&arena::UiKind::Row {
+                cells: vec![],
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::Tree { roots: vec![] }),
+            ui_kind_case(&arena::UiKind::TreeItem {
+                label: String::new(),
+                expanded: false,
+                action: None,
+                selected: false,
+                children: vec![],
+            }),
+            ui_kind_case(&arena::UiKind::Tabs {
+                active: 0,
+                tabs: vec![],
+            }),
+            ui_kind_case(&arena::UiKind::Tab {
+                label: String::new(),
+                action: None,
+                children: vec![],
+            }),
+            ui_kind_case(&arena::UiKind::Badge {
+                label: String::new(),
+                intent: Intent::Neutral,
+            }),
+            ui_kind_case(&arena::UiKind::Icon {
+                name: String::new(),
+            }),
+            ui_kind_case(&arena::UiKind::Progress {
+                value: None,
+                label: None,
+            }),
+            ui_kind_case(&arena::UiKind::Separator),
+            ui_kind_case(&arena::UiKind::EmptyState {
+                title: String::new(),
+                detail: None,
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::KeyValue { entries: vec![] }),
+            ui_kind_case(&arena::UiKind::TextInput {
+                field: String::new(),
+                label: None,
+                value: String::new(),
+                placeholder: None,
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::TextArea {
+                field: String::new(),
+                label: None,
+                value: String::new(),
+                rows: 0,
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::Number {
+                field: String::new(),
+                label: None,
+                value: None,
+                min: None,
+                max: None,
+                step: None,
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::Checkbox {
+                field: String::new(),
+                label: String::new(),
+                value: false,
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::Select {
+                field: String::new(),
+                label: None,
+                value: vec![],
+                options: vec![],
+                multiple: false,
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::Radio {
+                field: String::new(),
+                label: None,
+                value: None,
+                options: vec![],
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::Slider {
+                field: String::new(),
+                label: None,
+                value: 0.0,
+                min: 0.0,
+                max: 0.0,
+                step: 0.0,
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::DatePicker {
+                field: String::new(),
+                label: None,
+                value: None,
+                action: None,
+            }),
+            ui_kind_case(&arena::UiKind::Form {
+                children: vec![],
+                submit_label: String::new(),
+                submit: ActionRef::new(""),
+            }),
+            ui_kind_case(&arena::UiKind::Custom {
+                ns: String::new(),
+                payload: serde_json::Value::Null,
+                fallback: vec![],
+            }),
+            ui_kind_case(&arena::UiKind::Pending { label: None }),
+            ui_kind_case(&arena::UiKind::Failed {
+                message: String::new(),
+                retry: None,
             }),
         ],
     );
@@ -1862,9 +2299,7 @@ fn conform(source: &str) -> Result<(), String> {
         ("ui.rs", "ViewUpdate"),
         &[
             view_update_case(&ViewUpdate::Replace {
-                root: UiNode::Text {
-                    content: String::new(),
-                },
+                root: UiNode::text(""),
             }),
             view_update_case(&ViewUpdate::None),
             view_update_case(&ViewUpdate::Navigate {
@@ -1881,6 +2316,21 @@ fn conform(source: &str) -> Result<(), String> {
                 ns: String::new(),
                 payload: serde_json::Value::Null,
             }),
+            view_update_case(&ViewUpdate::Patch {
+                key: String::new(),
+                node: UiNode::text(""),
+            }),
+        ],
+    );
+
+    contract.variant_src(
+        "ui-value",
+        ("ui.rs", "UiValue"),
+        &[
+            ui_value_case(&UiValue::Text(String::new())),
+            ui_value_case(&UiValue::Number(0.0)),
+            ui_value_case(&UiValue::Bool(false)),
+            ui_value_case(&UiValue::Choices(vec![])),
         ],
     );
 
@@ -1915,6 +2365,10 @@ fn conform(source: &str) -> Result<(), String> {
             event_case(&Event::BatchEnded {
                 batch: BatchId(0),
                 changed: Vec::new(),
+            }),
+            event_case(&Event::ViewInvalidated {
+                view: String::new(),
+                instance: None,
             }),
         ],
     );
@@ -2063,9 +2517,17 @@ fn conform(source: &str) -> Result<(), String> {
             EventKind::Overflow,
             EventKind::Custom,
             EventKind::BatchEnded,
+            EventKind::ViewInvalidated,
         ]
         .map(event_kind_name)
         .as_slice(),
+    );
+    contract.enumeration_src(
+        "align",
+        ("ui.rs", "Align"),
+        [Align::Start, Align::Center, Align::End]
+            .map(align_name)
+            .as_slice(),
     );
     contract.enumeration_src(
         "axis",
@@ -2080,14 +2542,21 @@ fn conform(source: &str) -> Result<(), String> {
             .as_slice(),
     );
     contract.enumeration_src(
-        "view-placement",
-        ("traits.rs", "ViewPlacement"),
+        "view-surface",
+        ("traits.rs", "ViewSurface"),
         [
-            ViewPlacement::LeftSidebar,
-            ViewPlacement::RightSidebar,
-            ViewPlacement::Bottom,
+            ViewSurface::LeftSidebar,
+            ViewSurface::RightSidebar,
+            ViewSurface::Bottom,
+            ViewSurface::Main,
+            ViewSurface::Modal,
+            ViewSurface::StatusBar,
+            ViewSurface::Ribbon,
+            ViewSurface::Menu,
+            ViewSurface::ContextMenu,
+            ViewSurface::SettingsTab,
         ]
-        .map(view_placement_name)
+        .map(view_surface_name)
         .as_slice(),
     );
 
@@ -2503,6 +2972,10 @@ fn conform(source: &str) -> Result<(), String> {
                 ns: String::new(),
                 payload: serde_json::Value::Null,
             }),
+            command_effect_case(&CommandEffect::OpenView {
+                view: String::new(),
+                params: serde_json::Value::Null,
+            }),
         ],
     );
 
@@ -2529,24 +3002,44 @@ fn conform(source: &str) -> Result<(), String> {
     let ViewSpec {
         id,
         title,
-        placement,
+        surface,
         refresh,
         follows,
-    } = ViewSpec {
-        id: String::new(),
-        title: String::new(),
-        placement: ViewPlacement::Bottom,
-        refresh: EventMask::default(),
-        follows: ContextMask::default(),
-    };
+        params,
+        icon,
+        order,
+        open_by_default,
+        preferred_size,
+        closable,
+    } = ViewSpec::new("", "", ViewSurface::Bottom);
     contract.record(
         "view-spec",
         &[
             ("id", wit(&id)),
             ("title", wit(&title)),
-            ("placement", wit(&placement)),
+            ("surface", wit(&surface)),
             ("refresh", wit(&refresh)),
             ("follows", wit(&follows)),
+            ("params", wit(&params)),
+            ("icon", wit(&icon)),
+            ("order", wit(&order)),
+            ("open-by-default", wit(&open_by_default)),
+            ("preferred-size", wit(&preferred_size)),
+            ("closable", wit(&closable)),
+        ],
+    );
+
+    let ViewInstance {
+        view,
+        instance,
+        params,
+    } = ViewInstance::only("");
+    contract.record(
+        "view-instance",
+        &[
+            ("view", wit(&view)),
+            ("instance", wit(&instance)),
+            ("params", wit(&params)),
         ],
     );
 
@@ -2798,14 +3291,61 @@ fn conform(source: &str) -> Result<(), String> {
         &paged_fields(&Paged::all(Vec::<HealthIssue>::new())),
     );
 
-    let UiAction { action, payload } = UiAction {
-        action: ActionId(String::new()),
-        payload: serde_json::Value::Null,
-    };
+    let UiAction {
+        action,
+        payload,
+        fields,
+    } = UiAction::new("");
     contract.record(
         "ui-action",
+        &[
+            ("action", wit(&action)),
+            ("payload", wit(&payload)),
+            ("fields", wit(&fields)),
+        ],
+    );
+
+    let ActionRef { action, payload } = ActionRef::new("");
+    contract.record(
+        "action-ref",
         &[("action", wit(&action)), ("payload", wit(&payload))],
     );
+
+    let FieldValue { field, value } = FieldValue {
+        field: String::new(),
+        value: UiValue::Bool(false),
+    };
+    contract.record(
+        "field-value",
+        &[("field", wit(&field)), ("value", wit(&value))],
+    );
+
+    let UiOption { value, label } = UiOption::new("", "");
+    contract.record(
+        "ui-option",
+        &[("value", wit(&value)), ("label", wit(&label))],
+    );
+
+    let KeyValueEntry { label, value } = KeyValueEntry {
+        label: String::new(),
+        value: String::new(),
+    };
+    contract.record(
+        "key-value-entry",
+        &[("label", wit(&label)), ("value", wit(&value))],
+    );
+
+    let TableColumn { title, align } = TableColumn::new("");
+    contract.record(
+        "table-column",
+        &[("title", wit(&title)), ("align", wit(&align))],
+    );
+
+    let arena::UiNode { key, kind } = arena::UiNode {
+        key: None,
+        kind: arena::UiKind::Separator,
+    };
+    contract.record("ui-node", &[("key", wit(&key)), ("kind", wit(&kind))]);
 
     let PluginPermissions {
         read_vault,
@@ -3133,20 +3673,24 @@ fn conform(source: &str) -> Result<(), String> {
         "view",
         "render-view",
         <dyn ViewProvider>::render_view
-            as fn(&'static dyn ViewProvider, &'static str, HostRef) -> Result<UiNode, PluginError>,
-        &["view"],
+            as fn(
+                &'static dyn ViewProvider,
+                &'static ViewInstance,
+                HostRef,
+            ) -> Result<UiNode, PluginError>,
+        &["instance"],
     );
     contract.method(
         "view",
         "on-action",
         <dyn ViewProvider>::on_action
             as fn(
-                &'static dyn ViewProvider,
-                &'static str,
+                &'static mut dyn ViewProvider,
+                &'static ViewInstance,
                 UiAction,
                 Host,
             ) -> Result<ViewUpdate, PluginError>,
-        &["view", "action"],
+        &["instance", "action"],
     );
 
     contract.method(

@@ -62,6 +62,7 @@ deliberate stia in un posto solo e non solo nei commenti dei singoli punti:
 | [decisione 0003](../../docs/decisions/0003-modello-del-documento.md) | `anchor` dentro ogni record di blocco, `items` della lista, `thematic-break` da payload nudo a record, `embed` fuori da `link-target-wiki` |
 | [decisione 0012](../../docs/decisions/0012-origine-degli-eventi.md) | `event-handler.handle` prende un `notice` e non più un `event` nudo |
 | [decisione 0013](../../docs/decisions/0013-elenco-delle-capacita.md) | `host-api.storage-get` / `storage-set` **tolte** (lo stato volatile a chiave→valore non ha più casi d'uso: vedi il commento in `0.1.0.wit` e il verbale) |
+| [decisione 0016](../../docs/decisions/0016-cosa-e-una-view.md) | `ui-node` da `variant` a `record { key, kind }` (la chiave, §2.8); l'azione dei nodi da `action-id` a `action-ref` (il payload, §2.7); `view-placement` → `view-surface` e `view-spec.placement` → `surface` (le dieci superfici, §2.2); primo parametro di `render-view`/`on-action` da `string` a `view-instance` (le istanze, §2.3) |
 
 **Dopo il freeze** un file già qui non si tocca più. Alla pubblicazione di una
 versione nuova:

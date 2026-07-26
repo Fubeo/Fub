@@ -913,3 +913,270 @@ body[data-mode="reading"] #editor {
   box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
   font-size: 13px;
 }
+
+/* --------------------------------------------------------------------------
+   Le superfici del §2.2, e i nodi del §2.1
+   --------------------------------------------------------------------------
+   Ciò che una view dichiara è dove si attacca e cosa disegna; il tema resta
+   interamente qui — un provider sceglie intenti semantici, mai colori. */
+
+/* La barra di stato: ciò che informa senza interrompere. Una striscia, non un
+   pannello: titolo e contenuto sulla stessa riga. */
+#views-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 3px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 12px;
+  color: var(--muted);
+}
+#views-status .declared-view-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#views-status .panel-title {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+#views-status .declared-view .ui-stack {
+  gap: 12px;
+}
+
+/* La ribbon: i pulsanti che aprono qualcosa. */
+#views-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+
+/* La modale: la view che chiede qualcosa e se ne va. */
+#views-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 45%);
+}
+#views-modal .declared-view-panel {
+  min-width: 380px;
+  max-width: 70vw;
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+}
+
+/* Una view dichiarata si può richiudere dal suo titolo, se dichiara di
+   lasciarsi chiudere (§2.6). */
+.declared-view-panel.collapsed > .declared-view {
+  display: none;
+}
+.panel-title.clickable {
+  cursor: pointer;
+}
+
+/* --- i nodi ------------------------------------------------------------- */
+
+.ui-section {
+  margin: 4px 0;
+}
+.ui-section > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ui-table th {
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding: 3px 6px;
+}
+.ui-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.ui-row.clickable {
+  cursor: pointer;
+}
+.ui-row.clickable:hover {
+  background: var(--accent-soft);
+}
+
+.ui-tree-item > .ui-children {
+  margin-left: 12px;
+  border-left: 1px solid var(--border);
+  padding-left: 6px;
+}
+.ui-tree-label {
+  padding: 2px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ui-tree-label.clickable {
+  cursor: pointer;
+}
+.ui-tree-label.clickable:hover {
+  background: var(--accent-soft);
+}
+/* L'elemento corrente: è uno stato del nodo (§2.1), non un testo che il
+   provider si scrive nel titolo. */
+.ui-tree-label.selected,
+.ui-list-item.selected {
+  outline: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.ui-tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.ui-tab-button {
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ui-tab-button.selected {
+  border-bottom: 2px solid var(--accent);
+}
+
+.ui-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+}
+.ui-badge.intent-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ui-badge.intent-danger {
+  border-color: var(--doc-danger);
+  color: var(--doc-danger);
+}
+
+.ui-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ui-progress progress {
+  width: 120px;
+}
+.ui-progress-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ui-empty-state {
+  padding: 10px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ui-empty-title {
+  font-weight: 600;
+}
+.ui-empty-detail {
+  margin-top: 2px;
+}
+
+.ui-key-value {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 4px 0;
+  font-size: 12px;
+}
+.ui-key-value dt {
+  color: var(--muted);
+}
+.ui-key-value dd {
+  margin: 0;
+}
+
+/* I campi: la parte del §2.1 che senza il riconciliatore del §2.8 non si
+   potrebbe usare. */
+.ui-field-label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.ui-text-input input,
+.ui-date-picker input,
+.ui-number input,
+.ui-text-area textarea,
+.ui-select select {
+  width: 100%;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+}
+.ui-checkbox,
+.ui-radio-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.ui-slider input {
+  width: 100%;
+}
+.ui-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ui-form > .ui-children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* I due stati del §2.5: «non ancora» e «non ce l'ho fatta». */
+.ui-pending {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+.ui-failed {
+  padding: 8px;
+  border-left: 3px solid var(--doc-danger);
+  background: rgb(224 108 117 / 12%);
+  font-size: 12px;
+}
+.ui-failed-message {
+  margin-bottom: 4px;
+}

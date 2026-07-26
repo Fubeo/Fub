@@ -23,6 +23,7 @@ import {
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { pickIcon, showContextMenu } from "../ui/menu";
+import { registerPanel } from "../ui/panel-host";
 import { focusEditor, flushPendingSave, openDocument } from "./document";
 import { trashWithConfirm } from "./trash";
 
@@ -49,16 +50,31 @@ export function mountExplorer(): void {
   on("organization", () => renderFileList(state.knownDocs));
   on("active-doc", markActive);
 
+  // Una rinomina non è solo una lista invecchiata: l'organizzazione (icona,
+  // pin, ordine) è indicizzata per path e va **traslocata prima** del
+  // ridisegno. Resta un'iscrizione diretta, e non una riga in più nel
+  // `refresh` del pannello, proprio per quel «prima»: il router consegna gli
+  // ascoltatori generici — l'host dei pannelli è uno di quelli — prima dei
+  // tipizzati, quindi un ridisegno innescato dal registro partirebbe con
+  // l'organizzazione ancora al path vecchio.
   onEvent("document_renamed", (e) => {
     migrateOrganization(e.from, e.to);
     void refreshFromKernel();
   });
+
   // Dentro un lotto (decisione 0011) `index_updated` NON arriva: arriva
   // `batch_ended`, una volta sola. È tutta la differenza fra una rinomina con
   // 200 backlink che costa 201 giri di `list_documents` e una che ne costa uno.
-  onEvent("index_updated", () => void refreshFromKernel());
-  onEvent("batch_ended", () => void refreshFromKernel());
-  onEvent("overflow", () => void refreshFromKernel());
+  // Nessun `visible`: l'albero si tiene aggiornato anche mentre la sidebar
+  // mostra la ricerca o il cestino, perché alimenta anche ciò che si vede
+  // altrove (le appuntate, la striscia degli spazi).
+  registerPanel({
+    id: "shell:explorer",
+    title: "Note",
+    placement: "left_sidebar",
+    refresh: ["index_updated", "batch_ended"],
+    render: refreshFromKernel,
+  });
 }
 
 /// La lista dopo un evento del kernel.

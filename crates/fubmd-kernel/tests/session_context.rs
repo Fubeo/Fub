@@ -20,7 +20,7 @@ use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Span};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
-use fubmd_abi::traits::{HostApi, ViewPlacement, ViewProvider, ViewSpec};
+use fubmd_abi::traits::{HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{FormatProvider, PluginError};
 use fubmd_kernel::{FormatRegistry, Trust, Workspace, MAIN_PANE};
@@ -71,25 +71,26 @@ struct Spia {
 
 impl ViewProvider for Spia {
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec {
-            id: self.id.to_string(),
-            title: self.id.to_string(),
-            placement: ViewPlacement::RightSidebar,
-            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
-            follows: self.follows.clone(),
-        }]
+        vec![ViewSpec::new(self.id, self.id, ViewSurface::RightSidebar)
+            .refreshing(EventMask(vec![
+                EventKind::IndexUpdated,
+                EventKind::BatchEnded,
+            ]))
+            .following(self.follows.clone())]
     }
 
-    fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
+    fn render_view(
+        &self,
+        _instance: &ViewInstance,
+        host: &dyn HostApi,
+    ) -> Result<UiNode, PluginError> {
         // Il render legge il contesto come lo leggerebbe un plugin: dall'host.
-        Ok(UiNode::Text {
-            content: format!("{:?}", host.active_context()),
-        })
+        Ok(UiNode::text(format!("{:?}", host.active_context())))
     }
 
     fn on_action(
-        &self,
-        _view: &str,
+        &mut self,
+        _instance: &ViewInstance,
         _action: UiAction,
         _host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {

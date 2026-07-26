@@ -41,16 +41,167 @@ export interface BacklinkRef {
   context: string | null;
 }
 
-// Albero di UI dichiarativa (rispecchia fubmd_abi::ui::UiNode).
-export type UiNode =
+// --- UI dichiarativa (rispecchia fubmd_abi::ui) -----------------------------
+
+// L'azione attaccata a un nodo: l'id e il payload che il PROVIDER si porta
+// dietro. Il payload torna a lui intatto: la shell non lo legge e non lo
+// riscrive (§2.7).
+export interface ActionRef {
+  action: string;
+  payload: unknown;
+}
+
+export type Intent = "neutral" | "primary" | "danger";
+export type Align = "start" | "center" | "end";
+
+// Il valore di un campo di input. Tag ADIACENTE (`type`/`value`), come
+// ParamKind: una variante che porta una sequenza non sta col tag interno.
+export type UiValue =
+  | { type: "text"; value: string }
+  | { type: "number"; value: number }
+  | { type: "bool"; value: boolean }
+  | { type: "choices"; value: string[] };
+
+// Lo stato di un campo, come la shell lo consegna al provider.
+export interface FieldValue {
+  field: string;
+  value: UiValue;
+}
+
+export interface UiOption {
+  value: string;
+  label: string;
+}
+
+export interface KeyValueEntry {
+  label: string;
+  value: string;
+}
+
+export interface TableColumn {
+  title: string;
+  align: Align;
+}
+
+// La specie di un nodo. La CHIAVE viaggia accanto (vedi `UiNode`), non dentro:
+// è identità del nodo, non un dato della sua specie.
+export type UiKind =
   | { node: "stack"; dir: "row" | "column"; gap: number; children: UiNode[] }
   | { node: "text"; content: string }
   | { node: "heading"; level: number; content: string }
   | { node: "list"; items: UiNode[] }
-  | { node: "list_item"; title: string; subtitle: string | null; action: string | null }
-  | { node: "button"; label: string; intent: "neutral" | "primary" | "danger"; action: string }
+  | {
+      node: "list_item";
+      title: string;
+      subtitle: string | null;
+      action: ActionRef | null;
+      selected: boolean;
+    }
+  | { node: "button"; label: string; intent: Intent; action: ActionRef }
   | { node: "html"; html: string }
-  | { node: "web_view"; url: string; height: number };
+  | { node: "web_view"; url: string; height: number }
+  | { node: "section"; title: string; collapsed: boolean; children: UiNode[] }
+  | { node: "table"; columns: TableColumn[]; rows: UiNode[] }
+  | { node: "row"; cells: UiNode[]; action: ActionRef | null }
+  | { node: "tree"; roots: UiNode[] }
+  | {
+      node: "tree_item";
+      label: string;
+      expanded: boolean;
+      action: ActionRef | null;
+      selected: boolean;
+      children: UiNode[];
+    }
+  | { node: "tabs"; active: number; tabs: UiNode[] }
+  | { node: "tab"; label: string; action: ActionRef | null; children: UiNode[] }
+  | { node: "badge"; label: string; intent: Intent }
+  | { node: "icon"; name: string }
+  | { node: "progress"; value: number | null; label: string | null }
+  | { node: "separator" }
+  | { node: "empty_state"; title: string; detail: string | null; action: ActionRef | null }
+  | { node: "key_value"; entries: KeyValueEntry[] }
+  | {
+      node: "text_input";
+      field: string;
+      label: string | null;
+      value: string;
+      placeholder: string | null;
+      action: ActionRef | null;
+    }
+  | {
+      node: "text_area";
+      field: string;
+      label: string | null;
+      value: string;
+      rows: number;
+      action: ActionRef | null;
+    }
+  | {
+      node: "number";
+      field: string;
+      label: string | null;
+      value: number | null;
+      min: number | null;
+      max: number | null;
+      step: number | null;
+      action: ActionRef | null;
+    }
+  | { node: "checkbox"; field: string; label: string; value: boolean; action: ActionRef | null }
+  | {
+      node: "select";
+      field: string;
+      label: string | null;
+      value: string[];
+      options: UiOption[];
+      multiple: boolean;
+      action: ActionRef | null;
+    }
+  | {
+      node: "radio";
+      field: string;
+      label: string | null;
+      value: string | null;
+      options: UiOption[];
+      action: ActionRef | null;
+    }
+  | {
+      node: "slider";
+      field: string;
+      label: string | null;
+      value: number;
+      min: number;
+      max: number;
+      step: number;
+      action: ActionRef | null;
+    }
+  | {
+      node: "date_picker";
+      field: string;
+      label: string | null;
+      value: string | null;
+      action: ActionRef | null;
+    }
+  | { node: "form"; children: UiNode[]; submit_label: string; submit: ActionRef }
+  | { node: "custom"; ns: string; payload: unknown; fallback: UiNode[] }
+  | { node: "pending"; label: string | null }
+  | { node: "failed"; message: string; retry: ActionRef | null };
+
+// Un nodo: la sua chiave e la sua specie. `key` è l'identità del nodo fra due
+// ridisegni — è ciò su cui il riconciliatore lavora (§2.8) —, è assente quando
+// il provider non la dichiara, e la sua unicità vale FRA I FRATELLI.
+export type UiNode = UiKind & { key?: string };
+
+// L'azione che la shell manda al provider: le due metà con i due proprietari
+// (§2.7). `payload` è quello che il provider aveva attaccato al nodo e gli torna
+// intatto; `fields` è ciò che l'utente ha compilato, e lo costruisce la shell.
+// La costruisce lei, quindi vale la ragione del contesto di sessione: un campo
+// dimenticato di qua è un rifiuto di serde a runtime, non un errore di
+// compilazione.
+export interface UiAction {
+  action: string;
+  payload: unknown;
+  fields: FieldValue[];
+}
 
 // Aggiornamento restituito da un ViewProvider dopo un'azione
 // (rispecchia fubmd_abi::ui::ViewUpdate). Il frontend lo interpreta: `replace`
@@ -63,7 +214,10 @@ export type ViewUpdate =
   | { kind: "run_search"; query: string }
   // Varco di estensione: un intento che questa shell non prevede. La shell
   // che non riconosce `ns` NON FA NULLA (degrado garbato, da contratto).
-  | { kind: "custom"; ns: string; payload: unknown };
+  | { kind: "custom"; ns: string; payload: unknown }
+  // Rimpiazza il solo nodo con questa chiave. Una chiave che non c'è più non è
+  // un errore: è una view cambiata sotto, che si ridisegnerà intera.
+  | { kind: "patch"; key: string; node: UiNode };
 
 // Evento del kernel (rispecchia fubmd_abi::event::Event).
 export type KernelEvent =
@@ -86,7 +240,11 @@ export type KernelEvent =
   // una volta invece di una per nota — una rinomina con 200 backlink faceva 200
   // giri di `list_documents` più il ridisegno di ogni view iscritta.
   // `batch` è un u64 identità: attraversa l'IPC come stringa.
-  | { type: "batch_ended"; batch: string; changed: string[] };
+  | { type: "batch_ended"; batch: string; changed: string[] }
+  // Una view è invecchiata per un motivo che il vault non conosce: un job
+  // finito, una risposta dalla rete, un calcolo completato (§2.5). `instance`
+  // assente = tutte le istanze di quella view.
+  | { type: "view_invalidated"; view: string; instance: string | null };
 
 // Chi ha CHIESTO l'operazione da cui un evento nasce (rispecchia
 // fubmd_abi::event::Actor). Non chi l'ha eseguita: un comando invocato da
@@ -118,12 +276,42 @@ export interface KernelNotice {
 // cambio la view invecchia. Chi non dichiara `follows` non si ridisegna per il
 // contesto — è ciò che tiene fuori il pannello tag da ogni movimento del
 // cursore.
+// Dove una view si ancora. Dieci superfici, e non è un modello di layout: dice
+// a cosa ci si attacca, non come lo spazio è diviso (§2.2).
+export type ViewSurface =
+  | "left_sidebar"
+  | "right_sidebar"
+  | "bottom"
+  | "main"
+  | "modal"
+  | "status_bar"
+  | "ribbon"
+  | "menu"
+  | "context_menu"
+  | "settings_tab";
+
 export interface ViewSpec {
   id: string;
   title: string;
-  placement: "left_sidebar" | "right_sidebar" | "bottom";
+  surface: ViewSurface;
   refresh: KernelEvent["type"][];
   follows: ContextKind[];
+  // Gli argomenti con cui si apre un'istanza: gli stessi ParamSpec dei comandi.
+  // Vuoto = una sola istanza, quella che la shell monta da sé.
+  params: ParamSpec[];
+  icon: string | null;
+  order: number;
+  open_by_default: boolean;
+  preferred_size: number | null;
+  closable: boolean;
+}
+
+// Un esemplare vivo di una view: quale view, quale esemplare, con quali
+// parametri (§2.3). Lo costruisce la shell, che è chi apre.
+export interface ViewInstance {
+  view: string;
+  instance: string;
+  params: unknown;
 }
 
 // --- comandi (rispecchia fubmd_abi::command) --------------------------------
@@ -220,7 +408,9 @@ export type CommandEffect =
   | { kind: "run_search"; query: string }
   | ({ kind: "plan" } & CommandPlan)
   // Varco di estensione: la shell che non riconosce `ns` NON FA NULLA.
-  | { kind: "custom"; ns: string; payload: unknown };
+  | { kind: "custom"; ns: string; payload: unknown }
+  // Apri un'istanza di una view, con questi parametri (§2.3).
+  | { kind: "open_view"; view: string; params: unknown };
 
 export interface CommandOutcome {
   // Testo semplice, mai markup: si inserisce come testo (regola di confine).

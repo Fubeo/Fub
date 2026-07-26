@@ -19,31 +19,24 @@ use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::model::{Heading, Span};
 use fubmd_abi::session::{ContextKind, ContextMask, Selection};
-use fubmd_abi::traits::{HostApi, IndexQuery, IndexResult, ViewPlacement, ViewProvider, ViewSpec};
-use fubmd_abi::ui::{ActionId, Axis, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::traits::{
+    HostApi, IndexQuery, IndexResult, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+};
+use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const OUTLINE_ID: &str = "fubmd.outline";
 /// Id della `ViewSpec`: è ciò con cui la shell chiede questa view al kernel.
 pub const OUTLINE_VIEW: &str = "outline";
 
-/// Prefisso dell'azione di salto a un heading; porta l'intervallo in byte
-/// (`start:end`) del titolo. Il documento è quello attivo — lo stesso di cui la
-/// view mostra la struttura — e in `on_action` lo si chiede all'host, così un
-/// path con caratteri strani non deve stare dentro l'`ActionId`.
-const REVEAL: &str = "reveal:";
-
-/// Un livello di rientro nel titolo, reso con uno spazio EM (i normali si
-/// collassano nel DOM). L'albero `UiNode` non ha un campo "livello": la
-/// gerarchia si vede così, in attesa di un eventuale `UiNode` ad albero.
-const INDENT: &str = "\u{2003}";
-
-/// Come si dice "il cursore è in questa sezione" con i nodi che il protocollo
-/// ha: il sottotitolo di un `ListItem`. Un *evidenziato* vero vorrebbe una
-/// nozione di elemento corrente in [`UiNode`] — che è roba del §2.1, non di
-/// questo giro: qui la posizione attraversa il confine, che è la parte che
-/// mancava.
-const HERE: &str = "cursore qui";
+/// L'azione di salto a un heading. L'intervallo viaggia nel payload
+/// (`{"start":…,"end":…}`) e non concatenato nell'id (§2.7). Il documento è
+/// quello attivo — lo stesso di cui la view mostra la struttura — e in
+/// `on_action` lo si chiede all'host.
+const REVEAL: &str = "reveal";
+/// Le due chiavi del payload di [`REVEAL`].
+const START: &str = "start";
+const END: &str = "end";
 
 /// Il pannello struttura. Senza stato: heading e documento attivo li chiede
 /// all'host a ogni chiamata.
@@ -52,21 +45,33 @@ pub struct OutlineView;
 
 impl ViewProvider for OutlineView {
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec {
-            id: OUTLINE_VIEW.to_string(),
-            title: "Struttura".to_string(),
-            placement: ViewPlacement::RightSidebar,
-            // Gli heading cambiano quando cambia il documento: `IndexUpdated`
-            // copre ogni scrittura (anche quelle arrivate dal watcher).
-            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
-            // Del contesto segue il documento (di chi è la struttura) e la
-            // selezione (in quale sezione sta il cursore). Non la modalità: in
-            // lettura la selezione sparisce, e sparisce con lei il segno.
-            follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
-        }]
+        vec![
+            ViewSpec::new(OUTLINE_VIEW, "Struttura", ViewSurface::RightSidebar)
+                // Gli heading cambiano quando cambia il documento:
+                // `IndexUpdated` copre ogni scrittura (anche quelle arrivate
+                // dal watcher).
+                .refreshing(EventMask(vec![
+                    EventKind::IndexUpdated,
+                    EventKind::BatchEnded,
+                ]))
+                // Del contesto segue il documento (di chi è la struttura) e la
+                // selezione (in quale sezione sta il cursore). Non la modalità:
+                // in lettura la selezione sparisce, e sparisce con lei il segno.
+                .following(ContextMask(vec![
+                    ContextKind::Document,
+                    ContextKind::Selection,
+                ]))
+                .with_icon("struttura")
+                .ordered(1)
+                .open_by_default(),
+        ]
     }
 
-    fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
+    fn render_view(
+        &self,
+        _instance: &ViewInstance,
+        host: &dyn HostApi,
+    ) -> Result<UiNode, PluginError> {
         let Some(context) = host.active_context() else {
             return Ok(placeholder("Nessuna nota aperta."));
         };
@@ -85,16 +90,16 @@ impl ViewProvider for OutlineView {
     }
 
     fn on_action(
-        &self,
-        _view: &str,
+        &mut self,
+        _instance: &ViewInstance,
         action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
-        // "reveal:START:END" → salta a quell'intervallo nel documento attivo.
-        let Some(rest) = action.action.0.strip_prefix(REVEAL) else {
+        // `reveal` col suo intervallo → salta lì, nel documento attivo.
+        if action.action.0 != REVEAL {
             return Ok(ViewUpdate::None);
-        };
-        let Some(span) = parse_span(rest) else {
+        }
+        let Some(span) = payload_span(&action.payload) else {
             return Ok(ViewUpdate::None);
         };
         // Il documento è quello di cui la view mostra la struttura: l'attivo.
@@ -119,20 +124,16 @@ fn caret_of(selection: &Option<Selection>) -> Option<usize> {
     selection.as_ref()?.span.as_ref().map(|s| s.start)
 }
 
-/// `"start:end"` → `Span`, o `None` se malformato.
-fn parse_span(s: &str) -> Option<Span> {
-    let (start, end) = s.split_once(':')?;
-    Some(Span::new(start.parse().ok()?, end.parse().ok()?))
+/// `{"start":…,"end":…}` → `Span`, o `None` se il payload non è quello che
+/// questa view ha attaccato al nodo.
+fn payload_span(payload: &serde_json::Value) -> Option<Span> {
+    let start = payload.get(START)?.as_u64()? as usize;
+    let end = payload.get(END)?.as_u64()? as usize;
+    Some(Span::new(start, end))
 }
 
 fn placeholder(text: &str) -> UiNode {
-    UiNode::Stack {
-        dir: Axis::Column,
-        gap: 4,
-        children: vec![UiNode::Text {
-            content: text.to_string(),
-        }],
-    }
+    UiNode::empty_state(text)
 }
 
 /// L'indice dell'heading che **contiene** `caret`: l'ultimo che comincia prima
@@ -153,31 +154,64 @@ fn section_of(headings: &[Heading], caret: usize) -> Option<usize> {
 /// Costruisce l'albero `UiNode` dell'outline, segnando la sezione in cui sta il
 /// cursore. Separato dal provider perché è pura trasformazione dati→UI: si
 /// prova senza un host.
+///
+/// È un **albero**, e questo è il collaudo del §2.1: prima la gerarchia degli
+/// heading si vedeva rientrando il titolo con uno spazio EM, perché il
+/// protocollo aveva solo liste piatte — cioè la struttura di un documento
+/// attraversava il confine come *spaziatura*. Ora attraversa come annidamento,
+/// e la sezione col cursore è `selected` invece di essere un sottotitolo che
+/// dice «cursore qui».
 pub fn build_outline_view(headings: &[Heading], caret: Option<usize>) -> UiNode {
     if headings.is_empty() {
         return placeholder("Nessun heading.");
     }
     let corrente = caret.and_then(|c| section_of(headings, c));
+    let (roots, _) = subtree(headings, 0, 0, corrente);
+    UiNode::column(2, vec![UiNode::new(UiKind::Tree { roots })])
+}
 
-    let items = headings
-        .iter()
-        .enumerate()
-        .map(|(i, h)| UiNode::ListItem {
-            title: format!(
-                "{}{}",
-                INDENT.repeat(h.level.saturating_sub(1) as usize),
-                h.text
-            ),
-            subtitle: (Some(i) == corrente).then(|| HERE.to_string()),
-            action: Some(ActionId(format!("{REVEAL}{}:{}", h.span.start, h.span.end))),
-        })
-        .collect();
-
-    UiNode::Stack {
-        dir: Axis::Column,
-        gap: 2,
-        children: vec![UiNode::List { items }],
+/// Gli heading da `at` in poi che stanno **sotto** `parent_level`, e l'indice
+/// del primo che non ci sta più.
+///
+/// Gli heading arrivano in ordine di apparizione col loro livello, che è il
+/// contratto di [`IndexResult::Outline`]; il documento può cominciare da un `h3`
+/// o saltare un livello, quindi «figlio» qui vuol dire *di livello maggiore*, non
+/// *di livello esattamente uno in più*. Una nota scritta a mano non è tenuta a
+/// essere ben annidata, e un outline che perdesse gli heading di un documento
+/// disordinato sarebbe peggio di uno piatto.
+fn subtree(
+    headings: &[Heading],
+    at: usize,
+    parent_level: u8,
+    corrente: Option<usize>,
+) -> (Vec<UiNode>, usize) {
+    let mut nodi = Vec::new();
+    let mut i = at;
+    while let Some(h) = headings.get(i) {
+        if h.level <= parent_level {
+            break;
+        }
+        let (children, next) = subtree(headings, i + 1, h.level, corrente);
+        nodi.push(
+            UiNode::new(UiKind::TreeItem {
+                label: h.text.clone(),
+                // Aperto: un outline che nasce chiuso non è un outline.
+                expanded: true,
+                action: Some(ActionRef::with(
+                    REVEAL,
+                    serde_json::json!({ START: h.span.start, END: h.span.end }),
+                )),
+                selected: Some(i) == corrente,
+                children,
+            })
+            // La chiave è lo slug dell'heading, che è la sua identità stabile
+            // nel documento — non la posizione, che cambia a ogni riga scritta
+            // sopra di lui.
+            .with_key(h.slug.clone()),
+        );
+        i = next;
     }
+    (nodi, i)
 }
 
 #[cfg(test)]
@@ -195,40 +229,96 @@ mod tests {
         }
     }
 
+    /// Le voci dell'albero, in ordine di lettura, con il loro livello di
+    /// annidamento: `(profondità, etichetta, selezionata)`.
+    fn voci(tree: &UiNode) -> Vec<(usize, String, bool)> {
+        let UiKind::Stack { children, .. } = &tree.kind else {
+            panic!("l'outline è uno stack")
+        };
+        let UiKind::Tree { roots } = &children[0].kind else {
+            panic!("il primo figlio è l'albero")
+        };
+        fn scendi(nodi: &[UiNode], depth: usize, out: &mut Vec<(usize, String, bool)>) {
+            for n in nodi {
+                let UiKind::TreeItem {
+                    label,
+                    selected,
+                    children,
+                    ..
+                } = &n.kind
+                else {
+                    panic!("una voce d'albero è un tree-item")
+                };
+                out.push((depth, label.clone(), *selected));
+                scendi(children, depth + 1, out);
+            }
+        }
+        let mut out = Vec::new();
+        scendi(roots, 0, &mut out);
+        out
+    }
+
     #[test]
     fn empty_shows_placeholder() {
         assert!(matches!(
-            &build_outline_view(&[], None),
-            UiNode::Stack { children, .. } if matches!(&children[0], UiNode::Text { .. })
+            &build_outline_view(&[], None).kind,
+            UiKind::EmptyState { .. }
         ));
     }
 
     #[test]
-    fn nested_headings_are_indented_and_carry_reveal_actions() {
+    fn nested_headings_become_a_tree_and_carry_reveal_payloads() {
         let tree = build_outline_view(&[h(1, "Titolo", 0, 8), h(2, "Sezione", 20, 30)], None);
+        assert_eq!(
+            voci(&tree),
+            vec![
+                (0, "Titolo".to_string(), false),
+                (1, "Sezione".to_string(), false),
+            ],
+            "il livello è annidamento, non spaziatura nel titolo"
+        );
         let json = serde_json::to_string(&tree).unwrap();
-        assert!(json.contains("Titolo"));
-        // il secondo heading (livello 2) è rientrato di uno EM space
-        assert!(json.contains(&format!("{INDENT}Sezione")));
-        assert!(json.contains("reveal:0:8"));
-        assert!(json.contains("reveal:20:30"));
+        assert!(json.contains(r#""start":20"#) && json.contains(r#""end":30"#));
+        assert!(
+            !json.contains("reveal:"),
+            "l'id non porta più dati concatenati"
+        );
     }
 
-    /// I sottotitoli degli elementi, in ordine: è lì che finisce il segno
-    /// della sezione corrente.
-    fn subtitles(tree: &UiNode) -> Vec<Option<String>> {
-        let UiNode::Stack { children, .. } = tree else {
-            panic!("l'outline è uno stack")
-        };
-        let UiNode::List { items } = &children[0] else {
-            panic!("il primo figlio è la lista")
-        };
-        items
-            .iter()
-            .map(|i| match i {
-                UiNode::ListItem { subtitle, .. } => subtitle.clone(),
-                other => panic!("elemento inatteso: {other:?}"),
-            })
+    /// Un documento disordinato — che comincia da un `h2` e salta un livello —
+    /// non perde heading: «figlio» è *di livello maggiore*, non *di livello
+    /// esattamente uno in più*.
+    #[test]
+    fn a_document_that_skips_levels_keeps_all_its_headings() {
+        let tree = build_outline_view(
+            &[
+                h(2, "Due", 0, 5),
+                h(4, "Quattro", 10, 15),
+                h(3, "Tre", 20, 25),
+                h(1, "Uno", 30, 35),
+            ],
+            None,
+        );
+        assert_eq!(
+            voci(&tree)
+                .into_iter()
+                .map(|(d, l, _)| (d, l))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, "Due".to_string()),
+                (1, "Quattro".to_string()),
+                (1, "Tre".to_string()),
+                (0, "Uno".to_string()),
+            ]
+        );
+    }
+
+    /// Le etichette selezionate, in ordine di lettura.
+    fn selezionate(tree: &UiNode) -> Vec<String> {
+        voci(tree)
+            .into_iter()
+            .filter(|(_, _, sel)| *sel)
+            .map(|(_, l, _)| l)
             .collect()
     }
 
@@ -238,31 +328,27 @@ mod tests {
 
         // Dentro la seconda sezione: dopo il suo heading, prima del terzo.
         assert_eq!(
-            subtitles(&build_outline_view(&headings, Some(30))),
-            vec![None, Some(HERE.to_string()), None]
+            selezionate(&build_outline_view(&headings, Some(30))),
+            ["Due"]
         );
         // Sull'heading stesso: la sezione è la sua.
         assert_eq!(
-            subtitles(&build_outline_view(&headings, Some(40))),
-            vec![None, None, Some(HERE.to_string())]
+            selezionate(&build_outline_view(&headings, Some(40))),
+            ["Tre"]
         );
         assert_eq!(
-            subtitles(&build_outline_view(&headings, Some(0))),
-            vec![Some(HERE.to_string()), None, None],
+            selezionate(&build_outline_view(&headings, Some(0))),
+            ["Uno"],
             "il byte 0 è l'inizio del primo heading: ci sta dentro"
         );
         // Nel preambolo, prima di ogni heading: nessuna sezione, non la prima.
         let dopo_preambolo = [h(1, "Uno", 10, 15)];
-        assert_eq!(
-            subtitles(&build_outline_view(&dopo_preambolo, Some(3))),
-            vec![None],
+        assert!(
+            selezionate(&build_outline_view(&dopo_preambolo, Some(3))).is_empty(),
             "il preambolo non appartiene alla sezione che lo segue"
         );
         // Nessun cursore (o buffer sporco): nessun segno.
-        assert_eq!(
-            subtitles(&build_outline_view(&headings, None)),
-            vec![None, None, None]
-        );
+        assert!(selezionate(&build_outline_view(&headings, None)).is_empty());
     }
 
     #[test]
@@ -272,13 +358,14 @@ mod tests {
         // Il cursore c'è, ma il buffer ha modifiche non salvate: lo span non
         // attraversa il confine, e la view non ha dove segnare.
         host.set_caret(None);
-        let tree = OutlineView.render_view(OUTLINE_VIEW, &host).unwrap();
-        assert_eq!(subtitles(&tree), vec![None]);
+        let istanza = ViewInstance::only(OUTLINE_VIEW);
+        let tree = OutlineView.render_view(&istanza, &host).unwrap();
+        assert!(selezionate(&tree).is_empty());
 
         // Salvato: lo span torna vero, e il segno con lui.
         host.set_caret(Some(2));
-        let tree = OutlineView.render_view(OUTLINE_VIEW, &host).unwrap();
-        assert_eq!(subtitles(&tree), vec![Some(HERE.to_string())]);
+        let tree = OutlineView.render_view(&istanza, &host).unwrap();
+        assert_eq!(selezionate(&tree), ["Uno"]);
     }
 
     #[test]
@@ -286,18 +373,27 @@ mod tests {
         let host =
             MemoryHost::new().con_outline("nota.md", &[h(1, "Uno", 0, 5), h(2, "Due", 10, 15)]);
         host.set_active(Some("nota.md"));
-        let tree = OutlineView.render_view(OUTLINE_VIEW, &host).unwrap();
-        let json = serde_json::to_string(&tree).unwrap();
-        assert!(json.contains("Uno"));
-        assert!(json.contains("reveal:10:15"));
+        let tree = OutlineView
+            .render_view(&ViewInstance::only(OUTLINE_VIEW), &host)
+            .unwrap();
+        assert_eq!(
+            voci(&tree)
+                .into_iter()
+                .map(|(_, l, _)| l)
+                .collect::<Vec<_>>(),
+            ["Uno", "Due"]
+        );
     }
 
     #[test]
     fn render_without_active_doc_is_a_placeholder() {
         let host = MemoryHost::new();
         assert!(matches!(
-            OutlineView.render_view(OUTLINE_VIEW, &host).unwrap(),
-            UiNode::Stack { children, .. } if matches!(&children[0], UiNode::Text { .. })
+            OutlineView
+                .render_view(&ViewInstance::only(OUTLINE_VIEW), &host)
+                .unwrap()
+                .kind,
+            UiKind::EmptyState { .. }
         ));
     }
 
@@ -307,11 +403,8 @@ mod tests {
         host.set_active(Some("nota.md"));
         let update = OutlineView
             .on_action(
-                OUTLINE_VIEW,
-                UiAction {
-                    action: ActionId("reveal:10:15".into()),
-                    payload: serde_json::Value::Null,
-                },
+                &ViewInstance::only(OUTLINE_VIEW),
+                UiAction::new(REVEAL).with_payload(serde_json::json!({START: 10, END: 15})),
                 &mut host,
             )
             .unwrap();
@@ -322,5 +415,21 @@ mod tests {
                 span: Span::new(10, 15),
             }
         );
+    }
+
+    /// Un payload che non è quello che questa view attacca ai propri nodi non
+    /// fa saltare niente — e non è un errore: è un click che non significa.
+    #[test]
+    fn a_payload_that_is_not_a_span_reveals_nothing() {
+        let mut host = MemoryHost::new();
+        host.set_active(Some("nota.md"));
+        let update = OutlineView
+            .on_action(
+                &ViewInstance::only(OUTLINE_VIEW),
+                UiAction::new(REVEAL).with_payload(serde_json::json!({"start": "dieci"})),
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(update, ViewUpdate::None);
     }
 }

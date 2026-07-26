@@ -10,7 +10,8 @@
 use camino::Utf8PathBuf;
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::session::{Selection, ViewContext};
-use fubmd_abi::ui::{ActionId, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::traits::ViewInstance;
+use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_features::{OutlineView, OUTLINE_ID, OUTLINE_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Trust, Workspace, MAIN_PANE};
@@ -41,15 +42,16 @@ impl Vault {
     }
 }
 
-/// I titoli delle voci dell'outline, in ordine, con il rientro EM eventuale
-/// tolto — a noi qui interessa il testo e la sequenza.
+/// Le etichette dell'outline, in ordine di lettura. Dalla seduta 2 la gerarchia
+/// è annidamento vero e non più rientro nel testo, quindi qui non c'è più niente
+/// da ripulire.
 fn titles(tree: &UiNode) -> Vec<String> {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
-        match node {
-            UiNode::ListItem { title, .. } => out.push(title.replace('\u{2003}', "")),
-            UiNode::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
-            UiNode::List { items } => items.iter().for_each(|c| walk(c, out)),
-            _ => {}
+        if let UiKind::TreeItem { label, .. } = &node.kind {
+            out.push(label.clone());
+        }
+        for c in node.children() {
+            walk(c, out);
         }
     }
     let mut out = Vec::new();
@@ -57,16 +59,15 @@ fn titles(tree: &UiNode) -> Vec<String> {
     out
 }
 
-fn first_action(tree: &UiNode) -> String {
-    fn find(node: &UiNode) -> Option<String> {
-        match node {
-            UiNode::ListItem {
-                action: Some(a), ..
-            } => Some(a.0.clone()),
-            UiNode::Stack { children, .. } => children.iter().find_map(find),
-            UiNode::List { items } => items.iter().find_map(find),
-            _ => None,
+fn first_action(tree: &UiNode) -> ActionRef {
+    fn find(node: &UiNode) -> Option<ActionRef> {
+        if let UiKind::TreeItem {
+            action: Some(a), ..
+        } = &node.kind
+        {
+            return Some(a.clone());
         }
+        node.children().into_iter().find_map(find)
     }
     find(tree).expect("una voce con azione reveal")
 }
@@ -79,13 +80,13 @@ fn the_view_reads_the_active_docs_outline_from_the_kernel() {
     let mut ws = vault.open();
 
     // Nessun attivo → segnaposto.
-    assert!(titles(&ws.render_view(OUTLINE_VIEW).unwrap()).is_empty());
+    assert!(titles(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()).is_empty());
 
     // Attivo Nota: la view mostra i suoi heading nell'ordine del documento,
     // presi dai modelli del kernel via HostApi::query_index.
     ws.set_active_document(Some(DocId::new("Nota.md")));
     assert_eq!(
-        titles(&ws.render_view(OUTLINE_VIEW).unwrap()),
+        titles(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
         vec!["Titolo".to_string(), "Sezione".to_string()]
     );
 }
@@ -97,16 +98,17 @@ fn clicking_a_heading_reveals_its_span_back_through_the_kernel() {
     let mut ws = vault.open();
     ws.set_active_document(Some(DocId::new("Nota.md")));
 
-    let tree = ws.render_view(OUTLINE_VIEW).unwrap();
+    let tree = ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap();
     let action = first_action(&tree);
-    assert!(action.starts_with("reveal:"));
+    assert_eq!(action.action.0, "reveal");
 
     let update = ws
         .view_action(
-            OUTLINE_VIEW,
+            &ViewInstance::only(OUTLINE_VIEW),
             UiAction {
-                action: ActionId(action),
-                payload: serde_json::Value::Null,
+                action: action.action,
+                payload: action.payload,
+                fields: Vec::new(),
             },
         )
         .expect("view_action");
@@ -121,14 +123,16 @@ fn clicking_a_heading_reveals_its_span_back_through_the_kernel() {
     );
 }
 
-/// I sottotitoli, in ordine: è lì che l'outline segna la sezione del cursore.
-fn subtitles(tree: &UiNode) -> Vec<Option<String>> {
-    fn walk(node: &UiNode, out: &mut Vec<Option<String>>) {
-        match node {
-            UiNode::ListItem { subtitle, .. } => out.push(subtitle.clone()),
-            UiNode::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
-            UiNode::List { items } => items.iter().for_each(|c| walk(c, out)),
-            _ => {}
+/// Quali voci sono segnate, in ordine di lettura: dalla seduta 2 la sezione del
+/// cursore è `selected` sul nodo, e non più un sottotitolo che dice «cursore
+/// qui» — cioè uno stato travestito da testo.
+fn segnate(tree: &UiNode) -> Vec<bool> {
+    fn walk(node: &UiNode, out: &mut Vec<bool>) {
+        if let UiKind::TreeItem { selected, .. } = &node.kind {
+            out.push(*selected);
+        }
+        for c in node.children() {
+            walk(c, out);
         }
     }
     let mut out = Vec::new();
@@ -162,8 +166,8 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
          registrata qui, e va ridisegnata"
     );
     assert_eq!(
-        subtitles(&ws.render_view(OUTLINE_VIEW).unwrap()),
-        vec![Some("cursore qui".to_string()), None]
+        segnate(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
+        vec![true, false]
     );
 
     // Il cursore scende nella seconda sezione: il segno lo segue.
@@ -171,8 +175,8 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
     let byte = source.find("altro").unwrap();
     ws.set_active_context(Some(cursore(byte)));
     assert_eq!(
-        subtitles(&ws.render_view(OUTLINE_VIEW).unwrap()),
-        vec![None, Some("cursore qui".to_string())]
+        segnate(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
+        vec![false, true]
     );
 
     // Il buffer diventa sporco: la shell pubblica il testo senza lo span, e la
@@ -183,7 +187,7 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
             .with_selection(Some(Selection::caret(None))),
     ));
     assert_eq!(
-        subtitles(&ws.render_view(OUTLINE_VIEW).unwrap()),
-        vec![None, None]
+        segnate(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
+        vec![false, false]
     );
 }

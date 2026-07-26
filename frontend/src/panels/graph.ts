@@ -13,6 +13,9 @@
 
 import { api } from "../host/ipc";
 import { pageName } from "../rules/organizer";
+import { state } from "../state/store";
+import { $ } from "../ui/dom";
+import { registerPanel } from "../ui/panel-host";
 
 interface SimNode {
   id: string;
@@ -33,18 +36,54 @@ interface SimEdge {
   to: SimNode;
 }
 
-/// Apre l'overlay del grafo. `current` evidenzia la nota aperta;
-/// `onOpenNote` è il click su un nodo (apri la nota e chiudi l'overlay).
-export async function openGraph(
-  current: string | null,
-  onOpenNote: (id: string) => void,
-): Promise<void> {
-  document.getElementById("graph-overlay")?.remove();
+/// Ciò che il grafo chiede alla shell: il click su un nodo apre quella nota.
+/// Iniettato invece che importato, come per l'anteprima e il pannello del
+/// documento — `panels/document` importa a sua volta ciò che sta di qua.
+interface GraphHost {
+  openNote: (id: string) => void;
+}
+
+let host: GraphHost | null = null;
+
+const OVERLAY_ID = "graph-overlay";
+
+export function mountGraph(h: GraphHost): void {
+  host = h;
+  $("#show-graph").addEventListener("click", () => void openGraph());
+
+  // Il grafo è un pannello come gli altri per ciò che riguarda **chi lo
+  // conosce** — sta nell'inventario, dichiara dove sta e quando invecchia —
+  // e resta un'eccezione decisa per ciò che riguarda **cosa disegna**:
+  // `UiNode` non esprime un canvas, né deve (piano M2, §2.2).
+  //
+  // `refresh` vuoto non è una dimenticanza: il grafo si rilegge all'apertura,
+  // e ridisegnarlo a ogni salvataggio significherebbe far ripartire la
+  // simulazione sotto il mouse di chi lo sta guardando. L'unico caso in cui
+  // riparte è `overflow`, dove la coda è stata troncata e il dato in mano
+  // potrebbe essere di un vault che non esiste più.
+  registerPanel({
+    id: "shell:graph",
+    title: "Grafo",
+    placement: "overlay",
+    refresh: [],
+    visible: () => document.getElementById(OVERLAY_ID) !== null,
+    render: openGraph,
+  });
+}
+
+/// Apre l'overlay del grafo (o lo rifà da capo, se è già aperto). La nota
+/// aperta è evidenziata.
+export async function openGraph(): Promise<void> {
+  if (!host) return;
+  const { openNote } = host;
+  const current = state.currentDoc;
+
+  document.getElementById(OVERLAY_ID)?.remove();
 
   const data = await api.graphData();
 
   const overlay = document.createElement("div");
-  overlay.id = "graph-overlay";
+  overlay.id = OVERLAY_ID;
 
   const bar = document.createElement("div");
   bar.className = "graph-bar";
@@ -302,6 +341,6 @@ export async function openGraph(
     const n = nodeAt(e);
     if (!n) return;
     dispose();
-    onOpenNote(n.id);
+    openNote(n.id);
   });
 }

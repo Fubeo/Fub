@@ -36,7 +36,7 @@ export interface Signals {
   /// Il kernel ha detto **quali** view sono invecchiate dopo la pubblicazione
   /// del contesto (`ViewSpec.follows`). Il verso è questo, e non una chiamata
   /// diretta, perché chi pubblica il contesto è il pannello del documento e
-  /// chi monta le view è `ui/views.ts`: chiamarsi per nome sarebbe un ciclo.
+  /// chi le ridisegna è `ui/panel-host.ts`: chiamarsi per nome sarebbe un ciclo.
   "stale-views": [ids: string[]];
 }
 

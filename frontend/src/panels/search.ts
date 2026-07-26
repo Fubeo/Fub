@@ -1,9 +1,9 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
 import { api } from "../host/ipc";
 import type { SearchHit, Span } from "../host/contract";
-import { onEvent } from "../state/kernel";
 import { pageName } from "../rules/organizer";
 import { $ } from "../ui/dom";
+import { registerPanel } from "../ui/panel-host";
 import { openDocument } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
 
@@ -25,14 +25,16 @@ export function mountSearch(): void {
   // invecchiare sotto gli occhi di chi legge. Dentro un lotto (decisione 0011)
   // `index_updated` non arriva — arriva `batch_ended` — e chi reagisce
   // a uno deve reagire a entrambi, o dopo una rinomina con backlink la
-  // ricerca resta ferma.
-  onEvent("index_updated", refreshIfOpen);
-  onEvent("batch_ended", refreshIfOpen);
-  onEvent("overflow", refreshIfOpen);
-}
-
-function refreshIfOpen(): void {
-  if (isPanelVisible("search")) scheduleSearch();
+  // ricerca resta ferma. `overflow` non si dichiara: lo tratta l'host,
+  // riconciliando tutti i pannelli da zero.
+  registerPanel({
+    id: "shell:search",
+    title: "Risultati",
+    placement: "left_sidebar",
+    refresh: ["index_updated", "batch_ended"],
+    visible: () => isPanelVisible("search"),
+    render: scheduleSearch,
+  });
 }
 
 function scheduleSearch(): void {

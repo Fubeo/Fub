@@ -11,6 +11,7 @@ import type {
   CommandOutcome,
   CommandSpec,
   EmbedContent,
+  FieldValue,
   GraphData,
   InvokeMode,
   KernelNotice,
@@ -57,9 +58,29 @@ export const api = {
   // Le view offerte dai provider registrati: la shell le monta per
   // `placement`, senza cablare gli id — una view di plugin compare da sola.
   listViews: () => invoke<ViewSpec[]>("list_views"),
-  renderView: (view: string) => invoke<UiNode>("render_view", { view }),
-  viewAction: (view: string, action: string, payload?: unknown) =>
-    invoke<ViewUpdate>("view_action", { view, action, payload: payload ?? null }),
+  // L'istanza e i suoi parametri viaggiano accanto all'id della view (§2.3):
+  // assenti = l'esemplare unico, quello che la shell monta da sé.
+  renderView: (view: string, instance?: string, params?: unknown) =>
+    invoke<UiNode>("render_view", { view, instance: instance ?? null, params: params ?? null }),
+  // Le due metà di un'azione arrivano come due argomenti distinti, ed è ciò che
+  // impedisce alla shell di riscrivere quella del provider (§2.7): `payload` è
+  // suo, `fields` è ciò che l'utente ha compilato.
+  viewAction: (
+    view: string,
+    instance: string | null,
+    params: unknown,
+    action: string,
+    payload?: unknown,
+    fields?: FieldValue[],
+  ) =>
+    invoke<ViewUpdate>("view_action", {
+      view,
+      instance,
+      params: params ?? null,
+      action,
+      payload: payload ?? null,
+      fields: fields ?? null,
+    }),
   // Comandi (protocollo generico, gemello di listViews/viewAction). La palette
   // legge questo elenco e non cabla nessun id: un comando di plugin comparirà
   // da solo, coi suoi parametri e il suo raggio.

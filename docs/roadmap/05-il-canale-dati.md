@@ -125,12 +125,12 @@ troverebbe a dire di no a feature che non hanno altra strada.
       dieta dell'IPC del §16.6: senza, l'allowlist si troverebbe a dire di no a
       feature legittime che non hanno altra strada.
 - [ ] Con essa i quattro comandi diventano tre righe di `api.ts`, il grafo
-      smette di avere un canale privilegiato (§2.2) e i backlink smettono di
-      avere il proprio.
+      smette di avere un canale privilegiato e i backlink smettono di avere il
+      proprio.
 
-### 5.5 `list_documents` e `views()` — le metà nel contratto di §14.4 e §2.3
+### 5.5 `list_documents` e `views()` — le metà nel contratto di §14.4 e delle istanze
 
-*ex §1.27 · contratto · **P0** — le metà nel contratto della 14.4 e della 2.3*
+*ex §1.27 · contratto · **P0** — la metà nel contratto della 14.4, e il conto che le istanze hanno reso caldo*
 
 Due voci già nel piano hanno una metà **dentro** il contratto, e quella metà
 scade col freeze mentre l'altra no:
@@ -145,7 +145,11 @@ scade col freeze mentre l'altra no:
 - [ ] **`ViewProvider::views()` è interrogato a ogni giro**: `view_owner` chiama
       `p.views()` su *ogni* provider registrato per risolvere un id
       (`kernel/workspace.rs:1566-1571`), e ogni chiamata rialloca l'elenco. È
-      il gemello del §2.3: con le view istanziabili questa risoluzione
-      lineare-e-riallocante diventa il percorso caldo di ogni render. La
-      domanda di forma: le spec sono **dato di registrazione** (il kernel le
-      tiene, il provider le invalida) o restano una chiamata al provider?
+      il gemello delle istanze, e non è più un'ipotesi: con la
+      [decisione 0016](../decisions/0016-cosa-e-una-view.md) le view **sono**
+      istanziabili, e la stessa risoluzione lineare-e-riallocante ora gira due
+      volte per azione — una per trovare il proprietario, una per convalidare i
+      parametri contro la sua spec. È il percorso caldo di ogni render, oggi. La
+      domanda di forma è la stessa: le spec sono **dato di registrazione** (il
+      kernel le tiene, il provider le invalida) o restano una chiamata al
+      provider?

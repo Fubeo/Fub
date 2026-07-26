@@ -13,10 +13,14 @@
 // (§2.5): oggi la migrazione produrrebbe una view che sa mostrare la lista e
 // non sa offrire il bottone «Ripristina» se non come `list_item` cliccabile.
 // Resta aperta con la sua ragione, invece di essere fatta a metà.
+//
+// Ciò che nel frattempo è cambiato: non è un provider, ma è un `Panel` come le
+// view dichiarate — dichiara cosa lo fa invecchiare e l'host lo chiama. Il
+// giorno della migrazione resta da spostare il *disegno*, non l'innesco.
 import { api } from "../host/ipc";
-import { onEvent } from "../state/kernel";
 import { on, state } from "../state/store";
 import { $ } from "../ui/dom";
+import { registerPanel } from "../ui/panel-host";
 import { flushPendingSave, isOpen, reloadCurrent } from "./document";
 
 const historyPanelEl = $("#history-panel");
@@ -31,17 +35,28 @@ export function mountHistory(): void {
   on("vault", () => {
     historyPanelEl.hidden = !state.versioningOn;
   });
-  // La cronologia segue il documento aperto...
-  on("active-doc", (doc) => {
-    if (doc) void updateHistory(doc);
-    else svuota();
-  });
-  // ...e ogni scrittura, che è ciò che produce una versione nuova.
-  onEvent("document_changed", (e) => {
-    if (isOpen(e.id)) void updateHistory(e.id);
-  });
-  onEvent("overflow", () => {
-    if (state.currentDoc) void updateHistory(state.currentDoc);
+  // La cronologia segue il documento aperto (`followsDoc`) e ogni scrittura,
+  // che è ciò che produce una versione nuova.
+  registerPanel({
+    id: "shell:history",
+    title: "Cronologia",
+    placement: "right_sidebar",
+    refresh: ["document_changed"],
+    followsDoc: true,
+    // Versioning spento significa pannello assente (D7), non pannello vuoto:
+    // nascosto non si interroga nulla.
+    visible: () => !historyPanelEl.hidden,
+    render: (n) => {
+      // Una scrittura su un ALTRO documento non invecchia questa cronologia:
+      // è il solo pezzo per cui sapere quale evento è arrivato serve davvero.
+      const event = n?.event;
+      if (event?.type === "document_changed" && !isOpen(event.id)) return;
+      if (!state.currentDoc) {
+        svuota();
+        return;
+      }
+      return updateHistory(state.currentDoc);
+    },
   });
 }
 

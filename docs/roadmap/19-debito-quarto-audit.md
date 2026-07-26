@@ -16,10 +16,11 @@ punto?»; il giorno in cui le sedute che le assorbono si chiudono, questa si
 chiude con loro e non lascia niente indietro.
 
 - [ ] **Mutex unico sul `Workspace`** → assorbito dal §8.3 (misurare prima).
-- [ ] **UI di produzione = IPC bespoke** → assorbito da [decisione 0009](../decisions/0009-registro-dei-comandi.md), §2.1, §1.2, §16.6;
+- [ ] **UI di produzione = IPC bespoke** → assorbito da [decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0016](../decisions/0016-cosa-e-una-view.md), §1.2 e §16.6;
       il caso concreto resta la UI del versioning.
 - [ ] **Organizzazione sidebar chiusa ai plugin** (scelta O3): rivalutare alla
-      superficie plugin di M5 — con i nodi `Tree`/`Custom` del §2.1 la scelta
+      superficie plugin di M5 — con i nodi `Tree`/`Custom`, che dalla
+      [decisione 0016](../decisions/0016-cosa-e-una-view.md) esistono, la scelta
       cambia natura.
 - [ ] **"Tre copie" custodite da un flag TS**: merge esplicito a M3 (§18.1).
 

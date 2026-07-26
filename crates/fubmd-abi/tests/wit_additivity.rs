@@ -672,8 +672,8 @@ fn ogni_forma_di_rottura_e_rossa() {
         (
             "un caso di enum rimosso",
             Box::new(|c: &mut Contract| {
-                let Some(Shape::Enum(cases)) = c.types.get_mut("view::view-placement") else {
-                    panic!("view::view-placement è un enum");
+                let Some(Shape::Enum(cases)) = c.types.get_mut("view::view-surface") else {
+                    panic!("view::view-surface è un enum");
                 };
                 cases.pop();
             }),
@@ -782,8 +782,8 @@ fn le_aggiunte_in_coda_passano() {
         (
             "un caso in fondo a un enum (§2.2: una superficie di UI in più)",
             Box::new(|c: &mut Contract| {
-                let Some(Shape::Enum(cases)) = c.types.get_mut("view::view-placement") else {
-                    panic!("view::view-placement è un enum");
+                let Some(Shape::Enum(cases)) = c.types.get_mut("view::view-surface") else {
+                    panic!("view::view-surface è un enum");
                 };
                 cases.push("main-area".into());
             }),

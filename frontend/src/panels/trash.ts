@@ -7,7 +7,6 @@
 // il path originale è di nuovo occupato — il kernel non inventa nomi al posto
 // dell'utente.
 import { confirm } from "../host/dialog";
-import { onEvent } from "../state/kernel";
 import { api } from "../host/ipc";
 import {
   emptyTrash as svuota,
@@ -19,6 +18,7 @@ import {
 import { pageName } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { notify } from "../ui/notify";
+import { registerPanel } from "../ui/panel-host";
 import {
   closeDocument,
   isOpen,
@@ -36,13 +36,14 @@ export function mountTrash(): void {
   $("#empty-trash").addEventListener("click", () => void emptyTrashPanel());
   // Il cestino può essere riempito o svuotato da un'altra app (o da un'altra
   // finestra): se è aperto, si rilegge.
-  onEvent("index_updated", refreshIfOpen);
-  onEvent("batch_ended", refreshIfOpen);
-  onEvent("overflow", refreshIfOpen);
-}
-
-function refreshIfOpen(): void {
-  if (isPanelVisible("trash")) void refreshTrash();
+  registerPanel({
+    id: "shell:trash",
+    title: "Cestino",
+    placement: "left_sidebar",
+    refresh: ["index_updated", "batch_ended"],
+    visible: () => isPanelVisible("trash"),
+    render: refreshTrash,
+  });
 }
 
 export async function openTrash(): Promise<void> {

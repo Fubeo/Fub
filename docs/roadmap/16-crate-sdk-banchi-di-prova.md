@@ -51,13 +51,17 @@ banco della 16.2: un elenco dei provider ufficiali da cui un test possa
       girare un giro di eventi. Non può stare qui: l'SDK è ciò che un guest WASM
       importa, e `fubmd-kernel` nel suo grafo violerebbe l'invariante che
       `dependency_invariant.rs` presidia. Sono due crate, non due moduli.
-- [ ] La duplicazione non è ipotetica: **le tre feature ufficiali costruiscono
-      già lo stesso albero tre volte** — una lista di `ListItem` con azione, e
-      uno `Stack` con un `Text` come segnaposto vuoto
-      (`features/src/backlinks.rs:96`, `outline.rs`, `tags.rs:77`) — e ognuna ha
-      reinventato la codifica dei dati dentro l'`ActionId` (§2.7). Su tre
-      provider è una convenzione; su venti moduli Suite è un dialetto per
-      modulo.
+- [ ] La duplicazione non è ipotetica: **le feature ufficiali costruiscono già
+      lo stesso albero tre volte** — una lista di voci con azione, e un
+      segnaposto per il vuoto (`features/src/backlinks.rs`, `outline.rs`,
+      `tags.rs`). Su tre provider è una convenzione; su venti moduli Suite è un
+      dialetto per modulo. Una delle tre copie è già stata tolta di mezzo dal
+      contratto e non dall'SDK: la codifica dei dati dentro l'`ActionId` — che
+      ognuna aveva reinventato — non esiste più, perché ora l'azione porta un
+      payload ([decisione 0016](../decisions/0016-cosa-e-una-view.md)). È un
+      esempio della regola di questa voce letta al contrario: ciò che il
+      contratto **non** offre viene riscritto da tutti, ed è più economico
+      offrirlo che raccogliere le copie.
 
 *Sblocca:* 27.3 (unit/e2e test utilities, template progetto plugin, type
 definitions, plugin linting), 21.1 (moduli Suite con API condivise).
@@ -138,9 +142,11 @@ bisogno di un posto da cui essere montato).
       presidiato — `wit_conformance.rs` parsa il WIT e confronta nomi e tipi
       nelle due direzioni, ed è uno dei test migliori del repo — ma il presidio
       verifica il costo, non lo riduce.
-- [ ] **Il conto delle P0 lo rende un collo di bottiglia**: il §2.1 porta una
-      ventina di varianti `UiNode` nuove (in gran parte ricorsive, quindi con
-      l'arena da estendere), più [decisione 0003](../decisions/0003-modello-del-documento.md), [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md), [decisione 0006](../decisions/0006-import-export-come-trait.md), §2.2 e §2.3. Il §16.5 chiede
+- [ ] **Il conto delle P0 lo rende un collo di bottiglia, e la seduta 2 lo ha
+      misurato**: venticinque specie di `UiNode` nuove (in gran parte ricorsive,
+      quindi con l'arena da estendere) hanno toccato tutti e quattro i posti,
+      più il campione per specie in due fixture — ed è il costo *di una sola*
+      delle voci che restano, accanto a [decisione 0003](../decisions/0003-modello-del-documento.md), [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) e [decisione 0006](../decisions/0006-import-export-come-trait.md). Il §16.5 chiede
       di generare il mirror TS; la stessa domanda va posta **ora** per WIT e
       arena — generare l'uno dall'altro, o almeno gli scheletri — o la
       generazione arriverà dopo il lavoro che doveva alleggerire.

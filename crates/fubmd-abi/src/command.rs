@@ -175,50 +175,66 @@ impl CommandSpec {
     ///   proprio per il chiamante che questa firma esiste per servire: chiede
     ///   una cosa, ne ottiene un'altra, e non ha modo di accorgersene.
     pub fn validate_args(&self, args: &serde_json::Value) -> Result<(), PluginError> {
-        let bad = |msg: String| Err(PluginError::BadArgs(format!("`{}`: {msg}", self.id)));
-        let empty = serde_json::Map::new();
-        let object = match args {
-            serde_json::Value::Object(map) => map,
-            // Nessun argomento si dice con `null` o con `{}`: sono la stessa
-            // cosa, e un comando senza parametri non deve costringere chi lo
-            // invoca a mandare un oggetto vuoto.
-            serde_json::Value::Null => &empty,
-            _ => return bad("gli argomenti sono un oggetto JSON".to_string()),
-        };
-        for param in &self.params {
-            match object.get(&param.name) {
-                None | Some(serde_json::Value::Null) if param.required => {
-                    return bad(format!("manca l'argomento obbligatorio `{}`", param.name));
-                }
-                None | Some(serde_json::Value::Null) => {}
-                Some(value) if !param.kind.accepts(value) => {
-                    return bad(format!(
-                        "l'argomento `{}` vuole {}",
-                        param.name,
-                        param.kind.expected()
-                    ));
-                }
-                Some(_) => {}
+        validate_params(&self.id, &self.params, args)
+    }
+}
+
+/// Le tre regole di [`CommandSpec::validate_args`], applicate a un elenco di
+/// [`ParamSpec`] qualunque.
+///
+/// Sta fuori dal metodo perché i comandi non sono più gli unici a dichiarare dei
+/// parametri: dal §2.3 li dichiara anche una [`ViewSpec`](crate::traits::ViewSpec),
+/// e due convalide della stessa grammatica sarebbero due modi di essere severi —
+/// cioè un chiamante che passa da un comando e uno che apre una view a mano
+/// ricevono due risposte diverse sullo stesso argomento sbagliato.
+pub fn validate_params(
+    subject: &str,
+    params: &[ParamSpec],
+    args: &serde_json::Value,
+) -> Result<(), PluginError> {
+    let bad = |msg: String| Err(PluginError::BadArgs(format!("`{subject}`: {msg}")));
+    let empty = serde_json::Map::new();
+    let object = match args {
+        serde_json::Value::Object(map) => map,
+        // Nessun argomento si dice con `null` o con `{}`: sono la stessa
+        // cosa, e un comando senza parametri non deve costringere chi lo
+        // invoca a mandare un oggetto vuoto.
+        serde_json::Value::Null => &empty,
+        _ => return bad("gli argomenti sono un oggetto JSON".to_string()),
+    };
+    for param in params {
+        match object.get(&param.name) {
+            None | Some(serde_json::Value::Null) if param.required => {
+                return bad(format!("manca l'argomento obbligatorio `{}`", param.name));
             }
-        }
-        for key in object.keys() {
-            if self.param(key).is_none() {
+            None | Some(serde_json::Value::Null) => {}
+            Some(value) if !param.kind.accepts(value) => {
                 return bad(format!(
-                    "argomento `{key}` non dichiarato (dichiarati: {})",
-                    if self.params.is_empty() {
-                        "nessuno".to_string()
-                    } else {
-                        self.params
-                            .iter()
-                            .map(|p| p.name.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    }
+                    "l'argomento `{}` vuole {}",
+                    param.name,
+                    param.kind.expected()
                 ));
             }
+            Some(_) => {}
         }
-        Ok(())
     }
+    for key in object.keys() {
+        if !params.iter().any(|p| p.name == *key) {
+            return bad(format!(
+                "argomento `{key}` non dichiarato (dichiarati: {})",
+                if params.is_empty() {
+                    "nessuno".to_string()
+                } else {
+                    params
+                        .iter()
+                        .map(|p| p.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Un argomento di un comando: come si chiama, cosa vuole, se è obbligatorio.
@@ -523,6 +539,23 @@ pub enum CommandEffect {
     Custom {
         ns: String,
         payload: serde_json::Value,
+    },
+    /// Apri **un'istanza** di una view, con questi parametri (§2.3).
+    ///
+    /// È l'altra metà delle istanze: [`ViewSpec::params`](crate::traits::ViewSpec::params)
+    /// dice cosa una view accetta, questo è il modo in cui qualcuno gliene apre
+    /// una. Che passi da un comando e non da una capacità dell'`HostApi` è la
+    /// regola della decisione 0013 applicata: chi apre una view non ha bisogno
+    /// della risposta per proseguire, e il comando è il canale che la shell già
+    /// esegue — con la sua palette, la sua scorciatoia e la sua descrizione per
+    /// un umano, gratis.
+    ///
+    /// `params` è convalidato contro i `ParamSpec` della view **prima** di
+    /// arrivare al provider, come gli argomenti di un comando: chi apre può
+    /// sbagliare, chi disegna no.
+    OpenView {
+        view: String,
+        params: serde_json::Value,
     },
 }
 

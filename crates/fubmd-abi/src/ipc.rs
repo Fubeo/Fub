@@ -24,6 +24,16 @@
 
 use serde::{Deserialize, Deserializer, Serializer};
 
+/// `#[serde(default = "fubmd_abi::ipc::default_true")]` — il default di un
+/// campo booleano il cui valore normale è **vero**.
+///
+/// Serve perché `#[serde(default)]` su un `bool` dà `false`, e un campo assente
+/// in un JSON scritto da una versione più vecchia non deve significare il
+/// contrario di ciò che quella versione faceva.
+pub fn default_true() -> bool {
+    true
+}
+
 /// `#[serde(with = "fubmd_abi::ipc::u64_string")]` — serializza un `u64` come
 /// stringa decimale, e in lettura accetta **anche** il numero: i dati
 /// persistiti prima della regola (indici del versioning) devono restare

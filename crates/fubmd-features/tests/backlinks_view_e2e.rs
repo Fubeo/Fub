@@ -10,7 +10,8 @@
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
-use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
+use fubmd_abi::traits::ViewInstance;
+use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_features::{BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Trust, Workspace};
@@ -51,31 +52,31 @@ impl Vault {
 /// `UiNode` reso dalla view. Un albero senza lista (segnaposto) → vuoto.
 fn backlink_titles(tree: &UiNode) -> Vec<String> {
     fn list_items(node: &UiNode) -> Vec<String> {
-        match node {
-            UiNode::List { items } => items
+        match &node.kind {
+            UiKind::List { items } => items
                 .iter()
-                .filter_map(|i| match i {
-                    UiNode::ListItem { title, .. } => Some(title.clone()),
+                .filter_map(|i| match &i.kind {
+                    UiKind::ListItem { title, .. } => Some(title.clone()),
                     _ => None,
                 })
                 .collect(),
-            UiNode::Stack { children, .. } => children.iter().flat_map(list_items).collect(),
+            UiKind::Stack { children, .. } => children.iter().flat_map(list_items).collect(),
             _ => Vec::new(),
         }
     }
     list_items(tree)
 }
 
-/// L'`ActionId` della prima voce di backlink: è ciò che il frontend rimanda al
-/// provider su un click.
-fn first_action(tree: &UiNode) -> String {
-    fn find(node: &UiNode) -> Option<String> {
-        match node {
-            UiNode::ListItem {
+/// L'azione della prima voce di backlink — id **e payload**: è ciò che il
+/// frontend rimanda al provider su un click, e dal §2.7 sono due cose.
+fn first_action(tree: &UiNode) -> ActionRef {
+    fn find(node: &UiNode) -> Option<ActionRef> {
+        match &node.kind {
+            UiKind::ListItem {
                 action: Some(a), ..
-            } => Some(a.0.clone()),
-            UiNode::Stack { children, .. } => children.iter().find_map(find),
-            UiNode::List { items } => items.iter().find_map(find),
+            } => Some(a.clone()),
+            UiKind::Stack { children, .. } => children.iter().find_map(find),
+            UiKind::List { items } => items.iter().find_map(find),
             _ => None,
         }
     }
@@ -93,13 +94,17 @@ fn the_view_reads_active_doc_and_backlinks_from_the_kernel_host() {
     let mut ws = vault.open();
 
     // Nessun documento attivo: la view è un segnaposto, non un errore.
-    let tree = ws.render_view(BACKLINKS_VIEW).expect("render senza attivo");
+    let tree = ws
+        .render_view(&ViewInstance::only(BACKLINKS_VIEW))
+        .expect("render senza attivo");
     assert!(backlink_titles(&tree).is_empty());
 
     // La shell attiva Target: ora la view mostra i suoi due backlink, presi dal
     // grafo del kernel via HostApi::query_index — non passati dall'app.
     ws.set_active_document(Some(DocId::new("Target.md")));
-    let tree = ws.render_view(BACKLINKS_VIEW).expect("render con attivo");
+    let tree = ws
+        .render_view(&ViewInstance::only(BACKLINKS_VIEW))
+        .expect("render con attivo");
     let mut titoli = backlink_titles(&tree);
     titoli.sort();
     assert_eq!(titoli, vec!["Due".to_string(), "Uno".to_string()]);
@@ -113,17 +118,20 @@ fn clicking_a_backlink_routes_navigate_back_through_the_kernel() {
     let mut ws = vault.open();
     ws.set_active_document(Some(DocId::new("Target.md")));
 
-    let tree = ws.render_view(BACKLINKS_VIEW).expect("render");
+    let tree = ws
+        .render_view(&ViewInstance::only(BACKLINKS_VIEW))
+        .expect("render");
     let action = first_action(&tree);
 
     // L'azione torna al provider dal kernel (view_action) e produce un Navigate
     // verso la sorgente — il giro che il frontend chiude aprendo quel documento.
     let update = ws
         .view_action(
-            BACKLINKS_VIEW,
+            &ViewInstance::only(BACKLINKS_VIEW),
             UiAction {
-                action: fubmd_abi::ui::ActionId(action),
-                payload: serde_json::Value::Null,
+                action: action.action,
+                payload: action.payload,
+                fields: Vec::new(),
             },
         )
         .expect("view_action");

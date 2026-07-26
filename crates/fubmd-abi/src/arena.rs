@@ -289,9 +289,21 @@ pub enum Block {
 }
 
 /// [`ui::UiNode`] con i figli sostituiti da indici.
+///
+/// La chiave viaggia accanto alla specie come nell'albero nativo: è identità del
+/// nodo, non un dato della sua specie, e appiattire non la tocca.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UiNode {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(flatten)]
+    pub kind: UiKind,
+}
+
+/// [`ui::UiKind`] con i figli sostituiti da indici.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "node", rename_all = "snake_case")]
-pub enum UiNode {
+pub enum UiKind {
     Stack {
         dir: ui::Axis,
         gap: u8,
@@ -310,12 +322,13 @@ pub enum UiNode {
     ListItem {
         title: String,
         subtitle: Option<String>,
-        action: Option<ui::ActionId>,
+        action: Option<ui::ActionRef>,
+        selected: bool,
     },
     Button {
         label: String,
         intent: ui::Intent,
-        action: ui::ActionId,
+        action: ui::ActionRef,
     },
     Html {
         html: String,
@@ -323,6 +336,134 @@ pub enum UiNode {
     WebView {
         url: String,
         height: u32,
+    },
+    Section {
+        title: String,
+        collapsed: bool,
+        children: Vec<UiRef>,
+    },
+    Table {
+        columns: Vec<ui::TableColumn>,
+        rows: Vec<UiRef>,
+    },
+    Row {
+        cells: Vec<UiRef>,
+        action: Option<ui::ActionRef>,
+    },
+    Tree {
+        roots: Vec<UiRef>,
+    },
+    TreeItem {
+        label: String,
+        expanded: bool,
+        action: Option<ui::ActionRef>,
+        selected: bool,
+        children: Vec<UiRef>,
+    },
+    Tabs {
+        active: u32,
+        tabs: Vec<UiRef>,
+    },
+    Tab {
+        label: String,
+        action: Option<ui::ActionRef>,
+        children: Vec<UiRef>,
+    },
+    Badge {
+        label: String,
+        intent: ui::Intent,
+    },
+    Icon {
+        name: String,
+    },
+    Progress {
+        value: Option<f32>,
+        label: Option<String>,
+    },
+    Separator,
+    EmptyState {
+        title: String,
+        detail: Option<String>,
+        action: Option<ui::ActionRef>,
+    },
+    KeyValue {
+        entries: Vec<ui::KeyValueEntry>,
+    },
+    TextInput {
+        field: String,
+        label: Option<String>,
+        value: String,
+        placeholder: Option<String>,
+        action: Option<ui::ActionRef>,
+    },
+    TextArea {
+        field: String,
+        label: Option<String>,
+        value: String,
+        rows: u32,
+        action: Option<ui::ActionRef>,
+    },
+    Number {
+        field: String,
+        label: Option<String>,
+        value: Option<f64>,
+        min: Option<f64>,
+        max: Option<f64>,
+        step: Option<f64>,
+        action: Option<ui::ActionRef>,
+    },
+    Checkbox {
+        field: String,
+        label: String,
+        value: bool,
+        action: Option<ui::ActionRef>,
+    },
+    Select {
+        field: String,
+        label: Option<String>,
+        value: Vec<String>,
+        options: Vec<ui::UiOption>,
+        multiple: bool,
+        action: Option<ui::ActionRef>,
+    },
+    Radio {
+        field: String,
+        label: Option<String>,
+        value: Option<String>,
+        options: Vec<ui::UiOption>,
+        action: Option<ui::ActionRef>,
+    },
+    Slider {
+        field: String,
+        label: Option<String>,
+        value: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+        action: Option<ui::ActionRef>,
+    },
+    DatePicker {
+        field: String,
+        label: Option<String>,
+        value: Option<String>,
+        action: Option<ui::ActionRef>,
+    },
+    Form {
+        children: Vec<UiRef>,
+        submit_label: String,
+        submit: ui::ActionRef,
+    },
+    Custom {
+        ns: String,
+        payload: serde_json::Value,
+        fallback: Vec<UiRef>,
+    },
+    Pending {
+        label: Option<String>,
+    },
+    Failed {
+        message: String,
+        retry: Option<ui::ActionRef>,
     },
 }
 
@@ -736,48 +877,256 @@ impl UiTree {
             return Err(cycle("nodes", at.0));
         }
         path.push(at);
-        let out = match node {
-            UiNode::Stack { dir, gap, children } => ui::UiNode::Stack {
+        let kind = match &node.kind {
+            UiKind::Stack { dir, gap, children } => ui::UiKind::Stack {
                 dir: *dir,
                 gap: *gap,
                 children: self.children(children, path)?,
             },
-            UiNode::Text { content } => ui::UiNode::Text {
+            UiKind::Text { content } => ui::UiKind::Text {
                 content: content.clone(),
             },
-            UiNode::Heading { level, content } => ui::UiNode::Heading {
+            UiKind::Heading { level, content } => ui::UiKind::Heading {
                 level: *level,
                 content: content.clone(),
             },
-            UiNode::List { items } => ui::UiNode::List {
+            UiKind::List { items } => ui::UiKind::List {
                 items: self.children(items, path)?,
             },
-            UiNode::ListItem {
+            UiKind::ListItem {
                 title,
                 subtitle,
                 action,
-            } => ui::UiNode::ListItem {
+                selected,
+            } => ui::UiKind::ListItem {
                 title: title.clone(),
                 subtitle: subtitle.clone(),
                 action: action.clone(),
+                selected: *selected,
             },
-            UiNode::Button {
+            UiKind::Button {
                 label,
                 intent,
                 action,
-            } => ui::UiNode::Button {
+            } => ui::UiKind::Button {
                 label: label.clone(),
                 intent: *intent,
                 action: action.clone(),
             },
-            UiNode::Html { html } => ui::UiNode::Html { html: html.clone() },
-            UiNode::WebView { url, height } => ui::UiNode::WebView {
+            UiKind::Html { html } => ui::UiKind::Html { html: html.clone() },
+            UiKind::WebView { url, height } => ui::UiKind::WebView {
                 url: url.clone(),
                 height: *height,
             },
+            UiKind::Section {
+                title,
+                collapsed,
+                children,
+            } => ui::UiKind::Section {
+                title: title.clone(),
+                collapsed: *collapsed,
+                children: self.children(children, path)?,
+            },
+            UiKind::Table { columns, rows } => ui::UiKind::Table {
+                columns: columns.clone(),
+                rows: self.children(rows, path)?,
+            },
+            UiKind::Row { cells, action } => ui::UiKind::Row {
+                cells: self.children(cells, path)?,
+                action: action.clone(),
+            },
+            UiKind::Tree { roots } => ui::UiKind::Tree {
+                roots: self.children(roots, path)?,
+            },
+            UiKind::TreeItem {
+                label,
+                expanded,
+                action,
+                selected,
+                children,
+            } => ui::UiKind::TreeItem {
+                label: label.clone(),
+                expanded: *expanded,
+                action: action.clone(),
+                selected: *selected,
+                children: self.children(children, path)?,
+            },
+            UiKind::Tabs { active, tabs } => ui::UiKind::Tabs {
+                active: *active,
+                tabs: self.children(tabs, path)?,
+            },
+            UiKind::Tab {
+                label,
+                action,
+                children,
+            } => ui::UiKind::Tab {
+                label: label.clone(),
+                action: action.clone(),
+                children: self.children(children, path)?,
+            },
+            UiKind::Badge { label, intent } => ui::UiKind::Badge {
+                label: label.clone(),
+                intent: *intent,
+            },
+            UiKind::Icon { name } => ui::UiKind::Icon { name: name.clone() },
+            UiKind::Progress { value, label } => ui::UiKind::Progress {
+                value: *value,
+                label: label.clone(),
+            },
+            UiKind::Separator => ui::UiKind::Separator,
+            UiKind::EmptyState {
+                title,
+                detail,
+                action,
+            } => ui::UiKind::EmptyState {
+                title: title.clone(),
+                detail: detail.clone(),
+                action: action.clone(),
+            },
+            UiKind::KeyValue { entries } => ui::UiKind::KeyValue {
+                entries: entries.clone(),
+            },
+            UiKind::TextInput {
+                field,
+                label,
+                value,
+                placeholder,
+                action,
+            } => ui::UiKind::TextInput {
+                field: field.clone(),
+                label: label.clone(),
+                value: value.clone(),
+                placeholder: placeholder.clone(),
+                action: action.clone(),
+            },
+            UiKind::TextArea {
+                field,
+                label,
+                value,
+                rows,
+                action,
+            } => ui::UiKind::TextArea {
+                field: field.clone(),
+                label: label.clone(),
+                value: value.clone(),
+                rows: *rows,
+                action: action.clone(),
+            },
+            UiKind::Number {
+                field,
+                label,
+                value,
+                min,
+                max,
+                step,
+                action,
+            } => ui::UiKind::Number {
+                field: field.clone(),
+                label: label.clone(),
+                value: *value,
+                min: *min,
+                max: *max,
+                step: *step,
+                action: action.clone(),
+            },
+            UiKind::Checkbox {
+                field,
+                label,
+                value,
+                action,
+            } => ui::UiKind::Checkbox {
+                field: field.clone(),
+                label: label.clone(),
+                value: *value,
+                action: action.clone(),
+            },
+            UiKind::Select {
+                field,
+                label,
+                value,
+                options,
+                multiple,
+                action,
+            } => ui::UiKind::Select {
+                field: field.clone(),
+                label: label.clone(),
+                value: value.clone(),
+                options: options.clone(),
+                multiple: *multiple,
+                action: action.clone(),
+            },
+            UiKind::Radio {
+                field,
+                label,
+                value,
+                options,
+                action,
+            } => ui::UiKind::Radio {
+                field: field.clone(),
+                label: label.clone(),
+                value: value.clone(),
+                options: options.clone(),
+                action: action.clone(),
+            },
+            UiKind::Slider {
+                field,
+                label,
+                value,
+                min,
+                max,
+                step,
+                action,
+            } => ui::UiKind::Slider {
+                field: field.clone(),
+                label: label.clone(),
+                value: *value,
+                min: *min,
+                max: *max,
+                step: *step,
+                action: action.clone(),
+            },
+            UiKind::DatePicker {
+                field,
+                label,
+                value,
+                action,
+            } => ui::UiKind::DatePicker {
+                field: field.clone(),
+                label: label.clone(),
+                value: value.clone(),
+                action: action.clone(),
+            },
+            UiKind::Form {
+                children,
+                submit_label,
+                submit,
+            } => ui::UiKind::Form {
+                children: self.children(children, path)?,
+                submit_label: submit_label.clone(),
+                submit: submit.clone(),
+            },
+            UiKind::Custom {
+                ns,
+                payload,
+                fallback,
+            } => ui::UiKind::Custom {
+                ns: ns.clone(),
+                payload: payload.clone(),
+                fallback: self.children(fallback, path)?,
+            },
+            UiKind::Pending { label } => ui::UiKind::Pending {
+                label: label.clone(),
+            },
+            UiKind::Failed { message, retry } => ui::UiKind::Failed {
+                message: message.clone(),
+                retry: retry.clone(),
+            },
         };
         path.pop();
-        Ok(out)
+        Ok(ui::UiNode {
+            key: node.key.clone(),
+            kind,
+        })
     }
 
     fn children(
@@ -790,49 +1139,261 @@ impl UiTree {
 }
 
 fn ui_push(nodes: &mut Vec<UiNode>, n: &ui::UiNode) -> UiRef {
-    let node = match n {
-        ui::UiNode::Stack { dir, gap, children } => UiNode::Stack {
+    let kind = match &n.kind {
+        ui::UiKind::Stack { dir, gap, children } => UiKind::Stack {
             dir: *dir,
             gap: *gap,
-            children: children.iter().map(|c| ui_push(nodes, c)).collect(),
+            children: ui_push_all(nodes, children),
         },
-        ui::UiNode::Text { content } => UiNode::Text {
+        ui::UiKind::Text { content } => UiKind::Text {
             content: content.clone(),
         },
-        ui::UiNode::Heading { level, content } => UiNode::Heading {
+        ui::UiKind::Heading { level, content } => UiKind::Heading {
             level: *level,
             content: content.clone(),
         },
-        ui::UiNode::List { items } => UiNode::List {
-            items: items.iter().map(|c| ui_push(nodes, c)).collect(),
+        ui::UiKind::List { items } => UiKind::List {
+            items: ui_push_all(nodes, items),
         },
-        ui::UiNode::ListItem {
+        ui::UiKind::ListItem {
             title,
             subtitle,
             action,
-        } => UiNode::ListItem {
+            selected,
+        } => UiKind::ListItem {
             title: title.clone(),
             subtitle: subtitle.clone(),
             action: action.clone(),
+            selected: *selected,
         },
-        ui::UiNode::Button {
+        ui::UiKind::Button {
             label,
             intent,
             action,
-        } => UiNode::Button {
+        } => UiKind::Button {
             label: label.clone(),
             intent: *intent,
             action: action.clone(),
         },
-        ui::UiNode::Html { html } => UiNode::Html { html: html.clone() },
-        ui::UiNode::WebView { url, height } => UiNode::WebView {
+        ui::UiKind::Html { html } => UiKind::Html { html: html.clone() },
+        ui::UiKind::WebView { url, height } => UiKind::WebView {
             url: url.clone(),
             height: *height,
         },
+        ui::UiKind::Section {
+            title,
+            collapsed,
+            children,
+        } => UiKind::Section {
+            title: title.clone(),
+            collapsed: *collapsed,
+            children: ui_push_all(nodes, children),
+        },
+        ui::UiKind::Table { columns, rows } => UiKind::Table {
+            columns: columns.clone(),
+            rows: ui_push_all(nodes, rows),
+        },
+        ui::UiKind::Row { cells, action } => UiKind::Row {
+            cells: ui_push_all(nodes, cells),
+            action: action.clone(),
+        },
+        ui::UiKind::Tree { roots } => UiKind::Tree {
+            roots: ui_push_all(nodes, roots),
+        },
+        ui::UiKind::TreeItem {
+            label,
+            expanded,
+            action,
+            selected,
+            children,
+        } => UiKind::TreeItem {
+            label: label.clone(),
+            expanded: *expanded,
+            action: action.clone(),
+            selected: *selected,
+            children: ui_push_all(nodes, children),
+        },
+        ui::UiKind::Tabs { active, tabs } => UiKind::Tabs {
+            active: *active,
+            tabs: ui_push_all(nodes, tabs),
+        },
+        ui::UiKind::Tab {
+            label,
+            action,
+            children,
+        } => UiKind::Tab {
+            label: label.clone(),
+            action: action.clone(),
+            children: ui_push_all(nodes, children),
+        },
+        ui::UiKind::Badge { label, intent } => UiKind::Badge {
+            label: label.clone(),
+            intent: *intent,
+        },
+        ui::UiKind::Icon { name } => UiKind::Icon { name: name.clone() },
+        ui::UiKind::Progress { value, label } => UiKind::Progress {
+            value: *value,
+            label: label.clone(),
+        },
+        ui::UiKind::Separator => UiKind::Separator,
+        ui::UiKind::EmptyState {
+            title,
+            detail,
+            action,
+        } => UiKind::EmptyState {
+            title: title.clone(),
+            detail: detail.clone(),
+            action: action.clone(),
+        },
+        ui::UiKind::KeyValue { entries } => UiKind::KeyValue {
+            entries: entries.clone(),
+        },
+        ui::UiKind::TextInput {
+            field,
+            label,
+            value,
+            placeholder,
+            action,
+        } => UiKind::TextInput {
+            field: field.clone(),
+            label: label.clone(),
+            value: value.clone(),
+            placeholder: placeholder.clone(),
+            action: action.clone(),
+        },
+        ui::UiKind::TextArea {
+            field,
+            label,
+            value,
+            rows,
+            action,
+        } => UiKind::TextArea {
+            field: field.clone(),
+            label: label.clone(),
+            value: value.clone(),
+            rows: *rows,
+            action: action.clone(),
+        },
+        ui::UiKind::Number {
+            field,
+            label,
+            value,
+            min,
+            max,
+            step,
+            action,
+        } => UiKind::Number {
+            field: field.clone(),
+            label: label.clone(),
+            value: *value,
+            min: *min,
+            max: *max,
+            step: *step,
+            action: action.clone(),
+        },
+        ui::UiKind::Checkbox {
+            field,
+            label,
+            value,
+            action,
+        } => UiKind::Checkbox {
+            field: field.clone(),
+            label: label.clone(),
+            value: *value,
+            action: action.clone(),
+        },
+        ui::UiKind::Select {
+            field,
+            label,
+            value,
+            options,
+            multiple,
+            action,
+        } => UiKind::Select {
+            field: field.clone(),
+            label: label.clone(),
+            value: value.clone(),
+            options: options.clone(),
+            multiple: *multiple,
+            action: action.clone(),
+        },
+        ui::UiKind::Radio {
+            field,
+            label,
+            value,
+            options,
+            action,
+        } => UiKind::Radio {
+            field: field.clone(),
+            label: label.clone(),
+            value: value.clone(),
+            options: options.clone(),
+            action: action.clone(),
+        },
+        ui::UiKind::Slider {
+            field,
+            label,
+            value,
+            min,
+            max,
+            step,
+            action,
+        } => UiKind::Slider {
+            field: field.clone(),
+            label: label.clone(),
+            value: *value,
+            min: *min,
+            max: *max,
+            step: *step,
+            action: action.clone(),
+        },
+        ui::UiKind::DatePicker {
+            field,
+            label,
+            value,
+            action,
+        } => UiKind::DatePicker {
+            field: field.clone(),
+            label: label.clone(),
+            value: value.clone(),
+            action: action.clone(),
+        },
+        ui::UiKind::Form {
+            children,
+            submit_label,
+            submit,
+        } => UiKind::Form {
+            children: ui_push_all(nodes, children),
+            submit_label: submit_label.clone(),
+            submit: submit.clone(),
+        },
+        ui::UiKind::Custom {
+            ns,
+            payload,
+            fallback,
+        } => UiKind::Custom {
+            ns: ns.clone(),
+            payload: payload.clone(),
+            fallback: ui_push_all(nodes, fallback),
+        },
+        ui::UiKind::Pending { label } => UiKind::Pending {
+            label: label.clone(),
+        },
+        ui::UiKind::Failed { message, retry } => UiKind::Failed {
+            message: message.clone(),
+            retry: retry.clone(),
+        },
     };
     let at = UiRef(next_index(nodes.len()));
-    nodes.push(node);
+    nodes.push(UiNode {
+        key: n.key.clone(),
+        kind,
+    });
     at
+}
+
+fn ui_push_all(nodes: &mut Vec<UiNode>, children: &[ui::UiNode]) -> Vec<UiRef> {
+    children.iter().map(|c| ui_push(nodes, c)).collect()
 }
 
 #[cfg(test)]
@@ -842,7 +1403,9 @@ mod tests {
         Block as B, ColumnAlign, Inline as I, LinkTarget, ListItem as LI, Span as S, TableCell,
         TableRow as TR, TaskMarker,
     };
-    use crate::ui::{ActionId, Axis, Intent, UiNode as U};
+    use crate::ui::{
+        ActionRef, Align, Axis, Intent, KeyValueEntry, TableColumn, UiKind, UiNode as U, UiOption,
+    };
 
     /// Un corpo che tocca ogni variante e annida a più livelli: se il
     /// round-trip regge qui, regge.
@@ -989,46 +1552,179 @@ mod tests {
         ]
     }
 
+    /// Un albero che contiene **ogni** specie di nodo.
+    ///
+    /// Il round-trip qui sotto è il presidio della conversione albero↔arena, e
+    /// vale quanto è larga questa fixture: il `match` esaustivo garantisce che
+    /// una variante nuova non si possa dimenticare, non che i suoi campi siano
+    /// mappati sul campo giusto. Con trentatré varianti, un `label` copiato al
+    /// posto di un `title` è l'errore che si fa davvero — e senza un campione
+    /// per variante non lo vedrebbe nessuno.
     fn albero_ui() -> U {
-        U::Stack {
-            dir: Axis::Column,
-            gap: 6,
-            children: vec![
-                U::Heading {
-                    level: 3,
-                    content: "3 backlink".into(),
-                },
-                U::List {
-                    items: vec![
-                        U::ListItem {
-                            title: "Nota".into(),
-                            subtitle: Some("contesto".into()),
-                            action: Some(ActionId("open:a.md".into())),
-                        },
-                        U::ListItem {
-                            title: "Senza azione".into(),
-                            subtitle: None,
-                            action: None,
-                        },
-                    ],
-                },
-                U::Button {
-                    label: "Fai".into(),
-                    intent: Intent::Danger,
-                    action: ActionId("fai".into()),
-                },
-                U::Html {
+        let azione = || Some(ActionRef::with("apri", serde_json::json!({"doc": "a.md"})));
+        U::stack(
+            Axis::Column,
+            6,
+            vec![
+                U::heading(3, "3 backlink"),
+                U::list(vec![
+                    U::list_item("Nota", Some("contesto".into()), azione()).with_key("a.md"),
+                    U::list_item("Senza azione", None, None),
+                ]),
+                U::button("Fai", Intent::Danger, ActionRef::new("fai")),
+                U::new(UiKind::Html {
                     html: "<b>fidato</b>".into(),
-                },
-                U::WebView {
+                }),
+                U::new(UiKind::WebView {
                     url: "https://esempio".into(),
                     height: 200,
-                },
-                U::Text {
-                    content: "coda".into(),
-                },
+                }),
+                U::new(UiKind::Section {
+                    title: "Sezione".into(),
+                    collapsed: true,
+                    children: vec![U::text("dentro")],
+                }),
+                U::new(UiKind::Table {
+                    columns: vec![
+                        TableColumn::new("Nota"),
+                        TableColumn::aligned("Parole", Align::End),
+                    ],
+                    rows: vec![U::keyed(
+                        "a.md",
+                        UiKind::Row {
+                            cells: vec![U::text("Nota"), U::text("42")],
+                            action: azione(),
+                        },
+                    )],
+                }),
+                U::new(UiKind::Tree {
+                    roots: vec![U::new(UiKind::TreeItem {
+                        label: "cartella".into(),
+                        expanded: true,
+                        action: None,
+                        selected: false,
+                        children: vec![U::new(UiKind::TreeItem {
+                            label: "nota".into(),
+                            expanded: false,
+                            action: azione(),
+                            selected: true,
+                            children: vec![],
+                        })],
+                    })],
+                }),
+                U::new(UiKind::Tabs {
+                    active: 1,
+                    tabs: vec![
+                        U::new(UiKind::Tab {
+                            label: "Uno".into(),
+                            action: None,
+                            children: vec![U::text("primo")],
+                        }),
+                        U::new(UiKind::Tab {
+                            label: "Due".into(),
+                            action: Some(ActionRef::new("tab:2")),
+                            children: vec![U::text("secondo")],
+                        }),
+                    ],
+                }),
+                U::badge("bozza", Intent::Neutral),
+                U::new(UiKind::Icon {
+                    name: "cerca".into(),
+                }),
+                U::new(UiKind::Progress {
+                    value: Some(0.25),
+                    label: Some("indicizzo".into()),
+                }),
+                U::separator(),
+                U::new(UiKind::EmptyState {
+                    title: "Niente qui".into(),
+                    detail: Some("Crea la prima nota".into()),
+                    action: azione(),
+                }),
+                U::new(UiKind::KeyValue {
+                    entries: vec![KeyValueEntry {
+                        label: "Parole".into(),
+                        value: "42".into(),
+                    }],
+                }),
+                U::new(UiKind::Form {
+                    children: vec![
+                        U::new(UiKind::TextInput {
+                            field: "titolo".into(),
+                            label: Some("Titolo".into()),
+                            value: "Nuova".into(),
+                            placeholder: Some("senza titolo".into()),
+                            action: None,
+                        }),
+                        U::new(UiKind::TextArea {
+                            field: "corpo".into(),
+                            label: None,
+                            value: "testo".into(),
+                            rows: 4,
+                            action: azione(),
+                        }),
+                        U::new(UiKind::Number {
+                            field: "peso".into(),
+                            label: Some("Peso".into()),
+                            value: Some(1.5),
+                            min: Some(0.0),
+                            max: Some(10.0),
+                            step: Some(0.5),
+                            action: None,
+                        }),
+                        U::new(UiKind::Checkbox {
+                            field: "fissata".into(),
+                            label: "In cima".into(),
+                            value: true,
+                            action: None,
+                        }),
+                        U::new(UiKind::Select {
+                            field: "cartella".into(),
+                            label: Some("Cartella".into()),
+                            value: vec!["diario".into()],
+                            options: vec![
+                                UiOption::new("diario", "Diario"),
+                                UiOption::new("note", "Note"),
+                            ],
+                            multiple: false,
+                            action: None,
+                        }),
+                        U::new(UiKind::Radio {
+                            field: "ordine".into(),
+                            label: None,
+                            value: Some("data".into()),
+                            options: vec![UiOption::new("data", "Per data")],
+                            action: None,
+                        }),
+                        U::new(UiKind::Slider {
+                            field: "soglia".into(),
+                            label: Some("Soglia".into()),
+                            value: 0.5,
+                            min: 0.0,
+                            max: 1.0,
+                            step: 0.1,
+                            action: None,
+                        }),
+                        U::new(UiKind::DatePicker {
+                            field: "quando".into(),
+                            label: None,
+                            value: Some("2026-07-26".into()),
+                            action: None,
+                        }),
+                    ],
+                    submit_label: "Salva".into(),
+                    submit: ActionRef::with("salva", serde_json::json!({"doc": "a.md"})),
+                }),
+                U::new(UiKind::Custom {
+                    ns: "fubmd.graph".into(),
+                    payload: serde_json::json!({"nodi": 3}),
+                    fallback: vec![U::text("il grafo, a parole")],
+                }),
+                U::pending(Some("carico".into())),
+                U::failed("non ce l'ho fatta", Some(ActionRef::new("riprova"))),
+                U::text("coda"),
             ],
-        }
+        )
     }
 
     #[test]
@@ -1180,10 +1876,13 @@ mod tests {
         ));
 
         let tree = UiTree {
-            nodes: vec![UiNode::Stack {
-                dir: Axis::Row,
-                gap: 0,
-                children: vec![UiRef(0)],
+            nodes: vec![UiNode {
+                key: None,
+                kind: crate::arena::UiKind::Stack {
+                    dir: Axis::Row,
+                    gap: 0,
+                    children: vec![UiRef(0)],
+                },
             }],
             root: UiRef(0),
         };

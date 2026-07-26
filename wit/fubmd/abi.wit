@@ -352,8 +352,52 @@ interface ui {
 
     type action-id = string;
 
+    /// L'azione attaccata a un nodo: cosa chiamare, e con cosa. Il `payload` è
+    /// del PROVIDER — lo scrive rendendo l'albero e gli torna intatto in
+    /// `ui-action.payload`. Prima esisteva solo l'id, e i dati che servivano a
+    /// servire il click ci finivano concatenati dentro (`open:a/Uno.md`): una
+    /// convenzione privata che stava diventando contratto de facto.
+    record action-ref {
+        action: action-id,
+        payload: json,
+    }
+
     enum axis { row, column }
     enum intent { neutral, primary, danger }
+    /// L'allineamento di una colonna di tabella. Non è stile: un numero
+    /// allineato a sinistra è una tabella che non si legge, e solo il provider
+    /// sa se una colonna contiene numeri.
+    enum align { start, center, end }
+
+    /// Il valore di un campo di input, come torna dalla shell. Non è `json`
+    /// perché il tipo lo dichiara il nodo che disegna il campo: chi legge non
+    /// deve difendersi da una checkbox che risponde con una stringa.
+    variant ui-value {
+        text(string),
+        number(f64),
+        %bool(bool),
+        /// Selezione multipla: i `value` delle opzioni scelte.
+        choices(list<string>),
+    }
+    /// Lo stato di un campo, come la shell lo consegna al provider.
+    record field-value {
+        field: string,
+        value: ui-value,
+    }
+    /// Una scelta di `select`/`radio`. Due campi e non uno: `value` è ciò che
+    /// torna, `label` ciò che si legge — cioè ciò che si localizza (§12.1).
+    record ui-option {
+        value: string,
+        label: string,
+    }
+    record key-value-entry {
+        label: string,
+        value: string,
+    }
+    record table-column {
+        title: string,
+        align: align,
+    }
 
     /// Indice in `ui-tree.nodes`. Fuori range = albero malformato.
     type ui-ref = u32;
@@ -370,18 +414,166 @@ interface ui {
     record ui-list-item {
         title: string,
         subtitle: option<string>,
-        action: option<action-id>,
+        action: option<action-ref>,
+        /// È l'elemento CORRENTE? Non è stile: è l'unica cosa che una lista non
+        /// sa dire di sé, e senza chi ce l'ha se la scrive nel titolo — il §2.7
+        /// in un'altra forma.
+        selected: bool,
     }
     record ui-button {
         label: string,
         intent: intent,
-        action: action-id,
+        action: action-ref,
     }
     record ui-web-view {
         url: string,
         height: u32,
     }
-    variant ui-node {
+    /// Un gruppo con un titolo, apribile e richiudibile. `collapsed` è lo stato
+    /// INIZIALE: la piega è faccenda della shell, che non disturba il provider
+    /// per aprirla — e con la chiave sopravvive al ridisegno.
+    record ui-section {
+        title: string,
+        collapsed: bool,
+        children: list<ui-ref>,
+    }
+    /// Le righe sono NODI e non record proprio perché una riga ha una chiave: è
+    /// il caso del §2.8, il pannello con 500 righe che si riordina.
+    record ui-table {
+        columns: list<table-column>,
+        rows: list<ui-ref>,
+    }
+    record ui-row {
+        cells: list<ui-ref>,
+        action: option<action-ref>,
+    }
+    /// Una voce di `tree`: l'annidamento passa dai `children`, che sono altri
+    /// `tree-item`.
+    record ui-tree-item {
+        label: string,
+        expanded: bool,
+        action: option<action-ref>,
+        selected: bool,
+        children: list<ui-ref>,
+    }
+    /// `active` è l'indice iniziale in `tabs`; fuori range = la prima.
+    record ui-tabs {
+        active: u32,
+        tabs: list<ui-ref>,
+    }
+    /// `action`, se c'è, scatta quando la scheda viene scelta: la shell cambia
+    /// scheda da sé e avvisa solo chi ha chiesto di saperlo.
+    record ui-tab {
+        label: string,
+        action: option<action-ref>,
+        children: list<ui-ref>,
+    }
+    record ui-badge {
+        label: string,
+        intent: intent,
+    }
+    /// `value` in 0.0..=1.0; assente = indeterminato, che è il caso normale di
+    /// chi non sa quanto manca.
+    record ui-progress {
+        value: option<f32>,
+        label: option<string>,
+    }
+    /// Il vuoto detto bene: non c'è niente E questo è ciò che si può fare.
+    record ui-empty-state {
+        title: string,
+        detail: option<string>,
+        action: option<action-ref>,
+    }
+    /// I nodi di input portano `field` (la chiave sotto cui il valore torna in
+    /// `ui-action.fields`) e `value` (ciò che il provider vuole vederci ADESSO:
+    /// il protocollo resta senza stato lato shell). `action`, dove c'è, scatta
+    /// quando il valore si assesta.
+    record ui-text-input {
+        field: string,
+        label: option<string>,
+        value: string,
+        placeholder: option<string>,
+        action: option<action-ref>,
+    }
+    record ui-text-area {
+        field: string,
+        label: option<string>,
+        value: string,
+        rows: u32,
+        action: option<action-ref>,
+    }
+    record ui-number {
+        field: string,
+        label: option<string>,
+        value: option<f64>,
+        min: option<f64>,
+        max: option<f64>,
+        step: option<f64>,
+        action: option<action-ref>,
+    }
+    record ui-checkbox {
+        field: string,
+        label: string,
+        value: bool,
+        action: option<action-ref>,
+    }
+    record ui-select {
+        field: string,
+        label: option<string>,
+        value: list<string>,
+        options: list<ui-option>,
+        multiple: bool,
+        action: option<action-ref>,
+    }
+    record ui-radio {
+        field: string,
+        label: option<string>,
+        value: option<string>,
+        options: list<ui-option>,
+        action: option<action-ref>,
+    }
+    record ui-slider {
+        field: string,
+        label: option<string>,
+        value: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+        action: option<action-ref>,
+    }
+    /// Una data civile in ISO-8601 (`2026-07-26`). Stringa e non istante: il
+    /// tempo civile è il §12.3 e non è deciso; una data qui è ciò che l'utente
+    /// ha scritto su un calendario, non un punto sulla linea del tempo.
+    record ui-date-picker {
+        field: string,
+        label: option<string>,
+        value: option<string>,
+        action: option<action-ref>,
+    }
+    /// Inviare manda TUTTI i campi contenuti, anche quelli senza `action`
+    /// propria: è ciò che distingue un form da una fila di input sciolti.
+    record ui-form {
+        children: list<ui-ref>,
+        submit-label: string,
+        submit: action-ref,
+    }
+    /// Widget che il protocollo non prevede: la shell che conosce `ns` disegna
+    /// il suo (grafo, canvas, chart), chi non lo conosce disegna il `fallback`
+    /// dichiarativo. È il modo di far entrare le superfici privilegiate DENTRO
+    /// il protocollo invece di tenerle fuori come ha dovuto fare il grafo.
+    record ui-custom {
+        ns: string,
+        payload: json,
+        fallback: list<ui-ref>,
+    }
+    /// «Non ce l'ho fatta», con l'invito a riprovare. Distinto da un
+    /// `plugin-error` restituito da `render-view`: quello dice che la view non
+    /// si è disegnata, questo che una sua parte non ha un dato.
+    record ui-failed {
+        message: string,
+        retry: option<action-ref>,
+    }
+    variant ui-kind {
         stack(ui-stack),
         text(string),
         heading(ui-heading),
@@ -393,6 +585,47 @@ interface ui {
         /// iniettare contenuto attivo nella webview principale.
         html(string),
         web-view(ui-web-view),
+        section(ui-section),
+        table(ui-table),
+        row(ui-row),
+        tree(list<ui-ref>),
+        tree-item(ui-tree-item),
+        tabs(ui-tabs),
+        tab(ui-tab),
+        badge(ui-badge),
+        /// Un'icona dal repertorio della shell. Un nome che non conosce non
+        /// disegna niente: un'icona mancante non rompe un pannello.
+        icon(string),
+        progress(ui-progress),
+        separator,
+        empty-state(ui-empty-state),
+        key-value(list<key-value-entry>),
+        text-input(ui-text-input),
+        text-area(ui-text-area),
+        number(ui-number),
+        checkbox(ui-checkbox),
+        select(ui-select),
+        radio(ui-radio),
+        slider(ui-slider),
+        date-picker(ui-date-picker),
+        form(ui-form),
+        custom(ui-custom),
+        /// «Non ancora»: il dato non c'è perché qualcuno lo sta preparando
+        /// (§2.5). È un nodo e non una risposta di `render-view` perché il caso
+        /// normale è PARZIALE — la testata c'è, la tabella arriva.
+        pending(option<string>),
+        failed(ui-failed),
+    }
+
+    /// Un nodo: la sua CHIAVE e la sua specie. La chiave è l'identità del nodo
+    /// attraverso due ridisegni — deve essere stabile e unica fra i fratelli
+    /// (l'id di un documento, non l'indice nella lista). Senza, l'identità è la
+    /// posizione, e una lista che si riordina sposta il focus e la selezione
+    /// insieme alle righe: con i nodi di input, un campo di testo che si svuota
+    /// a ogni salvataggio.
+    record ui-node {
+        key: option<string>,
+        kind: ui-kind,
     }
 
     /// Arena dell'albero UI: `root` indicizza `nodes`. Lato Rust è un
@@ -402,9 +635,14 @@ interface ui {
         root: ui-ref,
     }
 
+    /// Le due metà hanno due proprietari e non si mescolano: `payload` è ciò che
+    /// il provider ha attaccato al nodo, `fields` ciò che l'utente ha digitato.
+    /// Senza la seconda, i nodi di input nascerebbero sopra una convenzione che
+    /// nessuno ha scritto.
     record ui-action {
         action: action-id,
         payload: json,
+        fields: list<field-value>,
     }
     record view-update-reveal {
         doc-id: string,
@@ -414,6 +652,14 @@ interface ui {
     record view-update-custom {
         ns: string,
         payload: json,
+    }
+    /// Rimpiazza UN SOLO nodo, quello con questa chiave. Per chiave e non per
+    /// posizione: un patch indirizzato per path si rompe al primo riordino, cioè
+    /// esattamente nel caso che lo motivava. Una chiave che la shell non trova
+    /// non è un errore.
+    record view-update-patch {
+        key: string,
+        node: ui-tree,
     }
     variant view-update {
         replace(ui-tree),
@@ -430,6 +676,7 @@ interface ui {
         /// intenti nuovi nascono qui e vengono promossi a varianti proprie
         /// solo se universali — è ciò che tiene l'enum chiudibile al freeze.
         custom(view-update-custom),
+        patch(view-update-patch),
     }
 }
 
@@ -487,6 +734,16 @@ interface events {
     /// transazione (il tutto-o-niente vuole il journal del §15.2), e ciò che non
     /// è andato lo sa chi lo ha aperto, dal proprio errore.
     record event-batch-ended { batch: batch-id, changed: list<doc-id> }
+    /// Una view è invecchiata per un motivo che il vault non conosce: un job
+    /// finito, una risposta dalla rete, un calcolo completato (§2.5). `instance`
+    /// assente = tutte le istanze di quella view.
+    ///
+    /// È un evento e non una capacità `invalidate-view` per la regola della
+    /// decisione 0013: una capacità è ciò di cui il chiamante ha bisogno della
+    /// risposta per proseguire; ciò che si limita a informare è un evento. Da
+    /// evento guadagna anche l'origine, che una capacità si sarebbe dovuta far
+    /// dichiarare da chi la chiama.
+    record event-view-invalidated { view: string, instance: option<string> }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -497,6 +754,7 @@ interface events {
         overflow(event-overflow),
         custom(event-custom),
         batch-ended(event-batch-ended),
+        view-invalidated(event-view-invalidated),
     }
 
     enum event-kind {
@@ -511,6 +769,8 @@ interface events {
         /// Chi si abbona a `index-updated` si abbona anche a questo: dentro un
         /// lotto è il solo dei due che arriva.
         batch-ended,
+        /// Una view è invecchiata per un motivo che il vault non conosce.
+        view-invalidated,
     }
     type event-mask = list<event-kind>;
 
@@ -662,6 +922,7 @@ interface command {
     }
     /// Ciò che la shell deve fare dopo. Parente di `view-update` e non lo stesso
     /// tipo: da un comando non esiste una view da ridisegnare.
+    record command-effect-open-view { view: string, params: json }
     variant command-effect {
         done,
         navigate(doc-id),
@@ -671,6 +932,14 @@ interface command {
         /// Varco di estensione con namespace: la shell che non riconosce `ns`
         /// non fa nulla (degrado garbato, come per `view-update`).
         custom(command-effect-custom),
+        /// Apri un'ISTANZA di una view, con questi parametri (§2.3). Che passi
+        /// da un comando e non da una capacità è la regola della decisione 0013:
+        /// chi apre una view non ha bisogno della risposta per proseguire, e il
+        /// comando è il canale che la shell già esegue — con la palette, la
+        /// scorciatoia e la descrizione per un umano, gratis. I `params` sono
+        /// convalidati contro i `param-spec` della view prima di arrivare al
+        /// provider.
+        open-view(command-effect-open-view),
     }
 
     /// L'esito: cosa dire all'utente e cosa deve fare la shell. Un record e non
@@ -1038,15 +1307,53 @@ interface edit {
 /// View dichiarative (`ViewProvider`).
 interface view {
     use ui.{ui-tree, ui-action, view-update};
+    use json.{json};
     use events.{event-mask};
     use session.{context-mask};
+    use command.{param-spec};
     use errors.{plugin-error};
 
-    enum view-placement { left-sidebar, right-sidebar, bottom }
+    /// Dove una view si ANCORA. Non è come si disegna — quello è l'albero
+    /// `ui-node` — ma quale superficie della finestra occupa. Erano tre, e con
+    /// tre ogni capitolo grande di FEATURES doveva uscire dal contratto per
+    /// avere un posto dove stare: il grafo lo ha già fatto, con un comando
+    /// bespoke e un renderer privato, non perché sia speciale ma perché non
+    /// c'era un posto dove metterlo.
+    enum view-surface {
+        left-sidebar,
+        right-sidebar,
+        bottom,
+        /// L'area principale: dove oggi c'è l'editor e basta. Database (11),
+        /// canvas e slide (12), grafo (7.3), viste task (10.3), dashboard
+        /// (11.5) e calendario (10.4) vivono qui.
+        main,
+        modal,
+        status-bar,
+        ribbon,
+        menu,
+        /// Cosa fosse il bersaglio del clic lo dice il contesto di sessione
+        /// (decisione 0007), non un parametro di questa superficie.
+        context-menu,
+        settings-tab,
+    }
+
+    /// Un esemplare vivo di una view: quale view, quale esemplare, con quali
+    /// parametri. È l'altra metà della decisione 0007 — quella risolve *quale
+    /// documento* guarda una view, questa *quale istanza* è.
+    ///
+    /// `instance` la sceglie chi apre (la shell, o il comando che ha restituito
+    /// `open-view`); per la view che la shell monta da sé è l'id della view.
+    /// `params` arriva già convalidato contro `view-spec.params`.
+    record view-instance {
+        view: string,
+        instance: string,
+        params: json,
+    }
+
     record view-spec {
         id: string,
         title: string,
-        placement: view-placement,
+        surface: view-surface,
         /// Dichiarazione di interesse: gli eventi al cui arrivo la shell deve
         /// ridisegnare la view. Vuota = nessun ridisegno event-driven.
         refresh: event-mask,
@@ -1055,11 +1362,34 @@ interface view {
         /// ridisegnare "al cambio del documento attivo" diventa ridisegnare a
         /// ogni movimento del cursore, appena il contesto porta la selezione.
         follows: context-mask,
+        /// Gli argomenti con cui si può aprire un'istanza. Sono gli stessi
+        /// `param-spec` dei comandi e non un secondo tipo con lo stesso
+        /// mestiere: due grammatiche di parametri sarebbero due convalide e due
+        /// modi di sbagliarle. Vuoto = una sola istanza, quella che la shell
+        /// monta da sé.
+        params: list<param-spec>,
+        /// Il nome di un'icona del repertorio della shell; ciò che non conosce
+        /// lo ignora.
+        icon: option<string>,
+        /// L'ordine fra le view della stessa superficie: crescente, i pari
+        /// merito nell'ordine di registrazione.
+        order: s32,
+        /// È aperta appena la superficie esiste? Il default è chiusa: una view
+        /// che si apre da sola costa lo spazio di tutti quelli che non la
+        /// volevano.
+        open-by-default: bool,
+        /// La dimensione che vorrebbe (pixel logici) sull'asse che la sua
+        /// superficie lascia decidere. È una preferenza: vale alla prima
+        /// apertura, poi comanda ciò che l'utente ha trascinato.
+        preferred-size: option<u32>,
+        /// Si può chiudere? Chi dice di no sta dicendo che la sua superficie non
+        /// ha senso senza di lei.
+        closable: bool,
     }
 
     views: func() -> list<view-spec>;
-    render-view: func(view: string) -> result<ui-tree, plugin-error>;
-    on-action: func(view: string, action: ui-action) -> result<view-update, plugin-error>;
+    render-view: func(instance: view-instance) -> result<ui-tree, plugin-error>;
+    on-action: func(instance: view-instance, action: ui-action) -> result<view-update, plugin-error>;
 }
 
 /// Errore prodotto da un plugin (nativo o WASM).

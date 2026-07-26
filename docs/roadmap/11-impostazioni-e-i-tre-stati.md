@@ -33,7 +33,8 @@ non ha permessi.
 
 - [ ] **`SettingsProvider`** (o `PluginManifest.settings_schema`): il provider
       dichiara uno **schema** di impostazioni (chiave, tipo, default, etichetta,
-      gruppo); la shell genera il form dai nodi del §2.1; i valori tornano al
+      gruppo); la shell genera il form dai nodi di input, che dalla
+      [decisione 0016](../decisions/0016-cosa-e-una-view.md) ci sono; i valori tornano al
       provider via `HostApi`.
 - [ ] **Store di configurazione nel kernel**, su tre livelli con precedenza
       dichiarata: globale (cartella di configurazione utente) → vault

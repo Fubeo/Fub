@@ -16,12 +16,14 @@ mettere le cose**, e in mancanza di un posto ogni aggiunta finisce nel file più
 grande. Il costo non si paga scrivendo la voce che lo provoca: lo paga quella
 dopo.
 
-E quelle dopo sono già scritte nella roadmap. Il [§2.1](../roadmap/02-cosa-e-una-view.md)
-riversa una ventina di nodi nuovi sul renderer `UiNode`; il [§2.8](../roadmap/02-cosa-e-una-view.md)
-gli mette accanto un riconciliatore con le chiavi; il [§2.2](../roadmap/02-cosa-e-una-view.md)
-aggiunge cinque superfici; il [§18.2](../roadmap/18-editor-e-tastiera.md) un
-registro di scorciatoie; il [§10.3](../roadmap/10-gli-eventi.md) un centro
-notifiche. Senza un albero, la divisione la decide chi tocca il file per ultimo.
+E quelle dopo erano già scritte nella roadmap. Tre sono **arrivate subito**, con
+la [decisione 0016](../decisions/0016-cosa-e-una-view.md): venticinque specie di
+nodo nuove sul renderer `UiNode`, il riconciliatore con le chiavi accanto, e sei
+superfici in più da ospitare. Le altre sono in coda — il
+[§18.2](../roadmap/18-editor-e-tastiera.md) porta un registro di scorciatoie, il
+[§10.3](../roadmap/10-gli-eventi.md) un centro notifiche. Senza un albero, la
+divisione la decide chi tocca il file per ultimo; con l'albero, la seduta 2 ha
+toccato `ui/node.ts`, `ui/views.ts` e `host/contract.ts` e nient'altro.
 
 ## L'albero
 
@@ -43,7 +45,8 @@ frontend/src/
 
   ui/            le primitive di interfaccia, senza dominio
     node.ts        il renderer di `UiNode`
-    views.ts       il view host: monta ciò che il backend dichiara
+    panel-host.ts  il registro dei pannelli: chi c'è, e quando si ridisegna
+    views.ts       l'adattatore `ViewSpec` → pannello, per ciò che il backend dichiara
     intents.ts     gli intenti che la shell sa eseguire
     palette.ts     la palette dei comandi
     menu.ts        menu contestuale e selettore di icona
@@ -114,8 +117,9 @@ Due bus, con due nature diverse:
 - **`state/kernel.ts`** — gli eventi del *backend*. Un modulo dichiara quale
   evento gli interessa (`onEvent("document_renamed", …)`) e riceve l'evento già
   ristretto alla sua variante, con l'origine. C'è un solo ascoltatore "di
-  tutto" legittimo (`onAnyEvent`), ed è il view host, che decide per **dato**
-  (`ViewSpec.refresh`) e non per conoscenza privata di chi c'è.
+  tutto" legittimo (`onAnyEvent`), ed è l'host dei pannelli, che decide per
+  **dato** — la maschera che ogni pannello ha dichiarato — e non per conoscenza
+  privata di chi c'è.
 - **`state/store.ts`** — i segnali della *shell*: `vault`, `documents`,
   `active-doc`, `organization`, `stale-views`.
 
@@ -146,10 +150,46 @@ Nello store sta ciò che serve a **più di un modulo**. I risultati di ricerca, 
 voci del cestino, l'anteprima di una versione restano nel loro pannello. Uno
 store che raccoglie tutto torna a essere l'oggetto-dio, con un file diverso.
 
+### 5. Un pannello dichiara cosa lo fa invecchiare; l'host decide quando chiamarlo
+
+C'è **un solo modo** di montare un pannello, e sta in `ui/panel-host.ts`: si
+dichiara `id`, `title`, `placement`, la maschera `refresh` degli eventi del
+kernel che lo invecchiano, se segue il documento aperto (`followsDoc`), se è
+visibile (`visible`) e come si disegna (`render`). Nessun pannello si iscrive
+più da sé al bus per ridisegnarsi.
+
+Una view dichiarata dal backend è un pannello come gli altri: `ui/views.ts` è
+solo l'adattatore che traduce un `ViewSpec` in un `Panel` e gli ritaglia il
+contenitore del suo placement. Da lì in giù non c'è differenza — ed è il punto,
+perché finché convivono due modi il secondo vince per pigrizia.
+
+Cosa ci si guadagna, oltre alla simmetria:
+
+- **`overflow` si tratta in un posto solo.** Non è un fatto del dominio, è la
+  coda troncata: l'host riconcilia **tutti** i pannelli da zero, e nessuno lo
+  dichiara fra i suoi `refresh`. Prima era la terza riga copiata in ogni
+  pannello, e quella che si dimenticava per prima.
+- **La terna non si copia più.** `index_updated`/`batch_ended` stava a mano in
+  explorer, ricerca e cestino: dimenticarne un pezzo — è già successo con
+  `batch_ended` ([decisione 0011](../decisions/0011-il-lotto.md)) — lasciava un
+  pannello fermo senza che nulla lo dicesse.
+- **Un pannello che lancia non zittisce gli altri**, e lo fa l'host: la regola
+  del bus vale ora anche per il disegno.
+- **Il registro è l'inventario** di quali superfici questa shell abbia davvero
+  — il pezzetto di [§7.6](../roadmap/07-il-confine.md) che le riguarda.
+
+Due iscrizioni diritte restano, e non sono eccezioni alla regola perché non
+sono *ridisegni*: `panels/explorer.ts` ascolta `document_renamed` per traslocare
+l'organizzazione **prima** del ridisegno (il router consegna i generici prima
+dei tipizzati, quindi un refresh dal registro partirebbe col path vecchio), e
+`panels/document.ts` reagisce agli eventi sul documento aperto — l'editor non è
+un pannello del registro, è l'area principale, e dove viva quella è il modello
+di layout qui sotto.
+
 ## Cosa resta aperto, e perché
 
-Sono le due metà del [§1.2](../roadmap/01-forma-della-shell.md) che questo giro
-**non** ha chiuso:
+Sono le due metà del [§1.2](../roadmap/01-forma-della-shell.md) che **non** sono
+chiuse:
 
 - **Il modello di layout** — tab, split, pane, workspace salvabili. Non è un
   refactor: è la feature 3.3, e va decisa insieme a `PaneId` e alle sessioni
@@ -157,10 +197,15 @@ Sono le due metà del [§1.2](../roadmap/01-forma-della-shell.md) che questo gir
   è già pronto è che il contesto pubblicato porta l'identità del pannello
   (`MAIN_PANE`), quindi il giorno che i pannelli saranno due nessuno dovrà
   inventarsi da dove viene la risposta.
-- **Un solo modo di montare un pannello** — cestino, cronologia, ricerca e grafo
-  non passano dal view host. Il grafo per decisione di M2 (è una superficie
-  privilegiata fuori da `UiNode`); gli altri perché il protocollo dichiarativo
-  non ha ancora i nodi di input del [§2.1](../roadmap/02-cosa-e-una-view.md) né
-  un modo di dire "sto caricando" ([§2.5](../roadmap/02-cosa-e-una-view.md)). La
-  cronologia è il caso di collaudo giusto — view con stato per-documento, input
-  e azioni che scrivono — e si migra **dopo** quella seduta, non prima.
+- **Cestino e cronologia come `ViewProvider` veri.** Il modo di montarli è ormai
+  uno — la regola 5 qui sopra — ma sono pannelli **nativi** che dichiarano, non
+  provider che disegnano con `UiNode`. Dipendeva dai nodi di input e da un modo
+  di dire "sto caricando": la
+  [decisione 0016](../decisions/0016-cosa-e-una-view.md) li ha portati tutti e
+  due, quindi il blocco non c'è più e resta solo da farlo. La cronologia è il
+  caso di collaudo giusto — view con stato per-documento, input e azioni che
+  scrivono — e migrarla *prima* avrebbe dato una view che sa mostrare la lista e
+  non sa offrire «Ripristina» se non come `list_item` cliccabile, cioè il
+  protocollo collaudato su un caso ammorbidito.
+  Il grafo non è in attesa di niente: resta fuori da `UiNode` per decisione di
+  M2, ed è nel registro come superficie `overlay`.

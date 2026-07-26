@@ -15,20 +15,24 @@ use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::session::ContextMask;
 use fubmd_abi::traits::{
-    BacklinkRef, HostApi, IndexQuery, IndexResult, ViewPlacement, ViewProvider, ViewSpec,
+    BacklinkRef, HostApi, IndexQuery, IndexResult, ViewInstance, ViewProvider, ViewSpec,
+    ViewSurface,
 };
-use fubmd_abi::ui::{ActionId, Axis, UiAction, UiNode, ViewUpdate};
+use fubmd_abi::ui::{ActionRef, UiAction, UiNode, ViewUpdate};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const BACKLINKS_ID: &str = "fubmd.backlinks";
 /// Id della `ViewSpec`: è ciò con cui la shell chiede questa view al kernel.
 pub const BACKLINKS_VIEW: &str = "backlinks";
 
-/// Prefisso dell'azione di navigazione emessa dai `ListItem` del pannello.
-/// L'id porta con sé il `DocId` sorgente perché il click possa navigare senza
-/// che il frontend sappia nulla della semantica: la rimanda al provider così
-/// com'è, ed è il provider a tradurla in [`ViewUpdate::Navigate`].
-const OPEN: &str = "open:";
+/// L'azione di navigazione emessa dai `ListItem` del pannello. L'id è **solo**
+/// l'id (§2.7): quale documento aprire viaggia nel `payload` dell'[`ActionRef`],
+/// sotto la chiave [`DOC`]. Prima era concatenato dentro l'id (`open:a/Uno.md`),
+/// che funzionava e stava insegnando la stessa convenzione al provider
+/// successivo.
+const OPEN: &str = "open";
+/// La chiave del payload che porta il `DocId` sorgente.
+const DOC: &str = "doc";
 
 /// Il pannello backlink. Senza stato: tutto ciò che gli serve lo chiede
 /// all'host a ogni chiamata.
@@ -37,21 +41,29 @@ pub struct BacklinksView;
 
 impl ViewProvider for BacklinksView {
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec {
-            id: BACKLINKS_VIEW.to_string(),
-            title: "Backlink".to_string(),
-            placement: ViewPlacement::RightSidebar,
-            // I backlink invecchiano quando il grafo cambia: ogni modifica al
-            // vault arriva come `IndexUpdated`.
-            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
-            // …e quando cambia la nota guardata. Non dove ci si trova dentro:
-            // i backlink di una nota sono gli stessi da ogni punto di essa, e
-            // seguire la selezione qui sarebbe una query per battuta di tasto.
-            follows: ContextMask::document(),
-        }]
+        vec![
+            ViewSpec::new(BACKLINKS_VIEW, "Backlink", ViewSurface::RightSidebar)
+                // I backlink invecchiano quando il grafo cambia: ogni modifica
+                // al vault arriva come `IndexUpdated`.
+                .refreshing(EventMask(vec![
+                    EventKind::IndexUpdated,
+                    EventKind::BatchEnded,
+                ]))
+                // …e quando cambia la nota guardata. Non dove ci si trova
+                // dentro: i backlink di una nota sono gli stessi da ogni punto
+                // di essa, e seguire la selezione qui sarebbe una query per
+                // battuta di tasto.
+                .following(ContextMask::document())
+                .with_icon("backlink")
+                .open_by_default(),
+        ]
     }
 
-    fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
+    fn render_view(
+        &self,
+        _instance: &ViewInstance,
+        host: &dyn HostApi,
+    ) -> Result<UiNode, PluginError> {
         let Some(active) = host.active_context().and_then(|c| c.doc) else {
             // Nessuna nota aperta: non è un errore, è uno stato.
             return Ok(placeholder("Nessuna nota aperta."));
@@ -73,13 +85,17 @@ impl ViewProvider for BacklinksView {
     }
 
     fn on_action(
-        &self,
-        _view: &str,
+        &mut self,
+        _instance: &ViewInstance,
         action: UiAction,
         _host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
-        // L'unica azione del pannello è "apri la sorgente di un backlink".
-        match action.action.0.strip_prefix(OPEN) {
+        // L'unica azione del pannello è "apri la sorgente di un backlink", e
+        // quale sia sta nel payload che il nodo si portava dietro.
+        if action.action.0 != OPEN {
+            return Ok(ViewUpdate::None);
+        }
+        match action.payload.get(DOC).and_then(|v| v.as_str()) {
             Some(id) => Ok(ViewUpdate::Navigate {
                 doc_id: id.to_string(),
             }),
@@ -88,15 +104,11 @@ impl ViewProvider for BacklinksView {
     }
 }
 
-/// Il segnaposto (nessun backlink / nessuna nota aperta).
+/// Il segnaposto (nessun backlink / nessuna nota aperta). Ora è ciò che dice di
+/// essere — un `EmptyState` — invece di un testo dentro uno stack: la differenza
+/// si vede quando è la shell a doverlo disegnare diversamente dal contenuto.
 fn placeholder(text: &str) -> UiNode {
-    UiNode::Stack {
-        dir: Axis::Column,
-        gap: 4,
-        children: vec![UiNode::Text {
-            content: text.to_string(),
-        }],
-    }
+    UiNode::empty_state(text)
 }
 
 /// Costruisce l'albero `UiNode` del pannello backlink per un insieme di
@@ -109,25 +121,30 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
 
     let items = refs
         .iter()
-        .map(|r| UiNode::ListItem {
-            title: r.source.page_name().to_string(),
-            subtitle: r.context.clone(),
-            // l'azione porta il DocId sorgente, così il provider può navigare.
-            action: Some(ActionId(format!("{OPEN}{}", r.source.as_str()))),
+        .map(|r| {
+            UiNode::list_item(
+                r.source.page_name(),
+                r.context.clone(),
+                // l'azione porta il DocId sorgente nel payload, così il
+                // provider può navigare senza parsare il proprio id.
+                Some(ActionRef::with(
+                    OPEN,
+                    serde_json::json!({ DOC: r.source.as_str() }),
+                )),
+            )
+            // La chiave è l'identità della riga fra due ridisegni: il documento
+            // sorgente, non la sua posizione nell'elenco.
+            .with_key(r.source.as_str())
         })
         .collect();
 
-    UiNode::Stack {
-        dir: Axis::Column,
-        gap: 6,
-        children: vec![
-            UiNode::Heading {
-                level: 3,
-                content: format!("{} backlink", refs.len()),
-            },
-            UiNode::List { items },
+    UiNode::column(
+        6,
+        vec![
+            UiNode::heading(3, format!("{} backlink", refs.len())),
+            UiNode::list(items),
         ],
-    }
+    )
 }
 
 #[cfg(test)]
@@ -135,16 +152,18 @@ mod tests {
     use super::*;
     use crate::testing::MemoryHost;
     use fubmd_abi::model::DocId;
+    use fubmd_abi::ui::UiKind;
+
+    fn istanza() -> ViewInstance {
+        ViewInstance::only(BACKLINKS_VIEW)
+    }
 
     #[test]
     fn empty_shows_placeholder() {
-        let node = build_backlinks_view(&[]);
-        match node {
-            UiNode::Stack { children, .. } => {
-                assert!(matches!(&children[0], UiNode::Text { .. }));
-            }
-            _ => panic!("atteso stack"),
-        }
+        assert!(matches!(
+            build_backlinks_view(&[]).kind,
+            UiKind::EmptyState { .. }
+        ));
     }
 
     #[test]
@@ -156,7 +175,15 @@ mod tests {
         let node = build_backlinks_view(&refs);
         let json = serde_json::to_string(&node).unwrap();
         assert!(json.contains("Nota"));
-        assert!(json.contains("open:a/Nota.md"));
+        assert!(json.contains(r#""doc":"a/Nota.md""#));
+        assert!(
+            !json.contains("open:a/Nota.md"),
+            "il documento sta nel payload, non concatenato nell'id"
+        );
+        assert!(
+            json.contains(r#""key":"a/Nota.md""#),
+            "ogni riga porta la propria identità fra due ridisegni"
+        );
     }
 
     #[test]
@@ -166,23 +193,18 @@ mod tests {
         let host = MemoryHost::new().con_backlink("target.md", &["a/Uno.md", "Due.md"]);
         host.set_active(Some("target.md"));
 
-        let tree = BacklinksView.render_view(BACKLINKS_VIEW, &host).unwrap();
+        let tree = BacklinksView.render_view(&istanza(), &host).unwrap();
         let json = serde_json::to_string(&tree).unwrap();
         assert!(json.contains("2 backlink"));
-        assert!(json.contains("open:a/Uno.md"));
-        assert!(json.contains("open:Due.md"));
+        assert!(json.contains(r#""doc":"a/Uno.md""#));
+        assert!(json.contains(r#""doc":"Due.md""#));
     }
 
     #[test]
     fn render_without_active_doc_is_a_placeholder_not_an_error() {
         let host = MemoryHost::new();
-        let tree = BacklinksView.render_view(BACKLINKS_VIEW, &host).unwrap();
-        match tree {
-            UiNode::Stack { children, .. } => {
-                assert!(matches!(&children[0], UiNode::Text { .. }));
-            }
-            _ => panic!("atteso stack segnaposto"),
-        }
+        let tree = BacklinksView.render_view(&istanza(), &host).unwrap();
+        assert!(matches!(tree.kind, UiKind::EmptyState { .. }));
     }
 
     #[test]
@@ -190,11 +212,8 @@ mod tests {
         let mut host = MemoryHost::new();
         let update = BacklinksView
             .on_action(
-                BACKLINKS_VIEW,
-                UiAction {
-                    action: ActionId("open:a/Uno.md".into()),
-                    payload: serde_json::Value::Null,
-                },
+                &istanza(),
+                UiAction::new(OPEN).with_payload(serde_json::json!({DOC: "a/Uno.md"})),
                 &mut host,
             )
             .unwrap();
@@ -204,5 +223,16 @@ mod tests {
                 doc_id: "a/Uno.md".into()
             }
         );
+    }
+
+    /// Un'azione senza il payload che questo pannello attacca ai propri nodi non
+    /// naviga da nessuna parte — e non è un errore.
+    #[test]
+    fn an_action_without_a_document_navigates_nowhere() {
+        let mut host = MemoryHost::new();
+        let update = BacklinksView
+            .on_action(&istanza(), UiAction::new(OPEN), &mut host)
+            .unwrap();
+        assert_eq!(update, ViewUpdate::None);
     }
 }
