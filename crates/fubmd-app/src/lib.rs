@@ -22,7 +22,7 @@ use fubmd_features::{
     VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, RenderedDocument, TrashEntry, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, IndexError, RenderedDocument, TrashEntry, Trust, Workspace};
 
 use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::RecursiveMode;
@@ -154,10 +154,18 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
         .and_then(|dir| SearchIndex::open(&dir))
     {
         Ok(index) => {
-            if let Err(e) = ws.register_index_provider(SEARCH_ID, Box::new(index)) {
-                // L'indice c'è, ma non ha ritrovato la propria memoria: si
-                // reindicizza tutto. È lento, non sbagliato.
-                eprintln!("indice di ricerca: impronte non ritrovate, reindicizzo: {e}");
+            // I due esiti sono diversi e vanno detti diversi (decisione 0019):
+            // un conflitto di rotte vuol dire che l'indice **non c'è** e la
+            // ricerca non risponderà; un'attivazione fallita che c'è ma
+            // reindicizza tutto, che è lento e non sbagliato.
+            match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
+                Ok(()) => {}
+                Err(IndexError::Route(c)) => {
+                    eprintln!("indice di ricerca NON registrato: {c}")
+                }
+                Err(IndexError::Activate(e)) => {
+                    eprintln!("indice di ricerca: impronte non ritrovate, reindicizzo: {e}")
+                }
             }
         }
         Err(e) => eprintln!("indice di ricerca non disponibile: {e}"),
