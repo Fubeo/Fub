@@ -359,19 +359,10 @@ impl Vault {
     }
 }
 
-/// Una voce del cestino.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TrashEntry {
-    /// Dove il file si trova ora: `.trash/Nota.2026-07-24T15-30-00.md`.
-    pub id: DocId,
-    /// Dove tornerebbe un ripristino: il path d'origine se il sidecar lo
-    /// ricorda (voce cestinata da FubMD), altrimenti il nome de-timbrato
-    /// nella radice.
-    pub original: DocId,
-    /// Istante della cancellazione (secondi UNIX).
-    pub deleted_at: u64,
-    pub size: u64,
-}
+/// Una voce del cestino. Vive nel **contratto** dal §1.4, da quando
+/// `HostApi::list_trash` la restituisce: qui resta il nome con cui il vault la
+/// costruisce.
+pub use fubmd_abi::traits::TrashEntry;
 
 fn file_name_of(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)

@@ -79,11 +79,15 @@ pub trait HostApi: Send + Sync {
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
     fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
     fn free_name(&self, id: &DocId) -> DocId;
+    // operazioni STRUTTURALI (§1.4): ciò che si fa a un documento senza aprirlo
+    fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+    fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError>;
+    fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError>;
+    fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError>;
+    fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError>;
+    fn empty_trash(&mut self) -> Result<u64, PluginError>;
     fn emit(&mut self, event: Event);
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
-    // stato leggero e volatile
-    fn storage_get(&self, key: &str) -> Option<serde_json::Value>;
-    fn storage_set(&mut self, key: &str, value: serde_json::Value);
     // storage persistente per-plugin (namespace imposto dall'host)
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError>;
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError>;
@@ -94,15 +98,38 @@ pub trait HostApi: Send + Sync {
     // interrogazione del vault e contesto della sessione (le ha chieste la view)
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
     fn active_context(&self) -> Option<ViewContext>;
+    // comporre: invocare un comando del registro (§1.1)
+    fn run_command(&mut self, command: &str, args: serde_json::Value)
+        -> Result<CommandOutcome, PluginError>;
 }
 ```
+
+**L'elenco è chiuso (§1.4).** Ventidue metodi, e da qui in avanti aggiungerne
+uno è una minor, toglierne uno una major. Il giro che lo ha chiuso ha anche
+**tolto** `storage_get/set` — l'unica rottura, con la linea di base ritagliata
+in `wit/frozen/0.1.0.wit` — e ha deciso a verbale, una per una, anche le
+capacità che restano fuori: allegati (§2.2 non ha il modello), rete (§1.21 +
+§2.10), tempo differito (§2.4), `create_folder` (§2.11), `notify`/`progress`/
+`log` (informano e non aspettano risposta: sono eventi, non capacità). Il
+verbale sta in `docs/todo.md` §1.4.
 
 `JobSpec { job, payload }` e `JobId(u64)` sono il varco del **lavoro lungo**:
 `spawn_job` accoda e ritorna subito; l'esito arriva come `Event::JobDone` con lo
 stesso `JobId` (il lanciatore lo conserva e riconosce il proprio). Il corpo del
 job è `Plugin::run_job` (vedi sotto), eseguito fuori dal kernel.
 
-**Le ultime tre famiglie di metodi le ha chieste il dogfooding.** Il versioning
+**Le operazioni strutturali le ha chieste il registro dei comandi.** Crea,
+rinomina e cestina restavano cablate nella shell perché il contratto non sapeva
+farle; adesso `CoreCommands` le offre come comandi (`note.create`,
+`note.rename`, `note.trash`, `trash.restore`, `trash.empty`) usando **solo**
+queste capacità, e i sei comandi Tauri corrispondenti sono spariti — che è ciò
+che rende vera la regola del §4.2. `vault.archive` è il cliente di
+`run_command`: sposta N note invocando `note.rename`, e da lì si vede che il
+modo viaggia con l'host (simulare la macro simula i passi), che l'attore non si
+riazzera e che il lotto non si moltiplica. Dettagli in
+[plugin-boundary.md](plugin-boundary.md), "Operazioni strutturali".
+
+**Le tre famiglie di metodi prima di quelle le ha chieste il dogfooding.** Il versioning
 è un `EventHandler` scritto come lo scriverebbe un plugin, e nella sua prima
 stesura scriveva lo store con `std::fs` e leggeva l'ora da `fubmd_kernel::time`:
 funzionava da nativo, e un plugin WASM con l'`HostApi` di allora non avrebbe
@@ -246,16 +273,35 @@ sovrascrivere. `docs` è l'insieme impattato completo — ci sta anche ciò che 
 `EditRequest` non esprime — e **lo completa l'host** con i documenti degli edit:
 quell'elenco è ciò che l'utente approva.
 
-**I provider veri: `CoreCommands`** (`fubmd-features/src/commands.rs`) —
-`search.open` (nessuna scrittura, un effetto per la shell), `selection.wikilink`
-(contesto di sessione §1.9 + modifica chirurgica §1.16 su una nota),
-`vault.replace` (N note, quattro specie di parametri, piano prima di applicare).
-Restano fuori i comandi **strutturali** (crea/rinomina/cestina): l'`HostApi` non
-ha quelle capacità, ed è il §1.4 a doverle decidere una per una — un comando
-ufficiale che le ottenesse per una via privilegiata sarebbe un dogfooding finto.
+**I provider veri: `CoreCommands`** (`fubmd-features/src/commands.rs`), nove
+comandi — `search.open` (nessuna scrittura, un effetto per la shell),
+`selection.wikilink` (contesto di sessione §1.9 + modifica chirurgica §1.16 su
+una nota), `vault.replace` (N note, quattro specie di parametri, piano prima di
+applicare), i cinque **strutturali** del §1.4 (`note.create`, `note.rename`,
+`note.trash`, `trash.restore`, `trash.empty`) e `vault.archive`, che non fa
+niente di suo: invoca `note.rename` una volta per nota.
+
+I cinque strutturali sono ciò che la shell cablava in sei comandi Tauri, e la
+loro migrazione è il dogfooding che al §1.1 non era possibile — l'`HostApi` non
+aveva le capacità, e un comando ufficiale che le avesse ottenute per una via
+privilegiata avrebbe provato che il registro funziona *per chi non è un plugin*.
+Adesso passano dalle stesse firme di un plugin, e i comandi Tauri sono spariti
+(restano le due **letture**: `list_trash` e `propose_free_name` — un
+`CommandOutcome` porta un messaggio e un effetto, non dati).
+
+Due dettagli che la migrazione ha deciso e che si vedono nelle spec: `note.rename`
+dichiara `CommandReach::Documents` e non `Document`, perché una rinomina riscrive
+anche le note che linkavano — e il suo piano le **nomina**, chiedendole
+all'indice, o l'utente approverebbe «rinomina una nota» mentre ne vengono toccate
+quaranta; `note.trash` è `reversible` non per ottimismo ma perché `trash.restore`
+sta nello stesso registro.
+
 Prove: `crates/fubmd-kernel/tests/invoke_command.rs` (le due garanzie, con
-comandi che provano *apposta* a violarle) e
-`crates/fubmd-features/tests/commands_e2e.rs`.
+comandi che provano *apposta* a violarle, incluse tutte le strutturali),
+`crates/fubmd-kernel/tests/structural_host.rs` (le capacità nuove viste dal lato
+del plugin, e `run_command` che compone) e
+`crates/fubmd-features/tests/commands_e2e.rs` (il ciclo di vita di una nota
+chiesto solo al registro).
 
 ### `ViewProvider` — UI dichiarativa (M2: graph/outline/tag panel)
 
@@ -630,12 +676,12 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
 | `IndexProvider` | — (backlink via grafo del kernel) | `SearchIndex` (tantivy) **M2** ✅ | `activate`/`flush` con `HostApi`: persiste via `data_*` |
 | `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` ✅ **M2** | **M2** (graph-data) | quattro provider veri; `query_index`+`active_context`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch`; `ViewSpec.follows` per il contesto |
-| `CommandProvider` | — | `CoreCommands` ✅ **M2** (§1.1, §1.36) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura |
+| `CommandProvider` | — | `CoreCommands` ✅ **M2** (§1.1, §1.36, §1.4) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura; nove comandi, cinque dei quali strutturali (le azioni che la shell cablava) e uno che compone (`vault.archive` via `run_command`) |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** (§1.7) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** (§1.7) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | storage in-memory per ora; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica (§1.16) |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso col §1.4**: 22 metodi, `storage_*` tolto, strutturali + `run_command` aggiunti; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica (§1.16) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore
@@ -691,6 +737,7 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `ExportSelection` | `variant { documents(list<doc-id>), folder(string), query(index-query) }` |
 | `JobSpec`/`JobId` | `record job-spec` / `type job-id = u64` (interface `jobs`) |
 | `PluginManifest`/`PluginPermissions` | `record` |
+| `TrashEntry` | `record trash-entry { id, original, deleted-at: u64, size: u64 }` (interface `host-api`) — salita nel contratto col §1.4, da quando `list-trash` la restituisce |
 | `FormatError`/`PluginError` | `variant` (mappati su `result<_, error>` WIT) |
 | `serde_json::Value` (in `attrs`, `args`, storage) | `type json = string` |
 

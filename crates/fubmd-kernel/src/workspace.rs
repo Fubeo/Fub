@@ -46,6 +46,7 @@
 //! [`Workspace::reindex`].
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode};
@@ -224,7 +225,21 @@ pub struct Workspace {
     /// stringa che l'esito porta all'utente (`notify`) è testo semplice, come
     /// lo snippet di una ricerca. Ciò che serve a un comando è un *permesso*
     /// (§2.10), che è un'altra domanda e ha un altro posto.
-    commands: Vec<(String, Box<dyn CommandProvider>)>,
+    ///
+    /// Sono `Arc` e non `Box` — soli fra i provider — perché sono gli unici che
+    /// devono restare **raggiungibili durante una propria chiamata**: col
+    /// `run_command` del §1.4 un comando ne invoca un altro, e se il registro
+    /// fosse svuotato per la durata dell'invocazione (la disciplina di view,
+    /// indici e handler) la macro non troverebbe nessuno dei comandi che deve
+    /// comporre — nemmeno quelli di provider diversi dal suo. `invoke` prende
+    /// `&self`, quindi condividere il puntatore basta e il prestito esclusivo
+    /// del workspace resta libero per l'host.
+    commands: Vec<(String, Arc<dyn CommandProvider>)>,
+    /// La catena dei comandi in corso, dal più esterno al più interno: serve a
+    /// rifiutare una ricorsione **nominandola** (`a → b → a`) invece di
+    /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
+    /// comandi registrati sono finiti e nessuno può comparire due volte.
+    command_stack: Vec<String>,
     /// Eventi in attesa di dispatch verso gli handler, ognuno con l'origine
     /// che aveva **al momento dell'emissione** — non quella del drenaggio, che
     /// può avvenire sotto un altro attore.
@@ -244,15 +259,6 @@ pub struct Workspace {
     pending_jobs: Vec<(JobId, JobSpec)>,
     /// Contatore per l'assegnazione dei [`JobId`].
     next_job_id: u64,
-    /// Lo `storage_get/set` dell'`HostApi`: stato **volatile** a chiave→valore
-    /// (preferenze, cursori, ciò che si ricostruisce). In memoria non è una
-    /// mancanza da colmare — è la sua semantica; ciò che deve durare passa da
-    /// `data_*`, che scrive in `.fubmd-data/plugins/<id>/`. Vedi
-    /// `docs/architecture/plugin-boundary.md`, "Storage".
-    ///
-    /// Il namespace per-plugin su questa mappa arriva col registry dei plugin
-    /// (M4): oggi gli handler registrati sono tutti codice fidato.
-    storage: HashMap<String, serde_json::Value>,
     /// Il contesto del pannello con il focus, servito alle view da
     /// [`HostApi::active_context`]. Lo imposta la shell
     /// ([`set_active_context`](Workspace::set_active_context)); il kernel non
@@ -315,12 +321,12 @@ impl Workspace {
             exports: Vec::new(),
             views: Vec::new(),
             commands: Vec::new(),
+            command_stack: Vec::new(),
             pending: VecDeque::new(),
             dispatching: false,
             in_provider_call: false,
             pending_jobs: Vec::new(),
             next_job_id: 0,
-            storage: HashMap::new(),
             context: None,
             actor: Actor::User,
             batch: None,
@@ -372,7 +378,11 @@ impl Workspace {
         // Anche questa è una "chiamata di provider" ai fini della consegna:
         // ciò che `f` emette arriva agli handler quando `f` è tornata.
         let result = self.with_provider_call(|ws| {
-            let mut host = KernelHost { ws, plugin };
+            let mut host = KernelHost {
+                ws,
+                plugin,
+                mode: InvokeMode::Apply,
+            };
             f(&mut host)
         });
         self.dispatch_pending();
@@ -406,7 +416,11 @@ impl Workspace {
         // qui non alias niente. `activate` è una chiamata a un provider come
         // le altre: il dispatch resta rimandato a chiamata tornata.
         let activated = self.with_provider_call(|ws| {
-            let mut host = KernelHost { ws, plugin: &id };
+            let mut host = KernelHost {
+                ws,
+                plugin: &id,
+                mode: InvokeMode::Apply,
+            };
             index.activate(&mut host)
         });
         self.indexes.push((id, index));
@@ -1438,7 +1452,11 @@ impl Workspace {
         let mut errors = Vec::new();
         self.with_provider_call(|ws| {
             for (id, index) in indexes.iter_mut() {
-                let mut host = KernelHost { ws, plugin: id };
+                let mut host = KernelHost {
+                    ws,
+                    plugin: id,
+                    mode: InvokeMode::Apply,
+                };
                 if let Err(e) = index.flush(&mut host) {
                     errors.push(e);
                 }
@@ -1526,7 +1544,11 @@ impl Workspace {
         // rientrato nella propria istanza: in nativo funziona, a M5 trappa.
         let (updated, trust) = self.with_provider_call(|ws| {
             let (id, trust, provider) = &mut views[at];
-            let mut host = KernelHost { ws, plugin: id };
+            let mut host = KernelHost {
+                ws,
+                plugin: id,
+                mode: InvokeMode::Apply,
+            };
             (provider.on_action(view, action, &mut host), *trust)
         });
         self.restore_views(views);
@@ -1572,7 +1594,10 @@ impl Workspace {
         id: impl Into<String>,
         provider: Box<dyn CommandProvider>,
     ) {
-        self.commands.push((id.into(), provider));
+        // La firma resta `Box` — è quella degli altri `register_*`, e chi
+        // registra non deve sapere perché qui dentro serve un `Arc` (§1.4:
+        // `run_command` rientra nel registro mentre il registro è in uso).
+        self.commands.push((id.into(), Arc::from(provider)));
     }
 
     /// I comandi offerti dai provider registrati, in ordine di registrazione.
@@ -1639,6 +1664,34 @@ impl Workspace {
         })
     }
 
+    /// L'invocazione **annidata**: quella di
+    /// [`HostApi::run_command`](fubmd_abi::traits::HostApi::run_command).
+    ///
+    /// Differisce da [`invoke_command`](Workspace::invoke_command) per le due
+    /// cose che non fa, ed è lì che sta la semantica del §1.4:
+    ///
+    /// - **non cambia attore**: chi ha chiesto è chi è entrato nel kernel, e
+    ///   invocare non è entrare. Un comando che si intestasse le scritture
+    ///   fatte per conto dell'utente direbbe all'automazione che le ha chieste
+    ///   lei, e un'automazione che non riconosce chi ha chiesto si richiama da
+    ///   sola (è il caso che il §1.18 esiste per evitare, letto dall'altro
+    ///   verso).
+    /// - **non apre un lotto**: si unisce a quello aperto (se non ce n'è uno —
+    ///   un handler che invoca un comando — lo apre, perché anche lì è *una*
+    ///   cosa). Una macro di tre comandi è un `batch-ended` solo.
+    ///
+    /// Il **modo** invece non è un parametro di questa funzione per caso: lo
+    /// passa l'host, che è l'unico a sapere in che modo sta girando chi
+    /// invoca. Vedi `KernelHost::mode` e `ReadOnlyHost::run_command`.
+    fn invoke_command_nested(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        self.batch(|ws| ws.invoke_command_here(command, args, mode))
+    }
+
     fn invoke_command_here(
         &mut self,
         command: &str,
@@ -1654,11 +1707,31 @@ impl Workspace {
             .expect("il proprietario è stato trovato dichiarando questo comando");
         spec.validate_args(&args)?;
 
-        let mut providers = std::mem::take(&mut self.commands);
+        // Il giro (§1.4). Un comando che rientra su sé stesso non è una
+        // profondità da limitare con un numero: è un errore di chi lo ha
+        // scritto, e l'unica risposta utile lo nomina.
+        if self.command_stack.iter().any(|c| c == command) {
+            let mut giro = self.command_stack.clone();
+            giro.push(command.to_string());
+            return Err(PluginError::BadArgs(format!(
+                "un comando non può invocare sé stesso: {}",
+                giro.join(" → ")
+            )));
+        }
+
+        // Il provider **resta** nel registro: si condivide il puntatore (vedi
+        // il campo `commands`). È ciò che permette a `run_command` di trovare
+        // gli altri comandi — e anche gli altri comandi dello stesso provider —
+        // mentre questo è in corso.
+        let (owner, provider) = self.commands[at].clone();
+        self.command_stack.push(command.to_string());
         let outcome = if spec.scope.writes && mode == InvokeMode::Apply {
             self.with_provider_call(|ws| {
-                let (id, provider) = &mut providers[at];
-                let mut host = KernelHost { ws, plugin: id };
+                let mut host = KernelHost {
+                    ws,
+                    plugin: &owner,
+                    mode,
+                };
                 provider.invoke(command, args, mode, &mut host)
             })
         } else {
@@ -1667,21 +1740,14 @@ impl Workspace {
             } else {
                 "il comando si è dichiarato di sola lettura"
             };
-            let (id, provider) = &providers[at];
             let mut host = ReadOnlyHost {
-                inner: ReadHost {
-                    ws: self,
-                    plugin: id,
-                },
+                ws: self,
+                plugin: &owner,
                 why,
             };
             provider.invoke(command, args, mode, &mut host)
         };
-        // Provider registrati *durante* la chiamata si accodano in fondo
-        // (simmetria con view, indici e handler).
-        let registered_meanwhile = std::mem::take(&mut self.commands);
-        self.commands = providers;
-        self.commands.extend(registered_meanwhile);
+        self.command_stack.pop();
 
         let mut outcome = outcome?;
         if let CommandEffect::Plan(plan) = &mut outcome.effect {
@@ -1759,7 +1825,11 @@ impl Workspace {
         let mut imports = std::mem::take(&mut self.imports);
         let report = self.with_provider_call(|ws| {
             let (id, provider) = &mut imports[at];
-            let mut host = KernelHost { ws, plugin: id };
+            let mut host = KernelHost {
+                ws,
+                plugin: id,
+                mode: InvokeMode::Apply,
+            };
             provider.import(source, request, &mut host)
         });
         let registered_meanwhile = std::mem::take(&mut self.imports);
@@ -2014,7 +2084,11 @@ impl Workspace {
                 }
                 let attore = Actor::Plugin { id: id.clone() };
                 ws.as_actor(attore, |ws| {
-                    let mut host = KernelHost { ws, plugin: id };
+                    let mut host = KernelHost {
+                        ws,
+                        plugin: id,
+                        mode: InvokeMode::Apply,
+                    };
                     // L'errore di un handler non deve far fallire l'operazione
                     // che ha emesso l'evento: si ignora (M4: log/notifica).
                     let _ = handler.handle(notice, &mut host);
@@ -2252,6 +2326,14 @@ struct KernelHost<'a> {
     ws: &'a mut Workspace,
     /// Chi sta usando queste capacità: determina lo spazio dati `data_*`.
     plugin: &'a str,
+    /// In che modo sta girando chi ha in mano questo host.
+    ///
+    /// Serve a una capacità sola — [`HostApi::run_command`] — ed è ciò che
+    /// impedisce a una simulazione di diventare reale invocando qualcuno. Fuori
+    /// dal percorso dei comandi (dispatch di un evento, azione di una view,
+    /// import) è [`InvokeMode::Apply`], che è la verità: lì non si sta
+    /// simulando niente.
+    mode: InvokeMode,
 }
 
 impl HostApi for KernelHost<'_> {
@@ -2298,6 +2380,60 @@ impl HostApi for KernelHost<'_> {
         self.ws.free_name(id)
     }
 
+    fn create_document(
+        &mut self,
+        id: &DocId,
+        source: &str,
+    ) -> std::result::Result<(), PluginError> {
+        let id = fenced_doc_id(id)?;
+        // Il rifiuto È la capacità: `write_document` qui sopra sovrascrive, e
+        // se questa facesse lo stesso non ci sarebbe motivo di averla.
+        if self.ws.is_taken(&id) {
+            return Err(plugin_error(KernelError::AlreadyExists(id.to_string())));
+        }
+        self.ws.write_document(&id, source).map_err(plugin_error)?;
+        Ok(())
+    }
+
+    fn rename_document(
+        &mut self,
+        from: &DocId,
+        to: &DocId,
+    ) -> std::result::Result<(), PluginError> {
+        let from = fenced_doc_id(from)?;
+        let to = fenced_doc_id(to)?;
+        self.ws.rename_document(&from, &to).map_err(plugin_error)
+    }
+
+    fn trash_document(&mut self, id: &DocId) -> std::result::Result<DocId, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws.delete_document(&id).map_err(plugin_error)
+    }
+
+    fn list_trash(&self) -> std::result::Result<Vec<TrashEntry>, PluginError> {
+        self.ws.list_trash().map_err(plugin_error)
+    }
+
+    fn restore_document(
+        &mut self,
+        entry: &DocId,
+        to: Option<DocId>,
+    ) -> std::result::Result<DocId, PluginError> {
+        // `entry` nomina un file **dentro** `.trash/`, non un documento del
+        // vault: il recinto che vale qui è quello del cestino, e lo applica
+        // `restore_from_trash` cercando la voce fra quelle che esistono — un id
+        // che non è nel cestino è `NotFound`, non un path da spazzolare. Il
+        // `to`, che invece atterra nel vault, lo valida il kernel.
+        self.ws.restore_from_trash(entry, to).map_err(plugin_error)
+    }
+
+    fn empty_trash(&mut self) -> std::result::Result<u64, PluginError> {
+        self.ws
+            .empty_trash()
+            .map(|n| n as u64)
+            .map_err(plugin_error)
+    }
+
     fn emit(&mut self, event: Event) {
         self.ws.emit_event(event);
     }
@@ -2307,15 +2443,6 @@ impl HostApi for KernelHost<'_> {
         self.ws.next_job_id += 1;
         self.ws.pending_jobs.push((id, spec));
         Ok(id)
-    }
-
-    fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
-        self.ws.storage.get(&self.storage_key(key)).cloned()
-    }
-
-    fn storage_set(&mut self, key: &str, value: serde_json::Value) {
-        let key = self.storage_key(key);
-        self.ws.storage.insert(key, value);
     }
 
     fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
@@ -2369,6 +2496,15 @@ impl HostApi for KernelHost<'_> {
 
     fn active_context(&self) -> Option<ViewContext> {
         self.ws.active_context().cloned()
+    }
+
+    fn run_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        // Il modo è quello dell'host, non della chiamata: vedi `mode`.
+        self.ws.invoke_command_nested(command, args, self.mode)
     }
 }
 
@@ -2436,22 +2572,49 @@ impl HostApi for ReadHost<'_> {
         self.ws.free_name(id)
     }
 
+    fn create_document(
+        &mut self,
+        _id: &DocId,
+        _source: &str,
+    ) -> std::result::Result<(), PluginError> {
+        self.read_only()
+    }
+
+    fn rename_document(
+        &mut self,
+        _from: &DocId,
+        _to: &DocId,
+    ) -> std::result::Result<(), PluginError> {
+        self.read_only()
+    }
+
+    fn trash_document(&mut self, _id: &DocId) -> std::result::Result<DocId, PluginError> {
+        self.read_only()
+    }
+
+    /// Elencare il cestino è una lettura: un pannello "cestino" è una view, e
+    /// una view disegna dal percorso di render.
+    fn list_trash(&self) -> std::result::Result<Vec<TrashEntry>, PluginError> {
+        self.ws.list_trash().map_err(plugin_error)
+    }
+
+    fn restore_document(
+        &mut self,
+        _entry: &DocId,
+        _to: Option<DocId>,
+    ) -> std::result::Result<DocId, PluginError> {
+        self.read_only()
+    }
+
+    fn empty_trash(&mut self) -> std::result::Result<u64, PluginError> {
+        self.read_only()
+    }
+
     fn emit(&mut self, _event: Event) {
         self.read_only()
     }
 
     fn spawn_job(&mut self, _spec: JobSpec) -> std::result::Result<JobId, PluginError> {
-        self.read_only()
-    }
-
-    fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
-        self.ws
-            .storage
-            .get(&format!("{}/{key}", self.plugin))
-            .cloned()
-    }
-
-    fn storage_set(&mut self, _key: &str, _value: serde_json::Value) {
         self.read_only()
     }
 
@@ -2495,6 +2658,18 @@ impl HostApi for ReadHost<'_> {
     fn active_context(&self) -> Option<ViewContext> {
         self.ws.active_context().cloned()
     }
+
+    /// Invocare un comando è, potenzialmente, scrivere: anche una simulazione
+    /// chiede al workspace di prestare un host, e da `&Workspace` non si presta
+    /// niente. Un `render_view` che volesse *eseguire* qualcosa sta disegnando
+    /// nel momento sbagliato.
+    fn run_command(
+        &mut self,
+        _command: &str,
+        _args: serde_json::Value,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        self.read_only()
+    }
 }
 
 /// L'[`HostApi`] prestato a un comando che **non deve scrivere**: o perché lo
@@ -2513,7 +2688,13 @@ impl HostApi for ReadHost<'_> {
 /// scrivere quando ti chiedo cosa faresti". Le convenzioni le rispettano i
 /// comandi che si scrivono in questo repo.
 struct ReadOnlyHost<'a> {
-    inner: ReadHost<'a>,
+    /// Il prestito è **esclusivo** anche qui, benché nessuna scrittura passi:
+    /// serve a [`HostApi::run_command`], che deve poter far girare un altro
+    /// comando *in simulazione* — e simulare vuol dire chiedere al workspace di
+    /// prestare a sua volta un host. Le letture riducono il prestito a un
+    /// [`ReadHost`] temporaneo, così le loro implementazioni restano una sola.
+    ws: &'a mut Workspace,
+    plugin: &'a str,
     /// La ragione del divieto, com'è arrivata all'host: finisce nel messaggio.
     why: &'static str,
 }
@@ -2525,11 +2706,20 @@ impl ReadOnlyHost<'_> {
             self.why
         )))
     }
+
+    /// Le capacità di lettura, delegate a [`ReadHost`]: una lettura è una
+    /// lettura, e averne due implementazioni sarebbe averne due semantiche.
+    fn reading(&self) -> ReadHost<'_> {
+        ReadHost {
+            ws: self.ws,
+            plugin: self.plugin,
+        }
+    }
 }
 
 impl HostApi for ReadOnlyHost<'_> {
     fn read_document(&self, id: &DocId) -> std::result::Result<String, PluginError> {
-        self.inner.read_document(id)
+        self.reading().read_document(id)
     }
 
     fn write_document(
@@ -2544,7 +2734,7 @@ impl HostApi for ReadOnlyHost<'_> {
     /// dry-run: un piano è fatto di [`EditRequest`] con una base, e la base la
     /// dà questa capacità.
     fn document_revision(&self, id: &DocId) -> std::result::Result<Revision, PluginError> {
-        self.inner.document_revision(id)
+        self.reading().document_revision(id)
     }
 
     fn apply_edit(
@@ -2556,11 +2746,52 @@ impl HostApi for ReadOnlyHost<'_> {
     }
 
     fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
-        self.inner.list_documents()
+        self.reading().list_documents()
     }
 
     fn free_name(&self, id: &DocId) -> DocId {
-        self.inner.free_name(id)
+        self.reading().free_name(id)
+    }
+
+    // Le operazioni strutturali del §1.4 sono negate qui **tutte**, ed è
+    // l'unico punto del kernel in cui oggi un permesso di scrittura viene
+    // davvero applicato. Il §2.10 non dovrà inventare il varco: dovrà solo
+    // decidere una seconda ragione per attraversarlo.
+
+    fn create_document(
+        &mut self,
+        id: &DocId,
+        _source: &str,
+    ) -> std::result::Result<(), PluginError> {
+        self.denied(&format!("creare `{id}`"))
+    }
+
+    fn rename_document(
+        &mut self,
+        from: &DocId,
+        _to: &DocId,
+    ) -> std::result::Result<(), PluginError> {
+        self.denied(&format!("rinominare `{from}`"))
+    }
+
+    fn trash_document(&mut self, id: &DocId) -> std::result::Result<DocId, PluginError> {
+        self.denied(&format!("cestinare `{id}`"))
+    }
+
+    fn list_trash(&self) -> std::result::Result<Vec<TrashEntry>, PluginError> {
+        self.reading().list_trash()
+    }
+
+    fn restore_document(
+        &mut self,
+        entry: &DocId,
+        _to: Option<DocId>,
+    ) -> std::result::Result<DocId, PluginError> {
+        self.denied(&format!("ripristinare `{entry}`"))
+    }
+
+    fn empty_trash(&mut self) -> std::result::Result<u64, PluginError> {
+        self.denied("svuotare il cestino")
     }
 
     fn emit(&mut self, _event: Event) {
@@ -2577,17 +2808,8 @@ impl HostApi for ReadOnlyHost<'_> {
         self.denied("lanciare un job")
     }
 
-    fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
-        self.inner.storage_get(key)
-    }
-
-    fn storage_set(&mut self, _key: &str, _value: serde_json::Value) {
-        // Come `emit`: nessun esito da restituire, quindi l'unica risposta
-        // onesta è non farlo.
-    }
-
     fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
-        self.inner.data_read(path)
+        self.reading().data_read(path)
     }
 
     fn data_write(&mut self, path: &str, _bytes: &[u8]) -> std::result::Result<(), PluginError> {
@@ -2599,32 +2821,41 @@ impl HostApi for ReadOnlyHost<'_> {
     }
 
     fn data_list(&self, prefix: &str) -> std::result::Result<Vec<String>, PluginError> {
-        self.inner.data_list(prefix)
+        self.reading().data_list(prefix)
     }
 
     fn now_unix_millis(&self) -> u64 {
-        self.inner.now_unix_millis()
+        self.reading().now_unix_millis()
     }
 
     fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        self.inner.query_index(query)
+        self.reading().query_index(query)
     }
 
     fn active_context(&self) -> Option<ViewContext> {
-        self.inner.active_context()
+        self.reading().active_context()
+    }
+
+    /// Invocare **si può**, ma in simulazione — sempre, qualunque fosse la
+    /// ragione del divieto.
+    ///
+    /// È la scelta che dà un senso al dry-run di una macro: se qui si
+    /// rispondesse `permission-denied`, simulare `vault.archive` non
+    /// direbbe *niente* di ciò che farebbe, perché tutto ciò che fa è invocare
+    /// altri comandi. Forzare il modo invece compone: il piano di una macro è
+    /// l'unione dei piani dei suoi passi, e nessuno dei passi ha modo di
+    /// scrivere — il comando invocato riceve a sua volta un host come questo.
+    fn run_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        self.ws
+            .invoke_command_nested(command, args, InvokeMode::DryRun)
     }
 }
 
 impl KernelHost<'_> {
-    /// La chiave davvero usata da `storage_get/set`: prefissata dall'id del
-    /// plugin, così due feature che scelgono lo stesso nome generico
-    /// ("cursor", "config") non si pestano. `data_*` ha il recinto in firma;
-    /// qui il recinto sta nell'implementazione. Il separatore `/` non è
-    /// ambiguo: gli id di plugin sono nomi semplici, senza separatori.
-    fn storage_key(&self, key: &str) -> String {
-        format!("{}/{key}", self.plugin)
-    }
-
     /// Path assoluto di un blob: come [`Workspace::plugin_data_path`], ma il
     /// nome vuoto non è la radice — è una richiesta malformata.
     fn data_blob(&self, rel: &str) -> std::result::Result<Utf8PathBuf, PluginError> {

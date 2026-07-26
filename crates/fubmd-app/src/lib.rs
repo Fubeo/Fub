@@ -320,39 +320,20 @@ fn write_document(state: State<AppState>, id: String, source: String) -> Result<
         .map_err(|e| e.to_string())
 }
 
-/// Rinomina/sposta un documento: file, grafo, evento `DocumentRenamed` e
-/// riscrittura chirurgica dei wikilink entranti (stile Obsidian).
-#[tauri::command]
-fn rename_document(state: State<AppState>, from: String, to: String) -> Result<(), String> {
-    let ws = current(&state)?;
-    let mut ws = ws.lock().unwrap();
-    ws.rename_document(&doc_id(&from)?, &doc_id(&to)?)
-        .map_err(|e| e.to_string())
-}
-
-/// Crea una nota vuota e restituisce il suo id. Senza `name` nasce "Senza
-/// titolo" (o il primo nome libero della famiglia); con `name` è il flusso
-/// "crea nota da link non risolto", e il nome arriva dal wikilink.
-#[tauri::command]
-fn create_note(state: State<AppState>, name: Option<String>) -> Result<String, String> {
-    let ws = current(&state)?;
-    let mut ws = ws.lock().unwrap();
-    ws.create_note(name.as_deref())
-        .map(|d| d.0)
-        .map_err(|e| e.to_string())
-}
-
-/// Cancella una nota spostandola nel cestino del vault; restituisce dove è
-/// finita. Il delete dell'app **è** questo spostamento: niente è distrutto
-/// finché l'utente non svuota il cestino.
-#[tauri::command]
-fn delete_document(state: State<AppState>, id: String) -> Result<String, String> {
-    let ws = current(&state)?;
-    let mut ws = ws.lock().unwrap();
-    ws.delete_document(&doc_id(&id)?)
-        .map(|d| d.0)
-        .map_err(|e| e.to_string())
-}
+// Le cinque azioni STRUTTURALI — crea, rinomina, cestina, ripristina, svuota —
+// non sono più comandi Tauri: sono comandi del registro (§1.1), serviti da
+// `CoreCommands` attraverso le capacità del §1.4, e la shell li invoca con
+// `invoke_command` come li invocherebbe una CLI o un plugin.
+//
+// È ciò che rende vera la regola del §4.2 — "una feature nuova non deve poter
+// aggiungere un comando Tauri" — che finché quelle cinque stavano qui valeva
+// solo per le feature che non toccano il vault.
+//
+// Restano le due LETTURE del giro, e resta la stessa linea a dividerle: un
+// `CommandOutcome` porta un messaggio e un effetto, non dati. Ciò che risponde
+// con dei dati si chiede al canale di lettura, come i documenti, i tag e i
+// backlink — anche quando i dati riguardano il cestino, e anche quando la
+// risposta è un nome.
 
 #[tauri::command]
 fn list_trash(state: State<AppState>) -> Result<Vec<TrashEntry>, String> {
@@ -373,31 +354,6 @@ fn propose_free_name(state: State<AppState>, id: String) -> Result<String, Strin
     let ws = current(&state)?;
     let ws = ws.lock().unwrap();
     Ok(ws.free_name(&DocId::new(id)).0)
-}
-
-/// Ripristina una voce del cestino, opzionalmente sotto un altro nome (è il
-/// caso in cui il path originale è di nuovo occupato e l'app ha chiesto).
-#[tauri::command]
-fn restore_from_trash(
-    state: State<AppState>,
-    id: String,
-    to: Option<String>,
-) -> Result<String, String> {
-    let ws = current(&state)?;
-    let mut ws = ws.lock().unwrap();
-    let to = to.as_deref().map(doc_id).transpose()?;
-    ws.restore_from_trash(&doc_id(&id)?, to)
-        .map(|d| d.0)
-        .map_err(|e| e.to_string())
-}
-
-/// Svuota il cestino: restituisce quante voci ha cancellato, perché da qui in
-/// poi non sono più recuperabili e l'utente deve poterlo leggere.
-#[tauri::command]
-fn empty_trash(state: State<AppState>) -> Result<usize, String> {
-    let ws = current(&state)?;
-    let mut ws = ws.lock().unwrap();
-    ws.empty_trash().map_err(|e| e.to_string())
 }
 
 /// Rispecchiato da `EmbedContent` in `frontend/src/api.ts` (fixture di
@@ -792,13 +748,8 @@ pub fn run() {
             list_documents,
             read_document,
             write_document,
-            rename_document,
-            create_note,
-            delete_document,
             list_trash,
             propose_free_name,
-            restore_from_trash,
-            empty_trash,
             render_preview,
             render_embed,
             backlinks,

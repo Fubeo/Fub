@@ -140,6 +140,51 @@ impl CommandProvider for AlwaysWrites {
     }
 }
 
+/// Un comando che prova **ogni capacità strutturale** del §1.4 e annota cosa
+/// gli ha risposto l'host. Serve a una cosa sola: che il varco del §1.36 copra
+/// anche le capacità nuove, e che non ne resti una scoperta il giorno che
+/// qualcuno ne aggiunge un'altra senza pensarci.
+struct TriesEverything {
+    rifiuti: Arc<Mutex<Vec<(&'static str, String)>>>,
+}
+
+impl CommandProvider for TriesEverything {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new("test.strutturale", "Prova tutto")
+            .describing("Prova ogni operazione strutturale, comunque gli si chieda.")
+            .with_scope(CommandScope::writing(CommandReach::Vault))]
+    }
+
+    fn invoke(
+        &self,
+        _command: &str,
+        _args: serde_json::Value,
+        _mode: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        let doc = DocId::new("nota.md");
+        let annota = |quale: &'static str, esito: Result<(), PluginError>| {
+            if let Err(e) = esito {
+                self.rifiuti.lock().unwrap().push((quale, e.to_string()));
+            }
+        };
+        annota("create", host.create_document(&DocId::new("nuova.md"), "x"));
+        annota(
+            "rename",
+            host.rename_document(&doc, &DocId::new("altra.md")),
+        );
+        annota("trash", host.trash_document(&doc).map(|_| ()));
+        annota("restore", host.restore_document(&doc, None).map(|_| ()));
+        annota("empty", host.empty_trash().map(|_| ()));
+        Ok(
+            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+                "niente",
+                Vec::new(),
+            ))),
+        )
+    }
+}
+
 /// Un comando che restituisce un piano **incompleto**: tocca due note e ne
 /// nomina una. È l'errore che rende un consenso strappato.
 struct HalfHonestPlan;
@@ -374,6 +419,56 @@ fn declaring_yourself_read_only_is_binding() {
     );
     let messaggio = rifiutato.lock().unwrap().clone().expect("rifiutato");
     assert!(messaggio.contains("sola lettura"), "{messaggio}");
+}
+
+#[test]
+fn every_structural_capability_is_refused_by_the_same_gate() {
+    let (_dir, mut ws) = vault();
+    let doc = DocId::new("nota.md");
+    ws.write_document(&doc, "originale").expect("scrive");
+
+    let rifiuti = Arc::new(Mutex::new(Vec::new()));
+    ws.register_command_provider(
+        "test",
+        Box::new(TriesEverything {
+            rifiuti: rifiuti.clone(),
+        }),
+    );
+
+    ws.invoke_command(
+        "test.strutturale",
+        serde_json::Value::Null,
+        InvokeMode::DryRun,
+        Actor::User,
+    )
+    .expect("la simulazione riesce");
+
+    let visti = rifiuti.lock().unwrap().clone();
+    let quali: Vec<&str> = visti.iter().map(|(q, _)| *q).collect();
+    assert_eq!(
+        quali,
+        vec!["create", "rename", "trash", "restore", "empty"],
+        "ogni capacità strutturale è stata rifiutata: se una passasse, \
+         mancherebbe da questo elenco"
+    );
+    for (quale, messaggio) in &visti {
+        assert!(
+            messaggio.contains("permesso negato") && messaggio.contains("simulazione"),
+            "{quale}: il rifiuto dice perché — {messaggio}"
+        );
+    }
+
+    assert_eq!(
+        ws.read_source(&doc).expect("legge"),
+        "originale",
+        "e il vault non si è mosso"
+    );
+    assert_eq!(
+        ws.documents(),
+        vec![doc],
+        "nessuna nota creata, nessuna cestinata"
+    );
+    assert!(ws.list_trash().expect("cestino").is_empty());
 }
 
 #[test]

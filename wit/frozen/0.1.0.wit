@@ -1046,6 +1046,18 @@ interface errors {
 }
 
 /// Capacità concesse dal kernel a un provider/plugin: l'unico varco col mondo.
+///
+/// LINEA DI BASE RITAGLIATA (pre-freeze, §1.4): `storage-get`/`storage-set` —
+/// lo stato volatile a chiave→valore — sono stati TOLTI. È l'unica rottura di
+/// questo giro e sta qui perché si veda. Con `data-*` (persistente, recintato
+/// per plugin) e le impostazioni del §1.3, allo store volatile non resta un
+/// caso d'uso: chi vuole ricordare qualcosa oltre la sessione usa i blob, chi
+/// vuole una preferenza usa le impostazioni, e chi vuole solo memoria per la
+/// durata della sessione ce l'ha già — un provider è un oggetto vivo nel
+/// workspace, e a M5 un componente WASM ha la propria memoria lineare. Una
+/// capacità che l'host fornisce per qualcosa che il chiamante possiede già è
+/// superficie da mantenere e da sandboxare per sempre. Toglierla dopo il
+/// freeze sarebbe stata una major: qui è un ritaglio in review.
 interface host-api {
     use model.{doc-id};
     use json.{json};
@@ -1064,11 +1076,6 @@ interface host-api {
     /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
     /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
     spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
-    /// Stato leggero e volatile del plugin (preferenze, cursori): vive in
-    /// memoria, non sopravvive alla chiusura. Per i dati che devono durare
-    /// c'è lo storage persistente qui sotto.
-    storage-get: func(key: string) -> option<json>;
-    storage-set: func(key: string, value: json);
 
     // --- storage persistente per-plugin --------------------------------------
     //
