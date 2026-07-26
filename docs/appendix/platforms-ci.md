@@ -19,7 +19,7 @@ subito**, non un hardening tardivo).
 Workflow con matrice `os: [ubuntu-latest, windows-latest, macos-latest]`, per ogni
 push/PR:
 
-1. Toolchain Rust pinnata (`rust-version = "1.85"` dal workspace) + cache.
+1. Toolchain Rust pinnata (`rust-version = "1.88"` dal workspace) + cache.
 2. `cargo build --workspace`.
 3. `cargo test --workspace` (unit + e2e, incluso `vault_e2e`).
 4. `cargo clippy --workspace -- -D warnings`.
