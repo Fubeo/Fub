@@ -56,6 +56,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
 
 use fubmd_abi::arena::{self, BlockRef, InlineRef, UiRef};
+use fubmd_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Event, EventKind, EventMask};
 use fubmd_abi::format::{
@@ -201,6 +202,14 @@ wit_type! {
     CommandOutcome => "command-outcome",
     ViewSpec => "view-spec",
     ViewPlacement => "view-placement",
+
+    // L'edit chirurgico: la coppia (span, testo) e la revisione su cui è stata
+    // calcolata.
+    Revision => "revision",
+    TextEdit => "text-edit",
+    EditRequest => "edit-request",
+    AppliedEdit => "applied-edit",
+    EditReport => "edit-report",
 
     // Il contesto di sessione: il pannello con il focus e ciò che contiene.
     PaneId => "pane-id",
@@ -1498,6 +1507,7 @@ fn plugin_error_case(e: &PluginError) -> Case {
         PluginError::BadArgs(s) => case_ty("bad-args", wit(s)),
         PluginError::PermissionDenied(s) => case_ty("permission-denied", wit(s)),
         PluginError::Internal(s) => case_ty("internal", wit(s)),
+        PluginError::Conflict(s) => case_ty("conflict", wit(s)),
     }
 }
 
@@ -1949,6 +1959,7 @@ fn conform(source: &str) -> Result<(), String> {
             plugin_error_case(&PluginError::BadArgs(String::new())),
             plugin_error_case(&PluginError::PermissionDenied(String::new())),
             plugin_error_case(&PluginError::Internal(String::new())),
+            plugin_error_case(&PluginError::Conflict(String::new())),
         ],
     );
 
@@ -2329,6 +2340,32 @@ fn conform(source: &str) -> Result<(), String> {
             ("refresh", wit(&refresh)),
             ("follows", wit(&follows)),
         ],
+    );
+
+    // --- l'edit chirurgico (§1.16)
+
+    let TextEdit { span, text } = TextEdit::insert(0, "");
+    contract.record("text-edit", &[("span", wit(&span)), ("text", wit(&text))]);
+
+    let EditRequest { base, edits } = EditRequest::new(Revision::default(), Vec::new());
+    contract.record(
+        "edit-request",
+        &[("base", wit(&base)), ("edits", wit(&edits))],
+    );
+
+    let AppliedEdit { span, replaced } = AppliedEdit {
+        span: Span::EMPTY,
+        replaced: String::new(),
+    };
+    contract.record(
+        "applied-edit",
+        &[("span", wit(&span)), ("replaced", wit(&replaced))],
+    );
+
+    let EditReport { revision, applied } = EditReport::default();
+    contract.record(
+        "edit-report",
+        &[("revision", wit(&revision)), ("applied", wit(&applied))],
     );
 
     // --- il contesto di sessione (§1.9)
@@ -2739,6 +2776,9 @@ fn conform(source: &str) -> Result<(), String> {
     let EventMask(kinds) = EventMask::all();
     contract.alias("event-mask", wit(&kinds));
 
+    let Revision(raw) = Revision::default();
+    contract.alias("revision", wit(&raw));
+
     let PaneId(raw) = PaneId::new("main");
     contract.alias("pane-id", wit(&raw));
 
@@ -2770,6 +2810,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("events");
     contract.types_only("errors");
     contract.types_only("session");
+    contract.types_only("edit");
     contract.types_only("transfer");
 
     contract.method(
@@ -2917,6 +2958,20 @@ fn conform(source: &str) -> Result<(), String> {
         <dyn HostApi>::write_document
             as fn(Host, &'static DocId, &'static str) -> Result<(), PluginError>,
         &["id", "source"],
+    );
+    contract.method(
+        "host-api",
+        "document-revision",
+        <dyn HostApi>::document_revision
+            as fn(&'static dyn HostApi, &'static DocId) -> Result<Revision, PluginError>,
+        &["id"],
+    );
+    contract.method(
+        "host-api",
+        "apply-edit",
+        <dyn HostApi>::apply_edit
+            as fn(Host, &'static DocId, EditRequest) -> Result<EditReport, PluginError>,
+        &["id", "request"],
     );
     contract.method(
         "host-api",

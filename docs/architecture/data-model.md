@@ -142,12 +142,16 @@ commenti YAML. Ne discendono tre regole:
 2. Il kernel **non riscrive mai un file esistente** passando da `serialize`.
 3. Le modifiche programmatiche a un documento esistente (rename dei link,
    inserimenti, refactoring) si fanno come **patch chirurgiche sulla sorgente**,
-   guidate dagli `Span` del modello. `Workspace::rename_document` è il primo
-   esempio cablato di questo pattern. **Guardia delle patch:** gli `Span`
-   valgono solo per la sorgente da cui il modello è stato parsato; prima di
-   applicare, si verifica che il testo dentro lo span sia quello atteso (già
-   fatto in `link_rewrite_plan`) — una patch su sorgente cambiata si scarta,
-   mai si applica alla cieca.
+   guidate dagli `Span` del modello. Dal §1.16 la patch è una primitiva del
+   contratto e non un pattern da rifare a mano:
+   `HostApi::apply_edit(id, EditRequest { base, edits })`, con `edits` una lista
+   di `(Span, String)` in coordinate della base. **Guardia delle patch:** gli
+   `Span` valgono solo per la sorgente da cui il modello è stato parsato, e la
+   guardia sta ora nella firma — `base` è la `Revision` di quella sorgente, e
+   una patch calcolata su un testo che nel frattempo è cambiato fallisce
+   (`Conflict`) invece di applicarsi alla cieca. `Workspace::rename_document` è
+   il primo cliente: il suo piano di riscrittura dei link è fatto di
+   `EditRequest`, uno per sorgente.
 
 ## Le tre copie: disco, modello, buffer (deciso)
 
