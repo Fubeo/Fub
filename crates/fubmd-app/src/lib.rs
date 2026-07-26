@@ -47,7 +47,7 @@ struct AppState {
     session: Mutex<Option<VaultSession>>,
 }
 
-/// Rispecchiato da `VaultInfo` in `frontend/src/api.ts`; il legame è la
+/// Rispecchiato da `VaultInfo` in `frontend/src/host/contract.ts`; il legame è la
 /// fixture di `tests/ts_mirror_app.rs`.
 #[derive(Serialize)]
 pub struct VaultInfo {
@@ -196,9 +196,9 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     ws.register_view_provider(TAGS_ID, Trust::Trusted, Box::new(TagPanelView));
     // Le statistiche: quarta feature sul giro delle view, e la prima a leggere
     // il **contesto di sessione** per intero — selezione e modalità, non solo
-    // quale nota è aperta (§1.9).
+    // quale nota è aperta (decisione 0007).
     ws.register_view_provider(STATS_ID, Trust::Trusted, Box::new(StatsView));
-    // I comandi ufficiali: la prima feature sul giro del **registro** (§1.1).
+    // I comandi ufficiali: la prima feature sul giro del **registro** (decisione 0009).
     // Da qui in poi un'azione nuova non è un comando Tauri in più — è una riga
     // in un `CommandProvider`, e la palette la trova da sola.
     ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands));
@@ -321,11 +321,11 @@ fn write_document(state: State<AppState>, id: String, source: String) -> Result<
 }
 
 // Le cinque azioni STRUTTURALI — crea, rinomina, cestina, ripristina, svuota —
-// non sono più comandi Tauri: sono comandi del registro (§1.1), serviti da
-// `CoreCommands` attraverso le capacità del §1.4, e la shell li invoca con
+// non sono più comandi Tauri: sono comandi del registro (decisione 0009), serviti da
+// `CoreCommands` attraverso le capacità della decisione 0013, e la shell li invoca con
 // `invoke_command` come li invocherebbe una CLI o un plugin.
 //
-// È ciò che rende vera la regola del §4.2 — "una feature nuova non deve poter
+// È ciò che rende vera la regola del §16.6 — "una feature nuova non deve poter
 // aggiungere un comando Tauri" — che finché quelle cinque stavano qui valeva
 // solo per le feature che non toccano il vault.
 //
@@ -356,7 +356,7 @@ fn propose_free_name(state: State<AppState>, id: String) -> Result<String, Strin
     Ok(ws.free_name(&DocId::new(id)).0)
 }
 
-/// Rispecchiato da `EmbedContent` in `frontend/src/api.ts` (fixture di
+/// Rispecchiato da `EmbedContent` in `frontend/src/host/contract.ts` (fixture di
 /// `tests/ts_mirror_app.rs`).
 #[derive(Serialize)]
 pub struct EmbedContent {
@@ -470,7 +470,7 @@ fn view_action(
 // --- comandi (protocollo generico) -----------------------------------------
 //
 // L'altro giro discovery+invoke accanto a quello delle view, e la ragione per
-// cui questo file non deve più crescere di un comando Tauri per feature (§4.2):
+// cui questo file non deve più crescere di un comando Tauri per feature (§16.6):
 // un'azione nuova si dichiara in un `CommandProvider` e arriva alla palette da
 // sola, con i suoi parametri e il suo raggio.
 
@@ -612,7 +612,7 @@ fn restore_version(state: State<AppState>, id: String, ts: u64) -> Result<(), St
 // scansione, watcher e indice lo ignorano già.
 
 /// Metadati di organizzazione del vault (rispecchiato da `WorkspaceMeta` in
-/// `frontend/src/api.ts`). Le chiavi sono path relativi al vault: `DocId` per
+/// `frontend/src/host/contract.ts`). Le chiavi sono path relativi al vault: `DocId` per
 /// le note, path di cartella senza slash finale per le cartelle (`""` è la
 /// radice).
 #[derive(Default, Serialize, Deserialize)]
@@ -672,7 +672,7 @@ fn write_workspace_meta(state: State<AppState>, meta: WorkspaceMeta) -> Result<(
 // superficie privilegiata dichiarata nel piano). Da qui esce solo DATO —
 // nodi e archi — e il renderer vive nel frontend.
 //
-// Il grafo però è entrato nel contratto (§1.6: `IndexQuery::Neighbors`), e
+// Il grafo però è entrato nel contratto (decisione 0005: `IndexQuery::Neighbors`), e
 // questo comando ne è il **primo cliente**: gli archi li chiede una nota alla
 // volta al canale dati, con le stesse capacità che avrà una vista a grafo di
 // terzi. Prima li prendeva da `Workspace::outgoing`, che è una scorciatoia che
@@ -687,7 +687,7 @@ pub struct GraphEdge {
 
 /// Il grafo del vault: nodi = documenti indicizzati, archi = wikilink
 /// risolti, deduplicati (la molteplicità non disegna nulla). Rispecchiato da
-/// `GraphData` in `frontend/src/api.ts` (fixture di `tests/ts_mirror_app.rs`).
+/// `GraphData` in `frontend/src/host/contract.ts` (fixture di `tests/ts_mirror_app.rs`).
 #[derive(Serialize)]
 pub struct GraphData {
     pub nodes: Vec<String>,

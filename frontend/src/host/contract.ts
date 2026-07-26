@@ -1,6 +1,14 @@
-// Wrapper tipizzati sui comandi/eventi IPC del backend Rust.
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+// I tipi del confine, rispecchiati a mano dal Rust — e nient'altro.
+//
+// Stanno in `host/` perché sono la forma di ciò che attraversa l'IPC, ma sono
+// deliberatamente **separati da `ipc.ts`**: qui non si importa `@tauri-apps`, e
+// un modulo che vuole solo *nominare* un `SearchHit` non si tira dentro la
+// cucitura Tauri. È la metà di tipi della regola del §1.3 — la cucitura è una
+// sola, ma il contratto lo legge tutta la shell.
+//
+// Che non divergano dal Rust non è affidato all'attenzione: la fixture generata
+// da serde (`crates/fubmd-features/tests/ts_mirror.rs` e la gemella dell'app)
+// e `mirror.test.ts` rendono rossi entrambi i lati se un lato cambia.
 
 export interface VaultInfo {
   root: string;
@@ -65,7 +73,7 @@ export type KernelEvent =
   | { type: "document_renamed"; from: string; to: string }
   // NB: dentro un lotto questo NON arriva — arriva `batch_ended`. Chi reagisce
   // a `index_updated` deve reagire anche a quello, o dopo una rinomina con
-  // backlink non si ridisegna più (fubmd_abi::event, §1.12).
+  // backlink non si ridisegna più (fubmd_abi::event, decisione 0011).
   | { type: "index_updated" }
   // Esito di un job in background (HostApi::spawn_job). `id` è un u64
   // identità: attraversa l'IPC come stringa (vedi VersionRef.hash).
@@ -73,7 +81,7 @@ export type KernelEvent =
   // Coda eventi troncata: lo stato derivato dagli eventi va riconciliato.
   | { type: "overflow"; dropped: number }
   | { type: "custom"; topic: string; payload: unknown }
-  // Un lotto si è chiuso (§1.12): N scritture che sono UNA cosa sola, e
+  // Un lotto si è chiuso (decisione 0011): N scritture che sono UNA cosa sola, e
   // `changed` sono le note toccate. È ciò che permette alla shell di ridisegnare
   // una volta invece di una per nota — una rinomina con 200 backlink faceva 200
   // giri di `list_documents` più il ridisegno di ogni view iscritta.
@@ -97,7 +105,7 @@ export interface Origin {
 }
 
 // Ciò che il ponte Tauri consegna davvero: l'evento E la sua origine
-// (fubmd_abi::event::Notice, §1.18).
+// (fubmd_abi::event::Notice, decisione 0012).
 export interface KernelNotice {
   event: KernelEvent;
   origin: Origin;
@@ -254,7 +262,8 @@ export interface ViewContext {
 
 // Il grafo del vault (rispecchia fubmd_app::GraphData): nodi = documenti,
 // archi = wikilink risolti, deduplicati. È DATO per il renderer canvas
-// (`graph.ts`): la superficie privilegiata fuori da UiNode dichiarata in M2.
+// (`panels/graph.ts`): la superficie privilegiata fuori da UiNode dichiarata
+// in M2.
 export interface GraphEdge {
   from: string;
   to: string;
@@ -318,9 +327,9 @@ export interface WorkspaceMeta {
   spaces: string[];
 }
 
-/// Gli id dei comandi strutturali che la shell invoca (§1.4).
+/// Gli id dei comandi strutturali che la shell invoca (decisione 0013).
 ///
-/// Sono **stringhe del registro**, non funzioni dell'IPC: dal §1.4 la shell
+/// Sono **stringhe del registro**, non funzioni dell'IPC: dalla decisione 0013 la shell
 /// chiede «crea una nota» esattamente come la chiederebbe una CLI, una macro o
 /// un plugin — `invokeCommand(id, args)` — e il fatto che l'implementazione sia
 /// una feature ufficiale non le dà più nessuna scorciatoia. Sono raccolti qui e
@@ -333,68 +342,3 @@ export const COMANDI = {
   ripristina: "trash.restore",
   svuota: "trash.empty",
 } as const;
-
-export const api = {
-  initialVault: () => invoke<string | null>("initial_vault"),
-  openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
-  listDocuments: () => invoke<string[]>("list_documents"),
-  readDocument: (id: string) => invoke<string>("read_document", { id }),
-  writeDocument: (id: string, source: string) =>
-    invoke<void>("write_document", { id, source }),
-  // Crea, rinomina, cestina, ripristina e svuota NON hanno più un comando
-  // Tauri: sono comandi del registro, e la shell li chiede con `invokeCommand`
-  // (vedi `COMANDI` più sotto in questo file). Quelle due che restano restano
-  // perché **leggono**: un `CommandOutcome` porta un messaggio e un effetto,
-  // non dati, e ciò che risponde con dei dati passa dal canale di lettura.
-  listTrash: () => invoke<TrashEntry[]>("list_trash"),
-  // Il primo nome libero della famiglia «Nota», «Nota 1», … (D3). La
-  // convenzione vive nel kernel: chiederla evita di averne due versioni.
-  proposeFreeName: (id: string) => invoke<string>("propose_free_name", { id }),
-  renderPreview: (id: string) => invoke<string>("render_preview", { id }),
-  renderEmbed: (page: string, heading: string | null) =>
-    invoke<EmbedContent>("render_embed", { page, heading }),
-  // View dichiarative (protocollo generico). La shell pubblica il contesto del
-  // pannello, chiede l'albero di una view e rimanda le azioni al provider,
-  // senza sapere cosa la view faccia — è il percorso di un plugin.
-  //
-  // Restituisce gli id delle view da ridisegnare: quali seguano cosa lo sa il
-  // kernel (`ViewSpec.follows`), non la shell. Senza questa risposta, l'unica
-  // strada sarebbe ridisegnarle tutte a ogni movimento del cursore.
-  setActiveContext: (context: ViewContext | null) =>
-    invoke<string[]>("set_active_context", { context }),
-  // Le view offerte dai provider registrati: la shell le monta per
-  // `placement`, senza cablare gli id — una view di plugin compare da sola.
-  listViews: () => invoke<ViewSpec[]>("list_views"),
-  renderView: (view: string) => invoke<UiNode>("render_view", { view }),
-  viewAction: (view: string, action: string, payload?: unknown) =>
-    invoke<ViewUpdate>("view_action", { view, action, payload: payload ?? null }),
-  // Comandi (protocollo generico, gemello di listViews/viewAction). La palette
-  // legge questo elenco e non cabla nessun id: un comando di plugin comparirà
-  // da solo, coi suoi parametri e il suo raggio.
-  listCommands: () => invoke<CommandSpec[]>("list_commands"),
-  // `mode` assente = `apply`: è la scelta di questo confine, non del contratto
-  // (dove un default non esiste apposta).
-  invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) =>
-    invoke<CommandOutcome>("invoke_command", {
-      command,
-      args: args ?? null,
-      mode: mode ?? null,
-    }),
-  search: (query: string, limit?: number) =>
-    invoke<SearchHit[]>("search", { query, limit }),
-  listTags: () => invoke<TagCount[]>("list_tags"),
-  graphData: () => invoke<GraphData>("graph_data"),
-  resolveLink: (page: string) => invoke<string | null>("resolve_link", { page }),
-  listVersions: (id: string) => invoke<VersionRef[]>("list_versions", { id }),
-  readVersion: (id: string, ts: number) => invoke<string>("read_version", { id, ts }),
-  restoreVersion: (id: string, ts: number) => invoke<void>("restore_version", { id, ts }),
-  readWorkspaceMeta: () => invoke<WorkspaceMeta>("read_workspace_meta"),
-  writeWorkspaceMeta: (meta: WorkspaceMeta) =>
-    invoke<void>("write_workspace_meta", { meta }),
-};
-
-export function onKernelEvent(
-  handler: (n: KernelNotice) => void,
-): Promise<UnlistenFn> {
-  return listen<KernelNotice>("fubmd://event", (evt) => handler(evt.payload));
-}

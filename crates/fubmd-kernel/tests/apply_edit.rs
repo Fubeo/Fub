@@ -1,4 +1,4 @@
-//! La **modifica chirurgica** nel kernel (§1.16): cambiare un pezzo di
+//! La **modifica chirurgica** nel kernel (decisione 0008): cambiare un pezzo di
 //! documento invece di riscriverlo tutto.
 //!
 //! Quattro invarianti, e nessuna è di comodo:
@@ -403,7 +403,7 @@ fn a_multibyte_document_is_edited_on_character_boundaries() {
 /// automazioni di 16.2 faranno, e che senza questa capacità sarebbe una
 /// riscrittura totale della nota di qualcun altro.
 ///
-/// Si difende dal richiamarsi da solo con l'**origine** (§1.18) e non col
+/// Si difende dal richiamarsi da solo con l'**origine** (decisione 0012) e non col
 /// contenuto: la propria correzione la riconosce perché la ha chiesta lui, non
 /// perché il testo non contiene più `TOODO`. La differenza si vede appena
 /// un'automazione fa una modifica che *non* cambia il proprio innesco — o che
@@ -504,14 +504,14 @@ impl EventHandler for ScriveAltrove {
     }
 }
 
-/// Il vicino rumoroso **non entra più a metà di una rinomina**: dal §1.12 la
+/// Il vicino rumoroso **non entra più a metà di una rinomina**: dalla decisione 0011 la
 /// rinomina è un lotto, e dentro un lotto il dispatch è rimandato alla chiusura.
 ///
-/// Fino al §1.12 questo test diceva l'opposto: l'handler scriveva in `b.lnk`
+/// Fino alla decisione 0011 questo test diceva l'opposto: l'handler scriveva in `b.lnk`
 /// mentre il piano non l'aveva ancora riscritta, la `base` di quella sorgente
 /// diventava stantia, e la rinomina falliva *per* `b.lnk`. Era il
 /// comportamento giusto per il contratto di allora — con gli eventi consegnati
-/// dentro l'operazione, quella corsa esisteva davvero e il §1.16 la rendeva
+/// dentro l'operazione, quella corsa esisteva davvero e la decisione 0008 la rendeva
 /// visibile invece di far sparire una riga in silenzio.
 ///
 /// Il lotto la toglie di mezzo a monte: nessun handler vede il vault a metà di

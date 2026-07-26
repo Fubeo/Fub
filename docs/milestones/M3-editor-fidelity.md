@@ -29,7 +29,7 @@ Il perno è già nel modello: ogni nodo porta uno `Span` in byte
   costruito lato frontend (o come proiezione IPC) e testato su testo multibyte
   PRIMA di cablare le decorazioni.
 - **De-rischiato da M1:** l'anteprima HTML resta come fallback e come oracolo
-  visivo — da §1.9 è la **modalità Lettura** del pannello, non un riquadro
+  visivo — da [decisione 0007](../decisions/0007-contesto-di-sessione.md) è la **modalità Lettura** del pannello, non un riquadro
   accanto all'editor; la live-preview è "meccanica" perché non richiede nuovi
   dati, solo proiezione degli `Span` esistenti.
 
@@ -71,28 +71,28 @@ Oggi il provider markdown emette callout/tabelle/embed/math come
   su cicli e profondità. M3 estende la resa (immagini, blocchi `^id`, stile) —
   non il meccanismo.
 
-### Command palette (`CommandProvider`) — **anticipata a M2** (§1.1 + §1.36)
+### Command palette (`CommandProvider`) — **anticipata a M2** ([decisione 0009](../decisions/0009-registro-dei-comandi.md) + [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md))
 
-Il registro, la palette e il dry-run sono stati fatti a M2 insieme al §1.36: il
+Il registro, la palette e il dry-run sono stati fatti a M2 insieme alla [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md): il
 motivo è che `CommandSpec` e `invoke` sono **firme**, e le firme costano un campo
 prima del freeze e una migrazione dopo. Cosa è già lì:
 `register_command_provider`/`commands`/`invoke_command` nel kernel,
 `list_commands`/`invoke_command` sull'IPC, `CoreCommands` in `fubmd-features`, la
-palette in `frontend/src/palette.ts` (filtro, form dai `ParamSpec`, anteprima del
+palette in `frontend/src/ui/palette.ts` (filtro, form dai `ParamSpec`, anteprima del
 piano prima di applicare, scorciatoie **dichiarate** dai comandi).
 
 Cosa resta a M3:
 
 - **I comandi strutturali** (crea/rinomina/sposta/cestina nota): non sono
-  migrati perché l'`HostApi` non ha quelle capacità — è il §1.4 a doverle
+  migrati perché l'`HostApi` non ha quelle capacità — è la [decisione 0013](../decisions/0013-elenco-delle-capacita.md) a doverle
   decidere una per una, e senza di esse un comando ufficiale le otterrebbe per
   una via privilegiata che un plugin non ha.
 - **I comandi della shell** (toggle pannelli, cambio modalità): il registro vive
-  nel kernel e il frontend non può registrarvisi (§3.2).
+  nel kernel e il frontend non può registrarvisi (§18.2).
 - **La mappa dei tasti come dato**: oggi la shell onora il `keybinding`
   *dichiarato* dal comando e ignora quelli senza modificatori; la mappa
-  configurabile dall'utente è nei settings (§1.3 + §3.2).
-- **Il form dei parametri con i nodi del §1.2**: la palette disegna i campi da
+  configurabile dall'utente è nei settings (§11.1 + §18.2).
+- **Il form dei parametri con i nodi del §2.1**: la palette disegna i campi da
   sé; quando i nodi di input esisteranno, saranno la resa dei `ParamSpec` — non
   un secondo modo di dichiararli.
 

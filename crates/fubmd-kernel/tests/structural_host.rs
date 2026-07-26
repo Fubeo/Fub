@@ -1,4 +1,4 @@
-//! Le capacità **strutturali** e `run_command` del §1.4, provate dal lato da
+//! Le capacità **strutturali** e `run_command` della decisione 0013, provate dal lato da
 //! cui le userà un plugin: `&mut dyn HostApi` e nient'altro.
 //!
 //! Quattro cose non si vedono dal codice del kernel e si vedono solo di qui:

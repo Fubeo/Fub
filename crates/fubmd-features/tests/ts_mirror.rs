@@ -2,12 +2,12 @@
 //!
 //! `UiNode`, `ViewUpdate`, `KernelEvent`/`Event`, `Span`, `VersionRef`,
 //! `SearchHit`, `BacklinkRef`, `TrashEntry`, `ViewSpec` sono rispecchiati a
-//! mano in TypeScript (`frontend/src/api.ts`): il confine può divergere in
+//! mano in TypeScript (`frontend/src/host/contract.ts`): il confine può divergere in
 //! silenzio — un caso aggiunto in Rust e non nel mirror, un campo rinominato.
 //! Questo test è metà del presidio: serializza un campione per ogni
 //! variante/tipo con **serde** (la stessa serializzazione che attraversa l'IPC)
 //! e lo confronta con la fixture committata. L'altra metà è in TypeScript
-//! (`frontend/src/mirror.test.ts`), che prende la stessa fixture e verifica che
+//! (`frontend/src/host/mirror.test.ts`), che prende la stessa fixture e verifica che
 //! ogni discriminante sia gestito — un `assertNever` scatta su un caso nuovo.
 //!
 //! Il giro completo: aggiungere un caso in Rust rende **rossa questa** (la
@@ -162,7 +162,7 @@ fn event_samples() -> Vec<Value> {
     all.iter().map(to_value).collect()
 }
 
-/// Un campione per ogni **attore** (§1.18), dentro il `Notice` che è ciò che il
+/// Un campione per ogni **attore** (decisione 0012), dentro il `Notice` che è ciò che il
 /// ponte Tauri consegna davvero alla webview.
 ///
 /// Il frontend non riceve più un `Event` nudo: senza questo campione il mirror

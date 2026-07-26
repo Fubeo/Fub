@@ -9,7 +9,11 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
-    "types": [],
+    // Solo i tipi di Vite (per `import.meta.glob`, che il presidio del §1.3
+    // usa per leggere i sorgenti). Deliberatamente NON quelli di Node: la
+    // shell gira in una webview, e non avere `process`/`fs` a tiro è ciò che
+    // impedisce di scriverci codice che nell'app impacchettata non esiste.
+    "types": ["vite/client"],
     "noEmit": true
   },
   "include": ["src"]

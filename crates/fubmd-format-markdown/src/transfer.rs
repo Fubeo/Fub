@@ -1,4 +1,4 @@
-//! Import ed export di markdown: il **primo cliente** dei trait del §1.7.
+//! Import ed export di markdown: il **primo cliente** dei trait della decisione 0006.
 //!
 //! È il caso banale di proposito. Un importer Notion o un export PDF hanno
 //! difficoltà tutte loro (contenitori zip, mappatura degli allegati, un motore

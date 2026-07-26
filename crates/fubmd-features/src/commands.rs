@@ -1,5 +1,5 @@
 //! I comandi ufficiali come `CommandProvider`: il dogfooding del registro
-//! (§1.1) e della sua descrizione a una macchina (§1.36).
+//! (decisione 0009) e della sua descrizione a una macchina (decisione 0010).
 //!
 //! Tre comandi, scelti perché insieme esercitano tutto ciò che la firma promette
 //! e niente che non esista ancora:
@@ -9,9 +9,9 @@
 //!   cablata nel frontend: adesso la dichiara il kernel e la palette la trova da
 //!   sola.
 //! - `selection.wikilink` — il comando che vive nel **contesto di sessione**
-//!   (§1.9) e scrive con la **modifica chirurgica** (§1.16): trasforma il testo
+//!   (decisione 0007) e scrive con la **modifica chirurgica** (decisione 0008): trasforma il testo
 //!   selezionato in un wikilink. È la prova che le tre firme si compongono, e
-//!   che la regola dello span del §1.9 ha un cliente che ne dipende davvero —
+//!   che la regola dello span della decisione 0007 ha un cliente che ne dipende davvero —
 //!   senza span non c'è nessun punto in cui scrivere, e il comando lo dice
 //!   invece di indovinare.
 //! - `vault.replace` — la sostituzione su N note: parametri di quattro specie,
@@ -19,12 +19,12 @@
 //!   a chi invoca di chiedere conferma. È il caso di 7.2 (bulk fix con dry-run) e
 //!   la forma che 22.4 chiede per ogni operazione in blocco.
 //!
-//! Dal §1.4 ci sono anche i **comandi strutturali** — creare, rinominare,
+//! Dalla decisione 0013 ci sono anche i **comandi strutturali** — creare, rinominare,
 //! cestinare, il giro del cestino — che fino al giro scorso restavano cablati
 //! nella shell perché l'`HostApi` non aveva le capacità per farli. Adesso le
 //! ha, e questi comandi le usano **dal di fuori**, esattamente come le userebbe
 //! un plugin: è il dogfooding che il registro non aveva ancora potuto fare, ed
-//! è ciò che ha permesso di togliere sei comandi Tauri dalla shell (§4.2: una
+//! è ciò che ha permesso di togliere sei comandi Tauri dalla shell (§16.6: una
 //! feature nuova non deve poter aggiungere un comando Tauri — regola che
 //! finché quei sei erano lì valeva solo per le feature che non toccano il
 //! vault).
@@ -144,7 +144,7 @@ impl CoreCommands {
                     ),
                 )
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
-            // --- strutturali (§1.4) ---------------------------------------
+            // --- strutturali (decisione 0013) ---------------------------------------
             CommandSpec::new(NOTE_CREATE, "Nuova nota")
                 .describing(
                     "Crea una nota vuota e la apre. Senza nome nasce «Senza \
@@ -282,7 +282,7 @@ impl CommandProvider for CoreCommands {
 /// Lo stato in cui il comando non può agire — nessuna nota, nessuna selezione,
 /// oppure una selezione senza span (buffer sporco: le coordinate non valgono per
 /// il file) — è un [`PluginError::BadArgs`] con dentro la ragione. È il caso
-/// che il §1.11 chiuderà bene (un errore *di precondizione* non è un errore di
+/// che il §12.2 chiuderà bene (un errore *di precondizione* non è un errore di
 /// argomenti): finché il confine ha questo vocabolario, un errore che si spiega
 /// vale più di un successo che non ha fatto niente — chi invoca può non essere
 /// una persona che guarda lo schermo.
@@ -303,7 +303,7 @@ fn selection_wikilink(
     if selection.is_empty() {
         return Err(stato("la selezione è vuota: non c'è testo da trasformare"));
     }
-    // La regola dello span del §1.9: senza span la selezione ha coordinate che
+    // La regola dello span della decisione 0007: senza span la selezione ha coordinate che
     // valgono per il buffer e non per il file. Scrivere lì significa tagliare i
     // byte sbagliati proprio mentre l'utente scrive.
     let span = selection.span.ok_or_else(|| {
@@ -337,7 +337,7 @@ fn selection_wikilink(
 
     let report = host.apply_edit(&doc, request)?;
     // Dov'è finito il testo nuovo: è il rapporto a saperlo, nelle coordinate
-    // del documento riscritto (§1.16). Senza, la shell dovrebbe ricalcolare uno
+    // del documento riscritto (decisione 0008). Senza, la shell dovrebbe ricalcolare uno
     // spostamento che l'host ha già calcolato.
     let effect = match report.applied.first() {
         Some(applied) => CommandEffect::Reveal {
@@ -430,7 +430,7 @@ fn vault_replace(
 }
 
 // ---------------------------------------------------------------------------
-// I comandi strutturali (§1.4)
+// I comandi strutturali (decisione 0013)
 // ---------------------------------------------------------------------------
 //
 // Sono sottili apposta: tutto ciò che fanno lo fanno chiedendolo all'host. La
@@ -617,7 +617,7 @@ const ARCHIVIO: &str = "Archivio";
 
 /// Sposta N note in una cartella **invocando `note.rename`**, non rinominando.
 ///
-/// È la forma che il §1.4 voleva provare: una macro non rifà ciò che un comando
+/// È la forma che la decisione 0013 voleva provare: una macro non rifà ciò che un comando
 /// già sa fare, lo chiama. Tre conseguenze che si vedono solo qui:
 ///
 /// - la riscrittura dei wikilink arriva **gratis**, perché la fa il comando
@@ -720,7 +720,7 @@ pub fn occurrences(source: &str, needle: &str, whole_word: bool) -> Vec<Span> {
             spans.push(Span::new(start, end));
         }
         // Si riparte dalla fine del match: le occorrenze sono un insieme di
-        // edit, e due edit non possono contendersi lo stesso punto (§1.16).
+        // edit, e due edit non possono contendersi lo stesso punto (decisione 0008).
         from = end;
     }
     spans
@@ -820,7 +820,7 @@ mod tests {
     fn the_wikilink_command_needs_a_selection_that_is_true_for_the_file() {
         let mut host = MemoryHost::new().con_documento("nota.md", "una nota di prova");
         host.set_active(Some("nota.md"));
-        // Buffer sporco: c'è il testo, non lo span (§1.9).
+        // Buffer sporco: c'è il testo, non lo span (decisione 0007).
         host.set_context(Some(
             ViewContext::new("main")
                 .with_doc(Some(DocId::new("nota.md")))

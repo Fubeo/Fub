@@ -79,7 +79,7 @@ pub trait HostApi: Send + Sync {
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
     fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
     fn free_name(&self, id: &DocId) -> DocId;
-    // operazioni STRUTTURALI (§1.4): ciò che si fa a un documento senza aprirlo
+    // operazioni STRUTTURALI ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)): ciò che si fa a un documento senza aprirlo
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError>;
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError>;
@@ -98,20 +98,20 @@ pub trait HostApi: Send + Sync {
     // interrogazione del vault e contesto della sessione (le ha chieste la view)
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
     fn active_context(&self) -> Option<ViewContext>;
-    // comporre: invocare un comando del registro (§1.1)
+    // comporre: invocare un comando del registro ([decisione 0009](../decisions/0009-registro-dei-comandi.md))
     fn run_command(&mut self, command: &str, args: serde_json::Value)
         -> Result<CommandOutcome, PluginError>;
 }
 ```
 
-**L'elenco è chiuso (§1.4).** Ventidue metodi, e da qui in avanti aggiungerne
+**L'elenco è chiuso ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).** Ventidue metodi, e da qui in avanti aggiungerne
 uno è una minor, toglierne uno una major. Il giro che lo ha chiuso ha anche
 **tolto** `storage_get/set` — l'unica rottura, con la linea di base ritagliata
 in `wit/frozen/0.1.0.wit` — e ha deciso a verbale, una per una, anche le
-capacità che restano fuori: allegati (§2.2 non ha il modello), rete (§1.21 +
-§2.10), tempo differito (§2.4), `create_folder` (§2.11), `notify`/`progress`/
+capacità che restano fuori: allegati (§14.1 non ha il modello), rete (§9.1 +
+§7.3), tempo differito (§8.3), `create_folder` (§14.3), `notify`/`progress`/
 `log` (informano e non aspettano risposta: sono eventi, non capacità). Il
-verbale sta in `docs/todo.md` §1.4.
+verbale sta nella [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
 
 `JobSpec { job, payload }` e `JobId(u64)` sono il varco del **lavoro lungo**:
 `spawn_job` accoda e ritorna subito; l'esito arriva come `Event::JobDone` con lo
@@ -123,7 +123,7 @@ rinomina e cestina restavano cablate nella shell perché il contratto non sapeva
 farle; adesso `CoreCommands` le offre come comandi (`note.create`,
 `note.rename`, `note.trash`, `trash.restore`, `trash.empty`) usando **solo**
 queste capacità, e i sei comandi Tauri corrispondenti sono spariti — che è ciò
-che rende vera la regola del §4.2. `vault.archive` è il cliente di
+che rende vera la regola del §16.6. `vault.archive` è il cliente di
 `run_command`: sposta N note invocando `note.rename`, e da lì si vede che il
 modo viaggia con l'host (simulare la macro simula i passi), che l'attore non si
 riazzera e che il lotto non si moltiplica. Dettagli in
@@ -170,7 +170,7 @@ provider, è un guscio che l'app riempie:
   regola sta in plugin-boundary.md, "La regola dello span", ed è ciò che
   impedisce di ritagliare il file salvato con gli offset del buffer.
 
-**E le due dopo le ha chieste la modifica chirurgica** (§1.16). Finché
+**E le due dopo le ha chieste la modifica chirurgica** ([decisione 0008](../decisions/0008-modifica-chirurgica.md)). Finché
 `write_document` era l'unico modo di cambiare un documento, ogni feature che ne
 tocca un pezzo — spuntare un task, scrivere una proprietà, correggere un link,
 inserire un template — avrebbe riletto e riscritto il file intero, e due di esse
@@ -187,7 +187,7 @@ non avrebbero potuto convivere:
   a *questo* host. Vedi [plugin-boundary.md](plugin-boundary.md), "Scrivere un
   pezzo".
 
-**E l'ultima l'ha chiesta l'import** (§1.7), con lo stesso meccanismo:
+**E l'ultima l'ha chiesta l'import** ([decisione 0006](../decisions/0006-import-export-come-trait.md)), con lo stesso meccanismo:
 
 - `free_name` — il primo nome libero della famiglia `<nome>`, `<nome> 1`, … La
   convenzione (D3) la sa solo il vault, che conosce l'occupato **in memoria e
@@ -199,7 +199,7 @@ non avrebbero potuto convivere:
 validano il `DocId` con la stessa regola dei comandi IPC
 (`fubmd_kernel::valid_doc_id`) e rispondono `PermissionDenied` a una risalita —
 lo stesso errore di `data_*`, così i due recinti si comportano allo stesso modo.
-Prima del §1.7 l'unico input esterno che diventava un `DocId` passava dall'IPC,
+Prima della [decisione 0006](../decisions/0006-import-export-come-trait.md) l'unico input esterno che diventava un `DocId` passava dall'IPC,
 che lo sanitizza; un importer invece nomina i documenti a partire dal **nome di
 una sorgente**, cioè da una stringa che l'utente non ha scritto.
 
@@ -222,7 +222,7 @@ pub trait CommandProvider: Send + Sync {
 
 `CommandSpec { id, title, description, keybinding, params: Vec<ParamSpec>, scope:
 CommandScope }`. I tre campi oltre `{id, title}` esistono per il chiamante che
-**non ha letto il codice** (§1.36): la `description` è l'unico ingrediente su cui
+**non ha letto il codice** ([decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md)): la `description` è l'unico ingrediente su cui
 un chiamante non umano sceglie, i `params` sono ciò che gli permette di comporre
 un'invocazione, lo `scope { writes, reach, reversible }` è il dato su cui si
 decide se chiedere conferma. Una palette si accontenterebbe di `{id, title}` —
@@ -231,7 +231,7 @@ comando (22.4).
 
 `ParamKind { Text, Number, Bool, Document, Documents, Choice(Vec<Choice>) }` è un
 vocabolario chiuso e piccolo: le specie che un chiamante qualunque sa produrre.
-**Non** sono i nodi di input del §1.2 — questi dicono *cosa* è un valore, quelli
+**Non** sono i nodi di input del §2.1 — questi dicono *cosa* è un valore, quelli
 diranno *come* lo si chiede; quando arriveranno saranno la resa di un
 `ParamSpec`, non un secondo modo di dichiararlo.
 
@@ -256,7 +256,7 @@ differenza fra un registro leggibile e uno eseguibile da terzi:
    rifiuta le scritture con `PermissionDenied`. Il dry-run non è quindi una
    convenzione fra chiamante e comando (che un comando di terzi non onora), e
    `writes: false` non è una decorazione.
-3. **L'invocazione è un lotto, intestato a chi l'ha chiesta** (§1.12 + §1.18).
+3. **L'invocazione è un lotto, intestato a chi l'ha chiesta** ([decisione 0011](../decisions/0011-il-lotto.md) + [decisione 0012](../decisions/0012-origine-degli-eventi.md)).
    Un `Apply` è per definizione *una* cosa che qualcuno ha chiesto: `vault.replace`
    su 40 note emette un `batch-ended` solo, e ogni evento che ne nasce porta `by`
    come attore. Che `by` sia un parametro e non un default è la scelta di
@@ -264,10 +264,10 @@ differenza fra un registro leggibile e uno eseguibile da terzi:
    un'automazione è l'errore che 16.2 esiste per non fare. `by` **non** arriva
    fino a `CommandProvider::invoke` — l'origine è ciò che l'host appone, non ciò
    che il comando legge, e un comando che si comportasse diversamente a seconda
-   di chi lo chiama sarebbe una policy (§2.10) nascosta in un'implementazione.
+   di chi lo chiama sarebbe una policy (§7.3) nascosta in un'implementazione.
 
 Il piano (`CommandPlan { summary, docs, edits }`) è un `EditRequest` per
-documento (§1.16), con le revisioni **di adesso**: se il documento cambia fra il
+documento ([decisione 0008](../decisions/0008-modifica-chirurgica.md)), con le revisioni **di adesso**: se il documento cambia fra il
 piano e l'approvazione, applicarlo fallisce con `Conflict` invece di
 sovrascrivere. `docs` è l'insieme impattato completo — ci sta anche ciò che un
 `EditRequest` non esprime — e **lo completa l'host** con i documenti degli edit:
@@ -275,14 +275,14 @@ quell'elenco è ciò che l'utente approva.
 
 **I provider veri: `CoreCommands`** (`fubmd-features/src/commands.rs`), nove
 comandi — `search.open` (nessuna scrittura, un effetto per la shell),
-`selection.wikilink` (contesto di sessione §1.9 + modifica chirurgica §1.16 su
+`selection.wikilink` (contesto di sessione [decisione 0007](../decisions/0007-contesto-di-sessione.md) + modifica chirurgica [decisione 0008](../decisions/0008-modifica-chirurgica.md) su
 una nota), `vault.replace` (N note, quattro specie di parametri, piano prima di
-applicare), i cinque **strutturali** del §1.4 (`note.create`, `note.rename`,
+applicare), i cinque **strutturali** della [decisione 0013](../decisions/0013-elenco-delle-capacita.md) (`note.create`, `note.rename`,
 `note.trash`, `trash.restore`, `trash.empty`) e `vault.archive`, che non fa
 niente di suo: invoca `note.rename` una volta per nota.
 
 I cinque strutturali sono ciò che la shell cablava in sei comandi Tauri, e la
-loro migrazione è il dogfooding che al §1.1 non era possibile — l'`HostApi` non
+loro migrazione è il dogfooding che alla [decisione 0009](../decisions/0009-registro-dei-comandi.md) non era possibile — l'`HostApi` non
 aveva le capacità, e un comando ufficiale che le avesse ottenute per una via
 privilegiata avrebbe provato che il registro funziona *per chi non è un plugin*.
 Adesso passano dalle stesse firme di un plugin, e i comandi Tauri sono spariti
@@ -319,7 +319,7 @@ ContextMask }` con `ViewPlacement { LeftSidebar, RightSidebar, Bottom }`. Le due
 maschere dicono **quando** una view invecchia: `refresh` per gli eventi del
 vault, `follows` per le parti del contesto di sessione (documento, selezione,
 modalità). Chi dichiara `IndexUpdated` in `refresh` deve dichiarare anche
-`BatchEnded`: dentro un lotto (§1.12) il primo non arriva, e il secondo è ciò che
+`BatchEnded`: dentro un lotto ([decisione 0011](../decisions/0011-il-lotto.md)) il primo non arriva, e il secondo è ciò che
 fa fare **un** ridisegno dove prima ne faceva N — la regola è
 `EventMask::misses_batches()`, verificata su ogni view ufficiale in
 `fubmd-features/tests/view_refresh_masks.rs`.
@@ -338,7 +338,7 @@ L'outline è il secondo provider e il primo a usare il **canale metadata**: chie
 gli heading del documento attivo con `IndexQuery::Outline` e traduce il click in
 `ViewUpdate::Reveal { doc_id, span }`, che porta l'editor sull'heading (lo `span`
 è in byte UTF-8, il frontend lo mappa su CodeMirror col ponte in
-`frontend/src/offsets.ts`). Il tag panel è il terzo: aggrega i tag del vault con
+`frontend/src/rules/offsets.ts`). Il tag panel è il terzo: aggrega i tag del vault con
 `IndexQuery::Tags` e traduce il click in `ViewUpdate::RunSearch { query }`, che la
 shell esegue riusando il pannello di ricerca. Il quarto è il pannello
 **statistiche**, primo cliente della **selezione**: conta parole e caratteri del
@@ -400,7 +400,7 @@ tags }` accanto alla stringa: la stringa è il linguaggio del provider, l'ambito
 comporre sintassi altrui, e un provider diverso non può interpretarlo
 diversamente. `PropertyFilter { key, test: PropertyTest }` fa lo stesso per il
 frontmatter: `exists`/`missing`/`equals`/`contains`/`>`/`<` su
-`PropertyValue` (§1.5), in AND fra loro.
+`PropertyValue` ([decisione 0003](../decisions/0003-modello-del-documento.md)), in AND fra loro.
 
 **L'alimentazione non passa dagli eventi.** Il `Workspace` possiede gli
 `IndexProvider` registrati e chiama `on_document_*` *dentro* le stesse
@@ -510,15 +510,15 @@ DocumentRenamed { from, to }, IndexUpdated, JobDone { id, job, result },
 Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed } }`,
 `EventKind` (stesso set, senza payload), `EventMask(Vec<EventKind>)`.
 
-- `Origin` dice **chi ha chiesto** l'operazione (§1.18), non chi l'ha eseguita:
+- `Origin` dice **chi ha chiesto** l'operazione ([decisione 0012](../decisions/0012-origine-degli-eventi.md)), non chi l'ha eseguita:
   un comando invocato da un'automazione porta l'origine dell'automazione. È
   l'unica lettura per cui il campo esiste — `Actor::is_plugin(id)` risponde a
   «questa l'ho scritta io?» — e senza di essa un'automazione su-modifica che
   scrive si richiama da sola finché il budget del dispatch non tronca.
   `Watcher` è l'unico attore che dice «il vault è cambiato senza passare da
   noi». Quale *comando* abbia chiesto l'operazione non c'è: è l'audit trail di
-  22.4, e vuole un posto che lo conservi (§2.5), non un campo che nessuno rilegge.
-- `BatchEnded { batch, changed }` chiude un **lotto** (§1.12): N scritture che
+  22.4, e vuole un posto che lo conservi (§15.2), non un campo che nessuno rilegge.
+- `BatchEnded { batch, changed }` chiude un **lotto** ([decisione 0011](../decisions/0011-il-lotto.md)): N scritture che
   sono una cosa sola, con l'elenco dei documenti toccati. Dentro un lotto
   `IndexUpdated` **non viene emesso** — è l'unico evento senza payload, quindi
   l'unico di cui N copie dicono quanto ne dice una — mentre gli eventi
@@ -562,11 +562,11 @@ così l'`HostApi` presta `&mut Workspace` senza aliasing (il nodo di ownership
 che rendeva il dispatch il punto più delicato del contratto). Vedi
 `workspace.rs` e `tests/rename_and_events.rs`.
 
-**Dentro un lotto il drenaggio è rimandato alla chiusura** (§1.12), per la stessa
+**Dentro un lotto il drenaggio è rimandato alla chiusura** ([decisione 0011](../decisions/0011-il-lotto.md)), per la stessa
 ragione per cui è rimandato dentro la chiamata a un provider: a metà di
 un'operazione il vault è in uno stato che non è mai esistito per nessuno, e un
 handler che vi reagisse reagirebbe a quello. La conseguenza vale la pena dirla:
-un handler non può più creare un conflitto di `base` (§1.16) scrivendo *dentro*
+un handler non può più creare un conflitto di `base` ([decisione 0008](../decisions/0008-modifica-chirurgica.md)) scrivendo *dentro*
 una rinomina, perché quando gira la rinomina è finita. La guardia della base
 resta per chi scrive fuori dal giro — un'altra app, un job che rientra. Prove:
 `fubmd-kernel/tests/batch_and_origin.rs`.
@@ -641,10 +641,10 @@ markdown (import, preview, conflitti, selezioni, round-trip) e
 `fubmd-kernel/tests/transfer_dispatch.rs` per il protocollo (dispatch, consegna
 degli eventi a chiamata tornata, recinto del vault).
 
-Resta fuori, dichiarato: **rollback e resume** (l'inverso di un lotto, §1.12,
-sopra il journal del §2.5 — il rapporto nomina i documenti toccati, che è
-l'input che servirà), il **lavoro lungo** che vede il vault (§1.21: oggi un
-import gira nel giro sincrono), il **modello parsato** a un exporter (§1.28: un
+Resta fuori, dichiarato: **rollback e resume** (l'inverso di un lotto, [decisione 0011](../decisions/0011-il-lotto.md),
+sopra il journal del §15.2 — il rapporto nomina i documenti toccati, che è
+l'input che servirà), il **lavoro lungo** che vede il vault (§9.1: oggi un
+import gira nel giro sincrono), il **modello parsato** a un exporter (§4.2: un
 export PDF/Typst dovrebbe riparsare) e la **superficie IPC** (senza dialoghi di
 sistema sarebbero due comandi Tauri senza chiamanti).
 
@@ -676,12 +676,12 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
 | `IndexProvider` | — (backlink via grafo del kernel) | `SearchIndex` (tantivy) **M2** ✅ | `activate`/`flush` con `HostApi`: persiste via `data_*` |
 | `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` ✅ **M2** | **M2** (graph-data) | quattro provider veri; `query_index`+`active_context`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch`; `ViewSpec.follows` per il contesto |
-| `CommandProvider` | — | `CoreCommands` ✅ **M2** (§1.1, §1.36, §1.4) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura; nove comandi, cinque dei quali strutturali (le azioni che la shell cablava) e uno che compone (`vault.archive` via `run_command`) |
+| `CommandProvider` | — | `CoreCommands` ✅ **M2** ([decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md), [decisione 0013](../decisions/0013-elenco-delle-capacita.md)) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura; nove comandi, cinque dei quali strutturali (le azioni che la shell cablava) e uno che compone (`vault.archive` via `run_command`) |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
-| `ImportProvider` | — | `MarkdownImport` ✅ **M2** (§1.7) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
-| `ExportProvider` | — | `MarkdownExport` ✅ **M2** (§1.7) | `&self`: un export è una lettura, gira sotto prestito condiviso |
+| `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([decisione 0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
+| `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([decisione 0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso col §1.4**: 22 metodi, `storage_*` tolto, strutturali + `run_command` aggiunti; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica (§1.16) |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md)**: 22 metodi, `storage_*` tolto, strutturali + `run_command` aggiunti; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica ([decisione 0008](../decisions/0008-modifica-chirurgica.md)) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore
@@ -737,7 +737,7 @@ materializza in `wit/fubmd/*.wit` + test abi↔WIT.
 | `ExportSelection` | `variant { documents(list<doc-id>), folder(string), query(index-query) }` |
 | `JobSpec`/`JobId` | `record job-spec` / `type job-id = u64` (interface `jobs`) |
 | `PluginManifest`/`PluginPermissions` | `record` |
-| `TrashEntry` | `record trash-entry { id, original, deleted-at: u64, size: u64 }` (interface `host-api`) — salita nel contratto col §1.4, da quando `list-trash` la restituisce |
+| `TrashEntry` | `record trash-entry { id, original, deleted-at: u64, size: u64 }` (interface `host-api`) — salita nel contratto con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md), da quando `list-trash` la restituisce |
 | `FormatError`/`PluginError` | `variant` (mappati su `result<_, error>` WIT) |
 | `serde_json::Value` (in `attrs`, `args`, storage) | `type json = string` |
 

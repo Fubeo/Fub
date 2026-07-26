@@ -22,16 +22,16 @@ applicare i permessi.
   nel core e ritorna. La firma è identica: per questo la regola d'oro impone tipi
   serializzabili.
 
-### Storage: uno, dopo che il §1.4 ne ha tolto uno (deciso)
+### Storage: uno, dopo che la [decisione 0013](../decisions/0013-elenco-delle-capacita.md) ne ha tolto uno (deciso)
 
 Un plugin ricorda in un modo solo: `data_read/write/remove/list`, path → blob di
 byte, persistente.
 
 Ce n'erano **due**. `storage_get/set` — chiave → JSON, volatile, "per le
-preferenze e i cursori" — è stato tolto dal contratto col §1.4, ritagliando la
+preferenze e i cursori" — è stato tolto dal contratto con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md), ritagliando la
 linea di base (`wit/frozen/0.1.0.wit`), che è la sola rottura di quel giro. La
-ragione, per esteso in `docs/todo.md` §1.4: con `data_*` da una parte e le
-impostazioni del §1.3 dall'altra, allo store volatile non restava un caso d'uso
+ragione, per esteso nella [decisione 0013](../decisions/0013-elenco-delle-capacita.md): con `data_*` da una parte e le
+impostazioni del §11.1 dall'altra, allo store volatile non restava un caso d'uso
 — e il caso che sembrava suo, "ricordare qualcosa per la durata della sessione",
 il chiamante lo aveva già risolto senza saperlo. Un provider è un **oggetto
 vivo** nel workspace (`handle` prende `&mut self`), e a M5 un componente WASM ha
@@ -75,11 +75,11 @@ l'`HostApi` precedente non avrebbe potuto tenere il proprio store — vedi
 [traits.md](traits.md), `HostApi`. Il buco è stato chiuso nel contratto prima
 del freeze di M4, e `VersionStore` è la prova che la firma regge un caso reale.
 
-### Operazioni strutturali e composizione (deciso, §1.4)
+### Operazioni strutturali e composizione (deciso, [decisione 0013](../decisions/0013-elenco-delle-capacita.md))
 
-Sette capacità aggiunte prima del freeze, e la chiusura dell'elenco: dal §1.4 la
+Sette capacità aggiunte prima del freeze, e la chiusura dell'elenco: dalla [decisione 0013](../decisions/0013-elenco-delle-capacita.md) la
 superficie dell'`HostApi` è dichiarata **completa**, e ciò che non c'è è fuori
-per una ragione scritta (`docs/todo.md` §1.4, capacità per capacità).
+per una ragione scritta ([decisione 0013](../decisions/0013-elenco-delle-capacita.md), capacità per capacità).
 
 - **`create_document(id, source)`** — crea, e **rifiuta** un path occupato. È
   l'unica differenza con `write_document`, ed è tutta la ragione per cui sono
@@ -89,7 +89,7 @@ per una ragione scritta (`docs/todo.md` §1.4, capacità per capacità).
 - **`rename_document(from, to)`** — quella del kernel: identità preservata **e
   wikilink entranti riscritti**. Non ce n'è una versione "nuda": due semantiche
   sotto lo stesso nome sarebbero una trappola, e la nuda produce un vault che
-  nessuno ha chiesto. Ne segue che è un lotto (§1.12), e dentro un lotto aperto
+  nessuno ha chiesto. Ne segue che è un lotto ([decisione 0011](../decisions/0011-il-lotto.md)), e dentro un lotto aperto
   vi si unisce.
 - **`trash_document(id) -> DocId`**, **`list_trash()`**,
   **`restore_document(entry, to)`**, **`empty_trash() -> u64`** — il giro del
@@ -100,7 +100,7 @@ per una ragione scritta (`docs/todo.md` §1.4, capacità per capacità).
   archi — e chiederlo al canale dati significherebbe promettere che quel canale
   sappia rispondere su ciò che non ha letto.
 - **`run_command(command, args) -> CommandOutcome`** — invoca un comando del
-  registro (§1.1). Non prende un `InvokeMode` (il modo è dell'host: chi si sta
+  registro ([decisione 0009](../decisions/0009-registro-dei-comandi.md)). Non prende un `InvokeMode` (il modo è dell'host: chi si sta
   simulando invoca in simulazione e riceve il *piano*, e il piano di una macro è
   l'unione dei piani dei suoi passi), non prende un `Actor` (l'attore è chi è
   *entrato* nel kernel e resta lui per tutta la catena), non apre un lotto suo.
@@ -116,8 +116,8 @@ quelli del proprio provider.
 legge nessuno** — non per dimenticanza: questo kernel non ha plugin, ha provider
 registrati per id, e `Plugin::manifest()` non viene mai chiamata perché non c'è
 niente che installi, abiliti o verifichi. Applicare `write_vault` oggi vorrebbe
-dire inventare il registro che tiene i manifest, cioè il §2.10 e M5. Il varco
-però esiste già, ed è quello del §1.36: un comando in **sola lettura** o
+dire inventare il registro che tiene i manifest, cioè il §7.3 e M5. Il varco
+però esiste già, ed è quello della [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md): un comando in **sola lettura** o
 **simulato** riceve un host che nega *tutte* e sei le strutturali con un errore
 che dice perché (`crates/fubmd-kernel/tests/invoke_command.rs`,
 `every_structural_capability_is_refused_by_the_same_gate`). Il giorno che
@@ -243,7 +243,7 @@ proprio nel caso normale di un'automazione che appende (un diario, un log, un
 sommario) — dove ogni scrittura è diversa dalla precedente e nessuna guardia di
 contenuto la ferma.
 
-**Di quale lotto fa parte** — `batch: Option<BatchId>` (§1.12). Un lotto è uno
+**Di quale lotto fa parte** — `batch: Option<BatchId>` ([decisione 0011](../decisions/0011-il-lotto.md)). Un lotto è uno
 scope del kernel dentro cui N scritture sono *una* cosa: il caso vero è una
 rinomina con 200 backlink, che riscrive 200 sorgenti. Dentro un lotto:
 
@@ -269,7 +269,7 @@ plugin è la sua **invocazione di comando**, che l'host apre e chiude per lui �
 
 **Un lotto non è una transazione.** Non annulla niente, e il nome lo dice: se una
 scrittura fallisce le altre restano fatte, e chi lo ha aperto lo scopre dal
-proprio valore di ritorno. Il tutto-o-niente vuole il journal del §2.5, e
+proprio valore di ritorno. Il tutto-o-niente vuole il journal del §15.2, e
 prometterlo con un nome (`transaction`, `rollback`) significherebbe farlo credere
 a chi legge solo la firma.
 
@@ -312,7 +312,7 @@ Il rapporto (`EditReport { revision, applied }`) torna nelle coordinate del
 testo **nuovo** e porta ciò che è stato sostituito: con quei due pezzi si mette
 il cursore dove l'utente se lo aspetta (16.1) e si costruisce l'edit **inverso**,
 che è un edit come gli altri (`EditReport::inverse`). Di chi sia la proprietà
-dell'undo resta una domanda aperta (§1.17 del piano); la forma con cui si
+dell'undo resta una domanda aperta (§13.3 del piano); la forma con cui si
 esprimerà è questa.
 
 Il primo cliente è il kernel stesso: la riscrittura dei wikilink su rename
@@ -323,7 +323,7 @@ fallimento si nomina.
 
 ## Invocare un comando: cosa l'host fa rispettare (deciso)
 
-Il registro dei comandi (§1.1) è il posto in cui un'azione si dichiara **una
+Il registro dei comandi ([decisione 0009](../decisions/0009-registro-dei-comandi.md)) è il posto in cui un'azione si dichiara **una
 volta** e la chiedono tutti: la palette, la tastiera, una macro (16.2), la CLI
 (27.1), l'API locale (27.2), il centro di comando LLM (22.4). Da qui in poi una
 feature nuova non aggiunge un comando Tauri: aggiunge una riga a un
@@ -370,12 +370,12 @@ quella difesa dall'altra parte.
 `by` **non** arriva fino a `CommandProvider::invoke`: l'origine è ciò che l'host
 appone, non ciò che il comando legge. Un comando che si comportasse diversamente
 a seconda di chi lo chiama sarebbe una policy nascosta in un'implementazione, e
-le policy hanno un posto (§2.10). Il giorno che servirà **leggerla**, è un metodo
+le policy hanno un posto (§7.3). Il giorno che servirà **leggerla**, è un metodo
 additivo sull'`HostApi`, non una firma da riaprire.
 
 ### Il consenso non è una capacità
 
-`PluginPermissions` (§2.10, qui sotto) risponde a «questo componente *può*, in
+`PluginPermissions` (§7.3, qui sotto) risponde a «questo componente *può*, in
 generale?». 22.4 chiede un'altra cosa: «l'utente approva **questa** esecuzione,
 su **queste** 40 note?». La risposta di FubMD è il giro **dry-run → piano →
 approvazione → apply**, e non una capacità `HostApi::confirm`. Due ragioni:
@@ -390,13 +390,13 @@ approvazione → apply**, e non una capacità `HostApi::confirm`. Due ragioni:
 
 *Quando* chiedere lo decide chi invoca, e lo decide dal `CommandScope`
 dichiarato: la shell mostra il piano quando un comando scrive su più di una nota
-o si dichiara non reversibile (`needsPlan` in `frontend/src/palette.ts`). Una CLI
+o si dichiara non reversibile (`needsPlan` in `frontend/src/ui/palette.ts`). Una CLI
 in uno script può avere un'altra politica sullo stesso dato — è per questo che il
 raggio sta nella spec e la politica no.
 
 Resta fuori, dichiarato: l'**attribuzione** (chi ha chiesto l'operazione: utente,
-comando, modello, prompt) è l'origine degli eventi (§1.18) applicata al lotto
-(§1.12), e senza quelle due un campo qui sarebbe scritto da chi invoca e letto da
+comando, modello, prompt) è l'origine degli eventi ([decisione 0012](../decisions/0012-origine-degli-eventi.md)) applicata al lotto
+([decisione 0011](../decisions/0011-il-lotto.md)), e senza quelle due un campo qui sarebbe scritto da chi invoca e letto da
 nessuno.
 
 ## Import ed export: il confine è di byte, non di path (deciso)
@@ -421,7 +421,7 @@ sui conflitti), e che a M5 la sandbox **non deve concedere niente**: la riga
 "Filesystem: nessun accesso diretto" resta vera senza eccezioni.
 
 Il prezzo è dichiarato: sorgente e artefatti stanno in memoria. Un export di
-vault enorme è lavoro lungo, e il lavoro lungo non vede ancora il vault (§1.21
+vault enorme è lavoro lungo, e il lavoro lungo non vede ancora il vault (§9.1
 del piano); ma la firma non lo preclude — uno `stream` al confine è additivo, un
 `path: string` sarebbe stato una porta aperta da richiudere con una major.
 

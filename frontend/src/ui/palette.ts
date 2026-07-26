@@ -1,4 +1,4 @@
-// La palette dei comandi: il primo cliente del registro (§1.1) nella shell.
+// La palette dei comandi: il primo cliente del registro (decisione 0009) nella shell.
 //
 // Non cabla nessun comando. Legge le spec dal kernel, disegna un campo per ogni
 // parametro dichiarato e — quando il raggio dichiarato lo merita — chiede prima
@@ -15,15 +15,15 @@
 // dichiarato. Un «sei sicuro?» mostra ciò che il comando sceglie di dire; un
 // piano mostra le note e le modifiche.
 
-import {
-  api,
-  type CommandEffect,
-  type CommandOutcome,
-  type CommandPlan,
-  type CommandSpec,
-  type ParamSpec,
-} from "./api";
-import { pageName } from "./organizer";
+import { api } from "../host/ipc";
+import type {
+  CommandEffect,
+  CommandOutcome,
+  CommandPlan,
+  CommandSpec,
+  ParamSpec,
+} from "../host/contract";
+import { pageName } from "../rules/organizer";
 
 /// Ciò che la palette chiede alla shell: eseguire gli intenti e dire qualcosa
 /// all'utente. Il resto (invocare, disegnare, chiedere) è suo.
@@ -42,7 +42,7 @@ export interface PaletteHost {
 /// I comandi che corrispondono a ciò che l'utente sta scrivendo, dai più
 /// pertinenti ai meno.
 ///
-/// Cerca anche nella **descrizione**: è il campo che il §1.36 ha aggiunto per i
+/// Cerca anche nella **descrizione**: è il campo che la decisione 0010 ha aggiunto per i
 /// chiamanti non umani, e si è rivelato utile anche qui — chi cerca «sostituisci
 /// in blocco» non conosce il titolo esatto.
 export function filterCommands(specs: CommandSpec[], query: string): CommandSpec[] {
@@ -149,7 +149,7 @@ export interface KeyChord {
 /// è Ctrl o Cmd. Una scorciatoia **senza modificatori viene ignorata**: le spec
 /// sono suggerimenti di chi scrive il comando, e un comando che dichiarasse `f`
 /// ruberebbe una lettera a chi sta scrivendo una nota. Finché la tastiera non è
-/// configurabile (§3.2) la shell onora ciò che può onorare senza fare danni.
+/// configurabile (§18.2) la shell onora ciò che può onorare senza fare danni.
 export function matchesBinding(e: KeyChord, binding: string | null): boolean {
   if (!binding) return false;
   const parti = binding.split("-");

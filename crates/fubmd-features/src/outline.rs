@@ -40,7 +40,7 @@ const INDENT: &str = "\u{2003}";
 
 /// Come si dice "il cursore è in questa sezione" con i nodi che il protocollo
 /// ha: il sottotitolo di un `ListItem`. Un *evidenziato* vero vorrebbe una
-/// nozione di elemento corrente in [`UiNode`] — che è roba del §1.2, non di
+/// nozione di elemento corrente in [`UiNode`] — che è roba del §2.1, non di
 /// questo giro: qui la posizione attraversa il confine, che è la parte che
 /// mancava.
 const HERE: &str = "cursore qui";

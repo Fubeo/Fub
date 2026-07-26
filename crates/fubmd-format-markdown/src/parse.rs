@@ -22,12 +22,12 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     o.extension.tasklist = true;
     // Senza `relaxed`, comrak riconosce come task solo `[ ]`, `[x]` e `[X]`: un
     // `[/]` resterebbe testo, e gli stati personalizzati (10.1) sarebbero
-    // irrappresentabili proprio nel modello che il §1.5 apre per loro.
+    // irrappresentabili proprio nel modello che la decisione 0003 apre per loro.
     o.parse.relaxed_tasklist_matching = true;
     o.extension.superscript = true;
     // GitHub alerts ≈ callout Obsidian.
     o.extension.alerts = true;
-    // Footnote e definition list: la decisione del §1.5 è che restino
+    // Footnote e definition list: la decisione 0003 dice che restino
     // `Block::Custom`, ma con un `custom_kind` **registrato** nel contratto — e
     // una decisione su come rappresentare qualcosa che il parser non produce
     // affatto sarebbe stata presa a vuoto.

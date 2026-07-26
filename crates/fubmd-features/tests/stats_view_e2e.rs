@@ -1,6 +1,6 @@
 //! Il pannello statistiche end-to-end **attraverso il kernel vero**.
 //!
-//! Prova la cosa che il §1.9 ha aperto e che nessun'altra view esercita: il
+//! Prova la cosa che la decisione 0007 ha aperto e che nessun'altra view esercita: il
 //! **testo selezionato** attraversa il confine e vale anche quando il buffer è
 //! sporco, cioè quando `read_document` restituirebbe un altro testo. È il
 //! motivo per cui `Selection` porta il testo e non solo lo span.

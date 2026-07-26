@@ -1023,7 +1023,7 @@ mod tests {
         assert!(search(&idx, "   ").is_empty());
     }
 
-    // --- ambito e finestra (§1.6) ------------------------------------------
+    // --- ambito e finestra (decisione 0005) ------------------------------------------
 
     #[test]
     fn a_folder_scope_takes_the_descendants_too() {

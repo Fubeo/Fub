@@ -1,7 +1,7 @@
 //! I **comandi**: le azioni del vault dette in una forma che chi non ha letto il
 //! codice può scegliere, compilare e invocare.
 //!
-//! # Il registro (§1.1)
+//! # Il registro (decisione 0009)
 //!
 //! Oggi ogni azione dell'app è un comando Tauri scritto a mano: creare una nota,
 //! aprire la ricerca, cestinare. Nessuna di esse è raggiungibile da un plugin,
@@ -11,7 +11,7 @@
 //! volta e la chiedono tutti: la palette, la tastiera, l'automazione, il
 //! chiamante remoto.
 //!
-//! # Il chiamante che non si può correggere leggendo il codice (§1.36)
+//! # Il chiamante che non si può correggere leggendo il codice (decisione 0010)
 //!
 //! `{ id, title, keybinding }` basta a una **palette**, dove a scegliere è un
 //! umano che legge il titolo e a compilare gli argomenti è lui. Non basta a
@@ -30,13 +30,13 @@
 //!   invocare e ricevere un errore.
 //! - [`CommandSpec::scope`] — il raggio: legge o scrive, tocca un documento, N
 //!   documenti, il vault o la configurazione, ed è reversibile o no. È il dato
-//!   su cui si fonda la conferma rafforzata (22.4) e, a valle, il §2.10.
+//!   su cui si fonda la conferma rafforzata (22.4) e, a valle, il §7.3.
 //!
 //! # La simulazione è un modo di invocare, non una cortesia
 //!
 //! [`InvokeMode::DryRun`] chiede a un comando cosa *farebbe*: risponde con un
 //! [`CommandPlan`] — i documenti impattati e, per ognuno, la
-//! [`EditRequest`](crate::edit::EditRequest) del §1.16 — **senza scrivere**. La
+//! [`EditRequest`](crate::edit::EditRequest) della decisione 0008 — **senza scrivere**. La
 //! parte che conta non è la variante: è che il non-scrivere lo garantisce
 //! l'**host**, prestando al comando un `HostApi` in sola lettura. Un dry-run
 //! affidato alla buona volontà di chi implementa sarebbe una convenzione, cioè
@@ -71,19 +71,19 @@
 //! # Cosa resta deliberatamente fuori
 //!
 //! - **L'attribuzione** (chi ha chiesto l'operazione: utente, comando, modello):
-//!   è l'origine degli eventi (§1.18) applicata al lotto (§1.12), e nessuna
+//!   è l'origine degli eventi (decisione 0012) applicata al lotto (decisione 0011), e nessuna
 //!   delle due esiste. Un campo `origin` qui sopra sarebbe scritto da chi
 //!   invoca e letto da nessuno.
-//! - **Le impostazioni scrivibili da un programma** (§1.3): il vocabolario c'è
+//! - **Le impostazioni scrivibili da un programma** (§11.1): il vocabolario c'è
 //!   ([`CommandReach::Settings`]), lo schema che dice *quali chiavi* no, perché
 //!   non ci sono ancora impostazioni.
 //! - **Il form** che raccoglie i parametri: qui si dichiara *cosa* serve, non
-//!   *come* si chiede. I nodi di input sono il §1.2, e quando arriveranno
+//!   *come* si chiede. I nodi di input sono il §2.1, e quando arriveranno
 //!   saranno la resa di questi [`ParamSpec`], non un secondo modo di dirli.
 //! - **Il dialogo a più passi** (una domanda che dipende dalla risposta
 //!   precedente): un comando dichiara i suoi parametri *tutti insieme*, perché
 //!   è la sola forma che un chiamante non interattivo sa compilare.
-//! - **Chi possiede un id** (§1.34): due provider che dichiarano lo stesso
+//! - **Chi possiede un id** (§7.4): due provider che dichiarano lo stesso
 //!   comando sono oggi risolti dall'ordine di registrazione, come per le view.
 
 use serde::{Deserialize, Serialize};
@@ -268,7 +268,7 @@ impl ParamSpec {
 /// esprimibile qui viaggia come testo e lo interpreta il comando — con il costo
 /// dichiarato di non essere più verificabile dall'host.
 ///
-/// Non sono i nodi di input del §1.2: quelli diranno *come si chiede* un valore
+/// Non sono i nodi di input del §2.1: quelli diranno *come si chiede* un valore
 /// (un campo, un menu, uno slider), questi dicono *cosa* è. Quando arriveranno,
 /// la resa di un [`ParamSpec`] sarà uno di quei nodi; il contrario — dichiarare
 /// i parametri con i nodi della UI — legherebbe la descrizione di un comando
@@ -361,7 +361,7 @@ impl Choice {
 // ---------------------------------------------------------------------------
 
 /// Quanto lontano arriva un comando: la dichiarazione su cui chi invoca decide
-/// se chiedere conferma, e su cui il §2.10 deciderà i permessi.
+/// se chiedere conferma, e su cui il §7.3 deciderà i permessi.
 ///
 /// [`writes`](CommandScope::writes) è l'unico campo che l'host **fa
 /// rispettare** (chi si dichiara di sola lettura riceve un host che rifiuta le
@@ -427,7 +427,7 @@ pub enum CommandReach {
     Documents,
     /// Il vault come insieme: crea, cestina, rinomina, riorganizza.
     Vault,
-    /// La configurazione. Il vocabolario c'è prima delle impostazioni (§1.3)
+    /// La configurazione. Il vocabolario c'è prima delle impostazioni (§11.1)
     /// perché un caso in più a un enum costa una riga oggi e una minor dopo il
     /// freeze.
     Settings,
@@ -526,12 +526,13 @@ pub enum CommandEffect {
     },
 }
 
-/// Cosa succederebbe: i documenti impattati e, per quelli che il §1.16 sa
+/// Cosa succederebbe: i documenti impattati e, per quelli che la decisione 0008 sa
 /// esprimere, la modifica esatta.
 ///
 /// I due elenchi non sono ridondanti. [`docs`](CommandPlan::docs) è la verità
 /// completa — ci sta dentro anche ciò che una [`EditRequest`] non esprime
-/// (creare, cestinare, rinominare: capacità che l'`HostApi` non ha ancora, §1.4)
+/// (creare, cestinare, rinominare: sono capacità **strutturali** dell'`HostApi`
+/// — decisione 0013 — e non modifiche a un testo)
 /// — mentre [`edits`](CommandPlan::edits) è il dettaglio di ciò che si può
 /// mostrare come diff. Chi approva legge il primo; chi vuole vedere *cosa*
 /// cambia legge il secondo.

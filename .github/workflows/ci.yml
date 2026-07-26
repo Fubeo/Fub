@@ -109,6 +109,24 @@ jobs:
       - run: cargo build --workspace
       - run: cargo test --workspace
 
+  # I documenti si rimandano l'un l'altro, ma nessuno li compila: un file
+  # rinominato o cancellato non rompe niente finché qualcuno non ci clicca — e a
+  # quel punto la riga che lo linkava è vecchia di venti commit. È già successo
+  # (`ORGANIZZAZIONE_VAULT.md`, cancellato col commit `0a4ee40` e linkato per un
+  # pezzo dopo). Dieci secondi qui valgono quanto la promessa che la mappa dei
+  # documenti sia vera.
+  docs:
+    name: docs (link interni)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Link interni dei documenti
+        run: node scripts/check-doc-links.mjs
+
   frontend:
     name: frontend (type-check + test + build)
     runs-on: ubuntu-latest

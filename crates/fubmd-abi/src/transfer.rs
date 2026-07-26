@@ -24,7 +24,7 @@
 //!
 //! Il prezzo, dichiarato: la sorgente e gli artefatti stanno **in memoria**.
 //! Un vault Obsidian da 4 GiB non entra, e non deve — quello è lavoro lungo, e
-//! il lavoro lungo non vede ancora il vault (§1.21 del piano). Questa firma non
+//! il lavoro lungo non vede ancora il vault (§9.1 del piano). Questa firma non
 //! lo preclude: uno `stream` al confine è additivo, un `path: String` no.
 //!
 //! # Il piano è il rapporto di una prova a vuoto
@@ -52,12 +52,12 @@
 //!
 //! - **Rollback e resume** (17.3): il rapporto nomina ogni documento toccato,
 //!   che è l'input di cui un rollback ha bisogno — ma il rollback stesso è
-//!   l'inverso di un lotto (§1.12) sopra un journal (§2.5), e nessuno dei due
+//!   l'inverso di un lotto (decisione 0011) sopra un journal (§15.2), e nessuno dei due
 //!   esiste. Inventare qui un `batch_id` che nessuno consuma sarebbe un varco
 //!   che sembra aperto.
 //! - **Il modello parsato**: un [`ExportProvider`] legge la *sorgente* dei
 //!   documenti (`HostApi::read_document`). Finché nessuna capacità restituisce
-//!   un [`DocumentModel`](crate::model::DocumentModel) (§1.28), un export verso
+//!   un [`DocumentModel`](crate::model::DocumentModel) (§4.2), un export verso
 //!   PDF/HTML/Typst deve riparsare per conto proprio; l'export markdown, che è
 //!   il primo cliente, la sorgente la vuole com'è.
 
@@ -319,7 +319,7 @@ pub struct ImportedDocument {
 ///
 /// Non porta un conteggio: `documents.len()` lo è già, e due verità sullo
 /// stesso numero divergono. Non porta un identificatore di lotto: il rollback è
-/// del §1.12, e un campo che nessuno consuma è peggio di un campo assente.
+/// della decisione 0011, e un campo che nessuno consuma è peggio di un campo assente.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImportReport {
     /// Con quale modalità è stato prodotto: un rapporto di preview e uno di
@@ -339,7 +339,7 @@ impl ImportReport {
     }
 
     /// I documenti che sono davvero cambiati nel vault (o cambierebbero): è
-    /// l'insieme su cui un giorno lavorerà il rollback del §1.12.
+    /// l'insieme su cui un giorno lavorerà il rollback della decisione 0011.
     pub fn changed(&self) -> Vec<&DocId> {
         self.documents
             .iter()
@@ -357,7 +357,7 @@ impl ImportReport {
 /// chiamata: 17.3 chiede *resume* e *retry*, e un provider che riprende ha
 /// bisogno di ricordare dove era. Con `&self` quella famiglia sarebbe chiusa
 /// dalla firma, che è esattamente il difetto che il piano imputa a
-/// `ViewProvider` (§1.30). Costa oggi un `mem::take` nel kernel; dopo il freeze
+/// `ViewProvider` (§2.4). Costa oggi un `mem::take` nel kernel; dopo il freeze
 /// costerebbe una major.
 pub trait ImportProvider: Send + Sync {
     /// Questa sorgente è roba mia?
@@ -388,7 +388,7 @@ pub trait ImportProvider: Send + Sync {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportTarget {
     /// Id stabile col prefisso di chi lo offre (`markdown.files`): è ciò che
-    /// una richiesta nomina, e la regola sugli spazi di nomi è del §1.34.
+    /// una richiesta nomina, e la regola sugli spazi di nomi è del §7.4.
     pub id: String,
     /// Nome leggibile, per un menù.
     pub name: String,
@@ -419,7 +419,7 @@ pub enum ExportSelection {
     /// intero. Stessa regola di appartenenza di
     /// [`SearchScope::folders`](crate::traits::SearchScope).
     Folder(String),
-    /// L'esito di un'interrogazione dell'indice (§1.6).
+    /// L'esito di un'interrogazione dell'indice (decisione 0005).
     Query(IndexQuery),
 }
 
@@ -434,7 +434,7 @@ impl ExportSelection {
     /// Risolve la selezione in documenti, con le sole capacità del contratto.
     ///
     /// Sta **qui** e non dentro ogni exporter per la stessa ragione per cui ci
-    /// sta `heading_slug` (§1.5): la risposta a «cosa c'è in questa cartella»
+    /// sta `heading_slug` (decisione 0003): la risposta a «cosa c'è in questa cartella»
     /// deve essere una sola. I documenti tornano in ordine e senza ripetizioni.
     ///
     /// Una query che non nomina documenti (l'outline di *un* documento, i tag

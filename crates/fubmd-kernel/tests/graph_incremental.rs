@@ -15,7 +15,7 @@
 //! alias che collidono con nomi di pagina, path che collidono a meno
 //! dell'estensione (`nota.md` / `nota.txt`), link a documenti inesistenti.
 //!
-//! Ci sono **entrambe le specie di link** (§2.21), e non per completismo: un
+//! Ci sono **entrambe le specie di link** (decisione 0004), e non per completismo: un
 //! link markdown è relativo alla cartella di chi lo scrive, quindi la stessa
 //! stringa in due documenti è due chiavi diverse — ed è esattamente il genere di
 //! cosa che un aggiornamento incrementale sbaglia e un full-rebuild no.

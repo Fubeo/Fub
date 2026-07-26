@@ -501,10 +501,10 @@ interface events {
     }
     type event-mask = list<event-kind>;
 
-    // LINEA DI BASE RITAGLIATA (pre-freeze, §1.18). Questi tipi entrano nella
-    // baseline perché `event-handler.handle` — la firma che il §1.18 ha rotto
+    // LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0012). Questi tipi entrano nella
+    // baseline perché `event-handler.handle` — la firma che la decisione 0012 ha rotto
     // apposta, e che è documentata sotto — li nomina: una baseline che non
-    // parsa non è una baseline. Ciò che il §1.18 ha aggiunto in modo davvero
+    // parsa non è una baseline. Ciò che la decisione 0012 ha aggiunto in modo davvero
     // additivo (il caso `batch-ended` di `event` e di `event-kind`, e il record
     // `event-batch-ended`) NON sta qui: deve restare una crescita che il test di
     // additività vede come tale.
@@ -542,7 +542,7 @@ interface command {
 
     /// La specie di un argomento. Vocabolario chiuso e piccolo: sono le specie
     /// che un chiamante qualunque sa produrre senza conoscere il comando. NON
-    /// sono i nodi di input della UI (§1.2): questi dicono *cosa* è un valore,
+    /// sono i nodi di input della UI (§2.1): questi dicono *cosa* è un valore,
     /// quelli diranno *come* lo si chiede.
     variant param-kind {
         text,
@@ -1047,10 +1047,10 @@ interface errors {
 
 /// Capacità concesse dal kernel a un provider/plugin: l'unico varco col mondo.
 ///
-/// LINEA DI BASE RITAGLIATA (pre-freeze, §1.4): `storage-get`/`storage-set` —
+/// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0013): `storage-get`/`storage-set` —
 /// lo stato volatile a chiave→valore — sono stati TOLTI. È l'unica rottura di
 /// questo giro e sta qui perché si veda. Con `data-*` (persistente, recintato
-/// per plugin) e le impostazioni del §1.3, allo store volatile non resta un
+/// per plugin) e le impostazioni del §11.1, allo store volatile non resta un
 /// caso d'uso: chi vuole ricordare qualcosa oltre la sessione usa i blob, chi
 /// vuole una preferenza usa le impostazioni, e chi vuole solo memoria per la
 /// durata della sessione ce l'ha già — un provider è un oggetto vivo nel
@@ -1124,7 +1124,7 @@ interface host-api {
 
 /// Reazione agli eventi (`EventHandler`).
 ///
-/// LINEA DI BASE RITAGLIATA (pre-freeze, §1.18): `handle` prendeva un `event`
+/// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0012): `handle` prendeva un `event`
 /// nudo. Adesso prende un `notice`, che è l'evento PIÙ la sua origine — chi ha
 /// chiesto l'operazione e di quale lotto fa parte. È una rottura, e sta qui
 /// perché si veda: senza l'origine sul parametro, un'automazione su-modifica che

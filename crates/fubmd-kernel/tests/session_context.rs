@@ -1,4 +1,4 @@
-//! Il **contesto di sessione** nel kernel (§1.9): chi lo pubblica, chi decide
+//! Il **contesto di sessione** nel kernel (decisione 0007): chi lo pubblica, chi decide
 //! quali view invecchiano, e chi lo rimette in accordo col vault.
 //!
 //! Tre invarianti, e nessuna è di comodo:

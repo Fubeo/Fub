@@ -158,7 +158,7 @@ da fare (graph-data, outline, tag) nascono su questo stesso giro.
   documento, non avendo un `FormatProvider`. Il click su un heading è un nuovo
   **`ViewUpdate::Reveal { doc_id, span }`**; il frontend porta l'editor
   sull'intervallo convertendo byte UTF-8 → code unit UTF-16
-  (`frontend/src/offsets.ts`, verificato su testo accentato+emoji). La gerarchia
+  (`frontend/src/rules/offsets.ts`, verificato su testo accentato+emoji). La gerarchia
   si vede col rientro nel titolo (spazio EM) in attesa di un eventuale `UiNode`
   ad albero. E2e: `crates/fubmd-features/tests/outline_view_e2e.rs`.
 - **Tag panel:** `fubmd_features::TagPanelView`, terzo `ViewProvider`. Aggrega i
@@ -182,7 +182,7 @@ Oggi `resolve_wiki` restituisce `None` per un wikilink senza target. M2:
 
 Chiuso (vedi [PIANO.md](../PIANO.md), "Decisioni"): `Workspace::create_note`
 + comando IPC `create_note`, cablato nell'app — e cablato è **rimasto** finché
-l'`HostApi` non ha avuto le capacità per farne un comando vero. Col §1.4 le ha:
+l'`HostApi` non ha avuto le capacità per farne un comando vero. Con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md) le ha:
 adesso è `note.create` (`free_name` + `create_document`), il comando IPC non
 esiste più, e il click su un link non risolto è il chiamante che questa voce
 aspettava dal principio. La nota nasce vuota,
@@ -190,7 +190,7 @@ non da uno scheletro: un template è una preferenza, e le preferenze arrivano co
 settings. Il backlink compare da solo, perché il link nel documento di partenza
 non viene toccato ed è il grafo a risolverlo di nuovo.
 
-### Registro dei comandi e palette (§1.1 + §1.36) — **fatto**, anticipato da M3
+### Registro dei comandi e palette ([decisione 0009](../decisions/0009-registro-dei-comandi.md) + [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md)) — **fatto**, anticipato da M3
 
 Il `CommandProvider` era l'unico trait del contratto senza un solo chiamante:
 esisteva la firma, non il registro. Ora il `Workspace` ha
@@ -199,7 +199,7 @@ esisteva la firma, non il registro. Ora il `Workspace` ha
 shell ha una **palette** che non cabla nessun id — legge le spec, disegna un
 campo per ogni parametro dichiarato, mostra il piano quando il raggio lo merita.
 
-È stato fatto insieme al §1.36 (un comando descritto a una **macchina**) perché
+È stato fatto insieme alla [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md) (un comando descritto a una **macchina**) perché
 sono la stessa firma vista da due lati, e le firme costano un campo prima del
 freeze e una migrazione dopo: `CommandSpec` porta ora descrizione, parametri
 tipati e raggio dichiarato, e `invoke` prende un `InvokeMode` — la rottura di
@@ -210,15 +210,15 @@ registro leggibile e uno eseguibile da terzi: gli argomenti sono convalidati
 contro la spec prima che il comando venga chiamato, e chi simula (o si è
 dichiarato di sola lettura) riceve un `HostApi` che rifiuta le scritture — quindi
 il dry-run non è una convenzione fra chiamante e comando. Il verbale delle
-decisioni, con ciò che resta fuori, è in [todo.md](../todo.md) §1.1 e §1.36.
+decisioni, con ciò che resta fuori, è nella [decisione 0009](../decisions/0009-registro-dei-comandi.md) e nella [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md).
 
 Clienti veri nello stesso giro: `CoreCommands` (`search.open`,
-`selection.wikilink` — che compone contesto di sessione §1.9 ed edit chirurgico
-§1.16 —, `vault.replace` con anteprima del piano su N note) e la palette.
+`selection.wikilink` — che compone contesto di sessione [decisione 0007](../decisions/0007-contesto-di-sessione.md) ed edit chirurgico
+[decisione 0008](../decisions/0008-modifica-chirurgica.md) —, `vault.replace` con anteprima del piano su N note) e la palette.
 E2e: `crates/fubmd-kernel/tests/invoke_command.rs`,
 `crates/fubmd-features/tests/commands_e2e.rs`.
 
-### Il lotto e l'origine degli eventi (§1.12 + §1.18) — **fatto**
+### Il lotto e l'origine degli eventi ([decisione 0011](../decisions/0011-il-lotto.md) + [decisione 0012](../decisions/0012-origine-degli-eventi.md)) — **fatto**
 
 Il kernel mutava un documento alla volta e non aveva modo di dire che N di quelle
 mutazioni sono **una** operazione. Il caso era già in repo e si vedeva a occhio:
@@ -227,8 +227,8 @@ una rinomina con 200 backlink riscriveva 200 sorgenti, ognuna con il suo
 ridisegno di ogni view iscritta — 201 ridisegni completi per una cosa che
 l'utente ha chiesto una volta.
 
-Le due voci sono state fatte insieme perché il §1.18 lo dichiara esso stesso:
-il campo che chiedeva è «origin **e** l'id di lotto del §1.12». Deciderle
+Le due voci sono state fatte insieme perché la [decisione 0012](../decisions/0012-origine-degli-eventi.md) lo dichiara essa stessa:
+il campo che chiedeva è «origin **e** l'id di lotto della [decisione 0011](../decisions/0011-il-lotto.md)». Deciderle
 separate significava deciderle due volte, la seconda con la prima già congelata.
 
 `Workspace::batch(|ws| …)` è uno scope: dentro, `index-updated` non viene emesso
@@ -237,7 +237,7 @@ dice una) e alla chiusura arriva un `Event::BatchEnded { batch, changed }`.
 Gli eventi **per-documento passano tutti**, quindi nessun handler esistente ha
 dovuto cambiare. Un lotto **non è una transazione** e non si chiama come se lo
 fosse: non annulla niente, e chi lo ha aperto scopre cosa non è andato dal
-proprio valore di ritorno — il tutto-o-niente vuole il journal del §2.5.
+proprio valore di ritorno — il tutto-o-niente vuole il journal del §15.2.
 
 Un handler riceve ora un `Notice { event, origin }`, con
 `Origin { actor, batch }` e `Actor { User, Watcher, Kernel, Plugin { id } }`.
@@ -249,7 +249,7 @@ ritagliata in `wit/frozen/0.1.0.wit`; e `invoke_command` ha guadagnato un
 `by: Actor`, perché un'invocazione attribuita a un default è l'errore che 16.2
 esiste per non fare.
 
-Il verbale, con ciò che resta fuori, è in [todo.md](../todo.md) §1.12 e §1.18.
+Il verbale, con ciò che resta fuori, è nella [decisione 0011](../decisions/0011-il-lotto.md) e nella [decisione 0012](../decisions/0012-origine-degli-eventi.md).
 
 Clienti veri nello stesso giro: `rename_document` (che *è* un lotto: 201
 ridisegni → 1), ogni `invoke_command(…, Apply)` — quindi `vault.replace` su N
@@ -258,7 +258,7 @@ distingue «un'altra applicazione ha scritto questo file» da «lo abbiamo riscr
 noi». E2e: `crates/fubmd-kernel/tests/batch_and_origin.rs`,
 `crates/fubmd-features/tests/{commands_e2e,view_refresh_masks}.rs`.
 
-### Le capacità dell'`HostApi`, chiuse (§1.4) — **fatto**, prima del freeze
+### Le capacità dell'`HostApi`, chiuse ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)) — **fatto**, prima del freeze
 
 La superficie più esposta del contratto è quella che il freeze rende definitiva
 nel modo più caro: una capacità che manca è una feature che non potrà mai essere
@@ -281,16 +281,16 @@ l'una si comporta come l'altra; `list_trash` sta accanto a `list_documents` e no
 in `IndexQuery`, perché il cestino non è indicizzato; `run_command` non prende né
 modo né attore né lotto — li **eredita**, così una simulazione non diventa reale
 invocando qualcuno e una macro di tre comandi resta una cosa sola. Il permesso
-`write_vault` resta al §2.10, ma il varco che **nega** copre già tutte e sei le
+`write_vault` resta al §7.3, ma il varco che **nega** copre già tutte e sei le
 strutturali: manca il registro dei manifest, non il rifiuto.
 
 Il verbale completo, capacità per capacità e con le ragioni di ciò che non
-entra, è in [todo.md](../todo.md) §1.4.
+entra, è nella [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
 
 Cliente vero nello stesso giro: le cinque azioni strutturali della shell migrate
 a `CoreCommands` (`note.create`, `note.rename`, `note.trash`, `trash.restore`,
 `trash.empty`), con **sei comandi Tauri spariti** — ed è quella sparizione a
-rendere vera la regola del §4.2 anche per le feature che toccano il vault — più
+rendere vera la regola del §16.6 anche per le feature che toccano il vault — più
 `vault.archive`, che sposta N note invocando `note.rename` e non nomina un solo
 link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
 `crates/fubmd-kernel/tests/invoke_command.rs`,
@@ -299,14 +299,14 @@ link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
 ## Trait/API coinvolti
 
 - `IndexProvider` (nuova impl nativa, tantivy) — [traits.md](../architecture/traits.md).
-- `CommandProvider` (registro, dry-run, palette: §1.1 + §1.36) — prima impl
+- `CommandProvider` (registro, dry-run, palette: [decisione 0009](../decisions/0009-registro-dei-comandi.md) + [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md)) — prima impl
   `CoreCommands`, anticipata da M3.
 - `ViewProvider` (backlink ✅, outline ✅, tag ✅; graph-data da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
 - `HostApi::query_index` (col canale metadata `IndexQuery::Outline`/`Tags`) + `HostApi::active_context` — le capacità che rendono una view un provider vero.
-- `HostApi` **chiusa** (§1.4): strutturali + `run_command` dentro, `storage_*` fuori — 22 metodi.
+- `HostApi` **chiusa** ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)): strutturali + `run_command` dentro, `storage_*` fuori — 22 metodi.
 - `Workspace` in `fubmd-kernel`: nuovi percorsi incrementali per grafo+indice.
 - `CommandProvider` per "crea nota" — fatto: `note.create`, e con esso gli altri
-  quattro strutturali (§1.4).
+  quattro strutturali ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).
 - Comandi IPC in `fubmd-app`: search, graph-data, outline, tags — e **sei in
   meno**, perché crea/rinomina/cestina/ripristina/svuota/proponi-nome sono
   diventati comandi del registro.

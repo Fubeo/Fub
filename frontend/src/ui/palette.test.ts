@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CommandPlan, CommandSpec, ParamKind } from "./api";
+import type { CommandPlan, CommandSpec, ParamKind } from "../host/contract";
 import {
   argsFromForm,
   filterCommands,
@@ -40,7 +40,7 @@ describe("scelta del comando", () => {
   it("cerca nel titolo, nell'id e nella descrizione", () => {
     expect(filterCommands(specs, "sostit").map((s) => s.id)).toEqual(["vault.replace"]);
     expect(filterCommands(specs, "wikilink").map((s) => s.id)).toEqual(["selection.wikilink"]);
-    // La descrizione è il campo che il §1.36 ha aggiunto per i chiamanti non
+    // La descrizione è il campo che la decisione 0010 ha aggiunto per i chiamanti non
     // umani: qui serve a chi non conosce il titolo esatto.
     expect(filterCommands(specs, "full-text").map((s) => s.id)).toEqual(["search.open"]);
     expect(filterCommands(specs, "")).toHaveLength(3);
@@ -183,7 +183,7 @@ describe("il piano che si guarda prima di approvarlo", () => {
     expect(planLines(plan)).toEqual([
       "A — 2 modifiche",
       "B — 1 modifica",
-      // Una nota impattata di cui il §1.16 non sa esprimere la modifica (una
+      // Una nota impattata di cui la decisione 0008 non sa esprimere la modifica (una
       // che verrebbe creata o cestinata) resta nell'elenco: è ciò che si
       // approva.
       "C",

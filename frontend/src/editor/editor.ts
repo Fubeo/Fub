@@ -10,7 +10,7 @@ import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { indentWithTab } from "@codemirror/commands";
-import { byteToCharIndex, charToByteIndex } from "./offsets";
+import { byteToCharIndex, charToByteIndex } from "../rules/offsets";
 import { editingExtensions } from "./editor-commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview } from "./livepreview";

@@ -274,7 +274,7 @@ fn rename_rewrites_the_self_link_too() {
 
 #[test]
 fn a_markdown_path_link_is_an_edge_like_a_wikilink() {
-    // La voce §2.21: `[t](sub/Nota.lnk)` deve avere backlink e arco esattamente
+    // La decisione 0004: `[t](sub/Nota.lnk)` deve avere backlink e arco esattamente
     // come `[[Nota]]`, o «aggiornamento link su rinomina» è vero a metà.
     let dir = TempDir::new("pathlink-edge");
     let mut ws = workspace(&dir.0);
@@ -648,7 +648,7 @@ type Log = Arc<Mutex<Vec<String>>>;
 struct ChainingHandler {
     log: Log,
     /// Ha già reagito? Era una chiave dello `storage_*` dell'host finché quello
-    /// esisteva; adesso è un campo — che è il punto per cui il §1.4 lo ha
+    /// esisteva; adesso è un campo — che è il punto per cui la decisione 0013 lo ha
     /// tolto, perché un handler è un oggetto vivo e la memoria ce l'ha già.
     fatto: bool,
 }

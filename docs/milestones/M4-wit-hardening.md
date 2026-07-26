@@ -48,8 +48,9 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
 
 ### Test di conformità abi↔WIT
 
-**È fatta** (vedi [todo.md](../todo.md), punti 1–2 del secondo giro, e
-[wit/README.md](../../wit/README.md)): il test parsa `abi.wit` con `wit-parser` e
+**È fatta** (vedi [wit/README.md](../../wit/README.md), e
+[wit/frozen/README.md](../../wit/frozen/README.md) per la gemella che confronta
+il contratto con com'era): il test parsa `abi.wit` con `wit-parser` e
 confronta nelle due direzioni — contratto morto incluso — **nomi e tipi**: campi
 dei record in ordine, payload dei casi di variant, destinazioni degli alias,
 firme complete delle funzioni, ed elisione di `host`. I tipi attesi non sono
@@ -94,10 +95,11 @@ Resta a M4, sulla conformità:
 
 ## Checklist del freeze
 
-Le decisioni "gratis prima, breaking dopo" del §1 di [todo.md](../todo.md), che
-è l'elenco autorevole e per intero (§1.1–§1.36, tutte P0); qui stanno quelle che
-hanno una **domanda aperta** e una risposta da mettere a verbale prima di
-chiudere. Le prime sono **già chiuse** in corso d'opera (il costo era una riga
+Le decisioni "gratis prima, breaking dopo" sono le voci marcate **P0** in
+[todo.md](../todo.md) — la marcatura vuol dire esattamente questo: forma di
+contratto, quindi scadenza al freeze — e quell'elenco è l'autorevole; qui stanno
+quelle che hanno una **domanda aperta** e una risposta da mettere a verbale prima
+di chiudere. Le prime sono **già chiuse** in corso d'opera (il costo era una riga
 oggi, una migrazione domani); le altre restano al freeze.
 
 **Chiuse prima del freeze:**
@@ -122,13 +124,13 @@ oggi, una migrazione domani); le altre restano al freeze.
 
 **Da chiudere al freeze:**
 
-- [x] **Il grafo nel contratto** — fatto col §1.6: `IndexQuery::Neighbors { doc,
+- [x] **Il grafo nel contratto** — fatto con la [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md): `IndexQuery::Neighbors { doc,
       direction, depth, page }` risponde dal `LinkGraph`, e `NeighborRef` porta
       il `via` con cui si ricostruiscono gli archi oltre il primo passo. Il
       comando `graph_data` non è più superficie privilegiata: è il **primo
       cliente** della variante, e prende gli archi una nota alla volta come farà
       una vista a grafo di terzi.
-- [x] **Import ed export nel contratto** — fatto col §1.7:
+- [x] **Import ed export nel contratto** — fatto con la [decisione 0006](../decisions/0006-import-export-come-trait.md):
       `ImportProvider`/`ExportProvider` in `abi/transfer.rs`, con
       `MarkdownImport`/`MarkdownExport` come **primo cliente** vero attraverso
       il kernel. La decisione che il freeze avrebbe reso definitiva è la forma
@@ -136,11 +138,11 @@ oggi, una migrazione domani); le altre restano al freeze.
       `ExportArtifact.bytes`), che è ciò per cui il capitolo 17 non chiede
       nessuna capacità filesystem e la sandbox di M5 non deve concedere niente.
       Con essa: `ImportMode::Preview` invece di un `MigrationPlan` gemello, e
-      `HostApi::free_name` — una capacità in più nell'elenco del §1.4, trovata
-      da un cliente vero. Restano aperti sopra questa firma il §1.12 (rollback e
-      lotto), il §1.21 (l'import come lavoro lungo) e il §1.28 (il modello a un
+      `HostApi::free_name` — una capacità in più nell'elenco della [decisione 0013](../decisions/0013-elenco-delle-capacita.md), trovata
+      da un cliente vero. Restano aperti sopra questa firma la [decisione 0011](../decisions/0011-il-lotto.md) (rollback e
+      lotto), il §9.1 (l'import come lavoro lungo) e il §4.2 (il modello a un
       exporter).
-- [x] **Modificare un pezzo di documento** — fatto col §1.16:
+- [x] **Modificare un pezzo di documento** — fatto con la [decisione 0008](../decisions/0008-modifica-chirurgica.md):
       `HostApi::apply_edit(id, EditRequest { base, edits })` e
       `HostApi::document_revision(id)` (interface `edit` nel WIT), con la
       riscrittura dei link su rename come **primo cliente** vero. La decisione
@@ -150,10 +152,10 @@ oggi, una migrazione domani); le altre restano al freeze.
       sarebbe una migrazione di ogni chiamante. Con essa: `PluginError::Conflict`
       come caso a sé (l'unico errore che si **riprova** invece di correggerlo) e
       un rapporto in coordinate nuove da cui l'inverso di un edit è un edit.
-      Restano aperti sopra questa firma il §1.12 (il lotto su più documenti), il
-      §1.17 (chi possiede l'undo) e il §1.18 (l'edit sull'evento, senza cui la
+      Restano aperti sopra questa firma la [decisione 0011](../decisions/0011-il-lotto.md) (il lotto su più documenti), il
+      §13.3 (chi possiede l'undo) e la [decisione 0012](../decisions/0012-origine-degli-eventi.md) (l'edit sull'evento, senza cui la
       shell deve ricaricare il documento invece di applicarlo al buffer).
-- [x] **Operazioni strutturali e parità plugin↔nativo** — fatto col §1.4, che ha
+- [x] **Operazioni strutturali e parità plugin↔nativo** — fatto con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md), che ha
       **chiuso l'elenco** delle capacità: `create_document`, `rename_document`,
       `trash_document`, `list_trash`, `restore_document`, `empty_trash`,
       `run_command`; via `storage_get`/`storage_set`; ventidue metodi in tutto.
@@ -168,7 +170,7 @@ oggi, una migrazione domani); le altre restano al freeze.
       `run_command` non prende né modo né attore né lotto — li eredita tutti e
       tre. `wit/frozen/0.1.0.wit` **ritagliato** (`storage-*` era pubblicata).
       Verbale capacità per capacità, incluse quelle che restano fuori, in
-      [todo.md §1.4](../todo.md).
+      [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
 - [x] **`create_note` in una cartella** — deciso col punto sopra:
       `create_document` prende un **`DocId` completo**, non un nome da cui
       l'host deriva il path. Un importer o un template sanno dove va la nota, e
@@ -185,7 +187,7 @@ oggi, una migrazione domani); le altre restano al freeze.
       basta. Aggiungere un canale dopo è breaking; l'alternativa ponte è un
       `Event::Custom` con topic convenzionale (`<plugin>/job-progress`), che
       il varco già permette senza toccare il contratto — se basta quella, la
-      decisione è "JobDone + convenzione documentata". Il §1.4 ha già deciso la
+      decisione è "JobDone + convenzione documentata". La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha già deciso la
       **forma**: se un canale ci sarà, sarà un **evento** e non una capacità —
       ciò che si limita a informare non è qualcosa di cui il chiamante aspetta
       la risposta. Resta da decidere se serve una variante dedicata o basta
@@ -198,21 +200,21 @@ oggi, una migrazione domani); le altre restano al freeze.
       solo quando le sue coordinate valgono anche per il sorgente del kernel.
       `ViewSpec` guadagna `follows: ContextMask`, o "ridisegna al cambio di nota
       attiva" diventerebbe "ridisegna a ogni battuta di tasto". Verbale in
-      [todo.md §1.9](../todo.md); `wit/frozen/0.1.0.wit` **ritagliato** (la
+      [decisione 0007](../decisions/0007-contesto-di-sessione.md); `wit/frozen/0.1.0.wit` **ritagliato** (la
       firma di `active-document` era pubblicata).
 - [ ] **Identità del documento: il path è per sempre la chiave?**
-      ([todo.md §1.10](../todo.md)) FEATURES chiede uuid opzionale (2.2), stable
+      ([todo.md §13.1](../todo.md)) FEATURES chiede uuid opzionale (2.2), stable
       note ID e redirect da note rinominate (7.1), Zettelkasten ID (8.3), mentre
       ogni firma prende `DocId` = path. O si dichiara che il path resta la chiave
       e i redirect sono una feature sopra (tabella di alias persistente), o si
       introduce ora un `DocRef` a due forme: la seconda strada, dopo, è una major.
-- [ ] **Forma dell'errore al confine** ([todo.md §1.11](../todo.md)):
+- [ ] **Forma dell'errore al confine** ([todo.md §12.2](../todo.md)):
       `PluginError`/`KernelError` sono nel contratto e finiscono in `String` su
       tutti i comandi IPC. Decidere se l'errore porta **codice + parametri** —
-      prerequisito della localizzazione (25.2, §1.8), delle notifiche (10.5) e
+      prerequisito della localizzazione (25.2, §12.1), delle notifiche (10.5) e
       dei retry delle automazioni (16.3). Un messaggio già composto non si
       traduce e non si discrimina: la shell oggi indovina.
-- [x] **Il lotto: serve una variante di evento?** — sì, fatto col §1.12 + §1.18:
+- [x] **Il lotto: serve una variante di evento?** — sì, fatto con la [decisione 0011](../decisions/0011-il-lotto.md) + [decisione 0012](../decisions/0012-origine-degli-eventi.md):
       `Event::BatchEnded { batch, changed }` e `EventKind::BatchEnded` (additivi,
       in coda), `Workspace::batch(|ws| …)` nel kernel, e tre clienti veri —
       `rename_document`, ogni `invoke_command(…, Apply)` e la shell. Le quattro
@@ -227,7 +229,7 @@ oggi, una migrazione domani); le altre restano al freeze.
          sospenderebbe gli eventi del vault per sempre. Il lotto di un plugin è
          la sua invocazione di comando.
       3. **Semantica di annullamento** → **nessuna**, e il nome lo dice (`batch`,
-         non `transaction`): il tutto-o-niente vuole il journal del §2.5, e un
+         non `transaction`): il tutto-o-niente vuole il journal del §15.2, e un
          annullamento che non sopravvive alla morte del processo non è un
          annullamento. Chi apre il lotto sceglie per il proprio caso, dal proprio
          valore di ritorno.
@@ -239,7 +241,7 @@ oggi, una migrazione domani); le altre restano al freeze.
       `index-updated` dentro un lotto non riceve più niente. Presidiato da
       `EventMask::misses_batches()` nel contratto e da un test su ogni view
       ufficiale, non da una nota nella prosa.
-- [x] **L'origine degli eventi** — fatta col §1.18, ed è **l'unica rottura di una
+- [x] **L'origine degli eventi** — fatta con la [decisione 0012](../decisions/0012-origine-degli-eventi.md), ed è **l'unica rottura di una
       firma già pubblicata** di questo giro: `event-handler.handle` prendeva un
       `event` nudo e adesso prende un `notice` (evento + origine). Linea di base
       ritagliata in `wit/frozen/0.1.0.wit`, con la ragione accanto: senza
@@ -254,21 +256,21 @@ oggi, una migrazione domani); le altre restano al freeze.
       `CommandProvider::invoke` resta com'era, perché l'origine l'host la
       **appone** e il comando non la legge.
 - [ ] **Canale del rendering: solo HTML, o anche il modello?**
-      ([todo.md §1.13](../todo.md)) `render_html` è puro per-documento e la shell
+      ([todo.md §4.1](../todo.md)) `render_html` è puro per-documento e la shell
       riceve una `String`; nessun canale porta il `DocumentModel` al frontend.
       Sopra la stringa opaca stanno lazy loading, hover popover, scroll sync,
       rendering incrementale e sanitizzazione (6.1, 5.3), e la sintassi nuova
-      nasce due volte (Rust + Lezer, §3.8). Decidere se l'HTML resta la
+      nasce due volte (Rust + Lezer, §4.4). Decidere se l'HTML resta la
       fast-path e il modello con gli `Span` diventa il canale dell'interattivo.
-- [x] **Un comando invocato da chi non ha letto il codice** — fatto col §1.1 +
-      §1.36: registro nel `Workspace` (`register_command_provider`, `commands`,
+- [x] **Un comando invocato da chi non ha letto il codice** — fatto con la [decisione 0009](../decisions/0009-registro-dei-comandi.md) +
+      [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md): registro nel `Workspace` (`register_command_provider`, `commands`,
       `invoke_command`), `list_commands`/`invoke_command` sull'IPC, interface
       `command` riscritta nel WIT, e `CoreCommands` + la **palette** come primi
       clienti. Le tre domande, con la risposta a verbale:
       1. **Come si dichiara un parametro** → uno **schema a sé**
          (`ParamSpec { name, title, description, kind, required }`,
          `ParamKind { text, number, bool, document, documents, choice }`), non i
-         nodi del §1.2. La ragione non è che i nodi non basterebbero: è che
+         nodi del §2.1. La ragione non è che i nodi non basterebbero: è che
          dichiarare *cosa serve* e disegnare *come lo si chiede* sono due
          domande, e solo la prima ha senso per la CLI, per un'automazione e per
          un modello, che non disegnano niente. Quando arriveranno i nodi di
@@ -277,7 +279,7 @@ oggi, una migrazione domani); le altre restano al freeze.
          un chiamante non umano sceglie a caso.
       2. **Dove vive il dry-run** → un argomento `mode: InvokeMode` su `invoke`,
          cioè la **rottura di firma fatta adesso** (linea di base ritagliata in
-         `wit/frozen/0.1.0.wit`, come per il §1.9). La variante
+         `wit/frozen/0.1.0.wit`, come per la [decisione 0007](../decisions/0007-contesto-di-sessione.md)). La variante
          `CommandOutcome::Plan` da sola sarebbe stata una convenzione fra
          chiamante e comando; con il modo nella firma, l'host può *far
          rispettare* la simulazione — presta un `HostApi` in sola lettura, e un
@@ -294,15 +296,15 @@ oggi, una migrazione domani); le altre restano al freeze.
          la risposta — e una firma che ogni host dovrà onorare e nessuno onora è
          peggio che assente. In più il piano si **legge**: mostra i `DocId`
          impattati e gli `EditRequest` proposti, mentre «sei sicuro?» mostra ciò
-         che il comando sceglie di dire. Il §2.10 resta la domanda gemella e
+         che il comando sceglie di dire. Il §7.3 resta la domanda gemella e
          diversa: non «l'utente approva questa esecuzione?» ma «questo componente
          può, in generale?».
       Resta aperto sopra questa firma, dichiarato: ~~l'**attribuzione**~~
-      (fatta, §1.18 + §1.12), le **impostazioni scrivibili da un programma**
-      (§1.3: il vocabolario c'è, `CommandReach::Settings`, lo schema no),
-      ~~i **comandi strutturali**~~ (fatti, §1.4: cinque comandi, sei comandi
+      (fatta, [decisione 0012](../decisions/0012-origine-degli-eventi.md) + [decisione 0011](../decisions/0011-il-lotto.md)), le **impostazioni scrivibili da un programma**
+      (§11.1: il vocabolario c'è, `CommandReach::Settings`, lo schema no),
+      ~~i **comandi strutturali**~~ (fatti, [decisione 0013](../decisions/0013-elenco-delle-capacita.md): cinque comandi, sei comandi
       Tauri in meno) e i **comandi della shell** (toggle dei pannelli: il registro vive nel kernel e
-      il frontend non può registrarvisi — §3.2).
+      il frontend non può registrarvisi — §18.2).
 
 ## Trait/API coinvolti
 
@@ -317,7 +319,7 @@ oggi, una migrazione domani); le altre restano al freeze.
 | WIT **vivo da M2**, freeze a M4 | La regola d'oro diventa verificabile ad ogni commit, non un atto di fede a fine corsa. |
 | Primo plugin **nativo** prima del WASM | Separa "il confine è giusto?" da "il runtime WASM funziona?"; M5 resta meccanico. |
 | JSON libero come `string` in WIT | Preserva l'escape hatch (`attrs`/`args`) senza esplodere il contratto. |
-| L'`HostApi` è **chiusa** dal §1.4 | Ventidue metodi, e ogni capacità esclusa ha una ragione scritta: dopo il freeze, una capacità mancante è una feature che non potrà mai essere un plugin, e "non ci avevamo pensato" non è un motivo che si possa leggere fra sei mesi. |
+| L'`HostApi` è **chiusa** dalla [decisione 0013](../decisions/0013-elenco-delle-capacita.md) | Ventidue metodi, e ogni capacità esclusa ha una ragione scritta: dopo il freeze, una capacità mancante è una feature che non potrà mai essere un plugin, e "non ci avevamo pensato" non è un motivo che si possa leggere fra sei mesi. |
 | Cambi additivi versionati post-freeze | Stabilità per i plugin di terzi senza bloccare l'evoluzione. |
 
 ## Criteri di accettazione
@@ -326,7 +328,7 @@ oggi, una migrazione domani); le altre restano al freeze.
   abi↔WIT è verde e **rompe** su una divergenza introdotta ad arte.
 - Il primo plugin nativo si attiva, registra i suoi provider, funziona end-to-end e
   rispetta i permessi (un accesso fuori `vault_scope` è negato con
-  `PermissionDenied`). I permessi sono la metà che il §1.4 ha lasciato al §2.10:
+  `PermissionDenied`). I permessi sono la metà che la [decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha lasciato al §7.3:
   il **rifiuto** esiste già ed è provato su tutte le strutturali; manca il
   registro dei manifest che dica *a chi* concedere.
 - La superficie dei trait è dichiarata **congelata**; policy di versioning documentata.

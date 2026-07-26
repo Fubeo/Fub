@@ -38,7 +38,7 @@ use crate::model::{DocId, Span};
 /// la inventa mai (un pannello nasce e muore nell'app, non nel vault). Serve
 /// perché un provider possa **distinguere** due contesti — tenere lo stato per
 /// pannello in `storage_*`, accorgersi che il focus si è spostato — anche prima
-/// che le view sappiano istanziarsi (§1.15).
+/// che le view sappiano istanziarsi (§2.3).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct PaneId(pub String);
 

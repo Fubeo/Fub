@@ -1,4 +1,4 @@
-//! Il canale dati del §1.6 su un vault vero: grafo, proprietà, faccette,
+//! Il canale dati della decisione 0005 su un vault vero: grafo, proprietà, faccette,
 //! salute, finestre.
 //!
 //! Sta qui e non fra i test del kernel perché serve markdown *vero* — è dal
@@ -293,7 +293,7 @@ fn the_health_of_the_vault_is_a_query_like_the_others() {
             "Progetti/Alpha.md".to_string(),
             Some("Nota che non c'è".to_string())
         )],
-        "solo il wikilink che non risolve; l'immagine di Diario.md non è un link rotto (§2.2)"
+        "solo il wikilink che non risolve; l'immagine di Diario.md non è un link rotto (§14.1)"
     );
     let issue = &broken.items[0];
     let span = issue.span.expect("un link rotto ha un punto nel sorgente");
