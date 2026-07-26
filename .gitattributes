@@ -1,0 +1,11 @@
+# Fine riga LF ovunque, anche nei checkout Windows.
+#
+# Non è una preferenza di stile: qui ci sono test che confrontano i **byte** di
+# file letti dal disco. `wit_conformance` legge `wit/fubmd/abi.wit` e ne muta
+# pezzi cercando stringhe che contengono `\n`; con un checkout in CRLF quelle
+# `replace` non trovano niente, la mutazione non muta, e il test che deve
+# dimostrare che la conformità sa fallire fallisce lui — solo su Windows, dove
+# nessuno di noi guarda.
+#
+# `text=auto` lascia stare i binari: git li riconosce e non li tocca.
+* text=auto eol=lf
