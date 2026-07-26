@@ -1,0 +1,412 @@
+--- a/docs/roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md
++++ b/docs/roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md
+@@ -87,8 +87,13 @@
+       `run_job` fuori dal lock e riconsegna con `complete_job`. Esiste il giro,
+       esiste il test, **non esiste il chiamante in produzione**: oggi
+       `spawn_job` accoda e basta.
+-- [ ] **Namespace per-plugin sullo `storage_*`** ora che il registry esiste
+-      (era rimandato "a quando ci sarà il registry").
++- [ ] ~~**Namespace per-plugin sullo `storage_*`**~~ — **decaduta**: lo
++      `storage_*` volatile è stato **ritirato** dal contratto dalla
++      [decisione 0013](../decisions/0013-elenco-delle-capacita.md), quindi non c'è
++      più niente da namespacare. Il recinto per-plugin che resta è quello dei
++      `data_*`, che ce l'ha già (`plugin_data_dir`, `workspace.rs:2177`). Dove il
++      buco è rimasto aperto è lo **stato di vista**, che non ha più nemmeno un
++      contenitore sbagliato: §11.2.
+ - [ ] **Safe mode / isolamento**: un provider che pania non deve portarsi via il
+       vault (`catch_unwind` al confine, disattivazione con avviso) — 24.2, 20.3.
+ 
+--- a/docs/roadmap/10-gli-eventi.md
++++ b/docs/roadmap/10-gli-eventi.md
+@@ -18,27 +18,34 @@
+ 
+ *ex §1.19 · contratto · **P0** — la forma della maschera è contratto*
+ 
+-- [ ] **La maschera è un `Vec<EventKind>` su 8 varianti**, e a
+-      [`Event::Custom`] ci si abbona a grana `EventKind::Custom`
+-      (`abi/event.rs:42`, consegna in `workspace.rs:1288`): con i moduli
+-      FubSuite che si parlano fra loro (21.2), ogni handler si sveglia per
+-      **ogni** custom di **ogni** plugin.
+-- [ ] **Manca la grana del soggetto**: nessuno può abbonarsi a "i cambiamenti
+-      di questa cartella" o "di questo documento", quindi l'evento più caldo
+-      (`DocumentChanged`) sveglia tutti, N feature × M documenti. Prefisso di
+-      topic per i custom e filtro per documento/cartella per gli altri: la
+-      forma della maschera è contratto, e va allargata prima che le famiglie di
+-      provider si moltiplichino.
++- [ ] **La maschera è un `Vec<EventKind>` su 9 varianti**
++      (`abi/event.rs:315`; il controllo della consegna è in
++      `workspace.rs:2082`), e a [`Event::Custom`] ci si abbona a grana
++      `EventKind::Custom`: con i moduli FubSuite che si parlano fra loro (21.2),
++      ogni handler si sveglia per **ogni** custom di **ogni** plugin.
++- [ ] **Il prefisso di topic non va inventato: c'è già.** Un custom è per
++      convenzione `"<plugin-id>/<nome>"` (`abi/event.rs:240`), quindi qui non
++      manca il formato — manca il **match sul prefisso** in `EventMask`. E il
++      formato è quello del §7.4 (gli id e il loro namespace, P0): si decide lì,
++      qui resta il solo filtro. Due voci, una decisione.
++- [ ] **Manca la grana del soggetto**, ed è la metà che va davvero inventata:
++      nessuno può abbonarsi a "i cambiamenti di questa cartella" o "di questo
++      documento", quindi l'evento più caldo (`DocumentChanged`) sveglia tutti,
++      N feature × M documenti. Per documento il soggetto è già nominabile (è il
++      `DocId`); per cartella è un prefisso di path, e chi rende la cartella un
++      cittadino del kernel è il §14.3. La forma della maschera è contratto, e va
++      allargata prima che le famiglie di provider si moltiplichino.
+ 
+ ### 10.2 Il ponte degli eventi non ha né freno né raggruppamento
+ 
+ *ex §2.27 · kernel · **P2** — il primo cliente vero sarà il progresso dei job (9.3)*
+ 
+-- [ ] **`EventBus` usa canali `std::mpsc` illimitati** (`kernel/bus.rs:14`) e il
+-      ponte verso la webview emette **un messaggio IPC per evento**
+-      (`app/lib.rs:184-188`). Un subscriber lento non rallenta nessuno: accumula
++- [ ] **`EventBus` usa canali `std::mpsc` illimitati** (`kernel/bus.rs:28`) e il
++      ponte verso la webview emette **un messaggio IPC per evento**, da un thread
++      dedicato che fa `recv()` e `emit` in un ciclo senza freno
++      (`app/lib.rs:208-215`). Un subscriber lento non rallenta nessuno: accumula
+       memoria, in silenzio, senza un tetto — l'opposto del `DISPATCH_BUDGET`
+-      che protegge gli handler.
++      (`workspace.rs:129`) che protegge gli handler.
+ - [ ] **E ogni evento costa un giro di shell**: a ogni `index_updated` (o
+       `batch_ended`) la shell rifà `list_documents` e ridisegna ogni view
+       iscritta. La [decisione 0011](../decisions/0011-il-lotto.md) ha ridotto gli eventi *che costano un ridisegno* —
+@@ -61,6 +68,13 @@
+       proseguire, e ciò che si limita a informare è un evento. Da evento porta
+       già `Origin.actor` (chi lo ha detto) e in simulazione non compare (`emit`
+       su un host in sola lettura è un no-op). Oggi gli errori finiscono in
+-      `eprintln!` e l'utente non li vede; il percorso in cui c'è qualcuno che
+-      aspetta ha già `CommandOutcome.notify`.
++      `eprintln!` da un lato del confine e in `console` dall'altro, e l'utente
++      non li vede; il percorso in cui c'è qualcuno che aspetta ha già
++      `CommandOutcome.notify`.
++- [ ] **Questa voce non è la superficie: è la sua forma bella.** Che nella shell
++      *esista un posto* dove un messaggio può comparire è il §20.4 (**P1**), che
++      lo dice già dal suo lato («il §10.3 la farà bella; qui basta che esista») e
++      ne conta dodici occasioni mancate. Quella viene prima e va comunque fatta;
++      questa aggiunge il canale a evento, lo storico e il raggruppamento. Non
++      vanno unite, ma nemmeno prese nell'ordine sbagliato.
+ - [ ] **Centro attività**: job in corso, progresso, cancellazione (24.1).
+--- a/docs/roadmap/11-impostazioni-e-i-tre-stati.md
++++ b/docs/roadmap/11-impostazioni-e-i-tre-stati.md
+@@ -54,9 +54,16 @@
+ *ex §3.10 · shell · **P2** — da decidere **adesso**, insieme all'11.1, anche se si implementa dopo*
+ 
+ - [ ] **Un `ViewProvider` non ha dove tenere il proprio stato di vista**:
+-      scroll, sezioni collassate, filtro corrente, tab attiva. `storage_*` è
+-      volatile e a chiave→valore (e senza namespace per-view), `data_*` è per i
+-      dati che durano.
++      scroll, sezioni collassate, filtro corrente, tab attiva. Non ha **niente**,
++      e da poco ha meno di prima: la [decisione 0013](../decisions/0013-elenco-delle-capacita.md)
++      ha **ritirato** lo `storage_*` volatile a chiave→valore — l'unica rottura
++      della linea di base di quel giro — perché fra i `data_*` da una parte e le
++      impostazioni del §11.1 dall'altra non gli restava un caso proprio. Il caso
++      proprio è questo, ed è rimasto senza contenitore: ciò che il contratto offre
++      oggi è il solo `data_*` (`abi/traits.rs:281-288`), che è persistente, su
++      path e pensato per i dati che durano e viaggiano col vault — mentre lo stato
++      di vista è per-macchina e per-pane, e non deve viaggiare. Il ritiro non ha
++      creato il buco: ha tolto l'illusione che fosse tappato.
+ - [ ] **Sono tre cose distinte, e vanno decise insieme o nasceranno con tre
+       meccanismi incompatibili**: le **impostazioni** (durano e viaggiano col
+       vault — §11.1), lo **stato di vista/sessione** (per-macchina, per-pane —
+@@ -71,10 +78,10 @@
+ *ex §2.14 · kernel · **P2** — da **assorbire**, non da affiancare*
+ 
+ - [ ] **`.fubmd/workspace.json` è un precedente fuori da ogni disciplina**: lo
+-      legge e scrive l'app con `std::fs` (`app/lib.rs:596-615`). Sono dati
++      legge e scrive l'app con `std::fs` (`app/lib.rs:640-665`). Sono dati
+       **autorevoli** — icone, appuntate, ordinamenti, spazi — senza scrittura
+       atomica, senza versione di schema (§15.3), fuori dal cestino e dal
+-      versioning, con la migrazione sui rename in TypeScript (`main.ts:638`):
++      versioning, con la migrazione sui rename in TypeScript (`main.ts:714`):
+       una nota rinominata da un'altra app **a FubMD chiusa** orfanizza icona,
+       pin e ordinamento in silenzio, perché quell'evento non lo vede nessuno.
+ - [ ] Lo store di configurazione del §11.1 deve **assorbirlo**, non affiancarlo:
+--- a/docs/roadmap/12-stringhe-errori-locale.md
++++ b/docs/roadmap/12-stringhe-errori-locale.md
+@@ -32,9 +32,11 @@
+ 
+ - [ ] **Un errore con codice e parametri**: i comandi Tauri restituiscono
+       `Result<_, String>` con la prosa italiana del kernel. Il costo è già
+-      visibile: `restoreFromTrash` (`main.ts:856`) intercetta **qualunque**
+-      errore e assume "path di nuovo occupato", quindi un errore di I/O o di
+-      permessi produce all'utente la domanda sbagliata.
++      visibile: `restoreFromTrash` (`main.ts:951`) ha un `catch` nudo che
++      intercetta **qualunque** errore e assume "path di nuovo occupato", quindi
++      un errore di I/O o di permessi produce all'utente la domanda sbagliata — e
++      la risposta «Ripristina» a quella domanda ritenta con un nome libero, che
++      per un disco pieno fallirà di nuovo.
+ - [ ] **`PluginError`/`KernelError` sono nel contratto**, quindi la forma scade
+       col freeze; ed è il gemello della decisione del §12.1 — chi localizza le
+       stringhe localizza anche gli errori, e un messaggio già composto non si
+@@ -49,7 +51,7 @@
+ 
+ Il versioning ha trovato `now_unix_millis` con l'argomento giusto: sotto sandbox
+ un componente non ha orologio, e uno che chiamasse `SystemTime::now` sarebbe non
+-testabile e non funzionante (`abi/traits.rs:125-131`). Lo stesso argomento, non
++testabile e non funzionante (`abi/traits.rs:296`). Lo stesso argomento, non
+ applicato, lascia fuori tre cose:
+ 
+ - [ ] **Il caso e gli UUID**: «UUID opzionale per nota» (2.2), Zettelkasten ID e
+--- a/docs/roadmap/13-identita-del-documento.md
++++ b/docs/roadmap/13-identita-del-documento.md
+@@ -38,7 +38,7 @@
+ 
+ - [ ] **Il rename è già un rito che ognuno celebra per conto proprio**: il
+       versioning migra la sua chiave sull'evento `DocumentRenamed`, il sidecar
+-      dell'organizzazione la migra in TypeScript (`main.ts:638`), e le prossime
++      dell'organizzazione la migra in TypeScript (`main.ts:714`), e le prossime
+       — annotazioni (13.3), task (10), commenti (4.3, 19.2), database (11),
+       flashcard (21.2) — la migreranno una terza e una quarta volta, ognuna col
+       proprio buco già annotato al §11.3 (il rename fatto ad app chiusa non lo
+@@ -59,11 +59,22 @@
+ *ex §1.17 · contratto · **P0** — senza la decisione, il lotto e `CommandOutcome` nascono privi del campo*
+ 
+ - [ ] **Oggi l'undo vive solo dentro CodeMirror**, su un **unico** `EditorView`
+-      riusato per tutte le note (`editor.ts:50`): dopo un cambio nota un Ctrl-Z
+-      riporta il contenuto della nota *precedente*. È un bug, ma il bug è il
+-      sintomo: non c'è un modello di undo, c'è l'undo di una libreria.
++      costruito una volta (`editor.ts:81`, da `main.ts:132`) e riusato per tutte
++      le note: `setDoc` sostituisce il documento con un `dispatch` di `changes`
++      normali, che entrano nella history di `basicSetup` come qualunque
++      modifica dell'utente. Non c'è un modello di undo, c'è l'undo di una
++      libreria, e la libreria non sa che le note sono cambiate.
++- [ ] **Il difetto che ne segue non aspetta questa decisione, ed è un bug della
++      shell: va chiuso subito.** Dopo un cambio nota un Ctrl-Z riporta il
++      contenuto della nota *precedente* — cioè scrive nel documento aperto il
++      testo di un altro, e il salvataggio automatico lo persiste. Si chiude
++      svuotando la history dentro `setDoc` (o marcando quel `dispatch` come non
++      annullabile), in poche righe, senza nessuna delle decisioni di forma qui
++      sotto. Tenerlo in ostaggio del freeze significa lasciare per mesi una
++      perdita di dati a portata di scorciatoia; sta come lavoro di shell nel
++      §18.1, e qui resta perché è il **sintomo** che ha fatto trovare la voce.
+ - [ ] **Nessuna mutazione del kernel è annullabile**: rename con riscrittura di
+-      N sorgenti (`workspace.rs:696`), ripristino di versione, e domani bulk
++      N sorgenti (`workspace.rs:855`), ripristino di versione, e domani bulk
+       fix, automazioni, import. FEATURES lo chiede in cinque punti: 4.2 (undo
+       illimitato, cronologia per sessione), 3.3 (undo toast), 11.3 (undo
+       database), 16.3 (undo delle automazioni), 17.3 (rollback dell'import).
+--- a/docs/roadmap/14-entry-cartelle-lista.md
++++ b/docs/roadmap/14-entry-cartelle-lista.md
+@@ -36,9 +36,11 @@
+ 
+ *ex §2.20 · kernel · **P2** — il `VaultEntry` esteso ai **documenti***
+ 
+-- [ ] **`DocMeta` tiene id, frontmatter, outline e link** (`workspace.rs:125-130`)
+-      e il `Vault` non espone uno `stat`. Quindi `reindex` **rilegge e riparsa
+-      l'intero vault a ogni apertura** (`workspace.rs:341-351`): «un indice
++- [ ] **`DocMeta` tiene id, frontmatter, outline e link** (`workspace.rs:154`)
++      e il `Vault` non espone uno `stat`: mtime e dimensione li legge già, ma solo
++      per le voci del cestino (`vault.rs:293-316`), e per i documenti non li tiene
++      nessuno. Quindi `reindex` **rilegge e riparsa l'intero vault a ogni
++      apertura** (`workspace.rs:438-450`): «un indice
+       persistente riconosce e salta gli immutati» è vero per l'indice, non per
+       il kernel, che paga comunque lettura + parse di tutto prima ancora di
+       chiedere all'indice se gli interessa.
+@@ -58,7 +60,7 @@
+ *ex §2.11 · kernel · **P2** — stesso lavoro della 14.4; sblocca `create_folder`, tenuto fuori da 0013*
+ 
+ - [ ] **La cartella come cittadino**: `metas` è una mappa piatta
+-      (`workspace.rs:163`) e l'albero vive solo in `organizer.ts::buildTree`.
++      (`workspace.rs:192`) e l'albero vive solo in `organizer.ts::buildTree`.
+       È anche la ragione per cui la [decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha lasciato `create_folder` **fuori**
+       dall'`HostApi`: una capacità che creasse una directory vuota produrrebbe
+       qualcosa che nessun'altra capacità vede — `list_documents` non la mostra,
+@@ -67,7 +69,7 @@
+       Quindi non si può creare una cartella vuota (le directory nascono per
+       effetto collaterale di `Vault::write`), rinominarne una sarebbe N rename
+       senza atomicità ([decisione 0011](../decisions/0011-il-lotto.md)) e senza un `FolderRenamed`, e icone/ordinamenti di
+-      cartella nel sidecar non li migra nessuno — `migrateMeta` (`main.ts:638`)
++      cartella nel sidecar non li migra nessuno — `migrateMeta` (`main.ts:714`)
+       gestisce i soli documenti.
+ 
+ *Sblocca:* 3.2 (crea/rinomina/sposta cartella, drag & drop), 8.2 (folder-level
+@@ -79,10 +81,14 @@
+ 
+ *ex §2.13 · kernel · **P2** — il canale più usato dell'app, e l'unico fuori da `IndexQuery`*
+ 
+-- [ ] **`list_documents` non è nel contratto e non scala**: restituisce
+-      `Vec<String>` con **tutto** il vault, ricostruito e riordinato a ogni
+-      chiamata (`workspace.rs:380`), e la shell ne ricostruisce l'albero intero a
+-      ogni `index_updated`. È il canale più usato dell'app e l'unico fuori da
+-      `IndexQuery`: la paginazione della [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) non lo tocca, la virtualizzazione del
+-      §2.9 mitiga il disegno ma non il trasferimento. Va ripensato per-cartella e
+-      paginato, insieme al §14.1 (`VaultEntry`) e al §14.3.
++- [ ] **`list_documents` è nel contratto, ma fuori da `IndexQuery`, e non
++      scala**: la capacità c'è (`abi/traits.rs:158`) e non prende **né `Page` né
++      filtro** — restituisce **tutto** il vault, ricostruito e riordinato a ogni
++      chiamata (`workspace.rs:481`: colleziona le chiavi di `metas` e le ordina).
++      Sull'IPC diventa un `Vec<String>` (`app/lib.rs:302`), e la shell ne
++      ricostruisce l'albero intero a ogni `index_updated`. È il canale più usato
++      dell'app e l'unico dato che si chiede fuori da `IndexQuery`: la paginazione
++      della [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) è
++      arrivata alle query e non a lui, e la virtualizzazione del §2.9 mitiga il
++      disegno ma non il trasferimento. Va ripensato per-cartella e paginato,
++      insieme al §14.1 (`VaultEntry`) e al §14.3.
+--- a/docs/roadmap/15-il-disco.md
++++ b/docs/roadmap/15-il-disco.md
+@@ -6,13 +6,21 @@
+ 
+ ---
+ 
+-Cinque voci sul supporto e due sulle politiche di cosa ci finisce sopra. La
+-metà contratto della 15.4 è **P0**: `data_write(path, bytes, durability)` è un
+-parametro in più su una capacità già pubblicata, cioè oggi un ritaglio della
+-linea di base e dopo il freeze una major. Il resto è P2, con un'avvertenza dal
+-piano: la **versione di schema** (15.3) costa un campo adesso e un formato da
+-indovinare dopo, quindi conviene anticiparla a ogni formato che nasce, invece di
+-aspettare il suo turno.
++Cinque voci sul supporto e due sulle politiche di cosa ci finisce sopra. Della
++15.4 è **P0** la *decisione*, non l'implementazione: un dato persistito si può
++classificare in tre forme — un parametro su `data_write`, un campo di manifest,
++due radici distinte per plugin — e solo la prima è un ritaglio della linea di
++base oggi e una major dopo il freeze. Le altre due sono additive. Ciò che scade
++col freeze è **scegliere fra le tre**, perché dopo non si prendono più tutte. Il
++resto è P2, con un'avvertenza dal piano: la **versione di schema** (15.3) costa
++un campo adesso e un formato da indovinare dopo, quindi conviene anticiparla a
++ogni formato che nasce, invece di aspettare il suo turno.
++
++E un avvertimento di lessico, perché la seduta contiene due assi diversi che si
++chiamano facilmente allo stesso modo: la **durabilità** è fsync e scrittura
++atomica, ed è la 15.2; la **classe** di un dato è «si può buttare o no», ed è la
++15.4. Chiamarle entrambe *durability* è l'errore che questa seduta deve evitare,
++non commettere.
+ 
+ La 15.7 sta qui e non fra i presidi perché è la stessa domanda della durabilità
+ vista all'apertura invece che alla scrittura: la verità non si rifiuta di aprire,
+@@ -23,8 +31,9 @@
+ *ex §2.1 · kernel · **P2** — sblocca cifratura, sync, PWA e i test veloci in un colpo solo*
+ 
+ - [ ] **`trait VaultStorage`** (list, read, write atomico, rename, remove, stat,
+-      exists) con impl `FsStorage` di default; `Vault` e lo storage dei plugin
+-      (`workspace.rs:1530-1560`) ci passano sopra invece di chiamare `std::fs`.
++      exists) con impl `FsStorage` di default; `Vault` e lo spazio dati dei
++      plugin (`workspace.rs:2177` per la radice, `:2448-2470` per i `data_*`) ci
++      passano sopra invece di chiamare `std::fs`.
+ - [ ] Impl `MemStorage` per i test (oggi ogni test e2e tocca il disco).
+ 
+ *Sblocca, in un colpo solo:* 23.1 (cifratura at-rest = uno storage che cifra),
+@@ -51,12 +60,18 @@
+ 
+ *ex §2.12 · kernel · **P2** — da anticipare a **ogni formato che nasce***
+ 
+-- [ ] Ce l'ha il solo `SearchIndex` (`search.rs:59`), con la regola giusta
+-      ("versione diversa → butto e ricostruisco") — ma quello è **derivato**.
+-      Non ce l'hanno lo store del versioning, i sidecar del cestino,
+-      `.fubmd/workspace.json`, e domani impostazioni, allegati, canvas, database:
+-      dati **autorevoli**, che se non si leggono non si ricostruiscono. Costa un
+-      campo per formato oggi; domani è un formato da indovinare a valle di una
++- [ ] **Ce l'hanno due formati, e uno dei due è il precedente da imitare.** Il
++      `SearchIndex` (`search.rs:63`) con la regola giusta ("versione diversa →
++      butto e ricostruisco"), ma quello è **derivato**: buttarlo è gratis. Lo
++      store del versioning ce l'ha pure (`versioning.rs:80`, campo a `:128`,
++      controllo a `:507`) ed è **autorevole** — quindi la disciplina esiste già
++      in repo, applicata al caso difficile. Non è un buco: è il modello.
++- [ ] **Non ce l'hanno i due che scrivono JSON nudo**: il sidecar del cestino
++      (`vault.rs:237-249`, un `serde_json::to_string` senza campo di versione) e
++      `.fubmd/workspace.json` (§11.3). E non l'avranno per imitazione — di quale
++      dei due precedenti? — impostazioni, allegati, canvas e database: dati
++      **autorevoli**, che se non si leggono non si ricostruiscono. Costa un campo
++      per formato oggi; domani è un formato da indovinare a valle di una
+       segnalazione utente.
+ 
+ *Sblocca:* 27.4 (upgrade migration test), 2.1 (corruption detection), 24.2
+@@ -64,7 +79,7 @@
+ 
+ ### 15.4 I dati persistiti non hanno né una mappa né una classe
+ 
+-*ex §2.29 · kernel · **P0** — la metà **contratto** è P0 (`durability`); la metà documentale è P2*
++*ex §2.29 · kernel · **P0** — è P0 la **scelta della forma**, non il parametro; la metà documentale è P2*
+ 
+ - [ ] **Quattro posti, quattro discipline diverse, nessun documento che li
+       elenchi**: `<vault>/.fubmd/workspace.json` (autorevole, scritto dall'app
+@@ -85,13 +100,36 @@
+       «cosa si esclude dal sync» (18.1), «cosa si porta dietro un vault che si
+       copia» (2.2) e «cosa si cancella per liberare spazio» (3.1). Cinque
+       risposte indovinate, e la peggiore cancella la cronologia.
+-- [ ] **La metà nel contratto è firma, quindi scade col freeze**:
+-      `data_write(path, bytes)` diventa `data_write(path, bytes, durability)`
+-      con `Durability { Derived, Authoritative }` — un parametro in più su una
+-      capacità pubblicata, cioè oggi un ritaglio della linea di base e domani
+-      una major. È il gemello esatto del §15.3 (la *versione* di uno schema) su
+-      un altro asse: quello dice come si legge un dato vecchio, questo se il
+-      dato si può buttare.
++- [ ] **Il nome «durabilità» designa un'altra cosa, e va scartato prima di
++      scegliere la forma**: la durabilità è fsync e scrittura atomica, ed è il
++      **§15.2**, due voci più su nella stessa seduta. Qui si classifica il dato —
++      derivato o autorevole, cioè buttabile o no — che è un asse diverso e
++      ortogonale (un dato derivato può volere una scrittura atomica, un dato
++      autorevole può accontentarsi di meno). Un nome solo per due assi dentro la
++      stessa seduta si sbaglia al primo lettore: `DataClass`, `Persistence` o
++      `Recoverability`, non `Durability`.
++- [ ] **E la classe è proprietà del path, non della singola scrittura.** Con
++      `data_write(path, bytes, class)` la stessa chiave si può dichiarare
++      derivata a una scrittura e autorevole a quella dopo — il contratto
++      permetterebbe di contraddirsi — e ogni chiamante ripete a ogni chiamata un
++      tag che non cambia mai. Le forme che la dichiarano **una volta sola** sono
++      due: per **prefisso nel manifest**, o **due radici** distinte per plugin
++      (`data/` autorevole, `cache/` derivata, recintate dalla firma come già
++      succede oggi). La seconda ha il pregio che la classe diventa
++      inconfondibile: sbagliarla vuol dire scrivere nel posto sbagliato, non
++      passare l'enum sbagliato.
++- [ ] **Quindi è P0 la scelta, e le tre forme non costano lo stesso.** Il
++      parametro su `data_write` (`abi/traits.rs:283`) è oggi un ritaglio della linea
++      di base e dopo il freeze una major — quello sì scade. Il campo di manifest
++      e la seconda radice sono **additivi**: `HostApi` la implementa l'host, non
++      il guest, quindi una coppia `cache_read`/`cache_write` in più non rompe
++      nessun plugin, e un campo di manifest nemmeno. Il che vuol dire che *se* la
++      risposta è una delle ultime due, l'implementazione può seguire M3 senza
++      costare niente; ma **decidere** resta P0, perché una delle tre dopo il
++      freeze non si prende più, e sceglierla implicitamente non-scegliendo
++      significa averla esclusa. È il gemello del §15.3 (la *versione* di uno
++      schema) su un altro asse: quello dice come si legge un dato vecchio, questo
++      se il dato si può buttare.
+ - [ ] **La metà documentale**: `docs/architecture/on-disk-layout.md` come mappa
+       unica — chi scrive dove, con quale disciplina, con quale classe, con quale
+       versione di schema (§15.3) e con quale scrittura (atomica o no, §15.2). Non
+@@ -137,13 +175,16 @@
+ *ex §2.23 · kernel · **P1** — il lavoro deve poter **fallire in parte***
+ 
+ - [ ] **`reindex` fallisce l'intera apertura per un solo documento**: legge e
+-      parsa tutto con `?` su ogni passo (`kernel/workspace.rs:341-351`). Una
++      parsa tutto con `?` su ogni passo (`kernel/workspace.rs:438-450`). Una
+       nota illeggibile per i permessi, un file troncato da un crash, un
+-      documento che il parser rifiuta — e **il vault non si apre**. È l'opposto
++      documento che il parser rifiuta — e **il vault non si apre**. Il precedente
++      giusto è nella stessa funzione, dieci righe sotto: il flush degli indici è
++      già tollerato con un `let _ =`, perché «un indice è derivato, il vault è la
++      verità». Read e parse sono i due passi rimasti fatali. È l'opposto
+       di ciò che chiedono 2.1 (corruption detection), 24.2 (vault repair, health
+       check) e del principio per cui il vault è la verità: la verità non si
+       rifiuta di aprire, si apre segnalando cosa non ha letto.
+-- [ ] **E succede dentro un comando IPC** (`app/lib.rs:109-208`): scansione,
++- [ ] **E succede dentro un comando IPC** (`open_vault`, `app/lib.rs:115-236`): scansione,
+       parse di ogni documento, grafo, riconciliazione e flush in una chiamata
+       sincrona che ritorna un `VaultInfo`. Niente progresso, niente
+       cancellazione, niente apertura parziale — «avvio rapido», «indexing
+--- a/docs/roadmap/18-editor-e-tastiera.md
++++ b/docs/roadmap/18-editor-e-tastiera.md
+@@ -34,6 +34,15 @@
+       math) — con la regola di chi vince dove.
+ - [ ] **Invariante del buffer sporco** irrobustita (oggi custodita da un flag TS)
+       e conflitto buffer↔disco esplicito: è lavoro M3 già dichiarato.
++- [ ] **La history di undo attraversa le note, e questo è un bug da chiudere
++      subito.** L'`EditorView` è costruito una volta (`editor.ts:81`, da
++      `main.ts:132`) e `setDoc` cambia documento con un `dispatch` di `changes`
++      normali, che finiscono nella history di `basicSetup`: dopo un cambio nota un
++      Ctrl-Z scrive nella nota aperta il testo di quella precedente, e l'autosave
++      lo persiste. Si chiude svuotando la history in `setDoc`, o marcando quel
++      `dispatch` come non annullabile. **Non aspetta** la decisione sui due
++      livelli di undo (§13.3, P0, contratto): quella dice chi possiede la storia
++      di un documento, questa è una perdita di dati a portata di scorciatoia.
+ 
+ ### 18.2 Comandi e tastiera
+ 
+--- a/docs/roadmap/strozzature.md
++++ b/docs/roadmap/strozzature.md
+@@ -42,7 +42,7 @@
+ | 3.1 ignore, 3.2 nascosti, 9.1, 18.1, 23.2 esclusioni | politica di esclusione come dato | `IGNORED_DIRS` è una costante di compilazione (`vault.rs:20`) |
+ | 9.2 query builder/explain, 9.1 operatori e faccette | la query come AST nel contratto | `FullText { query: String }` va dritta al `QueryParser` di tantivy |
+ | 28 settings, 8.2 proprietà, 11.3 editing, 19.3 form | riconciliazione e **chiave** dei nodi | `mountView` fa `innerHTML = ""` a ogni ridisegno (`main.ts:1198`): un input perde il focus |
+-| 3.3 workspace salvabili, 8.3 viste salvate, 20.1 settings | tre stati distinti (settings/vista/layout) | nessuno dei tre ha un contenitore: `storage_*` è volatile e a chiave→valore |
++| 3.3 workspace salvabili, 8.3 viste salvate, 20.1 settings | tre stati distinti (settings/vista/layout) | nessuno dei tre ha un contenitore: resta il solo `data_*` (persistente, viaggia col vault), e lo `storage_*` volatile è stato ritirato (0013) |
+ | 17 import/export, 18 sync/backup, 22 AI e RAG, 19.4 publishing, 13.4 trascrizione | lavoro lungo che **vede** il vault | `Plugin::run_job` è senza `HostApi` (`abi/traits.rs:476`): l'input deve stare tutto nel payload |
+ | 5.2 (~50 estensioni), 20.1 markdown extensions, 27.3 custom blocks | innestare sintassi su un formato esistente | `FormatRegistry::by_ext` è estensione→**un** provider (`registry.rs:13`): si sostituisce, non si estende |
+ | 6.1 mermaid/math/chart, 5.2 callout personalizzati | un renderer per `Block::Custom` | è un `if custom_kind == "callout"` dentro il provider markdown (`render.rs:62`) |
