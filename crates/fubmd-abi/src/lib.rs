@@ -56,7 +56,7 @@ pub use traits::{
     BacklinkRef, CommandProvider, DocumentProperties, EventHandler, HealthCheck, HealthIssue,
     HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged,
     Plugin, PluginManifest, PropertyCount, PropertyEntry, PropertyFilter, PropertySort,
-    PropertyTest, SearchHit, SearchScope, ViewProvider, ViewSpec,
+    PropertyTest, SearchHit, SearchScope, TrashEntry, ViewProvider, ViewSpec,
 };
 pub use transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,

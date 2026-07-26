@@ -143,34 +143,11 @@ fn nothing_a_plugin_can_name_escapes_its_own_space() {
     assert!(!root.join(".fubmd-data").join("fuori.txt").exists());
 }
 
-#[test]
-fn volatile_storage_is_namespaced_per_plugin() {
-    // Due feature che scelgono la stessa chiave generica ("cursor", "config")
-    // non devono pestarsi: `data_*` ha il recinto in firma, `storage_*` lo ha
-    // nell'implementazione.
-    let (_dir, mut ws) = vault();
-
-    ws.with_host("uno", |host| {
-        host.storage_set("config", serde_json::json!("di uno"))
-    });
-    ws.with_host("due", |host| {
-        host.storage_set("config", serde_json::json!("di due"))
-    });
-
-    assert_eq!(
-        ws.with_host("uno", |host| host.storage_get("config")),
-        Some(serde_json::json!("di uno"))
-    );
-    assert_eq!(
-        ws.with_host("due", |host| host.storage_get("config")),
-        Some(serde_json::json!("di due"))
-    );
-    assert_eq!(
-        ws.with_host("terzo", |host| host.storage_get("config")),
-        None,
-        "chi non ha mai scritto non vede le chiavi altrui"
-    );
-}
+// Lo `storage_*` volatile è stato TOLTO dal contratto col §1.4 (linea di base
+// ritagliata in `wit/frozen/0.1.0.wit`), e con esso il test che ne provava lo
+// spazio dei nomi. Ciò che quel test difendeva — due feature che scelgono la
+// stessa chiave generica non si pestano — resta vero e provato qui sopra per
+// `data_*`, dove il recinto sta nella firma invece che nell'implementazione.
 
 #[test]
 fn the_clock_is_a_capability_too() {

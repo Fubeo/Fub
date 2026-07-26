@@ -318,6 +318,22 @@ export interface WorkspaceMeta {
   spaces: string[];
 }
 
+/// Gli id dei comandi strutturali che la shell invoca (§1.4).
+///
+/// Sono **stringhe del registro**, non funzioni dell'IPC: dal §1.4 la shell
+/// chiede «crea una nota» esattamente come la chiederebbe una CLI, una macro o
+/// un plugin — `invokeCommand(id, args)` — e il fatto che l'implementazione sia
+/// una feature ufficiale non le dà più nessuna scorciatoia. Sono raccolti qui e
+/// non sparsi nei chiamanti perché un id è un dato del contratto: se cambia,
+/// cambia in un posto.
+export const COMANDI = {
+  crea: "note.create",
+  rinomina: "note.rename",
+  cestina: "note.trash",
+  ripristina: "trash.restore",
+  svuota: "trash.empty",
+} as const;
+
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
@@ -325,17 +341,15 @@ export const api = {
   readDocument: (id: string) => invoke<string>("read_document", { id }),
   writeDocument: (id: string, source: string) =>
     invoke<void>("write_document", { id, source }),
-  renameDocument: (from: string, to: string) =>
-    invoke<void>("rename_document", { from, to }),
-  createNote: (name?: string) => invoke<string>("create_note", { name: name ?? null }),
-  deleteDocument: (id: string) => invoke<string>("delete_document", { id }),
+  // Crea, rinomina, cestina, ripristina e svuota NON hanno più un comando
+  // Tauri: sono comandi del registro, e la shell li chiede con `invokeCommand`
+  // (vedi `COMANDI` più sotto in questo file). Quelle due che restano restano
+  // perché **leggono**: un `CommandOutcome` porta un messaggio e un effetto,
+  // non dati, e ciò che risponde con dei dati passa dal canale di lettura.
   listTrash: () => invoke<TrashEntry[]>("list_trash"),
   // Il primo nome libero della famiglia «Nota», «Nota 1», … (D3). La
   // convenzione vive nel kernel: chiederla evita di averne due versioni.
   proposeFreeName: (id: string) => invoke<string>("propose_free_name", { id }),
-  restoreFromTrash: (id: string, to?: string) =>
-    invoke<string>("restore_from_trash", { id, to: to ?? null }),
-  emptyTrash: () => invoke<number>("empty_trash"),
   renderPreview: (id: string) => invoke<string>("render_preview", { id }),
   renderEmbed: (page: string, heading: string | null) =>
     invoke<EmbedContent>("render_embed", { page, heading }),

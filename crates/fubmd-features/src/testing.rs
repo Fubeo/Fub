@@ -14,12 +14,13 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
+use fubmd_abi::command::CommandOutcome;
 use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::event::Event;
 use fubmd_abi::model::{DocId, Heading, Span};
 use fubmd_abi::session::{PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
-    BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, Paged, TagCount,
+    BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, Paged, TagCount, TrashEntry,
 };
 use fubmd_abi::PluginError;
 
@@ -41,6 +42,13 @@ pub struct MemoryHost {
     outlines: Mutex<BTreeMap<String, Vec<Heading>>>,
     /// Aggregazione dei tag finta per [`IndexQuery::Tags`].
     tags: Mutex<Vec<TagCount>>,
+    /// Il cestino: id nel cestino → (voce, sorgente). È in memoria come il
+    /// resto, ma ha la stessa forma di quello vero — due id per voce, e il
+    /// ripristino che rifiuta un path occupato — perché è quella forma che le
+    /// feature provano.
+    trash: Mutex<BTreeMap<String, (TrashEntry, String)>>,
+    /// Contatore per timbrare le voci del cestino con id distinti.
+    trashed: AtomicU64,
 }
 
 impl MemoryHost {
@@ -229,17 +237,85 @@ impl HostApi for MemoryHost {
             .expect("la sequenza dei candidati è infinita")
     }
 
+    fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
+        if self.docs.lock().unwrap().contains_key(id.as_str()) {
+            return Err(PluginError::BadArgs(format!("{id} esiste già")));
+        }
+        self.write_document(id, source)
+    }
+
+    /// Sposta il sorgente e basta: questo doppio non ha un grafo, quindi non
+    /// riscrive i backlink entranti. Che la rinomina *li* riscriva è una
+    /// proprietà del kernel e si prova contro il kernel (`tests/`); qui si
+    /// prova che una feature sappia chiederla.
+    fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
+        let mut docs = self.docs.lock().unwrap();
+        if from == to {
+            return Ok(());
+        }
+        if docs.contains_key(to.as_str()) {
+            return Err(PluginError::BadArgs(format!("{to} esiste già")));
+        }
+        let source = docs
+            .remove(from.as_str())
+            .ok_or_else(|| PluginError::BadArgs(format!("{from} non esiste")))?;
+        docs.insert(to.to_string(), source);
+        Ok(())
+    }
+
+    fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
+        let source = self.read_document(id)?;
+        self.docs.lock().unwrap().remove(id.as_str());
+        let stamp = self.trashed.fetch_add(1, Ordering::Relaxed);
+        let trashed = DocId::new(format!(".trash/{id}.{stamp}"));
+        self.trash.lock().unwrap().insert(
+            trashed.to_string(),
+            (
+                TrashEntry {
+                    id: trashed.clone(),
+                    original: id.clone(),
+                    deleted_at: self.now_unix_millis() / 1000,
+                    size: source.len() as u64,
+                },
+                source,
+            ),
+        );
+        Ok(trashed)
+    }
+
+    fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
+        let trash = self.trash.lock().unwrap();
+        let mut voci: Vec<TrashEntry> = trash.values().map(|(e, _)| e.clone()).collect();
+        voci.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at).then(a.id.cmp(&b.id)));
+        Ok(voci)
+    }
+
+    fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
+        let (voce, source) = self
+            .trash
+            .lock()
+            .unwrap()
+            .get(entry.as_str())
+            .cloned()
+            .ok_or_else(|| PluginError::BadArgs(format!("{entry} non è nel cestino")))?;
+        let target = to.unwrap_or(voce.original);
+        self.create_document(&target, &source)?;
+        self.trash.lock().unwrap().remove(entry.as_str());
+        Ok(target)
+    }
+
+    fn empty_trash(&mut self) -> Result<u64, PluginError> {
+        let mut trash = self.trash.lock().unwrap();
+        let quante = trash.len() as u64;
+        trash.clear();
+        Ok(quante)
+    }
+
     fn emit(&mut self, _event: Event) {}
 
     fn spawn_job(&mut self, _spec: JobSpec) -> Result<JobId, PluginError> {
         Ok(JobId(0))
     }
-
-    fn storage_get(&self, _key: &str) -> Option<serde_json::Value> {
-        None
-    }
-
-    fn storage_set(&mut self, _key: &str, _value: serde_json::Value) {}
 
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
         Ok(self.blobs.lock().unwrap().get(path).cloned())
@@ -317,5 +393,17 @@ impl HostApi for MemoryHost {
 
     fn active_context(&self) -> Option<ViewContext> {
         self.context.lock().unwrap().clone()
+    }
+
+    /// Il doppio non ha un registro dei comandi: comporre comandi si prova
+    /// contro il kernel, che è l'unico ad averlo. Rispondere `unknown-command`
+    /// è la stessa risposta che darebbe l'host vero per un id inesistente, e
+    /// non è un finto successo.
+    fn run_command(
+        &mut self,
+        command: &str,
+        _args: serde_json::Value,
+    ) -> Result<CommandOutcome, PluginError> {
+        Err(PluginError::UnknownCommand(command.to_string()))
     }
 }
