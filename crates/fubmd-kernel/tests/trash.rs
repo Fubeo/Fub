@@ -170,7 +170,7 @@ fn deleting_a_note_moves_it_to_the_trash_and_tells_the_index() {
     // L'indice deve saperlo, o la nota resta cercabile: un risultato che apre
     // il nulla è peggio di nessun risultato.
     assert_eq!(fx.calls(), vec![Call::Removed("Idea.txt".into())]);
-    assert!(events.try_iter().any(|e| e
+    assert!(events.try_iter().any(|n| n.event
         == Event::DocumentRemoved {
             id: DocId::new("Idea.txt")
         }));
@@ -232,7 +232,7 @@ fn restoring_under_a_new_name_announces_the_identity_migration() {
     assert_eq!(restored, DocId::new("progetti/Nota 1.txt"));
     // Lo stato per-documento (versioning, meta) vive sotto il path d'origine:
     // chi lo tiene deve sapere che la chiave è migrata.
-    assert!(events.try_iter().any(|e| e
+    assert!(events.try_iter().any(|n| n.event
         == Event::DocumentRenamed {
             from: DocId::new("progetti/Nota.txt"),
             to: DocId::new("progetti/Nota 1.txt"),

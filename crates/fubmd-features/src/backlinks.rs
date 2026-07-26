@@ -43,7 +43,7 @@ impl ViewProvider for BacklinksView {
             placement: ViewPlacement::RightSidebar,
             // I backlink invecchiano quando il grafo cambia: ogni modifica al
             // vault arriva come `IndexUpdated`.
-            refresh: EventMask(vec![EventKind::IndexUpdated]),
+            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
             // …e quando cambia la nota guardata. Non dove ci si trova dentro:
             // i backlink di una nota sono gli stessi da ogni punto di essa, e
             // seguire la selezione qui sarebbe una query per battuta di tasto.

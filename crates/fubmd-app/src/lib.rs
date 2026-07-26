@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fubmd_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fubmd_abi::event::Actor;
 use fubmd_abi::model::DocId;
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{
@@ -536,6 +537,14 @@ fn list_commands(state: State<AppState>) -> Result<Vec<CommandSpec>, String> {
 /// contratto (dove un default non esiste apposta). Il webview è codice nostro e
 /// il caso normale è eseguire; chi vuole il piano lo chiede, e riceve un
 /// `CommandOutcome` con dentro l'effetto `plan`.
+///
+/// L'attore è [`Actor::User`] e **non** un parametro dell'IPC: da questo canale
+/// passa la persona davanti allo schermo, per il tramite della webview, e
+/// lasciare che il chiamante si dichiarasse chi vuole avrebbe reso l'origine una
+/// stringa di cortesia — un'automazione (16.2) che potesse firmarsi "utente"
+/// aggirerebbe l'unica difesa che 16.2 ha. Gli altri chiamanti del registro (la
+/// CLI di 27.1, l'API locale di 27.2) sono canali diversi e diranno il proprio
+/// attore là dove passano.
 #[tauri::command]
 fn invoke_command(
     state: State<AppState>,
@@ -549,6 +558,7 @@ fn invoke_command(
         &command,
         args.unwrap_or(serde_json::Value::Null),
         mode.unwrap_or(InvokeMode::Apply),
+        Actor::User,
     )
     .map_err(|e| e.to_string())
 }

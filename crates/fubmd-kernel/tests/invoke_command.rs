@@ -21,7 +21,7 @@ use fubmd_abi::command::{
 };
 use fubmd_abi::edit::{EditRequest, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
-use fubmd_abi::event::{Event, EventMask};
+use fubmd_abi::event::{Actor, EventMask, Notice};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Span};
 use fubmd_abi::traits::{CommandProvider, EventHandler, HostApi};
@@ -208,7 +208,8 @@ impl EventHandler for Recorder {
         EventMask::all()
     }
 
-    fn handle(&mut self, event: &Event, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+    fn handle(&mut self, notice: &Notice, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let event = &notice.event;
         self.0.lock().unwrap().push(format!("{:?}", event.kind()));
         Ok(())
     }
@@ -218,7 +219,12 @@ impl EventHandler for Recorder {
 fn a_command_that_nobody_offers_is_named_as_unknown() {
     let (_dir, mut ws) = vault();
     let err = ws
-        .invoke_command("test.nope", serde_json::Value::Null, InvokeMode::Apply)
+        .invoke_command(
+            "test.nope",
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
         .unwrap_err();
     assert!(
         matches!(err, PluginError::UnknownCommand(id) if id == "test.nope"),
@@ -247,7 +253,12 @@ fn the_arguments_are_validated_before_the_command_is_ever_called() {
     ws.register_command_provider("test", Box::new(Echo(log.clone())));
 
     let err = ws
-        .invoke_command("test.echo", serde_json::json!({}), InvokeMode::Apply)
+        .invoke_command(
+            "test.echo",
+            serde_json::json!({}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
         .unwrap_err();
     let PluginError::BadArgs(msg) = err else {
         panic!("un argomento obbligatorio che manca è BadArgs")
@@ -262,6 +273,7 @@ fn the_arguments_are_validated_before_the_command_is_ever_called() {
             "test.echo",
             serde_json::json!({ "what": "ciao", "loud": "sì" }),
             InvokeMode::Apply,
+            Actor::User,
         )
         .unwrap_err();
     assert!(matches!(err, PluginError::BadArgs(_)), "specie sbagliata");
@@ -276,6 +288,7 @@ fn the_arguments_are_validated_before_the_command_is_ever_called() {
         "test.echo",
         serde_json::json!({ "what": "ciao" }),
         InvokeMode::Apply,
+        Actor::User,
     )
     .expect("gli argomenti buoni passano");
     assert_eq!(log.lock().unwrap().len(), 1);
@@ -296,8 +309,13 @@ fn a_dry_run_cannot_write_even_if_the_command_tries() {
         }),
     );
 
-    ws.invoke_command("test.write", serde_json::Value::Null, InvokeMode::DryRun)
-        .expect("la simulazione riesce");
+    ws.invoke_command(
+        "test.write",
+        serde_json::Value::Null,
+        InvokeMode::DryRun,
+        Actor::User,
+    )
+    .expect("la simulazione riesce");
     assert_eq!(
         ws.read_source(&doc).expect("legge"),
         "originale",
@@ -315,8 +333,13 @@ fn a_dry_run_cannot_write_even_if_the_command_tries() {
     );
 
     // Lo stesso comando, applicato: adesso scrive davvero.
-    ws.invoke_command("test.write", serde_json::Value::Null, InvokeMode::Apply)
-        .expect("applica");
+    ws.invoke_command(
+        "test.write",
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("applica");
     assert_eq!(ws.read_source(&doc).expect("legge"), "scritto dal comando");
 }
 
@@ -336,8 +359,13 @@ fn declaring_yourself_read_only_is_binding() {
         }),
     );
 
-    ws.invoke_command("test.write", serde_json::Value::Null, InvokeMode::Apply)
-        .expect("l'invocazione riesce");
+    ws.invoke_command(
+        "test.write",
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("l'invocazione riesce");
     assert_eq!(
         ws.read_source(&doc).expect("legge"),
         "originale",
@@ -356,7 +384,12 @@ fn the_host_completes_the_set_of_documents_a_plan_would_touch() {
     ws.register_command_provider("test", Box::new(HalfHonestPlan));
 
     let outcome = ws
-        .invoke_command("test.plan", serde_json::Value::Null, InvokeMode::DryRun)
+        .invoke_command(
+            "test.plan",
+            serde_json::Value::Null,
+            InvokeMode::DryRun,
+            Actor::User,
+        )
         .expect("simula");
     let CommandEffect::Plan(plan) = outcome.effect else {
         panic!("un piano")
@@ -378,7 +411,12 @@ fn a_plan_calculated_now_refuses_to_apply_over_someone_elses_write() {
     ws.write_document(&DocId::new("b.md"), "b").expect("scrive");
 
     let outcome = ws
-        .invoke_command("test.plan", serde_json::Value::Null, InvokeMode::DryRun)
+        .invoke_command(
+            "test.plan",
+            serde_json::Value::Null,
+            InvokeMode::DryRun,
+            Actor::User,
+        )
         .expect("simula");
     let CommandEffect::Plan(plan) = outcome.effect else {
         panic!("un piano")
@@ -407,8 +445,13 @@ fn what_a_command_writes_reaches_the_handlers_after_it_has_returned() {
     ws.register_event_handler("recorder", Box::new(Recorder(log.clone())));
     ws.register_command_provider("test", Box::new(Toucher));
 
-    ws.invoke_command("test.touch", serde_json::Value::Null, InvokeMode::Apply)
-        .expect("applica");
+    ws.invoke_command(
+        "test.touch",
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("applica");
 
     let eventi = log.lock().unwrap().clone();
     assert!(

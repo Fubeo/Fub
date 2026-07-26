@@ -10,6 +10,7 @@
 
 use camino::Utf8PathBuf;
 use fubmd_abi::command::{CommandEffect, InvokeMode};
+use fubmd_abi::event::{Actor, Event, EventKind, Notice};
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::session::{Selection, ViewContext};
 use fubmd_abi::PluginError;
@@ -51,7 +52,7 @@ fn a_bulk_replace_is_shown_before_it_is_done_and_then_done() {
     let args = serde_json::json!({ "find": "gatto", "replace": "cane" });
 
     let outcome = ws
-        .invoke_command(VAULT_REPLACE, args.clone(), InvokeMode::DryRun)
+        .invoke_command(VAULT_REPLACE, args.clone(), InvokeMode::DryRun, Actor::User)
         .expect("simula");
     let CommandEffect::Plan(plan) = outcome.effect else {
         panic!("un dry-run risponde con un piano")
@@ -65,7 +66,7 @@ fn a_bulk_replace_is_shown_before_it_is_done_and_then_done() {
     );
 
     let outcome = ws
-        .invoke_command(VAULT_REPLACE, args, InvokeMode::Apply)
+        .invoke_command(VAULT_REPLACE, args, InvokeMode::Apply, Actor::User)
         .expect("applica");
     assert_eq!(
         ws.read_source(&DocId::new("a.md")).expect("legge"),
@@ -105,6 +106,7 @@ fn a_command_writes_through_the_normal_path_so_the_graph_sees_it() {
             SELECTION_WIKILINK,
             serde_json::Value::Null,
             InvokeMode::Apply,
+            Actor::User,
         )
         .expect("applica");
     assert_eq!(
@@ -151,6 +153,7 @@ fn the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so() {
             SELECTION_WIKILINK,
             serde_json::Value::Null,
             InvokeMode::Apply,
+            Actor::User,
         )
         .unwrap_err();
     assert!(
@@ -172,6 +175,7 @@ fn the_search_command_is_an_intent_and_the_kernel_refuses_it_no_writes() {
             fubmd_features::SEARCH_OPEN,
             serde_json::json!({ "query": "gatto" }),
             InvokeMode::Apply,
+            Actor::User,
         )
         .expect("cerca");
     assert_eq!(
@@ -202,5 +206,89 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
             .collect::<Vec<_>>(),
         vec!["find", "replace", "whole_word", "docs"],
         "l'ordine dei parametri è quello in cui ha senso chiederli"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Il lotto (§1.12) e l'origine (§1.18) su un comando vero
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    for nome in ["a.md", "b.md", "c.md"] {
+        ws.write_document(&DocId::new(nome), "il gatto dorme")
+            .expect("scrive");
+    }
+    let rx = ws.bus().subscribe();
+
+    // Chi invoca dichiara chi è: qui un'automazione, che è il caso in cui
+    // attribuire all'utente sarebbe l'errore di 16.2.
+    let automa = Actor::Plugin {
+        id: "fubmd.automa".into(),
+    };
+    ws.invoke_command(
+        VAULT_REPLACE,
+        serde_json::json!({ "find": "gatto", "replace": "cane" }),
+        InvokeMode::Apply,
+        automa.clone(),
+    )
+    .expect("applica");
+
+    let notices: Vec<Notice> = rx.try_iter().collect();
+    assert_eq!(
+        notices
+            .iter()
+            .filter(|n| n.kind() == EventKind::IndexUpdated)
+            .count(),
+        0,
+        "tre note riscritte non sono tre aggiornamenti dell'indice: l'invocazione \
+         di un comando è UNA cosa che qualcuno ha chiesto"
+    );
+    let terminali: Vec<&Notice> = notices
+        .iter()
+        .filter(|n| n.kind() == EventKind::BatchEnded)
+        .collect();
+    assert_eq!(terminali.len(), 1);
+    let Event::BatchEnded { changed, .. } = &terminali[0].event else {
+        unreachable!()
+    };
+    assert_eq!(
+        changed,
+        &vec![DocId::new("a.md"), DocId::new("b.md"), DocId::new("c.md")],
+        "e il terminale nomina le tre note: chi ridisegna sa su cosa"
+    );
+    assert!(
+        notices.iter().all(|n| n.origin.actor == automa),
+        "ogni evento porta l'origine di chi ha INVOCATO, non del provider che ha \
+         eseguito: è ciò che permette a quell'automazione di non reagire alle \
+         proprie scritture invece di rincorrersi finché il budget del dispatch \
+         non la tronca"
+    );
+}
+
+#[test]
+fn a_dry_run_opens_no_batch_because_it_touches_nothing() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("a.md"), "il gatto dorme")
+        .expect("scrive");
+    let rx = ws.bus().subscribe();
+
+    ws.invoke_command(
+        VAULT_REPLACE,
+        serde_json::json!({ "find": "gatto", "replace": "cane" }),
+        InvokeMode::DryRun,
+        Actor::User,
+    )
+    .expect("simula");
+
+    assert_eq!(
+        rx.try_iter().count(),
+        0,
+        "una simulazione non emette niente, nemmeno un terminale di lotto: il \
+         non-scrivere del §1.36 vale anche per gli eventi, o la shell \
+         ridisegnerebbe per un'anteprima"
     );
 }

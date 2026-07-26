@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fubmd_abi::error::{FormatError, PluginError};
-use fubmd_abi::event::{Event, EventKind, EventMask};
+use fubmd_abi::event::{Event, EventKind, EventMask, Notice};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
 use fubmd_abi::traits::{EventHandler, HostApi, JobSpec};
@@ -163,7 +163,7 @@ fn rename_moves_identity_rewrites_name_links_and_emits_renamed() {
     // Fra gli eventi c'è DocumentRenamed con la coppia giusta.
     let mut renamed = None;
     while let Ok(e) = rx.try_recv() {
-        if let Event::DocumentRenamed { from, to } = e {
+        if let Event::DocumentRenamed { from, to } = e.event {
             renamed = Some((from, to));
         }
     }
@@ -585,7 +585,7 @@ fn an_external_rename_migrates_identity_and_emits_renamed() {
     assert!(!ws.documents().contains(&DocId::new("Nota.lnk")));
     assert!(ws.documents().contains(&DocId::new("Spostata.lnk")));
     assert_eq!(ws.active_document(), Some(&DocId::new("Spostata.lnk")));
-    let eventi: Vec<Event> = rx.try_iter().collect();
+    let eventi: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
     assert!(
         eventi
             .iter()
@@ -633,7 +633,7 @@ fn an_external_rename_into_an_ignored_folder_is_a_removal() {
     assert!(ws.documents().is_empty());
     assert!(rx
         .try_iter()
-        .any(|e| matches!(e, Event::DocumentRemoved { id }
+        .any(|n| matches!(n.event, Event::DocumentRemoved { id }
         if id.as_str() == "Nota.lnk")));
 }
 
@@ -654,7 +654,8 @@ impl EventHandler for ChainingHandler {
         EventMask(vec![EventKind::DocumentChanged, EventKind::Custom])
     }
 
-    fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let event = &notice.event;
         match event {
             Event::DocumentChanged { id } => {
                 self.log.lock().unwrap().push(format!("changed:{id}"));
@@ -726,7 +727,7 @@ impl EventHandler for PingPongHandler {
         EventMask(vec![EventKind::DocumentChanged, EventKind::Custom])
     }
 
-    fn handle(&mut self, _event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    fn handle(&mut self, _notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         *self.count.lock().unwrap() += 1;
         host.emit(Event::Custom {
             topic: "test/pong".into(),
@@ -761,7 +762,7 @@ fn dispatch_budget_stops_infinite_event_loops_loudly() {
     // degli eventi persi — il segnale di "riconcilia da zero".
     let mut overflow = None;
     while let Ok(e) = rx.try_recv() {
-        if let Event::Overflow { dropped } = e {
+        if let Event::Overflow { dropped } = e.event {
             overflow = Some(dropped);
         }
     }
@@ -785,7 +786,8 @@ impl EventHandler for JobRequestingHandler {
         EventMask(vec![EventKind::DocumentChanged, EventKind::JobDone])
     }
 
-    fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let event = &notice.event;
         match event {
             Event::DocumentChanged { id } if id.as_str() == "innesco.lnk" => {
                 if self.job_id.lock().unwrap().is_none() {

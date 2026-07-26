@@ -62,7 +62,7 @@ use fubmd_abi::transfer::{
     ImportRequest, ImportSource,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fubmd_abi::{Event, PluginError};
+use fubmd_abi::{Actor, BatchId, Event, Notice, Origin, PluginError};
 
 use crate::bus::EventBus;
 use crate::error::{KernelError, Result};
@@ -225,8 +225,10 @@ pub struct Workspace {
     /// lo snippet di una ricerca. Ciò che serve a un comando è un *permesso*
     /// (§2.10), che è un'altra domanda e ha un altro posto.
     commands: Vec<(String, Box<dyn CommandProvider>)>,
-    /// Eventi in attesa di dispatch verso gli handler.
-    pending: VecDeque<Event>,
+    /// Eventi in attesa di dispatch verso gli handler, ognuno con l'origine
+    /// che aveva **al momento dell'emissione** — non quella del drenaggio, che
+    /// può avvenire sotto un altro attore.
+    pending: VecDeque<Notice>,
     /// Guardia anti-rientranza: `dispatch_pending` non si annida mai.
     dispatching: bool,
     /// Siamo dentro una chiamata a un provider (view `on_action`, `handle`,
@@ -265,6 +267,35 @@ pub struct Workspace {
     /// stantio è peggio di uno span assente — chi lo usasse taglierebbe i byte
     /// sbagliati.
     context: Option<ViewContext>,
+    /// Chi ha **chiesto** ciò che il workspace sta facendo adesso (§1.18): è
+    /// l'attore che finisce sull'origine di ogni evento emesso da qui in poi.
+    /// Il valore a riposo è [`Actor::User`] perché a riposo il kernel è chiamato
+    /// dalla shell; lo cambiano, per la durata di una chiamata,
+    /// [`as_actor`](Workspace::as_actor) e i suoi tre chiamanti (il watcher, il
+    /// dispatch verso un handler, l'invocazione di un comando).
+    actor: Actor,
+    /// Il lotto aperto (§1.12), se c'è. Uno solo: un `rename_document` dentro un
+    /// comando non apre un secondo lotto, entra in quello che c'è — chiuderne
+    /// uno interno farebbe arrivare un `batch-ended` mentre l'operazione esterna
+    /// è ancora in corso. Per questo non serve contare le aperture: chi trova il
+    /// campo pieno non lo tocca, e a chiudere è solo chi lo ha riempito.
+    batch: Option<BatchState>,
+    /// Contatore per l'assegnazione dei [`BatchId`].
+    next_batch_id: u64,
+}
+
+/// Un lotto aperto: la sua identità e cosa ha toccato.
+struct BatchState {
+    id: BatchId,
+    /// I documenti toccati, in ordine di prima apparizione e senza ripetizioni:
+    /// è l'elenco che finirà in [`Event::BatchEnded`], ed è ciò che l'utente
+    /// vedrebbe se glielo si mostrasse — quindi l'ordine è quello in cui le cose
+    /// sono successe, non quello di una `HashSet`.
+    changed: Vec<DocId>,
+    /// Almeno un [`Event::IndexUpdated`] è stato soppresso: alla chiusura il
+    /// lotto ha qualcosa da dire anche se non ha toccato documenti (una
+    /// rimozione dal solo indice, un rebuild).
+    index_dirty: bool,
 }
 
 impl Workspace {
@@ -291,6 +322,9 @@ impl Workspace {
             next_job_id: 0,
             storage: HashMap::new(),
             context: None,
+            actor: Actor::User,
+            batch: None,
+            next_batch_id: 0,
         }
     }
 
@@ -417,11 +451,15 @@ impl Workspace {
         // indice è stato derivato, il vault è la verità (M4: notifica).
         let _ = self.flush_indexes();
 
-        self.emit_event(Event::VaultOpened {
-            root: self.vault.root().to_string(),
+        // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
+        // dichiara di esistere (§1.18).
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.emit_event(Event::VaultOpened {
+                root: ws.vault.root().to_string(),
+            });
+            ws.emit_event(Event::IndexUpdated);
+            ws.dispatch_pending();
         });
-        self.emit_event(Event::IndexUpdated);
-        self.dispatch_pending();
         Ok(())
     }
 
@@ -505,11 +543,17 @@ impl Workspace {
     }
 
     /// Riparsa un documento già presente sul disco (usato dal file watcher).
+    ///
+    /// L'origine è [`Actor::Watcher`] (§1.18): questa modifica non è passata da
+    /// noi, e chi la riceve — la shell col buffer aperto, un'automazione — deve
+    /// poterla distinguere da una scrittura che ha chiesto lui.
     pub fn refresh_from_disk(&mut self, id: &DocId) -> Result<()> {
-        let src = self.vault.read(id)?;
-        self.ingest(id, &src)?;
-        self.dispatch_pending();
-        Ok(())
+        self.as_actor(Actor::Watcher, |ws| {
+            let src = ws.vault.read(id)?;
+            ws.ingest(id, &src)?;
+            ws.dispatch_pending();
+            Ok(())
+        })
     }
 
     fn ingest(&mut self, id: &DocId, source: &str) -> Result<()> {
@@ -573,9 +617,11 @@ impl Workspace {
             self.refresh_from_disk(&id)?;
             Ok(true)
         } else {
-            let existed = self.metas.contains_key(&id);
-            self.remove_document(&id);
-            Ok(existed)
+            self.as_actor(Actor::Watcher, |ws| {
+                let existed = ws.metas.contains_key(&id);
+                ws.remove_document(&id);
+                Ok(existed)
+            })
         }
     }
 
@@ -786,7 +832,17 @@ impl Workspace {
     ///
     /// Emette [`Event::DocumentRenamed`] (non `Removed`+`Changed`): chi tiene
     /// stato per-documento migra la chiave.
+    ///
+    /// È un **lotto** (§1.12), ed è il caso che ha fatto nascere la voce: una
+    /// nota con 200 backlink riscrive 200 sorgenti, e prima di questo giro erano
+    /// 200 `index-updated` — cioè 200 ridisegni completi della shell, con 200
+    /// `list_documents`, per un'operazione che l'utente ha chiesto una volta.
+    /// Adesso è un `batch-ended` solo, con dentro l'elenco.
     pub fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<()> {
+        self.batch(|ws| ws.rename_document_in_batch(from, to))
+    }
+
+    fn rename_document_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
         // `to` arriva dall'IPC: senza validazione `../fuori.md` sposterebbe il
         // file fuori dal vault.
         let to = &valid_doc_id(to.as_str())?;
@@ -833,8 +889,17 @@ impl Workspace {
                 falliti.push(format!("{src}: {e}"));
             }
         }
+        // Dentro il lotto questo `index-updated` non esce: diventa il
+        // `batch-ended` che la chiusura emette. Resta scritto qui perché il
+        // rename **ha** aggiornato l'indice, e chi legge questo metodo non deve
+        // dedurlo dal fatto che è avvolto in un lotto.
         self.emit_event(Event::IndexUpdated);
         self.dispatch_pending();
+        // Il lotto non annulla: le sorgenti riscritte restano riscritte anche
+        // se una è fallita, ed è la scelta giusta *per il rename* — abortire a
+        // metà lascerebbe link misti senza possibilità di retry. Chi vuole il
+        // contrario (import, migrazioni) vuole il journal del §2.5, non un
+        // campo in più qui.
         if !falliti.is_empty() {
             return Err(KernelError::LinkRewrite(falliti.join("; ")));
         }
@@ -897,6 +962,10 @@ impl Workspace {
     ///
     /// [`sync_path`]: Workspace::sync_path
     pub fn sync_renamed_path(&mut self, from: &Utf8Path, to: &Utf8Path) -> Result<bool> {
+        self.as_actor(Actor::Watcher, |ws| ws.sync_renamed_path_here(from, to))
+    }
+
+    fn sync_renamed_path_here(&mut self, from: &Utf8Path, to: &Utf8Path) -> Result<bool> {
         let from_id = (!self.vault.is_ignored(from))
             .then(|| self.vault.doc_id_for_path(from).ok())
             .flatten()
@@ -1537,10 +1606,40 @@ impl Workspace {
     ///    non manterrebbe), ed è per la stessa ragione che `writes: false` non è
     ///    una decorazione: dichiararsi innocuo è vincolante.
     ///
+    /// 3. **L'invocazione è un lotto, intestato a chi l'ha chiesta** (§1.12 +
+    ///    §1.18). Un `Apply` è, per definizione, *una* cosa che qualcuno ha
+    ///    chiesto: `vault.replace` su 40 note emette un `batch-ended` solo, e
+    ///    ogni evento che ne nasce porta `by` come attore. Che `by` sia un
+    ///    parametro e non un default è la stessa scelta di [`InvokeMode`]:
+    ///    attribuire all'utente ciò che ha chiesto un'automazione è l'errore che
+    ///    16.2 esiste per non fare — l'automazione non riconoscerebbe più le
+    ///    proprie scritture, e si richiamerebbe da sola.
+    ///
+    /// L'attore è **chi ha chiesto**, non il provider che esegue: un comando
+    /// invocato da un plugin scrive con l'origine di quel plugin. Per la stessa
+    /// ragione `by` non arriva fino a
+    /// [`CommandProvider::invoke`](fubmd_abi::traits::CommandProvider::invoke):
+    /// l'origine è ciò che l'host **appone**, non ciò che il comando legge, e un
+    /// comando che si comportasse diversamente a seconda di chi lo chiama
+    /// sarebbe una policy (§2.10) nascosta dentro un'implementazione. Il giorno
+    /// che servirà leggerla, è un metodo additivo sull'`HostApi`.
+    ///
     /// Il resto è la disciplina di sempre: il provider esce dal workspace per la
     /// durata della chiamata, `in_provider_call` rimanda il dispatch, e ciò che
     /// il comando ha emesso arriva agli handler **dopo** che `invoke` è tornata.
     pub fn invoke_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        by: Actor,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        self.as_actor(by, |ws| {
+            ws.batch(|ws| ws.invoke_command_here(command, args, mode))
+        })
+    }
+
+    fn invoke_command_here(
         &mut self,
         command: &str,
         args: serde_json::Value,
@@ -1708,9 +1807,117 @@ impl Workspace {
 
     /// Unico punto di emissione: ponte verso i subscriber esterni + coda per
     /// gli handler registrati.
+    ///
+    /// È anche il punto unico in cui l'origine (§1.18) viene apposta e in cui il
+    /// lotto (§1.12) fa il proprio lavoro. Che siano la stessa riga non è
+    /// economia: un secondo posto da cui emettere sarebbe un posto da cui uscire
+    /// senza origine o fuori dal lotto, e un evento non attribuito è
+    /// indistinguibile da uno attribuito male.
     fn emit_event(&mut self, event: Event) {
-        self.bus.emit(event.clone());
-        self.pending.push_back(event);
+        // Dentro un lotto `index-updated` non esce: N copie di un evento senza
+        // payload dicono quanto ne dice una, e alla chiusura il `batch-ended`
+        // dice quella e in più *quali* documenti. È l'unico evento che il lotto
+        // coalizza — vedi il doc di `fubmd_abi::event`.
+        if let Some(state) = self.batch.as_mut() {
+            if matches!(event, Event::IndexUpdated) {
+                state.index_dirty = true;
+                return;
+            }
+            if let Some(doc) = event.touched() {
+                if !state.changed.contains(doc) {
+                    state.changed.push(doc.clone());
+                }
+            }
+        }
+        let notice = Notice::new(event, self.origin());
+        self.bus.emit(notice.clone());
+        self.pending.push_back(notice);
+    }
+
+    /// L'origine di ciò che il workspace sta emettendo adesso.
+    fn origin(&self) -> Origin {
+        Origin::by(self.actor.clone()).in_batch(self.batch.as_ref().map(|b| b.id))
+    }
+
+    /// Esegue `f` attribuendo a `actor` tutto ciò che ne nasce, e rimette
+    /// l'attore di prima quando `f` è tornata.
+    ///
+    /// L'attore è **chi ha chiesto**, non chi esegue: per questo lo alzano il
+    /// watcher (il vault è cambiato senza passare da noi), il dispatch verso un
+    /// handler (il plugin agisce di propria iniziativa) e `invoke_command` — dove
+    /// però l'attore è il *chiamante* del comando, non il provider che lo
+    /// esegue. Vedi `fubmd_abi::event`.
+    fn as_actor<R>(&mut self, actor: Actor, f: impl FnOnce(&mut Self) -> R) -> R {
+        let prev = std::mem::replace(&mut self.actor, actor);
+        let result = f(self);
+        self.actor = prev;
+        result
+    }
+
+    /// Esegue `f` dentro un **lotto** (§1.12): ciò che vi succede è una cosa
+    /// sola.
+    ///
+    /// Cosa cambia, dentro: gli eventi portano l'id del lotto sulla propria
+    /// origine, `index-updated` non viene emesso, e il dispatch verso gli
+    /// handler è rimandato alla chiusura — un handler che vedesse la sorgente
+    /// numero 1 di una rinomina mentre la 200 non è ancora riscritta vedrebbe un
+    /// vault a metà, e reagirebbe a uno stato che non è mai esistito per
+    /// nessuno.
+    ///
+    /// Alla chiusura, se qualcosa è stato toccato, arriva un
+    /// [`Event::BatchEnded`] con l'elenco dei documenti; poi la coda si drena.
+    ///
+    /// **Non è una transazione.** Se una delle scritture dentro `f` fallisce, le
+    /// altre restano fatte: il lotto non annulla niente e non lo promette (il
+    /// tutto-o-niente vuole il journal del §2.5). Ciò che è andato storto lo
+    /// riporta `f` col proprio valore di ritorno, che questa funzione passa
+    /// intatto.
+    ///
+    /// Annidato, entra nel lotto che c'è invece di aprirne un secondo: chiudere
+    /// quello interno farebbe arrivare un `batch-ended` mentre l'operazione
+    /// esterna è ancora in corso.
+    pub fn batch<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        if self.batch.is_some() {
+            // Entra in quello che c'è, e non lo chiude: a chiudere è chi lo ha
+            // aperto. Contare le aperture non servirebbe a niente — chi trova il
+            // campo pieno non lo tocca in nessun caso.
+            return f(self);
+        }
+        let id = BatchId(self.next_batch_id);
+        self.next_batch_id += 1;
+        self.batch = Some(BatchState {
+            id,
+            changed: Vec::new(),
+            index_dirty: false,
+        });
+        let result = f(self);
+        self.end_batch();
+        result
+    }
+
+    /// Chiude il lotto più esterno: emette il terminale (se c'è qualcosa da
+    /// dire) e drena.
+    fn end_batch(&mut self) {
+        let Some(state) = self.batch.take() else {
+            return;
+        };
+        if state.index_dirty || !state.changed.is_empty() {
+            // Il terminale si costruisce a mano invece di passare da
+            // `emit_event`: la sua origine porta il lotto che sta **chiudendo**
+            // (è l'evento *del* lotto, non uno che arriva dopo), e passare dal
+            // punto unico significherebbe o riaprire il lotto per una riga o
+            // emetterlo orfano.
+            let notice = Notice::new(
+                Event::BatchEnded {
+                    batch: state.id,
+                    changed: state.changed,
+                },
+                Origin::by(self.actor.clone()).in_batch(Some(state.id)),
+            );
+            self.bus.emit(notice.clone());
+            self.pending.push_back(notice);
+        }
+        self.dispatch_pending();
     }
 
     /// Drena la coda eventi verso gli handler. Mai rientrante: chiamato
@@ -1723,6 +1930,17 @@ impl Workspace {
     /// un [`Event::Overflow`] con il conteggio dei persi. Gli eventi emessi
     /// *durante* la gestione dell'`Overflow` sono a loro volta scartati (è
     /// l'unico modo di garantire la terminazione).
+    ///
+    /// Un lotto aperto rimanda il drenaggio come lo rimanda una chiamata a un
+    /// provider, e per la stessa ragione: dentro, il vault è a metà di
+    /// un'operazione che nessuno ha ancora finito di chiedere.
+    ///
+    /// **Un lotto non è al riparo dal troncamento.** Se il budget si esaurisce
+    /// mentre la coda si drena, fra gli eventi persi può esserci il
+    /// `batch-ended`: l'`Overflow` che arriva al suo posto dice «riconcilia da
+    /// zero», che è una richiesta più forte di «ridisegna questi documenti», e
+    /// una garanzia in più per il solo terminale sarebbe una seconda promessa
+    /// più debole accanto a una che già copre il caso.
     fn dispatch_pending(&mut self) {
         // La guardia di rientranza DEVE venire prima del fast-path qui sotto:
         // durante un dispatch gli handler sono estratti (`handlers` è vuoto) e
@@ -1733,7 +1951,7 @@ impl Workspace {
         // drena quando la SUA chiamata è tornata — mai dentro il suo frame
         // (a M5 il component model vieta la rientranza di un'istanza; la
         // semantica di consegna non può cambiare al freeze).
-        if self.dispatching || self.in_provider_call {
+        if self.dispatching || self.in_provider_call || self.batch.is_some() {
             return;
         }
         if self.handlers.is_empty() {
@@ -1743,12 +1961,16 @@ impl Workspace {
         }
         self.dispatching = true;
         let mut budget = DISPATCH_BUDGET;
-        while let Some(event) = self.pending.pop_front() {
+        while let Some(notice) = self.pending.pop_front() {
             if budget == 0 {
                 // L'evento estratto e i rimanenti non verranno consegnati.
                 let dropped = (self.pending.len() + 1) as u64;
                 self.pending.clear();
-                let overflow = Event::Overflow { dropped };
+                // Il troncamento è del **kernel**: non lo ha chiesto chi stava
+                // scrivendo, e attribuirglielo direbbe a un'automazione «questa
+                // l'hai causata tu» proprio nel momento in cui le si chiede di
+                // riconciliare.
+                let overflow = Notice::new(Event::Overflow { dropped }, Origin::by(Actor::Kernel));
                 self.bus.emit(overflow.clone());
                 self.deliver_to_handlers(&overflow);
                 // Ciò che gli handler hanno emesso gestendo l'Overflow è
@@ -1757,7 +1979,7 @@ impl Workspace {
                 break;
             }
             budget -= 1;
-            self.deliver_to_handlers(&event);
+            self.deliver_to_handlers(&notice);
         }
         self.dispatching = false;
     }
@@ -1777,17 +1999,26 @@ impl Workspace {
     /// Consegna un singolo evento a tutti gli handler abbonati. Gli handler
     /// escono dal workspace per la durata della chiamata: così `KernelHost`
     /// può prestare `&mut Workspace` senza aliasing.
-    fn deliver_to_handlers(&mut self, event: &Event) {
+    ///
+    /// Per la durata di `handle` l'attore è il **plugin** (§1.18): ciò che
+    /// scrive lì dentro lo ha chiesto lui, di propria iniziativa, ed è così che
+    /// alla prossima consegna riconosce le proprie scritture senza tenerne una
+    /// contabilità privata. L'origine dell'evento che sta *ricevendo* è un'altra
+    /// cosa e sta nel [`Notice`], dove il plugin la legge.
+    fn deliver_to_handlers(&mut self, notice: &Notice) {
         let mut handlers = std::mem::take(&mut self.handlers);
         self.with_provider_call(|ws| {
             for (id, handler) in handlers.iter_mut() {
-                if !handler.subscribed().contains(event.kind()) {
+                if !handler.subscribed().contains(notice.kind()) {
                     continue;
                 }
-                let mut host = KernelHost { ws, plugin: id };
-                // L'errore di un handler non deve far fallire l'operazione
-                // che ha emesso l'evento: si ignora (M4: log/notifica).
-                let _ = handler.handle(event, &mut host);
+                let attore = Actor::Plugin { id: id.clone() };
+                ws.as_actor(attore, |ws| {
+                    let mut host = KernelHost { ws, plugin: id };
+                    // L'errore di un handler non deve far fallire l'operazione
+                    // che ha emesso l'evento: si ignora (M4: log/notifica).
+                    let _ = handler.handle(notice, &mut host);
+                });
             }
         });
         // Handler registrati *durante* il dispatch si accodano in fondo.
@@ -1812,18 +2043,26 @@ impl Workspace {
     /// Riconsegna l'esito di un job: emette [`Event::JobDone`] sul giro
     /// sincrono normale (bus + handler). Chi ha lanciato il job riconosce il
     /// proprio `id`.
+    ///
+    /// L'origine è [`Actor::Kernel`] e non il plugin che ha lanciato il job: il
+    /// job lo ha eseguito l'host, fuori dal lock, e il lanciatore si riconosce
+    /// dall'`id` — che è il campo fatto apposta. Intestarglielo direbbe «questo
+    /// lo hai chiesto tu adesso», che è vero solo a metà e proprio nel senso
+    /// sbagliato per un handler che salta le proprie scritture.
     pub fn complete_job(
         &mut self,
         id: JobId,
         job: impl Into<String>,
         result: std::result::Result<serde_json::Value, PluginError>,
     ) {
-        self.emit_event(Event::JobDone {
-            id,
-            job: job.into(),
-            result,
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.emit_event(Event::JobDone {
+                id,
+                job: job.into(),
+                result,
+            });
+            ws.dispatch_pending();
         });
-        self.dispatch_pending();
     }
 
     // --- interni ---------------------------------------------------------

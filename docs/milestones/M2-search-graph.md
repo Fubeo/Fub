@@ -217,6 +217,46 @@ Clienti veri nello stesso giro: `CoreCommands` (`search.open`,
 E2e: `crates/fubmd-kernel/tests/invoke_command.rs`,
 `crates/fubmd-features/tests/commands_e2e.rs`.
 
+### Il lotto e l'origine degli eventi (§1.12 + §1.18) — **fatto**
+
+Il kernel mutava un documento alla volta e non aveva modo di dire che N di quelle
+mutazioni sono **una** operazione. Il caso era già in repo e si vedeva a occhio:
+una rinomina con 200 backlink riscriveva 200 sorgenti, ognuna con il suo
+`index_updated`, e la shell rispondeva a ciascuno con un `list_documents` più il
+ridisegno di ogni view iscritta — 201 ridisegni completi per una cosa che
+l'utente ha chiesto una volta.
+
+Le due voci sono state fatte insieme perché il §1.18 lo dichiara esso stesso:
+il campo che chiedeva è «origin **e** l'id di lotto del §1.12». Deciderle
+separate significava deciderle due volte, la seconda con la prima già congelata.
+
+`Workspace::batch(|ws| …)` è uno scope: dentro, `index-updated` non viene emesso
+(è l'unico evento senza payload, quindi l'unico di cui N copie dicono quanto ne
+dice una) e alla chiusura arriva un `Event::BatchEnded { batch, changed }`.
+Gli eventi **per-documento passano tutti**, quindi nessun handler esistente ha
+dovuto cambiare. Un lotto **non è una transazione** e non si chiama come se lo
+fosse: non annulla niente, e chi lo ha aperto scopre cosa non è andato dal
+proprio valore di ritorno — il tutto-o-niente vuole il journal del §2.5.
+
+Un handler riceve ora un `Notice { event, origin }`, con
+`Origin { actor, batch }` e `Actor { User, Watcher, Kernel, Plugin { id } }`.
+L'attore è **chi ha chiesto**, non chi ha eseguito: è l'unica lettura per cui il
+campo esiste, e senza di essa l'automazione su-modifica di 16.2 si richiama da
+sola finché il `DISPATCH_BUDGET` non tronca. È la seconda rottura di firma del
+giro — `event-handler.handle` prendeva un `event` nudo — con la linea di base
+ritagliata in `wit/frozen/0.1.0.wit`; e `invoke_command` ha guadagnato un
+`by: Actor`, perché un'invocazione attribuita a un default è l'errore che 16.2
+esiste per non fare.
+
+Il verbale, con ciò che resta fuori, è in [todo.md](../todo.md) §1.12 e §1.18.
+
+Clienti veri nello stesso giro: `rename_document` (che *è* un lotto: 201
+ridisegni → 1), ogni `invoke_command(…, Apply)` — quindi `vault.replace` su N
+note, con l'origine di chi ha invocato — e la shell, che ridisegna una volta e
+distingue «un'altra applicazione ha scritto questo file» da «lo abbiamo riscritto
+noi». E2e: `crates/fubmd-kernel/tests/batch_and_origin.rs`,
+`crates/fubmd-features/tests/{commands_e2e,view_refresh_masks}.rs`.
+
 ## Trait/API coinvolti
 
 - `IndexProvider` (nuova impl nativa, tantivy) — [traits.md](../architecture/traits.md).

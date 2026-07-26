@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fubmd_abi::error::{FormatError, PluginError};
-use fubmd_abi::event::{Event, EventMask};
+use fubmd_abi::event::{Event, EventMask, Notice};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{EventHandler, HostApi};
@@ -162,7 +162,8 @@ impl EventHandler for SpyHandler {
         EventMask::all()
     }
 
-    fn handle(&mut self, event: &Event, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+    fn handle(&mut self, notice: &Notice, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let event = &notice.event;
         if let Event::Custom { topic, .. } = event {
             self.0.lock().unwrap().push(format!("consegnato:{topic}"));
         }

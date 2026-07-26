@@ -6,6 +6,8 @@ import {
   type CommandEffect,
   type CommandSpec,
   type KernelEvent,
+  type KernelNotice,
+  type Origin,
   type PaneMode,
   type SearchHit,
   type Span,
@@ -1488,18 +1490,26 @@ function refreshViewsFor(eventType: KernelEvent["type"]) {
   }
 }
 
-function handleKernelEvent(e: KernelEvent) {
+function handleKernelEvent(n: KernelNotice) {
+  const e = n.event;
   // Le view dichiarative si ridisegnano secondo la loro maschera `refresh`,
   // qualunque sia l'evento: vale per le tre feature ufficiali come per una
   // futura view di plugin.
   refreshViewsFor(e.type);
-  if (e.type === "index_updated") {
+  // Un lotto (§1.12) è N scritture che sono una cosa sola, e dentro di esso il
+  // kernel NON emette `index_updated`: al suo posto arriva questo, una volta.
+  // È tutta la differenza fra una rinomina con 200 backlink che costa 201
+  // `list_documents` più 201 ridisegni di ogni view, e una che ne costa uno.
+  if (e.type === "index_updated" || e.type === "batch_ended") {
     api.listDocuments().then(refreshFileList);
     // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
     // invecchiare sotto gli occhi di chi legge. Vale anche per il cestino, che
     // un'altra app (o un'altra finestra) può aver riempito o svuotato.
     if (!searchPanelEl.hidden) scheduleSearch();
     if (!trashPanelEl.hidden) refreshTrash();
+    // La nota aperta può essere fra quelle che il lotto ha riscritto (è il caso
+    // dei backlink su rename): i `document_changed` sono arrivati anche loro,
+    // ognuno col proprio `reloadIfClean`, quindi qui non c'è altro da fare.
   } else if (e.type === "overflow") {
     // Eventi persi (coda troncata): ciò che deriviamo dagli eventi — lista
     // file, anteprima, backlink — va riconciliato da zero, non aggiornato.
@@ -1512,7 +1522,7 @@ function handleKernelEvent(e: KernelEvent) {
     // La nota è cambiata (anche da fuori: watcher, altra app). Il documento
     // reso si aggiorna solo se è ciò che si sta guardando.
     if (mode === "reading") updatePreview(currentDoc);
-    reloadIfClean(currentDoc);
+    reloadIfClean(currentDoc, n.origin);
   } else if (e.type === "document_removed" && e.id === currentDoc) {
     // La nota aperta è sparita da fuori (watcher, altra app). Col buffer
     // sporco il buffer vince — è la verità del documento aperto, e il primo
@@ -1550,9 +1560,22 @@ function handleKernelEvent(e: KernelEvent) {
 // buffer vince (verità del documento aperto) e il suo salvataggio riallineerà
 // il disco — limite accettato a M2, conflitto esplicito/merge previsto a M3
 // (vedi docs/milestones/M3-editor-fidelity.md).
-async function reloadIfClean(id: string) {
+//
+// L'origine (§1.18) distingue i due casi che prima erano un avviso solo, e sono
+// molto diversi: se ha scritto un'ALTRA APP il lavoro che il buffer sta per
+// coprire non è nostro e non lo possiamo rifare, mentre una riscrittura del
+// kernel o di un plugin la si riottiene rifacendo l'operazione. Fino a qui la
+// shell poteva solo dire «è cambiato su disco» e lasciare indovinare quale dei
+// due fosse.
+async function reloadIfClean(id: string, origin?: Origin) {
   if (dirty) {
-    console.warn(`FubMD: ${id} è cambiato su disco mentre il buffer è sporco: il buffer vince.`);
+    const daFuori = origin?.actor.kind === "watcher";
+    console.warn(
+      daFuori
+        ? `FubMD: ${id} è stato cambiato da un'altra applicazione mentre il buffer è sporco: ` +
+            `il buffer vince e quella modifica andrà persa al prossimo salvataggio.`
+        : `FubMD: ${id} è cambiato su disco mentre il buffer è sporco: il buffer vince.`,
+    );
     return;
   }
   const source = await api.readDocument(id);

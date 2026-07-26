@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fubmd_abi::error::{FormatError, PluginError};
+use fubmd_abi::event::Notice;
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, SearchHit};
@@ -271,7 +272,8 @@ fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
         fn subscribed(&self) -> EventMask {
             EventMask::all()
         }
-        fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+            let event = &notice.event;
             if !matches!(event, Event::Overflow { .. }) {
                 host.emit(Event::Custom {
                     topic: "test/eco".into(),

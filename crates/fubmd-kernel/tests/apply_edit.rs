@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use camino::Utf8PathBuf;
 use fubmd_abi::edit::{EditRequest, Revision, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
-use fubmd_abi::event::{Event, EventKind, EventMask};
+use fubmd_abi::event::{Event, EventKind, EventMask, Notice};
 use fubmd_abi::format::{FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
 use fubmd_abi::traits::{EventHandler, HostApi};
@@ -309,7 +309,7 @@ fn a_surgical_edit_goes_through_the_whole_write_path() {
     // Eventi: quelli di una scrittura, una volta sola.
     let mut cambiati = 0;
     while let Ok(e) = rx.try_recv() {
-        if let Event::DocumentChanged { id } = e {
+        if let Event::DocumentChanged { id } = e.event {
             assert_eq!(id, a);
             cambiati += 1;
         }
@@ -402,6 +402,14 @@ fn a_multibyte_document_is_edited_on_character_boundaries() {
 /// revisione, calcola un edit e lo applica — cioè fa dall'`HostApi` ciò che le
 /// automazioni di 16.2 faranno, e che senza questa capacità sarebbe una
 /// riscrittura totale della nota di qualcun altro.
+///
+/// Si difende dal richiamarsi da solo con l'**origine** (§1.18) e non col
+/// contenuto: la propria correzione la riconosce perché la ha chiesta lui, non
+/// perché il testo non contiene più `TOODO`. La differenza si vede appena
+/// un'automazione fa una modifica che *non* cambia il proprio innesco — o che
+/// lo cambia e lo rimette — e allora il guardiano di contenuto non guarda niente.
+const CORRETTORE: &str = "test.correttore";
+
 struct Correttore {
     fatto: Arc<Mutex<Vec<String>>>,
 }
@@ -411,8 +419,12 @@ impl EventHandler for Correttore {
         EventMask(vec![EventKind::DocumentChanged])
     }
 
-    fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let Event::DocumentChanged { id } = event else {
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        if notice.origin.actor.is_plugin(CORRETTORE) {
+            // Questa l'ho scritta io.
+            return Ok(());
+        }
+        let Event::DocumentChanged { id } = &notice.event else {
             return Ok(());
         };
         let source = host.read_document(id)?;
@@ -438,7 +450,7 @@ fn a_provider_patches_a_document_through_the_host_api() {
     let mut ws = workspace(&dir.0);
     let fatto = Arc::new(Mutex::new(Vec::new()));
     ws.register_event_handler(
-        "test.correttore",
+        CORRETTORE,
         Box::new(Correttore {
             fatto: fatto.clone(),
         }),
@@ -476,8 +488,8 @@ impl EventHandler for ScriveAltrove {
         EventMask(vec![EventKind::DocumentChanged])
     }
 
-    fn handle(&mut self, event: &Event, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let Event::DocumentChanged { id } = event else {
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let Event::DocumentChanged { id } = &notice.event else {
             return Ok(());
         };
         if id.as_str() != "a.lnk" {
@@ -492,8 +504,25 @@ impl EventHandler for ScriveAltrove {
     }
 }
 
+/// Il vicino rumoroso **non entra più a metà di una rinomina**: dal §1.12 la
+/// rinomina è un lotto, e dentro un lotto il dispatch è rimandato alla chiusura.
+///
+/// Fino al §1.12 questo test diceva l'opposto: l'handler scriveva in `b.lnk`
+/// mentre il piano non l'aveva ancora riscritta, la `base` di quella sorgente
+/// diventava stantia, e la rinomina falliva *per* `b.lnk`. Era il
+/// comportamento giusto per il contratto di allora — con gli eventi consegnati
+/// dentro l'operazione, quella corsa esisteva davvero e il §1.16 la rendeva
+/// visibile invece di far sparire una riga in silenzio.
+///
+/// Il lotto la toglie di mezzo a monte: nessun handler vede il vault a metà di
+/// una rinomina, quindi nessun handler può crearla. Ciò che resta provato qui è
+/// che le due scritture **non si cancellano**, che era il punto — solo che
+/// adesso riescono tutte e due invece di dover scegliere. La guardia della
+/// `base` non è diventata inutile: continua a coprire chi scrive *fuori* dal
+/// giro (un'altra app, un job che rientra), ed è provata da
+/// `a_stale_base_writes_nothing` e dal lotto in `batch_and_origin.rs`.
 #[test]
-fn the_rename_plan_does_not_erase_a_write_that_arrived_in_the_meantime() {
+fn a_rename_and_a_neighbour_write_no_longer_race_because_the_batch_defers_the_dispatch() {
     let dir = TempDir::new("rename-vicino");
     let mut ws = workspace(&dir.0);
     ws.write_document(&DocId::new("Vecchia.lnk"), "").unwrap();
@@ -501,28 +530,20 @@ fn the_rename_plan_does_not_erase_a_write_that_arrived_in_the_meantime() {
     ws.write_document(&DocId::new("b.lnk"), "Vecchia").unwrap();
     ws.register_event_handler("test.vicino", Box::new(ScriveAltrove));
 
-    // Il piano di riscrittura è calcolato su entrambe le sorgenti; applicando
-    // quella di `a` l'handler scrive in `b`, che il piano non ha ancora
-    // toccato. Prima del §1.16 il piano portava la sorgente INTERA di `b`, e
-    // scriverla avrebbe cancellato la riga dell'handler senza dirlo a nessuno.
-    let err = ws
-        .rename_document(&DocId::new("Vecchia.lnk"), &DocId::new("Nuova.lnk"))
-        .unwrap_err();
-    assert!(
-        err.to_string().contains("b.lnk"),
-        "il rename deve nominare la sorgente che non ha potuto riscrivere: {err}"
-    );
+    ws.rename_document(&DocId::new("Vecchia.lnk"), &DocId::new("Nuova.lnk"))
+        .unwrap();
 
     assert_eq!(
         ws.read_source(&DocId::new("a.lnk")).unwrap(),
         "Nuova",
-        "il resto del piano è stato applicato: un rename non si abortisce a metà"
+        "il piano si è applicato per intero"
     );
     assert_eq!(
         ws.read_source(&DocId::new("b.lnk")).unwrap(),
-        "Vecchia\nAggiunta",
-        "la scrittura dell'altro è intatta, e il suo link è rimasto vecchio: \
-         due link rotti che si vedono, invece di una riga sparita in silenzio"
+        "Nuova\nAggiunta",
+        "e la riga dell'handler, arrivata DOPO la chiusura del lotto, sta \
+         sopra il link già riscritto: nessuna delle due scritture ha cancellato \
+         l'altra, e nessuna delle due ha dovuto fallire per riuscirci"
     );
 }
 

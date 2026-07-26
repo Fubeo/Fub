@@ -7,7 +7,9 @@ import type {
   CommandSpec,
   EmbedContent,
   GraphData,
+  Actor,
   KernelEvent,
+  KernelNotice,
   PaneMode,
   SearchHit,
   Selection,
@@ -141,9 +143,22 @@ function touchEvent(e: KernelEvent): void {
     case "job_done":
     case "overflow":
     case "custom":
+    case "batch_ended":
       return;
     default:
       assertNever(e);
+  }
+}
+
+function touchActor(a: Actor): void {
+  switch (a.kind) {
+    case "user":
+    case "watcher":
+    case "kernel":
+    case "plugin":
+      return;
+    default:
+      assertNever(a);
   }
 }
 
@@ -210,6 +225,7 @@ describe("mirror TS↔Rust", () => {
       "UiNode",
       "ViewUpdate",
       "KernelEvent",
+      "KernelNotice",
       "Span",
       "VersionRef",
       "SearchHit",
@@ -241,6 +257,29 @@ describe("mirror TS↔Rust", () => {
 
   it("ogni KernelEvent prodotto da Rust è una variante gestita dal mirror", () => {
     for (const s of fixture.KernelEvent) touchEvent(s as KernelEvent);
+  });
+
+  // Ciò che il ponte Tauri consegna davvero non è un evento nudo ma un
+  // `KernelNotice`: l'evento e la sua origine (§1.18). Un mirror che avesse
+  // continuato a dichiarare la forma vecchia sarebbe rimasto verde in
+  // compilazione e `e.type` sarebbe stato `undefined` a runtime.
+  it("ogni attore prodotto da Rust è gestito, e il notice porta l'evento dentro", () => {
+    const notices = fixture.KernelNotice as KernelNotice[];
+    expect(notices.length).toBeGreaterThan(0);
+    for (const n of notices) {
+      touchActor(n.origin.actor);
+      touchEvent(n.event);
+      // `batch` è `string | null`: un u64 identità come `VersionRef.hash`,
+      // e `null` — non assente — fuori da un lotto.
+      expect(n.origin.batch === null || typeof n.origin.batch === "string").toBe(true);
+    }
+    expect(notices.some((n) => n.origin.batch === null), "manca il campione fuori da un lotto").toBe(
+      true,
+    );
+    expect(
+      notices.some((n) => n.origin.actor.kind === "plugin"),
+      "manca il campione di un'origine di plugin",
+    ).toBe(true);
   });
 
   it("ogni effetto e ogni specie di parametro prodotti da Rust sono gestiti dal mirror", () => {
@@ -295,6 +334,7 @@ describe("mirror TS↔Rust", () => {
     }
     for (const e of fixture.KernelEvent as KernelEvent[]) {
       if (e.type === "job_done") expect(typeof e.id).toBe("string");
+      if (e.type === "batch_ended") expect(typeof e.batch).toBe("string");
     }
   });
 });

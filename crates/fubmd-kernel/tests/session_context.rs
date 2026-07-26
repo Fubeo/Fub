@@ -75,7 +75,7 @@ impl ViewProvider for Spia {
             id: self.id.to_string(),
             title: self.id.to_string(),
             placement: ViewPlacement::RightSidebar,
-            refresh: EventMask(vec![EventKind::IndexUpdated]),
+            refresh: EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]),
             follows: self.follows.clone(),
         }]
     }
