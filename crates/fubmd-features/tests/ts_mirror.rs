@@ -20,6 +20,11 @@
 //! (`tests/ts_mirror_app.rs`), che scrive la sua fixture accanto a questa:
 //! questo crate non può dipendere da `fubmd-app`.
 
+use fubmd_abi::command::{
+    Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
+    ParamKind, ParamSpec, PlannedEdit,
+};
+use fubmd_abi::edit::{EditRequest, Revision, TextEdit};
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Event, EventKind, EventMask};
 use fubmd_abi::model::{DocId, Span};
@@ -152,6 +157,83 @@ fn event_samples() -> Vec<Value> {
     all.iter().map(to_value).collect()
 }
 
+/// Una spec che porta **ogni specie di parametro**: il mirror TS deve saperle
+/// disegnare tutte, e un `param-kind` nuovo in Rust deve renderlo rosso.
+fn command_spec_samples() -> Vec<Value> {
+    let all = [
+        ParamKind::Text,
+        ParamKind::Number,
+        ParamKind::Bool,
+        ParamKind::Document,
+        ParamKind::Documents,
+        ParamKind::Choice(vec![Choice::new("uno", "Uno")]),
+    ];
+    for k in &all {
+        match k {
+            ParamKind::Text
+            | ParamKind::Number
+            | ParamKind::Bool
+            | ParamKind::Document
+            | ParamKind::Documents
+            | ParamKind::Choice(_) => {}
+        }
+    }
+    let spec = all.into_iter().enumerate().fold(
+        CommandSpec::new("test.every", "Tutte le specie")
+            .describing("Un comando con un parametro per specie.")
+            .with_keybinding("Mod-k")
+            .with_scope(CommandScope::writing(CommandReach::Documents).irreversible()),
+        |spec, (i, kind)| {
+            spec.with_param(ParamSpec::new(format!("p{i}"), "P", kind).describing("un parametro"))
+        },
+    );
+    vec![
+        to_value(spec),
+        to_value(CommandSpec::new("test.min", "Minimo")),
+    ]
+}
+
+/// Un esito per **ogni** effetto: il `match` esaustivo rende rosso un effetto
+/// nuovo non campionato.
+fn command_outcome_samples() -> Vec<Value> {
+    let plan = CommandPlan::of_edits(
+        "una nota",
+        vec![PlannedEdit::new(
+            DocId::new("a.md"),
+            EditRequest::new(Revision::of("x"), vec![TextEdit::insert(0, "y")]),
+        )],
+    );
+    let all = [
+        CommandEffect::Done,
+        CommandEffect::Navigate {
+            doc: DocId::new("a.md"),
+        },
+        CommandEffect::Reveal {
+            doc: DocId::new("a.md"),
+            span: Span::new(3, 7),
+        },
+        CommandEffect::RunSearch { query: "q".into() },
+        CommandEffect::Plan(plan),
+        CommandEffect::Custom {
+            ns: "p".into(),
+            payload: Value::Null,
+        },
+    ];
+    for e in &all {
+        match e {
+            CommandEffect::Done
+            | CommandEffect::Navigate { .. }
+            | CommandEffect::Reveal { .. }
+            | CommandEffect::RunSearch { .. }
+            | CommandEffect::Plan(_)
+            | CommandEffect::Custom { .. } => {}
+        }
+    }
+    all.into_iter()
+        .map(|effect| to_value(CommandOutcome::notify("fatto").with_effect(effect)))
+        .collect()
+}
+
 fn to_value<T: serde::Serialize>(v: T) -> Value {
     serde_json::to_value(v).expect("serializza")
 }
@@ -221,6 +303,11 @@ fn expected() -> Value {
             span: Some(Span::new(0, 4)),
             text: "ciao".into(),
         })],
+        // I comandi: la shell legge le spec per disegnare la palette e gli
+        // esiti per sapere cosa fare dopo. Un parametro di specie nuova, o un
+        // effetto nuovo, non deve poter passare inosservato dall'altra parte.
+        "CommandSpec": command_spec_samples(),
+        "CommandOutcome": command_outcome_samples(),
     })
 }
 

@@ -201,6 +201,67 @@ di riscrivere N file interi — quindi una nota che qualcun altro ha toccato fra
 il calcolo del piano e la sua applicazione non viene più sovrascritta, e il
 fallimento si nomina.
 
+## Invocare un comando: cosa l'host fa rispettare (deciso)
+
+Il registro dei comandi (§1.1) è il posto in cui un'azione si dichiara **una
+volta** e la chiedono tutti: la palette, la tastiera, una macro (16.2), la CLI
+(27.1), l'API locale (27.2), il centro di comando LLM (22.4). Da qui in poi una
+feature nuova non aggiunge un comando Tauri: aggiunge una riga a un
+`CommandProvider`, e la shell la trova da sola.
+
+La parte che riguarda questo documento non è il registro, è cosa il confine
+**garantisce** a chi invoca senza aver letto il codice del comando:
+
+| Chi invoca dichiara | Chi implementa dichiara | Cosa gli presta l'host |
+|---|---|---|
+| `InvokeMode::Apply` | `scope.writes: true` | `KernelHost`: scrive |
+| `InvokeMode::Apply` | `scope.writes: false` | host in **sola lettura**: ogni scrittura è `PermissionDenied` |
+| `InvokeMode::DryRun` | qualunque cosa | host in **sola lettura** |
+
+Due conseguenze, ed è per esse che la tabella esiste:
+
+- **La simulazione è un modo di invocare, non una cortesia di chi implementa.**
+  Un dry-run che dipendesse dalla buona volontà del comando sarebbe una
+  convenzione — cioè qualcosa che un comando di terzi non onora, e proprio nel
+  momento in cui il chiamante si fida di lui (l'anteprima prima di toccare 40
+  note).
+- **Dichiararsi innocuo è vincolante.** `writes: false` non è una decorazione da
+  mostrare nella palette: chi lo dichiara riceve un host che rifiuta, e se ci
+  prova fallisce nei propri test.
+
+Gli **argomenti** sono l'altra metà: l'host li convalida contro la
+`CommandSpec` prima di chiamare (`validate_args`), quindi un comando non si
+difende da solo e chi sbaglia riceve un `BadArgs` che dice *cosa* manca. Un
+argomento non dichiarato è un errore e non un argomento ignorato: per un
+chiamante che non può leggere il codice, «ho chiesto una cosa, ne è successa
+un'altra, e non me ne accorgo» è il peggiore dei fallimenti.
+
+### Il consenso non è una capacità
+
+`PluginPermissions` (§2.10, qui sotto) risponde a «questo componente *può*, in
+generale?». 22.4 chiede un'altra cosa: «l'utente approva **questa** esecuzione,
+su **queste** 40 note?». La risposta di FubMD è il giro **dry-run → piano →
+approvazione → apply**, e non una capacità `HostApi::confirm`. Due ragioni:
+
+1. **Un host non può fermarsi a chiedere.** Il kernel è chiamato *dalla* shell e
+   ne tiene il lock: una conferma sincrona dovrebbe risalire nella webview che
+   sta aspettando la risposta. Una capacità che questo host non può implementare
+   sarebbe una firma che ogni host dovrà onorare e nessuno onora.
+2. **Il piano si legge, la domanda no.** Una conferma nel mezzo mostra ciò che il
+   comando *sceglie* di dire; un `CommandPlan` mostra i documenti impattati e gli
+   edit proposti, e li mostra prima. È la differenza fra «sei sicuro?» e il diff.
+
+*Quando* chiedere lo decide chi invoca, e lo decide dal `CommandScope`
+dichiarato: la shell mostra il piano quando un comando scrive su più di una nota
+o si dichiara non reversibile (`needsPlan` in `frontend/src/palette.ts`). Una CLI
+in uno script può avere un'altra politica sullo stesso dato — è per questo che il
+raggio sta nella spec e la politica no.
+
+Resta fuori, dichiarato: l'**attribuzione** (chi ha chiesto l'operazione: utente,
+comando, modello, prompt) è l'origine degli eventi (§1.18) applicata al lotto
+(§1.12), e senza quelle due un campo qui sarebbe scritto da chi invoca e letto da
+nessuno.
+
 ## Import ed export: il confine è di byte, non di path (deciso)
 
 Il capitolo 17 di FEATURES (~120 voci) è, in ogni altra applicazione, quello che

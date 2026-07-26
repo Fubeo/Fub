@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::command::{CommandOutcome, CommandSpec, InvokeMode};
 use crate::edit::{EditReport, EditRequest, Revision};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask};
@@ -229,25 +230,33 @@ pub trait HostApi: Send + Sync {
 // Comandi
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CommandSpec {
-    pub id: String,
-    pub title: String,
-    /// Suggerimento di scorciatoia, es. `"Mod-p"` (non vincolante).
-    pub keybinding: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct CommandOutcome {
-    pub notify: Option<String>,
-}
-
+/// Chi offre azioni al registro dei comandi: la palette, la tastiera, le macro
+/// (16.2), la CLI (27.1) e il centro di comando (22.4) sono tutti clienti dello
+/// stesso elenco. I tipi stanno in [`crate::command`], che è dove la forma di un
+/// comando è ragionata per intero.
+///
+/// # Come l'host chiama, e cosa garantisce
+///
+/// - Gli argomenti arrivano **già convalidati** contro la
+///   [`CommandSpec`]: un comando non deve difendersi da un chiamante distratto,
+///   e i `params` che ha dichiarato sono la sua difesa.
+/// - Con [`InvokeMode::DryRun`] — e con qualunque modo, se la spec dice
+///   `writes: false` — l'`host` prestato è in **sola lettura**: ogni scrittura
+///   risponde [`PluginError::PermissionDenied`]. La simulazione non è una
+///   promessa di chi implementa.
+/// - La consegna degli eventi è quella di sempre: ciò che il comando emette o
+///   scrive arriva agli handler **dopo** che `invoke` è tornata (vedi
+///   [`EventHandler`]).
 pub trait CommandProvider: Send + Sync {
     fn commands(&self) -> Vec<CommandSpec>;
+    /// Esegue (o simula) un comando. `command` è un id fra quelli di
+    /// [`commands`](CommandProvider::commands); un id ignoto è
+    /// [`PluginError::UnknownCommand`].
     fn invoke(
         &self,
         command: &str,
         args: serde_json::Value,
+        mode: InvokeMode,
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError>;
 }

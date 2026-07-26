@@ -48,13 +48,14 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span};
 use fubmd_abi::session::{ContextMask, ViewContext};
 use fubmd_abi::traits::{
-    BacklinkRef, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
-    Paged, ViewProvider, ViewSpec,
+    BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
+    JobId, JobSpec, Paged, ViewProvider, ViewSpec,
 };
 use fubmd_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -217,6 +218,13 @@ pub struct Workspace {
     /// Ogni albero di UI che entra nell'host passa da qui: è il punto unico in
     /// cui [`UiNode::validate_untrusted`] viene applicato.
     views: Vec<(String, Trust, Box<dyn ViewProvider>)>,
+    /// Provider di comandi, in ordine di registrazione. Senza [`Trust`], a
+    /// differenza delle view: la fiducia serve dove passa **contenuto attivo**
+    /// (`Html`/`WebView`), e da un comando non passa un albero di UI — l'unica
+    /// stringa che l'esito porta all'utente (`notify`) è testo semplice, come
+    /// lo snippet di una ricerca. Ciò che serve a un comando è un *permesso*
+    /// (§2.10), che è un'altra domanda e ha un altro posto.
+    commands: Vec<(String, Box<dyn CommandProvider>)>,
     /// Eventi in attesa di dispatch verso gli handler.
     pending: VecDeque<Event>,
     /// Guardia anti-rientranza: `dispatch_pending` non si annida mai.
@@ -275,6 +283,7 @@ impl Workspace {
             imports: Vec::new(),
             exports: Vec::new(),
             views: Vec::new(),
+            commands: Vec::new(),
             pending: VecDeque::new(),
             dispatching: false,
             in_provider_call: false,
@@ -1478,6 +1487,122 @@ impl Workspace {
         self.views.extend(registered_meanwhile);
     }
 
+    // --- comandi -----------------------------------------------------------
+    //
+    // Il registro del §1.1: un'azione si dichiara una volta e la chiedono tutti
+    // — la palette, la tastiera, una macro, la CLI, il centro di comando. Il
+    // kernel non sa cosa faccia un comando; sa scegliere chi lo possiede,
+    // convalidare ciò che gli si passa e decidere **quali capacità** prestargli.
+
+    /// Registra un [`CommandProvider`] sotto un id, con la stessa disciplina
+    /// degli altri provider: l'id è lo spazio dati che l'[`HostApi`] gli
+    /// concede, e l'ordine di registrazione è l'ordine in cui i comandi
+    /// compaiono e in cui si risolve un id conteso.
+    pub fn register_command_provider(
+        &mut self,
+        id: impl Into<String>,
+        provider: Box<dyn CommandProvider>,
+    ) {
+        self.commands.push((id.into(), provider));
+    }
+
+    /// I comandi offerti dai provider registrati, in ordine di registrazione.
+    ///
+    /// È la metà "discovery" del registro, ed è la ragione per cui una
+    /// [`CommandSpec`] porta descrizione, parametri e raggio: chi legge questo
+    /// elenco può essere una palette, ma anche una CLI o un modello, e nessuno
+    /// dei due ha letto il codice del comando.
+    pub fn commands(&self) -> Vec<CommandSpec> {
+        self.commands
+            .iter()
+            .flat_map(|(_, p)| p.commands())
+            .collect()
+    }
+
+    /// Esegue — o **simula** — un comando.
+    ///
+    /// Due cose accadono qui e non dentro i comandi, e sono le due che rendono
+    /// il registro utilizzabile da chi non lo conosce:
+    ///
+    /// 1. **Gli argomenti sono convalidati contro la spec**
+    ///    ([`CommandSpec::validate_args`]) prima di chiamare chiunque. Un
+    ///    comando non deve difendersi da un chiamante distratto, e chi sbaglia
+    ///    riceve un [`PluginError::BadArgs`] che dice cosa manca — non un
+    ///    comportamento a sorpresa.
+    /// 2. **Le capacità dipendono da ciò che il comando ha dichiarato.** Scrive
+    ///    solo un [`InvokeMode::Apply`] di un comando che si è dichiarato
+    ///    `writes`; in ogni altro caso l'host prestato è in sola lettura e ogni
+    ///    scrittura risponde [`PluginError::PermissionDenied`]. Il dry-run
+    ///    quindi non è una promessa di chi implementa (che un comando di terzi
+    ///    non manterrebbe), ed è per la stessa ragione che `writes: false` non è
+    ///    una decorazione: dichiararsi innocuo è vincolante.
+    ///
+    /// Il resto è la disciplina di sempre: il provider esce dal workspace per la
+    /// durata della chiamata, `in_provider_call` rimanda il dispatch, e ciò che
+    /// il comando ha emesso arriva agli handler **dopo** che `invoke` è tornata.
+    pub fn invoke_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let at = self.command_owner(command)?;
+        let spec = self.commands[at]
+            .1
+            .commands()
+            .into_iter()
+            .find(|s| s.id == command)
+            .expect("il proprietario è stato trovato dichiarando questo comando");
+        spec.validate_args(&args)?;
+
+        let mut providers = std::mem::take(&mut self.commands);
+        let outcome = if spec.scope.writes && mode == InvokeMode::Apply {
+            self.with_provider_call(|ws| {
+                let (id, provider) = &mut providers[at];
+                let mut host = KernelHost { ws, plugin: id };
+                provider.invoke(command, args, mode, &mut host)
+            })
+        } else {
+            let why = if mode.is_dry_run() {
+                "una simulazione non scrive"
+            } else {
+                "il comando si è dichiarato di sola lettura"
+            };
+            let (id, provider) = &providers[at];
+            let mut host = ReadOnlyHost {
+                inner: ReadHost {
+                    ws: self,
+                    plugin: id,
+                },
+                why,
+            };
+            provider.invoke(command, args, mode, &mut host)
+        };
+        // Provider registrati *durante* la chiamata si accodano in fondo
+        // (simmetria con view, indici e handler).
+        let registered_meanwhile = std::mem::take(&mut self.commands);
+        self.commands = providers;
+        self.commands.extend(registered_meanwhile);
+
+        let mut outcome = outcome?;
+        if let CommandEffect::Plan(plan) = &mut outcome.effect {
+            // L'insieme impattato è ciò che l'utente approva: lo completa
+            // l'host, invece di fidarsi che chi ha scritto il piano si sia
+            // ricordato di elencare ogni documento che i suoi edit nominano.
+            plan.complete();
+        }
+        self.dispatch_pending();
+        Ok(outcome)
+    }
+
+    /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
+    fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
+        self.commands
+            .iter()
+            .position(|(_, p)| p.commands().iter().any(|spec| spec.id == command))
+            .ok_or_else(|| PluginError::UnknownCommand(command.to_string()))
+    }
+
     // --- import ed export ---------------------------------------------------
     //
     // Il kernel non sa cosa sia un formato di scambio: sa scegliere chi lo sa e
@@ -2130,6 +2255,124 @@ impl HostApi for ReadHost<'_> {
 
     fn active_context(&self) -> Option<ViewContext> {
         self.ws.active_context().cloned()
+    }
+}
+
+/// L'[`HostApi`] prestato a un comando che **non deve scrivere**: o perché lo
+/// si sta simulando ([`InvokeMode::DryRun`]), o perché si è dichiarato di sola
+/// lettura ([`CommandScope::writes`](fubmd_abi::command::CommandScope::writes)).
+///
+/// È un [`ReadHost`] con l'altra risposta alle capacità di scrittura: là il
+/// percorso di render non può *raggiungerle* (è prestato come `&dyn HostApi`, e
+/// arrivarci sarebbe un bug del kernel, quindi un panic), qui invece un comando
+/// ce le ha davanti e può provarci — e provarci non è un bug del kernel, è il
+/// caso normale di un comando che ha dichiarato una cosa e ne fa un'altra.
+/// La risposta giusta è un errore che dice **perché**, e che chi ha scritto il
+/// comando legge nei propri test.
+///
+/// Senza questa struttura il dry-run sarebbe una convenzione: "per favore non
+/// scrivere quando ti chiedo cosa faresti". Le convenzioni le rispettano i
+/// comandi che si scrivono in questo repo.
+struct ReadOnlyHost<'a> {
+    inner: ReadHost<'a>,
+    /// La ragione del divieto, com'è arrivata all'host: finisce nel messaggio.
+    why: &'static str,
+}
+
+impl ReadOnlyHost<'_> {
+    fn denied<T>(&self, what: &str) -> std::result::Result<T, PluginError> {
+        Err(PluginError::PermissionDenied(format!(
+            "{what}: {}",
+            self.why
+        )))
+    }
+}
+
+impl HostApi for ReadOnlyHost<'_> {
+    fn read_document(&self, id: &DocId) -> std::result::Result<String, PluginError> {
+        self.inner.read_document(id)
+    }
+
+    fn write_document(
+        &mut self,
+        id: &DocId,
+        _source: &str,
+    ) -> std::result::Result<(), PluginError> {
+        self.denied(&format!("scrivere `{id}`"))
+    }
+
+    /// Leggere una revisione è una lettura, ed è **la** lettura che serve a un
+    /// dry-run: un piano è fatto di [`EditRequest`] con una base, e la base la
+    /// dà questa capacità.
+    fn document_revision(&self, id: &DocId) -> std::result::Result<Revision, PluginError> {
+        self.inner.document_revision(id)
+    }
+
+    fn apply_edit(
+        &mut self,
+        id: &DocId,
+        _request: EditRequest,
+    ) -> std::result::Result<EditReport, PluginError> {
+        self.denied(&format!("modificare `{id}`"))
+    }
+
+    fn list_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
+        self.inner.list_documents()
+    }
+
+    fn free_name(&self, id: &DocId) -> DocId {
+        self.inner.free_name(id)
+    }
+
+    fn emit(&mut self, _event: Event) {
+        // L'unica capacità senza esito: un evento che non si può rifiutare si
+        // può solo non emettere. Simulare significa anche non farsi sentire —
+        // un `DocumentChanged` finto farebbe ricaricare l'editor su una
+        // modifica che non è avvenuta.
+    }
+
+    fn spawn_job(&mut self, _spec: JobSpec) -> std::result::Result<JobId, PluginError> {
+        // Un job gira fuori dal giro sincrono e il suo esito rientra come
+        // evento: lanciarlo durante una simulazione è un effetto che la
+        // simulazione non può ritirare.
+        self.denied("lanciare un job")
+    }
+
+    fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
+        self.inner.storage_get(key)
+    }
+
+    fn storage_set(&mut self, _key: &str, _value: serde_json::Value) {
+        // Come `emit`: nessun esito da restituire, quindi l'unica risposta
+        // onesta è non farlo.
+    }
+
+    fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
+        self.inner.data_read(path)
+    }
+
+    fn data_write(&mut self, path: &str, _bytes: &[u8]) -> std::result::Result<(), PluginError> {
+        self.denied(&format!("scrivere il blob `{path}`"))
+    }
+
+    fn data_remove(&mut self, path: &str) -> std::result::Result<(), PluginError> {
+        self.denied(&format!("cancellare il blob `{path}`"))
+    }
+
+    fn data_list(&self, prefix: &str) -> std::result::Result<Vec<String>, PluginError> {
+        self.inner.data_list(prefix)
+    }
+
+    fn now_unix_millis(&self) -> u64 {
+        self.inner.now_unix_millis()
+    }
+
+    fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
+        self.inner.query_index(query)
+    }
+
+    fn active_context(&self) -> Option<ViewContext> {
+        self.inner.active_context()
     }
 }
 
