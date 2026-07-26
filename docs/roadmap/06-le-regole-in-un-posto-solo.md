@@ -72,9 +72,22 @@ problema dentro il primo provider che arriva.
 | risoluzione folder-note senza distinzione di caso | `graph::normalize` | `organizer.ts:118-122` |
 | offset byte ↔ code unit | `format-markdown/src/offsets.rs` | `offsets.ts` |
 | grammatica di wikilink, tag, evidenziato, checkbox | comrak + `sdk::scan` | `livepreview.ts` |
-| collazione e ordinamento | l'ordinamento del kernel | `Intl.Collator("it")` |
 
-- [ ] **Una sola delle sei ha un test che le lega**
+- [ ] **Una che sembrava della famiglia e non lo è: l'ordinamento.**
+      `Workspace::documents` fa `ids.sort()` — ordine di byte, e il commento su
+      `VaultHealth` dice perché (`workspace.rs:481-485`, `:1409-1412`): una
+      risposta paginata che cambiasse ordine fra una pagina e l'altra
+      ripeterebbe e salterebbe righe. La sidebar usa
+      `Intl.Collator("it", {sensitivity: "base", numeric: true})`
+      (`organizer.ts:17`), che è l'ordine di lettura di un umano. Non sono due
+      copie della stessa regola: sono **due requisiti diversi che devono
+      divergere**, e una fixture condivisa nascerebbe rossa e resterebbe rossa.
+      Quello che manca non è un presidio ma una decisione — *il kernel espone
+      un ordine di presentazione, o l'ordine di presentazione è della shell?* —
+      e finché non la si prende, `IndexQuery` pagina su una chiave che nessuna
+      UI mostrerà mai in quell'ordine (§5.5, e la paginazione della
+      [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md)).
+- [ ] **Una sola delle cinque ha un test che le lega**
       (`docid_page_name_agrees_with_the_frontend_on_hostile_names`), scritto a
       mano, e il commento sopra `pageName` dice «è la stessa regola, riga per
       riga» — cioè dichiara la duplicazione invece di toglierla. È la forma

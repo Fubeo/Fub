@@ -92,7 +92,7 @@ messaggio arrivato.
 | **4** | [Chi vede il modello parsato](roadmap/04-chi-vede-il-modello-parsato.md) | *chi vede la struttura di un documento?* Oggi: il kernel, e chi indicizza | 4 | 3 |
 | **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | chi risponde a una query, e chi la instrada — nell'ordine | 5 | 3 |
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | la stessa regola serve a provider, shell e a M5 a un guest WASM | 2 | — |
-| **7** | [Il confine: quante volte si scrive la disciplina](roadmap/07-il-confine.md) | la disciplina del confine, da chi lo attraversa e da chi lo presta | 6 | 3 |
+| **7** | [Il confine: quante volte si scrive la disciplina](roadmap/07-il-confine.md) | la disciplina del confine, da chi lo attraversa e da chi lo presta | 6 | 2 |
 | **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio va scomposto **prima** di ciò che gli atterra sopra | 3 | — |
 | **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | le tre facce del momento in cui un componente smette | 7 | 2 |
 | **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | lo stesso canale a tre distanze: chi si abbona, cosa passa, chi lo mostra | 3 | 1 |
@@ -165,7 +165,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§7.2** | [Una disciplina dei provider sola, non una per famiglia](roadmap/07-il-confine.md#72-una-disciplina-dei-provider-sola-non-una-per-famiglia) | 7. Il confine: quante volte si scrive la disciplina | kernel | **P1** |
 | **§7.3** | [Permessi e manifest — il punto di applicazione non esiste](roadmap/07-il-confine.md#73-permessi-e-manifest--il-punto-di-applicazione-non-esiste) | 7. Il confine: quante volte si scrive la disciplina | kernel | **P1** |
 | **§7.4** | [Gli id non sono di nessuno: nessuna regola di namespace, nessuna collisione](roadmap/07-il-confine.md#74-gli-id-non-sono-di-nessuno-nessuna-regola-di-namespace-nessuna-collisione) | 7. Il confine: quante volte si scrive la disciplina | contratto | **P0** |
-| **§7.5** | [I plugin non hanno un canale per parlarsi](roadmap/07-il-confine.md#75-i-plugin-non-hanno-un-canale-per-parlarsi) | 7. Il confine: quante volte si scrive la disciplina | contratto | **P0** |
+| **§7.5** | [I plugin non hanno un canale per parlarsi](roadmap/07-il-confine.md#75-i-plugin-non-hanno-un-canale-per-parlarsi) | 7. Il confine: quante volte si scrive la disciplina | contratto | **P1** |
 | **§7.6** | [Nessun inventario di ciò che è attivo](roadmap/07-il-confine.md#76-nessun-inventario-di-ciò-che-è-attivo) | 7. Il confine: quante volte si scrive la disciplina | kernel | **P1** |
 | **§8.1** | [`Workspace` è un oggetto-dio, e ogni voce di questo piano gli aggiunge un campo](roadmap/08-il-kernel-a-pezzi.md#81-workspace-è-un-oggetto-dio-e-ogni-voce-di-questo-piano-gli-aggiunge-un-campo) | 8. Il kernel a pezzi, e chi lo monta | kernel | **P1** |
 | **§8.2** | [Il montaggio dell'app vive dentro un comando Tauri](roadmap/08-il-kernel-a-pezzi.md#82-il-montaggio-dellapp-vive-dentro-un-comando-tauri) | 8. Il kernel a pezzi, e chi lo monta | kernel | **P1** |

@@ -16,10 +16,12 @@ dodici in arrivo sullo stesso `struct`.
 
 *ex §2.19 · kernel · **P1** — leva alta: **prima** dell'8.2 e dell'8.3*
 
-- [ ] **1750 righe e ~20 campi**, che mettono insieme: I/O del vault, registry
+- [ ] **2903 righe e 23 campi**, che mettono insieme: I/O del vault, registry
       dei formati, cache dei metadati, grafo, conteggi tag, event bus, coda e
-      dispatcher, **tre** tabelle di provider, storage dei plugin, stato di
-      sessione (`active`), coda dei job. Il §7.2 (`ProviderTable`) e il §8.3
+      dispatcher, **sei** tabelle di provider (`handlers`, `indexes`, `imports`,
+      `exports`, `views`, `commands`), storage dei plugin, contesto di sessione
+      (`context`), coda dei job, lo stack dei comandi, l'attore corrente e il
+      lotto aperto. Il §7.2 (`ProviderTable`) e il §8.3
       (`RwLock`) ne sono le due conseguenze già viste; la causa no, e ha due
       effetti che il resto del piano dà per risolti:
       - il `RwLock` del §8.3 **non potrà essere a grana fine**: un lettore che
@@ -36,6 +38,15 @@ dodici in arrivo sullo stesso `struct`.
       permessi (§7.3), cartelle (§14.3), ignore policy (§15.6). Dodici campi
       in più sullo stesso `struct`, e dodici ragioni in più per prendere lo
       stesso lock.
+- [ ] **Tre dei dodici sono già atterrati, e si vede quanto costano**: comandi
+      ([decisione 0009](../decisions/0009-registro-dei-comandi.md)) ha portato
+      `commands` e `command_stack`, il lotto
+      ([decisione 0011](../decisions/0011-il-lotto.md)) ha portato `batch` e
+      `next_batch_id`, l'origine
+      ([decisione 0012](../decisions/0012-origine-degli-eventi.md)) ha portato
+      `actor`. Cinque campi per tre sottosistemi, e il conto di questa voce si è
+      mosso da «1750 righe e ~20 campi» a 2903 e 23 **mentre il piano veniva
+      scritto**. Nove sottosistemi restano.
 - [ ] **La scomposizione va decisa prima di aggiungerli**, non dopo:
       `DocumentStore` (vault + cache + parse), `MetadataIndex` (grafo + tag +
       outline), `ProviderRegistry` (§7.2 + §9.4 + §7.3), `Dispatcher` (coda +
@@ -48,7 +59,7 @@ dodici in arrivo sullo stesso `struct`.
 
 *ex §2.15 · kernel · **P1** — cinque clienti previsti e nessuno può riusare il montaggio*
 
-- [ ] **`open_vault` (`app/lib.rs:109-208`) È il composition root**: registry
+- [ ] **`open_vault` (`app/lib.rs:115-295`) È il composition root**: registry
       dei formati, indice di ricerca, versioning, le tre view, il watcher, il
       ponte eventi e la sessione si montano lì dentro, in un
       `#[tauri::command]`, in un crate che dipende da tauri e notify.

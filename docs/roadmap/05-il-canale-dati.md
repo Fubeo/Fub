@@ -67,8 +67,10 @@ troverebbe a dire di no a feature che non hanno altra strada.
 *ex §2.18 · kernel · **P0** — kernel nel titolo, **registrazione — cioè firma** nella sostanza; dopo la 5.1*
 
 - [ ] **`query_index` prova gli indici in ordine di registrazione finché uno non
-      risponde `BadArgs`** (`workspace.rs:1426-1435`), e l'errore
-      dell'**ultimo interpellato** è quello che arriva al chiamante. Con un
+      risponde `BadArgs`** (`workspace.rs:1426-1435`), e di `BadArgs` arriva al
+      chiamante quello dell'**ultimo interpellato**; ogni altro errore torna
+      indietro dal **primo** che lo dà, e da fuori i due casi non si
+      distinguono. Con un
       indice funziona benissimo. Con quelli che FEATURES chiede — full-text,
       semantico e vettoriale (22.1), proprietà (8.2), task (10), database (11),
       citazioni (15.1) — ogni query gira su tutti, e due indici che rivendicano
@@ -106,9 +108,15 @@ troverebbe a dire di no a feature che non hanno altra strada.
 
 *ex §2.26 · kernel · **P1** — va **prima** della 16.6*
 
-- [ ] **Quattro comandi Tauri avvolgono lo stesso `query_index`**: `backlinks`
-      (`app/lib.rs:395`), `search` (`:528`), `list_tags` (`:554`) e — con un
-      canale tutto suo — `graph_data` (`:698`). Un provider può fare qualunque
+- [ ] **Tre comandi Tauri avvolgono lo stesso `query_index`** — `search`
+      (`app/lib.rs:528`), `list_tags` (`:554`) e `graph_data` (`:698`) — **e un
+      quarto non lo avvolge: lo scavalca.** `backlinks` (`:395`) chiama
+      `ws.backlinks(&DocId)` diretto sul grafo, senza passare dal canale dati.
+      È la stessa voce vista un gradino più in basso: dove sull'IPC un
+      `query_index` non c'è, un comando bespoke non si limita a duplicare il
+      canale — se lo salta, e con lui salterà il dispatch del §5.2 e la
+      paginazione della [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md).
+      Un provider può fare qualunque
       query; **la shell no**: ogni variante nuova della [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) (proprietà, faccette,
       vicinato del grafo, salute del vault) richiederebbe un comando in più.
 - [ ] **Manca il gemello di `render_view`/`view_action`**: un `query_index`
@@ -116,8 +124,9 @@ troverebbe a dire di no a feature che non hanno altra strada.
       del §12.2, paginazione della [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md)). È la voce che rende **praticabile** la
       dieta dell'IPC del §16.6: senza, l'allowlist si troverebbe a dire di no a
       feature legittime che non hanno altra strada.
-- [ ] Con essa i quattro comandi diventano tre righe di `api.ts` e il grafo
-      smette di avere un canale privilegiato (§2.2).
+- [ ] Con essa i quattro comandi diventano tre righe di `api.ts`, il grafo
+      smette di avere un canale privilegiato (§2.2) e i backlink smettono di
+      avere il proprio.
 
 ### 5.5 `list_documents` e `views()` — le metà nel contratto di §14.4 e §2.3
 

@@ -27,7 +27,7 @@ sia vivo.
 *ex §1.21 · contratto · **P0** — leva alta: **rende inesprimibile** — sblocca 17, 18, 22, 19.4*
 
 - [ ] **`Plugin::run_job` è deliberatamente senza `HostApi`** — «input nel
-      `payload`, output nel risultato» (`abi/traits.rs:476-483`). Per un
+      `payload`, output nel risultato» (`abi/traits.rs:1052-1064`). Per un
       calcolo puro è la firma giusta. Ma l'unico modo di dare input a un job
       diventa che il **chiamante** legga il vault dentro il giro sincrono:
       cioè faccia lì, in esclusiva sul workspace, esattamente il lavoro che il
@@ -54,16 +54,27 @@ runner dei job del §9.3, che oggi eseguirebbe soltanto funzioni pure.
 
 ### 9.2 Non c'è un ciclo di vita: si apre e basta
 
-*ex §1.35 · contratto · **P0** — l'asimmetria è di firma, quindi scade col freeze*
+*ex §1.35 · contratto · **P0 condizionale** — scade col freeze **solo se** il gemello nasce senza default (come il §7.1: P0 su una delle due strade)*
 
 - [ ] **Il contratto non ha uno spegnimento.** `IndexProvider` ha `activate` e
-      `flush` ma **nessun `close`/`deactivate`** (`abi/traits.rs:355-388`);
-      `Plugin::deactivate` esiste (`abi/traits.rs:469`) e **non ha chiamanti**
-      in tutto il repo. Un indice che possiede risorse esterne — tantivy tiene
+      `flush` ma **nessun `close`/`deactivate`** (`abi/traits.rs:917-949`);
+      `Plugin::deactivate` esiste (`abi/traits.rs:1051`) e **non ha chiamanti**
+      in tutto il repo — l'unico posto che lo nomina è il presidio di
+      conformance. Un indice che possiede risorse esterne — tantivy tiene
       segmenti, lock file e thread di merge — non ha un punto in cui chiuderle,
       e il kernel non ha modo di chiedergliele.
-- [ ] **L'asimmetria è di firma, quindi scade col freeze**: `activate` senza il
-      suo gemello è un ciclo di vita monco che ogni provider di terzi eredita.
+- [ ] **L'asimmetria è di firma, ma scade col freeze solo su una delle due
+      strade, e va detto quale.** Per `wit_additivity` una **funzione nuova** in
+      un'interfaccia è additiva: `close` aggiunto dopo il freeze non rompe il
+      WIT. Rompe **chi implementa**, e solo se nasce senza corpo di default —
+      esattamente la differenza fra `IndexProvider::flush` (obbligatoria) e
+      `Plugin::run_job` (che il default ce l'ha, `traits.rs:1058-1064`). Quindi
+      la P0 non è sulla voce: è sulla scelta. *Se* il ciclo di vita deve essere
+      obbligatorio — e per un indice che tiene lock file la risposta è
+      probabilmente sì — allora va messo **prima** del freeze, perché dopo ogni
+      provider di terzi già scritto smetterebbe di compilare. Se ammette un
+      default no-op, è additiva e sta col §9.5, che è P1. È la stessa forma del
+      §7.1: la voce è P0 **su una delle due strade**, e la strada va scelta ora.
       La metà implementativa — chi chiama, quando, e cosa succede a metà — è il
       §9.5.
 - [ ] Va deciso con il §9.4 (disattivazione a runtime) e il §9.1 (un job in
@@ -79,7 +90,7 @@ reload), 26.2-26.3 (dove il watcher non c'è).
 *ex §2.3 · kernel · **P1** — leva alta: è il registry su cui poggiano 9.4, 9.5 e il capitolo 7*
 
 - [ ] **Una tabella di montaggio unica**: oggi le feature sono cablate a mano in
-      `open_vault` (`app/lib.rs:128-178`). Serve un registry che, dato un
+      `open_vault` (`app/lib.rs:140-204`). Serve un registry che, dato un
       manifest, attivi/disattivi un bundle (`Plugin` + i suoi provider), assegni
       lo spazio dati, applichi `Trust` e `abi_compatible`. È il pezzo che a M5
       il caricatore WASM riuserà tale e quale.
@@ -115,9 +126,10 @@ reload), 26.2-26.3 (dove il watcher non c'è).
 *ex §2.22 · kernel · **P1** — la metà implementativa della 9.2; va con la 9.6*
 
 - [ ] **`flush_indexes` ha un solo chiamante in produzione**: il callback del
-      file watcher (`app/lib.rs:249-254`), più `reindex` all'apertura. Nessun
-      altro percorso lo chiama — né `write_document` dall'IPC, né la chiusura
-      del vault, né la chiusura dell'app.
+      file watcher (`app/lib.rs:279`), più `reindex` all'apertura
+      (`kernel/workspace.rs:466`, e lì l'esito è scartato con `let _ =` — cioè
+      §20.3). Nessun altro percorso lo chiama — né `write_document` dall'IPC, né
+      la chiusura del vault, né la chiusura dell'app.
 - [ ] **Quindi la durabilità di un indice dipende da un componente
       *opzionale***. Dove il watcher non c'è o non funziona — network share e
       cartelle cloud (2.3, 3.1), PWA (26.3), CLI (27.1), e2e headless (27.4),
@@ -159,7 +171,7 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       col disco. Il costo della sua assenza non è una riapertura lenta: è che il
       kernel risponde su un vault che non c'è più.
 - [ ] **E quando fallisce, fallisce due volte in silenzio.** Gli errori del
-      debouncer finiscono in un `eprintln!` (`app/lib.rs:283-287`, cioè §20.2), e
+      debouncer finiscono in un `eprintln!` (`app/lib.rs:285`, cioè §20.2), e
       la sincronizzazione di ogni singolo path scarta il proprio esito:
       `let _ = ws.sync_renamed_path(&from, &to)` e `let _ = ws.sync_path(&p)`
       (`app/lib.rs:266`, `:272`) — due righe sopra un `flush_indexes` che almeno

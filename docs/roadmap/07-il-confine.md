@@ -18,6 +18,12 @@ presidio dell'additività ([decisione 0002](../decisions/0002-additivita-del-con
 lo conta come rinomina. Se invece si sceglie il solo wrapper nel kernel, scala a
 P1 e non blocca niente.
 
+La 7.5 fa il percorso opposto e per la stessa ragione: pesa quanto le altre —
+senza, i moduli Suite sono crate linkati e non plugin — ma la sua sostanza è
+**additiva** per il presidio dell'additività, quindi non scade col freeze ed è
+P1. Il criterio dell'indice è la scadenza, non l'importanza, e se lo si piega
+una volta smette di ordinare alcunché.
+
 La 7.4 sta qui ed è la voce **più datata** del piano: è l'unica che non riguarda
 ciò che scriveremo ma ciò che avremo già pubblicato, e il suo costo non si misura
 in lavoro ma in id di terzi da rinominare.
@@ -68,8 +74,8 @@ cinque volte.
 
 *ex §2.8 · kernel · **P1** — va **prima** dei provider nuovi del capitolo 2, o li si scrive tre volte*
 
-- [ ] **`ProviderTable<T>`**: `deliver_to_handlers` (`workspace.rs:1284`),
-      `flush_indexes` (`:1088`) e `view_action` (`:1167`) implementano **tre
+- [ ] **`ProviderTable<T>`**: `deliver_to_handlers` (`workspace.rs:2078`),
+      `flush_indexes` (`:1450`) e `view_action` (`:1533`) implementano **tre
       volte** lo stesso protocollo sottile — `mem::take` dei provider →
       `with_provider_call` → ripristino → `extend(registered_meanwhile)` →
       `dispatch_pending`. Non è codice di servizio: è la semantica di consegna
@@ -85,8 +91,9 @@ cinque volte.
 
 - [ ] **Il registry tiene `(manifest, permessi, trust)`** e `KernelHost` si
       costruisce da quella voce: oggi `PluginPermissions` esiste nel contratto e
-      **nessuno lo legge**, e `KernelHost` porta solo `plugin: &str`
-      (`workspace.rs:1485`) — non sa di chi siano le capacità che sta prestando.
+      **nessuno lo legge**, e `KernelHost` porta `plugin: &str` e `mode`, e
+      nient'altro (`workspace.rs:2325-2337`) — non sa di chi siano le capacità
+      che sta prestando.
       Il kernel non conserva manifest: `register_*` prende una stringa.
 - [ ] **`Trust` va oltre le view**: oggi è un parametro del solo
       `register_view_provider`. Un `IndexProvider` di terzi riceverebbe *ogni*
@@ -111,7 +118,7 @@ cinque volte.
 *ex §1.34 · contratto · **P0** — la più **datata**: riguarda ciò che è già pubblicato*
 
 - [ ] **`view_owner` risolve un id cercando su tutti i provider e prende il
-      primo** (`kernel/workspace.rs:1196-1201`): due view con lo stesso id e la
+      primo** (`kernel/workspace.rs:1566-1571`): due view con lo stesso id e la
       seconda è irraggiungibile, **in silenzio**. È lo stesso difetto già visto
       per `FormatRegistry` (§3.1: l'ultimo registrato vince) e per il dispatch
       delle query (§5.2: per tentativi) — ma quelle sono due istanze di un
@@ -132,7 +139,7 @@ cinque volte.
 
 ### 7.5 I plugin non hanno un canale per parlarsi
 
-*ex §1.24 · contratto · **P0** — leva alta: senza, i moduli Suite sono crate linkati, non plugin*
+*ex §1.24 · contratto · **P1** — leva altissima, ma **additiva**: non scade col freeze*
 
 - [ ] **Gli unici canali fra provider sono `Event::Custom`** — fire-and-forget,
       senza risposta — **e `IndexQuery::Custom`**, che è il canale *indice* e
@@ -145,11 +152,25 @@ cinque volte.
       plugin» e «conflitti plugin», il 20.3 «conflict detection».
 - [ ] **Serve la terna, e va decisa insieme**: `provides`/`requires` nel
       `PluginManifest` (che oggi ha id, nome, versione, abi, permessi —
-      `abi/traits.rs:426-441`); un `HostApi::call_service(ns, method, args)`
+      `abi/traits.rs:1008-1023`); un `HostApi::call_service(ns, method, args)`
       sotto permesso; e l'**ordine di attivazione** che ne discende, con la
       semantica dichiarata del requisito mancante (il dipendente si disattiva?
       si attiva degradato?). Il §9.3 nomina il registry come tabella di
       montaggio: qui diventa anche un risolutore di dipendenze.
+- [ ] **Perché P1 e non P0, che è il contrario di quanto pesa.** La terna, per
+      il presidio dell'additività, è tutta **aggiunta**: `wit_additivity` conta
+      come additivi una funzione nuova in un'interfaccia (`call_service`) e un
+      campo **in fondo** a un `record` (`provides`/`requires` su
+      `PluginManifest`). È lo stesso argomento con cui la
+      [decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha chiuso
+      l'elenco delle capacità a ventidue — «aggiungerne uno è una minor» — e che
+      il §7.1 ripete. Il criterio di [todo.md](../todo.md) è esplicito: la
+      scadenza fa la P0, **non** l'importanza. Questa voce ha l'importanza e non
+      la scadenza, e va presa presto per la leva, non per il freeze. L'unico
+      pezzo che scadrebbe è una scelta che qui non si sta facendo: mettere
+      `call_service` in un'interfaccia WIT **diversa** da quella dove finirà —
+      spostarla dopo il `wit_additivity` la conta come rinomina (§7.1, ultimo
+      punto).
 - [ ] Senza, i moduli Suite non saranno plugin: saranno crate linkati che si
       vedono a compile time — cioè il contrario del §16.3.
 
@@ -161,7 +182,7 @@ plugin), 16.2 (automazioni che compongono feature diverse).
 
 *ex §2.25 · kernel · **P1** — nasce dal registry della 9.3*
 
-- [ ] **`VaultInfo.versioning: bool`** (`app/lib.rs:57`, mirror in `api.ts:14`)
+- [ ] **`VaultInfo.versioning: bool`** (`app/lib.rs:63`, mirror in `api.ts:14`)
       è un booleano **per feature** dentro un record IPC. Con i moduli del 21.2
       diventano venti booleani, e ognuno è una modifica al record, al mirror e
       alla fixture (§16.4).
