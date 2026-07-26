@@ -13,6 +13,7 @@ use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec};
 use crate::edit::{EditReport, EditRequest, Revision};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
+use crate::format::DocumentFormat;
 use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
 use crate::session::{ContextMask, ViewContext};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
@@ -172,6 +173,78 @@ pub trait HostApi: Send + Sync {
     /// Non prenota niente: fra la domanda e la scrittura il nome può diventare
     /// occupato, e a quel punto è la scrittura a dirlo.
     fn free_name(&self, id: &DocId) -> DocId;
+
+    // --- il modello parsato, e di che formato è ------------------------------
+    //
+    // Le due capacità del §4.2 e del §4.3, che sono la stessa domanda a due
+    // distanze: *cosa c'è dentro questo documento* e *cosa saprei farci*. Stanno
+    // qui accanto a `read_document` perché sono la stessa specie di cosa — una
+    // lettura del vault — e non dentro [`IndexQuery`], che è il canale di ciò
+    // che è **derivato** e aggregato. Vedi il § in testa a `IndexQuery` per la
+    // linea di confine, e il verbale della decisione 0018 per perché passa di lì.
+    //
+    // I due nomi dicono i due **costi**, ed è deliberato: `read_` è una lettura
+    // (disco, parse), `_of` è una domanda sul nome a cui risponde una mappa. Una
+    // coppia simmetrica — `document_model`/`document_format` — sarebbe stata più
+    // ordinata e avrebbe nascosto che una delle due si può fare tremila volte e
+    // l'altra no.
+
+    /// La struttura di un documento: il modello parsato, con gli `Span`. Il
+    /// gemello di [`read_document`](HostApi::read_document), che ne dà la
+    /// sorgente.
+    ///
+    /// È il verso che mancava. Uno c'era, ed è
+    /// [`IndexProvider::on_document_indexed`]: **spinto**, a chi indicizza,
+    /// quando lo decide il kernel. Chi sta dentro un indice era quindi già
+    /// servito — un indice dei task, le flashcard da blocchi, le citazioni, il
+    /// chunking per l'embedding ricevono ogni modello mentre passa. Tagliato
+    /// fuori era il percorso **one-shot**: chi ha bisogno del modello di
+    /// *questo* documento *adesso* e non era in ascolto quando è passato — un
+    /// comando che spunta il task sotto il cursore, un
+    /// [`ExportProvider`](crate::transfer::ExportProvider) su un documento solo,
+    /// un linter su richiesta, un TOC generato al volo. Le sue due strade erano
+    /// entrambe storte: riparsare con un parser proprio, o registrare un
+    /// `IndexProvider`-specchio al solo scopo di veder passare i modelli — cioè
+    /// tenere una copia dell'intero vault per rispondere a una domanda su una
+    /// nota.
+    ///
+    /// # Cosa costa, detto nella firma
+    ///
+    /// **Rilegge e riparsa dal disco a ogni chiamata.** Non è un dettaglio
+    /// d'implementazione ma il contratto, perché un canale che serve una cache e
+    /// uno che riparsa sono due firme diverse e la differenza si vede quando il
+    /// chiamante cammina l'intero vault. La cache del kernel tiene i soli
+    /// **metadati** (identità, frontmatter, outline, link): il corpo non c'è, e
+    /// promettere un modello servito dalla cache sarebbe promettere una cache
+    /// che non esiste. Chi vuole i soli metadati non passa di qui e non paga il
+    /// disco — [`IndexQuery::Outline`], [`IndexQuery::Properties`] e
+    /// [`IndexQuery::Tags`] rispondono dalla cache calda.
+    ///
+    /// Il modello è quello del **file**, con le regole di sintassi registrate
+    /// già applicate. Un buffer aperto e non salvato non lo conosce nessuno al
+    /// di qua del confine: chi disegna un editor tiene il proprio testo, e la
+    /// verità del vault è ciò che sta sul disco.
+    ///
+    /// Documento che il vault non conosce → [`PluginError::Internal`] con il
+    /// nome dentro; è la stessa risposta di [`read_document`](HostApi::read_document),
+    /// e per la stessa ragione — non è una domanda malformata, è una domanda su
+    /// qualcosa che non c'è.
+    fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError>;
+
+    /// Di che formato è un documento, e che sintassi capirebbe: il
+    /// [`DocumentFormat`](crate::format::DocumentFormat) di un [`DocId`].
+    ///
+    /// `None` = **nessun provider lo rivendica**, ed è una risposta utile
+    /// quanto le altre: è il modo con cui chi cammina una lista sa che quel
+    /// nome non è roba sua e va ignorato, invece di provare a leggerlo e
+    /// dedurlo dall'errore.
+    ///
+    /// Non restituisce un `Result` e non tocca il disco: è una domanda sul
+    /// **nome**, risolta dal registro dei formati sull'estensione. Vale quindi
+    /// anche per un documento che non esiste ancora — chi sta per creare
+    /// `Diario/2026-07-26.md` può chiedere prima chi lo tratterà — e si può
+    /// fare su tutta una lista senza pagare un'apertura a testa.
+    fn format_of(&self, id: &DocId) -> Option<DocumentFormat>;
 
     // --- operazioni strutturali sul vault -----------------------------------
     //
@@ -722,6 +795,25 @@ pub trait ViewProvider: Send + Sync {
 // tutto il resto (oggi: il full-text). La divisione non è di comodo — duplicare
 // il grafo dentro un indice creerebbe una seconda verità che può divergere
 // dalla prima.
+//
+// # Dove finisce questo canale, e comincia una lettura
+//
+// Qui sta ciò che è **derivato**: aggregato sul vault (i tag, le faccette, la
+// salute), oppure calcolato su una relazione che nessun documento contiene da
+// solo (i backlink, i vicini). Il documento **in sé** — la sua sorgente, la sua
+// struttura, di che formato è — non passa di qui ma dall'[`HostApi`]
+// (`read_document`, `read_model`, `format_of`), e la ragione è
+// duplice. La prima: una `IndexQuery` ha un dispatch *per tentativi* fra i
+// provider registrati, e una variante che il kernel serve sempre da sé
+// aggiungerebbe l'ottava su nove che a un provider non arriva mai — cioè
+// crescerebbe esattamente il difetto del §5.1. La seconda: `IndexResult` è
+// l'enum su cui ogni indice fa `match`, e infilarci un `DocumentModel` intero
+// vorrebbe dire farlo attraversare la firma di chi non lo ha chiesto.
+//
+// [`IndexQuery::Outline`] e [`IndexQuery::Tags`] stanno di qua e restano di
+// qua: sono **proiezioni** che il kernel tiene in cache, e servirle costa una
+// lettura di mappa invece di un parse. Il criterio non è "riguarda un
+// documento" — è *chi lo sa già*.
 
 /// La finestra chiesta su una risposta: da dove cominciare, quanti elementi al
 /// più.

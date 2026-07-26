@@ -197,7 +197,7 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
     let vault = Vault::new();
     let ws = vault.open();
     let specs = ws.commands();
-    assert_eq!(specs.len(), 9, "i nove comandi ufficiali");
+    assert_eq!(specs.len(), 10, "i dieci comandi ufficiali");
     let replace = specs
         .iter()
         .find(|s| s.id == VAULT_REPLACE)
@@ -411,6 +411,90 @@ fn trashing_without_an_argument_takes_the_note_the_user_is_looking_at() {
     )
     .expect("cestina la nota attiva");
     assert!(ws.documents().is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Il modello parsato dietro un comando (decisione 0018)
+// ---------------------------------------------------------------------------
+
+/// Spuntare un task è **un carattere**, e chi lo spunta non conosce la sintassi
+/// dei task.
+///
+/// È il percorso one-shot del §4.2 su un vault vero: il comando chiede il
+/// modello di *questa* nota, legge lo `span` del marcatore e scrive lì. Un test
+/// con un host in memoria non proverebbe la parte che conta — che il modello
+/// arriva **parsato da comrak**, con le posizioni del file vero, indentazione e
+/// frontmatter compresi.
+#[test]
+fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    let sorgente = "---\ntitolo: Spesa\n---\n\n- [ ] pane\n- [ ] latte\n";
+    ws.write_document(&DocId::new("spesa.md"), sorgente)
+        .expect("scrive");
+
+    // La posizione è dentro il testo della **seconda** voce: nessuno qui conta
+    // le parentesi quadre, e il frontmatter davanti sposta ogni offset.
+    let at = sorgente.find("latte").expect("c'è") as u64;
+    let outcome = ws
+        .invoke_command(
+            fubmd_features::NOTE_TASK_TOGGLE,
+            serde_json::json!({ "doc": "spesa.md", "at": at }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("spunta");
+
+    assert_eq!(
+        ws.read_source(&DocId::new("spesa.md")).expect("rilegge"),
+        "---\ntitolo: Spesa\n---\n\n- [ ] pane\n- [x] latte\n",
+        "una sola `x`, e nella voce giusta"
+    );
+    let CommandEffect::Reveal { span, .. } = outcome.effect else {
+        panic!("la shell deve sapere dove guardare")
+    };
+    assert_eq!(
+        span.end - span.start,
+        1,
+        "la patch più piccola che si scriva"
+    );
+
+    // E il giro contrario: il modello di adesso è quello del file di adesso,
+    // non quello di quando è stato indicizzato.
+    ws.invoke_command(
+        fubmd_features::NOTE_TASK_TOGGLE,
+        serde_json::json!({ "doc": "spesa.md", "at": at }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("de-spunta");
+    assert_eq!(
+        ws.read_source(&DocId::new("spesa.md")).expect("rilegge"),
+        sorgente
+    );
+}
+
+/// Una posizione che non sta in nessun task si dice, e non tocca il vault.
+#[test]
+fn a_position_outside_every_task_is_refused_by_the_command_not_guessed() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("spesa.md"), "# Titolo\n\n- [ ] pane\n")
+        .expect("scrive");
+
+    let err = ws
+        .invoke_command(
+            fubmd_features::NOTE_TASK_TOGGLE,
+            serde_json::json!({ "doc": "spesa.md", "at": 2 }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap_err();
+    assert!(matches!(err, PluginError::BadArgs(_)), "{err:?}");
+    assert_eq!(
+        ws.read_source(&DocId::new("spesa.md")).expect("rilegge"),
+        "# Titolo\n\n- [ ] pane\n"
+    );
 }
 
 /// Il piano di una rinomina nomina **anche** le note che la linkano.

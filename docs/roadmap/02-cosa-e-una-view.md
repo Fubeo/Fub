@@ -22,18 +22,8 @@ sta scritto nel verbale, e la forma del protocollo in
 
 Resta la nona, e resta per la ragione per cui era già P2: non scade col freeze,
 non è precondizione di niente, e si paga quando le liste diventano lunghe — cioè
-quando ci sarà un vault che le rende lunghe.
-
-### 2.9 Prestazioni della UI
-
-*ex §3.6 · shell · **P2** — la stessa superficie, quando le liste diventano lunghe*
-
-- [ ] **Virtualizzazione** di file tree, risultati di ricerca, liste lunghe e
-      tabelle: senza, "vault enormi" (24.1) è una promessa che la UI rompe prima
-      del kernel. Il nodo `Table` della
-      [decisione 0016](../decisions/0016-cosa-e-una-view.md) ha reso il caso più
-      concreto, non più urgente: una tabella dichiarata con diecimila righe le
-      manda tutte attraverso l'IPC prima ancora che qualcuno provi a
-      disegnarle, e la finestra che serve è quella che `Page` già esprime nelle
-      query — il pezzo che manca è chi la chiede.
-- [ ] **Rendering incrementale dell'anteprima** e lazy loading di immagini/embed.
+quando ci sarà un vault che le rende lunghe. Non è una decisione: è lavoro di
+shell, e sta nella
+[§2.9 in coda alla seduta 18](18-editor-e-tastiera.md#29-prestazioni-della-ui),
+insieme alle altre code delle sedute chiuse. Il numero si trasferisce, non si
+rinomina.

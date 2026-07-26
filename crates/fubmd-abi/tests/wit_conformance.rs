@@ -68,8 +68,8 @@ use fubmd_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
 use fubmd_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
-    RenderOptions, RenderTarget, SourceKind,
+    DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
+    ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
 use fubmd_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
@@ -213,6 +213,7 @@ wit_type! {
     // Il resto del contratto.
     FormatDescriptor => "format-descriptor",
     FormatCapabilities => "format-capabilities",
+    DocumentFormat => "document-format",
     ParseContext => "parse-context",
     RenderOptions => "render-options",
     RenderTarget => "render-target",
@@ -2880,6 +2881,21 @@ fn conform(source: &str) -> Result<(), String> {
     let FormatCapabilities { syntax } = FormatCapabilities::default();
     contract.record("format-capabilities", &[("syntax", wit(&syntax))]);
 
+    let DocumentFormat {
+        descriptor,
+        capabilities,
+    } = DocumentFormat {
+        descriptor: FormatDescriptor::text("", "", &[]),
+        capabilities: FormatCapabilities::default(),
+    };
+    contract.record(
+        "document-format",
+        &[
+            ("descriptor", wit(&descriptor)),
+            ("capabilities", wit(&capabilities)),
+        ],
+    );
+
     let ParseContext { doc_id, options } = ParseContext::default();
     contract.record(
         "parse-context",
@@ -4000,6 +4016,20 @@ fn conform(source: &str) -> Result<(), String> {
         "host-api",
         "free-name",
         <dyn HostApi>::free_name as fn(&'static dyn HostApi, &'static DocId) -> DocId,
+        &["id"],
+    );
+    contract.method(
+        "host-api",
+        "read-model",
+        <dyn HostApi>::read_model
+            as fn(&'static dyn HostApi, &'static DocId) -> Result<DocumentModel, PluginError>,
+        &["id"],
+    );
+    contract.method(
+        "host-api",
+        "format-of",
+        <dyn HostApi>::format_of
+            as fn(&'static dyn HostApi, &'static DocId) -> Option<DocumentFormat>,
         &["id"],
     );
     contract.method(

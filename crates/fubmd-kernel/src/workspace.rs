@@ -52,7 +52,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::custom::{CustomRenderer, SyntaxRule};
 use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
-use fubmd_abi::format::{DocumentSource, ParseContext, RenderOptions, SourceKind};
+use fubmd_abi::format::{
+    DocumentFormat, DocumentSource, FormatCapabilities, ParseContext, RenderOptions, SourceKind,
+};
 use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span};
 use fubmd_abi::session::{ContextMask, ViewContext};
 use fubmd_abi::traits::{
@@ -1271,6 +1273,52 @@ impl Workspace {
             .into_iter()
             .filter(|k| !drawn.contains(k))
             .collect()
+    }
+
+    /// Il modello parsato di un documento (§4.2): la metà kernel di
+    /// [`HostApi::read_model`].
+    ///
+    /// **Rilegge e riparsa dal disco**, con le regole di sintassi registrate già
+    /// applicate — è la stessa catena di `render_preview`, senza il rendering.
+    /// La cache tiene i soli metadati (vedi [`DocMeta`]), quindi il corpo non c'è
+    /// e non si può servire da lì: chi vuole i metadati passa da
+    /// [`query_index`](Workspace::query_index), che risponde senza toccare il
+    /// disco.
+    ///
+    /// Un documento che il workspace non conosce è `NotFound`, e la prova è la
+    /// stessa di `render_preview`: la cache dei metadati **è** l'insieme dei
+    /// documenti indicizzati.
+    pub fn read_model(&self, id: &DocId) -> Result<DocumentModel> {
+        if !self.metas.contains_key(id) {
+            return Err(KernelError::NotFound(id.to_string()));
+        }
+        self.parse_from_disk(id)
+    }
+
+    /// Di che formato è un documento, e che sintassi capirebbe (§4.3): la metà
+    /// kernel di [`HostApi::format_of`].
+    ///
+    /// Non tocca il disco e non chiede che il documento esista: è una domanda
+    /// sull'**estensione**, e il registro dei formati è l'unico che sa
+    /// rispondere. `None` = nessun provider la rivendica.
+    ///
+    /// Le capacità sono quelle **effettive**: quelle del provider, sovrapposte
+    /// da quelle che le [`SyntaxRule`](fubmd_abi::custom::SyntaxRule) registrate
+    /// gli innestano (§3.1). L'ordine della sovrapposizione dice chi vince su
+    /// una chiave condivisa, ed è il provider: se sa fare `fubmd:math` per conto
+    /// suo, il suo dettaglio è più informativo del semplice «acceso» che una
+    /// regola può dichiarare.
+    pub fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
+        let provider = self.provider_for(id).ok()?;
+        let descriptor = provider.descriptor();
+        let grafted = self.syntax.grafted_syntax(&descriptor.id);
+        let capabilities = FormatCapabilities {
+            syntax: grafted.overlay(&provider.capabilities().syntax),
+        };
+        Some(DocumentFormat {
+            descriptor,
+            capabilities,
+        })
     }
 
     /// Rende l'anteprima di un documento: l'HTML del provider, e le parti
@@ -2528,6 +2576,19 @@ impl HostApi for KernelHost<'_> {
         self.ws.free_name(id)
     }
 
+    fn read_model(&self, id: &DocId) -> std::result::Result<DocumentModel, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws.read_model(&id).map_err(plugin_error)
+    }
+
+    fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
+        // Nessun recinto da applicare: non si legge niente, e un id che esce dal
+        // vault non ha comunque un formato da dichiarare — l'estensione di un
+        // path che non nomina un documento è una domanda senza risposta, non un
+        // varco.
+        self.ws.format_of(id)
+    }
+
     fn create_document(
         &mut self,
         id: &DocId,
@@ -2720,6 +2781,18 @@ impl HostApi for ReadHost<'_> {
         self.ws.free_name(id)
     }
 
+    /// Il modello è una **lettura**, quindi arriva anche di qui: è ciò che
+    /// permette a una view di guardare la struttura del documento che sta
+    /// disegnando senza chiedere all'app di passargliela.
+    fn read_model(&self, id: &DocId) -> std::result::Result<DocumentModel, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws.read_model(&id).map_err(plugin_error)
+    }
+
+    fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
+        self.ws.format_of(id)
+    }
+
     fn create_document(
         &mut self,
         _id: &DocId,
@@ -2899,6 +2972,14 @@ impl HostApi for ReadOnlyHost<'_> {
 
     fn free_name(&self, id: &DocId) -> DocId {
         self.reading().free_name(id)
+    }
+
+    fn read_model(&self, id: &DocId) -> std::result::Result<DocumentModel, PluginError> {
+        self.reading().read_model(id)
+    }
+
+    fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
+        self.reading().format_of(id)
     }
 
     // Le operazioni strutturali della decisione 0013 sono negate qui **tutte**, ed è

@@ -5,9 +5,9 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sette giri sulla stessa domanda hanno prodotto novantanove voci. Ventinove
+Sette giri sulla stessa domanda hanno prodotto novantanove voci. Trentadue
 sono chiuse, e i loro verbali stanno in [docs/decisions/](decisions/README.md);
-le altre settanta sono qui, e questo file è il loro **indice**.
+le altre sessantasette sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -66,9 +66,12 @@ di nuove, e vanno fatte in quest'ordine:
 
 E una quinta, che il quinto giro ha aggiunto e nessuno aveva ancora fatto: **la
 risposta a una domanda che nessuno ha posto** — chi vede il modello parsato, che
-cosa è una view mentre è viva, come si spegne il tutto. Le risposte di oggi
-sono, nell'ordine: solo il kernel; una funzione pura e sincrona senza stato; non
-si spegne. E sono già decise nelle firme che il freeze congela.
+cosa è una view mentre è viva, come si spegne il tutto. Le risposte che i giri
+hanno trovato scritte nelle firme erano, nell'ordine: solo il kernel; una
+funzione pura e sincrona senza stato; non si spegne. Le prime due sono state
+riaperte e decise ([0018](decisions/0018-chi-vede-il-modello-parsato.md) e
+[0016](decisions/0016-cosa-e-una-view.md)); la terza è ancora quella, e sta
+nella [seduta 9](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md).
 
 E una sesta, dal **settimo giro**: **cosa fallisce senza produrre nessun
 segnale** — quale sbaglio di un plugin, del kernel, dell'utente o di un'altra
@@ -86,10 +89,10 @@ messaggio arrivato.
 
 | # | Seduta | Perché insieme | Voci | P0 |
 |---|---|---|---|---|
-| **1** | [La forma della shell](roadmap/01-forma-della-shell.md) | dove sta cosa, prima che la superficie cresca | 1 | — |
-| **2** | [Cosa è una view](roadmap/02-cosa-e-una-view.md) | le firme dicono insieme che una view è una funzione pura, sincrona, senza stato | 1 | — |
-| **3** | [Chi disegna ciò che il core non conosce](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md) | una decisione sola vista da tre lati: sintassi, blocco, renderer nella shell | 1 | — |
-| **4** | [Chi vede il modello parsato](roadmap/04-chi-vede-il-modello-parsato.md) | *chi vede la struttura di un documento?* Oggi: il kernel, e chi indicizza | 4 | 3 |
+| **1** | [La forma della shell](roadmap/01-forma-della-shell.md) | dove sta cosa, prima che la superficie cresca | — | — |
+| **2** | [Cosa è una view](roadmap/02-cosa-e-una-view.md) | le firme dicono insieme che una view è una funzione pura, sincrona, senza stato | — | — |
+| **3** | [Chi disegna ciò che il core non conosce](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md) | una decisione sola vista da tre lati: sintassi, blocco, renderer nella shell | — | — |
+| **4** | [Chi vede il modello parsato](roadmap/04-chi-vede-il-modello-parsato.md) | *chi vede la struttura di un documento?* Deciso con la [0018](decisions/0018-chi-vede-il-modello-parsato.md) | — | — |
 | **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | chi risponde a una query, e chi la instrada — nell'ordine | 5 | 3 |
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | la stessa regola serve a provider, shell e a M5 a un guest WASM | 2 | — |
 | **7** | [Il confine: quante volte si scrive la disciplina](roadmap/07-il-confine.md) | la disciplina del confine, da chi lo attraversa e da chi lo presta | 6 | 2 |
@@ -103,13 +106,13 @@ messaggio arrivato.
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | 7 | 1 |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 7 | — |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza | 3 | — |
-| **18** | [L'editor e la tastiera](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell e non sta nelle sedute sopra | 2 | — |
+| **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | le voci ancora aperte dei quattro giri di audit | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 4 | 1 |
 
 ## Le voci
 
-Settanta. Il numero è quello con cui le nomina il resto del repo.
+Sessantasette. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -118,14 +121,29 @@ della sua seduta e dal file della seduta — e il suo verbale va in
 poter mentire: una casella spuntata resta una promessa scritta da qualcuno,
 mentre una riga che non c'è più è stata tolta da chi ha spostato il verbale.
 Dentro il file di una seduta le caselle ci sono, e dicono a che punto è la
-singola voce: oggi ne hanno di spuntate la [§1.2](roadmap/01-forma-della-shell.md#12-smontare-il-monolite)
-(tre punti su quattro — l'albero dei moduli, il modo unico di montare un
-pannello, e il protocollo di disegno che la seduta 2 le bloccava; l'ultimo è una
-feature), la [§3.3](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell)
+singola voce: oggi ne hanno di spuntate la
+[§1.2](roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite) (tre punti su
+quattro — l'albero dei moduli, il modo unico di montare un pannello, e il
+protocollo di disegno che la seduta 2 le bloccava), la
+[§3.3](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell)
 (la **decisione** è presa con la [0017](decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
-e resta il grafo, che è l'ultimo pannello nativo) e la
+e resta il grafo, che è l'ultimo pannello nativo), la
+[§4.4](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi)
+(il blocco è tolto dalla [0018](decisions/0018-chi-vede-il-modello-parsato.md), e
+resta il moltiplicatore) e la
 [§18.1](roadmap/18-editor-e-tastiera.md#181-editor) (il ponte inverso, chiuso
 con la [decisione 0007](decisions/0007-contesto-di-sessione.md)).
+
+**Una seduta chiusa non tiene le proprie code.** Le prime quattro sedute hanno
+il verbale e non hanno più niente da decidere, ma qualcuna aveva lasciato dietro
+di sé dei punti di **esecuzione**: sono tutti di strato shell, e sono stati
+scritti in fondo alla [seduta 18](roadmap/18-editor-e-tastiera.md), che è la
+seduta definita per esclusione — *ciò che resta della shell*. Il motivo è che una
+coda lasciata in fondo a un capitolo concluso non la rilegge nessuno, mentre lì
+sta accanto alle voci con cui si incastra, e l'ordine in cui si sbloccano
+(§1.2 → §3.3) si vede solo tenendole nello stesso file. **Il numero resta il
+suo**: `§4.4` è ancora `§4.4`, e la colonna *Seduta* qui sotto dice dov'è
+adesso, con la seduta di provenienza fra parentesi.
 
 **I numeri non scalano.** Un numero chiuso si **ritira**, non si riusa e non
 viene rimpiazzato da quello che segue: le altre voci restano dove sono, e del
@@ -138,13 +156,10 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
-| **§1.2** | [Smontare il monolite](roadmap/01-forma-della-shell.md#12-smontare-il-monolite) | 1. La forma della shell | shell | **P1** |
-| **§2.9** | [Prestazioni della UI](roadmap/02-cosa-e-una-view.md#29-prestazioni-della-ui) | 2. Cosa è una view | shell | **P2** |
-| **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 3. Chi disegna ciò che il core non conosce | shell | **P1** |
-| **§4.1** | [Il canale del rendering — stringa HTML o modello?](roadmap/04-chi-vede-il-modello-parsato.md#41-il-canale-del-rendering--stringa-html-o-modello) | 4. Chi vede il modello parsato | contratto | **P0** |
-| **§4.2** | [Il modello parsato si riceve, non si chiede](roadmap/04-chi-vede-il-modello-parsato.md#42-il-modello-parsato-si-riceve-non-si-chiede) | 4. Chi vede il modello parsato | contratto | **P0** |
-| **§4.3** | [Il contratto non dice di che formato è un documento](roadmap/04-chi-vede-il-modello-parsato.md#43-il-contratto-non-dice-di-che-formato-è-un-documento) | 4. Chi vede il modello parsato | contratto | **P0** |
-| **§4.4** | [Due parser per la stessa sintassi](roadmap/04-chi-vede-il-modello-parsato.md#44-due-parser-per-la-stessa-sintassi) | 4. Chi vede il modello parsato | shell | **P1** |
+| **§1.2** | [Smontare il monolite](roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite) | 18. L'editor e la tastiera *(da 1)* | shell | **P1** |
+| **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
+| **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
+| **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
 | **§5.1** | [Sette varianti su nove di `IndexQuery` non arrivano a nessun provider](roadmap/05-il-canale-dati.md#51-sette-varianti-su-nove-di-indexquery-non-arrivano-a-nessun-provider) | 5. Il canale dati: chi risponde, e chi instrada | kernel | **P1** |
 | **§5.2** | [Il dispatch delle query è per tentativi](roadmap/05-il-canale-dati.md#52-il-dispatch-delle-query-è-per-tentativi) | 5. Il canale dati: chi risponde, e chi instrada | kernel | **P0** |
 | **§5.3** | [La query è una stringa in un linguaggio di terzi](roadmap/05-il-canale-dati.md#53-la-query-è-una-stringa-in-un-linguaggio-di-terzi) | 5. Il canale dati: chi risponde, e chi instrada | kernel | **P0** |
@@ -219,7 +234,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — diciassette, uno per
+- [I verbali delle decisioni chiuse](decisions/README.md) — diciotto, uno per
   file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

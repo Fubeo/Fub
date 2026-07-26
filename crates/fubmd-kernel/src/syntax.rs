@@ -177,6 +177,27 @@ impl SyntaxRegistry {
             .collect()
     }
 
+    /// Le sintassi che le regole registrate **innestano** su un formato: le
+    /// chiavi di contesto che le accendono, come voci di una [`OptionMap`].
+    ///
+    /// Serve alle capacità *effettive* di [`DocumentFormat`] (§4.3): chi chiede
+    /// cosa capisce un `.md` deve ricevere anche `fubmd:highlight`, che il
+    /// provider markdown non sa fare e che una regola gli innesta sopra. La
+    /// risposta contraria — le sole capacità del provider — sarebbe una verità
+    /// di laboratorio, e rimetterebbe in piedi le due categorie di estensioni
+    /// che la decisione 0017 ha rifiutato.
+    ///
+    /// Una regola senza `option` è sempre attiva e non compare: non ha un nome
+    /// da accendere, quindi non c'è niente da dichiarare a chi chiede *cosa
+    /// posso accendere*.
+    pub fn grafted_syntax(&self, format: &str) -> OptionMap {
+        self.rules
+            .iter()
+            .filter(|r| r.spec.format == format)
+            .filter_map(|r| r.spec.option.as_deref())
+            .fold(OptionMap::new(), |m, option| m.on(option))
+    }
+
     /// Applica le regole di questo formato al modello.
     ///
     /// Non restituisce un `Result`: una regola che fallisce **lascia il nodo

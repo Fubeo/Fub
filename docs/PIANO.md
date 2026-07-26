@@ -164,12 +164,18 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   stato e chiave dei nodi, i capitoli 8.2 (proprietà), 11 (database), 16.1
   (template), 19.3 (form) e 28 (settings) non hanno dove atterrare;
   **«Chi disegna ciò che il core non conosce»** e **«Chi vede il modello
-  parsato»** — il parser è sostituibile e non estendibile, e il `DocumentModel`
-  non attraversa il contratto: le ~50 estensioni di 5.2, e chiunque voglia
-  toccare il contenuto *strutturato* (spuntare un task, scrivere una proprietà,
-  estrarre una citazione, esportare, fare chunking), oggi non possono essere un
-  plugin, ed è l'unico punto in cui l'invariante «una feature ufficiale è ciò che
-  scriverà un plugin» è **già falsa**; **«Il canale dati»** — `query_index`
+  parsato»** — erano il punto in cui l'invariante «una feature ufficiale è ciò
+  che scriverà un plugin» era **già falsa**: il parser si poteva solo
+  *sostituire*, e il `DocumentModel` non si poteva *chiedere*, quindi le ~50
+  estensioni di 5.2 e chiunque volesse toccare il contenuto *strutturato*
+  (spuntare un task, scrivere una proprietà, estrarre una citazione, esportare,
+  fare chunking) non potevano essere un plugin. Sono chiuse con la
+  [0017](decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) (una sintassi
+  si **innesta** su un provider che non la conosce, e il blocco che ne esce
+  arriva a schermo senza una riga nella shell) e con la
+  [0018](decisions/0018-chi-vede-il-modello-parsato.md) (il modello **si
+  chiede**, un documento alla volta); di quelle due sedute resta la coda shell —
+  il grafo come ultimo pannello nativo, e la sintassi che nasce ancora due volte; **«Il canale dati»** — `query_index`
   risponde da sé a sette varianti su nove, quindi grafo, proprietà e salute del
   vault sono kernel-owned e a 7.3, 8.2, 10 e 15.1 resta solo `IndexQuery::Custom`;
   **«Il confine: quante volte si scrive la disciplina»** — il punto di

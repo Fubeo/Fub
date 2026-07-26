@@ -17,7 +17,7 @@ tre superfici che esistono.* Non era una scelta sbagliata — era una scelta
 asincrono, cioè i capitoli 11, 12, 11.5 e 22 di FEATURES.
 
 Otto voci su nove sono chiuse in questo giro. Resta aperta la
-[§2.9](../roadmap/02-cosa-e-una-view.md#29-prestazioni-della-ui) (virtualizzazione,
+[§2.9](../roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) (virtualizzazione,
 P2): è la stessa superficie quando le liste diventano lunghe, non ha scadenza
 col freeze, e non è una precondizione di niente.
 

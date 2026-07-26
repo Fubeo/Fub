@@ -43,9 +43,25 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.23 · §3.2 | [0017 — Chi disegna ciò che il core non conosce](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) |
 | §1.26 · §3.5 | [0017 — Chi disegna ciò che il core non conosce](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) |
 | §3.4 (vecchio) · §3.6 | [0017 — Chi disegna ciò che il core non conosce](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) |
+| §1.13 · §4.1 | [0018 — Chi vede il modello parsato](../decisions/0018-chi-vede-il-modello-parsato.md) |
+| §1.28 · §4.2 | [0018 — Chi vede il modello parsato](../decisions/0018-chi-vede-il-modello-parsato.md) |
+| §1.29 · §4.3 | [0018 — Chi vede il modello parsato](../decisions/0018-chi-vede-il-modello-parsato.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
+
+**Voci trasferite** — il numero è quello di sempre, il file no. Una seduta chiusa
+non tiene le proprie code: quando di una voce resta solo l'**esecuzione**, la
+voce si sposta nella seduta che la eseguirà, e il suo `§X.Y` la segue. Cercarla
+nella seduta del suo numero è quindi legittimo e non basta più: questa tabella
+dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
+
+| Voce | Dov'era | Dov'è adesso | Perché lì |
+|---|---|---|---|
+| §1.2 Smontare il monolite | 1. La forma della shell | [18. L'editor e la tastiera](18-editor-e-tastiera.md#12-smontare-il-monolite) | restano due punti di **esecuzione** shell (cestino/cronologia a `ViewProvider`, modello di layout), e la decisione è chiusa con la [0015](../decisions/0015-la-forma-della-shell.md) |
+| §2.9 Prestazioni della UI | 2. Cosa è una view | [18. L'editor e la tastiera](18-editor-e-tastiera.md#29-prestazioni-della-ui) | non è una decisione: è virtualizzazione e rendering incrementale, cioè shell |
+| §3.3 La UI di un plugin non ha modo di entrare nella shell | 3. Chi disegna ciò che il core non conosce | [18. L'editor e la tastiera](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | la decisione è presa con la [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md); resta il grafo, che aspetta il modello di layout della §1.2 |
+| §4.4 Due parser per la stessa sintassi | 4. Chi vede il modello parsato | [18. L'editor e la tastiera](18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | il canale è deciso con la [0018](../decisions/0018-chi-vede-il-modello-parsato.md); resta il moltiplicatore, che si toglie nell'editor accanto alla §18.1 |
 
 **Voci aperte** — hanno un numero nuovo in questo documento:
 
@@ -55,15 +71,12 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.8 | **§12.1** | Stringhe e localizzazione al confine — decisione, non implementazione |
 | §1.10 | **§13.1** | Identità del documento — il path, e l'eventuale seconda chiave |
 | §1.11 | **§12.2** | Errori tipizzati al confine, non `String` |
-| §1.13 | **§4.1** | Il canale del rendering — stringa HTML o modello? |
 | §1.17 | **§13.3** | L'undo non ha un proprietario |
 | §1.19 | **§10.1** | L'abbonamento agli eventi non filtra |
 | §1.21 | **§9.1** | Il lavoro lungo non vede il vault |
 | §1.24 | **§7.5** | I plugin non hanno un canale per parlarsi |
 | §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
 | §1.27 | **§5.5** | `list_documents` e `views()` — le metà nel contratto di §2.13 e §1.15 |
-| §1.28 | **§4.2** | Il modello parsato non arriva a nessun provider |
-| §1.29 | **§4.3** | Il contratto non dice di che formato è un documento |
 | §1.34 | **§7.4** | Gli id non sono di nessuno: nessuna regola di namespace, nessuna collisione |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §1.37 | **§6.1** | Le regole che il contratto promette vivono nel kernel, private |

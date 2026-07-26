@@ -146,6 +146,9 @@ pub trait HostApi: Send + Sync {
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
     fn list_documents(&self) -> Result<Vec<DocId>, PluginError>;
     fn free_name(&self, id: &DocId) -> DocId;
+    // la STRUTTURA ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)): il modello parsato, e di che formato è
+    fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError>;
+    fn format_of(&self, id: &DocId) -> Option<DocumentFormat>;
     // operazioni STRUTTURALI ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)): ciò che si fa a un documento senza aprirlo
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError>;
@@ -261,6 +264,29 @@ non avrebbero potuto convivere:
   sul disco**; un `ImportProvider` che risolvesse un conflitto rifacendola
   darebbe nomi diversi da `create_note` e dal ripristino dal cestino. Con ~50
   importer nel solo capitolo 17.1, l'alternativa erano cinquanta convenzioni.
+
+**E le due più recenti le ha chieste il percorso one-shot** ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)).
+Il `DocumentModel` attraversava il contratto in un verso solo —
+`IndexProvider::on_document_indexed`, **spinto**, a chi indicizza, quando lo
+decide il kernel — e chi voleva la struttura di *questa* nota *adesso* aveva due
+strade storte: riparsare con un parser proprio, o registrare un
+`IndexProvider`-specchio che tiene una copia dell'intero vault:
+
+- `read_model` — la struttura, con gli `Span`; il gemello di `read_document`, che
+  ne dà la sorgente. **Rilegge e riparsa dal disco a ogni chiamata**, e lo dice
+  nella firma: la cache del kernel tiene i soli metadati (identità, frontmatter,
+  outline, link), quindi promettere un modello servito dalla cache sarebbe
+  promettere una cache che non esiste. Chi vuole i soli metadati passa da
+  `IndexQuery::Outline`/`Properties`/`Tags`, che rispondono a caldo. Il modello è
+  quello del **file**: un buffer non salvato non lo conosce nessuno al di qua del
+  confine.
+- `format_of` — di che formato è un documento e che sintassi capirebbe
+  (`DocumentFormat { descriptor, capabilities }`). Non è un `Result` e non tocca
+  il disco: è una domanda sul **nome**, quindi vale anche per un documento che
+  non esiste ancora e si può fare su una lista intera. `None` = nessun provider
+  lo rivendica, ed è la risposta che serve a chi deve ignorarlo. Le capacità sono
+  quelle **effettive** — provider più le sintassi che le `SyntaxRule` registrate
+  gli innestano — o tornerebbero a esistere due categorie di estensioni.
 
 **Il recinto del vault vale anche qui.** `read_document`/`write_document`
 validano il `DocId` con la stessa regola dei comandi IPC
@@ -476,8 +502,11 @@ operazioni che aggiornano il grafo. È deliberato e asimmetrico rispetto a
 `EventHandler`: la coda eventi ha un budget e può troncare (`Event::Overflow`),
 e un indice che perde un aggiornamento non smette di rispondere — risponde
 **sbagliato**, in silenzio. In più `on_document_indexed` riceve il
-`DocumentModel`, che un handler non avrebbe modo di ottenere: l'`HostApi` dà la
-sorgente, non il modello parsato.
+`DocumentModel` **già parsato dalla passata che lo sta indicizzando**: dalla
+[decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md) un handler
+*potrebbe* chiederlo (`HostApi::read_model`), ma pagherebbe una rilettura e un
+parse per evento — l'asimmetria non è più fra il possibile e l'impossibile, è
+fra ciò che è già in mano e ciò che si rifà.
 
 Restano due giunture, ed è il compito degli altri due metodi:
 
@@ -712,9 +741,11 @@ degli eventi a chiamata tornata, recinto del vault).
 Resta fuori, dichiarato: **rollback e resume** (l'inverso di un lotto, [decisione 0011](../decisions/0011-il-lotto.md),
 sopra il journal del §15.2 — il rapporto nomina i documenti toccati, che è
 l'input che servirà), il **lavoro lungo** che vede il vault (§9.1: oggi un
-import gira nel giro sincrono), il **modello parsato** a un exporter (§4.2: un
-export PDF/Typst dovrebbe riparsare) e la **superficie IPC** (senza dialoghi di
-sistema sarebbero due comandi Tauri senza chiamanti).
+import gira nel giro sincrono) e la **superficie IPC** (senza dialoghi di
+sistema sarebbero due comandi Tauri senza chiamanti). Il **modello parsato** a un
+exporter era in questo elenco e non c'è più: lo serve `HostApi::read_model`
+([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)), quindi un
+export PDF/Typst non ha più bisogno di riparsare.
 
 ### `Plugin` — ciclo di vita (M4/M5)
 
@@ -749,7 +780,7 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([decisione 0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([decisione 0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md)**: 22 metodi, `storage_*` tolto, strutturali + `run_command` aggiunti; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica ([decisione 0008](../decisions/0008-modifica-chirurgica.md)) |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md)**: 22 metodi, `storage_*` tolto, strutturali + `run_command` aggiunti; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica ([decisione 0008](../decisions/0008-modifica-chirurgica.md)); 24 con `read_model` e `format_of`, che la [0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha aggiunto con lo stesso criterio — un cliente vero che le chiede |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore

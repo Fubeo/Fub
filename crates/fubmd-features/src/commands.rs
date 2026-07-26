@@ -48,7 +48,7 @@ use fubmd_abi::command::{
 };
 use fubmd_abi::edit::{EditRequest, TextEdit};
 use fubmd_abi::error::PluginError;
-use fubmd_abi::model::{DocId, Span};
+use fubmd_abi::model::{Block, DocId, DocumentModel, Span, TaskMarker};
 use fubmd_abi::traits::{BacklinkRef, CommandProvider, HostApi, IndexQuery, IndexResult};
 
 /// Id del provider: lo spazio dati e la registrazione, come per le view.
@@ -72,6 +72,8 @@ pub const TRASH_RESTORE: &str = "trash.restore";
 pub const TRASH_EMPTY: &str = "trash.empty";
 /// Sposta N note in una cartella, un `note.rename` alla volta.
 pub const VAULT_ARCHIVE: &str = "vault.archive";
+/// Spunta (o de-spunta) un task.
+pub const NOTE_TASK_TOGGLE: &str = "note.task.toggle";
 
 /// Il nome di una nota senza nome, e l'estensione che le si dà.
 ///
@@ -232,6 +234,33 @@ impl CoreCommands {
                         .describing("Dove spostarle. Assente = «Archivio»."),
                 )
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
+            CommandSpec::new(NOTE_TASK_TOGGLE, "Spunta il task")
+                .describing(
+                    "Spunta o de-spunta la voce di task che si trova in una \
+                     posizione del documento: `[ ]` diventa `[x]` e ogni altro \
+                     stato torna `[ ]`. Senza argomenti agisce sul task sotto il \
+                     cursore del pannello attivo. Scrive un carattere solo.",
+                )
+                // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
+                // quella la tiene l'editor, che spunta le todo delle righe
+                // selezionate nel **buffer** (`editor-commands.ts`). Sono due
+                // gesti su due oggetti diversi — il buffer e il file — e dare a
+                // entrambi la stessa combinazione vorrebbe dire che l'accordo
+                // fa due cose a seconda di chi vince la corsa. Chi la invoca
+                // oggi è chi ha una posizione da dare: la palette, un altro
+                // comando, un plugin.
+                .with_param(
+                    ParamSpec::new("doc", "Nota", ParamKind::Document)
+                        .describing("La nota su cui agire. Assente = quella del pannello attivo."),
+                )
+                .with_param(
+                    ParamSpec::new("at", "Posizione", ParamKind::Number).describing(
+                        "Posizione in byte dentro il documento: si spunta il task \
+                         che la contiene, il più interno se sono annidati. \
+                         Assente = il cursore del pannello attivo.",
+                    ),
+                )
+                .with_scope(CommandScope::writing(CommandReach::Document)),
         ]
     }
 }
@@ -268,6 +297,7 @@ impl CommandProvider for CoreCommands {
             TRASH_RESTORE => trash_restore(args, mode, host),
             TRASH_EMPTY => trash_empty(mode, host),
             VAULT_ARCHIVE => vault_archive(args, mode, host),
+            NOTE_TASK_TOGGLE => note_task_toggle(args, mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string())),
         }
     }
@@ -702,6 +732,183 @@ fn vault_archive(
     Ok(CommandOutcome::notify(notify))
 }
 
+// ---------------------------------------------------------------------------
+// note.task.toggle
+// ---------------------------------------------------------------------------
+
+/// Spunta il task che sta sotto una posizione: il **primo cliente one-shot** del
+/// modello parsato (§4.2, [decisione 0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)).
+///
+/// È il gesto quotidiano del capitolo 10, ed è anche la prova che la capacità
+/// nuova serve a qualcosa che prima non si poteva scrivere. Le due strade di
+/// prima erano entrambe storte: **riparsare** il markdown con un parser proprio
+/// — una seconda grammatica dentro un comando, che è il §4.4 visto dal lato del
+/// consumo — oppure registrare un `IndexProvider`-**specchio** che tiene una
+/// copia dell'intero vault al solo scopo di aver visto passare *questa* nota.
+/// Questa funzione non fa né l'una né l'altra: chiede il modello di una nota
+/// sola, e non conosce un solo carattere della sintassi dei task.
+///
+/// Ciò che scrive è **un carattere**, ed è lo `span` del marcatore a dirle
+/// quale: il modello porta la posizione del simbolo e non della voce
+/// ([`TaskMarker`]), quindi spuntare non riscrive la riga, non tocca il testo
+/// del task e non ha modo di sbagliare l'indentazione.
+///
+/// # La coppia che conosce
+///
+/// `[ ]` diventa `[x]`; **ogni altro simbolo torna `[ ]`**. Non è la lettura
+/// binaria di [`TaskMarker::checked`], ed è deliberato: gli stati personalizzati
+/// (`[/]` in corso, `[-]` cancellato, `[>]` rimandato) sono una famiglia che il
+/// prodotto non ha ancora definito, e un toggle che li promuovesse a `[x]`
+/// deciderebbe al posto suo che «in corso» è più vicino a «fatto» che a «da
+/// fare». Toglierli è l'unica mossa reversibile: il simbolo che c'era lo sa
+/// ancora l'undo, mentre una semantica inventata non la disfa nessuno.
+fn note_task_toggle(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let stato = |why: String| PluginError::BadArgs(why);
+    let context = host.active_context();
+
+    let doc = args
+        .document("doc")
+        .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
+        .ok_or_else(|| stato("nessuna nota: né in `doc`, né nel pannello attivo".into()))?;
+
+    // La posizione: quella detta, o quella del cursore. Le due non si mescolano
+    // — un `doc` detto e un `at` no vorrebbe dire spuntare in una nota il task
+    // che sta sotto il cursore di **un'altra**, che è un modo silenzioso di
+    // scrivere nel posto sbagliato.
+    let at = match args.number("at") {
+        Some(n) => posizione(n)?,
+        None => {
+            let context = context.as_ref().ok_or_else(|| {
+                stato("nessuna posizione in `at`, e nessun pannello attivo da cui prenderla".into())
+            })?;
+            if context.doc.as_ref() != Some(&doc) {
+                return Err(stato(format!(
+                    "`at` non c'è e il cursore non è in {doc}: dire su quale nota \
+                     agire senza dire dove non basta"
+                )));
+            }
+            let selection = context
+                .selection
+                .as_ref()
+                .ok_or_else(|| stato("nessun cursore nel pannello attivo".into()))?;
+            // La regola dello span della decisione 0007, per la stessa ragione di
+            // `selection.wikilink`: a buffer sporco le coordinate valgono per il
+            // buffer, e il modello che si sta per chiedere è quello del **file**.
+            selection
+                .span
+                .ok_or_else(|| {
+                    stato(
+                        "il buffer ha modifiche non salvate: salva prima di spuntare, \
+                         o dì la posizione in `at`"
+                            .into(),
+                    )
+                })?
+                .start
+        }
+    };
+
+    let model = host.read_model(&doc)?;
+    let marker = task_at(&model, at)
+        .ok_or_else(|| stato(format!("nessuna voce di task alla posizione {at} di {doc}")))?;
+
+    let (simbolo, fatto) = match marker.symbol {
+        None => ("x", true),
+        Some(_) => (" ", false),
+    };
+    let request = EditRequest::new(
+        host.document_revision(&doc)?,
+        vec![TextEdit::replace(marker.span, simbolo)],
+    );
+    let summary = if fatto {
+        format!("Task spuntata in {doc}")
+    } else {
+        format!("Task da fare in {doc}")
+    };
+
+    if mode.is_dry_run() {
+        return Ok(
+            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+                summary,
+                vec![PlannedEdit::new(doc, request)],
+            ))),
+        );
+    }
+
+    let report = host.apply_edit(&doc, request)?;
+    let effect = match report.applied.first() {
+        Some(applied) => CommandEffect::Reveal {
+            doc,
+            span: applied.span,
+        },
+        None => CommandEffect::Done,
+    };
+    Ok(CommandOutcome::notify(summary).with_effect(effect))
+}
+
+/// Un `at` che arriva come numero JSON diventa un offset in byte, o si spiega.
+///
+/// La specie [`ParamKind::Number`] è un `f64`, e ciò che non è un indice di byte
+/// — un negativo, una frazione, un infinito — va rifiutato **qui**: `as usize`
+/// lo tradurrebbe in una posizione plausibile e sbagliata (`-1` diventa un
+/// numero enorme, `3.9` diventa `3`), e chi legge l'errore dopo avrebbe in mano
+/// un task spuntato al posto di un rifiuto.
+fn posizione(n: f64) -> Result<usize, PluginError> {
+    if n.is_finite() && n >= 0.0 && n.fract() == 0.0 {
+        Ok(n as usize)
+    } else {
+        Err(PluginError::BadArgs(format!(
+            "`at` è una posizione in byte: {n} non lo è"
+        )))
+    }
+}
+
+/// Il marcatore del task che contiene `at`, **il più interno** se sono
+/// annidati.
+///
+/// Il criterio è la voce più stretta fra quelle che contengono la posizione: le
+/// voci annidate stanno dentro la loro, quindi il minimo è sempre la foglia — e
+/// un cursore su una sottovoce spunta quella e non il task che la contiene, che
+/// è ciò che si aspetta chi guarda lo schermo.
+fn task_at(model: &DocumentModel, at: usize) -> Option<TaskMarker> {
+    fn cerca(blocks: &[Block], at: usize, best: &mut Option<(usize, TaskMarker)>) {
+        for block in blocks {
+            match block {
+                Block::List { items, .. } => {
+                    for item in items {
+                        // Fine inclusa: il cursore a fine riga è dentro la voce
+                        // che si sta guardando, non fuori da tutto.
+                        if at < item.span.start || at > item.span.end {
+                            continue;
+                        }
+                        if let Some(task) = item.task {
+                            let ampiezza = item.span.end - item.span.start;
+                            if best.is_none_or(|(a, _)| ampiezza < a) {
+                                *best = Some((ampiezza, task));
+                            }
+                        }
+                        cerca(&item.blocks, at, best);
+                    }
+                }
+                // Un task dentro una citazione o dentro un callout è un task, e
+                // il modello lo tiene dove sta. Le altre varianti non portano
+                // blocchi annidati.
+                Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => {
+                    cerca(blocks, at, best)
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut best = None;
+    cerca(&model.body, at, &mut best);
+    best.map(|(_, task)| task)
+}
+
 /// Le occorrenze di `needle` in `source`, in byte e non sovrapposte.
 ///
 /// `whole_word` non è una raffinatezza: una sostituzione in blocco senza di essa
@@ -743,7 +950,7 @@ fn plurale(n: usize, uno: &str, molti: &str) -> String {
 mod tests {
     use super::*;
     use crate::testing::MemoryHost;
-    use fubmd_abi::model::DocId;
+    use fubmd_abi::model::{DocId, ListItem};
     use fubmd_abi::session::{Selection, ViewContext};
     use serde_json::json;
 
@@ -944,6 +1151,184 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, PluginError::BadArgs(_)));
+    }
+
+    // -----------------------------------------------------------------------
+    // note.task.toggle — il cliente one-shot del modello (decisione 0018)
+    // -----------------------------------------------------------------------
+
+    /// Il sorgente e il modello che gli corrisponde, con gli span contati a
+    /// mano: due task, la seconda annidata nella prima.
+    ///
+    /// ```text
+    /// - [ ] fare la spesa\n  - [x] pane\n
+    /// 0  3               19  22 25     32
+    /// ```
+    ///
+    /// L'host in memoria non parsa (e non deve: proverebbe la feature contro un
+    /// provider invece che contro il contratto), quindi il modello lo si semina
+    /// — ed è l'occasione per dire negli span esattamente cosa il comando si
+    /// aspetta di ricevere.
+    const TASK_SOURCE: &str = "- [ ] fare la spesa\n  - [x] pane\n";
+
+    fn con_task(symbol_esterno: Option<char>) -> MemoryHost {
+        let interna = ListItem {
+            blocks: Vec::new(),
+            task: Some(TaskMarker {
+                symbol: Some('x'),
+                span: Span::new(25, 26),
+            }),
+            span: Span::new(22, 32),
+        };
+        let esterna = ListItem {
+            blocks: vec![Block::List {
+                ordered: false,
+                items: vec![interna],
+                anchor: None,
+                span: Span::new(22, 32),
+            }],
+            task: Some(TaskMarker {
+                symbol: symbol_esterno,
+                span: Span::new(3, 4),
+            }),
+            span: Span::new(0, 32),
+        };
+        let mut model = DocumentModel::empty(DocId::new("nota.md"));
+        model.body = vec![Block::List {
+            ordered: false,
+            items: vec![esterna],
+            anchor: None,
+            span: Span::new(0, 32),
+        }];
+        let host = MemoryHost::new()
+            .con_documento("nota.md", TASK_SOURCE)
+            .con_modello("nota.md", model);
+        host.set_active(Some("nota.md"));
+        host
+    }
+
+    #[test]
+    fn checking_a_task_writes_one_character_where_the_model_says() {
+        let mut host = con_task(None);
+        host.set_caret(Some(10)); // dentro il testo della voce esterna
+
+        let outcome = invoke(&mut host, NOTE_TASK_TOGGLE, json!({}), InvokeMode::Apply)
+            .expect("spunta il task sotto il cursore");
+
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            "- [x] fare la spesa\n  - [x] pane\n",
+            "un carattere solo: il testo del task, l'indentazione e la voce \
+             annidata non si toccano"
+        );
+        let CommandEffect::Reveal { span, .. } = outcome.effect else {
+            panic!("dopo aver scritto, la shell deve sapere dove guardare")
+        };
+        assert_eq!(span, Span::new(3, 4));
+    }
+
+    #[test]
+    fn the_innermost_task_wins_when_they_are_nested() {
+        let mut host = con_task(None);
+        // Una posizione che sta dentro **entrambe** le voci: la annidata è la
+        // più stretta, ed è quella che l'utente sta guardando.
+        invoke(
+            &mut host,
+            NOTE_TASK_TOGGLE,
+            json!({ "doc": "nota.md", "at": 29 }),
+            InvokeMode::Apply,
+        )
+        .expect("spunta");
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            "- [ ] fare la spesa\n  - [ ] pane\n"
+        );
+    }
+
+    #[test]
+    fn a_custom_state_goes_back_to_undone_and_is_not_promoted_to_done() {
+        let mut host = con_task(Some('/'));
+        host.set_caret(Some(0));
+        invoke(&mut host, NOTE_TASK_TOGGLE, json!({}), InvokeMode::Apply).expect("de-spunta");
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            "- [ ] fare la spesa\n  - [x] pane\n",
+            "«in corso» non lo si promuove a «fatto»: quale sia il suo prossimo \
+             stato è una domanda che il prodotto non ha ancora deciso"
+        );
+    }
+
+    #[test]
+    fn a_dirty_buffer_stops_it_because_the_model_is_the_one_of_the_file() {
+        let mut host = con_task(None);
+        host.set_caret(None); // buffer sporco: nessuno span è vero (decisione 0007)
+
+        let err = invoke(&mut host, NOTE_TASK_TOGGLE, json!({}), InvokeMode::Apply).unwrap_err();
+        let PluginError::BadArgs(msg) = err else {
+            panic!("uno stato che non permette l'operazione si spiega")
+        };
+        assert!(msg.contains("non salvate"), "{msg}");
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            TASK_SOURCE,
+            "e non ha scritto niente"
+        );
+    }
+
+    #[test]
+    fn a_position_that_is_not_a_byte_offset_is_refused_before_the_write() {
+        let mut host = con_task(None);
+        for at in [json!(-1), json!(3.5), json!(9999)] {
+            let err = invoke(
+                &mut host,
+                NOTE_TASK_TOGGLE,
+                json!({ "doc": "nota.md", "at": at }),
+                InvokeMode::Apply,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, PluginError::BadArgs(_)),
+                "`at` = {at}: una posizione che non nomina un task si dice, non \
+                 si arrotonda a quello vicino"
+            );
+        }
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            TASK_SOURCE
+        );
+    }
+
+    #[test]
+    fn naming_a_note_without_saying_where_does_not_take_the_caret_of_another() {
+        let mut host = con_task(None);
+        host.set_caret(Some(10));
+        let err = invoke(
+            &mut host,
+            NOTE_TASK_TOGGLE,
+            json!({ "doc": "altra.md" }),
+            InvokeMode::Apply,
+        )
+        .unwrap_err();
+        assert!(matches!(err, PluginError::BadArgs(_)));
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            TASK_SOURCE,
+            "il cursore di una nota non è una posizione in un'altra"
+        );
+    }
+
+    #[test]
+    fn simulating_the_toggle_says_which_note_it_would_touch_and_writes_nothing() {
+        let mut host = con_task(None);
+        host.set_caret(Some(10));
+        let outcome =
+            invoke(&mut host, NOTE_TASK_TOGGLE, json!({}), InvokeMode::DryRun).expect("simula");
+        assert_eq!(piano(&outcome).docs, vec![DocId::new("nota.md")]);
+        assert_eq!(piano(&outcome).edit_count(), 1);
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            TASK_SOURCE
+        );
     }
 
     #[test]

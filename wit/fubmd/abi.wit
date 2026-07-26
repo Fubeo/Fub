@@ -365,6 +365,17 @@ interface format {
         doc-id: string,
         options: option-map,
     }
+    /// Cosa si sa di un documento SENZA averlo aperto (§4.3): chi lo tratterebbe
+    /// e che sintassi capirebbe. È una risposta sul NOME — la dà il registro dei
+    /// formati sull'estensione, senza leggere un byte — ed è ciò che permette a
+    /// chi cammina una lista di distinguere una nota da un canvas, un CSV, un
+    /// PDF o un allegato. Le `capabilities` sono quelle EFFETTIVE: il provider
+    /// più le sintassi che le regole registrate gli innestano sopra (§3.1), o
+    /// tornerebbero a esistere due categorie di estensioni.
+    record document-format {
+        descriptor: format-descriptor,
+        capabilities: format-capabilities,
+    }
     /// Per CHI si sta rendendo. È un enum e non una voce della mappa perché i
     /// bersagli sono esclusivi: si rende per uno solo alla volta.
     enum render-target {
@@ -1575,8 +1586,9 @@ interface errors {
 
 /// Capacità concesse dal kernel a un provider/plugin: l'unico varco col mondo.
 interface host-api {
-    use model.{doc-id};
+    use model.{doc-id, document-model};
     use json.{json};
+    use format.{document-format};
     use events.{event};
     use errors.{plugin-error};
     use jobs.{job-id, job-spec};
@@ -1620,6 +1632,40 @@ interface host-api {
     /// FEATURES 17.1, l'alternativa sono cinquanta convenzioni. Non prenota
     /// niente.
     free-name: func(id: doc-id) -> doc-id;
+
+    // --- il modello parsato, e di che formato è ------------------------------
+    //
+    // Il §4.2 e il §4.3: *cosa c'è dentro questo documento* e *cosa saprei
+    // farci*. Stanno accanto a `read-document` perché sono la stessa specie di
+    // cosa — una lettura del vault — e non dentro `index-query`, che è il canale
+    // di ciò che è derivato: una variante là avrebbe un dispatch per tentativi
+    // che il kernel non usa (§5.1) e infilerebbe un `document-model` intero
+    // nell'enum su cui ogni indice fa match.
+    //
+    // I due nomi dicono i due COSTI: `read-` è una lettura (disco, parse),
+    // `-of` è una domanda sul nome a cui risponde una mappa. Una coppia
+    // simmetrica avrebbe nascosto che una delle due si può fare tremila volte
+    // e l'altra no.
+
+    /// La struttura di un documento: il modello parsato, con gli span. Era
+    /// l'unico verso che mancava — uno c'era, `index.on-document-indexed`, ma è
+    /// SPINTO, a chi indicizza, quando lo decide il kernel. Tagliato fuori era
+    /// il percorso one-shot: chi vuole il modello di questa nota adesso e non
+    /// era in ascolto quando è passata.
+    ///
+    /// RILEGGE E RIPARSA DAL DISCO a ogni chiamata, ed è contratto e non
+    /// dettaglio: la cache del kernel tiene i soli metadati (identità,
+    /// frontmatter, outline, link), il corpo no. Chi vuole i metadati usa
+    /// `index-query.outline`/`properties`/`tags`, che rispondono dalla cache.
+    /// Il modello è quello del FILE: un buffer non salvato non lo conosce
+    /// nessuno al di qua del confine.
+    read-model: func(id: doc-id) -> result<document-model, plugin-error>;
+    /// Di che formato è un documento, e che sintassi capirebbe. `none` = nessun
+    /// provider lo rivendica, ed è la risposta che serve a chi deve ignorarlo.
+    /// Non tocca il disco e non è un `result`: è una domanda sul nome, quindi
+    /// vale anche per un documento che non esiste ancora e si può fare su una
+    /// lista intera senza pagare un'apertura a testa.
+    format-of: func(id: doc-id) -> option<document-format>;
 
     // --- operazioni strutturali sul vault ------------------------------------
     //

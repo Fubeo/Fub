@@ -143,8 +143,10 @@ oggi, una migrazione domani); le altre restano al freeze.
       Con essa: `ImportMode::Preview` invece di un `MigrationPlan` gemello, e
       `HostApi::free_name` — una capacità in più nell'elenco della [decisione 0013](../decisions/0013-elenco-delle-capacita.md), trovata
       da un cliente vero. Restano aperti sopra questa firma la [decisione 0011](../decisions/0011-il-lotto.md) (rollback e
-      lotto), il §9.1 (l'import come lavoro lungo) e il §4.2 (il modello a un
-      exporter).
+      lotto) e il §9.1 (l'import come lavoro lungo). Il modello a un exporter
+      **non è più aperto**: `HostApi::read_model` lo serve
+      ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)), e un
+      export PDF/Typst non deve più riparsare.
 - [x] **Modificare un pezzo di documento** — fatto con la [decisione 0008](../decisions/0008-modifica-chirurgica.md):
       `HostApi::apply_edit(id, EditRequest { base, edits })` e
       `HostApi::document_revision(id)` (interface `edit` nel WIT), con la
@@ -258,13 +260,19 @@ oggi, una migrazione domani); le altre restano al freeze.
       ma è l'ultimo momento in cui costa un parametro invece di una minor;
       `CommandProvider::invoke` resta com'era, perché l'origine l'host la
       **appone** e il comando non la legge.
-- [ ] **Canale del rendering: solo HTML, o anche il modello?**
-      ([todo.md §4.1](../todo.md)) `render_html` è puro per-documento e la shell
-      riceve una `String`; nessun canale porta il `DocumentModel` al frontend.
-      Sopra la stringa opaca stanno lazy loading, hover popover, scroll sync,
-      rendering incrementale e sanitizzazione (6.1, 5.3), e la sintassi nuova
-      nasce due volte (Rust + Lezer, §4.4). Decidere se l'HTML resta la
-      fast-path e il modello con gli `Span` diventa il canale dell'interattivo.
+- [x] **Canale del rendering: solo HTML, o anche il modello?** — fatto con la
+      [decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md), e la
+      risposta è **doppia**. Di qua dal confine il modello **si chiede**:
+      `HostApi::read_model(id)` (con `format_of(id)` per sapere di che formato è
+      un documento senza aprirlo). Verso il webview **no**: `render_preview`
+      resta la fast-path — HTML più le parti dichiarative della
+      [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) —
+      perché il modello è quello del **file** e la webview lavora sul **buffer**.
+      Ciò che la shell vuole *fare* col modello lo chiede come comando
+      (`note.task.toggle` è il primo cliente); le coordinate del sorgente per
+      scroll sync e rendering incrementale saranno una chiave di `RenderOptions`,
+      non un secondo canale. Resta il §4.4 (la sintassi nuova nasce due volte),
+      che è shell e P1.
 - [x] **Un comando invocato da chi non ha letto il codice** — fatto con la [decisione 0009](../decisions/0009-registro-dei-comandi.md) +
       [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md): registro nel `Workspace` (`register_command_provider`, `commands`,
       `invoke_command`), `list_commands`/`invoke_command` sull'IPC, interface
