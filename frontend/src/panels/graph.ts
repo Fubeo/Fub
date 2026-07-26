@@ -22,6 +22,10 @@ interface SimNode {
   vy: number;
   /// Grado (entrante+uscente): dimensiona il nodo.
   degree: number;
+  /// Etichetta e raggio: dipendono solo da `id` e `degree`, che non cambiano
+  /// mai dopo il setup. Calcolarli qui una volta li toglie dal frame.
+  label: string;
+  r: number;
 }
 
 interface SimEdge {
@@ -81,6 +85,12 @@ export async function openGraph(
   canvas.height = H * dpr;
   const ctx = canvas.getContext("2d")!;
   ctx.scale(dpr, dpr);
+  // Colore d'inchiostro letto una volta sola: dentro `draw` costringeva il
+  // webview a un ricalcolo di stile a ogni frame, che da solo mangiava più
+  // del disegno. L'overlay si ricrea a ogni apertura, quindi un cambio di
+  // tema viene comunque raccolto.
+  const ink = getComputedStyle(overlay).color;
+  const TAU = 2 * Math.PI;
 
   const byId = new Map<string, SimNode>();
   // Semina deterministica su un cerchio: niente Math.random, così due
@@ -95,6 +105,8 @@ export async function openGraph(
       vx: 0,
       vy: 0,
       degree: 0,
+      label: pageName(id),
+      r: 0,
     };
     byId.set(id, node);
     return node;
@@ -108,20 +120,40 @@ export async function openGraph(
     to.degree++;
     edges.push({ from, to });
   }
+  for (const n of nodes) n.r = 4 + Math.min(8, Math.sqrt(n.degree) * 1.6);
 
   // Distanza "comoda" fra nodi: l'area si spartisce fra i nodi presenti.
   const k = Math.sqrt((W * H) / Math.max(1, nodes.length)) * 0.7;
+  const k2 = k * k;
   let alpha = 1;
   let hovered: SimNode | null = null;
 
+  // Budget di frame. La repulsione è O(n²) e gira `ticks` volte per frame:
+  // a numero fisso di tick un vault grosso sfora i 16 ms e il framerate
+  // crolla. Qui i tick si adattano alla taglia del grafo, e il
+  // raffreddamento si riscala su di essi — meno passi per frame non
+  // significa aspettare di più: la simulazione dura uguale in secondi, solo
+  // spalmata su più frame, ciascuno dentro il budget.
+  const pairs = (nodes.length * Math.max(0, nodes.length - 1)) / 2;
+  const ticks = Math.max(1, Math.min(3, Math.floor(150_000 / Math.max(1, pairs))));
+  const cool = Math.pow(0.985, 3 / ticks);
+
   function tick() {
     // Repulsione fra tutte le coppie.
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i];
+    const len = nodes.length;
+    const rep = k2 * alpha;
+    for (let i = 0; i < len; i++) {
+      const a = nodes[i];
+      // Velocità di `a` accumulata in locali: il campo si rilegge n volte
+      // per giro, e nel loop interno solo `b` viene toccato.
+      let ax = a.vx;
+      let ay = a.vy;
+      const px = a.x;
+      const py = a.y;
+      for (let j = i + 1; j < len; j++) {
         const b = nodes[j];
-        let dx = a.x - b.x;
-        let dy = a.y - b.y;
+        let dx = px - b.x;
+        let dy = py - b.y;
         let d2 = dx * dx + dy * dy;
         if (d2 < 1) {
           // Coincidenti: separali lungo una direzione qualsiasi ma stabile.
@@ -129,13 +161,18 @@ export async function openGraph(
           dy = 0.5 - (j % 3) * 0.1;
           d2 = dx * dx + dy * dy;
         }
-        const f = ((k * k) / d2) * alpha;
-        const d = Math.sqrt(d2);
-        a.vx += (dx / d) * f;
-        a.vy += (dy / d) * f;
-        b.vx -= (dx / d) * f;
-        b.vy -= (dy / d) * f;
+        // (k²/d²)·α applicato al versore dx/d: una sola sqrt e una sola
+        // divisione per coppia invece di quattro.
+        const f = rep / (d2 * Math.sqrt(d2));
+        const fx = dx * f;
+        const fy = dy * f;
+        ax += fx;
+        ay += fy;
+        b.vx -= fx;
+        b.vy -= fy;
       }
+      a.vx = ax;
+      a.vy = ay;
     }
     // Molla sugli archi.
     for (const { from, to } of edges) {
@@ -160,57 +197,77 @@ export async function openGraph(
       n.x = Math.max(20, Math.min(W - 20, n.x));
       n.y = Math.max(20, Math.min(H - 20, n.y));
     }
-    alpha *= 0.985;
+    alpha *= cool;
   }
 
-  function radius(n: SimNode): number {
-    return 4 + Math.min(8, Math.sqrt(n.degree) * 1.6);
-  }
+  // Etichetta su tutti i nodi solo se il grafo è piccolo: sopra, resta
+  // leggibile solo mostrando i nodi grossi e quelli accesi.
+  const etichettaOvunque = nodes.length <= 30;
 
+  // Il disegno è tutto in batch: gli archi in un path solo, i nodi spenti in
+  // un path solo, le etichette a font impostato una volta. Su canvas — e in
+  // un webview senza accelerazione ancora di più — a costare non è il numero
+  // di segmenti ma il numero di chiamate di stroke/fill e di cambi di stato.
   function draw() {
-    const styles = getComputedStyle(overlay);
-    const ink = styles.color;
     ctx.clearRect(0, 0, W, H);
 
     ctx.globalAlpha = 0.25;
     ctx.strokeStyle = ink;
     ctx.lineWidth = 1;
+    ctx.beginPath();
     for (const { from, to } of edges) {
-      ctx.beginPath();
       ctx.moveTo(from.x, from.y);
       ctx.lineTo(to.x, to.y);
-      ctx.stroke();
     }
+    ctx.stroke();
 
+    // Nodi spenti: un fill solo. Il `moveTo` prima di ogni arco evita che i
+    // cerchi si colleghino fra loro dentro il path.
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    for (const n of nodes) {
+      if (n === hovered || n.id === current) continue;
+      ctx.moveTo(n.x + n.r, n.y);
+      ctx.arc(n.x, n.y, n.r, 0, TAU);
+    }
+    ctx.fill();
+
+    // Accesi: al più due (la nota aperta e quella sotto il mouse).
+    ctx.globalAlpha = 1;
     for (const n of nodes) {
       const attivo = n.id === current;
-      const acceso = n === hovered || attivo;
-      ctx.globalAlpha = acceso ? 1 : 0.8;
+      if (!attivo && n !== hovered) continue;
       ctx.beginPath();
-      ctx.arc(n.x, n.y, radius(n), 0, 2 * Math.PI);
-      ctx.fillStyle = attivo ? "#7aa2f7" : acceso ? "#9ece6a" : "#888";
+      ctx.arc(n.x, n.y, n.r, 0, TAU);
+      ctx.fillStyle = attivo ? "#7aa2f7" : "#9ece6a";
       ctx.fill();
+    }
 
-      // Etichette: sempre per i nodi grossi o accesi, così il grafo resta
-      // leggibile senza diventare una nuvola di testo.
-      if (acceso || n.degree >= 3 || nodes.length <= 30) {
-        ctx.globalAlpha = acceso ? 1 : 0.7;
-        ctx.fillStyle = ink;
-        ctx.font = acceso ? "bold 12px sans-serif" : "11px sans-serif";
-        ctx.fillText(pageName(n.id), n.x + radius(n) + 3, n.y + 4);
-      }
+    // Etichette: sempre per i nodi grossi o accesi, così il grafo resta
+    // leggibile senza diventare una nuvola di testo.
+    ctx.fillStyle = ink;
+    ctx.globalAlpha = 0.7;
+    ctx.font = "11px sans-serif";
+    for (const n of nodes) {
+      if (n === hovered || n.id === current) continue;
+      if (!etichettaOvunque && n.degree < 3) continue;
+      ctx.fillText(n.label, n.x + n.r + 3, n.y + 4);
     }
     ctx.globalAlpha = 1;
+    ctx.font = "bold 12px sans-serif";
+    for (const n of nodes) {
+      if (n !== hovered && n.id !== current) continue;
+      ctx.fillText(n.label, n.x + n.r + 3, n.y + 4);
+    }
   }
 
   function frame() {
     if (disposed) return;
     if (alpha > 0.02) {
-      // Più tick per frame: la simulazione converge in fretta senza che il
-      // disegno debba inseguire ogni singolo passo.
-      tick();
-      tick();
-      tick();
+      // Più tick per frame quando il grafo è piccolo: la simulazione
+      // converge in fretta senza che il disegno insegua ogni passo.
+      for (let t = 0; t < ticks; t++) tick();
       requestAnimationFrame(frame);
     }
     draw();
@@ -225,7 +282,7 @@ export async function openGraph(
     let bestD = Infinity;
     for (const n of nodes) {
       const d = Math.hypot(n.x - x, n.y - y);
-      if (d < radius(n) + 6 && d < bestD) {
+      if (d < n.r + 6 && d < bestD) {
         best = n;
         bestD = d;
       }
