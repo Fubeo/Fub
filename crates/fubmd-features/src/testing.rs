@@ -15,7 +15,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use fubmd_abi::event::Event;
-use fubmd_abi::model::{DocId, Heading};
+use fubmd_abi::model::{DocId, Heading, Span};
+use fubmd_abi::session::{PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, Paged, TagCount,
 };
@@ -27,9 +28,9 @@ pub struct MemoryHost {
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
     docs: Mutex<BTreeMap<String, String>>,
     now: AtomicU64,
-    /// Il documento attivo servito da [`HostApi::active_document`], come lo
-    /// imposterebbe la shell.
-    active: Mutex<Option<DocId>>,
+    /// Il contesto servito da [`HostApi::active_context`], come lo
+    /// pubblicherebbe la shell.
+    context: Mutex<Option<ViewContext>>,
     /// Backlink finti per [`HostApi::query_index`], seminati per target. Il
     /// doppio non ha un grafo: risponde solo a ciò che gli è stato messo dentro,
     /// ed è quanto basta a provare una view contro il contratto.
@@ -82,9 +83,47 @@ impl MemoryHost {
         }
     }
 
-    /// Imposta il documento attivo, come farebbe la shell su una navigazione.
+    /// Imposta il documento attivo, come farebbe la shell su una navigazione:
+    /// pannello principale, nessuna selezione, modalità normale.
     pub fn set_active(&self, id: Option<&str>) {
-        *self.active.lock().unwrap() = id.map(DocId::new);
+        *self.context.lock().unwrap() =
+            id.map(|id| ViewContext::new("main").with_doc(Some(DocId::new(id))));
+    }
+
+    /// Pubblica un contesto intero: è la forma con cui si provano le view che
+    /// seguono la selezione o la modalità.
+    pub fn set_context(&self, context: Option<ViewContext>) {
+        *self.context.lock().unwrap() = context;
+    }
+
+    /// Sposta il cursore (senza testo selezionato) nel documento attivo.
+    /// `None` = il buffer è sporco, quindi nessuno span sarebbe vero.
+    pub fn set_caret(&self, byte: Option<usize>) {
+        self.map_context(|c| {
+            c.selection = Some(Selection::caret(byte.map(|b| Span::new(b, b))));
+        });
+    }
+
+    /// Seleziona `text` a partire da `start` byte nel documento attivo.
+    pub fn set_selection(&self, start: usize, text: &str) {
+        self.map_context(|c| {
+            c.selection = Some(Selection {
+                span: Some(Span::new(start, start + text.len())),
+                text: text.to_string(),
+            });
+        });
+    }
+
+    /// Cambia la modalità del pannello attivo.
+    pub fn set_mode(&self, mode: PaneMode) {
+        self.map_context(|c| c.mode = mode);
+    }
+
+    fn map_context(&self, f: impl FnOnce(&mut ViewContext)) {
+        let mut ctx = self.context.lock().unwrap();
+        let mut context = ctx.take().unwrap_or_else(|| ViewContext::new("main"));
+        f(&mut context);
+        *ctx = Some(context);
     }
 
     /// Semina i backlink che [`HostApi::query_index`] restituirà per `target`
@@ -256,7 +295,7 @@ impl HostApi for MemoryHost {
         }
     }
 
-    fn active_document(&self) -> Option<DocId> {
-        self.active.lock().unwrap().clone()
+    fn active_context(&self) -> Option<ViewContext> {
+        self.context.lock().unwrap().clone()
     }
 }

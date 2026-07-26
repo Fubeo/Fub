@@ -30,4 +30,4 @@ pub use error::{KernelError, Result};
 pub use graph::LinkGraph;
 pub use registry::FormatRegistry;
 pub use vault::{TrashEntry, Vault, TRASH_DIR};
-pub use workspace::{valid_doc_id, GraphUpdate, Trust, Workspace};
+pub use workspace::{valid_doc_id, GraphUpdate, Trust, Workspace, MAIN_PANE};

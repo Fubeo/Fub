@@ -94,13 +94,14 @@ reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
   che fanno i pannelli che disegnano un insieme intero (tag, backlink di una
   nota).
 
-- **`active_document(&self) -> Option<DocId>`** — il solo contesto di sessione
-  che il contratto espone: *quale nota guarda l'utente*. Una view lo **chiede**
-  quando serve (il pannello backlink a ogni render). Il kernel lo custodisce in
-  `Workspace::active`; a scriverlo è **solo** la shell, con `set_active_document`
-  su ogni navigazione. Non c'è un gemello che scrive nell'`HostApi`: "quale nota
-  guardo" è una decisione dell'utente sull'app, non una capacità da concedere a
-  un plugin.
+- **`active_context(&self) -> Option<ViewContext>`** — il contesto di sessione:
+  *quale pannello ha il focus, che nota guarda, cosa c'è selezionato dentro, in
+  che modalità*. Una view lo **chiede** quando serve (il pannello backlink a
+  ogni render). Il kernel lo custodisce in `Workspace::context`; a scriverlo è
+  **solo** la shell, con `set_active_context` a ogni navigazione, movimento del
+  cursore o cambio di modalità. Non c'è un gemello che scrive nell'`HostApi`:
+  "quale nota guardo e dove ho cliccato" è una decisione dell'utente sull'app,
+  non una capacità da concedere a un plugin.
 
   Due strade scartate, entrambe per una ragione di forma: un **evento** che la
   view segue (`render_view(&self)` è immutabile — una view non può accumulare
@@ -109,11 +110,52 @@ reale: il pannello backlink migrato a view (`fubmd_features::BacklinksView`).
   contesto che non usa). La capacità che si chiede a domanda non ha nessuno dei
   due difetti.
 
-Il giro completo di una view passa quindi tutto dal contratto: la shell imposta
-il documento attivo → chiama `render_view` → il provider chiede attivo e dati
-all'host → un click torna come `on_action` e il provider risponde con un
-`ViewUpdate` (`Navigate` per i backlink), che la shell esegue. La prova end-to-end
-attraverso il kernel vero è `crates/fubmd-features/tests/backlinks_view_e2e.rs`.
+  Non è un `DocId` nudo perché con schede, split e finestre multiple (FEATURES
+  4.1) "il documento attivo" smette di essere una variabile globale: due
+  pannelli backlink affiancati farebbero la stessa domanda e riceverebbero la
+  stessa risposta, sbagliata per uno dei due. Il `PaneId` dentro il contesto è
+  ciò che permette di distinguerli già ora; **legare** una view a un pannello
+  fisso è l'altra metà, e arriva con le istanze di view.
+
+### La regola dello span: coordinate del sorgente che il kernel conosce
+
+`Selection { span: Option<Span>, text: String }` porta il **testo** sempre, lo
+**span** solo quando le sue coordinate valgono anche per il sorgente che il
+kernel ha in mano — cioè a buffer pulito. Non è prudenza: è l'unico modo di
+rendere impossibile l'errore che il contratto altrimenti inviterebbe a fare —
+leggere il documento con `read_document` e ritagliarlo con offset calcolati su
+un altro testo, cioè tagliare i byte sbagliati **proprio mentre l'utente
+scrive**. Chi vuole il testo (contare le parole selezionate, mandarle a un
+comando) lo ha sempre; chi vuole la posizione la ha quando è vera.
+
+La stessa invariante è tenuta dal kernel dall'altro lato: quando il sorgente
+sotto la selezione cambia, viene rinominato o sparisce, la selezione **cade**
+(`Workspace::invalidate_context`). Uno span stantio è peggio di uno span
+assente. La shell ne ripubblica uno vero al salvataggio successivo, che è il
+momento in cui torna a essere vero.
+
+### Chi si ridisegna, e quando
+
+`ViewSpec` dichiara due maschere, non una: `refresh: EventMask` per gli eventi
+del **vault**, `follows: ContextMask` per le parti del contesto di **sessione**
+(documento, selezione, modalità). Il contesto non passa dall'event bus di
+proposito: un cursore che si muove non è un fatto del vault, e farlo passare di
+là significherebbe consegnare ogni battuta di tasto a ogni handler registrato.
+
+`Workspace::set_active_context` restituisce **gli id delle view da
+ridisegnare** — quelle la cui `follows` interseca ciò che è cambiato. Il conto
+sta nel kernel e non nella shell perché la risposta non deve dipendere da chi
+la calcola: a M5 un host diverso avrà la stessa regola. La shell resta padrona
+del *quando* (è lei a pubblicare) e ignara del *chi*.
+
+Il giro completo di una view passa quindi tutto dal contratto: la shell pubblica
+il contesto → chiama `render_view` sulle view che il kernel le indica → il
+provider chiede contesto e dati all'host → un click torna come `on_action` e il
+provider risponde con un `ViewUpdate` (`Navigate` per i backlink), che la shell
+esegue. Le prove end-to-end attraverso il kernel vero sono
+`crates/fubmd-features/tests/backlinks_view_e2e.rs` (il giro base),
+`outline_view_e2e.rs` (il cursore che arriva alla view) e `stats_view_e2e.rs`
+(il testo selezionato che vale anche a buffer sporco).
 
 ## Import ed export: il confine è di byte, non di path (deciso)
 

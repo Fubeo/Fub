@@ -4,9 +4,11 @@ import {
   api,
   onKernelEvent,
   type KernelEvent,
+  type PaneMode,
   type SearchHit,
   type Span,
   type UiNode,
+  type ViewContext,
   type ViewSpec,
   type WorkspaceMeta,
 } from "./api";
@@ -87,6 +89,32 @@ let expanded = new Set<string>();
 let activeSpace: string | null = null;
 // Il drag in corso nella sidebar, se c'è.
 let drag: { path: string; kind: "note" | "folder"; parent: string } | null = null;
+// La modalità del pannello (FEATURES 4.1). Questa shell ha un pannello solo —
+// il contesto che pubblica ne porta comunque l'identità, perché con gli split
+// (3.3) la stessa domanda avrà due risposte. È **stato di vista**, come le
+// cartelle aperte e lo spazio selezionato: sta in localStorage, non nel
+// sidecar del vault, perché "come sto guardando questa nota adesso" è di
+// questa macchina e su un'altra sarebbe solo rumore.
+const MODE_KEY = "fubmd.mode";
+let mode: PaneMode = loadMode();
+// Pubblicazione del contesto: la selezione si muove a ogni tasto, il kernel non
+// deve saperlo a ogni tasto.
+let contextTimer: number | undefined;
+
+/// L'unico pannello di questa shell. Deve coincidere col `MAIN_PANE` del
+/// kernel: un pannello con un altro nome è, da contratto, un altro pannello.
+const MAIN_PANE = "main";
+
+/// La modalità dell'ultima sessione, se ne resta traccia. Sta accanto alla
+/// costante che legge — una `const` dichiarata più in basso nel modulo sarebbe
+/// in temporal dead zone quando questa gira, e il modulo non partirebbe
+/// affatto (nessun errore in console: proprio niente).
+function loadMode(): PaneMode {
+  const salvata = localStorage.getItem(MODE_KEY);
+  return salvata === "source" || salvata === "reading" || salvata === "live_preview"
+    ? salvata
+    : "live_preview";
+}
 
 async function init() {
   editor = createEditor($("#editor"), {
@@ -94,6 +122,10 @@ async function init() {
       dirty = true;
       scheduleSave();
     },
+    // Il cursore si è mosso (o il testo è cambiato sotto di lui): il contesto
+    // di sessione è invecchiato. Non si pubblica subito — vedi
+    // `scheduleContext`.
+    onSelectionChange: scheduleContext,
     // Mod-click su un wikilink nella live preview: stesso giro dei link
     // dell'anteprima (risolvi, altrimenti crea la nota che manca).
     onOpenWikilink: openWikilinkFromEditor,
@@ -112,6 +144,9 @@ async function init() {
   wireRootDropTarget();
   $("#show-trash").addEventListener("click", openTrash);
   $("#show-graph").addEventListener("click", () => openGraph(currentDoc, selectDoc));
+  for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
+    b.addEventListener("click", () => setMode(b.dataset.mode as PaneMode));
+  }
   $("#close-trash").addEventListener("click", () => showPanel("files"));
   $("#empty-trash").addEventListener("click", emptyTrash);
   searchInputEl.addEventListener("input", scheduleSearch);
@@ -119,8 +154,15 @@ async function init() {
     if (e.key === "Escape") clearSearch();
   });
   onKernelEvent(handleKernelEvent);
+  document.body.dataset.mode = mode;
   const initial = await api.initialVault();
   if (initial) await openVaultPath(initial);
+  // La modalità iniziale passa dalla stessa porta di un click sul commutatore
+  // — il cablaggio (classe attiva, resa inline, superficie di lettura,
+  // contesto pubblicato) sta in un punto solo invece che in due che devono
+  // restare d'accordo. Dopo l'apertura del vault, non prima: il contesto si
+  // pubblica quando c'è un workspace a cui pubblicarlo.
+  await setMode(mode);
 }
 
 async function pickVault() {
@@ -803,10 +845,9 @@ async function deleteDoc(id: string) {
     // una perdita silenziosa, è l'azione che l'utente ha appena confermato.
     dirty = false;
     currentDoc = null;
-    await api.setActiveDocument(null);
     editor.setDoc("");
     previewEl.innerHTML = "";
-    refreshAllViews();
+    await publishContext();
     const docs = await api.listDocuments();
     renderFileList(docs);
     if (docs.length > 0) await selectDoc(docs[0]);
@@ -891,15 +932,92 @@ async function selectDoc(id: string) {
   // così nessuna modifica resta appesa al debounce.
   await flushPendingSave();
   currentDoc = id;
-  // Il documento attivo è contesto di sessione del kernel: lo leggono le view
-  // (il pannello backlink lo fa a ogni render) via HostApi::active_document.
-  await api.setActiveDocument(id);
   const source = await api.readDocument(id);
   editor.setDoc(source);
   dirty = false;
+  // Il contesto si pubblica DOPO aver caricato il buffer e azzerato `dirty`:
+  // prima, lo span della selezione sarebbe quello del documento precedente.
+  await publishContext();
   editor.focus();
   markActive();
   await refreshCurrent();
+}
+
+// --- contesto di sessione (§1.9) --------------------------------------------
+//
+// La shell è l'unica a sapere quale pannello ha il focus, che nota mostra, cosa
+// c'è selezionato e in che modalità; il kernel lo custodisce e lo serve alle
+// view via `HostApi::active_context`. Qui si decide solo *quando* pubblicarlo:
+// **chi** ridisegnare lo dice il kernel, che conosce le `follows` di ogni view.
+
+/// Il contesto del pannello così com'è adesso.
+///
+/// Lo `span` della selezione c'è solo a buffer pulito: a buffer sporco gli
+/// offset dell'editor sono di un testo che il kernel non ha, e uno span
+/// mentitore farebbe tagliare i byte sbagliati a chiunque lo usi. Il testo
+/// invece è sempre quello vero — ed è ciò che serve a contare le parole
+/// selezionate o a mandarle a un comando.
+function paneContext(): ViewContext {
+  const sel = editor.selection();
+  const inEditing = currentDoc !== null && mode !== "reading";
+  return {
+    pane: MAIN_PANE,
+    doc: currentDoc,
+    selection: inEditing
+      ? { span: dirty ? null : { start: sel.start, end: sel.end }, text: sel.text }
+      : null,
+    mode,
+  };
+}
+
+/// Pubblica il contesto e ridisegna **solo** le view che il kernel indica.
+async function publishContext() {
+  window.clearTimeout(contextTimer);
+  try {
+    const stale = await api.setActiveContext(paneContext());
+    await Promise.all(stale.map(renderDeclaredView));
+  } catch (e) {
+    // Un vault non ancora aperto non ha un workspace: il contesto non ha dove
+    // andare, e non è un errore da mostrare.
+    console.debug(`FubMD: contesto non pubblicato: ${e}`);
+  }
+}
+
+/// Il cursore si muove a ogni tasto; il kernel non deve saperlo a ogni tasto.
+/// Il ritardo è la stessa idea del debounce di salvataggio, con un tempo più
+/// corto: chi segue la selezione (la struttura, le statistiche) deve sembrare
+/// immediato.
+function scheduleContext() {
+  window.clearTimeout(contextTimer);
+  contextTimer = window.setTimeout(publishContext, 150);
+}
+
+/// Cambia la modalità del pannello (FEATURES 4.1) e la pubblica.
+///
+/// In lettura l'editor lascia il posto al documento **reso**: è la stessa cosa
+/// che l'anteprima mostrava di lato, ma non è più un pannello sempre acceso
+/// accanto all'editor — le tre modalità sono esclusive, e due superfici sullo
+/// stesso documento sono due verità da tenere allineate.
+async function setMode(next: PaneMode) {
+  // Il documento reso lo produce il kernel dal **sorgente salvato**: entrare in
+  // lettura con del testo appeso al debounce mostrerebbe la nota di un minuto
+  // fa. Si salva prima, e la lettura è sempre di ciò che si è scritto.
+  if (next === "reading") await flushPendingSave();
+  mode = next;
+  document.body.dataset.mode = next;
+  // Sorgente = la stessa configurazione senza la resa inline.
+  editor.setLivePreview(next === "live_preview");
+  for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
+    b.classList.toggle("active", b.dataset.mode === next);
+  }
+  previewEl.hidden = next !== "reading";
+  localStorage.setItem(MODE_KEY, next);
+  if (next === "reading") {
+    if (currentDoc) await updatePreview(currentDoc);
+  } else {
+    editor.focus();
+  }
+  await publishContext();
 }
 
 function markActive() {
@@ -929,14 +1047,22 @@ async function saveCurrent() {
   // Pulito solo se nel frattempo non è arrivato altro input: `dirty` è stato
   // rimesso a true dal listener se l'utente ha continuato a scrivere.
   if (editor.getDoc() === text) dirty = false;
+  // Il sorgente sul disco è ora quello del buffer: la selezione torna
+  // posizionabile, e il kernel — che l'aveva lasciata cadere alla scrittura —
+  // deve risaperlo. È l'altra metà della regola dello span.
+  await publishContext();
   await refreshCurrent();
 }
 
 async function refreshCurrent() {
   if (!currentDoc) return;
+  // Le view non si ridisegnano più tutte "perché è cambiato qualcosa": quelle
+  // che seguono il vault le sveglia il loro evento (`ViewSpec.refresh`),
+  // quelle che seguono la sessione la pubblicazione del contesto
+  // (`ViewSpec.follows`). Qui resta ciò che è davvero della shell — e il
+  // documento reso solo quando è quello che si sta guardando.
   await Promise.all([
-    updatePreview(currentDoc),
-    refreshAllViews(),
+    mode === "reading" ? updatePreview(currentDoc) : Promise.resolve(),
     updateHistory(currentDoc),
   ]);
 }
@@ -1312,7 +1438,9 @@ function handleKernelEvent(e: KernelEvent) {
     refreshCurrent();
     if (currentDoc) reloadIfClean(currentDoc);
   } else if (e.type === "document_changed" && e.id === currentDoc) {
-    updatePreview(currentDoc);
+    // La nota è cambiata (anche da fuori: watcher, altra app). Il documento
+    // reso si aggiorna solo se è ciò che si sta guardando.
+    if (mode === "reading") updatePreview(currentDoc);
     reloadIfClean(currentDoc);
   } else if (e.type === "document_removed" && e.id === currentDoc) {
     // La nota aperta è sparita da fuori (watcher, altra app). Col buffer
@@ -1326,12 +1454,12 @@ function handleKernelEvent(e: KernelEvent) {
     }
     window.clearTimeout(saveTimer);
     currentDoc = null;
-    // Il kernel azzera già il proprio `active` in remove_document: qui si
-    // riafferma per tenere i due stati esplicitamente allineati.
-    api.setActiveDocument(null);
     editor.setDoc("");
     previewEl.innerHTML = "";
-    refreshAllViews();
+    // Il kernel svuota già il documento del contesto in `remove_document`: qui
+    // si ripubblica per allineare i due stati **e** per farsi dire quali view
+    // ridisegnare, che è cosa che il kernel non fa da sé.
+    publishContext();
     markActive();
   } else if (e.type === "document_renamed") {
     migrateMeta(e.from, e.to);
@@ -1339,6 +1467,7 @@ function handleKernelEvent(e: KernelEvent) {
     if (currentDoc === e.from) {
       currentDoc = e.to;
       markActive();
+      publishContext();
       refreshCurrent();
     }
     api.listDocuments().then(refreshFileList);
@@ -1362,4 +1491,11 @@ async function reloadIfClean(id: string) {
   }
 }
 
-init();
+// Un avvio che fallisce non deve morire in silenzio: senza questo, un errore
+// dell'IPC lascia la finestra a metà (lista file sì, vault no) e l'unico posto
+// dove si vede è la console della webview, che in un'app impacchettata non si
+// apre. Il titolo della finestra è il posto più visibile che la shell ha.
+init().catch((e) => {
+  console.error("FubMD: avvio fallito", e);
+  vaultPathEl.textContent = `avvio fallito: ${e}`;
+});

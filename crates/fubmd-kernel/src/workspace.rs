@@ -50,6 +50,7 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget, Span};
+use fubmd_abi::session::{ContextMask, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
     Paged, ViewProvider, ViewSpec,
@@ -70,6 +71,24 @@ use crate::properties;
 use crate::registry::FormatRegistry;
 use crate::tag_counts::TagCounts;
 use crate::vault::{TrashEntry, Vault, DATA_DIR};
+
+/// Il pannello di una shell che ne ha uno solo.
+///
+/// Sta qui, e non in ogni chiamante, perché kernel, app e test devono nominare
+/// lo **stesso** pannello: un contesto pubblicato con un `PaneId` diverso da
+/// quello di prima è, da contratto, un cambio di pannello — cioè un ridisegno
+/// di tutto ciò che segue il contesto.
+pub const MAIN_PANE: &str = "main";
+
+/// Cosa è successo al documento che il contesto stava guardando.
+enum ContextChange {
+    /// Il suo sorgente è stato riscritto: la selezione non è più posizionabile.
+    Rewritten,
+    /// Ha cambiato path: l'identità del contesto lo segue.
+    Renamed(DocId),
+    /// Non esiste più.
+    Gone,
+}
 
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
 ///
@@ -223,13 +242,20 @@ pub struct Workspace {
     /// Il namespace per-plugin su questa mappa arriva col registry dei plugin
     /// (M4): oggi gli handler registrati sono tutti codice fidato.
     storage: HashMap<String, serde_json::Value>,
-    /// Il documento con il focus della sessione di editing, servito alle view
-    /// da [`HostApi::active_document`]. Lo imposta la shell
-    /// ([`set_active_document`](Workspace::set_active_document)); il kernel non
-    /// lo deriva né lo cambia da sé — "quale nota guarda l'utente" è una
-    /// decisione dell'app, e il kernel la custodisce solo perché è il contesto
-    /// che una view (anche in WASM) deve poter chiedere.
-    active: Option<DocId>,
+    /// Il contesto del pannello con il focus, servito alle view da
+    /// [`HostApi::active_context`]. Lo imposta la shell
+    /// ([`set_active_context`](Workspace::set_active_context)); il kernel non
+    /// lo deriva né lo inventa — quale nota guarda l'utente, dove ha cliccato
+    /// e in che modalità legge sono decisioni dell'app, e il kernel le
+    /// custodisce solo perché sono il contesto che una view (anche in WASM)
+    /// deve poter chiedere.
+    ///
+    /// Il kernel lo tocca in un caso solo, ed è di **verità**: quando il
+    /// sorgente sotto la selezione cambia o il documento sparisce (vedi
+    /// [`invalidate_context`](Workspace::invalidate_context)). Uno span
+    /// stantio è peggio di uno span assente — chi lo usasse taglierebbe i byte
+    /// sbagliati.
+    context: Option<ViewContext>,
 }
 
 impl Workspace {
@@ -254,7 +280,7 @@ impl Workspace {
             pending_jobs: Vec::new(),
             next_job_id: 0,
             storage: HashMap::new(),
-            active: None,
+            context: None,
         }
     }
 
@@ -462,6 +488,12 @@ impl Workspace {
             // Il rebuild legge la cache: va aggiornata prima.
             self.rebuild_graph();
         }
+        // Il sorgente sotto la selezione è cambiato: gli offset pubblicati
+        // dalla shell erano di un altro testo. La shell ne ripubblicherà uno
+        // vero al prossimo movimento del cursore (o subito dopo un
+        // salvataggio); fino ad allora il contesto dice "non so dove", che è
+        // la verità.
+        self.invalidate_context(id, ContextChange::Rewritten);
         self.emit_event(Event::DocumentChanged { id: id.clone() });
         self.emit_event(Event::IndexUpdated);
     }
@@ -500,11 +532,9 @@ impl Workspace {
     /// Rimuove un documento (usato dal file watcher su cancellazione).
     pub fn remove_document(&mut self, id: &DocId) {
         if self.metas.remove(id).is_some() {
-            // La nota con il focus non esiste più: `active_document` non deve
-            // continuare a nominarla alle view.
-            if self.active.as_ref() == Some(id) {
-                self.active = None;
-            }
+            // La nota con il focus non esiste più: `active_context` non deve
+            // continuare a nominarla alle view (né tenerne una selezione).
+            self.invalidate_context(id, ContextChange::Gone);
             self.tags.remove(id);
             match self.graph_update {
                 GraphUpdate::Incremental => self.graph.remove(id),
@@ -766,13 +796,11 @@ impl Workspace {
     /// già spostato qualcun altro).
     fn migrate_identity(&mut self, from: &DocId, to: &DocId, model: DocumentModel) {
         self.metas.remove(from);
-        // La nota aperta segue il rename anche qui: senza, `active_document`
+        // La nota aperta segue il rename anche qui: senza, `active_context`
         // risponderebbe col path vecchio e outline/backlink si svuoterebbero
         // fino al prossimo cambio nota. Va fatto nel kernel, non nella shell:
         // vale anche per i rename non innescati da lei.
-        if self.active.as_ref() == Some(from) {
-            self.active = Some(to.clone());
-        }
+        self.invalidate_context(from, ContextChange::Renamed(to.clone()));
         // Per tag e indici il rename è remove+add: l'identità è la chiave, e
         // la chiave è cambiata. (Chi tiene stato *per-documento* invece migra
         // la chiave sull'evento `DocumentRenamed`.)
@@ -1087,19 +1115,81 @@ impl Workspace {
 
     // --- sessione ----------------------------------------------------------
 
-    /// Imposta (o azzera) il documento con il focus della sessione di editing.
+    /// Pubblica il contesto del pannello con il focus e restituisce **le view
+    /// da ridisegnare**: quelle la cui `ViewSpec::follows` interseca ciò che è
+    /// cambiato, in ordine di registrazione.
     ///
-    /// Lo chiama la shell quando l'utente cambia nota. È l'unico modo di
-    /// scrivere `active`: le view lo **leggono** via
-    /// [`HostApi::active_document`], nessuno lo scrive dall'interno del
-    /// contratto — vedi il campo [`Workspace::active`].
-    pub fn set_active_document(&mut self, id: Option<DocId>) {
-        self.active = id;
+    /// Lo chiama la shell a ogni cambio di nota, di selezione o di modalità. È
+    /// l'unico modo di scrivere il contesto: le view lo **leggono** via
+    /// [`HostApi::active_context`], nessuno lo scrive dall'interno del
+    /// contratto — vedi il campo [`Workspace::context`].
+    ///
+    /// Il conto di *cosa* ridisegnare sta qui e non nella shell perché la
+    /// risposta non deve dipendere da chi la calcola: la regola è una
+    /// ([`ViewContext::changes`]), e a M5 un host diverso avrà la stessa. La
+    /// shell resta padrona del *quando* (è lei a pubblicare) e ignara del
+    /// *chi* (non conosce gli id delle view).
+    pub fn set_active_context(&mut self, context: Option<ViewContext>) -> Vec<String> {
+        let changed = match (&self.context, &context) {
+            (Some(prima), Some(dopo)) => prima.changes(dopo),
+            // Un contesto che appare o sparisce cambia tutto ciò che si può
+            // seguire: non c'è un campo per volta da confrontare.
+            (None, Some(_)) | (Some(_), None) => ContextMask::all(),
+            (None, None) => ContextMask::default(),
+        };
+        self.context = context;
+        if changed.is_empty() {
+            return Vec::new();
+        }
+        self.views()
+            .into_iter()
+            .filter(|spec| spec.follows.intersects(&changed))
+            .map(|spec| spec.id)
+            .collect()
     }
 
-    /// Il documento con il focus della sessione, se impostato.
+    /// Scorciatoia per una shell a un pannello solo: il documento attivo, senza
+    /// selezione né modalità dichiarata.
+    ///
+    /// Non è una seconda strada per la stessa cosa — è la stessa strada con i
+    /// campi che una shell senza split non ha da dire. Azzera la selezione:
+    /// dichiarare un documento e lasciare la selezione del precedente sarebbe
+    /// l'unico modo di produrre uno span mentitore.
+    pub fn set_active_document(&mut self, id: Option<DocId>) -> Vec<String> {
+        let context = id.map(|id| ViewContext::new(MAIN_PANE).with_doc(Some(id)));
+        self.set_active_context(context)
+    }
+
+    /// Il contesto del pannello con il focus, se la shell ne ha pubblicato uno.
+    pub fn active_context(&self) -> Option<&ViewContext> {
+        self.context.as_ref()
+    }
+
+    /// Il documento del contesto attivo: la lettura che il kernel usa dove il
+    /// pannello non c'entra (rename, rimozione, comodità dei test).
     pub fn active_document(&self) -> Option<&DocId> {
-        self.active.as_ref()
+        self.context.as_ref().and_then(|c| c.doc.as_ref())
+    }
+
+    /// Rimette il contesto in accordo con il vault dopo che il documento che
+    /// guarda è cambiato, è stato rinominato o è sparito.
+    ///
+    /// La selezione cade in tutti e tre i casi, e per la stessa ragione: i suoi
+    /// offset erano di un testo che non c'è più. Il `text` cadrebbe con essi —
+    /// tenerlo senza span darebbe una selezione che non si sa più dov'era.
+    fn invalidate_context(&mut self, doc: &DocId, change: ContextChange) {
+        let Some(context) = self.context.as_mut() else {
+            return;
+        };
+        if context.doc.as_ref() != Some(doc) {
+            return;
+        }
+        context.selection = None;
+        match change {
+            ContextChange::Rewritten => {}
+            ContextChange::Renamed(to) => context.doc = Some(to),
+            ContextChange::Gone => context.doc = None,
+        }
     }
 
     // --- indici -----------------------------------------------------------
@@ -1838,8 +1928,8 @@ impl HostApi for KernelHost<'_> {
         self.ws.query_index(query)
     }
 
-    fn active_document(&self) -> Option<DocId> {
-        self.ws.active_document().cloned()
+    fn active_context(&self) -> Option<ViewContext> {
+        self.ws.active_context().cloned()
     }
 }
 
@@ -1947,8 +2037,8 @@ impl HostApi for ReadHost<'_> {
         self.ws.query_index(query)
     }
 
-    fn active_document(&self) -> Option<DocId> {
-        self.ws.active_document().cloned()
+    fn active_context(&self) -> Option<ViewContext> {
+        self.ws.active_context().cloned()
     }
 }
 

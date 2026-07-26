@@ -773,10 +773,58 @@ interface index {
     query: func(query: index-query) -> result<index-result, plugin-error>;
 }
 
+/// Il contesto di sessione: quale pannello ha il focus, che documento guarda,
+/// cosa c'è selezionato dentro, in che modalità. Lo imposta la shell, lo legge
+/// un provider da `host-api.active-context`.
+interface session {
+    use model.{doc-id, span};
+
+    /// Identità di un pannello di editing (scheda, metà di uno split,
+    /// finestra): stringa opaca assegnata dalla shell. Il kernel non la
+    /// interpreta e non la inventa — un pannello nasce e muore nell'app.
+    type pane-id = string;
+
+    /// Le tre modalità ESCLUSIVE di un pannello (FEATURES 4.1). Ciò che
+    /// esclusivo non è (focus mode, zen, typewriter, schermo intero) non sta
+    /// qui: non cambia cosa un provider deve fare.
+    enum pane-mode { source, live-preview, reading }
+
+    /// Ciò che è selezionato in un pannello — o dove sta il cursore, che è una
+    /// selezione vuota.
+    ///
+    /// `text` è SEMPRE il testo vero dell'editor; `span` c'è solo quando le
+    /// sue coordinate valgono anche per il sorgente che il kernel ha in mano
+    /// (buffer senza modifiche non salvate). È così che il contratto rende
+    /// impossibile ritagliare `read-document` con uno span calcolato su un
+    /// altro testo.
+    record selection {
+        span: option<span>,
+        text: string,
+    }
+
+    /// Il contesto in cui una view sta girando. Nessun gemello che scrive:
+    /// quale nota si guarda e dove si è cliccato sono decisioni dell'utente
+    /// sull'app, non capacità concesse a un plugin.
+    record view-context {
+        pane: pane-id,
+        doc: option<doc-id>,
+        selection: option<selection>,
+        mode: pane-mode,
+    }
+
+    /// Le parti del contesto che cambiano da sole. Nessun caso per il
+    /// pannello: cambiare pannello è cambiare tutto.
+    enum context-kind { document, selection, mode }
+    /// Le parti al cui cambio una view invecchia (vedi `view-spec.follows`).
+    /// Vuota = la view non guarda il contesto.
+    type context-mask = list<context-kind>;
+}
+
 /// View dichiarative (`ViewProvider`).
 interface view {
     use ui.{ui-tree, ui-action, view-update};
     use events.{event-mask};
+    use session.{context-mask};
     use errors.{plugin-error};
 
     enum view-placement { left-sidebar, right-sidebar, bottom }
@@ -785,9 +833,13 @@ interface view {
         title: string,
         placement: view-placement,
         /// Dichiarazione di interesse: gli eventi al cui arrivo la shell deve
-        /// ridisegnare la view. Vuota = nessun ridisegno event-driven (la
-        /// shell ridisegna comunque al cambio del documento attivo).
+        /// ridisegnare la view. Vuota = nessun ridisegno event-driven.
         refresh: event-mask,
+        /// L'altra metà, per ciò che non è un evento del vault: le parti del
+        /// contesto di sessione al cui cambio la view invecchia. Senza,
+        /// ridisegnare "al cambio del documento attivo" diventa ridisegnare a
+        /// ogni movimento del cursore, appena il contesto porta la selezione.
+        follows: context-mask,
     }
 
     views: func() -> list<view-spec>;
@@ -815,6 +867,7 @@ interface host-api {
     use errors.{plugin-error};
     use jobs.{job-id, job-spec};
     use index.{index-query, index-result};
+    use session.{view-context};
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
     write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
@@ -866,11 +919,14 @@ interface host-api {
     /// ricerca full-text (dai provider registrati). Stessa semantica di
     /// dispatch del kernel.
     query-index: func(query: index-query) -> result<index-result, plugin-error>;
-    /// Il documento con il focus della sessione di editing, se ce n'è uno. Lo
-    /// imposta la shell; una view lo chiede quando ne ha bisogno. Non ha un
-    /// gemello che scrive: "quale nota guardo" è una scelta dell'utente
-    /// sull'app, non una capacità concessa a un plugin.
-    active-document: func() -> option<doc-id>;
+    /// Il contesto del pannello con il focus: quale documento, cosa c'è
+    /// selezionato, in che modalità. `none` = la shell non ne ha ancora
+    /// pubblicato uno. Lo imposta la shell; una view lo chiede quando ne ha
+    /// bisogno. Non ha un gemello che scrive: "quale nota guardo e dove ho
+    /// cliccato" è una scelta dell'utente sull'app, non una capacità concessa
+    /// a un plugin. Un `doc-id` nudo non basterebbe: con schede e split il
+    /// documento attivo smette di essere una variabile globale.
+    active-context: func() -> option<view-context>;
 }
 
 /// Reazione agli eventi (`EventHandler`).

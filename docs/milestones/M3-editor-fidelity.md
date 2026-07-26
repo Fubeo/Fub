@@ -28,9 +28,10 @@ Il perno è già nel modello: ogni nodo porta uno `Span` in byte
   di comrak): senza, ogni decorazione slitta al primo carattere accentato. Va
   costruito lato frontend (o come proiezione IPC) e testato su testo multibyte
   PRIMA di cablare le decorazioni.
-- **De-rischiato da M1:** il pannello anteprima HTML resta come fallback e come
-  oracolo visivo; la live-preview è "meccanica" perché non richiede nuovi dati, solo
-  proiezione degli `Span` esistenti.
+- **De-rischiato da M1:** l'anteprima HTML resta come fallback e come oracolo
+  visivo — da §1.9 è la **modalità Lettura** del pannello, non un riquadro
+  accanto all'editor; la live-preview è "meccanica" perché non richiede nuovi
+  dati, solo proiezione degli `Span` esistenti.
 
 ### Conflitti buffer ↔ disco (debito dichiarato di M2)
 

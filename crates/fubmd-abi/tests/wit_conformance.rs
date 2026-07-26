@@ -65,6 +65,7 @@ use fubmd_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
     PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
 };
+use fubmd_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, CommandOutcome, CommandProvider, CommandSpec, DocumentProperties, EventHandler,
     HealthCheck, HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobSpec,
@@ -200,6 +201,14 @@ wit_type! {
     CommandOutcome => "command-outcome",
     ViewSpec => "view-spec",
     ViewPlacement => "view-placement",
+
+    // Il contesto di sessione: il pannello con il focus e ciò che contiene.
+    PaneId => "pane-id",
+    PaneMode => "pane-mode",
+    Selection => "selection",
+    ViewContext => "view-context",
+    ContextKind => "context-kind",
+    ContextMask => "context-mask",
     IndexQuery => "index-query",
     IndexResult => "index-result",
     BacklinkRef => "backlink-ref",
@@ -1456,6 +1465,22 @@ fn health_check_name(c: HealthCheck) -> &'static str {
     }
 }
 
+fn pane_mode_name(m: PaneMode) -> &'static str {
+    match m {
+        PaneMode::Source => "source",
+        PaneMode::LivePreview => "live-preview",
+        PaneMode::Reading => "reading",
+    }
+}
+
+fn context_kind_name(k: ContextKind) -> &'static str {
+    match k {
+        ContextKind::Document => "document",
+        ContextKind::Selection => "selection",
+        ContextKind::Mode => "mode",
+    }
+}
+
 fn format_error_case(e: &FormatError) -> Case {
     match e {
         FormatError::Parse(s) => case_ty("parse", wit(s)),
@@ -2287,11 +2312,13 @@ fn conform(source: &str) -> Result<(), String> {
         title,
         placement,
         refresh,
+        follows,
     } = ViewSpec {
         id: String::new(),
         title: String::new(),
         placement: ViewPlacement::Bottom,
         refresh: EventMask::default(),
+        follows: ContextMask::default(),
     };
     contract.record(
         "view-spec",
@@ -2300,7 +2327,49 @@ fn conform(source: &str) -> Result<(), String> {
             ("title", wit(&title)),
             ("placement", wit(&placement)),
             ("refresh", wit(&refresh)),
+            ("follows", wit(&follows)),
         ],
+    );
+
+    // --- il contesto di sessione (§1.9)
+
+    let Selection { span, text } = Selection::default();
+    contract.record("selection", &[("span", wit(&span)), ("text", wit(&text))]);
+
+    let ViewContext {
+        pane,
+        doc,
+        selection,
+        mode,
+    } = ViewContext::new("main");
+    contract.record(
+        "view-context",
+        &[
+            ("pane", wit(&pane)),
+            ("doc", wit(&doc)),
+            ("selection", wit(&selection)),
+            ("mode", wit(&mode)),
+        ],
+    );
+
+    contract.enumeration_src(
+        "pane-mode",
+        ("session.rs", "PaneMode"),
+        [PaneMode::Source, PaneMode::LivePreview, PaneMode::Reading]
+            .map(pane_mode_name)
+            .as_slice(),
+    );
+
+    contract.enumeration_src(
+        "context-kind",
+        ("session.rs", "ContextKind"),
+        [
+            ContextKind::Document,
+            ContextKind::Selection,
+            ContextKind::Mode,
+        ]
+        .map(context_kind_name)
+        .as_slice(),
     );
 
     let BacklinkRef { source, context } = BacklinkRef {
@@ -2670,6 +2739,12 @@ fn conform(source: &str) -> Result<(), String> {
     let EventMask(kinds) = EventMask::all();
     contract.alias("event-mask", wit(&kinds));
 
+    let PaneId(raw) = PaneId::new("main");
+    contract.alias("pane-id", wit(&raw));
+
+    let ContextMask(kinds) = ContextMask::all();
+    contract.alias("context-mask", wit(&kinds));
+
     let BlockRef(raw) = BlockRef::default();
     contract.alias("block-ref", wit(&raw));
     let InlineRef(raw) = InlineRef::default();
@@ -2694,6 +2769,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("jobs");
     contract.types_only("events");
     contract.types_only("errors");
+    contract.types_only("session");
     contract.types_only("transfer");
 
     contract.method(
@@ -2922,8 +2998,8 @@ fn conform(source: &str) -> Result<(), String> {
     );
     contract.method(
         "host-api",
-        "active-document",
-        <dyn HostApi>::active_document as fn(&'static dyn HostApi) -> Option<DocId>,
+        "active-context",
+        <dyn HostApi>::active_context as fn(&'static dyn HostApi) -> Option<ViewContext>,
         &[],
     );
 

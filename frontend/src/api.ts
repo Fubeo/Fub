@@ -72,15 +72,50 @@ export type KernelEvent =
   | { type: "custom"; topic: string; payload: unknown };
 
 // La dichiarazione di una view offerta da un provider (rispecchia
-// fubmd_abi::traits::ViewSpec). `placement` dice DOVE montarla; `refresh`
-// dice QUANDO ridisegnarla: gli eventi del kernel al cui arrivo la shell
-// deve richiedere `render_view` (il cambio di nota attiva non è un evento:
-// la shell ridisegna comunque da sé).
+// fubmd_abi::traits::ViewSpec). `placement` dice DOVE montarla; `refresh` e
+// `follows` dicono QUANDO ridisegnarla: gli eventi del kernel al cui arrivo
+// serve un nuovo `render_view`, e le parti del contesto di sessione al cui
+// cambio la view invecchia. Chi non dichiara `follows` non si ridisegna per il
+// contesto — è ciò che tiene fuori il pannello tag da ogni movimento del
+// cursore.
 export interface ViewSpec {
   id: string;
   title: string;
   placement: "left_sidebar" | "right_sidebar" | "bottom";
   refresh: KernelEvent["type"][];
+  follows: ContextKind[];
+}
+
+// --- contesto di sessione (rispecchia fubmd_abi::session) -------------------
+//
+// L'unico tipo che viaggia nel verso opposto agli altri: lo COSTRUISCE la
+// shell e lo consuma il kernel (`setActiveContext`). Ogni campo è obbligatorio
+// anche quando è nullo: serde rifiuta un campo assente, e il mirror
+// (`mirror.test.ts`) verifica che le chiavi siano esattamente queste.
+
+// Le tre modalità esclusive di un pannello (FEATURES 4.1).
+export type PaneMode = "source" | "live_preview" | "reading";
+
+// Le parti del contesto che una view può dichiarare di seguire.
+export type ContextKind = "document" | "selection" | "mode";
+
+// Ciò che è selezionato nel pannello — o dove sta il cursore (`text` vuoto).
+//
+// `span` è in byte UTF-8 e c'è SOLO quando quelle coordinate valgono anche per
+// il sorgente che il kernel ha in mano, cioè quando il buffer non ha modifiche
+// non salvate. `text` invece è sempre quello vero dell'editor: chi vuole il
+// testo lo ha sempre, chi vuole la posizione la ha quando è vera.
+export interface Selection {
+  span: Span | null;
+  text: string;
+}
+
+// Il contesto del pannello con il focus.
+export interface ViewContext {
+  pane: string;
+  doc: string | null;
+  selection: Selection | null;
+  mode: PaneMode;
 }
 
 // Il grafo del vault (rispecchia fubmd_app::GraphData): nodi = documenti,
@@ -170,11 +205,15 @@ export const api = {
   renderPreview: (id: string) => invoke<string>("render_preview", { id }),
   renderEmbed: (page: string, heading: string | null) =>
     invoke<EmbedContent>("render_embed", { page, heading }),
-  // View dichiarative (protocollo generico). La shell imposta il documento
-  // attivo, chiede l'albero di una view e rimanda le azioni al provider, senza
-  // sapere cosa la view faccia — è il percorso di un plugin.
-  setActiveDocument: (id: string | null) =>
-    invoke<void>("set_active_document", { id }),
+  // View dichiarative (protocollo generico). La shell pubblica il contesto del
+  // pannello, chiede l'albero di una view e rimanda le azioni al provider,
+  // senza sapere cosa la view faccia — è il percorso di un plugin.
+  //
+  // Restituisce gli id delle view da ridisegnare: quali seguano cosa lo sa il
+  // kernel (`ViewSpec.follows`), non la shell. Senza questa risposta, l'unica
+  // strada sarebbe ridisegnarle tutte a ogni movimento del cursore.
+  setActiveContext: (context: ViewContext | null) =>
+    invoke<string[]>("set_active_context", { context }),
   // Le view offerte dai provider registrati: la shell le monta per
   // `placement`, senza cablare gli id — una view di plugin compare da sola.
   listViews: () => invoke<ViewSpec[]>("list_views"),

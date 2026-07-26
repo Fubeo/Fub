@@ -5,14 +5,25 @@
 // collegamenti col mondo (aprire una nota, cercare un tag, le sorgenti dei
 // completamenti) da chi crea l'editor: qui si compone, non si decide.
 import { EditorView, keymap } from "@codemirror/view";
+import { Compartment } from "@codemirror/state";
 import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { indentWithTab } from "@codemirror/commands";
-import { byteToCharIndex } from "./offsets";
+import { byteToCharIndex, charToByteIndex } from "./offsets";
 import { editingExtensions } from "./editor-commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview } from "./livepreview";
+
+/// La selezione dell'editor come la capisce il kernel: **byte UTF-8** del
+/// buffer, più il testo che ci sta dentro (vuoto = cursore). È metà di
+/// `ViewContext.selection`; l'altra metà — se lo span sia vero anche per il
+/// sorgente salvato — la sa solo chi conosce lo stato del buffer, cioè la shell.
+export interface EditorSelection {
+  start: number;
+  end: number;
+  text: string;
+}
 
 export interface Editor {
   setDoc(text: string): void;
@@ -21,12 +32,20 @@ export interface Editor {
   /// Porta la vista su un offset in **byte UTF-8** del documento (es. l'inizio
   /// di un heading da `ViewUpdate::Reveal`). Converte al volo byte→code unit.
   revealByteOffset(byteOffset: number): void;
+  /// La selezione corrente in byte UTF-8 (il ponte inverso, `offsets.ts`).
+  selection(): EditorSelection;
+  /// Accende o spegne la resa inline: è la differenza fra la modalità Live
+  /// Preview e la modalità Sorgente (FEATURES 4.1).
+  setLivePreview(on: boolean): void;
 }
 
 export interface EditorOptions {
   /// Invocato a ogni modifica fatta dall'utente (non quando impostiamo il
   /// documento a livello di programma).
   onChange(text: string): void;
+  /// Invocato quando cambia la selezione (cursore compreso), anche senza
+  /// modifiche al testo: è ciò che la shell pubblica come contesto di sessione.
+  onSelectionChange(): void;
   /// Mod-click su un wikilink nella live preview: `page` è la pagina nuda,
   /// senza alias né `#heading` (stringa vuota per i link interni `[[#…]]`).
   onOpenWikilink(page: string): void;
@@ -41,9 +60,21 @@ export interface EditorOptions {
 export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   let programmatic = false;
 
+  // La resa inline sta in un compartment perché la modalità Sorgente è
+  // esattamente "quella stessa configurazione, senza questa estensione": si
+  // riconfigura a caldo, senza ricostruire l'editor e senza perdere né
+  // documento né cronologia di undo.
+  const preview = new Compartment();
+
   const listener = EditorView.updateListener.of((u) => {
     if (u.docChanged && !programmatic) {
       opts.onChange(u.state.doc.toString());
+    }
+    // Anche una modifica sposta il cursore: chi ascolta vuole saperlo in
+    // entrambi i casi, e un `setDoc` a livello di programma rimappa la
+    // selezione, quindi conta pure lui.
+    if (u.selectionSet || u.docChanged) {
+      opts.onSelectionChange();
     }
   });
 
@@ -61,10 +92,12 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       markdown({ base: markdownLanguage }),
       oneDark,
       EditorView.lineWrapping,
-      livePreview({
-        openWikilink: opts.onOpenWikilink,
-        searchTag: opts.onSearchTag,
-      }),
+      preview.of(
+        livePreview({
+          openWikilink: opts.onOpenWikilink,
+          searchTag: opts.onSearchTag,
+        }),
+      ),
       markdownCompletions(opts.completions),
       listener,
     ],
@@ -80,6 +113,27 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     },
     getDoc: () => view.state.doc.toString(),
     focus: () => view.focus(),
+    selection() {
+      const text = view.state.doc.toString();
+      const { from, to } = view.state.selection.main;
+      return {
+        start: charToByteIndex(text, from),
+        end: charToByteIndex(text, to),
+        text: text.slice(from, to),
+      };
+    },
+    setLivePreview(on: boolean) {
+      view.dispatch({
+        effects: preview.reconfigure(
+          on
+            ? livePreview({
+                openWikilink: opts.onOpenWikilink,
+                searchTag: opts.onSearchTag,
+              })
+            : [],
+        ),
+      });
+    },
     revealByteOffset(byteOffset: number) {
       const pos = Math.min(
         byteToCharIndex(view.state.doc.toString(), byteOffset),

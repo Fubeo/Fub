@@ -4,13 +4,16 @@ import type {
   EmbedContent,
   GraphData,
   KernelEvent,
+  PaneMode,
   SearchHit,
+  Selection,
   Span,
   TagCount,
   TrashEntry,
   UiNode,
   VaultInfo,
   VersionRef,
+  ViewContext,
   ViewSpec,
   ViewUpdate,
   WorkspaceMeta,
@@ -108,7 +111,18 @@ const RECORD_KEYS: Record<string, string[]> = {
   BacklinkRef: keysOf<BacklinkRef>({ source: true, context: true }),
   TrashEntry: keysOf<TrashEntry>({ id: true, original: true, deleted_at: true, size: true }),
   TagCount: keysOf<TagCount>({ name: true, count: true }),
-  ViewSpec: keysOf<ViewSpec>({ id: true, title: true, placement: true, refresh: true }),
+  ViewSpec: keysOf<ViewSpec>({
+    id: true,
+    title: true,
+    placement: true,
+    refresh: true,
+    follows: true,
+  }),
+  // Il contesto di sessione viaggia dalla shell al kernel: qui il mirror serve
+  // due volte, perché un campo che il TS dimenticasse di mandare arriverebbe
+  // `undefined` e serde lo rifiuterebbe a runtime, non in compilazione.
+  ViewContext: keysOf<ViewContext>({ pane: true, doc: true, selection: true, mode: true }),
+  Selection: keysOf<Selection>({ span: true, text: true }),
 };
 
 // I tipi che arrivano dall'APP (fixture gemella, `mirror-samples-app.json`).
@@ -142,6 +156,8 @@ describe("mirror TS↔Rust", () => {
       "TrashEntry",
       "TagCount",
       "ViewSpec",
+      "ViewContext",
+      "Selection",
     ]) {
       expect(fixture[type], `manca il tipo ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
@@ -175,6 +191,22 @@ describe("mirror TS↔Rust", () => {
         expect(Object.keys(sample as object).sort()).toEqual(keys);
       }
     }
+  });
+
+  it("ogni modalità prodotta da Rust è una modalità del mirror", () => {
+    // Un `enum` non ha un discriminante da esaurire con uno switch: la prova è
+    // che ogni valore che Rust serializza sia assegnabile al tipo TS, e che il
+    // tipo TS non abbia valori in più (l'array qui sotto li elenca tutti).
+    const tutte: PaneMode[] = ["source", "live_preview", "reading"];
+    for (const c of fixture.ViewContext as ViewContext[]) {
+      expect(tutte).toContain(c.mode);
+    }
+    // La regola dello span: `text` c'è sempre, `span` no (buffer sporco).
+    const sporca = (fixture.ViewContext as ViewContext[]).find(
+      (c) => c.selection !== null && c.selection.span === null,
+    );
+    expect(sporca, "manca il campione col buffer sporco").toBeTruthy();
+    expect(typeof sporca!.selection!.text).toBe("string");
   });
 
   it("gli u64 identità/impronta attraversano l'IPC come stringhe", () => {
