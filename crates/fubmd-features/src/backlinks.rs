@@ -3,7 +3,7 @@
 //!
 //! È dogfooding vero: il provider non riceve i dati già pronti dall'app, se li
 //! prende dall'[`HostApi`] come dovrà fare un plugin di terzi. Le due capacità
-//! che glielo permettono — [`HostApi::active_document`] (quale nota guardo) e
+//! che glielo permettono — [`HostApi::active_context`] (quale nota guardo) e
 //! [`HostApi::query_index`] (i suoi backlink) — sono esattamente ciò che prima
 //! mancava al contratto e costringeva l'app a fargli da tramite. Il giro
 //! completo è: la shell imposta il documento attivo → chiama `render_view` →
@@ -13,6 +13,7 @@
 
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
+use fubmd_abi::session::ContextMask;
 use fubmd_abi::traits::{
     BacklinkRef, HostApi, IndexQuery, IndexResult, ViewPlacement, ViewProvider, ViewSpec,
 };
@@ -41,14 +42,17 @@ impl ViewProvider for BacklinksView {
             title: "Backlink".to_string(),
             placement: ViewPlacement::RightSidebar,
             // I backlink invecchiano quando il grafo cambia: ogni modifica al
-            // vault arriva come `IndexUpdated` (il cambio di nota attiva è
-            // della shell, non un evento).
+            // vault arriva come `IndexUpdated`.
             refresh: EventMask(vec![EventKind::IndexUpdated]),
+            // …e quando cambia la nota guardata. Non dove ci si trova dentro:
+            // i backlink di una nota sono gli stessi da ogni punto di essa, e
+            // seguire la selezione qui sarebbe una query per battuta di tasto.
+            follows: ContextMask::document(),
         }]
     }
 
     fn render_view(&self, _view: &str, host: &dyn HostApi) -> Result<UiNode, PluginError> {
-        let Some(active) = host.active_document() else {
+        let Some(active) = host.active_context().and_then(|c| c.doc) else {
             // Nessuna nota aperta: non è un errore, è uno stato.
             return Ok(placeholder("Nessuna nota aperta."));
         };

@@ -13,6 +13,9 @@
 //! - [`tags`] — il pannello tag come
 //!   [`ViewProvider`](fubmd_abi::traits::ViewProvider): aggrega i tag del vault
 //!   via `IndexQuery::Tags`, click→ricerca (M2).
+//! - [`stats`] — il pannello statistiche come
+//!   [`ViewProvider`](fubmd_abi::traits::ViewProvider): parole, caratteri,
+//!   selezione e tempo di lettura dal **contesto di sessione** (M2, §1.9).
 //! - [`search`] — [`IndexProvider`](fubmd_abi::traits::IndexProvider) full-text
 //!   su tantivy, persistente e incrementale (M2).
 //! - [`versioning`] — snapshot per-file del vault come
@@ -22,6 +25,7 @@
 pub mod backlinks;
 pub mod outline;
 pub mod search;
+pub mod stats;
 pub mod tags;
 pub mod versioning;
 
@@ -34,5 +38,8 @@ mod testing;
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
 pub use search::{SearchIndex, SEARCH_ID};
+pub use stats::{
+    build_stats_view, count, reading_minutes, StatsView, TextStats, STATS_ID, STATS_VIEW,
+};
 pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};

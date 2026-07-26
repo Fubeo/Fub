@@ -7,6 +7,31 @@
   --muted: #9a9aa8;
   --accent: #6d5efc;
   --accent-soft: #8a7dff;
+
+  /* La tavolozza della **superficie del documento**: i colori con cui la nota
+     si scrive (il tema dell'editor) e con cui si legge. Stanno qui, in un
+     posto solo, perché le tre modalità di 4.1 devono essere la stessa nota
+     vista in tre modi — non tre note diverse. I valori vengono dal tema
+     dell'editor (oneDark); li usano sia `.markdown-preview` (Lettura) sia il
+     tema della live preview in `livepreview.ts`, che li legge come `var(…)`.
+     Cambiarli qui li cambia in tutte e tre le modalità insieme. */
+  --doc-bg: #282c34;
+  --doc-fg: #abb2bf;
+  --doc-link: #82aaff;
+  /* I titoli hanno un colore, e ce l'hanno anche in scrittura: è il tema di
+     sintassi dell'editor a darglielo (oneDark colora i marcatori `#`). Senza
+     questa riga, passare in Lettura spegneva i titoli — la differenza più
+     visibile fra le due superfici. */
+  --doc-heading: #e06c75;
+  --doc-danger: #e06c75;
+  /* Riempimenti e righe in alpha su grigio: reggono su qualunque fondo, ed è
+     il motivo per cui la live preview li usava già così. */
+  --doc-fill: rgba(135, 135, 135, 0.16);
+  --doc-fill-soft: rgba(135, 135, 135, 0.1);
+  --doc-rule: rgba(135, 135, 135, 0.45);
+  --doc-rule-soft: rgba(135, 135, 135, 0.28);
+  --doc-highlight: rgba(255, 205, 0, 0.28);
+
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
 }
@@ -63,13 +88,31 @@ button:hover {
 #views-bottom {
   grid-column: 1 / -1;
   overflow: auto;
+  max-height: 30vh;
+  padding: 4px 10px;
   border-top: 1px solid var(--border, #ccc3);
+}
+/* Le view in basso sono una striscia di stato: titolo e contenuto sulla stessa
+   riga, non un pannello con l'intestazione sopra. */
+#views-bottom .panel-title {
+  display: inline-flex;
+  margin: 0 8px 0 0;
+}
+#views-bottom .declared-view {
+  display: inline-flex;
 }
 
 #layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 240px 1fr 1fr;
+  /* La colonna di destra ospita solo le view dichiarative (e la cronologia):
+     da quando l'anteprima è una modalità e non un pannello, lo spazio va a chi
+     scrive. */
+  grid-template-columns: 240px 2fr 1fr;
+  /* La riga delle view in basso è alta quanto il suo contenuto: senza, la
+     griglia divide lo spazio avanzato fra le due righe e la striscia di stato
+     si mangia un quarto della finestra. */
+  grid-template-rows: 1fr auto;
   min-height: 0;
 }
 
@@ -333,10 +376,38 @@ button:hover {
   padding: 0 1px;
 }
 
+/* Le tre modalità del pannello (FEATURES 4.1). In lettura l'editor non c'è —
+   la griglia lascia tutto lo spazio all'anteprima — e la modalità viaggia nel
+   contesto di sessione, quindi le view che la seguono lo sanno. */
+#mode-switch {
+  display: inline-flex;
+  gap: 0;
+}
+#mode-switch button {
+  border-radius: 0;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+#mode-switch button:first-child {
+  border-radius: 5px 0 0 5px;
+}
+#mode-switch button:last-child {
+  border-radius: 0 5px 5px 0;
+}
+#mode-switch button.active {
+  background: var(--accent-soft);
+  color: var(--bg);
+}
+
 #editor-pane {
   min-width: 0;
   border-right: 1px solid var(--border);
   overflow: hidden;
+}
+/* Lettura: l'editor lascia il posto al documento reso, nello stesso spazio.
+   Le due superfici non convivono — è ciò che «modalità esclusiva» significa. */
+body[data-mode="reading"] #editor {
+  display: none;
 }
 #editor {
   height: 100%;
@@ -344,66 +415,91 @@ button:hover {
 .cm-editor {
   height: 100%;
 }
+/* Anche l'editor prende il fondo dalla variabile della superficie, invece che
+   dal tema di CodeMirror: così `--doc-bg` è davvero l'unico posto dove il
+   colore della nota è scritto, e le tre modalità non possono divergere. Del
+   tema restano i colori della **sintassi**, che sono un'altra cosa. */
+#editor .cm-editor,
+#editor .cm-gutters {
+  background-color: var(--doc-bg);
+}
+#editor .cm-editor {
+  color: var(--doc-fg);
+}
 
+/* Lettura: la superficie del documento, con i colori della superficie del
+   documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
+   fare sulla nota, non di che colore è. */
 #preview {
-  flex: 1;
+  height: 100%;
   overflow-y: auto;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-elev);
-  min-height: 120px;
+  padding: 10px 16px;
+  background: var(--doc-bg);
+  color: var(--doc-fg);
 }
 
 /* Anteprima markdown */
 .markdown-preview h1,
 .markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  color: var(--doc-heading);
+}
+.markdown-preview h1,
+.markdown-preview h2,
 .markdown-preview h3 {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--doc-rule-soft);
   padding-bottom: 3px;
 }
 .markdown-preview a.wikilink {
-  color: var(--accent-soft);
-  text-decoration: none;
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
-.markdown-preview a.wikilink:hover {
-  text-decoration: underline;
-}
 .markdown-preview a.wikilink.unresolved {
-  color: #e06c75;
+  color: var(--doc-danger);
 }
 .markdown-preview .tag {
-  background: var(--bg-input);
-  border-radius: 4px;
-  padding: 0 5px;
-  color: var(--accent-soft);
-  font-size: 12px;
+  background: var(--doc-fill);
+  border-radius: 1em;
+  padding: 0 0.45em;
+  color: var(--doc-link);
+  font-size: 0.95em;
+}
+.markdown-preview mark {
+  background: var(--doc-highlight);
+  color: inherit;
 }
 .markdown-preview code {
-  background: var(--bg-input);
+  background: var(--doc-fill);
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 .markdown-preview pre {
-  background: var(--bg-input);
+  background: var(--doc-fill-soft);
   padding: 10px;
   border-radius: 6px;
   overflow-x: auto;
 }
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid var(--doc-rule);
+}
 .markdown-preview blockquote {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--doc-rule);
   margin: 6px 0;
   padding-left: 10px;
-  color: var(--muted);
 }
 .markdown-preview .callout {
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border: 1px solid var(--doc-rule-soft);
+  border-left: 3px solid var(--doc-rule);
   border-radius: 6px;
   padding: 8px 10px;
   margin: 8px 0;
-  background: var(--bg-input);
+  background: var(--doc-fill-soft);
 }
 .markdown-preview .callout-title {
   font-weight: 700;
@@ -425,7 +521,7 @@ button:hover {
 }
 .markdown-preview li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"])::before {
   content: "[" attr(data-task) "]";
-  color: var(--accent);
+  color: var(--doc-link);
   font-weight: 700;
   margin-right: 6px;
 }
@@ -437,11 +533,11 @@ button:hover {
 }
 .markdown-preview th,
 .markdown-preview td {
-  border: 1px solid var(--border);
+  border: 1px solid var(--doc-rule-soft);
   padding: 4px 8px;
 }
 .markdown-preview th {
-  background: var(--bg-input);
+  background: var(--doc-fill-soft);
   font-weight: 700;
 }
 
@@ -473,24 +569,25 @@ button:hover {
   text-overflow: ellipsis;
 }
 
-/* Transclusion (embed idratati dal kernel) */
+/* Transclusion (embed idratati dal kernel): stanno dentro il documento, quindi
+   prendono i colori del documento. */
 .embed {
   display: block;
   margin: 8px 0;
   padding: 8px 12px;
-  border-left: 3px solid var(--accent);
-  background: var(--bg-input);
+  border-left: 3px solid var(--doc-rule);
+  background: var(--doc-fill-soft);
   border-radius: 5px;
 }
 .embed-cycle::after,
 .embed-too-deep::after {
   content: " (embed ricorsivo)";
-  color: var(--muted);
+  opacity: 0.7;
   font-size: 12px;
 }
 .embed.unresolved {
-  border-left-color: var(--muted);
-  color: var(--muted);
+  border-left-color: var(--doc-rule-soft);
+  opacity: 0.7;
 }
 
 /* Cestino */

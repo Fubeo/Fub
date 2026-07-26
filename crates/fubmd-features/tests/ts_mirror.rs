@@ -23,6 +23,7 @@
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Event, EventKind, EventMask};
 use fubmd_abi::model::{DocId, Span};
+use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{BacklinkRef, JobId, SearchHit, TagCount, ViewPlacement, ViewSpec};
 use fubmd_abi::ui::{ActionId, Axis, Intent, UiNode, ViewUpdate};
 use fubmd_features::VersionRef;
@@ -190,6 +191,35 @@ fn expected() -> Value {
             title: "V".into(),
             placement: ViewPlacement::RightSidebar,
             refresh: EventMask(vec![EventKind::IndexUpdated]),
+            follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
+        })],
+        // Il contesto di sessione viaggia nel verso opposto agli altri: lo
+        // COSTRUISCE il frontend e lo consuma il kernel. Il mirror serve
+        // quindi due volte — un campo che il TS non manda arriva `undefined`,
+        // e serde lo rifiuta a runtime invece che in compilazione.
+        "ViewContext": [
+            to_value(
+                ViewContext::new("main")
+                    .with_doc(Some(DocId::new("a.md")))
+                    .with_selection(Some(Selection {
+                        span: Some(Span::new(3, 7)),
+                        text: "ciao".into(),
+                    }))
+                    .with_mode(PaneMode::Reading),
+            ),
+            // Pannello vuoto: nessuna nota, nessun cursore.
+            to_value(ViewContext::new("main")),
+            // Buffer sporco: il testo c'è, lo span no (vedi `Selection`).
+            to_value(ViewContext::new("main").with_doc(Some(DocId::new("a.md"))).with_selection(
+                Some(Selection {
+                    span: None,
+                    text: "ciao".into(),
+                }),
+            )),
+        ],
+        "Selection": [to_value(Selection {
+            span: Some(Span::new(0, 4)),
+            text: "ciao".into(),
         })],
     })
 }

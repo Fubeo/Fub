@@ -473,9 +473,12 @@ function gestisciClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks
   return false;
 }
 
-// Il tema del modulo: solo classi cm-fubmd-*, dentro l'estensione. I colori
-// pieni hanno la variante &light/&dark; il resto usa alpha su grigio, che
-// regge su entrambi i temi.
+// Il tema del modulo: solo classi cm-fubmd-*, dentro l'estensione. I **valori**
+// dei colori vengono però dalle variabili della superficie del documento
+// (`--doc-*` in `style.css`): sono gli stessi che usa la modalità Lettura, e
+// tenerne due copie significherebbe che passare da Live a Lettura cambia i
+// colori della stessa nota. Le variabili hanno un fallback, così l'estensione
+// resta montabile anche senza il CSS della shell.
 const tema = EditorView.baseTheme({
   ".cm-fubmd-h1": { fontSize: "1.7em", fontWeight: "700" },
   ".cm-fubmd-h2": { fontSize: "1.5em", fontWeight: "700" },
@@ -487,13 +490,13 @@ const tema = EditorView.baseTheme({
   ".cm-fubmd-em": { fontStyle: "italic" },
   ".cm-fubmd-strike": { textDecoration: "line-through" },
   ".cm-fubmd-code": {
-    background: "rgba(135, 135, 135, 0.16)",
+    background: "var(--doc-fill, rgba(135, 135, 135, 0.16))",
     borderRadius: "3px",
     padding: "0 0.15em",
   },
-  ".cm-fubmd-codeblock": { background: "rgba(135, 135, 135, 0.10)" },
+  ".cm-fubmd-codeblock": { background: "var(--doc-fill-soft, rgba(135, 135, 135, 0.10))" },
   ".cm-fubmd-quote": {
-    borderLeft: "3px solid rgba(135, 135, 135, 0.45)",
+    borderLeft: "3px solid var(--doc-rule, rgba(135, 135, 135, 0.45))",
     paddingLeft: "0.6em",
   },
   ".cm-fubmd-quote-mark": { color: "rgba(135, 135, 135, 0.8)" },
@@ -501,26 +504,26 @@ const tema = EditorView.baseTheme({
     display: "inline-block",
     width: "100%",
     verticalAlign: "middle",
-    borderTop: "1px solid rgba(135, 135, 135, 0.55)",
+    borderTop: "1px solid var(--doc-rule, rgba(135, 135, 135, 0.55))",
   },
   ".cm-fubmd-link, .cm-fubmd-wikilink": {
     cursor: "pointer",
     textDecoration: "underline",
     textUnderlineOffset: "2px",
   },
-  "&light .cm-fubmd-link, &light .cm-fubmd-wikilink": { color: "#2f6bd8" },
-  "&dark .cm-fubmd-link, &dark .cm-fubmd-wikilink": { color: "#82aaff" },
-  ".cm-fubmd-highlight": { background: "rgba(255, 205, 0, 0.35)" },
-  "&dark .cm-fubmd-highlight": { background: "rgba(255, 205, 0, 0.28)" },
+  "&light .cm-fubmd-link, &light .cm-fubmd-wikilink": { color: "var(--doc-link, #2f6bd8)" },
+  "&dark .cm-fubmd-link, &dark .cm-fubmd-wikilink": { color: "var(--doc-link, #82aaff)" },
+  ".cm-fubmd-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.35))" },
+  "&dark .cm-fubmd-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.28))" },
   ".cm-fubmd-tag": {
-    background: "rgba(135, 135, 135, 0.18)",
+    background: "var(--doc-fill, rgba(135, 135, 135, 0.18))",
     borderRadius: "1em",
     padding: "0 0.45em",
     fontSize: "0.95em",
     cursor: "pointer",
   },
-  "&light .cm-fubmd-tag": { color: "#2f6bd8" },
-  "&dark .cm-fubmd-tag": { color: "#82aaff" },
+  "&light .cm-fubmd-tag": { color: "var(--doc-link, #2f6bd8)" },
+  "&dark .cm-fubmd-tag": { color: "var(--doc-link, #82aaff)" },
   ".cm-fubmd-done": { textDecoration: "line-through", opacity: "0.55" },
   ".cm-fubmd-checkbox": {
     cursor: "pointer",

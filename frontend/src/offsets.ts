@@ -36,3 +36,26 @@ export function byteToCharIndex(text: string, byteOffset: number): number {
   }
   return units; // oltre la fine → fine del documento
 }
+
+/// L'inversa: da un indice in **code unit UTF-16** (una posizione di
+/// CodeMirror) all'offset in **byte UTF-8** che il kernel capisce.
+///
+/// È la direzione che mancava, e senza la quale nessuna azione dell'editor
+/// poteva parlare di `Span` al core: la selezione che attraversa il confine
+/// (`ViewContext.selection`), un edit chirurgico, un'annotazione. Le regole
+/// sono le stesse dell'andata, lette al contrario: una posizione dentro una
+/// coppia surrogata — che CodeMirror non produce, ma un calcolo sì — si
+/// arrotonda al confine di code point successivo, e oltre la fine si ottiene
+/// la lunghezza in byte del documento.
+export function charToByteIndex(text: string, charIndex: number): number {
+  if (charIndex <= 0) return 0;
+  let bytes = 0;
+  let units = 0;
+  for (const ch of text) {
+    if (units >= charIndex) return bytes;
+    const cp = ch.codePointAt(0)!;
+    bytes += utf8Len(cp);
+    units += cp > 0xffff ? 2 : 1;
+  }
+  return bytes; // oltre la fine → tutto il documento
+}

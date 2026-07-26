@@ -11,7 +11,9 @@
 //!   index (ricerca/backlink), event handler, ciclo di vita del plugin;
 //! - i trait di **import ed export** ([`transfer`]): come i dati entrano nel
 //!   vault e come ne escono, a byte e non a path;
-//! - il protocollo di **UI dichiarativa** ([`ui`]) e gli **eventi** ([`event`]).
+//! - il protocollo di **UI dichiarativa** ([`ui`]) e gli **eventi** ([`event`]);
+//! - il **contesto di sessione** ([`session`]): quale pannello ha il focus, che
+//!   documento guarda, cosa c'è selezionato dentro.
 //!
 //! **Invariante:** nessuna dipendenza da markdown, tauri, wasmtime o tokio.
 //! Definendo ogni trait una volta sola qui, l'impl nativa (diretta) e l'impl
@@ -23,6 +25,7 @@ pub mod event;
 pub mod format;
 pub mod ipc;
 pub mod model;
+pub mod session;
 pub mod traits;
 pub mod transfer;
 pub mod ui;
@@ -36,6 +39,7 @@ pub use format::{
 pub use model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
 };
+pub use session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 pub use traits::{
     BacklinkRef, CommandProvider, CommandSpec, DocumentProperties, EventHandler, HealthCheck,
     HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page,

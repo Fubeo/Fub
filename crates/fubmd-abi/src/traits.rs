@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask};
 use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
+use crate::session::{ContextMask, ViewContext};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
 // ---------------------------------------------------------------------------
@@ -164,16 +165,27 @@ pub trait HostApi: Send + Sync {
     /// può servirla sotto prestito condiviso del workspace, come una view.
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 
-    /// Il documento con il focus della sessione di editing, se ce n'è uno.
+    /// Il contesto del pannello con il focus: quale documento, cosa c'è
+    /// selezionato, in che modalità. `None` = la shell non ne ha ancora
+    /// pubblicato uno (nessun pannello).
     ///
     /// È il solo contesto di sessione che il contratto espone: una view lo
     /// **chiede** quando ne ha bisogno (un pannello backlink lo fa a ogni
     /// render), invece di riceverlo come argomento — che costringerebbe *ogni*
     /// view a portarselo anche quando non le serve (un grafo, un pannello
-    /// impostazioni). Chi lo imposta è la shell, non un plugin: `active_document`
-    /// non ha un gemello che scrive nell'`HostApi`, perché "quale nota guardo"
-    /// è una decisione dell'utente sull'app, non una capacità da concedere.
-    fn active_document(&self) -> Option<DocId>;
+    /// impostazioni). Chi lo imposta è la shell, non un plugin:
+    /// `active_context` non ha un gemello che scrive nell'`HostApi`, perché
+    /// "quale nota guardo e dove ho cliccato" è una decisione dell'utente
+    /// sull'app, non una capacità da concedere.
+    ///
+    /// Restituisce un [`ViewContext`] e non un `DocId` perché con schede,
+    /// split e finestre multiple (FEATURES 4.1) "il documento attivo" non è più
+    /// una variabile globale: due pannelli backlink affiancati farebbero la
+    /// stessa domanda e riceverebbero la stessa risposta, sbagliata per uno dei
+    /// due. Il [`PaneId`](crate::session::PaneId) dentro il contesto è ciò che
+    /// permette di distinguerli già ora; legarli a un pannello *fisso* è
+    /// l'altra metà del problema, e arriva con le istanze di view (§1.15).
+    fn active_context(&self) -> Option<ViewContext>;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,11 +238,21 @@ pub struct ViewSpec {
     /// È il pezzo di protocollo che dice *quando* una view invecchia: senza,
     /// la shell può solo indovinare per conoscenza privata delle feature — e
     /// per una view di plugin non può indovinare niente. Maschera vuota =
-    /// nessun ridisegno event-driven (la shell ridisegna comunque quando
-    /// cambia il documento attivo, che non è un evento del vault ma una
-    /// decisione sua).
+    /// nessun ridisegno event-driven.
     #[serde(default)]
     pub refresh: EventMask,
+    /// L'altra metà della stessa dichiarazione, per ciò che **non è un evento
+    /// del vault**: le parti del contesto di sessione
+    /// ([`HostApi::active_context`]) al cui cambio questa view invecchia.
+    ///
+    /// Esiste perché "la shell ridisegna comunque quando cambia il documento
+    /// attivo" smette di essere sostenibile appena il contesto porta anche la
+    /// **selezione**: ridisegnare ogni view a ogni movimento del cursore
+    /// significherebbe interrogare l'indice a ogni battuta di tasto. Chi segue
+    /// il cursore lo dichiara e viene servito; chi mostra il vault intero (una
+    /// vista a grafo, il pannello tag) non dichiara nulla e resta fermo.
+    #[serde(default)]
+    pub follows: ContextMask,
 }
 
 pub trait ViewProvider: Send + Sync {

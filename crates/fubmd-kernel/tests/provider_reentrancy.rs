@@ -88,6 +88,7 @@ impl ViewProvider for WritingView {
             title: "Scrivente".into(),
             placement: ViewPlacement::RightSidebar,
             refresh: EventMask::default(),
+            follows: Default::default(),
         }]
     }
 

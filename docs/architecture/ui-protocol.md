@@ -41,9 +41,31 @@ Tipi di supporto: `Axis { Row, Column }`, `Intent { Neutral, Primary, Danger }`
    - `RunSearch { query }` — esegui una ricerca e mostrane i risultati.
 
 Questo giro è cablato nel renderer generico (`mountView` in `main.ts`) e servito
-dai comandi `render_view`/`view_action`/`set_active_document`. Lo esercitano i
+dai comandi `render_view`/`view_action`/`set_active_context`. Lo esercitano i
 backlink (`open:<DocId>` → `Navigate`), l'outline (`reveal:<start>:<end>` →
 `Reveal` sull'heading) e il pannello tag (`tag:<nome>` → `RunSearch`).
+
+## Quando una view invecchia: due maschere, non una
+
+`ViewSpec` dichiara `refresh: EventMask` **e** `follows: ContextMask`. La prima
+sono gli eventi del **vault** al cui arrivo serve un nuovo `render_view`; la
+seconda le parti del **contesto di sessione** (documento, selezione, modalità)
+che la view guarda. Sono separate perché un cursore che si muove non è un fatto
+del vault: farlo passare dall'event bus significherebbe consegnare ogni battuta
+di tasto a ogni handler registrato.
+
+La shell pubblica il contesto con `set_active_context` e riceve **gli id delle
+view da ridisegnare**: il conto lo fa il kernel, che conosce le `follows`. Senza
+questa metà del protocollo l'unica strada sarebbe ridisegnarle tutte a ogni
+movimento del cursore — cioè una `query_index` per battuta di tasto sul pannello
+tag e sulla vista a grafo.
+
+Cosa dichiarano le quattro view ufficiali: i backlink solo `Document` (i
+backlink di una nota sono gli stessi da ogni punto di essa), l'outline
+`Document + Selection` (segna la sezione in cui sta il cursore), le statistiche
+tutto (contano la selezione e cambiano faccia in lettura), il pannello tag
+**niente** — la distribuzione dei tag del vault è la stessa da qualunque nota la
+si guardi, ed è il caso che la maschera esiste per servire.
 
 ## La regola dell'escape hatch — e il confine di fiducia
 

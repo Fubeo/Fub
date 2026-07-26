@@ -9,6 +9,7 @@
 
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
+use fubmd_abi::session::ContextMask;
 use fubmd_abi::traits::{
     HostApi, IndexQuery, IndexResult, TagCount, ViewPlacement, ViewProvider, ViewSpec,
 };
@@ -39,6 +40,11 @@ impl ViewProvider for TagPanelView {
             // I tag sono aggregati vault-wide: invecchiano a ogni modifica
             // dell'indice, non al cambio di nota.
             refresh: EventMask(vec![EventKind::IndexUpdated]),
+            // …e non invecchiano per niente col contesto: la distribuzione dei
+            // tag del vault è la stessa da qualunque nota la si guardi. È il
+            // caso che la maschera esiste per servire — senza, questo pannello
+            // si ridisegnerebbe a ogni movimento del cursore.
+            follows: ContextMask::default(),
         }]
     }
 
