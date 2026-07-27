@@ -94,15 +94,16 @@ pub struct TrashEntry {
 // ---------------------------------------------------------------------------
 //
 // Le ventidue capacità della decisione 0013 — ventiquattro, contando le due che
-// la 0018 ha aggiunto — non stanno in un trait solo, e la ragione è il §7.1: un
-// trait solo si implementa **per intero o per niente**, e chi ne può fare solo
-// una metà (il percorso di render, che ha il workspace in prestito condiviso;
-// un comando che si è dichiarato di sola lettura; a M5 un componente senza il
-// permesso di scrivere) è costretto a scrivere l'altra metà come una fila di
-// rifiuti. Erano ottantotto corpi di metodo per quattro implementazioni, di cui
-// trentasei non facevano niente se non dire di no.
+// la 0018 ha aggiunto, venticinque col `call_service` della 0021 — non stanno
+// in un trait solo, e la ragione è il §7.1: un trait solo si implementa **per
+// intero o per niente**, e chi ne può fare solo una metà (il percorso di
+// render, che ha il workspace in prestito condiviso; un comando che si è
+// dichiarato di sola lettura; a M5 un componente senza il permesso di
+// scrivere) è costretto a scrivere l'altra metà come una fila di rifiuti.
+// Erano novantasei corpi di metodo per quattro implementazioni, di cui ventidue
+// non facevano niente se non dire di no.
 //
-// Le famiglie sono nove e sono scelte su un criterio solo: **cosa vuol dire
+// Le famiglie sono dieci e sono scelte su un criterio solo: **cosa vuol dire
 // negarne una.** È per questo che la lettura del vault sta separata dalla sua
 // scrittura e dalle operazioni strutturali (i tre gradi che `read_vault` e
 // `write_vault` distinguono, §7.3), che i blob del plugin si dividono nello
@@ -113,7 +114,7 @@ pub struct TrashEntry {
 // **somme**, con una impl generica, e nessuno le implementa a mano. Chi le
 // riceve continua a scrivere `&mut dyn HostApi` come prima.
 //
-// Al confine WIT le nove famiglie sono nove `interface`, e lì la scomposizione
+// Al confine WIT le dieci famiglie sono dieci `interface`, e lì la scomposizione
 // smette di essere una comodità di tipi: un componente a cui il mondo non
 // importa `host-vault-write` non ha **modo** di chiamarla — il rifiuto non è
 // più una risposta a runtime, è l'assenza della funzione.
@@ -630,7 +631,7 @@ pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv {}
 impl<T: VaultRead + DataRead + HostQuery + HostEnv + ?Sized> ReadApi for T {}
 
 /// Le capacità che il kernel concede a un provider/plugin: la **somma** delle
-/// nove famiglie.
+/// dieci famiglie.
 ///
 /// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
 /// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
@@ -640,8 +641,8 @@ impl<T: VaultRead + DataRead + HostQuery + HostEnv + ?Sized> ReadApi for T {}
 /// freeze un metodo **aggiunto** a una famiglia è una minor, uno **tolto** è una
 /// major.
 ///
-/// Non si implementa e non si dichiara: chi ha le nove famiglie ce l'ha, per la
-/// impl generica qui sotto. Chi lo **riceve** continua a scrivere
+/// Non si implementa e non si dichiara: chi ha le dieci famiglie ce l'ha, per
+/// la impl generica qui sotto. Chi lo **riceve** continua a scrivere
 /// `&mut dyn HostApi` come prima — è il tipo di chi può fare tutto, e a quello
 /// non è cambiato niente.
 ///

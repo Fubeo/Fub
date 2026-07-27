@@ -250,8 +250,8 @@ bisogno di un posto da cui essere montato).
       pensarci»*. Quella proprietà il test non ce l'ha: nota se una delle cinque
       **smette** di essere rifiutata, non se ne compare una sesta.
 - [ ] **Il posto in cui la sesta sbaglierebbe era `ReadOnlyHost`, e non c'è
-      più.** Era scritto metodo per metodo — sedici capacità delegavano a
-      `ReadHost` e sei negavano — e aggiungerne una copiando la riga sbagliata
+      più.** Era scritto metodo per metodo — dodici metodi delegavano a
+      `ReadHost`, dieci negavano e due facevano da sé — e aggiungerne una copiando la riga sbagliata
       (la delega invece del rifiuto) avrebbe prodotto **un dry-run che scrive**,
       cioè il buco esatto che la [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md)
       ha chiuso, in un punto in cui il chiamante si sta fidando. Il §7.1

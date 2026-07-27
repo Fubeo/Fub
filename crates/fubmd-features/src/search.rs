@@ -885,7 +885,7 @@ mod tests {
     use super::*;
     use crate::testing::MemoryHost;
     // Le famiglie che il doppio serve a questi test: dal §7.1 un host è la
-    // somma di nove trait, e i metodi di un trait si vedono se il trait è in
+    // somma di dieci trait, e i metodi di un trait si vedono se il trait è in
     // scope — anche quando l'oggetto li ha tutti.
     use camino::Utf8PathBuf;
     use fubmd_abi::model::Tag;

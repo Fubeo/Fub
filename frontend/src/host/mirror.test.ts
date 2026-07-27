@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAIN_PANE } from "./contract";
 import type {
   BacklinkRef,
   CommandEffect,
@@ -421,6 +422,26 @@ describe("mirror TS↔Rust", () => {
     for (const type of Object.keys(APP_RECORD_KEYS)) {
       expect(appFixture[type], `manca il tipo ${type} nella fixture dell'app`).toBeTruthy();
       expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("il pannello che la shell dichiara è quello che il kernel chiama MAIN_PANE", () => {
+    // Le altre righe di questo file presidiano le **forme**; questa presidia un
+    // **valore**, ed è l'unico del confine che la shell scriva da sé. Il kernel
+    // confronta il `pane` di un contesto con quello di prima: uno diverso è, da
+    // contratto, un cambio di pannello — cioè il ridisegno di tutto ciò che
+    // segue il contesto. Due costanti scritte a mano ai due lati divergono in
+    // silenzio, e il difetto si vedrebbe come «si ridisegna tutto a ogni
+    // pubblicazione», che non porta a questa riga.
+    //
+    // La catena è: costante TS → fixture → costante Rust. Regge perché la
+    // fixture è generata da `ViewContext::new(MAIN_PANE)` e non da una stringa
+    // scritta a mano (crates/fubmd-features/tests/ts_mirror.rs); se là tornasse
+    // un letterale, questo test resterebbe verde per il motivo sbagliato.
+    const contesti = fixture.ViewContext as ViewContext[];
+    expect(contesti.length, "nessun campione di ViewContext").toBeGreaterThan(0);
+    for (const c of contesti) {
+      expect(c.pane, "il pane della fixture non è il MAIN_PANE del mirror TS").toBe(MAIN_PANE);
     }
   });
 

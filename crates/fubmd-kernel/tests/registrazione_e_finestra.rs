@@ -210,7 +210,7 @@ fn un_provider_che_cambia_idea_lo_dichiara() {
         Err(PluginError::UnknownView(_))
     ));
 
-    ws.refresh_specs("prova");
+    ws.refresh_specs("prova").expect("i nomi nuovi sono suoi");
     assert_eq!(ws.views().len(), 2);
     ws.render_view(&ViewInstance::only("prova.altra"))
         .expect("adesso esiste");

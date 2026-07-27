@@ -99,7 +99,7 @@ moltiplicavano ogni voce futura — l'una per il numero di implementazioni
 dell'host, l'altra per il numero di linguaggi in cui la stessa regola va
 scritta. La prima è **chiusa** con la
 [decisione 0021](../decisions/0021-il-confine.md), e il moltiplicatore è
-sparito: una politica nuova è un `impl Policy` da nove righe invece di una impl
+sparito: una politica nuova è un `impl Policy` da dieci righe invece di una impl
 da ventiquattro metodi. La seconda è **chiusa** con la
 [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md), insieme al
 §6.1: il moltiplicatore resta (le regole condivise sono ancora scritte due

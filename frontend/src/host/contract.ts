@@ -503,6 +503,21 @@ export interface ViewContext {
   mode: PaneMode;
 }
 
+/// L'unico pannello di questa shell, e il `MAIN_PANE` del kernel.
+///
+/// Sta qui e non nel pannello del documento perché è un **valore del confine**,
+/// non un dettaglio di chi lo pubblica: il kernel confronta il `pane` di un
+/// contesto con quello di prima, e uno diverso è da contratto un cambio di
+/// pannello — cioè un ridisegno di tutto ciò che segue il contesto. Due
+/// costanti scritte a mano ai due lati potevano divergere in silenzio; ora la
+/// fixture del mirror porta il valore vero della costante Rust e
+/// `mirror.test.ts` lega questa a quella.
+///
+/// Il giorno che i pannelli saranno due (il modello di layout: FEATURES 3.3,
+/// §9.6) questa costante diventa un `PaneId` per pannello, ed è la riga da cui
+/// partire.
+export const MAIN_PANE = "main";
+
 // Un documento **reso**: l'HTML, e le parti dichiarative che la shell monta da
 // sé (rispecchia `fubmd_kernel::RenderedDocument`).
 //

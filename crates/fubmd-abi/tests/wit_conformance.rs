@@ -4453,9 +4453,9 @@ fn conform(source: &str) -> Result<(), String> {
         .get("plugin-world")
         .cloned()
         .expect("world `plugin-world` assente dal WIT");
-    // Le nove famiglie del §7.1. Il confronto è per contenimento e non per
+    // Le dieci famiglie del §7.1. Il confronto è per contenimento e non per
     // uguaglianza perché fra gli import risolti compaiono anche le interfacce
-    // di soli **tipi** che le nove usano (`model`, `errors`, `index`, …): sono
+    // di soli **tipi** che le dieci usano (`model`, `errors`, `index`, …): sono
     // dipendenze del grafo, non capacità concesse.
     for famiglia in [
         "host-vault-read",
@@ -4476,7 +4476,7 @@ fn conform(source: &str) -> Result<(), String> {
     }
     assert!(
         !imports.contains("host-api"),
-        "`host-api` è stata divisa nelle nove famiglie del §7.1: se riappare, \
+        "`host-api` è stata divisa nelle dieci famiglie del §7.1: se riappare, \
          è tornata la superficie che si concede per intero o per niente"
     );
     let expected_exports: BTreeSet<String> = [

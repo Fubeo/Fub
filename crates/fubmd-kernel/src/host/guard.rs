@@ -22,9 +22,9 @@ use fubmd_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le nove famiglie di capacità, come nomi su cui una politica risponde.
+/// Le dieci famiglie di capacità, come nomi su cui una politica risponde.
 ///
-/// Sono esattamente i nove trait di `fubmd_abi::traits`, e non è una
+/// Sono esattamente i dieci trait di `fubmd_abi::traits`, e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono restare la stessa lista, e il presidio è
 /// che [`Guard`] non compila se una famiglia non è coperta.
@@ -95,9 +95,9 @@ impl Capability {
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a nove nomi e non sa
+/// Una politica è **piccola per costruzione**: risponde a dieci nomi e non sa
 /// niente di documenti, di blob o di comandi. È ciò che permette di comporne
-/// due senza chiedersi cosa significhi comporre ventiquattro metodi.
+/// due senza chiedersi cosa significhi comporre venticinque metodi.
 pub trait Policy: Send + Sync {
     /// La ragione per cui questa famiglia è negata, o `None` se è concessa.
     ///
@@ -188,7 +188,7 @@ pub struct Granted {
 
 /// Le famiglie concesse, come insieme.
 ///
-/// Nove bit in un `u16`: è la forma che rende [`Granted`] clonabile senza
+/// Dieci bit in un `u16`: è la forma che rende [`Granted`] clonabile senza
 /// allocare, ed è anche il motivo per cui [`Capability`] è un enum piccolo e
 /// chiuso invece di una stringa.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -264,10 +264,10 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le nove famiglie sono
+/// Delega ciò che la politica concede e nega il resto. Le dieci famiglie sono
 /// implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
-/// da ventiquattro metodi.
+/// da venticinque metodi.
 ///
 /// # Le cinque capacità che non sanno dire di no
 ///

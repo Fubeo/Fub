@@ -41,7 +41,7 @@ use fubmd_abi::ui::{
     UiNode, UiOption, UiValue, ViewUpdate,
 };
 use fubmd_features::VersionRef;
-use fubmd_kernel::TrashEntry;
+use fubmd_kernel::{TrashEntry, MAIN_PANE};
 use serde_json::{json, Value};
 
 /// Un campione per **ogni** specie di nodo. L'esaustività la garantisce il
@@ -686,9 +686,16 @@ fn expected() -> Value {
         // COSTRUISCE il frontend e lo consuma il kernel. Il mirror serve
         // quindi due volte — un campo che il TS non manda arriva `undefined`,
         // e serde lo rifiuta a runtime invece che in compilazione.
+        //
+        // Il pannello è `MAIN_PANE` e non la stringa scritta a mano: la fixture
+        // porta così il valore VERO della costante, ed è ciò che permette al
+        // mirror TS di legare il proprio `MAIN_PANE` a questo. Un `PaneId`
+        // diverso da quello di prima è, da contratto, un cambio di pannello:
+        // le due costanti che divergono in silenzio sarebbero un ridisegno di
+        // tutto ciò che segue il contesto, senza che nulla lo dica.
         "ViewContext": [
             to_value(
-                ViewContext::new("main")
+                ViewContext::new(MAIN_PANE)
                     .with_doc(Some(DocId::new("a.md")))
                     .with_selection(Some(Selection {
                         span: Some(Span::new(3, 7)),
@@ -697,9 +704,9 @@ fn expected() -> Value {
                     .with_mode(PaneMode::Reading),
             ),
             // Pannello vuoto: nessuna nota, nessun cursore.
-            to_value(ViewContext::new("main")),
+            to_value(ViewContext::new(MAIN_PANE)),
             // Buffer sporco: il testo c'è, lo span no (vedi `Selection`).
-            to_value(ViewContext::new("main").with_doc(Some(DocId::new("a.md"))).with_selection(
+            to_value(ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new("a.md"))).with_selection(
                 Some(Selection {
                     span: None,
                     text: "ciao".into(),

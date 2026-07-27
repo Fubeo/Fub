@@ -136,7 +136,7 @@ Due semantiche fissate nel contratto:
 L'unico varco con cui un provider/plugin tocca il mondo esterno. Nativo → oggetto
 in-process; WASM (M5) → proxy che reinoltra come host function.
 
-**È una somma di nove trait** ([decisione 0021](../decisions/0021-il-confine.md),
+**È una somma di dieci trait** ([decisione 0021](../decisions/0021-il-confine.md),
 §7.1) e non un trait solo, perché un trait solo si implementa per intero o per
 niente: chi ne può fare una metà — il percorso di render, un comando dichiarato
 di sola lettura, a M5 un componente senza il permesso di scrivere — era

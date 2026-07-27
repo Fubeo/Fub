@@ -384,7 +384,7 @@ documenti milestone.
   permessi volevano politiche combinatorie, cioè N. Era un moltiplicatore,
   quindi invisibile finché il fattore è basso: non lo si pagava aggiungendo una
   capacità, lo si pagava a ogni host successivo. Adesso il rifiuto è un
-  **wrapper generico** (`Guard<H, P: Policy>`) e una politica nuova costa nove
+  **wrapper generico** (`Guard<H, P: Policy>`) e una politica nuova costa dieci
   righe; e `HostApi` è la **somma di dieci famiglie**, in Rust e nel WIT, così
   che «sola lettura» sia un tipo che non ha le capacità di scrittura invece di
   un tipo che ne rifiuta dodici. La domanda P0 pre-freeze era se spezzarla,

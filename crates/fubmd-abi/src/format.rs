@@ -290,6 +290,18 @@ pub trait FormatProvider: Send + Sync {
     /// qui**: il kernel lo estrae prima e lo rende con quello (§3.2). Ciò che
     /// arriva è ciò che il provider conosce, più i kind che nessuno rivendica —
     /// e per quelli la resa generica resta il degrado giusto.
+    ///
+    /// # Il modello può essere un frammento
+    ///
+    /// Estrarre quei blocchi vuol dire spezzare il corpo, quindi con dei
+    /// renderer registrati questo metodo viene chiamato **una volta per corsa**
+    /// con un modello che porta il proprio `id` e i soli blocchi di quella
+    /// corsa: `frontmatter`, `outline`, `links`, `tags`, `anchors` e `text`
+    /// sono vuoti. È il prezzo di non fare chirurgia sull'HTML, ed è dichiarato
+    /// qui perché è una promessa che questa firma fa: **la resa di un blocco
+    /// dipende dal blocco**, non dal resto del documento. Ciò che serve
+    /// all'intero documento — il tema, il CSS per nota del 6.2, il bersaglio —
+    /// viaggia in `opts`, che arriva sempre intero.
     fn render_html(
         &self,
         model: &DocumentModel,

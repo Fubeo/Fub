@@ -435,6 +435,70 @@ fn ciò_che_nessuno_serve_lo_dice() {
     assert!(documenti(&ws, clause(vec![lit(testo("brontosauro"))])).is_empty());
 }
 
+/// «Ogni documento» detto con una clausola vuota **in mezzo ad altre** resta
+/// ogni documento, anche per chi non saprebbe valutare le foglie che le stanno
+/// accanto.
+///
+/// È la forma che un query builder produce da solo: un gruppo di righe ancora
+/// vuoto accanto a uno riempito. L'espressione è tutta per l'identità dell'OR,
+/// ma le sue foglie hanno proprietari diversi — e il pianificatore consegnava
+/// al destinatario l'albero originale invece di quello risolto, così l'indice
+/// del kernel riceveva una foglia di testo e rispondeva `Unserved` a una
+/// domanda la cui risposta è tutto. Si vedeva su `PropertyValues` e
+/// `Neighbors`; `Tags` si salvava per una guardia propria e `Documents` perché
+/// il routing manda la foglia al suo proprietario.
+#[test]
+fn una_clausola_vuota_accanto_a_una_foglia_altrui_resta_ogni_documento() {
+    let (_g, ws) = vault();
+    let tutto_e_una_foglia_altrui = QueryExpr {
+        any: vec![
+            QueryClause { all: vec![] },
+            QueryClause {
+                all: vec![lit(testo("rust"))],
+            },
+        ],
+    };
+    assert!(
+        tutto_e_una_foglia_altrui.is_everything(),
+        "una clausola vuota in OR è l'identità: l'espressione seleziona tutto"
+    );
+
+    let valori = ws.query_index(IndexQuery::PropertyValues {
+        key: "tipo".into(),
+        matching: tutto_e_una_foglia_altrui.clone(),
+        page: None,
+    });
+    let risposta = valori.expect("le faccette di tutto");
+    let IndexResult::PropertyValues(valori) = risposta else {
+        panic!("il canale ha risposto fuori tema");
+    };
+    assert_eq!(
+        valori.total, 2,
+        "`tipo` vale progetto o nota su tutto il vault"
+    );
+
+    let vicini = ws.query_index(IndexQuery::Neighbors {
+        seeds: tutto_e_una_foglia_altrui.clone(),
+        direction: LinkDirection::Outbound,
+        depth: 1,
+        page: None,
+    });
+    assert!(vicini.is_ok(), "i vicini di tutto: {vicini:?}");
+
+    // Le altre due passavano già, e devono continuare a passare per la stessa
+    // ragione delle prime due e non per la propria.
+    let tag = ws.query_index(IndexQuery::Tags {
+        matching: tutto_e_una_foglia_altrui.clone(),
+        page: None,
+    });
+    assert!(tag.is_ok(), "i tag di tutto: {tag:?}");
+    assert_eq!(
+        ids(&ws, tutto_e_una_foglia_altrui).len(),
+        4,
+        "e i documenti sono il vault intero, non i soli che parlano di rust"
+    );
+}
+
 /// La frase esatta è un modo della foglia, non delle virgolette dentro una
 /// stringa che qualcun altro parsa.
 #[test]
@@ -456,5 +520,107 @@ fn la_frase_esatta_e_un_modo_non_una_sintassi() {
     assert_eq!(
         ids(&ws, clause(vec![lit(testo("rust motore"))])),
         ["Progetti/Ferrite.md"]
+    );
+}
+
+/// Un vault di note **indistinguibili per la ricerca**: stesso testo, quindi
+/// stesso punteggio. È l'unico modo per vedere chi rompe la parità, e i nomi
+/// sono scelti perché l'ordine di scrittura non sia già quello di `DocId`.
+fn vault_a_pari_merito() -> (tempfile::TempDir, Workspace) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+    for rel in ["z.md", "m.md", "a.md", "q.md", "b.md"] {
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join(rel), "parola uguale per tutti\n").unwrap();
+    }
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::new(&root, registry);
+    ws.register_core_feature(SEARCH_ID, SEARCH_ID)
+        .expect("dichiarato");
+    let data = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
+    let index = SearchIndex::open(&data).expect("indice");
+    ws.register_index_provider(SEARCH_ID, Box::new(index))
+        .expect("registrazione e attivazione");
+    ws.reindex().expect("reindex");
+    (dir, ws)
+}
+
+/// A pari rilevanza l'ordine è quello del **contratto**, anche quando a
+/// rispondere è un indice che il kernel non ha scritto.
+///
+/// `properties::finish` rompe la parità per `DocId` (decisione 0020), e non è
+/// estetica: è ciò che rende l'ordine **totale e stabile**, cioè ciò che tiene
+/// onesta la paginazione. Un indice di terzi ha il suo ordine interno — tantivy
+/// rompe la parità per indirizzo di segmento, che cambia quando i segmenti si
+/// fondono — e se la sua risposta arrivasse alla shell senza passare dalla coda
+/// del contratto, due pagine della stessa domanda potrebbero ripetere e saltare
+/// righe.
+#[test]
+fn a_pari_rilevanza_ordina_il_contratto_non_il_motore() {
+    let (_g, ws) = vault_a_pari_merito();
+    let query = || clause(vec![lit(testo("parola"))]);
+
+    let tutti = pagina(&ws, query(), None, PropertySelect::None, None);
+    let ordine: Vec<String> = tutti.items.iter().map(|d| d.doc.to_string()).collect();
+    assert_eq!(
+        ordine,
+        ["a.md", "b.md", "m.md", "q.md", "z.md"],
+        "a pari punteggio la parità si rompe per DocId, non per l'ordine interno del motore"
+    );
+
+    // E la conseguenza che conta: la finestra scorre senza ripetere né saltare.
+    let mut sfogliato: Vec<String> = Vec::new();
+    for offset in [0u32, 2, 4] {
+        let p = pagina(
+            &ws,
+            query(),
+            None,
+            PropertySelect::None,
+            Some(Page { offset, limit: 2 }),
+        );
+        assert_eq!(p.total, 5, "il totale non dipende dalla finestra");
+        sfogliato.extend(p.items.iter().map(|d| d.doc.to_string()));
+    }
+    assert_eq!(
+        sfogliato, ordine,
+        "sfogliare la stessa domanda deve dare la stessa risposta, in pezzi"
+    );
+}
+
+/// E quando i punteggi **non** sono pari, comanda la rilevanza.
+///
+/// Il gemello del test qui sopra, e serve a dire che la coda del contratto non
+/// ha appiattito tutto sull'ordine dei `DocId`: chi ha cercato si aspetta i
+/// risultati migliori in cima, e la parità è solo ciò che si rompe *dopo*.
+#[test]
+fn senza_chiave_di_ordinamento_comanda_la_rilevanza() {
+    let (_g, ws) = vault();
+    let items = pagina(
+        &ws,
+        clause(vec![lit(testo("rust"))]),
+        None,
+        PropertySelect::None,
+        None,
+    )
+    .items;
+
+    let punteggi: Vec<f32> = items.iter().map(|d| d.score.expect("rilevanza")).collect();
+    assert!(
+        punteggi.len() >= 3,
+        "il vault ne ha tre che parlano di rust"
+    );
+    assert!(
+        punteggi.windows(2).all(|w| w[0] >= w[1]),
+        "i risultati scendono per rilevanza: {punteggi:?}"
+    );
+    // Senza questo l'asserzione sopra sarebbe vera anche a punteggi tutti
+    // uguali, cioè non proverebbe niente.
+    assert!(
+        punteggi.first() > punteggi.last(),
+        "e i punteggi sono davvero diversi: {punteggi:?}"
     );
 }

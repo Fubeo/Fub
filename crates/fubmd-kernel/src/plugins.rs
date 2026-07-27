@@ -127,6 +127,16 @@ pub enum RegistryError {
     UnknownPlugin(String),
     /// Due plugin con lo stesso id.
     DuplicatePlugin(String),
+    /// Un plugin **revocato** che prova a registrare qualcosa (§7.3).
+    ///
+    /// `Trust::Revoked` non è un grado di fiducia più basso, è l'assenza del
+    /// permesso di essere eseguito — e una regola sintattica o un renderer
+    /// registrati sono codice che gira a ogni parse e a ogni anteprima, senza
+    /// passare da nessun guard. Negarlo qui, al varco unico di ogni
+    /// registrazione, è l'unico posto in cui la revoca vale per **tutte** le
+    /// famiglie: dichiararsi resta possibile, perché per dire che qualcuno è
+    /// revocato bisogna sapere che esiste.
+    Revoked(String),
     /// Un nome che chi lo registra non può nominare (§7.4).
     Namespace(IdFault),
     /// Un nome già rivendicato da qualcun altro. Chi vuole **sostituire** lo
@@ -169,6 +179,11 @@ impl std::fmt::Display for RegistryError {
             RegistryError::DuplicatePlugin(id) => {
                 write!(f, "un plugin con id `{id}` è già dichiarato")
             }
+            RegistryError::Revoked(id) => write!(
+                f,
+                "`{id}` è revocato e non registra niente: la revoca non è un permesso \
+                 in meno, è l'assenza del permesso di essere eseguito"
+            ),
             RegistryError::Namespace(fault) => write!(f, "{fault}"),
             RegistryError::Claimed {
                 kind,
@@ -292,8 +307,116 @@ impl PluginRegistry {
         kind: RegistrationKind,
         ids: &[String],
     ) -> Result<(), RegistryError> {
+        self.admission(plugin, kind, ids, true)
+    }
+
+    /// Il varco di chi **sostituisce**: le stesse domande di
+    /// [`admit`](PluginRegistry::admit) meno la contesa, perché prendere il
+    /// posto di chi c'era è precisamente ciò che si è chiesto di fare.
+    ///
+    /// Esiste per un motivo solo, e non è la simmetria: una sostituzione ha due
+    /// effetti — togliere chi c'era e mettersi al suo posto — e **il permesso va
+    /// chiesto prima di entrambi**. Chiedendolo dopo il primo, un rifiuto
+    /// lascerebbe un vault senza la view di chi c'era e un messaggio che dice
+    /// «non è registrato»: lo stato a metà che nessuna variante di
+    /// [`RegistryError`] descrive.
+    ///
+    /// Sostituire resta una cosa che si chiede: la regola dei nomi vale come
+    /// sempre, e un terzo che nomina nudo l'id del core non lo scavalca né lo
+    /// cancella.
+    pub fn admit_replacing(
+        &self,
+        plugin: &str,
+        kind: RegistrationKind,
+        ids: &[String],
+    ) -> Result<(), RegistryError> {
+        self.admission(plugin, kind, ids, false)
+    }
+
+    /// Il varco di chi **rinegozia i propri nomi**: un provider che cambia idea
+    /// su ciò che offre (`refresh_specs`).
+    ///
+    /// Come [`admit`](PluginRegistry::admit), con una differenza sola: ciò che è
+    /// **già suo** non è una contesa con sé stesso. Tutto il resto vale — un
+    /// nome fuori dal proprio namespace resta inammissibile, e un nome di
+    /// qualcun altro resta suo — perché il giorno che un provider potrà
+    /// rinominare le proprie view a runtime, poterlo fare senza passare di qui
+    /// vorrebbe dire che la regola dei nomi vale alla registrazione e mai più.
+    ///
+    /// Un id ripetuto **dentro la stessa dichiarazione** è un conflitto del
+    /// plugin con sé stesso: alla registrazione lo vedeva la contesa (il secondo
+    /// provider trovava il primo), e qui, dove il proprietario è lo stesso, non
+    /// lo vedrebbe più nessuno.
+    pub fn admit_refreshing(
+        &self,
+        plugin: &str,
+        kind: RegistrationKind,
+        ids: &[String],
+    ) -> Result<(), RegistryError> {
+        self.admission(plugin, kind, ids, false)?;
+        if !kind.names() {
+            return Ok(());
+        }
+        for (at, id) in ids.iter().enumerate() {
+            if ids[..at].contains(id) {
+                return Err(RegistryError::Claimed {
+                    kind,
+                    id: id.clone(),
+                    incumbent: plugin.to_string(),
+                    challenger: plugin.to_string(),
+                });
+            }
+            if let Some(incumbent) = self.owner_of(kind, id) {
+                if incumbent != plugin {
+                    return Err(RegistryError::Claimed {
+                        kind,
+                        id: id.clone(),
+                        incumbent: incumbent.to_string(),
+                        challenger: plugin.to_string(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// La sola regola dei nomi (§7.4), per i nomi che una registrazione
+    /// **dichiara senza registrarli**.
+    ///
+    /// Ne esiste una famiglia sola oggi, e sono i `produces` di una
+    /// [`SyntaxRule`](fubmd_abi::custom::SyntaxRule): i `custom_kind` che una
+    /// regola si impegna a emettere. Non passano da
+    /// [`admit`](PluginRegistry::admit) perché non sono una rivendicazione —
+    /// due regole che producono lo stesso kind sono legittime, ed è come si
+    /// scrivono due dialetti della stessa famiglia — ma la domanda «questo nome
+    /// è tuo?» vale per loro come per ogni altro: senza, un terzo dichiara
+    /// `produces: ["callout"]` e si fa disegnare dal renderer del core.
+    pub fn check_names(&self, plugin: &str, ids: &[String]) -> Result<(), RegistryError> {
         if self.get(plugin).is_none() {
             return Err(RegistryError::UnknownPlugin(plugin.to_string()));
+        }
+        let owner = self.owner(plugin);
+        for id in ids {
+            ids::check(id, owner).map_err(RegistryError::Namespace)?;
+        }
+        Ok(())
+    }
+
+    fn admission(
+        &self,
+        plugin: &str,
+        kind: RegistrationKind,
+        ids: &[String],
+        contested: bool,
+    ) -> Result<(), RegistryError> {
+        let Some(entry) = self.get(plugin) else {
+            return Err(RegistryError::UnknownPlugin(plugin.to_string()));
+        };
+        // Prima di ogni altra domanda, e prima del ramo che lascia passare le
+        // specie che non nominano niente: un revocato non registra **nessuna**
+        // specie, e un handler di eventi è codice che gira quanto una view.
+        if !entry.trust.runs() {
+            return Err(RegistryError::Revoked(plugin.to_string()));
         }
         if !kind.names() {
             return Ok(());
@@ -301,6 +424,9 @@ impl PluginRegistry {
         let owner = self.owner(plugin);
         for id in ids {
             ids::check(id, owner).map_err(RegistryError::Namespace)?;
+            if !contested {
+                continue;
+            }
             if let Some(incumbent) = self.owner_of(kind, id) {
                 return Err(RegistryError::Claimed {
                     kind,
@@ -326,6 +452,26 @@ impl PluginRegistry {
             });
             return;
         }
+        for id in ids {
+            entry.registrations.push(Registration {
+                kind,
+                id: id.clone(),
+            });
+        }
+    }
+
+    /// Rifà da capo le registrazioni di una specie fatte da un plugin.
+    ///
+    /// È l'altra metà di [`admit_refreshing`](PluginRegistry::admit_refreshing):
+    /// chi cambia idea su ciò che offre cambia anche ciò che l'inventario dice
+    /// di lui, o il §7.6 racconterebbe la registrazione invece dello stato. Un
+    /// elenco vuoto è una risposta — un provider che non offre più niente non
+    /// lascia una riga di ricordo.
+    pub fn resettle(&mut self, plugin: &str, kind: RegistrationKind, ids: &[String]) {
+        let Some(entry) = self.entries.iter_mut().find(|e| e.manifest.id == plugin) else {
+            return;
+        };
+        entry.registrations.retain(|r| r.kind != kind);
         for id in ids {
             entry.registrations.push(Registration {
                 kind,

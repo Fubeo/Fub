@@ -83,22 +83,32 @@ fn documents(
     let router = Router { indexes };
 
     // Pushdown intero: una sola clausola, un solo valutatore, e niente che
-    // questo modulo debba aggiungere dopo. È il percorso della ricerca pura, ed
-    // è quello che tiene la paginazione alla sorgente (tantivy pagina meglio di
-    // chi lo interroga: la pagina 40 non costa come le prime 40 insieme).
-    if let Some(target) = sole_evaluator(indexes, matching.predicates()) {
-        let pushable = target == Target::Core || (sort.is_none() && select.is_none());
-        if pushable {
-            let index = indexes
-                .at(target)
-                .expect("il bersaglio viene dalla tabella delle rotte");
-            return index.query(IndexQuery::Documents {
-                matching,
-                sort,
-                select,
-                page,
-            });
-        }
+    // questo modulo debba aggiungere dopo. Vale **solo verso il core**, e la
+    // restrizione è la coda di [`properties::finish`].
+    //
+    // La coda di una risposta a `Documents` — ordine, colonne, finestra — è del
+    // contratto (decisione 0020): a pari rilevanza la parità si rompe per
+    // `DocId`, perché serve un ordine totale e stabile o una risposta paginata
+    // ripete e salta righe fra una pagina e l'altra. Il core quella coda la
+    // applica (è `finish` che chiama); un indice di terzi no — tantivy rompe la
+    // parità per indirizzo di segmento, che non è l'ordine dei `DocId` e cambia
+    // quando i segmenti si fondono. Consegnargli anche la **finestra** vorrebbe
+    // dire lasciargli scegliere quali righe stanno nella pagina con un ordine
+    // che il contratto non promette, e la divergenza sarebbe muta.
+    //
+    // Il prezzo è che una ricerca pura materializza tutti i suoi risultati
+    // invece di farsi impaginare da tantivy. Non è un costo nuovo: è quello che
+    // ogni domanda mista già paga, perché `Router::ask` chiede senza finestra.
+    if sole_evaluator(indexes, matching.predicates()) == Some(Target::Core) {
+        let index = indexes
+            .at(Target::Core)
+            .expect("il bersaglio viene dalla tabella delle rotte");
+        return index.query(IndexQuery::Documents {
+            matching,
+            sort,
+            select,
+            page,
+        });
     }
 
     let matches = router.expr(&matching)?;
@@ -242,8 +252,13 @@ fn resolve_for(
     let Some(expr) = query.expression() else {
         return Ok(query);
     };
+    // «Ogni documento» si consegna **detto in quel modo**, non con l'albero da
+    // cui è venuto: una clausola vuota in OR rende l'espressione tutta, ma le
+    // foglie che le stanno accanto restano di chi le sa valutare, e il
+    // destinatario si troverebbe a dover valutare una foglia che non ha
+    // dichiarato. Rispondeva `Unserved` a una domanda la cui risposta è tutto.
     if expr.is_everything() {
-        return Ok(query);
+        return Ok(query.with_expression(QueryExpr::all()));
     }
     let router = Router { indexes };
     let mut resolved = QueryExpr {

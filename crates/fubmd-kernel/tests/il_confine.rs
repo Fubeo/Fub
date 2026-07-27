@@ -18,13 +18,15 @@
 //! ogni test che c'era già — `provider_reentrancy`, `index_feeding`,
 //! `view_invalidation` girano tutti sullo stesso `Workspace::lend`.
 
+use std::sync::{Arc, Mutex};
+
 use camino::Utf8PathBuf;
 use fubmd_abi::error::PluginError;
-use fubmd_abi::model::DocId;
+use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::options::permission;
 use fubmd_abi::traits::{
-    HostApi, PluginManifest, PluginPermissions, ReadApi, ServiceProvider, ViewInstance,
-    ViewProvider, ViewSpec, ViewSurface,
+    HostApi, IndexProvider, IndexQuery, IndexResult, PluginManifest, PluginPermissions, QueryKind,
+    QueryRoute, ReadApi, ServiceProvider, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_kernel::{
@@ -61,6 +63,79 @@ impl ViewProvider for Vista {
         _host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
         Ok(ViewUpdate::None)
+    }
+}
+
+/// Una view che **cambia idea** su ciò che offre: serve a `refresh_specs`.
+#[derive(Clone)]
+struct VistaMutevole(Arc<Mutex<Vec<String>>>);
+
+impl VistaMutevole {
+    fn che_offre(ids: &[&str]) -> Self {
+        VistaMutevole(Arc::new(Mutex::new(
+            ids.iter().map(|id| id.to_string()).collect(),
+        )))
+    }
+
+    /// Da adesso dichiara questi, e il kernel non lo sa finché non glielo si
+    /// chiede: è l'altra metà di «le spec sono dato di registrazione».
+    fn adesso_dice(&self, ids: &[&str]) {
+        *self.0.lock().expect("lock") = ids.iter().map(|id| id.to_string()).collect();
+    }
+}
+
+impl ViewProvider for VistaMutevole {
+    fn views(&self) -> Vec<ViewSpec> {
+        self.0
+            .lock()
+            .expect("lock")
+            .iter()
+            .map(|id| ViewSpec::new(id, id, ViewSurface::RightSidebar))
+            .collect()
+    }
+
+    fn render_view(
+        &self,
+        _instance: &ViewInstance,
+        _host: &dyn ReadApi,
+    ) -> Result<UiNode, PluginError> {
+        Ok(UiNode::text("niente"))
+    }
+
+    fn on_action(
+        &mut self,
+        _instance: &ViewInstance,
+        _action: UiAction,
+        _host: &mut dyn HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        Ok(ViewUpdate::None)
+    }
+}
+
+/// Un indice che non indicizza niente: serve a **rivendicare** una rotta.
+struct Indice(&'static str);
+
+impl IndexProvider for Indice {
+    fn routes(&self) -> Vec<QueryRoute> {
+        vec![QueryRoute::Query(QueryKind::Custom(self.0.to_string()))]
+    }
+
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn on_document_indexed(&mut self, _doc: &DocumentModel) {}
+
+    fn on_document_removed(&mut self, _id: &DocId) {}
+
+    fn reconcile(&mut self, _ids: &[DocId]) {}
+
+    fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
+        Ok(IndexResult::Custom(serde_json::Value::Null))
     }
 }
 
@@ -273,6 +348,185 @@ fn replacing_is_asked_for_by_name_and_leaves_one_owner() {
         vec!["fubmd.due".to_string()],
         "e l'inventario non tiene il ricordo di chi è stato sostituito"
     );
+}
+
+#[test]
+fn a_refused_replacement_does_not_take_away_the_one_who_was_there() {
+    let (_dir, mut ws) = vault();
+    ws.register_core_feature("fubmd.backlinks", "Backlinks")
+        .expect("il core");
+    ws.register_view_provider("fubmd.backlinks", Box::new(Vista("backlinks")))
+        .expect("registrata");
+    ws.register_plugin(
+        PluginManifest::new("com.acme.tasks", "Tasks"),
+        Trust::Community,
+    )
+    .expect("dichiarato");
+
+    // Una sostituzione ha due effetti — togliere chi c'era, mettersi al suo
+    // posto — e il permesso va chiesto prima di **entrambi**. Chiesto in mezzo,
+    // il rifiuto lasciava il vault senza la view del core: il varco era che un
+    // terzo poteva cancellare un id che non poteva nemmeno nominare.
+    let err = ws
+        .replace_view_provider("com.acme.tasks", Box::new(Vista("backlinks")))
+        .expect_err("un terzo non nomina `backlinks` nudo, nemmeno per sostituirla");
+    assert!(
+        matches!(&err, RegistryError::Namespace(_)),
+        "atteso un rifiuto sui nomi, trovato {err:?}"
+    );
+    assert_eq!(
+        ws.views().len(),
+        1,
+        "un rifiuto vuol dire «non è registrato», non «l'altro è sparito»"
+    );
+
+    // E lo stesso per chi non si è dichiarato affatto: è l'altro modo in cui
+    // `admit` dice di no, e da fuori il danno sarebbe stato identico.
+    let err = ws
+        .replace_view_provider("mai.dichiarato", Box::new(Vista("backlinks")))
+        .expect_err("un id non dichiarato non registra niente");
+    assert!(
+        matches!(&err, RegistryError::UnknownPlugin(_)),
+        "atteso un id sconosciuto, trovato {err:?}"
+    );
+    assert_eq!(ws.views().len(), 1, "e la view del core è ancora sua");
+    assert_eq!(
+        ws.plugins()
+            .iter()
+            .find(|p| p.id == "fubmd.backlinks")
+            .expect("il core è nell'inventario")
+            .registrations
+            .len(),
+        1,
+        "l'inventario deve dire ancora che `backlinks` è del core"
+    );
+}
+
+#[test]
+fn a_refused_index_replacement_does_not_leave_the_route_without_an_owner() {
+    let (_dir, mut ws) = vault();
+    ws.register_core_feature("fubmd.tasks", "Tasks")
+        .expect("il core");
+    ws.register_index_provider("fubmd.tasks", Box::new(Indice("fubmd:tasks")))
+        .expect("registrato");
+    ws.register_plugin(
+        PluginManifest::new("com.acme.tasks", "Tasks"),
+        Trust::Community,
+    )
+    .expect("dichiarato");
+
+    // Qui il danno era più silenzioso che per le view: la rotta restava servita
+    // da chi c'era, e a perdersi era la riga dell'inventario — cioè il §7.6
+    // diceva che `fubmd:tasks` non è di nessuno mentre qualcuno rispondeva.
+    let err = ws
+        .replace_index_provider("com.acme.tasks", Box::new(Indice("fubmd:tasks")))
+        .expect_err("il namespace `fubmd` non è di un terzo");
+    assert!(
+        matches!(&err, RegistryError::Namespace(_)),
+        "atteso un rifiuto sui nomi, trovato {err:?}"
+    );
+    assert_eq!(
+        ws.plugins()
+            .iter()
+            .find(|p| p.id == "fubmd.tasks")
+            .expect("il core è nell'inventario")
+            .registrations
+            .len(),
+        1,
+        "l'inventario deve dire ancora che `fubmd:tasks` è del core"
+    );
+}
+
+#[test]
+fn changing_ones_mind_does_not_get_around_the_rule_of_names() {
+    let (_dir, mut ws) = vault();
+    ws.register_core_feature("fubmd.uno", "Uno").expect("uno");
+    ws.register_view_provider("fubmd.uno", Box::new(Vista("pannello")))
+        .expect("il core");
+    ws.register_plugin(
+        PluginManifest::new("com.acme.tasks", "Tasks"),
+        Trust::Community,
+    )
+    .expect("dichiarato");
+
+    let acme = VistaMutevole::che_offre(&["com.acme.tasks:board"]);
+    ws.register_view_provider("com.acme.tasks", Box::new(acme.clone()))
+        .expect("il suo namespace è suo");
+
+    // Registrarsi con un id ammissibile e poi dichiararne un altro era l'ultimo
+    // modo di aggirare la regola dei nomi: le spec si rileggevano e basta.
+    acme.adesso_dice(&["board"]);
+    let err = ws
+        .refresh_specs("com.acme.tasks")
+        .expect_err("un id nudo resta inammissibile anche a chi cambia idea");
+    assert!(
+        matches!(&err, RegistryError::Namespace(_)),
+        "atteso un rifiuto sui nomi, trovato {err:?}"
+    );
+
+    // E il nome di **qualcun altro** resta suo anche quando chi lo chiede
+    // potrebbe nominarlo: fra due feature del core la regola dei nomi non dice
+    // niente, e ciò che decide è la contesa.
+    ws.register_core_feature("fubmd.due", "Due").expect("due");
+    let due = VistaMutevole::che_offre(&["sua"]);
+    ws.register_view_provider("fubmd.due", Box::new(due.clone()))
+        .expect("registrata");
+    due.adesso_dice(&["pannello"]);
+    let err = ws
+        .refresh_specs("fubmd.due")
+        .expect_err("`pannello` è di `fubmd.uno`");
+    assert!(
+        matches!(&err, RegistryError::Claimed { incumbent, .. } if incumbent == "fubmd.uno"),
+        "atteso un id già rivendicato, trovato {err:?}"
+    );
+
+    // Un rifiuto non cambia niente: né le spec, né l'inventario.
+    let mut viste = ws.views().iter().map(|s| s.id.clone()).collect::<Vec<_>>();
+    viste.sort();
+    assert_eq!(viste, vec!["com.acme.tasks:board", "pannello", "sua"]);
+}
+
+#[test]
+fn the_inventory_follows_a_provider_that_changes_its_mind() {
+    let (_dir, mut ws) = vault();
+    ws.register_core_feature("fubmd.uno", "Uno").expect("uno");
+    let provider = VistaMutevole::che_offre(&["prima"]);
+    ws.register_view_provider("fubmd.uno", Box::new(provider.clone()))
+        .expect("registrata");
+
+    // Ne aggiunge una e ne toglie una: l'inventario del §7.6 deve dire lo
+    // **stato**, non la registrazione — o «cosa è attivo» risponderebbe con
+    // ciò che era attivo il primo giorno.
+    provider.adesso_dice(&["seconda", "terza"]);
+    ws.refresh_specs("fubmd.uno").expect("sono nomi suoi");
+
+    let ids = |ws: &Workspace| {
+        let mut ids = ws
+            .plugins()
+            .iter()
+            .find(|p| p.id == "fubmd.uno")
+            .expect("nell'inventario")
+            .registrations
+            .iter()
+            .filter(|r| r.kind == RegistrationKind::View)
+            .map(|r| r.id.clone())
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids
+    };
+    assert_eq!(ids(&ws), vec!["seconda", "terza"]);
+
+    // E il nome lasciato è **libero**: se l'inventario tenesse il ricordo,
+    // nessun altro potrebbe più prenderlo e nessuno saprebbe perché.
+    ws.register_core_feature("fubmd.due", "Due").expect("due");
+    ws.register_view_provider("fubmd.due", Box::new(Vista("prima")))
+        .expect("`prima` non è più di nessuno");
+
+    // Un provider che non offre più niente non lascia una riga di ricordo.
+    provider.adesso_dice(&[]);
+    ws.refresh_specs("fubmd.uno")
+        .expect("non offrire è una scelta");
+    assert!(ids(&ws).is_empty());
 }
 
 // ---------------------------------------------------------------------------
