@@ -44,10 +44,13 @@ undo, e due di loro non si possono comporre — è il prerequisito silenzioso de
 
 Dal quarto giro se ne aggiungono due dello stesso peso, e vanno sopra tutte le
 altre perché non allargano una capacità: ne rendono una **inesprimibile**.
-**§9.1 (il job che vede il vault)**: finché il lavoro lungo non può leggere il
-vault, i capitoli 17, 18, 22 e 19.4 — cioè il volume maggiore di FEATURES dopo
-l'11 e il 12 — non hanno un posto dove girare, e l'unica alternativa è farli nel
-giro sincrono, con il workspace preso in esclusiva. ~~**§3.1 (il parser
+~~**§9.1 (il job che vede il vault)**~~ — **chiusa** dalla
+[decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), e resta qui
+perché era la voce di cui si poteva dire che un quinto di FEATURES non aveva un
+posto dove girare: i capitoli 17, 18, 22 e 19.4 — il volume maggiore dopo l'11 e
+il 12 — camminano il vault, e l'unica alternativa era farlo nel giro sincrono,
+con il workspace preso in esclusiva. Adesso un job ha l'`HostApi`, e se lo prende
+una chiamata alla volta: chi salva aspetta una lettura invece di tutte. ~~**§3.1 (il parser
 estendibile)**~~ — **chiusa** dalla [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md),
 e resta qui perché era la sola voce di cui si potesse dire *«l'invariante del
 progetto è già falsa»*: un'estensione di sintassi non poteva essere un plugin, e

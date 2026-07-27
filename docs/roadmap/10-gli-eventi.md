@@ -61,11 +61,13 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
       Resta che il ponte non ha una politica sua — coalescing per tipo, finestra
       temporale, tetto oltre il quale si degrada a "riconcilia tutto", che è poi
       ciò che `Event::Overflow` già significa per gli handler.
-- [ ] Va con §9.1 e §9.3 (il lavoro lungo emette progresso: sarà il canale più
-      caldo di tutti — il §8.3 lo nominava, ma la
+- [ ] Va con §9.3 (il lavoro lungo emette progresso: sarà il canale più caldo
+      di tutti — il §8.3 lo nominava, ma la
       [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha
-      chiuso il lock e lasciato il lavoro lungo a quelle due) e §10.3 (il centro
-      attività è il suo primo cliente).
+      chiuso il lock e lasciato il lavoro lungo alla firma dei job, adesso chiusa
+      con la [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), e al
+      runner che ancora non c'è) e §10.3 (il centro attività è il suo primo
+      cliente).
 
 ### 10.3 Notifiche e attività in background
 
@@ -88,9 +90,10 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
       vanno unite, ma nemmeno prese nell'ordine sbagliato.
 - [ ] **Centro attività**: job in corso, progresso, cancellazione (24.1). È la
       terza destinazione del secondo punto del §8.3 — «lavoro lungo fuori dal
-      lock, con eventi di progresso e un centro attività» — di cui il §9.1 tiene
-      la firma e il §9.3 il runner: qui sta il posto in cui l'utente lo vede e lo
-      ferma. Il §8.3 è chiuso con la
+      lock, con eventi di progresso e un centro attività» — di cui la
+      [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) ha
+      chiuso la firma e il §9.3 tiene il runner: qui sta il posto in cui l'utente
+      lo vede e lo ferma. Il §8.3 è chiuso con la
       [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md), che
       il lavoro lungo non lo ha spostato — ha reso misurabile quanto costa
       tenerlo dov'è.

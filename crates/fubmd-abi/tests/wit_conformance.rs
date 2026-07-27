@@ -4404,6 +4404,7 @@ fn conform(source: &str) -> Result<(), String> {
                 &'static dyn Plugin,
                 &'static str,
                 serde_json::Value,
+                Host,
             ) -> Result<serde_json::Value, PluginError>,
         &["job", "payload"],
     );

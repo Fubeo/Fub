@@ -32,6 +32,14 @@
 //!   Per l'app è il webview; per una CLI è stdout; per gli e2e è niente.
 //! - [`Host::open`] — chi decide *quando* si apre. L'host non apre da sé.
 //!
+//! ## Le capacità di un lavoro lungo
+//!
+//! [`JobHost`] è l'`HostApi` che un job riceve (§9.1,
+//! [decisione 0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md)),
+//! e sta qui per la stessa ragione del `RwLock`: il kernel non sa che esiste un
+//! lock, e un host che ne prende uno **per chiamata** può nascere solo dove il
+//! lock è di casa.
+//!
 //! ## Cosa NON è ancora qui
 //!
 //! Il §8.2 elencava anche il registry del §9.3, il runner dei job e lo storage
@@ -39,14 +47,18 @@
 //! oggi una tabella cablata a mano, ed è esattamente la tabella che il §9.3
 //! sostituirà con un registry che monta un bundle a partire dal suo manifest.
 //! Averla in un posto solo è la precondizione di quel lavoro, non il suo
-//! rimpiazzo.
+//! rimpiazzo. Il runner resta del §9.3 — un pool, e la cancellazione che va
+//! disegnata **con** lui; [`JobHost`] è ciò che quel pool avrà da passare al
+//! job, e che prima non c'era.
 
+pub mod jobs;
 pub mod mount;
 pub mod records;
 pub mod session;
 pub mod settings;
 pub mod watcher;
 
+pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, VaultInfo, WorkspaceMeta};
 pub use session::{doc_id, EventSink, Host, VaultSession};

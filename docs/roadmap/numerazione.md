@@ -63,6 +63,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.19 · §8.1 | [0022 — Il kernel a pezzi](../decisions/0022-il-kernel-a-pezzi.md) |
 | §2.15 · §8.2 | [0023 — Chi monta il kernel](../decisions/0023-chi-monta-il-kernel.md) |
 | §2.4 · §8.3 | [0024 — Il lock a grana fine](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) |
+| §1.21 · §9.1 | [0027 — Il lavoro lungo vede il vault](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -90,7 +91,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §1.11 | **§12.2** | Errori tipizzati al confine, non `String` |
 | §1.17 | **§13.3** | L'undo non ha un proprietario |
 | §1.19 | **§10.1** | L'abbonamento agli eventi non filtra |
-| §1.21 | **§9.1** | Il lavoro lungo non vede il vault |
 | §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §2.1 | **§15.1** | Astrazione sullo storage |

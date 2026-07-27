@@ -141,8 +141,10 @@ kernel.
       salvata non chiedono la stessa cosa a chi legge), il **soggetto** (quale
       documento, quale plugin — l'`Origin` c'è già e porta l'attore), e se
       `progress` sia la stessa variante con un contatore o una seconda. Il §10.3
-      (centro notifiche) e il §24.1 (progresso) sono i suoi due consumatori, e il
-      §9.1 (i job) è ciò che rende il secondo non vuoto.
+      (centro notifiche) e il §24.1 (progresso) sono i suoi due consumatori, e i
+      job sono ciò che rende il secondo non vuoto — dalla
+      [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) un job
+      cammina il vault davvero, quindi ha davvero un progresso da raccontare.
 
 *Sblocca:* 10.5 (notification center, alert stale notes / broken links / sync
 errors / backup errors / plugin errors — ~28 voci che oggi non hanno una
