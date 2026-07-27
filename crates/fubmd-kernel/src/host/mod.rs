@@ -4,10 +4,10 @@
 //! (col doppio in memoria delle feature) di cui ventidue non facevano altro
 //! che dire di no. Il §7.1 li ha divisi in tre cose che sono davvero tre:
 //!
-//! - [`KernelHost`] — l'unica implementazione **vera**. Presta
+//! - `KernelHost` (interno) — l'unica implementazione **vera**. Presta
 //!   `&mut Workspace`, fa le cose, e le dieci famiglie di capacità le
 //!   implementa perché le sa fare.
-//! - [`ReadHost`] — il percorso di **lettura**, che presta `&Workspace` e non
+//! - `ReadHost` (interno) — il percorso di **lettura**, che presta `&Workspace` e non
 //!   `&mut`. Implementa le quattro famiglie di lettura e **non le altre**: non
 //!   è un host mutilato con dodici `unreachable!()`, è un tipo che non
 //!   soddisfa [`HostApi`](fubmd_abi::traits::HostApi) e soddisfa

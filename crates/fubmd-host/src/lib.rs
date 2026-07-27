@@ -49,7 +49,7 @@
 //! registrazione ([decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md)),
 //! quindi un plugin non può registrarsi da sé — qualcuno che ha un
 //! `&mut Workspace` deve leggergli il manifest, dichiararlo, attivarlo e
-//! registrare ciò che offre. [`mount`] è la tabella delle otto righe ufficiali,
+//! registrare ciò che offre. [`mount()`] è la tabella delle otto righe ufficiali,
 //! e ogni riga è un [`Bundle`] come lo sarà un plugin di terzi.
 //!
 //! ## Chi esegue il lavoro lungo

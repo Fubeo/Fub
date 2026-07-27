@@ -129,6 +129,17 @@ fn due_letture_stanno_nel_workspace_insieme() {
 /// rosso su una piattaforma, non sarebbe una fiacchezza del test: sarebbe
 /// quella piattaforma che dice di non avere la proprietà, e a quel punto la
 /// coda equa va scritta da noi.
+///
+/// **L'altro modo di diventare rosso è una macchina occupata**, e non si
+/// distingue dal primo leggendo il numero: `lettori() * 2` thread in ciclo
+/// stretto contro una CI che sta già compilando altro possono far aspettare una
+/// `write()` per ragioni di scheduler e non di lock. La distinzione la fa il
+/// **secondo giro**: rilanciato da solo su una macchina scarica
+/// (`cargo test -p fubmd-host --test concorrenza`), un rosso che resta è la
+/// proprietà che non c'è più — un rosso che sparisce era il vicino di banco.
+/// La soglia non va alzata per farlo tacere: 50 ms sono già 150 volte l'attesa
+/// che il caso buono misura, e alzarla vuol dire smettere di vedere il caso
+/// cattivo (147 ms è il *migliore* dei prestiti esclusivi misurati).
 #[test]
 fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
     let v = vault(120);
