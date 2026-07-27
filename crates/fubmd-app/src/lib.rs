@@ -29,13 +29,24 @@ use fubmd_features::VersionRef;
 use fubmd_host::{doc_id, EventSink, Host};
 use fubmd_kernel::{RenderedDocument, TrashEntry};
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 // I tre record che attraversano l'IPC vivono nell'host — un'API locale
 // risponderebbe con gli stessi — e l'app li ri-esporta, perché è lei a farli
 // attraversare il confine: il mirror TS e la sua fixture
 // (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
 pub use fubmd_host::{EmbedContent, VaultInfo, WorkspaceMeta};
+
+/// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
+/// `frontend/src/host/contract.ts`.
+///
+/// Il "corrente" è una comodità della shell e non un'assunzione del backend:
+/// serve a chi non nomina un vault, e chi ne ha due davanti li nomina.
+#[derive(serde::Serialize)]
+pub struct OpenVaults {
+    pub roots: Vec<String>,
+    pub current: Option<String>,
+}
 
 /// Il ponte eventi verso il webview: l'unica implementazione di [`EventSink`]
 /// che ha bisogno di Tauri, ed è per questo che sta qui e non nell'host.
@@ -65,6 +76,43 @@ fn open_vault(host: State<Host>, path: String) -> Result<VaultInfo, String> {
     host.open(&Utf8PathBuf::from(path))
 }
 
+// --- i vault aperti (§9.6) -------------------------------------------------
+//
+// L'host tiene una **mappa** di sessioni e sa qual è la corrente: ogni comando
+// qui sotto accetta un `vault` opzionale, e chi non lo passa parla con la
+// corrente — che è ciò che la shell fa oggi, con una finestra sola. I tre
+// comandi che seguono sono il minimo che serve a chi vorrà fare altrimenti: sapere
+// quali sono aperti, sceglierne uno, e chiuderne uno senza chiudere l'app.
+
+/// I vault aperti, e quale è il corrente.
+#[tauri::command]
+fn list_vaults(host: State<Host>) -> OpenVaults {
+    OpenVaults {
+        roots: host.vaults().into_iter().map(|r| r.to_string()).collect(),
+        current: host.current().map(|r| r.to_string()),
+    }
+}
+
+/// Rende corrente un vault già aperto. Aprirne uno nuovo lo fa `open_vault`,
+/// che lo rende corrente da sé.
+#[tauri::command]
+fn set_current_vault(host: State<Host>, path: String) -> Result<(), String> {
+    host.set_current(&Utf8PathBuf::from(path))
+}
+
+/// Chiude un vault: flush, `close` degli indici, disattivazione dei plugin
+/// (§9.5). Restituisce **ciò che è andato storto chiudendo**, che non è un
+/// motivo per non chiudere: la lista è quasi sempre vuota, e quando non lo è
+/// dice cosa non è diventato durevole.
+#[tauri::command]
+fn close_vault(host: State<Host>, path: String) -> Result<Vec<String>, String> {
+    Ok(host
+        .close_vault(&Utf8PathBuf::from(path))?
+        .into_iter()
+        .map(|e| e.to_string())
+        .collect())
+}
+
 /// Path del vault da aprire all'avvio (comodo per sviluppo/screenshot):
 /// il frontend lo legge e apre il vault senza passare dal dialog.
 #[tauri::command]
@@ -73,22 +121,27 @@ fn initial_vault() -> Option<String> {
 }
 
 #[tauri::command]
-fn list_documents(host: State<Host>) -> Result<Vec<String>, String> {
-    let ws = host.workspace()?;
+fn list_documents(host: State<Host>, vault: Option<String>) -> Result<Vec<String>, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.documents().into_iter().map(|d| d.0).collect())
 }
 
 #[tauri::command]
-fn read_document(host: State<Host>, id: String) -> Result<String, String> {
-    let ws = host.workspace()?;
+fn read_document(host: State<Host>, id: String, vault: Option<String>) -> Result<String, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     ws.read_source(&doc_id(&id)?).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn write_document(host: State<Host>, id: String, source: String) -> Result<(), String> {
-    let ws = host.workspace()?;
+fn write_document(
+    host: State<Host>,
+    id: String,
+    source: String,
+    vault: Option<String>,
+) -> Result<(), String> {
+    let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     ws.write_document(&doc_id(&id)?, &source)
         .map_err(|e| e.to_string())
@@ -110,8 +163,8 @@ fn write_document(host: State<Host>, id: String, source: String) -> Result<(), S
 // risposta è un nome.
 
 #[tauri::command]
-fn list_trash(host: State<Host>) -> Result<Vec<TrashEntry>, String> {
-    let ws = host.workspace()?;
+fn list_trash(host: State<Host>, vault: Option<String>) -> Result<Vec<TrashEntry>, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     ws.list_trash().map_err(|e| e.to_string())
 }
@@ -124,8 +177,12 @@ fn list_trash(host: State<Host>) -> Result<Vec<TrashEntry>, String> {
 /// esce dallo stesso codice che nomina le note nuove. Non prenota nulla — il
 /// kernel resta il backstop se il nome viene preso nel frattempo.
 #[tauri::command]
-fn propose_free_name(host: State<Host>, id: String) -> Result<String, String> {
-    let ws = host.workspace()?;
+fn propose_free_name(
+    host: State<Host>,
+    id: String,
+    vault: Option<String>,
+) -> Result<String, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.free_name(&DocId::new(id)).0)
 }
@@ -137,8 +194,9 @@ fn render_embed(
     host: State<Host>,
     page: String,
     heading: Option<String>,
+    vault: Option<String>,
 ) -> Result<EmbedContent, String> {
-    let ws = host.workspace()?;
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     let (doc_id, content) = ws
         .render_embed(&page, heading.as_deref())
@@ -150,8 +208,12 @@ fn render_embed(
 }
 
 #[tauri::command]
-fn render_preview(host: State<Host>, id: String) -> Result<RenderedDocument, String> {
-    let ws = host.workspace()?;
+fn render_preview(
+    host: State<Host>,
+    id: String,
+    vault: Option<String>,
+) -> Result<RenderedDocument, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     ws.render_preview(&DocId::new(id))
         .map_err(|e| e.to_string())
@@ -178,8 +240,9 @@ fn render_preview(host: State<Host>, id: String) -> Result<RenderedDocument, Str
 fn set_active_context(
     host: State<Host>,
     context: Option<ViewContext>,
+    vault: Option<String>,
 ) -> Result<Vec<String>, String> {
-    let ws = host.workspace()?;
+    let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     Ok(ws.set_active_context(context))
 }
@@ -190,8 +253,8 @@ fn set_active_context(
 /// ogni view nel contenitore del suo `placement` e la ridisegna quando arriva
 /// un evento della sua maschera `refresh`. Una view di plugin compare da sola.
 #[tauri::command]
-fn list_views(host: State<Host>) -> Result<Vec<ViewSpec>, String> {
-    let ws = host.workspace()?;
+fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.views())
 }
@@ -210,8 +273,9 @@ fn render_view(
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
+    vault: Option<String>,
 ) -> Result<UiNode, String> {
-    let ws = host.workspace()?;
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     ws.render_view(&istanza(view, instance, params))
         .map_err(|e| e.to_string())
@@ -235,8 +299,9 @@ fn view_action(
     action: String,
     payload: Option<serde_json::Value>,
     fields: Option<Vec<FieldValue>>,
+    vault: Option<String>,
 ) -> Result<ViewUpdate, String> {
-    let ws = host.workspace()?;
+    let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     ws.view_action(
         &istanza(view, instance, params),
@@ -276,8 +341,8 @@ fn istanza(
 /// le stesse informazioni che leggerebbero una CLI (27.1) o un chiamante
 /// programmatico (22.4) — questo comando IPC è solo il primo dei suoi clienti.
 #[tauri::command]
-fn list_commands(host: State<Host>) -> Result<Vec<CommandSpec>, String> {
-    let ws = host.workspace()?;
+fn list_commands(host: State<Host>, vault: Option<String>) -> Result<Vec<CommandSpec>, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.commands())
 }
@@ -302,8 +367,9 @@ fn invoke_command(
     command: String,
     args: Option<serde_json::Value>,
     mode: Option<InvokeMode>,
+    vault: Option<String>,
 ) -> Result<CommandOutcome, String> {
-    let ws = host.workspace()?;
+    let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     ws.invoke_command(
         &command,
@@ -328,8 +394,12 @@ fn invoke_command(
 /// vieta i comandi bespoke non deve più dire di no a feature che non hanno altra
 /// strada.
 #[tauri::command]
-fn query_index(host: State<Host>, query: IndexQuery) -> Result<IndexResult, String> {
-    let ws = host.workspace()?;
+fn query_index(
+    host: State<Host>,
+    query: IndexQuery,
+    vault: Option<String>,
+) -> Result<IndexResult, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     ws.query_index(query).map_err(|e| e.to_string())
 }
@@ -340,18 +410,32 @@ fn query_index(host: State<Host>, query: IndexQuery) -> Result<IndexResult, Stri
 // e l'handler registrato — è lavoro dell'host: qui restano le tre firme IPC.
 
 #[tauri::command]
-fn list_versions(host: State<Host>, id: String) -> Result<Vec<VersionRef>, String> {
-    host.list_versions(&DocId::new(id))
+fn list_versions(
+    host: State<Host>,
+    id: String,
+    vault: Option<String>,
+) -> Result<Vec<VersionRef>, String> {
+    host.list_versions(vault.as_deref(), &DocId::new(id))
 }
 
 #[tauri::command]
-fn read_version(host: State<Host>, id: String, ts: u64) -> Result<String, String> {
-    host.read_version(&DocId::new(id), ts)
+fn read_version(
+    host: State<Host>,
+    id: String,
+    ts: u64,
+    vault: Option<String>,
+) -> Result<String, String> {
+    host.read_version(vault.as_deref(), &DocId::new(id), ts)
 }
 
 #[tauri::command]
-fn restore_version(host: State<Host>, id: String, ts: u64) -> Result<(), String> {
-    host.restore_version(&DocId::new(id), ts)
+fn restore_version(
+    host: State<Host>,
+    id: String,
+    ts: u64,
+    vault: Option<String>,
+) -> Result<(), String> {
+    host.restore_version(vault.as_deref(), &DocId::new(id), ts)
 }
 
 // --- organizzazione del vault ----------------------------------------------
@@ -360,18 +444,26 @@ fn restore_version(host: State<Host>, id: String, ts: u64) -> Result<(), String>
 // restano le due firme IPC.
 
 #[tauri::command]
-fn read_workspace_meta(host: State<Host>) -> Result<WorkspaceMeta, String> {
-    host.read_meta()
+fn read_workspace_meta(host: State<Host>, vault: Option<String>) -> Result<WorkspaceMeta, String> {
+    host.read_meta(vault.as_deref())
 }
 
 #[tauri::command]
-fn write_workspace_meta(host: State<Host>, meta: WorkspaceMeta) -> Result<(), String> {
-    host.write_meta(&meta)
+fn write_workspace_meta(
+    host: State<Host>,
+    meta: WorkspaceMeta,
+    vault: Option<String>,
+) -> Result<(), String> {
+    host.write_meta(vault.as_deref(), &meta)
 }
 
 #[tauri::command]
-fn resolve_link(host: State<Host>, page: String) -> Result<Option<String>, String> {
-    let ws = host.workspace()?;
+fn resolve_link(
+    host: State<Host>,
+    page: String,
+    vault: Option<String>,
+) -> Result<Option<String>, String> {
+    let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.resolve_link(&page).map(|d| d.0))
 }
@@ -392,6 +484,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_vault,
+            close_vault,
+            list_vaults,
+            set_current_vault,
             initial_vault,
             list_documents,
             read_document,
@@ -414,6 +509,23 @@ pub fn run() {
             read_workspace_meta,
             write_workspace_meta,
         ])
-        .run(tauri::generate_context!())
-        .expect("errore durante l'avvio di FubMD");
+        .build(tauri::generate_context!())
+        .expect("errore durante l'avvio di FubMD")
+        // **Chi chiude sa che sta chiudendo** (§9.5). Il kernel non può saperlo:
+        // non sa quando finisce un lotto, e finché l'unico chiamante di
+        // `flush_indexes` era il callback del watcher, la durabilità di un
+        // indice dipendeva da un componente opzionale. Qui invece il fatto è
+        // certo, ed è l'ultimo momento in cui si può dire a qualcuno di
+        // chiudersi: `Host::close` fa il giro su ogni vault aperto.
+        //
+        // `Exit` e non `ExitRequested`: il secondo si può annullare, e chiudere
+        // gli indici di un vault che poi resta aperto sarebbe peggio che non
+        // chiuderli.
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                for e in app.state::<Host>().close() {
+                    eprintln!("chiusura del vault: {e}");
+                }
+            }
+        });
 }

@@ -694,7 +694,8 @@ pub trait EventHandler: Send + Sync {
 `Actor { User, Watcher, Kernel, Plugin { id } }`,
 `Event { VaultOpened { root }, DocumentChanged { id }, DocumentRemoved { id },
 DocumentRenamed { from, to }, IndexUpdated, JobDone { id, job, result },
-Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed } }`,
+Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed },
+ViewInvalidated { view, instance }, VaultClosed { root } }`,
 `EventKind` (stesso set, senza payload), `EventMask(Vec<EventKind>)`.
 
 - `Origin` dice **chi ha chiesto** l'operazione ([decisione 0012](../decisions/0012-origine-degli-eventi.md)), non chi l'ha eseguita:
@@ -714,6 +715,18 @@ Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed } }
   verificabile con `EventMask::misses_batches()`. Un lotto **non è una
   transazione**: non annulla niente, e chi lo ha aperto scopre cosa non è andato
   dal proprio valore di ritorno.
+- `VaultClosed { root }` è il gemello di `VaultOpened`, e il suo contratto sta
+  tutto nel **quando** ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)):
+  arriva *prima* che si spenga chiunque, quindi chi lo riceve è ancora
+  registrato, ha ancora l'`HostApi` e **può ancora scrivere**. È l'ultimo
+  momento utile per rendere durevole ciò che si teneva in memoria. Un
+  `IndexProvider` non ne ha bisogno — ha `flush` e `close`, che il kernel gli
+  chiama subito dopo; ne ha bisogno chi indice non è, cioè ogni `EventHandler`,
+  che un metodo di ciclo di vita non ha e non avrà: il punto in cui un *bundle*
+  libera ciò che possiede resta `Plugin::deactivate`. Che sia un evento e non
+  una chiamata sul trait è la regola della
+  [0013](../decisions/0013-elenco-delle-capacita.md): chi chiude non aspetta la
+  risposta, e la chiusura non si annulla.
 - `DocumentRenamed` esiste perché **l'identità è il path**: un rename non è
   remove+add (vedi [data-model.md](data-model.md), "Identità e rename").
 - `JobDone { id, job, result }` è il rientro dei **job** (vedi `HostApi` sopra

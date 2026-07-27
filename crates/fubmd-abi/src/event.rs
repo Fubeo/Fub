@@ -295,12 +295,30 @@ pub enum Event {
         view: String,
         instance: Option<String>,
     },
+    /// Il vault sta per chiudersi: è l'**ultimo giro sincrono** in cui il vault
+    /// è ancora quello di prima, ed è il gemello di
+    /// [`VaultOpened`](Event::VaultOpened).
+    ///
+    /// Arriva **prima** che si spenga qualcuno (decisione 0029): chi lo riceve è
+    /// ancora registrato, ha ancora l'`HostApi` e può ancora scrivere — è
+    /// l'ultimo momento utile per rendere durevole ciò che teneva in memoria. Un
+    /// indice non ne ha bisogno (ha `flush` e `close`, che il kernel gli chiama
+    /// subito dopo); ne ha bisogno chiunque *non* sia un indice, cioè ogni
+    /// `EventHandler` — che non ha, e non avrà, un metodo di ciclo di vita
+    /// proprio.
+    ///
+    /// Che sia un evento e non una chiamata sul trait è la regola della
+    /// decisione 0013: chi chiude non ha bisogno della risposta per proseguire,
+    /// e la chiusura non si annulla. Chi non fa in tempo a scrivere ha comunque
+    /// perso solo ciò che non aveva reso durevole.
+    VaultClosed { root: String },
 }
 
 impl Event {
     pub fn kind(&self) -> EventKind {
         match self {
             Event::VaultOpened { .. } => EventKind::VaultOpened,
+            Event::VaultClosed { .. } => EventKind::VaultClosed,
             Event::DocumentChanged { .. } => EventKind::DocumentChanged,
             Event::DocumentRemoved { .. } => EventKind::DocumentRemoved,
             Event::DocumentRenamed { .. } => EventKind::DocumentRenamed,
@@ -348,6 +366,9 @@ pub enum EventKind {
     BatchEnded,
     /// Una view è invecchiata per un motivo che il vault non conosce (§2.5).
     ViewInvalidated,
+    /// Il vault sta per chiudersi: l'ultimo giro sincrono in cui è ancora
+    /// quello di prima (decisione 0029).
+    VaultClosed,
 }
 
 /// Insieme di tipi di evento a cui un handler è abbonato.
@@ -367,6 +388,7 @@ impl EventMask {
             EventKind::Custom,
             EventKind::BatchEnded,
             EventKind::ViewInvalidated,
+            EventKind::VaultClosed,
         ])
     }
 

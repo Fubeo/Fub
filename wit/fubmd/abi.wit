@@ -929,6 +929,12 @@ interface events {
     /// evento guadagna anche l'origine, che una capacità si sarebbe dovuta far
     /// dichiarare da chi la chiama.
     record event-view-invalidated { view: string, instance: option<string> }
+    /// Il vault STA PER chiudersi: l'ultimo giro sincrono in cui è ancora
+    /// quello di prima, e il gemello di `vault-opened`. Arriva PRIMA che si
+    /// spenga qualcuno (decisione 0029): chi lo riceve è ancora registrato e
+    /// può ancora scrivere. Un indice non ne ha bisogno — ha `flush` e `close`,
+    /// che il kernel gli chiama subito dopo; ne ha bisogno chi indice non è.
+    record event-vault-closed { root: string }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -940,6 +946,7 @@ interface events {
         custom(event-custom),
         batch-ended(event-batch-ended),
         view-invalidated(event-view-invalidated),
+        vault-closed(event-vault-closed),
     }
 
     enum event-kind {
@@ -956,6 +963,8 @@ interface events {
         batch-ended,
         /// Una view è invecchiata per un motivo che il vault non conosce.
         view-invalidated,
+        /// Il vault sta per chiudersi (decisione 0029).
+        vault-closed,
     }
     type event-mask = list<event-kind>;
 

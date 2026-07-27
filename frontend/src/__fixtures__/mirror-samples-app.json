@@ -78,6 +78,15 @@
       ]
     }
   ],
+  "OpenVaults": [
+    {
+      "roots": [
+        "/vault",
+        "/altro"
+      ],
+      "current": "/vault"
+    }
+  ],
   "WorkspaceMeta": [
     {
       "icons": {

@@ -58,9 +58,12 @@ ha già in mano.)
 
 E resta ciò che le quattro decisioni hanno **spostato senza risolvere**, che è il
 modo in cui questa seduta consegna alle altre: il registry dei bundle (§9.3), lo
-spegnimento (§9.5), le sessioni multiple (§9.6) e gli errori tipizzati (§12.2)
-hanno adesso un posto solo dove atterrare — `fubmd-host` — invece di ventidue
-comandi Tauri; i due punti dell'8.3 che non erano dell'8.3 — il lavoro lungo
+spegnimento (~~§9.5~~), le sessioni multiple (~~§9.6~~) e gli errori tipizzati
+(§12.2) hanno adesso un posto solo dove atterrare — `fubmd-host` — invece di
+ventidue comandi Tauri, e le due di mezzo sono **atterrate lì davvero**
+([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md): la
+mappa delle sessioni e la chiusura stanno in `host/session.rs`, e l'app ci mette
+il gancio su `RunEvent::Exit` e tre firme IPC); i due punti dell'8.3 che non erano dell'8.3 — il lavoro lungo
 fuori dal lock e la cancellazione — sono andati dove stanno i loro impedimenti,
 cioè §9.1 (chiusa con la
 [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md): il lavoro

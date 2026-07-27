@@ -205,8 +205,11 @@ Sono le due metà del [§1.2](../roadmap/01-forma-della-shell.md) che **non** so
 chiuse:
 
 - **Il modello di layout** — tab, split, pane, workspace salvabili. Non è un
-  refactor: è la feature 3.3, e va decisa insieme a `PaneId` e alle sessioni
-  multiple ([§9.6](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)). Ciò che
+  refactor: è la feature 3.3, e va decisa insieme a `PaneId`. La metà backend
+  delle sessioni multiple **c'è** ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)):
+  l'host tiene una mappa di vault aperti, ogni comando IPC accetta un `vault`
+  opzionale, e il "corrente" è una comodità di questa shell — quindi il giorno
+  che le finestre saranno due, il backend non è ciò che va riscritto. Ciò che
   è già pronto è che il contesto pubblicato porta l'identità del pannello
   (`MAIN_PANE`), quindi il giorno che i pannelli saranno due nessuno dovrà
   inventarsi da dove viene la risposta. La costante sta in `host/contract.ts`

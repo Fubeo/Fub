@@ -14,7 +14,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::model::DocId;
 use fubmd_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fubmd_abi::traits::{IndexQuery, IndexResult, Page, PropertySelect, ViewInstance};
@@ -102,7 +102,7 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
 
     let host = headless();
     host.open(&v.root).expect("il vault si apre");
-    let ws = host.workspace().expect("un vault è aperto");
+    let ws = host.workspace(None).expect("un vault è aperto");
 
     // Il canale dati: l'indice di ricerca è stato registrato PRIMA di
     // `reindex`, quindi ha già visto il vault.
@@ -154,25 +154,28 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
 
     // La prima fotografia scatta su `VaultOpened`, che `reindex` emette dentro
     // `Host::open`: la storia esiste prima ancora che qualcuno scriva.
-    let before = host.list_versions(&id).expect("versioning acceso");
+    let before = host.list_versions(None, &id).expect("versioning acceso");
     assert_eq!(before.len(), 1, "la fotografia dell'apertura");
 
     {
-        let ws = host.workspace().unwrap();
+        let ws = host.workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
         ws.write_document(&id, "# Nota\n\ndopo\n").expect("scrive");
     }
 
-    let after = host.list_versions(&id).expect("versioning acceso");
+    let after = host.list_versions(None, &id).expect("versioning acceso");
     assert_eq!(after.len(), 2, "la scrittura ha generato uno snapshot");
 
     // Rileggere e ripristinare passano dall'`HostApi` intestato al versioning,
     // non da `std::fs`: è la composizione delle due metà che prima stava
     // nell'app.
     let ts = before[0].ts;
-    assert_eq!(host.read_version(&id, ts).unwrap(), "# Nota\n\nprima\n");
-    host.restore_version(&id, ts).expect("ripristina");
-    let ws = host.workspace().unwrap();
+    assert_eq!(
+        host.read_version(None, &id, ts).unwrap(),
+        "# Nota\n\nprima\n"
+    );
+    host.restore_version(None, &id, ts).expect("ripristina");
+    let ws = host.workspace(None).unwrap();
     let ws = ws.read().unwrap();
     assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
 }
@@ -205,7 +208,7 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     );
 
     {
-        let ws = host.workspace().unwrap();
+        let ws = host.workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
         ws.write_document(&DocId::new("Nota.md"), "# Nota\n\nx\n")
             .expect("scrive");
@@ -222,8 +225,10 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     );
 }
 
+/// Due vault stanno aperti insieme, e il "corrente" è solo chi risponde a chi
+/// non ne nomina uno (§9.6).
 #[test]
-fn opening_a_second_vault_closes_the_first() {
+fn due_vault_stanno_aperti_insieme_e_il_corrente_e_una_comodita() {
     let a = Vault::new();
     a.put("A.md", "# A\n");
     let b = Vault::new();
@@ -234,12 +239,168 @@ fn opening_a_second_vault_closes_the_first() {
     let second = host.open(&b.root).expect("secondo vault");
     assert_eq!(second.documents, vec!["B.md"]);
 
+    assert_eq!(host.vaults().len(), 2, "il primo non è stato chiuso");
+    let corrente = host.workspace(None).expect("c'è un corrente");
+    assert_eq!(
+        corrente.read().unwrap().documents(),
+        vec![DocId::new("B.md")],
+        "l'ultimo aperto è il corrente"
+    );
+    // E il primo si raggiunge nominandolo, senza toccare il corrente.
+    let primo = host
+        .workspace(Some(a.root.as_str()))
+        .expect("il primo è ancora aperto");
+    assert_eq!(primo.read().unwrap().documents(), vec![DocId::new("A.md")]);
+
+    // Chiuderne uno lascia l'altro, e il corrente si sposta su chi resta.
+    host.close_vault(&b.root).expect("chiude il secondo");
+    assert_eq!(host.vaults().len(), 1);
+    assert_eq!(
+        host.workspace(None)
+            .expect("il corrente è passato a chi resta")
+            .read()
+            .unwrap()
+            .documents(),
+        vec![DocId::new("A.md")]
+    );
+
     host.close();
     assert!(
-        host.workspace().is_err(),
+        host.workspace(None).is_err(),
         "dopo `close` non c'è nessun vault aperto"
     );
-    assert!(!host.is_watching());
+    assert!(!host.is_watching(None));
+    assert!(host.vaults().is_empty());
+}
+
+/// Riaprire un vault già aperto **non lo riapre**: lo rende corrente.
+///
+/// Prima la sessione veniva buttata e rifatta, con la scansione da ripagare e il
+/// lock dell'indice da riprendere — e se la seconda apertura falliva non si
+/// tornava alla prima.
+#[test]
+fn riaprire_lo_stesso_vault_non_lo_rimonta() {
+    let v = Vault::new();
+    v.put("A.md", "# A\n");
+
+    let host = headless();
+    host.open(&v.root).expect("prima apertura");
+    let ws = host.workspace(None).unwrap();
+
+    // Una scrittura che il disco non ha: se la seconda apertura rimontasse e
+    // riscansionasse, sparirebbe.
+    ws.write()
+        .unwrap()
+        .set_active_document(Some(DocId::new("A.md")));
+
+    host.open(&v.root).expect("seconda apertura");
+    let ancora = host.workspace(None).unwrap();
+    assert!(
+        Arc::ptr_eq(&ws, &ancora),
+        "è la stessa sessione, non una nuova"
+    );
+    assert_eq!(host.vaults().len(), 1, "e non se ne è aggiunta una seconda");
+
+    // Lo stesso vault **nominato in un altro modo** resta lo stesso vault: la
+    // chiave è la forma canonica del path, non la stringa che è arrivata.
+    //
+    // Il giro da `..` è scelto apposta: un `/vault/./` non proverebbe niente,
+    // perché `Utf8PathBuf` si ordina per componenti e `.` non è una componente —
+    // sarebbe già la stessa chiave senza canonicalizzare. Qui invece le
+    // componenti sono diverse davvero, ed è il caso di ogni path che arriva da
+    // un dialogo, da un argomento di CLI o da un link simbolico.
+    let storto = v
+        .root
+        .join("..")
+        .join(v.root.file_name().expect("basename"));
+    let per_nome = host
+        .workspace(Some(storto.as_str()))
+        .expect("il vault si trova anche nominandolo storto");
+    assert!(
+        Arc::ptr_eq(&ws, &per_nome),
+        "`{storto}` è lo stesso vault, non un secondo"
+    );
+
+    // E aprirlo così non lo apre una seconda volta — che senza la chiave
+    // canonica non sarebbe nemmeno un secondo vault: sarebbe un secondo indice
+    // in attesa, per sempre, del lock che tiene il primo.
+    host.open(&storto).expect("apre lo stesso vault");
+    assert_eq!(host.vaults().len(), 1, "e resta uno solo");
+}
+
+/// La chiusura di un vault è **l'ultimo giro sincrono**: chi è registrato riceve
+/// `VaultClosed` mentre può ancora scrivere, e gli indici ricevono `flush` e
+/// `close` (§9.5).
+#[test]
+fn chiudere_un_vault_e_lultimo_giro_in_cui_e_ancora_aperto() {
+    let v = Vault::new();
+    v.put("Nota.md", "# Nota\n\nqualcosa da cercare\n");
+
+    let eventi = Arc::new(Mutex::new(Vec::new()));
+    let host = headless().with_sink(Arc::new(Registratore(eventi.clone())));
+    host.open(&v.root).expect("il vault si apre");
+
+    // Una scrittura **senza watcher**, cioè senza nessuno che chiami
+    // `flush_indexes`: è il caso di ogni host che un watcher non ce l'ha — CLI,
+    // e2e, PWA, mobile — e prima di questa voce l'indice non diventava durevole
+    // mai.
+    host.workspace(None)
+        .unwrap()
+        .write()
+        .unwrap()
+        .write_document(&DocId::new("Nuova.md"), "# Nuova\n")
+        .expect("scrittura");
+    assert!(
+        !manifest_dell_indice(&v.root).contains("Nuova.md"),
+        "senza flush il manifest dell'indice non sa ancora della nota: è il \
+         punto di partenza, e se cambiasse questo test proverebbe un'altra cosa"
+    );
+
+    let errori = host.close_vault(&v.root).expect("si chiude");
+    assert!(errori.is_empty(), "niente è andato storto: {errori:?}");
+
+    let visti = eventi.lock().unwrap().clone();
+    assert!(
+        visti.iter().any(|e| e == "vault_closed"),
+        "il gemello di `vault_opened` è passato dal ponte: {visti:?}"
+    );
+    assert!(
+        manifest_dell_indice(&v.root).contains("Nuova.md"),
+        "chiudere rende durevole ciò che l'indice aveva accettato: è il punto \
+         di consistenza che non è il watcher"
+    );
+
+    // E la cartella dell'indice non è più di nessuno: un altro host la riapre.
+    let altro = headless();
+    altro
+        .open(&v.root)
+        .expect("l'indice del vault chiuso non tiene più niente");
+    altro.close();
+}
+
+/// Il manifest delle impronte dell'indice di ricerca, com'è sul disco (vuoto se
+/// non c'è ancora).
+fn manifest_dell_indice(root: &Utf8Path) -> String {
+    let path = root
+        .join(".fubmd-data")
+        .join("plugins")
+        .join("fubmd.search")
+        .join("manifest.json");
+    std::fs::read_to_string(path).unwrap_or_default()
+}
+
+/// Il ponte eventi ridotto a ciò che serve a un test: il nome degli eventi
+/// passati.
+struct Registratore(Arc<Mutex<Vec<String>>>);
+
+impl EventSink for Registratore {
+    fn emit(&self, notice: &Notice) {
+        let nome = serde_json::to_value(&notice.event)
+            .ok()
+            .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
+            .unwrap_or_default();
+        self.0.lock().unwrap().push(nome);
+    }
 }
 
 #[test]
@@ -248,5 +409,5 @@ fn a_path_that_is_not_a_directory_is_refused_before_anything_is_mounted() {
     v.put("Nota.md", "# Nota\n");
     let host = headless();
     assert!(host.open(&v.root.join("Nota.md")).is_err());
-    assert!(host.workspace().is_err());
+    assert!(host.workspace(None).is_err());
 }

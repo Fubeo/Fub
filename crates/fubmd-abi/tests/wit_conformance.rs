@@ -1721,6 +1721,11 @@ fn event_case(e: &Event) -> Case {
             "event-view-invalidated",
             vec![("view", wit(view)), ("instance", wit(instance))],
         ),
+        Event::VaultClosed { root } => case_rec(
+            "vault-closed",
+            "event-vault-closed",
+            vec![("root", wit(root))],
+        ),
     }
 }
 
@@ -1736,6 +1741,7 @@ fn event_kind_name(k: EventKind) -> &'static str {
         EventKind::Custom => "custom",
         EventKind::BatchEnded => "batch-ended",
         EventKind::ViewInvalidated => "view-invalidated",
+        EventKind::VaultClosed => "vault-closed",
     }
 }
 
@@ -2495,6 +2501,9 @@ fn conform(source: &str) -> Result<(), String> {
                 view: String::new(),
                 instance: None,
             }),
+            event_case(&Event::VaultClosed {
+                root: String::new(),
+            }),
         ],
     );
 
@@ -2727,6 +2736,7 @@ fn conform(source: &str) -> Result<(), String> {
             EventKind::Custom,
             EventKind::BatchEnded,
             EventKind::ViewInvalidated,
+            EventKind::VaultClosed,
         ]
         .map(event_kind_name)
         .as_slice(),

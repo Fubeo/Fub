@@ -27,6 +27,16 @@ export interface VaultInfo {
   plugins: PluginInfo[];
 }
 
+// I vault aperti e quale è il corrente (rispecchia `OpenVaults` dell'app, §9.6).
+//
+// Il backend ne tiene una mappa: il "corrente" serve a chi non nomina un vault
+// — cioè a tutta la shell di oggi — e ogni comando accetta un `vault` opzionale
+// per parlare con un altro.
+export interface OpenVaults {
+  roots: string[];
+  current: string | null;
+}
+
 // Quanto l'host si fida di chi ha prodotto qualcosa (rispecchia
 // fubmd_kernel::Trust). Dal più fidato al meno; `revoked` non gira affatto.
 export type Trust = "core" | "verified" | "community" | "development" | "revoked";
@@ -297,7 +307,11 @@ export type KernelEvent =
   // Una view è invecchiata per un motivo che il vault non conosce: un job
   // finito, una risposta dalla rete, un calcolo completato (§2.5). `instance`
   // assente = tutte le istanze di quella view.
-  | { type: "view_invalidated"; view: string; instance: string | null };
+  | { type: "view_invalidated"; view: string; instance: string | null }
+  // Il vault STA PER chiudersi: l'ultimo giro in cui è ancora quello di prima
+  // (decisione 0029). Il gemello di `vault_opened`, e per la shell è il momento
+  // in cui smettere di disegnarlo — non il momento di chiedergli qualcosa.
+  | { type: "vault_closed"; root: string };
 
 // Chi ha CHIESTO l'operazione da cui un evento nasce (rispecchia
 // fubmd_abi::event::Actor). Non chi l'ha eseguita: un comando invocato da

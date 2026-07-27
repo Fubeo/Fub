@@ -108,8 +108,12 @@ decidere per loro.
 - [ ] **Modello di layout**: tab, split, pane, workspace salvabili (3.3, 4.1).
       Oggi c'è un editor solo e un documento solo: tutto il capitolo 3.3 è
       bloccato da questa mancanza, non dalla UI. **Non è un refactor, è una
-      feature**, e la sua metà kernel va decisa insieme a `PaneId` e alle sessioni
-      multiple ([§9.6](09-il-lavoro-lungo-e-lo-spegnimento.md#96-sessioni-multiple)) —
+      feature**, e la sua metà kernel va decisa insieme a `PaneId` — le sessioni
+      multiple, che le stavano davanti, sono **fatte**
+      ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md):
+      l'host tiene una mappa di vault aperti, ogni comando IPC accetta un `vault`
+      opzionale, e ci sono `list_vaults`, `set_current_vault` e `close_vault`, che
+      oggi non chiama nessuno) —
       la metà shell si esegue qui, e sblocca la §3.3 qui sotto. Ciò che è già
       pronto: il contesto di sessione pubblicato porta l'identità del pannello,
       quindi il giorno che i pannelli saranno due nessuno dovrà inventarsi da dove

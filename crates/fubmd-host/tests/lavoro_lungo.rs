@@ -104,7 +104,7 @@ fn vault(note: usize) -> Vault {
 fn aperto(v: &Vault) -> Host {
     let host = Host::new().with_watcher(Box::new(NoWatcher));
     host.open(&v.root).expect("il vault si apre");
-    host.workspace()
+    host.workspace(None)
         .unwrap()
         .write()
         .unwrap()
@@ -122,7 +122,7 @@ fn aperto(v: &Vault) -> Host {
 fn un_job_cammina_il_vault_e_ci_scrive() {
     let v = vault(30);
     let host = aperto(&v);
-    let ws = host.workspace().unwrap();
+    let ws = host.workspace(None).unwrap();
 
     let esito = {
         let ws = ws.clone();
@@ -157,7 +157,7 @@ fn un_job_cammina_il_vault_e_ci_scrive() {
 fn un_job_che_non_tocca_lhost_resta_un_calcolo_puro() {
     let v = vault(2);
     let host = aperto(&v);
-    let mut job_host = JobHost::new(host.workspace().unwrap(), INVENTARIO);
+    let mut job_host = JobHost::new(host.workspace(None).unwrap(), INVENTARIO);
     assert!(matches!(
         Inventario.run_job("altro", serde_json::json!({}), &mut job_host),
         Err(PluginError::UnknownJob(j)) if j == "altro"
@@ -210,7 +210,7 @@ fn attesa_di_chi_salva(ws: &Arc<RwLock<Workspace>>, camminata: impl FnOnce(&Barr
 fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
     let v = vault(150);
     let host = aperto(&v);
-    let ws = host.workspace().unwrap();
+    let ws = host.workspace(None).unwrap();
 
     let con_job = {
         let ws_job = ws.clone();
@@ -261,7 +261,7 @@ fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
 fn un_job_che_scrive_su_una_base_vecchia_riceve_conflict() {
     let v = vault(3);
     let host = aperto(&v);
-    let ws = host.workspace().unwrap();
+    let ws = host.workspace(None).unwrap();
     let id = DocId::new("Nota 1.md");
 
     let mut job_host = JobHost::new(ws.clone(), INVENTARIO);

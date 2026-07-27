@@ -41,9 +41,21 @@ non ha permessi.
       (`.fubmd/settings.json`, autorevole, viaggia col vault) → profilo/portable.
       Oggi il livello globale **non esiste affatto**: non c'è dove tenere vault
       recenti, preferiti, tema, hotkey.
+- [ ] **Registro dei vault** (recenti, preferiti, icone) — arriva dal ~~§9.6~~,
+      che la [decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)
+      ha chiuso per la sua metà kernel e non per questa. Il motivo dello
+      spostamento è che qui è **il suo posto**: un elenco di vault non sta in
+      nessun vault — è il livello globale, cioè quello che non esiste ancora, e
+      deciderlo altrove vorrebbe dire inventare un file di configurazione con un
+      solo cliente davanti. Il backend che lo servirà c'è già (`Host` tiene una
+      mappa di sessioni e sa qual è la corrente); quel che manca è **dove
+      scriverlo fra un avvio e l'altro**.
 - [ ] **Interruttore di feature nel registry**: `FUBMD_VERSIONING` diventa una
       impostazione; "spento = non registrato" resta la semantica (D7), ma
-      decisa a runtime e non da `std::env`.
+      decisa a runtime e non da `std::env`. E con lui l'altro interruttore che la
+      [0028](../decisions/0028-come-un-componente-smette.md) ha reso possibile:
+      spegnere **a runtime** un plugin già acceso, che adesso ha un inverso vero
+      (`Workspace::deactivate_plugin`) e non solo un «non lo registro all'avvio».
 - [ ] **Import/export/reset delle impostazioni** come comandi ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), non come
       codice dell'app.
 
