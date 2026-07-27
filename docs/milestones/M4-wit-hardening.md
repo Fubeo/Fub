@@ -150,6 +150,18 @@ oggi, una migrazione domani); le altre restano al freeze.
   chi chiude non aspetta la risposta, e la chiusura non si annulla. `event-mask`
   è una `list<event-kind>`, quindi il tipo nuovo non tocca nessuna maschera già
   scritta.
+- **Il rilevamento delle modifiche esterne, chiesto dal canale dati**:
+  `index-query.vault-status`, `query-kind.vault-status`,
+  `index-result.vault-status(vault-status)` e il record `vault-status`, tutti
+  **in coda** ai rispettivi variant e quindi additivi
+  ([decisione 0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md)). La
+  scelta di forma che scadeva col freeze non era la variante ma **dove** vive la
+  domanda: un comando IPC nuovo sarebbe stato visibile alla shell e non a una
+  feature — che di comandi non ne ha nessuno — cioè un fatto che il core conosce
+  e i plugin no, la stessa asimmetria che il canale dati esiste per non avere. E
+  tre campi invece di un booleano, perché «FubMD saprebbe», «è già successo
+  qualcosa che non ho saputo leggere» e «cosa» sono tre domande, e un vault
+  senza rilevamento non è un vault che ha appena mancato un file.
 
 **Da chiudere al freeze:**
 

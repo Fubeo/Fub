@@ -546,6 +546,9 @@
       "query": {
         "x": 1
       }
+    },
+    {
+      "kind": "vault_status"
     }
   ],
   "IndexResult": [
@@ -626,6 +629,14 @@
       "value": {
         "x": 1
       }
+    },
+    {
+      "kind": "vault_status",
+      "value": {
+        "watching": true,
+        "sync_failures": 1,
+        "last_sync_error": "Nota.md: frontmatter illeggibile"
+      }
     }
   ],
   "BacklinkRef": [
@@ -646,6 +657,13 @@
     {
       "name": "rust",
       "count": 2
+    }
+  ],
+  "VaultStatus": [
+    {
+      "watching": true,
+      "sync_failures": 1,
+      "last_sync_error": "Nota.md: frontmatter illeggibile"
     }
   ],
   "UiAction": [

@@ -21,6 +21,7 @@ import type {
   Selection,
   Span,
   TagCount,
+  VaultStatus,
   FieldValue,
   TrashEntry,
   UiAction,
@@ -256,6 +257,7 @@ function touchIndexQuery(q: IndexQuery): void {
       return;
     case "vault_health":
     case "custom":
+    case "vault_status":
       return;
     default:
       assertNever(q);
@@ -294,6 +296,7 @@ function touchIndexResult(r: IndexResult): void {
     case "property_values":
     case "vault_health":
     case "custom":
+    case "vault_status":
       return;
     default:
       assertNever(r);
@@ -314,6 +317,11 @@ const RECORD_KEYS: Record<string, string[]> = {
   BacklinkRef: keysOf<BacklinkRef>({ source: true, context: true }),
   TrashEntry: keysOf<TrashEntry>({ id: true, original: true, deleted_at: true, size: true }),
   TagCount: keysOf<TagCount>({ name: true, count: true }),
+  VaultStatus: keysOf<VaultStatus>({
+    watching: true,
+    sync_failures: true,
+    last_sync_error: true,
+  }),
   ViewSpec: keysOf<ViewSpec>({
     id: true,
     title: true,

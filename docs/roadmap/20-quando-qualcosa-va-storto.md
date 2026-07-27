@@ -179,10 +179,22 @@ visibile), 20.2 (log plugin).
       **guardi** quel `Result`.
 - [ ] **Gli altri due esiti già raccolti e mai letti**: `flush_indexes`
       restituisce `Vec<PluginError>` proprio *«perché chi ha un canale di
-      notifica possa mostrarli»* (`workspace.rs`) — e i suoi due
-      chiamanti in produzione sono un `eprintln!` nel watcher
-      (`host/watcher.rs`) e un `let _ =` in `reindex` (`workspace.rs`).
-      Il canale è stato costruito e non collegato.
+      notifica possa mostrarli»* (`workspace.rs`) — e i suoi chiamanti in
+      produzione sono un `eprintln!` nel watcher (`host/watcher.rs`), un
+      `let _ =` in `reindex` (`workspace.rs`) e, dalla
+      [0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md), la
+      chiusura del vault — che li **risale** fino al comando IPC e fino a chi
+      spegne l'app, dove diventano un `eprintln!` in più. Il canale è stato
+      costruito e collegato a metà: adesso arrivano fino al confine, e lì
+      finiscono ancora dove non li legge nessuno.
+- [ ] **Un precedente, ed è quello da imitare.** La
+      [0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md) ha chiuso una
+      delle occorrenze di questa firma — `let _ = ws.sync_path(…)` nel watcher —
+      **senza** chiedere ai chiamanti di stare attenti: `sync_path` registra da
+      sé il proprio fallimento (`VaultStatus.sync_failures`) e restituisce
+      quello che restituiva. La lezione è nella forma: un `Result` che dipende
+      dall'attenzione di chi lo riceve è un `Result` che si perde, e il posto
+      dove metterlo al sicuro è **dentro** chi lo produce.
 - [ ] Cosa serve: che `deliver_to_handlers` raccolga e risalga (l'operazione che
       ha emesso l'evento **non** deve fallire — quella parte del commento è
       giusta e va tenuta), e un unico posto in cui quegli esiti diventano ciò

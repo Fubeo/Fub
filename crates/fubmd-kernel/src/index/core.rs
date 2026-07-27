@@ -28,6 +28,7 @@
 //! decide in silenzio.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Frontmatter, Heading, Link};
@@ -35,7 +36,7 @@ use fubmd_abi::query::{in_folder, Matches, QueryEvaluator, QueryPredicate};
 use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
     HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, Paged, PredicateKind,
-    QueryKind, QueryRoute,
+    QueryKind, QueryRoute, VaultStatus,
 };
 use fubmd_abi::PluginError;
 
@@ -114,6 +115,53 @@ pub(crate) struct CoreIndex {
     /// documento, e la seconda mentirebbe in silenzio il giorno che i formati
     /// si registrano a caldo.
     registry: Arc<FormatRegistry>,
+    /// Che rapporto ha questo vault con il disco (§9.7).
+    ///
+    /// Sta qui e non sul `Workspace` per la ragione della
+    /// [0019](../../../../docs/decisions/0019-il-canale-dati.md): *le risposte
+    /// del kernel sono un provider*, e questa è una risposta del kernel. Metterla
+    /// sul workspace avrebbe voluto dire intercettare una variante **prima** del
+    /// router — cioè rimettere il ramo privilegiato che quella decisione ha
+    /// tolto.
+    pub(crate) watch: WatchState,
+}
+
+/// Il fatto che il §9.7 rende interrogabile: se qualcuno vede le scritture
+/// altrui, e cosa è già andato storto nel leggerle.
+#[derive(Default)]
+pub(crate) struct WatchState {
+    /// **Condiviso** con chi tiene vivo il rilevatore (`fubmd-host`): il kernel
+    /// non sa cosa sia un watcher, e questo è tutto ciò che gliene serve sapere.
+    ///
+    /// Un `Arc<AtomicBool>` e non un `bool`, perché la risposta deve poter
+    /// diventare `false` **mentre il vault è aperto**. Prima
+    /// `VaultWatcher::is_watching` rispondeva *per costruzione* — distingueva
+    /// «non ho avviato un debouncer» da «ne ho avviato uno», e un debouncer
+    /// morto continuava a rispondere `true`.
+    pub(crate) watching: Arc<AtomicBool>,
+    failures: u32,
+    last_error: Option<String>,
+}
+
+impl WatchState {
+    /// Registra l'esito di una sincronizzazione per-path.
+    ///
+    /// Sta **dentro** il kernel, ed è il punto: i due chiamanti veri scrivevano
+    /// `let _ = ws.sync_path(…)`, quindi il `Result` c'era e non lo leggeva
+    /// nessuno. Registrandolo qui, un chiamante distratto non può più nasconderlo
+    /// — al più non lo guarda lui, ma il vault se lo ricorda.
+    fn note(&mut self, error: impl std::fmt::Display) {
+        self.failures = self.failures.saturating_add(1);
+        self.last_error = Some(error.to_string());
+    }
+
+    fn status(&self) -> VaultStatus {
+        VaultStatus {
+            watching: self.watching.load(Ordering::Relaxed),
+            sync_failures: self.failures,
+            last_sync_error: self.last_error.clone(),
+        }
+    }
 }
 
 impl CoreIndex {
@@ -124,7 +172,13 @@ impl CoreIndex {
             graph: LinkGraph::default(),
             graph_update: GraphUpdate::default(),
             registry,
+            watch: WatchState::default(),
         }
+    }
+
+    /// Registra un fallimento di sincronizzazione (§9.7).
+    pub(crate) fn note_sync_failure(&mut self, error: impl std::fmt::Display) {
+        self.watch.note(error);
     }
 
     pub(crate) fn contains(&self, id: &DocId) -> bool {
@@ -226,6 +280,11 @@ impl IndexProvider for CoreIndex {
             QueryRoute::Query(QueryKind::Neighbors),
             QueryRoute::Query(QueryKind::PropertyValues),
             QueryRoute::Query(QueryKind::VaultHealth),
+            // Il rapporto col disco (§9.7): il kernel è l'unico che può
+            // rispondere, perché è l'unico che conosce insieme l'esito delle
+            // sincronizzazioni e il fatto — passatogli da chi monta — che un
+            // rilevatore ci sia.
+            QueryRoute::Query(QueryKind::VaultStatus),
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
@@ -364,6 +423,7 @@ impl IndexProvider for CoreIndex {
             IndexQuery::Custom { ns, .. } => Err(PluginError::Unserved(format!(
                 "l'indice del kernel non estende il canale: `{ns}`"
             ))),
+            IndexQuery::VaultStatus => Ok(IndexResult::VaultStatus(self.watch.status())),
         }
     }
 }

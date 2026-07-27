@@ -1,6 +1,6 @@
 # 9. Il lavoro lungo, e come un componente smette
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): lo spegnimento è chiuso — le tre facce di un componente che smette, e la chiusura del vault intero — e restano chi possiede i bundle e chi si accorge che il vault cambia da fuori.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): lo spegnimento è chiuso per intero — un componente, il vault, le sessioni, e il rilevamento che adesso si può chiedere — e resta **chi possiede i bundle**.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -36,18 +36,25 @@ una comodità della shell. Del §9.6 è rimasto fuori un punto solo, il **regist
 dei vault** (recenti, preferiti, icone), che è configurazione globale e si è
 spostato al [§11.1](11-impostazioni-e-i-tre-stati.md).
 
-Quel che resta della seduta è quindi **chi possiede i bundle** (9.3) e **chi si
-accorge che il vault cambia da fuori** (9.7).
+**E il rilevamento si può chiedere.** La ~~9.7~~ l'aveva aggiunta il settimo
+giro perché era la 9.5 sull'altro asse: là il watcher assente costava la
+**durabilità** di un indice — e quel costo l'ha tolto la 0029, perché adesso il
+flush ha un chiamante che non è il watcher — qui costava il fatto stesso di
+sapere che il vault è cambiato, e nessuno chiedeva mai se il watcher fosse vivo.
+La chiude la [decisione 0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md):
+`IndexQuery::VaultStatus` è la domanda, la bandiera del rilevamento è **una
+sola** e la tiene chi guarda, e ogni sincronizzazione per-path che fallisce resta
+scritta nel vault anche quando il chiamante butta via il proprio `Result`. Con
+lei è a verbale anche **cosa promette FubMD dove il rilevamento non c'è**, che
+era la decisione vera della voce. Ne è rimasto fuori un residuo, nominato: la
+`base` che manca a `write_document`, che è il conflitto buffer↔disco del
+[§18.1](18-editor-e-tastiera.md).
 
-Il settimo giro ha aggiunto la 9.7, che stava qui perché era la 9.5 sull'altro
-asse: là il watcher assente costava la **durabilità** di un indice — e quel costo
-la 0029 l'ha tolto, perché adesso il flush ha un chiamante che non è il watcher
-— qui costa il fatto stesso di sapere che il vault è cambiato, e nessuno chiede
-mai se il watcher sia vivo.
+Quel che resta della seduta è quindi **chi possiede i bundle** (9.3), e basta.
 
 ### 9.3 Registry di plugin/feature e runner dei job
 
-*ex §2.3 · kernel · **P1** — leva alta: è chi userà la disattivazione della [0028](../decisions/0028-come-un-componente-smette.md), ed è il registry su cui poggiano la 9.5 e il capitolo 7*
+*ex §2.3 · kernel · **P1** — leva alta: è chi userà la disattivazione della [0028](../decisions/0028-come-un-componente-smette.md) e la chiusura della [0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md), ed è il registry su cui poggia il capitolo 7. **È l'ultima voce della seduta.***
 
 - [ ] **Una tabella di montaggio unica**: le feature sono cablate a mano in
       `mount` (`host/mount.rs`). La [decisione 0023](../decisions/0023-chi-monta-il-kernel.md)
@@ -99,67 +106,3 @@ mai se il watcher sia vivo.
       è il vault irraggiungibile fino al riavvio. Finché i provider sono in-repo
       è il caso raro; con un'estensione installata un handler di comando che
       pania è il caso normale — la metà che resta non è la metà meno probabile.
-
-### 9.7 Il watcher è l'unico che vede le scritture altrui, e la sua morte non si vede
-
-*settimo giro · kernel · **P1** — l'altra metà della ~~9.5~~: là il costo era la lentezza ed è **stato pagato** ([0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)), qui è la correttezza e resta aperto*
-
-- [ ] **Il ~~§9.5~~ nominava il watcher come componente opzionale da cui
-      dipendeva la *durabilità* di un indice, e quella metà è chiusa**: il flush
-      adesso ha un chiamante che non è il watcher — la chiusura del vault
-      ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)).
-      Questa voce è la stessa dipendenza vista sull'altro asse, e la chiusura non
-      la tocca: il watcher è anche **l'unico** meccanismo con cui FubMD viene a
-      sapere che qualcun altro ha toccato il vault *mentre è aperto*. Non c'è
-      nessun altro percorso — `reindex` gira solo all'apertura
-      (`kernel/workspace.rs`), non esiste una riconciliazione periodica, e niente
-      confronta mai la cache col disco. Il costo della sua assenza non è più una
-      riapertura lenta: è che il kernel risponde su un vault che non c'è più.
-- [ ] **E quando fallisce, fallisce due volte in silenzio.** Gli errori del
-      debouncer finiscono in un `eprintln!` (`host/watcher.rs`, cioè §20.2), e
-      la sincronizzazione di ogni singolo path scarta il proprio esito:
-      `let _ = ws.sync_renamed_path(&from, &to)` e `let _ = ws.sync_path(&p)`
-      (`host/watcher.rs`) — due righe sopra un `flush_indexes` che almeno
-      stampa. Un file esterno che non si legge o non si parsa lascia la cache, il
-      grafo e l'indice fermi a **prima**, per sempre, senza che niente lo dica.
-- [ ] **Nessuno chiede mai se il watcher è vivo.** Il debouncer viene tenuto in
-      vita e basta (`VaultSession::watcher`, `host/session.rs`). La
-      [decisione 0023](../decisions/0023-chi-monta-il-kernel.md) gli ha dato un
-      trait — non era più un `Box<dyn Any + Send>` — e con lui un
-      `VaultWatcher::is_watching` che oggi risponde **per costruzione**, cioè
-      distingue `NoWatcher` da un debouncer avviato e nient'altro: nessuno
-      gliela chiede, e un debouncer che muore continua a rispondere `true`.
-      Quello è il posto dove questa voce andrà a scrivere — e adesso la domanda
-      si fa **per vault** (`Host::is_watching(vault)`,
-      [decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)),
-      il che rende la risposta per-vault e non più per-app: due vault possono
-      avere due watcher, uno vivo e uno morto. I casi in cui non funziona non
-      sono di nicchia e FEATURES li nomina uno per uno: network share e cloud
-      drive (2.3), vault sincronizzati con strumenti esterni (3.1, 18.1), il
-      limite di inotify su vault grandi (24.1), e i tre host dove non esisterà
-      affatto — CLI (27.1), PWA (26.3), mobile (26.2).
-- [ ] **La conseguenza peggiore è una scrittura, non una lettura.** La
-      [decisione 0008](../decisions/0008-modifica-chirurgica.md) ha dato la
-      guardia giusta — una `base` nella firma, e `Conflict` invece della
-      sovrascrittura silenziosa — ma vale per `apply_edit`, cioè per i *provider*.
-      Il salvataggio dell'editor passa da `write_document` (`app/lib.rs`, che
-      lo inoltra al workspace),
-      che una base non ce l'ha: se il watcher non ha visto la scrittura altrui, il
-      salvataggio successivo la copre e nessuna delle due metà del sistema è in
-      grado di accorgersene. Col watcher vivo il caso è coperto a metà (la shell
-      lo scrive in console, §20.4); col watcher morto non è coperto affatto.
-- [ ] Cosa serve, e non è un watcher migliore: un **fatto interrogabile** —
-      «questo vault ha o non ha il rilevamento delle modifiche esterne» — che la
-      shell mostri e che una feature possa leggere, più un esito per la
-      sincronizzazione per-path che smetta di essere scartato. La forma è quella
-      del §7.6 — l'inventario di ciò che è attivo, che adesso **c'è**
-      ([decisione 0021](../decisions/0021-il-confine.md)) — e il messaggio è quello del
-      §20.2; la decisione da prendere qui è **cosa promette FubMD dove il
-      rilevamento non c'è**, perché oggi promette la stessa cosa e ne mantiene
-      un'altra.
-
-*Sblocca:* 2.3 (rilevamento modifiche esterne, network drive, cloud drive,
-rilevamento file lock — ~29 voci), 3.1 (vault sincronizzabili con tool esterni,
-vault su USB), 18.1 (per-file status, conflict copies, sync health: ~52 voci che
-danno per scontato di sapere quando il disco cambia), 19.2 (offline
-collaboration recovery), 24.2 (file lock detection).

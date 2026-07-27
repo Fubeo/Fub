@@ -11,6 +11,7 @@ import "./style.css";
 import { hasPlugin } from "./host/contract";
 import { pickFolder } from "./host/dialog";
 import { api } from "./host/ipc";
+import { statoDelVault } from "./host/query";
 import { startKernelRouter } from "./state/kernel";
 import { loadOrganization } from "./state/organization";
 import { emit, loadActiveSpace, loadExpanded, loadMode, state } from "./state/store";
@@ -136,7 +137,31 @@ async function openVaultPath(dir: string): Promise<void> {
   await mountDeclaredViews();
   await loadCommandSpecs();
 
+  await avvisaSeNessunoGuarda();
+
   if (info.documents.length > 0) await openDocument(info.documents[0]);
+}
+
+/// Se questo vault non ha il rilevamento delle modifiche esterne, dirlo (§9.7).
+///
+/// È la promessa che FubMD non manteneva in silenzio: senza watcher nessuno
+/// vede le scritture altrui — network share, cloud drive, vault sincronizzati
+/// con strumenti esterni — e il salvataggio successivo copre ciò che non è
+/// stato visto. Un avviso all'apertura non è l'indicatore permanente che il
+/// §20.4 chiede insieme alla barra di stato: è ciò che questa shell può
+/// mostrare oggi senza inventarsi una superficie.
+async function avvisaSeNessunoGuarda(): Promise<void> {
+  try {
+    const stato = await statoDelVault();
+    if (!stato.watching) {
+      notify(
+        "Le modifiche fatte da altre app non verranno rilevate: chiudi e riapri il vault per rileggerlo.",
+      );
+    }
+  } catch {
+    // Un vault che non sa dire come sta non è un motivo per non aprirlo: il
+    // canale dati ha già risposto a tutto il resto.
+  }
 }
 
 // Un avvio che fallisce non deve morire in silenzio: senza questo, un errore

@@ -19,6 +19,7 @@ import type {
   Paged,
   QueryExpr,
   TagCount,
+  VaultStatus,
 } from "./contract";
 import { OGNI_DOCUMENTO } from "./contract";
 
@@ -78,4 +79,13 @@ export async function archiDelVault(): Promise<NeighborRef[]> {
     page: null,
   };
   return open(await api.queryIndex(query), "neighbors").items;
+}
+
+/// Che rapporto ha questo vault con il disco (§9.7): FubMD saprebbe che è
+/// cambiato da fuori, e cosa non è già riuscito a leggere.
+///
+/// Passa dal canale dati e non da un comando suo perché la stessa risposta
+/// dev'essere visibile a una feature, che di comandi IPC non ne ha nessuno.
+export async function statoDelVault(): Promise<VaultStatus> {
+  return open(await api.queryIndex({ kind: "vault_status" }), "vault_status");
 }

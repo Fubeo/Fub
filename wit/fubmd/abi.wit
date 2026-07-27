@@ -1361,6 +1361,13 @@ interface index {
         property-values(index-query-property-values),
         vault-health(index-query-vault-health),
         custom(index-query-custom),
+        /// QUESTO VAULT SA QUANDO CAMBIA DA FUORI? (§9.7) L'unica variante che
+        /// non chiede niente sul contenuto del vault: chiede del vault stesso.
+        /// Passa da qui e non da un comando suo perché i suoi due clienti sono
+        /// già qui — la shell ha `query-index`, una feature ha `host-query` e
+        /// nient'altro, e un comando IPC nuovo sarebbe stato visibile solo alla
+        /// prima delle due.
+        vault-status,
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -1375,6 +1382,11 @@ interface index {
         property-values,
         vault-health,
         custom(string),
+        /// Chi risponde a «questo vault sa quando cambia da fuori?» (§9.7). Il
+        /// proprietario è il kernel: è l'unico che conosce sia l'esito delle
+        /// sincronizzazioni sia il fatto — passatogli da chi monta — che un
+        /// rilevatore ci sia.
+        vault-status,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -1411,6 +1423,24 @@ interface index {
     record tag-count {
         name: string,
         count: u32,
+    }
+    /// Che rapporto ha questo vault con il disco (§9.7). Tre domande diverse e
+    /// non una: FubMD SAPREBBE che il vault è cambiato; È GIÀ successo qualcosa
+    /// che non ha saputo leggere; e cosa. Un booleano solo confonderebbe un
+    /// vault senza rilevamento — rischio noto e permanente — con un vault che il
+    /// rilevamento ce l'ha e ha appena mancato un file, che è un incidente.
+    record vault-status {
+        /// `false` = NESSUNO vede le scritture altrui: network share e cloud
+        /// drive, vault sincronizzati con strumenti esterni, oltre il limite di
+        /// inotify su vault grandi, e i tre host dove non esisterà affatto.
+        watching: bool,
+        /// Quante sincronizzazioni per-path sono fallite da quando il vault è
+        /// aperto.
+        sync-failures: u32,
+        /// L'ultimo di quei fallimenti, già composto. Messaggio e non codice: la
+        /// forma dell'errore al confine è §12.2, e quando ci sarà varrà anche
+        /// qui.
+        last-sync-error: option<string>,
     }
     record property-entry {
         key: string,
@@ -1497,6 +1527,7 @@ interface index {
         property-values(property-values-page),
         vault-health(vault-health-page),
         custom(json),
+        vault-status(vault-status),
     }
 
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel

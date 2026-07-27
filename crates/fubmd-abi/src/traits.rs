@@ -1500,6 +1500,22 @@ pub enum IndexQuery {
         ns: String,
         query: serde_json::Value,
     },
+    /// **Questo vault sa quando cambia da fuori?** (§9.7)
+    ///
+    /// È l'unica variante che non chiede niente *sul contenuto* del vault: chiede
+    /// del vault stesso, e la ragione per cui passa da qui invece che da un
+    /// comando suo è che i suoi due clienti sono già qui. La shell ha
+    /// `query_index`; una feature ha `HostQuery` e null'altro — un comando IPC
+    /// nuovo sarebbe stato visibile solo alla prima delle due, cioè un fatto che
+    /// il core conosce e i plugin no.
+    ///
+    /// La domanda che risponde è quella che nessuno faceva: il watcher è
+    /// **l'unico** meccanismo con cui FubMD viene a sapere che qualcun altro ha
+    /// toccato il vault — non c'è una riconciliazione periodica, e niente
+    /// confronta mai la cache col disco — e finché nessuno chiedeva se fosse
+    /// vivo, un vault senza rilevamento e uno con rilevamento erano
+    /// indistinguibili da fuori.
+    VaultStatus,
 }
 
 impl IndexQuery {
@@ -1512,7 +1528,9 @@ impl IndexQuery {
             | IndexQuery::Neighbors { page, .. }
             | IndexQuery::PropertyValues { page, .. }
             | IndexQuery::VaultHealth { page, .. } => *page,
-            IndexQuery::Outline { .. } | IndexQuery::Custom { .. } => None,
+            IndexQuery::Outline { .. } | IndexQuery::Custom { .. } | IndexQuery::VaultStatus => {
+                None
+            }
         }
     }
 
@@ -1528,7 +1546,8 @@ impl IndexQuery {
             IndexQuery::Backlinks { .. }
             | IndexQuery::Outline { .. }
             | IndexQuery::VaultHealth { .. }
-            | IndexQuery::Custom { .. } => None,
+            | IndexQuery::Custom { .. }
+            | IndexQuery::VaultStatus => None,
         }
     }
 
@@ -1579,6 +1598,7 @@ impl IndexQuery {
             IndexQuery::PropertyValues { .. } => QueryKind::PropertyValues,
             IndexQuery::VaultHealth { .. } => QueryKind::VaultHealth,
             IndexQuery::Custom { ns, .. } => QueryKind::Custom(ns.clone()),
+            IndexQuery::VaultStatus => QueryKind::VaultStatus,
         }
     }
 }
@@ -1599,6 +1619,11 @@ pub enum QueryKind {
     PropertyValues,
     VaultHealth,
     Custom(String),
+    /// Chi risponde a «questo vault sa quando cambia da fuori?» (§9.7). Il
+    /// proprietario è il kernel, e non è un'ovvietà del codice: è l'unico che
+    /// conosce sia l'esito delle sincronizzazioni sia il fatto — passatogli da
+    /// chi monta — che un rilevatore ci sia.
+    VaultStatus,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -1689,6 +1714,32 @@ pub struct NeighborRef {
     pub depth: u8,
 }
 
+/// Che rapporto ha questo vault con il disco (risposta a
+/// [`IndexQuery::VaultStatus`], §9.7).
+///
+/// I tre campi sono tre domande diverse, e tenerle separate è il punto:
+/// «FubMD **saprebbe** che il vault è cambiato», «**è già** successo qualcosa
+/// che non ha saputo leggere», e «cosa». Un booleano solo avrebbe confuso un
+/// vault senza rilevamento — dove il rischio è noto e permanente — con un vault
+/// che il rilevamento ce l'ha e ha appena mancato un file, che è un incidente.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VaultStatus {
+    /// `false` = **nessuno vede le scritture altrui**. Non è una condizione di
+    /// nicchia: non c'è su network share e cloud drive, sui vault sincronizzati
+    /// con strumenti esterni, oltre il limite di inotify su vault grandi, e non
+    /// esisterà affatto su CLI, PWA e mobile.
+    pub watching: bool,
+    /// Quante sincronizzazioni per-path sono fallite da quando il vault è
+    /// aperto. Erano `let _ =`: un file esterno che non si legge o non si parsa
+    /// lasciava la cache, il grafo e l'indice fermi a **prima**, per sempre,
+    /// senza che niente lo dicesse.
+    pub sync_failures: u32,
+    /// L'ultimo di quei fallimenti, già composto. È un messaggio e non un
+    /// codice, e va con il §12.2: quando l'errore al confine avrà una forma,
+    /// l'avrà anche questo.
+    pub last_sync_error: Option<String>,
+}
+
 /// Un tag del vault con quante note lo portano (risposta a
 /// [`IndexQuery::Tags`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1729,6 +1780,9 @@ pub enum IndexResult {
     VaultHealth(Paged<HealthIssue>),
     /// Risposta a una [`IndexQuery::Custom`].
     Custom(serde_json::Value),
+    /// Il rapporto fra questo vault e il disco (risposta a
+    /// [`IndexQuery::VaultStatus`]).
+    VaultStatus(VaultStatus),
 }
 
 impl IndexResult {
@@ -1759,6 +1813,7 @@ impl IndexResult {
             IndexResult::PropertyValues(_) => "property-values",
             IndexResult::VaultHealth(_) => "vault-health",
             IndexResult::Custom(_) => "custom",
+            IndexResult::VaultStatus(_) => "vault-status",
         }
     }
 }

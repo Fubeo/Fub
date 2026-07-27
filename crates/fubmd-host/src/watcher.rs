@@ -11,12 +11,17 @@
 //! solo cliente non è un'astrazione — è la stessa ragione per cui il §15.1
 //! chiede un `MemStorage` accanto a `FsStorage`.
 //!
-//! **Questa non è la §9.7.** Là la domanda è *cosa promette FubMD dove il
-//! rilevamento non c'è*: un fatto interrogabile che la shell mostri, e un esito
-//! per la sincronizzazione per-path che smetta di essere scartato. Qui c'è solo
-//! il posto dove quella risposta andrà a stare — [`VaultWatcher::is_watching`]
-//! oggi risponde per costruzione, e nessuno gliela chiede.
+//! **E il rilevatore può morire** (§9.7,
+//! [decisione 0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md)).
+//! Prima [`VaultWatcher::is_watching`] rispondeva *per costruzione* — `false`
+//! per [`NoWatcher`], `true` per un debouncer **avviato** — e nessuno gliela
+//! chiedeva: un debouncer che moriva continuava a rispondere `true` per sempre.
+//! Adesso la risposta è una bandiera condivisa che il kernel presta
+//! (`Workspace::watch_flag`), il debouncer la abbassa quando riporta errori e
+//! quando smette, e chiunque può leggerla dal canale dati
+//! (`IndexQuery::VaultStatus`).
 
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 
 use camino::Utf8Path;
@@ -28,12 +33,14 @@ use fubmd_kernel::Workspace;
 /// di un watcher. Senza di lui il trait sarebbe `Box<dyn Any + Send>` con un
 /// nome nuovo, che è esattamente il punto di partenza.
 pub trait VaultWatcher: Send {
-    /// `true` se questo vault ha il rilevamento delle modifiche esterne.
+    /// `true` se questo vault ha il rilevamento delle modifiche esterne
+    /// **adesso**.
     ///
-    /// Oggi la risposta è per costruzione — chi non guarda è [`NoWatcher`] — e
-    /// nessuno la chiede. Il giorno che un watcher può *morire* mentre l'app è
-    /// viva (limite di inotify su vault grandi, network share che si stacca) la
-    /// risposta diventa dinamica, e la destinazione è la §9.7.
+    /// Non «è stato avviato»: un debouncer che riporta errori ha smesso di
+    /// guardare, e da quel momento risponde `false` (§9.7). È la stessa
+    /// risposta che il canale dati serve come
+    /// `VaultStatus.watching`, perché è lo stesso `AtomicBool`: due copie
+    /// sarebbero due verità, e la seconda mentirebbe in silenzio.
     fn is_watching(&self) -> bool;
 }
 
@@ -44,10 +51,15 @@ pub trait VaultWatcher: Send {
 pub trait WatcherFactory: Send + Sync {
     /// Avvia il rilevamento su `root`, sincronizzando `workspace` a ogni
     /// cambiamento.
+    ///
+    /// `watching` è la bandiera del kernel (`Workspace::watch_flag`): chi
+    /// guarda davvero la alza avviandosi e la abbassa quando smette. Chi non
+    /// guarda la lascia dov'è, che è `false`.
     fn start(
         &self,
         root: &Utf8Path,
         workspace: Arc<RwLock<Workspace>>,
+        watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String>;
 }
 
@@ -68,10 +80,15 @@ impl VaultWatcher for NoWatcher {
 }
 
 impl WatcherFactory for NoWatcher {
+    /// La bandiera resta com'è, cioè `false`: non alzarla è l'unica cosa da
+    /// fare, ed è ciò che rende «qui nessuno vede le scritture altrui» un fatto
+    /// che si può chiedere invece di una proprietà del montaggio che nessuno
+    /// scrive da nessuna parte.
     fn start(
         &self,
         _root: &Utf8Path,
         _workspace: Arc<RwLock<Workspace>>,
+        _watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String> {
         Ok(Box::new(NoWatcher))
     }
@@ -82,6 +99,7 @@ pub use notify_watcher::NotifyWatcher;
 
 #[cfg(feature = "notify-watcher")]
 mod notify_watcher {
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, RwLock};
     use std::time::Duration;
 
@@ -101,11 +119,23 @@ mod notify_watcher {
     /// interessa solo che stia in piedi finché la sessione è aperta.
     struct Debounced {
         _debouncer: Box<dyn std::any::Any + Send>,
+        /// La bandiera del kernel, che questo debouncer possiede finché è vivo.
+        watching: Arc<AtomicBool>,
     }
 
     impl VaultWatcher for Debounced {
         fn is_watching(&self) -> bool {
-            true
+            self.watching.load(Ordering::Relaxed)
+        }
+    }
+
+    impl Drop for Debounced {
+        /// **Chi smette lo dice.** Il debouncer si ferma quando viene distrutto,
+        /// e senza questa riga la bandiera resterebbe alzata su una sessione che
+        /// non guarda più niente — che è la stessa bugia di prima, spostata di
+        /// un momento (§9.7).
+        fn drop(&mut self) {
+            self.watching.store(false, Ordering::Relaxed);
         }
     }
 
@@ -114,7 +144,9 @@ mod notify_watcher {
             &self,
             root: &Utf8Path,
             workspace: Arc<RwLock<Workspace>>,
+            watching: Arc<AtomicBool>,
         ) -> Result<Box<dyn VaultWatcher>, String> {
+            let failed = watching.clone();
             let mut debouncer = new_debouncer(
                 Duration::from_millis(300),
                 None,
@@ -155,6 +187,14 @@ mod notify_watcher {
                         }
                     }
                     Err(errors) => {
+                        // **Il rilevamento è finito, e da adesso si vede**
+                        // (§9.7). Un errore del debouncer non è un evento
+                        // perso: è che questo vault ha smesso di sapere quando
+                        // cambia da fuori — limite di inotify su un vault
+                        // grande, un network share che si stacca — e finché la
+                        // risposta era per costruzione l'unica traccia era
+                        // questa riga su stderr, cioè nessuna (§20.2).
+                        failed.store(false, Ordering::Relaxed);
                         for e in errors {
                             eprintln!("watch error: {e:?}");
                         }
@@ -165,8 +205,13 @@ mod notify_watcher {
             debouncer
                 .watch(root.as_std_path(), RecursiveMode::Recursive)
                 .map_err(|e| e.to_string())?;
+            // Alzata **dopo** che `watch` è riuscita: fra il debouncer costruito
+            // e la radice osservata c'è un errore possibile, e in mezzo la
+            // risposta giusta è ancora `false`.
+            watching.store(true, Ordering::Relaxed);
             Ok(Box::new(Debounced {
                 _debouncer: Box::new(debouncer),
+                watching,
             }))
         }
     }

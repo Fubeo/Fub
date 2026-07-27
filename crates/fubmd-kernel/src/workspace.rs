@@ -48,6 +48,7 @@
 //! [`Workspace::reindex`].
 
 use std::collections::BTreeSet;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -612,6 +613,24 @@ impl Workspace {
         self.closed
     }
 
+    /// La bandiera del **rilevamento delle modifiche esterne** (§9.7), da dare a
+    /// chi tiene vivo un rilevatore.
+    ///
+    /// È l'unico modo che il kernel ha di sapere una cosa che non gli
+    /// appartiene: il watcher vive in `fubmd-host`, il kernel non sa cosa sia, e
+    /// però è il kernel che deve **rispondere**
+    /// ([`IndexQuery::VaultStatus`](fubmd_abi::traits::IndexQuery::VaultStatus)),
+    /// perché è l'unico che conosce anche l'altra metà della risposta — quante
+    /// sincronizzazioni sono fallite.
+    ///
+    /// Una bandiera **condivisa** e non un valore copiato, perché la copia
+    /// sarebbe una seconda verità: chi monta la alzerebbe all'avvio e nessuno la
+    /// abbasserebbe quando il rilevatore muore. Chi la tiene la abbassa — quando
+    /// fallisce e quando smette — e la risposta del kernel cambia da sé.
+    pub fn watch_flag(&self) -> Arc<AtomicBool> {
+        self.indexes.core.watch.watching.clone()
+    }
+
     /// Questo plugin può nominare questo id? La regola del §7.4, per chi non
     /// passa da una registrazione.
     ///
@@ -1041,7 +1060,29 @@ impl Workspace {
     /// ([`Vault::is_ignored`](crate::vault::Vault::is_ignored)) e non una sua copia: le due porte d'ingresso del
     /// vault devono avere la stessa idea di cosa sta fuori, altrimenti una nota
     /// cestinata resterebbe cercabile.
+    ///
+    /// **Un fallimento resta scritto anche se il chiamante non lo legge** (§9.7):
+    /// i due chiamanti veri sono nel callback del watcher e scrivevano
+    /// `let _ = ws.sync_path(…)`, quindi un file esterno che non si legge o non
+    /// si parsa lasciava la cache, il grafo e l'indice fermi a *prima*, per
+    /// sempre, senza che niente lo dicesse. Adesso lo dice
+    /// [`IndexQuery::VaultStatus`](fubmd_abi::traits::IndexQuery::VaultStatus).
     pub fn sync_path(&mut self, abs: &Utf8Path) -> Result<bool> {
+        let outcome = self.sync_path_here(abs);
+        self.note_sync(&outcome);
+        outcome
+    }
+
+    /// Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
+    /// del §9.7. Non cambia ciò che il chiamante riceve: aggiunge un secondo
+    /// lettore, che è il vault stesso.
+    fn note_sync(&mut self, outcome: &Result<bool>) {
+        if let Err(e) = outcome {
+            self.indexes.core.note_sync_failure(e);
+        }
+    }
+
+    fn sync_path_here(&mut self, abs: &Utf8Path) -> Result<bool> {
         if self.docs.vault.is_ignored(abs) {
             return Ok(false);
         }
@@ -1389,8 +1430,15 @@ impl Workspace {
     /// rimozione; sorgente mai vista è al più un'aggiunta ([`sync_path`]).
     ///
     /// [`sync_path`]: Workspace::sync_path
+    ///
+    /// Come [`sync_path`](Workspace::sync_path), un fallimento resta scritto
+    /// anche se il chiamante non lo legge (§9.7) — e **una volta sola**: i rami
+    /// che degradano a `sync_path` passano dal corpo interno, non dalla porta
+    /// che registra.
     pub fn sync_renamed_path(&mut self, from: &Utf8Path, to: &Utf8Path) -> Result<bool> {
-        self.as_actor(Actor::Watcher, |ws| ws.sync_renamed_path_here(from, to))
+        let outcome = self.as_actor(Actor::Watcher, |ws| ws.sync_renamed_path_here(from, to));
+        self.note_sync(&outcome);
+        outcome
     }
 
     fn sync_renamed_path_here(&mut self, from: &Utf8Path, to: &Utf8Path) -> Result<bool> {
@@ -1399,8 +1447,10 @@ impl Workspace {
             .flatten()
             .filter(|id| self.indexes.core.metas.contains_key(id));
         let Some(from_id) = from_id else {
-            // Niente da migrare: al più in `to` è comparso qualcosa.
-            return self.sync_path(to);
+            // Niente da migrare: al più in `to` è comparso qualcosa. Il corpo
+            // interno, non la porta: chi ci ha chiamati registrerà l'esito una
+            // volta sola (§9.7).
+            return self.sync_path_here(to);
         };
         let to_id = (!self.docs.vault.is_ignored(to))
             .then(|| self.docs.vault.doc_id_for_path(to).ok())
@@ -1416,7 +1466,7 @@ impl Workspace {
             return Ok(true);
         };
         if from_id == to_id {
-            return self.sync_path(to);
+            return self.sync_path_here(to);
         }
         if !to.exists() {
             self.remove_document(&from_id);

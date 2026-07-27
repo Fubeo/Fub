@@ -33,8 +33,8 @@ use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, Tex
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, DocumentMatch, HealthCheck, IndexQuery, IndexResult, JobId, LinkDirection,
-    NeighborRef, Page, Paged, PropertyEntry, PropertySelect, TagCount, ViewInstance, ViewSpec,
-    ViewSurface,
+    NeighborRef, Page, Paged, PropertyEntry, PropertySelect, TagCount, VaultStatus, ViewInstance,
+    ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
@@ -561,6 +561,7 @@ fn index_query_samples() -> Vec<Value> {
             ns: "terzi".into(),
             query: json!({"x": 1}),
         },
+        IndexQuery::VaultStatus,
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -573,7 +574,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::Neighbors { .. }
             | IndexQuery::PropertyValues { .. }
             | IndexQuery::VaultHealth { .. }
-            | IndexQuery::Custom { .. } => {}
+            | IndexQuery::Custom { .. }
+            | IndexQuery::VaultStatus => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -599,6 +601,14 @@ fn index_result_samples() -> Vec<Value> {
         IndexResult::PropertyValues(Paged::all(vec![])),
         IndexResult::VaultHealth(Paged::all(vec![])),
         IndexResult::Custom(json!({"x": 1})),
+        // Un campione con il rilevamento **acceso e già inciampato**: con i
+        // default (`false`, 0, `None`) il mirror non vedrebbe né un `true` né
+        // una stringa dentro l'opzione, cioè metà della forma.
+        IndexResult::VaultStatus(VaultStatus {
+            watching: true,
+            sync_failures: 1,
+            last_sync_error: Some("Nota.md: frontmatter illeggibile".into()),
+        }),
     ];
     for r in &all {
         match r {
@@ -609,7 +619,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::Neighbors(_)
             | IndexResult::PropertyValues(_)
             | IndexResult::VaultHealth(_)
-            | IndexResult::Custom(_) => {}
+            | IndexResult::Custom(_)
+            | IndexResult::VaultStatus(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -666,6 +677,13 @@ fn expected() -> Value {
             size: 5,
         })],
         "TagCount": [to_value(TagCount { name: "rust".into(), count: 2 })],
+        // Il rilevamento acceso e già inciampato (§9.7): coi default il mirror
+        // non vedrebbe né un `true` né una stringa dentro l'opzione.
+        "VaultStatus": [to_value(VaultStatus {
+            watching: true,
+            sync_failures: 1,
+            last_sync_error: Some("Nota.md: frontmatter illeggibile".into()),
+        })],
         "UiAction": ui_action_samples(),
         "ViewSpec": [to_value(
             ViewSpec::new("v", "V", ViewSurface::RightSidebar)

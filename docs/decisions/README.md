@@ -40,6 +40,7 @@ cronologico di chiusura.
 | [0027](0027-il-lavoro-lungo-vede-il-vault.md) | Il lavoro lungo vede il vault: un host per chiamata, non uno snapshot | §9.1 | 2026-07-27 |
 | [0028](0028-come-un-componente-smette.md) | Come un componente smette: una chiusura obbligatoria, e una disattivazione che toglie davvero | §9.2 + §9.4 | 2026-07-27 |
 | [0029](0029-chiudere-un-vault-e-chiuderli-tutti.md) | Chiudere un vault, e chiuderli tutti: l'ultimo giro, il punto di consistenza, e la mappa che il backend non aveva | §9.5 + §9.6 | 2026-07-27 |
+| [0030](0030-il-rilevamento-si-puo-chiedere.md) | Il rilevamento si può chiedere: una bandiera sola, e gli esiti che smettono di essere buttati | §9.7 | 2026-07-27 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
