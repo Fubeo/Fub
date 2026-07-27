@@ -738,7 +738,7 @@ impl VersioningHandler {
     /// versionata cancellerebbe per sempre lo stato in cui l'utente l'ha
     /// trovata — l'handler gira *dopo* la scrittura e vede solo il testo nuovo.
     ///
-    /// È **policy della feature**, non del wiring dell'app: viveva in
+    /// È **policy della feature**, non del wiring di chi monta: viveva in
     /// `fubmd-app::open_vault`, cioè in un posto dove un plugin non potrebbe
     /// metterla. Qui è esattamente ciò che farebbe `Plugin::activate`.
     fn first_snapshot_of_the_vault(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {

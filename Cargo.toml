@@ -10,6 +10,7 @@ members = [
     "crates/fubmd-sdk",
     "crates/fubmd-format-markdown",
     "crates/fubmd-features",
+    "crates/fubmd-host",
     "crates/fubmd-app",
     # "crates/fubmd-wasm-host", # M5: host wasmtime per plugin di terzi
 ]
@@ -41,6 +42,7 @@ fubmd-kernel = { path = "crates/fubmd-kernel", version = "0.1.0" }
 fubmd-sdk = { path = "crates/fubmd-sdk", version = "0.1.0" }
 fubmd-format-markdown = { path = "crates/fubmd-format-markdown", version = "0.1.0" }
 fubmd-features = { path = "crates/fubmd-features", version = "0.1.0" }
+fubmd-host = { path = "crates/fubmd-host", version = "0.1.0" }
 
 [profile.dev]
 # compilazione più veloce mantenendo debug info utile

@@ -73,7 +73,8 @@ backend a parità di logica.
 
 - Tutti i trait del contratto, ora anche in versione **proxy WASM**.
 - `HostApi` come set di host function.
-- Nuovo crate `fubmd-wasm-host`; `fubmd-app` che monta l'host e carica i plugin.
+- Nuovo crate `fubmd-wasm-host`; `fubmd-host` che monta il runtime e carica i
+  plugin (la tabella di montaggio è `host/mount.rs`, decisione 0023).
 
 ## Decisioni (con il perché)
 

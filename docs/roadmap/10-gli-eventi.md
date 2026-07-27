@@ -47,7 +47,9 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
 - [ ] **`EventBus` usa canali `std::mpsc` illimitati** (`kernel/bus.rs`:
       `channel()`, non `sync_channel`) e il ponte verso la webview emette **un
       messaggio IPC per evento**, da un thread dedicato che fa `recv()` e `emit`
-      in un ciclo senza freno (`app/lib.rs`). Un subscriber lento non
+      in un ciclo senza freno (il ponte è avviato da `Host::open`,
+      `host/session.rs`, e il sink che emette sta in `app/lib.rs`). Un
+      subscriber lento non
       rallenta nessuno: accumula memoria, in silenzio, senza un tetto — l'opposto
       del `DISPATCH_BUDGET` (`dispatcher.rs`) che protegge gli handler.
 - [ ] **E ogni evento costa un giro di shell**: a ogni `index_updated` (o

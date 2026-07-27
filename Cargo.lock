@@ -1158,10 +1158,8 @@ dependencies = [
  "camino",
  "fubmd-abi",
  "fubmd-features",
- "fubmd-format-markdown",
+ "fubmd-host",
  "fubmd-kernel",
- "notify",
- "notify-debouncer-full",
  "serde",
  "serde_json",
  "tauri",
@@ -1195,6 +1193,22 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml_ng",
+ "tempfile",
+]
+
+[[package]]
+name = "fubmd-host"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "fubmd-abi",
+ "fubmd-features",
+ "fubmd-format-markdown",
+ "fubmd-kernel",
+ "notify",
+ "notify-debouncer-full",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 

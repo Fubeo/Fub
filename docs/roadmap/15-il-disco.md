@@ -104,7 +104,7 @@ network share), 2.3 (drive rimovibili).
 - [ ] **Il punto nuovo non è dove stanno: è che `data_*` non dichiara se ciò che
       scrive è derivato o autorevole.** Gli snapshot del versioning non si
       ricostruiscono da niente e vivono sotto `.fubmd-data/`, che il codice
-      descrive come dati derivati (`app/lib.rs`: «A differenza di
+      descrive come dati derivati (`host/records.rs`: «A differenza di
       `.fubmd-data` questi dati sono autorevoli»). Oggi non fa danno perché
       nessuno ha ancora scritto il codice che agisce su quella distinzione;
       domani la stessa distinzione la chiedono, ognuno per conto proprio,
@@ -196,9 +196,10 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
       di ciò che chiedono 2.1 (corruption detection), 24.2 (vault repair, health
       check) e del principio per cui il vault è la verità: la verità non si
       rifiuta di aprire, si apre segnalando cosa non ha letto.
-- [ ] **E succede dentro un comando IPC** (`open_vault`, `app/lib.rs`): scansione,
-      parse di ogni documento, grafo, riconciliazione e flush in una chiamata
-      sincrona che ritorna un `VaultInfo`. Niente progresso, niente
+- [ ] **E succede in una chiamata sola** (`Host::open`, `host/session.rs`, che
+      l'IPC si limita a inoltrare): scansione, parse di ogni documento, grafo,
+      riconciliazione e flush in una chiamata sincrona che ritorna un
+      `VaultInfo`. Niente progresso, niente
       cancellazione, niente apertura parziale — «avvio rapido», «indexing
       progress», «supporto vault enormi» (24.1) non hanno dove attaccarsi.
 - [ ] Le due cose vanno insieme e cambiano la **forma dell'apertura**: da

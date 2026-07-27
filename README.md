@@ -26,16 +26,24 @@ distingue un provider nativo da uno WASM.
       │ vault, grafo link, registry, event bus (agnostico)
       ▼
 ┌───────────────┐    ┌──────────────┐        ┌──────────────────────────┐
-│ fubmd-features│    │  fubmd-app   │        │ fubmd-wasm-host (M5)      │
-│ backlink/…    │    │  (Tauri v2)  │        │ plugin di terzi via WASM  │
+│ fubmd-features│    │  fubmd-host  │        │ fubmd-wasm-host (M5)      │
+│ backlink/…    │    │  (chi monta) │        │ plugin di terzi via WASM  │
 └───────────────┘    └──────┬───────┘        └──────────────────────────┘
+                            │
+                     ┌──────┴───────┐
+                     │  fubmd-app   │  colla Tauri: comandi, finestre
+                     │  (Tauri v2)  │
+                     └──────┬───────┘
                             │ IPC (comandi/eventi)
                             ▼
                     frontend/ (Vite + TS + CodeMirror 6)
 ```
 
-**Invariante chiave (verificata in CI/test):** `fubmd-kernel` e `fubmd-abi` non
-dipendono da `comrak`, `tauri` o `wasmtime`. Il core non sa cosa sia il markdown.
+**Invarianti chiave (verificate in CI/test):** `fubmd-kernel` e `fubmd-abi` non
+dipendono da `comrak`, `tauri` o `wasmtime` — il core non sa cosa sia il
+markdown; e `fubmd-host` non dipende da `tauri`, perché chi monta deve poter
+essere preso da una CLI, da un'API locale o da un e2e headless senza portarsi
+dietro un webview.
 
 ## Stato: Milestone 1 — app usabile ✅
 

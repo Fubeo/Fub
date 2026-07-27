@@ -88,7 +88,7 @@ auto-spostamento), 6.2 (CSS per cartella), 11.3 (database da cartella), 19.2
       cache dei metadati, ordinata per costruzione, senza materializzare il
       resto (`documents_page`, `workspace.rs`). Restano due metà: un **filtro**
       non lo prende, e **il comando IPC la `Page` non la usa** — restituisce un
-      `Vec<String>` con tutto il vault (`app/lib.rs`), e la shell ne
+      `Vec<String>` con tutto il vault (`list_documents`, `app/lib.rs`), e la shell ne
       ricostruisce l'albero intero a ogni `index_updated`. È il canale più usato
       dell'app e l'unico dato che si chiede fuori da `IndexQuery`, e la
       virtualizzazione del §2.9 mitiga il disegno ma non il trasferimento. Va
