@@ -1,73 +1,42 @@
 # 9. Il lavoro lungo, e come un componente smette
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): le tre facce del momento in cui un componente smette, più chi possiede i bundle.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): le tre facce del momento in cui un componente smette — tutte e tre chiuse — più chi possiede i bundle, chi chiude il vault e chi si accorge che il vault cambia da fuori.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Il quinto giro chiede di decidere insieme §9.2, §9.4 e ~~§9.1~~ — «tre facce del
-momento in cui un componente smette, e oggi nessuna delle tre ha una risposta» —
-e il §9.5 va con il §9.6, perché «chiudere una sessione» e «chiuderle tutte»
-sono lo stesso codice. Il registry (9.3) sta qui perché è chi **possiede** i
-bundle: senza di lui non c'è nessuno che apra e chiuda alcunché, e il runner dei
-job non ha un chiamante in produzione.
+Il quinto giro chiedeva di decidere insieme ~~§9.2~~, ~~§9.4~~ e ~~§9.1~~ — «tre
+facce del momento in cui un componente smette, e oggi nessuna delle tre ha una
+risposta» — e il §9.5 va con il §9.6, perché «chiudere una sessione» e
+«chiuderle tutte» sono lo stesso codice. Il registry (9.3) sta qui perché è chi
+**possiede** i bundle: senza di lui non c'è nessuno che apra e chiuda alcunché, e
+il runner dei job non ha un chiamante in produzione.
 
-La ~~9.1~~ andava sopra tutte per la ragione del quarto giro — non allargava una
-capacità, ne rendeva una **inesprimibile** — ed è **chiusa** dalla
-[decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md): un job
-riceve l'`HostApi` intero, e lo riceve *per chiamata*. Delle tre facce ne restano
-due, e la terza — un job in volo mentre il provider si spegne — è adesso una
-domanda per il §9.2 e il §9.4 soli.
+**Le tre facce sono chiuse.** La ~~9.1~~ andava sopra tutte per la ragione del
+quarto giro — non allargava una capacità, ne rendeva una **inesprimibile** — ed è
+chiusa dalla [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md):
+un job riceve l'`HostApi` intero, e lo riceve *per chiamata*. Le altre due —
+~~9.2~~ (il contratto non ha uno spegnimento) e ~~9.4~~ (si può solo *non
+registrare*) — le chiude la [decisione 0028](../decisions/0028-come-un-componente-smette.md):
+`IndexProvider::close` è **obbligatoria**, e `Workspace::deactivate_plugin` è
+l'inverso esatto della strada di registrazione. Lì è finita anche la terza faccia
+per intero: i job in coda di chi si spegne ricevono un esito, e le capacità di un
+job in volo evaporano da sé — la politica se la fa dare dal registro a ogni
+chiamata, e un id che nessuno ha più dichiarato non ottiene niente.
+
+Quel che resta della seduta è quindi **chi possiede i bundle** (9.3), **chi
+chiude il vault** (9.5 con 9.6) e **chi si accorge che il vault cambia da fuori**
+(9.7).
 
 Il settimo giro ha aggiunto la 9.7, che sta qui perché è la 9.5 sull'altro asse:
 là il watcher assente costa la **durabilità** di un indice, qui costa il fatto
 stesso di sapere che il vault è cambiato — e nessuno chiede mai se il watcher
 sia vivo.
 
-### 9.2 Non c'è un ciclo di vita: si apre e basta
-
-*ex §1.35 · contratto · **P0 condizionale** — scade col freeze **solo se** il gemello nasce senza default (era la stessa forma del §7.1, dove le due strade si sono rivelate due metà: [decisione 0021](../decisions/0021-il-confine.md))*
-
-- [ ] **Il contratto non ha uno spegnimento.** `IndexProvider` ha `activate` e
-      `flush` ma **nessun `close`/`deactivate`** (`abi/traits.rs`);
-      `Plugin::deactivate` esiste (`abi/traits.rs`) e **non ha chiamanti**
-      in tutto il repo — l'unico posto che lo nomina è il presidio di
-      conformance. Un indice che possiede risorse esterne — tantivy tiene
-      segmenti, lock file e thread di merge — non ha un punto in cui chiuderle,
-      e il kernel non ha modo di chiedergliele.
-- [ ] **L'asimmetria è di firma, ma scade col freeze solo su una delle due
-      strade, e va detto quale.** Per `wit_additivity` una **funzione nuova** in
-      un'interfaccia è additiva: `close` aggiunto dopo il freeze non rompe il
-      WIT. Rompe **chi implementa**, e solo se nasce senza corpo di default —
-      esattamente la differenza fra `IndexProvider::flush` (obbligatoria) e
-      `Plugin::run_job` (che il default ce l'ha, `traits.rs`). Quindi
-      la P0 non è sulla voce: è sulla scelta. *Se* il ciclo di vita deve essere
-      obbligatorio — e per un indice che tiene lock file la risposta è
-      probabilmente sì — allora va messo **prima** del freeze, perché dopo ogni
-      provider di terzi già scritto smetterebbe di compilare. Se ammette un
-      default no-op, è additiva e sta col §9.5, che è P1. È la stessa forma del
-      §7.1: la voce è P0 **su una delle due strade**, e la strada va scelta ora.
-      Là la risposta è stata «tutte e due, perché erano due metà»
-      ([decisione 0021](../decisions/0021-il-confine.md)); qui non è detto che
-      valga, ed è la domanda da porsi.
-      La metà implementativa — chi chiama, quando, e cosa succede a metà — è il
-      §9.5.
-- [ ] Va deciso con il §9.4 (disattivazione a runtime): sono due facce del
-      momento in cui un componente smette, e oggi nessuna delle due ha una
-      risposta. La terza era il §9.1 — un job in volo mentre il provider si
-      spegne — ed è **chiusa a metà**: la
-      [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) ha
-      dato al job le capacità, quindi il caso non è più ipotetico (un job in volo
-      **scrive**), ma chi lo aspetta o lo ferma resta da decidere qui e nel §9.3.
-
-*Sblocca:* 24.2 (safe mode, crash recovery, plugin isolation), 3.1 (switch fra
-vault senza perdere scritture), 20.1 (lifecycle, enable/disable), 20.2 (hot
-reload), 26.2-26.3 (dove il watcher non c'è).
-
 ### 9.3 Registry di plugin/feature e runner dei job
 
-*ex §2.3 · kernel · **P1** — leva alta: è il registry su cui poggiano 9.4, 9.5 e il capitolo 7*
+*ex §2.3 · kernel · **P1** — leva alta: è chi userà la disattivazione della [0028](../decisions/0028-come-un-componente-smette.md), ed è il registry su cui poggiano la 9.5 e il capitolo 7*
 
 - [ ] **Una tabella di montaggio unica**: le feature sono cablate a mano in
       `mount` (`host/mount.rs`). La [decisione 0023](../decisions/0023-chi-monta-il-kernel.md)
@@ -116,27 +85,9 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       è il caso raro; con un'estensione installata un handler di comando che
       pania è il caso normale — la metà che resta non è la metà meno probabile.
 
-### 9.4 Disattivazione — oggi si può solo *non registrare*
-
-*ex §2.9 · kernel · **P1** — presuppone la regola degli id (7.4)*
-
-- [ ] **`unregister`/`deactivate` nel workspace**: `register_event_handler`,
-      `register_index_provider` e `register_view_provider` fanno solo `push`.
-      D7 ("spento = non registrato") funziona perché la decisione si prende
-      all'avvio da una variabile d'ambiente; con le impostazioni del §11.1 va
-      presa a runtime, e senza un modo di togliere un provider "spento" non
-      significa più niente.
-- [ ] **Definire la semantica nei casi scomodi**: `view_owner` restituisce
-      **posizioni** in un `Vec` e i provider sono estratti per la durata di una
-      chiamata — una disattivazione che arrivi in quel momento va decisa, non
-      scoperta a runtime.
-
-*Sblocca:* 20.1 (enable/disable, lifecycle), 20.2 (hot reload, developer mode),
-20.3 (crash isolation, rollback, permission revocation), 24.2 (safe mode), 28.
-
 ### 9.5 Nessuno spegne niente: la durabilità dipende dal watcher
 
-*ex §2.22 · kernel · **P1** — la metà implementativa della 9.2; va con la 9.6*
+*ex §2.22 · kernel · **P1** — la metà *del workspace* di ciò che la [0028](../decisions/0028-come-un-componente-smette.md) ha dato al singolo plugin; va con la 9.6*
 
 - [ ] **`flush_indexes` ha un solo chiamante in produzione**: il callback del
       file watcher (`host/watcher.rs`), più `reindex` all'apertura
@@ -150,10 +101,13 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       il sintomo è solo una riapertura lenta che reindicizza tutto: nessuno se
       ne accorge finché non conta.
 - [ ] **E cambiare vault o chiudere l'app non chiude niente**: nessun flush
-      finale, nessun `Plugin::deactivate` (che non ha chiamanti), nessun
-      `close` sugli indici (che non esiste — §9.2). tantivy resta con segmenti
-      non committati e con i suoi lock; un journal (§15.2) resterebbe aperto; un
-      sync (18) resterebbe a metà.
+      finale, nessun `Plugin::deactivate` (che non ha ancora chiamanti — è il
+      §9.3), e nessuno che chiami `Workspace::deactivate_plugin`, che **adesso
+      esiste** ([0028](../decisions/0028-come-un-componente-smette.md)) e chiude
+      gli indici di chi si spegne. Il mattone c'è e non lo usa nessuno: tantivy
+      resta con segmenti non committati e con i suoi lock finché il processo non
+      muore; un journal (§15.2) resterebbe aperto; un sync (18) resterebbe a
+      metà.
 - [ ] Serve un **ciclo di vita esplicito del workspace** — `open` → `close` —
       con flush e deactivate di tutti i provider, la semantica di cosa succede
       se uno fallisce, e un punto di consistenza che **non sia il watcher**: il

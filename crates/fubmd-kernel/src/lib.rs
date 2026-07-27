@@ -62,7 +62,7 @@ pub mod vault;
 pub mod workspace;
 
 pub use bus::EventBus;
-pub use dispatcher::Dispatcher;
+pub use dispatcher::{Dispatcher, PendingJob};
 pub use documents::DocumentStore;
 pub use error::{KernelError, Result};
 pub use graph::LinkGraph;

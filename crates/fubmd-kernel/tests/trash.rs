@@ -88,6 +88,10 @@ impl IndexProvider for SpyIndex {
     fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
+
+    fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
     fn query(&self, _q: IndexQuery) -> Result<IndexResult, PluginError> {
         Err(PluginError::Unserved("la spia non serve niente".into()))
     }

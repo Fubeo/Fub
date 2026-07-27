@@ -166,6 +166,16 @@ pub enum RegistryError {
     /// L'indice **è** registrato e la sua `activate` è fallita: reindicizzerà
     /// tutto, che è lento e non sbagliato.
     Activate(PluginError),
+    /// Una **disattivazione** chiesta mentre i provider sono in prestito, cioè
+    /// da dentro la chiamata di un provider (§9.4).
+    ///
+    /// È un rifiuto e non un rinvio, e la ragione non è la prudenza: durante un
+    /// prestito la tabella dei provider è **vuota** — le voci sono in mano a chi
+    /// le sta chiamando — quindi una rimozione calcolata lì sopra toglierebbe
+    /// zero provider e li vedrebbe tornare tutti al ripristino. Chi lo riceve
+    /// non ha perso niente: la sua chiamata sta tornando, e fuori da lì la
+    /// stessa domanda si risponde per intero.
+    Busy(String),
 }
 
 impl std::fmt::Display for RegistryError {
@@ -215,6 +225,12 @@ impl std::fmt::Display for RegistryError {
             RegistryError::Syntax(c) => write!(f, "{c}"),
             RegistryError::Renderer(c) => write!(f, "{c}"),
             RegistryError::Activate(e) => write!(f, "{e}"),
+            RegistryError::Busy(id) => write!(
+                f,
+                "`{id}` non si disattiva da dentro la chiamata di un provider: \
+                 lì i provider sono in prestito, e ciò che non c'è nella tabella \
+                 non si può togliere (si richiede a chiamata tornata)"
+            ),
         }
     }
 }
@@ -478,6 +494,39 @@ impl PluginRegistry {
                 id: id.clone(),
             });
         }
+    }
+
+    /// I nomi che un plugin ha registrato di una specie, nell'ordine in cui li
+    /// ha registrati.
+    ///
+    /// Serve alla disattivazione (§9.4): togliere una regola sintattica o un
+    /// renderer vuol dire sapere **quali** sono suoi, e l'unico che lo sa è
+    /// l'inventario — i due registri di destinazione tengono l'id della regola,
+    /// non quello di chi l'ha registrata.
+    pub fn ids_of(&self, plugin: &str, kind: RegistrationKind) -> Vec<String> {
+        self.get(plugin)
+            .map(|e| {
+                e.registrations
+                    .iter()
+                    .filter(|r| r.kind == kind)
+                    .map(|r| r.id.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Toglie un plugin dal registro e restituisce ciò che era: è la
+    /// **disattivazione** (§9.4), vista dal lato di chi teneva la dichiarazione.
+    ///
+    /// Sparisce l'intera riga, non le sue sole registrazioni, e la ragione è
+    /// l'inventario del §7.6: «dichiarato con zero registrazioni» è uno stato
+    /// vero e diverso — è chi si è presentato e non ha registrato niente — e
+    /// usarlo anche per dire «spento» renderebbe i due indistinguibili proprio
+    /// nel posto in cui si va a leggere cosa è attivo. Riaccendere passa dalla
+    /// stessa porta della prima volta: `register_plugin`, e poi i `register_*`.
+    pub fn retire(&mut self, plugin: &str) -> Option<PluginEntry> {
+        let at = self.entries.iter().position(|e| e.manifest.id == plugin)?;
+        Some(self.entries.remove(at))
     }
 
     /// Toglie dall'inventario le registrazioni di una specie fatte da un

@@ -129,6 +129,26 @@ impl RendererRegistry {
         Ok(())
     }
 
+    /// Toglie un renderer per id, coi `custom_kind` che rivendicava (§9.4).
+    /// `false` = non era registrato.
+    ///
+    /// La mappa `kind → posizione` si **rifà**, non si aggiusta: togliere il
+    /// terzo di cinque sposta il quarto e il quinto, e una mappa aggiustata a
+    /// mano è il modo in cui un blocco finisce disegnato dal renderer sbagliato.
+    pub fn remove(&mut self, id: &str) -> bool {
+        let Some(at) = self.renderers.iter().position(|r| r.spec.id == id) else {
+            return false;
+        };
+        self.renderers.remove(at);
+        self.by_kind.clear();
+        for (at, registered) in self.renderers.iter().enumerate() {
+            for kind in &registered.spec.kinds {
+                self.by_kind.insert(kind.clone(), at);
+            }
+        }
+        true
+    }
+
     pub fn is_empty(&self) -> bool {
         self.renderers.is_empty()
     }

@@ -101,6 +101,49 @@ impl Indexes {
         target
     }
 
+    /// Toglie gli indici di un plugin e li restituisce ancora **vivi**, perché
+    /// chi li ha tolti deve poterli chiudere (§9.2: `flush` e poi `close`
+    /// vogliono un host, e questo componente non ne ha uno).
+    ///
+    /// Le rotte seguono: quelle di chi se n'è andato spariscono, quelle di chi
+    /// resta si spostano con lui ([`RouteTable::retarget`]).
+    pub(crate) fn remove(&mut self, plugin: &str) -> Vec<(String, Box<dyn IndexProvider>)> {
+        let doomed: Vec<usize> = self
+            .providers
+            .iter()
+            .enumerate()
+            .filter(|(_, (id, _))| id == plugin)
+            .map(|(at, _)| at)
+            .collect();
+        if doomed.is_empty() {
+            return Vec::new();
+        }
+        // La nuova posizione di chi resta è la vecchia meno quanti se ne sono
+        // andati prima di lui. Si calcola **prima** di togliere, o le posizioni
+        // da tradurre non esisterebbero più.
+        let moved = |target: Target| match target {
+            Target::Core => Some(Target::Core),
+            Target::Provider(at) if doomed.contains(&at) => None,
+            Target::Provider(at) => Some(Target::Provider(
+                at - doomed.iter().filter(|&&d| d < at).count(),
+            )),
+        };
+        self.routes.retarget(&moved);
+        let mut removed = Vec::with_capacity(doomed.len());
+        let mut kept = Vec::new();
+        for (at, entry) in self.providers.take().into_iter().enumerate() {
+            if doomed.contains(&at) {
+                removed.push(entry);
+            } else {
+                kept.push(entry);
+            }
+        }
+        for entry in kept {
+            self.providers.push(entry);
+        }
+        removed
+    }
+
     pub(crate) fn on_document_indexed(&mut self, model: &DocumentModel) {
         self.core.on_document_indexed(model);
         for (_, index) in self.providers.iter_mut() {

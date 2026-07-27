@@ -127,6 +127,15 @@ oggi, una migrazione domani); le altre restano al freeze.
 - **u64 sull'IPC JSON**: gli u64 identità/impronta attraversano il terzo
   confine come **stringhe** (`fubmd_abi::ipc`); presidiato dalle fixture dei
   mirror TS (contratto e app).
+- **Il ciclo di vita di un indice**: `IndexProvider::close(host)` **senza corpo
+  di default** ([decisione 0028](../decisions/0028-come-un-componente-smette.md)).
+  Una funzione nuova in un'interfaccia è additiva nel WIT, quindi ciò che scadeva
+  col freeze non era la voce ma la **scelta**: obbligatoria si aggiunge oggi a
+  costo zero (gli implementatori si contano), dopo smetterebbe di compilare per
+  ogni provider di terzi già scritto. Obbligatoria perché il caso che un default
+  no-op avrebbe reso invisibile — un indice che tiene un lock file e non ha dove
+  rilasciarlo — è il caso normale, e perché a M5 non c'è nessun `Drop` su cui
+  ripiegare.
 
 **Da chiudere al freeze:**
 
