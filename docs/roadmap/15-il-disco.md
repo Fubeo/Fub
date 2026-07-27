@@ -57,7 +57,7 @@ network share), 2.3 (drive rimovibili).
 *ex §2.5 · kernel · **P2** — il journal è il meccanismo di 13.3 e dell'audit trail di 0010*
 
 - [ ] **Scrittura atomica vera**: `Vault::write` è `std::fs::write`
-      (`vault.rs:146`) — un crash a metà lascia un file troncato. Serve
+      (`vault.rs`) — un crash a metà lascia un file troncato. Serve
       temp+rename+fsync sulla directory. (Il test `write_atomicity` presidia
       un'altra cosa: l'ordine parse→scrittura.)
 - [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
@@ -73,13 +73,13 @@ network share), 2.3 (drive rimovibili).
 *ex §2.12 · kernel · **P2** — da anticipare a **ogni formato che nasce***
 
 - [ ] **Ce l'hanno due formati, e uno dei due è il precedente da imitare.** Il
-      `SearchIndex` (`search.rs:63`) con la regola giusta ("versione diversa →
+      `SearchIndex` (`search.rs`) con la regola giusta ("versione diversa →
       butto e ricostruisco"), ma quello è **derivato**: buttarlo è gratis. Lo
-      store del versioning ce l'ha pure (`versioning.rs:80`, campo a `:128`,
-      controllo a `:507`) ed è **autorevole** — quindi la disciplina esiste già
+      store del versioning ce l'ha pure (`versioning.rs`, campo nel manifest e
+      controllo al caricamento) ed è **autorevole** — quindi la disciplina esiste già
       in repo, applicata al caso difficile. Non è un buco: è il modello.
 - [ ] **Non ce l'hanno i due che scrivono JSON nudo**: il sidecar del cestino
-      (`vault.rs:237-249`, un `serde_json::to_string` senza campo di versione) e
+      (`vault.rs`, un `serde_json::to_string` senza campo di versione) e
       `.fubmd/workspace.json` (§11.3). E non l'avranno per imitazione — di quale
       dei due precedenti? — impostazioni, allegati, canvas e database: dati
       **autorevoli**, che se non si leggono non si ricostruiscono. Costa un campo
@@ -104,7 +104,7 @@ network share), 2.3 (drive rimovibili).
 - [ ] **Il punto nuovo non è dove stanno: è che `data_*` non dichiara se ciò che
       scrive è derivato o autorevole.** Gli snapshot del versioning non si
       ricostruiscono da niente e vivono sotto `.fubmd-data/`, che il codice
-      descrive come dati derivati (`app/lib.rs:610`: «A differenza di
+      descrive come dati derivati (`app/lib.rs`: «A differenza di
       `.fubmd-data` questi dati sono autorevoli»). Oggi non fa danno perché
       nessuno ha ancora scritto il codice che agisce su quella distinzione;
       domani la stessa distinzione la chiedono, ognuno per conto proprio,
@@ -131,7 +131,7 @@ network share), 2.3 (drive rimovibili).
       inconfondibile: sbagliarla vuol dire scrivere nel posto sbagliato, non
       passare l'enum sbagliato.
 - [ ] **Quindi è P0 la scelta, e le tre forme non costano lo stesso.** Il
-      parametro su `data_write` (`abi/traits.rs:283`) è oggi un ritaglio della linea
+      parametro su `data_write` (`abi/traits.rs`) è oggi un ritaglio della linea
       di base e dopo il freeze una major — quello sì scade. Il campo di manifest
       e la seconda radice sono **additivi**: `HostApi` la implementa l'host, non
       il guest, quindi una coppia `cache_read`/`cache_write` in più non rompe
@@ -169,7 +169,7 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 
 *ex §2.16 · kernel · **P2** — il gemello della 15.5 sul lato *quali file* invece che *quali nomi**
 
-- [ ] **`IGNORED_DIRS` (`vault.rs:20`) è un `&[&str]` nel sorgente**, e la
+- [ ] **`IGNORED_DIRS` (`vault.rs`) è un `&[&str]` nel sorgente**, e la
       regola sta bene in un punto solo (`is_ignored_name`, usata da scansione e
       watcher). Il problema non è dove sta: è che è **una** politica quando ne
       servono cinque, e come **codice** quando serve come dato per-vault (§11.1).
@@ -196,7 +196,7 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
       di ciò che chiedono 2.1 (corruption detection), 24.2 (vault repair, health
       check) e del principio per cui il vault è la verità: la verità non si
       rifiuta di aprire, si apre segnalando cosa non ha letto.
-- [ ] **E succede dentro un comando IPC** (`open_vault`, `app/lib.rs:115-236`): scansione,
+- [ ] **E succede dentro un comando IPC** (`open_vault`, `app/lib.rs`): scansione,
       parse di ogni documento, grafo, riconciliazione e flush in una chiamata
       sincrona che ritorna un `VaultInfo`. Niente progresso, niente
       cancellazione, niente apertura parziale — «avvio rapido», «indexing

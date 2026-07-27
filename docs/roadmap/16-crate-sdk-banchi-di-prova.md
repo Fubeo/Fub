@@ -36,7 +36,7 @@ banco della 16.2: un elenco dei provider ufficiali da cui un test possa
 - [ ] **`fubmd-sdk` contiene un re-export e `scan`**, e il pezzo che conta sta
       altrove: il `MemoryHost` — l'unico modo di provare un provider **contro il
       contratto** invece che contro il kernel — è `#[cfg(test)] mod testing`
-      dentro `fubmd-features` (`features/src/lib.rs:31`). Nessun autore di
+      dentro `fubmd-features` (`features/src/lib.rs`). Nessun autore di
       plugin, e nemmeno un futuro modulo FubSuite in un crate a parte, può
       usarlo.
 - [ ] **Promuoverlo a `fubmd-sdk::testing`** insieme a ciò che ogni provider
@@ -72,9 +72,9 @@ definitions, plugin linting), 21.1 (moduli Suite con API condivise).
 
 - [ ] **16 helper `vault()`/`workspace()`** negli integration test e **15
       `impl FormatProvider` giocattolo**, di cui **sei** chiamati letteralmente
-      `PlainProvider` in sei file diversi (`trash.rs:28`, `invoke_command.rs:32`,
-      `structural_host.rs:33`, `provider_reentrancy.rs:26`,
-      `index_feeding.rs:22`, `transfer_dispatch.rs:32`). Ogni test che tocca il
+      `PlainProvider` in sei file diversi (`trash.rs`, `invoke_command.rs`,
+      `structural_host.rs`, `provider_reentrancy.rs`,
+      `index_feeding.rs`, `transfer_dispatch.rs`). Ogni test che tocca il
       kernel si costruisce da capo vault temporaneo, registry, provider minimo e
       asserzioni sugli eventi.
 - [ ] **I numeri di questa voce sono stati ricontati, e si sono mossi nella
@@ -184,7 +184,8 @@ bisogno di un posto da cui essere montato).
       in arrivo (task, proprietà, asset, comandi) non scala — ed è la stessa
       forma di difetto del [§16.7](#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione):
       una copertura che è un elenco scritto a mano.
-- [ ] **Ciò che è cambiato è chi decide.** Questa voce diceva «generare `api.ts`
+- [ ] **Ciò che è cambiato è chi decide.** Questa voce diceva «generare il
+      mirror TS del contratto (allora `api.ts`, oggi `host/contract.ts`)
       **dai tipi Rust** (`ts-rs` o `schemars`)», e quella è una risposta alla
       domanda del [§16.4](#164-il-contratto-si-scrive-quattro-volte-a-mano) —
       *da quale dei quattro posti si generano gli altri* — data guardando un
@@ -226,14 +227,14 @@ bisogno di un posto da cui essere montato).
 - [ ] **Il repo conosce già la tecnica giusta e l'ha applicata ai tipi.**
       `ts_mirror.rs` lo dice in un commento: *«l'esaustività la garantisce il
       `match` senza `_`: aggiungere una variante non compila finché non è qui»*
-      (`features/tests/ts_mirror.rs:39-41`), e la [decisione 0003](../decisions/0003-modello-del-documento.md) dice lo stesso di
+      (`features/tests/ts_mirror.rs`), e la [decisione 0003](../decisions/0003-modello-del-documento.md) dice lo stesso di
       `wit_conformance` («non compila su divergenza»). Sono presidi che il
       compilatore tiene completi. I due qui sotto sono elenchi scritti a mano, e
       la differenza si vede solo il giorno in cui qualcuno aggiunge la voce che
       non c'è.
 - [ ] **`view_refresh_masks.rs` copre quattro view, per nome.**
       `ogni_view()` costruisce a mano `BacklinksView`, `OutlineView`,
-      `TagPanelView`, `StatsView` (`features/tests/view_refresh_masks.rs:18-26`).
+      `TagPanelView`, `StatsView` (`features/tests/view_refresh_masks.rs`).
       La [decisione 0011](../decisions/0011-il-lotto.md) lo descrive come «un test su ogni view ufficiale», e la quinta
       view ufficiale entrerà senza che nessuno se ne accorga: il test resta verde
       perché guarda le quattro di prima. Il difetto che quel presidio esiste per
@@ -242,9 +243,9 @@ bisogno di un posto da cui essere montato).
       una rete con un buco silenzioso.
 - [ ] **`TriesEverything` prova cinque capacità, per nome.** Il test
       `every_structural_capability_is_refused_by_the_same_gate`
-      (`kernel/tests/invoke_command.rs:423-460`) asserisce
+      (`kernel/tests/invoke_command.rs`) asserisce
       `quali == vec!["create", "rename", "trash", "restore", "empty"]`, e il
-      provider che le chiama le elenca a mano (`:171-178`). La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) gli
+      provider che le chiama le elenca a mano (stesso file). La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) gli
       attribuisce un'altra proprietà: *«un test che le prova tutte in fila
       proprio per accorgersi di quella che un giorno qualcuno aggiungesse senza
       pensarci»*. Quella proprietà il test non ce l'ha: nota se una delle cinque

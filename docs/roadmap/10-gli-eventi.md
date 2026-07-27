@@ -19,7 +19,7 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
 *ex §1.19 · contratto · **P0** — la forma della maschera è contratto*
 
 - [ ] **La maschera è un `Vec<EventKind>` su 9 varianti** (`EventMask`,
-      `abi/event.rs:295-315`; la nona è `BatchEnded`, che ha portato la
+      `abi/event.rs`; la nona è `BatchEnded`, che ha portato la
       [decisione 0011](../decisions/0011-il-lotto.md) — e la maschera cresce
       **per varianti**, che è il punto di questa voce), e a
       [`Event::Custom`] ci si abbona a grana `EventKind::Custom`
@@ -44,10 +44,10 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
 
 *ex §2.27 · kernel · **P2** — il primo cliente vero sarà il progresso dei job (9.3)*
 
-- [ ] **`EventBus` usa canali `std::mpsc` illimitati** (`kernel/bus.rs:28`:
+- [ ] **`EventBus` usa canali `std::mpsc` illimitati** (`kernel/bus.rs`:
       `channel()`, non `sync_channel`) e il ponte verso la webview emette **un
       messaggio IPC per evento**, da un thread dedicato che fa `recv()` e `emit`
-      in un ciclo senza freno (`app/lib.rs:208-215`). Un subscriber lento non
+      in un ciclo senza freno (`app/lib.rs`). Un subscriber lento non
       rallenta nessuno: accumula memoria, in silenzio, senza un tetto — l'opposto
       del `DISPATCH_BUDGET` (`dispatcher.rs`) che protegge gli handler.
 - [ ] **E ogni evento costa un giro di shell**: a ogni `index_updated` (o

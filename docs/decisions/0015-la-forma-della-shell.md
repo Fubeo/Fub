@@ -19,7 +19,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la ma
       riversa una ventina di nodi sul renderer, il §2.8 ci mette accanto un
       riconciliatore, il §2.2 aggiunge cinque superfici a `main.ts`, il §18.2 un
       registro comandi, il §10.3 un centro notifiche.
-- [x] **`api.ts` è l'unica cucitura verso Tauri — tranne `main.ts:2`**, che
+- [x] **`api.ts` è l'unica cucitura verso Tauri — tranne `main.ts`**, che
       importa `@tauri-apps/plugin-dialog` per le conferme e il file picker.
       Basta una riga perché la shell smetta di essere portabile.
 

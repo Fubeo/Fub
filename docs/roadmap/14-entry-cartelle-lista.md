@@ -38,7 +38,7 @@ recente» non ha alcuna fonte.
 
 - [ ] **`DocMeta` tiene id, frontmatter, outline e link** (`index/core.rs`)
       e il `Vault` non espone uno `stat`: mtime e dimensione li legge già, ma solo
-      per le voci del cestino (`vault.rs:293-316`), e per i documenti non li tiene
+      per le voci del cestino (`vault.rs`), e per i documenti non li tiene
       nessuno. Quindi `reindex` **rilegge e riparsa l'intero vault a ogni
       apertura** (`workspace.rs`): «un indice
       persistente riconosce e salta gli immutati» è vero per l'indice, non per
@@ -69,8 +69,8 @@ recente» non ha alcuna fonte.
       Quindi non si può creare una cartella vuota (le directory nascono per
       effetto collaterale di `Vault::write`), rinominarne una sarebbe N rename
       senza atomicità ([decisione 0011](../decisions/0011-il-lotto.md)) e senza un `FolderRenamed`, e icone/ordinamenti di
-      cartella nel sidecar non li migra nessuno — `migrateMeta` (`main.ts:714`)
-      gestisce i soli documenti.
+      cartella nel sidecar non li migra nessuno — `migrateOrganization`
+      (`state/organization.ts`) gestisce i soli documenti.
 
 *Sblocca:* 3.2 (crea/rinomina/sposta cartella, drag & drop), 8.2 (folder-level
 metadata, inherited metadata), 8.3 (cartella default per tipo nota, regole di

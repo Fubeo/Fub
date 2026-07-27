@@ -21,7 +21,8 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
       già in cache. `PropertyTest` è un variant (`exists`, `missing`, `equals`,
       `not_equals`, `contains`, `>`, `<`) su `PropertyValue` della [decisione 0003](../decisions/0003-modello-del-documento.md); le
       faccette contano **sul sottoinsieme filtrato** e un elenco conta per ogni
-      suo elemento. Regole in un posto solo (`kernel/properties.rs`): specie
+      suo elemento. Regole in un posto solo (oggi `fubmd_abi::rules::properties`,
+      `abi/rules/properties.rs`, dalla [decisione 0020](0020-le-regole-in-un-posto-solo.md)): specie
       diverse non si confrontano (falso, non errore), chi non ha la chiave
       ordina in fondo in entrambi i versi, la parità la rompe il `DocId` — o una
       risposta paginata non è stabile.

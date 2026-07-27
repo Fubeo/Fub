@@ -51,8 +51,8 @@ raccoglie.
 - [ ] **Invariante del buffer sporco** irrobustita (oggi custodita da un flag TS)
       e conflitto buffer↔disco esplicito: è lavoro M3 già dichiarato.
 - [ ] **La history di undo attraversa le note, e questo è un bug da chiudere
-      subito.** L'`EditorView` è costruito una volta (`editor.ts:81`, da
-      `main.ts:132`) e `setDoc` cambia documento con un `dispatch` di `changes`
+      subito.** L'`EditorView` è costruito una volta (`editor/editor.ts`, da
+      `panels/document.ts`) e `setDoc` cambia documento con un `dispatch` di `changes`
       normali, che finiscono nella history di `basicSetup`: dopo un cambio nota un
       Ctrl-Z scrive nella nota aperta il testo di quella precedente, e l'autosave
       lo persiste. Si chiude svuotando la history in `setDoc`, o marcando quel
