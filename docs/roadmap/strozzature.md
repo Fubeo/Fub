@@ -16,7 +16,7 @@ Una riga per **famiglia di FEATURES**: cosa servirebbe perché quelle voci siano
 | 10 task, 5.2 id di blocco, 7.1 link a blocco | modello con task e ancore stabili | `Block::List` non porta lo stato di spunta; nessun `^block-id` |
 | 9.1 faceted/field search, 9.2 query engine, 8.4 collezioni | canale query su **proprietà** | c'è (0005) e adesso si **compone** col testo (0019): resta da disegnare chi lo usa — il builder e le viste salvate |
 | 17 import/export/migration (~120 voci) | trait `ImportProvider`/`ExportProvider` | non esistono: ogni formato sarebbe codice nell'app |
-| 24.1 task manager, 22 AI, 14.2 clipper | lavoro in background reale | `take_pending_jobs` (`workspace.rs:1312`) **non ha chiamanti fuori dai test**: `spawn_job` in produzione non esegue nulla |
+| 24.1 task manager, 22 AI, 14.2 clipper | lavoro in background reale | `take_pending_jobs` (`dispatcher.rs`) **non ha chiamanti fuori dai test**: `spawn_job` in produzione non esegue nulla |
 | 3.1 vault multipli, 3.3 finestre multiple, 26 piattaforme | sessioni multiple | `AppState` tiene **una** `Option<VaultSession>` (`app/lib.rs:39`) |
 | 5.3 sicurezza markdown, 23 privacy | sanitizzazione e CSP in un punto | `ui.ts:63-67` fa `innerHTML` su `UiNode::Html`; nessun sanitizer, nessuna policy contenuti remoti |
 | 25 accessibilità e localizzazione | tema a token + catalogo stringhe | stringhe italiane cablate **anche dentro i provider** (le view producono testo di UI) |
@@ -31,7 +31,7 @@ Una riga per **famiglia di FEATURES**: cosa servirebbe perché quelle voci siano
 | 27.3 test utilities, 21.1 moduli Suite | un SDK usabile da fuori | `MemoryHost` è `#[cfg(test)]` dentro `fubmd-features` (`features/src/lib.rs:31`) |
 | 2.2 config, 27.4 upgrade migration | versione di schema sui formati persistiti | ce l'ha il solo indice di ricerca (`search.rs:59`), che è **derivato** |
 | 20.1 ribbon/status bar/menu/settings tab, 11-12 database e canvas, 7.3 grafo | superfici di UI oltre le sidebar | `ViewPlacement` ha **3 varianti** (`traits.rs:195`) e l'area principale non è nel contratto |
-| 11.2 viste multiple, 8.3 viste salvate, 9.2 query embed, 3.3 split | view **istanziabili** con parametri | `views()` è un elenco statico e `view_owner` risolve per id (`workspace.rs:1196`) |
+| 11.2 viste multiple, 8.3 viste salvate, 9.2 query embed, 3.3 split | view **istanziabili** con parametri | `views()` è un elenco statico e `view_owner` risolve per id (`providers.rs`) |
 | ~~4.3, 7.2, 8.2, 10.1, 11.3, 16.1, 19.2, 22.2~~ | ~~modificare **un pezzo** di documento~~ | **chiuso ([decisione 0008](../decisions/0008-modifica-chirurgica.md))**: `HostApi::apply_edit(id, EditRequest { base, edits })`, con la revisione nella firma e `Conflict` invece della sovrascrittura silenziosa |
 | 4.2 undo illimitato, 11.3, 16.3, 17.3 rollback, 3.3 undo toast | un proprietario dell'undo | vive solo in CodeMirror, su **un** `EditorView` riusato per tutte le note |
 | 16.2 trigger, 18 sync, 19.2 collaborazione | origine e causalità sugli eventi | `DocumentChanged { id }` non dice chi ha scritto: la shell indovina (`main.ts:1360`) |
@@ -51,7 +51,7 @@ Una riga per **famiglia di FEATURES**: cosa servirebbe perché quelle voci siano
 | 2.2 UUID, 8.3 Zettelkasten ID, 10.4 calendario, 25.2 collazione | caso, fuso orario, locale come capacità | l'`HostApi` ha `now_unix_millis` e nient'altro (`abi/traits.rs:131`) |
 | 6.3 stampa/PDF, 19.4 pubblicazione, 6.2 CSS per nota, 5.3 sanitizzazione | opzioni di rendering | `RenderOptions` è **un** booleano (`abi/format.rs:62`), ed è argomento di `render_html` |
 | 8.1 note recenti, 24.1 apertura rapida, 18.1 sync differenziale, 3.2 duplicati | mtime, dimensione, impronta per entry | `DocMeta` non li ha (`workspace.rs:125`) e `reindex` riparsa **tutto** (`:341`) |
-| 27.1 CLI, 27.2 API locale, 26.2-26.3 mobile/PWA, 27.4 e2e | un pezzo riusabile più piccolo di "tutto" | `Workspace` è 1750 righe e ~20 campi dietro un lock solo |
+| 27.1 CLI, 27.2 API locale, 26.2-26.3 mobile/PWA, 27.4 e2e | un pezzo riusabile più piccolo di "tutto" | i cinque proprietari ci sono ([decisione 0022](../decisions/0022-il-kernel-a-pezzi.md)), ma stanno ancora dietro **un lock solo** (§8.3) e nessuno li monta fuori da un comando Tauri (§8.2) |
 | 20.1 UI di plugin, 21.1 moduli installabili separatamente | far entrare un renderer di terzi nella shell | `renderUiNode` è uno `switch` esaustivo compilato nel bundle (`ui.ts`) |
 | 23.3 SBOM/licenze/CVE, 20.3 reproducible builds, dependency audit | tooling di supply chain | la CI non ha `cargo-deny` né generazione SBOM |
 | ~~10 task, 8.2 proprietà, 15.1 citazioni, 17.2 export, 22.1 chunking~~ | ~~il **modello parsato** in mano a un provider~~ | **chiuso ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md))**: `HostApi::read_model(id) -> Result<DocumentModel>` — pull, un documento alla volta, riparsato dal disco |
@@ -60,7 +60,7 @@ Una riga per **famiglia di FEATURES**: cosa servirebbe perché quelle voci siano
 | 22 AI, 18 sync, 11.5 dashboard, 24.1 progresso | una view che si fa **ridisegnare** | `refresh` filtra eventi del kernel; nessun push dal provider, nessuno stato "in caricamento" |
 | 3.3 sidebar personalizzabili, 20.1 venti pannelli di plugin | metadati di presentazione di una view | `ViewSpec` ha id, titolo, placement, refresh (`abi/traits.rs:201`) — niente icona, ordine, default |
 | 19.3 form, 8.2 editor proprietà, 11.3 editing | le azioni portano **valori** | `UiAction.payload` non è mai popolato (`main.ts:1197`): i dati stanno dentro l'`ActionId` |
-| 20.1 conflitti plugin, 21.2 moduli che convivono | una regola sugli **spazi di nomi** | `view_owner` prende il primo id che combacia (`workspace.rs:1196`): il secondo è muto |
+| 20.1 conflitti plugin, 21.2 moduli che convivono | una regola sugli **spazi di nomi** | `view_owner` prende il primo id che combacia (`providers.rs`): il secondo è muto |
 | 24.2 safe mode/recovery, 3.1 switch vault, 26.2-26.3 | uno **spegnimento** | `flush_indexes` ha un solo chiamante: il watcher (`app/lib.rs:252`); `deactivate` non ne ha nessuno |
 | 7.1 link markdown/relativi, 7.2 link rotti, 13.1 riferimenti allegati | un grafo che risolve **tutti** i link | `LinkGraph` scarta ogni `LinkTarget` che non sia `Wiki` (`graph.rs:266`) |
 | 24.1 vault enormi, 2.1 corruption detection, 24.2 repair | apertura a fasi e tolleranza per-documento | `reindex` è tutto-o-niente (`workspace.rs:341`): una nota che non parsa chiude il vault |

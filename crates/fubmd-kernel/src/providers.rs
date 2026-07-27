@@ -115,3 +115,271 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
         &mut self.entries[at]
     }
 }
+
+// ---------------------------------------------------------------------------
+// Il registro dei provider (§8.1)
+// ---------------------------------------------------------------------------
+
+use std::sync::Arc;
+
+use fubmd_abi::command::CommandSpec;
+use fubmd_abi::traits::{
+    CommandProvider, EventHandler, ServiceProvider, ViewInstance, ViewProvider, ViewSpec,
+};
+use fubmd_abi::transfer::{ExportProvider, ExportTarget, ImportProvider};
+use fubmd_abi::PluginError;
+
+use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
+use crate::workspace::Trust;
+
+/// Un provider registrato, con **ciò che ha dichiarato al momento della
+/// registrazione**.
+///
+/// Le spec sono dato di registrazione e non una chiamata al provider, ed è la
+/// metà kernel del §5.5. Prima `view_owner` chiamava `views()` su *ogni*
+/// provider per risolvere un id, e `check_params` la richiamava sul vincitore
+/// per convalidare i parametri: due giri di allocazioni per azione, sul
+/// percorso caldo di ogni render — e con le istanze (decisione 0016) quel
+/// percorso è diventato quello di ogni click.
+///
+/// La domanda che questo risolve non è di prestazioni ma di **forma**: chi
+/// possiede la verità su cosa un provider offre. La risposta è il registro, dal
+/// momento in cui il provider gliel'ha detta; un provider che cambia idea lo
+/// dichiara ([`ProviderRegistry::refresh_specs`]), invece di farlo scoprire a
+/// chi interroga.
+pub(crate) struct RegisteredView {
+    pub(crate) id: String,
+    pub(crate) provider: Box<dyn ViewProvider>,
+    pub(crate) specs: Vec<ViewSpec>,
+    /// Quanto ci si fida di ciò che produce. Sta qui e non fra le spec perché è
+    /// una proprietà di **chi manda**, non di ciò che ha dichiarato: lo stesso
+    /// albero è legittimo da una feature ufficiale e inaccettabile da un plugin
+    /// sandboxato. I comandi non ce l'hanno, e non è una dimenticanza — da un
+    /// comando non passa un albero di UI.
+    pub(crate) trust: Trust,
+}
+
+pub(crate) struct RegisteredCommand {
+    pub(crate) id: String,
+    pub(crate) provider: Arc<dyn CommandProvider>,
+    pub(crate) specs: Vec<CommandSpec>,
+}
+
+/// **Chi è registrato, cosa ha dichiarato, e chi possiede quale nome.**
+///
+/// Uno dei cinque componenti in cui il §8.1 scompone il `Workspace`. Mette
+/// insieme le sei tabelle di provider, il registro dei plugin della
+/// [decisione 0021](../../../docs/decisions/0021-il-confine.md) e le due catene
+/// di chiamate in corso (servizi e comandi), perché sono la stessa domanda vista
+/// da lati diversi: *chi c'è, cosa ha promesso, e sta già girando?*
+///
+/// # Cosa **non** sta qui: chiamarli
+///
+/// È il taglio che conta, ed è netto. Ogni chiamata a un provider vuole un
+/// `HostApi`, e un `HostApi` è costruito su `&mut Workspace` — cioè su **tutto**
+/// il workspace, non su questo componente. Quindi `render_view`, `view_action`,
+/// `invoke_command`, `import`, `export`, `call_service` e `deliver_to_handlers`
+/// restano orchestratori sul `Workspace`, e qui c'è solo ciò che si risponde
+/// **senza svegliare nessuno**: chi possiede un id, cosa ha dichiarato, di chi
+/// ci si fida.
+///
+/// La distinzione non è estetica. È esattamente la linea lungo cui il `RwLock`
+/// del §8.3 potrà diventare a grana fine: le risposte qui sotto sono letture
+/// pure e non toccano né il vault né gli indici; le chiamate no, e non
+/// potranno mai esserlo.
+pub(crate) struct ProviderRegistry {
+    /// Handler registrati, ognuno col proprio id (feature ufficiali; a M4/M5 i
+    /// plugin via registry). L'id non è decorativo: è lo spazio dei nomi dello
+    /// storage che l'`HostApi` concede a quell'handler, e chi lo assegna è il
+    /// kernel — non l'handler, che altrimenti sceglierebbe il proprio recinto.
+    pub(crate) handlers: ProviderTable<(String, Box<dyn EventHandler>)>,
+    /// Chi è registrato, cosa ha dichiarato, cosa ha registrato (§7.3, §7.6).
+    pub(crate) plugins: PluginRegistry,
+    /// Chi offre servizi agli altri plugin (§7.5). Come i comandi sono `Arc` e
+    /// non `Box`, e per la stessa ragione: un servizio deve restare
+    /// **raggiungibile durante una propria chiamata**, o A→B→C non troverebbe
+    /// C. `call` prende `&self`, quindi condividere il puntatore basta.
+    pub(crate) services: ProviderTable<(String, Arc<dyn ServiceProvider>)>,
+    /// La catena dei servizi in corso, dal più esterno al più interno: rifiuta
+    /// una ricorsione **nominandola** invece di scoprirla come stack overflow.
+    pub(crate) service_stack: Vec<String>,
+    /// Provider di import, interpellati **in ordine**: il primo che riconosce
+    /// una sorgente la prende. Come per handler e indici, l'id è lo spazio dati
+    /// che l'`HostApi` concede al provider.
+    pub(crate) imports: ProviderTable<(String, Box<dyn ImportProvider>)>,
+    /// Provider di export. Non hanno un ordine che conta: una richiesta nomina
+    /// una destinazione, e la destinazione ha un proprietario solo.
+    pub(crate) exports: ProviderTable<(String, Box<dyn ExportProvider>)>,
+    /// View dichiarative registrate, col grado di fiducia di chi le produce.
+    /// Ogni albero di UI che entra nell'host passa dal `Workspace`, che è il
+    /// punto unico in cui `UiNode::validate_untrusted` viene applicato: qui c'è
+    /// solo *di chi ci si fida*, che è il dato su cui quella decisione si basa.
+    pub(crate) views: ProviderTable<RegisteredView>,
+    /// Provider di comandi, in ordine di registrazione. Senza [`Trust`], a
+    /// differenza delle view: la fiducia serve dove passa **contenuto attivo**
+    /// (`Html`/`WebView`), e da un comando non passa un albero di UI — l'unica
+    /// stringa che l'esito porta all'utente (`notify`) è testo semplice. Ciò
+    /// che serve a un comando è un *permesso* (§7.3), che è un'altra domanda.
+    ///
+    /// Sono `Arc` e non `Box` — soli fra i provider, con i servizi — perché
+    /// devono restare **raggiungibili durante una propria chiamata**: col
+    /// `run_command` della decisione 0013 un comando ne invoca un altro, e se il
+    /// registro fosse svuotato per la durata dell'invocazione (la disciplina di
+    /// view, indici e handler) la macro non troverebbe nessuno dei comandi che
+    /// deve comporre.
+    pub(crate) commands: ProviderTable<RegisteredCommand>,
+    /// La catena dei comandi in corso, dal più esterno al più interno: serve a
+    /// rifiutare una ricorsione **nominandola** (`a → b → a`) invece di
+    /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
+    /// comandi registrati sono finiti e nessuno può comparire due volte.
+    pub(crate) command_stack: Vec<String>,
+}
+
+impl ProviderRegistry {
+    pub(crate) fn new() -> Self {
+        Self {
+            handlers: ProviderTable::new(),
+            plugins: PluginRegistry::new(),
+            services: ProviderTable::new(),
+            service_stack: Vec::new(),
+            imports: ProviderTable::new(),
+            exports: ProviderTable::new(),
+            views: ProviderTable::new(),
+            commands: ProviderTable::new(),
+            command_stack: Vec::new(),
+        }
+    }
+
+    // --- chi c'è -----------------------------------------------------------
+
+    /// L'inventario di ciò che è **attivo** (§7.6): chi è registrato, con quale
+    /// manifest, quale fiducia, quali permessi, e cosa ha registrato.
+    pub(crate) fn inventory(&self) -> Vec<PluginInfo> {
+        self.plugins.iter().map(PluginInfo::of).collect()
+    }
+
+    /// Il grado di fiducia di un plugin dichiarato.
+    pub(crate) fn trust_of(&self, plugin: &str) -> Option<Trust> {
+        self.plugins.trust_of(plugin)
+    }
+
+    /// Un plugin può nominare questo id?
+    ///
+    /// Serve al topic di un `Event::Custom`, che è l'unico nome del contratto
+    /// senza un momento di registrazione in cui verificarlo: si controlla
+    /// quando lo si emette.
+    pub(crate) fn owns_name(
+        &self,
+        plugin: &str,
+        id: &str,
+    ) -> std::result::Result<(), fubmd_abi::rules::ids::IdFault> {
+        let owner = match self.plugins.trust_of(plugin) {
+            Some(Trust::Core) => fubmd_abi::rules::ids::Owner::Core,
+            _ => fubmd_abi::rules::ids::Owner::Plugin(plugin),
+        };
+        fubmd_abi::rules::ids::check(id, owner)
+    }
+
+    // --- cosa hanno dichiarato ---------------------------------------------
+
+    /// Le view offerte dai provider registrati, in ordine di registrazione.
+    pub(crate) fn view_specs(&self) -> Vec<ViewSpec> {
+        self.views
+            .iter()
+            .flat_map(|r| r.specs.iter().cloned())
+            .collect()
+    }
+
+    /// I comandi offerti dai provider registrati, in ordine di registrazione.
+    pub(crate) fn command_specs(&self) -> Vec<CommandSpec> {
+        self.commands
+            .iter()
+            .flat_map(|r| r.specs.iter().cloned())
+            .collect()
+    }
+
+    /// Le destinazioni di export offerte dai provider registrati.
+    pub(crate) fn export_targets(&self) -> Vec<ExportTarget> {
+        self.exports.iter().flat_map(|(_, p)| p.targets()).collect()
+    }
+
+    // --- chi possiede cosa -------------------------------------------------
+
+    /// Chi possiede una view, per posizione. `UnknownView` se nessuno.
+    pub(crate) fn view_owner(&self, view: &str) -> std::result::Result<usize, PluginError> {
+        self.views
+            .position(|r| r.specs.iter().any(|spec| spec.id == view))
+            .ok_or_else(|| PluginError::UnknownView(view.to_string()))
+    }
+
+    /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
+    pub(crate) fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
+        self.commands
+            .position(|r| r.specs.iter().any(|spec| spec.id == command))
+            .ok_or_else(|| PluginError::UnknownCommand(command.to_string()))
+    }
+
+    /// I parametri di un'istanza reggono la spec che il provider ha dichiarato?
+    pub(crate) fn check_params(
+        &self,
+        at: usize,
+        instance: &ViewInstance,
+    ) -> std::result::Result<(), PluginError> {
+        let spec = self.views[at]
+            .specs
+            .iter()
+            .find(|spec| spec.id == instance.view)
+            .ok_or_else(|| PluginError::UnknownView(instance.view.clone()))?;
+        spec.validate_params(&instance.params)
+    }
+
+    /// Rilegge le spec di un provider che dichiara di aver cambiato idea.
+    ///
+    /// Un rifiuto non cambia niente: le due famiglie si convalidano **prima**
+    /// che l'una o l'altra si muova.
+    pub(crate) fn refresh_specs(&mut self, id: &str) -> std::result::Result<(), RegistryError> {
+        // Le spec si chiedono una volta sola, anche qui: chiederle per
+        // convalidarle e poi di nuovo per tenerle sarebbe due risposte diverse
+        // dalla stessa domanda, che è precisamente ciò che questo metodo esiste
+        // per evitare.
+        let views: Vec<(usize, Vec<ViewSpec>)> = self
+            .views
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.id == id)
+            .map(|(at, v)| (at, v.provider.views()))
+            .collect();
+        let commands: Vec<(usize, Vec<CommandSpec>)> = self
+            .commands
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.id == id)
+            .map(|(at, c)| (at, c.provider.commands()))
+            .collect();
+
+        let view_ids: Vec<String> = views
+            .iter()
+            .flat_map(|(_, specs)| specs.iter().map(|s| s.id.clone()))
+            .collect();
+        let command_ids: Vec<String> = commands
+            .iter()
+            .flat_map(|(_, specs)| specs.iter().map(|s| s.id.clone()))
+            .collect();
+
+        self.plugins
+            .admit_refreshing(id, RegistrationKind::View, &view_ids)?;
+        self.plugins
+            .admit_refreshing(id, RegistrationKind::Command, &command_ids)?;
+
+        for (at, specs) in views {
+            self.views[at].specs = specs;
+        }
+        for (at, specs) in commands {
+            self.commands[at].specs = specs;
+        }
+        self.plugins.resettle(id, RegistrationKind::View, &view_ids);
+        self.plugins
+            .resettle(id, RegistrationKind::Command, &command_ids);
+        Ok(())
+    }
+}

@@ -55,8 +55,10 @@ con le ~50 del capitolo 5.2 in arrivo la falsità diventava la
 regola. Accanto, di poco sotto: **§7.5 (i servizi fra plugin — chiuso dalla
 [decisione 0021](../decisions/0021-il-confine.md))**, senza cui il
 capitolo 21 descriveva crate linkati e non moduli installabili separatamente, e
-**§8.1 (la scomposizione del `Workspace`)**, che è il posto dove tutte le altre
-voci di questo piano andranno ad atterrare — una alla volta, come campi.
+**§8.1 (la scomposizione del `Workspace`, **chiusa** dalla
+[decisione 0022](../decisions/0022-il-kernel-a-pezzi.md))**, che è il posto dove
+tutte le altre voci di questo piano andranno ad atterrare — non più come campi
+di un `struct` solo, ma dentro uno dei cinque proprietari.
 
 Dal quinto giro se ne aggiungono due. **Una view che non ha stato e non può
 chiedere di ridisegnarsi ([decisione 0016](../decisions/0016-cosa-e-una-view.md)

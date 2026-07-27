@@ -12,6 +12,24 @@
 //! - [`EventBus`] — pub/sub degli eventi del vault;
 //! - [`Workspace`] — l'orchestratore che li mette insieme.
 //!
+//! # I cinque proprietari (§8.1)
+//!
+//! `Workspace` non è un `struct` con ventiquattro campi piatti: ne ha
+//! **cinque**, e ognuno ha un nome che dice di cosa risponde —
+//! [`DocumentStore`] (il disco, e come ciò che ci sta sopra diventa un
+//! modello), `Indexes` (il canale dati),
+//! `ProviderRegistry` (chi è registrato e cosa ha dichiarato),
+//! [`Dispatcher`] (quando un evento parte, con che nome e per quanto) e
+//! [`Session`] (cosa sta guardando l'utente adesso).
+//!
+//! Il taglio passa fra **decidere e chiamare**, non fra sottosistemi: ogni
+//! chiamata a un provider vuole un `HostApi`, che è costruito su tutto il
+//! workspace, quindi `render_view`, `invoke_command`, `import`, `export` e il
+//! drenaggio della coda restano orchestrazione **sul `Workspace`**, e nei
+//! componenti c'è ciò a cui si risponde *senza svegliare nessuno*. È anche la
+//! linea lungo cui il `RwLock` del §8.3 potrà diventare a grana fine. Vedi la
+//! [decisione 0022](../../../docs/decisions/0022-il-kernel-a-pezzi.md).
+//!
 //! **Invariante:** questo crate non dipende da comrak/pulldown, wasmtime o
 //! tauri. Se `comrak` comparisse nel suo albero delle dipendenze, il design
 //! sarebbe fallito.
@@ -23,6 +41,8 @@
 //! mani. Il kernel le usa da lì come chiunque altro.
 
 pub mod bus;
+pub mod dispatcher;
+pub mod documents;
 pub mod error;
 pub mod graph;
 mod health;
@@ -32,6 +52,7 @@ pub mod plugins;
 mod providers;
 pub mod registry;
 pub mod renderer;
+pub mod session;
 pub mod syntax;
 mod tag_counts;
 pub mod time;
@@ -39,6 +60,8 @@ pub mod vault;
 pub mod workspace;
 
 pub use bus::EventBus;
+pub use dispatcher::Dispatcher;
+pub use documents::DocumentStore;
 pub use error::{KernelError, Result};
 pub use graph::LinkGraph;
 pub use host::{Capability, CapabilitySet, Granted, Guard, Policy, ReadOnly};
@@ -47,6 +70,7 @@ pub use index::{RouteConflict, CORE_ID};
 pub use plugins::{PluginInfo, PluginRegistry, Registration, RegistrationKind, RegistryError};
 pub use registry::{FormatRegistry, RegistryConflict};
 pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererRegistry};
+pub use session::Session;
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{TrashEntry, Vault, TRASH_DIR};
 pub use workspace::{valid_doc_id, GraphUpdate, Trust, Workspace, MAIN_PANE};

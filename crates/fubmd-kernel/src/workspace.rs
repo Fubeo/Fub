@@ -45,18 +45,16 @@
 //! (cancellazioni ad app chiusa): lo chiude [`IndexProvider::reconcile`] in
 //! [`Workspace::reindex`].
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::custom::{CustomRenderer, SyntaxRule};
 use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
-use fubmd_abi::format::{
-    DocumentFormat, DocumentSource, FormatCapabilities, ParseContext, RenderOptions, SourceKind,
-};
+use fubmd_abi::format::{DocumentFormat, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
-use fubmd_abi::session::{ContextMask, ViewContext};
+use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
     JobId, JobSpec, Page, Paged, PluginManifest, QueryRoute, ServiceProvider, ViewInstance,
@@ -67,23 +65,25 @@ use fubmd_abi::transfer::{
     ImportRequest, ImportSource,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fubmd_abi::{Actor, BatchId, Event, Notice, Origin, PluginError};
+use fubmd_abi::{Actor, Event, Notice, PluginError};
 use serde::{Deserialize, Serialize};
 
 use fubmd_abi::rules::path as rules_path;
 use fubmd_abi::rules::path::{resolution_key, strip_ext};
 
 use crate::bus::EventBus;
+use crate::dispatcher::{Dispatcher, ToDeliver};
+use crate::documents::{extension_of, DocumentStore};
 use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
 use crate::index::Indexes;
-use crate::plugins::{self, PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
-use crate::providers::ProviderTable;
+use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
+use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
 use crate::registry::FormatRegistry;
-use crate::renderer::{self, RenderedDocument, RendererRegistry};
-use crate::syntax::SyntaxRegistry;
-use crate::vault::{TrashEntry, Vault, DATA_DIR};
+use crate::renderer::{self, RenderedDocument};
+use crate::session::{ContextChange, Session};
+use crate::vault::TrashEntry;
 
 /// Il pannello di una shell che ne ha uno solo.
 ///
@@ -92,16 +92,6 @@ use crate::vault::{TrashEntry, Vault, DATA_DIR};
 /// quello di prima è, da contratto, un cambio di pannello — cioè un ridisegno
 /// di tutto ciò che segue il contesto.
 pub const MAIN_PANE: &str = "main";
-
-/// Cosa è successo al documento che il contesto stava guardando.
-enum ContextChange {
-    /// Il suo sorgente è stato riscritto: la selezione non è più posizionabile.
-    Rewritten,
-    /// Ha cambiato path: l'identità del contesto lo segue.
-    Renamed(DocId),
-    /// Non esiste più.
-    Gone,
-}
 
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
 ///
@@ -172,39 +162,16 @@ impl Trust {
     }
 }
 
-/// Tetto di eventi drenati in un singolo `dispatch_pending`: tronca i cicli
-/// di handler che si rimbalzano eventi a vicenda senza convergere. Il
-/// troncamento NON è silenzioso: emette [`Event::Overflow`] (bus + handler),
-/// così chi deriva stato dagli eventi sa di dover riconciliare da zero.
-const DISPATCH_BUDGET: usize = 1024;
-
 /// Nome di una nota nuova a cui nessuno ne ha dato uno (D3). L'utente la
 /// rinomina subito: è il motivo per cui non vale la pena essere più creativi.
 const UNTITLED: &str = "Senza titolo";
 
-/// Radice dello storage persistente dei plugin, dentro il vault: ogni plugin
-/// ha `<vault>/.fubmd-data/plugins/<id>/` e non vede nient'altro.
-///
-/// Sta nel vault e non nella cartella di configurazione dell'utente perché i
-/// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
-/// metterlo in sync deve portarsi dietro anche loro.
-const PLUGIN_DATA_DIR: &str = "plugins";
 pub struct Workspace {
-    vault: Vault,
-    registry: Arc<FormatRegistry>,
-    /// Le sintassi innestate sui provider (§3.1). Girano dopo il parse, sul
-    /// modello: è ciò che le rende innestabili su un provider che non le
-    /// conosce.
-    syntax: SyntaxRegistry,
-    /// Chi disegna quale `custom_kind` (§3.2). Il registro che l'escape hatch
-    /// del modello non aveva.
-    renderers: RendererRegistry,
-    bus: EventBus,
-    /// Handler registrati, ognuno col proprio id (feature ufficiali; a M4/M5 i
-    /// plugin via registry). L'id non è decorativo: è lo spazio dei nomi dello
-    /// storage che l'`HostApi` concede a quell'handler, e chi lo assegna è il
-    /// kernel — non l'handler, che altrimenti sceglierebbe il proprio recinto.
-    handlers: ProviderTable<(String, Box<dyn EventHandler>)>,
+    /// *Il disco, e come ciò che ci sta sopra diventa un modello* (§8.1): il
+    /// vault, il registro dei formati, le sintassi innestate (§3.1) e i
+    /// renderer dei blocchi custom (§3.2). Stanno insieme perché **ogni** parse
+    /// li attraversa tutti e quattro.
+    docs: DocumentStore,
     /// Il canale dati: l'indice del kernel (metadati, tag, grafo), quelli
     /// registrati e la tabella che dice a chi va cosa (§5.1, §5.2).
     ///
@@ -214,69 +181,23 @@ pub struct Workspace {
     /// storage persistente che l'[`HostApi`] gli concede: è lì che un indice si
     /// ricorda di ciò che ha già visto.
     indexes: Indexes,
-    /// Chi è registrato, cosa ha dichiarato, cosa ha registrato (§7.3, §7.6).
-    plugins: PluginRegistry,
-    /// Chi offre servizi agli altri plugin (§7.5). Come i comandi sono `Arc` e
-    /// non `Box`, e per la stessa ragione: un servizio deve restare
-    /// **raggiungibile durante una propria chiamata**, o A→B→C non troverebbe
-    /// C. `call` prende `&self`, quindi condividere il puntatore basta.
-    services: ProviderTable<(String, Arc<dyn ServiceProvider>)>,
-    /// La catena dei servizi in corso, dal più esterno al più interno: rifiuta
-    /// una ricorsione **nominandola** invece di scoprirla come stack overflow.
-    service_stack: Vec<String>,
-    /// Provider di import, interpellati **in ordine**: il primo che riconosce
-    /// una sorgente la prende (vedi [`Workspace::import`]). Come per handler e
-    /// indici, l'id è lo spazio dati che l'[`HostApi`] concede al provider.
-    imports: ProviderTable<(String, Box<dyn ImportProvider>)>,
-    /// Provider di export. Non hanno un ordine che conta: una richiesta nomina
-    /// una destinazione, e la destinazione ha un proprietario solo.
-    exports: ProviderTable<(String, Box<dyn ExportProvider>)>,
-    /// View dichiarative registrate, col grado di fiducia di chi le produce.
-    /// Ogni albero di UI che entra nell'host passa da qui: è il punto unico in
-    /// cui [`UiNode::validate_untrusted`] viene applicato.
-    views: ProviderTable<RegisteredView>,
-    /// Provider di comandi, in ordine di registrazione. Senza [`Trust`], a
-    /// differenza delle view: la fiducia serve dove passa **contenuto attivo**
-    /// (`Html`/`WebView`), e da un comando non passa un albero di UI — l'unica
-    /// stringa che l'esito porta all'utente (`notify`) è testo semplice, come
-    /// lo snippet di una ricerca. Ciò che serve a un comando è un *permesso*
-    /// (§7.3), che è un'altra domanda e ha un altro posto.
-    ///
-    /// Sono `Arc` e non `Box` — soli fra i provider — perché sono gli unici che
-    /// devono restare **raggiungibili durante una propria chiamata**: col
-    /// `run_command` della decisione 0013 un comando ne invoca un altro, e se il registro
-    /// fosse svuotato per la durata dell'invocazione (la disciplina di view,
-    /// indici e handler) la macro non troverebbe nessuno dei comandi che deve
-    /// comporre — nemmeno quelli di provider diversi dal suo. `invoke` prende
-    /// `&self`, quindi condividere il puntatore basta e il prestito esclusivo
-    /// del workspace resta libero per l'host.
-    commands: ProviderTable<RegisteredCommand>,
-    /// La catena dei comandi in corso, dal più esterno al più interno: serve a
-    /// rifiutare una ricorsione **nominandola** (`a → b → a`) invece di
-    /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
-    /// comandi registrati sono finiti e nessuno può comparire due volte.
-    command_stack: Vec<String>,
-    /// Eventi in attesa di dispatch verso gli handler, ognuno con l'origine
-    /// che aveva **al momento dell'emissione** — non quella del drenaggio, che
-    /// può avvenire sotto un altro attore.
-    pending: VecDeque<Notice>,
-    /// Guardia anti-rientranza: `dispatch_pending` non si annida mai.
-    dispatching: bool,
-    /// Siamo dentro una chiamata a un provider (view `on_action`, `handle`,
-    /// `flush`, `activate`, futuro `invoke`)? Finché è alzato, il dispatch è
-    /// rimandato: gli eventi arrivano **dopo che la chiamata del provider è
-    /// tornata**, mai dentro il suo frame. È la semantica che il component
-    /// model impone a M5 (un'istanza non è rientrante: un plugin che è sia
-    /// view sia handler trapperebbe), promossa a contratto già in nativo —
-    /// vedi il § "Dispatch degli eventi" qui sopra.
-    in_provider_call: bool,
-    /// Job richiesti via [`HostEvents::spawn_job`], in attesa che l'host li
-    /// esegua fuori dal giro sincrono (vedi [`Workspace::take_pending_jobs`]).
-    pending_jobs: Vec<(JobId, JobSpec)>,
-    /// Contatore per l'assegnazione dei [`JobId`].
-    next_job_id: u64,
-    /// Il contesto del pannello con il focus, servito alle view da
-    /// [`HostEnv::active_context`]. Lo imposta la shell
+    /// *Chi è registrato, cosa ha dichiarato, chi possiede quale nome* (§8.1):
+    /// le sei tabelle di provider, il registro dei plugin (decisione 0021) e le
+    /// due catene di chiamate in corso. Ciò che si risponde **senza svegliare
+    /// nessuno** sta lì dentro; chiamare un provider vuole un `HostApi`, che è
+    /// costruito su tutto il workspace, e resta orchestrazione di qui.
+    providers: ProviderRegistry,
+    /// *Quando un evento parte, con che nome e per quanto* (§8.1): il bus, la
+    /// coda verso gli handler, il lotto, l'attore corrente, il budget del
+    /// drenaggio e la coda dei job. Tre regole che il piano nominava separate —
+    /// lotto (decisione 0011), origine (decisione 0012), budget — e che si
+    /// applicano tutte nello stesso punto: tenerle in tre posti sarebbe avere
+    /// tre posti da cui un evento può uscire senza lotto, senza attribuzione o
+    /// senza freno. Vedi il § "Dispatch degli eventi" qui sopra.
+    dispatch: Dispatcher,
+    /// *Cosa sta guardando l'utente adesso* (§8.1): il contesto del pannello
+    /// con il focus, servito alle view da [`HostEnv::active_context`]. Lo
+    /// imposta la shell
     /// ([`set_active_context`](Workspace::set_active_context)); il kernel non
     /// lo deriva né lo inventa — quale nota guarda l'utente, dove ha cliccato
     /// e in che modalità legge sono decisioni dell'app, e il kernel le
@@ -285,73 +206,9 @@ pub struct Workspace {
     ///
     /// Il kernel lo tocca in un caso solo, ed è di **verità**: quando il
     /// sorgente sotto la selezione cambia o il documento sparisce (vedi
-    /// [`invalidate_context`](Workspace::invalidate_context)). Uno span
-    /// stantio è peggio di uno span assente — chi lo usasse taglierebbe i byte
-    /// sbagliati.
-    context: Option<ViewContext>,
-    /// Chi ha **chiesto** ciò che il workspace sta facendo adesso (decisione 0012): è
-    /// l'attore che finisce sull'origine di ogni evento emesso da qui in poi.
-    /// Il valore a riposo è [`Actor::User`] perché a riposo il kernel è chiamato
-    /// dalla shell; lo cambiano, per la durata di una chiamata,
-    /// [`as_actor`](Workspace::as_actor) e i suoi tre chiamanti (il watcher, il
-    /// dispatch verso un handler, l'invocazione di un comando).
-    actor: Actor,
-    /// Il lotto aperto (decisione 0011), se c'è. Uno solo: un `rename_document` dentro un
-    /// comando non apre un secondo lotto, entra in quello che c'è — chiuderne
-    /// uno interno farebbe arrivare un `batch-ended` mentre l'operazione esterna
-    /// è ancora in corso. Per questo non serve contare le aperture: chi trova il
-    /// campo pieno non lo tocca, e a chiudere è solo chi lo ha riempito.
-    batch: Option<BatchState>,
-    /// Contatore per l'assegnazione dei [`BatchId`].
-    next_batch_id: u64,
-}
-
-/// Un provider registrato, con **ciò che ha dichiarato al momento della
-/// registrazione**.
-///
-/// Le spec sono dato di registrazione e non una chiamata al provider, ed è la
-/// metà kernel del §5.5. Prima `view_owner` chiamava `views()` su *ogni*
-/// provider per risolvere un id, e `check_params` la richiamava sul vincitore
-/// per convalidare i parametri: due giri di allocazioni per azione, sul
-/// percorso caldo di ogni render — e con le istanze (decisione 0016) quel
-/// percorso è diventato quello di ogni click. Lo stesso valeva per i comandi,
-/// con la stessa riga.
-///
-/// La domanda che questo risolve non è di prestazioni ma di **forma**: chi
-/// possiede la verità su cosa un provider offre. La risposta è il kernel, dal
-/// momento in cui il provider gliel'ha detta; un provider che cambia idea lo
-/// dichiara ([`Workspace::refresh_specs`]), invece di farlo scoprire a chi
-/// interroga.
-struct RegisteredView {
-    id: String,
-    provider: Box<dyn ViewProvider>,
-    specs: Vec<ViewSpec>,
-    /// Quanto ci si fida di ciò che produce. Sta qui e non fra le spec perché è
-    /// una proprietà di **chi manda**, non di ciò che ha dichiarato: lo stesso
-    /// albero è legittimo da una feature ufficiale e inaccettabile da un plugin
-    /// sandboxato. I comandi non ce l'hanno, e non è una dimenticanza — da un
-    /// comando non passa un albero di UI (vedi il campo `commands`).
-    trust: Trust,
-}
-
-struct RegisteredCommand {
-    id: String,
-    provider: Arc<dyn CommandProvider>,
-    specs: Vec<CommandSpec>,
-}
-
-/// Un lotto aperto: la sua identità e cosa ha toccato.
-struct BatchState {
-    id: BatchId,
-    /// I documenti toccati, in ordine di prima apparizione e senza ripetizioni:
-    /// è l'elenco che finirà in [`Event::BatchEnded`], ed è ciò che l'utente
-    /// vedrebbe se glielo si mostrasse — quindi l'ordine è quello in cui le cose
-    /// sono successe, non quello di una `HashSet`.
-    changed: Vec<DocId>,
-    /// Almeno un [`Event::IndexUpdated`] è stato soppresso: alla chiusura il
-    /// lotto ha qualcosa da dire anche se non ha toccato documenti (una
-    /// rimozione dal solo indice, un rebuild).
-    index_dirty: bool,
+    /// [`Session::invalidate`]). Uno span stantio è peggio di uno span
+    /// assente — chi lo usasse taglierebbe i byte sbagliati.
+    session: Session,
 }
 
 impl Workspace {
@@ -362,30 +219,11 @@ impl Workspace {
         // `CoreIndex::registry`).
         let registry = Arc::new(registry);
         Workspace {
-            vault: Vault::open(root),
-            registry: Arc::clone(&registry),
-            syntax: SyntaxRegistry::new(),
-            renderers: RendererRegistry::new(),
-            bus: EventBus::new(),
-            handlers: ProviderTable::new(),
+            docs: DocumentStore::new(root, Arc::clone(&registry)),
             indexes: Indexes::new(registry),
-            plugins: PluginRegistry::new(),
-            services: ProviderTable::new(),
-            service_stack: Vec::new(),
-            imports: ProviderTable::new(),
-            exports: ProviderTable::new(),
-            views: ProviderTable::new(),
-            commands: ProviderTable::new(),
-            command_stack: Vec::new(),
-            pending: VecDeque::new(),
-            dispatching: false,
-            in_provider_call: false,
-            pending_jobs: Vec::new(),
-            next_job_id: 0,
-            context: None,
-            actor: Actor::User,
-            batch: None,
-            next_batch_id: 0,
+            providers: ProviderRegistry::new(),
+            dispatch: Dispatcher::new(EventBus::new()),
+            session: Session::default(),
         }
     }
 
@@ -399,11 +237,11 @@ impl Workspace {
     }
 
     pub fn bus(&self) -> &EventBus {
-        &self.bus
+        self.dispatch.bus()
     }
 
     pub fn root(&self) -> &Utf8Path {
-        self.vault.root()
+        self.docs.vault.root()
     }
 
     // --- il registro dei plugin (§7.3, §7.4, §7.6) --------------------------
@@ -435,7 +273,7 @@ impl Workspace {
         };
         for service in &manifest.provides {
             fubmd_abi::rules::ids::check(service, owner).map_err(RegistryError::Namespace)?;
-            if let Some(incumbent) = self.plugins.provider_of(service) {
+            if let Some(incumbent) = self.providers.plugins.provider_of(service) {
                 return Err(RegistryError::Claimed {
                     kind: RegistrationKind::Service,
                     id: service.clone(),
@@ -449,14 +287,14 @@ impl Workspace {
         // dichiarazione dev'essere topologico, e a M5 è il caricatore a
         // ordinarlo — il kernel non riordina ciò che gli si passa, dice che non
         // sta in piedi.
-        let missing = self.plugins.missing_requirements(&manifest);
+        let missing = self.providers.plugins.missing_requirements(&manifest);
         if !missing.is_empty() {
             return Err(RegistryError::MissingRequirement {
                 plugin: manifest.id.clone(),
                 requires: missing,
             });
         }
-        self.plugins.declare(manifest, trust)
+        self.providers.plugins.declare(manifest, trust)
     }
 
     /// Registra chi **offre** i servizi che il suo manifest dichiara (§7.5).
@@ -472,6 +310,7 @@ impl Workspace {
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
         let provides = self
+            .providers
             .plugins
             .get(&plugin)
             .map(|e| e.manifest.provides.clone())
@@ -479,9 +318,10 @@ impl Workspace {
         if provides.is_empty() {
             return Err(RegistryError::NothingProvided(plugin));
         }
-        self.plugins
+        self.providers
+            .plugins
             .record(&plugin, RegistrationKind::Service, &provides);
-        self.services.push((plugin, Arc::from(provider)));
+        self.providers.services.push((plugin, Arc::from(provider)));
         Ok(())
     }
 
@@ -503,6 +343,7 @@ impl Workspace {
         args: serde_json::Value,
     ) -> std::result::Result<serde_json::Value, PluginError> {
         let owner = self
+            .providers
             .plugins
             .provider_of(service)
             .ok_or_else(|| {
@@ -510,6 +351,7 @@ impl Workspace {
             })?
             .to_string();
         let at = self
+            .providers
             .services
             .position(|(id, _)| *id == owner)
             .ok_or_else(|| {
@@ -521,8 +363,8 @@ impl Workspace {
         // Il giro. Come per i comandi (decisione 0013), un servizio che rientra
         // su sé stesso non è una profondità da limitare con un numero: è un
         // errore di chi lo ha scritto, e l'unica risposta utile lo nomina.
-        if self.service_stack.iter().any(|s| s == service) {
-            let mut giro = self.service_stack.clone();
+        if self.providers.service_stack.iter().any(|s| s == service) {
+            let mut giro = self.providers.service_stack.clone();
             giro.push(service.to_string());
             return Err(PluginError::BadArgs(format!(
                 "un servizio non può chiamare sé stesso: {}",
@@ -530,13 +372,13 @@ impl Workspace {
             )));
         }
 
-        let provider = Arc::clone(&self.services[at].1);
-        self.service_stack.push(service.to_string());
+        let provider = Arc::clone(&self.providers.services[at].1);
+        self.providers.service_stack.push(service.to_string());
         let out = self.with_provider_call(|ws| {
             let mut host = ws.host_for(&owner, InvokeMode::Apply);
             provider.call(service, method, args, &mut host)
         });
-        self.service_stack.pop();
+        self.providers.service_stack.pop();
         self.dispatch_pending();
         out
     }
@@ -567,11 +409,7 @@ impl Workspace {
         plugin: &str,
         id: &str,
     ) -> std::result::Result<(), fubmd_abi::rules::ids::IdFault> {
-        let owner = match self.plugins.trust_of(plugin) {
-            Some(Trust::Core) => fubmd_abi::rules::ids::Owner::Core,
-            _ => fubmd_abi::rules::ids::Owner::Plugin(plugin),
-        };
-        fubmd_abi::rules::ids::check(id, owner)
+        self.providers.owns_name(plugin, id)
     }
 
     /// L'inventario di ciò che è **attivo** (§7.6): chi è registrato, con quale
@@ -582,12 +420,12 @@ impl Workspace {
     /// diventati venti booleani, ognuno una modifica al record, al mirror e
     /// alla fixture.
     pub fn plugins(&self) -> Vec<PluginInfo> {
-        self.plugins.iter().map(PluginInfo::of).collect()
+        self.providers.inventory()
     }
 
     /// Il grado di fiducia di un plugin dichiarato.
     pub fn trust_of(&self, plugin: &str) -> Option<Trust> {
-        self.plugins.trust_of(plugin)
+        self.providers.trust_of(plugin)
     }
 
     /// Registra un [`EventHandler`] per conto di un plugin dichiarato.
@@ -603,11 +441,13 @@ impl Workspace {
         handler: Box<dyn EventHandler>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        self.plugins
+        self.providers
+            .plugins
             .admit(&plugin, RegistrationKind::EventHandler, &[])?;
-        self.plugins
+        self.providers
+            .plugins
             .record(&plugin, RegistrationKind::EventHandler, &[]);
-        self.handlers.push((plugin, handler));
+        self.providers.handlers.push((plugin, handler));
         Ok(())
     }
 
@@ -639,7 +479,10 @@ impl Workspace {
     /// ha (§7.1), e prende `&self` perché una lettura gira sotto prestito
     /// condiviso del workspace.
     pub(crate) fn read_host_for<'a>(&'a self, plugin: &'a str) -> Guard<ReadHost<'a>, Granted> {
-        Guard::new(ReadHost { ws: self, plugin }, self.plugins.granted(plugin))
+        Guard::new(
+            ReadHost { ws: self, plugin },
+            self.providers.plugins.granted(plugin),
+        )
     }
 
     /// **Il punto di applicazione** (§7.3): un host intestato a un plugin, con
@@ -655,7 +498,7 @@ impl Workspace {
         mode: InvokeMode,
     ) -> Guard<KernelHost<'a>, Granted> {
         // La politica si prende **prima**: dopo, `self` è prestato all'host.
-        let granted = self.plugins.granted(plugin);
+        let granted = self.providers.plugins.granted(plugin);
         Guard::new(
             KernelHost {
                 ws: self,
@@ -696,12 +539,14 @@ impl Workspace {
         // sono nomi di nessuno — chi le rivendica non le nomina, le serve — e il
         // loro conflitto lo vede la tabella delle rotte.
         let namespaces = plugins::custom_namespaces(&index.routes());
-        self.plugins
+        self.providers
+            .plugins
             .admit(&plugin, RegistrationKind::Index, &namespaces)?;
         self.indexes
             .declare(&plugin, index.as_ref())
             .map_err(RegistryError::Route)?;
-        self.plugins
+        self.providers
+            .plugins
             .record(&plugin, RegistrationKind::Index, &namespaces);
         self.activate_index(plugin, index)
     }
@@ -725,11 +570,15 @@ impl Workspace {
         // c'era, non il suo namespace. E il permesso si chiede **prima** di
         // togliere la riga di chi c'era, o un rifiuto lascerebbe la rotta ancora
         // servita e l'inventario a dire che non è di nessuno.
-        self.plugins
+        self.providers
+            .plugins
             .admit_replacing(&plugin, RegistrationKind::Index, &namespaces)?;
-        self.plugins.forget(RegistrationKind::Index, &namespaces);
+        self.providers
+            .plugins
+            .forget(RegistrationKind::Index, &namespaces);
         self.indexes.declare_replacing(index.as_ref());
-        self.plugins
+        self.providers
+            .plugins
             .record(&plugin, RegistrationKind::Index, &namespaces);
         self.activate_index(plugin, index)
     }
@@ -763,14 +612,17 @@ impl Workspace {
     /// immutati) e [`IndexProvider::reconcile`] gli dice qual è l'insieme
     /// completo, così cancella ciò che è sparito ad app chiusa.
     pub fn reindex(&mut self) -> Result<()> {
-        let ids = self.vault.list_documents(&self.registry.all_extensions())?;
+        let ids = self
+            .docs
+            .vault
+            .list_documents(&self.docs.registry.all_extensions())?;
         // Prima si parsa TUTTO, poi si muta: un parse fallito a metà lascia il
         // workspace com'era. I modelli interi vivono solo qui, il tempo di
         // alimentare indici e conteggi: in cache restano i metadati.
         let mut models = Vec::with_capacity(ids.len());
         for id in ids {
-            let src = self.vault.read(&id)?;
-            let model = self.parse(&id, &src)?;
+            let src = self.docs.vault.read(&id)?;
+            let model = self.docs.parse(&id, &src)?;
             models.push((id, model));
         }
         self.indexes.core.clear();
@@ -794,7 +646,7 @@ impl Workspace {
         // dichiara di esistere (decisione 0012).
         self.as_actor(Actor::Kernel, |ws| {
             ws.emit_event(Event::VaultOpened {
-                root: ws.vault.root().to_string(),
+                root: ws.docs.vault.root().to_string(),
             });
             ws.emit_event(Event::IndexUpdated);
             ws.dispatch_pending();
@@ -839,14 +691,14 @@ impl Workspace {
     /// cablare `.md` nel frontend è vero solo finché markdown è l'unico
     /// formato, cioè finché il progetto non fa ciò per cui esiste.
     pub fn extensions(&self) -> Vec<String> {
-        let mut exts = self.registry.all_extensions();
+        let mut exts = self.docs.registry.all_extensions();
         exts.sort();
         exts
     }
 
     /// Sorgente grezza di un documento dal disco.
     pub fn read_source(&self, id: &DocId) -> Result<String> {
-        self.vault.read(id)
+        self.docs.vault.read(id)
     }
 
     /// Scrive la sorgente, riparsa il documento, aggiorna il grafo ed emette
@@ -856,8 +708,8 @@ impl Workspace {
         // Nell'ordine inverso un parse fallito lascerebbe il disco avanti
         // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
         // pur avendo scritto.
-        let model = self.parse(id, source)?;
-        self.vault.write(id, source)?;
+        let model = self.docs.parse(id, source)?;
+        self.docs.vault.write(id, source)?;
         self.ingest_model(id, model);
         self.dispatch_pending();
         Ok(())
@@ -910,7 +762,7 @@ impl Workspace {
     /// poterla distinguere da una scrittura che ha chiesto lui.
     pub fn refresh_from_disk(&mut self, id: &DocId) -> Result<()> {
         self.as_actor(Actor::Watcher, |ws| {
-            let src = ws.vault.read(id)?;
+            let src = ws.docs.vault.read(id)?;
             ws.ingest(id, &src)?;
             ws.dispatch_pending();
             Ok(())
@@ -918,7 +770,7 @@ impl Workspace {
     }
 
     fn ingest(&mut self, id: &DocId, source: &str) -> Result<()> {
-        let model = self.parse(id, source)?;
+        let model = self.docs.parse(id, source)?;
         self.ingest_model(id, model);
         Ok(())
     }
@@ -941,7 +793,7 @@ impl Workspace {
         // vero al prossimo movimento del cursore (o subito dopo un
         // salvataggio); fino ad allora il contesto dice "non so dove", che è
         // la verità.
-        self.invalidate_context(id, ContextChange::Rewritten);
+        self.session.invalidate(id, ContextChange::Rewritten);
         self.emit_event(Event::DocumentChanged { id: id.clone() });
         self.emit_event(Event::IndexUpdated);
     }
@@ -952,19 +804,19 @@ impl Workspace {
     /// provider: nessun effetto.
     ///
     /// Il filtro dei path ignorati è lo **stesso** della scansione
-    /// ([`Vault::is_ignored`]) e non una sua copia: le due porte d'ingresso del
+    /// ([`Vault::is_ignored`](crate::vault::Vault::is_ignored)) e non una sua copia: le due porte d'ingresso del
     /// vault devono avere la stessa idea di cosa sta fuori, altrimenti una nota
     /// cestinata resterebbe cercabile.
     pub fn sync_path(&mut self, abs: &Utf8Path) -> Result<bool> {
-        if self.vault.is_ignored(abs) {
+        if self.docs.vault.is_ignored(abs) {
             return Ok(false);
         }
-        let id = match self.vault.doc_id_for_path(abs) {
+        let id = match self.docs.vault.doc_id_for_path(abs) {
             Ok(id) => id,
             Err(_) => return Ok(false),
         };
         let ext = extension_of(&id).unwrap_or_default();
-        if self.registry.provider_for_ext(&ext).is_none() {
+        if self.docs.registry.provider_for_ext(&ext).is_none() {
             return Ok(false);
         }
         if abs.exists() {
@@ -984,7 +836,7 @@ impl Workspace {
         if self.indexes.core.contains(id) {
             // La nota con il focus non esiste più: `active_context` non deve
             // continuare a nominarla alle view (né tenerne una selezione).
-            self.invalidate_context(id, ContextChange::Gone);
+            self.session.invalidate(id, ContextChange::Gone);
             self.indexes.on_document_removed(id);
             if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
                 self.indexes.core.rebuild_graph();
@@ -1018,6 +870,7 @@ impl Workspace {
             }
             None => {
                 let ext = self
+                    .docs
                     .registry
                     .default_extension()
                     .ok_or(KernelError::NoDefaultFormat)?;
@@ -1062,19 +915,19 @@ impl Workspace {
     /// Questo path è già di qualcuno? Vale sia l'indicizzato sia ciò che sta
     /// sul disco e il workspace non ha ancora visto.
     pub(crate) fn is_taken(&self, id: &DocId) -> bool {
-        self.indexes.core.metas.contains_key(id) || self.vault.exists(id)
+        self.indexes.core.metas.contains_key(id) || self.docs.vault.exists(id)
     }
 
     /// Il [`DocId`] di una nota che nasce col nome dato: separatori normalizzati
     /// e, se il nome non porta già un'estensione gestita, quella di default.
     fn new_note_id(&self, name: &str) -> Result<DocId> {
         let id = valid_doc_id(name)?;
-        let ha_estensione =
-            extension_of(&id).is_some_and(|ext| self.registry.provider_for_ext(&ext).is_some());
+        let ha_estensione = self.docs.has_provider_for(&id);
         if ha_estensione {
             return Ok(id);
         }
         let ext = self
+            .docs
             .registry
             .default_extension()
             .ok_or(KernelError::NoDefaultFormat)?;
@@ -1101,14 +954,14 @@ impl Workspace {
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
-        let trashed = self.vault.trash(id)?;
+        let trashed = self.docs.vault.trash(id)?;
         self.remove_document(id);
         Ok(trashed)
     }
 
     /// Il contenuto del cestino, dal più recente al più vecchio.
     pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
-        self.vault.list_trash()
+        self.docs.vault.list_trash()
     }
 
     /// Ripristina una voce del cestino e restituisce il [`DocId`] con cui è
@@ -1125,6 +978,7 @@ impl Workspace {
     /// [`write_document`]: Workspace::write_document
     pub fn restore_from_trash(&mut self, trash_id: &DocId, to: Option<DocId>) -> Result<DocId> {
         let entry = self
+            .docs
             .vault
             .list_trash()?
             .into_iter()
@@ -1138,15 +992,15 @@ impl Workspace {
             Some(to) => valid_doc_id(to.as_str())?,
             None => entry.original,
         };
-        if self.indexes.core.metas.contains_key(&target) || self.vault.exists(&target) {
+        if self.indexes.core.metas.contains_key(&target) || self.docs.vault.exists(&target) {
             return Err(KernelError::AlreadyExists(target.to_string()));
         }
         let ext = extension_of(&target).unwrap_or_default();
-        if self.registry.provider_for_ext(&ext).is_none() {
+        if self.docs.registry.provider_for_ext(&ext).is_none() {
             return Err(KernelError::NoProvider(ext));
         }
 
-        let source = self.vault.read(trash_id)?;
+        let source = self.docs.vault.read(trash_id)?;
         self.write_document(&target, &source)?;
         // Se il ripristino approda su un path diverso dall'origine (il path
         // era di nuovo occupato e l'utente ha scelto un altro nome), lo stato
@@ -1164,14 +1018,14 @@ impl Workspace {
         // La copia nel cestino se ne va per ultima: se la cancellazione
         // fallisce restano due copie della nota, il che è un fastidio. Fare il
         // contrario significherebbe rischiare di non averne nessuna.
-        self.vault.remove_trashed(trash_id)?;
+        self.docs.vault.remove_trashed(trash_id)?;
         Ok(target)
     }
 
     /// Svuota il cestino. Restituisce quante voci ha cancellato: da qui in poi
     /// non sono più recuperabili, e chi chiama deve poterlo dire.
     pub fn empty_trash(&mut self) -> Result<usize> {
-        self.vault.empty_trash()
+        self.docs.vault.empty_trash()
     }
 
     /// Rinomina/sposta un documento **preservando l'identità**: file sul disco,
@@ -1208,11 +1062,11 @@ impl Workspace {
         // omonimo-per-case su filesystem case-sensitive è comunque intercettato
         // da `models` (il vault è l'unica fonte dei DocId, quindi lo conosce).
         let case_only = from.as_str().to_lowercase() == to.as_str().to_lowercase();
-        if self.indexes.core.metas.contains_key(to) || (!case_only && self.vault.exists(to)) {
+        if self.indexes.core.metas.contains_key(to) || (!case_only && self.docs.vault.exists(to)) {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
         let ext = extension_of(to).unwrap_or_default();
-        if self.registry.provider_for_ext(&ext).is_none() {
+        if self.docs.registry.provider_for_ext(&ext).is_none() {
             return Err(KernelError::NoProvider(ext));
         }
 
@@ -1220,9 +1074,9 @@ impl Workspace {
         // serve la risoluzione con il vecchio nome ancora in vigore.
         let plan = self.link_rewrite_plan(from, to);
 
-        self.vault.rename(from, to)?;
-        let source = self.vault.read(to)?;
-        let model = self.parse(to, &source)?;
+        self.docs.vault.rename(from, to)?;
+        let source = self.docs.vault.read(to)?;
+        let model = self.docs.parse(to, &source)?;
         self.migrate_identity(from, to, model);
 
         // Il piano si applica TUTTO, anche se una sorgente fallisce: abortire
@@ -1268,7 +1122,8 @@ impl Workspace {
         // risponderebbe col path vecchio e outline/backlink si svuoterebbero
         // fino al prossimo cambio nota. Va fatto nel kernel, non nella shell:
         // vale anche per i rename non innescati da lei.
-        self.invalidate_context(from, ContextChange::Renamed(to.clone()));
+        self.session
+            .invalidate(from, ContextChange::Renamed(to.clone()));
         // Per ogni indice — quello del kernel compreso — il rename è
         // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
         // tiene stato *per-documento* invece migra la chiave sull'evento
@@ -1305,20 +1160,20 @@ impl Workspace {
     }
 
     fn sync_renamed_path_here(&mut self, from: &Utf8Path, to: &Utf8Path) -> Result<bool> {
-        let from_id = (!self.vault.is_ignored(from))
-            .then(|| self.vault.doc_id_for_path(from).ok())
+        let from_id = (!self.docs.vault.is_ignored(from))
+            .then(|| self.docs.vault.doc_id_for_path(from).ok())
             .flatten()
             .filter(|id| self.indexes.core.metas.contains_key(id));
         let Some(from_id) = from_id else {
             // Niente da migrare: al più in `to` è comparso qualcosa.
             return self.sync_path(to);
         };
-        let to_id = (!self.vault.is_ignored(to))
-            .then(|| self.vault.doc_id_for_path(to).ok())
+        let to_id = (!self.docs.vault.is_ignored(to))
+            .then(|| self.docs.vault.doc_id_for_path(to).ok())
             .flatten()
             .filter(|id| {
                 let ext = extension_of(id).unwrap_or_default();
-                self.registry.provider_for_ext(&ext).is_some()
+                self.docs.registry.provider_for_ext(&ext).is_some()
             });
         let Some(to_id) = to_id else {
             // Spostato fuori, in una cartella ignorata o in un formato non
@@ -1333,8 +1188,8 @@ impl Workspace {
             self.remove_document(&from_id);
             return Ok(true);
         }
-        let source = self.vault.read(&to_id)?;
-        let model = self.parse(&to_id, &source)?;
+        let source = self.docs.vault.read(&to_id)?;
+        let model = self.docs.parse(&to_id, &source)?;
         self.migrate_identity(&from_id, &to_id, model);
         self.emit_event(Event::IndexUpdated);
         self.dispatch_pending();
@@ -1401,7 +1256,7 @@ impl Workspace {
             let Some(meta) = self.indexes.core.metas.get(&src) else {
                 continue;
             };
-            let Ok(source_text) = self.vault.read(&src) else {
+            let Ok(source_text) = self.docs.vault.read(&src) else {
                 continue;
             };
             let mut edits: Vec<TextEdit> = Vec::new();
@@ -1529,16 +1384,25 @@ impl Workspace {
         // propria — «serve un `ns:nome`», senza sapere di chi — e chiedeva un
         // namespace anche al core mentre non chiedeva a nessuno che fosse il
         // *suo*. Adesso passa di qui come le altre.
-        self.plugins
-            .admit(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id))?;
+        self.providers.plugins.admit(
+            &plugin,
+            RegistrationKind::Syntax,
+            std::slice::from_ref(&id),
+        )?;
         // E vale anche per i `custom_kind` che la regola si impegna a emettere:
         // sono nomi che entrano nel modello, e senza questa riga un terzo
         // dichiara `callout` e si fa disegnare dal core. Non passano da `admit`
         // perché produrre lo stesso kind in due non è una contesa — è come si
         // scrivono due dialetti della stessa famiglia.
-        self.plugins.check_names(&plugin, &spec.produces)?;
-        self.syntax.register(rule).map_err(RegistryError::Syntax)?;
-        self.plugins
+        self.providers
+            .plugins
+            .check_names(&plugin, &spec.produces)?;
+        self.docs
+            .syntax
+            .register(rule)
+            .map_err(RegistryError::Syntax)?;
+        self.providers
+            .plugins
             .record(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id));
         Ok(())
     }
@@ -1557,16 +1421,17 @@ impl Workspace {
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
         let id = renderer.spec().id;
-        self.plugins.admit(
+        self.providers.plugins.admit(
             &plugin,
             RegistrationKind::Renderer,
             std::slice::from_ref(&id),
         )?;
-        let trust = self.plugins.trust_of(&plugin).unwrap_or_default();
-        self.renderers
+        let trust = self.providers.plugins.trust_of(&plugin).unwrap_or_default();
+        self.docs
+            .renderers
             .register(trust, renderer)
             .map_err(RegistryError::Renderer)?;
-        self.plugins.record(
+        self.providers.plugins.record(
             &plugin,
             RegistrationKind::Renderer,
             std::slice::from_ref(&id),
@@ -1581,12 +1446,7 @@ impl Workspace {
     /// nessuno ha detto chi lo disegnerebbe. Chi monta l'app può guardarlo; oggi
     /// non c'è ancora una superficie dove mostrarlo (§20.4).
     pub fn undrawn_kinds(&self) -> Vec<String> {
-        let drawn = self.renderers.rendered_kinds();
-        self.syntax
-            .produced_kinds()
-            .into_iter()
-            .filter(|k| !drawn.contains(k))
-            .collect()
+        self.docs.undrawn_kinds()
     }
 
     /// Il modello parsato di un documento (§4.2): la metà kernel di
@@ -1606,7 +1466,7 @@ impl Workspace {
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
-        self.parse_from_disk(id)
+        self.docs.parse_from_disk(id)
     }
 
     /// Di che formato è un documento, e che sintassi capirebbe (§4.3): la metà
@@ -1623,16 +1483,7 @@ impl Workspace {
     /// suo, il suo dettaglio è più informativo del semplice «acceso» che una
     /// regola può dichiarare.
     pub fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
-        let provider = self.provider_for(id).ok()?;
-        let descriptor = provider.descriptor();
-        let grafted = self.syntax.grafted_syntax(&descriptor.id);
-        let capabilities = FormatCapabilities {
-            syntax: grafted.overlay(&provider.capabilities().syntax),
-        };
-        Some(DocumentFormat {
-            descriptor,
-            capabilities,
-        })
+        self.docs.format_of(id)
     }
 
     /// Rende l'anteprima di un documento: l'HTML del provider, e le parti
@@ -1646,12 +1497,12 @@ impl Workspace {
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
-        let model = self.parse_from_disk(id)?;
-        let provider = self.provider_for(id)?;
+        let model = self.docs.parse_from_disk(id)?;
+        let provider = self.docs.provider_for(id)?;
         Ok(renderer::compose(
             &model,
             provider,
-            &self.renderers,
+            &self.docs.renderers,
             &RenderOptions::preview(),
         )?)
     }
@@ -1677,8 +1528,8 @@ impl Workspace {
             return Err(KernelError::NotFound(id.to_string()));
         }
         // Come `render_preview`: il corpo si riparsa dal disco on demand.
-        let model = self.parse_from_disk(&id)?;
-        let provider = self.provider_for(&id)?;
+        let model = self.docs.parse_from_disk(&id)?;
+        let provider = self.docs.provider_for(&id)?;
         let opts = RenderOptions::preview();
         let model = match heading {
             None => model,
@@ -1692,7 +1543,7 @@ impl Workspace {
         // segnaposto dell'embed che ha appena idratato.
         Ok((
             id,
-            renderer::compose(&model, provider, &self.renderers, &opts)?,
+            renderer::compose(&model, provider, &self.docs.renderers, &opts)?,
         ))
     }
 
@@ -1720,7 +1571,7 @@ impl Workspace {
     /// Lo chiama la shell a ogni cambio di nota, di selezione o di modalità. È
     /// l'unico modo di scrivere il contesto: le view lo **leggono** via
     /// [`HostEnv::active_context`], nessuno lo scrive dall'interno del
-    /// contratto — vedi il campo [`Workspace::context`].
+    /// contratto — vedi il campo `session` e [`Session`].
     ///
     /// Il conto di *cosa* ridisegnare sta qui e non nella shell perché la
     /// risposta non deve dipendere da chi la calcola: la regola è una
@@ -1728,14 +1579,10 @@ impl Workspace {
     /// shell resta padrona del *quando* (è lei a pubblicare) e ignara del
     /// *chi* (non conosce gli id delle view).
     pub fn set_active_context(&mut self, context: Option<ViewContext>) -> Vec<String> {
-        let changed = match (&self.context, &context) {
-            (Some(prima), Some(dopo)) => prima.changes(dopo),
-            // Un contesto che appare o sparisce cambia tutto ciò che si può
-            // seguire: non c'è un campo per volta da confrontare.
-            (None, Some(_)) | (Some(_), None) => ContextMask::all(),
-            (None, None) => ContextMask::default(),
-        };
-        self.context = context;
+        // Il taglio del §8.1 passa qui: la sessione dice *cosa* è cambiato, il
+        // workspace traduce la maschera in id di view. È deliberato che il
+        // componente non sappia che le view esistono.
+        let changed = self.session.publish(context);
         if changed.is_empty() {
             return Vec::new();
         }
@@ -1760,34 +1607,13 @@ impl Workspace {
 
     /// Il contesto del pannello con il focus, se la shell ne ha pubblicato uno.
     pub fn active_context(&self) -> Option<&ViewContext> {
-        self.context.as_ref()
+        self.session.context()
     }
 
     /// Il documento del contesto attivo: la lettura che il kernel usa dove il
     /// pannello non c'entra (rename, rimozione, comodità dei test).
     pub fn active_document(&self) -> Option<&DocId> {
-        self.context.as_ref().and_then(|c| c.doc.as_ref())
-    }
-
-    /// Rimette il contesto in accordo con il vault dopo che il documento che
-    /// guarda è cambiato, è stato rinominato o è sparito.
-    ///
-    /// La selezione cade in tutti e tre i casi, e per la stessa ragione: i suoi
-    /// offset erano di un testo che non c'è più. Il `text` cadrebbe con essi —
-    /// tenerlo senza span darebbe una selezione che non si sa più dov'era.
-    fn invalidate_context(&mut self, doc: &DocId, change: ContextChange) {
-        let Some(context) = self.context.as_mut() else {
-            return;
-        };
-        if context.doc.as_ref() != Some(doc) {
-            return;
-        }
-        context.selection = None;
-        match change {
-            ContextChange::Rewritten => {}
-            ContextChange::Renamed(to) => context.doc = Some(to),
-            ContextChange::Gone => context.doc = None,
-        }
+        self.session.document()
     }
 
     // --- indici -----------------------------------------------------------
@@ -1906,21 +1732,27 @@ impl Workspace {
         // no — cioè una view del core cancellata da chi non poteva nemmeno
         // nominarla, con in mano un errore che dice «non è registrato».
         if replacing {
-            self.plugins
+            self.providers
+                .plugins
                 .admit_replacing(&plugin, RegistrationKind::View, &ids)?;
-            self.plugins.forget(RegistrationKind::View, &ids);
-            self.views
+            self.providers.plugins.forget(RegistrationKind::View, &ids);
+            self.providers
+                .views
                 .retain(|v| !v.specs.iter().any(|s| ids.contains(&s.id)));
         } else {
-            self.plugins.admit(&plugin, RegistrationKind::View, &ids)?;
+            self.providers
+                .plugins
+                .admit(&plugin, RegistrationKind::View, &ids)?;
         }
         // Il grado di fiducia è quello del plugin: era un parametro di questa
         // sola registrazione, ed è la ragione per cui un `IndexProvider` di
         // terzi avrebbe ricevuto ogni documento del vault senza che nessuno gli
         // avesse dato un grado (§7.3).
-        let trust = self.plugins.trust_of(&plugin).unwrap_or_default();
-        self.plugins.record(&plugin, RegistrationKind::View, &ids);
-        self.views.push(RegisteredView {
+        let trust = self.providers.plugins.trust_of(&plugin).unwrap_or_default();
+        self.providers
+            .plugins
+            .record(&plugin, RegistrationKind::View, &ids);
+        self.providers.views.push(RegisteredView {
             id: plugin,
             specs,
             provider,
@@ -1949,57 +1781,12 @@ impl Workspace {
     /// Un rifiuto non cambia niente: le due famiglie si convalidano **prima**
     /// che l'una o l'altra si muova.
     pub fn refresh_specs(&mut self, id: &str) -> std::result::Result<(), RegistryError> {
-        // Le spec si chiedono una volta sola, anche qui: chiederle per
-        // convalidarle e poi di nuovo per tenerle sarebbe due risposte diverse
-        // dalla stessa domanda, che è precisamente ciò che questo metodo esiste
-        // per evitare.
-        let views: Vec<(usize, Vec<ViewSpec>)> = self
-            .views
-            .iter()
-            .enumerate()
-            .filter(|(_, v)| v.id == id)
-            .map(|(at, v)| (at, v.provider.views()))
-            .collect();
-        let commands: Vec<(usize, Vec<CommandSpec>)> = self
-            .commands
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| c.id == id)
-            .map(|(at, c)| (at, c.provider.commands()))
-            .collect();
-
-        let view_ids: Vec<String> = views
-            .iter()
-            .flat_map(|(_, specs)| specs.iter().map(|s| s.id.clone()))
-            .collect();
-        let command_ids: Vec<String> = commands
-            .iter()
-            .flat_map(|(_, specs)| specs.iter().map(|s| s.id.clone()))
-            .collect();
-
-        self.plugins
-            .admit_refreshing(id, RegistrationKind::View, &view_ids)?;
-        self.plugins
-            .admit_refreshing(id, RegistrationKind::Command, &command_ids)?;
-
-        for (at, specs) in views {
-            self.views[at].specs = specs;
-        }
-        for (at, specs) in commands {
-            self.commands[at].specs = specs;
-        }
-        self.plugins.resettle(id, RegistrationKind::View, &view_ids);
-        self.plugins
-            .resettle(id, RegistrationKind::Command, &command_ids);
-        Ok(())
+        self.providers.refresh_specs(id)
     }
 
     /// Le view offerte dai provider registrati, in ordine di registrazione.
     pub fn views(&self) -> Vec<ViewSpec> {
-        self.views
-            .iter()
-            .flat_map(|r| r.specs.iter().cloned())
-            .collect()
+        self.providers.view_specs()
     }
 
     /// Rende una view e restituisce il suo albero di UI.
@@ -2021,7 +1808,7 @@ impl Workspace {
     /// confinata ai callback in scrittura (vedi il doc di `HostApi`).
     pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
         let at = self.view_owner(&instance.view)?;
-        let registered = &self.views[at];
+        let registered = &self.providers.views[at];
         self.check_params(at, instance)?;
         // Anche il percorso di lettura passa dal punto di applicazione: un
         // provider senza `read_vault` non legge il vault **mentre disegna** più
@@ -2049,14 +1836,14 @@ impl Workspace {
         let at = self.view_owner(&instance.view)?;
         self.check_params(at, instance)?;
         // Prima del `take`: dopo, il registro è vuoto.
-        let trust = self.views[at].trust;
+        let trust = self.providers.views[at].trust;
         // Il prestito rimanda il dispatch: se il provider scrive via `HostApi`
         // dentro `on_action`, gli handler NON girano nel suo frame — girano
         // nel `dispatch_pending` qui sotto, a chiamata tornata. Senza, un
         // plugin che è sia view sia handler (il caso versioning) sarebbe
         // rientrato nella propria istanza: in nativo funziona, a M5 trappa.
         let updated = self.lend(
-            |ws| &mut ws.views,
+            |ws| &mut ws.providers.views,
             |ws, views| {
                 let registered = &mut views[at];
                 let mut host = ws.host_for(&registered.id, InvokeMode::Apply);
@@ -2099,19 +1886,12 @@ impl Workspace {
         at: usize,
         instance: &ViewInstance,
     ) -> std::result::Result<(), PluginError> {
-        let spec = self.views[at]
-            .specs
-            .iter()
-            .find(|spec| spec.id == instance.view)
-            .ok_or_else(|| PluginError::UnknownView(instance.view.clone()))?;
-        spec.validate_params(&instance.params)
+        self.providers.check_params(at, instance)
     }
 
     /// Chi possiede una view, per posizione. `UnknownView` se nessuno.
     fn view_owner(&self, view: &str) -> std::result::Result<usize, PluginError> {
-        self.views
-            .position(|r| r.specs.iter().any(|spec| spec.id == view))
-            .ok_or_else(|| PluginError::UnknownView(view.to_string()))
+        self.providers.view_owner(view)
     }
 
     // --- comandi -----------------------------------------------------------
@@ -2133,14 +1913,16 @@ impl Workspace {
         let plugin = plugin.into();
         let specs = provider.commands();
         let ids: Vec<String> = specs.iter().map(|s| s.id.clone()).collect();
-        self.plugins
+        self.providers
+            .plugins
             .admit(&plugin, RegistrationKind::Command, &ids)?;
-        self.plugins
+        self.providers
+            .plugins
             .record(&plugin, RegistrationKind::Command, &ids);
         // La firma resta `Box` — è quella degli altri `register_*`, e chi
         // registra non deve sapere perché qui dentro serve un `Arc` (decisione 0013:
         // `run_command` rientra nel registro mentre il registro è in uso).
-        self.commands.push(RegisteredCommand {
+        self.providers.commands.push(RegisteredCommand {
             id: plugin,
             specs,
             provider: Arc::from(provider),
@@ -2155,10 +1937,7 @@ impl Workspace {
     /// elenco può essere una palette, ma anche una CLI o un modello, e nessuno
     /// dei due ha letto il codice del comando.
     pub fn commands(&self) -> Vec<CommandSpec> {
-        self.commands
-            .iter()
-            .flat_map(|r| r.specs.iter().cloned())
-            .collect()
+        self.providers.command_specs()
     }
 
     /// Esegue — o **simula** — un comando.
@@ -2247,7 +2026,7 @@ impl Workspace {
         mode: InvokeMode,
     ) -> std::result::Result<CommandOutcome, PluginError> {
         let at = self.command_owner(command)?;
-        let spec = self.commands[at]
+        let spec = self.providers.commands[at]
             .specs
             .iter()
             .find(|s| s.id == command)
@@ -2258,8 +2037,8 @@ impl Workspace {
         // Il giro (decisione 0013). Un comando che rientra su sé stesso non è una
         // profondità da limitare con un numero: è un errore di chi lo ha
         // scritto, e l'unica risposta utile lo nomina.
-        if self.command_stack.iter().any(|c| c == command) {
-            let mut giro = self.command_stack.clone();
+        if self.providers.command_stack.iter().any(|c| c == command) {
+            let mut giro = self.providers.command_stack.clone();
             giro.push(command.to_string());
             return Err(PluginError::BadArgs(format!(
                 "un comando non può invocare sé stesso: {}",
@@ -2271,9 +2050,9 @@ impl Workspace {
         // il campo `commands`). È ciò che permette a `run_command` di trovare
         // gli altri comandi — e anche gli altri comandi dello stesso provider —
         // mentre questo è in corso.
-        let owner = self.commands[at].id.clone();
-        let provider = Arc::clone(&self.commands[at].provider);
-        self.command_stack.push(command.to_string());
+        let owner = self.providers.commands[at].id.clone();
+        let provider = Arc::clone(&self.providers.commands[at].provider);
+        self.providers.command_stack.push(command.to_string());
         let outcome = if spec.scope.writes && mode == InvokeMode::Apply {
             self.with_provider_call(|ws| {
                 let mut host = ws.host_for(&owner, mode);
@@ -2291,7 +2070,7 @@ impl Workspace {
             // rispondere `permission-denied` a ogni riga.
             // Due politiche insieme: quella del plugin e quella del divieto.
             // È la combinatoria del §7.3 senza un tipo per combinazione.
-            let granted = self.plugins.granted(&owner);
+            let granted = self.providers.plugins.granted(&owner);
             let mut host = Guard::new(
                 KernelHost {
                     ws: self,
@@ -2302,7 +2081,7 @@ impl Workspace {
             );
             provider.invoke(command, args, mode, &mut host)
         };
-        self.command_stack.pop();
+        self.providers.command_stack.pop();
 
         let mut outcome = outcome?;
         if let CommandEffect::Plan(plan) = &mut outcome.effect {
@@ -2317,9 +2096,7 @@ impl Workspace {
 
     /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
     fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
-        self.commands
-            .position(|r| r.specs.iter().any(|spec| spec.id == command))
-            .ok_or_else(|| PluginError::UnknownCommand(command.to_string()))
+        self.providers.command_owner(command)
     }
 
     // --- import ed export ---------------------------------------------------
@@ -2339,9 +2116,13 @@ impl Workspace {
         p: Box<dyn ImportProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        self.plugins.admit(&plugin, RegistrationKind::Import, &[])?;
-        self.plugins.record(&plugin, RegistrationKind::Import, &[]);
-        self.imports.push((plugin, p));
+        self.providers
+            .plugins
+            .admit(&plugin, RegistrationKind::Import, &[])?;
+        self.providers
+            .plugins
+            .record(&plugin, RegistrationKind::Import, &[]);
+        self.providers.imports.push((plugin, p));
         Ok(())
     }
 
@@ -2356,10 +2137,13 @@ impl Workspace {
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
         let ids: Vec<String> = p.targets().into_iter().map(|t| t.id).collect();
-        self.plugins
+        self.providers
+            .plugins
             .admit(&plugin, RegistrationKind::Export, &ids)?;
-        self.plugins.record(&plugin, RegistrationKind::Export, &ids);
-        self.exports.push((plugin, p));
+        self.providers
+            .plugins
+            .record(&plugin, RegistrationKind::Export, &ids);
+        self.providers.exports.push((plugin, p));
         Ok(())
     }
 
@@ -2385,6 +2169,7 @@ impl Workspace {
         request: &ImportRequest,
     ) -> std::result::Result<ImportReport, PluginError> {
         let at = self
+            .providers
             .imports
             .iter()
             .position(|(_, p)| p.can_handle(source))
@@ -2397,7 +2182,7 @@ impl Workspace {
         // La stessa disciplina di tutti gli altri, e non più una quarta copia:
         // vedi `Workspace::lend`.
         let report = self.lend(
-            |ws| &mut ws.imports,
+            |ws| &mut ws.providers.imports,
             |ws, imports| {
                 let (id, provider) = &mut imports[at];
                 let mut host = ws.host_for(id, InvokeMode::Apply);
@@ -2410,7 +2195,7 @@ impl Workspace {
 
     /// Le destinazioni di export offerte dai provider registrati.
     pub fn export_targets(&self) -> Vec<ExportTarget> {
-        self.exports.iter().flat_map(|(_, p)| p.targets()).collect()
+        self.providers.export_targets()
     }
 
     /// Esporta secondo la richiesta, col provider che possiede la destinazione.
@@ -2426,6 +2211,7 @@ impl Workspace {
         request: &ExportRequest,
     ) -> std::result::Result<ExportReport, PluginError> {
         let (id, provider) = self
+            .providers
             .exports
             .iter()
             .find(|(_, p)| p.targets().iter().any(|t| t.id == request.target))
@@ -2450,29 +2236,7 @@ impl Workspace {
     /// senza origine o fuori dal lotto, e un evento non attribuito è
     /// indistinguibile da uno attribuito male.
     pub(crate) fn emit_event(&mut self, event: Event) {
-        // Dentro un lotto `index-updated` non esce: N copie di un evento senza
-        // payload dicono quanto ne dice una, e alla chiusura il `batch-ended`
-        // dice quella e in più *quali* documenti. È l'unico evento che il lotto
-        // coalizza — vedi il doc di `fubmd_abi::event`.
-        if let Some(state) = self.batch.as_mut() {
-            if matches!(event, Event::IndexUpdated) {
-                state.index_dirty = true;
-                return;
-            }
-            if let Some(doc) = event.touched() {
-                if !state.changed.contains(doc) {
-                    state.changed.push(doc.clone());
-                }
-            }
-        }
-        let notice = Notice::new(event, self.origin());
-        self.bus.emit(notice.clone());
-        self.pending.push_back(notice);
-    }
-
-    /// L'origine di ciò che il workspace sta emettendo adesso.
-    fn origin(&self) -> Origin {
-        Origin::by(self.actor.clone()).in_batch(self.batch.as_ref().map(|b| b.id))
+        self.dispatch.emit(event);
     }
 
     /// Esegue `f` attribuendo a `actor` tutto ciò che ne nasce, e rimette
@@ -2484,9 +2248,9 @@ impl Workspace {
     /// però l'attore è il *chiamante* del comando, non il provider che lo
     /// esegue. Vedi `fubmd_abi::event`.
     fn as_actor<R>(&mut self, actor: Actor, f: impl FnOnce(&mut Self) -> R) -> R {
-        let prev = std::mem::replace(&mut self.actor, actor);
+        let prev = self.dispatch.swap_actor(actor);
         let result = f(self);
-        self.actor = prev;
+        self.dispatch.restore_actor(prev);
         result
     }
 
@@ -2513,19 +2277,12 @@ impl Workspace {
     /// quello interno farebbe arrivare un `batch-ended` mentre l'operazione
     /// esterna è ancora in corso.
     pub fn batch<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        if self.batch.is_some() {
+        if !self.dispatch.open_batch() {
             // Entra in quello che c'è, e non lo chiude: a chiudere è chi lo ha
             // aperto. Contare le aperture non servirebbe a niente — chi trova il
             // campo pieno non lo tocca in nessun caso.
             return f(self);
         }
-        let id = BatchId(self.next_batch_id);
-        self.next_batch_id += 1;
-        self.batch = Some(BatchState {
-            id,
-            changed: Vec::new(),
-            index_dirty: false,
-        });
         let result = f(self);
         self.end_batch();
         result
@@ -2534,25 +2291,7 @@ impl Workspace {
     /// Chiude il lotto più esterno: emette il terminale (se c'è qualcosa da
     /// dire) e drena.
     fn end_batch(&mut self) {
-        let Some(state) = self.batch.take() else {
-            return;
-        };
-        if state.index_dirty || !state.changed.is_empty() {
-            // Il terminale si costruisce a mano invece di passare da
-            // `emit_event`: la sua origine porta il lotto che sta **chiudendo**
-            // (è l'evento *del* lotto, non uno che arriva dopo), e passare dal
-            // punto unico significherebbe o riaprire il lotto per una riga o
-            // emetterlo orfano.
-            let notice = Notice::new(
-                Event::BatchEnded {
-                    batch: state.id,
-                    changed: state.changed,
-                },
-                Origin::by(self.actor.clone()).in_batch(Some(state.id)),
-            );
-            self.bus.emit(notice.clone());
-            self.pending.push_back(notice);
-        }
+        self.dispatch.close_batch();
         self.dispatch_pending();
     }
 
@@ -2578,46 +2317,30 @@ impl Workspace {
     /// una garanzia in più per il solo terminale sarebbe una seconda promessa
     /// più debole accanto a una che già copre il caso.
     fn dispatch_pending(&mut self) {
-        // La guardia di rientranza DEVE venire prima del fast-path qui sotto:
-        // durante un dispatch gli handler sono estratti (`handlers` è vuoto) e
-        // svuotare la coda qui butterebbe via gli eventi appena accodati.
-        //
-        // `in_provider_call` è l'altra metà della stessa regola: un provider
-        // che scrive durante `on_action`/`handle`/`flush` accoda, e la coda si
-        // drena quando la SUA chiamata è tornata — mai dentro il suo frame
-        // (a M5 il component model vieta la rientranza di un'istanza; la
-        // semantica di consegna non può cambiare al freeze).
-        if self.dispatching || self.in_provider_call || self.batch.is_some() {
+        // Il ciclo consegna e basta: quando fermarsi, cosa scartare e cosa
+        // mettere al posto di ciò che si scarta lo decide il [`Dispatcher`]
+        // (§8.1). Qui resta ciò che il componente non può fare — chiamare un
+        // provider, che vuole `&mut Workspace` da prestare come `HostApi`.
+        if !self
+            .dispatch
+            .begin_drain(!self.providers.handlers.is_empty())
+        {
             return;
         }
-        if self.handlers.is_empty() {
-            // Nessun osservatore: non accumulare eventi all'infinito.
-            self.pending.clear();
-            return;
-        }
-        self.dispatching = true;
-        let mut budget = DISPATCH_BUDGET;
-        while let Some(notice) = self.pending.pop_front() {
-            if budget == 0 {
-                // L'evento estratto e i rimanenti non verranno consegnati.
-                let dropped = (self.pending.len() + 1) as u64;
-                self.pending.clear();
-                // Il troncamento è del **kernel**: non lo ha chiesto chi stava
-                // scrivendo, e attribuirglielo direbbe a un'automazione «questa
-                // l'hai causata tu» proprio nel momento in cui le si chiede di
-                // riconciliare.
-                let overflow = Notice::new(Event::Overflow { dropped }, Origin::by(Actor::Kernel));
-                self.bus.emit(overflow.clone());
-                self.deliver_to_handlers(&overflow);
-                // Ciò che gli handler hanno emesso gestendo l'Overflow è
-                // scartato: la coda deve terminare qui.
-                self.pending.clear();
-                break;
+        let mut budget = Dispatcher::budget();
+        while let Some(next) = self.dispatch.next_to_deliver(&mut budget) {
+            match next {
+                ToDeliver::Notice(notice) => self.deliver_to_handlers(&notice),
+                ToDeliver::Overflow(overflow) => {
+                    self.deliver_to_handlers(&overflow);
+                    // Ciò che gli handler hanno emesso gestendo l'Overflow è
+                    // scartato: la coda deve terminare qui.
+                    self.dispatch.drop_pending();
+                    break;
+                }
             }
-            budget -= 1;
-            self.deliver_to_handlers(&notice);
         }
-        self.dispatching = false;
+        self.dispatch.end_drain();
     }
 
     /// **Presta i provider di una tabella per la durata di una chiamata**: la
@@ -2655,10 +2378,9 @@ impl Workspace {
     /// `HostApi`) viene rimandato. Chi chiama è responsabile di drenare la
     /// coda **dopo** — è il "dopo che la tua chiamata è tornata" del contratto.
     fn with_provider_call<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let prev = self.in_provider_call;
-        self.in_provider_call = true;
+        let prev = self.dispatch.enter_provider_call();
         let result = f(self);
-        self.in_provider_call = prev;
+        self.dispatch.restore_provider_call(prev);
         result
     }
 
@@ -2673,7 +2395,7 @@ impl Workspace {
     /// cosa e sta nel [`Notice`], dove il plugin la legge.
     fn deliver_to_handlers(&mut self, notice: &Notice) {
         self.lend(
-            |ws| &mut ws.handlers,
+            |ws| &mut ws.providers.handlers,
             |ws, handlers| {
                 for (id, handler) in handlers.iter_mut() {
                     if !handler.subscribed().contains(notice.kind()) {
@@ -2709,14 +2431,11 @@ impl Workspace {
     /// un prestito per la durata di una chiamata, e un'identità che si conta
     /// dentro un prestito ricomincerebbe da capo a ogni prestito.
     pub(crate) fn enqueue_job(&mut self, spec: JobSpec) -> JobId {
-        let id = JobId(self.next_job_id);
-        self.next_job_id += 1;
-        self.pending_jobs.push((id, spec));
-        id
+        self.dispatch.enqueue_job(spec)
     }
 
     pub fn take_pending_jobs(&mut self) -> Vec<(JobId, JobSpec)> {
-        std::mem::take(&mut self.pending_jobs)
+        self.dispatch.take_pending_jobs()
     }
 
     /// Riconsegna l'esito di un job: emette [`Event::JobDone`] sul giro
@@ -2746,45 +2465,6 @@ impl Workspace {
 
     // --- interni ---------------------------------------------------------
 
-    /// Parsa una sorgente che il chiamante ha già in mano.
-    ///
-    /// Ha per forza del testo: chi la chiama è appena passato da una scrittura o
-    /// da un `Vault::read`. Per un documento che sta solo sul disco c'è
-    /// [`Workspace::parse_from_disk`], che legge nella forma che il provider ha
-    /// dichiarato.
-    fn parse(&self, id: &DocId, source: &str) -> Result<DocumentModel> {
-        self.parse_source(id, DocumentSource::Text(source.to_string()))
-    }
-
-    /// Legge e parsa un documento **nella forma che il suo provider chiede**:
-    /// testo decodificato o byte grezzi (§3.4).
-    fn parse_from_disk(&self, id: &DocId) -> Result<DocumentModel> {
-        let source = match self.provider_for(id)?.descriptor().source {
-            SourceKind::Text => DocumentSource::Text(self.vault.read(id)?),
-            SourceKind::Bytes => DocumentSource::Bytes(self.vault.read_bytes(id)?),
-        };
-        self.parse_source(id, source)
-    }
-
-    fn parse_source(&self, id: &DocId, source: DocumentSource) -> Result<DocumentModel> {
-        let provider = self.provider_for(id)?;
-        let ctx = ParseContext::obsidian(id.as_str());
-        let mut model = provider.parse(&source, &ctx)?;
-        // L'innesto del §3.1: le regole sintattiche registrate girano DOPO il
-        // provider, sul modello. È ciò che le rende innestabili su un provider
-        // che non le conosce — vedi `syntax::apply_rules`.
-        self.syntax
-            .apply(&mut model, &ctx, &provider.descriptor().id);
-        Ok(model)
-    }
-
-    fn provider_for(&self, id: &DocId) -> Result<&dyn fubmd_abi::FormatProvider> {
-        let ext = extension_of(id).unwrap_or_default();
-        self.registry
-            .provider_for_ext(&ext)
-            .ok_or(KernelError::NoProvider(ext))
-    }
-
     // --- storage persistente dei plugin ------------------------------------
 
     /// La radice dello spazio dati di un plugin, **come cartella del
@@ -2807,11 +2487,7 @@ impl Workspace {
 
     /// La radice dello spazio dati di un plugin.
     pub(crate) fn plugin_data_root(&self, plugin: &str) -> Utf8PathBuf {
-        self.vault
-            .root()
-            .join(DATA_DIR)
-            .join(PLUGIN_DATA_DIR)
-            .join(plugin)
+        self.docs.plugin_data_root(plugin)
     }
 
     /// Traduce un path relativo dello spazio di un plugin in un path assoluto,
@@ -2975,10 +2651,4 @@ fn section_of(model: &DocumentModel, heading: &str) -> Option<DocumentModel> {
         .cloned()
         .collect();
     Some(section)
-}
-
-fn extension_of(id: &DocId) -> Option<String> {
-    id.as_str()
-        .rsplit_once('.')
-        .map(|(_, ext)| ext.to_lowercase())
 }

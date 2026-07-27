@@ -229,7 +229,7 @@ comando) lo ha sempre; chi vuole la posizione la ha quando è vera.
 
 La stessa invariante è tenuta dal kernel dall'altro lato: quando il sorgente
 sotto la selezione cambia, viene rinominato o sparisce, la selezione **cade**
-(`Workspace::invalidate_context`). Uno span stantio è peggio di uno span
+(`Session::invalidate`, in `kernel/src/session.rs`). Uno span stantio è peggio di uno span
 assente. La shell ne ripubblica uno vero al salvataggio successivo, che è il
 momento in cui torna a essere vero.
 

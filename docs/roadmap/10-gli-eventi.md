@@ -49,7 +49,7 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
       messaggio IPC per evento**, da un thread dedicato che fa `recv()` e `emit`
       in un ciclo senza freno (`app/lib.rs:208-215`). Un subscriber lento non
       rallenta nessuno: accumula memoria, in silenzio, senza un tetto — l'opposto
-      del `DISPATCH_BUDGET` (`workspace.rs:129`) che protegge gli handler.
+      del `DISPATCH_BUDGET` (`dispatcher.rs`) che protegge gli handler.
 - [ ] **E ogni evento costa un giro di shell**: a ogni `index_updated` (o
       `batch_ended`) la shell rifà `list_documents` e ridisegna ogni view
       iscritta. La [decisione 0011](../decisions/0011-il-lotto.md) ha ridotto gli eventi *che costano un ridisegno* —
