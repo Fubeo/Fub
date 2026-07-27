@@ -8,7 +8,7 @@
 //!
 //! Gli [`EventHandler`] registrati sono chiamati **sincronamente ma a coda**:
 //! ogni operazione pubblica che muta il workspace accoda i propri eventi e li
-//! drena alla fine ([`Workspace::dispatch_pending`]). Un handler che durante
+//! drena alla fine (`Workspace::dispatch_pending`, interno). Un handler che durante
 //! `handle` emette eventi o scrive documenti (via [`HostApi`]) non innesca un
 //! dispatch ricorsivo: i nuovi eventi finiscono in coda e sono drenati dallo
 //! stesso ciclo, con un budget che tronca i ping-pong infiniti fra handler —
@@ -28,7 +28,8 @@
 //! ed è identica a quella che il proxy WASM potrà onorare.
 //!
 //! Il lavoro **lungo** (rete, calcolo pesante, il vault camminato per intero)
-//! non passa dagli handler: un provider lo chiede via [`HostEvents::spawn_job`],
+//! non passa dagli handler: un provider lo chiede via
+//! [`HostEvents::spawn_job`](fubmd_abi::traits::HostEvents::spawn_job),
 //! l'host lo esegue fuori dal lock ([`Workspace::take_pending_jobs`]) e l'esito
 //! rientra come [`Event::JobDone`] ([`Workspace::complete_job`]). Le capacità
 //! lì dentro ci sono (decisione 0027), e il prestito del workspace se lo prende
@@ -199,8 +200,9 @@ pub struct Workspace {
     /// senza freno. Vedi il § "Dispatch degli eventi" qui sopra.
     dispatch: Dispatcher,
     /// *Cosa sta guardando l'utente adesso* (§8.1): il contesto del pannello
-    /// con il focus, servito alle view da [`HostEnv::active_context`]. Lo
-    /// imposta la shell
+    /// con il focus, servito alle view da
+    /// [`HostEnv::active_context`](fubmd_abi::traits::HostEnv::active_context).
+    /// Lo imposta la shell
     /// ([`set_active_context`](Workspace::set_active_context)); il kernel non
     /// lo deriva né lo inventa — quale nota guarda l'utente, dove ha cliccato
     /// e in che modalità legge sono decisioni dell'app, e il kernel le
@@ -403,7 +405,8 @@ impl Workspace {
     }
 
     /// Dichiara una **feature ufficiale** di questo repo: [`Trust::Core`] e i
-    /// permessi di [`PluginPermissions::core`].
+    /// permessi di
+    /// [`PluginPermissions::core`](fubmd_abi::traits::PluginPermissions::core).
     ///
     /// È zucchero su [`register_plugin`](Workspace::register_plugin) e non un
     /// secondo percorso: passa dallo stesso registro, con lo stesso manifest,
@@ -658,7 +661,7 @@ impl Workspace {
     /// È l'unico modo che il kernel ha di sapere una cosa che non gli
     /// appartiene: il watcher vive in `fubmd-host`, il kernel non sa cosa sia, e
     /// però è il kernel che deve **rispondere**
-    /// ([`IndexQuery::VaultStatus`](fubmd_abi::traits::IndexQuery::VaultStatus)),
+    /// ([`IndexQuery::VaultStatus`]),
     /// perché è l'unico che conosce anche l'altra metà della risposta — quante
     /// sincronizzazioni sono fallite.
     ///
@@ -950,7 +953,9 @@ impl Workspace {
     ///
     /// L'ordine non si impone più a ogni chiamata: la cache dei metadati è
     /// ordinata per costruzione (§5.5). Chi ne vuole una **finestra** non passa
-    /// di qui ma da [`VaultRead::list_documents`], che non materializza il resto.
+    /// di qui ma da
+    /// [`VaultRead::list_documents`](fubmd_abi::traits::VaultRead::list_documents),
+    /// che non materializza il resto.
     pub fn documents(&self) -> Vec<DocId> {
         self.indexes.core.documents()
     }
@@ -1105,7 +1110,7 @@ impl Workspace {
     /// `let _ = ws.sync_path(…)`, quindi un file esterno che non si legge o non
     /// si parsa lasciava la cache, il grafo e l'indice fermi a *prima*, per
     /// sempre, senza che niente lo dicesse. Adesso lo dice
-    /// [`IndexQuery::VaultStatus`](fubmd_abi::traits::IndexQuery::VaultStatus).
+    /// [`IndexQuery::VaultStatus`].
     pub fn sync_path(&mut self, abs: &Utf8Path) -> Result<bool> {
         let outcome = self.sync_path_here(abs);
         self.note_sync(&outcome);
@@ -1773,11 +1778,11 @@ impl Workspace {
     }
 
     /// Il modello parsato di un documento (§4.2): la metà kernel di
-    /// [`VaultRead::read_model`].
+    /// [`VaultRead::read_model`](fubmd_abi::traits::VaultRead::read_model).
     ///
     /// **Rilegge e riparsa dal disco**, con le regole di sintassi registrate già
     /// applicate — è la stessa catena di `render_preview`, senza il rendering.
-    /// La cache tiene i soli metadati (vedi [`DocMeta`]), quindi il corpo non c'è
+    /// La cache tiene i soli metadati (vedi `DocMeta`, interno), quindi il corpo non c'è
     /// e non si può servire da lì: chi vuole i metadati passa da
     /// [`query_index`](Workspace::query_index), che risponde senza toccare il
     /// disco.
@@ -1793,14 +1798,14 @@ impl Workspace {
     }
 
     /// Di che formato è un documento, e che sintassi capirebbe (§4.3): la metà
-    /// kernel di [`VaultRead::format_of`].
+    /// kernel di [`VaultRead::format_of`](fubmd_abi::traits::VaultRead::format_of).
     ///
     /// Non tocca il disco e non chiede che il documento esista: è una domanda
     /// sull'**estensione**, e il registro dei formati è l'unico che sa
     /// rispondere. `None` = nessun provider la rivendica.
     ///
     /// Le capacità sono quelle **effettive**: quelle del provider, sovrapposte
-    /// da quelle che le [`SyntaxRule`](fubmd_abi::custom::SyntaxRule) registrate
+    /// da quelle che le [`SyntaxRule`] registrate
     /// gli innestano (§3.1). L'ordine della sovrapposizione dice chi vince su
     /// una chiave condivisa, ed è il provider: se sa fare `fubmd:math` per conto
     /// suo, il suo dettaglio è più informativo del semplice «acceso» che una
@@ -1893,8 +1898,8 @@ impl Workspace {
     ///
     /// Lo chiama la shell a ogni cambio di nota, di selezione o di modalità. È
     /// l'unico modo di scrivere il contesto: le view lo **leggono** via
-    /// [`HostEnv::active_context`], nessuno lo scrive dall'interno del
-    /// contratto — vedi il campo `session` e [`Session`].
+    /// [`HostEnv::active_context`](fubmd_abi::traits::HostEnv::active_context),
+    /// nessuno lo scrive dall'interno del contratto — vedi il campo `session` e [`Session`].
     ///
     /// Il conto di *cosa* ridisegnare sta qui e non nella shell perché la
     /// risposta non deve dipendere da chi la calcola: la regola è una
@@ -1947,7 +1952,7 @@ impl Workspace {
     /// su nove le serviva il kernel con un `return` anticipato, e le altre due
     /// giravano su tutti gli indici registrati in ordine finché uno non
     /// rispondeva `BadArgs`. Adesso chi serve cosa è dichiarato
-    /// ([`QueryRoute`](fubmd_abi::traits::QueryRoute)), le risposte del kernel
+    /// ([`QueryRoute`]), le risposte del kernel
     /// sono un indice registrato per primo, e ciò che nessuno serve torna come
     /// [`PluginError::Unserved`] invece che come l'errore dell'ultimo
     /// interpellato.
@@ -2304,7 +2309,7 @@ impl Workspace {
     /// L'attore è **chi ha chiesto**, non il provider che esegue: un comando
     /// invocato da un plugin scrive con l'origine di quel plugin. Per la stessa
     /// ragione `by` non arriva fino a
-    /// [`CommandProvider::invoke`](fubmd_abi::traits::CommandProvider::invoke):
+    /// [`CommandProvider::invoke`]:
     /// l'origine è ciò che l'host **appone**, non ciò che il comando legge, e un
     /// comando che si comportasse diversamente a seconda di chi lo chiama
     /// sarebbe una policy (§7.3) nascosta dentro un'implementazione. Il giorno

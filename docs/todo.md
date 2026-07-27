@@ -145,7 +145,7 @@ descrive una promessa.
 
 ## Le voci
 
-Cinquantaquattro. Il numero è quello con cui le nomina il resto del repo.
+Cinquantatré. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio

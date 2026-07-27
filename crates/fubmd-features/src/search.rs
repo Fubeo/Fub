@@ -1597,6 +1597,15 @@ mod tests {
     /// difendere non è «quanto va veloce» ma «scala o no»: col lock interno il
     /// rapporto è 1,0, senza è vicino al numero di core. In mezzo non c'è niente
     /// che una macchina lenta possa produrre per caso.
+    ///
+    /// Una macchina **occupata** è un'altra cosa da una lenta, e può darlo un
+    /// falso rosso: le due colonne stanno nella stessa corsa ma non nello stesso
+    /// istante, quindi un vicino di banco che si prende i core durante la
+    /// seconda peggiora solo quella. Il modo di distinguerlo è rilanciarlo da
+    /// solo (`cargo test -p fubmd-features --lib due_ricerche`): un rosso che
+    /// resta è un lock tornato dentro l'indice, uno che sparisce era il carico.
+    /// La soglia non va spostata per farlo tacere — fra 0,4 e 0,95 non c'è
+    /// niente che questa proprietà possa misurare.
     #[test]
     fn due_ricerche_stanno_nell_indice_insieme() {
         let n = std::thread::available_parallelism()

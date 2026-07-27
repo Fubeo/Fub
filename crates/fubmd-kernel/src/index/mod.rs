@@ -12,10 +12,10 @@
 //! Qui dentro ci sono le tre cose che lo chiudono, e sono una sola vista da tre
 //! lati:
 //!
-//! - [`CoreIndex`] — le risposte del kernel sono **un provider**, registrato per
+//! - `CoreIndex` (interno) — le risposte del kernel sono **un provider**, registrato per
 //!   primo. Non un ramo prima del ciclo: un `IndexProvider` come gli altri, che
 //!   dichiara ciò che serve e che si può sostituire chiedendolo per nome.
-//! - [`RouteTable`] — chi serve cosa è **dichiarato alla registrazione**, non
+//! - `RouteTable` (interno) — chi serve cosa è **dichiarato alla registrazione**, non
 //!   scoperto interpellando in ordine finché uno non risponde `BadArgs`. Un
 //!   conflitto si vede al montaggio, e «nessuno la serve» è distinguibile da
 //!   «chi la serve ha fallito».

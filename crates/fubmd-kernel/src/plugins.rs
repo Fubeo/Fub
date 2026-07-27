@@ -96,7 +96,7 @@ impl RegistrationKind {
 pub struct Registration {
     pub kind: RegistrationKind,
     /// L'id registrato. Per le specie che non nominano niente
-    /// ([`RegistrationKind::names`] falso) è l'id del plugin stesso: una riga
+    /// (`RegistrationKind::names` falso) è l'id del plugin stesso: una riga
     /// nell'inventario ci vuole comunque, o «ho registrato un handler» non si
     /// potrebbe dire.
     pub id: String,

@@ -250,7 +250,8 @@ impl BundleRegistry {
         let out = match Arc::get_mut(&mut bundle.plugin) {
             Some(plugin) => ws.with_host(id, |host| plugin.deactivate(host)).err(),
             None => Some(PluginError::Internal(format!(
-                "`{id}` ha un job ancora in volo: il suo `deactivate` non è stato chiamato                  (chi spegne un bundle ferma prima i suoi job)"
+                "`{id}` ha un job ancora in volo: il suo `deactivate` non è stato \
+                 chiamato (chi spegne un bundle ferma prima i suoi job)"
             ))),
         };
         // Qui l'ultima copia cade, ed è il momento in cui un bundle nativo

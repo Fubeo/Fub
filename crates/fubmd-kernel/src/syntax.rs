@@ -214,7 +214,8 @@ impl SyntaxRegistry {
     /// Le sintassi che le regole registrate **innestano** su un formato: le
     /// chiavi di contesto che le accendono, come voci di una [`OptionMap`].
     ///
-    /// Serve alle capacità *effettive* di [`DocumentFormat`] (§4.3): chi chiede
+    /// Serve alle capacità *effettive* di
+    /// [`DocumentFormat`](fubmd_abi::format::DocumentFormat) (§4.3): chi chiede
     /// cosa capisce un `.md` deve ricevere anche `fubmd:highlight`, che il
     /// provider markdown non sa fare e che una regola gli innesta sopra. La
     /// risposta contraria — le sole capacità del provider — sarebbe una verità

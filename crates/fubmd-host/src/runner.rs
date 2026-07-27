@@ -9,10 +9,11 @@
 //! # La forma, in tre righe
 //!
 //! N thread dedicati. Ognuno aspetta il campanello del kernel
-//! ([`JobBell`](fubmd_kernel::JobBell)), drena la coda, e per ogni job costruisce
-//! un [`JobHost`] e chiama [`Plugin::run_job`]. Nessuno tiene niente in mano
-//! mentre il job gira: il prestito del workspace se lo prende il `JobHost`, una
-//! chiamata alla volta ([decisione 0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md)).
+//! ([`JobBell`]), drena la coda, e per ogni job costruisce un [`JobHost`] e
+//! chiama [`Plugin::run_job`](fubmd_abi::traits::Plugin::run_job). Nessuno
+//! tiene niente in mano mentre il job gira: il prestito del workspace se lo
+//! prende il `JobHost`, una chiamata alla volta
+//! ([decisione 0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md)).
 //! Il corpo del job lo dà chi possiede i bundle
 //! ([decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md)): la
 //! coda dice **quale plugin**, il registry dice **quale codice**.
@@ -65,6 +66,77 @@ use crate::registry::BundleRegistry;
 /// sarà quella a dirlo.
 pub const DEFAULT_JOB_THREADS: usize = 2;
 
+/// Le bandiere dell'annullamento, e **fin dove il pool è arrivato**.
+///
+/// Le due cose stanno sotto lo stesso lock perché una si legge solo insieme
+/// all'altra: senza il secondo campo, «annulla» non saprebbe distinguere un job
+/// che deve ancora partire da uno che è già finito, e siccome il primo caso
+/// obbliga a creare la bandiera, il secondo ne creerebbe una che nessuno
+/// toglierà mai — una perdita piccola, per sempre, a ogni pulsante premuto
+/// tardi (§10.3).
+#[derive(Default)]
+struct Flags {
+    /// Una bandiera per job **vivo**: dal momento in cui il pool lo prende in
+    /// carico a quello in cui ne riconsegna l'esito. Ci finisce prima anche un
+    /// job annullato mentre è ancora in coda, perché annullarlo un istante
+    /// prima che parta deve valere quanto annullarlo in volo.
+    live: HashMap<JobId, Arc<AtomicBool>>,
+    /// L'id più alto che il pool abbia mai preso in carico, o `None` finché non
+    /// ha drenato niente.
+    ///
+    /// È un confine e non una statistica: il kernel assegna gli id in ordine e
+    /// un drenaggio prende **tutta** la coda, quindi un id oltre questo segno è
+    /// un job che deve ancora arrivare, e un id sotto che non è fra i vivi è un
+    /// job già finito.
+    seen: Option<u64>,
+}
+
+impl Flags {
+    /// **Prende in carico** un job appena drenato: da qui ha una bandiera, e il
+    /// segno si sposta fin dove il pool è arrivato.
+    ///
+    /// Le bandiere nascono qui e non quando il job parte, ed è ciò che rende
+    /// vero il confine: un lotto si esegue uno alla volta, quindi fra il
+    /// drenaggio e l'esecuzione i suoi job aspettano il proprio turno dentro un
+    /// thread — e in quella finestra sono vivi quanto quello che gira, mentre il
+    /// segno può già essere andato avanti per il lotto di un altro.
+    fn claim(&mut self, id: JobId) {
+        self.live
+            .entry(id)
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)));
+        self.seen = Some(match self.seen {
+            Some(seen) => seen.max(id.0),
+            None => id.0,
+        });
+    }
+
+    /// Alza la bandiera di un job, **se ce n'è ancora una da alzare**.
+    ///
+    /// I due modi di non essere fra i vivi vogliono risposte opposte: oltre il
+    /// segno è un job che il pool non ha ancora visto — la bandiera nasce qui,
+    /// alzata, e il drenaggio la troverà — mentre sotto il segno è un job già
+    /// concluso, e annullarlo non vuol dire niente.
+    fn cancel(&mut self, id: JobId) {
+        if let Some(flag) = self.live.get(&id) {
+            flag.store(true, Ordering::Relaxed);
+            return;
+        }
+        let da_venire = match self.seen {
+            Some(seen) => id.0 > seen,
+            None => true,
+        };
+        if da_venire {
+            self.live.insert(id, Arc::new(AtomicBool::new(true)));
+        }
+    }
+
+    fn cancel_all(&self) {
+        for flag in self.live.values() {
+            flag.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
 /// Ciò che i thread condividono: il vault, chi possiede i bundle, il campanello,
 /// e le bandiere di chi è stato annullato.
 struct Shared {
@@ -73,32 +145,39 @@ struct Shared {
     bell: Arc<JobBell>,
     /// Il pool sta chiudendo: nessun job nuovo parte.
     stopping: AtomicBool,
-    /// Una bandiera per job, creata da chi lo annulla o da chi lo avvia — chi
-    /// arriva prima. Annullare un job che non è ancora partito deve valere
-    /// quanto annullarne uno in volo, o «annulla» sarebbe una corsa.
-    flags: Mutex<HashMap<JobId, Arc<AtomicBool>>>,
+    flags: Mutex<Flags>,
 }
 
 impl Shared {
+    /// Prende in carico un lotto appena drenato ([`Flags::claim`]).
+    fn claim(&self, jobs: &[PendingJob]) {
+        let mut flags = self.flags.lock().expect("bandiere avvelenate");
+        for job in jobs {
+            flags.claim(job.id);
+        }
+    }
+
     /// La bandiera di un job, creandola se non c'è.
     fn flag(&self, id: JobId) -> Arc<AtomicBool> {
-        Arc::clone(
-            self.flags
-                .lock()
-                .expect("bandiere avvelenate")
-                .entry(id)
-                .or_insert_with(|| Arc::new(AtomicBool::new(false))),
-        )
+        let mut flags = self.flags.lock().expect("bandiere avvelenate");
+        flags.claim(id);
+        Arc::clone(&flags.live[&id])
+    }
+
+    fn cancel(&self, id: JobId) {
+        self.flags.lock().expect("bandiere avvelenate").cancel(id);
     }
 
     fn forget(&self, id: JobId) {
-        self.flags.lock().expect("bandiere avvelenate").remove(&id);
+        self.flags
+            .lock()
+            .expect("bandiere avvelenate")
+            .live
+            .remove(&id);
     }
 
     fn cancel_all(&self) {
-        for flag in self.flags.lock().expect("bandiere avvelenate").values() {
-            flag.store(true, Ordering::Relaxed);
-        }
+        self.flags.lock().expect("bandiere avvelenate").cancel_all();
     }
 
     /// Esegue un job e ne riconsegna l'esito. **Sempre** un esito: un job che
@@ -172,9 +251,25 @@ impl Shared {
                 .expect("workspace avvelenato")
                 .take_pending_jobs();
             if jobs.is_empty() {
+                // La bandiera si rilegge **dopo** aver preso il biglietto, e non
+                // basta quella in cima al ciclo: `stop` alza `stopping` e *poi*
+                // suona, quindi un thread che passa il controllo in cima un
+                // istante prima dello `store` prenderebbe il biglietto già
+                // oltre la suonata, troverebbe la coda vuota e si metterebbe ad
+                // aspettare una campana che non suonerà più — e chi chiude lo
+                // aspetterebbe per sempre. Riletta qui la corsa non c'è: o il
+                // biglietto è di prima della suonata, e allora `wait_beyond`
+                // torna subito perché il conto è già cambiato; o è di dopo, e
+                // allora `stopping` è già visibile (lo `store` è `Release`, e
+                // il biglietto passa dal mutex del campanello che la suonata ha
+                // rilasciato).
+                if self.stopping.load(Ordering::Acquire) {
+                    return;
+                }
                 self.bell.wait_beyond(ticket);
                 continue;
             }
+            self.claim(&jobs);
             for job in jobs {
                 // Il controllo è **dentro** il ciclo e non solo in cima: un
                 // drenaggio prende tutta la coda, e senza questa riga chiudere
@@ -210,7 +305,7 @@ impl JobRunner {
             bundles,
             bell,
             stopping: AtomicBool::new(false),
-            flags: Mutex::new(HashMap::new()),
+            flags: Mutex::new(Flags::default()),
         });
         let workers = (0..threads.max(1))
             .map(|n| {
@@ -227,12 +322,17 @@ impl JobRunner {
     /// **Annulla** un job: alzare la sua bandiera è tutto ciò che vuol dire.
     ///
     /// Vale anche per un job che non è ancora partito — la bandiera nasce qui e
-    /// il worker la trova già alzata — e per uno che non è mai esistito, che è
-    /// una bandiera che nessuno guarderà. L'alternativa (rispondere «non lo
+    /// il worker la trova già alzata. L'alternativa (rispondere «non lo
     /// conosco») vorrebbe dire che annullare un job un istante prima che parta è
     /// una corsa che si perde.
+    ///
+    /// Annullare un job **già concluso** non fa niente e non lascia niente: la
+    /// bandiera nasce solo per un id oltre il segno di ciò che il pool ha già
+    /// preso in carico. Senza quella distinzione ogni annullamento arrivato
+    /// tardi — che è il caso normale di un pulsante premuto mentre il lavoro
+    /// finisce — lascerebbe dietro di sé una bandiera che nessuno toglie.
     pub fn cancel(&self, id: JobId) {
-        self.shared.flag(id).store(true, Ordering::Relaxed);
+        self.shared.cancel(id);
     }
 
     /// **Ferma il pool**: annulla tutti, sveglia chi dorme, aspetta chi lavora,
@@ -289,5 +389,92 @@ impl Drop for JobRunner {
         if self.is_running() {
             self.stop();
         }
+    }
+}
+
+/// Le tre risposte di [`Flags::cancel`], provate **su [`Flags`]** e non su un
+/// pool acceso.
+///
+/// Farle girare per davvero — un vault, dei bundle, dei thread — vorrebbe dire
+/// che un rosso non dice più quale dei quattro ha sbagliato, e che la terza
+/// (quella che non deve lasciare niente) si può osservare solo indovinando un
+/// istante. Qui sono tre asserzioni su una mappa.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Cosa dice la bandiera di un job, o `None` se non ne ha una.
+    fn bandiera(flags: &Flags, id: u64) -> Option<bool> {
+        flags
+            .live
+            .get(&JobId(id))
+            .map(|f| f.load(Ordering::Relaxed))
+    }
+
+    /// Annullare un job **preso in carico** lo raggiunge: è il caso normale.
+    #[test]
+    fn annullare_un_job_vivo_alza_la_sua_bandiera() {
+        let mut flags = Flags::default();
+        flags.claim(JobId(7));
+        flags.cancel(JobId(7));
+        assert_eq!(bandiera(&flags, 7), Some(true));
+    }
+
+    /// Annullare un job che il pool **non ha ancora visto** deve valere: è la
+    /// corsa che la 0032 ha deciso di non perdere. La bandiera nasce alzata, e
+    /// il drenaggio la trova così invece di rimetterla a zero.
+    #[test]
+    fn annullare_un_job_ancora_in_coda_lo_aspetta() {
+        let mut flags = Flags::default();
+        flags.claim(JobId(3));
+        flags.cancel(JobId(9));
+        assert_eq!(bandiera(&flags, 9), Some(true));
+        flags.claim(JobId(9));
+        assert_eq!(bandiera(&flags, 9), Some(true));
+    }
+
+    /// Annullare un job **già concluso** non lascia niente dietro.
+    ///
+    /// È il pulsante premuto un istante troppo tardi, cioè il più comune dei
+    /// tre casi: senza il segno ogni pressione lascerebbe una bandiera che
+    /// nessuno toglie, e la mappa crescerebbe per tutta la vita del vault.
+    #[test]
+    fn annullare_un_job_finito_non_lascia_niente() {
+        let mut flags = Flags::default();
+        for id in [1, 2, 3] {
+            flags.claim(JobId(id));
+        }
+        // Il pool ne ha riconsegnato l'esito: `Shared::forget` li toglie.
+        for id in [1, 2, 3] {
+            flags.live.remove(&JobId(id));
+        }
+        for id in [1, 2, 3] {
+            flags.cancel(JobId(id));
+        }
+        assert!(
+            flags.live.is_empty(),
+            "un annullamento arrivato tardi ha lasciato una bandiera"
+        );
+    }
+
+    /// Un job ancora **in mano** al proprio thread è vivo quanto quello che
+    /// gira, anche se il segno è già andato oltre.
+    ///
+    /// È la ragione per cui le bandiere nascono al drenaggio e non all'avvio: un
+    /// lotto si esegue uno alla volta, e nel frattempo un altro thread può
+    /// averne drenato uno più avanti. Col solo segno, i job in attesa del
+    /// proprio turno sarebbero scambiati per job già finiti — e annullarli non
+    /// farebbe niente.
+    #[test]
+    fn un_job_in_attesa_del_proprio_turno_si_annulla() {
+        let mut flags = Flags::default();
+        flags.claim(JobId(4)); // il lotto di un thread
+        flags.claim(JobId(5));
+        flags.claim(JobId(6)); // il lotto di un altro, già più avanti
+        flags.claim(JobId(7));
+        flags.live.remove(&JobId(4)); // il 4 è finito
+        flags.cancel(JobId(5)); // il 5 aspetta ancora il proprio turno
+        assert_eq!(bandiera(&flags, 5), Some(true));
+        assert_eq!(bandiera(&flags, 4), None);
     }
 }

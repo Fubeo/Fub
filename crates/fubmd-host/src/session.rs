@@ -4,7 +4,7 @@
 //! La differenza non è il nome: è che le tre cose che rendevano quel tipo
 //! inutilizzabile fuori dall'app — il montaggio cablato dentro un comando, il
 //! watcher costruito sul posto e il ponte eventi che parlava a un webview —
-//! adesso sono [`mount`](crate::mount), un [`WatcherFactory`] e un
+//! adesso sono [`mount`](crate::mount()), un [`WatcherFactory`] e un
 //! [`EventSink`]. Chi non ha un webview passa un `NoWatcher` e nessun sink, e
 //! ottiene lo stesso vault.
 //!
@@ -319,11 +319,46 @@ impl Host {
             versions,
             watcher,
         };
-        let info = info_of(&session);
 
-        let mut sessions = self.sessions.lock().unwrap();
-        sessions.open.insert(root.clone(), session);
-        sessions.current = Some(root);
+        // **Chi arriva secondo lascia cadere ciò che ha montato.** Il controllo
+        // in cima non basta: fra lì e qui il lock delle sessioni è libero — deve
+        // esserlo, o montare un vault fermerebbe ogni altro comando per tutta la
+        // scansione — quindi due aperture concorrenti sulla stessa radice ci
+        // arrivano entrambe. Inserire e basta vorrebbe dire che una delle due
+        // sessioni sparisce dalla mappa **senza essere chiusa**: indici mai
+        // messi al sicuro, `Plugin::deactivate` mai chiamato, e il rilevatore
+        // dell'altra ancora vivo su un vault che nessuno guarda più.
+        //
+        // Quello che questo **non** ripara, ed è nominato: le due aperture hanno
+        // già montato entrambe, e il lock del writer di tantivy lo prende una
+        // sola: se lo prende la perdente, la sessione che resta è quella senza
+        // ricerca — un avviso, non un errore («indice di ricerca non
+        // disponibile»). Chiudere la perdente rilascia quel lock, ma non lo
+        // ridà alla vincente. Toglierlo davvero vuol dire non far montare due
+        // volte, cioè una porta d'ingresso che serializza le aperture sulla
+        // stessa radice, ed è una decisione che va a verbale (§15.7 —
+        // l'apertura è tutto-o-niente, sincrona e senza ritorno).
+        let (info, perdente) = {
+            let mut sessions = self.sessions.lock().unwrap();
+            let perdente = if sessions.open.contains_key(&root) {
+                // Ha vinto l'altro: la sessione buona è la sua — riaprire un
+                // vault già aperto non lo riapre, e vale anche quando il
+                // "già" è di un istante fa.
+                Some(session)
+            } else {
+                sessions.open.insert(root.clone(), session);
+                None
+            };
+            let vinta = sessions.open.get(&root).expect("appena inserita, o già lì");
+            let info = info_of(vinta);
+            sessions.current = Some(root.clone());
+            (info, perdente)
+        };
+        // Chiudere sta **fuori** dal lock delle sessioni, per la stessa ragione
+        // di [`close_vault`](Host::close_vault): chiudere chiama i provider.
+        if let Some(perdente) = perdente {
+            perdente.close();
+        }
         Ok(info)
     }
 
