@@ -1,12 +1,12 @@
-//! Le interrogazioni sul **frontmatter**: filtro, ordinamento, faccette.
+//! Le interrogazioni sul **frontmatter**: filtro, ordinamento, faccette — e la
+//! composizione di una risposta a [`IndexQuery::Documents`].
 //!
-//! Il kernel il frontmatter di ogni nota ce l'ha già in cache (è metà dei
-//! [`DocMeta`](crate::workspace)), e questo modulo è ciò che lo rende
-//! interrogabile dal contratto — [`IndexQuery::Properties`] e
-//! [`IndexQuery::PropertyValues`]. Da qui passano 9.1 (ricerca per campo e
-//! faccette), 8.4 (collezioni), 11 (database su file), 16 (template con query):
-//! senza, ognuna di quelle famiglie si scriverebbe il proprio giro sul JSON
-//! grezzo, con la propria idea di cosa vuol dire "maggiore di".
+//! Chi interroga il frontmatter ce l'ha già normalizzato dal
+//! `FormatProvider`, e questo modulo è ciò che lo rende interrogabile dal
+//! contratto. Da qui passano 9.1 (ricerca per campo e faccette), 8.4
+//! (collezioni), 11 (database su file), 16 (template con query): senza, ognuna
+//! di quelle famiglie si scriverebbe il proprio giro sul JSON grezzo, con la
+//! propria idea di cosa vuol dire "maggiore di".
 //!
 //! # Le regole, in un posto solo
 //!
@@ -24,15 +24,16 @@
 //!   (`autore: [a, b]` è una nota di `a` *e* una di `b`): è ciò che una
 //!   faccetta deve fare, ed è la stessa regola dei tag.
 //!
-//! [`IndexQuery::Properties`]: fubmd_abi::traits::IndexQuery::Properties
-//! [`IndexQuery::PropertyValues`]: fubmd_abi::traits::IndexQuery::PropertyValues
+//! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use fubmd_abi::model::{DocId, Frontmatter, PropertyDate, PropertyScalar, PropertyValue};
-use fubmd_abi::traits::{
-    PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertyTest,
+use crate::model::{DocId, Frontmatter, PropertyDate, PropertyScalar, PropertyValue};
+use crate::query::Matches;
+use crate::traits::{
+    DocumentMatch, Page, Paged, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
+    PropertySort, PropertyTest,
 };
 
 /// I valori distinti di una proprietà fra i documenti che passano i filtri, coi
@@ -79,7 +80,7 @@ pub fn facets<'a>(
 
 /// Il frontmatter passa questa prova?
 ///
-/// È la foglia [`QueryPredicate::Property`](fubmd_abi::query::QueryPredicate::Property)
+/// È la foglia [`QueryPredicate::Property`](crate::query::QueryPredicate::Property)
 /// valutata: prima era dentro un filtro in AND che solo questo modulo sapeva
 /// applicare, adesso è una funzione che il linguaggio chiama una volta per
 /// letterale — e l'AND, l'OR e la negazione stanno nel contratto.
@@ -214,12 +215,61 @@ pub fn entries(fm: &Frontmatter, select: &PropertySelect) -> Vec<PropertyEntry> 
     entries
 }
 
+/// Impagina, ordina e completa una risposta a
+/// [`IndexQuery::Documents`](crate::traits::IndexQuery::Documents).
+///
+/// È la coda comune a **chiunque** serva quella famiglia: il pianificatore del
+/// kernel quando ricompone, l'indice del kernel quando la domanda gli arriva
+/// intera, e il primo indice di terzi che la rivendicherà. Tre implementazioni
+/// divergerebbero sul caso che nessuno prova — l'ordine di chi non ha la chiave
+/// di ordinamento, quello fra due documenti a pari rilevanza — e la divergenza
+/// sarebbe muta: due risposte plausibili alla stessa domanda, che nessun test
+/// confronta perché i tre non si vedono fra loro.
+///
+/// `frontmatter` è come si legge il frontmatter di un documento: chi non ce
+/// l'ha in cache restituisce `None`, e ordinamento e colonne si comportano come
+/// per una chiave assente.
+pub fn finish<'a>(
+    matches: Matches,
+    sort: Option<&PropertySort>,
+    select: &PropertySelect,
+    page: Option<Page>,
+    frontmatter: impl Fn(&DocId) -> Option<&'a Frontmatter>,
+) -> Paged<DocumentMatch> {
+    let mut rows = matches.into_vec();
+
+    if !select.is_none() {
+        for row in rows.iter_mut() {
+            if let Some(fm) = frontmatter(&row.doc) {
+                row.properties = entries(fm, select);
+            }
+        }
+    }
+
+    match sort {
+        // Senza chiave: prima la rilevanza (chi ha cercato si aspetta i
+        // risultati migliori in cima), poi l'id. Chi non ha rilevanza va in
+        // fondo, come chi non ha la chiave di ordinamento.
+        None => rows.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.doc.cmp(&b.doc))
+        }),
+        Some(sort) => rows.sort_by(|a, b| {
+            let av = frontmatter(&a.doc).and_then(|fm| fm.property(&sort.key));
+            let bv = frontmatter(&b.doc).and_then(|fm| fm.property(&sort.key));
+            order_of(av.as_ref(), bv.as_ref(), sort.descending).then_with(|| a.doc.cmp(&b.doc))
+        }),
+    }
+
+    Paged::window(rows, page)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fubmd_abi::model::PropertyTime;
-    use fubmd_abi::query::Matches;
-    use fubmd_abi::traits::{DocumentMatch, PropertySort};
+    use crate::model::PropertyTime;
 
     fn fm(json: serde_json::Value) -> Frontmatter {
         Frontmatter(json.as_object().expect("oggetto").clone())
@@ -248,9 +298,9 @@ mod tests {
     }
 
     /// Il giro completo come lo fa il kernel: i filtri sono letterali in AND
-    /// (valutati da [`test`]), e ordine, colonne e finestra li mette
-    /// [`crate::index::plan::finish`]. Passa da lì e non da una composizione
-    /// locale perché è **quella** la composizione che gira in produzione.
+    /// (valutati da [`test`]), e ordine, colonne e finestra li mette [`finish`].
+    /// Passa da lì e non da una composizione locale perché è **quella** la
+    /// composizione che gira in produzione.
     fn run(
         filter: &[PropertyFilter],
         sort: Option<&PropertySort>,
@@ -262,7 +312,7 @@ mod tests {
             .filter(|(_, fm)| filter.iter().all(|f| test(fm, f)))
             .map(|(id, _)| DocumentMatch::of(id.clone()))
             .collect();
-        crate::index::plan::finish(matches, sort, select, None, |id| {
+        finish(matches, sort, select, None, |id| {
             vault
                 .iter()
                 .find(|(other, _)| other == id)

@@ -203,10 +203,12 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   [0019](decisions/0019-il-canale-dati.md)); e, dal **sesto giro**, **quante volte è
   scritto e da cosa cresce quel numero** — il moltiplicatore invece della
   migrazione, che non si paga aggiungendo la voce ma a ogni voce successiva: le
-  regole del contratto chiuse in `mod` privati del kernel (§6.1), l'`HostApi`
-  scritta quattro volte a mano (§7.1), i dati persistiti senza mappa né classe di
-  durabilità (§15.4), le regole duplicate in TypeScript senza il presidio che
-  hanno i tipi (§6.2) e il banco di prova copiato diciotto volte (§16.2).
+  regole del contratto chiuse in `mod` privati del kernel e le stesse regole
+  duplicate in TypeScript senza il presidio che hanno i tipi (§6.1 e §6.2,
+  chiusi con la [decisione 0020](decisions/0020-le-regole-in-un-posto-solo.md)),
+  l'`HostApi` scritta quattro volte a mano (§7.1), i dati persistiti senza mappa
+  né classe di durabilità (§15.4) e il banco di prova copiato diciotto volte
+  (§16.2).
   Dal **settimo giro**, una quinta domanda: **cosa fallisce senza produrre nessun
   segnale** — né per un test, né per un log, né per l'utente, finché il danno non
   è già fatto. Ha aperto una seduta sua (la 20) e ha una proprietà che le altre
@@ -382,16 +384,21 @@ documenti milestone.
   il rifiuto come **wrapper generico** invece che come impl gemella, e la
   domanda (P0, pre-freeze) se `HostApi` vada spezzata in sotto-trait, perché
   spostare una funzione fra interface WIT vale come rottura.
-- **Le stesse regole scritte due volte** — sei regole vivono già in Rust e in
-  TypeScript (nome pagina di un `DocId`, spunta di un task, risoluzione
-  case-insensitive, offset byte↔code unit, grammatica di wikilink e tag,
-  collazione), e **una** ha un test che le lega. I tipi al confine hanno una
-  fixture generata; le regole no. Mitigazione a due livelli
-  ([todo.md](todo.md) §6.2): la fixture di conformità sul modello di
-  `mirror-samples.json` adesso, `fubmd-abi` compilato a `wasm32-unknown-unknown`
-  come fine corsa — praticabile solo perché l'invariante del crate è stata
-  tenuta. Gemella dal lato Rust: le regole che il contratto promette stanno in
-  `mod` privati del kernel e un secondo provider le rifà a occhio (§6.1).
+- **Le stesse regole scritte due volte** — **mitigato**, con la
+  [decisione 0020](decisions/0020-le-regole-in-un-posto-solo.md). Sei regole
+  vivevano già in Rust e in TypeScript (nome pagina di un `DocId`, spunta di un
+  task, risoluzione case-insensitive, offset byte↔code unit, grammatica di
+  wikilink e tag, collazione) e **una** aveva un test che le legava, scritto a
+  mano. Adesso le regole del contratto stanno in `fubmd_abi::rules` — raggiungibili
+  da chi implementa un indice, che è la metà §6.1 — e ciò che resta scritto due
+  volte è legato da una fixture generata (`rules_mirror.rs` →
+  `rules-samples.json` → `rules-mirror.test.ts`), nei due versi. Due delle sei
+  non ci sono per ragioni dichiarate: la grammatica di wikilink e tag è la scelta
+  del §4.4 (decorare mentre si digita), la collazione è **due requisiti che
+  devono divergere**. Resta la fine corsa: `fubmd-abi` compilato a
+  `wasm32-unknown-unknown`, che toglierebbe la duplicazione invece di
+  presidiarla — praticabile solo perché l'invariante del crate è stata tenuta, e
+  non urgente proprio perché il presidio c'è.
 - **Il freeze arriva prima delle firme che FEATURES richiede** — è il rischio che
   le voci **P0** di [todo.md](todo.md) esistono per chiudere: una capacità che
   manca al contratto è una famiglia di voci che *non potrà mai* essere un plugin,

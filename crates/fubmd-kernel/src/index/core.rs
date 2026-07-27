@@ -32,6 +32,7 @@ use std::sync::Arc;
 
 use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Frontmatter, Heading, Link};
 use fubmd_abi::query::{in_folder, Matches, QueryEvaluator, QueryPredicate};
+use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
     HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, Paged, PredicateKind,
     QueryKind, QueryRoute,
@@ -43,8 +44,6 @@ use crate::health;
 use crate::registry::FormatRegistry;
 use crate::tag_counts::TagCounts;
 use crate::workspace::GraphUpdate;
-
-use super::plan;
 
 /// I metadati di un documento tenuti in cache: identità, frontmatter (alias),
 /// outline, link — ciò che le mutazioni devono mantenere e che grafo, canale
@@ -185,7 +184,7 @@ impl QueryEvaluator for CoreIndex {
             QueryPredicate::Property { filter } => Ok(Matches::of_docs(
                 self.metas
                     .iter()
-                    .filter(|(_, meta)| crate::properties::test(&meta.frontmatter, filter))
+                    .filter(|(_, meta)| properties::test(&meta.frontmatter, filter))
                     .map(|(id, _)| id.clone()),
             )),
             QueryPredicate::Tag { name, descendants } => {
@@ -285,7 +284,7 @@ impl IndexProvider for CoreIndex {
                 page,
             } => {
                 let matches = self.expr(&matching)?;
-                Ok(IndexResult::Documents(plan::finish(
+                Ok(IndexResult::Documents(properties::finish(
                     matches,
                     sort.as_ref(),
                     &select,
@@ -337,7 +336,7 @@ impl IndexProvider for CoreIndex {
                 page,
             } => {
                 let selected = self.expr(&matching)?;
-                let facets = crate::properties::facets(
+                let facets = properties::facets(
                     selected
                         .ids()
                         .filter_map(|id| self.metas.get(id).map(|m| (id, &m.frontmatter))),

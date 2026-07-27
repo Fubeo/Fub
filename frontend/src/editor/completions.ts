@@ -15,7 +15,7 @@ import {
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
-import { childName, pageName } from "../rules/organizer";
+import { childName, pageName, resolutionKey } from "../rules/mirrored";
 
 /// Le sorgenti dati dei completamenti. `listNotes` restituisce i DocId del
 /// vault; `listTags` i tag con la frequenza (mirror di `TagCount`).
@@ -79,17 +79,18 @@ function pathWithoutExtension(doc: string): string {
 
 /// Le opzioni per il completamento wikilink. `label` = nome pagina, `detail` =
 /// path (per orientarsi tra cartelle). Per i nomi pagina ambigui — stesso nome
-/// in cartelle diverse, confronto case-insensitive come la risoluzione dei
-/// link — si inserisce il path senza estensione, che è la forma univoca.
+/// in cartelle diverse, confrontati con la `resolutionKey`, cioè esattamente
+/// come li confronta chi risolve i link — si inserisce il path senza
+/// estensione, che è la forma univoca.
 export function noteCompletions(docs: string[], alreadyClosed: boolean): Completion[] {
   const seen = new Map<string, number>();
   for (const doc of docs) {
-    const key = pageName(doc).toLowerCase();
+    const key = resolutionKey(pageName(doc));
     seen.set(key, (seen.get(key) ?? 0) + 1);
   }
   return docs.map((doc) => {
     const name = pageName(doc);
-    const ambiguous = (seen.get(name.toLowerCase()) ?? 0) > 1;
+    const ambiguous = (seen.get(resolutionKey(name)) ?? 0) > 1;
     const insert = ambiguous ? pathWithoutExtension(doc) : name;
     return {
       label: name,

@@ -32,6 +32,9 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
+// La lettura binaria di una casella è una regola del contratto, non del
+// disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
+import { taskChecked } from "../rules/mirrored";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -341,7 +344,7 @@ export function computeDecorations(
     const mc = RE_CHECKBOX.exec(testo);
     if (mc) {
       const parA = riga.from + mc[0].length; // subito dopo `]`
-      const spuntata = mc[2].toLowerCase() === "x";
+      const spuntata = taskChecked(mc[2]);
       if (!rigaAttiva) {
         out.push({ from: parA - 3, to: parA, kind: "checkbox", data: spuntata ? "x" : " " });
       }

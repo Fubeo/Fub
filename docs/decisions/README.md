@@ -30,6 +30,7 @@ cronologico di chiusura.
 | [0017](0017-chi-disegna-cio-che-il-core-non-conosce.md) | Chi disegna ciò che il core non conosce | §3.1–§3.6 | 2026-07-26 |
 | [0018](0018-chi-vede-il-modello-parsato.md) | Chi vede il modello parsato | §4.1–§4.3 | 2026-07-27 |
 | [0019](0019-il-canale-dati.md) | Il canale dati: chi risponde, e chi instrada | §5.1–§5.5 | 2026-07-27 |
+| [0020](0020-le-regole-in-un-posto-solo.md) | Le regole in un posto solo | §6.1–§6.2 | 2026-07-27 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

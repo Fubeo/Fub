@@ -68,12 +68,13 @@ use fubmd_abi::transfer::{
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{Actor, BatchId, Event, Notice, Origin, PluginError};
 
+use fubmd_abi::rules::path as rules_path;
+use fubmd_abi::rules::path::{resolution_key, strip_ext};
+
 use crate::bus::EventBus;
 use crate::error::{KernelError, Result};
-use crate::graph::{normalize, strip_ext};
 use crate::index::plan::QueryPlan;
 use crate::index::{IndexError, Indexes};
-use crate::pathlink;
 use crate::registry::FormatRegistry;
 use crate::renderer::{self, RenderedDocument, RendererConflict, RendererRegistry};
 use crate::syntax::{SyntaxConflict, SyntaxRegistry};
@@ -1103,8 +1104,8 @@ impl Workspace {
     /// sorgenti del piano — i suoi link uscenti vanno ri-basati sulla cartella
     /// nuova — e non solo quando linka se stesso.
     fn link_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
-        let from_name = normalize(from.page_name());
-        let from_path = normalize(&strip_ext(from.as_str()));
+        let from_name = resolution_key(from.page_name());
+        let from_path = resolution_key(&strip_ext(from.as_str()));
 
         // Nuovo riferimento: il nome pagina se nessun altro documento lo
         // contende (a quel punto la risoluzione per nome è certa), altrimenti
@@ -1115,7 +1116,7 @@ impl Workspace {
             .core
             .metas
             .keys()
-            .any(|id| id != from && normalize(id.page_name()) == normalize(to_name));
+            .any(|id| id != from && resolution_key(id.page_name()) == resolution_key(to_name));
         let new_ref = if ambiguous {
             strip_ext(to.as_str())
         } else {
@@ -1158,9 +1159,10 @@ impl Workspace {
                         // Riscrivi solo se il link puntava davvero a `from`
                         // (non a un omonimo) e ci arrivava per nome o per path
                         // — mai per alias.
-                        let key = normalize(page);
+                        let key = resolution_key(page);
                         let by_name = key == from_name;
-                        let by_path = key == from_path || normalize(&strip_ext(&key)) == from_path;
+                        let by_path =
+                            key == from_path || resolution_key(&strip_ext(&key)) == from_path;
                         if !(by_name || by_path) {
                             continue;
                         }
@@ -1174,7 +1176,7 @@ impl Workspace {
                         else {
                             continue;
                         };
-                        let (_, fragment) = pathlink::split_fragment(written);
+                        let (_, fragment) = rules_path::split_fragment(written);
                         let rewritten = format!("{new_target}{fragment}");
                         if rewritten == *written {
                             continue;
@@ -1224,7 +1226,7 @@ impl Workspace {
     /// radice non si muove).
     ///
     /// L'estensione ricompare sempre nel riferimento nuovo, anche se il
-    /// vecchio ne era privo: vedi [`pathlink::relative_ref`].
+    /// vecchio ne era privo: vedi [`fubmd_abi::rules::path::relative_ref`].
     fn rebased_path_link(
         &self,
         from: &DocId,
@@ -1238,7 +1240,7 @@ impl Workspace {
         if !source_moves && !target_moves {
             return None;
         }
-        let (path, _) = pathlink::split_fragment(written);
+        let (path, _) = rules_path::split_fragment(written);
         let from_root = path.trim_start().starts_with('/');
         if from_root {
             if !target_moves {
@@ -1246,11 +1248,11 @@ impl Workspace {
             }
             // Un link dalla radice resta dalla radice: è una scelta di stile
             // di chi scrive, e il rename non è il momento di discuterla.
-            return Some(format!("/{}", pathlink::percent_encode_path(to.as_str())));
+            return Some(format!("/{}", rules_path::percent_encode_path(to.as_str())));
         }
         let src_after = if source_moves { to } else { src };
         let target_after = if target_moves { to } else { &resolved };
-        Some(pathlink::relative_ref(src_after, target_after))
+        Some(rules_path::relative_ref(src_after, target_after))
     }
 
     /// Innesta una sintassi su un provider (§3.1), o dice **perché no**.
@@ -3080,11 +3082,11 @@ impl KernelHost<'_> {
 /// (incluso) fino al prossimo heading di livello pari o superiore. `heading`
 /// matcha per slug o per testo, case-insensitive.
 fn section_of(model: &DocumentModel, heading: &str) -> Option<DocumentModel> {
-    let want = normalize(heading);
+    let want = resolution_key(heading);
     let idx = model
         .outline
         .iter()
-        .position(|h| normalize(&h.slug) == want || normalize(&h.text) == want)?;
+        .position(|h| resolution_key(&h.slug) == want || resolution_key(&h.text) == want)?;
     let start = model.outline[idx].span.start;
     let level = model.outline[idx].level;
     let end = model.outline[idx + 1..]

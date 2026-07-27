@@ -27,7 +27,11 @@
 //! - il protocollo di **UI dichiarativa** ([`ui`]) e gli **eventi** ([`event`]):
 //!   cosa è successo, **chi lo ha chiesto** e di quale **lotto** fa parte;
 //! - il **contesto di sessione** ([`session`]): quale pannello ha il focus, che
-//!   documento guarda, cosa c'è selezionato dentro.
+//!   documento guarda, cosa c'è selezionato dentro;
+//! - le **regole** ([`rules`]): la parte di una risposta che non dipende da chi
+//!   la dà — come si confrontano due proprietà, quando un path relativo diventa
+//!   un `DocId`, cosa conta come link rotto. Stanno qui e non nel kernel perché
+//!   chi serve una `IndexQuery` può non avere il kernel fra le mani.
 //!
 //! **Invariante:** nessuna dipendenza da markdown, tauri, wasmtime o tokio.
 //! Definendo ogni trait una volta sola qui, l'impl nativa (diretta) e l'impl
@@ -44,6 +48,7 @@ pub mod ipc;
 pub mod model;
 pub mod options;
 pub mod query;
+pub mod rules;
 pub mod session;
 pub mod traits;
 pub mod transfer;

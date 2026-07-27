@@ -10,7 +10,8 @@
 //! (path se contiene `/`, poi nome, poi alias). Un [`LinkTarget::Path`] — il
 //! link markdown ordinario, `[testo](note/altra.md)` — porta un *path relativo
 //! al documento che lo contiene*, e si risolve solo per path: le regole stanno
-//! in [`crate::pathlink`], che è l'unico posto dove la differenza è scritta. Un
+//! in [`fubmd_abi::rules::path`], che è l'unico posto dove la differenza è
+//! scritta. Un
 //! [`LinkTarget::Url`] non è un arco e non lo diventa.
 //!
 //! Da qui in giù i due sono indistinguibili: stessa chiave di risoluzione,
@@ -51,7 +52,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use fubmd_abi::model::{DocId, DocumentModel, Link, LinkTarget};
 use fubmd_abi::traits::{BacklinkRef, LinkDirection, NeighborRef};
 
-use crate::pathlink;
+use fubmd_abi::rules::path::{resolution_key, resolve_against, strip_ext};
 
 /// Ciò che il grafo legge di un documento: identità, alias, link.
 ///
@@ -206,7 +207,7 @@ impl LinkGraph {
     /// per path se contiene `/`, altrimenti per nome (fra omonimi vince il
     /// più vicino alla radice), infine per alias.
     pub fn resolve_wiki(&self, page: &str) -> Option<DocId> {
-        self.resolve_key(&normalize(page))
+        self.resolve_key(&resolution_key(page))
     }
 
     /// Risolve la destinazione di un link markdown (`[t](note/altra.md)`)
@@ -216,8 +217,8 @@ impl LinkGraph {
     /// (a valle) la navigazione da un'anteprima devono rispondere alla stessa
     /// domanda con la stessa risposta.
     pub fn resolve_path(&self, source: &DocId, target: &str) -> Option<DocId> {
-        let path = pathlink::resolve_against(source, target)?;
-        self.resolve_path_key(&normalize(&path))
+        let path = resolve_against(source, target)?;
+        self.resolve_path_key(&resolution_key(&path))
     }
 
     /// Backlink verso un documento (riferimenti entranti), ordinati per sorgente.
@@ -332,7 +333,7 @@ impl LinkGraph {
             return None;
         }
         if let Some(ids) = self.path_index.get(&strip_ext(key)) {
-            if let Some(id) = ids.iter().find(|id| normalize(id.as_str()) == key) {
+            if let Some(id) = ids.iter().find(|id| resolution_key(id.as_str()) == key) {
                 return Some(id.clone());
             }
         }
@@ -344,9 +345,13 @@ impl LinkGraph {
     fn attach_indexes<S: GraphSource + ?Sized>(&mut self, doc: &S, touched: &mut HashSet<String>) {
         let id = doc.graph_id();
         let keys = DocKeys {
-            name: normalize(id.page_name()),
-            path: normalize(&strip_ext(id.as_str())),
-            aliases: doc.graph_aliases().iter().map(|a| normalize(a)).collect(),
+            name: resolution_key(id.page_name()),
+            path: resolution_key(&strip_ext(id.as_str())),
+            aliases: doc
+                .graph_aliases()
+                .iter()
+                .map(|a| resolution_key(a))
+                .collect(),
         };
         insert_sorted(&mut self.name_index, &keys.name, id);
         insert_sorted(&mut self.path_index, &keys.path, id);
@@ -380,12 +385,12 @@ impl LinkGraph {
         let mut refs = Vec::new();
         for link in doc.graph_links() {
             let (key, kind) = match &link.target {
-                LinkTarget::Wiki { page, .. } => (normalize(page), RefKind::Wiki),
+                LinkTarget::Wiki { page, .. } => (resolution_key(page), RefKind::Wiki),
                 // Il path si risolve **qui**, contro la cartella del sorgente:
                 // da questo punto in poi la chiave è assoluta nel vault e il
                 // resto della macchina non deve più sapere da dove veniva.
-                LinkTarget::Path(target) => match pathlink::resolve_against(id, target) {
-                    Some(path) => (normalize(&path), RefKind::Path),
+                LinkTarget::Path(target) => match resolve_against(id, target) {
+                    Some(path) => (resolution_key(&path), RefKind::Path),
                     None => continue,
                 },
                 LinkTarget::Url(_) => continue,
@@ -505,17 +510,6 @@ impl LinkGraph {
     }
 }
 
-/// Chiave di risoluzione: trim + NFC + minuscolo. Unico punto di
-/// normalizzazione.
-///
-/// NFC perché un vault sincronizzato con macOS ha nomi file NFD mentre il
-/// link digitato è NFC: senza, `[[Café]]` non risolve, il backlink non esiste
-/// e per il grafo sono due nodi — e colpisce esattamente le note accentate.
-pub(crate) fn normalize(s: &str) -> String {
-    use unicode_normalization::UnicodeNormalization;
-    s.trim().nfc().collect::<String>().to_lowercase()
-}
-
 /// Le voci d'indice da cui dipende la risoluzione di una chiave di link.
 /// `resolve_key` guarda `path_index[strip_ext(key)]`, `name_index[key]` e
 /// `alias_index[key]`; `resolve_path_key` guarda `path_index` su entrambe. In
@@ -558,13 +552,6 @@ fn remove_sorted(index: &mut HashMap<String, Vec<DocId>>, key: &str, id: &DocId)
 /// radice), a parità quello lessicograficamente minore.
 fn priority(id: &DocId) -> (usize, &str) {
     (segments(id), id.as_str())
-}
-
-pub(crate) fn strip_ext(path: &str) -> String {
-    match path.rsplit_once('.') {
-        Some((stem, ext)) if !ext.contains('/') => stem.to_string(),
-        _ => path.to_string(),
-    }
 }
 
 fn segments(id: &DocId) -> usize {

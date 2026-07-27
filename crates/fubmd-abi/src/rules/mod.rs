@@ -1,0 +1,58 @@
+//! # Le regole del contratto, in un posto solo
+//!
+//! Una **regola** è la parte di una risposta che non dipende da chi la dà: come
+//! si confrontano due `PropertyValue`, dove ordina chi non ha la chiave, quando
+//! un path relativo diventa un `DocId`, cosa conta come link rotto, quale tag
+//! sta sotto quale. Sono la risposta a domande che il contratto pone — la
+//! risposta a [`IndexQuery::Documents`] è la stessa domanda per chiunque la
+//! serva — e finché vivevano in moduli privati del kernel c'era **un posto
+//! solo** soltanto finché l'implementazione era una.
+//!
+//! Da qui in avanti non lo è più: la decisione 0019 ha aperto il canale dati a
+//! indici di terzi, e un indice di terzi non ha `fubmd-kernel` fra le mani —
+//! `fubmd-features` non ci dipende *per invariante*, e un guest WASM a M5
+//! nemmeno. Il secondo che rifacesse queste funzioni risponderebbe diversamente
+//! alla stessa query, e la differenza non la vedrebbe nessun test, perché i due
+//! non si confrontano mai.
+//!
+//! Stanno in `fubmd-abi` e non nell'SDK perché l'SDK è comodo ma facoltativo, e
+//! una regola facoltativa non è una regola: chi vuole essere d'accordo col
+//! kernel non deve dover adottare anche un toolkit. È lo stesso spostamento che
+//! la decisione 0003 aveva fatto per `heading_slug` e `canonical_tag` — da
+//! funzioni private del provider markdown a funzioni del contratto — applicato
+//! al kernel invece che a un provider.
+//!
+//! ## La mappa
+//!
+//! - [`path`] — la chiave di risoluzione (trim, NFC, minuscolo), i link
+//!   markdown relativi, il percent-encoding;
+//! - [`properties`] — filtro, ordinamento e faccette sul frontmatter;
+//! - [`tag`] — la gerarchia dei tag, accanto alla forma canonica del nome;
+//! - [`health`] — cosa conta come link rotto, e cosa no.
+//!
+//! Le regole che erano **già** nel contratto restano dove sono e si raggiungono
+//! anche da qui, perché il posto in cui si cerca «la regola X» dev'essere uno:
+//! [`canonical_tag`], [`canonical_anchor`], [`valid_anchor`], [`heading_slug`] e
+//! il metodo [`DocId::page_name`](crate::model::DocId::page_name).
+//!
+//! ## Ciò che NON è una regola condivisa
+//!
+//! L'**ordine di presentazione**. Il kernel ordina per `DocId` — ordine di
+//! byte — e non è una scelta estetica: una risposta paginata che cambiasse
+//! ordine fra una pagina e l'altra ripeterebbe e salterebbe righe, quindi
+//! serve un ordine **totale, stabile e calcolabile senza un locale**. La
+//! sidebar ordina con un collatore italiano (`Intl.Collator`), che è l'ordine
+//! di lettura di un umano e dipende dalla lingua di chi guarda. Non sono due
+//! copie della stessa regola: sono **due requisiti che devono divergere**, e
+//! una fixture che li legasse nascerebbe rossa e resterebbe rossa. Chi vuole
+//! l'ordine dell'umano lo chiede a chi conosce l'umano — cioè alla shell, dopo
+//! aver ricevuto la pagina.
+//!
+//! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
+
+pub mod health;
+pub mod path;
+pub mod properties;
+pub mod tag;
+
+pub use crate::model::{canonical_anchor, canonical_tag, heading_slug, valid_anchor};

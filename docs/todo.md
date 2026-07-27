@@ -5,9 +5,9 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sette giri sulla stessa domanda hanno prodotto novantanove voci. Trentasette
+Sette giri sulla stessa domanda hanno prodotto novantanove voci. Trentanove
 sono chiuse, e i loro verbali stanno in [docs/decisions/](decisions/README.md);
-le altre sessantadue sono qui, e questo file è il loro **indice**.
+le altre sessanta sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -96,7 +96,7 @@ messaggio arrivato.
 | **3** | [Chi disegna ciò che il core non conosce](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md) | una decisione sola vista da tre lati: sintassi, blocco, renderer nella shell | — | — |
 | **4** | [Chi vede il modello parsato](roadmap/04-chi-vede-il-modello-parsato.md) | *chi vede la struttura di un documento?* Deciso con la [0018](decisions/0018-chi-vede-il-modello-parsato.md) | — | — |
 | **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | *chi risponde a una query, e chi la instrada?* Deciso con la [0019](decisions/0019-il-canale-dati.md) | — | — |
-| **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | la stessa regola serve a provider, shell e a M5 a un guest WASM | 2 | — |
+| **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | *la stessa regola serve a provider, shell e a M5 a un guest WASM.* Deciso con la [0020](decisions/0020-le-regole-in-un-posto-solo.md) | — | — |
 | **7** | [Il confine: quante volte si scrive la disciplina](roadmap/07-il-confine.md) | la disciplina del confine, da chi lo attraversa e da chi lo presta | 6 | 2 |
 | **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio va scomposto **prima** di ciò che gli atterra sopra | 3 | — |
 | **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | le tre facce del momento in cui un componente smette | 7 | 2 |
@@ -114,7 +114,7 @@ messaggio arrivato.
 
 ## Le voci
 
-Sessantadue. Il numero è quello con cui le nomina il resto del repo.
+Sessanta. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -162,8 +162,6 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
-| **§6.1** | [Le regole che il contratto promette vivono nel kernel, private](roadmap/06-le-regole-in-un-posto-solo.md#61-le-regole-che-il-contratto-promette-vivono-nel-kernel-private) | 6. Le regole in un posto solo | contratto | **P1** |
-| **§6.2** | [I *tipi* al confine hanno un presidio; le *regole* no](roadmap/06-le-regole-in-un-posto-solo.md#62-i-tipi-al-confine-hanno-un-presidio-le-regole-no) | 6. Le regole in un posto solo | presidi | **P1** |
 | **§7.1** | [Una capacità dell'`HostApi` si implementa quattro volte a mano](roadmap/07-il-confine.md#71-una-capacità-dellhostapi-si-implementa-quattro-volte-a-mano) | 7. Il confine: quante volte si scrive la disciplina | contratto | **P0** |
 | **§7.2** | [Una disciplina dei provider sola, non una per famiglia](roadmap/07-il-confine.md#72-una-disciplina-dei-provider-sola-non-una-per-famiglia) | 7. Il confine: quante volte si scrive la disciplina | kernel | **P1** |
 | **§7.3** | [Permessi e manifest — il punto di applicazione non esiste](roadmap/07-il-confine.md#73-permessi-e-manifest--il-punto-di-applicazione-non-esiste) | 7. Il confine: quante volte si scrive la disciplina | kernel | **P1** |
@@ -231,7 +229,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — diciannove, uno per
+- [I verbali delle decisioni chiuse](decisions/README.md) — venti, uno per
   file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

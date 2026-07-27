@@ -1,0 +1,1051 @@
+{
+  "page_name": [
+    {
+      "id": "note.md",
+      "out": "note"
+    },
+    {
+      "id": "note.backup",
+      "out": "note"
+    },
+    {
+      "id": "a.b.md",
+      "out": "a.b"
+    },
+    {
+      "id": ".foo",
+      "out": ".foo"
+    },
+    {
+      "id": "dir/.hidden.md",
+      "out": ".hidden"
+    },
+    {
+      "id": "dir/.gitignore",
+      "out": ".gitignore"
+    },
+    {
+      "id": "senza-ext",
+      "out": "senza-ext"
+    },
+    {
+      "id": "dir.con.punti/nota.md",
+      "out": "nota"
+    },
+    {
+      "id": "finisce-con-punto.",
+      "out": "finisce-con-punto"
+    },
+    {
+      "id": "Nota Lunga.md",
+      "out": "Nota Lunga"
+    }
+  ],
+  "resolution_key": [
+    {
+      "s": "Café",
+      "out": "café"
+    },
+    {
+      "s": "Café",
+      "out": "café"
+    },
+    {
+      "s": "  spazi attorno  ",
+      "out": "spazi attorno"
+    },
+    {
+      "s": "MAIUSCOLO",
+      "out": "maiuscolo"
+    },
+    {
+      "s": "Progetti/Alpha.md",
+      "out": "progetti/alpha.md"
+    },
+    {
+      "s": "ÅNGSTRÖM",
+      "out": "ångström"
+    },
+    {
+      "s": "Ången",
+      "out": "ången"
+    },
+    {
+      "s": "già",
+      "out": "già"
+    },
+    {
+      "s": "GIÀ",
+      "out": "già"
+    },
+    {
+      "s": "",
+      "out": ""
+    }
+  ],
+  "task_checked": [
+    {
+      "symbol": "x",
+      "out": true
+    },
+    {
+      "symbol": "X",
+      "out": true
+    },
+    {
+      "symbol": " ",
+      "out": false
+    },
+    {
+      "symbol": "/",
+      "out": false
+    },
+    {
+      "symbol": "-",
+      "out": false
+    },
+    {
+      "symbol": null,
+      "out": false
+    }
+  ],
+  "byte_to_utf16": [
+    {
+      "text": "ascii puro",
+      "byte": 0,
+      "out": 0
+    },
+    {
+      "text": "ascii puro",
+      "byte": 1,
+      "out": 1
+    },
+    {
+      "text": "ascii puro",
+      "byte": 2,
+      "out": 2
+    },
+    {
+      "text": "ascii puro",
+      "byte": 3,
+      "out": 3
+    },
+    {
+      "text": "ascii puro",
+      "byte": 4,
+      "out": 4
+    },
+    {
+      "text": "ascii puro",
+      "byte": 5,
+      "out": 5
+    },
+    {
+      "text": "ascii puro",
+      "byte": 6,
+      "out": 6
+    },
+    {
+      "text": "ascii puro",
+      "byte": 7,
+      "out": 7
+    },
+    {
+      "text": "ascii puro",
+      "byte": 8,
+      "out": 8
+    },
+    {
+      "text": "ascii puro",
+      "byte": 9,
+      "out": 9
+    },
+    {
+      "text": "ascii puro",
+      "byte": 10,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "byte": 11,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "byte": 12,
+      "out": 10
+    },
+    {
+      "text": "città è però",
+      "byte": 0,
+      "out": 0
+    },
+    {
+      "text": "città è però",
+      "byte": 1,
+      "out": 1
+    },
+    {
+      "text": "città è però",
+      "byte": 2,
+      "out": 2
+    },
+    {
+      "text": "città è però",
+      "byte": 3,
+      "out": 3
+    },
+    {
+      "text": "città è però",
+      "byte": 4,
+      "out": 4
+    },
+    {
+      "text": "città è però",
+      "byte": 5,
+      "out": 5
+    },
+    {
+      "text": "città è però",
+      "byte": 6,
+      "out": 5
+    },
+    {
+      "text": "città è però",
+      "byte": 7,
+      "out": 6
+    },
+    {
+      "text": "città è però",
+      "byte": 8,
+      "out": 7
+    },
+    {
+      "text": "città è però",
+      "byte": 9,
+      "out": 7
+    },
+    {
+      "text": "città è però",
+      "byte": 10,
+      "out": 8
+    },
+    {
+      "text": "città è però",
+      "byte": 11,
+      "out": 9
+    },
+    {
+      "text": "città è però",
+      "byte": 12,
+      "out": 10
+    },
+    {
+      "text": "città è però",
+      "byte": 13,
+      "out": 11
+    },
+    {
+      "text": "città è però",
+      "byte": 14,
+      "out": 12
+    },
+    {
+      "text": "città è però",
+      "byte": 15,
+      "out": 12
+    },
+    {
+      "text": "città è però",
+      "byte": 16,
+      "out": 12
+    },
+    {
+      "text": "città è però",
+      "byte": 17,
+      "out": 12
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 0,
+      "out": 0
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 1,
+      "out": 1
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 2,
+      "out": 2
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 3,
+      "out": 3
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 4,
+      "out": 4
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 5,
+      "out": 5
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 6,
+      "out": 7
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 7,
+      "out": 7
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 8,
+      "out": 7
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 9,
+      "out": 7
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 10,
+      "out": 8
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 11,
+      "out": 9
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 12,
+      "out": 10
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 13,
+      "out": 11
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 14,
+      "out": 12
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 15,
+      "out": 13
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 16,
+      "out": 13
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "byte": 17,
+      "out": 13
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 0,
+      "out": 0
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 1,
+      "out": 1
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 2,
+      "out": 1
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 3,
+      "out": 1
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 4,
+      "out": 2
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 5,
+      "out": 2
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 6,
+      "out": 2
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 7,
+      "out": 3
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 8,
+      "out": 3
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 9,
+      "out": 3
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 10,
+      "out": 4
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 11,
+      "out": 4
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 12,
+      "out": 4
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 13,
+      "out": 5
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 14,
+      "out": 5
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 15,
+      "out": 5
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 16,
+      "out": 5
+    },
+    {
+      "text": "漢字とかな",
+      "byte": 17,
+      "out": 5
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 0,
+      "out": 0
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 1,
+      "out": 2
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 2,
+      "out": 2
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 3,
+      "out": 2
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 4,
+      "out": 2
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 5,
+      "out": 4
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 6,
+      "out": 4
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 7,
+      "out": 4
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 8,
+      "out": 4
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 9,
+      "out": 6
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 10,
+      "out": 6
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 11,
+      "out": 6
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 12,
+      "out": 6
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 13,
+      "out": 6
+    },
+    {
+      "text": "🌍🌎🌏",
+      "byte": 14,
+      "out": 6
+    },
+    {
+      "text": "",
+      "byte": 0,
+      "out": 0
+    },
+    {
+      "text": "",
+      "byte": 1,
+      "out": 0
+    },
+    {
+      "text": "",
+      "byte": 2,
+      "out": 0
+    }
+  ],
+  "utf16_to_byte": [
+    {
+      "text": "ascii puro",
+      "unit": 0,
+      "out": 0
+    },
+    {
+      "text": "ascii puro",
+      "unit": 1,
+      "out": 1
+    },
+    {
+      "text": "ascii puro",
+      "unit": 2,
+      "out": 2
+    },
+    {
+      "text": "ascii puro",
+      "unit": 3,
+      "out": 3
+    },
+    {
+      "text": "ascii puro",
+      "unit": 4,
+      "out": 4
+    },
+    {
+      "text": "ascii puro",
+      "unit": 5,
+      "out": 5
+    },
+    {
+      "text": "ascii puro",
+      "unit": 6,
+      "out": 6
+    },
+    {
+      "text": "ascii puro",
+      "unit": 7,
+      "out": 7
+    },
+    {
+      "text": "ascii puro",
+      "unit": 8,
+      "out": 8
+    },
+    {
+      "text": "ascii puro",
+      "unit": 9,
+      "out": 9
+    },
+    {
+      "text": "ascii puro",
+      "unit": 10,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 11,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 12,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 13,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 14,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 15,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 16,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 17,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 18,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 19,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 20,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 21,
+      "out": 10
+    },
+    {
+      "text": "ascii puro",
+      "unit": 22,
+      "out": 10
+    },
+    {
+      "text": "città è però",
+      "unit": 0,
+      "out": 0
+    },
+    {
+      "text": "città è però",
+      "unit": 1,
+      "out": 1
+    },
+    {
+      "text": "città è però",
+      "unit": 2,
+      "out": 2
+    },
+    {
+      "text": "città è però",
+      "unit": 3,
+      "out": 3
+    },
+    {
+      "text": "città è però",
+      "unit": 4,
+      "out": 4
+    },
+    {
+      "text": "città è però",
+      "unit": 5,
+      "out": 6
+    },
+    {
+      "text": "città è però",
+      "unit": 6,
+      "out": 7
+    },
+    {
+      "text": "città è però",
+      "unit": 7,
+      "out": 9
+    },
+    {
+      "text": "città è però",
+      "unit": 8,
+      "out": 10
+    },
+    {
+      "text": "città è però",
+      "unit": 9,
+      "out": 11
+    },
+    {
+      "text": "città è però",
+      "unit": 10,
+      "out": 12
+    },
+    {
+      "text": "città è però",
+      "unit": 11,
+      "out": 13
+    },
+    {
+      "text": "città è però",
+      "unit": 12,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 13,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 14,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 15,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 16,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 17,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 18,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 19,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 20,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 21,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 22,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 23,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 24,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 25,
+      "out": 15
+    },
+    {
+      "text": "città è però",
+      "unit": 26,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 0,
+      "out": 0
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 1,
+      "out": 1
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 2,
+      "out": 2
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 3,
+      "out": 3
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 4,
+      "out": 4
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 5,
+      "out": 5
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 6,
+      "out": 9
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 7,
+      "out": 9
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 8,
+      "out": 10
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 9,
+      "out": 11
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 10,
+      "out": 12
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 11,
+      "out": 13
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 12,
+      "out": 14
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 13,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 14,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 15,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 16,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 17,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 18,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 19,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 20,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 21,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 22,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 23,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 24,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 25,
+      "out": 15
+    },
+    {
+      "text": "ciao 🌍 mondo",
+      "unit": 26,
+      "out": 15
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 0,
+      "out": 0
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 1,
+      "out": 3
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 2,
+      "out": 6
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 3,
+      "out": 9
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 4,
+      "out": 12
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 5,
+      "out": 15
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 6,
+      "out": 15
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 7,
+      "out": 15
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 8,
+      "out": 15
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 9,
+      "out": 15
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 10,
+      "out": 15
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 11,
+      "out": 15
+    },
+    {
+      "text": "漢字とかな",
+      "unit": 12,
+      "out": 15
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 0,
+      "out": 0
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 1,
+      "out": 4
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 2,
+      "out": 4
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 3,
+      "out": 8
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 4,
+      "out": 8
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 5,
+      "out": 12
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 6,
+      "out": 12
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 7,
+      "out": 12
+    },
+    {
+      "text": "🌍🌎🌏",
+      "unit": 8,
+      "out": 12
+    },
+    {
+      "text": "",
+      "unit": 0,
+      "out": 0
+    },
+    {
+      "text": "",
+      "unit": 1,
+      "out": 0
+    },
+    {
+      "text": "",
+      "unit": 2,
+      "out": 0
+    }
+  ]
+}
