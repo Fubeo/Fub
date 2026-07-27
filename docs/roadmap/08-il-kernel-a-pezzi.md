@@ -43,7 +43,7 @@ impedimenti, cioè §9.1, §9.3 e §10.3.
 
 ### 8.4 Il prestito condiviso si ferma al lock di un provider
 
-*ottavo giro · kernel · **P2** — trovata misurando la [0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md), e non prevedibile senza*
+*ottavo giro · kernel · **P0 condizionale** — scade col freeze **solo se** la risposta al terzo punto è qualcosa che chi implementa deve fornire; trovata misurando la [0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md), e non prevedibile senza*
 
 - [ ] **La lettura che l'utente scatena più spesso è l'unica che non è
       migliorata.** Il banco della 0024 misura `query_index` a **43 op/s con un
@@ -67,11 +67,29 @@ impedimenti, cioè §9.1, §9.3 e §10.3.
       condivisione, e lui si rimette in fila da solo. Va deciso se il contratto
       deve dire qualcosa (e cosa: una dichiarazione? un requisito?) o se resta
       una qualità di ogni singolo indice.
+- [ ] **E la scelta ha una scadenza, mentre la misura no.** È la forma del §9.2,
+      ed è la ragione per cui questa voce è marcata come quella: per il presidio
+      dell'additività ([0002](../decisions/0002-additivita-del-contratto.md)) un
+      campo **in fondo** a un record è additivo, quindi una dichiarazione
+      aggiunta dopo il freeze non rompe il WIT — rompe **chi implementa**, e solo
+      se nasce senza default. Se la risposta è che un `IndexProvider` deve
+      *dichiarare* se le sue `query` girano insieme, va messa prima del freeze di
+      M4, perché dopo ogni provider di terzi già scritto smette di compilare; se
+      è un requisito in prosa, o se resta una qualità del singolo indice, non
+      scade e la voce torna P2. La priorità sta quindi sulla **scelta**, non sul
+      lavoro: togliere il `Mutex` a `SearchIndex` senza perdere il commit pigro
+      può seguire, ed è P2 di suo.
 - [ ] **Non confondere con il costo.** Che una query costi ~23 ms su 2000 note è
       un'altra domanda, non di concorrenza: sta accanto alla reindicizzazione
-      (24.1) e alle prestazioni del §17.1. Qui il fatto è che quei 23 ms **non si
-      dividono per otto**, ed è per questo che il carico misto della 0024 dà
-      1,0× mentre ognuna delle sue parti dà molto di più.
+      (24.1) e alle prestazioni del §17.1, e da quando la
+      [0025](../decisions/0025-la-ricerca-predefinita.md) ha dichiarato che la
+      ricerca è built-in ha un proprietario suo — la
+      [§21.9](21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché),
+      che nota anche l'altra metà del problema: M2 aveva misurato **108 µs** per
+      la stessa query, e due numeri a due ordini di grandezza di distanza vogliono
+      dire che i due banchi misurano cose diverse. Qui il fatto è che quei 23 ms
+      **non si dividono per otto**, ed è per questo che il carico misto della
+      0024 dà 1,0× mentre ognuna delle sue parti dà molto di più.
 
 *Sblocca:* niente di bloccato, ma è ciò che separa il guadagno misurato della
 [0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) dal guadagno che

@@ -262,7 +262,7 @@ bisogno di un posto da cui essere montato).
       wrapper il default è *rifiuta*, con un'impl scritta a mano il default è
       *quello che hai battuto*. Resta la parte di questa voce che riguarda
       l'elenco delle cinque capacità provate in fila.
-- [ ] **E ce n'è un terzo che si spegne da solo, trovato facendolo girare.**
+- [x] **E ce n'è un terzo che si spegne da solo, trovato facendolo girare.**
       `scripts/check-doc-links.mjs` — il presidio che la [decisione 0014](../decisions/0014-i-verbali-fuori-da-todo.md) ha aggiunto
       perché «una promessa senza presidio meccanico decade» — salta ogni cartella
       che contenga un `.fubmd-data/`, per non trattare un vault come
@@ -275,6 +275,15 @@ bisogno di un posto da cui essere montato).
       smettere di controllarli. Il numero di file *è* il segnale, e nessuno lo
       legge; il minimo è che saltare un albero sia una **riga in uscita** e non
       una sottrazione dal totale.
+      **Fatto**, e con la causa invece del solo sintomo: la regola del vault
+      resta — le note di qualcuno non sono documentazione del repo — ma non si
+      applica a una cartella in cui **git tiene dei `.md`**, che è la
+      distinzione che il solo marcatore non sa fare (`docs/` è tracciata,
+      `VaultProva/` è ignorata: non serviva indovinarlo). Ogni albero saltato è
+      una riga in uscita, e **zero file controllati esce rosso** invece di
+      stampare «0 rotti». Senza git — fuori da un checkout — si torna alla
+      regola di prima e lo si dice in una riga, invece di saltare in silenzio.
+      Oggi: 81 file, 1105 link, e `VaultProva/` nominata mentre viene saltata.
 - [ ] **Il minimo, e sta nel banco di prova del §16.2**: un inventario dei
       provider ufficiali da cui i test iterino invece di elencarli (un
       `ogni_view_ufficiale()` nel testkit, che chi aggiunge una view aggiorna

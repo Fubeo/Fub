@@ -58,7 +58,9 @@ frontend/src/
     document.ts    l'editor, il buffer, la modalità, il contesto di sessione
     preview.ts     il documento reso (modalità Lettura) e gli embed
     explorer.ts    l'albero, gli spazi, le appuntate, il drag & drop
-    search.ts      la barra e i risultati
+    search.ts      la barra e i risultati (§21.4-§21.5: qui atterrano anche il
+                   quick switcher e la ricerca dentro la nota aperta — una porta
+                   sola verso l'indice, non tre)
     trash.ts       il cestino, e la conferma prima di cestinare
     history.ts     la cronologia delle versioni
     sidebar.ts     quale pannello della sidebar occupa lo spazio

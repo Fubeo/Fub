@@ -35,7 +35,15 @@ cronologico di chiusura.
 | [0022](0022-il-kernel-a-pezzi.md) | Il kernel a pezzi: cinque proprietari invece di ventiquattro campi | §8.1 | 2026-07-27 |
 | [0023](0023-chi-monta-il-kernel.md) | Chi monta il kernel: un crate `fubmd-host`, e l'app ridotta a colla | §8.2 | 2026-07-27 |
 | [0024](0024-chi-legge-non-aspetta-chi-legge.md) | Il lock: chi legge non aspetta chi legge, e chi salva non aspetta per sempre | §8.3 | 2026-07-27 |
+| [0025](0025-la-ricerca-predefinita.md) | La ricerca predefinita: di classe *omnisearch*, e built-in | [FEATURES](../FEATURES.md) §9.1 → **apre** la [seduta 21](../roadmap/21-la-ricerca-predefinita.md) | 2026-07-27 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
 nel momento in cui la voce di `todo.md` si chiude.
+
+La [0025](0025-la-ricerca-predefinita.md) è l'eccezione, ed è dichiarata come
+tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio
+di questa cartella è il *perché*, non la direzione: chi fra un anno troverà nel
+contratto congelato un modo di chiedere una ricerca tollerante ai refusi deve
+poter leggere perché quella scelta è finita in una firma WIT invece che dentro un
+provider.

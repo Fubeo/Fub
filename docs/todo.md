@@ -9,8 +9,14 @@ Sette giri sulla stessa domanda hanno prodotto novantanove voci, e la
 centesima non l'ha trovata un giro: l'ha trovata una **misura**
 (la [§8.4](roadmap/08-il-kernel-a-pezzi.md#84-il-prestito-condiviso-si-ferma-al-lock-di-un-provider),
 dalla [decisione 0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+Le nove che seguono non le ha trovate né un giro né una misura: le ha aperte una
+**decisione di prodotto** — la
+[0025](decisions/0025-la-ricerca-predefinita.md), che ha stabilito che la
+ricerca di FubMD è built-in e di classe *omnisearch*, e da lì in poi le voci sono
+la sottrazione fra ciò che quel comportamento richiede e ciò che il contratto sa
+dire ([seduta 21](roadmap/21-la-ricerca-predefinita.md)).
 Quarantotto sono chiuse, e i loro verbali stanno in
-[docs/decisions/](decisions/README.md); le altre cinquantadue sono qui, e questo
+[docs/decisions/](decisions/README.md); le altre sessantuno sono qui, e questo
 file è il loro **indice**.
 
 ## Come è organizzato
@@ -91,6 +97,14 @@ non lasciano traccia. Il presupposto da non dare per buono, cercandola: che un
 `Result` restituito sia un `Result` letto, e che un messaggio scritto sia un
 messaggio arrivato.
 
+E una settima strada, che non è una domanda: **una decisione di prodotto presa a
+verbale**. La [0025](decisions/0025-la-ricerca-predefinita.md) — la ricerca è
+built-in e di classe *omnisearch* — non ha trovato voci cercandole: le ha
+**create**, perché deciso *cosa* l'app deve fare, quello che manca al contratto
+per permetterlo si calcola. È la sola seduta che nasce così, e conviene che si
+veda: le altre venti descrivono un debito, la [21](roadmap/21-la-ricerca-predefinita.md)
+descrive una promessa.
+
 ## Le sedute
 
 | # | Seduta | Perché insieme | Voci | P0 |
@@ -102,7 +116,7 @@ messaggio arrivato.
 | **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | *chi risponde a una query, e chi la instrada?* Deciso con la [0019](decisions/0019-il-canale-dati.md) | — | — |
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | *la stessa regola serve a provider, shell e a M5 a un guest WASM.* Deciso con la [0020](decisions/0020-le-regole-in-un-posto-solo.md) | — | — |
 | **7** | [Il confine](roadmap/07-il-confine.md) | *la disciplina del confine, da chi lo attraversa e da chi lo presta.* Deciso con la [0021](decisions/0021-il-confine.md) | — | — |
-| **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio è scomposto ([0022](decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](decisions/0023-chi-monta-il-kernel.md)) e il lock è a grana fine ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)); resta ciò che la misura ha trovato | 1 | — |
+| **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio è scomposto ([0022](decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](decisions/0023-chi-monta-il-kernel.md)) e il lock è a grana fine ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)); resta ciò che la misura ha trovato | 1 | 1 |
 | **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | le tre facce del momento in cui un componente smette | 7 | 2 |
 | **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | lo stesso canale a tre distanze: chi si abbona, cosa passa, chi lo mostra | 3 | 1 |
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano | 3 | — |
@@ -115,10 +129,11 @@ messaggio arrivato.
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | le voci ancora aperte dei quattro giri di audit | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 4 | 1 |
+| **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le prime tre sono lo **stesso record** (`TextQuery`, `DocumentMatch`) e la stessa scadenza; il resto è dove quel comportamento si vede | 9 | 3 |
 
 ## Le voci
 
-Cinquantadue. Il numero è quello con cui le nomina il resto del repo.
+Sessantuno. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -136,7 +151,10 @@ protocollo di disegno che la seduta 2 le bloccava), la
 e resta il grafo, che è l'ultimo pannello nativo), la
 [§4.4](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi)
 (il blocco è tolto dalla [0018](decisions/0018-chi-vede-il-modello-parsato.md), e
-resta il moltiplicatore) e la
+resta il moltiplicatore), la
+[§16.7](roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+(il terzo presidio — quello che si spegneva da solo aprendo `docs/` come vault —
+non si spegne più; restano i due elenchi scritti a mano, che sono la voce) e la
 [§18.1](roadmap/18-editor-e-tastiera.md#181-editor) (il ponte inverso, chiuso
 con la [decisione 0007](decisions/0007-contesto-di-sessione.md)).
 
@@ -166,7 +184,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
-| **§8.4** | [Il prestito condiviso si ferma al lock di un provider](roadmap/08-il-kernel-a-pezzi.md#84-il-prestito-condiviso-si-ferma-al-lock-di-un-provider) | 8. Il kernel a pezzi, e chi lo monta | kernel | **P2** |
+| **§8.4** | [Il prestito condiviso si ferma al lock di un provider](roadmap/08-il-kernel-a-pezzi.md#84-il-prestito-condiviso-si-ferma-al-lock-di-un-provider) | 8. Il kernel a pezzi, e chi lo monta | kernel | **P0** |
 | **§9.1** | [Il lavoro lungo non vede il vault](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#91-il-lavoro-lungo-non-vede-il-vault) | 9. Il lavoro lungo, e come un componente smette | contratto | **P0** |
 | **§9.2** | [Non c'è un ciclo di vita: si apre e basta](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#92-non-cè-un-ciclo-di-vita-si-apre-e-basta) | 9. Il lavoro lungo, e come un componente smette | contratto | **P0** |
 | **§9.3** | [Registry di plugin/feature e runner dei job](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#93-registry-di-pluginfeature-e-runner-dei-job) | 9. Il lavoro lungo, e come un componente smette | kernel | **P1** |
@@ -214,6 +232,15 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§20.2** | [Ciò che va storto ha un canale nel contratto e nessuna destinazione](roadmap/20-quando-qualcosa-va-storto.md#202-ciò-che-va-storto-ha-un-canale-nel-contratto-e-nessuna-destinazione) | 20. Quando qualcosa va storto | contratto | **P1** |
 | **§20.3** | [Il kernel butta via gli esiti che ha già in mano](roadmap/20-quando-qualcosa-va-storto.md#203-il-kernel-butta-via-gli-esiti-che-ha-già-in-mano) | 20. Quando qualcosa va storto | kernel | **P1** |
 | **§20.4** | [La shell non ha una superficie dove dire niente, e il salvataggio non ha esito](roadmap/20-quando-qualcosa-va-storto.md#204-la-shell-non-ha-una-superficie-dove-dire-niente-e-il-salvataggio-non-ha-esito) | 20. Quando qualcosa va storto | shell | **P1** |
+| **§21.1** | [La tolleranza ai refusi non è dicibile nel contratto](roadmap/21-la-ricerca-predefinita.md#211-la-tolleranza-ai-refusi-non-è-dicibile-nel-contratto) | 21. La ricerca predefinita | contratto | **P0** |
+| **§21.2** | [Il prefisso mentre si digita non è un'euristica della casella](roadmap/21-la-ricerca-predefinita.md#212-il-prefisso-mentre-si-digita-non-è-uneuristica-della-casella) | 21. La ricerca predefinita | contratto | **P0** |
+| **§21.3** | [Gli estratti sono ancorati allo snippet, non al documento](roadmap/21-la-ricerca-predefinita.md#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento) | 21. La ricerca predefinita | contratto | **P0** |
+| **§21.4** | [La ricerca dentro la nota aperta non esiste](roadmap/21-la-ricerca-predefinita.md#214-la-ricerca-dentro-la-nota-aperta-non-esiste) | 21. La ricerca predefinita | shell | **P1** |
+| **§21.5** | [Tre superfici cercano, e rischiano di nascere con tre ranking](roadmap/21-la-ricerca-predefinita.md#215-tre-superfici-cercano-e-rischiano-di-nascere-con-tre-ranking) | 21. La ricerca predefinita | shell | **P1** |
+| **§21.6** | [I pesi dei campi sono una costante di compilazione](roadmap/21-la-ricerca-predefinita.md#216-i-pesi-dei-campi-sono-una-costante-di-compilazione) | 21. La ricerca predefinita | kernel | **P2** |
+| **§21.7** | [Ricerche recenti, e la nota che la ricerca non ha trovato](roadmap/21-la-ricerca-predefinita.md#217-ricerche-recenti-e-la-nota-che-la-ricerca-non-ha-trovato) | 21. La ricerca predefinita | shell | **P2** |
+| **§21.8** | [Il testo che sta dentro gli allegati](roadmap/21-la-ricerca-predefinita.md#218-il-testo-che-sta-dentro-gli-allegati) | 21. La ricerca predefinita | kernel | **P2** |
+| **§21.9** | [Una query costa 23 ms su duemila note, e nessuno sa perché](roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché) | 21. La ricerca predefinita | kernel | **P1** |
 
 ## Gli allegati
 

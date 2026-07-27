@@ -974,10 +974,27 @@
 
 ## 9.1 Ricerca base e avanzata
 
+**Questa sezione è Core, e la ricerca predefinita è di classe *omnisearch*.** Il
+comportamento che gli utenti di Obsidian conoscono da quell'estensione — refusi
+perdonati, prefisso mentre si digita, estratti ordinati per rilevanza con i
+termini evidenziati, un modale per il vault e uno per la nota aperta — **è** la
+ricerca di FubMD, non un plugin da installare: sotto non c'è una ricerca "base"
+da migliorare, e dalla stessa porta passano il quick switcher (8.1), la command
+palette, le collezioni (8.4) e le viste salvate (8.3). Il verbale, con ciò che
+resta fuori e perché, è la
+[decisione 0025](decisions/0025-la-ricerca-predefinita.md); ciò che manca al
+contratto perché quella frase sia vera è la
+[seduta 21](roadmap/21-la-ricerca-predefinita.md). Resta **Opzionale** come tutto
+ciò che sta oltre il nucleo — ma spenta vuol dire *senza ricerca*, non con una
+ricerca peggiore.
+
 - [ ] Ricerca globale
 - [ ] Ricerca rapida
 - [ ] Full-text
 - [ ] Fuzzy
+- [ ] Fuzzy di default nella casella di ricerca
+- [ ] Esattezza richiedibile per singola query
+- [ ] Prefisso mentre si digita
 - [ ] Esatta
 - [ ] Operatori
 - [ ] Regex
@@ -986,6 +1003,7 @@
 - [ ] Field-specific
 - [ ] Ricerca per percorso
 - [ ] Ricerca per nome file
+- [ ] Ricerca per heading
 - [ ] Ricerca per tag
 - [ ] Ricerca per proprietà
 - [ ] Ricerca per data creazione
@@ -1011,9 +1029,13 @@
 - [ ] Ricerca dentro commenti
 - [ ] Ricerca dentro annotazioni
 - [ ] Ricerca dentro form submissions
+- [ ] Ricerca dentro la nota aperta
 - [ ] Saved search
 - [ ] Highlight risultati
 - [ ] Anteprima risultati
+- [ ] Occorrenze multiple per nota nei risultati
+- [ ] Vai all'occorrenza nel testo
+- [ ] Ricerca dell'occorrenza successiva/precedente
 - [ ] Ranking risultati
 - [ ] Pesi personalizzati
 - [ ] Sinonimi opzionali
@@ -1027,8 +1049,10 @@
 - [ ] Recent searches
 - [ ] Search suggestions
 - [ ] Search history opzionale
+- [ ] Crea la nota cercata dal risultato vuoto
 - [ ] Snippet contestuali
 - [ ] Ranking personalizzabile
+- [ ] Pesi per campo configurabili
 - [ ] Pesi per cartella/tag/proprietà
 - [ ] Ricerca per similarità nota
 - [ ] Ricerca per blocchi simili
@@ -1047,6 +1071,8 @@
 - [ ] Search templates
 - [ ] Search aliases
 - [ ] Search audit
+- [ ] Porta unica: casella, quick switcher e palette sullo stesso indice
+- [ ] API di ricerca per i plugin
 
 ## 9.2 Query engine
 

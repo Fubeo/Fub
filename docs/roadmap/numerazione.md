@@ -128,3 +128,16 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §4.7 | **§16.3** | Un crate per bundle di feature |
 | §4.8 | **§16.4** | Il contratto si scrive quattro volte a mano |
 | §4.12 | **§16.2** | Il banco di prova del kernel è copiato diciotto volte |
+
+**Voci senza un numero vecchio.** Due famiglie non compaiono qui sopra perché
+non traducono niente: sono **nate** con la numerazione per sedute.
+
+- La **§8.4** l'ha trovata una misura, non un giro
+  ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+- Le **§21.1–§21.9** le ha aperte una decisione di prodotto, la
+  [0025](../decisions/0025-la-ricerca-predefinita.md): la ricerca è built-in e
+  di classe *omnisearch*, e quelle nove voci sono la sottrazione fra ciò che
+  quel comportamento richiede e ciò che il contratto sa dire.
+
+Cercarle in un commit di prima della riorganizzazione non ha senso: prima non
+esistevano.
