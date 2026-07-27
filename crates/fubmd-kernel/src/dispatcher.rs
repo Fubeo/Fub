@@ -83,7 +83,7 @@ pub struct Dispatcher {
     in_provider_call: bool,
     /// Job richiesti via `HostEvents::spawn_job`, in attesa che l'host li
     /// esegua fuori dal giro sincrono.
-    pending_jobs: Vec<(JobId, JobSpec)>,
+    pending_jobs: Vec<PendingJob>,
     /// Contatore per l'assegnazione dei [`JobId`].
     next_job_id: u64,
     /// Chi ha **chiesto** ciò che il workspace sta facendo adesso: è l'attore
@@ -230,6 +230,15 @@ impl Dispatcher {
         self.in_provider_call = prev;
     }
 
+    /// C'è una chiamata a un provider in corso? Cioè: le tabelle dei provider
+    /// sono in prestito, e quello che ci si legge dentro non è tutto.
+    ///
+    /// Lo chiede la disattivazione (§9.4), che da lì dentro si **rifiuta**
+    /// invece di togliere zero provider e crederci.
+    pub(crate) fn in_provider_call(&self) -> bool {
+        self.in_provider_call
+    }
+
     // --- drenaggio ---------------------------------------------------------
 
     /// Apre un drenaggio, se se ne può aprire uno. Rende `false` — e in quel
@@ -301,19 +310,57 @@ impl Dispatcher {
 
     // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------
 
-    /// Accoda un job e ne restituisce l'identità.
+    /// Accoda un job **di chi lo ha chiesto** e ne restituisce l'identità.
     ///
     /// Sta qui e non nell'host perché il contatore è del workspace: un host è
     /// un prestito per la durata di una chiamata, e un'identità che si conta
     /// dentro un prestito ricomincerebbe da capo a ogni prestito.
-    pub(crate) fn enqueue_job(&mut self, spec: JobSpec) -> JobId {
+    pub(crate) fn enqueue_job(&mut self, plugin: &str, spec: JobSpec) -> JobId {
         let id = JobId(self.next_job_id);
         self.next_job_id += 1;
-        self.pending_jobs.push((id, spec));
+        self.pending_jobs.push(PendingJob {
+            id,
+            plugin: plugin.to_string(),
+            spec,
+        });
         id
     }
 
-    pub(crate) fn take_pending_jobs(&mut self) -> Vec<(JobId, JobSpec)> {
+    pub(crate) fn take_pending_jobs(&mut self) -> Vec<PendingJob> {
         std::mem::take(&mut self.pending_jobs)
     }
+
+    /// Toglie dalla coda i job di un plugin che sta smettendo (§9.4) e li
+    /// restituisce, perché chi li toglie deve poterli **chiudere**: un job che
+    /// sparisce senza un esito è un chiamante che aspetta per sempre.
+    pub(crate) fn take_jobs_of(&mut self, plugin: &str) -> Vec<PendingJob> {
+        let mut theirs = Vec::new();
+        let mut rest = Vec::new();
+        for job in std::mem::take(&mut self.pending_jobs) {
+            if job.plugin == plugin {
+                theirs.push(job);
+            } else {
+                rest.push(job);
+            }
+        }
+        self.pending_jobs = rest;
+        theirs
+    }
+}
+
+/// Un job in coda: chi lo ha chiesto, con che identità, e cosa.
+///
+/// Il `plugin` non è decorazione ed è arrivato con la decisione 0028: il corpo
+/// di un job è [`Plugin::run_job`](fubmd_abi::traits::Plugin::run_job), quindi
+/// chi drena questa coda deve sapere **a quale plugin** chiederlo — e chi
+/// disattiva un plugin deve sapere quali job non partiranno mai. Finché la coda
+/// portava la sola coppia `(id, spec)` nessuna delle due domande aveva una
+/// risposta nel kernel.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingJob {
+    pub id: JobId,
+    /// L'id con cui chi lo ha chiesto si è dichiarato: è anche il plugin **con
+    /// le cui capacità** il job girerà.
+    pub plugin: String,
+    pub spec: JobSpec,
 }

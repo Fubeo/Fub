@@ -70,6 +70,8 @@ enum Call {
     Removed(String),
     Reconcile(Vec<String>),
     Flush,
+    /// L'ultima chiamata (decisione 0028): dopo di lei non arriva più niente.
+    Close,
     Query,
 }
 
@@ -144,6 +146,14 @@ impl IndexProvider for SpyIndex {
 
     fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         self.record(Call::Flush);
+        Ok(())
+    }
+
+    /// Anche la chiusura ha l'host, e la spia lo usa: è il punto in cui un
+    /// indice persistente lascia scritto di essersi chiuso bene.
+    fn close(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.record(Call::Close);
+        host.data_write(MEMORIA, b"chiuso")?;
         Ok(())
     }
 
@@ -484,6 +494,9 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
         fn on_document_removed(&mut self, _id: &DocId) {}
         fn reconcile(&mut self, _ids: &[DocId]) {}
         fn flush(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+        fn close(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
             Ok(())
         }
         fn query(&self, _q: IndexQuery) -> Result<IndexResult, PluginError> {

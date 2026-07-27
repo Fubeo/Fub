@@ -115,6 +115,36 @@ impl RouteTable {
         }
     }
 
+    /// Rimappa i bersagli dopo che qualcuno se n'è andato (§9.4): `moved` dice
+    /// dove è finito ognuno, e `None` vuol dire *non c'è più*.
+    ///
+    /// Esiste perché [`Target::Provider`] è una **posizione** nell'elenco degli
+    /// indici registrati, e togliere il terzo di cinque sposta il quarto e il
+    /// quinto: senza questa rimappatura, dopo una disattivazione la tabella
+    /// manderebbe le domande di chi se n'è andato a chi gli stava dietro — che è
+    /// il modo in cui un indice risponde per un altro senza che nessuno lo
+    /// veda. Le rotte di chi è sparito **spariscono**: chi le chiede riceve
+    /// `Unserved`, che è la verità.
+    pub(crate) fn retarget(&mut self, moved: &dyn Fn(Target) -> Option<Target>) {
+        self.queries.retain(|_, target| match moved(*target) {
+            Some(new) => {
+                *target = new;
+                true
+            }
+            None => false,
+        });
+        self.predicates.retain(|_, targets| {
+            targets.retain_mut(|target| match moved(*target) {
+                Some(new) => {
+                    *target = new;
+                    true
+                }
+                None => false,
+            });
+            !targets.is_empty()
+        });
+    }
+
     /// Chi serve questa famiglia.
     pub(crate) fn owner(&self, kind: &QueryKind) -> Option<Target> {
         self.queries.get(kind).copied()

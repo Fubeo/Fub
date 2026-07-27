@@ -4171,6 +4171,13 @@ fn conform(source: &str) -> Result<(), String> {
     );
     contract.method(
         "index",
+        "close",
+        <dyn IndexProvider>::close
+            as fn(&'static mut dyn IndexProvider, Host) -> Result<(), PluginError>,
+        &[],
+    );
+    contract.method(
+        "index",
         "query",
         <dyn IndexProvider>::query
             as fn(&'static dyn IndexProvider, IndexQuery) -> Result<IndexResult, PluginError>,

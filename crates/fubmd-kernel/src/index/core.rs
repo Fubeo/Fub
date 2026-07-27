@@ -272,6 +272,14 @@ impl IndexProvider for CoreIndex {
         Ok(())
     }
 
+    /// Non tiene niente che vada lasciato andare: la memoria di questo indice è
+    /// memoria, e se ne va con lui. La riga c'è perché il contratto non ha un
+    /// default (decisione 0028), ed è il caso che quel default avrebbe reso
+    /// indistinguibile da «non ci ho pensato».
+    fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         match query {
             // Arriva quando il pianificatore consegna un sottoalbero di foglie

@@ -854,9 +854,14 @@ fn jobs_run_outside_the_kernel_and_complete_via_event() {
     ws.write_document(&DocId::new("innesco.lnk"), "").unwrap();
     let jobs = ws.take_pending_jobs();
     assert_eq!(jobs.len(), 1);
-    let (id, spec) = &jobs[0];
-    assert_eq!(spec.job, "sommario");
-    assert_eq!(Some(*id), *job_id.lock().unwrap());
+    let in_coda = &jobs[0];
+    assert_eq!(in_coda.spec.job, "sommario");
+    assert_eq!(Some(in_coda.id), *job_id.lock().unwrap());
+    assert_eq!(
+        in_coda.plugin, "test.jobs",
+        "la coda porta anche CHI lo ha chiesto: il corpo di un job è \
+         `Plugin::run_job`, e chi drena deve sapere a chi chiederlo"
+    );
 
     // 2. L'host (qui il test; nell'app un thread) esegue il job FUORI dal
     //    workspace. Questo job non ha bisogno del vault, quindi non c'è nemmeno
@@ -865,7 +870,7 @@ fn jobs_run_outside_the_kernel_and_complete_via_event() {
 
     // 3. L'esito rientra come JobDone sul giro sincrono normale: il handler
     //    lo riconosce e scrive il documento derivato.
-    ws.complete_job(*id, spec.job.clone(), Ok(result));
+    ws.complete_job(in_coda.id, in_coda.spec.job.clone(), Ok(result));
     assert!(ws.documents().contains(&DocId::new("sommario.lnk")));
     assert_eq!(
         ws.read_source(&DocId::new("sommario.lnk")).unwrap(),

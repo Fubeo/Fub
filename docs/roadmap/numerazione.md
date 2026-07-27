@@ -64,6 +64,8 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.15 · §8.2 | [0023 — Chi monta il kernel](../decisions/0023-chi-monta-il-kernel.md) |
 | §2.4 · §8.3 | [0024 — Il lock a grana fine](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) |
 | §1.21 · §9.1 | [0027 — Il lavoro lungo vede il vault](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) |
+| §1.35 · §9.2 | [0028 — Come un componente smette](../decisions/0028-come-un-componente-smette.md) |
+| §2.9 · §9.4 | [0028 — Come un componente smette](../decisions/0028-come-un-componente-smette.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |

@@ -74,7 +74,7 @@ use fubmd_abi::rules::path as rules_path;
 use fubmd_abi::rules::path::{resolution_key, strip_ext};
 
 use crate::bus::EventBus;
-use crate::dispatcher::{Dispatcher, ToDeliver};
+use crate::dispatcher::{Dispatcher, PendingJob, ToDeliver};
 use crate::documents::{extension_of, DocumentStore};
 use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
@@ -398,6 +398,127 @@ impl Workspace {
         name: &str,
     ) -> std::result::Result<(), RegistryError> {
         self.register_plugin(PluginManifest::core(id, name), Trust::Core)
+    }
+
+    /// **Spegne un plugin**: chiude i suoi indici, toglie tutto ciò che ha
+    /// registrato, e ritira la sua dichiarazione (§9.4).
+    ///
+    /// È l'inverso esatto della strada di registrazione, e prima non c'era:
+    /// `register_*` faceva `push` e basta, quindi "spento" poteva voler dire
+    /// una cosa sola — *non registrato all'avvio*, deciso da una variabile
+    /// d'ambiente (D7). Con le impostazioni del §11.1 la decisione si prende a
+    /// runtime, e senza un modo di togliere un provider quella parola non
+    /// significherebbe più niente.
+    ///
+    /// # Cosa succede, nell'ordine
+    ///
+    /// 1. **Gli indici**: `flush` e poi `close` (decisione 0028), ognuno con
+    ///    l'host intestato a sé — è il loro ultimo momento per rendere durevole
+    ///    ciò che hanno e lasciare andare ciò che tengono. Le loro rotte
+    ///    spariscono dalla tabella: chi le chiede riceve `Unserved`, non la
+    ///    risposta di chi gli stava dietro nell'elenco.
+    /// 2. **Gli altri provider** — handler, view, comandi, servizi, import,
+    ///    export, regole sintattiche, renderer — che non hanno un momento di
+    ///    chiusura perché non tengono niente: il punto in cui un bundle libera
+    ///    ciò che possiede è `Plugin::deactivate`, e lo chiama chi possiede il
+    ///    bundle (il registry del §9.3), non il kernel.
+    /// 3. **La dichiarazione**, che sparisce dall'inventario del §7.6.
+    ///
+    /// Gli errori tornano al chiamante e **non fermano niente**: chi smette
+    /// smette comunque, e un `close` fallito non è una ragione per lasciare
+    /// mezzo plugin registrato. È la stessa regola di
+    /// [`flush_indexes`](Workspace::flush_indexes).
+    ///
+    /// # Da dentro una chiamata di provider non si può
+    ///
+    /// [`RegistryError::Busy`], e non è prudenza: lì i provider sono **in
+    /// prestito** (§7.2), la loro tabella è vuota, e una rimozione calcolata su
+    /// una tabella vuota toglie zero e vede tornare tutti. Chi lo riceve
+    /// richiede a chiamata tornata.
+    pub fn deactivate_plugin(
+        &mut self,
+        plugin: &str,
+    ) -> std::result::Result<Vec<PluginError>, RegistryError> {
+        if self.providers.plugins.get(plugin).is_none() {
+            return Err(RegistryError::UnknownPlugin(plugin.to_string()));
+        }
+        if self.dispatch.in_provider_call() {
+            return Err(RegistryError::Busy(plugin.to_string()));
+        }
+
+        let mut errors = Vec::new();
+        let indexes = self.indexes.remove(plugin);
+        let removed_indexes = !indexes.is_empty();
+        for (id, mut index) in indexes {
+            let out = self.with_provider_call(|ws| {
+                let mut host = ws.host_for(&id, InvokeMode::Apply);
+                // Il flush **prima** della chiusura, come dice il contratto: chi
+                // arriva a `close` ha già avuto il proprio punto di persistenza,
+                // e ciò che scrive lì dentro è roba della chiusura.
+                let flushed = index.flush(&mut host);
+                let closed = index.close(&mut host);
+                [flushed, closed]
+            });
+            errors.extend(out.into_iter().filter_map(|outcome| outcome.err()));
+            // Qui il `Box` cade, ed è il momento in cui un provider nativo
+            // lascia andare ciò che il `close` non ha saputo lasciare.
+            drop(index);
+        }
+
+        self.providers.handlers.retain(|(id, _)| id != plugin);
+        self.providers.views.retain(|v| v.id != plugin);
+        self.providers.commands.retain(|c| c.id != plugin);
+        self.providers.services.retain(|(id, _)| id != plugin);
+        self.providers.imports.retain(|(id, _)| id != plugin);
+        self.providers.exports.retain(|(id, _)| id != plugin);
+
+        // Regole sintattiche e renderer non sono in una tabella di provider: i
+        // loro registri conoscono l'id della *regola*, non quello di chi l'ha
+        // registrata. Chi lo sa è l'inventario, ed è da lì che si prendono i
+        // nomi da togliere.
+        for id in self
+            .providers
+            .plugins
+            .ids_of(plugin, RegistrationKind::Syntax)
+        {
+            self.docs.syntax.remove(&id);
+        }
+        for id in self
+            .providers
+            .plugins
+            .ids_of(plugin, RegistrationKind::Renderer)
+        {
+            self.docs.renderers.remove(&id);
+        }
+
+        self.providers.plugins.retire(plugin);
+
+        // I job che aveva in coda non partiranno: il loro corpo è
+        // `Plugin::run_job`, e quel plugin non c'è più. Ognuno riceve il proprio
+        // esito, perché un job che sparisce senza dire niente è un chiamante che
+        // aspetta per sempre — ed è la terza faccia del §9.2, quella che la
+        // decisione 0027 aveva lasciato aperta.
+        for job in self.dispatch.take_jobs_of(plugin) {
+            self.complete_job(
+                job.id,
+                job.spec.job.clone(),
+                Err(PluginError::Internal(format!(
+                    "`{plugin}` è stato disattivato prima che il job `{}` partisse",
+                    job.spec.job
+                ))),
+            );
+        }
+
+        // Il canale dati non risponde più come prima: chi disegna da una query
+        // sta mostrando il passato. Non lo ha chiesto un documento né un plugin
+        // — è il kernel che dichiara di aver cambiato forma (decisione 0012).
+        if removed_indexes {
+            self.as_actor(Actor::Kernel, |ws| {
+                ws.emit_event(Event::IndexUpdated);
+                ws.dispatch_pending();
+            });
+        }
+        Ok(errors)
     }
 
     /// Questo plugin può nominare questo id? La regola del §7.4, per chi non
@@ -2445,8 +2566,8 @@ impl Workspace {
     /// Sta qui e non nell'host perché il contatore è del workspace: un host è
     /// un prestito per la durata di una chiamata, e un'identità che si conta
     /// dentro un prestito ricomincerebbe da capo a ogni prestito.
-    pub(crate) fn enqueue_job(&mut self, spec: JobSpec) -> JobId {
-        self.dispatch.enqueue_job(spec)
+    pub(crate) fn enqueue_job(&mut self, plugin: &str, spec: JobSpec) -> JobId {
+        self.dispatch.enqueue_job(plugin, spec)
     }
 
     /// Preleva i job richiesti dai provider via
@@ -2463,7 +2584,7 @@ impl Workspace {
     /// capacità che usa prende il prestito del workspace, e chi lo eseguisse
     /// tenendolo aspetterebbe sé stesso. Il ponte che serve — un host che prende
     /// il prestito per **chiamata** — è `JobHost` in `fubmd-host`.
-    pub fn take_pending_jobs(&mut self) -> Vec<(JobId, JobSpec)> {
+    pub fn take_pending_jobs(&mut self) -> Vec<PendingJob> {
         self.dispatch.take_pending_jobs()
     }
 

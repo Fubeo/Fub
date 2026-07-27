@@ -161,6 +161,21 @@ impl SyntaxRegistry {
         Ok(())
     }
 
+    /// Toglie una regola per id, con le rivendicazioni che si era presa (§9.4).
+    /// `false` = non era registrata.
+    ///
+    /// Le rivendicazioni tornano libere, ed è il punto: una regola disattivata
+    /// che continuasse a tenere `mermaid` su markdown impedirebbe a chiunque di
+    /// prenderla, compresa sé stessa se la si riaccendesse.
+    pub fn remove(&mut self, id: &str) -> bool {
+        let Some(at) = self.rules.iter().position(|r| r.spec.id == id) else {
+            return false;
+        };
+        self.rules.remove(at);
+        self.claims.retain(|_, owner| owner != id);
+        true
+    }
+
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()
     }

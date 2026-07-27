@@ -226,7 +226,13 @@ pub struct SearchIndex {
     index: Index,
     /// Il solo lock rimasto, e non sta sul percorso di una query pulita: lo
     /// prende chi scrive, e chi interroga **solo** se trova `dirty`.
-    writer: Mutex<IndexWriter>,
+    ///
+    /// `Option` perché una chiusura lo **restituisce**: `IndexProvider::close`
+    /// (decisione 0028) lo estrae e aspetta i thread di merge, che è il solo
+    /// modo di lasciare andare il lock file della cartella prima che il processo
+    /// muoia. Vuoto = questo indice è chiuso, e ciò che arriva dopo non ha più
+    /// dove andare.
+    writer: Mutex<Option<IndexWriter>>,
     reader: IndexReader,
     fields: Fields,
     fingerprints: HashMap<DocId, u64>,
@@ -295,7 +301,7 @@ impl SearchIndex {
 
         Ok(SearchIndex {
             index,
-            writer: Mutex::new(writer),
+            writer: Mutex::new(Some(writer)),
             reader,
             fields,
             fingerprints: HashMap::new(),
@@ -399,10 +405,16 @@ impl SearchIndex {
         if !self.dirty.load(Ordering::Acquire) {
             return Ok(());
         }
-        let mut writer = self.writer.lock().expect("mutex");
+        let mut guard = self.writer.lock().expect("mutex");
         if !self.dirty.load(Ordering::Acquire) {
             return Ok(());
         }
+        // Chiuso: non c'è più niente da committare, e ciò che era in sospeso lo
+        // ha già committato `close`. Dirlo come errore sarebbe dire che
+        // qualcosa è andato storto, e non è andato storto niente.
+        let Some(writer) = guard.as_mut() else {
+            return Ok(());
+        };
         let opstamp = writer
             .commit()
             .map_err(|e| PluginError::Internal(format!("commit indice: {e}")))?;
@@ -860,13 +872,19 @@ impl IndexProvider for SearchIndex {
         let term = self.term_for(&doc.id);
         let td = self.tantivy_doc(doc);
         {
-            let writer = self.writer.lock().expect("mutex");
+            let guard = self.writer.lock().expect("mutex");
+            // Il writer è andato — chiuso (decisione 0028) o rotto — e in
+            // entrambi i casi l'indice non è più affidabile: mentire è peggio
+            // che perdere il documento. Si dimentica l'impronta, così il
+            // prossimo passaggio riproverà.
+            let Some(writer) = guard.as_ref() else {
+                drop(guard);
+                self.fingerprints.remove(&doc.id);
+                return;
+            };
             writer.delete_term(term);
             if writer.add_document(td).is_err() {
-                // Il writer è andato: l'indice non è più affidabile, e mentire è
-                // peggio che perdere il documento. Si dimentica l'impronta, così
-                // il prossimo passaggio riproverà.
-                drop(writer);
+                drop(guard);
                 self.fingerprints.remove(&doc.id);
                 return;
             }
@@ -880,7 +898,9 @@ impl IndexProvider for SearchIndex {
             return;
         }
         let term = self.term_for(id);
-        self.writer.lock().expect("mutex").delete_term(term);
+        if let Some(writer) = self.writer.lock().expect("mutex").as_ref() {
+            writer.delete_term(term);
+        }
         self.dirty.store(true, Ordering::Release);
     }
 
@@ -896,8 +916,7 @@ impl IndexProvider for SearchIndex {
             return;
         }
         let terms: Vec<Term> = dead.iter().map(|id| self.term_for(id)).collect();
-        {
-            let writer = self.writer.lock().expect("mutex");
+        if let Some(writer) = self.writer.lock().expect("mutex").as_ref() {
             for term in terms {
                 writer.delete_term(term);
             }
@@ -911,6 +930,32 @@ impl IndexProvider for SearchIndex {
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
         self.commit()?;
         self.persist(host)
+    }
+
+    /// Lascia andare la cartella: commit di ciò che resta, manifest, e **il
+    /// writer restituito a tantivy** aspettando i suoi thread di merge.
+    ///
+    /// L'ultimo passo è ciò per cui il §9.2 chiedeva questa funzione. Un
+    /// `IndexWriter` tiene un lock esclusivo sulla cartella dell'indice: finché
+    /// è vivo, un'altra sessione sullo stesso vault non apre la ricerca —
+    /// e `Index::writer` non fallisce subito, *aspetta*. Chi riapriva lo stesso
+    /// vault trovava il proprio indice dietro il lock della sessione che se ne
+    /// stava andando.
+    ///
+    /// Il `flush` che il kernel chiama prima ha già fatto commit e manifest;
+    /// rifarli qui non costa niente (`dirty` è spento, il manifest cita
+    /// l'opstamp corrente) e copre chi chiama `close` da solo.
+    fn close(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.commit()?;
+        self.persist(host)?;
+        let Some(writer) = self.writer.lock().expect("mutex").take() else {
+            // Già chiuso: chiudere due volte non è un errore, è un no-op — la
+            // stessa regola di `data_remove`.
+            return Ok(());
+        };
+        writer
+            .wait_merging_threads()
+            .map_err(|e| PluginError::Internal(format!("chiusura indice: {e}")))
     }
 
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
@@ -1579,6 +1624,33 @@ mod tests {
              l'indice. È la §8.4, e il prestito condiviso del workspace non lo \
              attraversa."
         );
+    }
+
+    /// La chiusura (§9.2, decisione 0028) **lascia andare la cartella**: il
+    /// writer torna a tantivy, i suoi thread di merge finiscono, e il lock
+    /// esclusivo sull'indice non c'è più.
+    ///
+    /// È la ragione per cui `close` esiste ed è obbligatoria. Il primo indice
+    /// qui sotto è **ancora vivo** quando il secondo si apre: senza la chiusura
+    /// il secondo aspetterebbe il lock del primo — non un errore, un'attesa
+    /// senza fine, che è esattamente ciò che succedeva riaprendo lo stesso vault
+    /// prima che la sessione precedente cadesse.
+    #[test]
+    fn un_indice_chiuso_lascia_la_cartella_a_chi_arriva_dopo() {
+        let (_g, path) = tmp();
+        let (mut primo, mut host) = fresh(&path);
+        primo.on_document_indexed(&doc("a.md", "ciao"));
+        primo.close(&mut host).expect("chiusura");
+
+        let secondo = SearchIndex::open_dir(&path);
+        assert!(
+            secondo.is_ok(),
+            "la cartella è libera mentre il primo indice è ancora in vita: {:?}",
+            secondo.err()
+        );
+        // E richiudere non è un errore: è un no-op, come cancellare un blob che
+        // non c'è.
+        primo.close(&mut host).expect("chiudere due volte");
     }
 
     #[test]

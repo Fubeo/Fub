@@ -499,6 +499,7 @@ pub trait IndexProvider: Send + Sync {
     fn on_document_removed(&mut self, id: &DocId);
     fn reconcile(&mut self, ids: &[DocId]);
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
+    fn close(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 }
 ```
@@ -575,6 +576,15 @@ Restano due giunture, ed è il compito degli altri due metodi:
   il lotto è finito non è il kernel (non lo sa) ma chi il lotto lo ha formato —
   nell'app, il watcher debounced. Chi interroga senza aspettare un flush vede
   comunque le proprie scritture: lo garantisce il provider, non il chiamante.
+- `close(host)` — **l'ultima chiamata**, e il gemello di `activate`: l'indice
+  lascia andare ciò che tiene (segmenti mmappati, lock file, thread di merge) e
+  può ancora scrivere, perché l'host c'è. Il kernel chiama `flush` e *poi*
+  questa; dopo, il provider non riceve più niente. Non ha un corpo di default
+  ([decisione 0028](../decisions/0028-come-un-componente-smette.md)): un `Drop`
+  non ha l'`HostApi` — quindi chi persistesse lì dovrebbe uscire dal proprio
+  recinto con `std::fs` — e a M5 il `Drop` non c'è affatto, perché un componente
+  che l'host smonta non esegue niente al proprio smontaggio. Senza `close`, un
+  indice di terzi non avrebbe **alcun** modo di chiudersi bene.
 
 **Dove sta l'`HostApi`, e perché non è su ogni metodo.** Un indice persistente
 deve poter **caricare e salvare** il proprio stato, e l'unico storage durevole
@@ -586,11 +596,15 @@ firma è un breaking change.
 
 L'host arriva nei due punti in cui lo stato attraversa il disco, e non altrove:
 
-- `activate(host)` — chiamata **una volta**, alla registrazione, prima di
+- `activate(host)`/`close(host)` — la prima e l'ultima. `activate` è chiamata
+  **una volta**, alla registrazione, prima di
   qualunque alimentazione: è il punto in cui un indice ritrova ciò che ha già
   visto. `SearchIndex` ci carica il manifest delle impronte, ed è quel
   riconoscimento a rendere rapida la riapertura di un vault non toccato. Dopo il
-  primo `on_document_indexed` sarebbe troppo tardi per averlo.
+  primo `on_document_indexed` sarebbe troppo tardi per averlo. `close` arriva
+  quando il plugin si spegne o il vault si chiude, e ha l'host per la ragione
+  simmetrica: ciò che una chiusura ha da dire passa da `data_*` come tutto il
+  resto.
 - `flush(host)` — l'unico punto in cui un indice **scrive**.
 - `on_document_*` e `reconcile` sono mutazioni in memoria: dare l'host qui
   costringerebbe il kernel a prestare `&mut Workspace` dentro il ciclo di
@@ -855,7 +869,7 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | Trait | Impl M1 | Prossima impl | Note |
 |---|---|---|---|
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
-| `IndexProvider` | `CoreIndex` (grafo, metadati, tag) ✅ | `SearchIndex` (tantivy) **M2** ✅ | `routes` dichiarate alla registrazione; `activate`/`flush` con `HostApi`: persiste via `data_*` |
+| `IndexProvider` | `CoreIndex` (grafo, metadati, tag) ✅ | `SearchIndex` (tantivy) **M2** ✅ | `routes` dichiarate alla registrazione; `activate`/`flush`/`close` con `HostApi`: persiste via `data_*`, e alla chiusura restituisce il lock della cartella ([decisione 0028](../decisions/0028-come-un-componente-smette.md)) |
 | `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` ✅ **M2** | **M2** (graph-data) | quattro provider veri; `query_index`+`active_context`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch`; `ViewSpec.follows` per il contesto |
 | `CommandProvider` | — | `CoreCommands` ✅ **M2** ([decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md), [decisione 0013](../decisions/0013-elenco-delle-capacita.md)) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura; nove comandi, cinque dei quali strutturali (le azioni che la shell cablava) e uno che compone (`vault.archive` via `run_command`) |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |

@@ -1859,6 +1859,41 @@ pub trait IndexProvider: Send + Sync {
     /// ciò che deve sopravvivere alla chiusura passa da `data_*`.
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
 
+    /// **L'ultima chiamata**: l'indice sta per smettere, e questo è il punto in
+    /// cui lascia andare ciò che tiene — segmenti mmappati, lock file, thread di
+    /// merge, handle aperti. Il gemello di
+    /// [`activate`](IndexProvider::activate), che è la prima.
+    ///
+    /// Il kernel chiama [`flush`](IndexProvider::flush) e **poi** questa: chi
+    /// arriva qui ha già avuto il proprio punto di persistenza, e l'host lo
+    /// riceve lo stesso perché una chiusura può avere qualcosa di suo da
+    /// scrivere (un marcatore di spegnimento pulito, che alla riapertura
+    /// distingue «chiuso bene» da «il processo è morto»).
+    ///
+    /// Non ha un corpo di default, ed è la scelta che la decisione 0028 ha preso
+    /// invece di rimandarla: un indice che tiene un lock file e non ha un punto
+    /// dove rilasciarlo lo rilascia quando il processo muore, cioè mai — e un
+    /// default no-op avrebbe fatto sembrare quel caso normale. Costa una riga a
+    /// chi non ha niente da chiudere (`Ok(())`) e la scrive sapendo di non
+    /// averne.
+    ///
+    /// # Perché non basta il `Drop`
+    ///
+    /// Perché un `Drop` non ha l'`HostApi`: ciò che un indice rende durevole
+    /// passa da `data_*`, e un provider che persistesse mentre viene distrutto
+    /// dovrebbe usare `std::fs` — cioè uscire dal proprio recinto — o non
+    /// persistere affatto. E a M5 non c'è nemmeno il `Drop`: un componente WASM
+    /// che l'host smonta non esegue **niente** al proprio smontaggio, quindi
+    /// senza questa funzione un indice di terzi non avrebbe alcun modo di
+    /// chiudersi bene. Il `Drop` nativo resta, e resta la rete: qui c'è la
+    /// chiusura *ordinata*, quella che può ancora parlare.
+    ///
+    /// Dopo `close` l'indice non riceve più niente — né alimentazione, né
+    /// `flush`, né `query`. L'errore non è fatale per chi chiama: chi smette
+    /// smette comunque, e ciò che è andato storto torna a chi ha un canale per
+    /// dirlo.
+    fn close(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
+
     /// Risponde a una query **che è stata dichiarata**.
     ///
     /// Il kernel non manda qui domande che [`routes`](IndexProvider::routes) non

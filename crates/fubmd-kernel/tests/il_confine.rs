@@ -134,6 +134,10 @@ impl IndexProvider for Indice {
         Ok(())
     }
 
+    fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
     fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
         Ok(IndexResult::Custom(serde_json::Value::Null))
     }
