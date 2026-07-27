@@ -112,6 +112,12 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
         .register(Box::new(LinkListProvider))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(dir, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    for plugin in [AUTOMA, "test.spia"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     ws.reindex().expect("reindex vault vuoto");
     ws
 }
@@ -385,7 +391,8 @@ fn quante_scritture(tag: &str, guardia: bool) -> usize {
             guardia,
             scritture: scritture.clone(),
         }),
-    );
+    )
+    .expect("registrato");
     ws.write_document(&DocId::new("innesco.lnk"), "via")
         .unwrap();
     let n = *scritture.lock().unwrap();
@@ -426,7 +433,8 @@ fn the_actor_of_a_plugin_write_is_the_plugin_and_of_a_shell_write_is_the_user() 
             guardia: true,
             scritture: Arc::new(Mutex::new(0)),
         }),
-    );
+    )
+    .expect("registrato");
     let rx = ws.bus().subscribe();
 
     ws.write_document(&DocId::new("innesco.lnk"), "via")
@@ -526,7 +534,8 @@ fn inside_a_batch_no_handler_sees_the_vault_halfway_through() {
     let dir = TempDir::new("mai-a-meta");
     let mut ws = workspace(&dir.0);
     let visto = Arc::new(Mutex::new(Vec::new()));
-    ws.register_event_handler("test.spia", Box::new(Spia(visto.clone())));
+    ws.register_event_handler("test.spia", Box::new(Spia(visto.clone())))
+        .expect("registrato");
 
     ws.batch(|ws| {
         for i in 0..5 {

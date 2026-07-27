@@ -53,6 +53,12 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.27 · §5.5 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
 | §1.37 · §6.1 | [0020 — Le regole in un posto solo](../decisions/0020-le-regole-in-un-posto-solo.md) |
 | §4.11 · §6.2 | [0020 — Le regole in un posto solo](../decisions/0020-le-regole-in-un-posto-solo.md) |
+| §1.38 · §7.1 | [0021 — Il confine](../decisions/0021-il-confine.md) |
+| §2.8 · §7.2 | [0021 — Il confine](../decisions/0021-il-confine.md) |
+| §2.10 · §7.3 | [0021 — Il confine](../decisions/0021-il-confine.md) |
+| §1.34 · §7.4 | [0021 — Il confine](../decisions/0021-il-confine.md) |
+| §1.24 · §7.5 | [0021 — Il confine](../decisions/0021-il-confine.md) |
+| §2.25 · §7.6 | [0021 — Il confine](../decisions/0021-il-confine.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -81,11 +87,8 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §1.17 | **§13.3** | L'undo non ha un proprietario |
 | §1.19 | **§10.1** | L'abbonamento agli eventi non filtra |
 | §1.21 | **§9.1** | Il lavoro lungo non vede il vault |
-| §1.24 | **§7.5** | I plugin non hanno un canale per parlarsi |
 | §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
-| §1.34 | **§7.4** | Gli id non sono di nessuno: nessuna regola di namespace, nessuna collisione |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
-| §1.38 | **§7.1** | Una capacità dell'`HostApi` si implementa quattro volte a mano |
 | §2.1 | **§15.1** | Astrazione sullo storage |
 | §2.2 | **§14.1** | Il vault non è solo documenti |
 | §2.3 | **§9.3** | Registry di plugin/feature e runner dei job |
@@ -93,9 +96,7 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.5 | **§15.2** | Durabilità e recovery |
 | §2.6 | **§15.5** | Politica dei path e del testo, in un modulo solo |
 | §2.7 | **§9.6** | Sessioni multiple |
-| §2.8 | **§7.2** | Una disciplina dei provider sola, non una per famiglia |
 | §2.9 | **§9.4** | Disattivazione — oggi si può solo *non registrare* |
-| §2.10 | **§7.3** | Permessi e manifest — il punto di applicazione non esiste |
 | §2.11 | **§14.3** | Le cartelle non esistono nel kernel |
 | §2.12 | **§15.3** | Una versione di schema su ogni formato persistito |
 | §2.13 | **§14.4** | Il canale della lista documenti |
@@ -107,7 +108,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
 | §2.24 | **§13.2** | Lo stato per-documento: ogni feature se lo migra da sé |
-| §2.25 | **§7.6** | Nessun inventario di ciò che è attivo |
 | §2.27 | **§10.2** | Il ponte degli eventi non ha né freno né raggruppamento |
 | §2.29 | **§15.4** | I dati persistiti non hanno né una mappa né una classe |
 | §3.1 | **§1.2** | Smontare il monolite |

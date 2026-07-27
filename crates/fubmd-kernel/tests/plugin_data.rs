@@ -15,7 +15,13 @@ use fubmd_kernel::{FormatRegistry, Workspace};
 fn vault() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let ws = Workspace::new(&root, FormatRegistry::new());
+    let mut ws = Workspace::new(&root, FormatRegistry::new());
+    // I plugin di prova si dichiarano prima di usare un host (§7.3): un id che
+    // nessuno ha dichiarato riceve un host che nega tutto.
+    for plugin in ["prova.plugin", "uno", "due"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     (dir, ws)
 }
 
@@ -175,6 +181,12 @@ fn a_plugin_can_look_around_the_vault_not_only_react_to_events() {
         .register(Box::new(TxtProvider))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    for plugin in ["prova.plugin", "uno", "due"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     ws.reindex().unwrap();
 
     let visti = ws

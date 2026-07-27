@@ -39,7 +39,12 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands));
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        ws.register_core_feature(COMMANDS_ID, COMMANDS_ID)
+            .expect("dichiarato");
+        ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands))
+            .expect("registrato");
         ws.reindex().expect("reindex");
         ws
     }

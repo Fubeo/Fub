@@ -222,7 +222,7 @@ pub enum Event {
     ///
     /// [`BatchEnded`]: Event::BatchEnded
     IndexUpdated,
-    /// Esito di un job in background (vedi `HostApi::spawn_job`): consegnato
+    /// Esito di un job in background (vedi `HostEvents::spawn_job`): consegnato
     /// sul giro sincrono normale. Chi ha lanciato il job riconosce il proprio
     /// `id`; `job` è il nome dell'entry point, per comodità di filtro.
     JobDone {
@@ -236,9 +236,19 @@ pub enum Event {
     /// considerarlo stantio e riconciliare da zero. Mai silenzioso: questo
     /// evento è la versione rumorosa del troncamento.
     Overflow { dropped: u64 },
-    /// Varco di estensione: eventi definiti dai plugin, con topic namespaced
-    /// (`"<plugin-id>/<nome>"`). L'abbonamento è a grana `EventKind::Custom`;
-    /// il filtro sul topic è a carico dell'handler.
+    /// Varco di estensione: eventi definiti dai plugin, con topic **namespaced
+    /// come ogni altro nome del contratto** (§7.4): o è l'id di chi lo emette,
+    /// o è dentro di esso (`com.acme.tasks:done`). Il core può emettere anche
+    /// nudo.
+    ///
+    /// La convenzione era scritta qui (`"<plugin-id>/<nome>"`) e non la imponeva
+    /// niente: un plugin poteva emettere sotto il nome di un altro e far
+    /// reagire i suoi handler. Adesso è la stessa regola degli id di view, di
+    /// comando e di rotta, e la fa rispettare l'host quando l'evento passa —
+    /// che è il solo momento in cui esiste, non avendo una registrazione.
+    ///
+    /// L'abbonamento è a grana `EventKind::Custom`; il filtro sul topic è a
+    /// carico dell'handler.
     Custom {
         topic: String,
         payload: serde_json::Value,

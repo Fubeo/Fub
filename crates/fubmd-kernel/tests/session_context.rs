@@ -22,10 +22,10 @@ use fubmd_abi::format::{
 };
 use fubmd_abi::model::{DocId, DocumentModel, Span};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
-use fubmd_abi::traits::{HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fubmd_abi::traits::{HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{FormatProvider, PluginError};
-use fubmd_kernel::{FormatRegistry, Trust, Workspace, MAIN_PANE};
+use fubmd_kernel::{FormatRegistry, Workspace, MAIN_PANE};
 
 /// Il minimo che serve perché una scrittura passi per il giro vero del kernel
 /// (parse → indici → grafo → eventi): il testo è il modello. Un provider
@@ -85,7 +85,7 @@ impl ViewProvider for Spia {
     fn render_view(
         &self,
         _instance: &ViewInstance,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         // Il render legge il contesto come lo leggerebbe un plugin: dall'host.
         Ok(UiNode::text(format!("{:?}", host.active_context())))
@@ -117,30 +117,36 @@ impl Fixture {
     /// segue anche la selezione, una che non segue niente.
     fn workspace(&self) -> Workspace {
         let mut ws = Workspace::new(&self.root, FormatRegistry::new());
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        for plugin in ["test.doc", "test.sel", "test.sorda"] {
+            ws.register_core_feature(plugin, plugin)
+                .expect("dichiarato");
+        }
         ws.register_view_provider(
             "test.doc",
-            Trust::Core,
             Box::new(Spia {
                 id: "solo-doc",
                 follows: ContextMask::document(),
             }),
-        );
+        )
+        .expect("registrato");
         ws.register_view_provider(
             "test.sel",
-            Trust::Core,
             Box::new(Spia {
                 id: "doc-e-selezione",
                 follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
             }),
-        );
+        )
+        .expect("registrato");
         ws.register_view_provider(
             "test.sorda",
-            Trust::Core,
             Box::new(Spia {
                 id: "sorda",
                 follows: ContextMask::default(),
             }),
-        );
+        )
+        .expect("registrato");
         ws
     }
 }
@@ -226,7 +232,12 @@ fn con_provider(root: &Utf8PathBuf) -> Workspace {
     registry
         .register(Box::new(TestoNudo))
         .expect("nessun conflitto di estensioni");
-    Workspace::new(root, registry)
+    let mut ws = Workspace::new(root, registry);
+    for plugin in ["test.doc", "test.sel", "test.sorda"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
+    ws
 }
 
 #[test]

@@ -17,9 +17,62 @@ export interface VaultInfo {
   // punto). Quale sia l'estensione di un documento lo sanno i FormatDescriptor
   // del backend: la UI non deve cablare ".md".
   extensions: string[];
-  // Il versioning è acceso? Spento significa assente: niente cronologia in UI
-  // e nessuna scrittura nel vault (D7).
-  versioning: boolean;
+  // Chi è attivo (§7.6): i plugin dichiarati, con manifest, fiducia, permessi
+  // e ciò che hanno registrato.
+  //
+  // Era `versioning: boolean` — un campo PER FEATURE dentro un record IPC. Con
+  // i moduli del capitolo 21 sarebbero diventati venti booleani, e ognuno una
+  // modifica al record, a questo mirror e alla fixture. La shell adesso non
+  // chiede «il versioning è acceso?»: chiede chi c'è (`hasPlugin`).
+  plugins: PluginInfo[];
+}
+
+// Quanto l'host si fida di chi ha prodotto qualcosa (rispecchia
+// fubmd_kernel::Trust). Dal più fidato al meno; `revoked` non gira affatto.
+export type Trust = "core" | "verified" | "community" | "development" | "revoked";
+
+// Che specie di cosa un plugin ha registrato
+// (rispecchia fubmd_kernel::RegistrationKind).
+export type RegistrationKind =
+  | "view"
+  | "command"
+  | "index"
+  | "event_handler"
+  | "import"
+  | "export"
+  | "syntax"
+  | "renderer";
+
+// Una cosa che un plugin ha registrato (rispecchia fubmd_kernel::Registration).
+export interface Registration {
+  kind: RegistrationKind;
+  // L'id registrato. Per handler e importer — che non nominano niente di
+  // proprio — è l'id del plugin stesso.
+  id: string;
+}
+
+// Una riga dell'inventario di ciò che è attivo (rispecchia
+// fubmd_kernel::PluginInfo).
+export interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  // La versione del contratto contro cui è scritto.
+  abi_version: string;
+  trust: Trust;
+  // I permessi concessi, con i loro parametri: la mappa del manifest, non un
+  // elenco di booleani.
+  permissions: Record<string, unknown>;
+  registrations: Registration[];
+}
+
+// C'è, ed è vivo? È la domanda che ha sostituito i booleani per feature.
+//
+// «Vivo» esclude `revoked`, che non è un grado di fiducia più basso ma
+// l'assenza del permesso di essere eseguiti: un plugin revocato è dichiarato e
+// non fa niente, e chi disegna deve trattarlo come assente.
+export function hasPlugin(info: VaultInfo, id: string): boolean {
+  return info.plugins.some((p) => p.id === id && p.trust !== "revoked");
 }
 
 // Una versione salvata (rispecchia fubmd_features::versioning::VersionRef).

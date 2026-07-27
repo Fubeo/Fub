@@ -28,9 +28,11 @@ use std::sync::{Arc, Mutex};
 use camino::Utf8PathBuf;
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Actor, Event, EventKind, EventMask, Notice};
-use fubmd_abi::traits::{EventHandler, HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fubmd_abi::traits::{
+    EventHandler, HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+};
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, Workspace};
 
 type Log = Arc<Mutex<Vec<String>>>;
 
@@ -46,7 +48,7 @@ impl ViewProvider for LavoroLungo {
     fn render_view(
         &self,
         _instance: &ViewInstance,
-        _host: &dyn HostApi,
+        _host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         Ok(UiNode::text("ok"))
     }
@@ -98,7 +100,11 @@ impl EventHandler for Ascoltatore {
 fn vault() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let ws = Workspace::new(&root, FormatRegistry::new());
+    let mut ws = Workspace::new(&root, FormatRegistry::new());
+    for plugin in ["ascoltatore", "test.lenta"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     (dir, ws)
 }
 
@@ -106,12 +112,10 @@ fn vault() -> (tempfile::TempDir, Workspace) {
 fn a_provider_can_ask_for_a_redraw_and_the_invitation_carries_its_origin() {
     let (_dir, mut ws) = vault();
     let log: Log = Arc::default();
-    ws.register_event_handler("ascoltatore", Box::new(Ascoltatore(log.clone())));
-    ws.register_view_provider(
-        "test.lenta",
-        Trust::Community,
-        Box::new(LavoroLungo(log.clone())),
-    );
+    ws.register_event_handler("ascoltatore", Box::new(Ascoltatore(log.clone())))
+        .expect("registrato");
+    ws.register_view_provider("test.lenta", Box::new(LavoroLungo(log.clone())))
+        .expect("registrato");
 
     let istanza = ViewInstance::only("lenta");
     ws.view_action(&istanza, UiAction::new("vai"))
@@ -142,12 +146,10 @@ fn a_provider_can_ask_for_a_redraw_and_the_invitation_carries_its_origin() {
 fn an_invitation_without_an_instance_means_all_of_them() {
     let (_dir, mut ws) = vault();
     let log: Log = Arc::default();
-    ws.register_event_handler("ascoltatore", Box::new(Ascoltatore(log.clone())));
-    ws.register_view_provider(
-        "test.lenta",
-        Trust::Community,
-        Box::new(LavoroLungo(log.clone())),
-    );
+    ws.register_event_handler("ascoltatore", Box::new(Ascoltatore(log.clone())))
+        .expect("registrato");
+    ws.register_view_provider("test.lenta", Box::new(LavoroLungo(log.clone())))
+        .expect("registrato");
 
     ws.view_action(&ViewInstance::only("lenta"), UiAction::new("tutte"))
         .expect("l'azione va a buon fine");

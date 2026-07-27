@@ -138,7 +138,7 @@ impl FormatCapabilities {
 ///
 /// È la risposta del §4.3, ed è una risposta sul **nome** e non sul file: la dà
 /// il registro dei formati guardando l'estensione, senza leggere un byte. Chi
-/// riceve una lista da [`HostApi::list_documents`](crate::traits::HostApi::list_documents)
+/// riceve una lista da [`VaultRead::list_documents`](crate::traits::VaultRead::list_documents)
 /// non aveva modo di distinguere una nota da un canvas, un CSV, un PDF o un
 /// allegato — cioè non poteva decidere se sa lavorarci, e nemmeno se *deve*
 /// ignorarlo. Con un formato solo non si vedeva; il §3.4 ha aperto `parse` ai

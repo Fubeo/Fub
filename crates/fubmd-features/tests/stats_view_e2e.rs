@@ -12,7 +12,7 @@ use fubmd_abi::traits::ViewInstance;
 use fubmd_abi::ui::{UiKind, UiNode};
 use fubmd_features::{StatsView, STATS_ID, STATS_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Trust, Workspace, MAIN_PANE};
+use fubmd_kernel::{FormatRegistry, Workspace, MAIN_PANE};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -32,7 +32,12 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_view_provider(STATS_ID, Trust::Core, Box::new(StatsView));
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        ws.register_core_feature(STATS_ID, STATS_ID)
+            .expect("dichiarato");
+        ws.register_view_provider(STATS_ID, Box::new(StatsView))
+            .expect("registrato");
         ws.reindex().expect("reindex");
         ws
     }

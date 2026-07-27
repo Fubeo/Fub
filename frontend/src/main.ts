@@ -8,6 +8,7 @@
 // somma di eccezioni a quella regola, era arrivato a 1622 righe con 81 funzioni
 // e 18 variabili globali (§1.1, §1.2).
 import "./style.css";
+import { hasPlugin } from "./host/contract";
 import { pickFolder } from "./host/dialog";
 import { api } from "./host/ipc";
 import { startKernelRouter } from "./state/kernel";
@@ -114,7 +115,9 @@ async function openVaultPath(dir: string): Promise<void> {
   state.vaultRoot = info.root;
   state.handledExtensions =
     info.extensions.length > 0 ? info.extensions : state.handledExtensions;
-  state.versioningOn = info.versioning;
+  // §7.6: non un booleano che il backend calcola per noi, ma una domanda
+  // all'inventario di ciò che è attivo.
+  state.versioningOn = hasPlugin(info, "fubmd.versioning");
 
   await loadOrganization();
   loadExpanded();

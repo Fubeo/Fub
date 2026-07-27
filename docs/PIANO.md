@@ -140,15 +140,15 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   **aperte**, cioè quali pezzi mancano perché la massa di
   [FEATURES.md](FEATURES.md) sia implementabile *come provider* invece che come
   codice dell'app. Sei giri sulla stessa domanda hanno prodotto ottantanove
-  voci; le quattordici chiuse sono uscite di lì e stanno in
+  voci; le ventuno chiuse sono uscite di lì e stanno in
   [decisions/](decisions/README.md).
   Le voci **non** sono raggruppate per strato ma per **seduta**: diciotto
   sedute più il debito del quarto audit, e una seduta è un insieme di voci che
   conviene decidere in una volta sola, perché sono la stessa domanda vista da
   lati diversi e deciderle separate significa deciderle male. Ogni seduta è un
   file in [roadmap/](roadmap/), con in testa la ragione per cui quelle voci
-  stanno insieme; `todo.md` è l'**indice** — le sedute, le settantanove voci con
-  strato e priorità, e gli allegati. Il piano lo diceva già, sparso in una
+  stanno insieme; `todo.md` è l'**indice** — le sedute, le cinquantaquattro voci
+  ancora aperte con strato e priorità, e gli allegati. Il piano lo diceva già, sparso in una
   ventina di note («vanno decise insieme», «va prima di», «o due terzi della
   risposta saranno inutilizzabili»): questa è quella conoscenza messa nella
   struttura invece che nelle note. Lo **strato** resta come etichetta su ogni
@@ -180,8 +180,9 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   vault sono kernel-owned e a 7.3, 8.2, 10 e 15.1 resta solo `IndexQuery::Custom`;
   **«Il confine: quante volte si scrive la disciplina»** — il punto di
   applicazione dei permessi, gli spazi di nomi degli id (l'unica voce che non
-  riguarda ciò che scriveremo ma ciò che abbiamo già pubblicato) e una capacità
-  dell'`HostApi` implementata quattro volte a mano; **«Il lavoro lungo, e come un
+  riguardava ciò che scriveremo ma ciò che abbiamo già pubblicato) e una
+  capacità dell'`HostApi` implementata quattro volte a mano, tutti chiusi con la
+  [0021](decisions/0021-il-confine.md); **«Il lavoro lungo, e come un
   componente smette»** — un job non vede il vault, quindi 17, 18, 19.4 e 22 non
   hanno un posto dove girare, e niente si disattiva; **«La forma della shell»**,
   che sta per prima perché è la precondizione che tutte le altre presuppongono e
@@ -206,7 +207,8 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   regole del contratto chiuse in `mod` privati del kernel e le stesse regole
   duplicate in TypeScript senza il presidio che hanno i tipi (§6.1 e §6.2,
   chiusi con la [decisione 0020](decisions/0020-le-regole-in-un-posto-solo.md)),
-  l'`HostApi` scritta quattro volte a mano (§7.1), i dati persistiti senza mappa
+  l'`HostApi` scritta quattro volte a mano (§7.1, chiusa con la
+  [decisione 0021](decisions/0021-il-confine.md)), i dati persistiti senza mappa
   né classe di durabilità (§15.4) e il banco di prova copiato diciotto volte
   (§16.2).
   Dal **settimo giro**, una quinta domanda: **cosa fallisce senza produrre nessun
@@ -375,15 +377,19 @@ documenti milestone.
   del contratto invece di una stringa nella sintassi di una dipendenza. Resta la
   metà della scomposizione del `Workspace` (§8.1), che quella voce doveva
   accompagnare.
-- **Il costo di una capacità non è la firma, è il numero di host** — `HostApi`
-  ha ventidue metodi e **quattro** implementazioni scritte a mano (`KernelHost`,
-  `ReadHost`, `ReadOnlyHost`, `MemoryHost`); a M5 sono cinque, e i permessi del
-  §7.3 vogliono politiche combinatorie, cioè N. È un moltiplicatore, quindi
-  invisibile finché il fattore è basso: non lo si paga aggiungendo una capacità,
-  lo si paga a ogni host successivo. Mitigazione in [todo.md](todo.md) §7.1 —
-  il rifiuto come **wrapper generico** invece che come impl gemella, e la
-  domanda (P0, pre-freeze) se `HostApi` vada spezzata in sotto-trait, perché
-  spostare una funzione fra interface WIT vale come rottura.
+- **Il costo di una capacità non è la firma, è il numero di host** —
+  **mitigato**, con la [decisione 0021](decisions/0021-il-confine.md). `HostApi`
+  aveva ventiquattro metodi e **quattro** implementazioni scritte a mano
+  (`KernelHost`, `ReadHost`, `ReadOnlyHost`, `MemoryHost`); a M5 cinque, e i
+  permessi volevano politiche combinatorie, cioè N. Era un moltiplicatore,
+  quindi invisibile finché il fattore è basso: non lo si pagava aggiungendo una
+  capacità, lo si pagava a ogni host successivo. Adesso il rifiuto è un
+  **wrapper generico** (`Guard<H, P: Policy>`) e una politica nuova costa nove
+  righe; e `HostApi` è la **somma di dieci famiglie**, in Rust e nel WIT, così
+  che «sola lettura» sia un tipo che non ha le capacità di scrittura invece di
+  un tipo che ne rifiuta dodici. La domanda P0 pre-freeze era se spezzarla,
+  perché spostare una funzione fra interface WIT vale come rottura: si è fatto,
+  ritagliando la linea di base.
 - **Le stesse regole scritte due volte** — **mitigato**, con la
   [decisione 0020](decisions/0020-le-regole-in-un-posto-solo.md). Sei regole
   vivevano già in Rust e in TypeScript (nome pagina di un `DocId`, spunta di un

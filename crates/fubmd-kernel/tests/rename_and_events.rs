@@ -126,6 +126,12 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
         .register(Box::new(LinkListProvider))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(dir, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    for plugin in ["test.chaining", "test.pingpong", "test.jobs"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     ws.reindex().expect("reindex vault vuoto");
     ws
 }
@@ -699,7 +705,8 @@ fn handlers_run_queued_not_recursive_and_can_write_documents() {
             log: log.clone(),
             fatto: false,
         }),
-    );
+    )
+    .expect("registrato");
 
     ws.write_document(&DocId::new("innesco.lnk"), "").unwrap();
 
@@ -757,7 +764,8 @@ fn dispatch_budget_stops_infinite_event_loops_loudly() {
         Box::new(PingPongHandler {
             count: count.clone(),
         }),
-    );
+    )
+    .expect("registrato");
 
     let rx = ws.bus().subscribe();
     // L'evento Custom emesso dal handler rialimenta sé stesso: senza budget
@@ -833,7 +841,8 @@ fn jobs_run_outside_the_kernel_and_complete_via_event() {
         Box::new(JobRequestingHandler {
             job_id: job_id.clone(),
         }),
-    );
+    )
+    .expect("registrato");
 
     // 1. Il handler chiede il job durante il giro sincrono: il kernel lo
     //    accoda soltanto (niente esecuzione dentro al lock).

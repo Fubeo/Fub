@@ -56,7 +56,7 @@
 //!   esiste. Inventare qui un `batch_id` che nessuno consuma sarebbe un varco
 //!   che sembra aperto.
 //! - **Il modello parsato**: un [`ExportProvider`] legge la *sorgente* dei
-//!   documenti (`HostApi::read_document`). Finché nessuna capacità restituisce
+//!   documenti (`VaultRead::read_document`). Finché nessuna capacità restituisce
 //!   un [`DocumentModel`](crate::model::DocumentModel) (§4.2), un export verso
 //!   PDF/HTML/Typst deve riparsare per conto proprio; l'export markdown, che è
 //!   il primo cliente, la sorgente la vuole com'è.
@@ -65,7 +65,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
-use crate::traits::{HostApi, IndexQuery, IndexResult};
+use crate::traits::{HostApi, IndexQuery, IndexResult, ReadApi};
 
 // ---------------------------------------------------------------------------
 // Comune ai due versi
@@ -229,7 +229,7 @@ pub enum ConflictPolicy {
     /// Sovrascrivi il documento esistente.
     Replace,
     /// Entra accanto, con un nome libero della stessa famiglia — la
-    /// convenzione la decide l'host ([`HostApi::free_name`]), non l'importer.
+    /// convenzione la decide l'host ([`VaultRead::free_name`]), non l'importer.
     Rename,
 }
 
@@ -370,7 +370,7 @@ pub trait ImportProvider: Send + Sync {
     /// Fa entrare la sorgente nel vault (o dice cosa entrerebbe, se
     /// `request.mode` è [`ImportMode::Preview`]).
     ///
-    /// Le scritture passano da [`HostApi::write_document`]: un importer non
+    /// Le scritture passano da [`VaultWrite::write_document`]: un importer non
     /// tocca il filesystem e non conosce la radice del vault.
     fn import(
         &mut self,
@@ -440,7 +440,7 @@ impl ExportSelection {
     /// Una query che non nomina documenti (l'outline di *un* documento, i tag
     /// del vault, una `Custom` di terzi) è `BadArgs`: non è una selezione
     /// vuota, è una domanda che non seleziona.
-    pub fn resolve(&self, host: &dyn HostApi) -> Result<Vec<DocId>, PluginError> {
+    pub fn resolve(&self, host: &dyn ReadApi) -> Result<Vec<DocId>, PluginError> {
         let mut docs = match self {
             ExportSelection::Documents(ids) => ids.clone(),
             ExportSelection::Folder(folder) => host
@@ -547,7 +547,7 @@ pub struct ExportReport {
 /// kernel di servirlo sotto prestito **condiviso** del workspace, come
 /// `render_view` e `IndexProvider::query`, cioè senza mettere in coda dietro un
 /// export lungo tutte le letture dell'app. È la stessa ragione per cui
-/// `HostApi::query_index` prende `&self`.
+/// `HostQuery::query_index` prende `&self`.
 pub trait ExportProvider: Send + Sync {
     /// Le destinazioni offerte. Elenco statico: quali *documenti* si esportino
     /// lo dice la richiesta, non il provider.
@@ -558,7 +558,7 @@ pub trait ExportProvider: Send + Sync {
     fn export(
         &self,
         request: &ExportRequest,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<ExportReport, PluginError>;
 }
 

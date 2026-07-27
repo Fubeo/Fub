@@ -13,6 +13,7 @@
 //! esiste.
 
 use fubmd_abi::format::ParseContext;
+use fubmd_abi::traits::ReadApi;
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportTarget,
     ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest, ImportSource,
@@ -181,7 +182,7 @@ impl ExportProvider for MarkdownExport {
     fn export(
         &self,
         request: &ExportRequest,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<ExportReport, PluginError> {
         if request.target != TARGET_FILES && request.target != TARGET_SINGLE {
             return Err(PluginError::BadArgs(format!(

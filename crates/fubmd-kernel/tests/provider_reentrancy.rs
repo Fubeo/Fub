@@ -19,10 +19,12 @@ use fubmd_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{EventHandler, HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fubmd_abi::traits::{
+    EventHandler, HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+};
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::FormatProvider;
-use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, Workspace};
 
 /// Provider di formato minimo: nessun link, nessuna struttura.
 struct PlainProvider;
@@ -97,7 +99,7 @@ impl ViewProvider for WritingView {
     fn render_view(
         &self,
         _instance: &ViewInstance,
-        _host: &dyn HostApi,
+        _host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         Ok(UiNode::text("ok"))
     }
@@ -122,7 +124,11 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     registry
         .register(Box::new(PlainProvider))
         .expect("nessun conflitto di estensioni");
-    let ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry);
+    for plugin in ["recorder", "scrivente", "prova.plugin"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     (dir, ws)
 }
 
@@ -130,8 +136,10 @@ fn vault() -> (tempfile::TempDir, Workspace) {
 fn events_emitted_inside_on_action_are_delivered_after_the_call_returns() {
     let (_dir, mut ws) = vault();
     let log: Log = Arc::default();
-    ws.register_event_handler("recorder", Box::new(Recorder(log.clone())));
-    ws.register_view_provider("scrivente", Trust::Core, Box::new(WritingView(log.clone())));
+    ws.register_event_handler("recorder", Box::new(Recorder(log.clone())))
+        .expect("registrato");
+    ws.register_view_provider("scrivente", Box::new(WritingView(log.clone())))
+        .expect("registrato");
 
     ws.view_action(&ViewInstance::only("scrivente"), UiAction::new("scrivi"))
         .expect("l'azione riesce");
@@ -162,7 +170,8 @@ fn events_emitted_inside_on_action_are_delivered_after_the_call_returns() {
 fn events_emitted_through_with_host_are_delivered_after_the_closure_returns() {
     let (_dir, mut ws) = vault();
     let log: Log = Arc::default();
-    ws.register_event_handler("recorder", Box::new(Recorder(log.clone())));
+    ws.register_event_handler("recorder", Box::new(Recorder(log.clone())))
+        .expect("registrato");
 
     ws.with_host("prova.plugin", |host| {
         host.write_document(&DocId::new("altra.md"), "via with_host")

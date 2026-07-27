@@ -110,6 +110,12 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
         .register(Box::new(LinkListProvider))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(dir, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    for plugin in [CORRETTORE, "test.vicino", "test.plugin"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     ws.reindex().expect("reindex vault vuoto");
     ws
 }
@@ -457,7 +463,8 @@ fn a_provider_patches_a_document_through_the_host_api() {
         Box::new(Correttore {
             fatto: fatto.clone(),
         }),
-    );
+    )
+    .expect("registrato");
 
     let id = DocId::new("nota.lnk");
     ws.write_document(&id, "Alfa\nTOODO: sistemare\nBeta")
@@ -531,7 +538,8 @@ fn a_rename_and_a_neighbour_write_no_longer_race_because_the_batch_defers_the_di
     ws.write_document(&DocId::new("Vecchia.lnk"), "").unwrap();
     ws.write_document(&DocId::new("a.lnk"), "Vecchia").unwrap();
     ws.write_document(&DocId::new("b.lnk"), "Vecchia").unwrap();
-    ws.register_event_handler("test.vicino", Box::new(ScriveAltrove));
+    ws.register_event_handler("test.vicino", Box::new(ScriveAltrove))
+        .expect("registrato");
 
     ws.rename_document(&DocId::new("Vecchia.lnk"), &DocId::new("Nuova.lnk"))
         .unwrap();

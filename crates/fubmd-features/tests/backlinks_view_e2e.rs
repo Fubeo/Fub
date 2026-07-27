@@ -4,7 +4,7 @@
 //! È la prova che il dogfooding non è finto. La `BacklinksView` non riceve
 //! nulla dall'app: `render_view` le presta un `HostApi` del kernel, e da lì la
 //! view chiede il documento attivo ([`Workspace::set_active_document`]) e i suoi
-//! backlink ([`HostApi::query_index`] → grafo). Il click torna dal kernel come
+//! backlink ([`HostQuery::query_index`] → grafo). Il click torna dal kernel come
 //! `view_action` e la view risponde [`ViewUpdate::Navigate`]. Ogni pezzo del
 //! giro passa dal contratto, esattamente come dovrà passarci un plugin WASM.
 
@@ -14,7 +14,7 @@ use fubmd_abi::traits::ViewInstance;
 use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_features::{BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, Workspace};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -44,7 +44,12 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_view_provider(BACKLINKS_ID, Trust::Core, Box::new(BacklinksView));
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        ws.register_core_feature(BACKLINKS_ID, BACKLINKS_ID)
+            .expect("dichiarato");
+        ws.register_view_provider(BACKLINKS_ID, Box::new(BacklinksView))
+            .expect("registrato");
         ws.reindex().expect("reindex");
         ws
     }
@@ -102,7 +107,7 @@ fn the_view_reads_active_doc_and_backlinks_from_the_kernel_host() {
     assert!(backlink_titles(&tree).is_empty());
 
     // La shell attiva Target: ora la view mostra i suoi due backlink, presi dal
-    // grafo del kernel via HostApi::query_index — non passati dall'app.
+    // grafo del kernel via HostQuery::query_index — non passati dall'app.
     ws.set_active_document(Some(DocId::new("Target.md")));
     let tree = ws
         .render_view(&ViewInstance::only(BACKLINKS_VIEW))

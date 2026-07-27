@@ -138,6 +138,12 @@ fn vault(provider: Box<dyn FormatProvider>) -> (tempfile::TempDir, Workspace) {
         .register(provider)
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    for plugin in ["prova.plugin", "automazione", "test.macro"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     ws.reindex().expect("reindex");
     (dir, ws)
 }
@@ -442,7 +448,8 @@ impl CommandProvider for Macro {
 fn con_macro() -> (tempfile::TempDir, Workspace, Log) {
     let (dir, mut ws) = vault_plain();
     let log: Log = Arc::new(Mutex::new(Vec::new()));
-    ws.register_command_provider("test.macro", Box::new(Macro(log.clone())));
+    ws.register_command_provider("test.macro", Box::new(Macro(log.clone())))
+        .expect("registrato");
     (dir, ws, log)
 }
 

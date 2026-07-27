@@ -14,7 +14,7 @@ use fubmd_abi::traits::ViewInstance;
 use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_features::{OutlineView, OUTLINE_ID, OUTLINE_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Trust, Workspace, MAIN_PANE};
+use fubmd_kernel::{FormatRegistry, Workspace, MAIN_PANE};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -38,7 +38,12 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_view_provider(OUTLINE_ID, Trust::Core, Box::new(OutlineView));
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        ws.register_core_feature(OUTLINE_ID, OUTLINE_ID)
+            .expect("dichiarato");
+        ws.register_view_provider(OUTLINE_ID, Box::new(OutlineView))
+            .expect("registrato");
         ws.reindex().expect("reindex");
         ws
     }
@@ -85,7 +90,7 @@ fn the_view_reads_the_active_docs_outline_from_the_kernel() {
     assert!(titles(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()).is_empty());
 
     // Attivo Nota: la view mostra i suoi heading nell'ordine del documento,
-    // presi dai modelli del kernel via HostApi::query_index.
+    // presi dai modelli del kernel via HostQuery::query_index.
     ws.set_active_document(Some(DocId::new("Nota.md")));
     assert_eq!(
         titles(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),

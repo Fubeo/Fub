@@ -3,8 +3,8 @@
 //!
 //! È dogfooding vero: il provider non riceve i dati già pronti dall'app, se li
 //! prende dall'[`HostApi`] come dovrà fare un plugin di terzi. Le due capacità
-//! che glielo permettono — [`HostApi::active_context`] (quale nota guardo) e
-//! [`HostApi::query_index`] (i suoi backlink) — sono esattamente ciò che prima
+//! che glielo permettono — [`HostEnv::active_context`] (quale nota guardo) e
+//! [`HostQuery::query_index`] (i suoi backlink) — sono esattamente ciò che prima
 //! mancava al contratto e costringeva l'app a fargli da tramite. Il giro
 //! completo è: la shell imposta il documento attivo → chiama `render_view` →
 //! il provider chiede i backlink all'host → un click torna come `on_action` e
@@ -15,7 +15,7 @@ use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::session::ContextMask;
 use fubmd_abi::traits::{
-    BacklinkRef, HostApi, IndexQuery, IndexResult, ViewInstance, ViewProvider, ViewSpec,
+    BacklinkRef, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewProvider, ViewSpec,
     ViewSurface,
 };
 use fubmd_abi::ui::{ActionRef, UiAction, UiNode, ViewUpdate};
@@ -62,7 +62,7 @@ impl ViewProvider for BacklinksView {
     fn render_view(
         &self,
         _instance: &ViewInstance,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         let Some(active) = host.active_context().and_then(|c| c.doc) else {
             // Nessuna nota aperta: non è un errore, è uno stato.

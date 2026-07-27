@@ -46,8 +46,14 @@ fn vault() -> (tempfile::TempDir, Workspace) {
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
-    ws.register_import_provider("fubmd.markdown", MarkdownImport::boxed());
-    ws.register_export_provider("fubmd.markdown", MarkdownExport::boxed());
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    ws.register_core_feature("fubmd.markdown", "fubmd.markdown")
+        .expect("dichiarato");
+    ws.register_import_provider("fubmd.markdown", MarkdownImport::boxed())
+        .expect("registrato");
+    ws.register_export_provider("fubmd.markdown", MarkdownExport::boxed())
+        .expect("registrato");
     ws.reindex().expect("reindex");
     (dir, ws)
 }
@@ -194,7 +200,7 @@ fn the_three_conflict_policies_do_three_different_things() {
         report.documents[0].doc,
         DocId::new("Progetti/Alpha 1.md"),
         "è la stessa famiglia di nomi di `create_note` e del ripristino dal \
-         cestino: `HostApi::free_name`"
+         cestino: `VaultRead::free_name`"
     );
     assert_eq!(
         ws.read_source(&alpha).unwrap(),
@@ -433,7 +439,14 @@ fn what_goes_out_comes_back_in_identical() {
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
     let mut altro = Workspace::new(&root, registry);
-    altro.register_import_provider("fubmd.markdown", MarkdownImport::boxed());
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    altro
+        .register_core_feature("fubmd.markdown", "fubmd.markdown")
+        .expect("dichiarato");
+    altro
+        .register_import_provider("fubmd.markdown", MarkdownImport::boxed())
+        .expect("registrato");
     altro.reindex().expect("reindex");
 
     for a in &esportato.artifacts {

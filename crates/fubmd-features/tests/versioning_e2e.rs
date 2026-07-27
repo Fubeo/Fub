@@ -37,13 +37,20 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        for plugin in [VERSIONING_ID, "test.loudmouth"] {
+            ws.register_core_feature(plugin, plugin)
+                .expect("dichiarato");
+        }
         let store = ws
             .with_host(VERSIONING_ID, VersionStore::open)
             .expect("store versioni");
         ws.register_event_handler(
             VERSIONING_ID,
             Box::new(VersioningHandler::new(store.clone())),
-        );
+        )
+        .expect("registrato");
         ws.reindex().expect("reindex");
         (ws, store)
     }
@@ -59,6 +66,12 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        for plugin in [VERSIONING_ID, "test.loudmouth"] {
+            ws.register_core_feature(plugin, plugin)
+                .expect("dichiarato");
+        }
         ws.reindex().expect("reindex");
         ws
     }
@@ -311,7 +324,8 @@ fn a_real_overflow_reaches_the_handler_and_it_reconciles() {
     let nota = DocId::new("Nota.md");
     assert_eq!(store.list(&nota).len(), 1, "la prima fotografia");
 
-    ws.register_event_handler("test.loudmouth", Box::new(Loudmouth));
+    ws.register_event_handler("test.loudmouth", Box::new(Loudmouth))
+        .expect("registrato");
 
     // La nota cambia sul disco e il workspace non ne sa niente: nessun
     // `DocumentChanged`, quindi nessuno snapshot per la via normale.

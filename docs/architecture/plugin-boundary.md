@@ -13,6 +13,18 @@ Un plugin non tocca mai il filesystem o il bus direttamente: passa da `HostApi`
 (vedi firma in [traits.md](traits.md)). Questo dà **un solo punto** in cui
 applicare i permessi.
 
+Dalla [decisione 0021](../decisions/0021-il-confine.md) l'`HostApi` è la
+**somma di dieci famiglie** — al confine WIT dieci `interface` importate una per
+una dal `plugin-world` — e il punto di applicazione esiste davvero: il kernel
+tiene un [registro dei plugin](../../crates/fubmd-kernel/src/plugins.rs) con
+manifest, permessi e grado di fiducia, e ogni host nasce dentro un
+`Guard<H, P: Policy>` che nega ciò che la politica del suo plugin non concede.
+Prima `PluginPermissions` esisteva nel contratto e non lo leggeva nessuno.
+
+Ne segue la regola di montaggio: **chi registra qualcosa si dichiara prima**
+(`register_plugin`). Un id non dichiarato non è un plugin creato al volo — è un
+errore, e un host intestato a un id sconosciuto nega tutto dicendo perché.
+
 - **Nativo (M4):** `HostApi` è un oggetto in-process che chiama direttamente il
   `Workspace` (già implementato: `KernelHost` in `fubmd-kernel/src/workspace.rs`,
   usato dal dispatch degli eventi — a coda, mai ricorsivo, vedi

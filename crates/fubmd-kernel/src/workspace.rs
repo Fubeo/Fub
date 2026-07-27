@@ -28,7 +28,7 @@
 //! ed è identica a quella che il proxy WASM potrà onorare.
 //!
 //! Il lavoro **lungo** (rete, calcolo pesante) non passa dagli handler: un
-//! provider lo chiede via [`HostApi::spawn_job`], l'host lo esegue fuori dal
+//! provider lo chiede via [`HostEvents::spawn_job`], l'host lo esegue fuori dal
 //! lock ([`Workspace::take_pending_jobs`]) e l'esito rientra come
 //! [`Event::JobDone`] ([`Workspace::complete_job`]).
 //!
@@ -59,7 +59,8 @@ use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::session::{ContextMask, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
-    JobId, JobSpec, Page, Paged, QueryRoute, ViewInstance, ViewProvider, ViewSpec,
+    JobId, JobSpec, Page, Paged, PluginManifest, QueryRoute, ServiceProvider, ViewInstance,
+    ViewProvider, ViewSpec,
 };
 use fubmd_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -67,17 +68,21 @@ use fubmd_abi::transfer::{
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{Actor, BatchId, Event, Notice, Origin, PluginError};
+use serde::{Deserialize, Serialize};
 
 use fubmd_abi::rules::path as rules_path;
 use fubmd_abi::rules::path::{resolution_key, strip_ext};
 
 use crate::bus::EventBus;
 use crate::error::{KernelError, Result};
+use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
-use crate::index::{IndexError, Indexes};
+use crate::index::Indexes;
+use crate::plugins::{self, PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
+use crate::providers::ProviderTable;
 use crate::registry::FormatRegistry;
-use crate::renderer::{self, RenderedDocument, RendererConflict, RendererRegistry};
-use crate::syntax::{SyntaxConflict, SyntaxRegistry};
+use crate::renderer::{self, RenderedDocument, RendererRegistry};
+use crate::syntax::SyntaxRegistry;
 use crate::vault::{TrashEntry, Vault, DATA_DIR};
 
 /// Il pannello di una shell che ne ha uno solo.
@@ -128,7 +133,8 @@ pub enum GraphUpdate {
 ///
 /// L'ordine è dal più fidato al meno, e conta: `>=` fra due gradi è una domanda
 /// che si fa davvero (`trust <= Trust::Development` = «lo eseguo?»).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Trust {
     /// Core e feature ufficiali: `Html`/`WebView` ammesse.
     Core,
@@ -198,7 +204,7 @@ pub struct Workspace {
     /// plugin via registry). L'id non è decorativo: è lo spazio dei nomi dello
     /// storage che l'`HostApi` concede a quell'handler, e chi lo assegna è il
     /// kernel — non l'handler, che altrimenti sceglierebbe il proprio recinto.
-    handlers: Vec<(String, Box<dyn EventHandler>)>,
+    handlers: ProviderTable<(String, Box<dyn EventHandler>)>,
     /// Il canale dati: l'indice del kernel (metadati, tag, grafo), quelli
     /// registrati e la tabella che dice a chi va cosa (§5.1, §5.2).
     ///
@@ -208,17 +214,27 @@ pub struct Workspace {
     /// storage persistente che l'[`HostApi`] gli concede: è lì che un indice si
     /// ricorda di ciò che ha già visto.
     indexes: Indexes,
+    /// Chi è registrato, cosa ha dichiarato, cosa ha registrato (§7.3, §7.6).
+    plugins: PluginRegistry,
+    /// Chi offre servizi agli altri plugin (§7.5). Come i comandi sono `Arc` e
+    /// non `Box`, e per la stessa ragione: un servizio deve restare
+    /// **raggiungibile durante una propria chiamata**, o A→B→C non troverebbe
+    /// C. `call` prende `&self`, quindi condividere il puntatore basta.
+    services: ProviderTable<(String, Arc<dyn ServiceProvider>)>,
+    /// La catena dei servizi in corso, dal più esterno al più interno: rifiuta
+    /// una ricorsione **nominandola** invece di scoprirla come stack overflow.
+    service_stack: Vec<String>,
     /// Provider di import, interpellati **in ordine**: il primo che riconosce
     /// una sorgente la prende (vedi [`Workspace::import`]). Come per handler e
     /// indici, l'id è lo spazio dati che l'[`HostApi`] concede al provider.
-    imports: Vec<(String, Box<dyn ImportProvider>)>,
+    imports: ProviderTable<(String, Box<dyn ImportProvider>)>,
     /// Provider di export. Non hanno un ordine che conta: una richiesta nomina
     /// una destinazione, e la destinazione ha un proprietario solo.
-    exports: Vec<(String, Box<dyn ExportProvider>)>,
+    exports: ProviderTable<(String, Box<dyn ExportProvider>)>,
     /// View dichiarative registrate, col grado di fiducia di chi le produce.
     /// Ogni albero di UI che entra nell'host passa da qui: è il punto unico in
     /// cui [`UiNode::validate_untrusted`] viene applicato.
-    views: Vec<RegisteredView>,
+    views: ProviderTable<RegisteredView>,
     /// Provider di comandi, in ordine di registrazione. Senza [`Trust`], a
     /// differenza delle view: la fiducia serve dove passa **contenuto attivo**
     /// (`Html`/`WebView`), e da un comando non passa un albero di UI — l'unica
@@ -234,7 +250,7 @@ pub struct Workspace {
     /// comporre — nemmeno quelli di provider diversi dal suo. `invoke` prende
     /// `&self`, quindi condividere il puntatore basta e il prestito esclusivo
     /// del workspace resta libero per l'host.
-    commands: Vec<RegisteredCommand>,
+    commands: ProviderTable<RegisteredCommand>,
     /// La catena dei comandi in corso, dal più esterno al più interno: serve a
     /// rifiutare una ricorsione **nominandola** (`a → b → a`) invece di
     /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
@@ -254,13 +270,13 @@ pub struct Workspace {
     /// view sia handler trapperebbe), promossa a contratto già in nativo —
     /// vedi il § "Dispatch degli eventi" qui sopra.
     in_provider_call: bool,
-    /// Job richiesti via [`HostApi::spawn_job`], in attesa che l'host li
+    /// Job richiesti via [`HostEvents::spawn_job`], in attesa che l'host li
     /// esegua fuori dal giro sincrono (vedi [`Workspace::take_pending_jobs`]).
     pending_jobs: Vec<(JobId, JobSpec)>,
     /// Contatore per l'assegnazione dei [`JobId`].
     next_job_id: u64,
     /// Il contesto del pannello con il focus, servito alle view da
-    /// [`HostApi::active_context`]. Lo imposta la shell
+    /// [`HostEnv::active_context`]. Lo imposta la shell
     /// ([`set_active_context`](Workspace::set_active_context)); il kernel non
     /// lo deriva né lo inventa — quale nota guarda l'utente, dove ha cliccato
     /// e in che modalità legge sono decisioni dell'app, e il kernel le
@@ -351,12 +367,15 @@ impl Workspace {
             syntax: SyntaxRegistry::new(),
             renderers: RendererRegistry::new(),
             bus: EventBus::new(),
-            handlers: Vec::new(),
+            handlers: ProviderTable::new(),
             indexes: Indexes::new(registry),
-            imports: Vec::new(),
-            exports: Vec::new(),
-            views: Vec::new(),
-            commands: Vec::new(),
+            plugins: PluginRegistry::new(),
+            services: ProviderTable::new(),
+            service_stack: Vec::new(),
+            imports: ProviderTable::new(),
+            exports: ProviderTable::new(),
+            views: ProviderTable::new(),
+            commands: ProviderTable::new(),
             command_stack: Vec::new(),
             pending: VecDeque::new(),
             dispatching: false,
@@ -387,20 +406,209 @@ impl Workspace {
         self.vault.root()
     }
 
-    /// Registra un [`EventHandler`] (fidato: le feature ufficiali) sotto un id.
-    /// I plugin di terzi passeranno dal registry dei plugin (M4/M5), che
-    /// applica permessi e confine di fiducia prima di arrivare qui.
+    // --- il registro dei plugin (§7.3, §7.4, §7.6) --------------------------
+    //
+    // Chi registra qualcosa si **dichiara** prima. Non è burocrazia: è la sola
+    // forma in cui l'host sa di chi siano le capacità che sta prestando, e in
+    // cui un nome ha un proprietario invece di essere il primo arrivato.
+
+    /// Dichiara un plugin: id, versione, versione di ABI, permessi, fiducia.
     ///
-    /// `id` è l'identità del plugin: determina lo spazio dello storage
-    /// persistente che l'[`HostApi`] gli concede
-    /// (`.fubmd-data/plugins/<id>/`). Deve essere un nome semplice, senza
-    /// separatori di path.
+    /// Va **prima** di ogni `register_*` che nomini quell'id. Un id non
+    /// dichiarato non è un plugin creato al volo: è un errore, e la ragione è
+    /// la stessa per cui [`Trust::default`] è il grado più restrittivo fra
+    /// quelli che girano — ciò che si ottiene dimenticandosi di dichiarare non
+    /// può essere più di ciò che si ottiene dichiarando.
+    ///
+    /// Il [`Trust`] non sta nel manifest e non ci starà mai: è ciò che l'host
+    /// pensa del plugin, non ciò che il plugin dice di sé.
+    pub fn register_plugin(
+        &mut self,
+        manifest: PluginManifest,
+        trust: Trust,
+    ) -> std::result::Result<(), RegistryError> {
+        // I servizi che offre sono nomi, e valgono la regola del §7.4: o è il
+        // proprio id, o è dentro di esso.
+        let owner = match trust {
+            Trust::Core => fubmd_abi::rules::ids::Owner::Core,
+            _ => fubmd_abi::rules::ids::Owner::Plugin(&manifest.id),
+        };
+        for service in &manifest.provides {
+            fubmd_abi::rules::ids::check(service, owner).map_err(RegistryError::Namespace)?;
+            if let Some(incumbent) = self.plugins.provider_of(service) {
+                return Err(RegistryError::Claimed {
+                    kind: RegistrationKind::Service,
+                    id: service.clone(),
+                    incumbent: incumbent.to_string(),
+                    challenger: manifest.id.clone(),
+                });
+            }
+        }
+        // E i requisiti devono essere **già offerti**: chi dipende da ciò che
+        // non c'è non si dichiara affatto (§7.5). Ne segue che l'ordine di
+        // dichiarazione dev'essere topologico, e a M5 è il caricatore a
+        // ordinarlo — il kernel non riordina ciò che gli si passa, dice che non
+        // sta in piedi.
+        let missing = self.plugins.missing_requirements(&manifest);
+        if !missing.is_empty() {
+            return Err(RegistryError::MissingRequirement {
+                plugin: manifest.id.clone(),
+                requires: missing,
+            });
+        }
+        self.plugins.declare(manifest, trust)
+    }
+
+    /// Registra chi **offre** i servizi che il suo manifest dichiara (§7.5).
+    ///
+    /// I `ns` non si passano qui: sono già nel manifest, e sono già stati
+    /// verificati alla dichiarazione. Registrare un provider per un plugin che
+    /// non offre niente è un errore che nomina la dimenticanza — è quasi certo
+    /// che manchi il `provides`, non che il provider sia di troppo.
+    pub fn register_service_provider(
+        &mut self,
+        plugin: impl Into<String>,
+        provider: Box<dyn ServiceProvider>,
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        let provides = self
+            .plugins
+            .get(&plugin)
+            .map(|e| e.manifest.provides.clone())
+            .ok_or_else(|| RegistryError::UnknownPlugin(plugin.clone()))?;
+        if provides.is_empty() {
+            return Err(RegistryError::NothingProvided(plugin));
+        }
+        self.plugins
+            .record(&plugin, RegistrationKind::Service, &provides);
+        self.services.push((plugin, Arc::from(provider)));
+        Ok(())
+    }
+
+    /// Chiama un servizio offerto da un plugin (§7.5).
+    ///
+    /// Chi esegue gira con le **proprie** capacità: un servizio non presta i
+    /// suoi permessi a chi lo chiama, e chi lo chiama non presta i propri a
+    /// lui. È la differenza fra una superficie fra pari e una scala per
+    /// scavalcare i permessi.
+    ///
+    /// Nessuno lo offre → [`PluginError::Unserved`], che è distinguibile da
+    /// «chi lo offre ha fallito»: è la stessa distinzione del canale dati
+    /// (decisione 0019), e serve a chi disegna per scegliere fra «installa il
+    /// plugin» e «qualcosa è andato storto».
+    pub fn call_service(
+        &mut self,
+        service: &str,
+        method: &str,
+        args: serde_json::Value,
+    ) -> std::result::Result<serde_json::Value, PluginError> {
+        let owner = self
+            .plugins
+            .provider_of(service)
+            .ok_or_else(|| {
+                PluginError::Unserved(format!("nessun plugin offre il servizio `{service}`"))
+            })?
+            .to_string();
+        let at = self
+            .services
+            .position(|(id, _)| *id == owner)
+            .ok_or_else(|| {
+                PluginError::Unserved(format!(
+                    "`{owner}` dichiara `{service}` e non ha registrato chi lo serve"
+                ))
+            })?;
+
+        // Il giro. Come per i comandi (decisione 0013), un servizio che rientra
+        // su sé stesso non è una profondità da limitare con un numero: è un
+        // errore di chi lo ha scritto, e l'unica risposta utile lo nomina.
+        if self.service_stack.iter().any(|s| s == service) {
+            let mut giro = self.service_stack.clone();
+            giro.push(service.to_string());
+            return Err(PluginError::BadArgs(format!(
+                "un servizio non può chiamare sé stesso: {}",
+                giro.join(" → ")
+            )));
+        }
+
+        let provider = Arc::clone(&self.services[at].1);
+        self.service_stack.push(service.to_string());
+        let out = self.with_provider_call(|ws| {
+            let mut host = ws.host_for(&owner, InvokeMode::Apply);
+            provider.call(service, method, args, &mut host)
+        });
+        self.service_stack.pop();
+        self.dispatch_pending();
+        out
+    }
+
+    /// Dichiara una **feature ufficiale** di questo repo: [`Trust::Core`] e i
+    /// permessi di [`PluginPermissions::core`].
+    ///
+    /// È zucchero su [`register_plugin`](Workspace::register_plugin) e non un
+    /// secondo percorso: passa dallo stesso registro, con lo stesso manifest,
+    /// e prende gli stessi rifiuti. Se fosse un percorso privilegiato, il §7.3
+    /// sarebbe applicato solo a chi non esiste ancora.
+    pub fn register_core_feature(
+        &mut self,
+        id: &str,
+        name: &str,
+    ) -> std::result::Result<(), RegistryError> {
+        self.register_plugin(PluginManifest::core(id, name), Trust::Core)
+    }
+
+    /// Questo plugin può nominare questo id? La regola del §7.4, per chi non
+    /// passa da una registrazione.
+    ///
+    /// Serve al topic di un [`Event::Custom`], che è l'unico nome del contratto
+    /// senza un momento di registrazione in cui verificarlo: si controlla
+    /// quando lo si emette.
+    pub(crate) fn owns_name(
+        &self,
+        plugin: &str,
+        id: &str,
+    ) -> std::result::Result<(), fubmd_abi::rules::ids::IdFault> {
+        let owner = match self.plugins.trust_of(plugin) {
+            Some(Trust::Core) => fubmd_abi::rules::ids::Owner::Core,
+            _ => fubmd_abi::rules::ids::Owner::Plugin(plugin),
+        };
+        fubmd_abi::rules::ids::check(id, owner)
+    }
+
+    /// L'inventario di ciò che è **attivo** (§7.6): chi è registrato, con quale
+    /// manifest, quale fiducia, quali permessi, e cosa ha registrato.
+    ///
+    /// È ciò che fa sparire `VaultInfo.versioning: bool` — un booleano per
+    /// feature dentro un record IPC, che con i moduli del 21.2 sarebbero
+    /// diventati venti booleani, ognuno una modifica al record, al mirror e
+    /// alla fixture.
+    pub fn plugins(&self) -> Vec<PluginInfo> {
+        self.plugins.iter().map(PluginInfo::of).collect()
+    }
+
+    /// Il grado di fiducia di un plugin dichiarato.
+    pub fn trust_of(&self, plugin: &str) -> Option<Trust> {
+        self.plugins.trust_of(plugin)
+    }
+
+    /// Registra un [`EventHandler`] per conto di un plugin dichiarato.
+    ///
+    /// `plugin` è l'identità di chi lo offre: determina lo spazio dello storage
+    /// persistente che l'`HostApi` gli concede (`.fubmd-data/plugins/<id>/`) e
+    /// **i permessi con cui girerà**. Un handler non nomina niente di suo, e
+    /// quindi non ha id da far collidere: l'unico nome in gioco è quello del
+    /// plugin.
     pub fn register_event_handler(
         &mut self,
-        id: impl Into<String>,
+        plugin: impl Into<String>,
         handler: Box<dyn EventHandler>,
-    ) {
-        self.handlers.push((id.into(), handler));
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        self.plugins
+            .admit(&plugin, RegistrationKind::EventHandler, &[])?;
+        self.plugins
+            .record(&plugin, RegistrationKind::EventHandler, &[]);
+        self.handlers.push((plugin, handler));
+        Ok(())
     }
 
     /// Presta un [`HostApi`] intestato a un plugin, per la durata di una
@@ -410,19 +618,52 @@ impl Workspace {
     /// dispatch: l'app apre lo store delle versioni e legge una versione con le
     /// stesse capacità che l'handler usa dentro `handle`, e non con `std::fs`.
     /// A M4 è anche il modo in cui il registry guiderà `Plugin::activate`.
+    ///
+    /// Le capacità sono **quelle del plugin**, non quelle del chiamante: un id
+    /// che nessuno ha dichiarato riceve un host che nega tutto, dicendo perché.
     pub fn with_host<R>(&mut self, plugin: &str, f: impl FnOnce(&mut dyn HostApi) -> R) -> R {
         // Anche questa è una "chiamata di provider" ai fini della consegna:
         // ciò che `f` emette arriva agli handler quando `f` è tornata.
         let result = self.with_provider_call(|ws| {
-            let mut host = KernelHost {
-                ws,
-                plugin,
-                mode: InvokeMode::Apply,
-            };
+            let mut host = ws.host_for(plugin, InvokeMode::Apply);
             f(&mut host)
         });
         self.dispatch_pending();
         result
+    }
+
+    /// L'host di **lettura** intestato a un plugin, con la stessa politica di
+    /// [`host_for`](Workspace::host_for) davanti.
+    ///
+    /// Non è un `KernelHost` con meno capacità: è un tipo che le altre non le
+    /// ha (§7.1), e prende `&self` perché una lettura gira sotto prestito
+    /// condiviso del workspace.
+    pub(crate) fn read_host_for<'a>(&'a self, plugin: &'a str) -> Guard<ReadHost<'a>, Granted> {
+        Guard::new(ReadHost { ws: self, plugin }, self.plugins.granted(plugin))
+    }
+
+    /// **Il punto di applicazione** (§7.3): un host intestato a un plugin, con
+    /// davanti la politica che i suoi permessi e la sua fiducia compongono.
+    ///
+    /// Ogni prestito passa di qui. Prima ne passava nessuno: `KernelHost`
+    /// portava `plugin: &str` e `mode`, e nient'altro — non sapeva di chi
+    /// fossero le capacità che stava prestando, quindi non poteva negarne
+    /// nessuna.
+    pub(crate) fn host_for<'a>(
+        &'a mut self,
+        plugin: &'a str,
+        mode: InvokeMode,
+    ) -> Guard<KernelHost<'a>, Granted> {
+        // La politica si prende **prima**: dopo, `self` è prestato all'host.
+        let granted = self.plugins.granted(plugin);
+        Guard::new(
+            KernelHost {
+                ws: self,
+                plugin,
+                mode,
+            },
+            granted,
+        )
     }
 
     /// Registra un [`IndexProvider`] sotto un id. Va fatto **prima** di
@@ -445,14 +686,24 @@ impl Workspace {
     /// [`reindex`]: Workspace::reindex
     pub fn register_index_provider(
         &mut self,
-        id: impl Into<String>,
+        plugin: impl Into<String>,
         index: Box<dyn IndexProvider>,
-    ) -> std::result::Result<(), IndexError> {
-        let id = id.into();
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        // I `ns` delle query custom sono nomi in uno spazio condiviso, e la
+        // regola del §7.4 vale per loro come per gli id di view: chi rivendica
+        // `acme:tasks` deve essere `acme`. Le rotte del contratto invece non
+        // sono nomi di nessuno — chi le rivendica non le nomina, le serve — e il
+        // loro conflitto lo vede la tabella delle rotte.
+        let namespaces = plugins::custom_namespaces(&index.routes());
+        self.plugins
+            .admit(&plugin, RegistrationKind::Index, &namespaces)?;
         self.indexes
-            .declare(&id, index.as_ref())
-            .map_err(IndexError::Route)?;
-        self.activate_index(id, index)
+            .declare(&plugin, index.as_ref())
+            .map_err(RegistryError::Route)?;
+        self.plugins
+            .record(&plugin, RegistrationKind::Index, &namespaces);
+        self.activate_index(plugin, index)
     }
 
     /// Registra un indice **sostituendo** chi rivendicava le stesse famiglie di
@@ -465,12 +716,20 @@ impl Workspace {
     /// ciclo, sono rotte come le altre.
     pub fn replace_index_provider(
         &mut self,
-        id: impl Into<String>,
+        plugin: impl Into<String>,
         index: Box<dyn IndexProvider>,
-    ) -> std::result::Result<(), IndexError> {
-        let id = id.into();
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        let namespaces = plugins::custom_namespaces(&index.routes());
+        // Sostituire non scavalca la regola dei nomi: si prende il posto di chi
+        // c'era, non il suo namespace.
+        self.plugins.forget(RegistrationKind::Index, &namespaces);
+        self.plugins
+            .admit(&plugin, RegistrationKind::Index, &namespaces)?;
         self.indexes.declare_replacing(index.as_ref());
-        self.activate_index(id, index)
+        self.plugins
+            .record(&plugin, RegistrationKind::Index, &namespaces);
+        self.activate_index(plugin, index)
     }
 
     /// La registrazione **è** l'attivazione: l'indice riceve subito un
@@ -481,21 +740,17 @@ impl Workspace {
         &mut self,
         id: String,
         mut index: Box<dyn IndexProvider>,
-    ) -> std::result::Result<(), IndexError> {
+    ) -> std::result::Result<(), RegistryError> {
         // `index` è ancora una variabile locale: prestare `&mut self` all'host
         // qui non alias niente. `activate` è una chiamata a un provider come
         // le altre: il dispatch resta rimandato a chiamata tornata.
         let activated = self.with_provider_call(|ws| {
-            let mut host = KernelHost {
-                ws,
-                plugin: &id,
-                mode: InvokeMode::Apply,
-            };
+            let mut host = ws.host_for(&id, InvokeMode::Apply);
             index.activate(&mut host)
         });
         self.indexes.providers.push((id, index));
         self.dispatch_pending();
-        activated.map_err(IndexError::Activate)
+        activated.map_err(RegistryError::Activate)
     }
 
     /// Riparsa tutti i documenti del vault, ricostruisce il grafo e allinea
@@ -549,7 +804,7 @@ impl Workspace {
     ///
     /// L'ordine non si impone più a ogni chiamata: la cache dei metadati è
     /// ordinata per costruzione (§5.5). Chi ne vuole una **finestra** non passa
-    /// di qui ma da [`HostApi::list_documents`], che non materializza il resto.
+    /// di qui ma da [`VaultRead::list_documents`], che non materializza il resto.
     pub fn documents(&self) -> Vec<DocId> {
         self.indexes.core.documents()
     }
@@ -804,7 +1059,7 @@ impl Workspace {
 
     /// Questo path è già di qualcuno? Vale sia l'indicizzato sia ciò che sta
     /// sul disco e il workspace non ha ancora visto.
-    fn is_taken(&self, id: &DocId) -> bool {
+    pub(crate) fn is_taken(&self, id: &DocId) -> bool {
         self.indexes.core.metas.contains_key(id) || self.vault.exists(id)
     }
 
@@ -1262,22 +1517,52 @@ impl Workspace {
     /// prima era proprio non avere dove dirlo.
     pub fn register_syntax_rule(
         &mut self,
+        plugin: impl Into<String>,
         rule: Box<dyn SyntaxRule>,
-    ) -> std::result::Result<(), SyntaxConflict> {
-        self.syntax.register(rule)
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        let id = rule.spec().id;
+        // La regola dei nomi è **una** (§7.4): questa famiglia aveva la
+        // propria — «serve un `ns:nome`», senza sapere di chi — e chiedeva un
+        // namespace anche al core mentre non chiedeva a nessuno che fosse il
+        // *suo*. Adesso passa di qui come le altre.
+        self.plugins
+            .admit(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id))?;
+        self.syntax.register(rule).map_err(RegistryError::Syntax)?;
+        self.plugins
+            .record(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id));
+        Ok(())
     }
 
     /// Registra chi disegna un `custom_kind` (§3.2).
     ///
-    /// Il [`Trust`] è quello delle view e per la stessa ragione: un
-    /// `CustomRendering::Ui` è un albero di UI, e da chi non è il core il
-    /// contenuto attivo si rifiuta a qualunque profondità.
+    /// Il [`Trust`] è quello del **plugin** e non un parametro di questa
+    /// chiamata: un `CustomRendering::Ui` è un albero di UI, e da chi non è il
+    /// core il contenuto attivo si rifiuta a qualunque profondità — ma *quanto*
+    /// ci si fida di qualcuno è una proprietà sua, non di ogni cosa che
+    /// registra (§7.3).
     pub fn register_custom_renderer(
         &mut self,
-        trust: Trust,
+        plugin: impl Into<String>,
         renderer: Box<dyn CustomRenderer>,
-    ) -> std::result::Result<(), RendererConflict> {
-        self.renderers.register(trust, renderer)
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        let id = renderer.spec().id;
+        self.plugins.admit(
+            &plugin,
+            RegistrationKind::Renderer,
+            std::slice::from_ref(&id),
+        )?;
+        let trust = self.plugins.trust_of(&plugin).unwrap_or_default();
+        self.renderers
+            .register(trust, renderer)
+            .map_err(RegistryError::Renderer)?;
+        self.plugins.record(
+            &plugin,
+            RegistrationKind::Renderer,
+            std::slice::from_ref(&id),
+        );
+        Ok(())
     }
 
     /// I `custom_kind` che qualcuno **produce** e nessuno **disegna**.
@@ -1296,7 +1581,7 @@ impl Workspace {
     }
 
     /// Il modello parsato di un documento (§4.2): la metà kernel di
-    /// [`HostApi::read_model`].
+    /// [`VaultRead::read_model`].
     ///
     /// **Rilegge e riparsa dal disco**, con le regole di sintassi registrate già
     /// applicate — è la stessa catena di `render_preview`, senza il rendering.
@@ -1316,7 +1601,7 @@ impl Workspace {
     }
 
     /// Di che formato è un documento, e che sintassi capirebbe (§4.3): la metà
-    /// kernel di [`HostApi::format_of`].
+    /// kernel di [`VaultRead::format_of`].
     ///
     /// Non tocca il disco e non chiede che il documento esista: è una domanda
     /// sull'**estensione**, e il registro dei formati è l'unico che sa
@@ -1425,7 +1710,7 @@ impl Workspace {
     ///
     /// Lo chiama la shell a ogni cambio di nota, di selezione o di modalità. È
     /// l'unico modo di scrivere il contesto: le view lo **leggono** via
-    /// [`HostApi::active_context`], nessuno lo scrive dall'interno del
+    /// [`HostEnv::active_context`], nessuno lo scrive dall'interno del
     /// contratto — vedi il campo [`Workspace::context`].
     ///
     /// Il conto di *cosa* ridisegnare sta qui e non nella shell perché la
@@ -1550,26 +1835,19 @@ impl Workspace {
     /// Gli indici escono dal workspace per la durata delle chiamate, così
     /// l'host può prestare `&mut Workspace` senza aliasing.
     pub fn flush_indexes(&mut self) -> Vec<PluginError> {
-        let mut indexes = std::mem::take(&mut self.indexes.providers);
-        let mut errors = Vec::new();
-        self.with_provider_call(|ws| {
-            for (id, index) in indexes.iter_mut() {
-                let mut host = KernelHost {
-                    ws,
-                    plugin: id,
-                    mode: InvokeMode::Apply,
-                };
-                if let Err(e) = index.flush(&mut host) {
-                    errors.push(e);
+        let errors = self.lend(
+            |ws| &mut ws.indexes.providers,
+            |ws, indexes| {
+                let mut errors = Vec::new();
+                for (id, index) in indexes.iter_mut() {
+                    let mut host = ws.host_for(id, InvokeMode::Apply);
+                    if let Err(e) = index.flush(&mut host) {
+                        errors.push(e);
+                    }
                 }
-            }
-        });
-        // Indici registrati *durante* il flush si accodano in fondo (simmetria
-        // con `deliver_to_handlers`: nessun percorso può perdere una
-        // registrazione solo perché è arrivata nel momento sbagliato).
-        let registered_meanwhile = std::mem::take(&mut self.indexes.providers);
-        self.indexes.providers = indexes;
-        self.indexes.providers.extend(registered_meanwhile);
+                errors
+            },
+        );
         // Ciò che i flush hanno emesso si consegna a chiamate tornate, non
         // dentro il frame di un provider.
         self.dispatch_pending();
@@ -1585,16 +1863,54 @@ impl Workspace {
     /// determina lo spazio dati che l'[`HostApi`] gli concede.
     pub fn register_view_provider(
         &mut self,
-        id: impl Into<String>,
-        trust: Trust,
+        plugin: impl Into<String>,
         provider: Box<dyn ViewProvider>,
-    ) {
+    ) -> std::result::Result<(), RegistryError> {
+        self.mount_views(plugin.into(), provider, false)
+    }
+
+    /// Registra un `ViewProvider` **sostituendo** chi possedeva gli stessi id
+    /// di view.
+    ///
+    /// È la stessa disciplina delle rotte (decisione 0019) e del registro dei
+    /// formati (decisione 0017), portata all'ultima famiglia che risolveva un
+    /// id per tentativi: sostituire resta possibile, ma **si chiede per nome**
+    /// invece di succedere a chi si registra per primo.
+    pub fn replace_view_provider(
+        &mut self,
+        plugin: impl Into<String>,
+        provider: Box<dyn ViewProvider>,
+    ) -> std::result::Result<(), RegistryError> {
+        self.mount_views(plugin.into(), provider, true)
+    }
+
+    fn mount_views(
+        &mut self,
+        plugin: String,
+        provider: Box<dyn ViewProvider>,
+        replacing: bool,
+    ) -> std::result::Result<(), RegistryError> {
+        let specs = provider.views();
+        let ids: Vec<String> = specs.iter().map(|s| s.id.clone()).collect();
+        if replacing {
+            self.plugins.forget(RegistrationKind::View, &ids);
+            self.views
+                .retain(|v| !v.specs.iter().any(|s| ids.contains(&s.id)));
+        }
+        self.plugins.admit(&plugin, RegistrationKind::View, &ids)?;
+        // Il grado di fiducia è quello del plugin: era un parametro di questa
+        // sola registrazione, ed è la ragione per cui un `IndexProvider` di
+        // terzi avrebbe ricevuto ogni documento del vault senza che nessuno gli
+        // avesse dato un grado (§7.3).
+        let trust = self.plugins.trust_of(&plugin).unwrap_or_default();
+        self.plugins.record(&plugin, RegistrationKind::View, &ids);
         self.views.push(RegisteredView {
-            id: id.into(),
-            specs: provider.views(),
+            id: plugin,
+            specs,
             provider,
             trust,
         });
+        Ok(())
     }
 
     /// Rilegge ciò che un provider dichiara: view e comandi.
@@ -1644,10 +1960,12 @@ impl Workspace {
         let at = self.view_owner(&instance.view)?;
         let registered = &self.views[at];
         self.check_params(at, instance)?;
-        let host = ReadHost {
-            ws: self,
-            plugin: &registered.id,
-        };
+        // Anche il percorso di lettura passa dal punto di applicazione: un
+        // provider senza `read_vault` non legge il vault **mentre disegna** più
+        // di quanto lo legga da un'azione. Che il guard qui avvolga un
+        // `ReadHost` invece di un `KernelHost` non cambia niente per la
+        // politica — è la stessa, e non sa cosa ci sia sotto.
+        let host = self.read_host_for(&registered.id);
         let tree = registered.provider.render_view(instance, &host)?;
         guard_ui(registered.trust, &tree)?;
         Ok(tree)
@@ -1668,22 +1986,19 @@ impl Workspace {
         self.check_params(at, instance)?;
         // Prima del `take`: dopo, il registro è vuoto.
         let trust = self.views[at].trust;
-        let mut views = std::mem::take(&mut self.views);
-        // Il flag rimanda il dispatch: se il provider scrive via `HostApi`
+        // Il prestito rimanda il dispatch: se il provider scrive via `HostApi`
         // dentro `on_action`, gli handler NON girano nel suo frame — girano
         // nel `dispatch_pending` qui sotto, a chiamata tornata. Senza, un
         // plugin che è sia view sia handler (il caso versioning) sarebbe
         // rientrato nella propria istanza: in nativo funziona, a M5 trappa.
-        let updated = self.with_provider_call(|ws| {
-            let registered = &mut views[at];
-            let mut host = KernelHost {
-                ws,
-                plugin: &registered.id,
-                mode: InvokeMode::Apply,
-            };
-            registered.provider.on_action(instance, action, &mut host)
-        });
-        self.restore_views(views);
+        let updated = self.lend(
+            |ws| &mut ws.views,
+            |ws, views| {
+                let registered = &mut views[at];
+                let mut host = ws.host_for(&registered.id, InvokeMode::Apply);
+                registered.provider.on_action(instance, action, &mut host)
+            },
+        );
         let update = updated?;
         if let ViewUpdate::Replace { root } = &update {
             guard_ui(trust, root)?;
@@ -1716,17 +2031,8 @@ impl Workspace {
     /// Chi possiede una view, per posizione. `UnknownView` se nessuno.
     fn view_owner(&self, view: &str) -> std::result::Result<usize, PluginError> {
         self.views
-            .iter()
             .position(|r| r.specs.iter().any(|spec| spec.id == view))
             .ok_or_else(|| PluginError::UnknownView(view.to_string()))
-    }
-
-    /// Rimette i provider al loro posto, in coda a quelli registrati nel
-    /// frattempo (simmetria con `deliver_to_handlers` e `flush_indexes`).
-    fn restore_views(&mut self, views: Vec<RegisteredView>) {
-        let registered_meanwhile = std::mem::take(&mut self.views);
-        self.views = views;
-        self.views.extend(registered_meanwhile);
     }
 
     // --- comandi -----------------------------------------------------------
@@ -1742,17 +2048,25 @@ impl Workspace {
     /// compaiono e in cui si risolve un id conteso.
     pub fn register_command_provider(
         &mut self,
-        id: impl Into<String>,
+        plugin: impl Into<String>,
         provider: Box<dyn CommandProvider>,
-    ) {
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        let specs = provider.commands();
+        let ids: Vec<String> = specs.iter().map(|s| s.id.clone()).collect();
+        self.plugins
+            .admit(&plugin, RegistrationKind::Command, &ids)?;
+        self.plugins
+            .record(&plugin, RegistrationKind::Command, &ids);
         // La firma resta `Box` — è quella degli altri `register_*`, e chi
         // registra non deve sapere perché qui dentro serve un `Arc` (decisione 0013:
         // `run_command` rientra nel registro mentre il registro è in uso).
         self.commands.push(RegisteredCommand {
-            id: id.into(),
-            specs: provider.commands(),
+            id: plugin,
+            specs,
             provider: Arc::from(provider),
         });
+        Ok(())
     }
 
     /// I comandi offerti dai provider registrati, in ordine di registrazione.
@@ -1820,7 +2134,7 @@ impl Workspace {
     }
 
     /// L'invocazione **annidata**: quella di
-    /// [`HostApi::run_command`](fubmd_abi::traits::HostApi::run_command).
+    /// [`HostCommands::run_command`](fubmd_abi::traits::HostCommands::run_command).
     ///
     /// Differisce da [`invoke_command`](Workspace::invoke_command) per le due
     /// cose che non fa, ed è lì che sta la semantica della decisione 0013:
@@ -1837,8 +2151,8 @@ impl Workspace {
     ///
     /// Il **modo** invece non è un parametro di questa funzione per caso: lo
     /// passa l'host, che è l'unico a sapere in che modo sta girando chi
-    /// invoca. Vedi `KernelHost::mode` e `ReadOnlyHost::run_command`.
-    fn invoke_command_nested(
+    /// invoca. Vedi `KernelHost::mode` e la politica `ReadOnly`.
+    pub(crate) fn invoke_command_nested(
         &mut self,
         command: &str,
         args: serde_json::Value,
@@ -1883,11 +2197,7 @@ impl Workspace {
         self.command_stack.push(command.to_string());
         let outcome = if spec.scope.writes && mode == InvokeMode::Apply {
             self.with_provider_call(|ws| {
-                let mut host = KernelHost {
-                    ws,
-                    plugin: &owner,
-                    mode,
-                };
+                let mut host = ws.host_for(&owner, mode);
                 provider.invoke(command, args, mode, &mut host)
             })
         } else {
@@ -1896,11 +2206,21 @@ impl Workspace {
             } else {
                 "il comando si è dichiarato di sola lettura"
             };
-            let mut host = ReadOnlyHost {
-                ws: self,
-                plugin: &owner,
-                why,
-            };
+            // Il rifiuto è un wrapper (§7.1): la politica dice quali famiglie
+            // servire, e l'host sottostante gira in simulazione — così una
+            // macro simulata compone i piani dei suoi passi invece di
+            // rispondere `permission-denied` a ogni riga.
+            // Due politiche insieme: quella del plugin e quella del divieto.
+            // È la combinatoria del §7.3 senza un tipo per combinazione.
+            let granted = self.plugins.granted(&owner);
+            let mut host = Guard::new(
+                KernelHost {
+                    ws: self,
+                    plugin: &owner,
+                    mode: InvokeMode::DryRun,
+                },
+                (ReadOnly { why }, granted),
+            );
             provider.invoke(command, args, mode, &mut host)
         };
         self.command_stack.pop();
@@ -1919,7 +2239,6 @@ impl Workspace {
     /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
     fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
         self.commands
-            .iter()
             .position(|r| r.specs.iter().any(|spec| spec.id == command))
             .ok_or_else(|| PluginError::UnknownCommand(command.to_string()))
     }
@@ -1935,13 +2254,34 @@ impl Workspace {
     ///
     /// Come per gli altri provider, `id` è un nome semplice e determina lo
     /// spazio dati (`.fubmd-data/plugins/<id>/`).
-    pub fn register_import_provider(&mut self, id: impl Into<String>, p: Box<dyn ImportProvider>) {
-        self.imports.push((id.into(), p));
+    pub fn register_import_provider(
+        &mut self,
+        plugin: impl Into<String>,
+        p: Box<dyn ImportProvider>,
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        self.plugins.admit(&plugin, RegistrationKind::Import, &[])?;
+        self.plugins.record(&plugin, RegistrationKind::Import, &[]);
+        self.imports.push((plugin, p));
+        Ok(())
     }
 
-    /// Registra un [`ExportProvider`] sotto un id.
-    pub fn register_export_provider(&mut self, id: impl Into<String>, p: Box<dyn ExportProvider>) {
-        self.exports.push((id.into(), p));
+    /// Registra un [`ExportProvider`] per conto di un plugin dichiarato.
+    ///
+    /// Gli id delle **destinazioni** (`markdown.files`) sono nomi in uno spazio
+    /// condiviso: valgono la regola del §7.4 e il conflitto, come per le view.
+    pub fn register_export_provider(
+        &mut self,
+        plugin: impl Into<String>,
+        p: Box<dyn ExportProvider>,
+    ) -> std::result::Result<(), RegistryError> {
+        let plugin = plugin.into();
+        let ids: Vec<String> = p.targets().into_iter().map(|t| t.id).collect();
+        self.plugins
+            .admit(&plugin, RegistrationKind::Export, &ids)?;
+        self.plugins.record(&plugin, RegistrationKind::Export, &ids);
+        self.exports.push((plugin, p));
+        Ok(())
     }
 
     /// Fa entrare una sorgente esterna nel vault, col **primo** provider
@@ -1975,22 +2315,16 @@ impl Workspace {
                     source.name
                 ))
             })?;
-        // Stessa disciplina di `view_action`: i provider escono dal workspace
-        // per la durata della chiamata (così `KernelHost` può prestare
-        // `&mut Workspace`), e chi si registra nel frattempo si accoda in fondo.
-        let mut imports = std::mem::take(&mut self.imports);
-        let report = self.with_provider_call(|ws| {
-            let (id, provider) = &mut imports[at];
-            let mut host = KernelHost {
-                ws,
-                plugin: id,
-                mode: InvokeMode::Apply,
-            };
-            provider.import(source, request, &mut host)
-        });
-        let registered_meanwhile = std::mem::take(&mut self.imports);
-        self.imports = imports;
-        self.imports.extend(registered_meanwhile);
+        // La stessa disciplina di tutti gli altri, e non più una quarta copia:
+        // vedi `Workspace::lend`.
+        let report = self.lend(
+            |ws| &mut ws.imports,
+            |ws, imports| {
+                let (id, provider) = &mut imports[at];
+                let mut host = ws.host_for(id, InvokeMode::Apply);
+                provider.import(source, request, &mut host)
+            },
+        );
         self.dispatch_pending();
         report
     }
@@ -2022,10 +2356,7 @@ impl Workspace {
                     request.target
                 ))
             })?;
-        let host = ReadHost {
-            ws: self,
-            plugin: id,
-        };
+        let host = self.read_host_for(id);
         provider.export(request, &host)
     }
 
@@ -2039,7 +2370,7 @@ impl Workspace {
     /// economia: un secondo posto da cui emettere sarebbe un posto da cui uscire
     /// senza origine o fuori dal lotto, e un evento non attribuito è
     /// indistinguibile da uno attribuito male.
-    fn emit_event(&mut self, event: Event) {
+    pub(crate) fn emit_event(&mut self, event: Event) {
         // Dentro un lotto `index-updated` non esce: N copie di un evento senza
         // payload dicono quanto ne dice una, e alla chiusura il `batch-ended`
         // dice quella e in più *quali* documenti. È l'unico evento che il lotto
@@ -2210,6 +2541,36 @@ impl Workspace {
         self.dispatching = false;
     }
 
+    /// **Presta i provider di una tabella per la durata di una chiamata**: la
+    /// disciplina di consegna, scritta una volta sola (§7.2).
+    ///
+    /// Estrae le voci dal workspace (l'host presta `&mut Workspace`, e un
+    /// provider che vi restasse dentro sarebbe un alias), chiama `f` col flag
+    /// `in_provider_call` alzato — così ciò che il provider emette arriva agli
+    /// handler *dopo* che la sua chiamata è tornata — e rimette le voci al loro
+    /// posto, in coda a quelle registrate nel frattempo.
+    ///
+    /// Erano tre copie (`deliver_to_handlers`, `flush_indexes`, `view_action`)
+    /// e ognuna delle tre poteva sbagliare l'ultimo passo in silenzio. Il
+    /// drenaggio della coda **non** è qui: `deliver_to_handlers` gira già
+    /// dentro un dispatch, e gli altri due devono drenare dopo aver finito il
+    /// proprio lavoro (validare un albero, raccogliere gli errori).
+    ///
+    /// `field` è un puntatore a funzione e non una chiusura perché deve poter
+    /// essere richiamato **due volte** su `self` — prima per svuotare, poi per
+    /// ripristinare — e una chiusura che catturasse `&mut self` non lo
+    /// permetterebbe.
+    fn lend<T, R>(
+        &mut self,
+        field: fn(&mut Self) -> &mut ProviderTable<T>,
+        f: impl FnOnce(&mut Self, &mut [T]) -> R,
+    ) -> R {
+        let mut lent = field(self).take();
+        let out = self.with_provider_call(|ws| f(ws, &mut lent));
+        field(self).restore(lent);
+        out
+    }
+
     /// Esegue `f` col flag `in_provider_call` alzato: qualunque
     /// `dispatch_pending` innescato dentro `f` (un provider che scrive via
     /// `HostApi`) viene rimandato. Chi chiama è responsabile di drenare la
@@ -2232,40 +2593,49 @@ impl Workspace {
     /// contabilità privata. L'origine dell'evento che sta *ricevendo* è un'altra
     /// cosa e sta nel [`Notice`], dove il plugin la legge.
     fn deliver_to_handlers(&mut self, notice: &Notice) {
-        let mut handlers = std::mem::take(&mut self.handlers);
-        self.with_provider_call(|ws| {
-            for (id, handler) in handlers.iter_mut() {
-                if !handler.subscribed().contains(notice.kind()) {
-                    continue;
+        self.lend(
+            |ws| &mut ws.handlers,
+            |ws, handlers| {
+                for (id, handler) in handlers.iter_mut() {
+                    if !handler.subscribed().contains(notice.kind()) {
+                        continue;
+                    }
+                    let attore = Actor::Plugin { id: id.clone() };
+                    ws.as_actor(attore, |ws| {
+                        let mut host = ws.host_for(id, InvokeMode::Apply);
+                        // L'errore di un handler non deve far fallire
+                        // l'operazione che ha emesso l'evento: si ignora
+                        // (M4: log/notifica).
+                        let _ = handler.handle(notice, &mut host);
+                    });
                 }
-                let attore = Actor::Plugin { id: id.clone() };
-                ws.as_actor(attore, |ws| {
-                    let mut host = KernelHost {
-                        ws,
-                        plugin: id,
-                        mode: InvokeMode::Apply,
-                    };
-                    // L'errore di un handler non deve far fallire l'operazione
-                    // che ha emesso l'evento: si ignora (M4: log/notifica).
-                    let _ = handler.handle(notice, &mut host);
-                });
-            }
-        });
-        // Handler registrati *durante* il dispatch si accodano in fondo.
-        let registered_meanwhile = std::mem::take(&mut self.handlers);
-        self.handlers = handlers;
-        self.handlers.extend(registered_meanwhile);
+            },
+        );
     }
 
     // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------
 
-    /// Preleva i job richiesti dai provider via [`HostApi::spawn_job`].
+    /// Preleva i job richiesti dai provider via [`HostEvents::spawn_job`].
     ///
     /// Il kernel è sincrono e non possiede thread: chi li possiede (l'app, o
     /// il registry dei plugin a M4/M5) drena questa coda, esegue ogni job
     /// **fuori** dal lock del workspace (`Plugin::run_job`, a M5 su
     /// un'istanza separata del componente) e riconsegna l'esito con
     /// [`Workspace::complete_job`].
+    /// Accoda un job richiesto via
+    /// [`HostEvents::spawn_job`](fubmd_abi::traits::HostEvents::spawn_job) e ne
+    /// restituisce l'identità.
+    ///
+    /// Sta qui e non nell'host perché il contatore è del workspace: un host è
+    /// un prestito per la durata di una chiamata, e un'identità che si conta
+    /// dentro un prestito ricomincerebbe da capo a ogni prestito.
+    pub(crate) fn enqueue_job(&mut self, spec: JobSpec) -> JobId {
+        let id = JobId(self.next_job_id);
+        self.next_job_id += 1;
+        self.pending_jobs.push((id, spec));
+        id
+    }
+
     pub fn take_pending_jobs(&mut self) -> Vec<(JobId, JobSpec)> {
         std::mem::take(&mut self.pending_jobs)
     }
@@ -2357,7 +2727,7 @@ impl Workspace {
     }
 
     /// La radice dello spazio dati di un plugin.
-    fn plugin_data_root(&self, plugin: &str) -> Utf8PathBuf {
+    pub(crate) fn plugin_data_root(&self, plugin: &str) -> Utf8PathBuf {
         self.vault
             .root()
             .join(DATA_DIR)
@@ -2371,7 +2741,7 @@ impl Workspace {
     /// Il recinto è qui e in nessun altro posto: il plugin nomina blob, non
     /// path del filesystem, e non ha modo di sapere dove sia la radice del
     /// vault. `rel` vuoto è la radice stessa (serve a `data_list`).
-    fn plugin_data_path(
+    pub(crate) fn plugin_data_path(
         &self,
         plugin: &str,
         rel: &str,
@@ -2430,7 +2800,7 @@ pub fn valid_doc_id(name: &str) -> Result<DocId> {
 /// comandi IPC, altro varco. L'errore è `PermissionDenied` e non `BadArgs`
 /// perché è la stessa risposta che `data_*` dà a una risalita — per chi la
 /// riceve, i due recinti si comportano allo stesso modo.
-fn fenced_doc_id(id: &DocId) -> std::result::Result<DocId, PluginError> {
+pub(crate) fn fenced_doc_id(id: &DocId) -> std::result::Result<DocId, PluginError> {
     valid_doc_id(id.as_str()).map_err(|_| {
         PluginError::PermissionDenied(format!(
             "`{id}`: un documento si nomina con un path relativo dentro il vault"
@@ -2446,7 +2816,7 @@ fn fenced_doc_id(id: &DocId) -> std::result::Result<DocId, PluginError> {
 /// Appiattirli su un errore interno lascerebbe quella distinzione a chi legge il
 /// messaggio, cioè a una stringa italiana — che è il debito del §12.2, non un
 /// posto dove aggiungerne.
-fn plugin_error(e: KernelError) -> PluginError {
+pub(crate) fn plugin_error(e: KernelError) -> PluginError {
     match e {
         KernelError::Stale(doc) => PluginError::Conflict(doc),
         KernelError::BadEdit { doc, why } => PluginError::BadArgs(format!("{doc}: {why}")),
@@ -2480,7 +2850,7 @@ fn is_safe_component(name: &str) -> bool {
 }
 
 /// Elenca ricorsivamente i file sotto `dir`, come path relativi a `root`.
-fn collect_data_files(root: &Utf8Path, dir: &Utf8Path, out: &mut Vec<String>) {
+pub(crate) fn collect_data_files(root: &Utf8Path, dir: &Utf8Path, out: &mut Vec<String>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         // Una cartella che non c'è è una lista vuota, non un errore: chi
         // interroga uno storage vuoto non sta sbagliando niente.
@@ -2495,586 +2865,6 @@ fn collect_data_files(root: &Utf8Path, dir: &Utf8Path, out: &mut Vec<String>) {
         } else if let Some(rel) = path.strip_prefix(root).ok().map(Utf8Path::as_str) {
             out.push(rel.replace('\\', "/"));
         }
-    }
-}
-
-/// L'[`HostApi`] del kernel per gli handler fidati: chiamate dirette, costo
-/// zero. È qui (in un solo punto) che a M4 si innesteranno i permessi dei
-/// plugin — vedi `docs/architecture/plugin-boundary.md`.
-struct KernelHost<'a> {
-    ws: &'a mut Workspace,
-    /// Chi sta usando queste capacità: determina lo spazio dati `data_*`.
-    plugin: &'a str,
-    /// In che modo sta girando chi ha in mano questo host.
-    ///
-    /// Serve a una capacità sola — [`HostApi::run_command`] — ed è ciò che
-    /// impedisce a una simulazione di diventare reale invocando qualcuno. Fuori
-    /// dal percorso dei comandi (dispatch di un evento, azione di una view,
-    /// import) è [`InvokeMode::Apply`], che è la verità: lì non si sta
-    /// simulando niente.
-    mode: InvokeMode,
-}
-
-impl HostApi for KernelHost<'_> {
-    fn read_document(&self, id: &DocId) -> std::result::Result<String, PluginError> {
-        let id = fenced_doc_id(id)?;
-        self.ws
-            .read_source(&id)
-            .map_err(|e| PluginError::Internal(e.to_string()))
-    }
-
-    fn write_document(&mut self, id: &DocId, source: &str) -> std::result::Result<(), PluginError> {
-        // Il recinto del vault, sul confine dei plugin e in un punto solo. Fino
-        // alla decisione 0006 l'unico input esterno che diventava un `DocId` arrivava dai
-        // comandi IPC, che lo sanitizzano; un `ImportProvider` invece nomina i
-        // documenti a partire dal **nome di una sorgente**, cioè da una stringa
-        // che l'utente non ha scritto (un'entrata di zip, un campo di JSON).
-        // `../../.ssh/authorized_keys` non è un `DocId` fantasma: è una
-        // scrittura fuori dal vault.
-        let id = fenced_doc_id(id)?;
-        self.ws
-            .write_document(&id, source)
-            .map_err(|e| PluginError::Internal(e.to_string()))
-    }
-
-    fn document_revision(&self, id: &DocId) -> std::result::Result<Revision, PluginError> {
-        let id = fenced_doc_id(id)?;
-        self.ws.document_revision(&id).map_err(plugin_error)
-    }
-
-    fn apply_edit(
-        &mut self,
-        id: &DocId,
-        request: EditRequest,
-    ) -> std::result::Result<EditReport, PluginError> {
-        let id = fenced_doc_id(id)?;
-        self.ws.apply_edit(&id, request).map_err(plugin_error)
-    }
-
-    fn list_documents(&self, page: Option<Page>) -> std::result::Result<Paged<DocId>, PluginError> {
-        Ok(self.ws.documents_page(page))
-    }
-
-    fn free_name(&self, id: &DocId) -> DocId {
-        self.ws.free_name(id)
-    }
-
-    fn read_model(&self, id: &DocId) -> std::result::Result<DocumentModel, PluginError> {
-        let id = fenced_doc_id(id)?;
-        self.ws.read_model(&id).map_err(plugin_error)
-    }
-
-    fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
-        // Nessun recinto da applicare: non si legge niente, e un id che esce dal
-        // vault non ha comunque un formato da dichiarare — l'estensione di un
-        // path che non nomina un documento è una domanda senza risposta, non un
-        // varco.
-        self.ws.format_of(id)
-    }
-
-    fn create_document(
-        &mut self,
-        id: &DocId,
-        source: &str,
-    ) -> std::result::Result<(), PluginError> {
-        let id = fenced_doc_id(id)?;
-        // Il rifiuto È la capacità: `write_document` qui sopra sovrascrive, e
-        // se questa facesse lo stesso non ci sarebbe motivo di averla.
-        if self.ws.is_taken(&id) {
-            return Err(plugin_error(KernelError::AlreadyExists(id.to_string())));
-        }
-        self.ws.write_document(&id, source).map_err(plugin_error)?;
-        Ok(())
-    }
-
-    fn rename_document(
-        &mut self,
-        from: &DocId,
-        to: &DocId,
-    ) -> std::result::Result<(), PluginError> {
-        let from = fenced_doc_id(from)?;
-        let to = fenced_doc_id(to)?;
-        self.ws.rename_document(&from, &to).map_err(plugin_error)
-    }
-
-    fn trash_document(&mut self, id: &DocId) -> std::result::Result<DocId, PluginError> {
-        let id = fenced_doc_id(id)?;
-        self.ws.delete_document(&id).map_err(plugin_error)
-    }
-
-    fn list_trash(&self) -> std::result::Result<Vec<TrashEntry>, PluginError> {
-        self.ws.list_trash().map_err(plugin_error)
-    }
-
-    fn restore_document(
-        &mut self,
-        entry: &DocId,
-        to: Option<DocId>,
-    ) -> std::result::Result<DocId, PluginError> {
-        // `entry` nomina un file **dentro** `.trash/`, non un documento del
-        // vault: il recinto che vale qui è quello del cestino, e lo applica
-        // `restore_from_trash` cercando la voce fra quelle che esistono — un id
-        // che non è nel cestino è `NotFound`, non un path da spazzolare. Il
-        // `to`, che invece atterra nel vault, lo valida il kernel.
-        self.ws.restore_from_trash(entry, to).map_err(plugin_error)
-    }
-
-    fn empty_trash(&mut self) -> std::result::Result<u64, PluginError> {
-        self.ws
-            .empty_trash()
-            .map(|n| n as u64)
-            .map_err(plugin_error)
-    }
-
-    fn emit(&mut self, event: Event) {
-        self.ws.emit_event(event);
-    }
-
-    fn spawn_job(&mut self, spec: JobSpec) -> std::result::Result<JobId, PluginError> {
-        let id = JobId(self.ws.next_job_id);
-        self.ws.next_job_id += 1;
-        self.ws.pending_jobs.push((id, spec));
-        Ok(id)
-    }
-
-    fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
-        let path = self.data_blob(path)?;
-        match std::fs::read(&path) {
-            Ok(bytes) => Ok(Some(bytes)),
-            // Mancare non è un errore: chi legge uno store vuoto lo scopre così.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
-        }
-    }
-
-    fn data_write(&mut self, path: &str, bytes: &[u8]) -> std::result::Result<(), PluginError> {
-        let path = self.data_blob(path)?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| PluginError::Internal(format!("{parent}: {e}")))?;
-        }
-        std::fs::write(&path, bytes).map_err(|e| PluginError::Internal(format!("{path}: {e}")))
-    }
-
-    fn data_remove(&mut self, path: &str) -> std::result::Result<(), PluginError> {
-        let path = self.data_blob(path)?;
-        match std::fs::remove_file(&path) {
-            Ok(()) => Ok(()),
-            // Idempotente: cancellare ciò che non c'è è già il risultato voluto.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
-        }
-    }
-
-    fn data_list(&self, prefix: &str) -> std::result::Result<Vec<String>, PluginError> {
-        let root = self.ws.plugin_data_root(self.plugin);
-        let dir = self.ws.plugin_data_path(self.plugin, prefix)?;
-        let mut out = Vec::new();
-        collect_data_files(&root, &dir, &mut out);
-        out.sort_unstable();
-        Ok(out)
-    }
-
-    fn now_unix_millis(&self) -> u64 {
-        crate::time::now_unix_millis()
-    }
-
-    fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        // Stesso dispatch di `Workspace::query_index`: i backlink li serve il
-        // grafo, il resto i provider registrati. Una view vede esattamente ciò
-        // che vedrebbe il kernel, e sotto lo stesso prestito condiviso.
-        self.ws.query_index(query)
-    }
-
-    fn active_context(&self) -> Option<ViewContext> {
-        self.ws.active_context().cloned()
-    }
-
-    fn run_command(
-        &mut self,
-        command: &str,
-        args: serde_json::Value,
-    ) -> std::result::Result<CommandOutcome, PluginError> {
-        // Il modo è quello dell'host, non della chiamata: vedi `mode`.
-        self.ws.invoke_command_nested(command, args, self.mode)
-    }
-}
-
-/// L'[`HostApi`] del percorso di **lettura** ([`Workspace::render_view`]):
-/// presta `&Workspace`, non `&mut`.
-///
-/// Esiste perché `render_view` deve poter girare sotto prestito condiviso (è
-/// il carico che il futuro `RwLock` parallelizza), e un [`KernelHost`] è per
-/// costruzione un prestito esclusivo. Le capacità di lettura delegano al
-/// workspace come farebbe `KernelHost`; quelle di **scrittura** prendono
-/// `&mut self`, che da un `&dyn HostApi` — l'unica forma in cui questo host
-/// viene prestato — non è raggiungibile: se un giorno lo diventasse, sarebbe
-/// un bug del kernel, e il panic lo direbbe subito.
-struct ReadHost<'a> {
-    ws: &'a Workspace,
-    plugin: &'a str,
-}
-
-impl ReadHost<'_> {
-    fn read_only(&self) -> ! {
-        unreachable!(
-            "ReadHost: il percorso di render è in sola lettura (&self); \
-             una capacità di scrittura non può arrivare qui"
-        )
-    }
-}
-
-impl HostApi for ReadHost<'_> {
-    fn read_document(&self, id: &DocId) -> std::result::Result<String, PluginError> {
-        let id = fenced_doc_id(id)?;
-        self.ws
-            .read_source(&id)
-            .map_err(|e| PluginError::Internal(e.to_string()))
-    }
-
-    fn write_document(
-        &mut self,
-        _id: &DocId,
-        _source: &str,
-    ) -> std::result::Result<(), PluginError> {
-        self.read_only()
-    }
-
-    /// Leggere una revisione è una lettura: una view che prepara una modifica
-    /// (calcolare gli edit è la parte lunga) può farlo mentre disegna, e
-    /// consegnarla poi da `on_action`, dove l'host sa scrivere.
-    fn document_revision(&self, id: &DocId) -> std::result::Result<Revision, PluginError> {
-        let id = fenced_doc_id(id)?;
-        self.ws.document_revision(&id).map_err(plugin_error)
-    }
-
-    fn apply_edit(
-        &mut self,
-        _id: &DocId,
-        _request: EditRequest,
-    ) -> std::result::Result<EditReport, PluginError> {
-        self.read_only()
-    }
-
-    fn list_documents(&self, page: Option<Page>) -> std::result::Result<Paged<DocId>, PluginError> {
-        Ok(self.ws.documents_page(page))
-    }
-
-    fn free_name(&self, id: &DocId) -> DocId {
-        self.ws.free_name(id)
-    }
-
-    /// Il modello è una **lettura**, quindi arriva anche di qui: è ciò che
-    /// permette a una view di guardare la struttura del documento che sta
-    /// disegnando senza chiedere all'app di passargliela.
-    fn read_model(&self, id: &DocId) -> std::result::Result<DocumentModel, PluginError> {
-        let id = fenced_doc_id(id)?;
-        self.ws.read_model(&id).map_err(plugin_error)
-    }
-
-    fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
-        self.ws.format_of(id)
-    }
-
-    fn create_document(
-        &mut self,
-        _id: &DocId,
-        _source: &str,
-    ) -> std::result::Result<(), PluginError> {
-        self.read_only()
-    }
-
-    fn rename_document(
-        &mut self,
-        _from: &DocId,
-        _to: &DocId,
-    ) -> std::result::Result<(), PluginError> {
-        self.read_only()
-    }
-
-    fn trash_document(&mut self, _id: &DocId) -> std::result::Result<DocId, PluginError> {
-        self.read_only()
-    }
-
-    /// Elencare il cestino è una lettura: un pannello "cestino" è una view, e
-    /// una view disegna dal percorso di render.
-    fn list_trash(&self) -> std::result::Result<Vec<TrashEntry>, PluginError> {
-        self.ws.list_trash().map_err(plugin_error)
-    }
-
-    fn restore_document(
-        &mut self,
-        _entry: &DocId,
-        _to: Option<DocId>,
-    ) -> std::result::Result<DocId, PluginError> {
-        self.read_only()
-    }
-
-    fn empty_trash(&mut self) -> std::result::Result<u64, PluginError> {
-        self.read_only()
-    }
-
-    fn emit(&mut self, _event: Event) {
-        self.read_only()
-    }
-
-    fn spawn_job(&mut self, _spec: JobSpec) -> std::result::Result<JobId, PluginError> {
-        self.read_only()
-    }
-
-    fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
-        if path.is_empty() {
-            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
-        }
-        let path = self.ws.plugin_data_path(self.plugin, path)?;
-        match std::fs::read(&path) {
-            Ok(bytes) => Ok(Some(bytes)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
-        }
-    }
-
-    fn data_write(&mut self, _path: &str, _bytes: &[u8]) -> std::result::Result<(), PluginError> {
-        self.read_only()
-    }
-
-    fn data_remove(&mut self, _path: &str) -> std::result::Result<(), PluginError> {
-        self.read_only()
-    }
-
-    fn data_list(&self, prefix: &str) -> std::result::Result<Vec<String>, PluginError> {
-        let root = self.ws.plugin_data_root(self.plugin);
-        let dir = self.ws.plugin_data_path(self.plugin, prefix)?;
-        let mut out = Vec::new();
-        collect_data_files(&root, &dir, &mut out);
-        out.sort_unstable();
-        Ok(out)
-    }
-
-    fn now_unix_millis(&self) -> u64 {
-        crate::time::now_unix_millis()
-    }
-
-    fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        self.ws.query_index(query)
-    }
-
-    fn active_context(&self) -> Option<ViewContext> {
-        self.ws.active_context().cloned()
-    }
-
-    /// Invocare un comando è, potenzialmente, scrivere: anche una simulazione
-    /// chiede al workspace di prestare un host, e da `&Workspace` non si presta
-    /// niente. Un `render_view` che volesse *eseguire* qualcosa sta disegnando
-    /// nel momento sbagliato.
-    fn run_command(
-        &mut self,
-        _command: &str,
-        _args: serde_json::Value,
-    ) -> std::result::Result<CommandOutcome, PluginError> {
-        self.read_only()
-    }
-}
-
-/// L'[`HostApi`] prestato a un comando che **non deve scrivere**: o perché lo
-/// si sta simulando ([`InvokeMode::DryRun`]), o perché si è dichiarato di sola
-/// lettura ([`CommandScope::writes`](fubmd_abi::command::CommandScope::writes)).
-///
-/// È un [`ReadHost`] con l'altra risposta alle capacità di scrittura: là il
-/// percorso di render non può *raggiungerle* (è prestato come `&dyn HostApi`, e
-/// arrivarci sarebbe un bug del kernel, quindi un panic), qui invece un comando
-/// ce le ha davanti e può provarci — e provarci non è un bug del kernel, è il
-/// caso normale di un comando che ha dichiarato una cosa e ne fa un'altra.
-/// La risposta giusta è un errore che dice **perché**, e che chi ha scritto il
-/// comando legge nei propri test.
-///
-/// Senza questa struttura il dry-run sarebbe una convenzione: "per favore non
-/// scrivere quando ti chiedo cosa faresti". Le convenzioni le rispettano i
-/// comandi che si scrivono in questo repo.
-struct ReadOnlyHost<'a> {
-    /// Il prestito è **esclusivo** anche qui, benché nessuna scrittura passi:
-    /// serve a [`HostApi::run_command`], che deve poter far girare un altro
-    /// comando *in simulazione* — e simulare vuol dire chiedere al workspace di
-    /// prestare a sua volta un host. Le letture riducono il prestito a un
-    /// [`ReadHost`] temporaneo, così le loro implementazioni restano una sola.
-    ws: &'a mut Workspace,
-    plugin: &'a str,
-    /// La ragione del divieto, com'è arrivata all'host: finisce nel messaggio.
-    why: &'static str,
-}
-
-impl ReadOnlyHost<'_> {
-    fn denied<T>(&self, what: &str) -> std::result::Result<T, PluginError> {
-        Err(PluginError::PermissionDenied(format!(
-            "{what}: {}",
-            self.why
-        )))
-    }
-
-    /// Le capacità di lettura, delegate a [`ReadHost`]: una lettura è una
-    /// lettura, e averne due implementazioni sarebbe averne due semantiche.
-    fn reading(&self) -> ReadHost<'_> {
-        ReadHost {
-            ws: self.ws,
-            plugin: self.plugin,
-        }
-    }
-}
-
-impl HostApi for ReadOnlyHost<'_> {
-    fn read_document(&self, id: &DocId) -> std::result::Result<String, PluginError> {
-        self.reading().read_document(id)
-    }
-
-    fn write_document(
-        &mut self,
-        id: &DocId,
-        _source: &str,
-    ) -> std::result::Result<(), PluginError> {
-        self.denied(&format!("scrivere `{id}`"))
-    }
-
-    /// Leggere una revisione è una lettura, ed è **la** lettura che serve a un
-    /// dry-run: un piano è fatto di [`EditRequest`] con una base, e la base la
-    /// dà questa capacità.
-    fn document_revision(&self, id: &DocId) -> std::result::Result<Revision, PluginError> {
-        self.reading().document_revision(id)
-    }
-
-    fn apply_edit(
-        &mut self,
-        id: &DocId,
-        _request: EditRequest,
-    ) -> std::result::Result<EditReport, PluginError> {
-        self.denied(&format!("modificare `{id}`"))
-    }
-
-    fn list_documents(&self, page: Option<Page>) -> std::result::Result<Paged<DocId>, PluginError> {
-        self.reading().list_documents(page)
-    }
-
-    fn free_name(&self, id: &DocId) -> DocId {
-        self.reading().free_name(id)
-    }
-
-    fn read_model(&self, id: &DocId) -> std::result::Result<DocumentModel, PluginError> {
-        self.reading().read_model(id)
-    }
-
-    fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
-        self.reading().format_of(id)
-    }
-
-    // Le operazioni strutturali della decisione 0013 sono negate qui **tutte**, ed è
-    // l'unico punto del kernel in cui oggi un permesso di scrittura viene
-    // davvero applicato. Il §7.3 non dovrà inventare il varco: dovrà solo
-    // decidere una seconda ragione per attraversarlo.
-
-    fn create_document(
-        &mut self,
-        id: &DocId,
-        _source: &str,
-    ) -> std::result::Result<(), PluginError> {
-        self.denied(&format!("creare `{id}`"))
-    }
-
-    fn rename_document(
-        &mut self,
-        from: &DocId,
-        _to: &DocId,
-    ) -> std::result::Result<(), PluginError> {
-        self.denied(&format!("rinominare `{from}`"))
-    }
-
-    fn trash_document(&mut self, id: &DocId) -> std::result::Result<DocId, PluginError> {
-        self.denied(&format!("cestinare `{id}`"))
-    }
-
-    fn list_trash(&self) -> std::result::Result<Vec<TrashEntry>, PluginError> {
-        self.reading().list_trash()
-    }
-
-    fn restore_document(
-        &mut self,
-        entry: &DocId,
-        _to: Option<DocId>,
-    ) -> std::result::Result<DocId, PluginError> {
-        self.denied(&format!("ripristinare `{entry}`"))
-    }
-
-    fn empty_trash(&mut self) -> std::result::Result<u64, PluginError> {
-        self.denied("svuotare il cestino")
-    }
-
-    fn emit(&mut self, _event: Event) {
-        // L'unica capacità senza esito: un evento che non si può rifiutare si
-        // può solo non emettere. Simulare significa anche non farsi sentire —
-        // un `DocumentChanged` finto farebbe ricaricare l'editor su una
-        // modifica che non è avvenuta.
-    }
-
-    fn spawn_job(&mut self, _spec: JobSpec) -> std::result::Result<JobId, PluginError> {
-        // Un job gira fuori dal giro sincrono e il suo esito rientra come
-        // evento: lanciarlo durante una simulazione è un effetto che la
-        // simulazione non può ritirare.
-        self.denied("lanciare un job")
-    }
-
-    fn data_read(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, PluginError> {
-        self.reading().data_read(path)
-    }
-
-    fn data_write(&mut self, path: &str, _bytes: &[u8]) -> std::result::Result<(), PluginError> {
-        self.denied(&format!("scrivere il blob `{path}`"))
-    }
-
-    fn data_remove(&mut self, path: &str) -> std::result::Result<(), PluginError> {
-        self.denied(&format!("cancellare il blob `{path}`"))
-    }
-
-    fn data_list(&self, prefix: &str) -> std::result::Result<Vec<String>, PluginError> {
-        self.reading().data_list(prefix)
-    }
-
-    fn now_unix_millis(&self) -> u64 {
-        self.reading().now_unix_millis()
-    }
-
-    fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        self.reading().query_index(query)
-    }
-
-    fn active_context(&self) -> Option<ViewContext> {
-        self.reading().active_context()
-    }
-
-    /// Invocare **si può**, ma in simulazione — sempre, qualunque fosse la
-    /// ragione del divieto.
-    ///
-    /// È la scelta che dà un senso al dry-run di una macro: se qui si
-    /// rispondesse `permission-denied`, simulare `vault.archive` non
-    /// direbbe *niente* di ciò che farebbe, perché tutto ciò che fa è invocare
-    /// altri comandi. Forzare il modo invece compone: il piano di una macro è
-    /// l'unione dei piani dei suoi passi, e nessuno dei passi ha modo di
-    /// scrivere — il comando invocato riceve a sua volta un host come questo.
-    fn run_command(
-        &mut self,
-        command: &str,
-        args: serde_json::Value,
-    ) -> std::result::Result<CommandOutcome, PluginError> {
-        self.ws
-            .invoke_command_nested(command, args, InvokeMode::DryRun)
-    }
-}
-
-impl KernelHost<'_> {
-    /// Path assoluto di un blob: come [`Workspace::plugin_data_path`], ma il
-    /// nome vuoto non è la radice — è una richiesta malformata.
-    fn data_blob(&self, rel: &str) -> std::result::Result<Utf8PathBuf, PluginError> {
-        if rel.is_empty() {
-            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
-        }
-        self.ws.plugin_data_path(self.plugin, rel)
     }
 }
 

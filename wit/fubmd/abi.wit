@@ -1707,18 +1707,37 @@ interface errors {
     }
 }
 
-/// Capacità concesse dal kernel a un provider/plugin: l'unico varco col mondo.
-interface host-api {
+// ---------------------------------------------------------------------------
+// Le capacità concesse dal kernel a un provider/plugin: l'unico varco col
+// mondo, in NOVE interfacce (§7.1).
+// ---------------------------------------------------------------------------
+//
+// Erano una sola, `host-api`, e un'interfaccia sola si importa per intero o per
+// niente: un componente a cui non si vuole concedere la scrittura la riceveva
+// comunque, e il rifiuto era una risposta a runtime che l'host doveva scrivere
+// capacità per capacità, host per host, politica per politica.
+//
+// Divise, il mondo di un plugin (`plugin-world`) **elenca** ciò che gli si
+// presta, e un componente a cui non è stata importata `host-vault-write` non ha
+// modo di chiamarla: la funzione non c'è. È lo stesso confine di prima, detto
+// dove il component model lo può far rispettare da sé.
+//
+// Il criterio delle nove famiglie è uno solo: **cosa vuol dire negarne una.**
+// Per questo la lettura del vault è separata dalla scrittura e dalle operazioni
+// strutturali (i tre gradi che `read-vault` e `write-vault` distinguono, §7.3),
+// i blob del plugin si dividono nello stesso modo, e ciò che l'host sa e il
+// guest no — l'orologio, il pannello attivo — è una famiglia sua.
+
+/// Leggere il vault: la sorgente, la struttura, l'elenco, il cestino.
+///
+/// La famiglia sotto `read-vault`, e la sola che ogni percorso ha: anche il
+/// render di una view, anche una simulazione.
+interface host-vault-read {
     use model.{doc-id, document-model};
-    use json.{json};
     use format.{document-format};
-    use events.{event};
     use errors.{plugin-error};
-    use jobs.{job-id, job-spec};
-    use index.{doc-ids-page, index-query, index-result, page};
-    use session.{view-context};
-    use edit.{revision, edit-request, edit-report};
-    use command.{command-outcome};
+    use index.{doc-ids-page, page};
+    use edit.{revision};
 
     /// Una voce del cestino. Due id perché sono due domande: dove il file si
     /// trova ora (ed è quello che si passa a `restore-document`) e dove
@@ -1731,20 +1750,13 @@ interface host-api {
     }
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
-    /// Scrive il documento INTERO: è la scrittura di chi il testo intero ce l'ha
-    /// in mano (l'editor che salva, un importer che crea una nota). Chi ne
-    /// cambia un pezzo usa `apply-edit`.
-    write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
     /// La revisione del sorgente di un documento: l'identità del testo su cui si
     /// sta per calcolare una modifica. È una capacità e non un calcolo perché la
     /// revisione è opaca e la sua derivazione non è promessa a nessuno.
+    ///
+    /// Sta fra le LETTURE, e non è una svista: chi prepara una modifica può
+    /// calcolarla mentre disegna, e consegnarla poi da dove si scrive.
     document-revision: func(id: doc-id) -> result<revision, plugin-error>;
-    /// Cambia un PEZZO di documento: gli edit della richiesta, tutti o nessuno,
-    /// sul sorgente che la sua `base` nomina. `conflict` = il documento è
-    /// cambiato nel frattempo e non è stato scritto niente (si rilegge e si
-    /// ricalcola); `bad-args` = gli edit non stanno in piedi (fuori dal
-    /// sorgente, a metà di un carattere, sovrapposti, due nello stesso punto).
-    apply-edit: func(id: doc-id, request: edit-request) -> result<edit-report, plugin-error>;
     /// I documenti del vault, in ordine di id, A FINESTRA. Senza,
     /// `read-document` serve solo per gli id che arrivano dagli eventi; senza
     /// finestra, è il metodo con cui un provider si guarda intorno e clona
@@ -1792,15 +1804,47 @@ interface host-api {
     /// vale anche per un documento che non esiste ancora e si può fare su una
     /// lista intera senza pagare un'apertura a testa.
     format-of: func(id: doc-id) -> option<document-format>;
+    /// Il contenuto del cestino, dal più recente al più vecchio. Sta qui e non
+    /// in `index-query` perché il cestino non è indicizzato: una nota cestinata
+    /// non ha modello, né tag, né archi.
+    list-trash: func() -> result<list<trash-entry>, plugin-error>;
+}
 
-    // --- operazioni strutturali sul vault ------------------------------------
-    //
-    // Creare, rinominare, cestinare: ciò che si fa a un documento senza
-    // aprirlo. Erano kernel-owned e fuori dal contratto, e la conseguenza era
-    // che template, daily note, import e auto-archiviazione non potevano
-    // essere un plugin. Sotto `write-vault` quando il §7.3 lo leggerà; oggi
-    // il varco che le rifiuta è quello della decisione 0010 (comando di sola lettura o
-    // simulato).
+/// Scrivere il TESTO di un documento.
+///
+/// Due funzioni sole, ed è la famiglia più piccola perché è quella su cui si
+/// dice di no più spesso: ciò che una simulazione non fa, ciò che un comando
+/// dichiarato innocuo non può fare, ciò che un plugin senza `write-vault` non
+/// ottiene.
+interface host-vault-write {
+    use model.{doc-id};
+    use errors.{plugin-error};
+    use edit.{edit-request, edit-report};
+
+    /// Scrive il documento INTERO: è la scrittura di chi il testo intero ce l'ha
+    /// in mano (l'editor che salva, un importer che crea una nota). Chi ne
+    /// cambia un pezzo usa `apply-edit`.
+    write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
+    /// Cambia un PEZZO di documento: gli edit della richiesta, tutti o nessuno,
+    /// sul sorgente che la sua `base` nomina. `conflict` = il documento è
+    /// cambiato nel frattempo e non è stato scritto niente (si rilegge e si
+    /// ricalcola); `bad-args` = gli edit non stanno in piedi (fuori dal
+    /// sorgente, a metà di un carattere, sovrapposti, due nello stesso punto).
+    apply-edit: func(id: doc-id, request: edit-request) -> result<edit-report, plugin-error>;
+}
+
+/// Le operazioni STRUTTURALI: creare, rinominare, cestinare, ripristinare,
+/// distruggere — ciò che si fa a un documento senza aprirlo.
+///
+/// Erano kernel-owned e fuori dal contratto, e la conseguenza era che template,
+/// daily note, import e auto-archiviazione non potevano essere un plugin.
+///
+/// Stanno sotto `write-vault` come `host-vault-write`, e sono una famiglia a
+/// parte perché il no è di specie diversa: chi scrive testo cambia una nota che
+/// l'utente ha già, chi cestina gliela toglie.
+interface host-vault-structure {
+    use model.{doc-id};
+    use errors.{plugin-error};
 
     /// Crea un documento NUOVO, e fallisce se il path è occupato. È il rifiuto
     /// a distinguerla da `write-document`, che sovrascrive: un template che
@@ -1814,10 +1858,6 @@ interface host-api {
     /// Sposta nel cestino e dice dov'è finito: l'id restituito è quello con cui
     /// si ripristina. Non distrugge — l'unica che distrugge è `empty-trash`.
     trash-document: func(id: doc-id) -> result<doc-id, plugin-error>;
-    /// Il contenuto del cestino, dal più recente al più vecchio. Sta qui e non
-    /// in `index-query` perché il cestino non è indicizzato: una nota cestinata
-    /// non ha modello, né tag, né archi.
-    list-trash: func() -> result<list<trash-entry>, plugin-error>;
     /// Riporta nel vault una voce del cestino (`entry` è il suo `id`) e
     /// restituisce con quale path è tornata. Path d'origine occupato e nessun
     /// `to` = errore, non un nome scelto d'ufficio: chi chiama ha `free-name`.
@@ -1825,47 +1865,55 @@ interface host-api {
     /// Svuota il cestino e dice quante voci ha distrutto. L'unica capacità del
     /// contratto da cui non si torna indietro, e per questo una capacità a sé.
     empty-trash: func() -> result<u64, plugin-error>;
+}
 
-    emit: func(event: event);
-    /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
-    /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
-    spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
+// --- storage persistente per-plugin -----------------------------------------
+//
+// Namespace `.fubmd-data/plugins/<plugin-id>/`, creato e imposto dall'host:
+// il plugin nomina blob con path relativi, non tocca mai il filesystem né
+// conosce la radice del vault. Percorsi assoluti, `..` e separatori di
+// sistema → `permission-denied`. È la capacità che rende scrivibile uno
+// store di snapshot (il versioning) da dentro il contratto.
+//
+// Sono DUE interfacce e non una, per la stessa ragione della lettura e della
+// scrittura del vault: il percorso di render può rileggere ciò che il provider
+// si è salvato, e non deve poter scrivere mentre disegna.
 
-    // --- storage persistente per-plugin --------------------------------------
-    //
-    // Namespace `.fubmd-data/plugins/<plugin-id>/`, creato e imposto dall'host:
-    // il plugin nomina blob con path relativi, non tocca mai il filesystem né
-    // conosce la radice del vault. Percorsi assoluti, `..` e separatori di
-    // sistema → `permission-denied`. È la capacità che rende scrivibile uno
-    // store di snapshot (il versioning) da dentro il contratto.
+/// Rileggere i propri blob persistenti.
+interface host-data-read {
+    use errors.{plugin-error};
 
     /// Legge un blob persistente. Assente → `none`.
     data-read: func(path: string) -> result<option<list<u8>>, plugin-error>;
+    /// Elenca i blob sotto un prefisso, path relativi allo spazio del plugin,
+    /// ordinati. Prefisso inesistente → lista vuota.
+    data-list: func(prefix: string) -> result<list<string>, plugin-error>;
+}
+
+/// Scrivere e cancellare i propri blob persistenti.
+interface host-data-write {
+    use errors.{plugin-error};
+
     /// Scrive (creando le directory intermedie) un blob persistente.
     data-write: func(path: string, bytes: list<u8>) -> result<_, plugin-error>;
     /// Cancella un blob. Assente → successo (idempotente).
     data-remove: func(path: string) -> result<_, plugin-error>;
-    /// Elenca i blob sotto un prefisso, path relativi allo spazio del plugin,
-    /// ordinati. Prefisso inesistente → lista vuota.
-    data-list: func(prefix: string) -> result<list<string>, plugin-error>;
+}
+
+/// Ciò che l'host sa e il guest no: che ore sono, e cosa sta guardando
+/// l'utente.
+///
+/// Sembrano lontane e sono la stessa specie di cosa — un fatto dell'host che
+/// chi gira dentro il confine non può calcolarsi — e si negano insieme: un
+/// componente sotto sandbox può non avere orologio (WASI lo può negare) e può
+/// non avere titolo a sapere quale nota è aperta.
+interface host-env {
+    use session.{view-context};
 
     /// Orologio dell'host: millisecondi dall'epoca Unix. Un plugin non ha
     /// accesso al tempo di sistema (WASI lo può negare, e in test serve
     /// deterministico): il tempo è una capacità come le altre.
     now-unix-millis: func() -> u64;
-
-    // --- interrogazione dell'indice e contesto della sessione ----------------
-    //
-    // Le due capacità che rendono un `view-provider` un vero provider e non un
-    // guscio riempito dall'app: interrogare il vault e sapere quale documento
-    // è aperto. Vedi docs/architecture/plugin-boundary.md, "Interrogazione e
-    // contesto".
-
-    /// Interroga il vault: documenti che combaciano, backlink, grafo,
-    /// struttura, tag, faccette, salute del vault. Chi serve cosa è dichiarato
-    /// (`query-route`), non scoperto per tentativi: ciò che nessuno serve torna
-    /// come `unserved`, che è distinguibile da «chi la serve ha fallito».
-    query-index: func(query: index-query) -> result<index-result, plugin-error>;
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `none` = la shell non ne ha ancora
     /// pubblicato uno. Lo imposta la shell; una view lo chiede quando ne ha
@@ -1874,6 +1922,74 @@ interface host-api {
     /// a un plugin. Un `doc-id` nudo non basterebbe: con schede e split il
     /// documento attivo smette di essere una variabile globale.
     active-context: func() -> option<view-context>;
+}
+
+/// Farsi sentire: emettere un evento, chiedere lavoro lungo.
+///
+/// Una famiglia sola perché si negano insieme e per la stessa ragione: sono
+/// effetti che una simulazione non può ritirare.
+interface host-events {
+    use events.{event};
+    use errors.{plugin-error};
+    use jobs.{job-id, job-spec};
+
+    /// L'unica capacità del contratto SENZA esito: un host che non la concede
+    /// non ha modo di rifiutare, può solo non emettere. Il silenzio è il no.
+    emit: func(event: event);
+    /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
+    /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
+    spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
+}
+
+/// Il canale dati: interrogare l'indice.
+///
+/// Una famiglia con una funzione sola, e non è uno spreco: è la sola lettura
+/// che non riguarda UN documento ma ciò che è derivato dall'intero vault, e un
+/// host può volerla negare a chi ha `read-vault` ristretto a una cartella —
+/// una risposta aggregata non ha un path da confrontare con una allowlist.
+interface host-query {
+    use errors.{plugin-error};
+    use index.{index-query, index-result};
+
+    /// Interroga il vault: documenti che combaciano, backlink, grafo,
+    /// struttura, tag, faccette, salute del vault. Chi serve cosa è dichiarato
+    /// (`query-route`), non scoperto per tentativi: ciò che nessuno serve torna
+    /// come `unserved`, che è distinguibile da «chi la serve ha fallito».
+    query-index: func(query: index-query) -> result<index-result, plugin-error>;
+}
+
+/// **Chiamare un altro plugin** e ricevere una risposta (§7.5).
+///
+/// Era il canale che non c'era. Gli unici modi in cui due provider si potevano
+/// parlare erano `event.custom` — fire-and-forget, senza risposta — e
+/// `index-query.custom`, che ha un destinatario dichiarato (decisione 0019) ma
+/// resta *una domanda all'indice*. Una CHIAMATA non c'era: A non poteva
+/// chiedere qualcosa a B e ricevere un risultato, e senza di essa i moduli
+/// Suite del capitolo 21 non sarebbero plugin — sarebbero crate linkati che si
+/// vedono a compile time.
+interface host-services {
+    use json.{json};
+    use errors.{plugin-error};
+
+    /// Chiama un metodo di un servizio offerto da un altro plugin. `service` è
+    /// un `ns` con la regola dei nomi del §7.4. Nessuno lo offre → `unserved`,
+    /// distinguibile da «chi lo offre ha fallito».
+    ///
+    /// Chi esegue gira con le PROPRIE capacità: un servizio non presta i suoi
+    /// permessi a chi lo chiama, e chi lo chiama non presta i propri a lui.
+    /// Un servizio non può chiamare sé stesso, nemmeno per giro: `bad-args`
+    /// nomina il ciclo.
+    call-service: func(service: string, method: string, args: json) -> result<json, plugin-error>;
+}
+
+/// Invocare i comandi del registro.
+///
+/// Una famiglia sua perché è l'unica che MOLTIPLICA: chi la ottiene può fare
+/// tutto ciò che sanno fare i comandi registrati, compresi quelli che scrivono.
+interface host-commands {
+    use json.{json};
+    use errors.{plugin-error};
+    use command.{command-outcome};
 
     /// Invoca un comando del registro (decisione 0009): è ciò che rende componibili macro
     /// e automazioni senza che un plugin debba conoscere gli altri.
@@ -1900,6 +2016,23 @@ interface event-handler {
 
     subscribed: func() -> event-mask;
     handle: func(notice: notice) -> result<_, plugin-error>;
+}
+
+/// Chi OFFRE un servizio agli altri plugin (§7.5).
+///
+/// Quali `ns` serva non lo dice questa interfaccia: lo dice il `provides` del
+/// suo `plugin-manifest`. È deliberato — «cosa offro» è una dichiarazione che
+/// l'host legge PRIMA di montare il plugin, e la usa per risolvere le
+/// dipendenze di chi arriva dopo; se stesse in una funzione, per saperlo
+/// bisognerebbe averlo già montato.
+interface service {
+    use json.{json};
+    use errors.{plugin-error};
+
+    /// Esegue un metodo. `service` è uno dei `ns` dichiarati nel manifest — un
+    /// provider può offrirne più d'uno. Un `method` ignoto è `bad-args`: la
+    /// domanda è arrivata a chi la doveva ricevere, ed è malposta.
+    call: func(service: string, method: string, args: json) -> result<json, plugin-error>;
 }
 
 /// Ciclo di vita del plugin + manifest e permessi.
@@ -1931,6 +2064,16 @@ interface plugin {
         /// Vedi `fubmd_abi::traits::abi_compatible`.
         abi-version: string,
         permissions: plugin-permissions,
+        /// I SERVIZI CHE OFFRE (§7.5): i `ns` con cui altri plugin lo chiamano
+        /// via `host-services.call-service`. Sta nel manifest e non in una
+        /// funzione del provider perché l'host deve poterlo leggere prima di
+        /// montarlo: è ciò con cui risolve le dipendenze di chi arriva dopo.
+        provides: list<string>,
+        /// I servizi di cui HA BISOGNO. Un requisito che nessuno offre non è un
+        /// avvertimento: il plugin non si dichiara affatto, e chi lo monta legge
+        /// quale requisito manca. «Attivo ma degradato» è uno stato che nessuno
+        /// prova e che ogni feature dovrebbe poi gestire.
+        requires: list<string>,
     }
 
     manifest: func() -> plugin-manifest;
@@ -2096,7 +2239,22 @@ interface exporter {
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che
 /// implementa. Il kernel non distingue nativo da WASM.
 world plugin-world {
-    import host-api;
+    // Le nove famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
+    // mondo che non importa `host-vault-write` non è un mondo che la rifiuta a
+    // runtime, è un mondo in cui quella funzione non esiste. Il giorno che il
+    // caricatore di M5 monterà un componente sotto sandbox stretta, ciò che
+    // cambia è questa lista — e la superficie negata non ha nemmeno un simbolo
+    // da chiamare.
+    import host-vault-read;
+    import host-vault-write;
+    import host-vault-structure;
+    import host-data-read;
+    import host-data-write;
+    import host-env;
+    import host-events;
+    import host-query;
+    import host-commands;
+    import host-services;
 
     export plugin;
     export format;
@@ -2110,6 +2268,7 @@ world plugin-world {
     export view;
     export index;
     export event-handler;
+    export service;
     export importer;
     export exporter;
 }

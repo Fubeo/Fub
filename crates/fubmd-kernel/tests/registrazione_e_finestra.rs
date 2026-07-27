@@ -16,11 +16,11 @@ use fubmd_abi::format::{
 };
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{
-    CommandProvider, HostApi, Page, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    CommandProvider, HostApi, Page, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::PluginError;
-use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, Workspace};
 
 // --- un provider che conta quante volte gli si chiede cosa offre ------------
 
@@ -51,7 +51,7 @@ impl ViewProvider for Conteggio {
     fn render_view(
         &self,
         _instance: &ViewInstance,
-        _host: &dyn HostApi,
+        _host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         Ok(UiNode::text("ciao"))
     }
@@ -122,6 +122,10 @@ fn workspace(docs: &[&str]) -> (tempfile::TempDir, Workspace) {
     let mut registry = FormatRegistry::new();
     registry.register(Box::new(Testo)).expect("registrazione");
     let mut ws = Workspace::new(&root, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    ws.register_core_feature("prova", "prova")
+        .expect("dichiarato");
     ws.reindex().expect("reindex");
     (dir, ws)
 }
@@ -141,13 +145,13 @@ fn le_spec_si_chiedono_una_volta_sola() {
 
     ws.register_view_provider(
         "prova",
-        Trust::Core,
         Box::new(Conteggio {
             views: Arc::clone(&views),
             commands: Arc::clone(&commands),
             seconda: Arc::clone(&seconda),
         }),
-    );
+    )
+    .expect("registrato");
     ws.register_command_provider(
         "prova",
         Box::new(Conteggio {
@@ -155,7 +159,8 @@ fn le_spec_si_chiedono_una_volta_sola() {
             commands: Arc::clone(&commands),
             seconda: Arc::clone(&seconda),
         }),
-    );
+    )
+    .expect("registrato");
     drop(provider);
     assert_eq!(*views.lock().unwrap(), 1, "una alla registrazione");
     assert_eq!(*commands.lock().unwrap(), 1);
@@ -190,7 +195,8 @@ fn un_provider_che_cambia_idea_lo_dichiara() {
     let (_g, mut ws) = workspace(&[]);
     let provider = Conteggio::default();
     let seconda = Arc::clone(&provider.seconda);
-    ws.register_view_provider("prova", Trust::Core, Box::new(provider));
+    ws.register_view_provider("prova", Box::new(provider))
+        .expect("registrato");
 
     *seconda.lock().unwrap() = true;
     assert_eq!(

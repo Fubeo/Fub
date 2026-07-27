@@ -28,7 +28,8 @@ use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::query::QueryExpr;
 use fubmd_abi::session::ContextMask;
 use fubmd_abi::traits::{
-    HostApi, IndexQuery, IndexResult, TagCount, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    HostApi, IndexQuery, IndexResult, ReadApi, TagCount, ViewInstance, ViewProvider, ViewSpec,
+    ViewSurface,
 };
 use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 
@@ -85,7 +86,7 @@ impl ViewProvider for TagPanelView {
     fn render_view(
         &self,
         _instance: &ViewInstance,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         self.tree(host)
     }
@@ -126,7 +127,7 @@ impl TagPanelView {
     /// Prende un `&dyn HostApi` e non un `&mut`: serve a entrambi i percorsi —
     /// il render (lettura) e la risposta a un'azione — e prenderlo in sola
     /// lettura è ciò che rende ovvio che disegnare non scrive.
-    fn tree(&self, host: &dyn HostApi) -> Result<UiNode, PluginError> {
+    fn tree(&self, host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         // Senza finestra: il pannello mostra la distribuzione intera, ed è la
         // ragione per cui la `Page` è opzionale invece che obbligatoria.
         let tags = match host.query_index(IndexQuery::Tags {

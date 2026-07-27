@@ -1,7 +1,7 @@
 //! Modificare **un pezzo** di documento: l'edit come primitiva del contratto.
 //!
 //! Fino a qui l'unico modo di cambiare un documento era
-//! [`HostApi::write_document`](crate::traits::HostApi::write_document), cioè
+//! [`VaultWrite::write_document`](crate::traits::VaultWrite::write_document), cioè
 //! riscrivere il file intero. Funziona per chi il file intero ce l'ha in mano —
 //! l'editor che salva il proprio buffer, un importer che crea una nota — e non
 //! funziona per nessun altro: spuntare un task (10.1), scrivere una proprietà
@@ -31,7 +31,7 @@
 //! dentro), e come l'host la deriva non è promesso a nessuno: un host che
 //! usasse un digest, un contatore o `mtime+size` sarebbe conforme uguale. Chi
 //! deve prepararla la **chiede**
-//! ([`HostApi::document_revision`](crate::traits::HostApi::document_revision));
+//! ([`VaultRead::document_revision`](crate::traits::VaultRead::document_revision));
 //! [`Revision::of`] è come la deriva *questo* host — sta qui perché il kernel e
 //! i doppi dei test ne abbiano una sola implementazione, non perché un provider
 //! debba ricalcolarla per conto proprio.
@@ -77,7 +77,7 @@ use crate::model::Span;
 /// L'identità del sorgente su cui un edit è stato calcolato.
 ///
 /// Opaca: solo l'uguaglianza è contratto (vedi il doc del modulo). La si ottiene
-/// dall'host ([`HostApi::document_revision`](crate::traits::HostApi::document_revision));
+/// dall'host ([`VaultRead::document_revision`](crate::traits::VaultRead::document_revision));
 /// [`Revision::of`] è la derivazione di *questo* host, non una promessa del
 /// confine.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]

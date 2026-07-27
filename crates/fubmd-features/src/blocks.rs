@@ -37,6 +37,11 @@ use serde_json::json;
 /// L'id del formato su cui queste regole si innestano.
 const MARKDOWN: &str = "markdown";
 
+/// Identità della feature che offre le sintassi innestate e i loro renderer: è
+/// lo spazio dati che l'host le concede, e dal §7.3 anche il proprietario dei
+/// nomi che registra.
+pub const BLOCKS_ID: &str = "fubmd.blocks";
+
 pub const DIAGRAMS_RULE: &str = "fubmd:diagrams";
 pub const MATH_RULE: &str = "fubmd:math";
 pub const HIGHLIGHT_RULE: &str = "fubmd:highlight";

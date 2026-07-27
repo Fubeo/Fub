@@ -246,6 +246,24 @@ pub mod permission {
     /// Filesystem fuori dal vault. Parametro: elenco di path (20.3, «file
     /// allowlist»).
     pub const EXTERNAL_FS: &str = "fubmd:external-fs";
+    /// Invocare i comandi del registro
+    /// ([`HostCommands::run_command`](crate::traits::HostCommands::run_command)).
+    ///
+    /// È il permesso che **moltiplica**: chi lo ottiene può fare tutto ciò che
+    /// sanno fare i comandi registrati, compresi quelli che scrivono. Sta
+    /// accanto agli altri e non dentro `write-vault` perché un plugin può
+    /// legittimamente volere l'uno senza l'altro — una macro che compone
+    /// comandi altrui non scrive niente di suo, e un formattatore che riscrive
+    /// una nota non ha motivo di invocare nessuno.
+    pub const RUN_COMMAND: &str = "fubmd:run-command";
+    /// Chiamare i servizi offerti da altri plugin
+    /// ([`HostServices::call_service`](crate::traits::HostServices::call_service)).
+    ///
+    /// È un permesso a sé e non un sinonimo di `run-command`: un comando è una
+    /// cosa che l'utente potrebbe fare da sé dalla palette, un servizio è una
+    /// superficie che un plugin offre a un altro. Chi concede l'uno non ha
+    /// detto niente sull'altro.
+    pub const CALL_SERVICE: &str = "fubmd:call-service";
 }
 
 #[cfg(test)]

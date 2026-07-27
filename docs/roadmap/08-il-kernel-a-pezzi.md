@@ -21,7 +21,9 @@ dodici in arrivo sullo stesso `struct`.
       dispatcher, **sei** tabelle di provider (`handlers`, `indexes`, `imports`,
       `exports`, `views`, `commands`), storage dei plugin, contesto di sessione
       (`context`), coda dei job, lo stack dei comandi, l'attore corrente e il
-      lotto aperto. Il §7.2 (`ProviderTable`) e il §8.3
+      lotto aperto (e il registro dei plugin, che la
+      [decisione 0021](../decisions/0021-il-confine.md) ha appena aggiunto). Il
+      §7.2 — chiuso con la 0021 — e il §8.3
       (`RwLock`) ne sono le due conseguenze già viste; la causa no, e ha due
       effetti che il resto del piano dà per risolti:
       - il `RwLock` del §8.3 **non potrà essere a grana fine**: un lettore che
@@ -49,7 +51,9 @@ dodici in arrivo sullo stesso `struct`.
       scritto**. Nove sottosistemi restano.
 - [ ] **La scomposizione va decisa prima di aggiungerli**, non dopo:
       `DocumentStore` (vault + cache + parse), `MetadataIndex` (grafo + tag +
-      outline), `ProviderRegistry` (§7.2 + §9.4 + §7.3), `Dispatcher` (coda +
+      outline), `ProviderRegistry` (il registro e il prestito della
+      [decisione 0021](../decisions/0021-il-confine.md), più il §9.4),
+      `Dispatcher` (coda +
       budget + origine della [decisione 0012](../decisions/0012-origine-degli-eventi.md)), `Session` (attivo + pane della [decisione 0007](../decisions/0007-contesto-di-sessione.md)). È anche
       il modo di dare al §8.2 un pezzo riusabile che non sia "tutto".
 - [ ] **Ordine**: viene **prima** del §8.2 e del §8.3, o quei due nascono

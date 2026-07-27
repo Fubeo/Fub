@@ -84,8 +84,9 @@ use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, DocumentMatch, EventHandler, HealthCheck, HealthIssue, HostApi,
     IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef, Page,
     Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry,
-    PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, TagCount,
-    TrashEntry, ViewInstance, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
+    PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi,
+    ServiceProvider, TagCount, TrashEntry, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -336,6 +337,7 @@ wit_type! {
 
     // Ciò che NON attraversa il confine: il ricevitore e le capacità dell'host.
     dyn HostApi => HOST,
+    dyn ReadApi => HOST,
     dyn FormatProvider => SELF,
     dyn CommandProvider => SELF,
     dyn ViewProvider => SELF,
@@ -343,6 +345,7 @@ wit_type! {
     dyn EventHandler => SELF,
     dyn Plugin => SELF,
     dyn ImportProvider => SELF,
+    dyn ServiceProvider => SELF,
     dyn ExportProvider => SELF,
     dyn SyntaxRule => SELF,
     dyn CustomRenderer => SELF,
@@ -475,12 +478,20 @@ wit_fn!(A, B, C);
 wit_fn!(A, B, C, D);
 wit_fn!(A, B, C, D, E);
 
-/// I due modi in cui l'`HostApi` compare in una firma Rust. Sono scritti con
+/// I due modi in cui l'host compare in una firma Rust. Sono scritti con
 /// lifetime `'static` solo perché un puntatore a funzione con lifetime elisi
 /// sarebbe higher-ranked, e un tipo higher-ranked non può implementare [`WitFn`];
 /// il cast dal metodo del trait resta valido, ed è quello che vincola la firma.
+///
+/// Sono **due trait diversi** dal §7.1: chi può fare tutto riceve l'`HostApi`
+/// intero, chi disegna o esporta riceve un [`ReadApi`], che le capacità di
+/// scrittura non ce le ha affatto. Al confine WIT non si vede — l'host è
+/// importato dal world, non passato come argomento — ed è per questo che
+/// entrambi si elidono allo stesso modo; ma il cast qui sopra è ciò che
+/// verifica che la firma Rust sia quella giusta, e se `render-view` tornasse a
+/// prendere un `HostApi` questo file non compilerebbe.
 type Host = &'static mut dyn HostApi;
-type HostRef = &'static dyn HostApi;
+type HostRef = &'static dyn ReadApi;
 
 // ---------------------------------------------------------------------------
 // Il WIT, parsato: nomi e tipi DICHIARATI, non sottostringhe
@@ -3746,12 +3757,16 @@ fn conform(source: &str) -> Result<(), String> {
         version,
         abi_version,
         permissions,
+        provides,
+        requires,
     } = PluginManifest {
         id: String::new(),
         name: String::new(),
         version: String::new(),
         abi_version: String::new(),
         permissions: PluginPermissions::default(),
+        provides: Vec::new(),
+        requires: Vec::new(),
     };
     contract.record(
         "plugin-manifest",
@@ -3761,6 +3776,11 @@ fn conform(source: &str) -> Result<(), String> {
             ("version", wit(&version)),
             ("abi-version", wit(&abi_version)),
             ("permissions", wit(&permissions)),
+            // I due campi del §7.5, **in fondo**: è ciò che li rende additivi
+            // per il presidio dell'additività, ed è la ragione per cui questa
+            // voce non scade col freeze.
+            ("provides", wit(&provides)),
+            ("requires", wit(&requires)),
         ],
     );
 
@@ -4158,160 +4178,186 @@ fn conform(source: &str) -> Result<(), String> {
     );
 
     contract.method(
-        "host-api",
+        "host-vault-read",
         "read-document",
         <dyn HostApi>::read_document
             as fn(&'static dyn HostApi, &'static DocId) -> Result<String, PluginError>,
         &["id"],
     );
     contract.method(
-        "host-api",
+        "host-vault-write",
         "write-document",
         <dyn HostApi>::write_document
             as fn(Host, &'static DocId, &'static str) -> Result<(), PluginError>,
         &["id", "source"],
     );
     contract.method(
-        "host-api",
+        "host-vault-read",
         "document-revision",
         <dyn HostApi>::document_revision
             as fn(&'static dyn HostApi, &'static DocId) -> Result<Revision, PluginError>,
         &["id"],
     );
     contract.method(
-        "host-api",
+        "host-vault-write",
         "apply-edit",
         <dyn HostApi>::apply_edit
             as fn(Host, &'static DocId, EditRequest) -> Result<EditReport, PluginError>,
         &["id", "request"],
     );
     contract.method(
-        "host-api",
+        "host-vault-read",
         "list-documents",
         <dyn HostApi>::list_documents
             as fn(&'static dyn HostApi, Option<Page>) -> Result<Paged<DocId>, PluginError>,
         &["page"],
     );
     contract.method(
-        "host-api",
+        "host-vault-read",
         "free-name",
         <dyn HostApi>::free_name as fn(&'static dyn HostApi, &'static DocId) -> DocId,
         &["id"],
     );
     contract.method(
-        "host-api",
+        "host-vault-read",
         "read-model",
         <dyn HostApi>::read_model
             as fn(&'static dyn HostApi, &'static DocId) -> Result<DocumentModel, PluginError>,
         &["id"],
     );
     contract.method(
-        "host-api",
+        "host-vault-read",
         "format-of",
         <dyn HostApi>::format_of
             as fn(&'static dyn HostApi, &'static DocId) -> Option<DocumentFormat>,
         &["id"],
     );
     contract.method(
-        "host-api",
+        "host-vault-structure",
         "create-document",
         <dyn HostApi>::create_document
             as fn(Host, &'static DocId, &'static str) -> Result<(), PluginError>,
         &["id", "source"],
     );
     contract.method(
-        "host-api",
+        "host-vault-structure",
         "rename-document",
         <dyn HostApi>::rename_document
             as fn(Host, &'static DocId, &'static DocId) -> Result<(), PluginError>,
         &["from", "to"],
     );
     contract.method(
-        "host-api",
+        "host-vault-structure",
         "trash-document",
         <dyn HostApi>::trash_document as fn(Host, &'static DocId) -> Result<DocId, PluginError>,
         &["id"],
     );
     contract.method(
-        "host-api",
+        "host-vault-read",
         "list-trash",
         <dyn HostApi>::list_trash
             as fn(&'static dyn HostApi) -> Result<Vec<TrashEntry>, PluginError>,
         &[],
     );
     contract.method(
-        "host-api",
+        "host-vault-structure",
         "restore-document",
         <dyn HostApi>::restore_document
             as fn(Host, &'static DocId, Option<DocId>) -> Result<DocId, PluginError>,
         &["entry", "to"],
     );
     contract.method(
-        "host-api",
+        "host-vault-structure",
         "empty-trash",
         <dyn HostApi>::empty_trash as fn(Host) -> Result<u64, PluginError>,
         &[],
     );
     contract.method(
-        "host-api",
+        "host-events",
         "emit",
         <dyn HostApi>::emit as fn(Host, Event),
         &["event"],
     );
     contract.method(
-        "host-api",
+        "host-events",
         "spawn-job",
         <dyn HostApi>::spawn_job as fn(Host, JobSpec) -> Result<JobId, PluginError>,
         &["spec"],
     );
     contract.method(
-        "host-api",
+        "host-data-read",
         "data-read",
         <dyn HostApi>::data_read
             as fn(&'static dyn HostApi, &'static str) -> Result<Option<Vec<u8>>, PluginError>,
         &["path"],
     );
     contract.method(
-        "host-api",
+        "host-data-write",
         "data-write",
         <dyn HostApi>::data_write
             as fn(Host, &'static str, &'static [u8]) -> Result<(), PluginError>,
         &["path", "bytes"],
     );
     contract.method(
-        "host-api",
+        "host-data-write",
         "data-remove",
         <dyn HostApi>::data_remove as fn(Host, &'static str) -> Result<(), PluginError>,
         &["path"],
     );
     contract.method(
-        "host-api",
+        "host-data-read",
         "data-list",
         <dyn HostApi>::data_list
             as fn(&'static dyn HostApi, &'static str) -> Result<Vec<String>, PluginError>,
         &["prefix"],
     );
     contract.method(
-        "host-api",
+        "host-env",
         "now-unix-millis",
         <dyn HostApi>::now_unix_millis as fn(&'static dyn HostApi) -> u64,
         &[],
     );
     contract.method(
-        "host-api",
+        "host-query",
         "query-index",
         <dyn HostApi>::query_index
             as fn(&'static dyn HostApi, IndexQuery) -> Result<IndexResult, PluginError>,
         &["query"],
     );
     contract.method(
-        "host-api",
+        "host-env",
         "active-context",
         <dyn HostApi>::active_context as fn(&'static dyn HostApi) -> Option<ViewContext>,
         &[],
     );
     contract.method(
-        "host-api",
+        "host-services",
+        "call-service",
+        <dyn HostApi>::call_service
+            as fn(
+                Host,
+                &'static str,
+                &'static str,
+                serde_json::Value,
+            ) -> Result<serde_json::Value, PluginError>,
+        &["service", "method", "args"],
+    );
+    contract.method(
+        "service",
+        "call",
+        <dyn ServiceProvider>::call
+            as fn(
+                &'static dyn ServiceProvider,
+                &'static str,
+                &'static str,
+                serde_json::Value,
+                Host,
+            ) -> Result<serde_json::Value, PluginError>,
+        &["service", "method", "args"],
+    );
+
+    contract.method(
+        "host-commands",
         "run-command",
         <dyn HostApi>::run_command
             as fn(Host, &'static str, serde_json::Value) -> Result<CommandOutcome, PluginError>,
@@ -4407,9 +4453,31 @@ fn conform(source: &str) -> Result<(), String> {
         .get("plugin-world")
         .cloned()
         .expect("world `plugin-world` assente dal WIT");
+    // Le nove famiglie del §7.1. Il confronto è per contenimento e non per
+    // uguaglianza perché fra gli import risolti compaiono anche le interfacce
+    // di soli **tipi** che le nove usano (`model`, `errors`, `index`, …): sono
+    // dipendenze del grafo, non capacità concesse.
+    for famiglia in [
+        "host-vault-read",
+        "host-vault-write",
+        "host-vault-structure",
+        "host-data-read",
+        "host-data-write",
+        "host-env",
+        "host-events",
+        "host-query",
+        "host-commands",
+        "host-services",
+    ] {
+        assert!(
+            imports.contains(famiglia),
+            "`plugin-world` deve importare `{famiglia}`, importa {imports:?}"
+        );
+    }
     assert!(
-        imports.contains("host-api"),
-        "`plugin-world` deve importare host-api, importa {imports:?}"
+        !imports.contains("host-api"),
+        "`host-api` è stata divisa nelle nove famiglie del §7.1: se riappare, \
+         è tornata la superficie che si concede per intero o per niente"
     );
     let expected_exports: BTreeSet<String> = [
         "plugin",
@@ -4423,6 +4491,7 @@ fn conform(source: &str) -> Result<(), String> {
         "view",
         "index",
         "event-handler",
+        "service",
         "importer",
         "exporter",
     ]

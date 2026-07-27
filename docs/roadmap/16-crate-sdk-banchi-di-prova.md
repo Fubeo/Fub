@@ -163,8 +163,11 @@ bisogno di un posto da cui essere montato).
       per tutti e quattro; il §16.5 ne è la conseguenza, non una decisione
       parallela.
 - [ ] **Quattro posti è il conto di un *tipo*; per una *capacità* il conto è
-      un altro, ed è il §7.1**: ventidue metodi × quattro implementazioni di
-      `HostApi` scritte a mano, cinque a M5, N con le politiche del §7.3. E per
+      un altro, ed era il §7.1**: ventiquattro metodi × quattro implementazioni
+      di `HostApi` scritte a mano, cinque a M5, N con le politiche dei permessi.
+      **Chiuso** con la [decisione 0021](../decisions/0021-il-confine.md): il
+      rifiuto è un wrapper generico e il percorso di lettura è un tipo che le
+      capacità di scrittura non le ha. E per
       una *regola* era un terzo conto ancora, il §6.2 — **chiuso** con la
       [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md), e vale
       la pena leggerne la forma: il conto non è stato azzerato ma **presidiato**,
@@ -246,16 +249,18 @@ bisogno di un posto da cui essere montato).
       proprio per accorgersi di quella che un giorno qualcuno aggiungesse senza
       pensarci»*. Quella proprietà il test non ce l'ha: nota se una delle cinque
       **smette** di essere rifiutata, non se ne compare una sesta.
-- [ ] **E il posto in cui la sesta sbaglierebbe è già identificato dal §7.1.**
-      `ReadOnlyHost` è scritto metodo per metodo (`kernel/workspace.rs:2720-2830`):
-      sedici capacità delegano a `ReadHost` e sei negano. Aggiungerne una e
-      copiare la riga sbagliata — la delega invece del rifiuto — produce **un
-      dry-run che scrive**, cioè il buco esatto che la [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md) ha chiuso, in un
-      punto in cui il chiamante si sta fidando (l'anteprima prima di toccare 40
-      note). Il §7.1 argomenta il `Guard<H, P: Policy>` sul **costo** (quattro
-      impl, cinque a M5, N con le politiche del §7.3); questa voce gli dà la
-      seconda ragione, che è più forte: con un wrapper il default è *rifiuta*,
-      con un'impl scritta a mano il default è *quello che hai battuto*.
+- [ ] **Il posto in cui la sesta sbaglierebbe era `ReadOnlyHost`, e non c'è
+      più.** Era scritto metodo per metodo — sedici capacità delegavano a
+      `ReadHost` e sei negavano — e aggiungerne una copiando la riga sbagliata
+      (la delega invece del rifiuto) avrebbe prodotto **un dry-run che scrive**,
+      cioè il buco esatto che la [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md)
+      ha chiuso, in un punto in cui il chiamante si sta fidando. Il §7.1
+      argomentava il `Guard<H, P: Policy>` sul **costo**; questa voce gli ha
+      dato la seconda ragione, che è più forte e che la
+      [decisione 0021](../decisions/0021-il-confine.md) ha adottato: con un
+      wrapper il default è *rifiuta*, con un'impl scritta a mano il default è
+      *quello che hai battuto*. Resta la parte di questa voce che riguarda
+      l'elenco delle cinque capacità provate in fila.
 - [ ] **E ce n'è un terzo che si spegne da solo, trovato facendolo girare.**
       `scripts/check-doc-links.mjs` — il presidio che la [decisione 0014](../decisions/0014-i-verbali-fuori-da-todo.md) ha aggiunto
       perché «una promessa senza presidio meccanico decade» — salta ogni cartella
@@ -273,7 +278,8 @@ bisogno di un posto da cui essere montato).
       provider ufficiali da cui i test iterino invece di elencarli (un
       `ogni_view_ufficiale()` nel testkit, che chi aggiunge una view aggiorna
       perché è anche il posto da cui la registra), e per le capacità la stessa
-      cosa che i tipi hanno già — un `match` esaustivo, o il `Policy` del §7.1
+      cosa che i tipi hanno già — un `match` esaustivo, o il `Policy` della
+      [decisione 0021](../decisions/0021-il-confine.md)
       che rende il rifiuto la posizione di riposo. Il criterio da portare avanti,
       che vale per ogni presidio futuro: **un presidio la cui copertura è un
       elenco scritto a mano smette di coprire senza diventare rosso**, e va detto

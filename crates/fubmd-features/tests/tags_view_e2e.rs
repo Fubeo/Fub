@@ -10,7 +10,7 @@ use fubmd_abi::traits::ViewInstance;
 use fubmd_abi::ui::{UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_features::{TagPanelView, TAGS_ID, TAGS_VIEW};
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, Workspace};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -34,7 +34,12 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_view_provider(TAGS_ID, Trust::Core, Box::new(TagPanelView::default()));
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        ws.register_core_feature(TAGS_ID, TAGS_ID)
+            .expect("dichiarato");
+        ws.register_view_provider(TAGS_ID, Box::new(TagPanelView::default()))
+            .expect("registrato");
         ws.reindex().expect("reindex");
         ws
     }

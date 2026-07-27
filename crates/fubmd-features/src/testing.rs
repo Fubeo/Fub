@@ -21,8 +21,9 @@ use fubmd_abi::format::DocumentFormat;
 use fubmd_abi::model::{DocId, DocumentModel, Heading, Span};
 use fubmd_abi::session::{PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
-    BacklinkRef, HostApi, IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, TagCount,
-    TrashEntry,
+    BacklinkRef, DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
+    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, TagCount, TrashEntry, VaultRead,
+    VaultStructure, VaultWrite,
 };
 use fubmd_abi::PluginError;
 
@@ -32,25 +33,25 @@ pub struct MemoryHost {
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
     docs: Mutex<BTreeMap<String, String>>,
     now: AtomicU64,
-    /// Il contesto servito da [`HostApi::active_context`], come lo
+    /// Il contesto servito da [`HostEnv::active_context`], come lo
     /// pubblicherebbe la shell.
     context: Mutex<Option<ViewContext>>,
-    /// Backlink finti per [`HostApi::query_index`], seminati per target. Il
+    /// Backlink finti per [`HostQuery::query_index`], seminati per target. Il
     /// doppio non ha un grafo: risponde solo a ciò che gli è stato messo dentro,
     /// ed è quanto basta a provare una view contro il contratto.
     backlinks: Mutex<BTreeMap<String, Vec<BacklinkRef>>>,
-    /// Outline finti per [`HostApi::query_index`], seminati per documento: il
+    /// Outline finti per [`HostQuery::query_index`], seminati per documento: il
     /// doppio non parsa, come non parsa il kernel dietro `IndexQuery::Outline`.
     outlines: Mutex<BTreeMap<String, Vec<Heading>>>,
     /// Aggregazione dei tag finta per [`IndexQuery::Tags`].
     tags: Mutex<Vec<TagCount>>,
-    /// Modelli finti per [`HostApi::read_model`], seminati per documento. Il
+    /// Modelli finti per [`VaultRead::read_model`], seminati per documento. Il
     /// doppio **non parsa** — come non parsa per l'outline — e la ragione è la
     /// stessa: un host in memoria che si portasse dentro un `FormatProvider`
     /// proverebbe la feature contro *quel* provider invece che contro il
     /// contratto. Chi vuole il parse vero ha i test end-to-end col kernel.
     models: Mutex<BTreeMap<String, DocumentModel>>,
-    /// Formati finti per [`HostApi::format_of`], seminati per **estensione**
+    /// Formati finti per [`VaultRead::format_of`], seminati per **estensione**
     /// senza il punto — che è la chiave con cui risponde anche il registro vero.
     formats: Mutex<BTreeMap<String, DocumentFormat>>,
     /// Il cestino: id nel cestino → (voce, sorgente). È in memoria come il
@@ -146,7 +147,7 @@ impl MemoryHost {
         *ctx = Some(context);
     }
 
-    /// Semina i backlink che [`HostApi::query_index`] restituirà per `target`
+    /// Semina i backlink che [`HostQuery::query_index`] restituirà per `target`
     /// (stile builder).
     pub fn con_backlink(self, target: &str, sorgenti: &[&str]) -> Self {
         let refs = sorgenti
@@ -163,7 +164,7 @@ impl MemoryHost {
         self
     }
 
-    /// Semina l'outline che [`HostApi::query_index`] restituirà per `doc`
+    /// Semina l'outline che [`HostQuery::query_index`] restituirà per `doc`
     /// (stile builder).
     pub fn con_outline(self, doc: &str, headings: &[Heading]) -> Self {
         self.outlines
@@ -186,14 +187,14 @@ impl MemoryHost {
         self
     }
 
-    /// Semina il modello che [`HostApi::read_model`] restituirà per `doc`
+    /// Semina il modello che [`VaultRead::read_model`] restituirà per `doc`
     /// (stile builder).
     pub fn con_modello(self, doc: &str, model: DocumentModel) -> Self {
         self.models.lock().unwrap().insert(doc.to_string(), model);
         self
     }
 
-    /// Semina il formato che [`HostApi::format_of`] restituirà per i documenti
+    /// Semina il formato che [`VaultRead::format_of`] restituirà per i documenti
     /// con questa estensione (stile builder).
     pub fn con_formato(self, ext: &str, format: DocumentFormat) -> Self {
         self.formats.lock().unwrap().insert(ext.to_string(), format);
@@ -201,7 +202,7 @@ impl MemoryHost {
     }
 }
 
-impl HostApi for MemoryHost {
+impl VaultRead for MemoryHost {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
         self.docs
             .lock()
@@ -211,31 +212,8 @@ impl HostApi for MemoryHost {
             .ok_or_else(|| PluginError::BadArgs(format!("{id} non esiste")))
     }
 
-    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.docs
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), source.to_string());
-        Ok(())
-    }
-
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
         Ok(Revision::of(&self.read_document(id)?))
-    }
-
-    /// La modifica chirurgica come la fa l'host vero: la base si verifica, gli
-    /// edit si applicano tutti o nessuno, e il documento nuovo è una scrittura
-    /// normale. Un doppio che qui accettasse qualunque base non proverebbe
-    /// niente proprio della cosa che questa firma esiste per rendere
-    /// impossibile.
-    fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
-        let source = self.read_document(id)?;
-        let (next, report) = request.apply_to(&source)?;
-        if report.is_empty() {
-            return Ok(report);
-        }
-        self.write_document(id, &next)?;
-        Ok(report)
     }
 
     /// In ordine di id e a finestra, come il kernel: un doppio che
@@ -287,6 +265,40 @@ impl HostApi for MemoryHost {
             .expect("la sequenza dei candidati è infinita")
     }
 
+    fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
+        let trash = self.trash.lock().unwrap();
+        let mut voci: Vec<TrashEntry> = trash.values().map(|(e, _)| e.clone()).collect();
+        voci.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at).then(a.id.cmp(&b.id)));
+        Ok(voci)
+    }
+}
+
+impl VaultWrite for MemoryHost {
+    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
+        self.docs
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), source.to_string());
+        Ok(())
+    }
+
+    /// La modifica chirurgica come la fa l'host vero: la base si verifica, gli
+    /// edit si applicano tutti o nessuno, e il documento nuovo è una scrittura
+    /// normale. Un doppio che qui accettasse qualunque base non proverebbe
+    /// niente proprio della cosa che questa firma esiste per rendere
+    /// impossibile.
+    fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
+        let source = self.read_document(id)?;
+        let (next, report) = request.apply_to(&source)?;
+        if report.is_empty() {
+            return Ok(report);
+        }
+        self.write_document(id, &next)?;
+        Ok(report)
+    }
+}
+
+impl VaultStructure for MemoryHost {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
         if self.docs.lock().unwrap().contains_key(id.as_str()) {
             return Err(PluginError::BadArgs(format!("{id} esiste già")));
@@ -333,13 +345,6 @@ impl HostApi for MemoryHost {
         Ok(trashed)
     }
 
-    fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
-        let trash = self.trash.lock().unwrap();
-        let mut voci: Vec<TrashEntry> = trash.values().map(|(e, _)| e.clone()).collect();
-        voci.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at).then(a.id.cmp(&b.id)));
-        Ok(voci)
-    }
-
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
         let (voce, source) = self
             .trash
@@ -360,28 +365,11 @@ impl HostApi for MemoryHost {
         trash.clear();
         Ok(quante)
     }
+}
 
-    fn emit(&mut self, _event: Event) {}
-
-    fn spawn_job(&mut self, _spec: JobSpec) -> Result<JobId, PluginError> {
-        Ok(JobId(0))
-    }
-
+impl DataRead for MemoryHost {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
         Ok(self.blobs.lock().unwrap().get(path).cloned())
-    }
-
-    fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
-        self.blobs
-            .lock()
-            .unwrap()
-            .insert(path.to_string(), bytes.to_vec());
-        Ok(())
-    }
-
-    fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
-        self.blobs.lock().unwrap().remove(path);
-        Ok(())
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
@@ -397,11 +385,42 @@ impl HostApi for MemoryHost {
             .cloned()
             .collect())
     }
+}
 
+impl DataWrite for MemoryHost {
+    fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
+        self.blobs
+            .lock()
+            .unwrap()
+            .insert(path.to_string(), bytes.to_vec());
+        Ok(())
+    }
+
+    fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
+        self.blobs.lock().unwrap().remove(path);
+        Ok(())
+    }
+}
+
+impl HostEnv for MemoryHost {
     fn now_unix_millis(&self) -> u64 {
         self.now.load(Ordering::Relaxed)
     }
 
+    fn active_context(&self) -> Option<ViewContext> {
+        self.context.lock().unwrap().clone()
+    }
+}
+
+impl HostEvents for MemoryHost {
+    fn emit(&mut self, _event: Event) {}
+
+    fn spawn_job(&mut self, _spec: JobSpec) -> Result<JobId, PluginError> {
+        Ok(JobId(0))
+    }
+}
+
+impl HostQuery for MemoryHost {
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         match query {
             // Come il kernel: i backlink sono una risposta del grafo, qui
@@ -442,11 +461,9 @@ impl HostApi for MemoryHost {
             )),
         }
     }
+}
 
-    fn active_context(&self) -> Option<ViewContext> {
-        self.context.lock().unwrap().clone()
-    }
-
+impl HostCommands for MemoryHost {
     /// Il doppio non ha un registro dei comandi: comporre comandi si prova
     /// contro il kernel, che è l'unico ad averlo. Rispondere `unknown-command`
     /// è la stessa risposta che darebbe l'host vero per un id inesistente, e
@@ -457,6 +474,23 @@ impl HostApi for MemoryHost {
         _args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
         Err(PluginError::UnknownCommand(command.to_string()))
+    }
+}
+
+impl HostServices for MemoryHost {
+    /// Il doppio non ha un registro dei plugin: chi prova un servizio lo prova
+    /// contro il kernel, che è l'unico ad averlo. `Unserved` è la stessa
+    /// risposta che darebbe l'host vero per un `ns` che nessuno offre, e non è
+    /// un finto successo.
+    fn call_service(
+        &mut self,
+        service: &str,
+        _method: &str,
+        _args: serde_json::Value,
+    ) -> Result<serde_json::Value, PluginError> {
+        Err(PluginError::Unserved(format!(
+            "MemoryHost non ha un registro dei plugin: nessuno offre `{service}`"
+        )))
     }
 }
 

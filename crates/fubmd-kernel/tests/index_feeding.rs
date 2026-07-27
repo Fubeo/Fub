@@ -181,7 +181,19 @@ impl Fixture {
         registry
             .register(Box::new(PlainProvider))
             .expect("nessun conflitto di estensioni");
-        Workspace::new(&self.root, registry)
+        let mut ws = Workspace::new(&self.root, registry);
+        for plugin in [
+            "test.spia",
+            "test.loudmouth",
+            "test.muta",
+            "test.risponde",
+            "test.rivale",
+            "test.altra",
+        ] {
+            ws.register_core_feature(plugin, plugin)
+                .expect("dichiarato");
+        }
+        ws
     }
 }
 
@@ -198,7 +210,7 @@ fn reindex_feeds_every_document_then_declares_the_full_truth() {
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     ws.register_index_provider("test.spia", Box::new(spy))
-        .unwrap();
+        .expect("registrato");
     ws.reindex().unwrap();
 
     let calls = calls_of(&log);
@@ -231,7 +243,7 @@ fn writes_and_removals_reach_the_index() {
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     ws.register_index_provider("test.spia", Box::new(spy))
-        .unwrap();
+        .expect("registrato");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
@@ -256,7 +268,7 @@ fn a_rename_is_remove_plus_add_for_an_index() {
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     ws.register_index_provider("test.spia", Box::new(spy))
-        .unwrap();
+        .expect("registrato");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
@@ -302,8 +314,9 @@ fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     ws.register_index_provider("test.spia", Box::new(spy))
-        .unwrap();
-    ws.register_event_handler("test.loudmouth", Box::new(Loudmouth));
+        .expect("registrato");
+    ws.register_event_handler("test.loudmouth", Box::new(Loudmouth))
+        .expect("registrato");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
@@ -327,7 +340,7 @@ fn a_file_the_vault_ignores_never_reaches_models_events_or_index() {
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     ws.register_index_provider("test.spia", Box::new(spy))
-        .unwrap();
+        .expect("registrato");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
     let events = ws.bus().subscribe();
@@ -365,7 +378,7 @@ fn backlinks_never_reach_the_providers() {
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     ws.register_index_provider("test.spia", Box::new(spy))
-        .unwrap();
+        .expect("registrato");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
@@ -390,9 +403,9 @@ fn a_provider_that_declared_nothing_is_never_asked() {
     let (mute, mute_log) = SpyIndex::new(false);
     let (answering, answering_log) = SpyIndex::new(true);
     ws.register_index_provider("test.muta", Box::new(mute))
-        .unwrap();
+        .expect("registrato");
     ws.register_index_provider("test.risponde", Box::new(answering))
-        .unwrap();
+        .expect("registrato");
     ws.reindex().unwrap();
     mute_log.lock().unwrap().clear();
     answering_log.lock().unwrap().clear();
@@ -427,7 +440,7 @@ fn a_query_nobody_declared_is_unserved() {
     let mut ws = fx.workspace();
     let (mute, _) = SpyIndex::new(false);
     ws.register_index_provider("test.muta", Box::new(mute))
-        .unwrap();
+        .expect("registrato");
     ws.reindex().unwrap();
 
     let r = ws.query_index(IndexQuery::Custom {
@@ -489,7 +502,10 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
     let err = ws
         .register_index_provider("test.rivale", Box::new(Rivale))
         .expect_err("i tag sono già dell'indice del kernel");
-    assert!(matches!(err, fubmd_kernel::IndexError::Route(_)), "{err}");
+    assert!(
+        matches!(err, fubmd_kernel::RegistryError::Route(_)),
+        "{err}"
+    );
     ws.reindex().unwrap();
 
     // E chi c'era risponde ancora: il perdente non si è registrato a metà.
@@ -530,7 +546,7 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     ws.register_index_provider("test.spia", Box::new(spy))
-        .unwrap();
+        .expect("registrato");
 
     // L'attivazione è la PRIMA cosa che accade, e accade alla registrazione:
     // dopo il primo `on_document_indexed` sarebbe già troppo tardi per
