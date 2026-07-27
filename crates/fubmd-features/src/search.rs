@@ -4,7 +4,7 @@
 //! serializzazione — ma dietro lo **stesso trait** che userà un plugin di terzi
 //! a M5. Il kernel non sa che dietro c'è tantivy: vede `dyn IndexProvider`.
 //!
-//! # Le tre proprietà che questo indice deve garantire
+//! # Le quattro proprietà che questo indice deve garantire
 //!
 //! 1. **Non mente.** Il kernel lo alimenta direttamente (non via event bus),
 //!    quindi non può perdere aggiornamenti; ciò che resta fuori dalla sua vista
@@ -17,6 +17,15 @@
 //! 3. **Non si affeziona ai propri dati.** Qualunque dubbio sulla coerenza fra
 //!    indice e manifest si risolve buttando via l'indice e ricostruendolo: la
 //!    verità è il vault, questo è solo stato derivato.
+//! 4. **Non si rimette in fila da sé.** [`IndexProvider::query`] prende `&self`
+//!    e il kernel la serve sotto prestito condiviso del workspace: due ricerche
+//!    possono essere in volo insieme, e questo indice non le serializza. È la
+//!    proprietà che la §8.4 ha trovato **mancante** — c'era un `Mutex` attorno a
+//!    tutto — e che nessuna firma può pretendere: il contratto chiede
+//!    `Send + Sync`, cioè che chiamare `query` da N thread sia *lecito*, non che
+//!    sia *parallelo*. Sta qui perché è una qualità di questo indice, e per la
+//!    stessa ragione ha un presidio suo
+//!    (`due_ricerche_stanno_nell_indice_insieme`).
 //!
 //! # Come questo indice usa l'`HostApi` (e dove non può)
 //!
@@ -35,6 +44,7 @@
 //! per un componente che avvolga un motore analogo.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use camino::Utf8Path;
@@ -185,28 +195,52 @@ fn build_schema() -> (Schema, Fields) {
     )
 }
 
-struct Inner {
+/// Indice full-text del vault.
+///
+/// # Perché non c'è un lock attorno a tutto
+///
+/// Prima c'era: un `Mutex<Inner>` che [`IndexProvider::query`] prendeva a ogni
+/// interrogazione, perché una query può dover **committare** le scritture in
+/// sospeso (chi interroga vede sempre le proprie scritture — è il provider a
+/// garantirlo, vedi il trait). Il risultato era che la lettura che l'utente
+/// scatena più spesso non guadagnava niente dal prestito condiviso del
+/// workspace: il `RwLock` del kernel non attraversa il lock di un provider, e
+/// otto thread facevano le stesse ricerche al secondo di uno
+/// ([decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+///
+/// La garanzia non è stata tolta: è stato tolto il **prezzo di chi non la usa**.
+/// Committare serve solo quando c'è qualcosa da committare, e chi scrive passa
+/// da `&mut self` — cioè, nel kernel, dal prestito esclusivo del workspace.
+/// Quindi:
+///
+/// - il **writer** è l'unica cosa dietro un lock, perché `IndexWriter::commit`
+///   vuole `&mut self` mentre `add_document`/`delete_term` no;
+/// - `dirty` è un atomico, e una query che lo trova falso — il caso normale —
+///   non tocca nessun lock: legge un `bool` e va a interrogare il reader;
+/// - `reader`, `index` e `fields` servono in sola lettura, e tantivy li dà per
+///   condivisi (`searcher()` prende `&self`);
+/// - `fingerprints` e `manifest_at` cambiano **solo** sotto `&mut self`, quindi
+///   sono campi normali: è il compilatore a tenerli fuori dalla concorrenza,
+///   non un lock.
+pub struct SearchIndex {
     index: Index,
-    writer: IndexWriter,
+    /// Il solo lock rimasto, e non sta sul percorso di una query pulita: lo
+    /// prende chi scrive, e chi interroga **solo** se trova `dirty`.
+    writer: Mutex<IndexWriter>,
     reader: IndexReader,
     fields: Fields,
     fingerprints: HashMap<DocId, u64>,
-    /// Ci sono scritture accettate ma non ancora committate?
-    dirty: bool,
-    /// L'opstamp dell'ultimo commit visto da questa istanza.
-    opstamp: u64,
+    /// Ci sono scritture accettate ma non ancora committate? Atomico perché lo
+    /// spegne anche una `query`, che ha solo `&self`.
+    dirty: AtomicBool,
+    /// L'opstamp dell'ultimo commit visto da questa istanza. Atomico per lo
+    /// stesso motivo: lo alza anche il commit deciso da una query.
+    opstamp: AtomicU64,
     /// L'opstamp citato dal manifest attualmente su disco, se ce n'è uno di cui
     /// ci si fida. `None` = manifest assente, di un'altra epoca o da riscrivere.
+    ///
+    /// Non atomico: lo scrivono solo `activate` e `flush`, che hanno `&mut self`.
     manifest_at: Option<u64>,
-}
-
-/// Indice full-text del vault.
-///
-/// `Mutex` perché [`IndexProvider::query`] prende `&self` ma una query può
-/// dover committare le scritture in sospeso (chi interroga vede sempre le
-/// proprie scritture — è il provider a garantirlo, vedi il trait).
-pub struct SearchIndex {
-    inner: Mutex<Inner>,
 }
 
 impl SearchIndex {
@@ -260,23 +294,21 @@ impl SearchIndex {
         let opstamp = index.load_metas().map(|m| m.opstamp).unwrap_or_default();
 
         Ok(SearchIndex {
-            inner: Mutex::new(Inner {
-                index,
-                writer,
-                reader,
-                fields,
-                fingerprints: HashMap::new(),
-                dirty: false,
-                opstamp,
-                manifest_at: None,
-            }),
+            index,
+            writer: Mutex::new(writer),
+            reader,
+            fields,
+            fingerprints: HashMap::new(),
+            dirty: AtomicBool::new(false),
+            opstamp: AtomicU64::new(opstamp),
+            manifest_at: None,
         })
     }
 
     /// Quanti documenti l'indice crede di avere. Utile ai test e alle
     /// diagnostiche; non è una query.
     pub fn len(&self) -> usize {
-        self.inner.lock().expect("mutex").fingerprints.len()
+        self.fingerprints.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -306,30 +338,79 @@ fn io_err(path: &Utf8Path, e: std::io::Error) -> PluginError {
     PluginError::Internal(format!("{path}: {e}"))
 }
 
-impl Inner {
+impl SearchIndex {
     fn term_for(&self, id: &DocId) -> Term {
         Term::from_field_text(self.fields.doc_id, id.as_str())
     }
 
+    /// Il documento come lo vuole tantivy.
+    ///
+    /// Sta fuori da `on_document_indexed` per una ragione sola: comporlo non ha
+    /// niente a che vedere col writer, e non deve tenerne il lock. Chi scrive lo
+    /// prende per due chiamate, non per la costruzione di un record.
+    fn tantivy_doc(&self, doc: &DocumentModel) -> TantivyDocument {
+        let f = self.fields;
+        let mut td = TantivyDocument::new();
+        td.add_text(f.doc_id, doc.id.as_str());
+        td.add_text(f.page_name, doc.id.page_name());
+        td.add_text(f.body, &doc.text);
+        // Un valore per tag (non una stringa unita): col tokenizer raw ogni
+        // valore È un termine, e il termine è la forma canonica — la stessa
+        // chiave con cui il kernel aggrega e il pannello interroga.
+        for tag in &doc.tags {
+            let canonical = canonical_tag(&tag.name);
+            // Ogni antenato è un termine a sé: `#progetto/casa` si lascia
+            // trovare da `progetto` con `descendants`, senza che nessuno debba
+            // valutare un prefisso documento per documento.
+            for ancestor in fubmd_abi::query::tag_ancestors(&canonical) {
+                td.add_text(f.tag_paths, &ancestor);
+            }
+            td.add_text(f.tags, &canonical);
+        }
+        // Una cartella per ogni antenata: cercare in `Progetti` prende anche
+        // `Progetti/sub`, e la radice (`""`) è su tutti.
+        for folder in fubmd_abi::query::folders_of(&doc.id) {
+            td.add_text(f.folder, folder);
+        }
+        td.add_text(f.folder_exact, fubmd_abi::query::folder_of(&doc.id));
+        td
+    }
+
     /// Committa se ci sono scritture in sospeso, e riallinea il reader.
     ///
-    /// Non tocca il manifest: qui non c'è un host, perché il commit può essere
-    /// deciso anche da una `query` (chi interroga vede le proprie scritture) e
-    /// una query non ne ha uno. Il manifest lo riscrive [`Inner::persist`], e
-    /// finché non lo fa quello su disco risulta di un'altra epoca — cioè
-    /// inaffidabile, che è il verso giusto in cui sbagliare.
-    fn commit(&mut self) -> Result<(), PluginError> {
-        if !self.dirty {
+    /// Prende `&self` perché il commit può essere deciso anche da una `query`
+    /// (chi interroga vede le proprie scritture), ed è **l'unico punto** in cui
+    /// una query tocca un lock. Quando non c'è niente in sospeso — cioè sempre,
+    /// tranne subito dopo una scrittura — questa funzione è la lettura di un
+    /// atomico e nient'altro.
+    ///
+    /// Il doppio controllo di `dirty` non è prudenza: due query concorrenti
+    /// possono trovarlo alzato insieme, e la seconda non deve committare a
+    /// vuoto. Le due `Ordering` non decorative sono queste: chi spegne `dirty`
+    /// lo fa in `Release` **dopo** il `reload`, chi lo legge spento lo fa in
+    /// `Acquire` **prima** di chiedere un `searcher` — cioè chi vede «pulito»
+    /// vede anche l'indice ricaricato che ha reso vera quella parola.
+    ///
+    /// Non tocca il manifest: qui non c'è un host, e una query non ne ha uno. Il
+    /// manifest lo riscrive [`SearchIndex::persist`], e finché non lo fa quello
+    /// su disco risulta di un'altra epoca — cioè inaffidabile, che è il verso
+    /// giusto in cui sbagliare.
+    fn commit(&self) -> Result<(), PluginError> {
+        if !self.dirty.load(Ordering::Acquire) {
             return Ok(());
         }
-        self.opstamp = self
-            .writer
+        let mut writer = self.writer.lock().expect("mutex");
+        if !self.dirty.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        let opstamp = writer
             .commit()
             .map_err(|e| PluginError::Internal(format!("commit indice: {e}")))?;
         self.reader
             .reload()
             .map_err(|e| PluginError::Internal(format!("reload indice: {e}")))?;
-        self.dirty = false;
+        self.opstamp.store(opstamp, Ordering::Relaxed);
+        self.dirty.store(false, Ordering::Release);
         Ok(())
     }
 
@@ -346,7 +427,9 @@ impl Inner {
         let Ok(manifest) = serde_json::from_slice::<Manifest>(&raw) else {
             return Ok(());
         };
-        if manifest.schema_version != SCHEMA_VERSION || manifest.opstamp != self.opstamp {
+        if manifest.schema_version != SCHEMA_VERSION
+            || manifest.opstamp != self.opstamp.load(Ordering::Relaxed)
+        {
             return Ok(());
         }
         self.fingerprints = manifest
@@ -366,12 +449,13 @@ impl Inner {
     /// nuovo non si scrive: è ciò che rende osservabile «riaprire un vault
     /// immutato non produce scritture».
     fn persist(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        if self.manifest_at == Some(self.opstamp) {
+        let opstamp = self.opstamp.load(Ordering::Relaxed);
+        if self.manifest_at == Some(opstamp) {
             return Ok(());
         }
         let manifest = Manifest {
             schema_version: SCHEMA_VERSION,
-            opstamp: self.opstamp,
+            opstamp,
             docs: self
                 .fingerprints
                 .iter()
@@ -381,7 +465,7 @@ impl Inner {
         let raw = serde_json::to_vec(&manifest)
             .map_err(|e| PluginError::Internal(format!("manifest: {e}")))?;
         host.data_write(MANIFEST, &raw)?;
-        self.manifest_at = Some(self.opstamp);
+        self.manifest_at = Some(opstamp);
         Ok(())
     }
 
@@ -400,11 +484,13 @@ impl Inner {
     /// **traduce**: la stringa libera sopravvive solo dentro la foglia di testo,
     /// dove è quello che è — dei termini da cercare.
     fn search(
-        &mut self,
+        &self,
         matching: &QueryExpr,
         page: Option<Page>,
     ) -> Result<Paged<DocumentMatch>, PluginError> {
-        // Chi interroga vede le proprie scritture, anche senza flush.
+        // Chi interroga vede le proprie scritture, anche senza flush. È la sola
+        // riga di questa funzione che possa fermarsi ad aspettare qualcuno, e
+        // solo se c'è davvero una scrittura in sospeso (vedi `commit`).
         self.commit()?;
         let f = self.fields;
         let mut text_parts: Vec<Box<dyn Query>> = Vec::new();
@@ -759,92 +845,75 @@ impl IndexProvider for SearchIndex {
     }
 
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        self.inner.get_mut().expect("mutex").load_manifest(host)
+        self.load_manifest(host)
     }
 
     fn on_document_indexed(&mut self, doc: &DocumentModel) {
-        let inner = self.inner.get_mut().expect("mutex");
         let print = fingerprint(doc);
         // Contenuto identico a quello già indicizzato: non c'è niente da fare.
         // È questo salto — non una scorciatoia all'avvio — a rendere rapida la
         // riapertura di un vault non toccato.
-        if inner.fingerprints.get(&doc.id) == Some(&print) {
+        if self.fingerprints.get(&doc.id) == Some(&print) {
             return;
         }
         // tantivy non aggiorna: si cancella il termine e si riscrive.
-        let term = inner.term_for(&doc.id);
-        inner.writer.delete_term(term);
-
-        let f = inner.fields;
-        let mut td = TantivyDocument::new();
-        td.add_text(f.doc_id, doc.id.as_str());
-        td.add_text(f.page_name, doc.id.page_name());
-        td.add_text(f.body, &doc.text);
-        // Un valore per tag (non una stringa unita): col tokenizer raw ogni
-        // valore È un termine, e il termine è la forma canonica — la stessa
-        // chiave con cui il kernel aggrega e il pannello interroga.
-        for tag in &doc.tags {
-            let canonical = canonical_tag(&tag.name);
-            // Ogni antenato è un termine a sé: `#progetto/casa` si lascia
-            // trovare da `progetto` con `descendants`, senza che nessuno debba
-            // valutare un prefisso documento per documento.
-            for ancestor in fubmd_abi::query::tag_ancestors(&canonical) {
-                td.add_text(f.tag_paths, &ancestor);
+        let term = self.term_for(&doc.id);
+        let td = self.tantivy_doc(doc);
+        {
+            let writer = self.writer.lock().expect("mutex");
+            writer.delete_term(term);
+            if writer.add_document(td).is_err() {
+                // Il writer è andato: l'indice non è più affidabile, e mentire è
+                // peggio che perdere il documento. Si dimentica l'impronta, così
+                // il prossimo passaggio riproverà.
+                drop(writer);
+                self.fingerprints.remove(&doc.id);
+                return;
             }
-            td.add_text(f.tags, &canonical);
         }
-        // Una cartella per ogni antenata: cercare in `Progetti` prende anche
-        // `Progetti/sub`, e la radice (`""`) è su tutti.
-        for folder in fubmd_abi::query::folders_of(&doc.id) {
-            td.add_text(f.folder, folder);
-        }
-        td.add_text(f.folder_exact, fubmd_abi::query::folder_of(&doc.id));
-        if inner.writer.add_document(td).is_err() {
-            // Il writer è andato: l'indice non è più affidabile, e mentire è
-            // peggio che perdere il documento. Si dimentica l'impronta, così
-            // il prossimo passaggio riproverà.
-            inner.fingerprints.remove(&doc.id);
-            return;
-        }
-        inner.fingerprints.insert(doc.id.clone(), print);
-        inner.dirty = true;
+        self.fingerprints.insert(doc.id.clone(), print);
+        self.dirty.store(true, Ordering::Release);
     }
 
     fn on_document_removed(&mut self, id: &DocId) {
-        let inner = self.inner.get_mut().expect("mutex");
-        if inner.fingerprints.remove(id).is_none() {
+        if self.fingerprints.remove(id).is_none() {
             return;
         }
-        let term = inner.term_for(id);
-        inner.writer.delete_term(term);
-        inner.dirty = true;
+        let term = self.term_for(id);
+        self.writer.lock().expect("mutex").delete_term(term);
+        self.dirty.store(true, Ordering::Release);
     }
 
     fn reconcile(&mut self, ids: &[DocId]) {
-        let inner = self.inner.get_mut().expect("mutex");
         let alive: std::collections::HashSet<&DocId> = ids.iter().collect();
-        let dead: Vec<DocId> = inner
+        let dead: Vec<DocId> = self
             .fingerprints
             .keys()
             .filter(|id| !alive.contains(id))
             .cloned()
             .collect();
-        for id in dead {
-            let term = inner.term_for(&id);
-            inner.writer.delete_term(term);
-            inner.fingerprints.remove(&id);
-            inner.dirty = true;
+        if dead.is_empty() {
+            return;
         }
+        let terms: Vec<Term> = dead.iter().map(|id| self.term_for(id)).collect();
+        {
+            let writer = self.writer.lock().expect("mutex");
+            for term in terms {
+                writer.delete_term(term);
+            }
+        }
+        for id in &dead {
+            self.fingerprints.remove(id);
+        }
+        self.dirty.store(true, Ordering::Release);
     }
 
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let inner = self.inner.get_mut().expect("mutex");
-        inner.commit()?;
-        inner.persist(host)
+        self.commit()?;
+        self.persist(host)
     }
 
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
-        let mut inner = self.inner.lock().expect("mutex");
         match query {
             IndexQuery::Documents {
                 matching,
@@ -864,7 +933,7 @@ impl IndexProvider for SearchIndex {
                             .to_string(),
                     ));
                 }
-                Ok(IndexResult::Documents(inner.search(&matching, page)?))
+                Ok(IndexResult::Documents(self.search(&matching, page)?))
             }
             // Tutto il resto ha già una fonte di verità nel kernel — grafo,
             // modelli parsati, frontmatter — e non si duplica qui: due verità
@@ -1183,7 +1252,7 @@ mod tests {
         // rapida la riapertura di un vault non toccato.
         idx.on_document_indexed(&doc("a.md", "contenuto stabile"));
         assert!(
-            !idx.inner.get_mut().unwrap().dirty,
+            !idx.dirty.load(Ordering::Relaxed),
             "un documento immutato non sporca l'indice"
         );
         // E nemmeno il manifest si riscrive: non c'è niente di nuovo da dire.
@@ -1415,6 +1484,101 @@ mod tests {
             page: None,
         });
         assert!(matches!(r, Err(PluginError::Unserved(_))));
+    }
+
+    // --- la quarta proprietà: due ricerche insieme (§8.4) ----------------------------
+
+    /// Quante ricerche fa ogni thread in una corsa. Abbastanza da coprire il
+    /// costo di far partire i thread, abbastanza poche da non pesare sulla suite.
+    const RICERCHE: usize = 20;
+
+    /// Un vault abbastanza grande che una query costi più del lock che si sta
+    /// misurando: sotto questa taglia la corsa racconterebbe il costo di
+    /// `thread::spawn`, non quello della ricerca.
+    fn indice_pieno(path: &Utf8Path) -> (SearchIndex, MemoryHost) {
+        let (mut idx, mut host) = fresh(path);
+        for i in 0..200 {
+            let mut corpo = String::new();
+            for s in 0..6 {
+                corpo.push_str(&format!(
+                    "## Sezione {s}\n\nUn paragrafo con parole ricorrenti come \
+                     linguaggio, sistema, memoria, concorrenza e prestazione.\n\n"
+                ));
+            }
+            idx.on_document_indexed(&doc(&format!("Nota {i}.md"), &corpo));
+        }
+        // Committato **prima** di misurare: con scritture in sospeso la prima
+        // query prenderebbe il lock del writer per davvero, e la corsa
+        // misurerebbe quello.
+        idx.flush(&mut host).expect("flush");
+        assert!(!idx.dirty.load(Ordering::Relaxed));
+        (idx, host)
+    }
+
+    /// Quanto ci mettono `thread` thread a fare [`RICERCHE`] ricerche a testa.
+    ///
+    /// Con `in_fila` le si serializza da fuori: è il termine di paragone, ed è
+    /// **il comportamento di prima** — un lock attorno all'intera `query`. Sta
+    /// nello stesso binario e nella stessa corsa, come il banco della 0024, così
+    /// non serve un ramo git per sapere cosa si sta guadagnando.
+    fn corsa(idx: &SearchIndex, thread: usize, in_fila: Option<&Mutex<()>>) -> f64 {
+        let inizio = std::time::Instant::now();
+        std::thread::scope(|s| {
+            for _ in 0..thread {
+                s.spawn(move || {
+                    for _ in 0..RICERCHE {
+                        let _fila = in_fila.map(|m| m.lock().expect("mutex"));
+                        let hits = page_of(idx, text("concorrenza"), Some(Page::first(10)));
+                        assert_eq!(hits.total, 200, "la ricerca deve trovare tutto il vault");
+                    }
+                });
+            }
+        });
+        inizio.elapsed().as_secs_f64()
+    }
+
+    /// **La proprietà che dà il nome alla §8.4**: due ricerche possono essere in
+    /// volo insieme dentro questo indice.
+    ///
+    /// Non si misura contando chi è *dentro* `query` — con un `Mutex` interno ci
+    /// starebbero in due lo stesso, uno dei quali fermo ad aspettare, e il test
+    /// passerebbe proprio nel caso che deve bocciare. Si misura invece il tempo,
+    /// contro un termine di paragone che sta nella stessa corsa: le stesse
+    /// ricerche serializzate da un lock esterno. Se l'indice ha un lock suo, le
+    /// due colonne coincidono e questo test è rosso — che è esattamente ciò che
+    /// succedeva prima della §8.4.
+    ///
+    /// La soglia è larga (un quarto di tempo risparmiato) perché il numero da
+    /// difendere non è «quanto va veloce» ma «scala o no»: col lock interno il
+    /// rapporto è 1,0, senza è vicino al numero di core. In mezzo non c'è niente
+    /// che una macchina lenta possa produrre per caso.
+    #[test]
+    fn due_ricerche_stanno_nell_indice_insieme() {
+        let n = std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .min(4);
+        if n < 2 {
+            eprintln!("un core solo: la sovrapposizione non è misurabile, e il test lo dice");
+            return;
+        }
+
+        let (_g, path) = tmp();
+        let (idx, _host) = indice_pieno(&path);
+
+        // Un giro a vuoto: la prima ricerca paga la cache dei segmenti, e
+        // pagarla dentro una delle due colonne la falserebbe.
+        corsa(&idx, n, None);
+        let in_fila = Mutex::new(());
+        let seriale = corsa(&idx, n, Some(&in_fila));
+        let insieme = corsa(&idx, n, None);
+
+        assert!(
+            insieme < seriale * 0.75,
+            "{n} thread hanno impiegato {insieme:.3}s insieme contro {seriale:.3}s \
+             in fila: la ricerca non scala, cioè c'è di nuovo un lock dentro \
+             l'indice. È la §8.4, e il prestito condiviso del workspace non lo \
+             attraversa."
+        );
     }
 
     #[test]

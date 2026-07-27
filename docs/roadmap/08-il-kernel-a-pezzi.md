@@ -1,6 +1,6 @@
 # 8. Il kernel a pezzi, e chi lo monta
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): l'oggetto-dio è scomposto ([0022](../decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](../decisions/0023-chi-monta-il-kernel.md)) e il lock è a grana fine ([0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)); resta ciò che la misura ha trovato.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): l'oggetto-dio è scomposto ([0022](../decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](../decisions/0023-chi-monta-il-kernel.md)), il lock è a grana fine ([0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e la ricerca non si rimette più in fila da sé ([0026](../decisions/0026-due-query-insieme.md)); qui non resta niente.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -29,68 +29,39 @@ meno importante. Misurando si è visto che sotto il `Mutex` **chi salvava una
 nota poteva aspettare secondi** dietro ai lettori, senza nessun limite scritto da
 nessuna parte. Era una fame, non una lentezza.
 
+**E la quarta voce non l'ha scritta un giro: l'ha scritta quella stessa misura.**
+La §8.4 è nata dal banco della 0024 — di sei letture, cinque andavano da 7 a 25
+volte più veloci e la ricerca stava ferma, perché `SearchIndex::query` si
+dichiarava una lettura e poi prendeva un `Mutex` suo. La chiude la
+[decisione 0026](../decisions/0026-due-query-insieme.md), e le due cose che
+lascia sono queste:
+
+- **Il contratto non dice niente di nuovo, e la scadenza non c'era.** La voce era
+  P0 *condizionale*: scadeva col freeze solo se la risposta fosse stata un campo
+  che chi implementa deve fornire. Non lo è — `Send + Sync` e `&self` dicono già
+  che chiamare `query` da N thread è lecito, e una dichiarazione avrebbe potuto
+  parlare solo di *quanto si aspetta*, cioè di un fatto che nessuno può
+  verificare e su cui nessun chiamante può agire. Restano un paragrafo di prosa
+  nel trait e nel WIT (che non è un cambio di contratto) e un presidio per
+  indice, perché la concorrenza di una query è una qualità di chi la implementa.
+- **E il guadagno che l'utente vede è arrivato adesso.** La 0024 aveva dovuto
+  scrivere che il carico misto dava 1,0× perché una ricerca era il 99,6% del
+  tempo del mix; con l'indice che non si serializza più, lo stesso banco dà
+  **6,8×** a otto thread e 9,1× a sedici. Il numero della 0024 non era sbagliato:
+  era incompleto di una voce.
+
 Resta ciò che la 0022 ha visto e non ha preso: **`CoreIndex` è un oggetto-dio
 annidato** — trenta accessi a `indexes` su trentuno passano da `indexes.core`. È
-lo stesso lavoro un giro più in basso, e non ha ancora un numero.
+lo stesso lavoro un giro più in basso, e non ha ancora un numero. (Non ha invece
+il problema della §8.4: di lock interni non ne ha nessuno, e risponde da ciò che
+ha già in mano.)
 
-E resta ciò che le tre decisioni hanno **spostato senza risolvere**, che è il
+E resta ciò che le quattro decisioni hanno **spostato senza risolvere**, che è il
 modo in cui questa seduta consegna alle altre: il registry dei bundle (§9.3), lo
 spegnimento (§9.5), le sessioni multiple (§9.6) e gli errori tipizzati (§12.2)
 hanno adesso un posto solo dove atterrare — `fubmd-host` — invece di ventidue
-comandi Tauri; e i due punti dell'8.3 che non erano dell'8.3 — il lavoro lungo
-fuori dal lock e la cancellazione — sono andati dove stanno i loro
-impedimenti, cioè §9.1, §9.3 e §10.3.
-
-### 8.4 Il prestito condiviso si ferma al lock di un provider
-
-*ottavo giro · kernel · **P0 condizionale** — scade col freeze **solo se** la risposta al terzo punto è qualcosa che chi implementa deve fornire; trovata misurando la [0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md), e non prevedibile senza*
-
-- [ ] **La lettura che l'utente scatena più spesso è l'unica che non è
-      migliorata.** Il banco della 0024 misura `query_index` a **43 op/s con un
-      thread e 43 con otto**, identici col prestito esclusivo e con quello
-      condiviso. Tutte le altre letture del giro vanno da 7 a 25 volte più
-      veloci; questa sta ferma.
-- [ ] **Il motivo è un lock dentro un provider, e il `RwLock` del workspace non
-      lo attraversa.** `SearchIndex::query` prende `&self` — cioè si dichiara una
-      lettura, e lo è per il kernel — e poi prende il proprio `Mutex<Inner>`
-      (`features/search.rs`), perché `Inner::search` vuole `&mut self`.
-      Lo vuole per una ragione sola: il **commit pigro** che fa vedere a chi
-      interroga le proprie scritture non ancora rese durevoli. Quindi la
-      serializzazione non è un dettaglio implementativo da togliere in silenzio:
-      è una garanzia — «chi interroga vede le proprie scritture» — che va
-      ridecisa, non aggirata.
-- [ ] **La forma della domanda è generale, e la ricerca è solo il primo caso.**
-      Il contratto chiede a un `IndexProvider` di essere `Send + Sync` e dà a
-      `query` un `&self`; non chiede, e non ha modo di chiedere, che due `query`
-      possano davvero girare insieme. Un provider di terzi che metta un `Mutex`
-      dentro un `&self` è conforme e invisibile: il workspace lo presta in
-      condivisione, e lui si rimette in fila da solo. Va deciso se il contratto
-      deve dire qualcosa (e cosa: una dichiarazione? un requisito?) o se resta
-      una qualità di ogni singolo indice.
-- [ ] **E la scelta ha una scadenza, mentre la misura no.** È la forma del §9.2,
-      ed è la ragione per cui questa voce è marcata come quella: per il presidio
-      dell'additività ([0002](../decisions/0002-additivita-del-contratto.md)) un
-      campo **in fondo** a un record è additivo, quindi una dichiarazione
-      aggiunta dopo il freeze non rompe il WIT — rompe **chi implementa**, e solo
-      se nasce senza default. Se la risposta è che un `IndexProvider` deve
-      *dichiarare* se le sue `query` girano insieme, va messa prima del freeze di
-      M4, perché dopo ogni provider di terzi già scritto smette di compilare; se
-      è un requisito in prosa, o se resta una qualità del singolo indice, non
-      scade e la voce torna P2. La priorità sta quindi sulla **scelta**, non sul
-      lavoro: togliere il `Mutex` a `SearchIndex` senza perdere il commit pigro
-      può seguire, ed è P2 di suo.
-- [ ] **Non confondere con il costo.** Che una query costi ~23 ms su 2000 note è
-      un'altra domanda, non di concorrenza: sta accanto alla reindicizzazione
-      (24.1) e alle prestazioni del §17.1, e da quando la
-      [0025](../decisions/0025-la-ricerca-predefinita.md) ha dichiarato che la
-      ricerca è built-in ha un proprietario suo — la
-      [§21.9](21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché),
-      che nota anche l'altra metà del problema: M2 aveva misurato **108 µs** per
-      la stessa query, e due numeri a due ordini di grandezza di distanza vogliono
-      dire che i due banchi misurano cose diverse. Qui il fatto è che quei 23 ms
-      **non si dividono per otto**, ed è per questo che il carico misto della
-      0024 dà 1,0× mentre ognuna delle sue parti dà molto di più.
-
-*Sblocca:* niente di bloccato, ma è ciò che separa il guadagno misurato della
-[0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) dal guadagno che
-l'utente vede con la ricerca aperta.
+comandi Tauri; i due punti dell'8.3 che non erano dell'8.3 — il lavoro lungo
+fuori dal lock e la cancellazione — sono andati dove stanno i loro impedimenti,
+cioè §9.1, §9.3 e §10.3; e *quanto costa* una query — i ~21 ms su duemila note,
+che questa seduta ha fatto dividere per otto senza spiegarli — è della
+[§21.9](21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché).

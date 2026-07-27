@@ -1861,6 +1861,30 @@ pub trait IndexProvider: Send + Sync {
     /// [`QueryEvaluator`](crate::query::QueryEvaluator) — chi non vuole
     /// tradurla nel proprio motore implementa le due foglie e lascia fare a
     /// quella.
+    ///
+    /// # Due `query` possono essere in volo insieme
+    ///
+    /// Questo trait è `Send + Sync` e questo metodo prende `&self`: il kernel
+    /// serve le interrogazioni sotto **prestito condiviso** del workspace, e N
+    /// chiamate concorrenti sulla stessa istanza sono lecite per costruzione.
+    ///
+    /// Lecite, non necessariamente **parallele**. Un provider che metta un lock
+    /// dentro il proprio `&self` è conforme, e si rimette in fila da solo senza
+    /// che nessuno se ne accorga: il `RwLock` del workspace non attraversa il
+    /// lock di un provider. Il contratto non chiede di dichiararlo, e non è una
+    /// dimenticanza — è la [decisione
+    /// 0026](../../../docs/decisions/0026-due-query-insieme.md): una
+    /// dichiarazione non potrebbe cambiare ciò che è *lecito* (lo dice già
+    /// `Send + Sync`), quindi sarebbe un fatto che nessun chiamante può
+    /// verificare e su cui nessuno può agire, e sbagliarla non produrrebbe un
+    /// errore ma solo un'attesa.
+    ///
+    /// Resta quindi un **requisito in prosa**, e vale per chi scrive un indice:
+    /// serializzare è permesso e sconsigliato, e chi vuole sapere se il proprio
+    /// indice scala lo **misura**. Il primo indice nativo lo fa
+    /// (`fubmd_features::SearchIndex`, presidio
+    /// `due_ricerche_stanno_nell_indice_insieme`), e lo fa perché per un anno
+    /// non lo faceva senza che si vedesse.
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 }
 
