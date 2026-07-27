@@ -37,6 +37,7 @@ cronologico di chiusura.
 | [0024](0024-chi-legge-non-aspetta-chi-legge.md) | Il lock: chi legge non aspetta chi legge, e chi salva non aspetta per sempre | §8.3 | 2026-07-27 |
 | [0025](0025-la-ricerca-predefinita.md) | La ricerca predefinita: di classe *omnisearch*, e built-in | [FEATURES](../FEATURES.md) §9.1 → **apre** la [seduta 21](../roadmap/21-la-ricerca-predefinita.md) | 2026-07-27 |
 | [0026](0026-due-query-insieme.md) | Due query insieme: nessuna dichiarazione, una misura | §8.4 | 2026-07-27 |
+| [0027](0027-il-lavoro-lungo-vede-il-vault.md) | Il lavoro lungo vede il vault: un host per chiamata, non uno snapshot | §9.1 | 2026-07-27 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

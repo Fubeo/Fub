@@ -20,10 +20,13 @@ I trait sono **object-safe**, **sincroni** e — per contratto — **brevi**: ne
 `async fn`, nessun metodo generico. L'I/O vive nell'`HostApi` (vedi
 [plugin-boundary.md](plugin-boundary.md)), non nelle firme dei provider —
 `parse`/`render`/`serialize` sono CPU-pure. Il lavoro **lungo** (rete, calcolo
-pesante) non sta dentro nessuna chiamata sincrona: passa dai **job**
-(`HostApi::spawn_job` → `Plugin::run_job` → `Event::JobDone`), eseguiti
-dall'host fuori dal giro sincrono del kernel — è la storia di concorrenza del
-contratto, vedi [plugin-boundary.md](plugin-boundary.md), "Lavoro lungo: i job".
+pesante, il vault camminato per intero) non sta dentro nessuna chiamata
+sincrona: passa dai **job** (`HostApi::spawn_job` → `Plugin::run_job` →
+`Event::JobDone`), eseguiti dall'host fuori dal giro sincrono del kernel e con
+le capacità in mano, prese una chiamata alla volta
+([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)) — è la
+storia di concorrenza del contratto, vedi
+[plugin-boundary.md](plugin-boundary.md), "Lavoro lungo: i job".
 
 Questa regola non è più solo un'asserzione: da **M2** un `wit/fubmd/*.wit` vivente
 la rende verificabile ad ogni commit (vedi [M4](../milestones/M4-wit-hardening.md)
@@ -218,7 +221,8 @@ verbale sta nella [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
 `JobSpec { job, payload }` e `JobId(u64)` sono il varco del **lavoro lungo**:
 `spawn_job` accoda e ritorna subito; l'esito arriva come `Event::JobDone` con lo
 stesso `JobId` (il lanciatore lo conserva e riconosce il proprio). Il corpo del
-job è `Plugin::run_job` (vedi sotto), eseguito fuori dal kernel.
+job è `Plugin::run_job` (vedi sotto), eseguito fuori dal kernel; il `payload`
+porta gli **argomenti** del job, non il suo input — quello se lo legge da sé.
 
 **Le operazioni strutturali le ha chieste il registro dei comandi.** Crea,
 rinomina e cestina restavano cablate nella shell perché il contratto non sapeva
@@ -828,16 +832,20 @@ pub trait Plugin: Send + Sync {
     fn manifest(&self) -> PluginManifest;
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn deactivate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
-    fn run_job(&self, job: &str, payload: serde_json::Value)
+    fn run_job(&self, job: &str, payload: serde_json::Value, host: &mut dyn HostApi)
         -> Result<serde_json::Value, PluginError> { /* default: UnknownJob */ }
 }
 ```
 
 `run_job` è il corpo di un job richiesto via `HostApi::spawn_job`, eseguito
-dall'host **fuori** dal kernel. Deliberatamente **senza `HostApi`**: il job è
-puro rispetto al vault — input nel `payload`, output nel risultato; le
-scritture le fa chi riceve il `JobDone`, dentro il giro sincrono normale.
-Default fornito (`UnknownJob`): la maggior parte dei plugin non ha job.
+dall'host **fuori** dal giro sincrono del kernel e **con** le capacità del
+plugin ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)).
+Non è uno snapshot: il prestito del workspace se lo prende una chiamata alla
+volta, quindi fra due chiamate il vault può cambiare, e contro quel cambio vale
+la guardia di tutti (`apply_edit` con la sua `base`, `Conflict`). Chi esegue non
+tiene niente in mano mentre chiama. Default fornito (`UnknownJob`): la maggior
+parte dei plugin non ha job, e chi non tocca l'`host` scrive il calcolo puro di
+prima.
 
 `PluginManifest { id, name, version, permissions: PluginPermissions }` e il modello
 di permessi in [plugin-boundary.md](plugin-boundary.md).

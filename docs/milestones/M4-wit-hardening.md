@@ -81,8 +81,11 @@ Resta a M4, sulla conformità:
 - Esercita: manifest, permessi (booleani + eventuale `vault_scope`), `activate`/
   `deactivate`, registrazione presso il registry, uso di `HostApi`.
 - Il registry di M4 porta anche il **runner dei job**: un pool di thread che
-  drena `Workspace::take_pending_jobs`, esegue `Plugin::run_job` fuori dal lock
-  e riconsegna con `complete_job` (il giro `spawn_job` → `JobDone` è già
+  drena `Workspace::take_pending_jobs`, esegue `Plugin::run_job` **senza tenere
+  in mano nessun prestito** del workspace — il job ne prende uno per chiamata,
+  con il `JobHost` di `fubmd-host`
+  ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)) — e
+  riconsegna con `complete_job` (il giro `spawn_job` → `JobDone` è già
   implementato e testato nel kernel: `tests/rename_and_events.rs`). Il plugin
   nativo dovrebbe esercitare anche un job end-to-end.
 - Valore: mette alla prova il confine **prima** di aggiungere WASM. Se `HostApi` è

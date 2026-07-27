@@ -205,8 +205,10 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 - [ ] Le due cose vanno insieme e cambiano la **forma dell'apertura**: da
       funzione che ritorna un vault a operazione a fasi (vault utilizzabile →
       indicizzazione in corso → pronto) con errori raccolti per-documento e un
-      esito consultabile. Chi sposta il lavoro fuori dal lock è il §9.1 (la
-      firma) col §9.3 (il runner) — il §8.3 ha messo il `RwLock`
+      esito consultabile. Chi sposta il lavoro fuori dal lock è la firma dei
+      job — chiusa con la
+      [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) — col
+      §9.3 (il runner, che manca) — il §8.3 ha messo il `RwLock`
       ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e
       ha misurato quanto costa tenercelo dentro: `reindex` tiene il workspace in
       esclusiva ~780 ms su 2000 note. Questa voce dice l'altra cosa ancora: che

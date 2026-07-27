@@ -22,14 +22,22 @@ use crate::ui::{UiAction, UiNode, ViewUpdate};
 // ---------------------------------------------------------------------------
 // Job: il varco per il lavoro lungo. Le chiamate dei trait sono sincrone e
 // devono restare brevi (a M5 una deadline le tronca); tutto ciò che è lento —
-// rete, calcolo pesante — passa da qui e gira FUORI dal giro sincrono del
-// kernel. Vedi docs/architecture/plugin-boundary.md, "Lavoro lungo: i job".
+// rete, calcolo pesante, camminare il vault intero — passa da qui e gira FUORI
+// dal giro sincrono del kernel. Vedi docs/architecture/plugin-boundary.md,
+// "Lavoro lungo: i job".
 // ---------------------------------------------------------------------------
 
 /// Richiesta di lavoro in background. `job` è il nome dell'entry point del
-/// plugin ([`Plugin::run_job`]); `payload` porta TUTTO l'input necessario:
-/// dentro al job non c'è `HostApi` (niente vault, niente eventi) — input nel
-/// payload, output nel risultato.
+/// plugin ([`Plugin::run_job`]); `payload` porta i suoi **argomenti** — quale
+/// cartella esportare, quale URL importare — non il suo input.
+///
+/// Fino alla decisione 0027 portava anche l'input, e non per scelta: dentro al
+/// job non c'era `HostApi`, quindi tutto ciò che il job avrebbe letto doveva
+/// leggerlo il **chiamante**, nel giro sincrono, e passarglielo qui dentro. Un
+/// export del vault intero era un `payload` grande quanto il vault, letto in
+/// esclusiva sul workspace: cioè il lavoro lungo fatto esattamente dove il job
+/// serviva a non farlo. Adesso il vault il job se lo legge da sé
+/// ([`Plugin::run_job`]), e qui restano gli argomenti.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct JobSpec {
     pub job: String,
@@ -472,6 +480,12 @@ pub trait HostEvents: Send + Sync {
     /// Chiede l'esecuzione in background di un job ([`Plugin::run_job`]).
     /// Ritorna subito con l'identità del job; l'esito arriverà come
     /// [`Event::JobDone`](crate::Event::JobDone) sul giro sincrono normale.
+    ///
+    /// Chi lancia non deve leggere il vault per conto del job: dalla decisione
+    /// 0027 il job ha l'host, e nel [`JobSpec`] vanno i suoi argomenti. Ciò che
+    /// il lanciatore *non* può dare — e resta la ragione per cui questa è una
+    /// richiesta e non una chiamata — è il **tempo**: il job gira quando l'host
+    /// lo esegue, non adesso.
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
 }
 
@@ -2108,17 +2122,59 @@ pub trait Plugin: Send + Sync {
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn deactivate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     /// Corpo di un job richiesto via [`HostEvents::spawn_job`]: eseguito
-    /// dall'host fuori dal kernel (a M5 su un'istanza separata del
-    /// componente). Deliberatamente **senza** `HostApi`: il job è puro
-    /// rispetto al vault — input nel `payload`, output nel risultato; le
-    /// eventuali scritture le fa chi riceve il `JobDone`, dentro il giro
-    /// sincrono normale. Default: nessun job supportato.
+    /// dall'host **fuori** dal giro sincrono del kernel (a M5 su un'istanza
+    /// separata del componente), con le stesse capacità che il plugin ha
+    /// altrove. Default: nessun job supportato.
+    ///
+    /// Fino alla decisione 0027 questa firma non aveva l'`host`, e il job era
+    /// dichiarato «puro rispetto al vault»: input nel `payload`, output nel
+    /// risultato. Per un calcolo puro era la firma giusta e resta disponibile —
+    /// chi non tocca l'`host` scrive lo stesso job di prima. Per tutto il resto
+    /// era il divieto di esistere: import, export, sync, backup, embedding, OCR,
+    /// reindicizzazione e web clipper camminano il vault, e l'unico posto in cui
+    /// potevano girare era l'unico che non lo vedeva.
+    ///
+    /// # Ciò che questo host è, e ciò che non è
+    ///
+    /// È l'`HostApi` di sempre, con davanti la politica del plugin (§7.3): un
+    /// job di chi non ha `write_vault` riceve gli stessi rifiuti che riceve il
+    /// suo `handle`. **Non** è uno snapshot, e la differenza va detta perché è
+    /// l'unica cosa che si comporta diversamente dal giro sincrono:
+    ///
+    /// - **Il vault si vede per chiamata, non per job.** Ogni capacità prende il
+    ///   prestito del workspace, fa il suo lavoro e lo rilascia. Fra due
+    ///   chiamate il vault può cambiare — l'utente che salva, il watcher che
+    ///   vede una scrittura altrui, un altro job — e chi cammina il vault vedrà
+    ///   qualcosa che non è mai stato vero tutto insieme. È il prezzo di non
+    ///   tenere fermo il vault per la durata di un lavoro lungo, ed è il verso
+    ///   giusto in cui pagarlo: l'alternativa è un'app che si blocca per la
+    ///   durata di un export.
+    /// - **Contro quel cambio la guardia esiste già, ed è la stessa di tutti.**
+    ///   Chi scrive un pezzo passa da [`VaultWrite::apply_edit`] con la `base`
+    ///   che [`VaultRead::document_revision`] gli ha dato, e riceve
+    ///   [`PluginError::Conflict`] se qualcuno è arrivato prima; chi crea passa
+    ///   da [`VaultStructure::create_document`], che rifiuta un path occupato.
+    ///   La decisione 0008 aveva scritto che una base omessa la si omette
+    ///   «proprio nel caso lungo (l'automazione che calcola per un minuto), che
+    ///   è l'unico in cui serve»: questa è quell'automazione.
+    /// - **Un job non è una transazione e non è un lotto.** N scritture sono N
+    ///   scritture, con N eventi, e nessuno le annulla se la terza fallisce. Il
+    ///   lotto (decisione 0011) copre ciò che accade dentro **una** chiamata del
+    ///   kernel; un job dura più di una chiamata per definizione.
+    /// - **Chi esegue non tiene niente in mano.** L'host chiama `run_job` senza
+    ///   nessun prestito del workspace aperto — altrimenti la prima capacità che
+    ///   il job usa aspetterebbe chi l'ha chiamato, per sempre.
+    ///
+    /// L'esito torna comunque come
+    /// [`Event::JobDone`](crate::Event::JobDone) sul giro sincrono: ciò che il
+    /// job restituisce è il suo **risultato**, non più il suo unico effetto.
     fn run_job(
         &self,
         job: &str,
         payload: serde_json::Value,
+        host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
-        let _ = payload;
+        let (_, _) = (payload, host);
         Err(PluginError::UnknownJob(job.to_string()))
     }
 }

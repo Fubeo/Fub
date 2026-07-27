@@ -62,6 +62,8 @@ spegnimento (§9.5), le sessioni multiple (§9.6) e gli errori tipizzati (§12.2
 hanno adesso un posto solo dove atterrare — `fubmd-host` — invece di ventidue
 comandi Tauri; i due punti dell'8.3 che non erano dell'8.3 — il lavoro lungo
 fuori dal lock e la cancellazione — sono andati dove stanno i loro impedimenti,
-cioè §9.1, §9.3 e §10.3; e *quanto costa* una query — i ~21 ms su duemila note,
+cioè §9.1 (chiusa con la
+[decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md): il lavoro
+lungo adesso *può* stare fuori), §9.3 e §10.3; e *quanto costa* una query — i ~21 ms su duemila note,
 che questa seduta ha fatto dividere per otto senza spiegarli — è della
 [§21.9](21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché).

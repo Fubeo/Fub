@@ -27,10 +27,12 @@
 //! `on_action`. La semantica di consegna è contratto dal freeze di M4 in poi
 //! ed è identica a quella che il proxy WASM potrà onorare.
 //!
-//! Il lavoro **lungo** (rete, calcolo pesante) non passa dagli handler: un
-//! provider lo chiede via [`HostEvents::spawn_job`], l'host lo esegue fuori dal
-//! lock ([`Workspace::take_pending_jobs`]) e l'esito rientra come
-//! [`Event::JobDone`] ([`Workspace::complete_job`]).
+//! Il lavoro **lungo** (rete, calcolo pesante, il vault camminato per intero)
+//! non passa dagli handler: un provider lo chiede via [`HostEvents::spawn_job`],
+//! l'host lo esegue fuori dal lock ([`Workspace::take_pending_jobs`]) e l'esito
+//! rientra come [`Event::JobDone`] ([`Workspace::complete_job`]). Le capacità
+//! lì dentro ci sono (decisione 0027), e il prestito del workspace se lo prende
+//! una chiamata alla volta.
 //!
 //! Il canale [`EventBus`] resta il ponte verso i subscriber esterni (frontend,
 //! watcher): riceve gli stessi eventi, senza passare dalla coda.
@@ -57,8 +59,8 @@ use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
-    JobId, JobSpec, Page, Paged, PluginManifest, QueryRoute, ServiceProvider, ViewInstance,
-    ViewProvider, ViewSpec,
+    JobId, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
+    ViewInstance, ViewProvider, ViewSpec,
 };
 use fubmd_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -470,6 +472,26 @@ impl Workspace {
         });
         self.dispatch_pending();
         result
+    }
+
+    /// Presta un [`ReadApi`] intestato a un plugin, per la durata di una
+    /// chiamata — il gemello in sola lettura di
+    /// [`with_host`](Workspace::with_host).
+    ///
+    /// Prende `&self`, ed è tutta la ragione per cui esiste: chi ha il workspace
+    /// dietro un `RwLock` (l'host, decisione 0024) può servire una lettura con
+    /// il prestito **condiviso** invece di quello esclusivo. Passare da
+    /// `with_host` anche per leggere rimetterebbe in fila chiunque stia
+    /// disegnando, e lo farebbe in silenzio: `write()` al posto di `read()`
+    /// compila.
+    ///
+    /// Il primo cliente è il `JobHost` di `fubmd-host` (§9.1): un lavoro lungo
+    /// che cammina il vault fa quasi solo letture, e sono migliaia.
+    pub fn with_read_host<R>(&self, plugin: &str, f: impl FnOnce(&dyn ReadApi) -> R) -> R {
+        // Niente `with_provider_call` e niente drenaggio: da qui non si emette
+        // e non si scrive, quindi non c'è nessuna coda che possa crescere.
+        let host = self.read_host_for(plugin);
+        f(&host)
     }
 
     /// L'host di **lettura** intestato a un plugin, con la stessa politica di
@@ -2416,13 +2438,6 @@ impl Workspace {
 
     // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------
 
-    /// Preleva i job richiesti dai provider via [`HostEvents::spawn_job`].
-    ///
-    /// Il kernel è sincrono e non possiede thread: chi li possiede (l'app, o
-    /// il registry dei plugin a M4/M5) drena questa coda, esegue ogni job
-    /// **fuori** dal lock del workspace (`Plugin::run_job`, a M5 su
-    /// un'istanza separata del componente) e riconsegna l'esito con
-    /// [`Workspace::complete_job`].
     /// Accoda un job richiesto via
     /// [`HostEvents::spawn_job`](fubmd_abi::traits::HostEvents::spawn_job) e ne
     /// restituisce l'identità.
@@ -2434,6 +2449,20 @@ impl Workspace {
         self.dispatch.enqueue_job(spec)
     }
 
+    /// Preleva i job richiesti dai provider via
+    /// [`HostEvents::spawn_job`](fubmd_abi::traits::HostEvents::spawn_job).
+    ///
+    /// Il kernel è sincrono e non possiede thread: chi li possiede (l'app, o
+    /// il registry dei plugin a M4/M5) drena questa coda, esegue ogni job
+    /// **fuori** dal lock del workspace (`Plugin::run_job`, a M5 su
+    /// un'istanza separata del componente) e riconsegna l'esito con
+    /// [`Workspace::complete_job`].
+    ///
+    /// «Fuori dal lock» è la parte che chi drena non può sbagliare senza
+    /// rompere tutto: dalla decisione 0027 il job ha l'host, quindi la prima
+    /// capacità che usa prende il prestito del workspace, e chi lo eseguisse
+    /// tenendolo aspetterebbe sé stesso. Il ponte che serve — un host che prende
+    /// il prestito per **chiamata** — è `JobHost` in `fubmd-host`.
     pub fn take_pending_jobs(&mut self) -> Vec<(JobId, JobSpec)> {
         self.dispatch.take_pending_jobs()
     }

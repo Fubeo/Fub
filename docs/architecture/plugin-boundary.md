@@ -463,8 +463,9 @@ sui conflitti), e che a M5 la sandbox **non deve concedere niente**: la riga
 "Filesystem: nessun accesso diretto" resta vera senza eccezioni.
 
 Il prezzo è dichiarato: sorgente e artefatti stanno in memoria. Un export di
-vault enorme è lavoro lungo, e il lavoro lungo non vede ancora il vault (§9.1
-del piano); ma la firma non lo preclude — uno `stream` al confine è additivo, un
+vault enorme è lavoro lungo, e dalla
+[decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) il lavoro
+lungo il vault lo vede; ma la firma non preclude niente di più — uno `stream` al confine è additivo, un
 `path: string` sarebbe stato una porta aperta da richiudere con una major.
 
 **Il recinto, dove sta.** `KernelHost::read_document`/`write_document` validano
@@ -487,19 +488,29 @@ strada propria — i **job** — invece di fingere che non esista:
    lock (`Workspace::take_pending_jobs`).
 2. **Esecuzione (fuori dal kernel).** Chi possiede i thread — l'app oggi, il
    registry dei plugin a M4, l'host WASM a M5 — drena la coda ed esegue
-   `Plugin::run_job(job, payload)` **fuori** dal lock del workspace. Il job è
-   **puro rispetto al vault**: non ha `HostApi` — tutto l'input viaggia nel
-   `payload` (chi lancia legge ciò che serve *prima*, nel giro sincrono),
-   l'output nel risultato. Niente snapshot da invalidare, niente rientranza.
+   `Plugin::run_job(job, payload, host)` **fuori** dal giro sincrono del kernel,
+   **senza tenere in mano nessun prestito del workspace**. Il job ha le stesse
+   capacità che il plugin ha altrove ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)),
+   con davanti la politica dei suoi permessi, e le usa **una chiamata alla
+   volta**: ogni capacità prende il prestito, fa il suo lavoro e lo rilascia. Il
+   `payload` porta gli **argomenti**, non l'input.
 3. **Rientro (sincrono).** L'esito torna con `Workspace::complete_job` →
    `Event::JobDone { id, job, result }` sul giro sincrono normale. Il
-   lanciatore riconosce il proprio `JobId` e — solo qui — scrive documenti,
-   emette eventi, aggiorna storage.
+   lanciatore riconosce il proprio `JobId` e legge il **risultato** — che non è
+   più il solo effetto che un job poteva avere.
 
 Conseguenze:
 
 - il giro sincrono resta **breve per definizione**: la deadline di M5 può
   essere severa senza uccidere i plugin legittimi;
+- **niente snapshot**: fra due chiamate il vault può cambiare, e chi lo cammina
+  vedrà qualcosa che non è mai stato vero tutto insieme. La guardia contro quel
+  cambio è quella di tutti — `apply_edit` con la sua `base` e `Conflict`
+  ([decisione 0008](../decisions/0008-modifica-chirurgica.md)), `create_document`
+  che rifiuta un path occupato — e un job non è né una transazione né un lotto;
+- **al confine WIT non si vede**, ed è la ragione per cui il divieto di prima non
+  era sostenibile: le capacità sono import del world, non un parametro di
+  `run-job`, quindi «dentro un job non c'è `host-api`» era una regola solo Rust;
 - il permesso `network` si applica **al job** (a M5 l'istanza che esegue
   `run_job` è un componente con le stesse capability del plugin);
 - un job lento o ostile non congela nulla: al peggio il suo `JobDone` porta

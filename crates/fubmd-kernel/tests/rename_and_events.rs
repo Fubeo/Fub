@@ -793,8 +793,13 @@ fn dispatch_budget_stops_infinite_event_loops_loudly() {
 // ---------------------------------------------------------------------------
 
 /// Handler che su `DocumentChanged` chiede un job e su `JobDone` scrive il
-/// risultato nel vault — il pattern canonico: lavoro lungo fuori dal kernel,
-/// scritture solo al rientro, dentro il giro sincrono.
+/// risultato nel vault: il giro `spawn_job` → coda → `complete_job` →
+/// `JobDone`, che è ciò che questo test presidia.
+///
+/// Il job qui è un **calcolo puro** e resta il caso più semplice: dalla
+/// decisione 0027 un job può anche scrivere da sé, e chi non tocca l'host
+/// scrive lo stesso job di prima. Che questo test non sia cambiato di una riga
+/// è la prova di quella metà.
 struct JobRequestingHandler {
     job_id: Arc<Mutex<Option<fubmd_abi::traits::JobId>>>,
 }
@@ -854,7 +859,8 @@ fn jobs_run_outside_the_kernel_and_complete_via_event() {
     assert_eq!(Some(*id), *job_id.lock().unwrap());
 
     // 2. L'host (qui il test; nell'app un thread) esegue il job FUORI dal
-    //    workspace: il job è puro — input nel payload, output nel risultato.
+    //    workspace. Questo job non ha bisogno del vault, quindi non c'è nemmeno
+    //    un `JobHost` da costruirgli: il risultato è una funzione del payload.
     let result = serde_json::Value::String("innesco".to_string());
 
     // 3. L'esito rientra come JobDone sul giro sincrono normale: il handler

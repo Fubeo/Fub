@@ -856,9 +856,16 @@ interface ui {
 }
 
 /// Job: il varco per il lavoro lungo. Le chiamate dei trait sono sincrone e
-/// brevi (a M5 una deadline le tronca); rete e calcolo pesante passano da un
-/// job, eseguito dall'host FUORI dal giro sincrono del kernel. Dentro al job
-/// non c'è host-api: input nel payload, output nel risultato.
+/// brevi (a M5 una deadline le tronca); rete, calcolo pesante e vault camminato
+/// per intero passano da un job, eseguito dall'host FUORI dal giro sincrono del
+/// kernel.
+///
+/// Dentro al job le capacità dell'host CI SONO (decisione 0027), e al confine
+/// non si vede: sono import del world, non un parametro di `run-job`. Ciò che
+/// va detto perché non si vede è la disciplina — il vault si vede PER CHIAMATA
+/// e non per job, quindi fra due chiamate può cambiare; la guardia contro quel
+/// cambio è quella di tutti (`vault-write.apply-edit` con la sua `base`, e
+/// `conflict` come risposta), e un job non è né una transazione né un lotto.
 interface jobs {
     use json.{json};
 
@@ -866,8 +873,11 @@ interface jobs {
     /// nell'evento `job-done`.
     type job-id = u64;
 
-    /// Richiesta di lavoro in background: `job` è il nome dell'entry point
-    /// del plugin (`run-job`), `payload` porta tutto l'input necessario.
+    /// Richiesta di lavoro in background: `job` è il nome dell'entry point del
+    /// plugin (`run-job`), `payload` porta i suoi ARGOMENTI — quale cartella
+    /// esportare, quale URL importare. L'input il job se lo legge da sé: prima
+    /// della 0027 doveva leggerlo il chiamante, nel giro sincrono, e passarlo
+    /// qui dentro.
     record job-spec {
         job: string,
         payload: json,
@@ -2092,8 +2102,12 @@ interface plugin {
     manifest: func() -> plugin-manifest;
     activate: func() -> result<_, plugin-error>;
     deactivate: func() -> result<_, plugin-error>;
-    /// Corpo di un job (vedi `host-api.spawn-job`): eseguito fuori dal
-    /// kernel, senza host-api — input nel payload, output nel risultato.
+    /// Corpo di un job (vedi `host-events.spawn-job`): eseguito fuori dal giro
+    /// sincrono del kernel, CON le capacità dell'host — che qui non compaiono
+    /// perché il world le importa (decisione 0027). La disciplina che vale lì
+    /// dentro sta sull'interfaccia `jobs`; chi esegue chiama questa funzione
+    /// senza tenere niente in mano, o la prima capacità che il job usa
+    /// aspetterebbe il proprio chiamante.
     run-job: func(job: string, payload: json) -> result<json, plugin-error>;
 }
 

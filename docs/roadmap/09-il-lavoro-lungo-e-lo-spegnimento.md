@@ -6,64 +6,24 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): le tre facce del mo
 
 ---
 
-Il quinto giro chiede di decidere insieme §9.2, §9.4 e §9.1 — «tre facce del
+Il quinto giro chiede di decidere insieme §9.2, §9.4 e ~~§9.1~~ — «tre facce del
 momento in cui un componente smette, e oggi nessuna delle tre ha una risposta» —
 e il §9.5 va con il §9.6, perché «chiudere una sessione» e «chiuderle tutte»
 sono lo stesso codice. Il registry (9.3) sta qui perché è chi **possiede** i
 bundle: senza di lui non c'è nessuno che apra e chiuda alcunché, e il runner dei
 job non ha un chiamante in produzione.
 
-La 9.1 va sopra tutte per la ragione del quarto giro: non allarga una capacità,
-ne rende una **inesprimibile**. Finché il lavoro lungo non può leggere il vault,
-i capitoli 17, 18, 22 e 19.4 non hanno un posto dove girare.
+La ~~9.1~~ andava sopra tutte per la ragione del quarto giro — non allargava una
+capacità, ne rendeva una **inesprimibile** — ed è **chiusa** dalla
+[decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md): un job
+riceve l'`HostApi` intero, e lo riceve *per chiamata*. Delle tre facce ne restano
+due, e la terza — un job in volo mentre il provider si spegne — è adesso una
+domanda per il §9.2 e il §9.4 soli.
 
 Il settimo giro ha aggiunto la 9.7, che sta qui perché è la 9.5 sull'altro asse:
 là il watcher assente costa la **durabilità** di un indice, qui costa il fatto
 stesso di sapere che il vault è cambiato — e nessuno chiede mai se il watcher
 sia vivo.
-
-### 9.1 Il lavoro lungo non vede il vault
-
-*ex §1.21 · contratto · **P0** — leva alta: **rende inesprimibile** — sblocca 17, 18, 22, 19.4*
-
-- [ ] **`Plugin::run_job` è deliberatamente senza `HostApi`** — «input nel
-      `payload`, output nel risultato» (`abi/traits.rs`). Per un
-      calcolo puro è la firma giusta. Ma l'unico modo di dare input a un job
-      diventa che il **chiamante** legga il vault dentro il giro sincrono:
-      cioè faccia lì, in esclusiva sul workspace, esattamente il lavoro che il
-      job doveva togliere da lì.
-- [ ] **Il conto di ciò che con questa firma non è esprimibile**: import ed
-      export (17, ~120 voci), embedding e RAG locale (22.1-22.3), sync (18.1),
-      backup e snapshot (18.2), sito statico (19.4), OCR e trascrizione (13.4),
-      health check e diagnostic bundle (24.2), reindicizzazione (24.1). Tutte
-      camminano il vault, e quasi tutte ci scrivono.
-- [ ] **La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) ci sta già costruendo sopra**: `http_fetch` «solo dentro un
-      job». Ma un web clipper (14.2) fa fetch *e* scrive una nota *e* scarica
-      gli allegati: con la firma attuale la sola parte che può stare nel job è
-      la fetch, e il resto torna nel giro sincrono. Idem per «import da URL»
-      (17.1) e per i modelli scaricabili (22.3).
-- [ ] **Le due strade, da scegliere ora**: un `JobHost` in **sola lettura** su
-      uno snapshot coerente del vault, oppure scritture differite al `JobDone`
-      con una semantica dichiarata di cosa succede se il vault è cambiato nel
-      frattempo. La seconda domanda è la stessa della [decisione 0008](../decisions/0008-modifica-chirurgica.md) (l'edit calcolato su
-      una revisione), e va risolta una volta per entrambi. È forma di firma di
-      un trait: dopo il freeze si cambia con una major.
-- [ ] **«Lavoro lungo fuori dal lock» era il secondo punto del §8.3, e viene ad
-      atterrare qui** — perché non dipendeva dal tipo del lock, ma dal fatto che
-      oggi il lavoro lungo *non può* stare fuori. La
-      [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha
-      messo il `RwLock` e ha misurato cosa costa il prestito esclusivo: `reindex`
-      tiene il workspace ~780 ms su 2000 note, e in quel tempo nessuno legge. Non
-      blocca nessuno **solo** perché `Host::open` lo chiama su un `Workspace` che
-      ancora possiede, prima di condividerlo — è l'unica delle cinque operazioni
-      lunghe che il §8.3 elencava a stare già dove le si vuole. Le altre quattro
-      — reindicizzazione a vault aperto (24.1), import, export, embedding — non
-      hanno quella fortuna, e finché la firma è questa non ce l'avranno: il
-      chiamante deve leggere il vault dentro il giro sincrono. Il §8.3 ha reso il
-      costo **visibile e misurabile**; toglierlo è questa voce.
-
-*Sblocca:* 17 per intero, 18.1-18.2, 19.4, 22, 13.4, 14.2, 24.1-24.2, e il
-runner dei job del §9.3, che oggi eseguirebbe soltanto funzioni pure.
 
 ### 9.2 Non c'è un ciclo di vita: si apre e basta
 
@@ -93,9 +53,13 @@ runner dei job del §9.3, che oggi eseguirebbe soltanto funzioni pure.
       valga, ed è la domanda da porsi.
       La metà implementativa — chi chiama, quando, e cosa succede a metà — è il
       §9.5.
-- [ ] Va deciso con il §9.4 (disattivazione a runtime) e il §9.1 (un job in
-      volo mentre il provider si spegne): sono tre facce del momento in cui un
-      componente smette, e oggi nessuna delle tre ha una risposta.
+- [ ] Va deciso con il §9.4 (disattivazione a runtime): sono due facce del
+      momento in cui un componente smette, e oggi nessuna delle due ha una
+      risposta. La terza era il §9.1 — un job in volo mentre il provider si
+      spegne — ed è **chiusa a metà**: la
+      [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) ha
+      dato al job le capacità, quindi il caso non è più ipotetico (un job in volo
+      **scrive**), ma chi lo aspetta o lo ferma resta da decidere qui e nel §9.3.
 
 *Sblocca:* 24.2 (safe mode, crash recovery, plugin isolation), 3.1 (switch fra
 vault senza perdere scritture), 20.1 (lifecycle, enable/disable), 20.2 (hot
@@ -117,9 +81,13 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       esiste il test, **non esiste il chiamante in produzione**: oggi
       `spawn_job` accoda e basta. «Fuori dal lock» adesso vuol dire una cosa
       precisa e non più una figura: il workspace ha un `RwLock`
-      ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)),
-      quindi il runner può tenere il prestito condiviso mentre le view
-      disegnano — e deve prendere quello esclusivo solo per riconsegnare.
+      ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e
+      il job ha un host che il prestito se lo prende da sé, una chiamata alla
+      volta ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)
+      — è `JobHost`, in `fubmd-host`). Il pool quindi **non deve tenere niente in
+      mano** mentre chiama `run_job`: il ponte c'è, e ciò che resta da scrivere è
+      chi lo usa. Prima di quella decisione un runner scritto qui avrebbe
+      eseguito soltanto funzioni pure.
 - [ ] **Cancellazione** — il terzo punto del §8.3, e sta qui perché prima del
       runner non c'è niente da cancellare: `spawn_job` accoda, e una coda non si
       ferma, si svuota. Un job che non si può fermare è un job che blocca la
