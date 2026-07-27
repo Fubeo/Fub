@@ -1,6 +1,6 @@
 # 9. Il lavoro lungo, e come un componente smette
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): lo spegnimento è chiuso per intero — un componente, il vault, le sessioni, e il rilevamento che adesso si può chiedere — e resta **chi possiede i bundle**.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): lo spegnimento è chiuso per intero — un componente, il vault, le sessioni, e il rilevamento che adesso si può chiedere — chi possiede i bundle ha un nome, e resta **chi esegue il lavoro lungo**.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -50,19 +50,33 @@ era la decisione vera della voce. Ne è rimasto fuori un residuo, nominato: la
 `base` che manca a `write_document`, che è il conflitto buffer↔disco del
 [§18.1](18-editor-e-tastiera.md).
 
-Quel che resta della seduta è quindi **chi possiede i bundle** (9.3), e basta.
+**E chi possiede i bundle ha un nome.** Il primo punto della 9.3 lo chiude la
+[decisione 0031](../decisions/0031-chi-possiede-i-bundle.md): un bundle si monta
+in quattro passi sempre uguali — la versione del contratto, la dichiarazione,
+`Plugin::activate`, i provider — e li percorre un registry che sta **dalla parte
+dell'host**, perché l'`HostApi` non ha capacità di registrazione ([0013](../decisions/0013-elenco-delle-capacita.md))
+e un plugin non può registrarsi da sé. Da lì vengono le due cose che non avevano
+un posto: `Plugin::deactivate` ha un chiamante — e arriva **prima** che il kernel
+tolga i provider, che è l'unico momento in cui il suo `host` serve a qualcosa —
+e `abi_compatible`, che era una regola senza applicazione, si applica.
+
+Quel che resta della seduta è quindi **chi esegue il lavoro lungo**: la 9.3 è
+aperta per la sua seconda metà, e basta.
 
 ### 9.3 Registry di plugin/feature e runner dei job
 
-*ex §2.3 · kernel · **P1** — leva alta: è chi userà la disattivazione della [0028](../decisions/0028-come-un-componente-smette.md) e la chiusura della [0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md), ed è il registry su cui poggia il capitolo 7. **È l'ultima voce della seduta.***
+*ex §2.3 · kernel · **P1** — leva alta: è chi usa la disattivazione della [0028](../decisions/0028-come-un-componente-smette.md) e la chiusura della [0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md), ed è il registry su cui poggia il capitolo 7. **È l'ultima voce della seduta, ed è aperta a metà**: il registry lo ha chiuso la [0031](../decisions/0031-chi-possiede-i-bundle.md), restano il runner, la cancellazione e il safe mode — che vanno decisi insieme.*
 
-- [ ] **Una tabella di montaggio unica**: le feature sono cablate a mano in
-      `mount` (`host/mount.rs`). La [decisione 0023](../decisions/0023-chi-monta-il-kernel.md)
-      l'ha tolta da dentro un `#[tauri::command]` e messa in un posto solo — che
-      è la precondizione di questa voce, non il suo rimpiazzo. Serve un registry
-      che, dato un manifest, attivi/disattivi un bundle (`Plugin` + i suoi provider), assegni
-      lo spazio dati, applichi `Trust` e `abi_compatible`. È il pezzo che a M5
-      il caricatore WASM riuserà tale e quale.
+- [x] ~~**Una tabella di montaggio unica**~~ — **chiusa dalla
+      [decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)**: le feature
+      erano cablate a mano in `mount` (`host/mount.rs`), e adesso ogni riga è un
+      `Bundle` che passa dalla stessa strada di un plugin di terzi. Il registry
+      dichiara, verifica `abi_compatible`, chiama `Plugin::activate`, fa
+      registrare i provider e **possiede** il `Box<dyn Plugin>` finché è vivo;
+      lo spazio dati continua ad assegnarlo il kernel (`plugin_data_dir`), e
+      `Trust` lo dice chi monta, non il manifest. È il pezzo che a M5 il
+      caricatore WASM riuserà tale e quale, perché a M5 il caricatore è
+      host-side per costruzione.
 - [ ] **Runner dei job**: un pool che draina `take_pending_jobs`, esegue
       `run_job` fuori dal lock e riconsegna con `complete_job`. Esiste il giro,
       esiste il test, **non esiste il chiamante in produzione**: oggi
@@ -74,7 +88,11 @@ Quel che resta della seduta è quindi **chi possiede i bundle** (9.3), e basta.
       — è `JobHost`, in `fubmd-host`). Il pool quindi **non deve tenere niente in
       mano** mentre chiama `run_job`: il ponte c'è, e ciò che resta da scrivere è
       chi lo usa. Prima di quella decisione un runner scritto qui avrebbe
-      eseguito soltanto funzioni pure.
+      eseguito soltanto funzioni pure. E adesso c'è anche **a chi chiedere il
+      corpo**: la coda dice quale plugin (`PendingJob.plugin`), e chi possiede
+      quel plugin è il registry della
+      [0031](../decisions/0031-chi-possiede-i-bundle.md) — `BundleRegistry::plugin`
+      è l'unica cosa che quella decisione ha lasciato senza chiamante.
 - [ ] **Cancellazione** — il terzo punto del §8.3, e sta qui perché prima del
       runner non c'è niente da cancellare: `spawn_job` accoda, e una coda non si
       ferma, si svuota. Un job che non si può fermare è un job che blocca la

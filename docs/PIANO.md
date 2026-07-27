@@ -115,10 +115,14 @@ La prima delle due divisioni che il piano aveva dichiarato è **fatta**:
 ([decisione 0023](decisions/0023-chi-monta-il-kernel.md)) — quel montaggio ha
 cinque clienti previsti (CLI, API locale, e2e headless, mobile, PWA) e nessuno
 di loro poteva riusare un composition root che viveva dentro un
-`#[tauri::command]`. Il registry dei bundle e il runner dei job, che la voce
-elencava, restano aperti come §9.3: `fubmd-host` è dove atterreranno, ed è dove
-il `JobHost` della [0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md) è già
-atterrato. La
+`#[tauri::command]`. Il **registry dei bundle** che la voce elencava è atterrato
+lì anche lui ([decisione 0031](decisions/0031-chi-possiede-i-bundle.md)): un
+bundle si monta in quattro passi sempre uguali — versione del contratto,
+dichiarazione, `Plugin::activate`, provider — e chi lo monta lo possiede, perché
+l'`HostApi` non ha capacità di registrazione e un plugin non può registrarsi da
+sé. Del §9.3 resta il **runner dei job**, nello stesso crate del `JobHost` della
+[0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), che è ciò che quel pool
+avrà da passare al job. La
 seconda è ancora da fare — **un crate per bundle di feature** (§16.3), perché
 oggi compilare il pannello outline compila un motore di ricerca; va dopo il
 §16.2, o i venti bundle di 21.2 si portano dietro venti copie del banco di

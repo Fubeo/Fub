@@ -47,6 +47,7 @@ use fubmd_kernel::Workspace;
 
 use crate::mount::mount;
 use crate::records::{read_workspace_meta, write_workspace_meta, VaultInfo, WorkspaceMeta};
+use crate::registry::BundleRegistry;
 use crate::watcher::{VaultWatcher, WatcherFactory};
 
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
@@ -83,6 +84,11 @@ pub struct VaultSession {
     /// scrivere, senza nessun limite: 6,4 secondi di attesa misurati per un
     /// salvataggio, contro 0,12 ms adesso. Il banco è `examples/contesa.rs`.
     workspace: Arc<RwLock<Workspace>>,
+    /// **Chi possiede i bundle** di questo vault (§9.3): i `Box<dyn Plugin>`
+    /// montati, in ordine di montaggio. Vive quanto la sessione perché è chi
+    /// chiama `Plugin::deactivate` quando si chiude — il kernel quei box non li
+    /// ha mai avuti.
+    registry: BundleRegistry,
     /// Copia dello store delle versioni, se il versioning è acceso. L'altra
     /// vive dentro l'handler registrato nel workspace: il kernel non sa che il
     /// versioning esiste, ed è l'host a comporre le due metà.
@@ -118,15 +124,24 @@ impl VaultSession {
     /// chiusi — cioè scrivere in un vault che si sta chiudendo, che è la
     /// versione a due thread del problema che questa funzione risolve.
     ///
+    /// La chiusura passa dal registry e non dal workspace, ed è l'unica
+    /// differenza col §9.5: l'ordine resta quello di [`Workspace::close`] —
+    /// l'evento mentre tutti sono vivi, il flush, poi ognuno che smette a
+    /// rovescio — con `Plugin::deactivate` di ogni bundle infilato al proprio
+    /// posto (§9.3).
+    ///
     /// Gli errori tornano a chi chiude: la chiusura non si interrompe per uno di
     /// loro ([`Workspace::close`]), e chi ha un canale per dirli li mostra.
     pub fn close(self) -> Vec<PluginError> {
         let VaultSession {
-            workspace, watcher, ..
+            workspace,
+            watcher,
+            mut registry,
+            ..
         } = self;
         drop(watcher);
         let mut ws = workspace.write().expect("workspace avvelenato");
-        ws.close()
+        registry.close(&mut ws)
     }
 }
 
@@ -208,6 +223,7 @@ impl Host {
 
         let crate::mount::Mounted {
             workspace: mut ws,
+            registry,
             versions,
         } = mount(&root)?;
 
@@ -239,6 +255,7 @@ impl Host {
         let session = VaultSession {
             root: root.clone(),
             workspace,
+            registry,
             versions,
             watcher,
         };
