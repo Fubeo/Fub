@@ -19,8 +19,9 @@ ma ciò che abbiamo già pubblicato.
 
 Nota di rotta: le voci con l'effetto leva più alto sono **[decisione 0009](../decisions/0009-registro-dei-comandi.md) (comandi —
 fatta)**, **[decisione 0016](../decisions/0016-cosa-e-una-view.md) (i nodi di
-input in `UiNode` — fatta)** e **§9.3 (registry — fatto con la
-[decisione 0031](../decisions/0031-chi-possiede-i-bundle.md) — + job)** — insieme
+input in `UiNode` — fatta)** e **§9.3 (registry e job — fatto, con la
+[decisione 0031](../decisions/0031-chi-possiede-i-bundle.md) e la
+[0032](../decisions/0032-il-runner-dei-job.md))** — insieme
 spostano dal "cablato nell'app" al "registrato" praticamente ogni capitolo di
 FEATURES dal 4 al 22, e sono le tre che il freeze di M4 rende definitive. Accanto a quelle, dal
 secondo giro: **[decisione 0007](../decisions/0007-contesto-di-sessione.md) (contesto e selezione)**, senza cui metà dei capitoli 4, 13

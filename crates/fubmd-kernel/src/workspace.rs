@@ -75,7 +75,7 @@ use fubmd_abi::rules::path as rules_path;
 use fubmd_abi::rules::path::{resolution_key, strip_ext};
 
 use crate::bus::EventBus;
-use crate::dispatcher::{Dispatcher, PendingJob, ToDeliver};
+use crate::dispatcher::{Dispatcher, JobBell, PendingJob, ToDeliver};
 use crate::documents::{extension_of, DocumentStore};
 use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
@@ -388,7 +388,14 @@ impl Workspace {
         self.providers.service_stack.push(service.to_string());
         let out = self.with_provider_call(|ws| {
             let mut host = ws.host_for(&owner, InvokeMode::Apply);
-            provider.call(service, method, args, &mut host)
+            // La rete contro i panici sta **attorno alla chiamata del
+            // provider** e a niente di più (§9.3): tutto ciò che viene dopo —
+            // la pila dei servizi da svuotare, il dispatch da drenare — è già
+            // scritto per girare sul ramo dell'errore, e catturare più in alto
+            // lo salterebbe.
+            crate::safety::calling(&owner, &format!("servendo `{service}.{method}`"), || {
+                provider.call(service, method, args, &mut host)
+            })
         });
         self.providers.service_stack.pop();
         self.dispatch_pending();
@@ -2132,7 +2139,11 @@ impl Workspace {
         // `ReadHost` invece di un `KernelHost` non cambia niente per la
         // politica — è la stessa, e non sa cosa ci sia sotto.
         let host = self.read_host_for(&registered.id);
-        let tree = registered.provider.render_view(instance, &host)?;
+        let tree = crate::safety::calling(
+            &registered.id,
+            &format!("disegnando `{}`", instance.view),
+            || registered.provider.render_view(instance, &host),
+        )?;
         guard_ui(registered.trust, &tree)?;
         Ok(tree)
     }
@@ -2163,7 +2174,14 @@ impl Workspace {
             |ws, views| {
                 let registered = &mut views[at];
                 let mut host = ws.host_for(&registered.id, InvokeMode::Apply);
-                registered.provider.on_action(instance, action, &mut host)
+                // Dentro il prestito, non attorno: il `lend` deve **rimettere a
+                // posto** la tabella delle view anche quando il provider pania,
+                // e lo fa perché il panico non arriva fin qui.
+                crate::safety::calling(
+                    &registered.id,
+                    &format!("reagendo a un'azione di `{}`", instance.view),
+                    || registered.provider.on_action(instance, action, &mut host),
+                )
             },
         );
         let update = updated?;
@@ -2372,7 +2390,9 @@ impl Workspace {
         let outcome = if spec.scope.writes && mode == InvokeMode::Apply {
             self.with_provider_call(|ws| {
                 let mut host = ws.host_for(&owner, mode);
-                provider.invoke(command, args, mode, &mut host)
+                crate::safety::calling(&owner, &format!("eseguendo `{command}`"), || {
+                    provider.invoke(command, args, mode, &mut host)
+                })
             })
         } else {
             let why = if mode.is_dry_run() {
@@ -2395,8 +2415,13 @@ impl Workspace {
                 },
                 (ReadOnly { why }, granted),
             );
-            provider.invoke(command, args, mode, &mut host)
+            crate::safety::calling(&owner, &format!("eseguendo `{command}`"), || {
+                provider.invoke(command, args, mode, &mut host)
+            })
         };
+        // Il `pop` è **fuori** dalla rete e prima del `?`: un comando che pania
+        // non deve restare per sempre "in giro" nella pila, o la prossima
+        // invocazione si rifiuterebbe da sé dicendo che sta chiamando sé stesso.
         self.providers.command_stack.pop();
 
         let mut outcome = outcome?;
@@ -2722,8 +2747,12 @@ impl Workspace {
                         let mut host = ws.host_for(id, InvokeMode::Apply);
                         // L'errore di un handler non deve far fallire
                         // l'operazione che ha emesso l'evento: si ignora
-                        // (M4: log/notifica).
-                        let _ = handler.handle(notice, &mut host);
+                        // (M4: log/notifica). E nemmeno il suo **panico**, che
+                        // altrimenti si porterebbe via la scrittura che ha
+                        // emesso l'evento — cioè il vault (§9.3).
+                        crate::safety::notifying(id, "ricevendo un evento", || {
+                            let _ = handler.handle(notice, &mut host);
+                        });
                     });
                 }
             },
@@ -2743,14 +2772,30 @@ impl Workspace {
         self.dispatch.enqueue_job(plugin, spec)
     }
 
+    /// **Il campanello dei job** (§9.3), da dare a chi possiede i thread.
+    ///
+    /// Il kernel non sa che esistono dei thread, e non deve: sa che qualcuno
+    /// potrebbe stare aspettando un job, e presta il pezzetto di stato che serve
+    /// a svegliarlo — esattamente come presta la bandiera del rilevamento a chi
+    /// tiene un watcher ([`watch_flag`](Workspace::watch_flag), decisione 0030).
+    /// Senza, chi drena la coda dovrebbe interrogarla a intervalli, cioè
+    /// scegliere una politica al posto di un fatto.
+    pub fn job_bell(&self) -> Arc<JobBell> {
+        self.dispatch.bell()
+    }
+
     /// Preleva i job richiesti dai provider via
     /// [`HostEvents::spawn_job`](fubmd_abi::traits::HostEvents::spawn_job).
     ///
-    /// Il kernel è sincrono e non possiede thread: chi li possiede (l'app, o
-    /// il registry dei plugin a M4/M5) drena questa coda, esegue ogni job
-    /// **fuori** dal lock del workspace (`Plugin::run_job`, a M5 su
-    /// un'istanza separata del componente) e riconsegna l'esito con
-    /// [`Workspace::complete_job`].
+    /// Il kernel è sincrono e non possiede thread: chi li possiede — il
+    /// `JobRunner` di `fubmd-host`
+    /// ([decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)), a
+    /// M5 l'host WASM — drena questa coda, esegue ogni job **fuori** dal lock
+    /// del workspace (`Plugin::run_job`, a M5 su un'istanza separata del
+    /// componente) e riconsegna l'esito con [`Workspace::complete_job`].
+    ///
+    /// Chi drena non deve chiedere «ce n'è uno?» a intervalli: aspetta il
+    /// [campanello](Workspace::job_bell), che suona quando uno entra.
     ///
     /// «Fuori dal lock» è la parte che chi drena non può sbagliare senza
     /// rompere tutto: dalla decisione 0027 il job ha l'host, quindi la prima

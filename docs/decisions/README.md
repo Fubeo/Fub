@@ -42,18 +42,21 @@ cronologico di chiusura.
 | [0029](0029-chiudere-un-vault-e-chiuderli-tutti.md) | Chiudere un vault, e chiuderli tutti: l'ultimo giro, il punto di consistenza, e la mappa che il backend non aveva | §9.5 + §9.6 | 2026-07-27 |
 | [0030](0030-il-rilevamento-si-puo-chiedere.md) | Il rilevamento si può chiedere: una bandiera sola, e gli esiti che smettono di essere buttati | §9.7 | 2026-07-27 |
 | [0031](0031-chi-possiede-i-bundle.md) | Chi possiede i bundle: una strada sola per montare, e chi smette avvisato mentre è ancora intero | §9.3 (**prima metà**) | 2026-07-27 |
+| [0032](0032-il-runner-dei-job.md) | Il runner dei job: chi esegue, chi lo può fermare, e chi non si porta via il vault | §9.3 (**seconda metà**) — chiude la voce e la [seduta 9](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | 2026-07-27 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
 nel momento in cui la voce di `todo.md` si chiude.
 
-La [0031](0031-chi-possiede-i-bundle.md) è la prima che ne chiude **mezza**: il
-§9.3 chiede quattro cose, e le ultime tre — il runner, la cancellazione,
-l'isolamento — vanno decise insieme o la prima si riscrive per fare posto alle
-altre. La voce resta aperta finché non arriva il secondo verbale, e chi legge il
-primo lo trova scritto in testa. Un verbale per *pezzo di voce* si scrive quando
-il pezzo è una decisione intera, non quando il lavoro è lungo: il criterio è
-sempre quello, un ragionamento che fra sei mesi non si ricostruisce dal diff.
+La [0031](0031-chi-possiede-i-bundle.md) è la prima che ne ha chiusa **mezza**:
+il §9.3 chiedeva quattro cose, e le ultime tre — il runner, la cancellazione,
+l'isolamento — andavano decise insieme o la prima si sarebbe riscritta per fare
+posto alle altre. La voce è rimasta aperta finché non è arrivato il secondo
+verbale, la [0032](0032-il-runner-dei-job.md), che la chiude: le due si leggono
+in fila, e ognuna porta in testa il rimando all'altra. Un verbale per *pezzo di
+voce* si scrive quando il pezzo è una decisione intera, non quando il lavoro è
+lungo: il criterio è sempre quello, un ragionamento che fra sei mesi non si
+ricostruisce dal diff.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio

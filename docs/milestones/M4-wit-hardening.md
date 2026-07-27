@@ -86,15 +86,16 @@ Resta a M4, sulla conformità:
   possiede il `Box<dyn Plugin>` finché è vivo. Le otto feature ufficiali passano
   già di lì, quindi il plugin nativo di M4 non inaugura una strada: ne prende una
   battuta.
-- Il registry porta anche il **runner dei job**, che invece manca: un pool di
-  thread che
-  drena `Workspace::take_pending_jobs`, esegue `Plugin::run_job` **senza tenere
-  in mano nessun prestito** del workspace — il job ne prende uno per chiamata,
-  con il `JobHost` di `fubmd-host`
-  ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)) — e
-  riconsegna con `complete_job` (il giro `spawn_job` → `JobDone` è già
-  implementato e testato nel kernel: `tests/rename_and_events.rs`). Il plugin
-  nativo dovrebbe esercitare anche un job end-to-end.
+- Con il registry c'è anche il **runner dei job**
+  ([decisione 0032](../decisions/0032-il-runner-dei-job.md)): `JobRunner` in
+  `fubmd-host` è un pool di thread per vault che aspetta un campanello del
+  kernel, drena `Workspace::take_pending_jobs`, esegue `Plugin::run_job`
+  **senza tenere in mano nessun prestito** del workspace — il job ne prende uno
+  per chiamata, con il `JobHost` della
+  [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) — e
+  riconsegna con `complete_job`. `Host::cancel_job` annulla: da lì in poi l'host
+  del job rifiuta con `PluginError::Cancelled`. Il plugin nativo dovrebbe
+  esercitare anche un job end-to-end.
 - Valore: mette alla prova il confine **prima** di aggiungere WASM. Se `HostApi` è
   scomoda, si corregge qui (ultimo momento prima del freeze duro per M5).
 - Un anticipo lo ha già dato il **versioning**, che è un `EventHandler` scritto

@@ -29,6 +29,7 @@
 //! che è esattamente ciò che questo componente non deve avere.
 
 use std::collections::VecDeque;
+use std::sync::{Arc, Condvar, Mutex};
 
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{JobId, JobSpec};
@@ -84,6 +85,8 @@ pub struct Dispatcher {
     /// Job richiesti via `HostEvents::spawn_job`, in attesa che l'host li
     /// esegua fuori dal giro sincrono.
     pending_jobs: Vec<PendingJob>,
+    /// Il campanello che avverte chi li esegue. Vedi [`JobBell`].
+    bell: Arc<JobBell>,
     /// Contatore per l'assegnazione dei [`JobId`].
     next_job_id: u64,
     /// Chi ha **chiesto** ciò che il workspace sta facendo adesso: è l'attore
@@ -106,6 +109,7 @@ impl Dispatcher {
             dispatching: false,
             in_provider_call: false,
             pending_jobs: Vec::new(),
+            bell: Arc::new(JobBell::default()),
             next_job_id: 0,
             actor: Actor::User,
             batch: None,
@@ -323,7 +327,15 @@ impl Dispatcher {
             plugin: plugin.to_string(),
             spec,
         });
+        // Il campanello si suona **dopo** che il job è in coda, o chi si sveglia
+        // troverebbe la coda vuota e tornerebbe a dormire su un lavoro che c'è.
+        self.bell.ring();
         id
+    }
+
+    /// Il campanello dei job, da dare a chi possiede i thread.
+    pub(crate) fn bell(&self) -> Arc<JobBell> {
+        Arc::clone(&self.bell)
     }
 
     pub(crate) fn take_pending_jobs(&mut self) -> Vec<PendingJob> {
@@ -363,4 +375,58 @@ pub struct PendingJob {
     /// le cui capacità** il job girerà.
     pub plugin: String,
     pub spec: JobSpec,
+}
+
+/// **Il campanello dei job**: quanti ne sono stati accodati, e chi sta
+/// aspettando che ne arrivi uno.
+///
+/// Il kernel è sincrono e non possiede thread — ma sa che *qualcuno* potrebbe
+/// starne aspettando uno, e questo è tutto ciò che gli serve sapere. È la stessa
+/// mossa della bandiera del rilevamento
+/// ([decisione 0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md)):
+/// il kernel possiede un pezzetto di stato condiviso e lo **presta** a chi fa il
+/// mestiere che lui non fa. L'alternativa era un runner che interroga la coda a
+/// intervalli, cioè una politica (ogni quanto? a che costo di batteria?) al
+/// posto di un fatto.
+///
+/// # Il conto, e perché non è un booleano
+///
+/// `queued` è **quanti job sono stati accodati da sempre**, non «ce n'è uno».
+/// Chi drena legge il conto *prima* di drenare e poi aspetta che cambi: così un
+/// job accodato nella finestra fra il drenaggio e l'attesa non si perde — il
+/// conto è già diverso, e l'attesa torna subito. Con un booleano quella
+/// finestra sarebbe un job fermo fino al successivo, che è il genere di bug che
+/// si vede una volta al mese e non si riproduce mai.
+#[derive(Default)]
+pub struct JobBell {
+    queued: Mutex<u64>,
+    ring: Condvar,
+}
+
+impl JobBell {
+    /// Suona: un job è entrato in coda (o qualcuno vuole svegliare chi aspetta).
+    pub fn ring(&self) {
+        let mut queued = self.queued.lock().expect("campanello avvelenato");
+        *queued += 1;
+        // `notify_all` e non `notify_one`: un drenaggio prende **tutti** i job
+        // in coda, e chi si sveglia potrebbe non trovarne più (un altro thread
+        // lo ha preceduto). Svegliarne uno solo lascerebbe gli altri fermi
+        // davanti a lavoro che c'è.
+        self.ring.notify_all();
+    }
+
+    /// Quante volte ha suonato finora. Si legge **prima** di drenare.
+    pub fn ticket(&self) -> u64 {
+        *self.queued.lock().expect("campanello avvelenato")
+    }
+
+    /// Aspetta che suoni oltre `seen`, e restituisce il conto nuovo.
+    pub fn wait_beyond(&self, seen: u64) -> u64 {
+        let queued = self.queued.lock().expect("campanello avvelenato");
+        let queued = self
+            .ring
+            .wait_while(queued, |q| *q == seen)
+            .expect("campanello avvelenato");
+        *queued
+    }
 }

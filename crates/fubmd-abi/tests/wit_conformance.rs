@@ -2014,6 +2014,7 @@ fn plugin_error_case(e: &PluginError) -> Case {
         PluginError::Internal(s) => case_ty("internal", wit(s)),
         PluginError::Conflict(s) => case_ty("conflict", wit(s)),
         PluginError::Unserved(s) => case_ty("unserved", wit(s)),
+        PluginError::Cancelled(s) => case_ty("cancelled", wit(s)),
     }
 }
 
@@ -2726,6 +2727,7 @@ fn conform(source: &str) -> Result<(), String> {
             plugin_error_case(&PluginError::Internal(String::new())),
             plugin_error_case(&PluginError::Conflict(String::new())),
             plugin_error_case(&PluginError::Unserved(String::new())),
+            plugin_error_case(&PluginError::Cancelled(String::new())),
         ],
     );
 

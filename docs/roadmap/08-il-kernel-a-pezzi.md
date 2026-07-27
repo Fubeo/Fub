@@ -57,16 +57,20 @@ il problema della §8.4: di lock interni non ne ha nessuno, e risponde da ciò c
 ha già in mano.)
 
 E resta ciò che le quattro decisioni hanno **spostato senza risolvere**, che è il
-modo in cui questa seduta consegna alle altre: il registry dei bundle (§9.3), lo
-spegnimento (~~§9.5~~), le sessioni multiple (~~§9.6~~) e gli errori tipizzati
+modo in cui questa seduta consegna alle altre: il registry dei bundle (~~§9.3~~),
+lo spegnimento (~~§9.5~~), le sessioni multiple (~~§9.6~~) e gli errori tipizzati
 (§12.2) hanno adesso un posto solo dove atterrare — `fubmd-host` — invece di
-ventidue comandi Tauri, e le due di mezzo sono **atterrate lì davvero**
+ventidue comandi Tauri, e le prime tre sono **atterrate lì davvero**
 ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md): la
 mappa delle sessioni e la chiusura stanno in `host/session.rs`, e l'app ci mette
-il gancio su `RunEvent::Exit` e tre firme IPC); i due punti dell'8.3 che non erano dell'8.3 — il lavoro lungo
+il gancio su `RunEvent::Exit` e tre firme IPC;
+[0031](../decisions/0031-chi-possiede-i-bundle.md) e
+[0032](../decisions/0032-il-runner-dei-job.md): il registry e il pool dei job
+stanno in `host/registry.rs` e `host/runner.rs`); i due punti dell'8.3 che non erano dell'8.3 — il lavoro lungo
 fuori dal lock e la cancellazione — sono andati dove stanno i loro impedimenti,
 cioè §9.1 (chiusa con la
 [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md): il lavoro
-lungo adesso *può* stare fuori), §9.3 e §10.3; e *quanto costa* una query — i ~21 ms su duemila note,
+lungo adesso *può* stare fuori), ~~§9.3~~ (chiusa: gira, e si annulla) e §10.3
+(dove l'utente lo vedrà e lo fermerà); e *quanto costa* una query — i ~21 ms su duemila note,
 che questa seduta ha fatto dividere per otto senza spiegarli — è della
 [§21.9](21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché).

@@ -276,11 +276,16 @@ pub(crate) fn compose(
             span: *span,
         };
         // Un renderer che fallisce degrada al provider: un'estensione rotta
-        // rende un documento meno ricco, non illeggibile.
-        let rendering = registered
-            .renderer
-            .render(&custom, opts)
-            .unwrap_or(CustomRendering::Fallback);
+        // rende un documento meno ricco, non illeggibile. E un renderer che
+        // **pania** degrada allo stesso modo (§9.3): la politica c'era già, e
+        // un panico è solo il modo più brusco di fallire.
+        let rendering = crate::safety::caught(
+            &registered.spec.id,
+            &format!("disegnando `{custom_kind}`"),
+            fubmd_abi::error::FormatError::Render,
+            || registered.renderer.render(&custom, opts),
+        )
+        .unwrap_or(CustomRendering::Fallback);
         match rendering {
             CustomRendering::Fallback => run.push(block.clone()),
             CustomRendering::Html(html) => {

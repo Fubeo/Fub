@@ -42,7 +42,7 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
 
 ### 10.2 Il ponte degli eventi non ha né freno né raggruppamento
 
-*ex §2.27 · kernel · **P2** — il primo cliente vero sarà il progresso dei job (9.3)*
+*ex §2.27 · kernel · **P2** — il primo cliente vero sarà il progresso dei job, che dalla [0032](../decisions/0032-il-runner-dei-job.md) girano ma non sanno dire a che punto sono*
 
 - [ ] **`EventBus` usa canali `std::mpsc` illimitati** (`kernel/bus.rs`:
       `channel()`, non `sync_channel`) e il ponte verso la webview emette **un
@@ -61,13 +61,15 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
       Resta che il ponte non ha una politica sua — coalescing per tipo, finestra
       temporale, tetto oltre il quale si degrada a "riconcilia tutto", che è poi
       ciò che `Event::Overflow` già significa per gli handler.
-- [ ] Va con §9.3 (il lavoro lungo emette progresso: sarà il canale più caldo
+- [ ] Va con il lavoro lungo, che emetterà progresso: sarà il canale più caldo
       di tutti — il §8.3 lo nominava, ma la
       [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha
-      chiuso il lock e lasciato il lavoro lungo alla firma dei job, adesso chiusa
-      con la [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), e al
-      runner che ancora non c'è) e §10.3 (il centro attività è il suo primo
-      cliente).
+      chiuso il lock e lasciato il lavoro lungo alla firma dei job, chiusa con la
+      [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), e al runner,
+      chiuso con la [0032](../decisions/0032-il-runner-dei-job.md). Adesso i job
+      girano davvero, e ciò che manca è proprio **dire a che punto sono**: un job
+      non ha modo di emettere un progresso e questo ponte non avrebbe come
+      reggerlo. Va quindi con §10.3 (il centro attività è il suo primo cliente).
 
 ### 10.3 Notifiche e attività in background
 
@@ -92,8 +94,11 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
       terza destinazione del secondo punto del §8.3 — «lavoro lungo fuori dal
       lock, con eventi di progresso e un centro attività» — di cui la
       [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) ha
-      chiuso la firma e il §9.3 tiene il runner: qui sta il posto in cui l'utente
-      lo vede e lo ferma. Il §8.3 è chiuso con la
+      chiuso la firma e la [0032](../decisions/0032-il-runner-dei-job.md) il
+      runner: qui sta il posto in cui l'utente lo vede e lo ferma. Fermarlo ha
+      già la sua porta — `Host::cancel_job`, che oggi usano solo i presidi — e
+      quel che manca è **vederlo**: nessun job sa dire «sono al 40%», e il
+      progresso è il §10.2 qui sopra. Il §8.3 è chiuso con la
       [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md), che
       il lavoro lungo non lo ha spostato — ha reso misurabile quanto costa
       tenerlo dov'è.

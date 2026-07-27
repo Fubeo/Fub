@@ -145,7 +145,17 @@ impl DocumentStore {
     fn parse_source(&self, id: &DocId, source: DocumentSource) -> Result<DocumentModel> {
         let provider = self.provider_for(id)?;
         let ctx = ParseContext::obsidian(id.as_str());
-        let mut model = provider.parse(&source, &ctx)?;
+        // Il parse è dentro ogni scrittura, quindi sotto il prestito esclusivo
+        // di chi scrive: un provider di formato che pania su un documento
+        // storto si porterebbe via il vault, e non il documento (§9.3). Con la
+        // rete il panico diventa un `FormatError` come un altro, e la scrittura
+        // fallisce dicendo di chi è la colpa.
+        let mut model = crate::safety::caught(
+            &provider.descriptor().id,
+            &format!("parsando `{id}`"),
+            fubmd_abi::error::FormatError::Parse,
+            || provider.parse(&source, &ctx),
+        )?;
         // L'innesto del §3.1: le regole sintattiche registrate girano DOPO il
         // provider, sul modello. È ciò che le rende innestabili su un provider
         // che non le conosce — vedi `syntax::apply_rules`.

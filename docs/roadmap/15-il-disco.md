@@ -208,7 +208,8 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
       esito consultabile. Chi sposta il lavoro fuori dal lock è la firma dei
       job — chiusa con la
       [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) — col
-      §9.3 (il runner, che manca) — il §8.3 ha messo il `RwLock`
+      §9.3, il runner, chiuso dalla
+      [0032](../decisions/0032-il-runner-dei-job.md) — il §8.3 ha messo il `RwLock`
       ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e
       ha misurato quanto costa tenercelo dentro: `reindex` tiene il workspace in
       esclusiva ~780 ms su 2000 note. Questa voce dice l'altra cosa ancora: che

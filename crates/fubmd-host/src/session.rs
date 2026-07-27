@@ -41,6 +41,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::model::DocId;
+use fubmd_abi::traits::JobId;
 use fubmd_abi::{Notice, PluginError};
 use fubmd_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fubmd_kernel::Workspace;
@@ -48,6 +49,7 @@ use fubmd_kernel::Workspace;
 use crate::mount::mount;
 use crate::records::{read_workspace_meta, write_workspace_meta, VaultInfo, WorkspaceMeta};
 use crate::registry::BundleRegistry;
+use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::watcher::{VaultWatcher, WatcherFactory};
 
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
@@ -84,11 +86,19 @@ pub struct VaultSession {
     /// scrivere, senza nessun limite: 6,4 secondi di attesa misurati per un
     /// salvataggio, contro 0,12 ms adesso. Il banco è `examples/contesa.rs`.
     workspace: Arc<RwLock<Workspace>>,
-    /// **Chi possiede i bundle** di questo vault (§9.3): i `Box<dyn Plugin>`
-    /// montati, in ordine di montaggio. Vive quanto la sessione perché è chi
-    /// chiama `Plugin::deactivate` quando si chiude — il kernel quei box non li
-    /// ha mai avuti.
-    registry: BundleRegistry,
+    /// **Chi possiede i bundle** di questo vault (§9.3): i plugin montati, in
+    /// ordine di montaggio. Vive quanto la sessione perché è chi chiama
+    /// `Plugin::deactivate` quando si chiude — il kernel quei plugin non li ha
+    /// mai avuti.
+    ///
+    /// Condiviso col runner, che da qui prende il **corpo** di un job. Il lock
+    /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
+    /// chiude deve poterci passare mentre un export cammina il vault.
+    registry: Arc<Mutex<BundleRegistry>>,
+    /// **Chi esegue il lavoro lungo** (§9.3): il pool che drena la coda dei job.
+    /// Va fermato **prima** di chiudere, ed è il gemello del watcher — quello
+    /// smette di guardare, questo smette di lavorare.
+    runner: JobRunner,
     /// Copia dello store delle versioni, se il versioning è acceso. L'altra
     /// vive dentro l'handler registrato nel workspace: il kernel non sa che il
     /// versioning esiste, ed è l'host a comporre le due metà.
@@ -105,6 +115,13 @@ impl VaultSession {
 
     pub fn workspace(&self) -> &Arc<RwLock<Workspace>> {
         &self.workspace
+    }
+
+    /// Chi possiede i bundle di questo vault (§9.3): serve a chi ne monta uno a
+    /// mano — un test, e a M5 il caricatore che installa un plugin a vault già
+    /// aperto.
+    pub fn bundles(&self) -> &Arc<Mutex<BundleRegistry>> {
+        &self.registry
     }
 
     pub fn versions(&self) -> Option<&VersionStore> {
@@ -136,12 +153,26 @@ impl VaultSession {
         let VaultSession {
             workspace,
             watcher,
-            mut registry,
+            registry,
+            mut runner,
             ..
         } = self;
+        // 1. smette di guardare, 2. smette di lavorare, 3. si chiude. I primi
+        // due sono la stessa regola letta due volte: nessun altro thread deve
+        // poter entrare nel vault mentre lo si chiude.
         drop(watcher);
+        let mut errors = runner.stop();
+        drop(runner);
         let mut ws = workspace.write().expect("workspace avvelenato");
-        registry.close(&mut ws)
+        errors.extend(registry.lock().expect("registry avvelenato").close(&mut ws));
+        errors
+    }
+
+    /// **Annulla** un job in volo (o che deve ancora partire): alzare la sua
+    /// bandiera è tutto ciò che vuol dire, e alla capacità successiva il suo host
+    /// gli dice di no.
+    pub fn cancel_job(&self, id: JobId) {
+        self.runner.cancel(id);
     }
 }
 
@@ -160,6 +191,9 @@ pub struct Host {
     sessions: Mutex<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
+    /// Quanti thread esegue i job di **ogni** vault aperto (§9.3). Per vault e
+    /// non in totale: i pool non si conoscono, come non si conoscono i vault.
+    job_threads: usize,
 }
 
 impl Default for Host {
@@ -183,6 +217,7 @@ impl Host {
             sessions: Mutex::new(Sessions::default()),
             watcher,
             sink: None,
+            job_threads: DEFAULT_JOB_THREADS,
         }
     }
 
@@ -196,6 +231,23 @@ impl Host {
     pub fn with_sink(mut self, sink: Arc<dyn EventSink>) -> Self {
         self.sink = Some(sink);
         self
+    }
+
+    /// Quanti thread eseguono i job di ogni vault (§9.3). Zero vale uno: un
+    /// vault senza nessuno che drena la coda è ciò che questa decisione esiste
+    /// per non lasciare più in giro.
+    pub fn with_job_threads(mut self, threads: usize) -> Self {
+        self.job_threads = threads.max(1);
+        self
+    }
+
+    /// Annulla un job di un vault (o del corrente).
+    ///
+    /// Non c'è un «job sconosciuto»: annullare un job un istante prima che parta
+    /// deve valere quanto annullarne uno in volo, e una risposta negativa lo
+    /// renderebbe una corsa. L'altro lato — il pulsante — è il §10.3.
+    pub fn cancel_job(&self, vault: Option<&str>, id: JobId) -> Result<(), String> {
+        self.with_session(vault, |s| s.cancel_job(id))
     }
 
     /// Apre un vault — monta, scansiona, accende il ponte, avvia il rilevatore —
@@ -226,6 +278,7 @@ impl Host {
             registry,
             versions,
         } = mount(&root)?;
+        let registry = Arc::new(Mutex::new(registry));
 
         ws.reindex().map_err(|e| e.to_string())?;
 
@@ -252,10 +305,17 @@ impl Host {
         let watching = workspace.read().expect("workspace avvelenato").watch_flag();
         let watcher = self.watcher.start(&root, workspace.clone(), watching)?;
 
+        // Il pool parte **dopo** la scansione e dopo il ponte eventi: i job che
+        // `reindex` ha fatto accodare sono già in coda, e il primo giro del pool
+        // li trova lì — drenare prima di aspettare è ciò che rende il campanello
+        // sufficiente.
+        let runner = JobRunner::start(workspace.clone(), registry.clone(), self.job_threads);
+
         let session = VaultSession {
             root: root.clone(),
             workspace,
             registry,
+            runner,
             versions,
             watcher,
         };
