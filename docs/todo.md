@@ -5,9 +5,13 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sette giri sulla stessa domanda hanno prodotto novantanove voci. Quarantasette
-sono chiuse, e i loro verbali stanno in [docs/decisions/](decisions/README.md);
-le altre cinquantadue sono qui, e questo file è il loro **indice**.
+Sette giri sulla stessa domanda hanno prodotto novantanove voci, e la
+centesima non l'ha trovata un giro: l'ha trovata una **misura**
+(la [§8.4](roadmap/08-il-kernel-a-pezzi.md#84-il-prestito-condiviso-si-ferma-al-lock-di-un-provider),
+dalla [decisione 0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+Quarantotto sono chiuse, e i loro verbali stanno in
+[docs/decisions/](decisions/README.md); le altre cinquantadue sono qui, e questo
+file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -98,7 +102,7 @@ messaggio arrivato.
 | **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | *chi risponde a una query, e chi la instrada?* Deciso con la [0019](decisions/0019-il-canale-dati.md) | — | — |
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | *la stessa regola serve a provider, shell e a M5 a un guest WASM.* Deciso con la [0020](decisions/0020-le-regole-in-un-posto-solo.md) | — | — |
 | **7** | [Il confine](roadmap/07-il-confine.md) | *la disciplina del confine, da chi lo attraversa e da chi lo presta.* Deciso con la [0021](decisions/0021-il-confine.md) | — | — |
-| **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio è scomposto ([0022](decisions/0022-il-kernel-a-pezzi.md)) e il montaggio è un crate ([0023](decisions/0023-chi-monta-il-kernel.md)); resta il lock | 1 | — |
+| **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio è scomposto ([0022](decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](decisions/0023-chi-monta-il-kernel.md)) e il lock è a grana fine ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)); resta ciò che la misura ha trovato | 1 | — |
 | **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | le tre facce del momento in cui un componente smette | 7 | 2 |
 | **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | lo stesso canale a tre distanze: chi si abbona, cosa passa, chi lo mostra | 3 | 1 |
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano | 3 | — |
@@ -162,7 +166,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
-| **§8.3** | [Concorrenza](roadmap/08-il-kernel-a-pezzi.md#83-concorrenza) | 8. Il kernel a pezzi, e chi lo monta | kernel | **P2** |
+| **§8.4** | [Il prestito condiviso si ferma al lock di un provider](roadmap/08-il-kernel-a-pezzi.md#84-il-prestito-condiviso-si-ferma-al-lock-di-un-provider) | 8. Il kernel a pezzi, e chi lo monta | kernel | **P2** |
 | **§9.1** | [Il lavoro lungo non vede il vault](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#91-il-lavoro-lungo-non-vede-il-vault) | 9. Il lavoro lungo, e come un componente smette | contratto | **P0** |
 | **§9.2** | [Non c'è un ciclo di vita: si apre e basta](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#92-non-cè-un-ciclo-di-vita-si-apre-e-basta) | 9. Il lavoro lungo, e come un componente smette | contratto | **P0** |
 | **§9.3** | [Registry di plugin/feature e runner dei job](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#93-registry-di-pluginfeature-e-runner-dei-job) | 9. Il lavoro lungo, e come un componente smette | kernel | **P1** |

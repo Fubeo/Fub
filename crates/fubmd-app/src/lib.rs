@@ -75,21 +75,21 @@ fn initial_vault() -> Option<String> {
 #[tauri::command]
 fn list_documents(host: State<Host>) -> Result<Vec<String>, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     Ok(ws.documents().into_iter().map(|d| d.0).collect())
 }
 
 #[tauri::command]
 fn read_document(host: State<Host>, id: String) -> Result<String, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     ws.read_source(&doc_id(&id)?).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn write_document(host: State<Host>, id: String, source: String) -> Result<(), String> {
     let ws = host.workspace()?;
-    let mut ws = ws.lock().unwrap();
+    let mut ws = ws.write().unwrap();
     ws.write_document(&doc_id(&id)?, &source)
         .map_err(|e| e.to_string())
 }
@@ -112,7 +112,7 @@ fn write_document(host: State<Host>, id: String, source: String) -> Result<(), S
 #[tauri::command]
 fn list_trash(host: State<Host>) -> Result<Vec<TrashEntry>, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     ws.list_trash().map_err(|e| e.to_string())
 }
 
@@ -126,7 +126,7 @@ fn list_trash(host: State<Host>) -> Result<Vec<TrashEntry>, String> {
 #[tauri::command]
 fn propose_free_name(host: State<Host>, id: String) -> Result<String, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     Ok(ws.free_name(&DocId::new(id)).0)
 }
 
@@ -139,7 +139,7 @@ fn render_embed(
     heading: Option<String>,
 ) -> Result<EmbedContent, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     let (doc_id, content) = ws
         .render_embed(&page, heading.as_deref())
         .map_err(|e| e.to_string())?;
@@ -152,7 +152,7 @@ fn render_embed(
 #[tauri::command]
 fn render_preview(host: State<Host>, id: String) -> Result<RenderedDocument, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     ws.render_preview(&DocId::new(id))
         .map_err(|e| e.to_string())
 }
@@ -180,7 +180,7 @@ fn set_active_context(
     context: Option<ViewContext>,
 ) -> Result<Vec<String>, String> {
     let ws = host.workspace()?;
-    let mut ws = ws.lock().unwrap();
+    let mut ws = ws.write().unwrap();
     Ok(ws.set_active_context(context))
 }
 
@@ -192,7 +192,7 @@ fn set_active_context(
 #[tauri::command]
 fn list_views(host: State<Host>) -> Result<Vec<ViewSpec>, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     Ok(ws.views())
 }
 
@@ -212,7 +212,7 @@ fn render_view(
     params: Option<serde_json::Value>,
 ) -> Result<UiNode, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     ws.render_view(&istanza(view, instance, params))
         .map_err(|e| e.to_string())
 }
@@ -237,7 +237,7 @@ fn view_action(
     fields: Option<Vec<FieldValue>>,
 ) -> Result<ViewUpdate, String> {
     let ws = host.workspace()?;
-    let mut ws = ws.lock().unwrap();
+    let mut ws = ws.write().unwrap();
     ws.view_action(
         &istanza(view, instance, params),
         UiAction {
@@ -278,7 +278,7 @@ fn istanza(
 #[tauri::command]
 fn list_commands(host: State<Host>) -> Result<Vec<CommandSpec>, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     Ok(ws.commands())
 }
 
@@ -304,7 +304,7 @@ fn invoke_command(
     mode: Option<InvokeMode>,
 ) -> Result<CommandOutcome, String> {
     let ws = host.workspace()?;
-    let mut ws = ws.lock().unwrap();
+    let mut ws = ws.write().unwrap();
     ws.invoke_command(
         &command,
         args.unwrap_or(serde_json::Value::Null),
@@ -330,7 +330,7 @@ fn invoke_command(
 #[tauri::command]
 fn query_index(host: State<Host>, query: IndexQuery) -> Result<IndexResult, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     ws.query_index(query).map_err(|e| e.to_string())
 }
 
@@ -372,7 +372,7 @@ fn write_workspace_meta(host: State<Host>, meta: WorkspaceMeta) -> Result<(), St
 #[tauri::command]
 fn resolve_link(host: State<Host>, page: String) -> Result<Option<String>, String> {
     let ws = host.workspace()?;
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     Ok(ws.resolve_link(&page).map(|d| d.0))
 }
 

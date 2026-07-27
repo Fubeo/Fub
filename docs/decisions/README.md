@@ -34,6 +34,7 @@ cronologico di chiusura.
 | [0021](0021-il-confine.md) | Il confine: quante volte si scrive la disciplina | §7.1–§7.6 | 2026-07-27 |
 | [0022](0022-il-kernel-a-pezzi.md) | Il kernel a pezzi: cinque proprietari invece di ventiquattro campi | §8.1 | 2026-07-27 |
 | [0023](0023-chi-monta-il-kernel.md) | Chi monta il kernel: un crate `fubmd-host`, e l'app ridotta a colla | §8.2 | 2026-07-27 |
+| [0024](0024-chi-legge-non-aspetta-chi-legge.md) | Il lock: chi legge non aspetta chi legge, e chi salva non aspetta per sempre | §8.3 | 2026-07-27 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

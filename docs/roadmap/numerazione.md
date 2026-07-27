@@ -61,6 +61,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.25 · §7.6 | [0021 — Il confine](../decisions/0021-il-confine.md) |
 | §2.19 · §8.1 | [0022 — Il kernel a pezzi](../decisions/0022-il-kernel-a-pezzi.md) |
 | §2.15 · §8.2 | [0023 — Chi monta il kernel](../decisions/0023-chi-monta-il-kernel.md) |
+| §2.4 · §8.3 | [0024 — Il lock a grana fine](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -94,7 +95,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.1 | **§15.1** | Astrazione sullo storage |
 | §2.2 | **§14.1** | Il vault non è solo documenti |
 | §2.3 | **§9.3** | Registry di plugin/feature e runner dei job |
-| §2.4 | **§8.3** | Concorrenza |
 | §2.5 | **§15.2** | Durabilità e recovery |
 | §2.6 | **§15.5** | Politica dei path e del testo, in un modulo solo |
 | §2.7 | **§9.6** | Sessioni multiple |

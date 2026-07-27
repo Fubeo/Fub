@@ -17,7 +17,7 @@
 //! il posto dove quella risposta andrà a stare — [`VaultWatcher::is_watching`]
 //! oggi risponde per costruzione, e nessuno gliela chiede.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use camino::Utf8Path;
 use fubmd_kernel::Workspace;
@@ -47,7 +47,7 @@ pub trait WatcherFactory: Send + Sync {
     fn start(
         &self,
         root: &Utf8Path,
-        workspace: Arc<Mutex<Workspace>>,
+        workspace: Arc<RwLock<Workspace>>,
     ) -> Result<Box<dyn VaultWatcher>, String>;
 }
 
@@ -71,7 +71,7 @@ impl WatcherFactory for NoWatcher {
     fn start(
         &self,
         _root: &Utf8Path,
-        _workspace: Arc<Mutex<Workspace>>,
+        _workspace: Arc<RwLock<Workspace>>,
     ) -> Result<Box<dyn VaultWatcher>, String> {
         Ok(Box::new(NoWatcher))
     }
@@ -82,7 +82,7 @@ pub use notify_watcher::NotifyWatcher;
 
 #[cfg(feature = "notify-watcher")]
 mod notify_watcher {
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, RwLock};
     use std::time::Duration;
 
     use camino::{Utf8Path, Utf8PathBuf};
@@ -113,14 +113,14 @@ mod notify_watcher {
         fn start(
             &self,
             root: &Utf8Path,
-            workspace: Arc<Mutex<Workspace>>,
+            workspace: Arc<RwLock<Workspace>>,
         ) -> Result<Box<dyn VaultWatcher>, String> {
             let mut debouncer = new_debouncer(
                 Duration::from_millis(300),
                 None,
                 move |result: DebounceEventResult| match result {
                     Ok(events) => {
-                        let mut ws = workspace.lock().unwrap();
+                        let mut ws = workspace.write().unwrap();
                         for event in events {
                             // Un rename accoppiato (`paths = [from, to]`) è una
                             // migrazione d'identità, non remove+add: la storia del
