@@ -107,7 +107,7 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
     // Il canale dati: l'indice di ricerca è stato registrato PRIMA di
     // `reindex`, quindi ha già visto il vault.
     let hits = {
-        let ws = ws.lock().unwrap();
+        let ws = ws.read().unwrap();
         match ws.query_index(IndexQuery::Documents {
             matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("linguaggio"))),
             sort: None,
@@ -124,7 +124,7 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
     // Il giro delle view, sullo stesso workspace: il pannello backlink vede il
     // wikilink di Cucina.md perché il grafo è stato costruito dal `reindex` del
     // montaggio.
-    let mut ws = ws.lock().unwrap();
+    let mut ws = ws.write().unwrap();
     ws.set_active_context(None);
     ws.set_active_document(Some(DocId::new("Rust.md")));
     let tree = ws
@@ -159,7 +159,7 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
 
     {
         let ws = host.workspace().unwrap();
-        let mut ws = ws.lock().unwrap();
+        let mut ws = ws.write().unwrap();
         ws.write_document(&id, "# Nota\n\ndopo\n").expect("scrive");
     }
 
@@ -173,7 +173,7 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     assert_eq!(host.read_version(&id, ts).unwrap(), "# Nota\n\nprima\n");
     host.restore_version(&id, ts).expect("ripristina");
     let ws = host.workspace().unwrap();
-    let ws = ws.lock().unwrap();
+    let ws = ws.read().unwrap();
     assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
 }
 
@@ -206,7 +206,7 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
 
     {
         let ws = host.workspace().unwrap();
-        let mut ws = ws.lock().unwrap();
+        let mut ws = ws.write().unwrap();
         ws.write_document(&DocId::new("Nota.md"), "# Nota\n\nx\n")
             .expect("scrive");
     }

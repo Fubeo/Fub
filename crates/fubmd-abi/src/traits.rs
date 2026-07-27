@@ -983,8 +983,9 @@ impl ViewSpec {
 /// Ora il percorso di **scrittura** (`on_action`) può mutare il provider e
 /// quello di **lettura** (`render_view`) no. Non è un compromesso: è la stessa
 /// divisione che regge `index.query` e il §8.3 — N view che si ridisegnano non
-/// si aspettano a vicenda, e il giorno che il render girasse in parallelo la
-/// firma lo permette già. Il kernel estrae il provider dal workspace per la
+/// si aspettano a vicenda, e dalla
+/// [decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+/// il render gira davvero in parallelo: era la firma a permetterlo. Il kernel estrae il provider dal workspace per la
 /// durata di `on_action`, come faceva prima per prestargli l'host in scrittura;
 /// il costo di `&mut self` è quindi zero, ed è per questo che la terza strada —
 /// l'interior mutability dichiarata a contratto — non serve più a nessuno.

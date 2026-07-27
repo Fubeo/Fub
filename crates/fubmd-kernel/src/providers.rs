@@ -183,9 +183,10 @@ pub(crate) struct RegisteredCommand {
 /// **senza svegliare nessuno**: chi possiede un id, cosa ha dichiarato, di chi
 /// ci si fida.
 ///
-/// La distinzione non è estetica. È esattamente la linea lungo cui il `RwLock`
-/// del §8.3 potrà diventare a grana fine: le risposte qui sotto sono letture
-/// pure e non toccano né il vault né gli indici; le chiamate no, e non
+/// La distinzione non è estetica. È esattamente la linea lungo cui il §8.3 ha
+/// messo il `RwLock` ([decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)):
+/// le risposte qui sotto sono letture pure, non toccano né il vault né gli
+/// indici, e girano sotto prestito **condiviso**; le chiamate no, e non
 /// potranno mai esserlo.
 pub(crate) struct ProviderRegistry {
     /// Handler registrati, ognuno col proprio id (feature ufficiali; a M4/M5 i

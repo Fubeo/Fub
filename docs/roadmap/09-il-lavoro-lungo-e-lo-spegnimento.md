@@ -48,6 +48,19 @@ sia vivo.
       frattempo. La seconda domanda è la stessa della [decisione 0008](../decisions/0008-modifica-chirurgica.md) (l'edit calcolato su
       una revisione), e va risolta una volta per entrambi. È forma di firma di
       un trait: dopo il freeze si cambia con una major.
+- [ ] **«Lavoro lungo fuori dal lock» era il secondo punto del §8.3, e viene ad
+      atterrare qui** — perché non dipendeva dal tipo del lock, ma dal fatto che
+      oggi il lavoro lungo *non può* stare fuori. La
+      [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha
+      messo il `RwLock` e ha misurato cosa costa il prestito esclusivo: `reindex`
+      tiene il workspace ~780 ms su 2000 note, e in quel tempo nessuno legge. Non
+      blocca nessuno **solo** perché `Host::open` lo chiama su un `Workspace` che
+      ancora possiede, prima di condividerlo — è l'unica delle cinque operazioni
+      lunghe che il §8.3 elencava a stare già dove le si vuole. Le altre quattro
+      — reindicizzazione a vault aperto (24.1), import, export, embedding — non
+      hanno quella fortuna, e finché la firma è questa non ce l'avranno: il
+      chiamante deve leggere il vault dentro il giro sincrono. Il §8.3 ha reso il
+      costo **visibile e misurabile**; toglierlo è questa voce.
 
 *Sblocca:* 17 per intero, 18.1-18.2, 19.4, 22, 13.4, 14.2, 24.1-24.2, e il
 runner dei job del §9.3, che oggi eseguirebbe soltanto funzioni pure.
@@ -102,7 +115,17 @@ reload), 26.2-26.3 (dove il watcher non c'è).
 - [ ] **Runner dei job**: un pool che draina `take_pending_jobs`, esegue
       `run_job` fuori dal lock e riconsegna con `complete_job`. Esiste il giro,
       esiste il test, **non esiste il chiamante in produzione**: oggi
-      `spawn_job` accoda e basta.
+      `spawn_job` accoda e basta. «Fuori dal lock» adesso vuol dire una cosa
+      precisa e non più una figura: il workspace ha un `RwLock`
+      ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)),
+      quindi il runner può tenere il prestito condiviso mentre le view
+      disegnano — e deve prendere quello esclusivo solo per riconsegnare.
+- [ ] **Cancellazione** — il terzo punto del §8.3, e sta qui perché prima del
+      runner non c'è niente da cancellare: `spawn_job` accoda, e una coda non si
+      ferma, si svuota. Un job che non si può fermare è un job che blocca la
+      chiusura dell'app, il che lo lega al §9.5 (chi chiude aspetta chi?) e al
+      §10.3 (dove l'utente vede il pulsante). Va disegnata **con** il runner, non
+      dopo: un pool che non nasce cancellabile si riscrive per diventarlo.
 - [ ] ~~**Namespace per-plugin sullo `storage_*`**~~ — **decaduta**: lo
       `storage_*` volatile è stato **ritirato** dal contratto dalla
       [decisione 0013](../decisions/0013-elenco-delle-capacita.md), quindi non c'è

@@ -15,10 +15,16 @@ per nome altrove nel repo e vale la pena poter rispondere «dove è finito quel
 punto?»; il giorno in cui le sedute che le assorbono si chiudono, questa si
 chiude con loro e non lascia niente indietro.
 
-- [ ] **Mutex unico sul `Workspace`** → assorbito dal §8.3 (misurare prima). La
-      [decisione 0022](../decisions/0022-il-kernel-a-pezzi.md) ha tolto il
-      motivo per cui il lock non *poteva* essere a grana fine — cinque
-      proprietari invece di ventiquattro campi — e ha lasciato il lock dov'era.
+- [x] ~~**Mutex unico sul `Workspace`**~~ → assorbito dal §8.3, e **chiuso**
+      con la [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md).
+      La [0022](../decisions/0022-il-kernel-a-pezzi.md) aveva tolto il motivo per
+      cui il lock non *poteva* essere a grana fine — cinque proprietari invece di
+      ventiquattro campi — e aveva lasciato il lock dov'era; la 0024 lo ha
+      sostituito con un `RwLock`, misurando prima come la voce chiedeva. Il
+      guadagno vero non era quello previsto: non le view che si ridisegnano
+      insieme (pure, da 7 a 25 volte), ma il fatto che chi salva una nota **non
+      viene più affamato** dai lettori — sotto il `Mutex` un salvataggio ha
+      aspettato 6,4 secondi.
 - [ ] **UI di produzione = IPC bespoke** → assorbito da [decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0016](../decisions/0016-cosa-e-una-view.md), §1.2 e §16.6;
       il caso concreto resta la UI del versioning.
 - [ ] **Organizzazione sidebar chiusa ai plugin** (scelta O3): rivalutare alla

@@ -12,8 +12,20 @@
 //! aprire un vault chiude quello aperto. Le sessioni multiple sono il §9.6, e
 //! quando arriveranno il posto dove mettere la mappa è questo — non ventidue
 //! comandi IPC.
+//!
+//! **Due lock, e fanno due mestieri diversi.** Lo slot della sessione è un
+//! `Mutex` e lo si tiene per il tempo di un `take` o di un `clone`; il
+//! workspace è un [`RwLock`] e lo si tiene per il tempo di una lettura o di una
+//! scrittura vera. Il secondo è il §8.3
+//! ([decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)),
+//! e chi prende quale prestito **non è una convenzione**: da un
+//! `RwLockReadGuard` non si chiama `write_document`, perché il `Workspace`
+//! prende `&mut self` per scrivere e `&self` per leggere. Il compilatore fa la
+//! classificazione, e i presidi in `tests/concorrenza.rs` guardano l'unico
+//! errore che gli resta possibile — prendere il prestito esclusivo per una
+//! lettura, che compila e rimette tutti in fila in silenzio.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::model::DocId;
@@ -44,7 +56,17 @@ pub trait EventSink: Send + Sync + 'static {
 /// Sessione di un vault aperto: il workspace condiviso, la metà leggibile del
 /// versioning, e il rilevatore tenuto vivo.
 pub struct VaultSession {
-    workspace: Arc<Mutex<Workspace>>,
+    /// Il workspace, dietro il lock che distingue chi legge da chi scrive.
+    ///
+    /// Era un `Mutex`, ed è la §8.3. Il cambio non ha voluto niente — il
+    /// `Workspace` era già `Sync`, perché i trait di provider dell'ABI sono
+    /// `Send + Sync` — e ha comprato due cose, di cui la seconda non era
+    /// prevista: N view che si ridisegnano insieme (da 7 a 25 volte più
+    /// veloci), e soprattutto **chi salva che non viene più affamato**. Sotto
+    /// il `Mutex` i lettori in ciclo stretto scavalcavano chi aspettava di
+    /// scrivere, senza nessun limite: 6,4 secondi di attesa misurati per un
+    /// salvataggio, contro 0,12 ms adesso. Il banco è `examples/contesa.rs`.
+    workspace: Arc<RwLock<Workspace>>,
     /// Copia dello store delle versioni, se il versioning è acceso. L'altra
     /// vive dentro l'handler registrato nel workspace: il kernel non sa che il
     /// versioning esiste, ed è l'host a comporre le due metà.
@@ -54,7 +76,7 @@ pub struct VaultSession {
 }
 
 impl VaultSession {
-    pub fn workspace(&self) -> &Arc<Mutex<Workspace>> {
+    pub fn workspace(&self) -> &Arc<RwLock<Workspace>> {
         &self.workspace
     }
 
@@ -153,11 +175,11 @@ impl Host {
             });
         }
 
-        let workspace = Arc::new(Mutex::new(ws));
+        let workspace = Arc::new(RwLock::new(ws));
         let watcher = self.watcher.start(root, workspace.clone())?;
 
         let info = {
-            let ws = workspace.lock().unwrap();
+            let ws = workspace.read().unwrap();
             VaultInfo {
                 root: ws.root().to_string(),
                 documents: ws.documents().into_iter().map(|d| d.0).collect(),
@@ -188,7 +210,7 @@ impl Host {
 
     /// Un handle clonato al workspace corrente, o errore se nessun vault è
     /// aperto.
-    pub fn workspace(&self) -> Result<Arc<Mutex<Workspace>>, String> {
+    pub fn workspace(&self) -> Result<Arc<RwLock<Workspace>>, String> {
         self.session
             .lock()
             .unwrap()
@@ -200,7 +222,7 @@ impl Host {
     /// La radice del vault aperto.
     pub fn root(&self) -> Result<Utf8PathBuf, String> {
         let ws = self.workspace()?;
-        let ws = ws.lock().unwrap();
+        let ws = ws.read().unwrap();
         Ok(ws.root().to_owned())
     }
 
@@ -243,7 +265,7 @@ impl Host {
     pub fn read_version(&self, id: &DocId, ts: u64) -> Result<String, String> {
         let store = self.versions()?;
         let ws = self.workspace()?;
-        let mut ws = ws.lock().unwrap();
+        let mut ws = ws.write().unwrap();
         ws.with_host(VERSIONING_ID, |host| store.read(id, ts, host))
             .map_err(|e| e.to_string())
     }
@@ -254,7 +276,7 @@ impl Host {
     pub fn restore_version(&self, id: &DocId, ts: u64) -> Result<(), String> {
         let source = self.read_version(id, ts)?;
         let ws = self.workspace()?;
-        let mut ws = ws.lock().unwrap();
+        let mut ws = ws.write().unwrap();
         ws.write_document(id, &source).map_err(|e| e.to_string())
     }
 
