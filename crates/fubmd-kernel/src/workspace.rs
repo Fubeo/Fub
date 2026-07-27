@@ -431,7 +431,11 @@ impl Workspace {
     ///    export, regole sintattiche, renderer — che non hanno un momento di
     ///    chiusura perché non tengono niente: il punto in cui un bundle libera
     ///    ciò che possiede è `Plugin::deactivate`, e lo chiama chi possiede il
-    ///    bundle (il registry del §9.3), non il kernel.
+    ///    bundle — il `BundleRegistry` di `fubmd-host`
+    ///    ([decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md)),
+    ///    non il kernel. Lo chiama **prima** di questa funzione, che è l'unico
+    ///    momento in cui il bundle è ancora intero: dopo, l'host intestato a
+    ///    quell'id nega tutto, perché la dichiarazione non c'è più.
     /// 3. **La dichiarazione**, che sparisce dall'inventario del §7.6.
     ///
     /// Gli errori tornano al chiamante e **non fermano niente**: chi smette
@@ -576,6 +580,33 @@ impl Workspace {
     /// riceverlo senza uscire da sé stesso — l'host che gli si presterebbe è
     /// costruito sul workspace che lo contiene.
     pub fn close(&mut self) -> Vec<PluginError> {
+        self.close_with(|_, _| Vec::new())
+    }
+
+    /// [`close`](Workspace::close), con **un passo in più su ogni plugin**:
+    /// `stopping` gira su ciascuno subito prima che il kernel lo disattivi, ed è
+    /// il posto in cui chi possiede i bundle chiama
+    /// [`Plugin::deactivate`](fubmd_abi::traits::Plugin::deactivate) (§9.3).
+    ///
+    /// Esiste perché quel passo **non può stare né prima né dopo**. Il kernel
+    /// non possiede i `Box<dyn Plugin>` — li possiede il registry, che vive in
+    /// `fubmd-host` — quindi chiuderli non è cosa sua; e chi li possiede non può
+    /// farlo fuori da qui, perché prima di questa funzione il vault non ha
+    /// ancora avuto il suo [`Event::VaultClosed`] e dopo non c'è più nessuno a
+    /// cui dirlo: [`deactivate_plugin`](Workspace::deactivate_plugin) ritira la
+    /// dichiarazione, e da lì in poi un host intestato a quell'id nega tutto.
+    ///
+    /// L'ordine è quindi, per ogni plugin e a rovescio della dichiarazione:
+    /// **`stopping` mentre il bundle è ancora intero** — provider registrati,
+    /// capacità vive — e poi il kernel che gli toglie tutto. È la stessa forma
+    /// del punto 1 qui sopra: si dice a chi c'è ancora.
+    ///
+    /// Gli errori di `stopping` si accodano agli altri e non fermano niente,
+    /// come tutto il resto della chiusura.
+    pub fn close_with(
+        &mut self,
+        mut stopping: impl FnMut(&mut Workspace, &str) -> Vec<PluginError>,
+    ) -> Vec<PluginError> {
         if self.closed {
             return Vec::new();
         }
@@ -597,6 +628,7 @@ impl Workspace {
             .rev()
             .collect();
         for id in plugins {
+            errors.extend(stopping(self, &id));
             match self.deactivate_plugin(&id) {
                 Ok(errs) => errors.extend(errs),
                 // Un `Busy` qui vorrebbe dire che si sta chiudendo il vault da

@@ -486,14 +486,18 @@ strada propria — i **job** — invece di fingere che non esista:
    plugin chiama `HostApi::spawn_job(JobSpec { job, payload })` e riceve
    subito un `JobId`. Il kernel accoda soltanto: niente esecuzione dentro al
    lock (`Workspace::take_pending_jobs`).
-2. **Esecuzione (fuori dal kernel).** Chi possiede i thread — l'app oggi, il
-   registry dei plugin a M4, l'host WASM a M5 — drena la coda ed esegue
+2. **Esecuzione (fuori dal kernel).** Chi possiede i thread — il runner del
+   §9.3, che in produzione **non c'è ancora**, l'host WASM a M5 — drena la coda
+   ed esegue
    `Plugin::run_job(job, payload, host)` **fuori** dal giro sincrono del kernel,
    **senza tenere in mano nessun prestito del workspace**. Il job ha le stesse
    capacità che il plugin ha altrove ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)),
    con davanti la politica dei suoi permessi, e le usa **una chiamata alla
    volta**: ogni capacità prende il prestito, fa il suo lavoro e lo rilascia. Il
-   `payload` porta gli **argomenti**, non l'input.
+   `payload` porta gli **argomenti**, non l'input. La coda dice **a quale
+   plugin** chiedere il corpo (`PendingJob.plugin`), e a saperglielo dare è chi
+   possiede i bundle: `BundleRegistry::plugin`
+   ([decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)).
 3. **Rientro (sincrono).** L'esito torna con `Workspace::complete_job` →
    `Event::JobDone { id, job, result }` sul giro sincrono normale. Il
    lanciatore riconosce il proprio `JobId` e legge il **risultato** — che non è
@@ -628,13 +632,29 @@ al frontend/all'IPC.
 
 ## Percorso di attivazione
 
-1. Il core legge il `PluginManifest` (nativo: dal codice; WASM: dai metadati del
-   componente).
-2. Mostra/richiede i permessi; costruisce un `HostApi` **con i permessi applicati**.
-3. Chiama `Plugin::activate(host)`; il plugin registra i suoi provider
-   (`Command`/`View`/`Index`/`EventHandler`/`Import`/`Export`) presso il
-   registry del kernel.
-4. Alla disattivazione, `Plugin::deactivate(host)` e deregistrazione.
+Chi lo percorre è il **`BundleRegistry`** di `fubmd-host`
+([decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)), e sta dalla parte
+dell'host per una ragione sola: l'`HostApi` non ha capacità di registrazione
+([decisione 0013](../decisions/0013-elenco-delle-capacita.md)), quindi **un
+plugin non può registrarsi da sé**. A M5 il caricatore WASM percorre gli stessi
+passi; ciò che cambia è come si costruisce il `Plugin`, non chi lo dichiara.
+
+1. Il registry legge il `PluginManifest` (nativo: dal codice; WASM: dai metadati
+   del componente) e ne verifica la **versione del contratto** (`abi_compatible`):
+   una major diversa, o una minor più nuova di quella dell'host, non si monta e
+   non si dichiara.
+2. Lo **dichiara** al kernel (`Workspace::register_plugin`), che applica permessi
+   e fiducia (§7.3), la regola dei nomi sui servizi offerti (§7.4) e i requisiti
+   (§7.5); da lì un `HostApi` intestato a quell'id ha i permessi applicati.
+3. Chiama `Plugin::activate(host)`; poi **il bundle** registra i provider
+   (`Command`/`View`/`Index`/`EventHandler`/`Import`/`Export`) presso il registry
+   del kernel. I primi tre passi sono tutto-o-niente — un `activate` fallito
+   ritira la dichiarazione — mentre un provider che non entra è un avviso: il
+   bundle è montato, e gli manca quel pezzo.
+4. Alla disattivazione, `Plugin::deactivate(host)` **prima** che il kernel gli
+   tolga provider e dichiarazione (`Workspace::deactivate_plugin`): dopo,
+   l'host intestato a quell'id nega tutto, e quel commiato non potrebbe più né
+   scrivere né chiamare i propri comandi.
 
 Il **primo plugin nativo** (M4) esercita esattamente questo percorso senza WASM,
 così M5 diventa "cambiare il backend delle host function", non "inventare il confine".

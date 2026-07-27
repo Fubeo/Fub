@@ -80,7 +80,14 @@ Resta a M4, sulla conformità:
   [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md).
 - Esercita: manifest, permessi (booleani + eventuale `vault_scope`), `activate`/
   `deactivate`, registrazione presso il registry, uso di `HostApi`.
-- Il registry di M4 porta anche il **runner dei job**: un pool di thread che
+- Il registry **c'è** ([decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)):
+  è `BundleRegistry` in `fubmd-host`, monta un bundle in quattro passi sempre
+  uguali (versione del contratto, dichiarazione, `Plugin::activate`, provider) e
+  possiede il `Box<dyn Plugin>` finché è vivo. Le otto feature ufficiali passano
+  già di lì, quindi il plugin nativo di M4 non inaugura una strada: ne prende una
+  battuta.
+- Il registry porta anche il **runner dei job**, che invece manca: un pool di
+  thread che
   drena `Workspace::take_pending_jobs`, esegue `Plugin::run_job` **senza tenere
   in mano nessun prestito** del workspace — il job ne prende uno per chiamata,
   con il `JobHost` di `fubmd-host`

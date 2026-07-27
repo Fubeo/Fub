@@ -40,20 +40,29 @@
 //! lock, e un host che ne prende uno **per chiamata** può nascere solo dove il
 //! lock è di casa.
 //!
+//! ## Chi possiede i bundle
+//!
+//! [`BundleRegistry`] è chi monta un plugin coi suoi provider e lo **possiede**
+//! finché è vivo (§9.3,
+//! [decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md)). Sta
+//! qui e non nel kernel per una ragione sola: l'`HostApi` non ha capacità di
+//! registrazione ([decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md)),
+//! quindi un plugin non può registrarsi da sé — qualcuno che ha un
+//! `&mut Workspace` deve leggergli il manifest, dichiararlo, attivarlo e
+//! registrare ciò che offre. [`mount`] è la tabella delle otto righe ufficiali,
+//! e ogni riga è un [`Bundle`] come lo sarà un plugin di terzi.
+//!
 //! ## Cosa NON è ancora qui
 //!
-//! Il §8.2 elencava anche il registry del §9.3, il runner dei job e lo storage
-//! del §15.1. Sono tre **voci aperte**, non tre pezzi dimenticati: [`mount`] è
-//! oggi una tabella cablata a mano, ed è esattamente la tabella che il §9.3
-//! sostituirà con un registry che monta un bundle a partire dal suo manifest.
-//! Averla in un posto solo è la precondizione di quel lavoro, non il suo
-//! rimpiazzo. Il runner resta del §9.3 — un pool, e la cancellazione che va
-//! disegnata **con** lui; [`JobHost`] è ciò che quel pool avrà da passare al
-//! job, e che prima non c'era.
+//! Il §8.2 elencava anche il runner dei job e lo storage del §15.1. Il runner
+//! resta del §9.3 — un pool, e la cancellazione che va disegnata **con** lui;
+//! [`JobHost`] è ciò che quel pool avrà da passare al job, e
+//! [`BundleRegistry::plugin`] è dove troverà il corpo da eseguire.
 
 pub mod jobs;
 pub mod mount;
 pub mod records;
+pub mod registry;
 pub mod session;
 pub mod settings;
 pub mod watcher;
@@ -61,6 +70,7 @@ pub mod watcher;
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, VaultInfo, WorkspaceMeta};
+pub use registry::{Bundle, BundleError, BundleRegistry, OnlyProviders};
 pub use session::{doc_id, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled};
 pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
