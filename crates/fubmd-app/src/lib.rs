@@ -1,12 +1,21 @@
-//! Backend Tauri v2 di FubMD.
+//! Colla Tauri v2 di FubMD: comandi IPC, ponte eventi verso il webview,
+//! finestre e dialoghi.
 //!
-//! Monta il kernel agnostico con il provider markdown nativo, espone i comandi
-//! IPC al frontend e fa da ponte: gli eventi dell'event bus del kernel (incluse
-//! le modifiche rilevate dal file watcher) vengono inoltrati al webview.
+//! **Chi monta non è qui.** Registro dei formati, feature ufficiali, indice di
+//! ricerca, versioning, view, comandi, sintassi, renderer, sessione e watcher
+//! stanno in [`fubmd_host`], che non dipende da tauri: quel montaggio ha cinque
+//! clienti previsti — CLI (27.1), API locale (27.2), e2e headless (17.2 e
+//! 27.4), mobile (26.2) e PWA (26.3) — e finché viveva dentro
+//! `#[tauri::command] open_vault` nessuno di loro poteva riusarlo (§8.2,
+//! decisione 0023).
+//!
+//! Ciò che resta in questo file è **solo** ciò che non esiste senza un webview:
+//! le firme `#[tauri::command]`, la traduzione degli errori in `String` per
+//! l'IPC, il ponte che inoltra gli eventi del kernel a `fubmd://event`, e
+//! `run()`. Se una riga di questo file può essere spiegata senza nominare
+//! Tauri, sta nel posto sbagliato.
 
-use std::any::Any;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fubmd_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
@@ -15,399 +24,71 @@ use fubmd_abi::model::DocId;
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{IndexQuery, IndexResult, ViewInstance, ViewSpec};
 use fubmd_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
-use fubmd_features::{
-    BacklinksView, CoreCommands, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer,
-    MathRule, OutlineView, SearchIndex, StatsView, TagPanelView, VersionRef, VersionStore,
-    VersioningHandler, BACKLINKS_ID, BLOCKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID,
-    TAGS_ID, VERSIONING_ID,
-};
-use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{
-    FormatRegistry, PluginInfo, RegistryError, RenderedDocument, TrashEntry, Workspace,
-};
+use fubmd_abi::Notice;
+use fubmd_features::VersionRef;
+use fubmd_host::{doc_id, EventSink, Host};
+use fubmd_kernel::{RenderedDocument, TrashEntry};
 
-use notify::event::{EventKind, ModifyKind, RenameMode};
-use notify::RecursiveMode;
-use notify_debouncer_full::{new_debouncer, DebounceEventResult};
-use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
-/// Sessione di un vault aperto: il workspace condiviso + il watcher tenuto vivo.
-struct VaultSession {
-    workspace: Arc<Mutex<Workspace>>,
-    /// Copia dello store delle versioni, se il versioning è acceso. L'altra
-    /// vive dentro l'handler registrato nel workspace: il kernel non sa che il
-    /// versioning esiste, ed è l'app a comporre le due metà.
-    versions: Option<VersionStore>,
-    /// Debouncer con tipo cancellato: va solo tenuto in vita.
-    _watcher: Box<dyn Any + Send>,
-}
+// I tre record che attraversano l'IPC vivono nell'host — un'API locale
+// risponderebbe con gli stessi — e l'app li ri-esporta, perché è lei a farli
+// attraversare il confine: il mirror TS e la sua fixture
+// (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
+pub use fubmd_host::{EmbedContent, VaultInfo, WorkspaceMeta};
 
-#[derive(Default)]
-struct AppState {
-    session: Mutex<Option<VaultSession>>,
-}
-
-/// Rispecchiato da `VaultInfo` in `frontend/src/host/contract.ts`; il legame è la
-/// fixture di `tests/ts_mirror_app.rs`.
-#[derive(Serialize)]
-pub struct VaultInfo {
-    pub root: String,
-    pub documents: Vec<String>,
-    /// Le estensioni che i provider registrati gestiscono (minuscole, senza
-    /// punto). Il frontend le usa per ricavare il "nome pagina" di un `DocId`
-    /// senza cablare `.md`: quale sia l'estensione di un documento lo sanno i
-    /// `FormatDescriptor`, non la UI.
-    pub extensions: Vec<String>,
-    /// **Chi è attivo** (§7.6): i plugin dichiarati, con manifest, fiducia,
-    /// permessi e ciò che hanno registrato.
-    ///
-    /// Era un booleano — `versioning: bool` — cioè un campo **per feature**
-    /// dentro un record IPC: con i moduli del 21.2 sarebbero diventati venti
-    /// booleani, e ognuno una modifica al record, al mirror TS e alla fixture.
-    /// La shell adesso non chiede «il versioning è acceso?»: chiede chi c'è, e
-    /// guarda se fra loro c'è chi le serve. È la stessa domanda che il pannello
-    /// plugin (20.1), il developer mode (20.2) e la diagnostica (24.2) faranno,
-    /// e nessuno dei tre avrà bisogno di un campo suo.
-    pub plugins: Vec<PluginInfo>,
-}
-
-/// Il versioning è acceso?
+/// Il ponte eventi verso il webview: l'unica implementazione di [`EventSink`]
+/// che ha bisogno di Tauri, ed è per questo che sta qui e non nell'host.
 ///
-/// Fino ai settings dichiarativi di M3 l'interruttore è una variabile
-/// d'ambiente. Acceso di default — è una rete di sicurezza, e una rete che va
-/// accesa a mano non c'è quando serve — e spento da `FUBMD_VERSIONING` a `0`,
-/// `off`, `no` o `false`.
-fn versioning_enabled() -> bool {
-    match std::env::var("FUBMD_VERSIONING") {
-        Err(_) => true,
-        Ok(v) => !matches!(
-            v.trim().to_ascii_lowercase().as_str(),
-            "0" | "off" | "no" | "false"
-        ),
+/// L'handle arriva in ritardo, e la `OnceLock` è quel ritardo reso esplicito.
+/// L'ordine di Tauri è: costruzione → finestre della configurazione → `setup`,
+/// e l'`AppHandle` esiste solo dall'ultimo passo. Ma lo stato gestito va
+/// dichiarato al **primo**, o una `invoke` che arrivasse da una finestra già
+/// aperta troverebbe `State<Host>` non gestito — che in Tauri è un panico, non
+/// un errore. Quindi l'host si registra subito con questo sink vuoto, e il
+/// `setup` ci mette dentro l'handle: nel frattempo un evento si perde invece di
+/// far cadere l'app, e nel frattempo non c'è nessun vault aperto che possa
+/// emetterne.
+#[derive(Default)]
+struct WebviewEvents(std::sync::OnceLock<AppHandle>);
+
+impl EventSink for WebviewEvents {
+    fn emit(&self, notice: &Notice) {
+        if let Some(app) = self.0.get() {
+            let _ = app.emit("fubmd://event", notice);
+        }
     }
-}
-
-/// Lo store delle versioni della sessione, o l'errore se il versioning è
-/// spento: un comando che risponde "vuoto" quando la feature non c'è
-/// racconterebbe che non ci sono versioni, che è un'altra cosa.
-fn versions_of(state: &AppState) -> Result<VersionStore, String> {
-    state
-        .session
-        .lock()
-        .unwrap()
-        .as_ref()
-        .and_then(|s| s.versions.clone())
-        .ok_or_else(|| "Versioning disattivato.".to_string())
-}
-
-/// [`DocId`] da input IPC: la stessa validazione del kernel
-/// (`fubmd_kernel::valid_doc_id`), applicata sul confine — nessun comando
-/// costruisce un `DocId` non sanitizzato da ciò che arriva dal webview.
-fn doc_id(raw: &str) -> Result<DocId, String> {
-    fubmd_kernel::valid_doc_id(raw).map_err(|e| e.to_string())
-}
-
-/// Restituisce un handle clonato al workspace corrente, o errore se nessun
-/// vault è aperto.
-fn current(state: &AppState) -> Result<Arc<Mutex<Workspace>>, String> {
-    state
-        .session
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|s| s.workspace.clone())
-        .ok_or_else(|| "Nessun vault aperto.".to_string())
 }
 
 #[tauri::command]
-fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<VaultInfo, String> {
-    let root = Utf8PathBuf::from(path);
-    if !root.is_dir() {
-        return Err(format!("Non è una cartella valida: {root}"));
-    }
-
-    // La sessione precedente si chiude **prima** che la nuova si apra, e non
-    // dopo: l'indice di ricerca tiene un lock esclusivo di scrittura sulla
-    // propria cartella, e tantivy quel lock lo aspetta *bloccando*. Aprendo la
-    // nuova sessione sullo stesso vault mentre la vecchia è ancora viva, il
-    // comando si pianta per sempre — nessun errore, nessun log, la finestra
-    // resta a metà. Succede riaprendo lo stesso vault dal dialogo, e in
-    // sviluppo a ogni ricarica della pagina.
-    //
-    // Prezzo dichiarato: se l'apertura nuova fallisce, non si torna alla
-    // vecchia. È la scelta onesta — la sessione vecchia ha già un watcher e un
-    // indice su un vault che l'utente ha detto di voler lasciare.
-    drop(state.session.lock().unwrap().take());
-
-    let mut registry = FormatRegistry::new();
-    // Il primo registrato è anche quello che dà l'estensione alle note nuove
-    // (`FormatRegistry::default_extension`). Un conflitto qui è impossibile con
-    // un provider solo, e resta gestito lo stesso: il giorno che ce ne sono due,
-    // il silenzio sarebbe un file che si apre col parser sbagliato.
-    if let Err(e) = registry.register(MarkdownProvider::boxed()) {
-        return Err(format!("provider di formato in conflitto: {e}"));
-    }
-
-    let mut ws = Workspace::new(&root, registry);
-
-    // Le feature ufficiali si **dichiarano** prima di registrare qualcosa
-    // (§7.3): il kernel non presta capacità a una stringa, le presta a un
-    // plugin che ha un manifest, dei permessi e un grado di fiducia. Che siano
-    // nello stesso binario non le esenta — se le esentasse, il punto di
-    // applicazione sarebbe provato solo contro i plugin che non esistono
-    // ancora.
-    //
-    // Un fallimento qui è un errore di montaggio di questo repo (due feature
-    // con lo stesso id), non una condizione che l'utente possa produrre: si
-    // dice e si tira dritto, come per i conflitti di sintassi qui sotto.
-    for (id, nome) in [
-        (SEARCH_ID, "Ricerca"),
-        (VERSIONING_ID, "Versioning"),
-        (BACKLINKS_ID, "Backlink"),
-        (OUTLINE_ID, "Struttura"),
-        (TAGS_ID, "Tag"),
-        (STATS_ID, "Statistiche"),
-        (COMMANDS_ID, "Comandi"),
-        (BLOCKS_ID, "Blocchi"),
-    ] {
-        if let Err(e) = ws.register_core_feature(id, nome) {
-            eprintln!("feature non dichiarata: {e}");
-        }
-    }
-
-    // L'indice va registrato PRIMA di `reindex`: è lì che riceve il contenuto
-    // del vault e riconcilia ciò che è cambiato mentre non era vivo. Se non si
-    // apre, il vault si apre lo stesso senza ricerca: la verità è il vault,
-    // l'indice è stato derivato e non deve mai impedire di leggere le note.
-    //
-    // Vive nel proprio spazio dati (`.fubmd-data/plugins/fubmd.search/`), che è
-    // il kernel ad assegnargli: la registrazione lo attiva, e l'attivazione è
-    // il momento in cui ritrova da `data_*` le impronte di ciò che ha già visto.
-    match ws
-        .plugin_data_dir(SEARCH_ID)
-        .and_then(|dir| SearchIndex::open(&dir))
-    {
-        Ok(index) => {
-            // I due esiti sono diversi e vanno detti diversi (decisione 0019):
-            // un conflitto di rotte vuol dire che l'indice **non c'è** e la
-            // ricerca non risponderà; un'attivazione fallita che c'è ma
-            // reindicizza tutto, che è lento e non sbagliato.
-            match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
-                Ok(()) => {}
-                Err(RegistryError::Activate(e)) => {
-                    eprintln!("indice di ricerca: impronte non ritrovate, reindicizzo: {e}")
-                }
-                Err(e) => eprintln!("indice di ricerca NON registrato: {e}"),
-            }
-        }
-        Err(e) => eprintln!("indice di ricerca non disponibile: {e}"),
-    }
-
-    // Il versioning è una feature ufficiale scritta come la scriverebbe un
-    // plugin: un `EventHandler` e nient'altro. Spento (D7) non si registra, e
-    // nel vault non compare nemmeno la cartella.
-    //
-    // Lo store si apre con le stesse capacità che avrà l'handler — un
-    // `HostApi` intestato a `VERSIONING_ID` — e non con `std::fs`: l'app non ha
-    // un canale privilegiato che un plugin non avrebbe. La prima fotografia del
-    // vault non è più qui: è policy della feature, e scatta sull'evento
-    // `VaultOpened` che `reindex` emette qui sotto.
-    let versions = versioning_enabled()
-        .then(|| ws.with_host(VERSIONING_ID, |host| VersionStore::open(host)))
-        .transpose()
-        .unwrap_or_else(|e| {
-            eprintln!("versioning non disponibile: {e}");
-            None
-        });
-    if let Some(store) = &versions {
-        if let Err(e) = ws.register_event_handler(
-            VERSIONING_ID,
-            Box::new(VersioningHandler::new(store.clone())),
-        ) {
-            eprintln!("versioning non registrato: {e}");
-        }
-    }
-
-    // Il pannello backlink è una feature ufficiale che passa per il protocollo
-    // di view come dovrà fare un plugin: registrato come `ViewProvider` fidato
-    // (produce solo UI dichiarativa, niente `Html`/`WebView`), si prende
-    // documento attivo e riferimenti dall'`HostApi`. L'app non gli fa più da
-    // tramite — il giro render/azione passa dai comandi generici qui sotto.
-    let views: [(&str, Box<dyn fubmd_abi::ViewProvider>); 4] = [
-        (BACKLINKS_ID, Box::new(BacklinksView)),
-        (OUTLINE_ID, Box::new(OutlineView)),
-        (TAGS_ID, Box::new(TagPanelView::default())),
-        (STATS_ID, Box::new(StatsView)),
-    ];
-    for (id, provider) in views {
-        if let Err(e) = ws.register_view_provider(id, provider) {
-            eprintln!("view non registrata: {e}");
-        }
-    }
-    // L'outline è la seconda feature ufficiale sul giro delle view, e la prima a
-    // usare il canale metadata (`IndexQuery::Outline`): legge la struttura del
-    // documento attivo dal kernel, non dall'app.
-    // Il pannello tag: aggrega i tag del vault via `IndexQuery::Tags`, click →
-    // ricerca. Terza feature ufficiale sul giro delle view.
-    // Le statistiche: quarta feature sul giro delle view, e la prima a leggere
-    // il **contesto di sessione** per intero — selezione e modalità, non solo
-    // quale nota è aperta (decisione 0007).
-    // I comandi ufficiali: la prima feature sul giro del **registro** (decisione 0009).
-    // Da qui in poi un'azione nuova non è un comando Tauri in più — è una riga
-    // in un `CommandProvider`, e la palette la trova da sola.
-    if let Err(e) = ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands)) {
-        eprintln!("comandi non registrati: {e}");
-    }
-
-    // Le sintassi ufficiali (decisione 0017). Nessuna di loro tocca il provider
-    // markdown: si **innestano** su di lui, che è la strada che il §3.1 ha
-    // aperto e che prima non esisteva — l'unica alternativa era forkare
-    // `fubmd-format-markdown`.
-    //
-    // Un conflitto qui non è fatale ma non è nemmeno silenzioso: la sintassi che
-    // perde non si registra, e chi monta l'app lo legge. È tutta la differenza
-    // con «l'ultimo registrato vince», che è ciò che il registro faceva prima.
-    for rule in [
-        Box::new(DiagramRule) as Box<dyn fubmd_abi::custom::SyntaxRule>,
-        Box::new(MathRule),
-        Box::new(HighlightRule),
-    ] {
-        if let Err(e) = ws.register_syntax_rule(BLOCKS_ID, rule) {
-            eprintln!("sintassi non innestata: {e}");
-        }
-    }
-    // E chi le disegna (§3.2). Il diagramma esce come albero `UiNode` e arriva
-    // alla shell; la formula esce come HTML. `Trust::Core` perché sono feature
-    // ufficiali — un renderer di terzi passerebbe dalla stessa porta con un
-    // grado più basso, e il suo albero verrebbe validato.
-    for renderer in [
-        Box::new(DiagramRenderer) as Box<dyn fubmd_abi::custom::CustomRenderer>,
-        Box::new(MathRenderer),
-    ] {
-        if let Err(e) = ws.register_custom_renderer(BLOCKS_ID, renderer) {
-            eprintln!("renderer non registrato: {e}");
-        }
-    }
-    // Ciò che qualcuno produce e nessuno disegna: il conto che il §3.2 chiedeva
-    // di poter fare. Oggi è vuoto; il giorno che non lo è, è un blocco che
-    // l'utente legge crudo.
-    for kind in ws.undrawn_kinds() {
-        eprintln!("`{kind}` non ha un renderer: degraderà alla resa generica");
-    }
-
-    ws.reindex().map_err(|e| e.to_string())?;
-
-    // Ponte eventi kernel → frontend (thread dedicato che vive quanto il bus).
-    let rx = ws.bus().subscribe();
-    let app_bridge = app.clone();
-    std::thread::spawn(move || {
-        while let Ok(event) = rx.recv() {
-            let _ = app_bridge.emit("fubmd://event", &event);
-        }
-    });
-
-    let workspace = Arc::new(Mutex::new(ws));
-    let watcher = spawn_watcher(&root, workspace.clone()).map_err(|e| e.to_string())?;
-
-    let info = {
-        let ws = workspace.lock().unwrap();
-        VaultInfo {
-            root: ws.root().to_string(),
-            documents: ws.documents().into_iter().map(|d| d.0).collect(),
-            extensions: ws.extensions(),
-            plugins: ws.plugins(),
-        }
-    };
-
-    *state.session.lock().unwrap() = Some(VaultSession {
-        workspace,
-        versions,
-        _watcher: watcher,
-    });
-    Ok(info)
-}
-
-/// Avvia un watcher debounced sulla radice del vault: ogni cambiamento
-/// sincronizza il workspace, che a sua volta emette eventi verso il frontend.
-fn spawn_watcher(
-    root: &camino::Utf8Path,
-    workspace: Arc<Mutex<Workspace>>,
-) -> notify::Result<Box<dyn Any + Send>> {
-    let mut debouncer = new_debouncer(
-        Duration::from_millis(300),
-        None,
-        move |result: DebounceEventResult| match result {
-            Ok(events) => {
-                let mut ws = workspace.lock().unwrap();
-                for event in events {
-                    // Un rename accoppiato (`paths = [from, to]`) è una
-                    // migrazione d'identità, non remove+add: la storia del
-                    // versioning resta attaccata alla nota, il frontend migra
-                    // i meta, e `DocumentRenamed` viene emesso anche per i
-                    // rename fatti da Finder/Obsidian/sync. Tutto il resto
-                    // passa dal fallback per-path qui sotto.
-                    if matches!(
-                        event.kind,
-                        EventKind::Modify(ModifyKind::Name(RenameMode::Both))
-                    ) && event.paths.len() == 2
-                    {
-                        if let (Ok(from), Ok(to)) = (
-                            Utf8PathBuf::from_path_buf(event.paths[0].clone()),
-                            Utf8PathBuf::from_path_buf(event.paths[1].clone()),
-                        ) {
-                            let _ = ws.sync_renamed_path(&from, &to);
-                            continue;
-                        }
-                    }
-                    for path in &event.paths {
-                        if let Ok(p) = Utf8PathBuf::from_path_buf(path.clone()) {
-                            let _ = ws.sync_path(&p);
-                        }
-                    }
-                }
-                // Fine del lotto debounced: è il punto tranquillo in cui
-                // rendere durevoli gli indici. Il kernel non sa quando finisce
-                // un lotto — lo sa il watcher, che il lotto lo ha formato.
-                for e in ws.flush_indexes() {
-                    eprintln!("flush indice: {e}");
-                }
-            }
-            Err(errors) => {
-                for e in errors {
-                    eprintln!("watch error: {e:?}");
-                }
-            }
-        },
-    )?;
-    debouncer.watch(root.as_std_path(), RecursiveMode::Recursive)?;
-    Ok(Box::new(debouncer))
+fn open_vault(host: State<Host>, path: String) -> Result<VaultInfo, String> {
+    host.open(&Utf8PathBuf::from(path))
 }
 
 /// Path del vault da aprire all'avvio (comodo per sviluppo/screenshot):
 /// il frontend lo legge e apre il vault senza passare dal dialog.
 #[tauri::command]
 fn initial_vault() -> Option<String> {
-    std::env::var("FUBMD_VAULT").ok().filter(|s| !s.is_empty())
+    fubmd_host::initial_vault()
 }
 
 #[tauri::command]
-fn list_documents(state: State<AppState>) -> Result<Vec<String>, String> {
-    let ws = current(&state)?;
+fn list_documents(host: State<Host>) -> Result<Vec<String>, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     Ok(ws.documents().into_iter().map(|d| d.0).collect())
 }
 
 #[tauri::command]
-fn read_document(state: State<AppState>, id: String) -> Result<String, String> {
-    let ws = current(&state)?;
+fn read_document(host: State<Host>, id: String) -> Result<String, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     ws.read_source(&doc_id(&id)?).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn write_document(state: State<AppState>, id: String, source: String) -> Result<(), String> {
-    let ws = current(&state)?;
+fn write_document(host: State<Host>, id: String, source: String) -> Result<(), String> {
+    let ws = host.workspace()?;
     let mut ws = ws.lock().unwrap();
     ws.write_document(&doc_id(&id)?, &source)
         .map_err(|e| e.to_string())
@@ -429,8 +110,8 @@ fn write_document(state: State<AppState>, id: String, source: String) -> Result<
 // risposta è un nome.
 
 #[tauri::command]
-fn list_trash(state: State<AppState>) -> Result<Vec<TrashEntry>, String> {
-    let ws = current(&state)?;
+fn list_trash(host: State<Host>) -> Result<Vec<TrashEntry>, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     ws.list_trash().map_err(|e| e.to_string())
 }
@@ -443,35 +124,21 @@ fn list_trash(state: State<AppState>) -> Result<Vec<TrashEntry>, String> {
 /// esce dallo stesso codice che nomina le note nuove. Non prenota nulla — il
 /// kernel resta il backstop se il nome viene preso nel frattempo.
 #[tauri::command]
-fn propose_free_name(state: State<AppState>, id: String) -> Result<String, String> {
-    let ws = current(&state)?;
+fn propose_free_name(host: State<Host>, id: String) -> Result<String, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     Ok(ws.free_name(&DocId::new(id)).0)
-}
-
-/// Rispecchiato da `EmbedContent` in `frontend/src/host/contract.ts` (fixture di
-/// `tests/ts_mirror_app.rs`).
-///
-/// Porta un [`RenderedDocument`] e non una stringa perché un embed passa dai
-/// renderer registrati come l'anteprima: un diagramma dentro una nota trasclusa
-/// resta un diagramma, e le sue parti dichiarative vanno montate dal frontend
-/// dentro il segnaposto che ha appena idratato.
-#[derive(Serialize)]
-pub struct EmbedContent {
-    pub doc_id: String,
-    #[serde(flatten)]
-    pub content: RenderedDocument,
 }
 
 /// Contenuto di un embed `![[page#heading]]`: il frontend lo innesta nel
 /// placeholder emesso dal provider (profondità massima e cicli a suo carico).
 #[tauri::command]
 fn render_embed(
-    state: State<AppState>,
+    host: State<Host>,
     page: String,
     heading: Option<String>,
 ) -> Result<EmbedContent, String> {
-    let ws = current(&state)?;
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     let (doc_id, content) = ws
         .render_embed(&page, heading.as_deref())
@@ -483,8 +150,8 @@ fn render_embed(
 }
 
 #[tauri::command]
-fn render_preview(state: State<AppState>, id: String) -> Result<RenderedDocument, String> {
-    let ws = current(&state)?;
+fn render_preview(host: State<Host>, id: String) -> Result<RenderedDocument, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     ws.render_preview(&DocId::new(id))
         .map_err(|e| e.to_string())
@@ -509,10 +176,10 @@ fn render_preview(state: State<AppState>, id: String) -> Result<RenderedDocument
 /// dopo che l'ultima nota è stata chiusa).
 #[tauri::command]
 fn set_active_context(
-    state: State<AppState>,
+    host: State<Host>,
     context: Option<ViewContext>,
 ) -> Result<Vec<String>, String> {
-    let ws = current(&state)?;
+    let ws = host.workspace()?;
     let mut ws = ws.lock().unwrap();
     Ok(ws.set_active_context(context))
 }
@@ -523,8 +190,8 @@ fn set_active_context(
 /// ogni view nel contenitore del suo `placement` e la ridisegna quando arriva
 /// un evento della sua maschera `refresh`. Una view di plugin compare da sola.
 #[tauri::command]
-fn list_views(state: State<AppState>) -> Result<Vec<ViewSpec>, String> {
-    let ws = current(&state)?;
+fn list_views(host: State<Host>) -> Result<Vec<ViewSpec>, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     Ok(ws.views())
 }
@@ -539,12 +206,12 @@ fn list_views(state: State<AppState>) -> Result<Vec<ViewSpec>, String> {
 /// comando accetta i due campi assenti proprio per non obbligarla a costruirla.
 #[tauri::command]
 fn render_view(
-    state: State<AppState>,
+    host: State<Host>,
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
 ) -> Result<UiNode, String> {
-    let ws = current(&state)?;
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     ws.render_view(&istanza(view, instance, params))
         .map_err(|e| e.to_string())
@@ -561,7 +228,7 @@ fn render_view(
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn view_action(
-    state: State<AppState>,
+    host: State<Host>,
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
@@ -569,7 +236,7 @@ fn view_action(
     payload: Option<serde_json::Value>,
     fields: Option<Vec<FieldValue>>,
 ) -> Result<ViewUpdate, String> {
-    let ws = current(&state)?;
+    let ws = host.workspace()?;
     let mut ws = ws.lock().unwrap();
     ws.view_action(
         &istanza(view, instance, params),
@@ -609,8 +276,8 @@ fn istanza(
 /// le stesse informazioni che leggerebbero una CLI (27.1) o un chiamante
 /// programmatico (22.4) — questo comando IPC è solo il primo dei suoi clienti.
 #[tauri::command]
-fn list_commands(state: State<AppState>) -> Result<Vec<CommandSpec>, String> {
-    let ws = current(&state)?;
+fn list_commands(host: State<Host>) -> Result<Vec<CommandSpec>, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     Ok(ws.commands())
 }
@@ -631,12 +298,12 @@ fn list_commands(state: State<AppState>) -> Result<Vec<CommandSpec>, String> {
 /// attore là dove passano.
 #[tauri::command]
 fn invoke_command(
-    state: State<AppState>,
+    host: State<Host>,
     command: String,
     args: Option<serde_json::Value>,
     mode: Option<InvokeMode>,
 ) -> Result<CommandOutcome, String> {
-    let ws = current(&state)?;
+    let ws = host.workspace()?;
     let mut ws = ws.lock().unwrap();
     ws.invoke_command(
         &command,
@@ -661,125 +328,68 @@ fn invoke_command(
 /// vieta i comandi bespoke non deve più dire di no a feature che non hanno altra
 /// strada.
 #[tauri::command]
-fn query_index(state: State<AppState>, query: IndexQuery) -> Result<IndexResult, String> {
-    let ws = current(&state)?;
+fn query_index(host: State<Host>, query: IndexQuery) -> Result<IndexResult, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     ws.query_index(query).map_err(|e| e.to_string())
 }
 
 // --- versioning ------------------------------------------------------------
 //
-// Il kernel non sa che il versioning esiste: le versioni le tiene un
-// `EventHandler`, e il ripristino è una scrittura normale (D8). L'app compone
-// le due metà, che è esattamente ciò che dovrà fare per un plugin di terzi.
+// Il kernel non sa che il versioning esiste, e comporre le due metà — lo store
+// e l'handler registrato — è lavoro dell'host: qui restano le tre firme IPC.
 
 #[tauri::command]
-fn list_versions(state: State<AppState>, id: String) -> Result<Vec<VersionRef>, String> {
-    Ok(versions_of(&state)?.list(&DocId::new(id)))
-}
-
-/// Rileggere una versione passa dall'`HostApi` come tutto il resto: l'app
-/// presta al versioning le sue stesse capacità (`Workspace::with_host`), non
-/// una scorciatoia sul filesystem.
-fn read_version_source(state: &AppState, doc: &DocId, ts: u64) -> Result<String, String> {
-    let store = versions_of(state)?;
-    let ws = current(state)?;
-    let mut ws = ws.lock().unwrap();
-    ws.with_host(VERSIONING_ID, |host| store.read(doc, ts, host))
-        .map_err(|e| e.to_string())
+fn list_versions(host: State<Host>, id: String) -> Result<Vec<VersionRef>, String> {
+    host.list_versions(&DocId::new(id))
 }
 
 #[tauri::command]
-fn read_version(state: State<AppState>, id: String, ts: u64) -> Result<String, String> {
-    read_version_source(&state, &DocId::new(id), ts)
+fn read_version(host: State<Host>, id: String, ts: u64) -> Result<String, String> {
+    host.read_version(&DocId::new(id), ts)
 }
 
-/// Ripristina una versione riscrivendo il documento (D8): passa da parse,
-/// grafo, indici ed eventi come ogni altra modifica — e siccome passa dagli
-/// eventi, genera a sua volta uno snapshot. Il ripristino è annullabile.
 #[tauri::command]
-fn restore_version(state: State<AppState>, id: String, ts: u64) -> Result<(), String> {
-    let doc = DocId::new(id);
-    let source = read_version_source(&state, &doc, ts)?;
-    let ws = current(&state)?;
-    let mut ws = ws.lock().unwrap();
-    ws.write_document(&doc, &source).map_err(|e| e.to_string())
+fn restore_version(host: State<Host>, id: String, ts: u64) -> Result<(), String> {
+    host.restore_version(&DocId::new(id), ts)
 }
 
 // --- organizzazione del vault ----------------------------------------------
 //
-// Icone, note appuntate, ordinamenti scelti a mano e spazio attivo vivono nel
-// sidecar `.fubmd/workspace.json`, dentro il vault: le note restano markdown
-// puro e l'organizzazione viaggia col vault (sync, git). A differenza di
-// `.fubmd-data` questi dati sono autorevoli, non derivati: persi, non si
-// ricostruiscono. Il kernel non ne sa nulla — `.fubmd` è un dot-dir, quindi
-// scansione, watcher e indice lo ignorano già.
+// Il sidecar `.fubmd/workspace.json` è stato del vault e vive nell'host; qui
+// restano le due firme IPC.
 
-/// Metadati di organizzazione del vault (rispecchiato da `WorkspaceMeta` in
-/// `frontend/src/host/contract.ts`). Le chiavi sono path relativi al vault: `DocId` per
-/// le note, path di cartella senza slash finale per le cartelle (`""` è la
-/// radice).
-#[derive(Default, Serialize, Deserialize)]
-pub struct WorkspaceMeta {
-    /// path → emoji mostrata accanto al nome.
-    #[serde(default)]
-    pub icons: std::collections::BTreeMap<String, String>,
-    /// Note appuntate in cima alla sidebar, nell'ordine scelto.
-    #[serde(default)]
-    pub pinned: Vec<String>,
-    /// cartella → nomi dei figli nell'ordine scelto a mano; chi non compare
-    /// segue in ordine alfabetico.
-    #[serde(default)]
-    pub order: std::collections::BTreeMap<String, Vec<String>>,
-    /// Cartelle registrate come "spazi": la striscia di icone in cima alla
-    /// sidebar, nell'ordine in cui appaiono. QUALE spazio è selezionato è
-    /// stato di vista, per-macchina: sta al frontend, non qui.
-    #[serde(default)]
-    pub spaces: Vec<String>,
-}
-
-fn workspace_meta_path(state: &AppState) -> Result<Utf8PathBuf, String> {
-    let ws = current(state)?;
-    let ws = ws.lock().unwrap();
-    Ok(ws.root().join(".fubmd").join("workspace.json"))
-}
-
-/// File assente = vault mai personalizzato: si risponde col default, non con
-/// un errore. Un file presente ma malformato invece È un errore: sovrascriverlo
-/// in silenzio con il default butterebbe via l'organizzazione dell'utente.
 #[tauri::command]
-fn read_workspace_meta(state: State<AppState>) -> Result<WorkspaceMeta, String> {
-    let path = workspace_meta_path(&state)?;
-    match std::fs::read_to_string(&path) {
-        Ok(json) => serde_json::from_str(&json)
-            .map_err(|e| format!("{path} non è un workspace.json valido: {e}")),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(WorkspaceMeta::default()),
-        Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
-    }
+fn read_workspace_meta(host: State<Host>) -> Result<WorkspaceMeta, String> {
+    host.read_meta()
 }
 
 #[tauri::command]
-fn write_workspace_meta(state: State<AppState>, meta: WorkspaceMeta) -> Result<(), String> {
-    let path = workspace_meta_path(&state)?;
-    let dir = path
-        .parent()
-        .expect("il sidecar sta sempre in una cartella");
-    std::fs::create_dir_all(dir).map_err(|e| format!("non riesco a creare {dir}: {e}"))?;
-    let json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| format!("non riesco a scrivere {path}: {e}"))
+fn write_workspace_meta(host: State<Host>, meta: WorkspaceMeta) -> Result<(), String> {
+    host.write_meta(&meta)
 }
 
 #[tauri::command]
-fn resolve_link(state: State<AppState>, page: String) -> Result<Option<String>, String> {
-    let ws = current(&state)?;
+fn resolve_link(host: State<Host>, page: String) -> Result<Option<String>, String> {
+    let ws = host.workspace()?;
     let ws = ws.lock().unwrap();
     Ok(ws.resolve_link(&page).map(|d| d.0))
 }
 
 pub fn run() {
+    // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
+    // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
+    // `WebviewEvents`).
+    let sink = Arc::new(WebviewEvents::default());
+    let bridge = sink.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState::default())
+        .manage(Host::new().with_sink(sink))
+        .setup(move |app| {
+            let _ = bridge.0.set(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             open_vault,
             initial_vault,

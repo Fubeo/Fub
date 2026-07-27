@@ -111,8 +111,8 @@ kernel.
 - [ ] **I clienti ci sono già, e sono scritti.** Venticinque `eprintln!` nel
       backend, ognuno su un fatto che l'utente ha diritto di sapere e non saprà:
       indice di ricerca non disponibile e versioning non disponibile
-      (`app/lib.rs`), flush dell'indice fallito ed errore del watcher
-      (sempre `app/lib.rs`), sidecar del cestino non scritto
+      (`host/mount.rs`), flush dell'indice fallito ed errore del watcher
+      (`host/watcher.rs`), sidecar del cestino non scritto
       (`kernel/vault.rs` — cioè: **il ripristino di quella nota tornerà nel
       posto sbagliato**), versione non salvata, nota illeggibile, tombstone non
       scritto, potatura fallita, indice del versioning ricostruito
@@ -179,7 +179,7 @@ visibile), 20.2 (log plugin).
       restituisce `Vec<PluginError>` proprio *«perché chi ha un canale di
       notifica possa mostrarli»* (`workspace.rs`) — e i suoi due
       chiamanti in produzione sono un `eprintln!` nel watcher
-      (`app/lib.rs`) e un `let _ =` in `reindex` (`workspace.rs`).
+      (`host/watcher.rs`) e un `let _ =` in `reindex` (`workspace.rs`).
       Il canale è stato costruito e non collegato.
 - [ ] Cosa serve: che `deliver_to_handlers` raccolga e risalga (l'operazione che
       ha emesso l'evento **non** deve fallire — quella parte del commento è

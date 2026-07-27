@@ -330,6 +330,41 @@ fn official_features_do_not_depend_on_the_kernel() {
     );
 }
 
+/// Il confine host↔app: **chi monta** non deve dipendere da chi disegna (§8.2).
+///
+/// `fubmd-host` esiste perché il composition root aveva cinque clienti previsti
+/// — CLI (27.1), API locale (27.2), e2e headless (17.2 e 27.4), mobile (26.2) e
+/// PWA (26.3) — e nessuno poteva riusarlo finché viveva dentro un
+/// `#[tauri::command]`. Se `tauri` rientrasse dalla finestra, quei cinque
+/// tornerebbero a non poterlo prendere, e «`fubmd-app` è ridotto a colla Tauri»
+/// resterebbe vero solo nella frase che lo dice.
+///
+/// La denylist per famiglia è la stessa dell'`abi`/kernel, ristretta al toolkit:
+/// il resto — `notify`, `tantivy`, il parser markdown — un host lo può avere, ed
+/// è anzi ciò che monta.
+#[test]
+fn whoever_mounts_does_not_depend_on_whoever_draws() {
+    let meta = metadata();
+    let graph = Graph::new(&meta);
+    let reached = graph.closure("fubmd-host");
+
+    let ui: Vec<&str> = reached
+        .into_iter()
+        .filter(|n| {
+            ["tauri", "wry", "webkit2gtk"]
+                .iter()
+                .any(|f| n.starts_with(f))
+        })
+        .collect();
+    assert!(
+        ui.is_empty(),
+        "`fubmd-host` raggiunge {ui:?} fra le dipendenze normali.\n\
+         Chi monta non può dipendere da chi disegna: la CLI, l'API locale, gli e2e\n\
+         headless, il mobile e la PWA devono poter prendere il montaggio senza\n\
+         prendersi un webview. Vedi docs/decisions/0023-chi-monta-il-kernel.md."
+    );
+}
+
 /// Il test del test: la rete deve sapersi chiudere.
 #[test]
 fn forbidden_families_match_by_prefix() {

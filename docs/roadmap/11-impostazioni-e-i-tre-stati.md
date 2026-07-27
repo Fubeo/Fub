@@ -79,7 +79,7 @@ vault), 1.1 (telemetria opt-in ha bisogno di un posto dove stare spenta).
 *ex §2.14 · kernel · **P2** — da **assorbire**, non da affiancare*
 
 - [ ] **`.fubmd/workspace.json` è un precedente fuori da ogni disciplina**: lo
-      legge e scrive l'app con `std::fs` (`app/lib.rs`). Sono dati
+      leggono e scrivono due funzioni con `std::fs` (`host/records.rs`). Sono dati
       **autorevoli** — icone, appuntate, ordinamenti, spazi — senza scrittura
       atomica, senza versione di schema (§15.3), fuori dal cestino e dal
       versioning, con la migrazione sui rename in TypeScript

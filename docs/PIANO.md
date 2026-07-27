@@ -90,7 +90,9 @@ fubmd-abi              contratto: modello documento comune + tutti i trait
   ├─ fubmd-format-markdown   1° FormatProvider nativo (comrak)
   ├─ fubmd-features    feature ufficiali (backlink, ricerca full-text, versioning)
   │                    NON dipende dal kernel: solo dal contratto, come un plugin
-  ├─ fubmd-app         Tauri v2: IPC comandi/eventi, file watcher
+  ├─ fubmd-host        chi MONTA: tabella delle feature, sessione, watcher
+  │                    dietro un trait, ponte eventi. NON dipende da tauri
+  ├─ fubmd-app         colla Tauri v2: IPC comandi/eventi, finestre, dialoghi
   ├─ fubmd-testkit     (§16.2) banco di prova del KERNEL: vault temporaneo,
   │                    provider minimo, asserzioni sugli eventi. Crate a sé e
   │                    non `fubmd-sdk::testing`, che è il banco dei PROVIDER
@@ -104,15 +106,17 @@ Il meccanismo "un trait, due backend": il trait vive in `fubmd-abi`;
 `fubmd-format-markdown` lo implementa nativo; `fubmd-wasm-host` lo implementerà
 come proxy. Il kernel vede solo `dyn Trait`.
 
-Due divisioni ulteriori sono **decise nel piano e non ancora fatte**, e stanno
-qui perché sono l'unico posto in cui si vedono insieme: `fubmd-host`
-([todo.md](todo.md) §8.2) — sessione, registry, runner dei job, watcher dietro
-un trait — con `fubmd-app` ridotto a colla Tauri, perché quel montaggio ha già
+La prima delle due divisioni che il piano aveva dichiarato è **fatta**:
+`fubmd-host` esiste, e con lui `fubmd-app` è ridotto a colla Tauri
+([decisione 0023](decisions/0023-chi-monta-il-kernel.md)) — quel montaggio ha
 cinque clienti previsti (CLI, API locale, e2e headless, mobile, PWA) e nessuno
-di loro può riusare un composition root che vive dentro un `#[tauri::command]`;
-e **un crate per bundle di feature** (§16.3), perché oggi compilare il pannello
-outline compila un motore di ricerca. La seconda va dopo il §16.2, o i venti
-bundle di 21.2 si portano dietro venti copie del banco di prova.
+di loro poteva riusare un composition root che viveva dentro un
+`#[tauri::command]`. Il registry dei bundle e il runner dei job, che la voce
+elencava, restano aperti come §9.3: `fubmd-host` è dove atterreranno. La
+seconda è ancora da fare — **un crate per bundle di feature** (§16.3), perché
+oggi compilare il pannello outline compila un motore di ricerca; va dopo il
+§16.2, o i venti bundle di 21.2 si portano dietro venti copie del banco di
+prova.
 
 Anche `frontend/` è un albero, non un elenco di file, ed è stato dichiarato
 **prima** che la seduta 2 ci riversasse venticinque specie di nodo nuove: la
