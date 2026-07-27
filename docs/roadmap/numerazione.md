@@ -65,6 +65,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.4 · §8.3 | [0024 — Il lock a grana fine](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) |
 | §1.21 · §9.1 | [0027 — Il lavoro lungo vede il vault](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) |
 | §1.35 · §9.2 | [0028 — Come un componente smette](../decisions/0028-come-un-componente-smette.md) |
+| §2.3 · §9.3 | [0031 — Chi possiede i bundle](../decisions/0031-chi-possiede-i-bundle.md) + [0032 — Il runner dei job](../decisions/0032-il-runner-dei-job.md) |
 | §2.9 · §9.4 | [0028 — Come un componente smette](../decisions/0028-come-un-componente-smette.md) |
 | §2.22 · §9.5 | [0029 — Chiudere un vault, e chiuderli tutti](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md) |
 | §2.7 · §9.6 | [0029 — Chiudere un vault, e chiuderli tutti](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md) |
@@ -100,7 +101,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §2.1 | **§15.1** | Astrazione sullo storage |
 | §2.2 | **§14.1** | Il vault non è solo documenti |
-| §2.3 | **§9.3** | Registry di plugin/feature e runner dei job |
 | §2.5 | **§15.2** | Durabilità e recovery |
 | §2.6 | **§15.5** | Politica dei path e del testo, in un modulo solo |
 | §2.7 | **§9.6** | Sessioni multiple |

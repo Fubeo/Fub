@@ -1,6 +1,6 @@
 # 9. Il lavoro lungo, e come un componente smette
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): lo spegnimento è chiuso per intero — un componente, il vault, le sessioni, e il rilevamento che adesso si può chiedere — chi possiede i bundle ha un nome, e resta **chi esegue il lavoro lungo**.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): lo spegnimento è chiuso per intero — un componente, il vault, le sessioni, il rilevamento che si può chiedere — e con lui chi possiede i bundle e chi esegue il lavoro lungo; qui non resta niente.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -9,9 +9,10 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): lo spegnimento è c
 Il quinto giro chiedeva di decidere insieme ~~§9.2~~, ~~§9.4~~ e ~~§9.1~~ — «tre
 facce del momento in cui un componente smette, e oggi nessuna delle tre ha una
 risposta» — e ~~§9.5~~ andava con ~~§9.6~~, perché «chiudere una sessione» e
-«chiuderle tutte» sono lo stesso codice. Il registry (9.3) sta qui perché è chi
-**possiede** i bundle: senza di lui non c'è nessuno che apra e chiuda alcunché, e
-il runner dei job non ha un chiamante in produzione.
+«chiuderle tutte» sono lo stesso codice. La ~~9.3~~ stava qui perché è chi
+**possiede** i bundle: senza di lui non c'era nessuno che aprisse e chiudesse
+alcunché, e il runner dei job non aveva un chiamante in produzione. Adesso ce
+l'ha.
 
 **Le tre facce sono chiuse.** La ~~9.1~~ andava sopra tutte per la ragione del
 quarto giro — non allargava una capacità, ne rendeva una **inesprimibile** — ed è
@@ -60,67 +61,26 @@ un posto: `Plugin::deactivate` ha un chiamante — e arriva **prima** che il ker
 tolga i provider, che è l'unico momento in cui il suo `host` serve a qualcosa —
 e `abi_compatible`, che era una regola senza applicazione, si applica.
 
-Quel che resta della seduta è quindi **chi esegue il lavoro lungo**: la 9.3 è
-aperta per la sua seconda metà, e basta.
+**E il lavoro lungo ha chi lo esegue.** La seconda metà della ~~9.3~~ la chiude
+la [decisione 0032](../decisions/0032-il-runner-dei-job.md), e sono le tre cose
+che il §9.3 chiedeva di decidere **insieme**, perché un pool che non nasce
+cancellabile si riscrive per diventarlo. Un pool di thread che aspetta un
+campanello del kernel invece di interrogare la coda a intervalli — la stessa
+mossa della bandiera della [0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md),
+il kernel presta un pezzetto di stato a chi fa il mestiere che lui non fa.
+L'annullamento che **non aggiunge nessuna capacità**: chi è annullato riceve
+rifiuti dal proprio host alla chiamata successiva, e un job puro che non chiama
+mai l'host arriva in fondo comunque — è il limite, ed è dichiarato. E la risposta
+alla domanda che la voce poneva, *chi chiude aspetta chi?*: **prima si smette di
+guardare, poi si smette di lavorare, poi si chiude**, che è la stessa regola del
+watcher letta due volte.
 
-### 9.3 Registry di plugin/feature e runner dei job
+Con lei è chiuso anche il **safe mode**, e non come lo chiedeva la voce: la rete
+contro i panici c'è a tutte e otto le porte da cui si entra in un plugin — e sta
+attorno alla chiamata del provider e a niente di più, perché il kernel ha
+invarianti da rimettere a posto e quel codice era già scritto per il ramo
+dell'errore — mentre la **disattivazione automatica no**, perché il meccanismo
+c'è ([0031](../decisions/0031-chi-possiede-i-bundle.md)) e mancano le due metà
+della frase: l'avviso (§20.2) e il modo di riaccendere (§11.1).
 
-*ex §2.3 · kernel · **P1** — leva alta: è chi usa la disattivazione della [0028](../decisions/0028-come-un-componente-smette.md) e la chiusura della [0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md), ed è il registry su cui poggia il capitolo 7. **È l'ultima voce della seduta, ed è aperta a metà**: il registry lo ha chiuso la [0031](../decisions/0031-chi-possiede-i-bundle.md), restano il runner, la cancellazione e il safe mode — che vanno decisi insieme.*
-
-- [x] ~~**Una tabella di montaggio unica**~~ — **chiusa dalla
-      [decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)**: le feature
-      erano cablate a mano in `mount` (`host/mount.rs`), e adesso ogni riga è un
-      `Bundle` che passa dalla stessa strada di un plugin di terzi. Il registry
-      dichiara, verifica `abi_compatible`, chiama `Plugin::activate`, fa
-      registrare i provider e **possiede** il `Box<dyn Plugin>` finché è vivo;
-      lo spazio dati continua ad assegnarlo il kernel (`plugin_data_dir`), e
-      `Trust` lo dice chi monta, non il manifest. È il pezzo che a M5 il
-      caricatore WASM riuserà tale e quale, perché a M5 il caricatore è
-      host-side per costruzione.
-- [ ] **Runner dei job**: un pool che draina `take_pending_jobs`, esegue
-      `run_job` fuori dal lock e riconsegna con `complete_job`. Esiste il giro,
-      esiste il test, **non esiste il chiamante in produzione**: oggi
-      `spawn_job` accoda e basta. «Fuori dal lock» adesso vuol dire una cosa
-      precisa e non più una figura: il workspace ha un `RwLock`
-      ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e
-      il job ha un host che il prestito se lo prende da sé, una chiamata alla
-      volta ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)
-      — è `JobHost`, in `fubmd-host`). Il pool quindi **non deve tenere niente in
-      mano** mentre chiama `run_job`: il ponte c'è, e ciò che resta da scrivere è
-      chi lo usa. Prima di quella decisione un runner scritto qui avrebbe
-      eseguito soltanto funzioni pure. E adesso c'è anche **a chi chiedere il
-      corpo**: la coda dice quale plugin (`PendingJob.plugin`), e chi possiede
-      quel plugin è il registry della
-      [0031](../decisions/0031-chi-possiede-i-bundle.md) — `BundleRegistry::plugin`
-      è l'unica cosa che quella decisione ha lasciato senza chiamante.
-- [ ] **Cancellazione** — il terzo punto del §8.3, e sta qui perché prima del
-      runner non c'è niente da cancellare: `spawn_job` accoda, e una coda non si
-      ferma, si svuota. Un job che non si può fermare è un job che blocca la
-      chiusura dell'app, e adesso quella chiusura **esiste**
-      ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)):
-      oggi non aspetta nessuno perché non c'è nessuno in volo, e la domanda «chi
-      chiude aspetta chi?» diventa dovuta il giorno in cui il runner c'è. L'altro
-      lato è il §10.3 (dove l'utente vede il pulsante). Va disegnata **con** il
-      runner, non dopo: un pool che non nasce cancellabile si riscrive per
-      diventarlo.
-- [ ] ~~**Namespace per-plugin sullo `storage_*`**~~ — **decaduta**: lo
-      `storage_*` volatile è stato **ritirato** dal contratto dalla
-      [decisione 0013](../decisions/0013-elenco-delle-capacita.md), quindi non c'è
-      più niente da namespacare. Il recinto per-plugin che resta è quello dei
-      `data_*`, che ce l'ha già (`plugin_data_dir`, che delega a `DocumentStore::plugin_data_root` in `documents.rs`). Dove il
-      buco è rimasto aperto è lo **stato di vista**, che non ha più nemmeno un
-      contenitore sbagliato: §11.2.
-- [ ] **Safe mode / isolamento**: un provider che pania non deve portarsi via il
-      vault (`catch_unwind` al confine, disattivazione con avviso) — 24.2, 20.3.
-      La [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)
-      ne ha tolto **una metà**, e va detto quale: un `RwLock` si avvelena solo se
-      a paniare è chi tiene il prestito esclusivo, quindi un provider che
-      **disegna** non se lo porta più via. Chi **agisce** sì, ed è tutto lì
-      dentro: `view_action` e `invoke_command` prendono `write()`
-      (`app/lib.rs`), e `write_document` ci fa passare il parse del formato e
-      l'alimentazione degli indici. Da lì il panico avvelena, e i quindici
-      `.read()/.write().unwrap()` di `app/lib.rs` lo traducono in un panico su
-      **ogni** comando successivo: non è la chiamata persa di cui parla la 0024,
-      è il vault irraggiungibile fino al riavvio. Finché i provider sono in-repo
-      è il caso raro; con un'estensione installata un handler di comando che
-      pania è il caso normale — la metà che resta non è la metà meno probabile.
+Qui non resta niente.

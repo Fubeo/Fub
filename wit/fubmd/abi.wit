@@ -1778,6 +1778,15 @@ interface errors {
         /// valore del routing dichiarato — chi disegna deve poter scegliere fra
         /// «installa un indice» e «qualcosa è andato storto».
         unserved(string),
+        /// ANNULLATO: il lavoro non è fallito, è stato fermato — da chi lo ha
+        /// chiesto, o dalla chiusura del vault. È l'unico esito che non è un
+        /// difetto di nessuno, e chi disegna deve poterlo dire diversamente:
+        /// senza, l'unica forma disponibile sarebbe `internal`, cioè «errore
+        /// interno del plugin» scritto sotto un pulsante che l'utente ha appena
+        /// premuto. Lo riceve chi chiama una capacità dell'host dopo che il
+        /// proprio job è stato annullato: la cancellazione non aggiunge una
+        /// capacità, toglie le altre.
+        cancelled(string),
     }
 }
 

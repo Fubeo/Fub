@@ -224,10 +224,14 @@ impl ViewProvider for Esplode {
 /// disegnare è ciò che un provider fa più spesso — smette di portarsi via il
 /// vault.
 ///
-/// **Non è la 24.2.** Là si chiede un `catch_unwind` al confine e la
-/// disattivazione con avviso: qui il panico attraversa ancora il chiamante, e
-/// chi lo riceve è il comando IPC che l'ha chiesto. Quello che cambia è che si
-/// porta via *quella chiamata* invece del vault.
+/// **E adesso non attraversa più nemmeno il chiamante** (§9.3,
+/// decisione 0032). Questa prova diceva l'opposto: «il panico attraversa ancora
+/// chi ha chiamato, e quello che cambia è che si porta via *quella chiamata*
+/// invece del vault». Era la metà che la 0024 poteva comprare da sola; l'altra
+/// metà è la rete al confine, che traduce il panico in un `PluginError` che
+/// **nomina** il colpevole. Ciò che la 0024 ha comprato resta e non è
+/// ridondante: la rete si può bucare — la prova qui sotto la buca apposta da un
+/// thread suo — e sotto un `Mutex` un buco solo costerebbe ancora il vault.
 #[test]
 fn una_view_che_pania_disegnando_non_avvelena_il_vault() {
     let v = vault(4);
@@ -243,15 +247,30 @@ fn una_view_che_pania_disegnando_non_avvelena_il_vault() {
             .expect("registrata");
     }
 
+    // Il panico non esce più dal kernel: torna come errore, e dice di chi è.
+    let esito = ws
+        .read()
+        .unwrap()
+        .render_view(&ViewInstance::only("esplode"));
+    let errore = esito.expect_err("una view che pania non rende un albero");
+    assert!(
+        errore.to_string().contains("fubmd.esplode")
+            && errore.to_string().contains("è andato in panico"),
+        "l'errore deve nominare chi è esploso: {errore}"
+    );
+
+    // E se qualcuno lo bucasse, la seconda rete regge: un panico su un prestito
+    // **condiviso** non avvelena. Il thread serve solo a non far morire il test.
     let scoppiata = {
         let ws = ws.clone();
         std::thread::spawn(move || {
             let w = ws.read().unwrap();
-            let _ = w.render_view(&ViewInstance::only("esplode"));
+            let _ = w.views();
+            panic!("qualcuno pania tenendo il prestito condiviso");
         })
         .join()
     };
-    assert!(scoppiata.is_err(), "la view doveva paniare");
+    assert!(scoppiata.is_err(), "il thread doveva paniare");
 
     // E il vault risponde ancora — in lettura e in scrittura.
     assert!(

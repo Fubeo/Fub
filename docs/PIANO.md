@@ -120,9 +120,12 @@ lì anche lui ([decisione 0031](decisions/0031-chi-possiede-i-bundle.md)): un
 bundle si monta in quattro passi sempre uguali — versione del contratto,
 dichiarazione, `Plugin::activate`, provider — e chi lo monta lo possiede, perché
 l'`HostApi` non ha capacità di registrazione e un plugin non può registrarsi da
-sé. Del §9.3 resta il **runner dei job**, nello stesso crate del `JobHost` della
-[0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), che è ciò che quel pool
-avrà da passare al job. La
+sé. E nello stesso crate è atterrato il **runner dei job**
+([decisione 0032](decisions/0032-il-runner-dei-job.md)), che chiude il §9.3: un
+pool di thread per vault che aspetta un campanello del kernel, drena la coda e
+passa al job il `JobHost` della
+[0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md); annullare è alzare una
+bandiera, e chi chiude aspetta chi ha già cominciato. La
 seconda è ancora da fare — **un crate per bundle di feature** (§16.3), perché
 oggi compilare il pannello outline compila un motore di ricerca; va dopo il
 §16.2, o i venti bundle di 21.2 si portano dietro venti copie del banco di

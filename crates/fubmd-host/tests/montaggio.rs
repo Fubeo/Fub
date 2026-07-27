@@ -283,7 +283,7 @@ fn chi_smette_ha_ancora_lhost_e_i_propri_provider() {
     assert_eq!(registry.ids(), vec!["test.uno"]);
     assert!(
         registry
-            .plugin("test.uno")
+            .body("test.uno")
             .is_some_and(|p| p.manifest().id == "test.uno"),
         "il registry POSSIEDE il plugin: è dove il runner dei job troverà il \
          corpo da eseguire"
@@ -305,7 +305,7 @@ fn chi_smette_ha_ancora_lhost_e_i_propri_provider() {
         "e dopo non è rimasto niente di lui"
     );
     assert!(
-        registry.plugin("test.uno").is_none(),
+        registry.body("test.uno").is_none(),
         "il registry non lo possiede più"
     );
 }

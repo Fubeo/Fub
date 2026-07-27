@@ -144,17 +144,32 @@ impl Indexes {
         removed
     }
 
+    /// Un documento indicizzato va all'indice del kernel e poi a tutti quelli
+    /// registrati.
+    ///
+    /// I registrati passano dalla rete contro i panici (§9.3): questo giro è
+    /// dentro **ogni scrittura**, cioè sotto il prestito esclusivo di chi ha
+    /// chiamato, e un indice che pania su un documento strano si porterebbe via
+    /// il vault invece che sé stesso. Il kernel non ha come dirglielo — la firma
+    /// non rende niente — quindi il panico si ferma e si racconta, come l'errore
+    /// di un handler. L'indice del kernel **non** è in rete: se pania lui è un
+    /// difetto del kernel, e nasconderlo vorrebbe dire cercarlo poi in un vault
+    /// che risponde a metà.
     pub(crate) fn on_document_indexed(&mut self, model: &DocumentModel) {
         self.core.on_document_indexed(model);
-        for (_, index) in self.providers.iter_mut() {
-            index.on_document_indexed(model);
+        for (id, index) in self.providers.iter_mut() {
+            crate::safety::notifying(id, "indicizzando un documento", || {
+                index.on_document_indexed(model)
+            });
         }
     }
 
     pub(crate) fn on_document_removed(&mut self, id: &DocId) {
         self.core.on_document_removed(id);
-        for (_, index) in self.providers.iter_mut() {
-            index.on_document_removed(id);
+        for (plugin, index) in self.providers.iter_mut() {
+            crate::safety::notifying(plugin, "togliendo un documento", || {
+                index.on_document_removed(id)
+            });
         }
     }
 

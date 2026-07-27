@@ -251,20 +251,26 @@ impl SyntaxRegistry {
                     continue;
                 }
             }
-            match &r.spec.trigger {
-                SyntaxTrigger::Fence { info } => {
-                    let wanted: Vec<String> = info.iter().map(|i| i.to_lowercase()).collect();
-                    apply_to_blocks(&mut model.body, &mut |block| {
-                        fence_rule(block, r, &wanted, ctx)
-                    });
+            // Una regola gira dentro **ogni** parse, cioè sotto il prestito di
+            // chi ha chiesto di scrivere: un panico qui si porterebbe via il
+            // vault (§9.3). Si ferma, si racconta, e ciò che perde è la propria
+            // trasformazione — le altre regole girano lo stesso.
+            crate::safety::notifying(&r.spec.id, "innestandosi sul documento", || {
+                match &r.spec.trigger {
+                    SyntaxTrigger::Fence { info } => {
+                        let wanted: Vec<String> = info.iter().map(|i| i.to_lowercase()).collect();
+                        apply_to_blocks(&mut model.body, &mut |block| {
+                            fence_rule(block, r, &wanted, ctx)
+                        });
+                    }
+                    SyntaxTrigger::Inline { open, close } => {
+                        apply_to_blocks(&mut model.body, &mut |block| {
+                            inline_rule(block, r, open, close, ctx);
+                            None
+                        });
+                    }
                 }
-                SyntaxTrigger::Inline { open, close } => {
-                    apply_to_blocks(&mut model.body, &mut |block| {
-                        inline_rule(block, r, open, close, ctx);
-                        None
-                    });
-                }
-            }
+            });
         }
     }
 }

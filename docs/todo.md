@@ -15,8 +15,8 @@ Le nove che seguono non le ha trovate né un giro né una misura: le ha aperte u
 ricerca di FubMD è built-in e di classe *omnisearch*, e da lì in poi le voci sono
 la sottrazione fra ciò che quel comportamento richiede e ciò che il contratto sa
 dire ([seduta 21](roadmap/21-la-ricerca-predefinita.md)).
-Cinquantacinque sono chiuse, e i loro verbali stanno in
-[docs/decisions/](decisions/README.md); le altre cinquantaquattro sono qui, e
+Cinquantasei sono chiuse, e i loro verbali stanno in
+[docs/decisions/](decisions/README.md); le altre cinquantatré sono qui, e
 questo file è il loro **indice**.
 
 ## Come è organizzato
@@ -89,12 +89,13 @@ disattivazione che toglie davvero
 con l'ultimo giro sincrono, il flush e poi ognuno che smette
 ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)) — dove «il
 tutto» ha smesso di voler dire *un* vault, perché adesso ce ne stanno più
-d'uno aperti insieme. Quel che resta della seduta non è più lo spegnimento: è
-**chi esegue il lavoro lungo** (la seconda metà del §9.3), e basta — anche
-l'ultima domanda che nessuno faceva, *questo vault sa quando cambia da fuori?*,
-adesso si può fare ([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)), e
-i bundle un proprietario ce l'hanno
-([0031](decisions/0031-chi-possiede-i-bundle.md)).
+d'uno aperti insieme. E della seduta non resta **niente**: i bundle hanno un
+proprietario
+([0031](decisions/0031-chi-possiede-i-bundle.md)) e il lavoro lungo ha chi lo
+esegue, chi lo può fermare e una rete sotto
+([0032](decisions/0032-il-runner-dei-job.md)) — e anche l'ultima domanda che
+nessuno faceva, *questo vault sa quando cambia da fuori?*, adesso si può fare
+([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)).
 
 E una sesta, dal **settimo giro**: **cosa fallisce senza produrre nessun
 segnale** — quale sbaglio di un plugin, del kernel, dell'utente o di un'altra
@@ -128,7 +129,7 @@ descrive una promessa.
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | *la stessa regola serve a provider, shell e a M5 a un guest WASM.* Deciso con la [0020](decisions/0020-le-regole-in-un-posto-solo.md) | — | — |
 | **7** | [Il confine](roadmap/07-il-confine.md) | *la disciplina del confine, da chi lo attraversa e da chi lo presta.* Deciso con la [0021](decisions/0021-il-confine.md) | — | — |
 | **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio è scomposto ([0022](decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](decisions/0023-chi-monta-il-kernel.md)), il lock è a grana fine ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e la ricerca non si rimette più in fila da sé ([0026](decisions/0026-due-query-insieme.md)) | — | — |
-| **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | tutto lo spegnimento è **chiuso** — un componente ([0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), [0028](decisions/0028-come-un-componente-smette.md)), il vault e le sessioni multiple ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)), il rilevamento che si può chiedere ([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)) e chi possiede i bundle ([0031](decisions/0031-chi-possiede-i-bundle.md)); resta chi esegue il lavoro lungo | 1 | — |
+| **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | **chiusa**: un componente che smette ([0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), [0028](decisions/0028-come-un-componente-smette.md)), il vault e le sessioni multiple ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)), il rilevamento che si può chiedere ([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)), chi possiede i bundle ([0031](decisions/0031-chi-possiede-i-bundle.md)) e chi esegue il lavoro lungo ([0032](decisions/0032-il-runner-dei-job.md)) | — | — |
 | **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | lo stesso canale a tre distanze: chi si abbona, cosa passa, chi lo mostra | 3 | 1 |
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano | 3 | — |
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | chi localizza le stringhe localizza anche gli errori | 4 | 3 |
@@ -195,7 +196,6 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
-| **§9.3** | [Registry di plugin/feature e runner dei job](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#93-registry-di-pluginfeature-e-runner-dei-job) *(aperta a metà: il registry lo ha chiuso la [0031](decisions/0031-chi-possiede-i-bundle.md))* | 9. Il lavoro lungo, e come un componente smette | kernel | **P1** |
 | **§10.1** | [L'abbonamento agli eventi non filtra](roadmap/10-gli-eventi.md#101-labbonamento-agli-eventi-non-filtra) | 10. Gli eventi: grana, freno, destinatari | contratto | **P0** |
 | **§10.2** | [Il ponte degli eventi non ha né freno né raggruppamento](roadmap/10-gli-eventi.md#102-il-ponte-degli-eventi-non-ha-né-freno-né-raggruppamento) | 10. Gli eventi: grana, freno, destinatari | kernel | **P2** |
 | **§10.3** | [Notifiche e attività in background](roadmap/10-gli-eventi.md#103-notifiche-e-attività-in-background) | 10. Gli eventi: grana, freno, destinatari | shell | **P2** |
@@ -256,7 +256,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — ventotto, uno per
+- [I verbali delle decisioni chiuse](decisions/README.md) — trentadue, uno per
   file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

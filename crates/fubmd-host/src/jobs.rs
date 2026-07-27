@@ -22,7 +22,26 @@
 //! due chiamate**. Non è un difetto di questo tipo, è ciò che vuol dire non
 //! fermare il mondo; la guardia contro il cambio è quella di tutti — una `base`
 //! e un [`Conflict`](fubmd_abi::PluginError::Conflict).
+//!
+//! # E la cancellazione, che è la stessa idea al contrario
+//!
+//! Un prestito per chiamata vuol dire anche **una decisione per chiamata**, e
+//! da lì viene l'annullamento (§9.3,
+//! [decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)): un job
+//! annullato non riceve un segnale da controllare, riceve
+//! [`PluginError::Cancelled`] alla capacità successiva. Non c'è niente da
+//! ricordarsi di chiamare, e un job scritto prima che la cancellazione esistesse
+//! si ferma comunque.
+//!
+//! Ciò che **non** rifiuta sono le cinque capacità che non possono fallire —
+//! `free_name`, `format_of`, `now_unix_millis`, `active_context`, `emit` — e non
+//! è una dimenticanza: non hanno dove metterlo, un rifiuto. Nessuna delle cinque
+//! cambia il vault, e la ragione è strutturale: nel contratto **tutto ciò che
+//! cambia il vault può fallire**, quindi tutto ciò che cambia il vault si può
+//! rifiutare. `emit` resta aperta di proposito — l'ultima cosa che un job
+//! annullato può voler dire è che sta smettendo.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 use fubmd_abi::command::CommandOutcome;
@@ -58,6 +77,15 @@ use fubmd_kernel::Workspace;
 pub struct JobHost {
     workspace: Arc<RwLock<Workspace>>,
     plugin: String,
+    /// La bandiera dell'**annullamento** (§9.3, decisione 0032): alzata, ogni
+    /// capacità che può dire di no dice di no.
+    ///
+    /// Sta qui e non nel contratto perché la cancellazione **non aggiunge una
+    /// capacità**: non c'è un `is_cancelled()` che un job debba ricordarsi di
+    /// chiamare — c'è un host che smette di servirlo. Un job scritto senza
+    /// sapere che la cancellazione esiste si ferma comunque, alla prima cosa
+    /// che prova a fare.
+    cancelled: Arc<AtomicBool>,
 }
 
 impl JobHost {
@@ -71,7 +99,53 @@ impl JobHost {
         JobHost {
             workspace,
             plugin: plugin.into(),
+            cancelled: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Lega questo host alla bandiera con cui il suo job si può **annullare**.
+    ///
+    /// La tiene il runner, che è l'unico a sapere quale job è quale; alzarla è
+    /// tutto ciò che «annullare» vuol dire.
+    pub fn cancelled_by(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.cancelled = flag;
+        self
+    }
+
+    /// Il rifiuto da dare a chi è stato annullato, se lo è stato.
+    ///
+    /// Si guarda **prima** di prendere il prestito: un job annullato smette
+    /// anche di mettersi in fila per il lock, che è metà del motivo per cui lo
+    /// si annulla.
+    fn stopped(&self) -> Result<(), PluginError> {
+        if self.cancelled.load(Ordering::Relaxed) {
+            return Err(PluginError::Cancelled(format!(
+                "il job di `{}` è stato annullato",
+                self.plugin
+            )));
+        }
+        Ok(())
+    }
+
+    /// Una lettura che può **rifiutare**: prima la bandiera, poi il prestito.
+    fn read_result<R>(
+        &self,
+        f: impl FnOnce(&dyn ReadApi) -> Result<R, PluginError>,
+    ) -> Result<R, PluginError> {
+        self.stopped()?;
+        self.reading(f)
+    }
+
+    /// Una scrittura che può **rifiutare**. Tutto ciò che cambia il vault passa
+    /// di qui, ed è la ragione per cui la cancellazione non ha bisogno di
+    /// nient'altro: nel contratto **tutto ciò che cambia il vault può fallire**,
+    /// quindi tutto ciò che cambia il vault si può rifiutare.
+    fn write_result<R>(
+        &mut self,
+        f: impl FnOnce(&mut dyn HostApi) -> Result<R, PluginError>,
+    ) -> Result<R, PluginError> {
+        self.stopped()?;
+        self.writing(f)
     }
 
     /// Una lettura: prestito **condiviso**, e N job che leggono non si aspettano
@@ -97,15 +171,15 @@ impl JobHost {
 
 impl VaultRead for JobHost {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
-        self.reading(|h| h.read_document(id))
+        self.read_result(|h| h.read_document(id))
     }
 
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
-        self.reading(|h| h.document_revision(id))
+        self.read_result(|h| h.document_revision(id))
     }
 
     fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
-        self.reading(|h| h.list_documents(page))
+        self.read_result(|h| h.list_documents(page))
     }
 
     fn free_name(&self, id: &DocId) -> DocId {
@@ -113,7 +187,7 @@ impl VaultRead for JobHost {
     }
 
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
-        self.reading(|h| h.read_model(id))
+        self.read_result(|h| h.read_model(id))
     }
 
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
@@ -121,59 +195,59 @@ impl VaultRead for JobHost {
     }
 
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
-        self.reading(|h| h.list_trash())
+        self.read_result(|h| h.list_trash())
     }
 }
 
 impl VaultWrite for JobHost {
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.writing(|h| h.write_document(id, source))
+        self.write_result(|h| h.write_document(id, source))
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
-        self.writing(|h| h.apply_edit(id, request))
+        self.write_result(|h| h.apply_edit(id, request))
     }
 }
 
 impl VaultStructure for JobHost {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.writing(|h| h.create_document(id, source))
+        self.write_result(|h| h.create_document(id, source))
     }
 
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
-        self.writing(|h| h.rename_document(from, to))
+        self.write_result(|h| h.rename_document(from, to))
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
-        self.writing(|h| h.trash_document(id))
+        self.write_result(|h| h.trash_document(id))
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        self.writing(|h| h.restore_document(entry, to))
+        self.write_result(|h| h.restore_document(entry, to))
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
-        self.writing(|h| h.empty_trash())
+        self.write_result(|h| h.empty_trash())
     }
 }
 
 impl DataRead for JobHost {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        self.reading(|h| h.data_read(path))
+        self.read_result(|h| h.data_read(path))
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
-        self.reading(|h| h.data_list(prefix))
+        self.read_result(|h| h.data_list(prefix))
     }
 }
 
 impl DataWrite for JobHost {
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
-        self.writing(|h| h.data_write(path, bytes))
+        self.write_result(|h| h.data_write(path, bytes))
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
-        self.writing(|h| h.data_remove(path))
+        self.write_result(|h| h.data_remove(path))
     }
 }
 
@@ -200,13 +274,13 @@ impl HostEvents for JobHost {
     /// Un job può chiederne un altro: la coda è la stessa, e a drenarla è sempre
     /// chi possiede i thread.
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError> {
-        self.writing(|h| h.spawn_job(spec))
+        self.write_result(|h| h.spawn_job(spec))
     }
 }
 
 impl HostQuery for JobHost {
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
-        self.reading(|h| h.query_index(query))
+        self.read_result(|h| h.query_index(query))
     }
 }
 
@@ -219,7 +293,7 @@ impl HostCommands for JobHost {
         command: &str,
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
-        self.writing(|h| h.run_command(command, args))
+        self.write_result(|h| h.run_command(command, args))
     }
 }
 
@@ -230,6 +304,6 @@ impl HostServices for JobHost {
         method: &str,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
-        self.writing(|h| h.call_service(service, method, args))
+        self.write_result(|h| h.call_service(service, method, args))
     }
 }

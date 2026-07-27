@@ -56,6 +56,14 @@ non ha permessi.
       [0028](../decisions/0028-come-un-componente-smette.md) ha reso possibile:
       spegnere **a runtime** un plugin già acceso, che adesso ha un inverso vero
       (`Workspace::deactivate_plugin`) e non solo un «non lo registro all'avvio».
+      La strada dal registro esiste ed è `BundleRegistry::unmount`
+      ([0031](../decisions/0031-chi-possiede-i-bundle.md)): smonta un bundle
+      intero — commiato al plugin, provider ritirati, job annullati — e quindi
+      qui non resta da inventare il *meccanismo*, ma da dargli **dove stare
+      scritto** fra un avvio e l'altro, e un modo di **riaccendere**. È anche il
+      pezzo che manca alla [0032](../decisions/0032-il-runner-dei-job.md) per
+      poter decidere che un plugin che pania si spenga: senza riaccensione e
+      senza avviso (§20.2), un panico costa la chiamata e basta.
 - [ ] **Import/export/reset delle impostazioni** come comandi ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), non come
       codice dell'app.
 

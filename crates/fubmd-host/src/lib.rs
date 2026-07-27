@@ -52,17 +52,26 @@
 //! registrare ciò che offre. [`mount`] è la tabella delle otto righe ufficiali,
 //! e ogni riga è un [`Bundle`] come lo sarà un plugin di terzi.
 //!
+//! ## Chi esegue il lavoro lungo
+//!
+//! [`JobRunner`] è il pool che drena la coda dei job e li esegue fuori dal giro
+//! sincrono (§9.3,
+//! [decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)). Prima
+//! quella coda non la drenava nessuno in produzione: `spawn_job` accodava e
+//! basta. Il pool passa al job un [`JobHost`] — che il prestito se lo prende una
+//! chiamata alla volta — e il **corpo** glielo dà [`BundleRegistry::body`].
+//! Annullare un job è alzare una bandiera: da lì in poi il suo host gli dice di
+//! no, e chi chiude aspetta chi ha già cominciato.
+//!
 //! ## Cosa NON è ancora qui
 //!
-//! Il §8.2 elencava anche il runner dei job e lo storage del §15.1. Il runner
-//! resta del §9.3 — un pool, e la cancellazione che va disegnata **con** lui;
-//! [`JobHost`] è ciò che quel pool avrà da passare al job, e
-//! [`BundleRegistry::plugin`] è dove troverà il corpo da eseguire.
+//! Il §8.2 elencava anche lo storage del §15.1.
 
 pub mod jobs;
 pub mod mount;
 pub mod records;
 pub mod registry;
+pub mod runner;
 pub mod session;
 pub mod settings;
 pub mod watcher;
@@ -71,6 +80,7 @@ pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, VaultInfo, WorkspaceMeta};
 pub use registry::{Bundle, BundleError, BundleRegistry, OnlyProviders};
+pub use runner::{JobRunner, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled};
 pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};

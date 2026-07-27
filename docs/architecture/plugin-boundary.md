@@ -486,9 +486,9 @@ strada propria — i **job** — invece di fingere che non esista:
    plugin chiama `HostApi::spawn_job(JobSpec { job, payload })` e riceve
    subito un `JobId`. Il kernel accoda soltanto: niente esecuzione dentro al
    lock (`Workspace::take_pending_jobs`).
-2. **Esecuzione (fuori dal kernel).** Chi possiede i thread — il runner del
-   §9.3, che in produzione **non c'è ancora**, l'host WASM a M5 — drena la coda
-   ed esegue
+2. **Esecuzione (fuori dal kernel).** Chi possiede i thread — il `JobRunner` di
+   `fubmd-host` ([decisione 0032](../decisions/0032-il-runner-dei-job.md)),
+   l'host WASM a M5 — drena la coda ed esegue
    `Plugin::run_job(job, payload, host)` **fuori** dal giro sincrono del kernel,
    **senza tenere in mano nessun prestito del workspace**. Il job ha le stesse
    capacità che il plugin ha altrove ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)),
@@ -519,6 +519,16 @@ Conseguenze:
   `run_job` è un componente con le stesse capability del plugin);
 - un job lento o ostile non congela nulla: al peggio il suo `JobDone` porta
   un errore (timeout dell'host);
+- **si può annullare, e la cancellazione è cooperativa**: `Host::cancel_job`
+  alza una bandiera, e da quel momento l'host del job **rifiuta** ogni capacità
+  fallibile con `PluginError::Cancelled` (le cinque infallibili — `free_name`,
+  `format_of`, `now_unix_millis`, `active_context`, `emit` — non hanno dove
+  metterlo, un rifiuto). Nel contratto non compare nessuna capacità nuova: un
+  job scritto prima che la cancellazione esistesse si ferma comunque, alla prima
+  cosa che prova a fare. Il limite è dichiarato — **un job che non chiama mai
+  l'host arriva in fondo**, perché in Rust un thread non si uccide; la risposta
+  vera è la deadline di M5. Chiudere il vault annulla tutto, ferma il pool e
+  aspetta chi ha già cominciato: nessun job sparisce senza il suo `JobDone`;
 - lo **streaming** (progressi incrementali di un job) non è ancora nel
   contratto: se servirà (AI, indicizzazioni lunghe) si aggiungerà un canale di
   progresso *prima* del freeze — vedi [../appendix/ai-autocomplete.md](../appendix/ai-autocomplete.md).
@@ -537,6 +547,24 @@ Quindi, esplicitamente:
 - lo scopo del primo plugin nativo (M4) è esercitare *il percorso* (manifest →
   consenso → `HostApi` con permessi → attivazione), così M5 cambia il backend,
   non inventa il confine.
+
+**Un panico al confine costa la chiamata, non il vault.** L'unico isolamento che
+si può comprare da un plugin nativo è quello dai suoi *incidenti*, e c'è: ogni
+porta da cui si entra in codice di un provider — `invoke_command`, `view_action`,
+`render_view`, `call_service`, la consegna a un `EventHandler`, l'alimentazione
+degli indici registrati, il `parse` di un `FormatProvider`, l'innesto di una
+`SyntaxRule`, il disegno di un `CustomRenderer` — gira dentro una rete
+(`fubmd-kernel/src/safety.rs`) che cattura il panico e lo traduce nell'errore di
+casa, nominando il colpevole. La rete sta **attorno alla chiamata del provider e
+a niente di più**: dentro quella chiamata il kernel ha invarianti da rimettere a
+posto (la tabella dei provider prestata, le pile di comandi e servizi, il lotto,
+l'attore) e quel codice gira già sul ramo dell'errore. Senza la rete, un provider
+che pania sotto il prestito esclusivo avvelenava il `RwLock` del workspace e
+rendeva il vault irraggiungibile fino al riavvio. Non disattiva niente — il
+meccanismo esiste (`BundleRegistry::unmount`) ma manca sia il canale per dare
+l'avviso (§20.2) sia il modo di riaccendere a runtime (§11.1). L'isolamento vero
+— un plugin che non si porta via nemmeno la memoria — resta la sandbox di M5
+([decisione 0032](../decisions/0032-il-runner-dei-job.md)).
 
 Stesso principio per la UI: un provider non fidato non può emettere
 `UiNode::Html`/`WebView` (iniettano contenuto attivo nella webview privilegiata

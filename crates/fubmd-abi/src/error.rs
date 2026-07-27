@@ -51,4 +51,19 @@ pub enum PluginError {
     /// «installa un indice» o «qualcosa è andato storto».
     #[error("nessun indice serve questa domanda: {0}")]
     Unserved(String),
+    /// **Annullato**: il lavoro non è fallito, è stato fermato — da chi l'ha
+    /// chiesto, o dalla chiusura del vault.
+    ///
+    /// È un caso a sé perché è l'unico esito che **non è un difetto di
+    /// nessuno**, e chi disegna deve poterlo dire diversamente: un job fallito
+    /// si riprova e si segnala, un job annullato si è ottenuto ciò che si
+    /// voleva. Senza, l'unica forma disponibile sarebbe `internal`, cioè
+    /// «errore interno del plugin» scritto sotto un pulsante che l'utente ha
+    /// appena premuto.
+    ///
+    /// Lo riceve chi chiama una capacità dell'host **dopo** che il proprio job è
+    /// stato annullato (decisione 0032): la cancellazione non aggiunge una
+    /// capacità al contratto, toglie le altre.
+    #[error("annullato: {0}")]
+    Cancelled(String),
 }

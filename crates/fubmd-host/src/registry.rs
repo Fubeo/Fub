@@ -38,6 +38,8 @@
 //! smontarlo per intero vorrebbe dire che un id doppio in un plugin di terzi
 //! spegne l'indice di ricerca. Ciò che non entra torna come **avviso**.
 
+use std::sync::Arc;
+
 use fubmd_abi::traits::{abi_compatible, HostApi, Plugin, PluginManifest};
 use fubmd_abi::PluginError;
 use fubmd_kernel::{RegistryError, Trust, Workspace};
@@ -123,14 +125,21 @@ impl std::fmt::Display for BundleError {
 impl std::error::Error for BundleError {}
 
 /// Un bundle montato: l'id con cui è dichiarato, e il suo plugin.
+///
+/// Il plugin è un `Arc` e non un `Box` dalla
+/// [0032](../../../docs/decisions/0032-il-runner-dei-job.md): il runner esegue
+/// `run_job` su un thread suo e per tutta la durata del job, quindi ha bisogno
+/// di **tenere** il corpo senza tenere il lock di questo registry — o chiudere
+/// il vault aspetterebbe la fine di un export. `Arc<dyn Plugin>` è la forma di
+/// quel prestito, e regge perché `run_job` prende `&self`.
 struct MountedBundle {
     id: String,
-    plugin: Box<dyn Plugin>,
+    plugin: Arc<dyn Plugin>,
 }
 
 /// **Chi possiede i bundle** di un workspace, in ordine di montaggio.
 ///
-/// Possedere il `Box<dyn Plugin>` è tutto il mestiere di questo tipo, e da lì
+/// Possedere il plugin è tutto il mestiere di questo tipo, e da lì
 /// vengono le due cose che prima non avevano un posto dove stare:
 /// [`Plugin::deactivate`], che non aveva un chiamante
 /// ([decisione 0028](../../../docs/decisions/0028-come-un-componente-smette.md)),
@@ -183,7 +192,13 @@ impl BundleRegistry {
 
         // 4. I provider. Da qui in poi ciò che va storto è un avviso.
         let warnings = bundle.register(ws);
-        self.mounted.push(MountedBundle { id, plugin });
+        self.mounted.push(MountedBundle {
+            id,
+            // Dopo l'attivazione, e non prima: `activate` vuole `&mut self`, e
+            // il momento in cui il plugin è ancora solo di chi lo ha costruito è
+            // proprio questo.
+            plugin: Arc::from(plugin),
+        });
         Ok(warnings)
     }
 
@@ -192,17 +207,19 @@ impl BundleRegistry {
         self.mounted.iter().map(|m| m.id.as_str()).collect()
     }
 
-    /// Il plugin di un bundle montato.
-    ///
-    /// È il corpo di un job: chi drena `take_pending_jobs` sa **a quale
-    /// plugin** chiederlo (è il campo che la
+    /// **Il corpo di un job.** Chi drena `take_pending_jobs` sa a quale plugin
+    /// chiederlo (è il campo che la
     /// [0028](../../../docs/decisions/0028-come-un-componente-smette.md) ha
     /// messo in `PendingJob`) e lo trova qui.
-    pub fn plugin(&self, id: &str) -> Option<&dyn Plugin> {
+    ///
+    /// Rende un `Arc` clonato e non un prestito, ed è il punto: chi esegue un
+    /// job lo tiene per minuti, e un prestito lo terrebbe legato a questo
+    /// registry per tutto quel tempo.
+    pub fn body(&self, id: &str) -> Option<Arc<dyn Plugin>> {
         self.mounted
             .iter()
             .find(|m| m.id == id)
-            .map(|m| m.plugin.as_ref())
+            .map(|m| Arc::clone(&m.plugin))
     }
 
     /// **Chi smette lo sa mentre è ancora intero**: chiama
@@ -224,11 +241,22 @@ impl BundleRegistry {
             return Vec::new();
         };
         let mut bundle = self.mounted.remove(at);
-        let out = ws.with_host(id, |host| bundle.plugin.deactivate(host));
-        // Qui il `Box` cade, ed è il momento in cui un bundle nativo lascia
-        // andare ciò che il `deactivate` non ha saputo lasciare.
+        // `deactivate` prende `&mut self`, quindi vuole che il plugin sia di
+        // **uno solo**: lo è, perché chi chiude ferma il pool prima di arrivare
+        // qui (`JobRunner::stop`, decisione 0032) e un job in volo è l'unico
+        // altro che potrebbe tenerne una copia. Se un giorno qualcuno invertisse
+        // i due passi, il commiato non verrebbe chiamato e questo lo **dice**,
+        // invece di aspettare in silenzio la fine di un export.
+        let out = match Arc::get_mut(&mut bundle.plugin) {
+            Some(plugin) => ws.with_host(id, |host| plugin.deactivate(host)).err(),
+            None => Some(PluginError::Internal(format!(
+                "`{id}` ha un job ancora in volo: il suo `deactivate` non è stato chiamato                  (chi spegne un bundle ferma prima i suoi job)"
+            ))),
+        };
+        // Qui l'ultima copia cade, ed è il momento in cui un bundle nativo
+        // lascia andare ciò che il `deactivate` non ha saputo lasciare.
         drop(bundle);
-        out.err().into_iter().collect()
+        out.into_iter().collect()
     }
 
     /// Spegne **un** bundle per intero: [`Plugin::deactivate`] mentre ha ancora
