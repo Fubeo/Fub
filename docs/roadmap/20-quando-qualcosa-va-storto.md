@@ -40,12 +40,12 @@ dell'attesa non cresce, è già massimo.
 
 - [ ] **Tre metodi su cinque di `IndexProvider` restituiscono `()`**:
       `on_document_indexed`, `on_document_removed` e `reconcile`
-      (`abi/traits.rs:928-936`). Gli altri due — `activate` e `flush`
-      (`:927`, `:948`) — restituiscono `Result`. L'asimmetria è dentro lo stesso
+      (`abi/traits.rs`). Gli altri due — `activate` e `flush`
+      (stesso file) — restituiscono `Result`. L'asimmetria è dentro lo stesso
       trait, e cade esattamente sui tre metodi da cui passa **tutto il dato**:
       il ciclo di vita può fallire e dirlo, l'alimentazione no.
 - [ ] **Non è teorico, ed è già scritto in repo con il suo commento.**
-      `SearchIndex::on_document_indexed` (`features/src/search.rs:603-609`):
+      `SearchIndex::on_document_indexed` (`features/src/search.rs`):
 
       if inner.writer.add_document(td).is_err() {
           // Il writer è andato: l'indice non è più affidabile, e mentire è
@@ -108,19 +108,18 @@ kernel.
       perché non hanno un cliente»*. Questa voce non riapre la decisione: porta
       **il cliente**, che è la condizione che il verbale stesso aveva posto
       (*«quando arriveranno, arriveranno come Event, ed è additivo»*).
-- [ ] **I clienti ci sono già, e sono scritti.** Quattordici `eprintln!` nel
+- [ ] **I clienti ci sono già, e sono scritti.** Venticinque `eprintln!` nel
       backend, ognuno su un fatto che l'utente ha diritto di sapere e non saprà:
       indice di ricerca non disponibile e versioning non disponibile
-      (`app/lib.rs:155`, `:158`, `:174`), flush dell'indice fallito (`:280`),
-      errore del watcher (`:285`), sidecar del cestino non scritto
-      (`kernel/vault.rs:219` — cioè: **il ripristino di quella nota tornerà nel
+      (`app/lib.rs`), flush dell'indice fallito ed errore del watcher
+      (sempre `app/lib.rs`), sidecar del cestino non scritto
+      (`kernel/vault.rs` — cioè: **il ripristino di quella nota tornerà nel
       posto sbagliato**), versione non salvata, nota illeggibile, tombstone non
       scritto, potatura fallita, indice del versioning ricostruito
-      (`features/src/versioning.rs:163`, `:435`, `:438`, `:540`, `:611`, `:614`,
-      `:660`, `:664`). In un'app impacchettata **stderr non ha un lettore**: lo
-      dice la shell stessa, nel commento che protegge l'unico caso in cui si è
-      posto il problema (`frontend/src/main.ts`, in coda, «la console della
-      webview, che in un'app impacchettata non si apre»).
+      (`features/src/versioning.rs`). In un'app impacchettata **stderr non ha
+      un lettore**: lo dice la shell stessa, nel commento che protegge l'unico
+      caso in cui si è posto il problema (`frontend/src/main.ts`, in coda, «la
+      console della webview, che in un'app impacchettata non si apre»).
 - [ ] **Due commenti nel kernel rimandano tutti e due alla stessa cosa che non
       esiste** (`workspace.rs`): «gli errori di flush non fanno fallire
       l'apertura del vault: un indice è stato *derivato*, il vault è la verità
@@ -158,12 +157,12 @@ visibile), 20.2 (log plugin).
 - [ ] **`let _ = handler.handle(notice, &mut host);`** (`workspace.rs`,
       `deliver_to_handlers`).
       `EventHandler::handle` restituisce `Result<(), PluginError>`
-      (`abi/traits.rs:989`) — il contratto il canale ce l'ha — e il dispatch lo
+      (`abi/traits.rs`) — il contratto il canale ce l'ha — e il dispatch lo
       scarta con un commento che nomina il debito («si ignora (M4:
       log/notifica)»).
 - [ ] **La rete di sicurezza si spegne nella forma esatta del funzionare.** Il
       versioning è un `EventHandler` e nient'altro; il suo `handle` propaga
-      l'errore di `store.snapshot(...)` (`features/src/versioning.rs:702-704`).
+      l'errore di `store.snapshot(...)` (`features/src/versioning.rs`).
       Disco pieno, `.fubmd-data/` in sola lettura, vault su una cartella cloud
       che rifiuta la scrittura: gli snapshot **smettono**, il pannello
       cronologia resta al suo posto ed elenca le versioni vecchie, nessuna riga
@@ -180,7 +179,7 @@ visibile), 20.2 (log plugin).
       restituisce `Vec<PluginError>` proprio *«perché chi ha un canale di
       notifica possa mostrarli»* (`workspace.rs`) — e i suoi due
       chiamanti in produzione sono un `eprintln!` nel watcher
-      (`app/lib.rs:279-281`) e un `let _ =` in `reindex` (`workspace.rs`).
+      (`app/lib.rs`) e un `let _ =` in `reindex` (`workspace.rs`).
       Il canale è stato costruito e non collegato.
 - [ ] Cosa serve: che `deliver_to_handlers` raccolga e risalga (l'operazione che
       ha emesso l'evento **non** deve fallire — quella parte del commento è
@@ -196,16 +195,17 @@ visibile), 20.2 (log plugin).
 
 - [ ] **`saveCurrent` non ha un `catch`, e la shell non ha uno stato di
       salvataggio.** `await api.writeDocument(currentDoc, text)`
-      (`main.ts:1103`) è invocato da un `setTimeout` (`:1089`): se la scrittura
+      (`panels/document.ts`) è invocato da un `setTimeout`: se la scrittura
       fallisce — vault in sola lettura, disco pieno, file bloccato da un'altra
       app, permessi cambiati — la promise rifiuta in un contesto senza
-      gestore, e nella UI **non cambia niente**. In `frontend/index.html` non
-      esiste un elemento di stato: non c'è «salvato», non c'è «salvataggio in
-      corso», non c'è «non salvato». L'utente continua a scrivere per un'ora
-      dentro una nota che nessuno sta scrivendo su disco.
+      gestore, e nella UI **non cambia niente**. Una superficie per un
+      messaggio adesso c'è (`notify`, `ui/notify.ts`) e il salvataggio non la
+      usa; uno **stato di salvataggio** non esiste proprio — non c'è «salvato»,
+      non c'è «salvataggio in corso», non c'è «non salvato». L'utente continua
+      a scrivere per un'ora dentro una nota che nessuno sta scrivendo su disco.
 - [ ] **La shell sa già di stare per distruggere il lavoro di un'altra
       applicazione, e lo dice alla console.** `reloadIfClean`
-      (`main.ts:1597-1606`) col buffer sporco e `origin.actor == watcher`
+      (`panels/document.ts`) col buffer sporco e `origin.actor == watcher`
       stampa, testualmente, *«è stato cambiato da un'altra applicazione mentre
       il buffer è sporco: il buffer vince e quella modifica andrà persa al
       prossimo salvataggio»*. La diagnosi è giusta, è completa, distingue il
@@ -218,31 +218,35 @@ visibile), 20.2 (log plugin).
       buco copre altri undici avvisi che un dialogo di conflitto non riguarda.
 - [ ] **Un'organizzazione congelata è una sessione di lavoro buttata.**
       Se `.fubmd/workspace.json` non si legge, la shell alza `metaBroken` e
-      **smette di salvare** per non sovrascrivere ciò che c'è (`main.ts:207-214`,
-      `:703-710`). La decisione è giusta. Ciò che manca è dirlo: da quel momento
+      **smette di salvare** per non sovrascrivere ciò che c'è
+      (`state/organization.ts`). La decisione è giusta. Ciò che manca è dirlo:
+      da quel momento
       ogni icona, ogni nota appuntata, ogni riordino e ogni spazio vengono
       accettati, disegnati e scartati, per tutta la sessione, senza un segno.
       È il §11.3 (il sidecar da assorbire, oggi scritto senza atomicità) visto
       dal lato di chi lo usa.
-- [ ] **Gli altri sette punti dello stesso buco**, tutti in `main.ts`: una view
-      che non si ridisegna lascia montato l'albero precedente (`:1500-1503`) —
+- [ ] **Gli altri punti dello stesso buco**, sparsi per la shell: una view che
+      non si ridisegna lascia montato l'albero precedente (`ui/panel-host.ts`) —
       cioè un pannello **stantio identico a uno vivo**, che è il sintomo che il
-      test del lotto ([decisione 0011](../decisions/0011-il-lotto.md)) esiste per prevenire in un altro modo; un `overflow`
-      riconcilia e lo scrive alla console (`:1543`); una rinomina rifiutata fa
-      tornare indietro la riga senza dire perché (`:819`); l'organizzazione non
-      salvata (`:708`), la conversione in cartella e lo spostamento falliti
-      (`:578`, `:673`), la nota da wikilink mancante non creata (`:1209`,
-      `:1232`). E uno peggiore degli altri perché non ha nemmeno la console:
-      `commandSpecs = await api.listCommands().catch(() => [])` (`:227`) — se
-      l'elenco dei comandi non arriva, la palette è vuota e **ogni scorciatoia
-      dichiarata è morta**, senza una riga da nessuna parte.
+      test del lotto ([decisione 0011](../decisions/0011-il-lotto.md)) esiste per prevenire in un altro modo; un ascoltatore
+      di eventi del kernel che lancia lo scrive alla console (`state/kernel.ts`);
+      una rinomina rifiutata, una conversione in cartella e uno spostamento
+      falliti tornano indietro senza dire perché (`panels/explorer.ts`);
+      l'organizzazione non salvata (`state/organization.ts`); la nota da
+      wikilink mancante non creata (`panels/preview.ts`). In tutto tredici
+      `console.warn`/`console.error`, e uno peggiore degli altri perché non ha
+      nemmeno la console: `state.commandSpecs = await api.listCommands().catch(() => [])`
+      (`state/vault.ts`) — se l'elenco dei comandi non arriva all'apertura del
+      vault, la palette è vuota e **ogni scorciatoia dichiarata è morta**, senza
+      una riga da nessuna parte. (La palette, quando è lei a ricaricarli, un
+      `notify` lo fa: `ui/palette.ts`.)
 - [ ] Cosa serve, e non è un centro notifiche: una **superficie minima** dove un
       messaggio possa comparire (il §10.3 la farà bella; qui basta che esista),
       più uno **stato di salvataggio** accanto al documento. Il precedente è già
       in repo e vale come regola: l'unico fallimento che oggi arriva all'utente è
-      quello dell'avvio, che scrive nel titolo del vault perché *«è il posto più
-      visibile che la shell ha»* (`main.ts:1615-1621`). La regola è scritta, è
-      giusta, ed è applicata **una volta su dodici**.
+      quello dell'avvio, che scrive nella barra del vault perché *«è il posto
+      più visibile che la shell ha»* (`main.ts`, in coda). La regola è scritta,
+      è giusta, ed è applicata **una volta su quattordici**.
 
 *Sblocca:* 2.1 (autosave, crash recovery, gestione conflitti file), 24.2
 (error reporting chiaro, autosave recovery), 3.1 (vault read-only, vault su

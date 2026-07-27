@@ -34,7 +34,7 @@ numero.
 
 *ex §2.15 · kernel · **P1** — cinque clienti previsti e nessuno può riusare il montaggio*
 
-- [ ] **`open_vault` (`app/lib.rs:115-295`) È il composition root**: registry
+- [ ] **`open_vault` (`app/lib.rs`) È il composition root**: registry
       dei formati, indice di ricerca, versioning, le tre view, il watcher, il
       ponte eventi e la sessione si montano lì dentro, in un
       `#[tauri::command]`, in un crate che dipende da tauri e notify.

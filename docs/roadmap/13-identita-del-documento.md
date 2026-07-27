@@ -38,7 +38,8 @@ pile.
 
 - [ ] **Il rename è già un rito che ognuno celebra per conto proprio**: il
       versioning migra la sua chiave sull'evento `DocumentRenamed`, il sidecar
-      dell'organizzazione la migra in TypeScript (`main.ts:714`), e le prossime
+      dell'organizzazione la migra in TypeScript (`migrateOrganization`,
+      `state/organization.ts`), e le prossime
       — annotazioni (13.3), task (10), commenti (4.3, 19.2), database (11),
       flashcard (21.2) — la migreranno una terza e una quarta volta, ognuna col
       proprio buco già annotato al §11.3 (il rename fatto ad app chiusa non lo
@@ -59,7 +60,8 @@ pile.
 *ex §1.17 · contratto · **P0** — senza la decisione, il lotto e `CommandOutcome` nascono privi del campo*
 
 - [ ] **Oggi l'undo vive solo dentro CodeMirror**, su un **unico** `EditorView`
-      costruito una volta (`editor.ts:81`, da `main.ts:132`) e riusato per tutte
+      costruito una volta (`createEditor`, `editor/editor.ts`, chiamato da
+      `panels/document.ts`) e riusato per tutte
       le note: `setDoc` sostituisce il documento con un `dispatch` di `changes`
       normali, che entrano nella history di `basicSetup` come qualunque
       modifica dell'utente. Non c'è un modello di undo, c'è l'undo di una

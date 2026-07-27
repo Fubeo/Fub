@@ -30,8 +30,8 @@ chiude con loro e non lascia niente indietro.
 **Due voci sono state tolte da qui, e per due ragioni diverse.**
 
 Il **ponte byte↔UTF-16** era segnato `[~]`, «l'inversa resta». Non resta:
-`charToByteIndex` sta in `frontend/src/rules/offsets.ts:50`, la usa l'editor
-(`editor.ts:120-121`) ed è testata su accenti ed emoji in andata e ritorno. È la
+`charToByteIndex` sta in `frontend/src/rules/offsets.ts`, la usa l'editor
+(`editor/editor.ts`) ed è testata su accenti ed emoji in andata e ritorno. È la
 [decisione 0007](../decisions/0007-contesto-di-sessione.md), che ne aveva bisogno
 per far attraversare il confine alla selezione, ed è già spuntata nel
 [§18.1](18-editor-e-tastiera.md#181-editor). Questa riga dichiarava aperto ciò

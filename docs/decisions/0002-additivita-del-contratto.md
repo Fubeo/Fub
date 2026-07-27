@@ -11,7 +11,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
 ---
 
 - [x] **Nessuno confronta il contratto con la versione precedente.**
-      `abi_compatible` applica la regola a runtime (`abi/traits.rs:453-464`) e
+      `abi_compatible` applica la regola a runtime (`abi/traits.rs`) e
       `wit_conformance.rs` verifica che Rust e WIT dicano la stessa cosa —
       **oggi**, fra di loro. Ma la promessa del freeze è un'altra: *post-M4 il
       contratto cresce solo per aggiunta*. Nessun test la controlla, e non c'è

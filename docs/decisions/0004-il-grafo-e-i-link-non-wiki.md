@@ -11,7 +11,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
 ---
 
 - [x] **`LinkGraph::register_links` scarta ogni `LinkTarget` che non sia
-      `Wiki`** (`kernel/graph.rs:266`), e `link_rewrite_plan` fa lo stesso
+      `Wiki`** (`kernel/graph.rs`), e `link_rewrite_plan` fa lo stesso
       (`kernel/workspace.rs`). Quindi per un link markdown ordinario —
       `[testo](note/altra.md)`, che il 7.1 mette sullo stesso piano del
       wikilink, insieme a «link relativi» e «link a file allegato» — **non ci
@@ -33,7 +33,8 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
       cosa, con o senza estensione, case), archi nel grafo, e riscrittura al
       rename con la stessa disciplina chirurgica già scritta per i wikilink.
 
-**Fatta la metà kernel.** `crates/fubmd-kernel/src/pathlink.rs` è il posto — e
+**Fatta la metà kernel.** `fubmd_abi::rules::path` (`abi/rules/path.rs`, dove
+la [decisione 0020](0020-le-regole-in-un-posto-solo.md) le ha portate) è il posto — e
 l'unico — dove sta scritto cosa significa un path dentro un documento: relativo
 alla **cartella** del sorgente (con lo slash iniziale, alla radice del vault),
 `.` e `..` risolti lì, un `..` di troppo che esce dal vault e quindi non risolve;
@@ -84,7 +85,7 @@ rinomina) — che ora vedono tutti gli archi, non metà.
 l'unica cosa che distingue una risorsa del vault da un url esterno è
 `classify_url` nel provider markdown (`://` o `mailto:`), e un provider terzo può
 non fare la stessa cosa. Soprattutto: **le immagini non entrano affatto in
-`links`** (`parse.rs:281`), quindi 13.1 sugli allegati — riferimenti su rinomina
+`links`** (`parse.rs`), quindi 13.1 sugli allegati — riferimenti su rinomina
 di un allegato, orfani, dedup — resta fuori portata: non perché il `Path` non sia
 un arco, ma perché quell'arco non viene nemmeno raccolto. E in anteprima un
 `.internal-path` porta già il suo `data-path`, ma nessuno lo clicca: la shell non

@@ -32,7 +32,7 @@ decisione: è la prova che le quattro sono una.
 
 - [ ] **Un errore con codice e parametri**: i comandi Tauri restituiscono
       `Result<_, String>` con la prosa italiana del kernel. Il costo è già
-      visibile: `restoreFromTrash` (`main.ts:951`) ha un `catch` nudo che
+      visibile: il ripristino dal cestino (`panels/trash.ts`) ha un `catch` nudo che
       intercetta **qualunque** errore e assume "path di nuovo occupato", quindi
       un errore di I/O o di permessi produce all'utente la domanda sbagliata — e
       la risposta «Ripristina» a quella domanda ritenta con un nome libero, che
@@ -51,7 +51,7 @@ decisione: è la prova che le quattro sono una.
 
 Il versioning ha trovato `now_unix_millis` con l'argomento giusto: sotto sandbox
 un componente non ha orologio, e uno che chiamasse `SystemTime::now` sarebbe non
-testabile e non funzionante (`abi/traits.rs:296`). Lo stesso argomento, non
+testabile e non funzionante (`abi/traits.rs`). Lo stesso argomento, non
 applicato, lascia fuori tre cose:
 
 - [ ] **Il caso e gli UUID**: «UUID opzionale per nota» (2.2), Zettelkasten ID e

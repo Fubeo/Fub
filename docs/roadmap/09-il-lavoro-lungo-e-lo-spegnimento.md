@@ -27,7 +27,7 @@ sia vivo.
 *ex §1.21 · contratto · **P0** — leva alta: **rende inesprimibile** — sblocca 17, 18, 22, 19.4*
 
 - [ ] **`Plugin::run_job` è deliberatamente senza `HostApi`** — «input nel
-      `payload`, output nel risultato» (`abi/traits.rs:1052-1064`). Per un
+      `payload`, output nel risultato» (`abi/traits.rs`). Per un
       calcolo puro è la firma giusta. Ma l'unico modo di dare input a un job
       diventa che il **chiamante** legga il vault dentro il giro sincrono:
       cioè faccia lì, in esclusiva sul workspace, esattamente il lavoro che il
@@ -57,8 +57,8 @@ runner dei job del §9.3, che oggi eseguirebbe soltanto funzioni pure.
 *ex §1.35 · contratto · **P0 condizionale** — scade col freeze **solo se** il gemello nasce senza default (era la stessa forma del §7.1, dove le due strade si sono rivelate due metà: [decisione 0021](../decisions/0021-il-confine.md))*
 
 - [ ] **Il contratto non ha uno spegnimento.** `IndexProvider` ha `activate` e
-      `flush` ma **nessun `close`/`deactivate`** (`abi/traits.rs:917-949`);
-      `Plugin::deactivate` esiste (`abi/traits.rs:1051`) e **non ha chiamanti**
+      `flush` ma **nessun `close`/`deactivate`** (`abi/traits.rs`);
+      `Plugin::deactivate` esiste (`abi/traits.rs`) e **non ha chiamanti**
       in tutto il repo — l'unico posto che lo nomina è il presidio di
       conformance. Un indice che possiede risorse esterne — tantivy tiene
       segmenti, lock file e thread di merge — non ha un punto in cui chiuderle,
@@ -68,7 +68,7 @@ runner dei job del §9.3, che oggi eseguirebbe soltanto funzioni pure.
       un'interfaccia è additiva: `close` aggiunto dopo il freeze non rompe il
       WIT. Rompe **chi implementa**, e solo se nasce senza corpo di default —
       esattamente la differenza fra `IndexProvider::flush` (obbligatoria) e
-      `Plugin::run_job` (che il default ce l'ha, `traits.rs:1058-1064`). Quindi
+      `Plugin::run_job` (che il default ce l'ha, `traits.rs`). Quindi
       la P0 non è sulla voce: è sulla scelta. *Se* il ciclo di vita deve essere
       obbligatorio — e per un indice che tiene lock file la risposta è
       probabilmente sì — allora va messo **prima** del freeze, perché dopo ogni
@@ -93,7 +93,7 @@ reload), 26.2-26.3 (dove il watcher non c'è).
 *ex §2.3 · kernel · **P1** — leva alta: è il registry su cui poggiano 9.4, 9.5 e il capitolo 7*
 
 - [ ] **Una tabella di montaggio unica**: oggi le feature sono cablate a mano in
-      `open_vault` (`app/lib.rs:140-204`). Serve un registry che, dato un
+      `open_vault` (`app/lib.rs`). Serve un registry che, dato un
       manifest, attivi/disattivi un bundle (`Plugin` + i suoi provider), assegni
       lo spazio dati, applichi `Trust` e `abi_compatible`. È il pezzo che a M5
       il caricatore WASM riuserà tale e quale.
@@ -134,7 +134,7 @@ reload), 26.2-26.3 (dove il watcher non c'è).
 *ex §2.22 · kernel · **P1** — la metà implementativa della 9.2; va con la 9.6*
 
 - [ ] **`flush_indexes` ha un solo chiamante in produzione**: il callback del
-      file watcher (`app/lib.rs:279`), più `reindex` all'apertura
+      file watcher (`app/lib.rs`), più `reindex` all'apertura
       (`kernel/workspace.rs`, e lì l'esito è scartato con `let _ =` — cioè
       §20.3). Nessun altro percorso lo chiama — né `write_document` dall'IPC, né
       la chiusura del vault, né la chiusura dell'app.
@@ -179,15 +179,15 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       col disco. Il costo della sua assenza non è una riapertura lenta: è che il
       kernel risponde su un vault che non c'è più.
 - [ ] **E quando fallisce, fallisce due volte in silenzio.** Gli errori del
-      debouncer finiscono in un `eprintln!` (`app/lib.rs:285`, cioè §20.2), e
+      debouncer finiscono in un `eprintln!` (`app/lib.rs`, cioè §20.2), e
       la sincronizzazione di ogni singolo path scarta il proprio esito:
       `let _ = ws.sync_renamed_path(&from, &to)` e `let _ = ws.sync_path(&p)`
-      (`app/lib.rs:266`, `:272`) — due righe sopra un `flush_indexes` che almeno
+      (`app/lib.rs`) — due righe sopra un `flush_indexes` che almeno
       stampa. Un file esterno che non si legge o non si parsa lascia la cache, il
       grafo e l'indice fermi a **prima**, per sempre, senza che niente lo dica.
 - [ ] **Nessuno chiede mai se il watcher è vivo.** Il debouncer viene messo in
       un `Box<dyn Any + Send>` e tenuto in vita e basta
-      (`VaultSession::_watcher`, `app/lib.rs:42`). I casi in cui non funziona non
+      (`VaultSession::_watcher`, `app/lib.rs`). I casi in cui non funziona non
       sono di nicchia e FEATURES li nomina uno per uno: network share e cloud
       drive (2.3), vault sincronizzati con strumenti esterni (3.1, 18.1), il
       limite di inotify su vault grandi (24.1), e i tre host dove non esisterà
@@ -196,7 +196,7 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       [decisione 0008](../decisions/0008-modifica-chirurgica.md) ha dato la
       guardia giusta — una `base` nella firma, e `Conflict` invece della
       sovrascrittura silenziosa — ma vale per `apply_edit`, cioè per i *provider*.
-      Il salvataggio dell'editor passa da `write_document` (`app/lib.rs:316-321`),
+      Il salvataggio dell'editor passa da `write_document` (`app/lib.rs`),
       che una base non ce l'ha: se il watcher non ha visto la scrittura altrui, il
       salvataggio successivo la copre e nessuna delle due metà del sistema è in
       grado di accorgersene. Col watcher vivo il caso è coperto a metà (la shell
