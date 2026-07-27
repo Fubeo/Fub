@@ -28,7 +28,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la ma
 L'albero è dichiarato e **abitato** (`host/`, `state/`, `ui/`, `panels/`,
 `editor/`, `rules/`, `theme/`), e sta in [architecture/shell.md](../architecture/shell.md),
 non qui: una mappa che si consulta scrivendo un file nuovo non va nell'archivio
-delle decisioni. `main.ts` è passato da **1622 a 133 righe** e non contiene più
+delle decisioni. `main.ts` è passato da **1622 a 137 righe** e non contiene più
 logica di dominio: compone, inietta due collegamenti e apre il vault.
 
 Le decisioni prese, da NON ridiscutere senza motivo:

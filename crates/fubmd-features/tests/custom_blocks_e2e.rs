@@ -398,3 +398,144 @@ fn un_kind_prodotto_e_mai_disegnato_si_puo_contare() {
         .unwrap();
     assert!(ws.undrawn_kinds().is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// I tre confini che la seduta dichiarava e che il codice non teneva
+// ---------------------------------------------------------------------------
+
+#[test]
+fn un_plugin_revocato_non_registra_niente() {
+    let v = Vault::new();
+    let mut registry = FormatRegistry::new();
+    registry.register(MarkdownProvider::boxed()).unwrap();
+    let mut ws = Workspace::new(&v.root, registry);
+    // Dichiararsi si può — per dire che qualcuno è revocato bisogna sapere che
+    // esiste. Registrare no: una regola e un renderer sono codice che gira a
+    // ogni parse e a ogni anteprima, e non passa da nessun guard.
+    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Revoked)
+        .expect("dichiararsi si può");
+
+    let err = ws
+        .register_syntax_rule("terzi", Box::new(GanttinoRule))
+        .expect_err("un revocato non innesta niente");
+    assert!(err.to_string().contains("revocato"), "{err}");
+
+    let err = ws
+        .register_custom_renderer("terzi", Box::new(GanttinoRenderer { ostile: false }))
+        .expect_err("un revocato non disegna niente");
+    assert!(err.to_string().contains("revocato"), "{err}");
+
+    // E il registro non è rimasto sporco: niente kind prodotto, niente parte.
+    assert!(ws.undrawn_kinds().is_empty());
+    v.put("g.md", "```ganttino\na\n```\n");
+    ws.reindex().unwrap();
+    assert!(preview(&ws, "g.md").parts.is_empty());
+}
+
+/// Il gemello del `GanttinoRule` che dichiara `terzi:gantt` e prova a emettere
+/// `callout`, che è del core.
+struct GanttinoBugiardo;
+
+impl SyntaxRule for GanttinoBugiardo {
+    fn spec(&self) -> SyntaxRuleSpec {
+        SyntaxRuleSpec {
+            id: "terzi:bugiardo".into(),
+            format: "markdown".into(),
+            trigger: SyntaxTrigger::Fence {
+                info: vec!["ganttino".into()],
+            },
+            order: 0,
+            produces: vec!["terzi:gantt".into()],
+            option: None,
+        }
+    }
+    fn apply(
+        &self,
+        _m: &SyntaxMatch,
+        _ctx: &ParseContext,
+    ) -> Result<Option<SyntaxProduct>, FormatError> {
+        Ok(Some(SyntaxProduct::Block {
+            custom_kind: custom_kind::CALLOUT.into(),
+            attrs: json!({ "kind": "danger", "title": "Sono il core" }),
+            blocks: vec![],
+        }))
+    }
+}
+
+#[test]
+fn un_terzo_non_si_fa_passare_per_il_core() {
+    let v = Vault::new();
+    v.put("b.md", "```ganttino\nx\n```\n");
+    let mut registry = FormatRegistry::new();
+    registry.register(MarkdownProvider::boxed()).unwrap();
+    let mut ws = Workspace::new(&v.root, registry);
+    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+        .unwrap();
+
+    // Dichiarare di produrre un kind del core si ferma alla registrazione: è la
+    // stessa regola dei nomi di ogni altra famiglia (§7.4).
+    struct DichiaraIlCore;
+    impl SyntaxRule for DichiaraIlCore {
+        fn spec(&self) -> SyntaxRuleSpec {
+            SyntaxRuleSpec {
+                id: "terzi:dichiara".into(),
+                format: "markdown".into(),
+                trigger: SyntaxTrigger::Fence {
+                    info: vec!["altro".into()],
+                },
+                order: 0,
+                produces: vec![custom_kind::CALLOUT.into()],
+                option: None,
+            }
+        }
+        fn apply(
+            &self,
+            _m: &SyntaxMatch,
+            _ctx: &ParseContext,
+        ) -> Result<Option<SyntaxProduct>, FormatError> {
+            unreachable!("non deve nemmeno registrarsi")
+        }
+    }
+    let err = ws
+        .register_syntax_rule("terzi", Box::new(DichiaraIlCore))
+        .expect_err("`callout` non è un nome di `terzi`");
+    assert!(err.to_string().contains("callout"), "{err}");
+
+    // E chi dichiara il proprio e emette quello del core viene scartato dove
+    // emette: `produces` è un contratto, non una nota.
+    ws.register_syntax_rule("terzi", Box::new(GanttinoBugiardo))
+        .expect("dichiara solo roba sua, quindi si registra");
+    ws.reindex().unwrap();
+    let model = ws.read_model(&DocId::new("b.md")).expect("modello");
+    assert!(
+        matches!(model.body[0], Block::CodeBlock { .. }),
+        "il recinto resta com'era: {:?}",
+        model.body[0]
+    );
+    // E il conto non si è sporcato di un kind che nessuno emetterà mai.
+    assert_eq!(ws.undrawn_kinds(), vec!["terzi:gantt".to_string()]);
+}
+
+#[test]
+fn una_regola_inline_entra_nella_label_di_un_link() {
+    let v = Vault::new();
+    // Fuori dal link e dentro: la stessa sintassi non può funzionare a seconda
+    // di dove capita.
+    v.put("l.md", "Vedi [==qui==](https://esempio.it) e ==là==.\n");
+    let ws = v.open();
+    let out = preview(&ws, "l.md");
+
+    assert_eq!(
+        out.html.matches("class=\"inline-highlight\"").count(),
+        2,
+        "html: {}",
+        out.html
+    );
+    assert!(
+        out.html.contains(">qui<") && out.html.contains(">là<"),
+        "html: {}",
+        out.html
+    );
+    // E il link è rimasto un link.
+    assert!(out.html.contains("https://esempio.it"), "html: {}", out.html);
+}

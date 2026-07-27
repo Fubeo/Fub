@@ -17,16 +17,13 @@
 import { createEditor, type Editor } from "../editor/editor";
 import { api } from "../host/ipc";
 import { tagDelVault } from "../host/query";
+import { MAIN_PANE } from "../host/contract";
 import type { PaneMode, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { emit, saveMode, state } from "../state/store";
 import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
 import { clearPreview, setPreviewVisible, updatePreview } from "./preview";
-
-/// L'unico pannello di questa shell. Deve coincidere col `MAIN_PANE` del
-/// kernel: un pannello con un altro nome è, da contratto, un altro pannello.
-const MAIN_PANE = "main";
 
 export interface DocumentDeps {
   /// Click su un `#tag` nella live preview. Iniettato invece che importato:

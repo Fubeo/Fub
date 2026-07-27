@@ -211,6 +211,41 @@ fn the_same_guard_applies_to_what_comes_back_from_an_action() {
 }
 
 #[test]
+fn a_patch_carries_a_tree_too_and_gets_the_same_guard() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    monta(
+        &mut ws,
+        "terzi.chirurgo",
+        Trust::Community,
+        Puppet::boxed(
+            "terzi.chirurgo:chirurgo",
+            dichiarativo(),
+            ViewUpdate::Patch {
+                key: "riga-1".into(),
+                node: html(),
+            },
+        ),
+    );
+
+    // `Patch` è l'altro modo di far arrivare un albero alla shell, ed è più
+    // stretto solo nella *dimensione*: un nodo sostituito è un nodo che entra
+    // nella webview esattamente come quelli di `Replace`. Guardare solo
+    // `Replace` sarebbe presidiare la porta larga e lasciare aperta quella
+    // piccola, che è la stessa porta.
+    assert!(ws
+        .render_view(&ViewInstance::only("terzi.chirurgo:chirurgo"))
+        .is_ok());
+    let err = ws
+        .view_action(
+            &ViewInstance::only("terzi.chirurgo:chirurgo"),
+            UiAction::new("click"),
+        )
+        .expect_err("anche una patch deve essere validata");
+    assert!(matches!(err, PluginError::PermissionDenied(_)));
+}
+
+#[test]
 fn navigate_and_none_are_not_trees_and_pass() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();

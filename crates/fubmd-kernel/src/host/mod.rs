@@ -1,11 +1,11 @@
 //! Gli host: **chi presta le capacità**, e con quale disciplina.
 //!
-//! Erano tre `impl HostApi` dentro `workspace.rs`, ottantotto corpi di metodo
-//! (col doppio in memoria delle feature) di cui trentasei non facevano altro
+//! Erano tre `impl HostApi` dentro `workspace.rs`, novantasei corpi di metodo
+//! (col doppio in memoria delle feature) di cui ventidue non facevano altro
 //! che dire di no. Il §7.1 li ha divisi in tre cose che sono davvero tre:
 //!
 //! - [`KernelHost`] — l'unica implementazione **vera**. Presta
-//!   `&mut Workspace`, fa le cose, e le nove famiglie di capacità le
+//!   `&mut Workspace`, fa le cose, e le dieci famiglie di capacità le
 //!   implementa perché le sa fare.
 //! - [`ReadHost`] — il percorso di **lettura**, che presta `&Workspace` e non
 //!   `&mut`. Implementa le quattro famiglie di lettura e **non le altre**: non
@@ -19,15 +19,15 @@
 //!
 //! # Perché il rifiuto è un wrapper e non una impl gemella
 //!
-//! `ReadOnlyHost` esisteva per dire «no» a sei capacità, e per dirlo ne aveva
-//! riscritte ventidue — sedici delle quali delegavano a `ReadHost` riga per
+//! `ReadOnlyHost` esisteva per dire «no» a dieci metodi, e per dirlo ne aveva
+//! riscritti ventiquattro — dodici dei quali delegavano a `ReadHost` riga per
 //! riga. Con una politica in più (un comando simulato, un plugin senza
 //! `write_vault`, un plugin senza rete, e le loro **combinazioni**) sarebbe
 //! stata un'altra impl da ventiquattro metodi a testa: è il moltiplicatore che
 //! il sesto giro cercava, e che non si paga aggiungendo la politica ma a ogni
 //! politica successiva.
 //!
-//! Adesso una politica è un `impl Policy` — nove righe — e comporne due è una
+//! Adesso una politica è un `impl Policy` — dieci righe — e comporne due è una
 //! tupla ([`Policy` per `(A, B)`](Policy#impl-Policy-for-(A,+B))).
 //!
 //! # Le capacità senza esito

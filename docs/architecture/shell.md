@@ -33,7 +33,7 @@ frontend/src/
   style.css      le regole dei componenti
 
   host/          la cucitura con l'esterno, e nient'altro
-    contract.ts    i tipi rispecchiati dal Rust (nessun @tauri-apps)
+    contract.ts    i tipi (e i pochi valori) rispecchiati dal Rust (nessun @tauri-apps)
     ipc.ts         `api` + il canale eventi: i comandi del backend
     query.ts       il canale dati: si costruisce una query, si apre una risposta
     dialog.ts      le superfici di SISTEMA: conferme, selettore di cartella
@@ -44,11 +44,11 @@ frontend/src/
     vault.ts       le operazioni sul vault (tutte dal registro comandi)
     organization.ts  il sidecar .fubmd/workspace.json
 
-  ui/            le primitive di interfaccia, senza dominio
+  ui/            le primitive di interfaccia, senza dominio (un'eccezione: intents.ts)
     node.ts        il renderer di `UiNode`
     panel-host.ts  il registro dei pannelli: chi c'è, e quando si ridisegna
     views.ts       l'adattatore `ViewSpec` → pannello, per ciò che il backend dichiara
-    intents.ts     gli intenti che la shell sa eseguire
+    intents.ts     gli intenti che la shell sa eseguire (l'unico qui che nomina i pannelli)
     palette.ts     la palette dei comandi
     menu.ts        menu contestuale e selettore di icona
     notify.ts      i messaggi che non chiedono risposta
@@ -76,6 +76,16 @@ frontend/src/
 
   __fixtures__/  le fixture generate da serde (il mirror TS↔Rust)
 ```
+
+Un file dell'albero **non rispetta** la riga che lo ospita, e vale la pena
+dirlo qui invece di lasciarlo scoprire: `ui/intents.ts` importa
+`panels/document` e `panels/search`, mentre `ui/` è per il resto senza dominio.
+Non è una svista ed è il posto meno peggio: gli intenti arrivano da due sorgenti
+diverse (un `ViewUpdate` di una view e un `CommandEffect` di un comando) e sono
+gli stessi perché sono intenti **della shell** — una copia per sorgente sarebbe
+una copia da tenere allineata. Il vincolo che lo rende innocuo è che nessun
+modulo di `panels/` importa `intents.ts`: è un pozzo, non un anello, e finché
+resta tale il ciclo non c'è.
 
 Due cartelle dell'albero **non esistono ancora come codice**, e non è una
 dimenticanza:
@@ -197,7 +207,13 @@ chiuse:
   multiple ([§9.6](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)). Ciò che
   è già pronto è che il contesto pubblicato porta l'identità del pannello
   (`MAIN_PANE`), quindi il giorno che i pannelli saranno due nessuno dovrà
-  inventarsi da dove viene la risposta.
+  inventarsi da dove viene la risposta. La costante sta in `host/contract.ts`
+  perché è un **valore del confine**, ed è presidiata: la fixture del mirror è
+  generata da `ViewContext::new(MAIN_PANE)` — la costante vera del kernel, non
+  una stringa scritta a mano — e `host/mirror.test.ts` ci lega quella TS. Due
+  valori che divergono sono, da contratto, un cambio di pannello a ogni
+  pubblicazione del contesto: si vedrebbe come «si ridisegna tutto» e non
+  porterebbe a nessuna delle due righe.
 - **Cestino e cronologia come `ViewProvider` veri.** Il modo di montarli è ormai
   uno — la regola 5 qui sopra — ma sono pannelli **nativi** che dichiarano, non
   provider che disegnano con `UiNode`. Dipendeva dai nodi di input e da un modo

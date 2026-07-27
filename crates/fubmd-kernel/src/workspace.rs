@@ -722,10 +722,12 @@ impl Workspace {
         let plugin = plugin.into();
         let namespaces = plugins::custom_namespaces(&index.routes());
         // Sostituire non scavalca la regola dei nomi: si prende il posto di chi
-        // c'era, non il suo namespace.
-        self.plugins.forget(RegistrationKind::Index, &namespaces);
+        // c'era, non il suo namespace. E il permesso si chiede **prima** di
+        // togliere la riga di chi c'era, o un rifiuto lascerebbe la rotta ancora
+        // servita e l'inventario a dire che non è di nessuno.
         self.plugins
-            .admit(&plugin, RegistrationKind::Index, &namespaces)?;
+            .admit_replacing(&plugin, RegistrationKind::Index, &namespaces)?;
+        self.plugins.forget(RegistrationKind::Index, &namespaces);
         self.indexes.declare_replacing(index.as_ref());
         self.plugins
             .record(&plugin, RegistrationKind::Index, &namespaces);
@@ -1521,13 +1523,20 @@ impl Workspace {
         rule: Box<dyn SyntaxRule>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let id = rule.spec().id;
+        let spec = rule.spec();
+        let id = spec.id;
         // La regola dei nomi è **una** (§7.4): questa famiglia aveva la
         // propria — «serve un `ns:nome`», senza sapere di chi — e chiedeva un
         // namespace anche al core mentre non chiedeva a nessuno che fosse il
         // *suo*. Adesso passa di qui come le altre.
         self.plugins
             .admit(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id))?;
+        // E vale anche per i `custom_kind` che la regola si impegna a emettere:
+        // sono nomi che entrano nel modello, e senza questa riga un terzo
+        // dichiara `callout` e si fa disegnare dal core. Non passano da `admit`
+        // perché produrre lo stesso kind in due non è una contesa — è come si
+        // scrivono due dialetti della stessa famiglia.
+        self.plugins.check_names(&plugin, &spec.produces)?;
         self.syntax.register(rule).map_err(RegistryError::Syntax)?;
         self.plugins
             .record(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id));
@@ -1892,12 +1901,19 @@ impl Workspace {
     ) -> std::result::Result<(), RegistryError> {
         let specs = provider.views();
         let ids: Vec<String> = specs.iter().map(|s| s.id.clone()).collect();
+        // Il permesso **prima** di togliere chi c'era: una sostituzione ha due
+        // effetti, e un rifiuto in mezzo lascerebbe il primo fatto e il secondo
+        // no — cioè una view del core cancellata da chi non poteva nemmeno
+        // nominarla, con in mano un errore che dice «non è registrato».
         if replacing {
+            self.plugins
+                .admit_replacing(&plugin, RegistrationKind::View, &ids)?;
             self.plugins.forget(RegistrationKind::View, &ids);
             self.views
                 .retain(|v| !v.specs.iter().any(|s| ids.contains(&s.id)));
+        } else {
+            self.plugins.admit(&plugin, RegistrationKind::View, &ids)?;
         }
-        self.plugins.admit(&plugin, RegistrationKind::View, &ids)?;
         // Il grado di fiducia è quello del plugin: era un parametro di questa
         // sola registrazione, ed è la ragione per cui un `IndexProvider` di
         // terzi avrebbe ricevuto ogni documento del vault senza che nessuno gli
@@ -1922,13 +1938,60 @@ impl Workspace {
     /// oggi nessun provider cambia il proprio elenco a runtime. Il giorno che
     /// succederà (un plugin che registra una view per ogni database aperto) è un
     /// metodo additivo, e questa è la sua metà kernel già in piedi.
-    pub fn refresh_specs(&mut self, id: &str) {
-        for view in self.views.iter_mut().filter(|v| v.id == id) {
-            view.specs = view.provider.views();
+    ///
+    /// **Cambiare idea non scavalca la regola dei nomi** (§7.4): i nomi nuovi
+    /// passano dallo stesso varco della registrazione, e quelli che erano già
+    /// suoi non sono una contesa con sé stesso. Era l'ultimo modo di aggirarla —
+    /// registrarsi con un id ammissibile e poi dichiararne un altro — e valeva
+    /// anche per l'inventario, che restava a raccontare la registrazione invece
+    /// dello stato.
+    ///
+    /// Un rifiuto non cambia niente: le due famiglie si convalidano **prima**
+    /// che l'una o l'altra si muova.
+    pub fn refresh_specs(&mut self, id: &str) -> std::result::Result<(), RegistryError> {
+        // Le spec si chiedono una volta sola, anche qui: chiederle per
+        // convalidarle e poi di nuovo per tenerle sarebbe due risposte diverse
+        // dalla stessa domanda, che è precisamente ciò che questo metodo esiste
+        // per evitare.
+        let views: Vec<(usize, Vec<ViewSpec>)> = self
+            .views
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.id == id)
+            .map(|(at, v)| (at, v.provider.views()))
+            .collect();
+        let commands: Vec<(usize, Vec<CommandSpec>)> = self
+            .commands
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.id == id)
+            .map(|(at, c)| (at, c.provider.commands()))
+            .collect();
+
+        let view_ids: Vec<String> = views
+            .iter()
+            .flat_map(|(_, specs)| specs.iter().map(|s| s.id.clone()))
+            .collect();
+        let command_ids: Vec<String> = commands
+            .iter()
+            .flat_map(|(_, specs)| specs.iter().map(|s| s.id.clone()))
+            .collect();
+
+        self.plugins
+            .admit_refreshing(id, RegistrationKind::View, &view_ids)?;
+        self.plugins
+            .admit_refreshing(id, RegistrationKind::Command, &command_ids)?;
+
+        for (at, specs) in views {
+            self.views[at].specs = specs;
         }
-        for command in self.commands.iter_mut().filter(|c| c.id == id) {
-            command.specs = command.provider.commands();
+        for (at, specs) in commands {
+            self.commands[at].specs = specs;
         }
+        self.plugins.resettle(id, RegistrationKind::View, &view_ids);
+        self.plugins
+            .resettle(id, RegistrationKind::Command, &command_ids);
+        Ok(())
     }
 
     /// Le view offerte dai provider registrati, in ordine di registrazione.
@@ -1972,11 +2035,12 @@ impl Workspace {
     }
 
     /// Consegna un'azione della UI al provider della view e restituisce il suo
-    /// aggiornamento. L'albero eventualmente contenuto in
-    /// [`ViewUpdate::Replace`] passa dalla stessa validazione di
-    /// [`render_view`](Workspace::render_view): un provider non fidato non può
-    /// iniettare contenuto attivo *in risposta a un click* invece che al
-    /// rendering.
+    /// aggiornamento. Ogni albero che l'aggiornamento porta con sé —
+    /// [`ViewUpdate::Replace`] e [`ViewUpdate::Patch`] — passa dalla stessa
+    /// validazione di [`render_view`](Workspace::render_view): un provider non
+    /// fidato non può iniettare contenuto attivo *in risposta a un click*
+    /// invece che al rendering, né per la via stretta invece che per quella
+    /// larga.
     pub fn view_action(
         &mut self,
         instance: &ViewInstance,
@@ -2000,8 +2064,23 @@ impl Workspace {
             },
         );
         let update = updated?;
-        if let ViewUpdate::Replace { root } = &update {
-            guard_ui(trust, root)?;
+        // **Ogni** albero che l'aggiornamento porta con sé, non solo quello di
+        // `Replace`: una `Patch` è un nodo che entra nella webview come gli
+        // altri, ed è più piccola solo nella dimensione. Il `match` è esaustivo
+        // di proposito — è la stessa lezione di `UiNode::children`, che elencava
+        // a mano i contenitori che c'erano: una variante nuova che portasse un
+        // nodo deve rompere la compilazione qui, non passare in silenzio.
+        let albero = match &update {
+            ViewUpdate::Replace { root } => Some(root),
+            ViewUpdate::Patch { node, .. } => Some(node),
+            ViewUpdate::None
+            | ViewUpdate::Navigate { .. }
+            | ViewUpdate::Reveal { .. }
+            | ViewUpdate::RunSearch { .. }
+            | ViewUpdate::Custom { .. } => None,
+        };
+        if let Some(albero) = albero {
+            guard_ui(trust, albero)?;
         }
         // Gli eventi accodati durante `on_action` arrivano ADESSO, dopo che la
         // chiamata del provider è tornata: è il contratto di consegna.

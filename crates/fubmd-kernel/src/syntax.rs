@@ -45,6 +45,10 @@ pub enum SyntaxConflict {
     /// delimitatori vuoti. Registrarlo sarebbe registrare un no-op che sembra
     /// una regola.
     InertTrigger(String),
+    /// Una regola che non dichiara nessun `produces`. Dato che ciò che non è
+    /// dichiarato viene scartato, una regola così aggancia e non produce mai:
+    /// è l'altro modo di essere un no-op che sembra una regola.
+    NothingProduced(String),
     /// Due regole rivendicano la stessa sintassi sullo stesso formato.
     Claimed {
         format: String,
@@ -67,6 +71,13 @@ impl std::fmt::Display for SyntaxConflict {
                 write!(
                     f,
                     "il trigger della regola `{id}` non può agganciare niente"
+                )
+            }
+            SyntaxConflict::NothingProduced(id) => {
+                write!(
+                    f,
+                    "la regola `{id}` non dichiara nessun `produces`, quindi tutto ciò \
+                     che emettesse verrebbe scartato"
                 )
             }
             SyntaxConflict::Claimed {
@@ -119,6 +130,9 @@ impl SyntaxRegistry {
         if claims.is_empty() || claims.iter().any(|c| c.ends_with(':')) {
             return Err(SyntaxConflict::InertTrigger(spec.id));
         }
+        if spec.produces.is_empty() {
+            return Err(SyntaxConflict::NothingProduced(spec.id));
+        }
         // Si controllano TUTTE le rivendicazioni prima di inserirne una: una
         // regola che ne prende tre e collide sulla terza non deve restare
         // registrata a metà.
@@ -159,6 +173,11 @@ impl SyntaxRegistry {
     /// I `custom_kind` di **blocco** che qualcuno emette. È metà del conto del
     /// §3.2: l'altra metà è chi li disegna, e la differenza fra i due insiemi è
     /// l'elenco dei blocchi che l'utente leggerà crudi.
+    ///
+    /// Il conto è **esatto** perché `produces` è verificato dove si applica:
+    /// ciò che una regola emette senza averlo dichiarato viene scartato, quindi
+    /// questo elenco non può contenere un kind che non arriverà mai nel modello
+    /// né mancarne uno che ci arriva.
     ///
     /// I kind **inline** non ci sono, e non è una dimenticanza: il registro dei
     /// renderer è dei blocchi, e un `Inline::Custom` lo disegna il provider nel
@@ -271,6 +290,9 @@ fn fence_rule(
         // il recinto è un blocco, e non c'è dove mettere un inline al suo posto.
         return None;
     };
+    if !r.spec.produces.contains(&custom_kind) {
+        return None;
+    }
     Some(Block::Custom {
         custom_kind,
         attrs,
@@ -307,6 +329,30 @@ fn split_inlines(
                 split_inlines(&mut children, r, open, close, ctx, span);
                 out.push(Inline::Strong(children));
             }
+            // L'etichetta di un link è testo che l'utente legge, e ciò che vale
+            // in un paragrafo vale lì dentro: `[==qui==](url)` deve evidenziare
+            // come `==qui==` fuori, o la stessa sintassi funzionerebbe a
+            // seconda di dove capita. Lo span è quello del link, che è più
+            // stretto di quello del contenitore — è il meglio che il kernel
+            // conosca onestamente qui.
+            //
+            // Un **embed** no: `![[img|100]]` non porta un'etichetta da
+            // leggere ma un parametro per chi lo incorpora, e interpretarci una
+            // sintassi vorrebbe dire riscrivere un argomento.
+            Inline::Link {
+                target,
+                label: Some(mut label),
+                embed: false,
+                span: link_span,
+            } => {
+                split_inlines(&mut label, r, open, close, ctx, link_span);
+                out.push(Inline::Link {
+                    target,
+                    label: Some(label),
+                    embed: false,
+                    span: link_span,
+                });
+            }
             // `Code` no: dentro un `code` la sintassi non si interpreta, ed è la
             // ragione per cui il codice si scrive fra backtick.
             other => out.push(other),
@@ -337,7 +383,17 @@ fn split_text(
             text: inner.to_string(),
             span,
         };
-        let Ok(Some(SyntaxProduct::Inline { custom_kind, attrs })) = r.rule.apply(&m, ctx) else {
+        // Un kind che la regola non ha dichiarato è come un rifiuto: `produces`
+        // è un contratto, e ciò che non c'è dentro non entra nel modello.
+        let prodotto = match r.rule.apply(&m, ctx) {
+            Ok(Some(SyntaxProduct::Inline { custom_kind, attrs }))
+                if r.spec.produces.contains(&custom_kind) =>
+            {
+                Some((custom_kind, attrs))
+            }
+            _ => None,
+        };
+        let Some((custom_kind, attrs)) = prodotto else {
             // Declina o fallisce: si salta l'apertura e si continua a cercare,
             // invece di fermarsi — un `$` isolato non deve spegnere la regola
             // per il resto del paragrafo.
@@ -528,5 +584,83 @@ mod tests {
             .register(Box::new(Mermaid { id: "mermaid" }))
             .expect_err("serve `ns:nome`");
         assert_eq!(err, SyntaxConflict::UnnamespacedId("mermaid".into()));
+    }
+
+    /// Dichiara di produrre una cosa e ne emette un'altra — quella del core.
+    struct Bugiarda {
+        produces: Vec<String>,
+        emette: &'static str,
+    }
+
+    impl SyntaxRule for Bugiarda {
+        fn spec(&self) -> SyntaxRuleSpec {
+            SyntaxRuleSpec {
+                id: "terzi:bugiarda".into(),
+                format: "markdown".into(),
+                trigger: SyntaxTrigger::Fence {
+                    info: vec!["bugia".into()],
+                },
+                order: 0,
+                option: None,
+                produces: self.produces.clone(),
+            }
+        }
+        fn apply(
+            &self,
+            _m: &SyntaxMatch,
+            _ctx: &ParseContext,
+        ) -> Result<Option<SyntaxProduct>, FormatError> {
+            Ok(Some(SyntaxProduct::Block {
+                custom_kind: self.emette.into(),
+                attrs: json!({}),
+                blocks: vec![],
+            }))
+        }
+    }
+
+    #[test]
+    fn un_kind_non_dichiarato_non_entra_nel_modello() {
+        let mut reg = SyntaxRegistry::new();
+        reg.register(Box::new(Bugiarda {
+            produces: vec!["terzi:onesto".into()],
+            // `callout` è del core: senza il controllo su `produces`, questa
+            // regola si farebbe disegnare dal provider come un callout vero.
+            emette: "callout",
+        }))
+        .expect("si registra: la bugia si vede solo quando emette");
+        let mut model = model_con(vec![fence("bugia", "x")]);
+        reg.apply(&mut model, &ParseContext::obsidian("a.md"), "markdown");
+        assert!(
+            matches!(model.body[0], Block::CodeBlock { .. }),
+            "il prodotto non dichiarato si scarta e il nodo resta: {:?}",
+            model.body[0]
+        );
+    }
+
+    #[test]
+    fn un_kind_dichiarato_entra_e_prova_che_il_test_di_sopra_non_e_vuoto() {
+        let mut reg = SyntaxRegistry::new();
+        reg.register(Box::new(Bugiarda {
+            produces: vec!["terzi:onesto".into()],
+            emette: "terzi:onesto",
+        }))
+        .unwrap();
+        let mut model = model_con(vec![fence("bugia", "x")]);
+        reg.apply(&mut model, &ParseContext::obsidian("a.md"), "markdown");
+        assert!(
+            matches!(&model.body[0], Block::Custom { custom_kind, .. } if custom_kind == "terzi:onesto")
+        );
+    }
+
+    #[test]
+    fn una_regola_che_non_produce_niente_non_si_registra() {
+        let mut reg = SyntaxRegistry::new();
+        let err = reg
+            .register(Box::new(Bugiarda {
+                produces: vec![],
+                emette: "terzi:onesto",
+            }))
+            .expect_err("senza `produces` la regola non potrebbe emettere niente");
+        assert_eq!(err, SyntaxConflict::NothingProduced("terzi:bugiarda".into()));
     }
 }

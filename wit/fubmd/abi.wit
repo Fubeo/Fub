@@ -1709,7 +1709,7 @@ interface errors {
 
 // ---------------------------------------------------------------------------
 // Le capacità concesse dal kernel a un provider/plugin: l'unico varco col
-// mondo, in NOVE interfacce (§7.1).
+// mondo, in DIECI interfacce (§7.1).
 // ---------------------------------------------------------------------------
 //
 // Erano una sola, `host-api`, e un'interfaccia sola si importa per intero o per
@@ -1722,7 +1722,7 @@ interface errors {
 // modo di chiamarla: la funzione non c'è. È lo stesso confine di prima, detto
 // dove il component model lo può far rispettare da sé.
 //
-// Il criterio delle nove famiglie è uno solo: **cosa vuol dire negarne una.**
+// Il criterio delle dieci famiglie è uno solo: **cosa vuol dire negarne una.**
 // Per questo la lettura del vault è separata dalla scrittura e dalle operazioni
 // strutturali (i tre gradi che `read-vault` e `write-vault` distinguono, §7.3),
 // i blob del plugin si dividono nello stesso modo, e ciò che l'host sa e il
@@ -2239,7 +2239,7 @@ interface exporter {
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che
 /// implementa. Il kernel non distingue nativo da WASM.
 world plugin-world {
-    // Le nove famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
+    // Le dieci famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
     // mondo che non importa `host-vault-write` non è un mondo che la rifiuta a
     // runtime, è un mondo in cui quella funzione non esiste. Il giorno che il
     // caricatore di M5 monterà un componente sotto sandbox stretta, ciò che

@@ -256,6 +256,56 @@ plugin» significa.
   divisione si legge dal **trigger**, perché è il trigger a decidere quale delle
   due passate applica la regola.
 
+## Tre confini che erano scritti qui e non nel codice
+
+Una rilettura di questa seduta contro il codice ha trovato tre punti in cui il
+verbale prometteva più di ciò che il repo teneva. Non sono ripensamenti — le
+decisioni restano quelle — è la loro applicazione che mancava, e adesso c'è.
+
+- **«`Revoked` non gira affatto» valeva solo per l'`HostApi`.** Il presidio
+  stava nel guard delle chiamate (decisione 0021), ma una `SyntaxRule` e un
+  `CustomRenderer` non passano da nessun guard: girano a ogni parse e a ogni
+  anteprima. Un plugin revocato poteva registrarli e vederli girare. Il rifiuto
+  sta ora nel **varco unico di ogni registrazione** (`PluginRegistry::admission`,
+  `RegistryError::Revoked`), quindi vale per tutte le famiglie e non per quelle
+  che qualcuno si ricorda: dichiararsi resta possibile — per dire che qualcuno è
+  revocato bisogna sapere che esiste — registrare no.
+- **`produces` era una nota, non un contratto.** Il verbale dice «chi consuma il
+  modello sa che tutto ciò che arriva da un terzo porta un `custom_kind` con un
+  namespace addosso»: non era vero. Nessuno confrontava ciò che
+  `SyntaxRule::apply` restituiva con ciò che la regola aveva dichiarato, e
+  nessuno chiedeva che i `produces` fossero nel namespace di chi li dichiara.
+  Una regola di terzi poteva dichiarare `terzi:onesto` ed emettere `callout`,
+  farsi disegnare come un callout del core e sfasare `undrawn_kinds()` nei due
+  sensi insieme — contando un kind mai emesso e non vedendo quello emesso. Ora
+  l'elenco è verificato **due volte**: alla registrazione contro il namespace
+  (§7.4, `PluginRegistry::check_names`) e dove si applica, scartando il prodotto
+  non dichiarato come si scarta un rifiuto. Una regola con `produces` vuoto è un
+  no-op che sembra una regola, e il registro la rifiuta come rifiuta un trigger
+  inerte.
+- **Una regola inline saltava l'etichetta dei link.** `[==qui==](url)` restava
+  testo crudo mentre `==là==` fuori agganciava: la stessa sintassi funzionava a
+  seconda di dove capitava, ed era l'unico dei limiti di questa seduta a non
+  essere dichiarato da nessuna parte. Ora la passata inline scende anche lì, con
+  lo span del link — più stretto di quello del contenitore. Gli **embed** no:
+  `![[img|100]]` non porta un'etichetta da leggere ma un parametro per chi lo
+  incorpora, e interpretarci una sintassi vorrebbe dire riscrivere un argomento.
+
+Due limiti che restano, e adesso sono scritti dove servono invece che qui:
+`FormatProvider::render_html` dichiara di poter ricevere un **frammento** (con i
+renderer registrati il kernel spezza il corpo, quindi arriva una corsa di
+blocchi e nient'altro — è la promessa che la resa di un blocco dipende dal
+blocco), e `SyntaxProduct::Inline` dichiara la convenzione `attrs.text`, che è
+ciò che il degrado generico legge per non far sparire il contenuto di un inline
+che nessuno conosce.
+
+Il lato **renderer** non è stato stretto allo stesso modo, ed è deliberato: un
+terzo che rivendica un `custom_kind` del core non si nasconde — i renderer sono
+contesi per kind, quindi due che vogliono lo stesso si vedono, e disegnare
+meglio un kind che il core produce è un innesto legittimo, non
+un'impersonificazione. Ciò che mancava sul lato sintassi era proprio la
+contesa: là il conflitto non aveva dove accadere.
+
 ## Verifica
 
 `cargo test --workspace`: **481 verdi** (erano 456), fra cui la conformità
@@ -271,3 +321,9 @@ niente finché non rompe tutto in un punto solo (CodeMirror scrive stili inline,
 `style-src 'unsafe-inline'` è lì apposta — ma l'unica prova vera è la finestra
 che si apre), e il **sanitizer sull'anteprima**, dove un attributo dimenticato
 nell'allowlist non è un test rosso: è una tabella che perde l'allineamento.
+
+I tre confini stretti dopo (sezione qui sopra) portano **sei test** nuovi: tre
+sul contratto di `produces` fra gli unitari di `SyntaxRegistry`, e tre
+end-to-end in `custom_blocks_e2e.rs` — il revocato che non registra niente, il
+terzo che non si fa passare per il core, e l'evidenziato dentro l'etichetta di
+un link.

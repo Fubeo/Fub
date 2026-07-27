@@ -21,12 +21,12 @@ Le sei voci sono chiuse.
 
 ## La risposta, in una frase
 
-**Il confine ha nove famiglie di capacità, una disciplina di prestito, un
+**Il confine ha dieci famiglie di capacità, una disciplina di prestito, un
 registro di chi c'è, e una regola per i nomi.**
 
-- **§7.1** — l'`HostApi` è la **somma** di nove trait
+- **§7.1** — l'`HostApi` è la **somma** di dieci trait
   ([`fubmd_abi::traits`](../../crates/fubmd-abi/src/traits.rs)), e al confine WIT
-  nove `interface` che il `plugin-world` importa una per una. Il rifiuto è un
+  dieci `interface` che il `plugin-world` importa una per una. Il rifiuto è un
   wrapper generico ([`Guard<H, P: Policy>`](../../crates/fubmd-kernel/src/host/guard.rs)),
   non una impl gemella.
 - **§7.2** — la disciplina di consegna (`take` → chiamata → ripristino con in
@@ -50,13 +50,13 @@ registro di chi c'è, e una regola per i nomi.**
   poneva come una scelta — il `Guard` nel kernel *oppure* la scomposizione in
   sotto-trait — e sono state prese entrambe, perché risolvono due problemi
   diversi che si somigliano. Il `Guard` toglie la impl gemella che serve a dire
-  di no (`ReadOnlyHost` diceva no a sei capacità e per dirlo ne riscriveva
-  ventidue); la scomposizione toglie i **rifiuti che non sono nemmeno rifiuti** —
+  di no (`ReadOnlyHost` diceva no a dieci metodi e per dirlo ne riscriveva
+  ventiquattro); la scomposizione toglie i **rifiuti che non sono nemmeno rifiuti** —
   i dodici `unreachable!()` di `ReadHost`, che dicevano il vero e non erano un
   tipo. Prendere solo la prima avrebbe lasciato il percorso di lettura a
   implementare capacità che non può avere; prendere solo la seconda avrebbe
   lasciato ogni politica del §7.3 a costare una impl.
-- **Il criterio delle nove famiglie è: cosa vuol dire negarne una.** Non
+- **Il criterio delle dieci famiglie è: cosa vuol dire negarne una.** Non
   «quante ne stanno comode insieme». Per questo la lettura del vault è separata
   dalla scrittura di testo *e* dalle operazioni strutturali (chi scrive una nota
   cambia ciò che l'utente ha, chi la cestina gliela toglie: un host può voler
@@ -210,6 +210,25 @@ passano da `admit` come tutte, con un proprietario.
   non è una dimenticanza: non c'è ancora una capacità che li userebbe. Il §7.3
   chiedeva il registro, non l'`if`; il giorno che `http_fetch` entrerà,
   `Capability::permission()` è la riga che le dà un permesso.
+- **La regola dei nomi la fa rispettare chi registra, e non tutti i nomi si
+  registrano.** `admit` prende gli id di chi si presenta — view, comandi, regole
+  sintattiche, renderer, export, servizi, e i `ns` delle rotte di un indice — e
+  `owns_name` prende il topic di un `Event::Custom`, che una registrazione non
+  ce l'ha: lì è l'host a guardare, quando l'evento passa. Restano fuori i nomi
+  che nascono **dentro una risposta**, dove non passano da nessuno: il `ns` di
+  `UiNode::Custom`, di `ViewUpdate::Custom` e di `CommandOutcome::Custom` — un
+  provider può rispondere sotto il namespace di un altro, e la shell che quel
+  `ns` lo riconosce gli dà retta; i `custom_kind` del §3.2, da tutte e due le
+  parti, perché `SyntaxRuleSpec::produces` non è guardato da niente e
+  `CustomRendererSpec::kinds` ha una contesa a chi arriva primo
+  (`RendererConflict::Claimed`) ma nessun **proprietario**, così un terzo che
+  rivendica `fubmd:callout` e si registra per primo chiude fuori il core; e
+  `JobSpec::job`, che un proprietario non ce l'ha affatto — `enqueue_job` accoda
+  `(JobId, JobSpec)` senza registrare **chi** l'ha chiesto. Per i primi due il
+  posto è quello di `emit` (l'host, al passaggio) ed è additivo, perché
+  `owns_name` c'è già; per i job la domanda arriva col §9.3, che è dove qualcuno
+  comincerà a drenare la coda — oggi `Plugin::run_job` è senza chiamanti come
+  `activate`.
 - **Nessun `deactivate`, nessun `unregister`.** Togliere un provider è il §9.4, e
   con la §7.4 chiusa adesso ha ciò che gli mancava: un id che è di qualcuno.
 - **`Plugin::activate`/`deactivate` restano senza chiamanti.** Il registro tiene

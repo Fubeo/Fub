@@ -98,6 +98,20 @@ pub struct SyntaxRuleSpec {
     /// I `custom_kind` che questa regola emette. È l'altra metà del conto del
     /// §3.2: un `custom_kind` prodotto e mai rivendicato da un renderer è un
     /// blocco che l'utente leggerà crudo, e adesso si può **contare**.
+    ///
+    /// **È un contratto, non una nota.** Ciò che [`SyntaxRule::apply`]
+    /// restituisce e che non è dichiarato qui viene **scartato**, e il nodo
+    /// resta com'era. Senza quel controllo `produces` sarebbe una promessa che
+    /// non costa niente rompere: una regola di terzi potrebbe dichiarare
+    /// `terzi:onesto` ed emettere `callout`, farsi disegnare dal renderer del
+    /// core e mandare in confusione il conto — che conterebbe un kind mai
+    /// emesso e non vedrebbe quello emesso. La frase «tutto ciò che arriva da
+    /// un terzo porta un namespace addosso» vale perché questo elenco è
+    /// verificato due volte: qui contro ciò che la regola emette, e alla
+    /// registrazione contro il namespace di chi la registra (§7.4).
+    ///
+    /// Vuoto = una regola che non può produrre niente, cioè un no-op che
+    /// sembra una regola: il registro la rifiuta.
     pub produces: Vec<String>,
 }
 
@@ -130,6 +144,13 @@ pub enum SyntaxProduct {
     /// Un `Inline::Custom`. Non ha figli — è la forma che l'escape hatch inline
     /// ha nel modello, ed è deliberato che una regola non possa produrre
     /// enfasi o link.
+    ///
+    /// **Convenzione degli `attrs`: chi porta del testo lo chiama `text`.** Non
+    /// è un capriccio di stile — è ciò che il degrado generico di un provider
+    /// legge per non far sparire il contenuto quando nessuno conosce il kind.
+    /// Un inline che mette il proprio testo sotto un altro nome si rende come
+    /// uno span vuoto da chiunque non lo conosca, che è esattamente la
+    /// sparizione silenziosa che il §3.2 ha corretto.
     Inline {
         custom_kind: String,
         attrs: serde_json::Value,
