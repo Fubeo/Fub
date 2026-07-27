@@ -1500,6 +1500,19 @@ interface index {
     /// Punto di consistenza E di persistenza: al ritorno l'accettato è
     /// visibile alle query e durevole (via `host-api.data-*`).
     flush: func() -> result<_, plugin-error>;
+    /// Risponde a una domanda GIÀ DICHIARATA da `routes`.
+    ///
+    /// **Due `query` possono essere in volo insieme**, e il contratto non ha
+    /// modo di chiedere che lo siano davvero: è una lettura, il kernel la serve
+    /// sotto prestito condiviso del workspace, e un indice che si rimetta in
+    /// fila da sé con un lock proprio resta conforme — semplicemente, non
+    /// scala, e il prestito condiviso del kernel non lo attraversa. Non c'è
+    /// un campo che lo dichiari, e la ragione sta nella decisione 0026: una
+    /// dichiarazione del genere non potrebbe cambiare *cosa è lecito* (lo dice
+    /// già `Send + Sync`), quindi sarebbe un'informazione che nessuno può
+    /// verificare e su cui nessuno può agire. Serializzare è quindi permesso
+    /// e sconsigliato, e chi non vuole farlo lo prova misurando, non
+    /// dichiarando.
     query: func(query: index-query) -> result<index-result, plugin-error>;
 }
 

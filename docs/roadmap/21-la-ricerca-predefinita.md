@@ -224,7 +224,7 @@ che lo ha prodotto.
 
 ### 21.9 Una query costa 23 ms su duemila note, e nessuno sa perché
 
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel/presidi · **P1** — trovata misurando, come la §8.4*
+*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel/presidi · **P1** — trovata misurando, come la §8.4, che però è chiusa ([0026](../decisions/0026-due-query-insieme.md))*
 
 - [ ] **I due numeri che abbiamo sono a due ordini di grandezza di distanza.**
       [M2](../milestones/M2-search-graph.md) ha misurato la query peggiore a
@@ -244,10 +244,12 @@ che lo ha prodotto.
       [0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha applicato
       al lock, e con lo stesso motivo: lì misurando è cambiata la ragione per
       fare la voce.
-- [ ] **Va con la [§8.4](08-il-kernel-a-pezzi.md#84-il-prestito-condiviso-si-ferma-al-lock-di-un-provider)**,
-      che è l'altra metà misurata sullo stesso banco: `SearchIndex::query` prende
-      `&self` e poi si rimette in fila da sé sul proprio `Mutex<Inner>`, quindi
-      la lettura che l'utente scatena più spesso è l'unica che il `RwLock` non ha
-      accelerato. Le due voci non sono la stessa — una è *quanto costa una
-      query*, l'altra è *quante ne passano insieme* — ma si prendono con lo
-      stesso banco e conviene prenderle di seguito.
+- [ ] **L'altra metà misurata sullo stesso banco — la §8.4 — è chiusa, e questa
+      resta.** La [decisione 0026](../decisions/0026-due-query-insieme.md) ha
+      tolto il `Mutex` che faceva rimettere in fila da sé `SearchIndex::query`:
+      adesso otto ricerche passano insieme, e il carico misto è tornato a scalare
+      (6,8× a otto thread). Ma le due voci non erano la stessa — una è *quante ne
+      passano insieme*, questa è *quanto costa una* — e infatti il costo non si è
+      mosso di un filo: ~21 ms a ricerca allora, ~21 ms adesso. Il banco è lo
+      stesso e si rilancia allo stesso modo, il che vuol dire che questa voce ha
+      già il proprio strumento.

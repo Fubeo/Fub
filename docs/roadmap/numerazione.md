@@ -28,6 +28,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.18 | [0012 — L'origine degli eventi](../decisions/0012-origine-degli-eventi.md) |
 | §1.36 | [0010 — Un comando descritto a una macchina](../decisions/0010-comando-descritto-a-una-macchina.md) |
 | §2.21 | [0004 — Il grafo e i link non-wiki](../decisions/0004-il-grafo-e-i-link-non-wiki.md) |
+| §8.4 | [0026 — Due query insieme](../decisions/0026-due-query-insieme.md) |
 | §3.11 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §3.13 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §1.2 · §2.1 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
