@@ -643,6 +643,20 @@ i risultati di ricerca — è la stessa regola di `UiNode::Html` in
 [ui-protocol.md](ui-protocol.md). Chi disegna avvolge gli intervalli con i
 propri elementi, e nel farlo attraversa il ponte byte→UTF-16.
 
+**Dentro `snippet` e non dentro il documento**, però, ed è una scelta che ha una
+scadenza: gli span non sono coordinate nel testo della nota, quindi da un
+risultato non si può tornare al punto che lo ha prodotto — mentre la
+destinazione, `ViewUpdate::Reveal { doc_id, span }`, esiste già ed è quella che
+l'outline usa. Con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md)
+la ricerca predefinita di FubMD è dichiarata **di classe *omnisearch***, e da lì
+questa forma diventa la [§21.3](../roadmap/21-la-ricerca-predefinita.md#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento):
+senza coordinate nel documento, la ricerca *dentro* la nota aperta, il salto
+all'occorrenza e le occorrenze multiple per nota sono inesprimibili. Vale lo
+stesso per `TextQuery`: `TextMode` sa dire `Terms` e `Phrase` e non sa dire «a
+meno di un refuso» — né, di conseguenza, «esattamente», che è ciò che serve a chi
+poi **scrive** sullo stesso canale (§21.1). Tutti e due i record sono già nel
+WIT: si correggono prima del freeze di M4, o con una migrazione di versione.
+
 `Custom` è il **varco di estensione** (namespaced: `ns` = plugin id): senza,
 gli enum chiusi + il freeze WIT di M4 obbligherebbero il contratto a prevedere
 in anticipo ogni query futura — e i plugin di terzi non potrebbero definirne

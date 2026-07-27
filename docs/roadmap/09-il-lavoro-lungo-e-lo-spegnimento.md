@@ -135,6 +135,18 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       contenitore sbagliato: §11.2.
 - [ ] **Safe mode / isolamento**: un provider che pania non deve portarsi via il
       vault (`catch_unwind` al confine, disattivazione con avviso) — 24.2, 20.3.
+      La [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+      ne ha tolto **una metà**, e va detto quale: un `RwLock` si avvelena solo se
+      a paniare è chi tiene il prestito esclusivo, quindi un provider che
+      **disegna** non se lo porta più via. Chi **agisce** sì, ed è tutto lì
+      dentro: `view_action` e `invoke_command` prendono `write()`
+      (`app/lib.rs`), e `write_document` ci fa passare il parse del formato e
+      l'alimentazione degli indici. Da lì il panico avvelena, e i quindici
+      `.read()/.write().unwrap()` di `app/lib.rs` lo traducono in un panico su
+      **ogni** comando successivo: non è la chiamata persa di cui parla la 0024,
+      è il vault irraggiungibile fino al riavvio. Finché i provider sono in-repo
+      è il caso raro; con un'estensione installata un handler di comando che
+      pania è il caso normale — la metà che resta non è la metà meno probabile.
 
 ### 9.4 Disattivazione — oggi si può solo *non registrare*
 

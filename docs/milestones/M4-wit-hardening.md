@@ -321,6 +321,33 @@ oggi, una migrazione domani); le altre restano al freeze.
       Tauri in meno) e i **comandi della shell** (toggle dei pannelli: il registro vive nel kernel e
       il frontend non può registrarvisi — §18.2).
 
+- [ ] **La forma di una ricerca tollerante** ([todo.md](../todo.md) §21.1–§21.3,
+      dalla [decisione 0025](../decisions/0025-la-ricerca-predefinita.md)):
+      `text-mode`, `text-field`, `text-query` e `document-match` sono già nel WIT,
+      e la 0025 ha stabilito che la ricerca predefinita di FubMD è di classe
+      *omnisearch*. Le tre domande da chiudere qui:
+      1. **Dove sta la tolleranza ai refusi** → una terza variante di `TextMode`
+         è la più economica ma tratta modalità e tolleranza come esclusive,
+         mentre sono ortogonali (una *frase* cercata a meno di un refuso ha
+         senso); un campo a sé (`tolerance`, con `Exact` come default esplicito)
+         costa un campo su ogni mirror e le tiene indipendenti. Nel contratto
+         **non** deve entrare una distanza di edit: è un parametro di un motore, e
+         metterlo in una firma vorrebbe dire che cambiare motore cambia il
+         significato delle query salvate.
+      2. **Come si dice che l'ultimo termine è incompleto** — è la proprietà di
+         un'*invocazione*, non di una query salvata, e se la aggiunge la casella
+         di ricerca allora CLI, automazioni e centro di comando LLM interrogano
+         lo stesso indice in una lingua diversa da quella dell'utente.
+      3. **Se un estratto porta coordinate nel documento** e, in tal caso, di
+         quale revisione — `EditRequest` ha già la forma
+         ([decisione 0008](../decisions/0008-modifica-chirurgica.md)). Senza,
+         `ViewUpdate::Reveal` non ha niente da ricevere dalla ricerca e la ricerca
+         dentro la nota aperta resta *inesprimibile*, non stretta.
+      La ragione per cui tutto questo è contratto e non implementazione è una
+      sola, e va riletta prima di rispondere: la tolleranza deve poter essere
+      **spenta per singola query**, perché lo stesso `IndexQuery::Documents`
+      serve la casella di ricerca e `vault.replace`.
+
 ## Trait/API coinvolti
 
 - `Plugin`, `HostApi` (prima impl reale end-to-end).

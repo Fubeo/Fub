@@ -37,6 +37,7 @@ di *implementare gli stessi trait*, non di girare in sandbox WASM).
 | Indici (ricerca) | **Posseduti e alimentati dal kernel**, non dagli eventi; backlink serviti dal grafo | Un indice che perde un aggiornamento non tace: risponde *sbagliato*, in silenzio. La coda eventi ha un budget e può troncare, questo canale no. E i backlink hanno già una fonte di verità — il grafo — che conosce le ambiguità dell'intero vault: duplicarli creerebbe una seconda verità divergente. Vedi [M2](milestones/M2-search-graph.md). |
 | Persistenza di un indice | **`HostApi` per-chiamata in `activate` e `flush`**, non altrove; registrazione = attivazione, con un id che assegna lo spazio dati | Senza host in nessuna firma, un index provider di terzi in WASM non potrebbe persistere *nulla* — lo stesso buco che il versioning ha fatto emergere per `EventHandler`, e l'unica voce del debito che toccava una **firma da congelare**. L'host arriva nei due punti in cui lo stato attraversa il disco: `activate` per ritrovarlo, `flush` per scriverlo. Non su `on_document_*` (mutazioni in memoria: costringerebbe il kernel a duplicare il modello a ogni salvataggio) né su `query` (che il kernel serve sotto prestito *condiviso*). Per-chiamata e non un handle: il kernel presta `&mut Workspace`, che `'static` non può essere. Il manifest di `SearchIndex` passa da `data_*`; la cartella mmap di tantivy da `Workspace::plugin_data_dir`, varco nativo dichiarato — vedi [traits.md](architecture/traits.md). |
 | Risultati di ricerca | **`snippet` testo puro + `highlights: Vec<Span>`** | Un provider di terzi non deve poter iniettare markup nella webview privilegiata passando per i risultati (stessa regola di `UiNode::Html`); chi disegna avvolge gli intervalli con i propri elementi. |
+| Quale ricerca ([decisione 0025](decisions/0025-la-ricerca-predefinita.md)) | **Di classe *omnisearch*, built-in e accesa di default** — non un plugin installabile | In Obsidian omnisearch è un plugin perché sotto c'è già una ricerca nativa; qui sotto non c'è niente, e due motori sullo stesso vault sono due ranking e due risposte alla stessa domanda — la stessa ragione per cui i backlink li serve **il grafo** e non un secondo indice. E la ricerca non è un pannello: è la strada per cui si arriva a tutto il resto (quick switcher, palette, `RunSearch` dal pannello tag, collezioni, `vault.replace`), quindi se il comportamento buono stesse in un plugin ognuna di quelle superfici dovrebbe sapere **se quel plugin c'è**. La conseguenza dura è che le parti che contano sono **firma**: `TextMode` non sa dire «a meno di un refuso» né, di conseguenza, «esattamente», e `DocumentMatch.highlights` sono span dentro `snippet` e non dentro il documento — quindi la ricerca dentro la nota aperta e il salto all'occorrenza sono *inesprimibili*, non stretti. Il fuzzy va nel contratto non perché sia importante ma perché deve poter essere **spento per singola query**: lo stesso `IndexQuery::Documents` serve la casella di ricerca e `vault.replace`, e un motore che indovina su un canale che poi scrive è un difetto. Tre **P0** nella [seduta 21](roadmap/21-la-ricerca-predefinita.md), tutte prima del freeze di M4. |
 | Eventi | **Dispatch a coda anti-rientranza** + varco `Event::Custom` | Un handler che emette/scrive durante `handle` non rientra; i plugin comunicano via topic namespaced. Il budget anti-ping-pong tronca **rumorosamente**: `Event::Overflow { dropped }` avvisa chi deriva stato di riconciliare da zero — mai perdite silenziose. |
 | Lotto ed origine ([decisione 0011](decisions/0011-il-lotto.md) + [decisione 0012](decisions/0012-origine-degli-eventi.md)) | **Un lotto è uno scope del kernel, non una transazione, e non lo apre un plugin**; un handler riceve `Notice { event, origin }` | Il lotto coalizza il solo `index-updated` — l'unico evento senza payload, quindi l'unico di cui N copie dicono quanto ne dice una — e chiude con `BatchEnded { batch, changed }`: una rinomina con 200 backlink passa da 201 ridisegni completi a 1, senza che gli eventi per-documento perdano un colpo. Non annulla niente e non si chiama come se lo facesse: il tutto-o-niente vuole il journal del §15.2, e un annullamento che non sopravvive alla morte del processo non è un annullamento. Non lo apre un plugin perché uno scope a chiusura garantita non attraversa il confine dei componenti: il lotto di un plugin è la sua invocazione di comando. `Origin.actor` è **chi ha chiesto**, non chi ha eseguito — è l'unica lettura per cui esiste («questa l'ho scritta io?»), e senza di essa l'automazione su-modifica di 16.2 si richiama da sola finché il budget non tronca. |
 | Capacità dell'`HostApi` ([decisione 0013](decisions/0013-elenco-delle-capacita.md)) | **L'elenco è chiuso**: ventidue metodi, con le operazioni strutturali dentro e `storage_*` fuori | Dopo il freeze una capacità che manca è una feature che **non potrà mai essere un plugin**, quindi ogni voce è stata decisa a verbale — comprese quelle che non entrano, o «non ci avevamo pensato» diventerebbe indistinguibile da «è stata una scelta». Dentro: creare (che **rifiuta** un path occupato — è l'unica differenza con `write_document`, e senza di essa un template che sbaglia la data cancella una nota), rinominare (quella del kernel, che **riscrive i backlink**: non ce n'è una nuda, perché due semantiche sotto un nome sono una trappola), il giro del cestino, e `run_command`, che eredita modo, attore e lotto invece di prenderli come argomenti — una simulazione non diventa reale invocando qualcuno, e una macro di tre comandi resta una cosa sola. Fuori, con la ragione: allegati (§14.1), rete (§9.1 + §7.3), tempo differito (§8.3), cartelle (§14.3), e `notify`/`progress`/`log`, che informano senza aspettare risposta — cioè la definizione di un **evento**, non di una capacità. `storage_*` volatile è stato **tolto**: con `data_*` e le impostazioni non aveva più casi d'uso, e toglierlo dopo il freeze sarebbe stata una major. |
@@ -143,15 +144,19 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
 - [todo.md](todo.md) — **roadmap infrastrutturale**: l'elenco delle voci
   **aperte**, cioè quali pezzi mancano perché la massa di
   [FEATURES.md](FEATURES.md) sia implementabile *come provider* invece che come
-  codice dell'app. Sei giri sulla stessa domanda hanno prodotto ottantanove
-  voci; le ventuno chiuse sono uscite di lì e stanno in
+  codice dell'app. Sette giri sulla stessa domanda hanno prodotto novantanove
+  voci, la centesima l'ha trovata una **misura** (la §8.4, dalla
+  [decisione 0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e le
+  ultime nove non le ha trovate nessuna delle due: le ha **aperte** una decisione
+  di prodotto, la [0025](decisions/0025-la-ricerca-predefinita.md); le
+  quarantotto chiuse sono uscite di lì e stanno in
   [decisions/](decisions/README.md).
-  Le voci **non** sono raggruppate per strato ma per **seduta**: diciotto
-  sedute più il debito del quarto audit, e una seduta è un insieme di voci che
+  Le voci **non** sono raggruppate per strato ma per **seduta**: venti
+  sedute più quella nata dalla 0025, e una seduta è un insieme di voci che
   conviene decidere in una volta sola, perché sono la stessa domanda vista da
   lati diversi e deciderle separate significa deciderle male. Ogni seduta è un
   file in [roadmap/](roadmap/), con in testa la ragione per cui quelle voci
-  stanno insieme; `todo.md` è l'**indice** — le sedute, le cinquantaquattro voci
+  stanno insieme; `todo.md` è l'**indice** — le sedute, le sessantuno voci
   ancora aperte con strato e priorità, e gli allegati. Il piano lo diceva già, sparso in una
   ventina di note («vanno decise insieme», «va prima di», «o due terzi della
   risposta saranno inutilizzabili»): questa è quella conoscenza messa nella
@@ -190,7 +195,13 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   componente smette»** — un job non vede il vault, quindi 17, 18, 19.4 e 22 non
   hanno un posto dove girare, e niente si disattiva; **«La forma della shell»**,
   che sta per prima perché è la precondizione che tutte le altre presuppongono e
-  nessuna dichiara. Fuori da quei capitoli restano P0, e per la stessa ragione,
+  nessuna dichiara; e **«La ricerca predefinita»**, che non nasce da un giro ma
+  dalla [0025](decisions/0025-la-ricerca-predefinita.md) — deciso che la ricerca
+  è built-in e di classe *omnisearch*, le sue prime tre voci sono lo stesso
+  record (`TextQuery`, `DocumentMatch`) e la stessa scadenza: oggi il contratto
+  non sa dire «a meno di un refuso» né, di conseguenza, «esattamente», e gli
+  estratti sono ancorati allo snippet e non al documento, quindi cercare *dentro*
+  la nota aperta è inesprimibile. Fuori da quei capitoli restano P0, e per la stessa ragione,
   l'identità del documento (§13.1: il path è per sempre la chiave?), gli errori
   tipizzati al confine (§12.2) e la decisione sulle stringhe e sul locale
   (§12.1), che nessun contenitore della shell può prendere al posto del
@@ -229,7 +240,7 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   scadenza — e la **tabella di corrispondenza** fra la numerazione vecchia e
   questa, che è l'unico posto del repo dove i vecchi `§X.Y` restano validi.
 - [decisions/](decisions/README.md) — **i verbali delle decisioni chiuse**, un
-  file per decisione (`NNNN-<slug>.md`) più l'indice; quattordici a oggi. Sono
+  file per decisione (`NNNN-<slug>.md`) più l'indice; venticinque a oggi. Sono
   la parte di questo repo che fra sei mesi non si ricostruisce dal diff — il
   *perché*, non il *cosa* — e finché stavano dentro `todo.md` erano archiviati
   nel posto in cui si va a cercare *cosa resta da fare*, dove non li rilegge
@@ -288,6 +299,13 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   (`DocMeta` tiene identità, frontmatter, outline e link; il corpo si riparsa dal
   disco su richiesta) e la **graph view** su Canvas. Resta il §5 del quarto
   audit, che ha un milestone suo.
+  Con la [decisione 0025](decisions/0025-la-ricerca-predefinita.md) la ricerca
+  che M2 ha spedito è dichiarata **la** ricerca dell'app — built-in e di classe
+  *omnisearch* — e quella dichiarazione apre la
+  [seduta 21](roadmap/21-la-ricerca-predefinita.md): la parte che scade col
+  freeze sono tre voci di firma (la tolleranza ai refusi che non è dicibile, il
+  prefisso mentre si digita, gli estratti senza coordinate nel documento), il
+  resto è superficie e misura.
 - **M3 — Fedeltà editor** → [dettaglio](milestones/M3-editor-fidelity.md)
   Live preview in-editor (decorazioni CodeMirror sugli `Span`), settings
   dichiarativi, rendering callout/embed/math. La command palette

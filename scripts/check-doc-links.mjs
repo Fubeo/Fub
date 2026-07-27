@@ -20,10 +20,18 @@
 // senza argomenti parte dalla cartella corrente (in CI: la radice del repo).
 // Exit code 1 se c'è almeno un link rotto, 0 altrimenti.
 //
-// Niente dipendenze npm: solo `node:fs` e `node:path`. Un presidio che per
-// girare ha bisogno di un `npm install` è un presidio che prima o poi si
-// disattiva "temporaneamente".
+// Niente dipendenze npm: solo `node:fs`, `node:path` e — per una domanda sola,
+// con una risposta di ripiego se manca — `git`. Un presidio che per girare ha
+// bisogno di un `npm install` è un presidio che prima o poi si disattiva
+// "temporaneamente".
+//
+// Ciò che questo script non deve poter fare è **smettere di guardare in
+// silenzio**: ogni albero saltato è una riga in uscita, e zero file controllati
+// è rosso. È la §16.7 della roadmap, e il difetto era reale: aprire `docs/`
+// come vault — cioè fare il dogfooding che il progetto chiede — faceva passare
+// il controllo da ~1000 link a 21, stampando «0 rotti» in entrambi i casi.
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -42,9 +50,45 @@ const SCHEMI_ESTERNI = ["http:", "https:", "mailto:"];
 // ---------------------------------------------------------------------------
 
 /**
- * Cammina ricorsivamente `radice` e restituisce i percorsi assoluti dei `.md`.
+ * Le cartelle che contengono documentazione **del repo**: quelle in cui git
+ * traccia almeno un `.md`, e tutte le loro antenate fino alla radice.
+ *
+ * Serve a una cosa sola, ed è la distinzione che il solo marcatore non sa fare:
+ * `docs/` e un vault dell'utente hanno entrambi un `.fubmd-data/` dentro, ma il
+ * primo è testo che questo repo mantiene e il secondo sono note di qualcuno.
+ * Git lo sa già — `docs/` è tracciata, `VaultProva/` è ignorata — e non c'è
+ * ragione di indovinarlo con un'euristica peggiore.
+ *
+ * Restituisce `null` se git non c'è o se la radice non è un checkout: chi
+ * chiama, in quel caso, torna alla regola del solo marcatore e **lo dice**.
  */
-function raccogliMarkdown(radice) {
+function documentazioneTracciata(radice) {
+  const esito = spawnSync("git", ["-C", radice, "ls-files", "-z", "--", "*.md"], {
+    encoding: "utf8",
+  });
+  if (esito.error || esito.status !== 0) return null;
+
+  const cartelle = new Set();
+  for (const relativo of esito.stdout.split("\0")) {
+    if (!relativo) continue;
+    let cartella = path.dirname(path.resolve(radice, relativo));
+    while (cartella.startsWith(radice)) {
+      cartelle.add(cartella);
+      if (cartella === radice) break;
+      cartella = path.dirname(cartella);
+    }
+  }
+  return cartelle;
+}
+
+/**
+ * Cammina ricorsivamente `radice` e restituisce i percorsi assoluti dei `.md`.
+ *
+ * `saltate` viene riempito con gli alberi che la regola del vault ha escluso:
+ * chi chiama li stampa, perché un albero che sparisce dal totale senza dirlo è
+ * il modo in cui questo presidio si è già spento una volta.
+ */
+function raccogliMarkdown(radice, tracciate, saltate) {
   const trovati = [];
 
   const visita = (cartella) => {
@@ -58,8 +102,16 @@ function raccogliMarkdown(radice) {
     // Un vault non è documentazione del repo: sono note dell'utente, e i loro
     // link vanno risolti dalle regole del vault (wikilink, alias, cestino), non
     // da questo script. Il marcatore è la cartella dati che il core ci scrive
-    // dentro.
-    if (voci.some((v) => v.isDirectory() && v.name === ".fubmd-data")) return;
+    // dentro — ma una cartella può essere tutte e due le cose, ed è il caso di
+    // `docs/` dal giorno in cui il progetto ha cominciato a mangiare il proprio
+    // cibo. Se git ci tiene dei `.md`, è documentazione: il marcatore non basta
+    // a mandarla via.
+    if (voci.some((v) => v.isDirectory() && v.name === ".fubmd-data")) {
+      if (tracciate === null || !tracciate.has(path.resolve(cartella))) {
+        saltate.push(cartella);
+        return;
+      }
+    }
 
     for (const voce of voci) {
       const percorso = path.join(cartella, voce.name);
@@ -250,7 +302,20 @@ function esterno(destinazione) {
 
 function main() {
   const radice = path.resolve(process.argv[2] ?? process.cwd());
-  const file = raccogliMarkdown(radice);
+  const tracciate = documentazioneTracciata(radice);
+  const saltate = [];
+  const file = raccogliMarkdown(radice, tracciate, saltate);
+
+  for (const cartella of saltate) {
+    const dove = path.relative(radice, cartella) || ".";
+    console.log(`saltato l'albero ${dove}/ — è un vault (.fubmd-data)`);
+  }
+  if (tracciate === null && saltate.length > 0) {
+    console.log(
+      "  (git non risponde qui: non si è potuto distinguere un vault dell'utente\n" +
+        "   dalla documentazione del repo che è anche un vault, e si è saltato)",
+    );
+  }
 
   // Le ancore del bersaglio si calcolano una volta sola: gli stessi documenti
   // vengono linkati da mezzo repo.
@@ -321,6 +386,17 @@ function main() {
   }
   if (problemi.length > 0) console.log("");
   console.log(`${file.length} file controllati, ${totaleLink} link, ${problemi.length} rotti`);
+
+  // Un presidio che non ha guardato niente non è verde: è spento. È il modo in
+  // cui questo si era già spento una volta, e «0 rotti» lo diceva verde.
+  if (file.length === 0) {
+    console.log(
+      "\nnessun documento controllato: qui il presidio non sta guardando niente.\n" +
+        "Se è la cartella sbagliata è un errore di invocazione; se è un albero saltato\n" +
+        "qui sopra, quello è il difetto.",
+    );
+    process.exit(1);
+  }
 
   process.exit(problemi.length > 0 ? 1 : 0);
 }

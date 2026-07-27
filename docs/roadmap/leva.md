@@ -163,3 +163,28 @@ Cercandola, il presupposto da non dare per buono è che un `Result` restituito s
 un `Result` letto, e che un messaggio scritto sia un messaggio arrivato: nel repo
 di oggi quattordici messaggi vanno a `stderr` e dodici alla console della webview, e
 nessuno dei due ha un lettore in un'app impacchettata.
+
+**Fuori dai giri**, e con lo statuto delle voci del quarto scaglione — *rende
+inesprimibile, non stretto* — ne arrivano due dalla
+[decisione 0025](../decisions/0025-la-ricerca-predefinita.md), che non ha cercato
+voci: le ha **create**, decidendo cosa l'app deve fare.
+
+**§21.3 (gli estratti sono ancorati allo snippet, non al documento)**:
+`DocumentMatch.highlights` sono span *dentro `snippet`*, quindi la ricerca
+dentro la nota aperta, il salto all'occorrenza e le occorrenze multiple per nota
+non sono strette — non si possono scrivere. E la destinazione esiste già:
+`ViewUpdate::Reveal` è in repo dal pannello outline e aspetta coordinate che
+nessuno può produrre, che è la forma più netta in cui una capacità può mancare —
+metà del giro c'è, metà è indicibile.
+
+**§21.1 (la tolleranza ai refusi non è dicibile)** si legge al contrario di come
+sembra, e per questo sta qui invece che fra le rifiniture. Non è che manchi il
+fuzzy: manca il modo di chiedere l'**esattezza**, perché oggi l'esattezza è
+implicita, e ciò che è implicito non si può pretendere. Il giorno in cui il
+provider comincia a indovinare cominciano a indovinare nello stesso istante
+`vault.replace`, le collezioni, i template e le automazioni, e nessuno di loro ha
+una parola per dire di no. È la famiglia della
+[decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) — una promessa
+che vale a metà e in silenzio — vista **prima** di farla: l'unica volta in cui
+costa una variante invece di una migrazione, e l'unica in cui il criterio di
+questa pagina serve a evitare un difetto invece che a ordinarne la riparazione.

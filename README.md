@@ -87,7 +87,12 @@ cargo clippy --workspace --all-targets
 ## Roadmap
 
 - **M2** — ricerca full-text (tantivy), graph view, outline, tag panel, "crea nota"
-  per i link non risolti.
+  per i link non risolti. La ricerca è **built-in e di classe *omnisearch***
+  ([decisione 0025](docs/decisions/0025-la-ricerca-predefinita.md)): non un
+  plugin da installare ma *la* ricerca dell'app. Ciò che le manca ancora — refusi
+  perdonati, prefisso mentre si digita, ricerca dentro la nota aperta — sta nella
+  [seduta 21](docs/roadmap/21-la-ricerca-predefinita.md), e tre di quelle voci
+  sono **firma**: scadono col freeze di M4.
 - **M3** — live preview *in-editor* alla Obsidian (decorazioni CodeMirror sugli
   `Span` del modello), command palette, settings via form dichiarativi.
 - **M4** — congelamento della superficie dei trait + contratto WIT (`wit/`),

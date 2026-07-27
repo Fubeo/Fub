@@ -44,10 +44,17 @@ full-rebuild di grafo/indice con un aggiornamento **incrementale**.
   buttare le **impronte** (non l'indice) e reindicizzare — `delete`+`add` è
   idempotente. Mai il contrario: un manifest creduto valido a sproposito farebbe
   *saltare* documenti, cioè mentire in silenzio.
-- **Query:** `IndexQuery::FullText { query, limit }` → `IndexResult::Search(Vec<SearchHit>)`
-  con `score`, `snippet` e `highlights`. Congiunzione di default ("rust async"
-  vuole entrambi). Query sintatticamente non valida → `BadArgs`, non un errore
-  interno: chi sta ancora digitando `campo:` non ha rotto niente.
+- **Query:** `IndexQuery::Documents { matching: QueryExpr, … }` →
+  `IndexResult::Documents(Paged<DocumentMatch>)`, con `score`, `snippet` e
+  `highlights`. Era `IndexQuery::FullText { query, limit }` →
+  `Vec<SearchHit>`, e questa riga è rimasta indietro di una decisione: con la
+  [decisione 0019](../decisions/0019-il-canale-dati.md) la stringa è diventata un
+  **albero** e `SearchHit` si è fuso con `DocumentProperties` in
+  `DocumentMatch`. Il testo cercato vive nella foglia
+  `QueryPredicate::Text(TextQuery)` e `TextMode::Terms` è la congiunzione di
+  default ("rust async" vuole entrambi). Un predicato che il provider non sa
+  valutare non è più un errore da interpretare: il routing è **dichiarato**
+  (`QueryRoute`) e ciò che nessuno rivendica torna `Unserved`.
 - **`snippet` è testo puro, `highlights` sono `Span` al suo interno:** un
   provider non può iniettare markup nella webview privilegiata passando per i
   risultati (vedi [traits.md](../architecture/traits.md)). Il frontend taglia
@@ -77,6 +84,36 @@ cancellate ad app chiusa). La chiude `IndexProvider::reconcile(ids)`, che
 riceve la verità completa del vault in coda a `reindex`. `Event::Overflow`
 mantiene tutto il suo valore per il *frontend*, che invece deriva davvero il
 proprio stato dagli eventi.
+
+### La ricerca predefinita è di classe *omnisearch* ([decisione 0025](../decisions/0025-la-ricerca-predefinita.md)) — **dichiarata**, non ancora vera
+
+Ciò che M2 ha spedito è un motore full-text esatto: `TextMode::Terms`,
+congiunzione di default, boost ×4 sul nome, un estratto per nota. Funziona, ed è
+la base giusta — ma non è ancora ciò che un utente di Obsidian intende per
+«la ricerca funziona», che è il comportamento dell'estensione **omnisearch**:
+refusi perdonati, prefisso mentre si digita, più occorrenze per nota su cui si
+può saltare, e un secondo modale che cerca *dentro* la nota aperta.
+
+La [0025](../decisions/0025-la-ricerca-predefinita.md) ha deciso che quel
+comportamento è **la ricerca dell'app** e non un plugin installabile — sotto non
+c'è una ricerca "base" da migliorare, e dalla stessa porta passano quick
+switcher, palette, collezioni e `vault.replace`. Il che rende tre pezzi
+**firma**, quindi scadenti col freeze di [M4](M4-wit-hardening.md):
+
+- `TextMode` non sa dire «a meno di un refuso» — né, di conseguenza,
+  «esattamente», che è ciò che serve a chi poi **scrive** ([§21.1](../roadmap/21-la-ricerca-predefinita.md#211-la-tolleranza-ai-refusi-non-è-dicibile-nel-contratto));
+- non c'è modo di dire che l'ultimo termine è ancora incompleto, e se lo aggiunge
+  la casella di ricerca allora CLI, automazioni e LLM interrogano lo stesso
+  indice in una lingua diversa ([§21.2](../roadmap/21-la-ricerca-predefinita.md#212-il-prefisso-mentre-si-digita-non-è-uneuristica-della-casella));
+- `DocumentMatch.highlights` sono span dentro `snippet` e non dentro il
+  documento, quindi `ViewUpdate::Reveal` — che la shell sa già eseguire per
+  l'outline — non ha coordinate da ricevere ([§21.3](../roadmap/21-la-ricerca-predefinita.md#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento)).
+
+Le altre sei voci (superfici, pesi, allegati, e la misura che non torna) stanno
+nella [seduta 21](../roadmap/21-la-ricerca-predefinita.md). Nessuna di esse
+rimette in discussione ciò che questa milestone ha fatto: l'indice persistente e
+incrementale, il routing dichiarato e il linguaggio delle query restano, e sono
+esattamente ciò su cui quel comportamento si appoggia.
 
 ### Grafo incrementale (insieme all'indice) — **fatto**
 
@@ -317,6 +354,7 @@ link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
 | Decisione | Perché |
 |---|---|
 | tantivy **incrementale su disco** | Scala a vault grandi e dà avvio rapido; i ganci `on_document_*` esistono già nel trait. |
+| Ricerca **built-in di classe *omnisearch***, non un plugin ([decisione 0025](../decisions/0025-la-ricerca-predefinita.md)) | Sotto non c'è una ricerca "base" da migliorare: due motori sullo stesso vault sarebbero due indici, due ranking e due risposte alla stessa domanda. E la tolleranza ai refusi va nel **contratto** e non dentro il provider, perché deve poter essere **spenta per singola query**: lo stesso `IndexQuery::Documents` serve la casella di ricerca e `vault.replace`. |
 | Indici **posseduti e alimentati dal kernel**, non dagli eventi | Un indice che perde un aggiornamento non tace: risponde sbagliato, in silenzio. La coda eventi ha un budget; questo canale no. Vedi sopra, "Perché l'indice non si alimenta dagli eventi". |
 | `reconcile(ids)` + `flush(host)` **aggiunti al trait** a M2 | Le due giunture che restano: ciò che cambia ad app chiusa, e il fatto che il kernel scriva un documento alla volta mentre un indice vuole scrivere a lotti. Il freeze è a M4: la firma si corregge ora o mai più. |
 | `activate(host)` + `flush(host)` con l'**`HostApi`** nella firma | Senza, un index provider di terzi in WASM non potrebbe persistere nulla: stesso buco che il versioning aveva trovato per `EventHandler`. L'host arriva nei due punti in cui lo stato attraversa il disco, e in nessun altro — vedi [traits.md](../architecture/traits.md), `IndexProvider`. |
@@ -332,7 +370,13 @@ link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
 - Ricerca full-text su un vault di ≥1000 note con risultati rilevanti < 50 ms a
   query (indice caldo), snippet evidenziati. ✅ misurato su 2000 note (release,
   vocabolario ristretto = caso peggiore): query peggiore **108 µs**, indice
-  costruito da zero in 25 ms.
+  costruito da zero in 25 ms. **Ma la spunta va letta con un asterisco**: il
+  banco della [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+  ha misurato ~**23 ms** per query passando dal workspace, cioè due ordini di
+  grandezza sopra. Nessuno dei due numeri è sbagliato, quindi i due banchi
+  misurano cose diverse — ed è la [§21.9](../roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché),
+  che esiste perché «la ricerca è veloce» non sia una frase spuntata su una
+  misura che non copre il caso vero.
 - Riapertura del vault **senza** reindicizzazione completa (indice caricato da
   disco). ✅ **13,9 ms** per 2000 note, con **zero** scritture sull'indice
   (verificato sull'opstamp di tantivy, non a occhio).
