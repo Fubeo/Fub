@@ -85,8 +85,8 @@ use fubmd_abi::traits::{
     IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef, Page,
     Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry,
     PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi,
-    ServiceProvider, TagCount, TrashEntry, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
-    ABI_VERSION,
+    ServiceProvider, TagCount, TrashEntry, VaultStatus, ViewInstance, ViewProvider, ViewSpec,
+    ViewSurface, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -283,6 +283,7 @@ wit_type! {
     NeighborRef => "neighbor-ref",
     DocumentMatch => "document-match",
     TagCount => "tag-count",
+    VaultStatus => "vault-status",
     TrashEntry => "trash-entry",
     Page => "page",
     LinkDirection => "link-direction",
@@ -1820,6 +1821,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
             "index-query-custom",
             vec![("ns", wit(ns)), ("query", wit(query))],
         ),
+        IndexQuery::VaultStatus => case("vault-status"),
     }
 }
 
@@ -1873,6 +1875,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::PropertyValues => case("property-values"),
         QueryKind::VaultHealth => case("vault-health"),
         QueryKind::Custom(ns) => case_ty("custom", wit(ns)),
+        QueryKind::VaultStatus => case("vault-status"),
     }
 }
 
@@ -1904,6 +1907,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::PropertyValues(v) => case_ty("property-values", wit(v)),
         IndexResult::VaultHealth(v) => case_ty("vault-health", wit(v)),
         IndexResult::Custom(v) => case_ty("custom", wit(v)),
+        IndexResult::VaultStatus(v) => case_ty("vault-status", wit(v)),
     }
 }
 
@@ -2558,6 +2562,7 @@ fn conform(source: &str) -> Result<(), String> {
                 ns: String::new(),
                 query: serde_json::Value::Null,
             }),
+            index_query_case(&IndexQuery::VaultStatus),
         ],
     );
 
@@ -2573,6 +2578,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::PropertyValues(Paged::all(vec![]))),
             index_result_case(&IndexResult::VaultHealth(Paged::all(vec![]))),
             index_result_case(&IndexResult::Custom(serde_json::Value::Null)),
+            index_result_case(&IndexResult::VaultStatus(VaultStatus::default())),
         ],
     );
 
@@ -2629,6 +2635,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::PropertyValues),
             query_kind_case(&QueryKind::VaultHealth),
             query_kind_case(&QueryKind::Custom(String::new())),
+            query_kind_case(&QueryKind::VaultStatus),
         ],
     );
 
@@ -3569,6 +3576,20 @@ fn conform(source: &str) -> Result<(), String> {
         count: 0,
     };
     contract.record("tag-count", &[("name", wit(&name)), ("count", wit(&count))]);
+
+    let VaultStatus {
+        watching,
+        sync_failures,
+        last_sync_error,
+    } = VaultStatus::default();
+    contract.record(
+        "vault-status",
+        &[
+            ("watching", wit(&watching)),
+            ("sync-failures", wit(&sync_failures)),
+            ("last-sync-error", wit(&last_sync_error)),
+        ],
+    );
 
     let NeighborRef { doc, via, depth } = NeighborRef {
         doc: DocId::new("a"),

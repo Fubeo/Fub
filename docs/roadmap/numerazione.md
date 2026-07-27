@@ -68,6 +68,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.9 · §9.4 | [0028 — Come un componente smette](../decisions/0028-come-un-componente-smette.md) |
 | §2.22 · §9.5 | [0029 — Chiudere un vault, e chiuderli tutti](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md) |
 | §2.7 · §9.6 | [0029 — Chiudere un vault, e chiuderli tutti](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md) |
+| §9.7 | [0030 — Il rilevamento si può chiedere](../decisions/0030-il-rilevamento-si-puo-chiedere.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |

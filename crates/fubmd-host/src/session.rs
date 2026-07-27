@@ -230,7 +230,11 @@ impl Host {
         }
 
         let workspace = Arc::new(RwLock::new(ws));
-        let watcher = self.watcher.start(&root, workspace.clone())?;
+        // La bandiera del rilevamento è **del kernel** e la tiene chi guarda
+        // (§9.7): così `Host::is_watching` e `IndexQuery::VaultStatus`
+        // rispondono dallo stesso bit, e non da due idee di com'è andata.
+        let watching = workspace.read().expect("workspace avvelenato").watch_flag();
+        let watcher = self.watcher.start(&root, workspace.clone(), watching)?;
 
         let session = VaultSession {
             root: root.clone(),

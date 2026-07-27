@@ -49,7 +49,17 @@ raccoglie.
       (già fatto), semantica dagli `Span` del modello (embed risolti, callout,
       math) — con la regola di chi vince dove.
 - [ ] **Invariante del buffer sporco** irrobustita (oggi custodita da un flag TS)
-      e conflitto buffer↔disco esplicito: è lavoro M3 già dichiarato.
+      e conflitto buffer↔disco esplicito: è lavoro M3 già dichiarato. Ci è
+      arrivato anche il **residuo del ~~§9.7~~**
+      ([decisione 0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md)):
+      `write_document` non porta una `base`, quindi il salvataggio dell'editor
+      **copre** una scrittura altrui che il watcher non ha visto, e nessuna delle
+      due metà del sistema se ne accorge. La guardia giusta esiste da un pezzo —
+      la revisione nella firma e `Conflict` invece della sovrascrittura silenziosa
+      ([0008](../decisions/0008-modifica-chirurgica.md)) — ma vale per
+      `apply_edit`, cioè per i *provider*. Quel che la 0030 ha aggiunto è che
+      adesso il rischio è **misurabile** da qui: con `VaultStatus.watching` a
+      `false` la copertura è nulla, e si sa.
 - [ ] **La history di undo attraversa le note, e questo è un bug da chiudere
       subito.** L'`EditorView` è costruito una volta (`editor/editor.ts`, da
       `panels/document.ts`) e `setDoc` cambia documento con un `dispatch` di `changes`

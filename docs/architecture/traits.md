@@ -505,15 +505,22 @@ pub trait IndexProvider: Send + Sync {
 ```
 
 `IndexQuery { Documents, Backlinks, Outline, Tags, Neighbors, PropertyValues,
-VaultHealth, Custom }` — è il **canale dati verso le view**, e ciò che non è
-esprimibile qui diventa un comando bespoke dell'app, cioè una superficie che un
-plugin non potrà mai avere. Le risposte stanno in `IndexResult`, con gli stessi
-nomi.
+VaultHealth, Custom, VaultStatus }` — è il **canale dati verso le view**, e ciò
+che non è esprimibile qui diventa un comando bespoke dell'app, cioè una
+superficie che un plugin non potrà mai avere. Le risposte stanno in
+`IndexResult`, con gli stessi nomi.
 
 Le forme che portano: `DocumentMatch { doc, score?, snippet?, highlights,
 properties }`, `BacklinkRef { source, context }`, `NeighborRef { doc, via,
 depth }`, `TagCount { name, count }`, `PropertyCount { value, count }`,
-`HealthIssue { doc, check, detail, span }`.
+`HealthIssue { doc, check, detail, span }`,
+`VaultStatus { watching, sync_failures, last_sync_error }`.
+
+`VaultStatus` è l'unica variante che non chiede niente **sul contenuto** del
+vault: chiede del vault stesso — *sa quando cambia da fuori?* — e sta qui per la
+ragione per cui il canale esiste ([decisione 0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md)).
+I suoi clienti sono due e uno dei due non ha comandi: la shell ha `query_index`,
+una feature ha `HostQuery` e nient'altro.
 
 **La query è un albero, non una stringa** ([decisione 0019](../decisions/0019-il-canale-dati.md)).
 `Documents { matching: QueryExpr, … }` porta un OR di clausole, ogni clausola un
@@ -637,9 +644,14 @@ di terzi *possa* persistere, non che tutti persistano allo stesso modo.
 (`kernel/src/index/core.rs`) è registrato per primo e serve `Backlinks` e
 `Neighbors` (dal grafo), `Outline` (dai metadati di un documento), `Tags` e
 `PropertyValues` (dai metadati dell'intero vault), `VaultHealth` (dal grafo e dai
-link in cache), più le foglie `Property`/`Tag`/`Folder`/`Linked`: hanno tutte una
-sola fonte di verità *dentro* il kernel, e duplicarla creerebbe una seconda
-verità divergente. Sono anche il **canale metadata** — il modo con cui una view
+link in cache), `VaultStatus` (dalla bandiera del rilevamento e dal conto delle
+sincronizzazioni fallite), più le foglie `Property`/`Tag`/`Folder`/`Linked`:
+hanno tutte una sola fonte di verità *dentro* il kernel, e duplicarla creerebbe
+una seconda verità divergente. `VaultStatus` è il caso limite che lo mostra: la
+bandiera del rilevamento gliela **presta chi monta** (`Workspace::watch_flag`,
+un `Arc<AtomicBool>` che il watcher possiede finché è vivo), perché il kernel non
+sa cosa sia un watcher — ma la risposta resta sua, dato che l'altra metà, gli
+esiti scartati delle sincronizzazioni per-path, non ce l'ha nessun altro. Sono anche il **canale metadata** — il modo con cui una view
 legge struttura, tag e proprietà senza avere un `FormatProvider` (che, essendo un
 plugin, non ha). La differenza col passato è che questa scelta è **dichiarata**
 invece che cablata: chi la volesse contraddire trova un conflitto di

@@ -12,15 +12,16 @@
 //! provando anche il debouncer, e un test che fallisce per il filesystem non
 //! dice più niente su ciò che doveva provare.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::model::DocId;
 use fubmd_abi::query::{QueryExpr, QueryPredicate, TextQuery};
-use fubmd_abi::traits::{IndexQuery, IndexResult, Page, PropertySelect, ViewInstance};
+use fubmd_abi::traits::{IndexQuery, IndexResult, Page, PropertySelect, VaultStatus, ViewInstance};
 use fubmd_abi::Notice;
 use fubmd_features::BACKLINKS_VIEW;
-use fubmd_host::{EventSink, Host, NoWatcher};
+use fubmd_host::{EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -400,6 +401,88 @@ impl EventSink for Registratore {
             .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
             .unwrap_or_default();
         self.0.lock().unwrap().push(nome);
+    }
+}
+
+/// Un rilevatore che si limita ad alzare la bandiera del kernel: è tutto ciò
+/// che un watcher vero fa in più di `NoWatcher`, e qui serve senza il
+/// filesystem in mezzo.
+struct FintoWatcher;
+
+struct Guarda(Arc<AtomicBool>);
+
+impl VaultWatcher for Guarda {
+    fn is_watching(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for Guarda {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
+}
+
+impl WatcherFactory for FintoWatcher {
+    fn start(
+        &self,
+        _root: &Utf8Path,
+        _workspace: Arc<std::sync::RwLock<fubmd_kernel::Workspace>>,
+        watching: Arc<AtomicBool>,
+    ) -> Result<Box<dyn VaultWatcher>, String> {
+        watching.store(true, Ordering::Relaxed);
+        Ok(Box::new(Guarda(watching)))
+    }
+}
+
+/// `Host::is_watching` e `IndexQuery::VaultStatus` rispondono **dallo stesso
+/// bit** (§9.7).
+///
+/// Due copie del fatto sarebbero due verità, e la seconda mentirebbe in
+/// silenzio: chi monta alzerebbe la sua all'avvio e nessuno la abbasserebbe
+/// quando il rilevatore muore. Il presidio è che l'host non scrive mai il
+/// proprio valore — legge la bandiera del kernel.
+#[test]
+fn il_rilevamento_si_chiede_dal_canale_dati_e_dallhost_ed_e_lo_stesso_bit() {
+    let v = Vault::new();
+    v.put("Nota.md", "# Nota\n");
+
+    let senza = headless();
+    senza.open(&v.root).expect("il vault si apre");
+    assert!(!senza.is_watching(None));
+    assert!(
+        !stato(&senza).watching,
+        "senza rilevatore il canale dati dice la stessa cosa dell'host"
+    );
+    senza.close();
+
+    let con = Host::new().with_watcher(Box::new(FintoWatcher));
+    con.open(&v.root).expect("il vault si apre");
+    assert!(con.is_watching(None));
+    assert!(
+        stato(&con).watching,
+        "chi guarda ha alzato la bandiera del kernel, non una sua"
+    );
+
+    // E chi smette lo dice: chiudere il vault lascia andare il rilevatore, e la
+    // risposta cambia senza che nessuno la aggiorni a mano.
+    let ws = con.workspace(None).unwrap();
+    con.close_vault(&v.root).expect("si chiude");
+    assert!(
+        !matches!(
+            ws.read().unwrap().query_index(IndexQuery::VaultStatus),
+            Ok(IndexResult::VaultStatus(s)) if s.watching
+        ),
+        "un rilevatore distrutto continuava a rispondere `true`: era la §9.7"
+    );
+}
+
+fn stato(host: &Host) -> VaultStatus {
+    let ws = host.workspace(None).expect("un vault è aperto");
+    let ws = ws.read().unwrap();
+    match ws.query_index(IndexQuery::VaultStatus) {
+        Ok(IndexResult::VaultStatus(s)) => s,
+        other => panic!("il canale dati ha risposto fuori tema: {other:?}"),
     }
 }
 

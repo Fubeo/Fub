@@ -714,7 +714,12 @@ export type IndexQuery =
     }
   | { kind: "property_values"; key: string; matching: QueryExpr; page?: Page | null }
   | { kind: "vault_health"; check: string; page?: Page | null }
-  | { kind: "custom"; ns: string; query: unknown };
+  | { kind: "custom"; ns: string; query: unknown }
+  // Questo vault sa quando cambia da fuori? (§9.7) L'unica variante che non
+  // chiede niente sul contenuto del vault: chiede del vault stesso. Passa dal
+  // canale dati e non da un comando suo perché i suoi due clienti sono già qui
+  // — questa shell, e una feature che ha `HostQuery` e nient'altro.
+  | { kind: "vault_status" };
 
 // La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -727,7 +732,23 @@ export type IndexResult =
   | { kind: "neighbors"; value: Paged<NeighborRef> }
   | { kind: "property_values"; value: Paged<PropertyCount> }
   | { kind: "vault_health"; value: Paged<HealthIssue> }
-  | { kind: "custom"; value: unknown };
+  | { kind: "custom"; value: unknown }
+  | { kind: "vault_status"; value: VaultStatus };
+
+// Che rapporto ha questo vault con il disco (rispecchia
+// fubmd_abi::traits::VaultStatus, §9.7). Tre domande diverse e non una: FubMD
+// SAPREBBE che il vault è cambiato; è GIÀ successo qualcosa che non ha saputo
+// leggere; e cosa.
+export interface VaultStatus {
+  // `false` = nessuno vede le scritture altrui. Non è di nicchia: network share
+  // e cloud drive, vault sincronizzati con strumenti esterni, il limite di
+  // inotify sui vault grandi, e i tre host dove non esisterà affatto.
+  watching: boolean;
+  // Quante sincronizzazioni per-path sono fallite da quando il vault è aperto.
+  sync_failures: number;
+  // L'ultimo di quei fallimenti, già composto.
+  last_sync_error: string | null;
+}
 
 // Un tag del vault con quante note lo portano (rispecchia
 // fubmd_abi::traits::TagCount). `name` è senza `#`, gerarchia intatta (`a/b`).
