@@ -32,8 +32,9 @@ si apre segnalando cosa non ha letto.
 
 - [ ] **`trait VaultStorage`** (list, read, write atomico, rename, remove, stat,
       exists) con impl `FsStorage` di default; `Vault` e lo spazio dati dei
-      plugin (`workspace.rs:2177` per la radice, `:2448-2470` per i `data_*`) ci
-      passano sopra invece di chiamare `std::fs`.
+      plugin (`DocumentStore::plugin_data_root` in `documents.rs` per la radice,
+      i `data_*` in `host/kernel.rs` e `host/read.rs`, più `collect_data_files`
+      in `workspace.rs`) ci passano sopra invece di chiamare `std::fs`.
 - [ ] **Un `MemStorage`, ma non come banco di prova dei test e2e.** Il movente
       «oggi ogni test e2e tocca il disco» era scritto qui e va tolto, perché
       **lavora contro il §15.2**: tutto il punto del §15.2 è temp+rename+fsync
@@ -186,7 +187,7 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 *ex §2.23 · kernel · **P1** — il lavoro deve poter **fallire in parte***
 
 - [ ] **`reindex` fallisce l'intera apertura per un solo documento**: legge e
-      parsa tutto con `?` su ogni passo (`kernel/workspace.rs:438-450`). Una
+      parsa tutto con `?` su ogni passo (`kernel/workspace.rs`). Una
       nota illeggibile per i permessi, un file troncato da un crash, un
       documento che il parser rifiuta — e **il vault non si apre**. Il precedente
       giusto è nella stessa funzione, dieci righe sotto: il flush degli indici è

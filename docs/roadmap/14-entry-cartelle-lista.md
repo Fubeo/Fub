@@ -36,11 +36,11 @@ recente» non ha alcuna fonte.
 
 *ex §2.20 · kernel · **P2** — il `VaultEntry` esteso ai **documenti***
 
-- [ ] **`DocMeta` tiene id, frontmatter, outline e link** (`workspace.rs:154`)
+- [ ] **`DocMeta` tiene id, frontmatter, outline e link** (`index/core.rs`)
       e il `Vault` non espone uno `stat`: mtime e dimensione li legge già, ma solo
       per le voci del cestino (`vault.rs:293-316`), e per i documenti non li tiene
       nessuno. Quindi `reindex` **rilegge e riparsa l'intero vault a ogni
-      apertura** (`workspace.rs:438-450`): «un indice
+      apertura** (`workspace.rs`): «un indice
       persistente riconosce e salta gli immutati» è vero per l'indice, non per
       il kernel, che paga comunque lettura + parse di tutto prima ancora di
       chiedere all'indice se gli interessa.
@@ -60,7 +60,7 @@ recente» non ha alcuna fonte.
 *ex §2.11 · kernel · **P2** — stesso lavoro della 14.4; sblocca `create_folder`, tenuto fuori da 0013*
 
 - [ ] **La cartella come cittadino**: `metas` è una mappa piatta
-      (`workspace.rs:192`) e l'albero vive solo in `organizer.ts::buildTree`.
+      (`index/core.rs`) e l'albero vive solo in `organizer.ts::buildTree`.
       È anche la ragione per cui la [decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha lasciato `create_folder` **fuori**
       dall'`HostApi`: una capacità che creasse una directory vuota produrrebbe
       qualcosa che nessun'altra capacità vede — `list_documents` non la mostra,
@@ -81,14 +81,16 @@ auto-spostamento), 6.2 (CSS per cartella), 11.3 (database da cartella), 19.2
 
 *ex §2.13 · kernel · **P2** — il canale più usato dell'app, e l'unico fuori da `IndexQuery`*
 
-- [ ] **`list_documents` è nel contratto, ma fuori da `IndexQuery`, e non
-      scala**: la capacità c'è (`abi/traits.rs:158`) e non prende **né `Page` né
-      filtro** — restituisce **tutto** il vault, ricostruito e riordinato a ogni
-      chiamata (`workspace.rs:481`: colleziona le chiavi di `metas` e le ordina).
-      Sull'IPC diventa un `Vec<String>` (`app/lib.rs:302`), e la shell ne
+- [ ] **`list_documents` è nel contratto, ma fuori da `IndexQuery`, e sull'IPC
+      non scala.** La finestra al confine è arrivata con la
+      [decisione 0019](../decisions/0019-il-canale-dati.md) (§5.5): la capacità
+      prende una `Page` (`abi/traits.rs`) e il kernel taglia la pagina dalla
+      cache dei metadati, ordinata per costruzione, senza materializzare il
+      resto (`documents_page`, `workspace.rs`). Restano due metà: un **filtro**
+      non lo prende, e **il comando IPC la `Page` non la usa** — restituisce un
+      `Vec<String>` con tutto il vault (`app/lib.rs`), e la shell ne
       ricostruisce l'albero intero a ogni `index_updated`. È il canale più usato
-      dell'app e l'unico dato che si chiede fuori da `IndexQuery`: la paginazione
-      della [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md) è
-      arrivata alle query e non a lui, e la virtualizzazione del §2.9 mitiga il
-      disegno ma non il trasferimento. Va ripensato per-cartella e paginato,
-      insieme al §14.1 (`VaultEntry`) e al §14.3.
+      dell'app e l'unico dato che si chiede fuori da `IndexQuery`, e la
+      virtualizzazione del §2.9 mitiga il disegno ma non il trasferimento. Va
+      ripensato per-cartella e chiesto a pagine anche di là dall'IPC, insieme al
+      §14.1 (`VaultEntry`) e al §14.3.

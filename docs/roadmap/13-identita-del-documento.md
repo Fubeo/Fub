@@ -74,7 +74,7 @@ pile.
       perdita di dati a portata di scorciatoia; sta come lavoro di shell nel
       §18.1, e qui resta perché è il **sintomo** che ha fatto trovare la voce.
 - [ ] **Nessuna mutazione del kernel è annullabile**: rename con riscrittura di
-      N sorgenti (`workspace.rs:855`), ripristino di versione, e domani bulk
+      N sorgenti (`workspace.rs`), ripristino di versione, e domani bulk
       fix, automazioni, import. FEATURES lo chiede in cinque punti: 4.2 (undo
       illimitato, cronologia per sessione), 3.3 (undo toast), 11.3 (undo
       database), 16.3 (undo delle automazioni), 17.3 (rollback dell'import).

@@ -59,7 +59,7 @@ dell'attesa non cresce, è già massimo.
       peggio, e poi non ha nessuno a cui dirlo: la firma non gli lascia un
       valore di ritorno. Il ripiego — dimenticare l'impronta — funziona solo
       alla riapertura del vault, perché `reindex` è l'unico percorso che
-      rialimenta un documento **immutato** (`kernel/workspace.rs:438-457`). Per
+      rialimenta un documento **immutato** (`kernel/workspace.rs`). Per
       tutta la sessione corrente quella nota non c'è nella ricerca, e «nessun
       risultato» è indistinguibile da «nessuna corrispondenza».
 - [ ] **Contraddice una promessa scritta due volte.**
@@ -121,12 +121,16 @@ kernel.
       dice la shell stessa, nel commento che protegge l'unico caso in cui si è
       posto il problema (`frontend/src/main.ts`, in coda, «la console della
       webview, che in un'app impacchettata non si apre»).
-- [ ] **Tre commenti nel kernel rimandano tutti alla stessa cosa che non
-      esiste**: «un indice è stato *derivato*, la verità è il vault (M4:
-      notifica)» (`workspace.rs:1442`), «si ignora (M4: log/notifica)»
-      (`:2093`), «gli errori di flush non fanno fallire l'apertura del vault
-      (M4: notifica)» (`:464`). Non è un debito ignoto: è un debito **nominato
-      tre volte** che aspetta una decisione già presa e mai implementata.
+- [ ] **Due commenti nel kernel rimandano tutti e due alla stessa cosa che non
+      esiste** (`workspace.rs`): «gli errori di flush non fanno fallire
+      l'apertura del vault: un indice è stato *derivato*, il vault è la verità
+      (M4: notifica)» in `reindex`, e «l'errore di un handler non deve far
+      fallire l'operazione che ha emesso l'evento: si ignora (M4:
+      log/notifica)» in `deliver_to_handlers`. Il terzo posto che nomina lo
+      stesso canale mancante è il doc di `flush_indexes` — *«perché chi ha un
+      canale di notifica possa mostrarli»* — ed è la voce §20.3 qui sotto. Non è
+      un debito ignoto: è un debito **nominato tre volte** che aspetta una
+      decisione già presa e mai implementata.
 - [ ] **Il payload è in comune con il §12.2, e va deciso lì.** Qualunque
       variante porti «cosa è andato storto» porta un `PluginError`, che oggi è
       prosa italiana composta. Un avviso che l'utente deve leggere e una shell
@@ -151,7 +155,8 @@ visibile), 20.2 (log plugin).
 
 *settimo giro · kernel · **P1** — non è una firma: il canale c'è, ed è il kernel a scartarlo*
 
-- [ ] **`let _ = handler.handle(notice, &mut host);`** (`workspace.rs:2094`).
+- [ ] **`let _ = handler.handle(notice, &mut host);`** (`workspace.rs`,
+      `deliver_to_handlers`).
       `EventHandler::handle` restituisce `Result<(), PluginError>`
       (`abi/traits.rs:989`) — il contratto il canale ce l'ha — e il dispatch lo
       scarta con un commento che nomina il debito («si ignora (M4:
@@ -173,9 +178,9 @@ visibile), 20.2 (log plugin).
       **guardi** quel `Result`.
 - [ ] **Gli altri due esiti già raccolti e mai letti**: `flush_indexes`
       restituisce `Vec<PluginError>` proprio *«perché chi ha un canale di
-      notifica possa mostrarli»* (`workspace.rs:1443-1444`) — e i suoi due
+      notifica possa mostrarli»* (`workspace.rs`) — e i suoi due
       chiamanti in produzione sono un `eprintln!` nel watcher
-      (`app/lib.rs:279-281`) e un `let _ =` in `reindex` (`workspace.rs:466`).
+      (`app/lib.rs:279-281`) e un `let _ =` in `reindex` (`workspace.rs`).
       Il canale è stato costruito e non collegato.
 - [ ] Cosa serve: che `deliver_to_handlers` raccolga e risalga (l'operazione che
       ha emesso l'evento **non** deve fallire — quella parte del commento è

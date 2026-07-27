@@ -135,7 +135,7 @@ reload), 26.2-26.3 (dove il watcher non c'è).
 
 - [ ] **`flush_indexes` ha un solo chiamante in produzione**: il callback del
       file watcher (`app/lib.rs:279`), più `reindex` all'apertura
-      (`kernel/workspace.rs:466`, e lì l'esito è scartato con `let _ =` — cioè
+      (`kernel/workspace.rs`, e lì l'esito è scartato con `let _ =` — cioè
       §20.3). Nessun altro percorso lo chiama — né `write_document` dall'IPC, né
       la chiusura del vault, né la chiusura dell'app.
 - [ ] **Quindi la durabilità di un indice dipende da un componente
@@ -174,7 +174,7 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       la *durabilità* di un indice.** Questa voce è la stessa dipendenza vista
       sull'altro asse: il watcher è anche **l'unico** meccanismo con cui FubMD
       viene a sapere che qualcun altro ha toccato il vault. Non c'è nessun altro
-      percorso — `reindex` gira solo all'apertura (`kernel/workspace.rs:438`),
+      percorso — `reindex` gira solo all'apertura (`kernel/workspace.rs`),
       non esiste una riconciliazione periodica, e niente confronta mai la cache
       col disco. Il costo della sua assenza non è una riapertura lenta: è che il
       kernel risponde su un vault che non c'è più.
