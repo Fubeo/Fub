@@ -23,7 +23,7 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
       [decisione 0011](../decisions/0011-il-lotto.md) — e la maschera cresce
       **per varianti**, che è il punto di questa voce), e a
       [`Event::Custom`] ci si abbona a grana `EventKind::Custom`
-      (consegna in `workspace.rs:2078-2084`): con i moduli
+      (consegna in `deliver_to_handlers`, `workspace.rs`): con i moduli
       FubSuite che si parlano fra loro (21.2), ogni handler si sveglia per
       **ogni** custom di **ogni** plugin.
 - [ ] **Il prefisso di topic non va inventato: c'è già, ed è deciso.** Il

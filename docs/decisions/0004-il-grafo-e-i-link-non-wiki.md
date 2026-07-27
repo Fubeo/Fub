@@ -12,7 +12,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
 
 - [x] **`LinkGraph::register_links` scarta ogni `LinkTarget` che non sia
       `Wiki`** (`kernel/graph.rs:266`), e `link_rewrite_plan` fa lo stesso
-      (`kernel/workspace.rs:893`). Quindi per un link markdown ordinario —
+      (`kernel/workspace.rs`). Quindi per un link markdown ordinario —
       `[testo](note/altra.md)`, che il 7.1 mette sullo stesso piano del
       wikilink, insieme a «link relativi» e «link a file allegato» — **non ci
       sono backlink, non c'è riscrittura su rinomina, non c'è arco nel grafo**.

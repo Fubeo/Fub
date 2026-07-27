@@ -26,7 +26,7 @@ Ne segue la regola di montaggio: **chi registra qualcosa si dichiara prima**
 errore, e un host intestato a un id sconosciuto nega tutto dicendo perché.
 
 - **Nativo (M4):** `HostApi` è un oggetto in-process che chiama direttamente il
-  `Workspace` (già implementato: `KernelHost` in `fubmd-kernel/src/workspace.rs`,
+  `Workspace` (già implementato: `KernelHost` in `fubmd-kernel/src/host/kernel.rs`,
   usato dal dispatch degli eventi — a coda, mai ricorsivo, vedi
   [traits.md](traits.md)). Costo ≈ zero.
 - **WASM (M5):** il plugin riceve un *proxy* di `HostApi`; ogni metodo è una **host
