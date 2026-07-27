@@ -23,10 +23,12 @@ Le precedenze verso l'esterno, per come sono state onorate:
 
 - **La 5.4 andava prima della 16.6**, ed è andata: la dieta dell'IPC può
   cominciare senza dover dire di no a feature che non hanno altra strada.
-- **La 5.1 andava con l'8.1**, e ne ha fatta la metà: il canale dati è adesso un
-  sottosistema con un confine (`kernel/src/index/`), che è ciò che la
-  scomposizione del `Workspace` deve accogliere. L'altra metà — gli altri
-  sottosistemi — resta il [§8.1](08-il-kernel-a-pezzi.md).
+- **La 5.1 andava con l'8.1**, e ne ha fatta la metà: il canale dati è stato il
+  primo sottosistema con un confine (`kernel/src/index/`). L'altra metà — gli
+  altri sottosistemi — è arrivata con la
+  [decisione 0022](../decisions/0022-il-kernel-a-pezzi.md): `Indexes` è uno dei
+  **cinque** proprietari del `Workspace`, accanto a `DocumentStore`,
+  `ProviderRegistry`, `Dispatcher` e `Session`.
 - **Le faccette** che la [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md)
   aveva dichiarato fuori portata sono arrivate senza costare niente: il
   sottoinsieme è una query, e i tag li conta chi li ha in cache.

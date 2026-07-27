@@ -374,9 +374,9 @@ documenti milestone.
   promessa che valeva a metà **in silenzio** dopo i link markdown fuori dal
   grafo. Adesso le risposte del kernel sono un `IndexProvider` registrato per
   primo, chi serve cosa è dichiarato alla registrazione, e la query è un albero
-  del contratto invece di una stringa nella sintassi di una dipendenza. Resta la
-  metà della scomposizione del `Workspace` (§8.1), che quella voce doveva
-  accompagnare.
+  del contratto invece di una stringa nella sintassi di una dipendenza. La metà
+  della scomposizione del `Workspace` che quella voce doveva accompagnare è
+  arrivata con la [decisione 0022](decisions/0022-il-kernel-a-pezzi.md).
 - **Il costo di una capacità non è la firma, è il numero di host** —
   **mitigato**, con la [decisione 0021](decisions/0021-il-confine.md). `HostApi`
   aveva ventiquattro metodi e **quattro** implementazioni scritte a mano

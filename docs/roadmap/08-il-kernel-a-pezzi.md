@@ -1,63 +1,34 @@
 # 8. Il kernel a pezzi, e chi lo monta
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): l'oggetto-dio va scomposto **prima** di ciò che gli atterra sopra.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): l'oggetto-dio è scomposto ([0022](../decisions/0022-il-kernel-a-pezzi.md)); restano chi lo monta e il lock.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Precedenza dura, e viene dal quarto giro: **l'8.1 va prima dell'8.2 e
-dell'8.3**, o il crate host nasce attorno all'oggetto-dio e il lock non potrà mai
-essere a grana fine. È anche il posto dove tutte le altre voci di questo piano
-andranno ad atterrare — una alla volta, come campi: il piano stesso ne conta
-dodici in arrivo sullo stesso `struct`.
+Precedenza dura, e veniva dal quarto giro: **l'8.1 andava prima dell'8.2 e
+dell'8.3**, o il crate host sarebbe nato attorno all'oggetto-dio e il lock non
+avrebbe mai potuto essere a grana fine. **L'8.1 è chiusa** con la
+[decisione 0022](../decisions/0022-il-kernel-a-pezzi.md): `Workspace` non ha più
+ventiquattro campi piatti ma cinque proprietari — `DocumentStore`, `Indexes`,
+`ProviderRegistry`, `Dispatcher`, `Session` — e le due voci che restano hanno su
+cosa poggiare.
 
-### 8.1 `Workspace` è un oggetto-dio, e ogni voce di questo piano gli aggiunge un campo
+Cosa la 0022 lascia in mano a queste due, e che prima non c'era:
 
-*ex §2.19 · kernel · **P1** — leva alta: **prima** dell'8.2 e dell'8.3*
+- all'**8.2**, un pezzo riusabile che non sia «tutto»: i cinque componenti sono
+  ciò che una CLI, un'API locale o un e2e headless possono prendere senza
+  prendersi il grafo delle dipendenze intero;
+- all'**8.3**, qualcosa da lockare separatamente — e in più la linea lungo cui
+  farlo, che la 0022 ha già tracciata: le letture pure (chi possiede un id, cosa
+  ha dichiarato, di chi ci si fida) stanno nei componenti, le chiamate ai
+  provider restano orchestrazione sul `Workspace` e non potranno mai essere a
+  grana fine, perché ognuna vuole un `HostApi` costruito su tutto il workspace.
 
-- [ ] **2903 righe e 23 campi**, che mettono insieme: I/O del vault, registry
-      dei formati, cache dei metadati, grafo, conteggi tag, event bus, coda e
-      dispatcher, **sei** tabelle di provider (`handlers`, `indexes`, `imports`,
-      `exports`, `views`, `commands`), storage dei plugin, contesto di sessione
-      (`context`), coda dei job, lo stack dei comandi, l'attore corrente e il
-      lotto aperto (e il registro dei plugin, che la
-      [decisione 0021](../decisions/0021-il-confine.md) ha appena aggiunto). Il
-      §7.2 — chiuso con la 0021 — e il §8.3
-      (`RwLock`) ne sono le due conseguenze già viste; la causa no, e ha due
-      effetti che il resto del piano dà per risolti:
-      - il `RwLock` del §8.3 **non potrà essere a grana fine**: un lettore che
-        rende una view e uno scrittore che tocca il grafo sono lo stesso
-        `struct` dietro lo stesso lock, quindi "le letture sono le view" resta
-        vero e inutile;
-      - il crate host del §8.2 sarebbe riusabile **tutto o niente**: CLI
-        (27.1), API locale (27.2), e2e headless (27.4), mobile (26.2) e PWA
-        (26.3) prenderebbero comunque il `Workspace` intero, col suo grafo
-        delle dipendenze — che è il §16.3 perso dal lato del kernel.
-- [ ] **E i sottosistemi che questo piano aggiunge sono dodici**: comandi
-      ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), impostazioni (§11.1), lotti ([decisione 0011](../decisions/0011-il-lotto.md)), edit ([decisione 0008](../decisions/0008-modifica-chirurgica.md)), undo (§13.3),
-      storage (§15.1), allegati (§14.1), registry e job (§9.3), sessioni (§9.6),
-      permessi (§7.3), cartelle (§14.3), ignore policy (§15.6). Dodici campi
-      in più sullo stesso `struct`, e dodici ragioni in più per prendere lo
-      stesso lock.
-- [ ] **Tre dei dodici sono già atterrati, e si vede quanto costano**: comandi
-      ([decisione 0009](../decisions/0009-registro-dei-comandi.md)) ha portato
-      `commands` e `command_stack`, il lotto
-      ([decisione 0011](../decisions/0011-il-lotto.md)) ha portato `batch` e
-      `next_batch_id`, l'origine
-      ([decisione 0012](../decisions/0012-origine-degli-eventi.md)) ha portato
-      `actor`. Cinque campi per tre sottosistemi, e il conto di questa voce si è
-      mosso da «1750 righe e ~20 campi» a 2903 e 23 **mentre il piano veniva
-      scritto**. Nove sottosistemi restano.
-- [ ] **La scomposizione va decisa prima di aggiungerli**, non dopo:
-      `DocumentStore` (vault + cache + parse), `MetadataIndex` (grafo + tag +
-      outline), `ProviderRegistry` (il registro e il prestito della
-      [decisione 0021](../decisions/0021-il-confine.md), più il §9.4),
-      `Dispatcher` (coda +
-      budget + origine della [decisione 0012](../decisions/0012-origine-degli-eventi.md)), `Session` (attivo + pane della [decisione 0007](../decisions/0007-contesto-di-sessione.md)). È anche
-      il modo di dare al §8.2 un pezzo riusabile che non sia "tutto".
-- [ ] **Ordine**: viene **prima** del §8.2 e del §8.3, o quei due nascono
-      attorno all'oggetto-dio e lo rendono definitivo.
+Resta anche ciò che la 0022 ha visto e non ha preso: **`CoreIndex` è un
+oggetto-dio annidato** — trenta accessi a `indexes` su trentuno passano da
+`indexes.core`. È lo stesso lavoro un giro più in basso, e non ha ancora un
+numero.
 
 ### 8.2 Il montaggio dell'app vive dentro un comando Tauri
 

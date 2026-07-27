@@ -105,7 +105,7 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       `storage_*` volatile è stato **ritirato** dal contratto dalla
       [decisione 0013](../decisions/0013-elenco-delle-capacita.md), quindi non c'è
       più niente da namespacare. Il recinto per-plugin che resta è quello dei
-      `data_*`, che ce l'ha già (`plugin_data_dir`, `workspace.rs:2177`). Dove il
+      `data_*`, che ce l'ha già (`plugin_data_dir`, che delega a `DocumentStore::plugin_data_root` in `documents.rs`). Dove il
       buco è rimasto aperto è lo **stato di vista**, che non ha più nemmeno un
       contenitore sbagliato: §11.2.
 - [ ] **Safe mode / isolamento**: un provider che pania non deve portarsi via il

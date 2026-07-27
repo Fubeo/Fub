@@ -15,7 +15,10 @@ per nome altrove nel repo e vale la pena poter rispondere «dove è finito quel
 punto?»; il giorno in cui le sedute che le assorbono si chiudono, questa si
 chiude con loro e non lascia niente indietro.
 
-- [ ] **Mutex unico sul `Workspace`** → assorbito dal §8.3 (misurare prima).
+- [ ] **Mutex unico sul `Workspace`** → assorbito dal §8.3 (misurare prima). La
+      [decisione 0022](../decisions/0022-il-kernel-a-pezzi.md) ha tolto il
+      motivo per cui il lock non *poteva* essere a grana fine — cinque
+      proprietari invece di ventiquattro campi — e ha lasciato il lock dov'era.
 - [ ] **UI di produzione = IPC bespoke** → assorbito da [decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0016](../decisions/0016-cosa-e-una-view.md), §1.2 e §16.6;
       il caso concreto resta la UI del versioning.
 - [ ] **Organizzazione sidebar chiusa ai plugin** (scelta O3): rivalutare alla

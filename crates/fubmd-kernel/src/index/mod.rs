@@ -46,9 +46,10 @@ use crate::registry::FormatRegistry;
 /// Gli indici del workspace: quello del kernel, quelli registrati, e la tabella
 /// che dice a chi va cosa.
 ///
-/// È il primo dei sottosistemi che la scomposizione del `Workspace` (§8.1) deve
-/// accogliere, ed è tenuto insieme qui perché le tre parti non hanno senso
-/// separate: una tabella di routing senza un core index che si dichiara come
+/// È uno dei cinque componenti in cui il §8.1 scompone il `Workspace`
+/// ([decisione 0022](../../../docs/decisions/0022-il-kernel-a-pezzi.md)) — il
+/// primo ad avere avuto un confine, con la 0019 — ed è tenuto insieme qui
+/// perché le tre parti non hanno senso separate: una tabella di routing senza un core index che si dichiara come
 /// gli altri instraderebbe due varianti su nove.
 pub(crate) struct Indexes {
     /// L'indice del kernel: metadati, tag, grafo. È `Target::Core` nella

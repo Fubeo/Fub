@@ -714,8 +714,10 @@ troncamento è **rumoroso**: al posto degli eventi persi arriva un
 gestendo l'`Overflow` è a sua volta scartato, unico modo di garantire la
 terminazione). Durante il drenaggio gli handler sono estratti dal workspace,
 così l'`HostApi` presta `&mut Workspace` senza aliasing (il nodo di ownership
-che rendeva il dispatch il punto più delicato del contratto). Vedi
-`workspace.rs` e `tests/rename_and_events.rs`.
+che rendeva il dispatch il punto più delicato del contratto). La coda, il
+budget, il lotto e l'attore stanno in `kernel/src/dispatcher.rs`; il ciclo che
+consegna — l'unica parte che chiama un provider, e quindi vuole tutto il
+workspace — resta in `workspace.rs`. Vedi anche `tests/rename_and_events.rs`.
 
 **Dentro un lotto il drenaggio è rimandato alla chiusura** ([decisione 0011](../decisions/0011-il-lotto.md)), per la stessa
 ragione per cui è rimandato dentro la chiamata a un provider: a metà di

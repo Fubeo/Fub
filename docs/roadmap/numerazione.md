@@ -59,6 +59,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.34 · §7.4 | [0021 — Il confine](../decisions/0021-il-confine.md) |
 | §1.24 · §7.5 | [0021 — Il confine](../decisions/0021-il-confine.md) |
 | §2.25 · §7.6 | [0021 — Il confine](../decisions/0021-il-confine.md) |
+| §2.19 · §8.1 | [0022 — Il kernel a pezzi](../decisions/0022-il-kernel-a-pezzi.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -103,7 +104,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.14 | **§11.3** | Il sidecar dell'organizzazione, da assorbire |
 | §2.15 | **§8.2** | Il montaggio dell'app vive dentro un comando Tauri |
 | §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
-| §2.19 | **§8.1** | `Workspace` è un oggetto-dio, e ogni voce di questo piano gli aggiunge un campo |
 | §2.20 | **§14.2** | Nessun metadato di entry: né mtime, né dimensione, né impronta |
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
