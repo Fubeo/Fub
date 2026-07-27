@@ -356,6 +356,9 @@ fn event_samples() -> Vec<Value> {
             view: "v".into(),
             instance: Some("v#2".into()),
         },
+        Event::VaultClosed {
+            root: "/vault".into(),
+        },
     ];
     for e in &all {
         match e {
@@ -368,6 +371,7 @@ fn event_samples() -> Vec<Value> {
             | Event::Overflow { .. }
             | Event::ViewInvalidated { .. }
             | Event::Custom { .. }
+            | Event::VaultClosed { .. }
             | Event::BatchEnded { .. } => {}
         }
     }

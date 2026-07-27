@@ -28,5 +28,8 @@ resta il suo: si trasferisce, non si rinomina.
 Il modello di layout è ciò che sblocca il grafo nell'area principale
 ([§3.3](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell)),
 ed è anche l'unico dei due che non è un refactor ma una **feature** (FEATURES
-3.3): la sua metà kernel va decisa con `PaneId` e le sessioni multiple
-([§9.6](09-il-lavoro-lungo-e-lo-spegnimento.md#96-sessioni-multiple)).
+3.3): la sua metà kernel va decisa con `PaneId`. Le sessioni multiple, che le
+stavano davanti, **ci sono**
+([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)):
+l'host tiene una mappa di vault aperti e ogni comando IPC accetta un `vault`
+opzionale, quindi ciò che manca è tutto da questo lato.

@@ -136,6 +136,20 @@ oggi, una migrazione domani); le altre restano al freeze.
   no-op avrebbe reso invisibile — un indice che tiene un lock file e non ha dove
   rilasciarlo — è il caso normale, e perché a M5 non c'è nessun `Drop` su cui
   ripiegare.
+- **Il ciclo di vita del *vault*, che è un'altra cosa**: `event-vault-closed`
+  (record + caso del `variant event`) e `vault-closed` in `event-kind`, **in
+  coda a tutti e due** e quindi additivi
+  ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)).
+  È il gemello di `vault-opened`, e il suo contratto sta tutto nel *quando*:
+  arriva **prima** che si spenga chiunque, mentre chi lo riceve è ancora
+  registrato e può ancora scrivere. Sta qui e non fra le decisioni rimandate
+  perché è la risposta a una domanda di forma: chi non è un indice — cioè ogni
+  `EventHandler` — non ha un metodo di ciclo di vita e **non lo avrà**, quindi o
+  la chiusura è un evento o quel caso resta scoperto per sempre. Un evento e non
+  una capacità per la regola della [0013](../decisions/0013-elenco-delle-capacita.md):
+  chi chiude non aspetta la risposta, e la chiusura non si annulla. `event-mask`
+  è una `list<event-kind>`, quindi il tipo nuovo non tocca nessuna maschera già
+  scritta.
 
 **Da chiudere al freeze:**
 

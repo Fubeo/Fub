@@ -1,6 +1,6 @@
 # 9. Il lavoro lungo, e come un componente smette
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): le tre facce del momento in cui un componente smette — tutte e tre chiuse — più chi possiede i bundle, chi chiude il vault e chi si accorge che il vault cambia da fuori.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): lo spegnimento è chiuso — le tre facce di un componente che smette, e la chiusura del vault intero — e restano chi possiede i bundle e chi si accorge che il vault cambia da fuori.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -8,7 +8,7 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): le tre facce del mo
 
 Il quinto giro chiedeva di decidere insieme ~~§9.2~~, ~~§9.4~~ e ~~§9.1~~ — «tre
 facce del momento in cui un componente smette, e oggi nessuna delle tre ha una
-risposta» — e il §9.5 va con il §9.6, perché «chiudere una sessione» e
+risposta» — e ~~§9.5~~ andava con ~~§9.6~~, perché «chiudere una sessione» e
 «chiuderle tutte» sono lo stesso codice. Il registry (9.3) sta qui perché è chi
 **possiede** i bundle: senza di lui non c'è nessuno che apra e chiuda alcunché, e
 il runner dei job non ha un chiamante in produzione.
@@ -25,14 +25,25 @@ per intero: i job in coda di chi si spegne ricevono un esito, e le capacità di 
 job in volo evaporano da sé — la politica se la fa dare dal registro a ogni
 chiamata, e un id che nessuno ha più dichiarato non ottiene niente.
 
-Quel che resta della seduta è quindi **chi possiede i bundle** (9.3), **chi
-chiude il vault** (9.5 con 9.6) e **chi si accorge che il vault cambia da fuori**
-(9.7).
+**E il vault si chiude.** La ~~9.5~~ e la ~~9.6~~ le chiude insieme, com'era
+previsto, la [decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md):
+chiudere è `VaultClosed` mentre tutti sono ancora vivi, poi un flush di tutti gli
+indici — il punto di consistenza che non è il watcher — e poi ogni plugin che
+smette in ordine inverso di dichiarazione. Sotto, `Host` ha smesso di tenere una
+sessione sola: i vault aperti sono una mappa, ogni comando IPC accetta un
+`vault` opzionale, e il "corrente" è tornato a essere ciò che diceva di essere —
+una comodità della shell. Del §9.6 è rimasto fuori un punto solo, il **registro
+dei vault** (recenti, preferiti, icone), che è configurazione globale e si è
+spostato al [§11.1](11-impostazioni-e-i-tre-stati.md).
 
-Il settimo giro ha aggiunto la 9.7, che sta qui perché è la 9.5 sull'altro asse:
-là il watcher assente costa la **durabilità** di un indice, qui costa il fatto
-stesso di sapere che il vault è cambiato — e nessuno chiede mai se il watcher
-sia vivo.
+Quel che resta della seduta è quindi **chi possiede i bundle** (9.3) e **chi si
+accorge che il vault cambia da fuori** (9.7).
+
+Il settimo giro ha aggiunto la 9.7, che stava qui perché era la 9.5 sull'altro
+asse: là il watcher assente costava la **durabilità** di un indice — e quel costo
+la 0029 l'ha tolto, perché adesso il flush ha un chiamante che non è il watcher
+— qui costa il fatto stesso di sapere che il vault è cambiato, e nessuno chiede
+mai se il watcher sia vivo.
 
 ### 9.3 Registry di plugin/feature e runner dei job
 
@@ -60,9 +71,13 @@ sia vivo.
 - [ ] **Cancellazione** — il terzo punto del §8.3, e sta qui perché prima del
       runner non c'è niente da cancellare: `spawn_job` accoda, e una coda non si
       ferma, si svuota. Un job che non si può fermare è un job che blocca la
-      chiusura dell'app, il che lo lega al §9.5 (chi chiude aspetta chi?) e al
-      §10.3 (dove l'utente vede il pulsante). Va disegnata **con** il runner, non
-      dopo: un pool che non nasce cancellabile si riscrive per diventarlo.
+      chiusura dell'app, e adesso quella chiusura **esiste**
+      ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)):
+      oggi non aspetta nessuno perché non c'è nessuno in volo, e la domanda «chi
+      chiude aspetta chi?» diventa dovuta il giorno in cui il runner c'è. L'altro
+      lato è il §10.3 (dove l'utente vede il pulsante). Va disegnata **con** il
+      runner, non dopo: un pool che non nasce cancellabile si riscrive per
+      diventarlo.
 - [ ] ~~**Namespace per-plugin sullo `storage_*`**~~ — **decaduta**: lo
       `storage_*` volatile è stato **ritirato** dal contratto dalla
       [decisione 0013](../decisions/0013-elenco-delle-capacita.md), quindi non c'è
@@ -85,58 +100,21 @@ sia vivo.
       è il caso raro; con un'estensione installata un handler di comando che
       pania è il caso normale — la metà che resta non è la metà meno probabile.
 
-### 9.5 Nessuno spegne niente: la durabilità dipende dal watcher
-
-*ex §2.22 · kernel · **P1** — la metà *del workspace* di ciò che la [0028](../decisions/0028-come-un-componente-smette.md) ha dato al singolo plugin; va con la 9.6*
-
-- [ ] **`flush_indexes` ha un solo chiamante in produzione**: il callback del
-      file watcher (`host/watcher.rs`), più `reindex` all'apertura
-      (`kernel/workspace.rs`, e lì l'esito è scartato con `let _ =` — cioè
-      §20.3). Nessun altro percorso lo chiama — né `write_document` dall'IPC, né
-      la chiusura del vault, né la chiusura dell'app.
-- [ ] **Quindi la durabilità di un indice dipende da un componente
-      *opzionale***. Dove il watcher non c'è o non funziona — network share e
-      cartelle cloud (2.3, 3.1), PWA (26.3), CLI (27.1), e2e headless (27.4),
-      mobile (26.2) — le scritture dell'indice **non diventano mai durevoli**, e
-      il sintomo è solo una riapertura lenta che reindicizza tutto: nessuno se
-      ne accorge finché non conta.
-- [ ] **E cambiare vault o chiudere l'app non chiude niente**: nessun flush
-      finale, nessun `Plugin::deactivate` (che non ha ancora chiamanti — è il
-      §9.3), e nessuno che chiami `Workspace::deactivate_plugin`, che **adesso
-      esiste** ([0028](../decisions/0028-come-un-componente-smette.md)) e chiude
-      gli indici di chi si spegne. Il mattone c'è e non lo usa nessuno: tantivy
-      resta con segmenti non committati e con i suoi lock finché il processo non
-      muore; un journal (§15.2) resterebbe aperto; un sync (18) resterebbe a
-      metà.
-- [ ] Serve un **ciclo di vita esplicito del workspace** — `open` → `close` —
-      con flush e deactivate di tutti i provider, la semantica di cosa succede
-      se uno fallisce, e un punto di consistenza che **non sia il watcher**: il
-      kernel non sa quando finisce un lotto (è dichiarato, ed è giusto), ma
-      "l'app sta chiudendo" lo sa chi la chiude. Va con §9.6 (sessioni multiple:
-      chiuderne una) e §9.3 (il registry è chi possiede i bundle).
-
-### 9.6 Sessioni multiple
-
-*ex §2.7 · kernel · **P2** — «chiuderne una» e «chiuderle tutte» sono lo stesso codice*
-
-- [ ] **`Host` con una mappa di sessioni** (`vault_id -> VaultSession`) e i
-      comandi IPC che portano il vault di riferimento; il vault "corrente" resta
-      una comodità della shell, non un'assunzione del backend.
-- [ ] **Registro dei vault** (recenti, preferiti, icone) nella configurazione
-      globale (§11.1).
-
 ### 9.7 Il watcher è l'unico che vede le scritture altrui, e la sua morte non si vede
 
-*settimo giro · kernel · **P1** — l'altra metà della 9.5: là il costo è la lentezza, qui è la correttezza*
+*settimo giro · kernel · **P1** — l'altra metà della ~~9.5~~: là il costo era la lentezza ed è **stato pagato** ([0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)), qui è la correttezza e resta aperto*
 
-- [ ] **Il §9.5 nomina già il watcher come componente opzionale da cui dipende
-      la *durabilità* di un indice.** Questa voce è la stessa dipendenza vista
-      sull'altro asse: il watcher è anche **l'unico** meccanismo con cui FubMD
-      viene a sapere che qualcun altro ha toccato il vault. Non c'è nessun altro
-      percorso — `reindex` gira solo all'apertura (`kernel/workspace.rs`),
-      non esiste una riconciliazione periodica, e niente confronta mai la cache
-      col disco. Il costo della sua assenza non è una riapertura lenta: è che il
-      kernel risponde su un vault che non c'è più.
+- [ ] **Il ~~§9.5~~ nominava il watcher come componente opzionale da cui
+      dipendeva la *durabilità* di un indice, e quella metà è chiusa**: il flush
+      adesso ha un chiamante che non è il watcher — la chiusura del vault
+      ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)).
+      Questa voce è la stessa dipendenza vista sull'altro asse, e la chiusura non
+      la tocca: il watcher è anche **l'unico** meccanismo con cui FubMD viene a
+      sapere che qualcun altro ha toccato il vault *mentre è aperto*. Non c'è
+      nessun altro percorso — `reindex` gira solo all'apertura
+      (`kernel/workspace.rs`), non esiste una riconciliazione periodica, e niente
+      confronta mai la cache col disco. Il costo della sua assenza non è più una
+      riapertura lenta: è che il kernel risponde su un vault che non c'è più.
 - [ ] **E quando fallisce, fallisce due volte in silenzio.** Gli errori del
       debouncer finiscono in un `eprintln!` (`host/watcher.rs`, cioè §20.2), e
       la sincronizzazione di ogni singolo path scarta il proprio esito:
@@ -151,7 +129,11 @@ sia vivo.
       `VaultWatcher::is_watching` che oggi risponde **per costruzione**, cioè
       distingue `NoWatcher` da un debouncer avviato e nient'altro: nessuno
       gliela chiede, e un debouncer che muore continua a rispondere `true`.
-      Quello è il posto dove questa voce andrà a scrivere. I casi in cui non funziona non
+      Quello è il posto dove questa voce andrà a scrivere — e adesso la domanda
+      si fa **per vault** (`Host::is_watching(vault)`,
+      [decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)),
+      il che rende la risposta per-vault e non più per-app: due vault possono
+      avere due watcher, uno vivo e uno morto. I casi in cui non funziona non
       sono di nicchia e FEATURES li nomina uno per uno: network share e cloud
       drive (2.3), vault sincronizzati con strumenti esterni (3.1, 18.1), il
       limite di inotify su vault grandi (24.1), e i tre host dove non esisterà

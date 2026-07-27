@@ -67,7 +67,7 @@ fn aperto(v: &Vault) -> Host {
 fn due_letture_stanno_nel_workspace_insieme() {
     let v = vault(60);
     let host = aperto(&v);
-    let ws = host.workspace().unwrap();
+    let ws = host.workspace(None).unwrap();
 
     let n = lettori();
     let dentro = Arc::new(AtomicUsize::new(0));
@@ -133,7 +133,7 @@ fn due_letture_stanno_nel_workspace_insieme() {
 fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
     let v = vault(120);
     let host = aperto(&v);
-    let ws = host.workspace().unwrap();
+    let ws = host.workspace(None).unwrap();
 
     let stop = Arc::new(AtomicBool::new(false));
     let handles: Vec<_> = (0..(lettori() * 2))
@@ -232,7 +232,7 @@ impl ViewProvider for Esplode {
 fn una_view_che_pania_disegnando_non_avvelena_il_vault() {
     let v = vault(4);
     let host = aperto(&v);
-    let ws = host.workspace().unwrap();
+    let ws = host.workspace(None).unwrap();
     {
         // Prima si dichiara, poi si registra: il kernel non presta capacità a
         // una stringa (§7.3, decisione 0021).

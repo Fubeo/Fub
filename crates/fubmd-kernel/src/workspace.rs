@@ -211,6 +211,14 @@ pub struct Workspace {
     /// [`Session::invalidate`]). Uno span stantio è peggio di uno span
     /// assente — chi lo usasse taglierebbe i byte sbagliati.
     session: Session,
+    /// Il vault è già stato chiuso ([`close`](Workspace::close))?
+    ///
+    /// **Non è un sesto proprietario** (§8.1): è lo stato del *tutto*, ed è
+    /// l'unica cosa che nessuno dei cinque può sapere da sé — il disco non sa
+    /// degli indici, gli indici non sanno dei provider, e «il vault è chiuso» è
+    /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
+    /// sola: chiudere due volte non è chiudere due volte.
+    closed: bool,
 }
 
 impl Workspace {
@@ -226,6 +234,7 @@ impl Workspace {
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
+            closed: false,
         }
     }
 
@@ -519,6 +528,88 @@ impl Workspace {
             });
         }
         Ok(errors)
+    }
+
+    /// **Chiude il vault**: l'ultimo giro sincrono, un punto di consistenza per
+    /// tutti, e poi ognuno che smette (§9.5).
+    ///
+    /// È il gemello di [`reindex`](Workspace::reindex), che è l'apertura, e
+    /// prima non esisteva: `flush_indexes` aveva **un solo chiamante in
+    /// produzione**, il callback del watcher, quindi la durabilità di un indice
+    /// dipendeva da un componente **opzionale**. Dove il watcher non c'è — un
+    /// network share, una cartella cloud, la CLI, un e2e headless, PWA e mobile
+    /// — le scritture di un indice non diventavano mai durevoli, e il sintomo
+    /// era solo una riapertura lenta: nessuno se ne accorgeva finché non
+    /// contava.
+    ///
+    /// # L'ordine, e perché è quello
+    ///
+    /// 1. **[`Event::VaultClosed`]**, con la coda drenata subito dopo. È
+    ///    l'ultimo momento in cui il vault è ancora quello di prima: chi lo
+    ///    riceve è ancora registrato, ha ancora l'`HostApi` e può ancora
+    ///    scrivere. Emetterlo dopo aver spento qualcuno sarebbe stato
+    ///    annunciare una chiusura a chi non c'è più.
+    /// 2. **Un flush di tutti gli indici**, che è il punto di consistenza che
+    ///    non è il watcher. Prima delle disattivazioni, e non dentro: ciò che
+    ///    l'evento ha fatto scrivere agli handler dev'essere già indicizzato
+    ///    quando il primo indice si chiude.
+    /// 3. **Ogni plugin, in ordine inverso di dichiarazione** — `flush` e
+    ///    `close` sui suoi indici, via tutto il resto
+    ///    ([decisione 0028](../../../docs/decisions/0028-come-un-componente-smette.md)).
+    ///    All'inverso perché è l'ordine in cui si smontano le cose che si sono
+    ///    montate in ordine: chi è arrivato per ultimo può dipendere da chi
+    ///    c'era già (§7.5), mai il contrario.
+    ///
+    /// Gli errori non fermano niente e tornano tutti insieme: una chiusura che
+    /// si interrompesse a metà lascerebbe il resto aperto, che è il caso che
+    /// questa funzione esiste per non produrre. È la stessa regola di
+    /// [`flush_indexes`](Workspace::flush_indexes) — chi ha un canale per dirlo
+    /// li mostra.
+    ///
+    /// Chiuderlo due volte non fa niente: la seconda chiamata rende una lista
+    /// vuota senza emettere un secondo `VaultClosed`.
+    ///
+    /// **L'indice del kernel non riceve `close`**, e non è una dimenticanza: non
+    /// persiste niente per conto proprio (la sua verità è il vault, e la
+    /// ricostruisce all'apertura), non ha uno spazio dati, e non potrebbe
+    /// riceverlo senza uscire da sé stesso — l'host che gli si presterebbe è
+    /// costruito sul workspace che lo contiene.
+    pub fn close(&mut self) -> Vec<PluginError> {
+        if self.closed {
+            return Vec::new();
+        }
+        self.closed = true;
+
+        let root = self.docs.vault.root().to_string();
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.emit_event(Event::VaultClosed { root });
+            ws.dispatch_pending();
+        });
+
+        let mut errors = self.flush_indexes();
+
+        let plugins: Vec<String> = self
+            .providers
+            .plugins
+            .iter()
+            .map(|e| e.manifest.id.clone())
+            .rev()
+            .collect();
+        for id in plugins {
+            match self.deactivate_plugin(&id) {
+                Ok(errs) => errors.extend(errs),
+                // Un `Busy` qui vorrebbe dire che si sta chiudendo il vault da
+                // dentro la chiamata di un provider, cioè che chi chiude è
+                // qualcuno che il vault lo sta usando. Non fa danno e va detto.
+                Err(e) => errors.push(PluginError::Internal(e.to_string())),
+            }
+        }
+        errors
+    }
+
+    /// Il vault è già stato chiuso?
+    pub fn is_closed(&self) -> bool {
+        self.closed
     }
 
     /// Questo plugin può nominare questo id? La regola del §7.4, per chi non

@@ -11,7 +11,7 @@
 use fubmd_abi::options::permission;
 use fubmd_abi::traits::PluginPermissions;
 use fubmd_abi::ui::UiNode;
-use fubmd_app_lib::{EmbedContent, VaultInfo, WorkspaceMeta};
+use fubmd_app_lib::{EmbedContent, OpenVaults, VaultInfo, WorkspaceMeta};
 use fubmd_kernel::{
     PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
 };
@@ -91,6 +91,13 @@ fn expected() -> Value {
         // `documents`, gli archi una `neighbors` con i semi su tutto il vault,
         // e le due risposte sono tipi del **contratto** — quindi stanno nella
         // fixture gemella, non qui.
+        // I vault aperti (§9.6): il campione ne ha due e uno corrente, perché
+        // con uno solo la forma non direbbe niente di ciò che il record esiste
+        // per dire — che «corrente» è uno dei tanti, non l'unico possibile.
+        "OpenVaults": [to_value(OpenVaults {
+            roots: vec!["/vault".into(), "/altro".into()],
+            current: Some("/vault".into()),
+        })],
         "WorkspaceMeta": [to_value(WorkspaceMeta {
             icons: [("p".to_string(), "📁".to_string())].into_iter().collect(),
             pinned: vec!["a.md".into()],

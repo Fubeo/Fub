@@ -15,8 +15,8 @@ Le nove che seguono non le ha trovate né un giro né una misura: le ha aperte u
 ricerca di FubMD è built-in e di classe *omnisearch*, e da lì in poi le voci sono
 la sottrazione fra ciò che quel comportamento richiede e ciò che il contratto sa
 dire ([seduta 21](roadmap/21-la-ricerca-predefinita.md)).
-Cinquantadue sono chiuse, e i loro verbali stanno in
-[docs/decisions/](decisions/README.md); le altre cinquantasette sono qui, e
+Cinquantaquattro sono chiuse, e i loro verbali stanno in
+[docs/decisions/](decisions/README.md); le altre cinquantacinque sono qui, e
 questo file è il loro **indice**.
 
 ## Come è organizzato
@@ -82,11 +82,16 @@ nell'ordine: solo il kernel; una funzione pura e sincrona senza stato; il kernel
 per sette varianti su nove, e nessuno poteva scavalcarlo; non si spegne. Le prime
 tre sono state riaperte e decise ([0018](decisions/0018-chi-vede-il-modello-parsato.md),
 [0016](decisions/0016-cosa-e-una-view.md) e [0019](decisions/0019-il-canale-dati.md));
-la quarta è decisa a **metà**, ed è la [seduta 9](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md):
-un *componente* adesso smette — con una chiusura obbligatoria e una
+la quarta è decisa anche lei, ed è la [seduta 9](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)
+in due tempi: un *componente* smette con una chiusura obbligatoria e una
 disattivazione che toglie davvero
-([0028](decisions/0028-come-un-componente-smette.md)) — mentre il **tutto**
-continua a non spegnersi, ed è il §9.5.
+([0028](decisions/0028-come-un-componente-smette.md)), e il **tutto** si spegne
+con l'ultimo giro sincrono, il flush e poi ognuno che smette
+([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)) — dove «il
+tutto» ha smesso di voler dire *un* vault, perché adesso ce ne stanno più
+d'uno aperti insieme. Quel che resta della seduta non è più lo spegnimento: è
+**chi possiede i bundle** (§9.3) e **chi si accorge che il vault cambia da
+fuori** (§9.7).
 
 E una sesta, dal **settimo giro**: **cosa fallisce senza produrre nessun
 segnale** — quale sbaglio di un plugin, del kernel, dell'utente o di un'altra
@@ -120,7 +125,7 @@ descrive una promessa.
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | *la stessa regola serve a provider, shell e a M5 a un guest WASM.* Deciso con la [0020](decisions/0020-le-regole-in-un-posto-solo.md) | — | — |
 | **7** | [Il confine](roadmap/07-il-confine.md) | *la disciplina del confine, da chi lo attraversa e da chi lo presta.* Deciso con la [0021](decisions/0021-il-confine.md) | — | — |
 | **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio è scomposto ([0022](decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](decisions/0023-chi-monta-il-kernel.md)), il lock è a grana fine ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e la ricerca non si rimette più in fila da sé ([0026](decisions/0026-due-query-insieme.md)) | — | — |
-| **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | le tre facce del momento in cui un componente smette sono **chiuse** ([0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md) e [0028](decisions/0028-come-un-componente-smette.md)); restano chi possiede i bundle, chi chiude il vault e chi si accorge che il vault cambia da fuori | 4 | — |
+| **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | le tre facce del momento in cui un componente smette sono **chiuse** ([0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md) e [0028](decisions/0028-come-un-componente-smette.md)), e con loro la chiusura del vault e le sessioni multiple ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)); restano chi possiede i bundle e chi si accorge che il vault cambia da fuori | 2 | — |
 | **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | lo stesso canale a tre distanze: chi si abbona, cosa passa, chi lo mostra | 3 | 1 |
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano | 3 | — |
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | chi localizza le stringhe localizza anche gli errori | 4 | 3 |
@@ -136,7 +141,7 @@ descrive una promessa.
 
 ## Le voci
 
-Cinquantasette. Il numero è quello con cui le nomina il resto del repo.
+Cinquantacinque. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -188,8 +193,6 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
 | **§9.3** | [Registry di plugin/feature e runner dei job](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#93-registry-di-pluginfeature-e-runner-dei-job) | 9. Il lavoro lungo, e come un componente smette | kernel | **P1** |
-| **§9.5** | [Nessuno spegne niente: la durabilità dipende dal watcher](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#95-nessuno-spegne-niente-la-durabilità-dipende-dal-watcher) | 9. Il lavoro lungo, e come un componente smette | kernel | **P1** |
-| **§9.6** | [Sessioni multiple](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#96-sessioni-multiple) | 9. Il lavoro lungo, e come un componente smette | kernel | **P2** |
 | **§9.7** | [Il watcher è l'unico che vede le scritture altrui, e la sua morte non si vede](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md#97-il-watcher-è-lunico-che-vede-le-scritture-altrui-e-la-sua-morte-non-si-vede) | 9. Il lavoro lungo, e come un componente smette | kernel | **P1** |
 | **§10.1** | [L'abbonamento agli eventi non filtra](roadmap/10-gli-eventi.md#101-labbonamento-agli-eventi-non-filtra) | 10. Gli eventi: grana, freno, destinatari | contratto | **P0** |
 | **§10.2** | [Il ponte degli eventi non ha né freno né raggruppamento](roadmap/10-gli-eventi.md#102-il-ponte-degli-eventi-non-ha-né-freno-né-raggruppamento) | 10. Gli eventi: grana, freno, destinatari | kernel | **P2** |

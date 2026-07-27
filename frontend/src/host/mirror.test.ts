@@ -11,6 +11,7 @@ import type {
   IndexQuery,
   IndexResult,
   NeighborRef,
+  OpenVaults,
   RenderedDocument,
   Actor,
   KernelEvent,
@@ -214,6 +215,7 @@ function touchEvent(e: KernelEvent): void {
     case "custom":
     case "batch_ended":
     case "view_invalidated":
+    case "vault_closed":
       return;
     default:
       assertNever(e);
@@ -384,6 +386,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   }),
   EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true, parts: true }),
   RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
+  OpenVaults: keysOf<OpenVaults>({ roots: true, current: true }),
   WorkspaceMeta: keysOf<WorkspaceMeta>({
     icons: true,
     pinned: true,

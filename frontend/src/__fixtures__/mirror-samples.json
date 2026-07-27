@@ -352,6 +352,10 @@
       "type": "view_invalidated",
       "view": "v",
       "instance": "v#2"
+    },
+    {
+      "type": "vault_closed",
+      "root": "/vault"
     }
   ],
   "KernelNotice": [

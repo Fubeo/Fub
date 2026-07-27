@@ -1,4 +1,5 @@
-//! **Come un componente smette** (§9.2 + §9.4, decisione 0028).
+//! **Come un componente smette, e come si chiude il vault** (§9.2 + §9.4,
+//! decisione 0028; §9.5, decisione 0029).
 //!
 //! Prima di questa seduta il kernel sapeva solo aggiungere: `register_*` faceva
 //! `push`, `IndexProvider` non aveva un `close`, e "spento" poteva voler dire
@@ -12,6 +13,10 @@
 //! primo di due, senza rimappare, manderebbe le domande del primo al secondo —
 //! che risponderebbe, e nessuno avrebbe modo di accorgersi che sta rispondendo
 //! per conto di un altro.
+//!
+//! In coda ci sono le due prove della **chiusura del vault**, che è la stessa
+//! cosa fatta a tutti in una volta: l'ordine — l'evento mentre si può ancora
+//! scrivere, poi il flush, poi chi smette — e l'idempotenza.
 
 use std::sync::{Arc, Mutex};
 
@@ -21,7 +26,7 @@ use fubmd_abi::custom::{
     SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
 use fubmd_abi::error::{FormatError, PluginError};
-use fubmd_abi::event::{Event, EventMask, Notice};
+use fubmd_abi::event::{Event, EventKind, EventMask, Notice};
 use fubmd_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
     RenderOptions,
@@ -29,7 +34,8 @@ use fubmd_abi::format::{
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{
     EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobSpec, PluginManifest,
-    QueryKind, QueryRoute, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    PluginPermissions, QueryKind, QueryRoute, ReadApi, ViewInstance, ViewProvider, ViewSpec,
+    ViewSurface,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_kernel::{FormatRegistry, RegistryError, Trust, Workspace};
@@ -261,9 +267,16 @@ impl Banco {
 /// Dichiara un plugin **non** del core: i suoi nomi vivono sotto il proprio id
 /// (§7.4), che è ciò che serve a una regola sintattica e a un renderer — i loro
 /// id vogliono un namespace, e per il core quel namespace sarebbe `fubmd`.
+///
+/// I permessi sono quelli di una feature ufficiale perché qui si prova il ciclo
+/// di vita, non il §7.3: senza `write_vault` un handler che scrive riceverebbe
+/// un rifiuto, e il test parlerebbe della politica invece che della chiusura.
 fn dichiara(ws: &mut Workspace, id: &str) {
-    ws.register_plugin(PluginManifest::new(id, id), Trust::Community)
-        .expect("dichiarato");
+    ws.register_plugin(
+        PluginManifest::new(id, id).granting(PluginPermissions::core()),
+        Trust::Community,
+    )
+    .expect("dichiarato");
 }
 
 fn vita(log: &Arc<Mutex<Vec<Vita>>>) -> Vec<Vita> {
@@ -466,4 +479,86 @@ fn un_plugin_che_non_esiste_non_si_disattiva() {
         "spegnere ciò che non è acceso non è un no-op: è una domanda su qualcosa \
          che non c'è"
     );
+}
+
+// --- la chiusura del vault (§9.5) -------------------------------------------
+
+/// Un handler che, quando il vault sta per chiudersi, scrive ciò che aveva in
+/// memoria: è il caso per cui `VaultClosed` esiste.
+struct Ultimo;
+
+impl EventHandler for Ultimo {
+    fn subscribed(&self) -> EventMask {
+        EventMask(vec![EventKind::VaultClosed])
+    }
+
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        if matches!(notice.event, Event::VaultClosed { .. }) {
+            host.write_document(&DocId::new("ultimo.txt"), "detto all'ultimo")?;
+        }
+        Ok(())
+    }
+}
+
+/// Chiudere è: **l'ultimo giro sincrono**, poi il punto di consistenza, poi chi
+/// smette — e in quest'ordine, o l'ultima scrittura non sarebbe indicizzata da
+/// nessuno.
+#[test]
+fn chiudere_e_lultimo_giro_poi_il_flush_poi_chi_smette() {
+    let banco = Banco::nuovo();
+    let mut ws = banco.workspace();
+    let (spia, log) = Spia::nuova("prova.uno:dati");
+    ws.register_index_provider("prova.uno", Box::new(spia))
+        .expect("indice");
+    ws.register_event_handler("prova.due", Box::new(Ultimo))
+        .expect("handler");
+    ws.reindex().expect("scansione");
+
+    let errori = ws.close();
+    assert!(errori.is_empty(), "niente è andato storto: {errori:?}");
+
+    assert!(
+        ws.read_source(&DocId::new("ultimo.txt")).is_ok(),
+        "chi riceve `VaultClosed` è ancora registrato e può ancora scrivere"
+    );
+
+    let vita = vita(&log);
+    let ultimo_indicizzato = vita
+        .iter()
+        .rposition(|v| matches!(v, Vita::Indicizzato(id) if id == "ultimo.txt"))
+        .expect("l'indice ha visto l'ultima scrittura");
+    let flush = vita
+        .iter()
+        .rposition(|v| *v == Vita::Flush)
+        .expect("c'è stato un flush");
+    let chiuso = vita
+        .iter()
+        .position(|v| *v == Vita::Chiuso)
+        .expect("l'indice è stato chiuso");
+    assert!(
+        ultimo_indicizzato < flush && flush < chiuso,
+        "l'ordine è: l'evento (che fa scrivere), il flush, la chiusura — {vita:?}"
+    );
+    assert!(
+        ws.plugins().is_empty(),
+        "e alla fine non è registrato più nessuno"
+    );
+}
+
+/// Chiudere due volte non è chiudere due volte: la seconda non fa niente e non
+/// annuncia una seconda chiusura a nessuno.
+#[test]
+fn chiudere_due_volte_non_chiude_due_volte() {
+    let banco = Banco::nuovo();
+    let mut ws = banco.workspace();
+    let eventi = ws.bus().subscribe();
+    ws.close();
+    ws.close();
+
+    let chiusure = eventi
+        .try_iter()
+        .filter(|n| matches!(n.event, Event::VaultClosed { .. }))
+        .count();
+    assert_eq!(chiusure, 1, "un vault si chiude una volta sola");
+    assert!(ws.is_closed());
 }
