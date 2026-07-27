@@ -15,14 +15,18 @@
 //! **Invariante:** questo crate non dipende da comrak/pulldown, wasmtime o
 //! tauri. Se `comrak` comparisse nel suo albero delle dipendenze, il design
 //! sarebbe fallito.
+//!
+//! **Le regole non sono qui.** Come si confrontano due proprietà, quando un
+//! path relativo diventa un `DocId`, cosa conta come link rotto, quale tag sta
+//! sotto quale: stanno in [`fubmd_abi::rules`], perché sono la risposta a
+//! domande del **contratto** e chi le serve può non avere questo crate fra le
+//! mani. Il kernel le usa da lì come chiunque altro.
 
 pub mod bus;
 pub mod error;
 pub mod graph;
 mod health;
 pub mod index;
-mod pathlink;
-mod properties;
 pub mod registry;
 pub mod renderer;
 pub mod syntax;

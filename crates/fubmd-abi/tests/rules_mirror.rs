@@ -1,0 +1,265 @@
+//! Il mirror delle **regole** TS↔Rust, legato da una fixture generata.
+//!
+//! `ts_mirror.rs` presidia i **tipi** al confine: nessuno dei due lati può
+//! aggiungere una variante da solo restando verde. Le **regole** non avevano
+//! niente — e sono già scritte due volte, perché ogni cosa che la UI deve
+//! sapere *prima* di un giro IPC (che nome mostrare per una nota, se una casella
+//! è spuntata, se due nomi sono lo stesso nome, dove cade un byte dentro una
+//! stringa JavaScript) nasce in due copie. L'unica che avesse un legame lo
+//! aveva scritto a mano — «è la stessa regola, riga per riga» — cioè dichiarava
+//! la duplicazione invece di presidiarla.
+//!
+//! Il giro è quello di `mirror-samples.json`, applicato a coppie
+//! **input → output** invece che a campioni di tipo: qui si genera
+//! `frontend/src/__fixtures__/rules-samples.json` con la risposta **di Rust**
+//! per ogni caso, e il gemello vitest (`frontend/src/rules/rules-mirror.test.ts`)
+//! passa gli stessi input all'implementazione TypeScript e pretende la stessa
+//! risposta. Cambiare la regola da un lato solo è rosso: se cambia Rust la
+//! fixture è stantia (questo test), e rigenerandola (`UPDATE_MIRROR=1`) il rosso
+//! si sposta di là.
+//!
+//! **Le due metà si nominano a vicenda.** Il gemello TS pretende che ogni chiave
+//! della fixture abbia un suo handler *e* che ogni handler abbia una chiave: una
+//! regola nuova non può entrare qui e restare non rispecchiata, né restare di là
+//! senza casi.
+//!
+//! # Cosa NON sta qui
+//!
+//! - **La grammatica delle decorazioni** (wikilink, tag, evidenziato, checkbox
+//!   dentro una riga): i due parser sono una scelta dichiarata del §4.4 — la
+//!   live preview deve decorare mentre si digita, senza un giro IPC per tasto.
+//!   Il *significato* di ciò che il parser trova sta qui (`task_checked`); dove
+//!   comincia e dove finisce il token no.
+//! - **L'ordinamento.** Il kernel ordina per `DocId` (ordine di byte: totale,
+//!   stabile, senza locale — è ciò che tiene onesta la paginazione), la sidebar
+//!   con un collatore italiano. Non sono due copie della stessa regola ma due
+//!   requisiti che devono divergere, e una fixture che li legasse nascerebbe
+//!   rossa e resterebbe rossa. Vedi `fubmd_abi::rules`.
+
+use fubmd_abi::model::{DocId, TaskMarker};
+use fubmd_abi::rules::path::resolution_key;
+use fubmd_abi::Span;
+use serde_json::{json, Value};
+
+/// Il nome da mostrare per un documento: basename senza l'ultima estensione.
+///
+/// I casi sono quelli ostili, gli unici su cui due implementazioni possono
+/// dissentire: `note.backup` (un'estensione che nessuno gestisce è comunque
+/// un'estensione), i dotfile (il punto iniziale è parte del nome), il doppio
+/// punto, la cartella col punto dentro.
+fn page_name_cases() -> Vec<Value> {
+    [
+        "note.md",
+        "note.backup",
+        "a.b.md",
+        ".foo",
+        "dir/.hidden.md",
+        "dir/.gitignore",
+        "senza-ext",
+        "dir.con.punti/nota.md",
+        "finisce-con-punto.",
+        "Nota Lunga.md",
+    ]
+    .into_iter()
+    .map(|id| json!({"id": id, "out": DocId::new(id).page_name()}))
+    .collect()
+}
+
+/// La chiave con cui due nomi si scoprono lo stesso nome.
+///
+/// I casi che contano sono la composizione Unicode e il caso: `Café` scritto in
+/// NFC (un code point) e in NFD (`e` + accento combinante, che è come macOS
+/// scrive i nomi file) devono dare la stessa chiave, o su un vault sincronizzato
+/// fra macOS e Linux la sidebar non trova la folder note e il grafo vede due
+/// nodi. Il lato TS non faceva NFC affatto: questa è la riga che glielo impone.
+fn resolution_key_cases() -> Vec<Value> {
+    [
+        "Café",              // NFC
+        "Cafe\u{0301}",      // NFD — la stessa parola per un umano
+        "  spazi attorno  ", // il trim
+        "MAIUSCOLO",
+        "Progetti/Alpha.md",
+        "ÅNGSTRÖM",     // il caso su lettere non ASCII
+        "\u{212B}ngen", // il segno angstrom (NFC → Å)
+        "già",
+        "GIÀ",
+        "",
+    ]
+    .into_iter()
+    .map(|s| json!({"s": s, "out": resolution_key(s)}))
+    .collect()
+}
+
+/// La lettura binaria di una casella: `[x]`/`[X]` è fatta, ogni altro simbolo
+/// no. Gli stati personalizzati (`[/]`, `[-]`, `[>]`) esistono e **non** sono
+/// completati: è la regola di Obsidian, ed è l'unica che non inventa semantica
+/// sui simboli che il prodotto non ha ancora definito.
+fn task_checked_cases() -> Vec<Value> {
+    [Some('x'), Some('X'), Some(' '), Some('/'), Some('-'), None]
+        .into_iter()
+        .map(|symbol| {
+            let marker = TaskMarker {
+                symbol,
+                span: Span::EMPTY,
+            };
+            json!({
+                "symbol": symbol.map(String::from),
+                "out": marker.checked(),
+            })
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Gli offset: byte UTF-8 ↔ code unit UTF-16
+// ---------------------------------------------------------------------------
+//
+// Questa è l'unica regola della fixture che in Rust non ha una funzione: uno
+// `Span` è in byte perché è così che Rust indicizza le stringhe, e un `usize`
+// non ha bisogno di essere convertito in sé stesso. Ce l'ha però un **oracolo**,
+// ed è `str` — la definizione di «byte» e «code unit» sta lì, non in una
+// libreria che potremmo scrivere male. Il lato TS ha invece l'implementazione
+// vera, perché CodeMirror (come ogni stringa JavaScript) indicizza in UTF-16, e
+// senza questa conversione uno `Span` che arriva dal core cade righe più in là.
+
+/// L'oracolo dell'andata. Un offset che cadesse *dentro* un carattere
+/// multibyte si arrotonda al confine successivo, e oltre la fine si ottiene la
+/// lunghezza del documento: uno scroll non deve mai lanciare.
+fn byte_to_utf16(text: &str, byte: usize) -> usize {
+    let mut bytes = 0;
+    let mut units = 0;
+    for ch in text.chars() {
+        if bytes >= byte {
+            return units;
+        }
+        bytes += ch.len_utf8();
+        units += ch.len_utf16();
+    }
+    units
+}
+
+/// L'oracolo del ritorno, con le stesse regole lette al contrario.
+fn utf16_to_byte(text: &str, unit: usize) -> usize {
+    let mut bytes = 0;
+    let mut units = 0;
+    for ch in text.chars() {
+        if units >= unit {
+            return bytes;
+        }
+        bytes += ch.len_utf8();
+        units += ch.len_utf16();
+    }
+    bytes
+}
+
+/// I testi su cui la conversione non è l'identità: un accento (2 byte, 1 code
+/// unit), un'emoji (4 byte, 2 code unit — una coppia surrogata), un ideogramma
+/// (3 byte, 1 code unit).
+const OFFSET_TEXTS: &[&str] = &[
+    "ascii puro",
+    "città è però",
+    "ciao 🌍 mondo",
+    "漢字とかな",
+    "🌍🌎🌏",
+    "",
+];
+
+fn offset_cases(forward: bool) -> Vec<Value> {
+    let mut out = Vec::new();
+    for text in OFFSET_TEXTS {
+        // Ogni indice, confini di carattere compresi e non: i casi interessanti
+        // sono proprio quelli che cadono in mezzo a un carattere.
+        let limit = if forward {
+            text.len()
+        } else {
+            text.chars().count() * 2
+        };
+        for i in 0..=limit + 2 {
+            out.push(if forward {
+                json!({"text": text, "byte": i, "out": byte_to_utf16(text, i)})
+            } else {
+                json!({"text": text, "unit": i, "out": utf16_to_byte(text, i)})
+            });
+        }
+    }
+    out
+}
+
+/// La fixture attesa, costruita dalle regole Rust.
+///
+/// Una chiave qui è una regola che **esiste in due lingue**: aggiungerne una
+/// vuol dire scriverne la gemella TypeScript, o il gemello vitest resta rosso.
+fn expected() -> Value {
+    json!({
+        "page_name": page_name_cases(),
+        "resolution_key": resolution_key_cases(),
+        "task_checked": task_checked_cases(),
+        "byte_to_utf16": offset_cases(true),
+        "utf16_to_byte": offset_cases(false),
+    })
+}
+
+fn fixture_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../frontend/src/__fixtures__/rules-samples.json"
+    ))
+}
+
+#[test]
+fn rules_fixture_is_in_sync_with_the_rust_rules() {
+    let expected = expected();
+    let path = fixture_path();
+
+    // Rigenerazione esplicita: `UPDATE_MIRROR=1 cargo test -p fubmd-abi --test
+    // rules_mirror`. Fuori da quel caso il test non scrive mai nulla.
+    if std::env::var_os("UPDATE_MIRROR").is_some() {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).expect("crea la cartella delle fixture");
+        }
+        let mut json = serde_json::to_string_pretty(&expected).expect("pretty");
+        json.push('\n');
+        std::fs::write(&path, json).expect("scrive la fixture");
+        return;
+    }
+
+    let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "fixture delle regole mancante ({}): {e}. Rigenerala con \
+             `UPDATE_MIRROR=1 cargo test -p fubmd-abi --test rules_mirror`.",
+            path.display()
+        )
+    });
+    let committed: Value = serde_json::from_str(&committed).expect("fixture JSON valida");
+
+    assert_eq!(
+        committed, expected,
+        "la fixture delle regole è stantia: una regola Rust è cambiata senza \
+         rigenerarla. Rigenerala con `UPDATE_MIRROR=1 cargo test -p fubmd-abi \
+         --test rules_mirror`, poi aggiorna la gemella TypeScript finché \
+         `rules-mirror.test.ts` non torna verde."
+    );
+}
+
+/// Il test del test: una fixture di casi che non distinguono niente non
+/// presidierebbe niente.
+///
+/// Per ogni regola con esito booleano servono entrambi gli esiti, e per le
+/// altre almeno due risposte diverse: se domani qualcuno potasse i casi ostili
+/// lasciando solo quelli facili, la fixture resterebbe verde mentre le due
+/// implementazioni divergono sul resto.
+#[test]
+fn every_rule_has_cases_that_disagree_with_each_other() {
+    let fixture = expected();
+    for (rule, cases) in fixture.as_object().expect("oggetto") {
+        let cases = cases.as_array().expect("array di casi");
+        assert!(cases.len() >= 2, "`{rule}` ha meno di due casi");
+        let distinct: std::collections::BTreeSet<String> =
+            cases.iter().map(|c| c["out"].to_string()).collect();
+        assert!(
+            distinct.len() >= 2,
+            "`{rule}`: tutti i casi danno la stessa risposta ({distinct:?}), \
+             quindi la fixture non distingue due implementazioni diverse"
+        );
+    }
+}

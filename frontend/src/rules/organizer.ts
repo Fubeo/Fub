@@ -3,6 +3,11 @@
 // l'ordinamento scelto a mano nel sidecar (`WorkspaceMeta`). Solo logica: il
 // DOM sta in main.ts, e il kernel non sa nulla di tutto questo.
 import type { WorkspaceMeta } from "../host/contract";
+// Le regole che hanno una gemella Rust stanno in un file solo, e da lì le
+// riprende chiunque: qui servono il nome pagina e la chiave di risoluzione.
+import { childName, pageName, resolutionKey } from "./mirrored";
+
+export { childName, pageName };
 
 export interface FolderNode {
   /// L'ultimo segmento del path ("" per la radice del vault).
@@ -16,34 +21,10 @@ export interface FolderNode {
 
 const collator = new Intl.Collator("it", { sensitivity: "base", numeric: true });
 
-/// L'ultimo segmento di un path: `Progetti/Alpha.md` → `Alpha.md`.
-export function childName(path: string): string {
-  return path.split("/").pop() ?? path;
-}
-
 /// La cartella che contiene `path` ("" se sta nella radice).
 export function parentOf(path: string): string {
   const slash = path.lastIndexOf("/");
   return slash === -1 ? "" : path.slice(0, slash);
-}
-
-/// Il "nome pagina" di un `DocId`: basename senza l'ultima estensione.
-///
-/// È la **stessa regola** di `DocId::page_name` nel kernel
-/// (`crates/fubmd-abi/src/model.rs`), riga per riga: si toglie ciò che segue
-/// l'ultimo punto, a meno che il punto sia il primo carattere del basename (un
-/// dotfile non ha estensione). I casi ostili — `note.backup`, `.foo`, `a.b.md`,
-/// `dir/.hidden.md` — sono elencati nel test
-/// `docid_page_name_agrees_with_the_frontend_on_hostile_names`.
-///
-/// Non consulta le estensioni *gestite* (`VaultInfo.extensions`): un `DocId`
-/// arriva dal vault, quindi un'estensione gestita ce l'ha già, e filtrarci sopra
-/// era proprio ciò che faceva dissentire risoluzione e display — per
-/// `note.backup` il kernel risolveva `note` e la UI mostrava `note.backup`.
-export function pageName(id: string): string {
-  const base = childName(id);
-  const dot = base.lastIndexOf(".");
-  return dot > 0 ? base.slice(0, dot) : base;
 }
 
 /// L'albero della sidebar, radicato in `rootPath` ("" = tutto il vault; una
@@ -115,11 +96,15 @@ export function findFolder(root: FolderNode, path: string): FolderNode | null {
 /// esiste.
 export function folderNoteOf(folder: FolderNode, exts: string[]): string | null {
   if (!folder.path) return null;
-  const byLower = new Map(folder.notes.map((n) => [n.toLowerCase(), n]));
+  // `resolutionKey` e non `toLowerCase()`: è la chiave con cui il kernel decide
+  // che due nomi sono lo stesso nome, e su un vault sincronizzato con macOS
+  // (nomi file in NFD) il solo minuscolo non farebbe incontrare `Città/Città.md`
+  // con sé stessa.
+  const byKey = new Map(folder.notes.map((n) => [resolutionKey(n), n]));
   // Prima il nome della cartella, poi `index`: l'omonima vince, come in make.md.
   for (const stem of [folder.name, "index"]) {
     for (const ext of exts) {
-      const hit = byLower.get(`${folder.path}/${stem}.${ext}`.toLowerCase());
+      const hit = byKey.get(resolutionKey(`${folder.path}/${stem}.${ext}`));
       if (hit) return hit;
     }
   }

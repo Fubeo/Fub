@@ -12,9 +12,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }
 thiserror = { workspace = true }
-# NFC nell'unico punto di normalizzazione delle chiavi di risoluzione
-# (graph::normalize): macOS scrive i nomi file in NFD, i link digitati sono NFC.
-unicode-normalization = "0.1"
 
 # INVARIANTE: niente comrak/pulldown, wasmtime, tauri qui dentro. Il core non
 # sa cosa sia il markdown.

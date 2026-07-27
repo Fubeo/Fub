@@ -51,6 +51,8 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.17 · §5.3 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
 | §2.26 · §5.4 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
 | §1.27 · §5.5 | [0019 — Il canale dati](../decisions/0019-il-canale-dati.md) |
+| §1.37 · §6.1 | [0020 — Le regole in un posto solo](../decisions/0020-le-regole-in-un-posto-solo.md) |
+| §4.11 · §6.2 | [0020 — Le regole in un posto solo](../decisions/0020-le-regole-in-un-posto-solo.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -83,7 +85,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
 | §1.34 | **§7.4** | Gli id non sono di nessuno: nessuna regola di namespace, nessuna collisione |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
-| §1.37 | **§6.1** | Le regole che il contratto promette vivono nel kernel, private |
 | §1.38 | **§7.1** | Una capacità dell'`HostApi` si implementa quattro volte a mano |
 | §2.1 | **§15.1** | Astrazione sullo storage |
 | §2.2 | **§14.1** | Il vault non è solo documenti |
@@ -126,5 +127,4 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §4.6 | **§16.1** | L'SDK come superficie di riuso — oggi è quasi vuoto |
 | §4.7 | **§16.3** | Un crate per bundle di feature |
 | §4.8 | **§16.4** | Il contratto si scrive quattro volte a mano |
-| §4.11 | **§6.2** | I *tipi* al confine hanno un presidio; le *regole* no |
 | §4.12 | **§16.2** | Il banco di prova del kernel è copiato diciotto volte |

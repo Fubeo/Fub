@@ -61,26 +61,25 @@ const FORBIDDEN: &[&str] = &[
 /// Le dipendenze normali che `fubmd-abi` e `fubmd-kernel` possono dichiarare.
 /// Elenco chiuso: allungarlo è una decisione, non un incidente.
 const ALLOWED_DIRECT: &[(&str, &[&str])] = &[
-    // Il contratto: serializzazione e nient'altro.
-    ("fubmd-abi", &["serde", "serde_json", "thiserror"]),
-    // Il core: il contratto, serializzazione, path UTF-8, e la normalizzazione
-    // Unicode (NFC) delle chiavi di risoluzione dei wikilink — macOS scrive i
-    // nomi file in NFD, i link digitati sono NFC (vedi graph::normalize).
+    // Il contratto: serializzazione, e la normalizzazione Unicode (NFC) delle
+    // chiavi di risoluzione — macOS scrive i nomi file in NFD, i link digitati
+    // sono NFC (vedi `rules::path::resolution_key`). Sta qui e non nel kernel
+    // perché ci sta la regola: chi serve una `IndexQuery` può non avere il
+    // kernel fra le mani.
+    (
+        "fubmd-abi",
+        &["serde", "serde_json", "thiserror", "unicode-normalization"],
+    ),
+    // Il core: il contratto, serializzazione, path UTF-8.
     (
         "fubmd-kernel",
-        &[
-            "fubmd-abi",
-            "serde",
-            "serde_json",
-            "camino",
-            "thiserror",
-            "unicode-normalization",
-        ],
+        &["fubmd-abi", "serde", "serde_json", "camino", "thiserror"],
     ),
 ];
 
 /// **Tutto** ciò che `fubmd-abi` raggiunge fra le dipendenze normali, sé stesso
-/// escluso: serde, serde_json, thiserror e la loro coda di macro e utilità.
+/// escluso: serde, serde_json, thiserror, unicode-normalization e la loro coda
+/// di macro e utilità.
 ///
 /// È una fotografia, e il test pretende che sia fedele nelle due direzioni: un
 /// nome nuovo è rosso (guardalo: è arrivato qualcosa che nessuno ha chiesto), un
@@ -104,7 +103,10 @@ const ALLOWED_TRANSITIVE_ABI: &[&str] = &[
     "syn",
     "thiserror",
     "thiserror-impl",
+    "tinyvec",
+    "tinyvec_macros",
     "unicode-ident",
+    "unicode-normalization",
     "zmij",
 ];
 

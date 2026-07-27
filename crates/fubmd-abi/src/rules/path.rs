@@ -1,4 +1,16 @@
-//! I link markdown ordinari — `[testo](note/altra.md)` — visti come **archi**.
+//! I path del vault: la **chiave** con cui si risolvono e i link markdown
+//! relativi che ci arrivano sopra.
+//!
+//! # La chiave di risoluzione
+//!
+//! [`resolution_key`] è l'unico punto di normalizzazione: trim, NFC, minuscolo.
+//! Ci passano il nome pagina di un wikilink, il path di un link markdown, gli
+//! alias, e la ricerca della folder note nella sidebar. NFC perché un vault
+//! sincronizzato con macOS ha nomi file in NFD mentre il link digitato è NFC:
+//! senza, `[[Café]]` non risolve, il backlink non esiste e per il grafo sono due
+//! nodi — e colpisce esattamente le note accentate.
+//!
+//! # I link markdown ordinari — `[testo](note/altra.md)` — visti come archi
 //!
 //! Un wikilink porta un nome di pagina e la risoluzione è globale: `[[Nota]]`
 //! vuol dire la stessa cosa ovunque sia scritto. Un link markdown porta invece
@@ -12,24 +24,51 @@
 //!    slash iniziale, alla radice del vault. `.` e `..` si risolvono qui, e un
 //!    `..` di troppo esce dal vault: il link non risolve, non lo si insegue.
 //! 2. **Con o senza estensione** — vince l'accoppiamento esatto (`note/a.md` →
-//!    `note/a.md`); solo se manca si prova il path *senza estensione*, la stessa
-//!    chiave dei wikilink, che accoglie sia `note/a` sia i nomi col punto dentro
-//!    (`note/v1.2`). Un `note/a.png` che non esiste **non** ricade su `note/a.md`:
-//!    l'utente ha scritto un'estensione, e va presa sul serio.
-//! 3. **Caso** — la stessa normalizzazione dei wikilink (trim, NFC, minuscolo),
-//!    perché il vault sincronizzato fra macOS e Linux è lo stesso vault.
+//!    `note/a.md`); solo se manca si prova il path *senza estensione*
+//!    ([`strip_ext`]), la stessa chiave dei wikilink, che accoglie sia `note/a`
+//!    sia i nomi col punto dentro (`note/v1.2`). Un `note/a.png` che non esiste
+//!    **non** ricade su `note/a.md`: l'utente ha scritto un'estensione, e va
+//!    presa sul serio.
+//! 3. **Caso** — la stessa [`resolution_key`] dei wikilink, perché il vault
+//!    sincronizzato fra macOS e Linux è lo stesso vault.
 //!
-//! In più il percent-encoding, che nei wikilink non esiste e qui sì: `[t](nota%20uno.md)`
-//! e `[t](<nota uno.md>)` sono lo stesso link, e devono essere lo stesso arco.
+//! In più il percent-encoding, che nei wikilink non esiste e qui sì:
+//! `[t](nota%20uno.md)` e `[t](<nota uno.md>)` sono lo stesso link, e devono
+//! essere lo stesso arco.
 
-use fubmd_abi::model::DocId;
+use unicode_normalization::UnicodeNormalization;
+
+use crate::model::DocId;
+
+/// La chiave con cui una stringa entra nella risoluzione: trim, NFC, minuscolo.
+///
+/// **Unico punto di normalizzazione.** Chi confronta due nomi di documento —
+/// il grafo, la riscrittura al rename, la folder note della sidebar,
+/// l'autocompletamento — deve passare da qui, o due pezzi del sistema avranno
+/// due idee di quando due nomi sono lo stesso nome.
+pub fn resolution_key(s: &str) -> String {
+    s.trim().nfc().collect::<String>().to_lowercase()
+}
+
+/// Il path senza l'ultima estensione: `note/v1.2.md` → `note/v1.2`.
+///
+/// È la chiave *senza estensione* con cui `note/a` e `note/a.md` si incontrano.
+/// Un punto dentro un segmento di cartella non conta (`v1.2/nota` resta
+/// intero): l'estensione è dell'ultimo segmento o non c'è.
+pub fn strip_ext(path: &str) -> String {
+    match path.rsplit_once('.') {
+        Some((stem, ext)) if !ext.contains('/') => stem.to_string(),
+        _ => path.to_string(),
+    }
+}
 
 /// Divide un target markdown in path e **frammento** (`#heading`, `#^blocco`).
 ///
 /// Il frammento non partecipa alla risoluzione — l'ancora dentro un documento è
-/// roba della decisione 0003 — ma va conservato: una riscrittura al rename che lo perdesse
-/// romperebbe il link in un modo diverso da quello che stava riparando.
-pub(crate) fn split_fragment(raw: &str) -> (&str, &str) {
+/// roba della decisione 0003 — ma va conservato: una riscrittura al rename che
+/// lo perdesse romperebbe il link in un modo diverso da quello che stava
+/// riparando.
+pub fn split_fragment(raw: &str) -> (&str, &str) {
     match raw.find('#') {
         Some(i) => (&raw[..i], &raw[i..]),
         None => (raw, ""),
@@ -38,7 +77,7 @@ pub(crate) fn split_fragment(raw: &str) -> (&str, &str) {
 
 /// Decodifica le sequenze `%XX`. Byte non validi o troncati restano com'erano:
 /// un path non è il posto dove fallire per una percentuale scritta a mano.
-pub(crate) fn percent_decode(s: &str) -> String {
+pub fn percent_decode(s: &str) -> String {
     if !s.contains('%') {
         return s.to_string();
     }
@@ -101,7 +140,7 @@ fn is_safe(c: char) -> bool {
 }
 
 /// Codifica un path perché possa stare in `[testo](qui)`.
-pub(crate) fn percent_encode_path(s: &str) -> String {
+pub fn percent_encode_path(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         if is_safe(c) {
@@ -124,7 +163,7 @@ pub(crate) fn percent_encode_path(s: &str) -> String {
 ///
 /// Il risultato è un path **letterale** (caso e estensione come li ha scritti
 /// l'utente): la normalizzazione la fa chi indicizza, che è il grafo.
-pub(crate) fn resolve_against(src: &DocId, raw: &str) -> Option<String> {
+pub fn resolve_against(src: &DocId, raw: &str) -> Option<String> {
     let (path, _) = split_fragment(raw);
     let path = percent_decode(path.trim());
     if path.is_empty() {
@@ -160,7 +199,7 @@ pub(crate) fn resolve_against(src: &DocId, raw: &str) -> Option<String> {
 /// path senza estensione è ambiguo per costruzione (`nota.md` e `nota.txt`
 /// condividono la chiave) e riscrivere un link significa garantire che dopo
 /// punti ancora dove puntava.
-pub(crate) fn relative_ref(src: &DocId, to: &DocId) -> String {
+pub fn relative_ref(src: &DocId, to: &DocId) -> String {
     let from_dir = parent_segments(src);
     let to_segments: Vec<&str> = to.as_str().split('/').filter(|s| !s.is_empty()).collect();
     let common = from_dir
@@ -264,5 +303,22 @@ mod tests {
         // la `take` sul penultimo segmento il link diventerebbe vuoto.
         let r = relative_ref(&DocId::new("x/note/a.md"), &DocId::new("x/note"));
         assert_eq!(r, "../note");
+    }
+
+    #[test]
+    fn the_resolution_key_folds_case_and_composition() {
+        // Il caso che rende la regola non banale: `é` scritto come un code
+        // point solo (NFC) e come `e` + accento combinante (NFD, che è come
+        // macOS scrive i nomi file) devono dare la stessa chiave.
+        assert_eq!(resolution_key("  Café  "), resolution_key("cafe\u{0301}"));
+        assert_eq!(resolution_key("Café"), "café");
+    }
+
+    #[test]
+    fn strip_ext_only_looks_at_the_last_segment() {
+        assert_eq!(strip_ext("note/v1.2.md"), "note/v1.2");
+        assert_eq!(strip_ext("note/senza-estensione"), "note/senza-estensione");
+        // Il punto sta in una cartella: non è un'estensione.
+        assert_eq!(strip_ext("v1.2/nota"), "v1.2/nota");
     }
 }

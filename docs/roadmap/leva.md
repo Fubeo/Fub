@@ -92,7 +92,14 @@ estenderli (7.3, 8.2, 7.2, 10, 15.1) hanno una strada sola, il `Custom`, cioè u
 vocabolario privato accanto a quello ufficiale che dice la stessa cosa. Sotto,
 di poco: **§7.1** e **§6.2**, che non rendono inesprimibile niente ma
 moltiplicano ogni voce futura — l'una per il numero di implementazioni
-dell'host, l'altra per il numero di linguaggi in cui la stessa regola va scritta.
+dell'host, l'altra per il numero di linguaggi in cui la stessa regola va
+scritta. La seconda è **chiusa** con la
+[decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md), insieme al
+§6.1: il moltiplicatore resta (le regole condivise sono ancora scritte due
+volte) ma non moltiplica più il **rischio**, perché una fixture generata tiene
+uguali le due copie e ogni regola nuova nasce con la sua invece che con un
+commento. Toglierlo davvero è la fine corsa del §6.2 — `fubmd-abi` compilato a
+wasm32 — e non è urgente proprio perché il presidio c'è.
 
 Un'ultima nota, che vale come criterio più che come voce: **[decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md)** (i link
 markdown fuori dal grafo) è il primo caso in cui questo piano non descrive un

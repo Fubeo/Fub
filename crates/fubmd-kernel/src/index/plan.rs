@@ -23,7 +23,10 @@
 //! 3. **Altrimenti si ricompone qui**, foglia per foglia, con le combinazioni
 //!    che stanno nel contratto ([`QueryEvaluator`]) e non in questo modulo:
 //!    quello che AND e OR significano non deve poter divergere fra il kernel e
-//!    chi implementa un indice.
+//!    chi implementa un indice. Per la stessa ragione la **coda** — ordine,
+//!    colonne, finestra — è [`fubmd_abi::rules::properties::finish`]: la
+//!    chiamano il pianificatore, l'indice del kernel e chiunque rivendichi
+//!    `Documents`.
 //!
 //! Quando una domanda porta un'espressione ma la serve **un altro** (i tag di un
 //! sottoinsieme, i vicini di una selezione), ciò che quel destinatario non
@@ -31,18 +34,16 @@
 //! [`QueryPredicate::Docs`]: chi la riceve non deve sapere da quale domanda
 //! venisse.
 
-use fubmd_abi::model::{DocId, Frontmatter};
 use fubmd_abi::query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate,
 };
+use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
-    DocumentMatch, IndexQuery, IndexResult, Page, Paged, PredicateKind, PropertySelect,
-    PropertySort, QueryKind,
+    IndexQuery, IndexResult, Page, PredicateKind, PropertySelect, PropertySort, QueryKind,
 };
 use fubmd_abi::PluginError;
 
 use super::{Indexes, Target};
-use crate::properties;
 
 /// Il percorso di dispatch, che è **uno**.
 pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, PluginError> {
@@ -101,58 +102,13 @@ fn documents(
     }
 
     let matches = router.expr(&matching)?;
-    Ok(IndexResult::Documents(finish(
+    Ok(IndexResult::Documents(properties::finish(
         matches,
         sort.as_ref(),
         &select,
         page,
         |id| indexes.core.frontmatter(id),
     )))
-}
-
-/// Impagina, ordina e completa una risposta a `Documents`.
-///
-/// Sta qui e non in due posti perché la chiamano in due — il pianificatore
-/// quando ricompone, e l'indice del kernel quando la domanda gli arriva intera —
-/// e due implementazioni divergerebbero sul caso che nessuno prova: l'ordine di
-/// chi non ha la chiave di ordinamento, o quello fra due documenti a pari
-/// rilevanza.
-pub(crate) fn finish<'a>(
-    matches: Matches,
-    sort: Option<&PropertySort>,
-    select: &PropertySelect,
-    page: Option<Page>,
-    frontmatter: impl Fn(&DocId) -> Option<&'a Frontmatter>,
-) -> Paged<DocumentMatch> {
-    let mut rows = matches.into_vec();
-
-    if !select.is_none() {
-        for row in rows.iter_mut() {
-            if let Some(fm) = frontmatter(&row.doc) {
-                row.properties = properties::entries(fm, select);
-            }
-        }
-    }
-
-    match sort {
-        // Senza chiave: prima la rilevanza (chi ha cercato si aspetta i
-        // risultati migliori in cima), poi l'id. Chi non ha rilevanza va in
-        // fondo, come chi non ha la chiave di ordinamento.
-        None => rows.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.doc.cmp(&b.doc))
-        }),
-        Some(sort) => rows.sort_by(|a, b| {
-            let av = frontmatter(&a.doc).and_then(|fm| fm.property(&sort.key));
-            let bv = frontmatter(&b.doc).and_then(|fm| fm.property(&sort.key));
-            properties::order_of(av.as_ref(), bv.as_ref(), sort.descending)
-                .then_with(|| a.doc.cmp(&b.doc))
-        }),
-    }
-
-    Paged::window(rows, page)
 }
 
 /// Il valutatore che sa **instradare**: ogni foglia al suo proprietario, la

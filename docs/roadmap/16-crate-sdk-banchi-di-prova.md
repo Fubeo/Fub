@@ -165,8 +165,11 @@ bisogno di un posto da cui essere montato).
 - [ ] **Quattro posti è il conto di un *tipo*; per una *capacità* il conto è
       un altro, ed è il §7.1**: ventidue metodi × quattro implementazioni di
       `HostApi` scritte a mano, cinque a M5, N con le politiche del §7.3. E per
-      una *regola* è un terzo conto ancora, il §6.2. Le tre voci sono lo stesso
-      difetto misurato su tre unità diverse.
+      una *regola* era un terzo conto ancora, il §6.2 — **chiuso** con la
+      [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md), e vale
+      la pena leggerne la forma: il conto non è stato azzerato ma **presidiato**,
+      con una fixture generata che tiene uguali le copie. Le tre voci sono lo
+      stesso difetto misurato su tre unità diverse.
 
 ### 16.5 Mirror TS↔Rust generati, non scritti
 

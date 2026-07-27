@@ -333,7 +333,7 @@ pub enum LinkTarget {
 
 Il provider dichiara l'**intento** ("questo è un wikilink a `Page#Heading^block`");
 la **risoluzione a `DocId` è del kernel** (regola Obsidian dello shortest unique
-path, e `pathlink` per i path). Questo confine è ciò che tiene il provider
+path, e `fubmd_abi::rules::path` per i path). Questo confine è ciò che tiene il provider
 markdown ignaro della topologia del vault.
 
 **Chi decide la specie è il contratto.** `LinkTarget::classify(raw)` è la regola

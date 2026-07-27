@@ -18,6 +18,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use fubmd_abi::model::{canonical_tag, DocId, Tag};
+use fubmd_abi::rules::tag::is_sub_tag;
 use fubmd_abi::traits::TagCount;
 
 /// Il contributo di una nota: chiave canonica → grafie con cui la scrive.
@@ -156,13 +157,6 @@ impl TagCounts {
         found.sort();
         found
     }
-}
-
-/// `progetto/casa` sta sotto `progetto`. La regola è una sola e sta qui perché
-/// la chiedono in due (il predicato del linguaggio e il conteggio).
-pub(crate) fn is_sub_tag(key: &str, ancestor: &str) -> bool {
-    key.strip_prefix(ancestor)
-        .is_some_and(|rest| rest.starts_with('/'))
 }
 
 #[cfg(test)]
