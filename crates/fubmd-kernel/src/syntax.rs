@@ -661,6 +661,9 @@ mod tests {
                 emette: "terzi:onesto",
             }))
             .expect_err("senza `produces` la regola non potrebbe emettere niente");
-        assert_eq!(err, SyntaxConflict::NothingProduced("terzi:bugiarda".into()));
+        assert_eq!(
+            err,
+            SyntaxConflict::NothingProduced("terzi:bugiarda".into())
+        );
     }
 }

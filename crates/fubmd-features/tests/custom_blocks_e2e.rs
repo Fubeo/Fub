@@ -537,5 +537,9 @@ fn una_regola_inline_entra_nella_label_di_un_link() {
         out.html
     );
     // E il link è rimasto un link.
-    assert!(out.html.contains("https://esempio.it"), "html: {}", out.html);
+    assert!(
+        out.html.contains("https://esempio.it"),
+        "html: {}",
+        out.html
+    );
 }
