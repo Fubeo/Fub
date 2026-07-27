@@ -18,11 +18,13 @@ use fubmd_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fubmd_features::{
     BacklinksView, CoreCommands, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer,
     MathRule, OutlineView, SearchIndex, StatsView, TagPanelView, VersionRef, VersionStore,
-    VersioningHandler, BACKLINKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID,
-    VERSIONING_ID,
+    VersioningHandler, BACKLINKS_ID, BLOCKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID,
+    TAGS_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, IndexError, RenderedDocument, TrashEntry, Trust, Workspace};
+use fubmd_kernel::{
+    FormatRegistry, PluginInfo, RegistryError, RenderedDocument, TrashEntry, Workspace,
+};
 
 use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::RecursiveMode;
@@ -57,9 +59,17 @@ pub struct VaultInfo {
     /// senza cablare `.md`: quale sia l'estensione di un documento lo sanno i
     /// `FormatDescriptor`, non la UI.
     pub extensions: Vec<String>,
-    /// Il versioning è acceso? Spento significa **assente** (D7): il frontend
-    /// non disegna la cronologia, e nel vault non compare nulla.
-    pub versioning: bool,
+    /// **Chi è attivo** (§7.6): i plugin dichiarati, con manifest, fiducia,
+    /// permessi e ciò che hanno registrato.
+    ///
+    /// Era un booleano — `versioning: bool` — cioè un campo **per feature**
+    /// dentro un record IPC: con i moduli del 21.2 sarebbero diventati venti
+    /// booleani, e ognuno una modifica al record, al mirror TS e alla fixture.
+    /// La shell adesso non chiede «il versioning è acceso?»: chiede chi c'è, e
+    /// guarda se fra loro c'è chi le serve. È la stessa domanda che il pannello
+    /// plugin (20.1), il developer mode (20.2) e la diagnostica (24.2) faranno,
+    /// e nessuno dei tre avrà bisogno di un campo suo.
+    pub plugins: Vec<PluginInfo>,
 }
 
 /// Il versioning è acceso?
@@ -141,6 +151,31 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
 
     let mut ws = Workspace::new(&root, registry);
 
+    // Le feature ufficiali si **dichiarano** prima di registrare qualcosa
+    // (§7.3): il kernel non presta capacità a una stringa, le presta a un
+    // plugin che ha un manifest, dei permessi e un grado di fiducia. Che siano
+    // nello stesso binario non le esenta — se le esentasse, il punto di
+    // applicazione sarebbe provato solo contro i plugin che non esistono
+    // ancora.
+    //
+    // Un fallimento qui è un errore di montaggio di questo repo (due feature
+    // con lo stesso id), non una condizione che l'utente possa produrre: si
+    // dice e si tira dritto, come per i conflitti di sintassi qui sotto.
+    for (id, nome) in [
+        (SEARCH_ID, "Ricerca"),
+        (VERSIONING_ID, "Versioning"),
+        (BACKLINKS_ID, "Backlink"),
+        (OUTLINE_ID, "Struttura"),
+        (TAGS_ID, "Tag"),
+        (STATS_ID, "Statistiche"),
+        (COMMANDS_ID, "Comandi"),
+        (BLOCKS_ID, "Blocchi"),
+    ] {
+        if let Err(e) = ws.register_core_feature(id, nome) {
+            eprintln!("feature non dichiarata: {e}");
+        }
+    }
+
     // L'indice va registrato PRIMA di `reindex`: è lì che riceve il contenuto
     // del vault e riconcilia ciò che è cambiato mentre non era vivo. Se non si
     // apre, il vault si apre lo stesso senza ricerca: la verità è il vault,
@@ -160,12 +195,10 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
             // reindicizza tutto, che è lento e non sbagliato.
             match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
                 Ok(()) => {}
-                Err(IndexError::Route(c)) => {
-                    eprintln!("indice di ricerca NON registrato: {c}")
-                }
-                Err(IndexError::Activate(e)) => {
+                Err(RegistryError::Activate(e)) => {
                     eprintln!("indice di ricerca: impronte non ritrovate, reindicizzo: {e}")
                 }
+                Err(e) => eprintln!("indice di ricerca NON registrato: {e}"),
             }
         }
         Err(e) => eprintln!("indice di ricerca non disponibile: {e}"),
@@ -188,10 +221,12 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
             None
         });
     if let Some(store) = &versions {
-        ws.register_event_handler(
+        if let Err(e) = ws.register_event_handler(
             VERSIONING_ID,
             Box::new(VersioningHandler::new(store.clone())),
-        );
+        ) {
+            eprintln!("versioning non registrato: {e}");
+        }
     }
 
     // Il pannello backlink è una feature ufficiale che passa per il protocollo
@@ -199,22 +234,31 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
     // (produce solo UI dichiarativa, niente `Html`/`WebView`), si prende
     // documento attivo e riferimenti dall'`HostApi`. L'app non gli fa più da
     // tramite — il giro render/azione passa dai comandi generici qui sotto.
-    ws.register_view_provider(BACKLINKS_ID, Trust::Core, Box::new(BacklinksView));
+    let views: [(&str, Box<dyn fubmd_abi::ViewProvider>); 4] = [
+        (BACKLINKS_ID, Box::new(BacklinksView)),
+        (OUTLINE_ID, Box::new(OutlineView)),
+        (TAGS_ID, Box::new(TagPanelView::default())),
+        (STATS_ID, Box::new(StatsView)),
+    ];
+    for (id, provider) in views {
+        if let Err(e) = ws.register_view_provider(id, provider) {
+            eprintln!("view non registrata: {e}");
+        }
+    }
     // L'outline è la seconda feature ufficiale sul giro delle view, e la prima a
     // usare il canale metadata (`IndexQuery::Outline`): legge la struttura del
     // documento attivo dal kernel, non dall'app.
-    ws.register_view_provider(OUTLINE_ID, Trust::Core, Box::new(OutlineView));
     // Il pannello tag: aggrega i tag del vault via `IndexQuery::Tags`, click →
     // ricerca. Terza feature ufficiale sul giro delle view.
-    ws.register_view_provider(TAGS_ID, Trust::Core, Box::new(TagPanelView::default()));
     // Le statistiche: quarta feature sul giro delle view, e la prima a leggere
     // il **contesto di sessione** per intero — selezione e modalità, non solo
     // quale nota è aperta (decisione 0007).
-    ws.register_view_provider(STATS_ID, Trust::Core, Box::new(StatsView));
     // I comandi ufficiali: la prima feature sul giro del **registro** (decisione 0009).
     // Da qui in poi un'azione nuova non è un comando Tauri in più — è una riga
     // in un `CommandProvider`, e la palette la trova da sola.
-    ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands));
+    if let Err(e) = ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands)) {
+        eprintln!("comandi non registrati: {e}");
+    }
 
     // Le sintassi ufficiali (decisione 0017). Nessuna di loro tocca il provider
     // markdown: si **innestano** su di lui, che è la strada che il §3.1 ha
@@ -229,7 +273,7 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
         Box::new(MathRule),
         Box::new(HighlightRule),
     ] {
-        if let Err(e) = ws.register_syntax_rule(rule) {
+        if let Err(e) = ws.register_syntax_rule(BLOCKS_ID, rule) {
             eprintln!("sintassi non innestata: {e}");
         }
     }
@@ -241,7 +285,7 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
         Box::new(DiagramRenderer) as Box<dyn fubmd_abi::custom::CustomRenderer>,
         Box::new(MathRenderer),
     ] {
-        if let Err(e) = ws.register_custom_renderer(Trust::Core, renderer) {
+        if let Err(e) = ws.register_custom_renderer(BLOCKS_ID, renderer) {
             eprintln!("renderer non registrato: {e}");
         }
     }
@@ -272,7 +316,7 @@ fn open_vault(app: AppHandle, state: State<AppState>, path: String) -> Result<Va
             root: ws.root().to_string(),
             documents: ws.documents().into_iter().map(|d| d.0).collect(),
             extensions: ws.extensions(),
-            versioning: versions.is_some(),
+            plugins: ws.plugins(),
         }
     };
 
@@ -456,7 +500,7 @@ fn render_preview(state: State<AppState>, id: String) -> Result<RenderedDocument
 
 /// Contesto del pannello con il focus: quale nota, cosa c'è selezionato, in che
 /// modalità. Lo pubblica la shell a ogni navigazione, movimento del cursore o
-/// cambio di modalità; le view lo leggono via `HostApi::active_context`.
+/// cambio di modalità; le view lo leggono via `HostEnv::active_context`.
 ///
 /// Restituisce **gli id delle view da ridisegnare** — quelle la cui
 /// `ViewSpec.follows` interseca ciò che è cambiato. Il conto lo fa il kernel e

@@ -53,6 +53,10 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        ws.register_core_feature(SEARCH_ID, SEARCH_ID)
+            .expect("dichiarato");
         let dir = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
         let index = SearchIndex::open(&dir).expect("indice");
         ws.register_index_provider(SEARCH_ID, Box::new(index))
@@ -328,7 +332,7 @@ fn incremental_index_matches_one_built_from_scratch() {
 /// è il contatore che cambia se e solo se qualcosa è stato scritto.
 ///
 /// Il manifest vive nello spazio dati del plugin e ci arriva attraverso
-/// `HostApi::data_write`: leggerlo da qui col filesystem è lecito perché questo
+/// `DataWrite::data_write`: leggerlo da qui col filesystem è lecito perché questo
 /// è un test che guarda *il risultato*, non un percorso di produzione.
 fn opstamp(vault_root: &Utf8PathBuf) -> u64 {
     let path = vault_root

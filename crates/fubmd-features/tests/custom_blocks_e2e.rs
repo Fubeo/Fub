@@ -21,10 +21,11 @@ use fubmd_abi::error::FormatError;
 use fubmd_abi::format::{DocumentSource, ParseContext, RenderOptions};
 use fubmd_abi::model::{custom_kind, Block, DocId};
 use fubmd_abi::options::syntax;
+use fubmd_abi::traits::PluginManifest;
 use fubmd_abi::ui::{UiKind, UiNode};
 use fubmd_abi::FormatProvider;
 use fubmd_features::{
-    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, DIAGRAM_NS,
+    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID, DIAGRAM_NS,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, RenderedDocument, SyntaxRegistry, Trust, Workspace};
@@ -54,15 +55,17 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
-        ws.register_syntax_rule(Box::new(DiagramRule))
+        ws.register_core_feature(BLOCKS_ID, "Blocchi")
+            .expect("dichiarato");
+        ws.register_syntax_rule(BLOCKS_ID, Box::new(DiagramRule))
             .expect("diagrammi");
-        ws.register_syntax_rule(Box::new(MathRule))
+        ws.register_syntax_rule(BLOCKS_ID, Box::new(MathRule))
             .expect("formule");
-        ws.register_syntax_rule(Box::new(HighlightRule))
+        ws.register_syntax_rule(BLOCKS_ID, Box::new(HighlightRule))
             .expect("evidenziato");
-        ws.register_custom_renderer(Trust::Core, Box::new(DiagramRenderer))
+        ws.register_custom_renderer(BLOCKS_ID, Box::new(DiagramRenderer))
             .expect("renderer dei diagrammi");
-        ws.register_custom_renderer(Trust::Core, Box::new(MathRenderer))
+        ws.register_custom_renderer(BLOCKS_ID, Box::new(MathRenderer))
             .expect("renderer delle formule");
         ws.reindex().expect("reindex");
         ws
@@ -267,17 +270,18 @@ fn una_sintassi_di_terzi_percorre_tutti_e_tre_i_lati() {
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
     let mut ws = Workspace::new(&v.root, registry);
+    // Un plugin di terzi, dichiarato come tale: il grado di fiducia sta nella
+    // dichiarazione, non su ogni cosa che registra (§7.3).
+    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+        .expect("dichiarato");
 
     // Lato 1: la sintassi si innesta sul provider markdown, che non la conosce
     // e non viene toccato.
-    ws.register_syntax_rule(Box::new(GanttinoRule))
+    ws.register_syntax_rule("terzi", Box::new(GanttinoRule))
         .expect("innesto");
     // Lato 2: il renderer si registra per il kind che la regola produce.
-    ws.register_custom_renderer(
-        Trust::Community,
-        Box::new(GanttinoRenderer { ostile: false }),
-    )
-    .expect("renderer");
+    ws.register_custom_renderer("terzi", Box::new(GanttinoRenderer { ostile: false }))
+        .expect("renderer");
     ws.reindex().expect("reindex");
 
     // Lato 3: arriva alla shell come albero, senza una riga nel bundle.
@@ -294,12 +298,12 @@ fn da_un_renderer_non_fidato_il_contenuto_attivo_non_passa() {
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
     let mut ws = Workspace::new(&v.root, registry);
-    ws.register_syntax_rule(Box::new(GanttinoRule)).unwrap();
-    ws.register_custom_renderer(
-        Trust::Community,
-        Box::new(GanttinoRenderer { ostile: true }),
-    )
-    .unwrap();
+    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+        .expect("dichiarato");
+    ws.register_syntax_rule("terzi", Box::new(GanttinoRule))
+        .unwrap();
+    ws.register_custom_renderer("terzi", Box::new(GanttinoRenderer { ostile: true }))
+        .unwrap();
     ws.reindex().unwrap();
 
     let out = preview(&ws, "g.md");
@@ -321,8 +325,10 @@ fn due_regole_sulla_stessa_sintassi_non_si_registrano_in_silenzio() {
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
     let mut ws = Workspace::new(&v.root, registry);
+    ws.register_core_feature(BLOCKS_ID, "Blocchi")
+        .expect("dichiarato");
 
-    ws.register_syntax_rule(Box::new(DiagramRule))
+    ws.register_syntax_rule(BLOCKS_ID, Box::new(DiagramRule))
         .expect("la prima passa");
 
     /// Un plugin che rivendica `mermaid`, già preso dalla regola ufficiale.
@@ -348,8 +354,13 @@ fn due_regole_sulla_stessa_sintassi_non_si_registrano_in_silenzio() {
             unreachable!("non deve nemmeno registrarsi")
         }
     }
+    // Il concorrente è un terzo, e nomina dentro il proprio namespace: la
+    // regola del §7.4 è soddisfatta, e ciò che lo ferma è l'altro conflitto —
+    // quello sul **trigger**, che è ciò che questo test vuole vedere.
+    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+        .expect("dichiarato");
     let err = ws
-        .register_syntax_rule(Box::new(Concorrente))
+        .register_syntax_rule("terzi", Box::new(Concorrente))
         .expect_err("la seconda rivendica `mermaid`");
     // Il valore non è nel rifiuto: è nel fatto che ci sia un `Err` da leggere.
     assert!(err.to_string().contains("fence:mermaid"), "{err}");
@@ -361,15 +372,20 @@ fn un_kind_prodotto_e_mai_disegnato_si_puo_contare() {
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
     let mut ws = Workspace::new(&v.root, registry);
+    ws.register_core_feature(BLOCKS_ID, "Blocchi")
+        .expect("dichiarato");
 
-    ws.register_syntax_rule(Box::new(DiagramRule)).unwrap();
-    ws.register_syntax_rule(Box::new(MathRule)).unwrap();
+    ws.register_syntax_rule(BLOCKS_ID, Box::new(DiagramRule))
+        .unwrap();
+    ws.register_syntax_rule(BLOCKS_ID, Box::new(MathRule))
+        .unwrap();
     // L'evidenziato è **inline**: non è disegnabile da un renderer, e non deve
     // comparire nel conto — un allarme che non si può spegnere è un allarme che
     // si impara a ignorare.
-    ws.register_syntax_rule(Box::new(HighlightRule)).unwrap();
+    ws.register_syntax_rule(BLOCKS_ID, Box::new(HighlightRule))
+        .unwrap();
     // Solo uno dei due kind di blocco ha un renderer.
-    ws.register_custom_renderer(Trust::Core, Box::new(DiagramRenderer))
+    ws.register_custom_renderer(BLOCKS_ID, Box::new(DiagramRenderer))
         .unwrap();
 
     // È il conto che il §3.2 chiedeva di poter fare: ogni nome qui è un blocco
@@ -378,7 +394,7 @@ fn un_kind_prodotto_e_mai_disegnato_si_puo_contare() {
 
     // E con anche il suo renderer, il conto è vuoto: è lo stato in cui l'app si
     // monta oggi.
-    ws.register_custom_renderer(Trust::Core, Box::new(MathRenderer))
+    ws.register_custom_renderer(BLOCKS_ID, Box::new(MathRenderer))
         .unwrap();
     assert!(ws.undrawn_kinds().is_empty());
 }

@@ -24,9 +24,10 @@ spostano dal "cablato nell'app" al "registrato" praticamente ogni capitolo di
 FEATURES dal 4 al 22, e sono le tre che il freeze di M4 rende definitive. Accanto a quelle, dal
 secondo giro: **[decisione 0007](../decisions/0007-contesto-di-sessione.md) (contesto e selezione)**, senza cui metà dei capitoli 4, 13
 e 22 non potrà mai essere un provider; **[decisione 0011](../decisions/0011-il-lotto.md) (il lotto — fatto, con la [decisione 0012](../decisions/0012-origine-degli-eventi.md))**,
-prerequisito silenzioso di bulk fix, import, automazioni e database; e **§7.2 + §7.3**, che
-sono il posto dove ogni famiglia di provider futura atterra senza portarsi
-dietro la propria copia della disciplina.
+prerequisito silenzioso di bulk fix, import, automazioni e database; e **§7.2 + §7.3 — chiusi dalla
+[decisione 0021](../decisions/0021-il-confine.md)**, che sono il posto dove ogni
+famiglia di provider futura atterra senza portarsi dietro la propria copia della
+disciplina.
 
 Dal terzo giro se ne aggiungono due dello stesso peso. **Le superfici
 ([decisione 0016](../decisions/0016-cosa-e-una-view.md) — fatta)**: senza area
@@ -51,8 +52,9 @@ estendibile)**~~ — **chiusa** dalla [decisione 0017](../decisions/0017-chi-dis
 e resta qui perché era la sola voce di cui si potesse dire *«l'invariante del
 progetto è già falsa»*: un'estensione di sintassi non poteva essere un plugin, e
 con le ~50 del capitolo 5.2 in arrivo la falsità diventava la
-regola. Accanto, di poco sotto: **§7.5 (i servizi fra plugin)**, senza cui il
-capitolo 21 descrive crate linkati e non moduli installabili separatamente, e
+regola. Accanto, di poco sotto: **§7.5 (i servizi fra plugin — chiuso dalla
+[decisione 0021](../decisions/0021-il-confine.md))**, senza cui il
+capitolo 21 descriveva crate linkati e non moduli installabili separatamente, e
 **§8.1 (la scomposizione del `Workspace`)**, che è il posto dove tutte le altre
 voci di questo piano andranno ad atterrare — una alla volta, come campi.
 
@@ -61,10 +63,12 @@ chiedere di ridisegnarsi ([decisione 0016](../decisions/0016-cosa-e-una-view.md)
 — fatta)**: erano due firme che insieme dicevano che una view è una funzione
 pura sincrona, e su quella forma non reggeva nulla di interattivo né di
 asincrono — cioè i capitoli 11, 12, 11.5 e 22, gli stessi che le superfici
-stavano cercando dove mettere. **§7.4 (gli spazi di nomi degli id)**: non è la
-più grande, è la più **datata** — è l'unica voce dell'intero piano che non
-riguarda ciò che scriveremo ma ciò che avremo già pubblicato, e il suo costo non
-si misura in lavoro ma in id di terzi da rinominare.
+stavano cercando dove mettere. **§7.4 (gli spazi di nomi degli id)**: non era la
+più grande, era la più **datata** — l'unica voce dell'intero piano che non
+riguardava ciò che scriveremo ma ciò che avremmo già pubblicato, e il cui costo
+non si misurava in lavoro ma in id di terzi da rinominare. **Chiusa** dalla
+[decisione 0021](../decisions/0021-il-confine.md), che è stata pagata al prezzo
+previsto: nessuno, perché nessun id di terzi esiste ancora.
 
 In questo scaglione il quinto giro ne aveva messa una terza, la **§4.2 (il
 modello parsato in mano ai provider — ora chiusa con la
@@ -90,10 +94,13 @@ rende una inesprimibile, e lo fa su un canale che la [decisione 0005](../decisio
 kernel-owned e non scavalcabili, quindi tutte le famiglie che vorrebbero
 estenderli (7.3, 8.2, 7.2, 10, 15.1) hanno una strada sola, il `Custom`, cioè un
 vocabolario privato accanto a quello ufficiale che dice la stessa cosa. Sotto,
-di poco: **§7.1** e **§6.2**, che non rendono inesprimibile niente ma
-moltiplicano ogni voce futura — l'una per il numero di implementazioni
+di poco: **§7.1** e **§6.2**, che non rendevano inesprimibile niente ma
+moltiplicavano ogni voce futura — l'una per il numero di implementazioni
 dell'host, l'altra per il numero di linguaggi in cui la stessa regola va
-scritta. La seconda è **chiusa** con la
+scritta. La prima è **chiusa** con la
+[decisione 0021](../decisions/0021-il-confine.md), e il moltiplicatore è
+sparito: una politica nuova è un `impl Policy` da nove righe invece di una impl
+da ventiquattro metodi. La seconda è **chiusa** con la
 [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md), insieme al
 §6.1: il moltiplicatore resta (le regole condivise sono ancora scritte due
 volte) ma non moltiplica più il **rischio**, perché una fixture generata tiene

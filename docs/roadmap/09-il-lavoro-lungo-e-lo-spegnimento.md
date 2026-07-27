@@ -54,7 +54,7 @@ runner dei job del §9.3, che oggi eseguirebbe soltanto funzioni pure.
 
 ### 9.2 Non c'è un ciclo di vita: si apre e basta
 
-*ex §1.35 · contratto · **P0 condizionale** — scade col freeze **solo se** il gemello nasce senza default (come il §7.1: P0 su una delle due strade)*
+*ex §1.35 · contratto · **P0 condizionale** — scade col freeze **solo se** il gemello nasce senza default (era la stessa forma del §7.1, dove le due strade si sono rivelate due metà: [decisione 0021](../decisions/0021-il-confine.md))*
 
 - [ ] **Il contratto non ha uno spegnimento.** `IndexProvider` ha `activate` e
       `flush` ma **nessun `close`/`deactivate`** (`abi/traits.rs:917-949`);
@@ -75,6 +75,9 @@ runner dei job del §9.3, che oggi eseguirebbe soltanto funzioni pure.
       provider di terzi già scritto smetterebbe di compilare. Se ammette un
       default no-op, è additiva e sta col §9.5, che è P1. È la stessa forma del
       §7.1: la voce è P0 **su una delle due strade**, e la strada va scelta ora.
+      Là la risposta è stata «tutte e due, perché erano due metà»
+      ([decisione 0021](../decisions/0021-il-confine.md)); qui non è detto che
+      valga, ed è la domanda da porsi.
       La metà implementativa — chi chiama, quando, e cosa succede a metà — è il
       §9.5.
 - [ ] Va deciso con il §9.4 (disattivazione a runtime) e il §9.1 (un job in
@@ -202,7 +205,8 @@ reload), 26.2-26.3 (dove il watcher non c'è).
       «questo vault ha o non ha il rilevamento delle modifiche esterne» — che la
       shell mostri e che una feature possa leggere, più un esito per la
       sincronizzazione per-path che smetta di essere scartato. La forma è quella
-      del §7.6 (l'inventario di ciò che è attivo) e il messaggio è quello del
+      del §7.6 — l'inventario di ciò che è attivo, che adesso **c'è**
+      ([decisione 0021](../decisions/0021-il-confine.md)) — e il messaggio è quello del
       §20.2; la decisione da prendere qui è **cosa promette FubMD dove il
       rilevamento non c'è**, perché oggi promette la stessa cosa e ne mantiene
       un'altra.

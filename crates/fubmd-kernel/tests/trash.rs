@@ -134,6 +134,10 @@ impl Fixture {
             .register(Box::new(PlainProvider))
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
+        // I plugin di prova si dichiarano prima di registrare (§7.3): il
+        // kernel non presta capacità a una stringa.
+        ws.register_core_feature("test.spia", "test.spia")
+            .expect("dichiarato");
         ws.register_index_provider("test.spia", Box::new(SpyIndex(self.calls.clone())))
             .expect("attivazione");
         ws.reindex().expect("reindex");

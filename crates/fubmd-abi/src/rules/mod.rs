@@ -24,6 +24,8 @@
 //!
 //! ## La mappa
 //!
+//! - [`ids`] — **di chi è un id**: la regola dei namespace, per tutti e otto
+//!   gli spazi di nomi del contratto (§7.4);
 //! - [`path`] — la chiave di risoluzione (trim, NFC, minuscolo), i link
 //!   markdown relativi, il percent-encoding;
 //! - [`properties`] — filtro, ordinamento e faccette sul frontmatter;
@@ -51,6 +53,7 @@
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
 
 pub mod health;
+pub mod ids;
 pub mod path;
 pub mod properties;
 pub mod tag;

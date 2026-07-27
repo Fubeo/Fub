@@ -22,7 +22,7 @@ use fubmd_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{EventHandler, HostApi};
+use fubmd_abi::traits::{EventHandler, HostApi, ReadApi};
 use fubmd_abi::transfer::{
     ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection, ExportTarget,
     ImportOutcome, ImportProvider, ImportReport, ImportRequest, ImportSource, ImportedDocument,
@@ -137,7 +137,7 @@ impl ExportProvider for SpyExport {
     fn export(
         &self,
         request: &ExportRequest,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<ExportReport, PluginError> {
         let docs = request.selection.resolve(host)?;
         let elenco = docs
@@ -184,6 +184,12 @@ fn workspace() -> (tempfile::TempDir, Workspace) {
         .register(Box::new(PlainProvider))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    for plugin in ["spia.csv", "spia.txt", "spia.handler", "spia"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     ws.reindex().expect("reindex");
     (dir, ws)
 }
@@ -200,7 +206,8 @@ fn the_first_provider_that_claims_the_source_takes_it() {
             log: log.clone(),
             writes: None,
         }),
-    );
+    )
+    .expect("registrato");
     ws.register_import_provider(
         "spia.txt",
         Box::new(SpyImport {
@@ -208,7 +215,8 @@ fn the_first_provider_that_claims_the_source_takes_it() {
             log: log.clone(),
             writes: Some(DocId::new("nuova.txt")),
         }),
-    );
+    )
+    .expect("registrato");
 
     ws.import(
         &ImportSource::text_source("dati.txt", "contenuto"),
@@ -234,7 +242,8 @@ fn events_emitted_during_an_import_arrive_after_it_returns() {
     let (_g, mut ws) = workspace();
     let log: Log = Arc::default();
 
-    ws.register_event_handler("spia.handler", Box::new(SpyHandler(log.clone())));
+    ws.register_event_handler("spia.handler", Box::new(SpyHandler(log.clone())))
+        .expect("registrato");
     ws.register_import_provider(
         "spia.txt",
         Box::new(SpyImport {
@@ -242,7 +251,8 @@ fn events_emitted_during_an_import_arrive_after_it_returns() {
             log: log.clone(),
             writes: Some(DocId::new("nuova.txt")),
         }),
-    );
+    )
+    .expect("registrato");
 
     ws.import(
         &ImportSource::text_source("dati.txt", "contenuto"),
@@ -273,7 +283,8 @@ fn a_provider_cannot_name_a_document_outside_the_vault() {
             log: Arc::default(),
             writes: Some(DocId::new("../fuori.txt")),
         }),
-    );
+    )
+    .expect("registrato");
 
     let report = ws
         .import(
@@ -298,7 +309,8 @@ fn a_provider_cannot_name_a_document_outside_the_vault() {
 #[test]
 fn an_export_sees_the_whole_world_through_a_read_only_host() {
     let (_g, mut ws) = workspace();
-    ws.register_export_provider("spia", Box::new(SpyExport));
+    ws.register_export_provider("spia", Box::new(SpyExport))
+        .expect("registrato");
 
     let report = ws
         .export(&ExportRequest::new(

@@ -5,12 +5,12 @@
 //! ha un `FormatProvider` (è un plugin), quindi non può parsare un documento per
 //! ricavarne gli heading. Li chiede al kernel — che il modello parsato ce l'ha —
 //! con [`IndexQuery::Outline`], la stessa porta dei backlink
-//! ([`HostApi::query_index`]). Il click su un heading torna come `on_action` e la
+//! ([`HostQuery::query_index`]). Il click su un heading torna come `on_action` e la
 //! view risponde [`ViewUpdate::Reveal`], che la shell esegue portando l'editor
 //! sull'intervallo. Nessun pezzo del giro è cablato nell'app.
 //!
 //! È anche il primo cliente della **selezione** nel contesto di sessione
-//! ([`HostApi::active_context`]): la sezione in cui sta il cursore è segnata,
+//! ([`HostEnv::active_context`]): la sezione in cui sta il cursore è segnata,
 //! e lo è solo quando lo span è vero — a buffer sporco
 //! ([`Selection::span`] assente) gli offset del modello sono di un altro testo,
 //! e segnare la sezione sbagliata è peggio che non segnarne nessuna.
@@ -20,7 +20,7 @@ use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::model::{Heading, Span};
 use fubmd_abi::session::{ContextKind, ContextMask, Selection};
 use fubmd_abi::traits::{
-    HostApi, IndexQuery, IndexResult, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 
@@ -70,7 +70,7 @@ impl ViewProvider for OutlineView {
     fn render_view(
         &self,
         _instance: &ViewInstance,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         let Some(context) = host.active_context() else {
             return Ok(placeholder("Nessuna nota aperta."));

@@ -37,7 +37,7 @@
 //!
 //! # Cosa NON c'è qui, e perché
 //!
-//! Non c'è un comando che **legge** il cestino: `HostApi::list_trash` è una
+//! Non c'è un comando che **legge** il cestino: `VaultRead::list_trash` è una
 //! capacità, ma un elenco non è l'esito di un comando (`CommandOutcome` porta
 //! un messaggio e un effetto, non dati). Chi deve mostrare il cestino lo legge
 //! dal canale di lettura — la shell dal suo IPC, una view da `list_trash`.
@@ -952,6 +952,7 @@ mod tests {
     use crate::testing::MemoryHost;
     use fubmd_abi::model::{DocId, ListItem};
     use fubmd_abi::session::{Selection, ViewContext};
+    use fubmd_abi::traits::VaultRead;
     use serde_json::json;
 
     fn invoke(

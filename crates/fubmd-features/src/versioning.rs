@@ -835,6 +835,7 @@ mod tests {
     use crate::testing::MemoryHost;
 
     use super::*;
+    use fubmd_abi::traits::{DataWrite, HostEnv, VaultWrite};
 
     fn id(s: &str) -> DocId {
         DocId::new(s)

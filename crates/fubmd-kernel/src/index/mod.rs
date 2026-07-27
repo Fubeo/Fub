@@ -40,6 +40,7 @@ pub(crate) use core::CoreIndex;
 pub use routing::RouteConflict;
 pub(crate) use routing::{RouteTable, Target};
 
+use crate::providers::ProviderTable;
 use crate::registry::FormatRegistry;
 
 /// Gli indici del workspace: quello del kernel, quelli registrati, e la tabella
@@ -55,7 +56,7 @@ pub(crate) struct Indexes {
     /// precedenza sulle foglie che sa valutare, non un privilegio nel codice.
     pub(crate) core: CoreIndex,
     /// Gli indici registrati, col proprio id (che è anche il loro spazio dati).
-    pub(crate) providers: Vec<(String, Box<dyn IndexProvider>)>,
+    pub(crate) providers: ProviderTable<(String, Box<dyn IndexProvider>)>,
     pub(crate) routes: RouteTable,
 }
 
@@ -68,7 +69,7 @@ impl Indexes {
             .expect("la tabella è vuota: il primo a dichiarare non può confliggere");
         Indexes {
             core,
-            providers: Vec::new(),
+            providers: ProviderTable::new(),
             routes,
         }
     }
@@ -154,33 +155,6 @@ impl Indexes {
         }
     }
 }
-
-/// Perché un indice non si è registrato — o si è registrato **senza** la
-/// propria memoria.
-///
-/// Sono due esiti diversi e chi chiama deve poterli distinguere: il primo dice
-/// che quell'indice non c'è (e le sue domande non hanno un destinatario), il
-/// secondo che c'è e reindicizzerà tutto, che è lento e non sbagliato. Prima
-/// erano un `PluginError` solo, perché il conflitto non poteva accadere: chi
-/// arrivava secondo vinceva o perdeva a seconda dell'ordine, in silenzio.
-#[derive(Debug)]
-pub enum IndexError {
-    /// Le famiglie che dichiarava sono già di un altro: **non è registrato**.
-    Route(RouteConflict),
-    /// È registrato, ma `activate` è fallita: non ha ritrovato ciò che sapeva.
-    Activate(PluginError),
-}
-
-impl std::fmt::Display for IndexError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IndexError::Route(c) => write!(f, "{c}"),
-            IndexError::Activate(e) => write!(f, "l'indice è registrato ma non si è attivato: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for IndexError {}
 
 /// L'id dell'indice del kernel. Non è uno spazio dati (il core non persiste
 /// niente per conto proprio: la sua verità è il vault), è il nome con cui

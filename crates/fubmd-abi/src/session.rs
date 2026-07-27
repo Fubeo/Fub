@@ -22,7 +22,7 @@
 //! sorgente che il kernel ha in mano — cioè quando il buffer non ha modifiche
 //! non salvate. Non è prudenza: è l'unico modo di rendere impossibile l'errore
 //! che il contratto altrimenti inviterebbe a fare — leggere il documento con
-//! [`HostApi::read_document`](crate::traits::HostApi::read_document) e
+//! [`VaultRead::read_document`](crate::traits::VaultRead::read_document) e
 //! ritagliarlo con uno span calcolato su un altro testo, cioè tagliare i byte
 //! sbagliati mentre l'utente scrive. Chi vuole il testo lo ha sempre; chi vuole
 //! la posizione la ha quando è vera.
@@ -118,7 +118,7 @@ impl Selection {
 /// contiene.
 ///
 /// Lo **imposta la shell** e lo **legge** un provider via
-/// [`HostApi::active_context`](crate::traits::HostApi::active_context). Non ha
+/// [`HostEnv::active_context`](crate::traits::HostEnv::active_context). Non ha
 /// un gemello che scrive: quale nota si guarda, dove si è cliccato e in che
 /// modalità si legge sono decisioni dell'utente sull'app, non capacità da
 /// concedere a un plugin.

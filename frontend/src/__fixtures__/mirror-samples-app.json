@@ -8,7 +8,52 @@
       "extensions": [
         "md"
       ],
-      "versioning": true
+      "plugins": [
+        {
+          "id": "fubmd.versioning",
+          "name": "Versioning",
+          "version": "0.1.0",
+          "abi_version": "0.1.0",
+          "trust": "core",
+          "permissions": {
+            "fubmd:call-service": true,
+            "fubmd:read-vault": true,
+            "fubmd:run-command": true,
+            "fubmd:write-vault": true
+          },
+          "registrations": [
+            {
+              "kind": "event_handler",
+              "id": "fubmd.versioning"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "PluginInfo": [
+    {
+      "id": "com.acme.tasks",
+      "name": "Tasks",
+      "version": "2.1.0",
+      "abi_version": "0.1.0",
+      "trust": "community",
+      "permissions": {
+        "fubmd:network": [
+          "api.acme.com"
+        ],
+        "fubmd:read-vault": true
+      },
+      "registrations": [
+        {
+          "kind": "view",
+          "id": "com.acme.tasks:board"
+        },
+        {
+          "kind": "command",
+          "id": "com.acme.tasks:archive"
+        }
+      ]
     }
   ],
   "EmbedContent": [

@@ -8,9 +8,13 @@
 //! in `frontend/src/host/mirror.test.ts`. Rigenerazione: `UPDATE_MIRROR=1 cargo
 //! test -p fubmd-app --test ts_mirror_app`.
 
+use fubmd_abi::options::permission;
+use fubmd_abi::traits::PluginPermissions;
 use fubmd_abi::ui::UiNode;
 use fubmd_app_lib::{EmbedContent, VaultInfo, WorkspaceMeta};
-use fubmd_kernel::{RenderedDocument, RenderedPart};
+use fubmd_kernel::{
+    PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
+};
 use serde_json::{json, Value};
 
 fn to_value<T: serde::Serialize>(v: T) -> Value {
@@ -25,7 +29,47 @@ fn expected() -> Value {
             root: "/vault".into(),
             documents: vec!["a.md".into()],
             extensions: vec!["md".into()],
-            versioning: true,
+            // Il campione porta un plugin con una registrazione: un inventario
+            // vuoto sarebbe una lista, non l'inventario del §7.6, e non
+            // proverebbe la forma di ciò che la shell deve saper leggere.
+            plugins: vec![PluginInfo {
+                id: "fubmd.versioning".into(),
+                name: "Versioning".into(),
+                version: "0.1.0".into(),
+                abi_version: "0.1.0".into(),
+                trust: Trust::Core,
+                permissions: PluginPermissions::core().granted,
+                registrations: vec![Registration {
+                    kind: RegistrationKind::EventHandler,
+                    id: "fubmd.versioning".into(),
+                }],
+            }],
+        })],
+        // L'inventario del §7.6 ha un campione **suo** e non solo quello
+        // annidato in `VaultInfo`: il lato TS pretende che ogni tipo della
+        // tabella dei mirror abbia dei casi, e un tipo che vive solo dentro un
+        // altro non verrebbe controllato campo per campo.
+        "PluginInfo": [to_value(PluginInfo {
+            id: "com.acme.tasks".into(),
+            name: "Tasks".into(),
+            version: "2.1.0".into(),
+            abi_version: "0.1.0".into(),
+            trust: Trust::Community,
+            // Un permesso che porta un PARAMETRO: è la forma che un booleano
+            // non poteva avere (decisione 0017), e il mirror deve vederla.
+            permissions: PluginPermissions::of(&[permission::READ_VAULT])
+                .granted
+                .with(permission::NETWORK, serde_json::json!(["api.acme.com"])),
+            registrations: vec![
+                Registration {
+                    kind: RegistrationKind::View,
+                    id: "com.acme.tasks:board".into(),
+                },
+                Registration {
+                    kind: RegistrationKind::Command,
+                    id: "com.acme.tasks:archive".into(),
+                },
+            ],
         })],
         "EmbedContent": [to_value(EmbedContent {
             doc_id: "a.md".into(),

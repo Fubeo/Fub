@@ -64,11 +64,11 @@ impl<'de> Deserialize<'de> for JobId {
 
 /// Una voce del cestino del vault.
 ///
-/// Sale nel contratto con la decisione 0013 perché [`HostApi::list_trash`] la restituisce:
+/// Sale nel contratto con la decisione 0013 perché [`VaultRead::list_trash`] la restituisce:
 /// prima viveva nel kernel, dove il solo lettore era la shell attraverso un
 /// comando Tauri. Porta **due** id perché sono due domande diverse — dove il
 /// file si trova ora (`id`, ed è quello che si passa a
-/// [`restore_document`](HostApi::restore_document)) e dove tornerebbe
+/// [`restore_document`](VaultStructure::restore_document)) e dove tornerebbe
 /// (`original`) — e un cestino che sapesse solo la prima non saprebbe
 /// ripristinare.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,37 +89,43 @@ pub struct TrashEntry {
 // chiamate come host function attraverso il confine.
 // ---------------------------------------------------------------------------
 
-/// Le capacità che il kernel concede a un provider/plugin.
+// ---------------------------------------------------------------------------
+// Le capacità, per famiglia
+// ---------------------------------------------------------------------------
+//
+// Le ventidue capacità della decisione 0013 — ventiquattro, contando le due che
+// la 0018 ha aggiunto — non stanno in un trait solo, e la ragione è il §7.1: un
+// trait solo si implementa **per intero o per niente**, e chi ne può fare solo
+// una metà (il percorso di render, che ha il workspace in prestito condiviso;
+// un comando che si è dichiarato di sola lettura; a M5 un componente senza il
+// permesso di scrivere) è costretto a scrivere l'altra metà come una fila di
+// rifiuti. Erano ottantotto corpi di metodo per quattro implementazioni, di cui
+// trentasei non facevano niente se non dire di no.
+//
+// Le famiglie sono nove e sono scelte su un criterio solo: **cosa vuol dire
+// negarne una.** È per questo che la lettura del vault sta separata dalla sua
+// scrittura e dalle operazioni strutturali (i tre gradi che `read_vault` e
+// `write_vault` distinguono, §7.3), che i blob del plugin si dividono nello
+// stesso modo, e che ciò che l'host sa e il provider no — l'orologio, il
+// pannello attivo — è una famiglia sua e non un residuo.
+//
+// Chi implementa tutto lo dichiara una volta: [`HostApi`] e [`ReadApi`] sono
+// **somme**, con una impl generica, e nessuno le implementa a mano. Chi le
+// riceve continua a scrivere `&mut dyn HostApi` come prima.
+//
+// Al confine WIT le nove famiglie sono nove `interface`, e lì la scomposizione
+// smette di essere una comodità di tipi: un componente a cui il mondo non
+// importa `host-vault-write` non ha **modo** di chiamarla — il rifiuto non è
+// più una risposta a runtime, è l'assenza della funzione.
+
+/// Leggere il vault: la sorgente, la struttura, l'elenco, il cestino.
 ///
-/// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
-/// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
-/// il dogfooding del versioning ha trovato il buco: un `EventHandler` scritto
-/// come lo scriverebbe un plugin non aveva modo di tenere uno store di snapshot
-/// su disco né di sapere che ore sono. La decisione 0013 ha chiuso l'elenco: dopo il
-/// freeze un metodo **aggiunto** qui è una minor, uno **tolto** è una major.
-///
-/// # Visibilità durante i callback (contratto)
-///
-/// Durante un callback **in scrittura** (`handle`, `on_action`, `flush`,
-/// `activate`) un provider **non vede sé stesso né i fratelli in corso di
-/// chiamata**: l'host li estrae dal workspace per la durata del giro, quindi
-/// una [`query_index`](HostApi::query_index) fatta da lì dentro può trovare
-/// meno provider di quanti ne esistano — al limite nessuno. Non è un
-/// malfunzionamento: un callback in scrittura risponde da ciò che ha già in
-/// mano, non interrogando il mondo che lo sta chiamando. Il percorso di
-/// **lettura** (`render_view`) invece gira sotto prestito condiviso e vede il
-/// mondo intero, indici compresi.
-pub trait HostApi: Send + Sync {
+/// È la famiglia sotto
+/// [`permission::READ_VAULT`](crate::options::permission::READ_VAULT), ed è la
+/// sola che ogni percorso ha — anche quello di render, anche una simulazione.
+pub trait VaultRead: Send + Sync {
     /// Legge la sorgente di un documento dal vault.
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
-    /// Scrive la sorgente di un documento nel vault.
-    ///
-    /// È la scrittura di chi il documento intero ce l'ha in mano: l'editor che
-    /// salva il proprio buffer, un importer che crea una nota. Chi vuole
-    /// cambiarne **un pezzo** usa [`apply_edit`](HostApi::apply_edit) — non per
-    /// eleganza, ma perché una riscrittura totale non dice cosa è cambiato e
-    /// non si accorge di chi ha scritto nel frattempo.
-    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
 
     /// La revisione del sorgente di un documento: l'identità del testo su cui
     /// si sta per calcolare una modifica.
@@ -128,27 +134,11 @@ pub trait HostApi: Send + Sync {
     /// l'uguaglianza è contratto) e come l'host la derivi non è promesso a
     /// nessuno: un provider che se la ricavasse da sé dal sorgente si legherebbe
     /// a questa implementazione. Vedi [`crate::edit`].
+    ///
+    /// Sta fra le **letture**, e non è una svista: chi prepara una modifica
+    /// (calcolare gli edit è la parte lunga) può farlo mentre disegna, e
+    /// consegnarla poi da dove si scrive.
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError>;
-
-    /// Cambia **un pezzo** di documento: gli edit della richiesta, tutti o
-    /// nessuno, sul sorgente che la sua `base` nomina.
-    ///
-    /// È la primitiva su cui poggia ogni modifica programmatica che non sia la
-    /// riscrittura di un file intero — spuntare un task, scrivere una proprietà,
-    /// correggere un link, inserire un template — e senza la quale ognuna di
-    /// esse rileggerebbe e riscriverebbe tutto, perdendo per strada cosa è
-    /// cambiato e chi altro stava scrivendo.
-    ///
-    /// [`PluginError::Conflict`] = il documento è cambiato da quando gli edit
-    /// sono stati calcolati, e non è stato scritto niente: chi chiama rilegge,
-    /// ricalcola e riprova. [`PluginError::BadArgs`] = gli edit non stanno in
-    /// piedi (fuori dal sorgente, a metà di un carattere, sovrapposti).
-    ///
-    /// Il rapporto torna nelle coordinate del testo **nuovo** e porta ciò che
-    /// era stato sostituito: è quanto serve a mettere il cursore dove l'utente
-    /// se lo aspetta, e a costruire l'edit inverso
-    /// ([`EditReport::inverse`](crate::edit::EditReport::inverse)).
-    fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
 
     /// I documenti del vault, in ordine di id, **a finestra**.
     ///
@@ -167,6 +157,7 @@ pub trait HostApi: Send + Sync {
     ///
     /// [`Event::VaultOpened`]: crate::Event::VaultOpened
     fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError>;
+
     /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
     /// a partire da un id qualsiasi. Se l'id è già libero, è lui.
     ///
@@ -200,7 +191,7 @@ pub trait HostApi: Send + Sync {
     // l'altra no.
 
     /// La struttura di un documento: il modello parsato, con gli `Span`. Il
-    /// gemello di [`read_document`](HostApi::read_document), che ne dà la
+    /// gemello di [`read_document`](VaultRead::read_document), che ne dà la
     /// sorgente.
     ///
     /// È il verso che mancava. Uno c'era, ed è
@@ -236,9 +227,9 @@ pub trait HostApi: Send + Sync {
     /// verità del vault è ciò che sta sul disco.
     ///
     /// Documento che il vault non conosce → [`PluginError::Internal`] con il
-    /// nome dentro; è la stessa risposta di [`read_document`](HostApi::read_document),
-    /// e per la stessa ragione — non è una domanda malformata, è una domanda su
-    /// qualcosa che non c'è.
+    /// nome dentro; è la stessa risposta di
+    /// [`read_document`](VaultRead::read_document), e per la stessa ragione —
+    /// non è una domanda malformata, è una domanda su qualcosa che non c'è.
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError>;
 
     /// Di che formato è un documento, e che sintassi capirebbe: il
@@ -256,27 +247,84 @@ pub trait HostApi: Send + Sync {
     /// fare su tutta una lista senza pagare un'apertura a testa.
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat>;
 
-    // --- operazioni strutturali sul vault -----------------------------------
-    //
-    // Creare, rinominare, cestinare: le tre cose che si fanno a un documento
-    // *senza aprirlo*. Fino alla decisione 0013 erano kernel-owned e fuori dal contratto, e
-    // la conseguenza era che template, daily note, import, auto-archiviazione e
-    // cleanup wizard (FEATURES 16, 17, 8.3, 7.2) non potevano essere un plugin:
-    // il vault sapeva farle, il confine no.
-    //
-    // Sono le capacità che il §7.3 metterà sotto `write_vault`. Oggi il varco
-    // che le rifiuta è quello della decisione 0010: un comando in sola lettura, o
-    // simulato, le riceve tutte negate.
+    /// Il contenuto del cestino, dal più recente al più vecchio.
+    ///
+    /// Sta qui accanto a [`list_documents`](VaultRead::list_documents) e non
+    /// dentro [`IndexQuery`] perché il cestino **non è indicizzato**: una nota
+    /// cestinata non ha modello, né tag, né archi nel grafo — è esattamente
+    /// ciò che l'indice non contiene. Interrogarlo dal canale dati sarebbe
+    /// promettere che il canale dati sappia rispondere su ciò che non ha
+    /// letto.
+    ///
+    /// È una **lettura** e sta fra le letture: un pannello "cestino" è una
+    /// view, e una view disegna dal percorso di render.
+    fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError>;
+}
 
+/// Scrivere il **testo** di un documento che già esiste — o che si sta creando
+/// riscrivendolo per intero.
+///
+/// Due capacità sole, e sono la famiglia più piccola perché è quella su cui si
+/// dice di no più spesso: è ciò che una simulazione non fa, ciò che un comando
+/// dichiarato innocuo non può fare, ciò che un plugin senza
+/// [`permission::WRITE_VAULT`](crate::options::permission::WRITE_VAULT) non
+/// ottiene.
+pub trait VaultWrite: VaultRead {
+    /// Scrive la sorgente di un documento nel vault.
+    ///
+    /// È la scrittura di chi il documento intero ce l'ha in mano: l'editor che
+    /// salva il proprio buffer, un importer che crea una nota. Chi vuole
+    /// cambiarne **un pezzo** usa [`apply_edit`](VaultWrite::apply_edit) — non
+    /// per eleganza, ma perché una riscrittura totale non dice cosa è cambiato
+    /// e non si accorge di chi ha scritto nel frattempo.
+    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+
+    /// Cambia **un pezzo** di documento: gli edit della richiesta, tutti o
+    /// nessuno, sul sorgente che la sua `base` nomina.
+    ///
+    /// È la primitiva su cui poggia ogni modifica programmatica che non sia la
+    /// riscrittura di un file intero — spuntare un task, scrivere una proprietà,
+    /// correggere un link, inserire un template — e senza la quale ognuna di
+    /// esse rileggerebbe e riscriverebbe tutto, perdendo per strada cosa è
+    /// cambiato e chi altro stava scrivendo.
+    ///
+    /// [`PluginError::Conflict`] = il documento è cambiato da quando gli edit
+    /// sono stati calcolati, e non è stato scritto niente: chi chiama rilegge,
+    /// ricalcola e riprova. [`PluginError::BadArgs`] = gli edit non stanno in
+    /// piedi (fuori dal sorgente, a metà di un carattere, sovrapposti).
+    ///
+    /// Il rapporto torna nelle coordinate del testo **nuovo** e porta ciò che
+    /// era stato sostituito: è quanto serve a mettere il cursore dove l'utente
+    /// se lo aspetta, e a costruire l'edit inverso
+    /// ([`EditReport::inverse`](crate::edit::EditReport::inverse)).
+    fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
+}
+
+/// Le operazioni **strutturali** sul vault: creare, rinominare, cestinare,
+/// ripristinare, distruggere.
+///
+/// Creare, rinominare, cestinare sono le tre cose che si fanno a un documento
+/// *senza aprirlo*. Fino alla decisione 0013 erano kernel-owned e fuori dal
+/// contratto, e la conseguenza era che template, daily note, import,
+/// auto-archiviazione e cleanup wizard (FEATURES 16, 17, 8.3, 7.2) non potevano
+/// essere un plugin: il vault sapeva farle, il confine no.
+///
+/// Stanno sotto
+/// [`permission::WRITE_VAULT`](crate::options::permission::WRITE_VAULT) come
+/// [`VaultWrite`], e sono una famiglia a parte perché il no è di **specie
+/// diversa**: chi scrive testo cambia una nota che l'utente ha già, chi cestina
+/// gliela toglie. Un host può voler concedere il primo e negare il secondo, e
+/// finché erano lo stesso trait quella distinzione non era esprimibile.
+pub trait VaultStructure: VaultRead {
     /// Crea un documento **nuovo** con il sorgente dato, e fallisce se quel
     /// path è già occupato.
     ///
-    /// È questo rifiuto a distinguerla da [`write_document`](HostApi::write_document),
+    /// È questo rifiuto a distinguerla da [`write_document`](VaultWrite::write_document),
     /// che crea ciò che non c'è e sovrascrive ciò che c'è: un plugin di
     /// template che scrivesse la nota di oggi con `write_document` e sbagliasse
     /// la data **cancellerebbe** una nota dell'utente, senza che niente nel
     /// codice sembri una cancellazione. Chi vuole un nome comunque libero lo
-    /// chiede a [`free_name`](HostApi::free_name) e passa quello: due capacità
+    /// chiede a [`free_name`](VaultRead::free_name) e passa quello: due capacità
     /// che si compongono dicono cosa succede, una che rinomina in silenzio no.
     ///
     /// L'id è quello del chiamante e non un nome da cui l'host deriva un path:
@@ -307,20 +355,10 @@ pub trait HostApi: Send + Sync {
     ///
     /// Si chiama `trash_` e non `delete_` perché è ciò che fa: il documento
     /// esce dal vault (e dagli indici, e da
-    /// [`list_documents`](HostApi::list_documents)) ma non è distrutto, e l'id
+    /// [`list_documents`](VaultRead::list_documents)) ma non è distrutto, e l'id
     /// restituito è quello con cui si ripristina. L'unica capacità che
-    /// distrugge è [`empty_trash`](HostApi::empty_trash), e si chiama così.
+    /// distrugge è [`empty_trash`](VaultStructure::empty_trash), e si chiama così.
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError>;
-
-    /// Il contenuto del cestino, dal più recente al più vecchio.
-    ///
-    /// Sta qui accanto a [`list_documents`](HostApi::list_documents) e non
-    /// dentro [`IndexQuery`] perché il cestino **non è indicizzato**: una nota
-    /// cestinata non ha modello, né tag, né archi nel grafo — è esattamente
-    /// ciò che l'indice non contiene. Interrogarlo dal canale dati sarebbe
-    /// promettere che il canale dati sappia rispondere su ciò che non ha
-    /// letto.
-    fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError>;
 
     /// Riporta nel vault una voce del cestino (`entry` è il suo
     /// [`TrashEntry::id`]) e restituisce il [`DocId`] con cui è tornata: il suo
@@ -329,7 +367,7 @@ pub trait HostApi: Send + Sync {
     /// Il ripristino è una scrittura normale — parse, grafo, indici, eventi —
     /// e quindi è a sua volta annullabile. Se il path d'origine è di nuovo
     /// occupato e `to` non è stato dato, è un errore e non un nome scelto
-    /// d'ufficio: chi chiama ha [`free_name`](HostApi::free_name) e decide.
+    /// d'ufficio: chi chiama ha [`free_name`](VaultRead::free_name) e decide.
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError>;
 
     /// Svuota il cestino e dice quante voci ha distrutto.
@@ -343,33 +381,48 @@ pub trait HostApi: Send + Sync {
     /// a 32 bit, e un tipo che cambia larghezza a seconda di chi lo compila non
     /// è un tipo del contratto.
     fn empty_trash(&mut self) -> Result<u64, PluginError>;
+}
 
-    /// Emette un evento sull'event bus.
-    fn emit(&mut self, event: Event);
-    /// Chiede l'esecuzione in background di un job ([`Plugin::run_job`]).
-    /// Ritorna subito con l'identità del job; l'esito arriverà come
-    /// [`Event::JobDone`](crate::Event::JobDone) sul giro sincrono normale.
-    fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
+// --- storage persistente per-plugin -----------------------------------------
+//
+// Blob nominati con path relativi dentro uno spazio che l'host assegna e
+// impone (`.fubmd-data/plugins/<id>/`): il plugin non conosce la radice del
+// vault, non compone path assoluti e non può uscire dal proprio recinto.
+// È l'alternativa a un'API filesystem scoped, ed è stata scelta perché il
+// recinto qui è una proprietà della firma, non una convenzione da
+// rispettare — vedi docs/architecture/plugin-boundary.md.
+//
+// Sono **due** famiglie e non una, per la stessa ragione per cui lo sono la
+// lettura e la scrittura del vault: il percorso di render può rileggere ciò che
+// il provider si è salvato (un pannello che ricorda la sezione aperta) e non
+// deve poter scrivere mentre disegna.
 
-    // --- storage persistente per-plugin -------------------------------------
-    //
-    // Blob nominati con path relativi dentro uno spazio che l'host assegna e
-    // impone (`.fubmd-data/plugins/<id>/`): il plugin non conosce la radice del
-    // vault, non compone path assoluti e non può uscire dal proprio recinto.
-    // È l'alternativa a un'API filesystem scoped, ed è stata scelta perché il
-    // recinto qui è una proprietà della firma, non una convenzione da
-    // rispettare — vedi docs/architecture/plugin-boundary.md.
-
+/// Rileggere i propri blob persistenti.
+pub trait DataRead: Send + Sync {
     /// Legge un blob. Assente → `Ok(None)` (mancare non è un errore).
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError>;
+    /// I blob sotto un prefisso, path relativi allo spazio del plugin e
+    /// ordinati. Prefisso inesistente → lista vuota.
+    fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError>;
+}
+
+/// Scrivere e cancellare i propri blob persistenti.
+pub trait DataWrite: DataRead {
     /// Scrive un blob, creando le directory intermedie.
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError>;
     /// Cancella un blob. Idempotente: cancellare ciò che non c'è riesce.
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError>;
-    /// I blob sotto un prefisso, path relativi allo spazio del plugin e
-    /// ordinati. Prefisso inesistente → lista vuota.
-    fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError>;
+}
 
+/// Ciò che **l'host sa e il provider no**: che ore sono, e cosa sta guardando
+/// l'utente.
+///
+/// Le due capacità sembrano lontane e sono la stessa specie di cosa — un fatto
+/// dell'host che chi gira dentro il confine non può calcolarsi — e si negano
+/// insieme: un componente sotto sandbox può non avere orologio (WASI lo può
+/// negare) e può non avere titolo a sapere quale nota è aperta. Averle in una
+/// famiglia sola è ciò che permette di dirlo in un posto solo.
+pub trait HostEnv: Send + Sync {
     /// Millisecondi dall'epoca UNIX, secondo l'host.
     ///
     /// Il tempo è una capacità come le altre: un componente WASM può non avere
@@ -377,24 +430,6 @@ pub trait HostApi: Send + Sync {
     /// deterministico nei test. Un plugin che chiamasse `SystemTime::now` per
     /// conto proprio sarebbe non testabile e, sotto sandbox, non funzionante.
     fn now_unix_millis(&self) -> u64;
-
-    // --- interrogazione dell'indice e contesto della sessione ---------------
-    //
-    // Le due capacità che un `ViewProvider` deve avere per essere un vero
-    // provider e non un guscio a cui l'app passa i dati già pronti: sapere
-    // *cosa* c'è nel vault (backlink, ricerca) e *quale* documento è aperto.
-    // Senza, un pannello backlink in WASM non potrebbe fare né l'una né l'altra
-    // cosa — le farebbe l'app per lui, cioè un dogfooding finto. Vedi
-    // docs/architecture/plugin-boundary.md, "Interrogazione e contesto".
-
-    /// Interroga il vault: backlink, grafo, struttura, tag, proprietà, salute e
-    /// ricerca full-text passano tutti di qui, con la stessa semantica di
-    /// dispatch del kernel (ciò di cui il kernel è già l'unica fonte di verità
-    /// lo serve lui, il resto i provider registrati; vedi [`IndexQuery`]).
-    ///
-    /// È `&self` — una query non muta niente — ed è la ragione per cui un indice
-    /// può servirla sotto prestito condiviso del workspace, come una view.
-    fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `None` = la shell non ne ha ancora
@@ -417,7 +452,127 @@ pub trait HostApi: Send + Sync {
     /// permette di distinguerli già ora; legarli a un pannello *fisso* è
     /// l'altra metà del problema, e arriva con le istanze di view (§2.3).
     fn active_context(&self) -> Option<ViewContext>;
+}
 
+/// Farsi sentire: emettere un evento, chiedere lavoro lungo.
+///
+/// Le due sono una famiglia perché si negano insieme e per la stessa ragione:
+/// sono **effetti che una simulazione non può ritirare**. Un `DocumentChanged`
+/// finto fa ricaricare l'editor su una modifica che non è avvenuta; un job
+/// gira fuori dal giro sincrono e rientra come evento quando la simulazione è
+/// finita da un pezzo.
+pub trait HostEvents: Send + Sync {
+    /// Emette un evento sull'event bus.
+    ///
+    /// È l'unica capacità del contratto **senza esito**, e ne segue una cosa
+    /// che va detta: un host che non la concede non ha modo di rifiutare, può
+    /// solo non emettere. Il silenzio è il no.
+    fn emit(&mut self, event: Event);
+    /// Chiede l'esecuzione in background di un job ([`Plugin::run_job`]).
+    /// Ritorna subito con l'identità del job; l'esito arriverà come
+    /// [`Event::JobDone`](crate::Event::JobDone) sul giro sincrono normale.
+    fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
+}
+
+/// Il canale dati: interrogare l'indice.
+///
+/// Una famiglia con una capacità sola, e non è uno spreco: è la sola lettura
+/// che non riguarda **un** documento ma ciò che è derivato dall'intero vault, e
+/// un host può volerla negare a chi ha `read_vault` ristretto a una cartella —
+/// una query aggregata non ha un path da confrontare con una allowlist.
+pub trait HostQuery: Send + Sync {
+    /// Interroga il vault: backlink, grafo, struttura, tag, proprietà, salute e
+    /// ricerca full-text passano tutti di qui, con la stessa semantica di
+    /// dispatch del kernel (ciò di cui il kernel è già l'unica fonte di verità
+    /// lo serve lui, il resto i provider registrati; vedi [`IndexQuery`]).
+    ///
+    /// È `&self` — una query non muta niente — ed è la ragione per cui un indice
+    /// può servirla sotto prestito condiviso del workspace, come una view.
+    fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
+}
+
+/// **Chiamare un altro plugin** e ricevere una risposta (§7.5).
+///
+/// Era il canale che non c'era. Gli unici modi in cui due provider si potevano
+/// parlare erano [`Event::Custom`](crate::Event::Custom) — fire-and-forget,
+/// senza risposta — e [`IndexQuery::Custom`], che ha un destinatario dichiarato
+/// (decisione 0019) ma resta *una domanda all'indice*. Una **chiamata** non
+/// c'era: A non poteva chiedere qualcosa a B e ricevere un risultato.
+///
+/// Il capitolo 21 lo dà per scontato a ogni riga — FubCharts che disegna dati
+/// di FubDB, FubForms che scrive in FubDB, FubCalendar che legge da FubTasks —
+/// e senza questa capacità quei moduli non sarebbero plugin: sarebbero crate
+/// linkati che si vedono a compile time, cioè il contrario del §16.3.
+///
+/// # La terna, e perché va insieme
+///
+/// Da sola una chiamata non basta: serve sapere **chi offre cosa**
+/// ([`PluginManifest::provides`]), **chi ha bisogno di chi**
+/// ([`PluginManifest::requires`]) e cosa succede quando ciò che serve non c'è.
+/// Le tre cose sono una decisione sola, e la risposta di FubMD alla terza è:
+/// **chi dipende da ciò che non c'è non si dichiara affatto**. Non si attiva
+/// degradato e non si disattiva dopo: chi lo monta riceve un errore che nomina
+/// il requisito mancante, e decide.
+pub trait HostServices: Send + Sync {
+    /// Chiama un metodo di un servizio offerto da un altro plugin.
+    ///
+    /// `service` è un `ns` con la regola dei nomi del §7.4 — è l'id del plugin
+    /// che lo offre, o un nome dentro di esso. Nessuno lo offre →
+    /// [`PluginError::Unserved`], che è distinguibile da «chi lo offre ha
+    /// fallito»; ed è la stessa distinzione che la decisione 0019 ha portato
+    /// nel canale dati.
+    ///
+    /// `&mut self` perché una chiamata può **scrivere**: chiedere a FubDB di
+    /// registrare una riga è ciò per cui FubForms esiste. Le capacità di chi
+    /// esegue restano le **sue** — un servizio non presta i propri permessi a
+    /// chi lo chiama, e chi lo chiama non presta i propri a lui.
+    ///
+    /// Un servizio non può chiamare sé stesso, nemmeno per giro: la catena è
+    /// nota all'host e una ricorsione risponde
+    /// [`PluginError::BadArgs`](crate::PluginError::BadArgs) nominando il giro.
+    /// È la stessa regola di [`HostCommands::run_command`], per la stessa
+    /// ragione.
+    fn call_service(
+        &mut self,
+        service: &str,
+        method: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, PluginError>;
+}
+
+/// Chi **offre** un servizio agli altri plugin (§7.5).
+///
+/// Quali `ns` serva non lo dice questo trait: lo dice il
+/// [`PluginManifest::provides`] di chi lo registra. È deliberato — «cosa offro»
+/// è una dichiarazione del plugin, che l'host legge *prima* di montarlo e usa
+/// per risolvere le dipendenze di chi arriva dopo; se stesse in un metodo del
+/// provider, per saperlo bisognerebbe averlo già montato.
+pub trait ServiceProvider: Send + Sync {
+    /// Esegue un metodo. `service` è uno dei `ns` dichiarati nel manifest — un
+    /// provider può offrirne più d'uno — e `method` un nome che il servizio
+    /// documenta.
+    ///
+    /// Un `method` ignoto è [`PluginError::BadArgs`]: la domanda è arrivata a
+    /// chi la doveva ricevere, ed è malposta. `Unserved` significa un'altra
+    /// cosa — che nessuno serve quel `ns` — e lo risponde l'host, non questo
+    /// trait.
+    fn call(
+        &self,
+        service: &str,
+        method: &str,
+        args: serde_json::Value,
+        host: &mut dyn HostApi,
+    ) -> Result<serde_json::Value, PluginError>;
+}
+
+/// Invocare i comandi del registro: la capacità che rende componibili macro e
+/// automazioni.
+///
+/// È una famiglia sua perché è l'unica che **moltiplica**: chi la ottiene può
+/// fare tutto ciò che sanno fare i comandi registrati, e un permesso che si
+/// concede senza saperlo sarebbe la scala privilegiata verso ogni altra
+/// capacità. Il §7.3 la nomina per questo.
+pub trait HostCommands: Send + Sync {
     /// Invoca un comando del registro (decisione 0009).
     ///
     /// È la capacità che rende **componibili** macro e automazioni (16.2, 16.3):
@@ -453,6 +608,69 @@ pub trait HostApi: Send + Sync {
         command: &str,
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError>;
+}
+
+// ---------------------------------------------------------------------------
+// Le due somme: cosa si può fare **senza cambiare niente**, e tutto
+// ---------------------------------------------------------------------------
+
+/// Tutto ciò che si può fare **senza cambiare niente**.
+///
+/// È il tipo del percorso di lettura: `render_view` (che gira sotto prestito
+/// condiviso del workspace) e `export` (che per contratto non scrive nel vault)
+/// lo ricevono, e la loro firma dice adesso ciò che prima diceva una riga di
+/// prosa. Prima ricevevano l'`HostApi` intero e l'host che glielo prestava
+/// implementava dodici capacità di scrittura come altrettanti `unreachable!()`:
+/// il divieto era vero, e non era un tipo.
+///
+/// Non si implementa: c'è una impl generica per chiunque abbia le quattro
+/// famiglie di lettura.
+pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv {}
+
+impl<T: VaultRead + DataRead + HostQuery + HostEnv + ?Sized> ReadApi for T {}
+
+/// Le capacità che il kernel concede a un provider/plugin: la **somma** delle
+/// nove famiglie.
+///
+/// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
+/// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
+/// il dogfooding del versioning ha trovato il buco: un `EventHandler` scritto
+/// come lo scriverebbe un plugin non aveva modo di tenere uno store di snapshot
+/// su disco né di sapere che ore sono. La decisione 0013 ha chiuso l'elenco: dopo il
+/// freeze un metodo **aggiunto** a una famiglia è una minor, uno **tolto** è una
+/// major.
+///
+/// Non si implementa e non si dichiara: chi ha le nove famiglie ce l'ha, per la
+/// impl generica qui sotto. Chi lo **riceve** continua a scrivere
+/// `&mut dyn HostApi` come prima — è il tipo di chi può fare tutto, e a quello
+/// non è cambiato niente.
+///
+/// # Visibilità durante i callback (contratto)
+///
+/// Durante un callback **in scrittura** (`handle`, `on_action`, `flush`,
+/// `activate`) un provider **non vede sé stesso né i fratelli in corso di
+/// chiamata**: l'host li estrae dal workspace per la durata del giro, quindi
+/// una [`query_index`](HostQuery::query_index) fatta da lì dentro può trovare
+/// meno provider di quanti ne esistano — al limite nessuno. Non è un
+/// malfunzionamento: un callback in scrittura risponde da ciò che ha già in
+/// mano, non interrogando il mondo che lo sta chiamando. Il percorso di
+/// **lettura** (`render_view`) invece gira sotto prestito condiviso e vede il
+/// mondo intero, indici compresi.
+pub trait HostApi:
+    ReadApi + VaultWrite + VaultStructure + DataWrite + HostEvents + HostCommands + HostServices
+{
+}
+
+impl<T> HostApi for T where
+    T: ReadApi
+        + VaultWrite
+        + VaultStructure
+        + DataWrite
+        + HostEvents
+        + HostCommands
+        + HostServices
+        + ?Sized
+{
 }
 
 // ---------------------------------------------------------------------------
@@ -628,7 +846,7 @@ pub struct ViewSpec {
     pub refresh: EventMask,
     /// L'altra metà della stessa dichiarazione, per ciò che **non è un evento
     /// del vault**: le parti del contesto di sessione
-    /// ([`HostApi::active_context`]) al cui cambio questa view invecchia.
+    /// ([`HostEnv::active_context`]) al cui cambio questa view invecchia.
     ///
     /// Esiste perché "la shell ridisegna comunque quando cambia il documento
     /// attivo" smette di essere sostenibile appena il contesto porta anche la
@@ -777,10 +995,16 @@ pub trait ViewProvider: Send + Sync {
     fn views(&self) -> Vec<ViewSpec>;
     /// Restituisce l'albero di UI dichiarativa per **questa istanza** della
     /// view.
+    ///
+    /// L'host è un [`ReadApi`] e non un [`HostApi`]: disegnare è leggere, e
+    /// dal §7.1 quella frase è un tipo invece che un commento. Chi disegna non
+    /// ha davanti le capacità di scrittura — non le può chiamare, non le deve
+    /// rifiutare, e l'host che gliele prestava non deve più implementarne
+    /// dodici come altrettanti `unreachable!()`.
     fn render_view(
         &self,
         instance: &ViewInstance,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError>;
     fn on_action(
         &mut self,
@@ -1716,6 +1940,23 @@ impl PluginPermissions {
     pub fn has(&self, name: &str) -> bool {
         self.granted.enabled(name)
     }
+
+    /// I permessi che una **feature ufficiale** dichiara: leggere e scrivere il
+    /// vault, invocare i comandi del registro, chiamare i servizi degli altri.
+    ///
+    /// Non è "tutti i permessi", ed è deliberato che non lo sia: la rete, gli
+    /// appunti, la camera e il filesystem esterno non li ha nessuna delle
+    /// feature di questo repo, e concederli in blocco a chi è di casa
+    /// renderebbe il punto di applicazione del §7.3 vero solo per i plugin di
+    /// terzi — cioè una regola che non si prova mai dove la si scrive.
+    pub fn core() -> Self {
+        PluginPermissions::of(&[
+            crate::options::permission::READ_VAULT,
+            crate::options::permission::WRITE_VAULT,
+            crate::options::permission::RUN_COMMAND,
+            crate::options::permission::CALL_SERVICE,
+        ])
+    }
 }
 
 /// La versione del contratto che QUESTO abi definisce. È la stessa del
@@ -1741,6 +1982,76 @@ pub struct PluginManifest {
     /// (il contratto post-freeze cresce solo per aggiunta).
     pub abi_version: String,
     pub permissions: PluginPermissions,
+    /// I **servizi che offre** (§7.5): i `ns` con cui altri plugin lo chiamano
+    /// via [`HostServices::call_service`].
+    ///
+    /// Sta nel manifest e non in un metodo del provider perché l'host deve
+    /// poterlo leggere **prima** di montarlo: è ciò con cui risolve le
+    /// dipendenze di chi arriva dopo. Ogni nome vale la regola del §7.4 — o è
+    /// l'id del plugin, o è dentro di esso.
+    #[serde(default)]
+    pub provides: Vec<String>,
+    /// I servizi di cui **ha bisogno**. Un requisito che nessuno offre non è un
+    /// avvertimento: il plugin non si dichiara affatto, e chi lo monta legge
+    /// quale requisito manca.
+    ///
+    /// È la semantica dichiarata della terna del §7.5, ed è quella che non
+    /// lascia in piedi uno stato intermedio: un plugin «attivo ma degradato»
+    /// è uno stato che nessuno prova e che ogni feature deve poi gestire.
+    #[serde(default)]
+    pub requires: Vec<String>,
+}
+
+impl PluginManifest {
+    /// Un manifest **senza permessi**: id, nome, e la versione di ABI con cui è
+    /// compilato.
+    ///
+    /// Il default è nessun permesso, e non è pigrizia: un plugin che non
+    /// dichiara niente non deve poter fare niente, o dichiarare smetterebbe di
+    /// essere ciò che apre le porte. I permessi si aggiungono con
+    /// [`granting`](PluginManifest::granting).
+    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
+        PluginManifest {
+            id: id.into(),
+            name: name.into(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            abi_version: ABI_VERSION.to_string(),
+            permissions: PluginPermissions::default(),
+            provides: Vec::new(),
+            requires: Vec::new(),
+        }
+    }
+
+    /// I servizi che questo plugin offre (§7.5).
+    pub fn providing(mut self, services: &[&str]) -> Self {
+        self.provides = services.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    /// I servizi di cui questo plugin ha bisogno per essere montato.
+    pub fn requiring(mut self, services: &[&str]) -> Self {
+        self.requires = services.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    /// I permessi che questo manifest dichiara.
+    pub fn granting(mut self, permissions: PluginPermissions) -> Self {
+        self.permissions = permissions;
+        self
+    }
+
+    /// Il manifest di una **feature ufficiale** di questo repo: la versione del
+    /// contratto è quella con cui è compilata, i permessi sono quelli di
+    /// [`PluginPermissions::core`].
+    ///
+    /// Esiste perché dal §7.3 il kernel non registra più provider intestati a
+    /// una stringa: chi registra si dichiara, e una feature che sta nello
+    /// stesso binario deve dichiararsi come si dichiarerà un plugin — con le
+    /// stesse informazioni, o il punto di applicazione lo si proverebbe solo
+    /// contro chi non esiste ancora.
+    pub fn core(id: impl Into<String>, name: impl Into<String>) -> Self {
+        PluginManifest::new(id, name).granting(PluginPermissions::core())
+    }
 }
 
 /// Un plugin che dichiara `declared` può girare su un host che parla
@@ -1770,7 +2081,7 @@ pub trait Plugin: Send + Sync {
     fn manifest(&self) -> PluginManifest;
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn deactivate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
-    /// Corpo di un job richiesto via [`HostApi::spawn_job`]: eseguito
+    /// Corpo di un job richiesto via [`HostEvents::spawn_job`]: eseguito
     /// dall'host fuori dal kernel (a M5 su un'istanza separata del
     /// componente). Deliberatamente **senza** `HostApi`: il job è puro
     /// rispetto al vault — input nel `payload`, output nel risultato; le

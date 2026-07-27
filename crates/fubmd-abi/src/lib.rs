@@ -80,11 +80,12 @@ pub use query::{
 };
 pub use session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 pub use traits::{
-    BacklinkRef, CommandProvider, DocumentMatch, EventHandler, HealthCheck, HealthIssue, HostApi,
+    BacklinkRef, CommandProvider, DataRead, DataWrite, DocumentMatch, EventHandler, HealthCheck,
+    HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
     IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged, Plugin,
     PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
-    PropertySort, PropertyTest, QueryKind, QueryRoute, TrashEntry, ViewInstance, ViewProvider,
-    ViewSpec, ViewSurface,
+    PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, TrashEntry,
+    VaultRead, VaultStructure, VaultWrite, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 pub use transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,

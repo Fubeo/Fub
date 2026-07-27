@@ -47,8 +47,8 @@ mod testing;
 
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 pub use blocks::{
-    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, DIAGRAMS_RULE, DIAGRAM_NS,
-    DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER, MATH_RULE,
+    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID, DIAGRAMS_RULE,
+    DIAGRAM_NS, DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER, MATH_RULE,
 };
 pub use commands::{
     occurrences, CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TASK_TOGGLE, NOTE_TRASH,

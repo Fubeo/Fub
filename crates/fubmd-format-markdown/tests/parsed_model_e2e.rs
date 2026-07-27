@@ -18,9 +18,10 @@ use fubmd_abi::format::ParseContext;
 use fubmd_abi::model::{Block, DocId};
 use fubmd_abi::options::syntax;
 use fubmd_abi::traits::HostApi;
+use fubmd_abi::traits::PluginManifest;
 use fubmd_abi::PluginError;
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_kernel::{FormatRegistry, Trust, Workspace};
 
 /// L'estensione di un terzo: un delimitatore che comrak non conosce, innestato
 /// sul provider markdown come lo innesterebbe un plugin.
@@ -77,6 +78,10 @@ fn vault() -> (tempfile::TempDir, Workspace) {
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    ws.register_core_feature("test", "test")
+        .expect("dichiarato");
     ws.reindex().expect("reindex");
     (dir, ws)
 }
@@ -171,7 +176,12 @@ fn le_capacita_di_un_formato_comprendono_le_sintassi_innestate() {
         "nessuno l'ha ancora innestata"
     );
 
-    ws.register_syntax_rule(Box::new(RegolaDiTerzi))
+    // Un plugin di terzi si dichiara, e i nomi che registra stanno nel suo
+    // namespace (§7.4): `terzi:sottolineato` è di `terzi`, e non lo sarebbe di
+    // nessun altro.
+    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+        .expect("dichiarato");
+    ws.register_syntax_rule("terzi", Box::new(RegolaDiTerzi))
         .expect("nessun conflitto");
 
     let dopo = chiedendo(&mut ws, |host| host.format_of(&DocId::new("Nota.md")))

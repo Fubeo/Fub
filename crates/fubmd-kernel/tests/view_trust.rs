@@ -13,7 +13,9 @@
 
 use camino::Utf8PathBuf;
 use fubmd_abi::error::PluginError;
-use fubmd_abi::traits::{HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fubmd_abi::traits::{
+    HostApi, PluginManifest, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+};
 use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_kernel::{FormatRegistry, Trust, Workspace};
 
@@ -45,7 +47,7 @@ impl ViewProvider for Puppet {
     fn render_view(
         &self,
         instance: &ViewInstance,
-        _host: &dyn HostApi,
+        _host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         if instance.view != self.id {
             return Err(PluginError::UnknownView(instance.view.clone()));
@@ -83,6 +85,21 @@ impl Fixture {
     }
 }
 
+/// Dichiara un plugin e registra la sua view, in una riga sola.
+///
+/// Il grado di fiducia sta nella **dichiarazione** e non nella registrazione
+/// della view: era un parametro del solo `register_view_provider`, e la
+/// conseguenza era che un `IndexProvider` di terzi non ne aveva nessuno (§7.3).
+fn monta(ws: &mut Workspace, plugin: &str, trust: Trust, provider: Box<dyn ViewProvider>) {
+    let manifest = match trust {
+        Trust::Core => PluginManifest::core(plugin, plugin),
+        _ => PluginManifest::new(plugin, plugin),
+    };
+    ws.register_plugin(manifest, trust).expect("dichiarato");
+    ws.register_view_provider(plugin, provider)
+        .expect("registrato");
+}
+
 fn html() -> UiNode {
     // Annidato di proposito: il rifiuto non deve dipendere dalla posizione.
     UiNode::column(
@@ -108,7 +125,8 @@ fn dichiarativo() -> UiNode {
 fn a_trusted_provider_may_return_active_content() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.register_view_provider(
+    monta(
+        &mut ws,
         "core.fidato",
         Trust::Core,
         Puppet::boxed("fidata", html(), ViewUpdate::None),
@@ -127,14 +145,15 @@ fn a_trusted_provider_may_return_active_content() {
 fn an_untrusted_provider_cannot_smuggle_active_content() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.register_view_provider(
+    monta(
+        &mut ws,
         "terzi.ostile",
         Trust::Community,
-        Puppet::boxed("ostile", html(), ViewUpdate::None),
+        Puppet::boxed("terzi.ostile:ostile", html(), ViewUpdate::None),
     );
 
     let err = ws
-        .render_view(&ViewInstance::only("ostile"))
+        .render_view(&ViewInstance::only("terzi.ostile:ostile"))
         .expect_err("deve essere rifiutato");
     assert!(
         matches!(err, PluginError::PermissionDenied(_)),
@@ -146,16 +165,18 @@ fn an_untrusted_provider_cannot_smuggle_active_content() {
 fn an_untrusted_provider_may_still_describe_a_ui() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.register_view_provider(
+    monta(
+        &mut ws,
         "terzi.perbene",
         Trust::Community,
-        Puppet::boxed("perbene", dichiarativo(), ViewUpdate::None),
+        Puppet::boxed("terzi.perbene:perbene", dichiarativo(), ViewUpdate::None),
     );
 
     // Il confine non è "i plugin non disegnano": è "i plugin descrivono, il core
     // disegna". Tutto il dichiarativo passa.
     assert_eq!(
-        ws.render_view(&ViewInstance::only("perbene")).unwrap(),
+        ws.render_view(&ViewInstance::only("terzi.perbene:perbene"))
+            .unwrap(),
         dichiarativo()
     );
 }
@@ -164,11 +185,12 @@ fn an_untrusted_provider_may_still_describe_a_ui() {
 fn the_same_guard_applies_to_what_comes_back_from_an_action() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.register_view_provider(
+    monta(
+        &mut ws,
         "terzi.tardivo",
         Trust::Community,
         Puppet::boxed(
-            "tardivo",
+            "terzi.tardivo:tardivo",
             dichiarativo(),
             ViewUpdate::Replace { root: html() },
         ),
@@ -176,9 +198,14 @@ fn the_same_guard_applies_to_what_comes_back_from_an_action() {
 
     // Un albero pulito al rendering e sporco al primo click sarebbe la strada
     // più ovvia per aggirare un controllo fatto solo in `render_view`.
-    assert!(ws.render_view(&ViewInstance::only("tardivo")).is_ok());
+    assert!(ws
+        .render_view(&ViewInstance::only("terzi.tardivo:tardivo"))
+        .is_ok());
     let err = ws
-        .view_action(&ViewInstance::only("tardivo"), UiAction::new("click"))
+        .view_action(
+            &ViewInstance::only("terzi.tardivo:tardivo"),
+            UiAction::new("click"),
+        )
         .expect_err("anche l'aggiornamento deve essere validato");
     assert!(matches!(err, PluginError::PermissionDenied(_)));
 }
@@ -187,11 +214,12 @@ fn the_same_guard_applies_to_what_comes_back_from_an_action() {
 fn navigate_and_none_are_not_trees_and_pass() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.register_view_provider(
+    monta(
+        &mut ws,
         "terzi.navigante",
         Trust::Community,
         Puppet::boxed(
-            "navigante",
+            "terzi.navigante:navigante",
             dichiarativo(),
             ViewUpdate::Navigate {
                 doc_id: "a.md".into(),
@@ -200,7 +228,10 @@ fn navigate_and_none_are_not_trees_and_pass() {
     );
 
     let update = ws
-        .view_action(&ViewInstance::only("navigante"), UiAction::new("open"))
+        .view_action(
+            &ViewInstance::only("terzi.navigante:navigante"),
+            UiAction::new("open"),
+        )
         .expect("navigare non è iniettare");
     assert_eq!(
         update,
@@ -214,14 +245,18 @@ fn navigate_and_none_are_not_trees_and_pass() {
 fn an_action_reaches_the_provider_with_its_own_data_space() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.register_view_provider(
+    monta(
+        &mut ws,
         "terzi.diario",
         Trust::Community,
-        Puppet::boxed("diario", dichiarativo(), ViewUpdate::None),
+        Puppet::boxed("terzi.diario:diario", dichiarativo(), ViewUpdate::None),
     );
 
-    ws.view_action(&ViewInstance::only("diario"), UiAction::new("premuto"))
-        .unwrap();
+    ws.view_action(
+        &ViewInstance::only("terzi.diario:diario"),
+        UiAction::new("premuto"),
+    )
+    .unwrap();
 
     let scritto = fx
         .root
@@ -239,7 +274,8 @@ fn an_action_reaches_the_provider_with_its_own_data_space() {
 fn a_view_nobody_offers_is_unknown_not_empty() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.register_view_provider(
+    monta(
+        &mut ws,
         "core.una",
         Trust::Core,
         Puppet::boxed("una", dichiarativo(), ViewUpdate::None),

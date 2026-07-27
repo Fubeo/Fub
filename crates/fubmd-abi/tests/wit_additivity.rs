@@ -698,8 +698,8 @@ fn ogni_forma_di_rottura_e_rossa() {
             "una funzione rimossa",
             Box::new(|c: &mut Contract| {
                 c.functions
-                    .remove("host-api::read-document")
-                    .expect("host-api::read-document esiste");
+                    .remove("host-vault-read::read-document")
+                    .expect("host-vault-read::read-document esiste");
             }),
         ),
         (
@@ -707,8 +707,8 @@ fn ogni_forma_di_rottura_e_rossa() {
             Box::new(|c: &mut Contract| {
                 let sig = c
                     .functions
-                    .get_mut("host-api::read-document")
-                    .expect("host-api::read-document esiste");
+                    .get_mut("host-vault-read::read-document")
+                    .expect("host-vault-read::read-document esiste");
                 sig.params.push(("modo".into(), "u32".into()));
             }),
         ),
@@ -717,8 +717,8 @@ fn ogni_forma_di_rottura_e_rossa() {
             Box::new(|c: &mut Contract| {
                 let sig = c
                     .functions
-                    .get_mut("host-api::read-document")
-                    .expect("host-api::read-document esiste");
+                    .get_mut("host-vault-read::read-document")
+                    .expect("host-vault-read::read-document esiste");
                 sig.params[0].0 = "documento".into();
             }),
         ),
@@ -727,8 +727,8 @@ fn ogni_forma_di_rottura_e_rossa() {
             Box::new(|c: &mut Contract| {
                 let sig = c
                     .functions
-                    .get_mut("host-api::read-document")
-                    .expect("host-api::read-document esiste");
+                    .get_mut("host-vault-read::read-document")
+                    .expect("host-vault-read::read-document esiste");
                 sig.result = Some("string".into());
             }),
         ),
@@ -811,7 +811,7 @@ fn le_aggiunte_in_coda_passano() {
             "una funzione nuova (decisione 0013: una capacità in più)",
             Box::new(|c: &mut Contract| {
                 c.functions.insert(
-                    "host-api::notify".into(),
+                    "host-env::notify".into(),
                     Sig {
                         params: vec![("message".into(), "string".into())],
                         result: None,

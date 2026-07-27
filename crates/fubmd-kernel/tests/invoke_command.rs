@@ -74,6 +74,12 @@ fn vault() -> (tempfile::TempDir, Workspace) {
         .register(Box::new(PlainProvider))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    for plugin in ["test", "recorder"] {
+        ws.register_core_feature(plugin, plugin)
+            .expect("dichiarato");
+    }
     ws.reindex().expect("reindex");
     (dir, ws)
 }
@@ -285,7 +291,8 @@ fn a_command_that_nobody_offers_is_named_as_unknown() {
 #[test]
 fn the_registry_lists_what_a_caller_needs_to_invoke_without_reading_the_code() {
     let (_dir, mut ws) = vault();
-    ws.register_command_provider("test", Box::new(Echo(Log::default())));
+    ws.register_command_provider("test", Box::new(Echo(Log::default())))
+        .expect("registrato");
     let specs = ws.commands();
     assert_eq!(specs.len(), 1);
     let spec = &specs[0];
@@ -300,7 +307,8 @@ fn the_registry_lists_what_a_caller_needs_to_invoke_without_reading_the_code() {
 fn the_arguments_are_validated_before_the_command_is_ever_called() {
     let (_dir, mut ws) = vault();
     let log = Log::default();
-    ws.register_command_provider("test", Box::new(Echo(log.clone())));
+    ws.register_command_provider("test", Box::new(Echo(log.clone())))
+        .expect("registrato");
 
     let err = ws
         .invoke_command(
@@ -357,7 +365,8 @@ fn a_dry_run_cannot_write_even_if_the_command_tries() {
             dichiara_scritture: true,
             rifiutato: rifiutato.clone(),
         }),
-    );
+    )
+    .expect("registrato");
 
     ws.invoke_command(
         "test.write",
@@ -407,7 +416,8 @@ fn declaring_yourself_read_only_is_binding() {
             dichiara_scritture: false,
             rifiutato: rifiutato.clone(),
         }),
-    );
+    )
+    .expect("registrato");
 
     ws.invoke_command(
         "test.write",
@@ -438,7 +448,8 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
         Box::new(TriesEverything {
             rifiuti: rifiuti.clone(),
         }),
-    );
+    )
+    .expect("registrato");
 
     ws.invoke_command(
         "test.strutturale",
@@ -481,7 +492,8 @@ fn the_host_completes_the_set_of_documents_a_plan_would_touch() {
     let (_dir, mut ws) = vault();
     ws.write_document(&DocId::new("a.md"), "a").expect("scrive");
     ws.write_document(&DocId::new("b.md"), "b").expect("scrive");
-    ws.register_command_provider("test", Box::new(HalfHonestPlan));
+    ws.register_command_provider("test", Box::new(HalfHonestPlan))
+        .expect("registrato");
 
     let outcome = ws
         .invoke_command(
@@ -507,7 +519,8 @@ fn a_plan_calculated_now_refuses_to_apply_over_someone_elses_write() {
     let (_dir, mut ws) = vault();
     let doc = DocId::new("a.md");
     ws.write_document(&doc, "il gatto").expect("scrive");
-    ws.register_command_provider("test", Box::new(HalfHonestPlan));
+    ws.register_command_provider("test", Box::new(HalfHonestPlan))
+        .expect("registrato");
     ws.write_document(&DocId::new("b.md"), "b").expect("scrive");
 
     let outcome = ws
@@ -542,8 +555,10 @@ fn a_plan_calculated_now_refuses_to_apply_over_someone_elses_write() {
 fn what_a_command_writes_reaches_the_handlers_after_it_has_returned() {
     let (_dir, mut ws) = vault();
     let log = Log::default();
-    ws.register_event_handler("recorder", Box::new(Recorder(log.clone())));
-    ws.register_command_provider("test", Box::new(Toucher));
+    ws.register_event_handler("recorder", Box::new(Recorder(log.clone())))
+        .expect("registrato");
+    ws.register_command_provider("test", Box::new(Toucher))
+        .expect("registrato");
 
     ws.invoke_command(
         "test.touch",

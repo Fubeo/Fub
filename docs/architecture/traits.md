@@ -136,8 +136,29 @@ Due semantiche fissate nel contratto:
 L'unico varco con cui un provider/plugin tocca il mondo esterno. Nativo → oggetto
 in-process; WASM (M5) → proxy che reinoltra come host function.
 
+**È una somma di nove trait** ([decisione 0021](../decisions/0021-il-confine.md),
+§7.1) e non un trait solo, perché un trait solo si implementa per intero o per
+niente: chi ne può fare una metà — il percorso di render, un comando dichiarato
+di sola lettura, a M5 un componente senza il permesso di scrivere — era
+costretto a scrivere l'altra metà come una fila di rifiuti. Le famiglie sono
+`VaultRead`, `VaultWrite`, `VaultStructure`, `DataRead`, `DataWrite`, `HostEnv`,
+`HostEvents`, `HostQuery`, `HostCommands`, `HostServices`, e il criterio con cui
+sono divise è uno solo: **cosa vuol dire negarne una**.
+
+`HostApi` e `ReadApi` (le quattro famiglie di lettura) sono somme con una impl
+generica: nessuno le implementa a mano, e chi le riceve continua a scrivere
+`&mut dyn HostApi` come prima. Al confine WIT sono dieci `interface` che il
+`plugin-world` importa una per una — e là la scomposizione compra ciò che in
+Rust non si vede: un mondo che non importa `host-vault-write` non ha quella
+funzione da chiamare.
+
 ```rust
-pub trait HostApi: Send + Sync {
+// La somma, e le sue parti (le firme sono quelle di prima).
+pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv {}
+pub trait HostApi:
+    ReadApi + VaultWrite + VaultStructure + DataWrite + HostEvents + HostCommands + HostServices {}
+
+pub trait VaultRead: Send + Sync {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
     // il documento intero (chi ce l'ha in mano) …
     fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
@@ -171,8 +192,19 @@ pub trait HostApi: Send + Sync {
     // comporre: invocare un comando del registro ([decisione 0009](../decisions/0009-registro-dei-comandi.md))
     fn run_command(&mut self, command: &str, args: serde_json::Value)
         -> Result<CommandOutcome, PluginError>;
+    // chiamare un altro plugin ([decisione 0021](../decisions/0021-il-confine.md), §7.5)
+    fn call_service(&mut self, service: &str, method: &str, args: serde_json::Value)
+        -> Result<serde_json::Value, PluginError>;
 }
 ```
+
+**Cinque di queste capacità non sanno dire di no**, ed è una proprietà delle
+loro firme: `emit`, `free_name`, `format_of`, `now_unix_millis`,
+`active_context` non restituiscono un `Result`, quindi una politica che le nega
+può solo dare la risposta nulla. La lezione per l'elenco della
+[decisione 0013](../decisions/0013-elenco-delle-capacita.md): una capacità nuova
+porti un esito **anche quando "non può fallire"** — non potendo fallire, non può
+nemmeno essere negata.
 
 **L'elenco è chiuso ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).** Ventidue metodi, e da qui in avanti aggiungerne
 uno è una minor, toglierne uno una major. Il giro che lo ha chiuso ha anche

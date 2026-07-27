@@ -13,10 +13,10 @@
 // WASM di M5 la chiamerà invece di riscriverla. Decisione e motivazioni in
 // docs/architecture/traits.md, "Alberi ricorsivi al confine".
 //
-// KEYWORD WIT — `list`, `result` e `from` sono parole chiave del linguaggio:
-// dove sono nomi di variante o di campo compaiono con l'escape `%`. È solo
-// sintassi: l'identificatore dichiarato resta `list`/`result`/`from`, e i tipi
-// Rust non cambiano.
+// KEYWORD WIT — `list`, `result`, `from` e `option` sono parole chiave del
+// linguaggio: dove sono nomi di variante o di campo compaiono con l'escape `%`.
+// È solo sintassi: l'identificatore dichiarato resta `list`/`result`/`from`/
+// `option`, e i tipi Rust non cambiano.
 //
 // HOST-API — `host-api` è IMPORTATO dal world: le sue funzioni non compaiono
 // come parametro di nessun'altra funzione, anche là dove il metodo Rust
@@ -37,10 +37,22 @@ interface json {
     type json = string;
 }
 
-/// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): questa interfaccia non
-/// esisteva. Ci sta perché i quattro tipi qui sotto la nominano dopo il ritaglio;
-/// la sua aggiunta al contratto corrente è additiva e non avrebbe richiesto
-/// nulla.
+/// *Cosa è acceso, e con quale parametro.*
+///
+/// La risposta comune ai quattro tipi che il §3.5 nomina insieme — uno, tre o
+/// cinque booleani dove la domanda che arriva ha una coda aperta: le ~50
+/// sintassi del 5.2, i bersagli di rendering del 6.3, i permessi del 20.3.
+/// Quello che scade col freeze non è la LARGHEZZA di quei tipi (un campo in
+/// fondo a un record è additivo) ma la loro FORMA: sostituire N booleani con una
+/// mappa è la sola cosa che dopo non si fa più.
+///
+/// Chiave: `ns:nome`. Il namespace è di chi definisce la voce — `fubmd` per il
+/// core, l'id del plugin per gli altri — così due estensioni che vogliono
+/// chiamarsi allo stesso modo hanno due chiavi diverse.
+///
+/// Presente = acceso, e il valore è il parametro; un `false` esplicito spegne.
+/// Qui è una LISTA perché WIT non ha mappe: lato Rust è una `BTreeMap`, e
+/// l'ordine stabile è ciò che rende questa lista confrontabile.
 interface options {
     use json.{json};
 
@@ -324,10 +336,14 @@ interface format {
     use model.{document-model};
     use options.{option-map};
 
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): non esisteva, e
-    /// `parse` prendeva una `string`. Con quella firma un `.canvas`, un CSV
-    /// grande, un PDF trattato come documento (13.2) o un file con encoding da
-    /// rilevare (2.3) non entravano affatto (§3.4).
+    /// In che forma un provider vuole la sorgente. Senza questo campo "leggi il
+    /// file" e "decodificalo come UTF-8" restavano la stessa operazione, e i
+    /// documenti non-testo (canvas 12, CSV/JSON 11.4, PDF 13.2, encoding da
+    /// rilevare 2.3) non avevano modo di entrare.
+    enum source-kind {
+        text,
+        bytes,
+    }
     variant document-source {
         text(string),
         bytes(list<u8>),
@@ -336,33 +352,38 @@ interface format {
         id: string,
         name: string,
         extensions: list<string>,
+        source: source-kind,
     }
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): erano cinque
-    /// booleani (`wikilinks`, `tags`, `frontmatter`, `callouts`, `embeds`)
-    /// contro le ~50 sintassi del 5.2 — e con quella forma ogni sintassi era un
-    /// campo nuovo del contratto. Il vocabolario è ora lo stesso di
-    /// `parse-context`, perché «cosa so fare» e «cosa devi accendere» sono la
-    /// stessa domanda vista da due lati (§3.5 con §3.4).
+    /// Che sintassi sa leggere un provider: un elenco di NOMI, non cinque
+    /// booleani — e lo stesso vocabolario di `parse-context.options`, perché
+    /// «cosa so fare» e «cosa devi accendere» sono la stessa domanda vista da
+    /// due lati (§3.4 e §3.5).
     record format-capabilities {
         syntax: option-map,
     }
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): erano `parse-tags`
-    /// e `parse-wikilinks`, due booleani dove la coda è aperta (§3.4).
     record parse-context {
         doc-id: string,
         options: option-map,
     }
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): non esisteva. Il
-    /// rendering ha almeno tre bersagli distinti — schermo, stampa e PDF (6.3),
-    /// pubblicazione statica (19.4) — e un booleano non ne distingueva due.
+    /// Cosa si sa di un documento SENZA averlo aperto (§4.3): chi lo tratterebbe
+    /// e che sintassi capirebbe. È una risposta sul NOME — la dà il registro dei
+    /// formati sull'estensione, senza leggere un byte — ed è ciò che permette a
+    /// chi cammina una lista di distinguere una nota da un canvas, un CSV, un
+    /// PDF o un allegato. Le `capabilities` sono quelle EFFETTIVE: il provider
+    /// più le sintassi che le regole registrate gli innestano sopra (§3.1), o
+    /// tornerebbero a esistere due categorie di estensioni.
+    record document-format {
+        descriptor: format-descriptor,
+        capabilities: format-capabilities,
+    }
+    /// Per CHI si sta rendendo. È un enum e non una voce della mappa perché i
+    /// bersagli sono esclusivi: si rende per uno solo alla volta.
     enum render-target {
         screen,
         print,
         pdf,
         static-site,
     }
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): era il solo
-    /// `wikilinks-as-data-attrs: bool` (§3.5).
     record render-options {
         target: render-target,
         options: option-map,
@@ -376,13 +397,127 @@ interface format {
 
     descriptor: func() -> format-descriptor;
     capabilities: func() -> format-capabilities;
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): `source` era una
-    /// `string` (§3.4).
     parse: func(source: document-source, ctx: parse-context) -> result<document-model, format-error>;
     render-html: func(model: document-model, opts: render-options) -> result<string, format-error>;
     /// Generazione, non round-trip: la fonte di verità di un documento
     /// esistente è la sorgente; il kernel non riscrive mai un file da qui.
     serialize: func(model: document-model) -> result<string, format-error>;
+}
+
+/// `SyntaxRule`: una sintassi INNESTATA su un formato che non la conosce (§3.1).
+///
+/// Prima, `format-registry` era una mappa estensione → UN provider e chi
+/// registrava dopo vinceva in silenzio: l'unico modo di aggiungere una sintassi
+/// al markdown era sostituire il provider markdown. Era l'unico punto in cui
+/// l'invariante del progetto — «una feature ufficiale è ciò che scriverà un
+/// plugin di terzi» — era già falsa.
+///
+/// Una regola agisce sul MODELLO, dopo il parse del provider, e questo è ciò che
+/// la rende innestabile su chi non la conosce. Il prezzo, dichiarato: non può
+/// cambiare come la grammatica di base spezza il testo. Può fare ciò che i
+/// trigger dicono — prendersi un recinto che il provider ha già riconosciuto
+/// come tale, o un tratto di testo fra due delimitatori.
+interface syntax {
+    use json.{json};
+    use model.{span, document-tree};
+    use format.{parse-context, format-error};
+
+    record syntax-trigger-fence {
+        info: list<string>,
+    }
+    record syntax-trigger-inline {
+        open: string,
+        close: string,
+    }
+    variant syntax-trigger {
+        fence(syntax-trigger-fence),
+        inline(syntax-trigger-inline),
+    }
+
+    record syntax-rule-spec {
+        id: string,
+        format: string,
+        trigger: syntax-trigger,
+        order: s32,
+        /// La chiave di `parse-context.options` che la accende; assente =
+        /// sempre attiva. È il ponte col §3.4: una regola si spegne per vault,
+        /// cartella o nota senza che nessuno la disinstalli.
+        %option: option<string>,
+        /// I `custom-kind` che emette. Un kind prodotto e mai rivendicato da un
+        /// renderer è un blocco che l'utente leggerà crudo — e adesso si può
+        /// contare.
+        produces: list<string>,
+    }
+
+    record syntax-match {
+        trigger: string,
+        text: string,
+        /// Lo riempie il kernel, non la regola: una regola che dichiarasse il
+        /// proprio span potrebbe mentire sull'identità di un blocco.
+        span: span,
+    }
+
+    /// Una regola produce SEMPRE l'escape hatch, mai un nodo del vocabolario
+    /// centrale: nessuno innesta una sintassi che finge di essere un heading.
+    record syntax-product-block {
+        custom-kind: string,
+        attrs: json,
+        blocks: document-tree,
+    }
+    record syntax-product-inline {
+        custom-kind: string,
+        attrs: json,
+    }
+    variant syntax-product {
+        block(syntax-product-block),
+        inline(syntax-product-inline),
+    }
+
+    spec: func() -> syntax-rule-spec;
+    /// `none` = «non è roba mia dopo tutto», e il nodo resta com'era: è il modo
+    /// con cui una regola declina senza fallire.
+    apply: func(m: syntax-match, ctx: parse-context) -> result<option<syntax-product>, format-error>;
+}
+
+/// `CustomRenderer`: il punto d'innesto che `block.custom` non aveva (§3.2).
+///
+/// L'escape hatch del modello esisteva, il suo disegno no: era un
+/// `if custom-kind == callout` dentro il provider markdown, e ogni altro kind
+/// cadeva in un ramo generico. Quel ramo non è il difetto — è il DEGRADO, e
+/// serve; il difetto era che fosse tutto, e che non ci fosse modo di dire chi lo
+/// disegnerebbe.
+interface renderer {
+    use json.{json};
+    use model.{span, document-tree};
+    use ui.{ui-tree};
+    use format.{render-options, format-error};
+
+    record custom-renderer-spec {
+        id: string,
+        kinds: list<string>,
+    }
+
+    record custom-block {
+        custom-kind: string,
+        attrs: json,
+        blocks: document-tree,
+        anchor: option<string>,
+        span: span,
+    }
+
+    /// Le due strade non sono equivalenti, e la differenza è il §3.6: `html` è
+    /// HTML che entra nella webview e passa dal punto unico di sanitizzazione;
+    /// `ui` è sicura per costruzione e viaggia fino alla shell, che la monta
+    /// con lo stesso `mount-tree` delle view. È la strada per cui la UI di un
+    /// plugin entra nella shell SENZA codice nel bundle (§3.3).
+    variant custom-rendering {
+        html(string),
+        ui(ui-tree),
+        fallback,
+    }
+
+    spec: func() -> custom-renderer-spec;
+    render: func(block: custom-block, opts: render-options) -> result<custom-rendering, format-error>;
 }
 
 /// Protocollo di UI dichiarativa (`UiNode`).
@@ -392,8 +527,52 @@ interface ui {
 
     type action-id = string;
 
+    /// L'azione attaccata a un nodo: cosa chiamare, e con cosa. Il `payload` è
+    /// del PROVIDER — lo scrive rendendo l'albero e gli torna intatto in
+    /// `ui-action.payload`. Prima esisteva solo l'id, e i dati che servivano a
+    /// servire il click ci finivano concatenati dentro (`open:a/Uno.md`): una
+    /// convenzione privata che stava diventando contratto de facto.
+    record action-ref {
+        action: action-id,
+        payload: json,
+    }
+
     enum axis { row, column }
     enum intent { neutral, primary, danger }
+    /// L'allineamento di una colonna di tabella. Non è stile: un numero
+    /// allineato a sinistra è una tabella che non si legge, e solo il provider
+    /// sa se una colonna contiene numeri.
+    enum align { start, center, end }
+
+    /// Il valore di un campo di input, come torna dalla shell. Non è `json`
+    /// perché il tipo lo dichiara il nodo che disegna il campo: chi legge non
+    /// deve difendersi da una checkbox che risponde con una stringa.
+    variant ui-value {
+        text(string),
+        number(f64),
+        %bool(bool),
+        /// Selezione multipla: i `value` delle opzioni scelte.
+        choices(list<string>),
+    }
+    /// Lo stato di un campo, come la shell lo consegna al provider.
+    record field-value {
+        field: string,
+        value: ui-value,
+    }
+    /// Una scelta di `select`/`radio`. Due campi e non uno: `value` è ciò che
+    /// torna, `label` ciò che si legge — cioè ciò che si localizza (§12.1).
+    record ui-option {
+        value: string,
+        label: string,
+    }
+    record key-value-entry {
+        label: string,
+        value: string,
+    }
+    record table-column {
+        title: string,
+        align: align,
+    }
 
     /// Indice in `ui-tree.nodes`. Fuori range = albero malformato.
     type ui-ref = u32;
@@ -406,15 +585,6 @@ interface ui {
     record ui-heading {
         level: u8,
         content: string,
-    }
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0016): l'azione di un
-    /// nodo era il solo `action-id`, e i dati che servivano a servire il click
-    /// ci finivano concatenati dentro (`open:a/Uno.md`) — una convenzione
-    /// privata delle tre feature ufficiali che stava diventando contratto de
-    /// facto. Ora porta un payload del provider (§2.7).
-    record action-ref {
-        action: action-id,
-        payload: json,
     }
     record ui-list-item {
         title: string,
@@ -434,12 +604,150 @@ interface ui {
         url: string,
         height: u32,
     }
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0016): `ui-node` era
-    /// questo `variant`, e ora è il record `{ key, kind }` che lo contiene. La
-    /// chiave è ciò su cui un riconciliatore lavora (§2.8): senza, l'identità di
-    /// un nodo è la sua posizione, e una lista che si riordina sposta il focus e
-    /// la selezione insieme alle righe — con i nodi di input del §2.1, un campo
-    /// di testo che si svuota a ogni salvataggio.
+    /// Un gruppo con un titolo, apribile e richiudibile. `collapsed` è lo stato
+    /// INIZIALE: la piega è faccenda della shell, che non disturba il provider
+    /// per aprirla — e con la chiave sopravvive al ridisegno.
+    record ui-section {
+        title: string,
+        collapsed: bool,
+        children: list<ui-ref>,
+    }
+    /// Le righe sono NODI e non record proprio perché una riga ha una chiave: è
+    /// il caso del §2.8, il pannello con 500 righe che si riordina.
+    record ui-table {
+        columns: list<table-column>,
+        rows: list<ui-ref>,
+    }
+    record ui-row {
+        cells: list<ui-ref>,
+        action: option<action-ref>,
+    }
+    /// Una voce di `tree`: l'annidamento passa dai `children`, che sono altri
+    /// `tree-item`.
+    record ui-tree-item {
+        label: string,
+        expanded: bool,
+        action: option<action-ref>,
+        selected: bool,
+        children: list<ui-ref>,
+    }
+    /// `active` è l'indice iniziale in `tabs`; fuori range = la prima.
+    record ui-tabs {
+        active: u32,
+        tabs: list<ui-ref>,
+    }
+    /// `action`, se c'è, scatta quando la scheda viene scelta: la shell cambia
+    /// scheda da sé e avvisa solo chi ha chiesto di saperlo.
+    record ui-tab {
+        label: string,
+        action: option<action-ref>,
+        children: list<ui-ref>,
+    }
+    record ui-badge {
+        label: string,
+        intent: intent,
+    }
+    /// `value` in 0.0..=1.0; assente = indeterminato, che è il caso normale di
+    /// chi non sa quanto manca.
+    record ui-progress {
+        value: option<f32>,
+        label: option<string>,
+    }
+    /// Il vuoto detto bene: non c'è niente E questo è ciò che si può fare.
+    record ui-empty-state {
+        title: string,
+        detail: option<string>,
+        action: option<action-ref>,
+    }
+    /// I nodi di input portano `field` (la chiave sotto cui il valore torna in
+    /// `ui-action.fields`) e `value` (ciò che il provider vuole vederci ADESSO:
+    /// il protocollo resta senza stato lato shell). `action`, dove c'è, scatta
+    /// quando il valore si assesta.
+    record ui-text-input {
+        field: string,
+        label: option<string>,
+        value: string,
+        placeholder: option<string>,
+        action: option<action-ref>,
+    }
+    record ui-text-area {
+        field: string,
+        label: option<string>,
+        value: string,
+        rows: u32,
+        action: option<action-ref>,
+    }
+    record ui-number {
+        field: string,
+        label: option<string>,
+        value: option<f64>,
+        min: option<f64>,
+        max: option<f64>,
+        step: option<f64>,
+        action: option<action-ref>,
+    }
+    record ui-checkbox {
+        field: string,
+        label: string,
+        value: bool,
+        action: option<action-ref>,
+    }
+    record ui-select {
+        field: string,
+        label: option<string>,
+        value: list<string>,
+        options: list<ui-option>,
+        multiple: bool,
+        action: option<action-ref>,
+    }
+    record ui-radio {
+        field: string,
+        label: option<string>,
+        value: option<string>,
+        options: list<ui-option>,
+        action: option<action-ref>,
+    }
+    record ui-slider {
+        field: string,
+        label: option<string>,
+        value: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+        action: option<action-ref>,
+    }
+    /// Una data civile in ISO-8601 (`2026-07-26`). Stringa e non istante: il
+    /// tempo civile è il §12.3 e non è deciso; una data qui è ciò che l'utente
+    /// ha scritto su un calendario, non un punto sulla linea del tempo.
+    record ui-date-picker {
+        field: string,
+        label: option<string>,
+        value: option<string>,
+        action: option<action-ref>,
+    }
+    /// Inviare manda TUTTI i campi contenuti, anche quelli senza `action`
+    /// propria: è ciò che distingue un form da una fila di input sciolti.
+    record ui-form {
+        children: list<ui-ref>,
+        submit-label: string,
+        submit: action-ref,
+    }
+    /// Widget che il protocollo non prevede: la shell che conosce `ns` disegna
+    /// il suo (grafo, canvas, chart), chi non lo conosce disegna il `fallback`
+    /// dichiarativo. È il modo di far entrare le superfici privilegiate DENTRO
+    /// il protocollo invece di tenerle fuori come ha dovuto fare il grafo.
+    record ui-custom {
+        ns: string,
+        payload: json,
+        fallback: list<ui-ref>,
+    }
+    /// «Non ce l'ho fatta», con l'invito a riprovare. Distinto da un
+    /// `plugin-error` restituito da `render-view`: quello dice che la view non
+    /// si è disegnata, questo che una sua parte non ha un dato.
+    record ui-failed {
+        message: string,
+        retry: option<action-ref>,
+    }
     variant ui-kind {
         stack(ui-stack),
         text(string),
@@ -452,7 +760,44 @@ interface ui {
         /// iniettare contenuto attivo nella webview principale.
         html(string),
         web-view(ui-web-view),
+        section(ui-section),
+        table(ui-table),
+        row(ui-row),
+        tree(list<ui-ref>),
+        tree-item(ui-tree-item),
+        tabs(ui-tabs),
+        tab(ui-tab),
+        badge(ui-badge),
+        /// Un'icona dal repertorio della shell. Un nome che non conosce non
+        /// disegna niente: un'icona mancante non rompe un pannello.
+        icon(string),
+        progress(ui-progress),
+        separator,
+        empty-state(ui-empty-state),
+        key-value(list<key-value-entry>),
+        text-input(ui-text-input),
+        text-area(ui-text-area),
+        number(ui-number),
+        checkbox(ui-checkbox),
+        select(ui-select),
+        radio(ui-radio),
+        slider(ui-slider),
+        date-picker(ui-date-picker),
+        form(ui-form),
+        custom(ui-custom),
+        /// «Non ancora»: il dato non c'è perché qualcuno lo sta preparando
+        /// (§2.5). È un nodo e non una risposta di `render-view` perché il caso
+        /// normale è PARZIALE — la testata c'è, la tabella arriva.
+        pending(option<string>),
+        failed(ui-failed),
     }
+
+    /// Un nodo: la sua CHIAVE e la sua specie. La chiave è l'identità del nodo
+    /// attraverso due ridisegni — deve essere stabile e unica fra i fratelli
+    /// (l'id di un documento, non l'indice nella lista). Senza, l'identità è la
+    /// posizione, e una lista che si riordina sposta il focus e la selezione
+    /// insieme alle righe: con i nodi di input, un campo di testo che si svuota
+    /// a ogni salvataggio.
     record ui-node {
         key: option<string>,
         kind: ui-kind,
@@ -465,9 +810,14 @@ interface ui {
         root: ui-ref,
     }
 
+    /// Le due metà hanno due proprietari e non si mescolano: `payload` è ciò che
+    /// il provider ha attaccato al nodo, `fields` ciò che l'utente ha digitato.
+    /// Senza la seconda, i nodi di input nascerebbero sopra una convenzione che
+    /// nessuno ha scritto.
     record ui-action {
         action: action-id,
         payload: json,
+        fields: list<field-value>,
     }
     record view-update-reveal {
         doc-id: string,
@@ -477,6 +827,14 @@ interface ui {
     record view-update-custom {
         ns: string,
         payload: json,
+    }
+    /// Rimpiazza UN SOLO nodo, quello con questa chiave. Per chiave e non per
+    /// posizione: un patch indirizzato per path si rompe al primo riordino, cioè
+    /// esattamente nel caso che lo motivava. Una chiave che la shell non trova
+    /// non è un errore.
+    record view-update-patch {
+        key: string,
+        node: ui-tree,
     }
     variant view-update {
         replace(ui-tree),
@@ -493,6 +851,7 @@ interface ui {
         /// intenti nuovi nascono qui e vengono promossi a varianti proprie
         /// solo se universali — è ciò che tiene l'enum chiudibile al freeze.
         custom(view-update-custom),
+        patch(view-update-patch),
     }
 }
 
@@ -541,6 +900,25 @@ interface events {
     /// Coda eventi troncata (budget anti-ping-pong): `dropped` eventi persi.
     /// Chi deriva stato dagli eventi deve riconciliare da zero. Mai silenzioso.
     record event-overflow { dropped: u64 }
+    /// Un lotto (decisione 0011) si è chiuso: le N scritture che lo compongono sono una
+    /// cosa sola, e `changed` sono i documenti toccati — in ordine di prima
+    /// apparizione, senza ripetizioni. Sostituisce l'`index-updated` che ognuna
+    /// di quelle scritture avrebbe emesso: chi ridisegna lo fa UNA volta.
+    ///
+    /// Non dice se il lotto è riuscito per intero: un lotto non è una
+    /// transazione (il tutto-o-niente vuole il journal del §15.2), e ciò che non
+    /// è andato lo sa chi lo ha aperto, dal proprio errore.
+    record event-batch-ended { batch: batch-id, changed: list<doc-id> }
+    /// Una view è invecchiata per un motivo che il vault non conosce: un job
+    /// finito, una risposta dalla rete, un calcolo completato (§2.5). `instance`
+    /// assente = tutte le istanze di quella view.
+    ///
+    /// È un evento e non una capacità `invalidate-view` per la regola della
+    /// decisione 0013: una capacità è ciò di cui il chiamante ha bisogno della
+    /// risposta per proseguire; ciò che si limita a informare è un evento. Da
+    /// evento guadagna anche l'origine, che una capacità si sarebbe dovuta far
+    /// dichiarare da chi la chiama.
+    record event-view-invalidated { view: string, instance: option<string> }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -550,6 +928,8 @@ interface events {
         job-done(event-job-done),
         overflow(event-overflow),
         custom(event-custom),
+        batch-ended(event-batch-ended),
+        view-invalidated(event-view-invalidated),
     }
 
     enum event-kind {
@@ -561,28 +941,49 @@ interface events {
         job-done,
         overflow,
         custom,
+        /// Chi si abbona a `index-updated` si abbona anche a questo: dentro un
+        /// lotto è il solo dei due che arriva.
+        batch-ended,
+        /// Una view è invecchiata per un motivo che il vault non conosce.
+        view-invalidated,
     }
     type event-mask = list<event-kind>;
 
-    // LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0012). Questi tipi entrano nella
-    // baseline perché `event-handler.handle` — la firma che la decisione 0012 ha rotto
-    // apposta, e che è documentata sotto — li nomina: una baseline che non
-    // parsa non è una baseline. Ciò che la decisione 0012 ha aggiunto in modo davvero
-    // additivo (il caso `batch-ended` di `event` e di `event-kind`, e il record
-    // `event-batch-ended`) NON sta qui: deve restare una crescita che il test di
-    // additività vede come tale.
+    /// Identità di un lotto (decisione 0011). Come `job-id`, sul confine JSON viaggia
+    /// come stringa; qui resta `u64`, che non ha il problema dei 2⁵³.
+    ///
+    /// Opaca e non ordinabile per contratto: due lotti diversi hanno id diversi,
+    /// e nient'altro è promesso.
     type batch-id = u64;
+
+    /// Chi ha CHIESTO l'operazione da cui un evento nasce (decisione 0012) — non chi
+    /// l'ha eseguita. Un comando invocato da un'automazione scrive con l'origine
+    /// dell'automazione: è la sola lettura per cui il campo esiste, «questa l'ho
+    /// scritta io?», e leggerlo come "chi ha toccato il disco" darebbe la
+    /// risposta sbagliata proprio nel caso di 16.2.
     record actor-plugin { id: string }
     variant actor {
+        /// La persona davanti allo schermo, per il tramite della shell.
         user,
+        /// Il filesystem: un'altra app, un sync, una copia da terminale.
         watcher,
+        /// Il kernel stesso: apertura del vault, esito di un job, troncamento.
         kernel,
+        /// Un plugin che ha agito di propria iniziativa.
         plugin(actor-plugin),
     }
+
+    /// Da dove viene un evento: chi lo ha chiesto, e di quale lotto fa parte.
     record origin {
         actor: actor,
         batch: option<batch-id>,
     }
+
+    /// Un evento E la sua origine: ciò che un handler riceve.
+    ///
+    /// Un record e non un campo dentro ogni variante: l'origine è ortogonale a
+    /// *cosa* è successo, e ripeterla in nove casi avrebbe costretto ogni match
+    /// a destrutturarla anche dove non la guarda.
     record notice {
         event: event,
         origin: origin,
@@ -696,6 +1097,7 @@ interface command {
     }
     /// Ciò che la shell deve fare dopo. Parente di `view-update` e non lo stesso
     /// tipo: da un comando non esiste una view da ridisegnare.
+    record command-effect-open-view { view: string, params: json }
     variant command-effect {
         done,
         navigate(doc-id),
@@ -705,6 +1107,14 @@ interface command {
         /// Varco di estensione con namespace: la shell che non riconosce `ns`
         /// non fa nulla (degrado garbato, come per `view-update`).
         custom(command-effect-custom),
+        /// Apri un'ISTANZA di una view, con questi parametri (§2.3). Che passi
+        /// da un comando e non da una capacità è la regola della decisione 0013:
+        /// chi apre una view non ha bisogno della risposta per proseguire, e il
+        /// comando è il canale che la shell già esegue — con la palette, la
+        /// scorciatoia e la descrizione per un umano, gratis. I `params` sono
+        /// convalidati contro i `param-spec` della view prima di arrivare al
+        /// provider.
+        open-view(command-effect-open-view),
     }
 
     /// L'esito: cosa dire all'utente e cosa deve fare la shell. Un record e non
@@ -730,23 +1140,6 @@ interface command {
 /// largo. Chi risponde: il KERNEL per ciò di cui è già l'unica fonte di verità
 /// (grafo, modelli, frontmatter), i provider registrati per il resto (il
 /// full-text).
-/// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0019): il canale dati.
-///
-/// Cinque rotture deliberate, tutte della stessa: la query smette di essere una
-/// stringa nel linguaggio di una dipendenza e diventa un albero del contratto.
-/// `search-scope`, `index-query-full-text`, `index-query-properties`,
-/// `search-hit`, `document-properties`, `search-page` e `properties-page` sono
-/// TOLTI; `index-query` e `index-result` perdono `full-text`/`properties` e
-/// `search`/`properties` in favore di `documents`; `index-query-tags`,
-/// `index-query-neighbors` e `index-query-property-values` cambiano il primo
-/// campo (un'espressione al posto di un documento o di una lista di filtri); e
-/// l'interfaccia guadagna `routes`, senza cui il dispatch resta per tentativi.
-///
-/// Perché non additivo: `full-text` e `properties` erano due modi di chiedere la
-/// stessa cosa — quali documenti — in due lingue che non si potevano comporre,
-/// e affiancare una terza variante avrebbe lasciato le prime due a dire la
-/// stessa cosa peggio, per sempre. Il join fra testo e frontmatter non è un
-/// campo in più: è l'unificazione delle due.
 interface index {
     use json.{json};
     use model.{doc-id, document-model, span, heading, property-value, property-scalar};
@@ -1210,24 +1603,46 @@ interface view {
     use json.{json};
     use events.{event-mask};
     use session.{context-mask};
+    use command.{param-spec};
     use errors.{plugin-error};
 
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0016): si chiamava
-    /// `view-placement`. Una voce di menu o una scheda di impostazioni non è un
-    /// *posto in un layout* ma una superficie a cui ci si attacca, e con tre
-    /// soli casi ogni capitolo grande di FEATURES doveva uscire dal contratto
-    /// per avere dove stare (§2.2). I tre di prima restano in testa e
-    /// nell'ordine: è lo stesso discriminante.
-    enum view-surface { left-sidebar, right-sidebar, bottom }
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0016): `render-view` e
-    /// `on-action` prendevano il solo id della view, quindi una view era
-    /// un esemplare unico e statico — niente "questa view, con questo
-    /// parametro" (§2.3).
+    /// Dove una view si ANCORA. Non è come si disegna — quello è l'albero
+    /// `ui-node` — ma quale superficie della finestra occupa. Erano tre, e con
+    /// tre ogni capitolo grande di FEATURES doveva uscire dal contratto per
+    /// avere un posto dove stare: il grafo lo ha già fatto, con un comando
+    /// bespoke e un renderer privato, non perché sia speciale ma perché non
+    /// c'era un posto dove metterlo.
+    enum view-surface {
+        left-sidebar,
+        right-sidebar,
+        bottom,
+        /// L'area principale: dove oggi c'è l'editor e basta. Database (11),
+        /// canvas e slide (12), grafo (7.3), viste task (10.3), dashboard
+        /// (11.5) e calendario (10.4) vivono qui.
+        main,
+        modal,
+        status-bar,
+        ribbon,
+        menu,
+        /// Cosa fosse il bersaglio del clic lo dice il contesto di sessione
+        /// (decisione 0007), non un parametro di questa superficie.
+        context-menu,
+        settings-tab,
+    }
+
+    /// Un esemplare vivo di una view: quale view, quale esemplare, con quali
+    /// parametri. È l'altra metà della decisione 0007 — quella risolve *quale
+    /// documento* guarda una view, questa *quale istanza* è.
+    ///
+    /// `instance` la sceglie chi apre (la shell, o il comando che ha restituito
+    /// `open-view`); per la view che la shell monta da sé è l'id della view.
+    /// `params` arriva già convalidato contro `view-spec.params`.
     record view-instance {
         view: string,
         instance: string,
         params: json,
     }
+
     record view-spec {
         id: string,
         title: string,
@@ -1240,6 +1655,29 @@ interface view {
         /// ridisegnare "al cambio del documento attivo" diventa ridisegnare a
         /// ogni movimento del cursore, appena il contesto porta la selezione.
         follows: context-mask,
+        /// Gli argomenti con cui si può aprire un'istanza. Sono gli stessi
+        /// `param-spec` dei comandi e non un secondo tipo con lo stesso
+        /// mestiere: due grammatiche di parametri sarebbero due convalide e due
+        /// modi di sbagliarle. Vuoto = una sola istanza, quella che la shell
+        /// monta da sé.
+        params: list<param-spec>,
+        /// Il nome di un'icona del repertorio della shell; ciò che non conosce
+        /// lo ignora.
+        icon: option<string>,
+        /// L'ordine fra le view della stessa superficie: crescente, i pari
+        /// merito nell'ordine di registrazione.
+        order: s32,
+        /// È aperta appena la superficie esiste? Il default è chiusa: una view
+        /// che si apre da sola costa lo spazio di tutti quelli che non la
+        /// volevano.
+        open-by-default: bool,
+        /// La dimensione che vorrebbe (pixel logici) sull'asse che la sua
+        /// superficie lascia decidere. È una preferenza: vale alla prima
+        /// apertura, poi comanda ciò che l'utente ha trascinato.
+        preferred-size: option<u32>,
+        /// Si può chiudere? Chi dice di no sta dicendo che la sua superficie non
+        /// ha senso senza di lei.
+        closable: bool,
     }
 
     views: func() -> list<view-spec>;
@@ -1256,79 +1694,240 @@ interface errors {
         bad-args(string),
         permission-denied(string),
         internal(string),
+        /// Il sorgente su cui l'operazione era stata calcolata non è più quello
+        /// (`edit-request.base`). Caso a sé e non `bad-args` perché è l'unico
+        /// errore che non è una colpa di chi chiama: gli argomenti erano giusti
+        /// quando li ha calcolati, e la risposta giusta è ricalcolare.
+        conflict(string),
+        /// NESSUNO serve questa domanda: nessun indice ha dichiarato la rotta
+        /// che servirebbe. Distinguerlo da «chi la serve ha fallito» è metà del
+        /// valore del routing dichiarato — chi disegna deve poter scegliere fra
+        /// «installa un indice» e «qualcosa è andato storto».
+        unserved(string),
     }
 }
 
-/// Capacità concesse dal kernel a un provider/plugin: l'unico varco col mondo.
+// ---------------------------------------------------------------------------
+// Le capacità concesse dal kernel a un provider/plugin: l'unico varco col
+// mondo, in NOVE interfacce (§7.1).
+// ---------------------------------------------------------------------------
+//
+// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0021): fino a qui c'era
+// UNA interfaccia, `host-api`, con dentro tutte e ventiquattro le funzioni e
+// il record `trash-entry`. Ognuna di quelle funzioni cambia nome qualificato
+// — `host-api.read-document` diventa `host-vault-read.read-document` — e per
+// il presidio dell'additività questo è, giustamente, ventiquattro rimozioni
+// e un tipo spostato: la rottura più larga fatta finora, e l'ultima che
+// riguarda l'`host-api`, perché dopo il freeze una funzione non si sposta più
+// da un'interfaccia all'altra.
+//
+// Si fa adesso perché è il solo momento in cui costa una riga di diff invece
+// di una major, e perché ciò che compra non è ordine: è che il permesso di
+// scrivere possa **non essere importato**. Vedi il verbale della decisione
+// 0021.
+//
+// Erano una sola, `host-api`, e un'interfaccia sola si importa per intero o per
+// niente: un componente a cui non si vuole concedere la scrittura la riceveva
+// comunque, e il rifiuto era una risposta a runtime che l'host doveva scrivere
+// capacità per capacità, host per host, politica per politica.
+//
+// Divise, il mondo di un plugin (`plugin-world`) **elenca** ciò che gli si
+// presta, e un componente a cui non è stata importata `host-vault-write` non ha
+// modo di chiamarla: la funzione non c'è. È lo stesso confine di prima, detto
+// dove il component model lo può far rispettare da sé.
+//
+// Il criterio delle nove famiglie è uno solo: **cosa vuol dire negarne una.**
+// Per questo la lettura del vault è separata dalla scrittura e dalle operazioni
+// strutturali (i tre gradi che `read-vault` e `write-vault` distinguono, §7.3),
+// i blob del plugin si dividono nello stesso modo, e ciò che l'host sa e il
+// guest no — l'orologio, il pannello attivo — è una famiglia sua.
+
+/// Leggere il vault: la sorgente, la struttura, l'elenco, il cestino.
 ///
-/// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0013): `storage-get`/`storage-set` —
-/// lo stato volatile a chiave→valore — sono stati TOLTI. È l'unica rottura di
-/// questo giro e sta qui perché si veda. Con `data-*` (persistente, recintato
-/// per plugin) e le impostazioni del §11.1, allo store volatile non resta un
-/// caso d'uso: chi vuole ricordare qualcosa oltre la sessione usa i blob, chi
-/// vuole una preferenza usa le impostazioni, e chi vuole solo memoria per la
-/// durata della sessione ce l'ha già — un provider è un oggetto vivo nel
-/// workspace, e a M5 un componente WASM ha la propria memoria lineare. Una
-/// capacità che l'host fornisce per qualcosa che il chiamante possiede già è
-/// superficie da mantenere e da sandboxare per sempre. Toglierla dopo il
-/// freeze sarebbe stata una major: qui è un ritaglio in review.
-interface host-api {
-    use model.{doc-id};
-    use json.{json};
-    use events.{event};
+/// La famiglia sotto `read-vault`, e la sola che ogni percorso ha: anche il
+/// render di una view, anche una simulazione.
+interface host-vault-read {
+    use model.{doc-id, document-model};
+    use format.{document-format};
     use errors.{plugin-error};
-    use jobs.{job-id, job-spec};
-    use index.{doc-ids-page, index-query, index-result, page};
-    use session.{view-context};
+    use index.{doc-ids-page, page};
+    use edit.{revision};
+
+    /// Una voce del cestino. Due id perché sono due domande: dove il file si
+    /// trova ora (ed è quello che si passa a `restore-document`) e dove
+    /// tornerebbe un ripristino.
+    record trash-entry {
+        id: doc-id,
+        original: doc-id,
+        deleted-at: u64,
+        size: u64,
+    }
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
-    write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
-    /// I documenti del vault, in ordine. Senza, `read-document` serve solo per
-    /// gli id che arrivano dagli eventi.
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0019): prende una
-    /// finestra e restituisce una pagina. È il metodo con cui un provider si
-    /// guarda intorno, e senza finestra clona TUTTO il vault a ogni chiamata.
+    /// La revisione del sorgente di un documento: l'identità del testo su cui si
+    /// sta per calcolare una modifica. È una capacità e non un calcolo perché la
+    /// revisione è opaca e la sua derivazione non è promessa a nessuno.
+    ///
+    /// Sta fra le LETTURE, e non è una svista: chi prepara una modifica può
+    /// calcolarla mentre disegna, e consegnarla poi da dove si scrive.
+    document-revision: func(id: doc-id) -> result<revision, plugin-error>;
+    /// I documenti del vault, in ordine di id, A FINESTRA. Senza,
+    /// `read-document` serve solo per gli id che arrivano dagli eventi; senza
+    /// finestra, è il metodo con cui un provider si guarda intorno e clona
+    /// TUTTO il vault a ogni chiamata. `none` resta "tutto": chi ha davvero
+    /// bisogno dell'insieme intero non deve inventarsi un tetto.
     list-documents: func(page: option<page>) -> result<doc-ids-page, plugin-error>;
-    emit: func(event: event);
-    /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
-    /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
-    spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
+    /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, … a partire da
+    /// un id qualsiasi. È una capacità e non un calcolo perché il vault è
+    /// l'unico a sapere cosa è occupato (l'indicizzato E ciò che sta sul disco)
+    /// e perché la convenzione D3 deve restare una sola: con ~50 importer in
+    /// FEATURES 17.1, l'alternativa sono cinquanta convenzioni. Non prenota
+    /// niente.
+    free-name: func(id: doc-id) -> doc-id;
 
-    // --- storage persistente per-plugin --------------------------------------
+    // --- il modello parsato, e di che formato è ------------------------------
     //
-    // Namespace `.fubmd-data/plugins/<plugin-id>/`, creato e imposto dall'host:
-    // il plugin nomina blob con path relativi, non tocca mai il filesystem né
-    // conosce la radice del vault. Percorsi assoluti, `..` e separatori di
-    // sistema → `permission-denied`. È la capacità che rende scrivibile uno
-    // store di snapshot (il versioning) da dentro il contratto.
+    // Il §4.2 e il §4.3: *cosa c'è dentro questo documento* e *cosa saprei
+    // farci*. Stanno accanto a `read-document` perché sono la stessa specie di
+    // cosa — una lettura del vault — e non dentro `index-query`, che è il canale
+    // di ciò che è derivato: una variante là avrebbe un dispatch per tentativi
+    // che il kernel non usa (§5.1) e infilerebbe un `document-model` intero
+    // nell'enum su cui ogni indice fa match.
+    //
+    // I due nomi dicono i due COSTI: `read-` è una lettura (disco, parse),
+    // `-of` è una domanda sul nome a cui risponde una mappa. Una coppia
+    // simmetrica avrebbe nascosto che una delle due si può fare tremila volte
+    // e l'altra no.
+
+    /// La struttura di un documento: il modello parsato, con gli span. Era
+    /// l'unico verso che mancava — uno c'era, `index.on-document-indexed`, ma è
+    /// SPINTO, a chi indicizza, quando lo decide il kernel. Tagliato fuori era
+    /// il percorso one-shot: chi vuole il modello di questa nota adesso e non
+    /// era in ascolto quando è passata.
+    ///
+    /// RILEGGE E RIPARSA DAL DISCO a ogni chiamata, ed è contratto e non
+    /// dettaglio: la cache del kernel tiene i soli metadati (identità,
+    /// frontmatter, outline, link), il corpo no. Chi vuole i metadati usa
+    /// `index-query.outline`/`properties`/`tags`, che rispondono dalla cache.
+    /// Il modello è quello del FILE: un buffer non salvato non lo conosce
+    /// nessuno al di qua del confine.
+    read-model: func(id: doc-id) -> result<document-model, plugin-error>;
+    /// Di che formato è un documento, e che sintassi capirebbe. `none` = nessun
+    /// provider lo rivendica, ed è la risposta che serve a chi deve ignorarlo.
+    /// Non tocca il disco e non è un `result`: è una domanda sul nome, quindi
+    /// vale anche per un documento che non esiste ancora e si può fare su una
+    /// lista intera senza pagare un'apertura a testa.
+    format-of: func(id: doc-id) -> option<document-format>;
+    /// Il contenuto del cestino, dal più recente al più vecchio. Sta qui e non
+    /// in `index-query` perché il cestino non è indicizzato: una nota cestinata
+    /// non ha modello, né tag, né archi.
+    list-trash: func() -> result<list<trash-entry>, plugin-error>;
+}
+
+/// Scrivere il TESTO di un documento.
+///
+/// Due funzioni sole, ed è la famiglia più piccola perché è quella su cui si
+/// dice di no più spesso: ciò che una simulazione non fa, ciò che un comando
+/// dichiarato innocuo non può fare, ciò che un plugin senza `write-vault` non
+/// ottiene.
+interface host-vault-write {
+    use model.{doc-id};
+    use errors.{plugin-error};
+    use edit.{edit-request, edit-report};
+
+    /// Scrive il documento INTERO: è la scrittura di chi il testo intero ce l'ha
+    /// in mano (l'editor che salva, un importer che crea una nota). Chi ne
+    /// cambia un pezzo usa `apply-edit`.
+    write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
+    /// Cambia un PEZZO di documento: gli edit della richiesta, tutti o nessuno,
+    /// sul sorgente che la sua `base` nomina. `conflict` = il documento è
+    /// cambiato nel frattempo e non è stato scritto niente (si rilegge e si
+    /// ricalcola); `bad-args` = gli edit non stanno in piedi (fuori dal
+    /// sorgente, a metà di un carattere, sovrapposti, due nello stesso punto).
+    apply-edit: func(id: doc-id, request: edit-request) -> result<edit-report, plugin-error>;
+}
+
+/// Le operazioni STRUTTURALI: creare, rinominare, cestinare, ripristinare,
+/// distruggere — ciò che si fa a un documento senza aprirlo.
+///
+/// Erano kernel-owned e fuori dal contratto, e la conseguenza era che template,
+/// daily note, import e auto-archiviazione non potevano essere un plugin.
+///
+/// Stanno sotto `write-vault` come `host-vault-write`, e sono una famiglia a
+/// parte perché il no è di specie diversa: chi scrive testo cambia una nota che
+/// l'utente ha già, chi cestina gliela toglie.
+interface host-vault-structure {
+    use model.{doc-id};
+    use errors.{plugin-error};
+
+    /// Crea un documento NUOVO, e fallisce se il path è occupato. È il rifiuto
+    /// a distinguerla da `write-document`, che sovrascrive: un template che
+    /// sbaglia la data cancellerebbe una nota vera. Chi vuole un nome comunque
+    /// libero lo chiede a `free-name` e passa quello.
+    create-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
+    /// Rinomina/sposta preservando l'identità E riscrivendo i wikilink
+    /// entranti: è il rename del kernel, non ce n'è un secondo "nudo". È un
+    /// lotto (decisione 0011), e dentro un lotto già aperto vi si unisce.
+    rename-document: func(%from: doc-id, to: doc-id) -> result<_, plugin-error>;
+    /// Sposta nel cestino e dice dov'è finito: l'id restituito è quello con cui
+    /// si ripristina. Non distrugge — l'unica che distrugge è `empty-trash`.
+    trash-document: func(id: doc-id) -> result<doc-id, plugin-error>;
+    /// Riporta nel vault una voce del cestino (`entry` è il suo `id`) e
+    /// restituisce con quale path è tornata. Path d'origine occupato e nessun
+    /// `to` = errore, non un nome scelto d'ufficio: chi chiama ha `free-name`.
+    restore-document: func(entry: doc-id, to: option<doc-id>) -> result<doc-id, plugin-error>;
+    /// Svuota il cestino e dice quante voci ha distrutto. L'unica capacità del
+    /// contratto da cui non si torna indietro, e per questo una capacità a sé.
+    empty-trash: func() -> result<u64, plugin-error>;
+}
+
+// --- storage persistente per-plugin -----------------------------------------
+//
+// Namespace `.fubmd-data/plugins/<plugin-id>/`, creato e imposto dall'host:
+// il plugin nomina blob con path relativi, non tocca mai il filesystem né
+// conosce la radice del vault. Percorsi assoluti, `..` e separatori di
+// sistema → `permission-denied`. È la capacità che rende scrivibile uno
+// store di snapshot (il versioning) da dentro il contratto.
+//
+// Sono DUE interfacce e non una, per la stessa ragione della lettura e della
+// scrittura del vault: il percorso di render può rileggere ciò che il provider
+// si è salvato, e non deve poter scrivere mentre disegna.
+
+/// Rileggere i propri blob persistenti.
+interface host-data-read {
+    use errors.{plugin-error};
 
     /// Legge un blob persistente. Assente → `none`.
     data-read: func(path: string) -> result<option<list<u8>>, plugin-error>;
+    /// Elenca i blob sotto un prefisso, path relativi allo spazio del plugin,
+    /// ordinati. Prefisso inesistente → lista vuota.
+    data-list: func(prefix: string) -> result<list<string>, plugin-error>;
+}
+
+/// Scrivere e cancellare i propri blob persistenti.
+interface host-data-write {
+    use errors.{plugin-error};
+
     /// Scrive (creando le directory intermedie) un blob persistente.
     data-write: func(path: string, bytes: list<u8>) -> result<_, plugin-error>;
     /// Cancella un blob. Assente → successo (idempotente).
     data-remove: func(path: string) -> result<_, plugin-error>;
-    /// Elenca i blob sotto un prefisso, path relativi allo spazio del plugin,
-    /// ordinati. Prefisso inesistente → lista vuota.
-    data-list: func(prefix: string) -> result<list<string>, plugin-error>;
+}
+
+/// Ciò che l'host sa e il guest no: che ore sono, e cosa sta guardando
+/// l'utente.
+///
+/// Sembrano lontane e sono la stessa specie di cosa — un fatto dell'host che
+/// chi gira dentro il confine non può calcolarsi — e si negano insieme: un
+/// componente sotto sandbox può non avere orologio (WASI lo può negare) e può
+/// non avere titolo a sapere quale nota è aperta.
+interface host-env {
+    use session.{view-context};
 
     /// Orologio dell'host: millisecondi dall'epoca Unix. Un plugin non ha
     /// accesso al tempo di sistema (WASI lo può negare, e in test serve
     /// deterministico): il tempo è una capacità come le altre.
     now-unix-millis: func() -> u64;
-
-    // --- interrogazione dell'indice e contesto della sessione ----------------
-    //
-    // Le due capacità che rendono un `view-provider` un vero provider e non un
-    // guscio riempito dall'app: interrogare il vault e sapere quale documento
-    // è aperto. Vedi docs/architecture/plugin-boundary.md, "Interrogazione e
-    // contesto".
-
-    /// Interroga il vault: backlink e grafo (serviti dal grafo del kernel),
-    /// struttura, tag e proprietà (dai modelli in cache), salute del vault, e
-    /// ricerca full-text (dai provider registrati). Stessa semantica di
-    /// dispatch del kernel.
-    query-index: func(query: index-query) -> result<index-result, plugin-error>;
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `none` = la shell non ne ha ancora
     /// pubblicato uno. Lo imposta la shell; una view lo chiede quando ne ha
@@ -1339,15 +1938,92 @@ interface host-api {
     active-context: func() -> option<view-context>;
 }
 
+/// Farsi sentire: emettere un evento, chiedere lavoro lungo.
+///
+/// Una famiglia sola perché si negano insieme e per la stessa ragione: sono
+/// effetti che una simulazione non può ritirare.
+interface host-events {
+    use events.{event};
+    use errors.{plugin-error};
+    use jobs.{job-id, job-spec};
+
+    /// L'unica capacità del contratto SENZA esito: un host che non la concede
+    /// non ha modo di rifiutare, può solo non emettere. Il silenzio è il no.
+    emit: func(event: event);
+    /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
+    /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
+    spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
+}
+
+/// Il canale dati: interrogare l'indice.
+///
+/// Una famiglia con una funzione sola, e non è uno spreco: è la sola lettura
+/// che non riguarda UN documento ma ciò che è derivato dall'intero vault, e un
+/// host può volerla negare a chi ha `read-vault` ristretto a una cartella —
+/// una risposta aggregata non ha un path da confrontare con una allowlist.
+interface host-query {
+    use errors.{plugin-error};
+    use index.{index-query, index-result};
+
+    /// Interroga il vault: documenti che combaciano, backlink, grafo,
+    /// struttura, tag, faccette, salute del vault. Chi serve cosa è dichiarato
+    /// (`query-route`), non scoperto per tentativi: ciò che nessuno serve torna
+    /// come `unserved`, che è distinguibile da «chi la serve ha fallito».
+    query-index: func(query: index-query) -> result<index-result, plugin-error>;
+}
+
+/// **Chiamare un altro plugin** e ricevere una risposta (§7.5).
+///
+/// Era il canale che non c'era. Gli unici modi in cui due provider si potevano
+/// parlare erano `event.custom` — fire-and-forget, senza risposta — e
+/// `index-query.custom`, che ha un destinatario dichiarato (decisione 0019) ma
+/// resta *una domanda all'indice*. Una CHIAMATA non c'era: A non poteva
+/// chiedere qualcosa a B e ricevere un risultato, e senza di essa i moduli
+/// Suite del capitolo 21 non sarebbero plugin — sarebbero crate linkati che si
+/// vedono a compile time.
+interface host-services {
+    use json.{json};
+    use errors.{plugin-error};
+
+    /// Chiama un metodo di un servizio offerto da un altro plugin. `service` è
+    /// un `ns` con la regola dei nomi del §7.4. Nessuno lo offre → `unserved`,
+    /// distinguibile da «chi lo offre ha fallito».
+    ///
+    /// Chi esegue gira con le PROPRIE capacità: un servizio non presta i suoi
+    /// permessi a chi lo chiama, e chi lo chiama non presta i propri a lui.
+    /// Un servizio non può chiamare sé stesso, nemmeno per giro: `bad-args`
+    /// nomina il ciclo.
+    call-service: func(service: string, method: string, args: json) -> result<json, plugin-error>;
+}
+
+/// Invocare i comandi del registro.
+///
+/// Una famiglia sua perché è l'unica che MOLTIPLICA: chi la ottiene può fare
+/// tutto ciò che sanno fare i comandi registrati, compresi quelli che scrivono.
+interface host-commands {
+    use json.{json};
+    use errors.{plugin-error};
+    use command.{command-outcome};
+
+    /// Invoca un comando del registro (decisione 0009): è ciò che rende componibili macro
+    /// e automazioni senza che un plugin debba conoscere gli altri.
+    ///
+    /// Non prende un `invoke-mode`: il modo è dell'host, non della chiamata —
+    /// chi si sta simulando invoca in simulazione e riceve il PIANO, e il piano
+    /// di una macro è l'unione dei piani dei suoi passi. Non prende un `actor`:
+    /// l'attore è chi è ENTRATO nel kernel e resta lui per tutta la catena. Non
+    /// apre un lotto suo: si unisce a quello aperto, così una macro di tre
+    /// comandi è un `batch-ended` solo. Un comando non può invocare sé stesso,
+    /// nemmeno per giro: `bad-args` nomina il ciclo.
+    run-command: func(command: string, args: json) -> result<command-outcome, plugin-error>;
+}
+
 /// Reazione agli eventi (`EventHandler`).
 ///
-/// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0012): `handle` prendeva un `event`
-/// nudo. Adesso prende un `notice`, che è l'evento PIÙ la sua origine — chi ha
-/// chiesto l'operazione e di quale lotto fa parte. È una rottura, e sta qui
-/// perché si veda: senza l'origine sul parametro, un'automazione su-modifica che
-/// scrive non ha modo di riconoscere le proprie scritture e si richiama da sé.
-/// Aggiungerla dopo il freeze sarebbe costato una major, o una seconda funzione
-/// accanto alla prima con la stessa semantica e un argomento in più.
+/// `handle` riceve un `notice`, non un `event` nudo: accanto a *cosa* è successo
+/// c'è chi lo ha chiesto e di quale lotto fa parte (decisione 0012). Senza, un'automazione
+/// su-modifica che scrive si richiama da sé, e l'unica difesa sarebbe il budget
+/// del dispatch — che tronca, cioè è una rete di sicurezza e non una semantica.
 interface event-handler {
     use events.{notice, event-mask};
     use errors.{plugin-error};
@@ -1356,16 +2032,38 @@ interface event-handler {
     handle: func(notice: notice) -> result<_, plugin-error>;
 }
 
+/// Chi OFFRE un servizio agli altri plugin (§7.5).
+///
+/// Quali `ns` serva non lo dice questa interfaccia: lo dice il `provides` del
+/// suo `plugin-manifest`. È deliberato — «cosa offro» è una dichiarazione che
+/// l'host legge PRIMA di montare il plugin, e la usa per risolvere le
+/// dipendenze di chi arriva dopo; se stesse in una funzione, per saperlo
+/// bisognerebbe averlo già montato.
+interface service {
+    use json.{json};
+    use errors.{plugin-error};
+
+    /// Esegue un metodo. `service` è uno dei `ns` dichiarati nel manifest — un
+    /// provider può offrirne più d'uno. Un `method` ignoto è `bad-args`: la
+    /// domanda è arrivata a chi la doveva ricevere, ed è malposta.
+    call: func(service: string, method: string, args: json) -> result<json, plugin-error>;
+}
+
 /// Ciclo di vita del plugin + manifest e permessi.
 interface plugin {
     use errors.{plugin-error};
     use json.{json};
     use options.{option-map};
 
-    /// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0017): erano tre booleani
-    /// (`read-vault`, `write-vault`, `network`). Un booleano non ha dove mettere
-    /// il PARAMETRO di un permesso, e «rete» senza allowlist è o tutto o niente
-    /// — mentre 20.3 chiede proprio l'allowlist, di rete e di file (§3.5).
+    /// Cosa un plugin dichiara di voler fare. Erano tre booleani — leggere,
+    /// scrivere, rete — contro ciò che 20.1, 23.1 e 20.3 chiedono: appunti,
+    /// camera e microfono, filesystem esterno, e soprattutto rete CON ALLOWLIST
+    /// e file CON ALLOWLIST, cioè permessi che hanno un parametro. Un booleano
+    /// non ha dove metterlo, e «rete» senza allowlist è o tutto o niente.
+    ///
+    /// Un permesso con un namespace di terzi attraversa il confine intatto: un
+    /// host che non lo conosce può RIFIUTARLO, che è ciò che un enum chiuso non
+    /// gli avrebbe permesso di fare. Il punto di applicazione resta il §7.3.
     record plugin-permissions {
         granted: option-map,
     }
@@ -1380,6 +2078,16 @@ interface plugin {
         /// Vedi `fubmd_abi::traits::abi_compatible`.
         abi-version: string,
         permissions: plugin-permissions,
+        /// I SERVIZI CHE OFFRE (§7.5): i `ns` con cui altri plugin lo chiamano
+        /// via `host-services.call-service`. Sta nel manifest e non in una
+        /// funzione del provider perché l'host deve poterlo leggere prima di
+        /// montarlo: è ciò con cui risolve le dipendenze di chi arriva dopo.
+        provides: list<string>,
+        /// I servizi di cui HA BISOGNO. Un requisito che nessuno offre non è un
+        /// avvertimento: il plugin non si dichiara affatto, e chi lo monta legge
+        /// quale requisito manca. «Attivo ma degradato» è uno stato che nessuno
+        /// prova e che ogni feature dovrebbe poi gestire.
+        requires: list<string>,
     }
 
     manifest: func() -> plugin-manifest;
@@ -1390,15 +2098,191 @@ interface plugin {
     run-job: func(job: string, payload: json) -> result<json, plugin-error>;
 }
 
+/// Ciò che i due versi del trasferimento hanno in comune. Sta in un'interfaccia
+/// sua per la stessa ragione di `jobs` e `errors`: un tipo condiviso da due
+/// interfacce deve essere dichiarato in una terza, o "spostarlo" dopo sarebbe
+/// una rinomina qualificata, cioè una rottura.
+interface transfer {
+    /// Gravità di una riga di giornale.
+    enum note-level { info, warning, error }
+
+    /// I *migration logs* / *migration audit* di FEATURES 17.3. `entry` dice a
+    /// COSA si riferisce la riga nei termini della sorgente (il nome dentro lo
+    /// zip, la riga del CSV): senza, un giornale di quattromila righe è vero e
+    /// inservibile.
+    record transfer-note {
+        level: note-level,
+        message: string,
+        entry: option<string>,
+    }
+}
+
+/// `ImportProvider`: come i dati ENTRANO nel vault.
+///
+/// La sorgente arriva **già letta** (`bytes`), mai come percorso: chi apre il
+/// file è l'host. È ciò che rende il capitolo 17 esprimibile senza concedere a
+/// un plugin una capacità filesystem — la sandbox di M5 non deve aggiungere
+/// nulla. Il prezzo dichiarato: la sorgente sta in memoria (lo streaming è
+/// additivo, un `path: string` non lo sarebbe).
+interface importer {
+    use json.{json};
+    use model.{doc-id};
+    use errors.{plugin-error};
+    use transfer.{transfer-note};
+
+    /// I byte stanno nella sorgente, e non solo nel parametro di `import`,
+    /// perché `.docx`, `.epub`, `.odt` e mezzo mondo dei backup sono LO STESSO
+    /// contenitore zip: un dispatch sul solo nome sceglierebbe il provider
+    /// sbagliato. Il costo è una copia per candidato interpellato.
+    record import-source {
+        /// Come l'utente conosce la sorgente. NON è un doc-id: sta fuori dal
+        /// vault.
+        name: string,
+        media-type: option<string>,
+        bytes: list<u8>,
+    }
+
+    /// La *preview* di 17.3 senza un secondo tipo: in `preview` il provider fa
+    /// tutto tranne le scritture e restituisce lo stesso `import-report`. Il
+    /// piano È il rapporto di una prova a vuoto.
+    enum import-mode { preview, apply }
+
+    /// Il *duplicate handling* di 17.3. `rename` usa `host-api.free-name`: la
+    /// convenzione dei nomi la decide l'host, non l'importer.
+    enum conflict-policy { skip, replace, rename }
+
+    record import-request {
+        mode: import-mode,
+        /// Cartella del vault in cui atterrano i documenti; vuota = radice.
+        folder: string,
+        on-conflict: conflict-policy,
+        /// Opzioni del singolo importer: l'escape hatch JSON, senza namespace
+        /// perché il provider è già stato scelto.
+        options: json,
+    }
+
+    variant import-outcome {
+        created,
+        replaced,
+        skipped,
+        /// Un import può riuscire con dei falliti dentro: `plugin-error`
+        /// significa «non ho potuto cominciare», questo «questo pezzo no».
+        failed(string),
+    }
+    record imported-document {
+        doc: doc-id,
+        outcome: import-outcome,
+        /// Da quale entrata della sorgente viene.
+        entry: option<string>,
+    }
+    /// Nessun conteggio (`documents` lo è già) e nessun id di lotto: il
+    /// rollback è della decisione 0011 del piano, e un campo che nessuno consuma è peggio
+    /// di un campo assente.
+    record import-report {
+        mode: import-mode,
+        documents: list<imported-document>,
+        log: list<transfer-note>,
+    }
+
+    /// Il dispatch: il kernel interpella i provider in ordine e il primo che
+    /// dice di sì la prende. `false` non è un errore.
+    can-handle: func(source: import-source) -> bool;
+    /// Le scritture passano da `host-api.write-document` (importato dal world):
+    /// un importer non tocca il filesystem.
+    %import: func(source: import-source, request: import-request) -> result<import-report, plugin-error>;
+}
+
+/// `ExportProvider`: come i dati ESCONO dal vault.
+///
+/// Un export è una **lettura**: nessuna delle ~45 voci di 17.2 scrive nel
+/// vault, e dirlo nella firma è ciò che permette al kernel di servirlo sotto
+/// prestito condiviso, come `view.render-view` e `index.query`.
+interface exporter {
+    use json.{json};
+    use model.{doc-id};
+    use errors.{plugin-error};
+    use index.{index-query};
+    use transfer.{transfer-note};
+
+    record export-target {
+        /// Id stabile col prefisso di chi lo offre (`markdown.files`).
+        id: string,
+        name: string,
+        /// Estensione dell'artefatto quando l'esito è UN FILE SOLO (`pdf`,
+        /// `zip`); assente quando è un albero di file (una cartella markdown,
+        /// un sito statico). Un campo per due domande, di proposito: chi apre
+        /// il dialogo di sistema deve sapere prima se chiedere un file o una
+        /// cartella, e due campi indipendenti ammetterebbero combinazioni che
+        /// non esistono.
+        extension: option<string>,
+    }
+
+    /// Le tre domande di 17.2: note selezionate, cartella (la radice = vault
+    /// intero), risultati di una query. L'ultima non è un lusso: senza,
+    /// esportare una ricerca vuol dire che l'APP materializza la lista, cioè
+    /// che un plugin non potrebbe fare la stessa cosa.
+    variant export-selection {
+        documents(list<doc-id>),
+        /// Cartella e discendenti; `""` è la radice. Stessa regola di
+        /// appartenenza di `query-predicate.folder`.
+        folder(string),
+        query(index-query),
+    }
+    record export-request {
+        selection: export-selection,
+        /// L'id di una delle destinazioni di `targets`.
+        target: string,
+        options: json,
+    }
+    /// Byte, non un file: chi li posa sul disco è l'host.
+    record export-artifact {
+        /// Path relativo DENTRO l'esito.
+        path: string,
+        media-type: string,
+        bytes: list<u8>,
+    }
+    record export-report {
+        artifacts: list<export-artifact>,
+        log: list<transfer-note>,
+    }
+
+    targets: func() -> list<export-target>;
+    %export: func(request: export-request) -> result<export-report, plugin-error>;
+}
+
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che
 /// implementa. Il kernel non distingue nativo da WASM.
 world plugin-world {
-    import host-api;
+    // Le nove famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
+    // mondo che non importa `host-vault-write` non è un mondo che la rifiuta a
+    // runtime, è un mondo in cui quella funzione non esiste. Il giorno che il
+    // caricatore di M5 monterà un componente sotto sandbox stretta, ciò che
+    // cambia è questa lista — e la superficie negata non ha nemmeno un simbolo
+    // da chiamare.
+    import host-vault-read;
+    import host-vault-write;
+    import host-vault-structure;
+    import host-data-read;
+    import host-data-write;
+    import host-env;
+    import host-events;
+    import host-query;
+    import host-commands;
+    import host-services;
 
     export plugin;
     export format;
+    /// I due innesti del §3.1 e del §3.2: chi aggiunge la sintassi, e chi
+    /// disegna il blocco che ne esce. Sono esportati separatamente da `format`
+    /// perché un plugin può implementarne uno senza implementare l'altro — ed è
+    /// esattamente ciò che «mezzo plugin» significa.
+    export syntax;
+    export renderer;
     export command;
     export view;
     export index;
     export event-handler;
+    export service;
+    export importer;
+    export exporter;
 }

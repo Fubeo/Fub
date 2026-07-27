@@ -26,11 +26,12 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
       (consegna in `workspace.rs:2078-2084`): con i moduli
       FubSuite che si parlano fra loro (21.2), ogni handler si sveglia per
       **ogni** custom di **ogni** plugin.
-- [ ] **Il prefisso di topic non va inventato: c'è già.** Un custom è per
-      convenzione `"<plugin-id>/<nome>"` (`abi/event.rs:239-240`), quindi qui non
-      manca il formato — manca il **match sul prefisso** in `EventMask`. E il
-      formato è quello del §7.4 (gli id e il loro namespace, P0): si decide lì,
-      qui resta il solo filtro. Due voci, una decisione.
+- [ ] **Il prefisso di topic non va inventato: c'è già, ed è deciso.** Il
+      formato è quello del §7.4 — `ns:nome`, col `ns` di chi emette — e la
+      [decisione 0021](../decisions/0021-il-confine.md) lo impone all'host nel
+      momento in cui l'evento passa. Qui resta il solo **match sul prefisso** in
+      `EventMask`, che è l'altra metà: senza, chi si abbona ai custom li riceve
+      tutti.
 - [ ] **Manca la grana del soggetto**, ed è la metà che va davvero inventata:
       nessuno può abbonarsi a "i cambiamenti di questa cartella" o "di questo
       documento", quindi l'evento più caldo (`DocumentChanged`) sveglia tutti,

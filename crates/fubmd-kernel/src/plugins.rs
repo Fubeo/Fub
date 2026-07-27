@@ -1,0 +1,428 @@
+//! Il **registro dei plugin**: chi è registrato, cosa ha dichiarato, cosa ha
+//! registrato (§7.3, §7.4, §7.6).
+//!
+//! Prima di questo modulo il kernel non conservava manifest: `register_*`
+//! prendeva una **stringa**, e da quella stringa nasceva lo spazio dati del
+//! provider e nient'altro. Le conseguenze erano tre, e sono le tre voci che
+//! questo modulo chiude insieme:
+//!
+//! - **§7.3 — il punto di applicazione non esisteva.** `PluginPermissions`
+//!   stava nel contratto e non lo leggeva nessuno; `KernelHost` portava
+//!   `plugin: &str` e non sapeva *di chi* fossero le capacità che stava
+//!   prestando. `Trust` esisteva ed era un parametro del solo
+//!   `register_view_provider`: un `IndexProvider` di terzi avrebbe ricevuto
+//!   ogni documento del vault senza che `read_vault` fosse mai consultato.
+//! - **§7.4 — gli id non erano di nessuno.** Nessuna regola di namespace,
+//!   nessun conflitto: due view con lo stesso id, e la seconda irraggiungibile
+//!   in silenzio.
+//! - **§7.6 — non c'era un inventario.** La shell sapeva un booleano
+//!   (`versioning`) e nient'altro: non quali provider, indici, comandi fossero
+//!   attivi, con quale versione, quali permessi, quale fiducia.
+//!
+//! # La forma
+//!
+//! Una **dichiarazione** ([`Workspace::register_plugin`]) precede ogni
+//! registrazione, e dice chi è: id, versione, versione di ABI, permessi,
+//! fiducia. Le registrazioni successive nominano quell'id; un id che nessuno ha
+//! dichiarato è un errore, **non** un plugin creato al volo.
+//!
+//! Che sia un errore e non un default è il punto: il grado di fiducia più
+//! restrittivo fra quelli che girano è già ciò che si ottiene dimenticandosi di
+//! dichiararlo ([`Trust::default`]), e concedere `Trust::Core` a chi non si è
+//! presentato sarebbe la regola opposta nello stesso kernel.
+//!
+//! [`Workspace::register_plugin`]: crate::Workspace::register_plugin
+
+use fubmd_abi::rules::ids::{self, IdFault, Owner};
+use fubmd_abi::traits::{PluginManifest, QueryRoute};
+use fubmd_abi::PluginError;
+use serde::{Deserialize, Serialize};
+
+use crate::host::Granted;
+use crate::index::RouteConflict;
+use crate::workspace::Trust;
+
+/// Che specie di cosa un plugin ha registrato.
+///
+/// Serve a due mestieri e per questo è un enum e non otto liste: l'inventario
+/// del §7.6 (*cosa è attivo*) e la **contesa dei nomi** del §7.4 (*chi possiede
+/// già questo id*), che è la stessa domanda letta al contrario.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RegistrationKind {
+    View,
+    Command,
+    Index,
+    EventHandler,
+    Import,
+    Export,
+    Syntax,
+    Renderer,
+    /// Un servizio offerto agli altri plugin (§7.5).
+    Service,
+}
+
+impl RegistrationKind {
+    /// Come si chiama in un messaggio d'errore.
+    pub fn what(self) -> &'static str {
+        match self {
+            RegistrationKind::View => "la view",
+            RegistrationKind::Command => "il comando",
+            RegistrationKind::Index => "la rotta",
+            RegistrationKind::EventHandler => "l'handler",
+            RegistrationKind::Import => "l'importer",
+            RegistrationKind::Export => "la destinazione di export",
+            RegistrationKind::Syntax => "la regola sintattica",
+            RegistrationKind::Renderer => "il renderer",
+            RegistrationKind::Service => "il servizio",
+        }
+    }
+
+    /// I nomi di questa specie stanno in uno spazio a sé?
+    ///
+    /// Sì per tutte tranne le due che **non nominano niente**: un event handler
+    /// e un importer non hanno un id proprio — si registrano e basta — e per
+    /// loro l'unico nome in gioco è quello del plugin.
+    fn names(self) -> bool {
+        !matches!(
+            self,
+            RegistrationKind::EventHandler | RegistrationKind::Import
+        )
+    }
+}
+
+/// Una cosa che un plugin ha registrato: la specie e il nome.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Registration {
+    pub kind: RegistrationKind,
+    /// L'id registrato. Per le specie che non nominano niente
+    /// ([`RegistrationKind::names`] falso) è l'id del plugin stesso: una riga
+    /// nell'inventario ci vuole comunque, o «ho registrato un handler» non si
+    /// potrebbe dire.
+    pub id: String,
+}
+
+/// Un plugin dichiarato, con ciò che ha dichiarato e ciò che ha registrato.
+pub struct PluginEntry {
+    pub manifest: PluginManifest,
+    pub trust: Trust,
+    /// La politica già calcolata: è ciò che ogni host di questo plugin monta
+    /// davanti a sé. Sta qui e non si ricalcola a ogni prestito perché un host
+    /// si presta a ogni evento consegnato, e un `BTreeMap` clonato per evento
+    /// per handler è un costo che non compra niente.
+    pub(crate) granted: Granted,
+    pub registrations: Vec<Registration>,
+}
+
+/// Perché una registrazione non è avvenuta.
+///
+/// **Ogni variante vuol dire "non è registrato"**, e non "è registrato a metà":
+/// è la disciplina che la decisione 0017 ha fissato per i renderer e la 0019
+/// per le rotte, applicata a tutte le famiglie. L'unica eccezione è dichiarata
+/// e si chiama [`RegistryError::Activate`] — là il provider **è** registrato e
+/// non ha ritrovato la propria memoria, che è lento e non sbagliato.
+#[derive(Debug)]
+pub enum RegistryError {
+    /// Un id che nessuno ha dichiarato con `register_plugin`.
+    UnknownPlugin(String),
+    /// Due plugin con lo stesso id.
+    DuplicatePlugin(String),
+    /// Un nome che chi lo registra non può nominare (§7.4).
+    Namespace(IdFault),
+    /// Un nome già rivendicato da qualcun altro. Chi vuole **sostituire** lo
+    /// chiede per nome (`replace_*`), che è la differenza fra scavalcare
+    /// qualcuno e farlo per sbaglio.
+    Claimed {
+        kind: RegistrationKind,
+        id: String,
+        incumbent: String,
+        challenger: String,
+    },
+    /// Una rotta di query già rivendicata (decisione 0019).
+    Route(RouteConflict),
+    /// Una regola sintattica in conflitto (decisione 0017).
+    Syntax(crate::syntax::SyntaxConflict),
+    /// Un renderer in conflitto (decisione 0017).
+    Renderer(crate::renderer::RendererConflict),
+    /// Un plugin che ha bisogno di servizi che nessuno offre (§7.5). Non si
+    /// dichiara affatto: «attivo ma degradato» è uno stato che nessuno prova.
+    MissingRequirement {
+        plugin: String,
+        requires: Vec<String>,
+    },
+    /// Un `ServiceProvider` registrato da un plugin che non dichiara di offrire
+    /// niente: quasi certamente manca il `provides` del manifest.
+    NothingProvided(String),
+    /// L'indice **è** registrato e la sua `activate` è fallita: reindicizzerà
+    /// tutto, che è lento e non sbagliato.
+    Activate(PluginError),
+}
+
+impl std::fmt::Display for RegistryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RegistryError::UnknownPlugin(id) => write!(
+                f,
+                "`{id}` non è un plugin dichiarato: chi registra qualcosa si dichiara prima \
+                 (register_plugin), o le sue capacità non hanno un proprietario"
+            ),
+            RegistryError::DuplicatePlugin(id) => {
+                write!(f, "un plugin con id `{id}` è già dichiarato")
+            }
+            RegistryError::Namespace(fault) => write!(f, "{fault}"),
+            RegistryError::Claimed {
+                kind,
+                id,
+                incumbent,
+                challenger,
+            } => write!(
+                f,
+                "{} `{id}` è già di `{incumbent}`: `{challenger}` non la registra \
+                 (per sostituirla si chiede per nome)",
+                kind.what()
+            ),
+            RegistryError::MissingRequirement { plugin, requires } => write!(
+                f,
+                "`{plugin}` ha bisogno di {} e nessuno li offre: non è dichiarato \
+                 (chi lo monta li monti prima)",
+                requires
+                    .iter()
+                    .map(|r| format!("`{r}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            RegistryError::NothingProvided(plugin) => write!(
+                f,
+                "`{plugin}` registra un ServiceProvider e il suo manifest non dichiara \
+                 nessun `provides`: è il manifest a dire cosa offre"
+            ),
+            RegistryError::Route(c) => write!(f, "{c}"),
+            RegistryError::Syntax(c) => write!(f, "{c}"),
+            RegistryError::Renderer(c) => write!(f, "{c}"),
+            RegistryError::Activate(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for RegistryError {}
+
+/// Chi è registrato, in ordine di dichiarazione.
+#[derive(Default)]
+pub struct PluginRegistry {
+    entries: Vec<PluginEntry>,
+}
+
+impl PluginRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Dichiara un plugin. Id già dichiarato → conflitto.
+    pub fn declare(&mut self, manifest: PluginManifest, trust: Trust) -> Result<(), RegistryError> {
+        if self.entries.iter().any(|e| e.manifest.id == manifest.id) {
+            return Err(RegistryError::DuplicatePlugin(manifest.id));
+        }
+        let granted = Granted::new(&manifest.id, &manifest.permissions, trust);
+        self.entries.push(PluginEntry {
+            manifest,
+            trust,
+            granted,
+            registrations: Vec::new(),
+        });
+        Ok(())
+    }
+
+    pub fn get(&self, id: &str) -> Option<&PluginEntry> {
+        self.entries.iter().find(|e| e.manifest.id == id)
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, PluginEntry> {
+        self.entries.iter()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// La politica da montare davanti a un host intestato a `plugin`.
+    ///
+    /// Un id **sconosciuto** riceve una politica che nega tutto. È il caso di
+    /// chi presta un host a un id che nessuno ha dichiarato (per esempio
+    /// `Workspace::with_host` chiamato a vanvera): la risposta giusta non è
+    /// concedere in bianco, ed è un rifiuto che si legge nel messaggio invece
+    /// di essere un `unwrap` che sparisce.
+    pub(crate) fn granted(&self, plugin: &str) -> Granted {
+        match self.get(plugin) {
+            Some(entry) => entry.granted.clone(),
+            None => Granted::undeclared(plugin),
+        }
+    }
+
+    /// Il proprietario che ha già registrato questo nome, se c'è.
+    pub fn owner_of(&self, kind: RegistrationKind, id: &str) -> Option<&str> {
+        self.entries
+            .iter()
+            .find(|e| e.registrations.iter().any(|r| r.kind == kind && r.id == id))
+            .map(|e| e.manifest.id.as_str())
+    }
+
+    /// Il grado di fiducia di un plugin dichiarato.
+    pub fn trust_of(&self, plugin: &str) -> Option<Trust> {
+        self.get(plugin).map(|e| e.trust)
+    }
+
+    /// Chi può nominare cosa, per un plugin dichiarato: il core nomina anche
+    /// nudo, gli altri solo dentro il proprio id (§7.4).
+    fn owner<'a>(&'a self, plugin: &'a str) -> Owner<'a> {
+        match self.trust_of(plugin) {
+            Some(Trust::Core) => Owner::Core,
+            _ => Owner::Plugin(plugin),
+        }
+    }
+
+    /// **Il varco unico di ogni registrazione** (§7.3 + §7.4): il plugin è
+    /// dichiarato, i nomi sono suoi, e nessuno di essi è già di qualcun altro.
+    ///
+    /// Prende **tutti** i nomi in una volta e non uno alla volta perché la
+    /// risposta deve essere tutto-o-niente: un provider che offre tre view e ne
+    /// nomina bene due non ne registra due.
+    pub fn admit(
+        &self,
+        plugin: &str,
+        kind: RegistrationKind,
+        ids: &[String],
+    ) -> Result<(), RegistryError> {
+        if self.get(plugin).is_none() {
+            return Err(RegistryError::UnknownPlugin(plugin.to_string()));
+        }
+        if !kind.names() {
+            return Ok(());
+        }
+        let owner = self.owner(plugin);
+        for id in ids {
+            ids::check(id, owner).map_err(RegistryError::Namespace)?;
+            if let Some(incumbent) = self.owner_of(kind, id) {
+                return Err(RegistryError::Claimed {
+                    kind,
+                    id: id.clone(),
+                    incumbent: incumbent.to_string(),
+                    challenger: plugin.to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Segna ciò che un plugin ha registrato. Da chiamare **dopo** che
+    /// [`admit`](PluginRegistry::admit) è passata.
+    pub fn record(&mut self, plugin: &str, kind: RegistrationKind, ids: &[String]) {
+        let Some(entry) = self.entries.iter_mut().find(|e| e.manifest.id == plugin) else {
+            return;
+        };
+        if ids.is_empty() {
+            entry.registrations.push(Registration {
+                kind,
+                id: plugin.to_string(),
+            });
+            return;
+        }
+        for id in ids {
+            entry.registrations.push(Registration {
+                kind,
+                id: id.clone(),
+            });
+        }
+    }
+
+    /// Toglie dall'inventario le registrazioni di una specie fatte da un
+    /// plugin: è ciò che serve a una **sostituzione**, dove chi entra prende il
+    /// posto di chi c'era.
+    pub fn forget(&mut self, kind: RegistrationKind, ids: &[String]) {
+        for entry in self.entries.iter_mut() {
+            entry
+                .registrations
+                .retain(|r| !(r.kind == kind && ids.contains(&r.id)));
+        }
+    }
+}
+
+/// Una riga dell'inventario di ciò che è attivo (§7.6): ciò che la shell può
+/// sapere di un plugin senza avere il kernel fra le mani.
+///
+/// È il tipo che fa sparire `VaultInfo.versioning: bool` — un booleano **per
+/// feature** dentro un record IPC, che con i moduli del 21.2 sarebbe diventato
+/// venti booleani, e ognuno una modifica al record, al mirror e alla fixture.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PluginInfo {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    /// La versione del contratto contro cui è scritto.
+    pub abi_version: String,
+    pub trust: Trust,
+    /// I permessi **concessi**, con i loro parametri: è la mappa del manifest,
+    /// non un elenco di booleani.
+    pub permissions: fubmd_abi::options::OptionMap,
+    /// Cosa ha registrato. Vuoto è una risposta: un plugin dichiarato che non
+    /// ha registrato niente è precisamente ciò che si vuole poter vedere.
+    pub registrations: Vec<Registration>,
+}
+
+impl PluginInfo {
+    pub(crate) fn of(entry: &PluginEntry) -> Self {
+        PluginInfo {
+            id: entry.manifest.id.clone(),
+            name: entry.manifest.name.clone(),
+            version: entry.manifest.version.clone(),
+            abi_version: entry.manifest.abi_version.clone(),
+            trust: entry.trust,
+            permissions: entry.manifest.permissions.granted.clone(),
+            registrations: entry.registrations.clone(),
+        }
+    }
+}
+
+/// Le query custom che un indice rivendica: i soli nomi di una rotta che
+/// stanno in uno spazio condiviso, e quindi i soli su cui la regola del §7.4
+/// ha qualcosa da dire.
+///
+/// Le rotte **non** custom (`Documents`, `Tags`, …) sono nomi del contratto,
+/// non di chi le serve: chi le rivendica non le sta nominando, le sta servendo,
+/// e il conflitto lo vede la tabella delle rotte (decisione 0019).
+pub fn custom_namespaces(routes: &[QueryRoute]) -> Vec<String> {
+    use fubmd_abi::traits::{PredicateKind, QueryKind};
+    routes
+        .iter()
+        .filter_map(|route| match route {
+            QueryRoute::Query(QueryKind::Custom(ns)) => Some(ns.clone()),
+            QueryRoute::Predicate(PredicateKind::Custom(ns)) => Some(ns.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Chi offre un servizio, per `ns`: la tabella di instradamento del §7.5.
+///
+/// È una funzione e non un campo perché la verità sta nei manifest — un
+/// servizio lo dichiara chi lo offre, e tenerne una seconda copia vorrebbe dire
+/// tenerle allineate.
+impl PluginRegistry {
+    /// Il plugin che offre questo servizio, se c'è. Un plugin revocato non lo
+    /// offre: `Trust::Revoked` non è un grado più basso, è l'assenza del
+    /// permesso di essere eseguiti.
+    pub fn provider_of(&self, service: &str) -> Option<&str> {
+        self.iter()
+            .find(|e| e.trust.runs() && e.manifest.provides.iter().any(|s| s == service))
+            .map(|e| e.manifest.id.as_str())
+    }
+
+    /// I requisiti di un manifest che nessuno offre.
+    pub fn missing_requirements(&self, manifest: &PluginManifest) -> Vec<String> {
+        manifest
+            .requires
+            .iter()
+            .filter(|r| self.provider_of(r).is_none())
+            .cloned()
+            .collect()
+    }
+}

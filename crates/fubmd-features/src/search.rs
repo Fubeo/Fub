@@ -884,10 +884,14 @@ impl IndexProvider for SearchIndex {
 mod tests {
     use super::*;
     use crate::testing::MemoryHost;
+    // Le famiglie che il doppio serve a questi test: dal §7.1 un host è la
+    // somma di nove trait, e i metodi di un trait si vedono se il trait è in
+    // scope — anche quando l'oggetto li ha tutti.
     use camino::Utf8PathBuf;
     use fubmd_abi::model::Tag;
     use fubmd_abi::query::QueryLiteral;
     use fubmd_abi::traits::PropertySelect;
+    use fubmd_abi::traits::{DataRead, DataWrite};
 
     fn doc(id: &str, text: &str) -> DocumentModel {
         let mut m = DocumentModel::empty(DocId::new(id));

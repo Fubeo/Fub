@@ -61,6 +61,10 @@ fn vault() -> (tempfile::TempDir, Workspace) {
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry);
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    ws.register_core_feature(SEARCH_ID, SEARCH_ID)
+        .expect("dichiarato");
     let data = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
     let index = SearchIndex::open(&data).expect("indice");
     ws.register_index_provider(SEARCH_ID, Box::new(index))

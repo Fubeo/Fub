@@ -18,7 +18,7 @@
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::session::{ContextMask, PaneMode, Selection};
-use fubmd_abi::traits::{HostApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fubmd_abi::traits::{HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
@@ -93,7 +93,7 @@ impl ViewProvider for StatsView {
     fn render_view(
         &self,
         _instance: &ViewInstance,
-        host: &dyn HostApi,
+        host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         let Some(doc) = host.active_context().and_then(|c| c.doc) else {
             return Ok(riga("Nessuna nota aperta."));
