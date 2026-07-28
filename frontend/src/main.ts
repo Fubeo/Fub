@@ -18,10 +18,11 @@ import { emit, loadActiveSpace, loadExpanded, loadMode, state } from "./state/st
 import { loadCommandSpecs } from "./state/vault";
 import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
-import { notify } from "./ui/notify";
+import { mountNotifications, notify } from "./ui/notify";
 import { findByBinding, openCommandPalette, startCommand } from "./ui/palette";
 import { mountPanelHost } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
+import { mountActivity } from "./panels/activity";
 import {
   closeDocument,
   mountDocument,
@@ -74,6 +75,11 @@ async function init(): Promise<void> {
   mountTrash();
   mountHistory();
   mountGraph({ openNote: (id) => void openDocument(id) });
+  // Le due superfici della barra di stato (§10.3): cosa sta girando, e cosa è
+  // stato detto. Il centro attività si iscrive agli eventi del kernel, quindi
+  // va montato prima che il router parta.
+  mountNotifications();
+  mountActivity();
 
   $("#open-vault").addEventListener("click", () => void pickVault());
 

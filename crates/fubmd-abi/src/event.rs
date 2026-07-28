@@ -83,6 +83,30 @@
 //! quando ridisegnare una view dichiarata. Due letture della stessa maschera
 //! sono due modi di restringerla, e il secondo non lo vedrebbe nessun test.
 //!
+//! # Il lavoro lungo si racconta (decisione 0035): tre eventi, non una capacità
+//!
+//! Un job aveva un evento solo, l'esito ([`Event::JobDone`]), e chi lo aveva
+//! chiesto restava senza notizie fino alla fine — un export di duemila note era
+//! indistinguibile da un'app ferma. Adesso il ciclo è per intero sul canale:
+//! [`JobStarted`](Event::JobStarted) quando il job è accettato,
+//! [`JobProgress`](Event::JobProgress) quante volte il job vuole,
+//! [`JobDone`](Event::JobDone) alla fine.
+//!
+//! Il nodo era che **un job non conosce il proprio [`JobId`]**: `run_job` riceve
+//! il nome dell'entry point, gli argomenti e l'host, non l'identità. La risposta
+//! non cambia la regola della decisione 0013 — il progresso *informa*, quindi è
+//! un evento — e mette l'identità dove sta: la timbra l'host del job, quando il
+//! job passa da
+//! [`report_progress`](crate::traits::HostEvents::report_progress). Da lì viene
+//! una proprietà che una firma con l'id fra i parametri non avrebbe: nessuno può
+//! raccontare il progresso di un altro.
+//!
+//! I due eventi nuovi sono **recuperabili**: chi arriva dopo, o chi ha ricevuto
+//! un [`Overflow`](Event::Overflow), ricostruisce l'elenco con
+//! [`IndexQuery::Jobs`](crate::traits::IndexQuery::Jobs). Per il progresso non è
+//! una comodità: è la condizione perché il canale più fitto del contratto possa
+//! essere frenato come tutti gli altri.
+//!
 //! # Cosa resta deliberatamente fuori
 //!
 //! - **L'annullamento** di un lotto (§15.2 + §13.3): vedi sopra.
@@ -104,7 +128,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
-use crate::traits::JobId;
+use crate::traits::{JobId, JobProgress};
 
 /// Identità di un lotto (decisione 0011): le N scritture che la portano sono una cosa
 /// sola.
@@ -333,6 +357,35 @@ pub enum Event {
     /// e la chiusura non si annulla. Chi non fa in tempo a scrivere ha comunque
     /// perso solo ciò che non aveva reso durevole.
     VaultClosed { root: String },
+    /// Un lavoro lungo è stato **accettato** (§10.3, decisione 0035): il gemello
+    /// d'apertura di [`JobDone`](Event::JobDone), ed è il momento in cui un
+    /// centro attività fa comparire la riga.
+    ///
+    /// «Accettato» e non «partito»: lo emette il kernel quando il job entra in
+    /// coda, perché quando parta davvero lo sa solo chi possiede i thread — e la
+    /// differenza non cambia niente né per chi guarda né per chi ferma, dato che
+    /// un job in coda si annulla come uno in volo (decisione 0032). Il contrario
+    /// — aspettare che un thread lo prenda in mano — vorrebbe dire non mostrare,
+    /// e non lasciar fermare, esattamente i job che stanno aspettando.
+    ///
+    /// `job` è il nome dell'entry point, come in `JobDone`; **chi** lo ha chiesto
+    /// lo dice [`Origin::actor`], che qui non è il kernel ma il richiedente.
+    JobStarted { id: JobId, job: String },
+    /// A che punto è un lavoro lungo (§10.3, decisione 0035).
+    ///
+    /// Lo emette l'host del job quando il job chiama
+    /// [`HostEvents::report_progress`](crate::traits::HostEvents::report_progress):
+    /// il fatto è un evento — *ciò che si limita a informare* (decisione 0013) —
+    /// e l'identità la mette chi ce l'ha, perché un job non conosce il proprio
+    /// [`JobId`].
+    ///
+    /// È il canale **più caldo** del contratto: un job che cammina il vault può
+    /// chiamarlo per nota. Per questo si butta senza rimpianti — è
+    /// [recuperabile](Event::is_recoverable), e ciò che lo riscopre è
+    /// [`IndexQuery::Jobs`](crate::traits::IndexQuery::Jobs) — e per questo il
+    /// ponte verso la shell ne tiene **l'ultimo per job** dentro una raffica
+    /// (decisione 0034): venti passi avanti in un giro sono un passo avanti.
+    JobProgress { id: JobId, progress: JobProgress },
 }
 
 impl Event {
@@ -349,6 +402,8 @@ impl Event {
             Event::Custom { .. } => EventKind::Custom,
             Event::BatchEnded { .. } => EventKind::BatchEnded,
             Event::ViewInvalidated { .. } => EventKind::ViewInvalidated,
+            Event::JobStarted { .. } => EventKind::JobStarted,
+            Event::JobProgress { .. } => EventKind::JobProgress,
         }
     }
 
@@ -388,7 +443,16 @@ impl Event {
             | Event::DocumentRenamed { .. }
             | Event::IndexUpdated
             | Event::BatchEnded { .. }
-            | Event::ViewInvalidated { .. } => true,
+            | Event::ViewInvalidated { .. }
+            // Il lavoro in volo si riscopre **chiedendolo**
+            // ([`IndexQuery::Jobs`](crate::traits::IndexQuery::Jobs)), che è
+            // ciò che quella variante esiste per permettere: un centro
+            // attività che riceve un `overflow` ricostruisce l'elenco intero
+            // invece di restare fermo su un lavoro finito. Il progresso in
+            // particolare **deve** essere sacrificabile, o il canale più caldo
+            // del contratto sarebbe l'unico senza freno.
+            | Event::JobStarted { .. }
+            | Event::JobProgress { .. } => true,
             Event::VaultOpened { .. }
             | Event::VaultClosed { .. }
             | Event::JobDone { .. }
@@ -449,6 +513,11 @@ pub enum EventKind {
     /// Il vault sta per chiudersi: l'ultimo giro sincrono in cui è ancora
     /// quello di prima (decisione 0029).
     VaultClosed,
+    /// Un lavoro lungo è stato accettato (§10.3).
+    JobStarted,
+    /// A che punto è un lavoro lungo (§10.3). Chi si abbona a questo si abbona
+    /// al canale più fitto che il contratto abbia.
+    JobProgress,
 }
 
 /// **Dove**: il soggetto di un abbonamento (decisione 0033).
@@ -553,6 +622,8 @@ impl EventMask {
             EventKind::BatchEnded,
             EventKind::ViewInvalidated,
             EventKind::VaultClosed,
+            EventKind::JobStarted,
+            EventKind::JobProgress,
         ])
     }
 
@@ -634,6 +705,14 @@ mod tests {
                 instance: None,
             },
             Event::VaultClosed { root: "/v".into() },
+            Event::JobStarted {
+                id: JobId(1),
+                job: "j".into(),
+            },
+            Event::JobProgress {
+                id: JobId(1),
+                progress: JobProgress::default(),
+            },
         ] {
             assert!(
                 all.contains(event.kind()),
@@ -734,6 +813,21 @@ mod tests {
             Event::BatchEnded {
                 batch: BatchId(1),
                 changed: vec![],
+            },
+            // Il lavoro in volo lo si riscopre **chiedendolo** (§10.3), ed è
+            // la condizione perché il canale più fitto del contratto abbia un
+            // freno come tutti gli altri.
+            Event::JobStarted {
+                id: JobId(1),
+                job: "j".into(),
+            },
+            Event::JobProgress {
+                id: JobId(1),
+                progress: JobProgress {
+                    done: 3,
+                    total: Some(10),
+                    label: None,
+                },
             },
         ] {
             assert!(event.is_recoverable(), "{event:?} lo si riscopre guardando");

@@ -72,9 +72,10 @@ pub fn folder_contains(folder: &str, id: &str) -> bool {
 /// che riceveva.
 ///
 /// Il filtro di soggetto si applica ai soli eventi che un documento lo nominano
-/// ([`Event::names`]): `overflow`, `vault-closed` e `job-done` passano anche a
-/// chi si è abbonato a una cartella sola, perché nessuno dei tre si riscopre
-/// riguardando il vault e perderli sarebbe perdere l'unica copia di un fatto.
+/// ([`Event::names`]): `overflow`, `vault-closed` e i tre del ciclo di un job
+/// passano anche a chi si è abbonato a una cartella sola — un lavoro lungo non
+/// è di una cartella, e filtrarlo via lascerebbe un centro attività che non
+/// vede niente proprio quando qualcuno ha ristretto il proprio interesse.
 pub fn mask_wants(mask: &EventMask, event: &Event) -> bool {
     if !mask.contains(event.kind()) {
         return false;

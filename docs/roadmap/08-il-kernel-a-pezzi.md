@@ -70,7 +70,9 @@ stanno in `host/registry.rs` e `host/runner.rs`); i due punti dell'8.3 che non e
 fuori dal lock e la cancellazione — sono andati dove stanno i loro impedimenti,
 cioè §9.1 (chiusa con la
 [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md): il lavoro
-lungo adesso *può* stare fuori), ~~§9.3~~ (chiusa: gira, e si annulla) e §10.3
-(dove l'utente lo vedrà e lo fermerà); e *quanto costa* una query — i ~21 ms su duemila note,
+lungo adesso *può* stare fuori), ~~§9.3~~ (chiusa: gira, e si annulla) e
+~~§10.3~~ (chiusa con la
+[decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md): l'utente lo
+vede, e lo ferma); e *quanto costa* una query — i ~21 ms su duemila note,
 che questa seduta ha fatto dividere per otto senza spiegarli — è della
 [§21.9](21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché).

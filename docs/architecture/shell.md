@@ -19,11 +19,14 @@ dopo.
 E quelle dopo erano già scritte nella roadmap. Tre sono **arrivate subito**, con
 la [decisione 0016](../decisions/0016-cosa-e-una-view.md): venticinque specie di
 nodo nuove sul renderer `UiNode`, il riconciliatore con le chiavi accanto, e sei
-superfici in più da ospitare. Le altre sono in coda — il
-[§18.2](../roadmap/18-editor-e-tastiera.md) porta un registro di scorciatoie, il
-[§10.3](../roadmap/10-gli-eventi.md) un centro notifiche. Senza un albero, la
-divisione la decide chi tocca il file per ultimo; con l'albero, la seduta 2 ha
-toccato `ui/node.ts`, `ui/views.ts` e `host/contract.ts` e nient'altro.
+superfici in più da ospitare. Una è arrivata dopo — il
+[§10.3](../roadmap/10-gli-eventi.md), col centro notifiche e il centro attività —
+e ha toccato `ui/notify.ts`, un `panels/activity.ts` nuovo e la barra di stato,
+senza entrare in nessun altro modulo. Altre sono ancora in coda: il
+[§18.2](../roadmap/18-editor-e-tastiera.md) porta un registro di scorciatoie.
+Senza un albero, la divisione la decide chi tocca il file per ultimo; con
+l'albero, la seduta 2 ha toccato `ui/node.ts`, `ui/views.ts` e
+`host/contract.ts` e nient'altro.
 
 ## L'albero
 
@@ -51,7 +54,7 @@ frontend/src/
     intents.ts     gli intenti che la shell sa eseguire (l'unico qui che nomina i pannelli)
     palette.ts     la palette dei comandi
     menu.ts        menu contestuale e selettore di icona
-    notify.ts      i messaggi che non chiedono risposta
+    notify.ts      il centro notifiche: toast, storico, raggruppamento (§10.3)
     dom.ts         `$`
 
   panels/        un modulo per dominio
@@ -65,6 +68,7 @@ frontend/src/
     history.ts     la cronologia delle versioni
     sidebar.ts     quale pannello della sidebar occupa lo spazio
     graph.ts       il grafo su canvas (superficie privilegiata, fuori da UiNode)
+    activity.ts    il centro attività: cosa sta girando, a che punto è, come si ferma (§10.3)
 
   editor/        i moduli CodeMirror, autonomi e iniettati
     editor.ts, editor-commands.ts, completions.ts, livepreview.ts

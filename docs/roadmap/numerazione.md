@@ -72,6 +72,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §9.7 | [0030 — Il rilevamento si può chiedere](../decisions/0030-il-rilevamento-si-puo-chiedere.md) |
 | §1.19 · §10.1 | [0033 — La grana di un abbonamento](../decisions/0033-la-grana-di-un-abbonamento.md) |
 | §2.27 · §10.2 | [0034 — Il freno e il raggruppamento](../decisions/0034-il-freno-e-il-raggruppamento.md) |
+| §3.5 · §10.3 | [0035 — Il lavoro lungo si racconta](../decisions/0035-il-lavoro-lungo-si-racconta.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -119,7 +120,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §3.1 | **§1.2** | Smontare il monolite |
 | §3.2 | **§18.2** | Comandi e tastiera |
 | §3.3 | **§12.4** | Tema, token, accessibilità |
-| §3.5 | **§10.3** | Notifiche e attività in background |
 | §3.6 | **§2.9** | Prestazioni della UI |
 | §3.7 | **§18.1** | Editor |
 | §3.8 | **§4.4** | Due parser per la stessa sintassi |

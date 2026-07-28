@@ -311,7 +311,16 @@ export type KernelEvent =
   // Il vault STA PER chiudersi: l'ultimo giro in cui è ancora quello di prima
   // (decisione 0029). Il gemello di `vault_opened`, e per la shell è il momento
   // in cui smettere di disegnarlo — non il momento di chiedergli qualcosa.
-  | { type: "vault_closed"; root: string };
+  | { type: "vault_closed"; root: string }
+  // Un lavoro lungo è stato ACCETTATO (§10.3): il gemello d'apertura di
+  // `job_done`, ed è il momento in cui il centro attività fa comparire la riga.
+  // «Accettato» e non «partito»: quando parta davvero lo sa solo chi possiede i
+  // thread, e la differenza non cambia niente per chi guarda né per chi ferma.
+  | { type: "job_started"; id: string; job: string }
+  // A che punto è un lavoro lungo (§10.3). Il canale più fitto del contratto: il
+  // ponte ne tiene l'ultimo per job dentro una raffica, e ciò che si perde si
+  // riscopre con la query `jobs`.
+  | { type: "job_progress"; id: string; progress: JobProgress };
 
 // DOVE: il soggetto di un abbonamento (rispecchia fubmd_abi::event::Subject,
 // §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un
@@ -739,7 +748,13 @@ export type IndexQuery =
   // chiede niente sul contenuto del vault: chiede del vault stesso. Passa dal
   // canale dati e non da un comando suo perché i suoi due clienti sono già qui
   // — questa shell, e una feature che ha `HostQuery` e nient'altro.
-  | { kind: "vault_status" };
+  | { kind: "vault_status" }
+  // Cosa sta girando adesso? (§10.3) La seconda variante che chiede del vault e
+  // non del suo contenuto, ed è la RICONCILIAZIONE del centro attività:
+  // `job_started` e `job_progress` sono recuperabili, quindi i freni del canale
+  // possono buttarli, e senza questa domanda quel troncamento sarebbe una
+  // perdita definitiva.
+  | { kind: "jobs" };
 
 // La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -753,7 +768,8 @@ export type IndexResult =
   | { kind: "property_values"; value: Paged<PropertyCount> }
   | { kind: "vault_health"; value: Paged<HealthIssue> }
   | { kind: "custom"; value: unknown }
-  | { kind: "vault_status"; value: VaultStatus };
+  | { kind: "vault_status"; value: VaultStatus }
+  | { kind: "jobs"; value: JobStatus[] };
 
 // Che rapporto ha questo vault con il disco (rispecchia
 // fubmd_abi::traits::VaultStatus, §9.7). Tre domande diverse e non una: FubMD
@@ -768,6 +784,33 @@ export interface VaultStatus {
   sync_failures: number;
   // L'ultimo di quei fallimenti, già composto.
   last_sync_error: string | null;
+}
+
+// A CHE PUNTO è un lavoro lungo (rispecchia fubmd_abi::traits::JobProgress,
+// §10.3). Un record solo per tutti e due i modi di saperlo: l'evento
+// `job_progress`, che lo dice quando cambia, e `JobStatus`, che lo dice a chi
+// arriva dopo e chiede.
+export interface JobProgress {
+  done: number;
+  // Assente = indeterminato: si disegna un'attesa senza barra, non una barra
+  // che mente.
+  total: number | null;
+  label: string | null;
+}
+
+// Un lavoro lungo VIVO (rispecchia fubmd_abi::traits::JobStatus, §10.3): da
+// `job_started` a `job_done`, quindi anche quelli che aspettano un thread
+// libero — uno in coda si annulla come uno in volo, e chi guarda deve poterlo
+// vedere per poterlo fermare.
+//
+// `id` è un u64 identità: attraversa l'IPC come stringa (vedi VersionRef.hash).
+// `since` è in millisecondi dall'epoca UNIX.
+export interface JobStatus {
+  id: string;
+  job: string;
+  plugin: string;
+  since: number;
+  progress: JobProgress | null;
 }
 
 // Un tag del vault con quante note lo portano (rispecchia

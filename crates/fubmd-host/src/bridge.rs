@@ -96,18 +96,22 @@ fn reduce(burst: Vec<Notice>) -> Vec<Notice> {
 /// La chiave con cui due notice della stessa raffica sono **la stessa cosa
 /// detta due volte**.
 ///
-/// Solo tre specie ce l'hanno, e nessuna delle tre porta un fatto che le altre
-/// copie non portino: `index-updated` non ha payload affatto, un
+/// Solo quattro specie ce l'hanno, e nessuna delle quattro porta un fatto che le
+/// altre copie non portino: `index-updated` non ha payload affatto, un
 /// `document-changed` dice «rileggi questo» e due volte dice la stessa cosa, un
-/// `view-invalidated` dice «ridisegna questa». Tutto il resto — rimozioni,
-/// rename, lotti, custom, esiti di job — resta uno per uno: sono **fatti
-/// distinti**, e fonderli vorrebbe dire raccontare una storia diversa da quella
-/// che è successa.
+/// `view-invalidated` dice «ridisegna questa», e di un `job-progress` conta solo
+/// **dove il job è arrivato** — venti passi avanti in un giro sono un passo
+/// avanti (§10.3). Tutto il resto — rimozioni, rename, lotti, custom, avvii ed
+/// esiti di job — resta uno per uno: sono **fatti distinti**, e fonderli vorrebbe
+/// dire raccontare una storia diversa da quella che è successa.
 #[derive(PartialEq, Eq, Hash)]
 enum Grain {
     Index,
     Changed(DocId),
     View(String, Option<String>),
+    /// Il progresso **di un job**: la grana è l'id, o due job che camminano
+    /// insieme si mangerebbero i passi a vicenda.
+    Progress(u64),
 }
 
 fn grain(event: &Event) -> Option<Grain> {
@@ -117,6 +121,7 @@ fn grain(event: &Event) -> Option<Grain> {
         Event::ViewInvalidated { view, instance } => {
             Some(Grain::View(view.clone(), instance.clone()))
         }
+        Event::JobProgress { id, .. } => Some(Grain::Progress(id.0)),
         _ => None,
     }
 }
@@ -285,6 +290,45 @@ mod tests {
             &out[0].event,
             Event::ViewInvalidated { view, instance: None } if view == "tags"
         ));
+    }
+
+    /// Il canale più fitto del contratto (§10.3): mille passi di due job
+    /// diventano **due**, l'ultimo di ciascuno, e l'avvio non si fonde con
+    /// niente.
+    #[test]
+    fn a_job_walking_says_where_it_got_to_not_every_step() {
+        let passo = |id: u64, done: u64| {
+            Notice::of(Event::JobProgress {
+                id: JobId(id),
+                progress: fubmd_abi::traits::JobProgress {
+                    done,
+                    total: Some(500),
+                    label: None,
+                },
+            })
+        };
+        let mut burst = vec![Notice::of(Event::JobStarted {
+            id: JobId(1),
+            job: "export".into(),
+        })];
+        for n in 0..500 {
+            burst.push(passo(1, n));
+            burst.push(passo(2, n));
+        }
+
+        let out = reduce(burst);
+        assert_eq!(out.len(), 3, "l'avvio e l'ultimo passo di ognuno: {out:?}");
+        assert!(matches!(out[0].event, Event::JobStarted { .. }));
+        // I due job non si mangiano i passi a vicenda, e di ognuno resta dove è
+        // arrivato davvero.
+        for (n, atteso) in [(1, JobId(1)), (2, JobId(2))] {
+            assert!(
+                matches!(&out[n].event, Event::JobProgress { id, progress }
+                    if *id == atteso && progress.done == 499),
+                "{:?}",
+                out[n].event
+            );
+        }
     }
 
     #[test]

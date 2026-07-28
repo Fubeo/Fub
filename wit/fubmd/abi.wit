@@ -882,13 +882,41 @@ interface jobs {
         job: string,
         payload: json,
     }
+
+    /// A CHE PUNTO è un lavoro lungo (§10.3, decisione 0035). Un record solo per
+    /// tutti e due i modi di saperlo: l'evento `job-progress`, che lo dice
+    /// quando cambia, e `job-status`, che lo dice a chi arriva dopo e chiede.
+    ///
+    /// `total` assente = indeterminato (uno scaricamento senza `content-length`,
+    /// una scansione che non ha finito di contare): chi disegna mostra un'attesa
+    /// senza barra invece di una barra che mente. Nessun campo dice «finito»: un
+    /// job finisce con `job-done`, che porta l'esito.
+    record job-progress {
+        done: u64,
+        total: option<u64>,
+        label: option<string>,
+    }
+
+    /// Un lavoro lungo VIVO: la risposta a `index-query.jobs` (§10.3).
+    ///
+    /// Vivo va da `job-started` a `job-done`, quindi comprende i job che
+    /// aspettano un thread libero — ed è deliberato: uno in coda si annulla come
+    /// uno in volo (decisione 0032), quindi chi guarda deve poterlo vedere per
+    /// poterlo fermare. `since` è in millisecondi dall'epoca UNIX.
+    record job-status {
+        id: job-id,
+        job: string,
+        plugin: string,
+        since: u64,
+        progress: option<job-progress>,
+    }
 }
 
 /// Eventi del ciclo di vita del vault.
 interface events {
     use json.{json};
     use model.{doc-id};
-    use jobs.{job-id};
+    use jobs.{job-id, job-progress};
     use errors.{plugin-error};
 
     record event-document-changed { id: doc-id }
@@ -938,6 +966,22 @@ interface events {
     /// può ancora scrivere. Un indice non ne ha bisogno — ha `flush` e `close`,
     /// che il kernel gli chiama subito dopo; ne ha bisogno chi indice non è.
     record event-vault-closed { root: string }
+    /// Un lavoro lungo è stato ACCETTATO (§10.3, decisione 0035): il gemello
+    /// d'apertura di `job-done`, ed è il momento in cui un centro attività fa
+    /// comparire la riga. «Accettato» e non «partito»: lo emette il kernel
+    /// quando il job entra in coda, perché quando parta davvero lo sa solo chi
+    /// possiede i thread — e la differenza non cambia niente per chi guarda né
+    /// per chi ferma. Chi lo ha chiesto lo dice l'origine, non un campo.
+    record event-job-started { id: job-id, job: string }
+    /// A che punto è un lavoro lungo (§10.3, decisione 0035). Lo emette l'host
+    /// del job quando il job chiama `host-events.report-progress`: il fatto è un
+    /// evento (decisione 0013), e l'identità la mette chi ce l'ha, perché un job
+    /// NON conosce il proprio `job-id`.
+    ///
+    /// È il canale più caldo del contratto — un job che cammina il vault può
+    /// chiamarlo per nota — e per questo è recuperabile: ciò che lo riscopre è
+    /// `index-query.jobs`, e chi consegna ne tiene l'ultimo per job.
+    record event-job-progress { id: job-id, progress: job-progress }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -950,6 +994,8 @@ interface events {
         batch-ended(event-batch-ended),
         view-invalidated(event-view-invalidated),
         vault-closed(event-vault-closed),
+        job-started(event-job-started),
+        job-progress(event-job-progress),
     }
 
     enum event-kind {
@@ -968,6 +1014,11 @@ interface events {
         view-invalidated,
         /// Il vault sta per chiudersi (decisione 0029).
         vault-closed,
+        /// Un lavoro lungo è stato accettato (§10.3).
+        job-started,
+        /// A che punto è un lavoro lungo (§10.3): il canale più fitto che il
+        /// contratto abbia.
+        job-progress,
     }
     /// DOVE: il soggetto di un abbonamento (§10.1, decisione 0033).
     ///
@@ -1205,6 +1256,7 @@ interface command {
 interface index {
     use json.{json};
     use model.{doc-id, document-model, span, heading, property-value, property-scalar};
+    use jobs.{job-status};
     use errors.{plugin-error};
 
     /// La finestra chiesta su una risposta: sta nella DOMANDA perché chi la
@@ -1411,6 +1463,13 @@ interface index {
         /// nient'altro, e un comando IPC nuovo sarebbe stato visibile solo alla
         /// prima delle due.
         vault-status,
+        /// COSA STA GIRANDO ADESSO? (§10.3) La seconda variante che chiede del
+        /// vault e non del suo contenuto, e passa da qui per la stessa ragione
+        /// della precedente. È anche la RICONCILIAZIONE del centro attività:
+        /// `job-started` e `job-progress` sono recuperabili, quindi i freni del
+        /// canale possono buttarli — e senza questa domanda quel troncamento
+        /// sarebbe una perdita definitiva.
+        jobs,
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -1430,6 +1489,10 @@ interface index {
         /// sincronizzazioni sia il fatto — passatogli da chi monta — che un
         /// rilevatore ci sia.
         vault-status,
+        /// Chi risponde a «cosa sta girando adesso?» (§10.3). Di nuovo il
+        /// kernel: la coda dei job è sua, e chi possiede i thread non sa niente
+        /// di quelli che devono ancora entrargli in mano.
+        jobs,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -1571,6 +1634,9 @@ interface index {
         vault-health(vault-health-page),
         custom(json),
         vault-status(vault-status),
+        /// I lavori lunghi vivi, in ordine di richiesta. Senza finestra come
+        /// l'outline e per la stessa ragione: non cresce col vault.
+        jobs(list<job-status>),
     }
 
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel
@@ -2057,14 +2123,30 @@ interface host-env {
 interface host-events {
     use events.{event};
     use errors.{plugin-error};
-    use jobs.{job-id, job-spec};
+    use jobs.{job-id, job-progress, job-spec};
 
-    /// L'unica capacità del contratto SENZA esito: un host che non la concede
-    /// non ha modo di rifiutare, può solo non emettere. Il silenzio è il no.
+    /// Una delle due capacità del contratto SENZA esito: un host che non la
+    /// concede non ha modo di rifiutare, può solo non emettere. Il silenzio è
+    /// il no.
     emit: func(event: event);
     /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
     /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
     spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
+    /// A CHE PUNTO SONO: da chiamare dentro `plugin.run-job`, quante volte si
+    /// vuole (§10.3, decisione 0035).
+    ///
+    /// È una capacità e il progresso resta un evento: ciò che finisce sul canale
+    /// è `event.job-progress`, e questa è la PORTA — come `emit` è la porta di
+    /// ogni altro evento. C'è perché un job non conosce il proprio `job-id`:
+    /// `run-job` riceve il nome dell'entry point, gli argomenti e le capacità,
+    /// non l'identità. Passando da qui l'id non è un parametro, quindi non si
+    /// può sbagliare e non si può raccontare il progresso di un altro.
+    ///
+    /// Fuori da un job non fa niente, e non è una dimenticanza: un progresso ha
+    /// bisogno di una FINE per essere un progresso, e l'unica cosa che nel
+    /// contratto ne ha una dichiarata è un job. Senza esito come `emit`, e come
+    /// `emit` non la si nega a un job annullato.
+    report-progress: func(progress: job-progress);
 }
 
 /// Il canale dati: interrogare l'indice.
