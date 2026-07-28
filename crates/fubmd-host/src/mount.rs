@@ -45,7 +45,8 @@ use fubmd_kernel::{
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
 use crate::settings::{
-    core_settings, disabled_plugins, versioning_enabled, versioning_settings, CORE_ID,
+    core_catalog, core_settings, disabled_plugins, versioning_enabled, versioning_settings,
+    versioning_settings_catalog, CORE_ID,
 };
 
 /// Ciò che esce dal montaggio: il workspace con tutto registrato, chi possiede i
@@ -188,14 +189,36 @@ pub fn mount(
         // dare un proprietario a una chiave è una riga strana da leggere, ed è
         // meno strana dell'alternativa — appendere la configurazione dell'app a
         // una feature che si può spegnere.
-        Arc::new(CoreBundle::new(CORE_ID, "FubMD", |_| Vec::new()).configuring(core_settings())),
-        Arc::new(CoreBundle::new(SEARCH_ID, "Ricerca", register_search)),
+        Arc::new(
+            CoreBundle::new(CORE_ID, "FubMD", |_| Vec::new())
+                .configuring(core_settings())
+                // **Due** cataloghi per lingua, e si sommano: le chiavi del
+                // core stanno in `fubmd-host` accanto al loro schema, quelle
+                // del locale in `fubmd-kernel` accanto al proprio. Chi somma è
+                // `Strings::template`, e il perché sta nel suo doc.
+                .speaking(
+                    "it",
+                    [core_catalog(), fubmd_kernel::locale::catalog()].concat(),
+                ),
+        ),
+        Arc::new(
+            CoreBundle::new(SEARCH_ID, "Ricerca", register_search)
+                .speaking("it", fubmd_features::search::catalog()),
+        ),
         Arc::new(
             CoreBundle::new(VERSIONING_ID, "Versioning", {
                 let store = store.clone();
                 move |ws: &mut Workspace| register_versioning(ws, &store)
             })
-            .configuring(versioning_settings()),
+            .configuring(versioning_settings())
+            .speaking(
+                "it",
+                [
+                    versioning_settings_catalog(),
+                    fubmd_features::versioning::catalog(),
+                ]
+                .concat(),
+            ),
         ),
         Arc::new(
             CoreBundle::new(BACKLINKS_ID, "Backlink", |ws| {
@@ -203,20 +226,32 @@ pub fn mount(
             })
             .speaking("it", fubmd_features::backlinks::catalog()),
         ),
-        Arc::new(CoreBundle::new(OUTLINE_ID, "Struttura", |ws| {
-            register_view(ws, OUTLINE_ID, Box::new(OutlineView))
-        })),
+        Arc::new(
+            CoreBundle::new(OUTLINE_ID, "Struttura", |ws| {
+                register_view(ws, OUTLINE_ID, Box::new(OutlineView))
+            })
+            .speaking("it", fubmd_features::outline::catalog()),
+        ),
         Arc::new(
             CoreBundle::new(TAGS_ID, "Tag", |ws| {
                 register_view(ws, TAGS_ID, Box::new(TagPanelView))
             })
             .speaking("it", fubmd_features::tags::catalog()),
         ),
-        Arc::new(CoreBundle::new(STATS_ID, "Statistiche", |ws| {
-            register_view(ws, STATS_ID, Box::new(StatsView))
-        })),
-        Arc::new(CoreBundle::new(COMMANDS_ID, "Comandi", register_commands)),
-        Arc::new(CoreBundle::new(BLOCKS_ID, "Blocchi", register_blocks)),
+        Arc::new(
+            CoreBundle::new(STATS_ID, "Statistiche", |ws| {
+                register_view(ws, STATS_ID, Box::new(StatsView))
+            })
+            .speaking("it", fubmd_features::stats::catalog()),
+        ),
+        Arc::new(
+            CoreBundle::new(COMMANDS_ID, "Comandi", register_commands)
+                .speaking("it", fubmd_features::commands::catalog()),
+        ),
+        Arc::new(
+            CoreBundle::new(BLOCKS_ID, "Blocchi", register_blocks)
+                .speaking("it", fubmd_features::blocks::catalog()),
+        ),
     ];
 
     // **Due passi, e in questo ordine.** Prima si dichiara al registry cosa

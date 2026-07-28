@@ -8,6 +8,8 @@ import { refreshOn, registerPanel } from "../ui/panel-host";
 import { openDocument } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
 import { errorText } from "../host/errors";
+import { attivabile } from "../ui/a11y";
+import { t } from "../i18n/strings";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -87,11 +89,15 @@ async function runSearch(): Promise<void> {
 
 function showSearchResults(hits: DocumentMatch[], error: string | null): void {
   showPanel("search");
+  // Il conteggio è un **argomento**, non una parola declinata: «1 risultato»
+  // e «2 risultati» erano due rami di un ternario, che è la forma che una
+  // lingua con tre plurali non può scrivere. Vale qui come vale in Rust, dove
+  // il motore dei template non sceglie una forma plurale (§12.4).
   searchSummaryEl.textContent = error
-    ? "Ricerca non disponibile"
+    ? t("search.unavailable")
     : hits.length === 0
-      ? "Nessun risultato"
-      : `${hits.length} risultat${hits.length === 1 ? "o" : "i"}`;
+      ? t("search.empty")
+      : t("search.count", { count: hits.length });
 
   searchResultsEl.innerHTML = "";
   for (const hit of hits) {
@@ -108,6 +114,9 @@ function showSearchResults(hits: DocumentMatch[], error: string | null): void {
 
     li.append(title, snippet);
     li.addEventListener("click", () => void openDocument(hit.doc));
+    // Un risultato di ricerca si apre col mouse e adesso anche col tab: era una
+    // `<li>` con un `click` sopra, cioè — per chi non usa il mouse — testo.
+    attivabile(li);
     searchResultsEl.appendChild(li);
   }
 }

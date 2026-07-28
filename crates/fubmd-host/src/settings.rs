@@ -24,6 +24,8 @@
 //! leggibile), un bundle non montato non sa niente perché non c'è nessuno.
 
 use fubmd_abi::settings::{SettingKind, SettingSpec};
+use fubmd_abi::text::{StringCatalog, Text};
+use fubmd_abi::ui::UiOption;
 
 /// L'id del bundle che non registra niente e dichiara la configurazione
 /// dell'app.
@@ -41,6 +43,16 @@ pub const VERSIONING_ENABLED: &str = "versioning.enabled";
 /// Gli id dei bundle che l'utente ha spento (chiave dell'app).
 pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 
+/// In che luce si guarda FubMD: `""` (come il sistema), `light`, `dark`.
+///
+/// Il valore vuoto è «come il sistema» per la stessa convenzione delle chiavi
+/// `locale.*` ([`fubmd_kernel::locale::AS_SYSTEM`]): *non ho deciso io, chiedilo
+/// a chi sta sotto*. Averla uguale conta più di averla esplicita — sono le due
+/// sole famiglie di chiavi che delegano al sistema, e due convenzioni diverse
+/// per la stessa idea si sarebbero pagate al primo componente che ne legge una
+/// aspettandosi l'altra.
+pub const APPEARANCE_THEME: &str = "appearance.theme";
+
 /// Le impostazioni del bundle di core.
 ///
 /// Le chiavi `locale.*` (§12.3) stanno qui e non in una feature per la stessa
@@ -50,40 +62,157 @@ pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 pub fn core_settings() -> Vec<SettingSpec> {
     let mut settings = vec![SettingSpec::new(
         PLUGINS_DISABLED,
-        "Componenti spenti",
+        Text::key(C_PLUGINS_DISABLED),
         SettingKind::List {
             default: Vec::new(),
         },
     )
-    .describing(
-        "Gli id dei componenti che non vengono montati all'apertura di questo \
-         vault. Si cambiano accendendo e spegnendo un componente, non scrivendo \
-         qui dentro.",
-    )
-    .grouped("Componenti")];
+    .describing(Text::key(C_PLUGINS_DISABLED_DESC))
+    .grouped(Text::key(C_GROUP_COMPONENTS))];
     // **Non** `program_writable`, ed è la riga che conta: un componente che
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
     // tutto ciò che gli sta accanto — compreso ciò che lo controlla. Chi
     // accende e spegne è la persona davanti allo schermo, e passa dalla shell.
+    settings.push(
+        SettingSpec::new(
+            APPEARANCE_THEME,
+            Text::key(C_THEME),
+            SettingKind::Choice {
+                default: fubmd_kernel::locale::AS_SYSTEM.into(),
+                options: vec![
+                    // «Come il sistema» è la stessa frase che dicono quattro
+                    // chiavi `locale.*`, e la dice con la **loro** chiave: due
+                    // traduzioni della stessa scelta, in due tendine vicine,
+                    // sarebbero la prima cosa che qualcuno nota e l'ultima che
+                    // qualcuno ripara.
+                    UiOption::new(
+                        fubmd_kernel::locale::AS_SYSTEM,
+                        Text::key(fubmd_kernel::locale::AS_SYSTEM_KEY),
+                    ),
+                    UiOption::new("light", Text::key(C_THEME_LIGHT)),
+                    UiOption::new("dark", Text::key(C_THEME_DARK)),
+                ],
+            },
+        )
+        .describing(Text::key(C_THEME_DESC))
+        .grouped(Text::key(C_GROUP_APPEARANCE))
+        // Di **macchina**, e non di vault, per la ragione dello scope della
+        // 0036: un vault è dato che arriva da fuori, e un vault che decidesse
+        // in che luce leggi sarebbe un file che cambia l'interfaccia di chi lo
+        // apre. È lo stesso argomento delle chiavi `locale.*`, e vale qui
+        // perché è lo stesso genere di scelta: riguarda gli occhi di chi
+        // guarda, non il contenuto guardato.
+        //
+        // **Non** `program_writable`, e questa è meno ovvia della precedente:
+        // un tema è reversibile e si vede subito, quindi il danno di un
+        // componente che lo cambia è piccolo. La ragione non è il danno, è che
+        // *nessuno lo ha chiesto*: il caso vero — «scuro al tramonto» — è un
+        // pezzo di 6.2, dove si decide se un componente possa avere in mano
+        // l'aspetto e con che permesso. Aprire il cancello adesso vorrebbe
+        // dire deciderlo qui, di sfuggita, e per un cliente che non esiste.
+        .per_machine(),
+    );
     settings.extend(fubmd_kernel::locale::locale_settings());
     settings
 }
 
+/// Le chiavi delle stringhe del core. Le `locale.*` non stanno qui: stanno
+/// accanto alle impostazioni che descrivono, in `fubmd_kernel::locale`, e
+/// arrivano al montaggio come secondo catalogo della stessa lingua.
+const C_GROUP_COMPONENTS: &str = "core.group.components";
+const C_GROUP_APPEARANCE: &str = "core.group.appearance";
+const C_PLUGINS_DISABLED: &str = "core.plugins_disabled";
+const C_PLUGINS_DISABLED_DESC: &str = "core.plugins_disabled.desc";
+const C_THEME: &str = "core.theme";
+const C_THEME_DESC: &str = "core.theme.desc";
+const C_THEME_LIGHT: &str = "core.theme.light";
+const C_THEME_DARK: &str = "core.theme.dark";
+
+/// Le stringhe del bundle di core: le sue, non quelle del locale.
+pub fn core_catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(C_GROUP_COMPONENTS, "Componenti")
+            .with(C_GROUP_APPEARANCE, "Aspetto")
+            .with(C_PLUGINS_DISABLED, "Componenti spenti")
+            .with(
+                C_PLUGINS_DISABLED_DESC,
+                "Gli id dei componenti che non vengono montati all'apertura di questo \
+                 vault. Si cambiano accendendo e spegnendo un componente, non scrivendo \
+                 qui dentro.",
+            )
+            .with(C_THEME, "Tema")
+            .with(
+                C_THEME_DESC,
+                "In che luce disegnare l'interfaccia. «Come il sistema» segue le \
+                 preferenze del sistema operativo, anche quando cambiano mentre \
+                 FubMD è aperto.",
+            )
+            .with(C_THEME_LIGHT, "Chiaro")
+            .with(C_THEME_DARK, "Scuro"),
+        StringCatalog::new("en")
+            .with(C_GROUP_COMPONENTS, "Components")
+            .with(C_GROUP_APPEARANCE, "Appearance")
+            .with(C_PLUGINS_DISABLED, "Disabled components")
+            .with(
+                C_PLUGINS_DISABLED_DESC,
+                "The ids of the components that are not mounted when this vault is \
+                 opened. You change them by turning a component on and off, not by \
+                 writing in here.",
+            )
+            .with(C_THEME, "Theme")
+            .with(
+                C_THEME_DESC,
+                "Which light to draw the interface in. «Same as system» follows the \
+                 operating system preferences, even when they change while FubMD is \
+                 open.",
+            )
+            .with(C_THEME_LIGHT, "Light")
+            .with(C_THEME_DARK, "Dark"),
+    ]
+}
+
 /// Le impostazioni del bundle del versioning.
 pub fn versioning_settings() -> Vec<SettingSpec> {
-    vec![SettingSpec::toggle(VERSIONING_ENABLED, "Versioning", true)
-        .describing(
-            "Tiene uno storico delle modifiche di ogni nota, con ripristino. \
-             Spento, la storia già registrata resta leggibile e non ne nasce di \
-             nuova.",
-        )
-        .grouped("Vault")
+    vec![SettingSpec::toggle(VERSIONING_ENABLED, Text::key(V_ENABLED), true)
+        .describing(Text::key(V_ENABLED_DESC))
+        .grouped(Text::key(V_GROUP))
         // Scrivibile da un programma: è reversibile, non riguarda la privacy, e
         // un profilo di vault («questo vault è un archivio: niente versioning»)
         // è esattamente il caso che il §11.1 apre. Il permesso resta il primo
         // cancello — `fubmd:write-settings` non ce l'ha nessun plugin di terzi
         // finché non se lo dichiara e qualcuno glielo concede.
         .program_writable()]
+}
+
+/// Le chiavi dell'interruttore del versioning. Stanno **qui** e non nella
+/// feature perché è qui che lo schema si dichiara: il catalogo che le traduce
+/// viaggia col bundle del versioning, insieme a quello delle sue stringhe.
+const V_GROUP: &str = "versioning.group";
+const V_ENABLED: &str = "versioning.enabled.label";
+const V_ENABLED_DESC: &str = "versioning.enabled.desc";
+
+/// Le stringhe dell'interruttore del versioning.
+pub fn versioning_settings_catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(V_GROUP, "Vault")
+            .with(V_ENABLED, "Versioning")
+            .with(
+                V_ENABLED_DESC,
+                "Tiene uno storico delle modifiche di ogni nota, con ripristino. \
+                 Spento, la storia già registrata resta leggibile e non ne nasce di \
+                 nuova.",
+            ),
+        StringCatalog::new("en")
+            .with(V_GROUP, "Vault")
+            .with(V_ENABLED, "Versioning")
+            .with(
+                V_ENABLED_DESC,
+                "Keeps a history of every note's changes, with restore. Turned off, \
+                 the history already recorded stays readable and no new one is made.",
+            ),
+    ]
 }
 
 /// Acceso di default, e la ragione è la stessa di prima: è una rete di

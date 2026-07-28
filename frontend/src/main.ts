@@ -21,15 +21,18 @@ import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
 import { mountNotifications, notify } from "./ui/notify";
 import { findByBinding, openCommandPalette, startCommand } from "./ui/palette";
-import { mountPanelHost } from "./ui/panel-host";
+import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
+import { mountStrings, t } from "./i18n/strings";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
+import { mountTheme } from "./theme/theme";
 import {
   closeDocument,
   mountDocument,
   openDocument,
   openWikilink,
+  setEditorTheme,
   setMode,
 } from "./panels/document";
 import { mountExplorer } from "./panels/explorer";
@@ -55,6 +58,28 @@ async function init(): Promise<void> {
   // resta questo default, che è ciò che la shell mostrava prima che qualcuno
   // guardasse qualcosa.
   document.body.dataset.mode = state.mode;
+
+  // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
+  // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
+  // giusta invece di correggersi mezzo secondo dopo. Va prima di
+  // `mountDocument` anche per una ragione meno cosmetica: l'editor nasce col
+  // tema che trova sulla radice, e nascere col tema sbagliato vorrebbe dire
+  // riconfigurarlo subito dopo.
+  mountTheme(setEditorTheme);
+
+  // Le stringhe accanto al tema, e per la stessa ragione (§12.4): sono le due
+  // cose che vanno applicate **prima** che qualcosa disegni, o il primo
+  // fotogramma è nella luce sbagliata e nella lingua sbagliata, e si corregge
+  // sotto gli occhi di chi guarda. Qui si riempie anche il testo fermo di
+  // `index.html`, che fino a questa riga è la lingua di ripiego scritta nel
+  // file.
+  //
+  // Ciò che passa di qui è **ciò che nessun altro sa rifare**: i pannelli, che
+  // hanno tutti un `render` e un registro che sa chiamarli. Chi disegna testo
+  // fuori dai pannelli — i due pulsanti della barra di stato, il titolo dello
+  // spazio — si iscrive da sé con `onLingua`, invece di allungare un elenco qui
+  // che si scopre incompleto solo cambiando lingua.
+  mountStrings(() => void refreshAllPanels());
 
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
   // documento mostra l'anteprima (in Lettura) e l'anteprima apre i documenti;
@@ -196,9 +221,7 @@ async function avvisaSeNessunoGuarda(): Promise<void> {
   try {
     const stato = await statoDelVault();
     if (!stato.watching) {
-      notify(
-        "Le modifiche fatte da altre app non verranno rilevate: chiudi e riapri il vault per rileggerlo.",
-      );
+      notify(t("app.external_changes"));
     }
   } catch {
     // Un vault che non sa dire come sta non è un motivo per non aprirlo: il
@@ -213,5 +236,5 @@ async function avvisaSeNessunoGuarda(): Promise<void> {
 // chiede una superficie vera, che oggi non c'è.
 init().catch((e) => {
   console.error("FubMD: avvio fallito", e);
-  vaultPathEl.textContent = `avvio fallito: ${errorText(e)}`;
+  vaultPathEl.textContent = t("app.start_failed", { reason: errorText(e) });
 });

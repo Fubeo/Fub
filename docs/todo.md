@@ -15,8 +15,8 @@ Le nove che seguono non le ha trovate né un giro né una misura: le ha aperte u
 ricerca di FubMD è built-in e di classe *omnisearch*, e da lì in poi le voci sono
 la sottrazione fra ciò che quel comportamento richiede e ciò che il contratto sa
 dire ([seduta 21](roadmap/21-la-ricerca-predefinita.md)).
-Sessantaquattro sono chiuse, e i loro verbali stanno in
-[docs/decisions/](decisions/README.md); le altre quarantacinque sono qui, e
+Sessantacinque sono chiuse, e i loro verbali stanno in
+[docs/decisions/](decisions/README.md); le altre quarantaquattro sono qui, e
 questo file è il loro **indice**.
 
 ## Come è organizzato
@@ -132,7 +132,7 @@ descrive una promessa.
 | **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | **chiusa**: un componente che smette ([0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), [0028](decisions/0028-come-un-componente-smette.md)), il vault e le sessioni multiple ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)), il rilevamento che si può chiedere ([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)), chi possiede i bundle ([0031](decisions/0031-chi-possiede-i-bundle.md)) e chi esegue il lavoro lungo ([0032](decisions/0032-il-runner-dei-job.md)) | — | — |
 | **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | **chiusa**: lo stesso canale a tre distanze — chi si abbona ([0033](decisions/0033-la-grana-di-un-abbonamento.md)), cosa passa ([0034](decisions/0034-il-freno-e-il-raggruppamento.md)), chi lo mostra ([0035](decisions/0035-il-lavoro-lungo-si-racconta.md)) | — | — |
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano: la [0036](decisions/0036-le-impostazioni-e-i-tre-stati.md) ha chiuso il primo — le impostazioni — e la [0037](decisions/0037-lo-stato-di-vista.md) il secondo; il sidecar dell'organizzazione è assorbito dalla [0038](decisions/0038-il-kernel-possiede-il-sidecar.md), e del §11.2 resta il **layout** — che aspetta il modello di layout | 1 | — |
-| **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | chi localizza le stringhe localizza anche gli errori, e comunque serve il locale — che la [0039](decisions/0039-il-locale-e-il-caso.md) ha messo nel contratto per primo; la [0040](decisions/0040-chi-localizza.md) ha poi risposto alla domanda vera e la [0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) l'ha estesa al suo **gemello dichiarato**, l'errore | 1 | — |
+| **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | **chiusa**: il locale nel contratto per primo ([0039](decisions/0039-il-locale-e-il-caso.md)), poi la domanda vera — chi localizza ([0040](decisions/0040-chi-localizza.md)) —, il suo **gemello dichiarato** l'errore ([0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)) e infine il catalogo della shell, che quelle decisioni avevano ristretto ([0042](decisions/0042-il-catalogo-della-shell.md)) | — | — |
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | l'identità, ciò che le sta attaccato, la sua storia | 3 | 2 |
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | lo stesso lavoro visto da quattro lati | 4 | — |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | 7 | 1 |
@@ -145,7 +145,7 @@ descrive una promessa.
 
 ## Le voci
 
-Quarantasette. Il numero è quello con cui le nomina il resto del repo.
+Quarantaquattro. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -203,7 +203,6 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
 | **§11.2** | [Tre stati diversi, zero contenitori](roadmap/11-impostazioni-e-i-tre-stati.md#112-tre-stati-diversi-zero-contenitori) | 11. Le impostazioni, e i tre stati | shell | **P2** |
-| **§12.4** | [Tema, token, accessibilità](roadmap/12-stringhe-errori-locale.md#124-tema-token-accessibilità) | 12. Le stringhe, gli errori, il locale | shell | **P2** |
 | **§13.1** | [Identità del documento — il path, e l'eventuale seconda chiave](roadmap/13-identita-del-documento.md#131-identità-del-documento--il-path-e-leventuale-seconda-chiave) | 13. L'identità di un documento | contratto | **P0** |
 | **§13.2** | [Lo stato per-documento: ogni feature se lo migra da sé](roadmap/13-identita-del-documento.md#132-lo-stato-per-documento-ogni-feature-se-lo-migra-da-sé) | 13. L'identità di un documento | kernel | **P2** |
 | **§13.3** | [L'undo non ha un proprietario](roadmap/13-identita-del-documento.md#133-lundo-non-ha-un-proprietario) | 13. L'identità di un documento | contratto | **P0** |
@@ -254,7 +253,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — quarantuno, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — quarantadue, uno
   per file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

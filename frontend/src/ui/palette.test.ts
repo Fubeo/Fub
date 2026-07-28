@@ -181,8 +181,15 @@ describe("il piano che si guarda prima di approvarlo", () => {
       ],
     };
     expect(planLines(plan)).toEqual([
-      "A — 2 modifiche",
-      "B — 1 modifica",
+      // «2 modifiche»/«1 modifica» era un ternario sul conteggio, cioè una
+      // forma plurale scelta in TypeScript. Il motore dei template non sa
+      // sceglierne una (§12.4) — né quello di qui né quello del contratto — e
+      // fingere di sì avrebbe voluto dire una frase giusta in due lingue e
+      // sbagliata nelle altre. La frase è riscritta in forma che il plurale non
+      // lo chiede, col numero come argomento: la stessa cura presa in
+      // `stats::conteggi` dall'altro lato del confine.
+      "A — Modifiche: 2",
+      "B — Modifiche: 1",
       // Una nota impattata di cui la decisione 0008 non sa esprimere la modifica (una
       // che verrebbe creata o cestinata) resta nell'elenco: è ciò che si
       // approva.

@@ -33,6 +33,7 @@ import { $ } from "../ui/dom";
 import { notify } from "../ui/notify";
 import type { Tono } from "../ui/notify";
 import { errorText } from "../host/errors";
+import { onLingua, t } from "../i18n/strings";
 
 /// Una riga del centro attività. È `JobStatus` senza i campi che una riga non
 /// disegna: chi arriva da un evento non conosce né il plugin né l'istante, e
@@ -119,8 +120,8 @@ export function avvisoDi(notice: KernelNotice): { testo: string; tono: Tono } | 
   // composta — §12.2 gli darà una forma, e a quel punto questa riga la userà.
   const errore = (result as { Err?: unknown } | null)?.Err;
   return errore === undefined
-    ? { testo: `«${job}» è finito.`, tono: "info" }
-    : { testo: `«${job}» non è riuscito: ${descrivi(errore)}`, tono: "guasto" };
+    ? { testo: t("activity.finished", { job }), tono: "info" }
+    : { testo: t("activity.failed", { job, reason: descrivi(errore) }), tono: "guasto" };
 }
 
 /// Un `PluginError` in una riga. Finché il §12.2 non gli dà una forma, ciò che
@@ -130,7 +131,7 @@ function descrivi(errore: unknown): string {
   if (typeof errore === "string") return errore;
   if (errore && typeof errore === "object") {
     const voci = Object.entries(errore as Record<string, unknown>);
-    const [nome, dettaglio] = voci[0] ?? ["errore sconosciuto", undefined];
+    const [nome, dettaglio] = voci[0] ?? [t("activity.unknown_error"), undefined];
     return typeof dettaglio === "string" && dettaglio.length > 0 ? dettaglio : nome;
   }
   return String(errore);
@@ -168,6 +169,10 @@ export function mountActivity(): void {
     if (avviso) notify(avviso.testo, avviso.tono);
   });
 
+  // La lingua che cambia rifà il pulsante e le righe: il pulsante porta un
+  // conteggio, quindi il testo fermo di `index.html` non lo può possedere.
+  onLingua(ridisegna);
+
   ridisegna();
 }
 
@@ -190,7 +195,8 @@ function daStatus(status: JobStatus): Lavoro {
 function ridisegna(): void {
   const pulsante = document.getElementById("activity-button");
   if (pulsante) {
-    pulsante.textContent = lavori.length > 0 ? `Attività ${lavori.length}` : "Attività";
+    pulsante.textContent =
+      lavori.length > 0 ? t("activity.count", { count: lavori.length }) : t("activity.title");
     pulsante.classList.toggle("in-corso", lavori.length > 0);
     pulsante.setAttribute("aria-expanded", String(aperto));
   }
@@ -206,7 +212,7 @@ function ridisegna(): void {
   if (lavori.length === 0) {
     const vuoto = document.createElement("li");
     vuoto.className = "muted";
-    vuoto.textContent = "Nessun lavoro in corso.";
+    vuoto.textContent = t("activity.none");
     lista.appendChild(vuoto);
     return;
   }
@@ -235,8 +241,8 @@ function riga(lavoro: Lavoro): HTMLLIElement {
 
   const ferma = document.createElement("button");
   ferma.className = "link-button";
-  ferma.textContent = "Annulla";
-  ferma.title = "Ferma questo lavoro";
+  ferma.textContent = t("app.cancel");
+  ferma.title = t("activity.stop");
   ferma.addEventListener("click", () => void annulla(lavoro));
 
   el.append(testo, barra, ferma);
@@ -251,6 +257,6 @@ async function annulla(lavoro: Lavoro): Promise<void> {
   try {
     await api.cancelJob(lavoro.id);
   } catch (e) {
-    notify(`Non sono riuscito a fermare «${etichettaDi(lavoro)}»: ${errorText(e)}`, "guasto");
+    notify(t("activity.stop_failed", { job: etichettaDi(lavoro), reason: errorText(e) }), "guasto");
   }
 }

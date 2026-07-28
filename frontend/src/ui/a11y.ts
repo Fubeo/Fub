@@ -1,0 +1,155 @@
+// I pezzi che rendono usabile ciò che la shell disegna anche senza mouse e
+// senza vedere lo schermo (§12.4).
+//
+// Stanno in un modulo loro e non sparsi nei pannelli per la ragione che rende
+// questa voce fattibile *adesso* e cara dopo: le regole di accessibilità non
+// sono decorazioni per elemento, sono **invarianti** — «ciò che si clicca si
+// raggiunge col tab», «una modale non lascia uscire il fuoco», «un campo ha un
+// nome». Scritte una volta e chiamate da chi disegna valgono anche per i
+// pannelli che non esistono ancora; ricopiate a mano trenta volte valgono nei
+// ventinove in cui qualcuno si è ricordato.
+//
+// Il presidio che le tiene ferme è `ui/a11y.test.ts`, ed è la metà che la 0014
+// chiede: *una promessa senza presidio meccanico decade*, e questa decadrebbe
+// alla prima view nuova.
+
+/// Un id unico nel documento, per legare due elementi (`for`, `aria-labelledby`,
+/// `aria-controls`).
+///
+/// Il contatore basta e non serve nient'altro: gli id vivono quanto il
+/// documento, e la shell non li serializza da nessuna parte. Il prefisso serve
+/// solo a chi legge il DOM con l'ispettore.
+let contatore = 0;
+export function identificatore(prefisso: string): string {
+  contatore += 1;
+  return `${prefisso}-${contatore}`;
+}
+
+/// Gli elementi che il browser rende già attivabili da tastiera per conto suo.
+const GIA_INTERATTIVI = new Set(["BUTTON", "A", "INPUT", "SELECT", "TEXTAREA", "SUMMARY"]);
+
+/// Rende attivabile da tastiera un elemento che risponde al click.
+///
+/// È la riga con la leva più lunga di questa voce. La shell disegna le cose
+/// cliccabili come `div` — una voce di lista, l'etichetta di un albero, una
+/// riga di tabella — e un `div` con un `addEventListener("click")` è, per chi
+/// non usa il mouse, **niente**: non lo raggiunge il tab, non lo annuncia un
+/// lettore di schermo, non lo attiva Invio. Non è un difetto di un pannello: è
+/// un difetto del *renderer*, quindi si ripara nel renderer e vale per tutti i
+/// pannelli, compresi quelli che scriverà un plugin.
+///
+/// Cosa fa, e cosa deliberatamente non fa:
+///
+/// - **Non tocca** ciò che è già interattivo. Mettere `tabindex` e
+///   `role="button"` su un `<button>` non aggiunge niente e toglie qualcosa:
+///   il ruolo implicito è già quello giusto, e un `role` esplicito ridondante è
+///   la prima cosa che diverge quando l'elemento cambia.
+/// - **Non impone `role="button"` a chi ha già un ruolo**. Una riga di tabella
+///   è una riga, e chiamarla pulsante toglierebbe a un lettore di schermo la
+///   struttura della tabella per dargli un'etichetta che ha già. Prende il
+///   `tabindex` e il tasto, e resta ciò che è.
+/// - Invio **e** barra spaziatrice, perché sono i due tasti che attivano un
+///   pulsante nativo e chi li usa non sa di essere su un `div`. La barra si
+///   ferma qui (`preventDefault`) o farebbe scorrere il pannello sotto.
+export function attivabile(el: HTMLElement): void {
+  if (GIA_INTERATTIVI.has(el.tagName)) return;
+  el.tabIndex = 0;
+  if (!el.hasAttribute("role")) el.setAttribute("role", "button");
+  if (el.dataset.attivabile === "sì") return;
+  el.dataset.attivabile = "sì";
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    el.click();
+  });
+}
+
+/// Toglie ciò che [`attivabile`] aveva messo, quando un nodo smette di avere
+/// un'azione.
+///
+/// Serve perché il riconciliatore (§2.8) **riusa** gli elementi: la stessa riga
+/// che era cliccabile al giro scorso può non esserlo più a questo, e restare
+/// raggiungibile col tab senza fare niente è peggio che non esserlo mai stata —
+/// è un vicolo cieco in mezzo all'ordine di lettura.
+export function nonAttivabile(el: HTMLElement): void {
+  if (GIA_INTERATTIVI.has(el.tagName)) return;
+  el.removeAttribute("tabindex");
+  if (el.getAttribute("role") === "button") el.removeAttribute("role");
+}
+
+/// Gli elementi che possono prendere il fuoco dentro `root`, nell'ordine in cui
+/// il tab li visiterebbe.
+///
+/// `tabindex="-1"` è escluso di proposito: vuol dire «raggiungibile da un
+/// programma, non dal tab», ed è esattamente ciò che il contenitore di una
+/// modale usa per potersi prendere il fuoco senza entrare nel giro.
+export function fuocabili(root: HTMLElement): HTMLElement[] {
+  const selettore =
+    'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
+  return Array.from(root.querySelectorAll<HTMLElement>(selettore)).filter(
+    (el) => !el.hasAttribute("disabled") && el.offsetParent !== null,
+  );
+}
+
+/// Chiude il fuoco dentro una superficie modale finché resta aperta.
+///
+/// Le due cose che una modale deve fare e che nessuna di questa shell faceva:
+///
+/// 1. **Non lasciare uscire il tab.** Una modale da cui il fuoco scappa mette
+///    chi non vede a interagire con la UI *sotto* — che è ancora lì, la legge
+///    ancora, e non è più quella che sta guardando. Peggio: non c'è modo di
+///    accorgersene, perché visivamente non succede niente.
+/// 2. **Chiudersi con Escape.** È il gesto che tutti provano per primo, ed è
+///    l'unico che funziona senza sapere dov'è il pulsante di chiusura.
+///
+/// Rende la funzione che scioglie la trappola: chi apre una modale la tiene, e
+/// la chiama quando la chiude. Senza, il secondo `apri()` metterebbe un secondo
+/// ascoltatore sopra il primo e a quel punto Escape chiuderebbe due volte.
+export function intrappolaFuoco(root: HTMLElement, chiudi: () => void): () => void {
+  const precedente = document.activeElement as HTMLElement | null;
+
+  const suTasto = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      chiudi();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const dentro = fuocabili(root);
+    if (dentro.length === 0) {
+      // Una modale senza niente da mettere a fuoco esiste (un messaggio, un
+      // pannello ancora vuoto): il tab non deve poterne uscire lo stesso.
+      e.preventDefault();
+      root.focus();
+      return;
+    }
+    const primo = dentro[0]!;
+    const ultimo = dentro[dentro.length - 1]!;
+    const corrente = document.activeElement;
+    // Il giro si chiude a mano solo ai due estremi: in mezzo comanda il
+    // browser, che conosce l'ordine di lettura meglio di questa lista.
+    if (e.shiftKey && (corrente === primo || !root.contains(corrente))) {
+      e.preventDefault();
+      ultimo.focus();
+    } else if (!e.shiftKey && (corrente === ultimo || !root.contains(corrente))) {
+      e.preventDefault();
+      primo.focus();
+    }
+  };
+
+  // In **cattura**: un pannello che gestisce le frecce o Escape per conto suo
+  // (la palette dei comandi) non deve poter mangiare il tasto prima che la
+  // trappola lo veda.
+  document.addEventListener("keydown", suTasto, true);
+
+  const dentro = fuocabili(root);
+  (dentro[0] ?? root).focus();
+
+  return () => {
+    document.removeEventListener("keydown", suTasto, true);
+    // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
+    // chiudere una modale rimanda chi naviga da tastiera all'inizio del
+    // documento, e deve rifare tutta la strada per tornare dov'era.
+    if (precedente?.isConnected) precedente.focus();
+  };
+}

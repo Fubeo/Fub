@@ -27,6 +27,7 @@
 import { api } from "../host/ipc";
 import type { ActionRef, FieldValue, UiNode, ViewSpec, ViewSurface } from "../host/contract";
 import { $ } from "./dom";
+import { attivabile, intrappolaFuoco } from "./a11y";
 import { applyIntent } from "./intents";
 import { mountTree, patchTree, unmountTree } from "./node";
 import { onEvent } from "../state/kernel";
@@ -112,6 +113,12 @@ export async function mountDeclaredViews(): Promise<void> {
   ]) {
     el.replaceChildren();
   }
+  // Il nome della superficie modale se ne va coi titoli che lo componevano: un
+  // `aria-labelledby` che sopravvive a ciò a cui punta è la regola *riferimento
+  // nel vuoto* del presidio, ed è il modo più silenzioso di perdere un nome —
+  // l'attributo c'è, sembra a posto, e non nomina nessuno. Tolto lui, resta
+  // l'`aria-label` di ripiego che `index.html` porta di suo.
+  viewsModalEl.removeAttribute("aria-labelledby");
 
   const specs = await api.listViews();
   // L'ordine fra le view di una stessa superficie lo dichiara la view (§2.6);
@@ -134,7 +141,35 @@ export async function mountDeclaredViews(): Promise<void> {
   viewsStatusEl.hidden = viewsStatusEl.childElementCount === 0;
   viewsRibbonEl.hidden = viewsRibbonEl.childElementCount === 0;
   viewsModalEl.hidden = viewsModalEl.childElementCount === 0;
+  trappolaModale();
   await Promise.all([...montate.keys()].map((id) => refreshPanel(id)));
+}
+
+/// Come si scioglie la trappola del fuoco della superficie modale.
+let sciogliModale: (() => void) | null = null;
+
+/// Tiene il fuoco dentro `#views-modal` finché ci sta dentro qualcosa (§12.4).
+///
+/// La superficie modale non si «apre» e non si «chiude» come le altre modali
+/// della shell: **esiste** finché una view dichiarata la occupa, e sparisce
+/// quando nessuno la chiede più. Quindi la trappola segue lo stesso segnale che
+/// decide se è visibile — `hidden` — invece di un `apri()`/`chiudi()` che qui
+/// non esistono.
+///
+/// Escape la chiude togliendole ciò che contiene: è l'unica cosa che questa
+/// shell possa fare senza inventarsi un modo per dire a un provider «l'utente
+/// ha rinunciato», che è roba del contratto e non di questa voce. La view
+/// ricompare al prossimo `mountDeclaredViews`, che è quanto basta perché
+/// Escape non sia una via d'uscita definitiva da qualcosa che serviva.
+function trappolaModale(): void {
+  sciogliModale?.();
+  sciogliModale = null;
+  if (viewsModalEl.hidden) return;
+  sciogliModale = intrappolaFuoco(viewsModalEl, () => {
+    viewsModalEl.hidden = true;
+    sciogliModale?.();
+    sciogliModale = null;
+  });
 }
 
 function montaSpec(spec: ViewSpec, host: HTMLElement): void {
@@ -148,9 +183,24 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
   title.className = "panel-title";
   if (spec.icon) title.dataset.icon = spec.icon;
   title.textContent = spec.title;
+  // Il titolo di un pannello è un titolo: darglielo mette le view dichiarate
+  // nell'indice che un lettore di schermo costruisce per saltare da una
+  // sezione all'altra. Senza, un pannello si trova solo scorrendolo tutto.
+  title.setAttribute("role", "heading");
+  title.setAttribute("aria-level", "2");
   if (spec.closable) {
     title.classList.add("clickable");
-    title.addEventListener("click", () => pannello.classList.toggle("collapsed"));
+    title.addEventListener("click", () => {
+      const chiuso = pannello.classList.toggle("collapsed");
+      title.setAttribute("aria-expanded", String(!chiuso));
+    });
+    // Un titolo cliccabile è un titolo **e** un comando. `aria-expanded` sta
+    // sul titolo e non sul pannello perché è il titolo che si preme, ed è di
+    // ciò che si preme che serve sapere in che stato mette le cose.
+    attivabile(title);
+    // `attivabile` metterebbe `role="button"` a chi non ha ruolo; qui il ruolo
+    // c'è già ed è quello giusto, quindi resta titolo. Il tabindex sì.
+    title.setAttribute("aria-expanded", String(spec.open_by_default));
   }
 
   const container = document.createElement("div");
@@ -161,6 +211,19 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
   if (spec.preferred_size !== null) {
     const asse = spec.surface === "bottom" ? "height" : "width";
     container.style[asse] = `${spec.preferred_size}px`;
+  }
+
+  // La superficie modale è un `role="dialog"`, e un dialogo senza nome si
+  // annuncia «finestra di dialogo» e nient'altro: chi ci finisce dentro deve
+  // leggerselo per sapere dove è finito. Il nome è il titolo della view che lo
+  // occupa — l'unica cosa che questa shell sappia di lui, visto che il
+  // contenuto lo decide un provider. Se ne occupano due, il nome sono
+  // entrambi, in ordine: `aria-labelledby` prende una lista apposta, e
+  // sceglierne uno a caso sarebbe peggio che dirli tutti e due.
+  if (host === viewsModalEl) {
+    title.id = `views-modal-titolo-${spec.id}`;
+    const nomi = host.getAttribute("aria-labelledby");
+    host.setAttribute("aria-labelledby", nomi ? `${nomi} ${title.id}` : title.id);
   }
 
   pannello.append(title, container);

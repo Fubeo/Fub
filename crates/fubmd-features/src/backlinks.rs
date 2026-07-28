@@ -14,7 +14,7 @@
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::session::ContextMask;
-use fubmd_abi::text::{StringCatalog, Text};
+use fubmd_abi::text::{Arg, StringCatalog, Text};
 use fubmd_abi::traits::{
     BacklinkRef, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewProvider, ViewSpec,
     ViewSurface,
@@ -43,7 +43,7 @@ pub struct BacklinksView;
 impl ViewProvider for BacklinksView {
     fn views(&self) -> Vec<ViewSpec> {
         vec![
-            ViewSpec::new(BACKLINKS_VIEW, "Backlink", ViewSurface::RightSidebar)
+            ViewSpec::new(BACKLINKS_VIEW, Text::key(VIEW_TITLE), ViewSurface::RightSidebar)
                 // I backlink invecchiano quando il grafo cambia: ogni modifica
                 // al vault arriva come `IndexUpdated`.
                 .refreshing(EventMask::of([
@@ -125,18 +125,28 @@ fn placeholder(key: &str) -> UiNode {
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
+            .with(VIEW_TITLE, "Backlink")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
-            .with(EMPTY, "Nessun backlink."),
+            .with(EMPTY, "Nessun backlink.")
+            .with(COUNT, "Backlink: {count}"),
         StringCatalog::new("en")
+            .with(VIEW_TITLE, "Backlinks")
             .with(NO_ACTIVE_DOC, "No note open.")
-            .with(EMPTY, "No backlinks."),
+            .with(EMPTY, "No backlinks.")
+            .with(COUNT, "Backlinks: {count}"),
     ]
 }
 
+/// Il titolo del pannello: si vede sempre, anche quando il pannello è vuoto.
+const VIEW_TITLE: &str = "view_title";
 /// Nessuna nota aperta: non è un errore, è uno stato.
 const NO_ACTIVE_DOC: &str = "no_active_doc";
 /// La nota aperta non ha backlink.
 const EMPTY: &str = "empty";
+/// L'intestazione dell'elenco, col numero. Era un `format!` italiano — l'ultima
+/// riga di questo file a esserlo — e il numero attraversa adesso come numero.
+const COUNT: &str = "count_heading";
+const A_COUNT: &str = "count";
 
 /// Costruisce l'albero `UiNode` del pannello backlink per un insieme di
 /// riferimenti entranti. Separato da [`BacklinksView`] perché è pura
@@ -168,7 +178,7 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
     UiNode::column(
         6,
         vec![
-            UiNode::heading(3, format!("{} backlink", refs.len())),
+            UiNode::heading(3, Text::message(COUNT, vec![Arg::int(A_COUNT, refs.len() as i64)])),
             UiNode::list(items),
         ],
     )
@@ -222,7 +232,10 @@ mod tests {
 
         let tree = BacklinksView.render_view(&istanza(), &host).unwrap();
         let json = serde_json::to_string(&tree).unwrap();
-        assert!(json.contains("2 backlink"));
+        // La testata porta il **numero**, non la frase: la frase la compone il
+        // catalogo, e il numero è ciò che questo provider ha da dire.
+        assert!(json.contains(r#""key":"count_heading""#), "{json}");
+        assert!(json.contains(r#""value":2"#), "{json}");
         assert!(json.contains(r#""doc":"a/Uno.md""#));
         assert!(json.contains(r#""doc":"Due.md""#));
     }

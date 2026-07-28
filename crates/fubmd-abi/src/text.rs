@@ -460,6 +460,15 @@ impl<'a> Strings<'a> {
 
     /// Il template di una chiave, per la scala del doc del modulo. `None` =
     /// nessun catalogo la contiene.
+    ///
+    /// **Più cataloghi per la stessa lingua si sommano**, e vince il primo che
+    /// ha la chiave. Non è un dettaglio di implementazione: è ciò che permette a
+    /// un componente fatto di due metà di portarne una per metà, senza che
+    /// nessuno debba fonderle a mano. Il core ne è il caso vivo — le sue chiavi
+    /// stanno in `fubmd-host` e quelle del locale in `fubmd-kernel`, e sono due
+    /// crate diverse apposta. Cercando solo nel **primo** catalogo di quella
+    /// lingua, il secondo sarebbe stato invisibile: non un errore, non un
+    /// avviso, solo metà delle stringhe che scendono alla chiave nuda.
     pub fn template(&self, key: &str) -> Option<&'a str> {
         let cerca = |tag: &str| -> Option<&'a str> {
             if tag.is_empty() {
@@ -467,8 +476,8 @@ impl<'a> Strings<'a> {
             }
             self.catalogs
                 .iter()
-                .find(|c| c.locale.eq_ignore_ascii_case(tag))
-                .and_then(|c| c.entries.get(key))
+                .filter(|c| c.locale.eq_ignore_ascii_case(tag))
+                .find_map(|c| c.entries.get(key))
                 .map(String::as_str)
         };
         if self.locale.has_language() {

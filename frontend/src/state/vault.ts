@@ -14,6 +14,7 @@
 import { api } from "../host/ipc";
 import { COMANDI } from "../host/contract";
 import { emit, state } from "./store";
+import { t } from "../i18n/strings";
 
 /// Richiede la lista dei documenti e la annuncia. Chi disegna una lista si
 /// iscrive a `documents`; nessuno chiama nessuno per nome.
@@ -74,7 +75,7 @@ export async function restoreFromTrash(entry: string, to?: string): Promise<stri
 /// Svuota il cestino e restituisce il messaggio che il comando ha prodotto.
 export async function emptyTrash(): Promise<string> {
   const outcome = await api.invokeCommand(COMANDI.svuota);
-  return outcome.notify ?? "cestino svuotato";
+  return outcome.notify ?? t("trash.emptied");
 }
 
 /// Il primo nome libero della famiglia «Nota», «Nota 1», … (D3): la convenzione

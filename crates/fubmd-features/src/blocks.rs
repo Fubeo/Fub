@@ -31,6 +31,7 @@ use fubmd_abi::error::FormatError;
 use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::custom_kind;
 use fubmd_abi::options::syntax;
+use fubmd_abi::text::{Arg, StringCatalog, Text};
 use fubmd_abi::ui::{Axis, UiKind, UiNode};
 use serde_json::json;
 
@@ -52,6 +53,30 @@ pub const MATH_RENDERER: &str = "fubmd:math";
 /// È lo stesso nome del renderer, e non per pigrizia: chi manda e chi disegna
 /// devono essere riconoscibili come **la stessa estensione**.
 pub const DIAGRAM_NS: &str = "fubmd:diagram";
+
+/// Il titolo del ripiego di un diagramma: l'**unica** stringa che questo
+/// componente scriva a un umano.
+///
+/// Vale la pena dirlo perché è il caso che il §12.4 non prevedeva: «sei feature
+/// senza catalogo» suggerisce sei cataloghi da riempire, e uno di questi ha una
+/// voce sola. Non è una svista — i blocchi sono un `CustomBlockProvider`, e ciò
+/// che rendono è il contenuto di chi scrive la nota, non prosa loro. La riga
+/// che resta è quella che compare quando il rendering vero non c'è: e proprio
+/// perché è l'unica, sarebbe stata l'ultima a essere tradotta.
+const FALLBACK_TITLE: &str = "fallback_title";
+/// Il nome del motore (`mermaid`, `graphviz`): un dato, non una parola da
+/// tradurre — `ArgValue::Text` è per questo.
+const ENGINE: &str = "engine";
+
+/// Le stringhe dei blocchi. Vedi
+/// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
+/// componente e non nella shell.
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it").with(FALLBACK_TITLE, "Diagramma ({engine})"),
+        StringCatalog::new("en").with(FALLBACK_TITLE, "Diagram ({engine})"),
+    ]
+}
 
 // ---------------------------------------------------------------------------
 // I diagrammi: un recinto che il core delimita e non sa disegnare
@@ -135,7 +160,7 @@ impl CustomRenderer for DiagramRenderer {
             return Ok(CustomRendering::Fallback);
         };
         let fallback = UiNode::new(UiKind::Section {
-            title: format!("Diagramma ({engine})").into(),
+            title: Text::message(FALLBACK_TITLE, vec![Arg::text(ENGINE, engine)]),
             collapsed: true,
             children: vec![UiNode::new(UiKind::Stack {
                 dir: Axis::Column,

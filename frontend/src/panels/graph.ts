@@ -17,6 +17,7 @@ import { pageName } from "../rules/organizer";
 import { state } from "../state/store";
 import { $ } from "../ui/dom";
 import { refreshOn, registerPanel } from "../ui/panel-host";
+import { t } from "../i18n/strings";
 
 interface SimNode {
   id: string;
@@ -106,12 +107,10 @@ export async function openGraph(): Promise<void> {
   bar.className = "graph-bar";
   const title = document.createElement("span");
   title.className = "panel-title";
-  title.textContent = `Grafo — ${data.nodes.length} not${data.nodes.length === 1 ? "a" : "e"}, ${
-    data.edges.length
-  } collegament${data.edges.length === 1 ? "o" : "i"}`;
+  title.textContent = t("graph.count", { note: data.nodes.length, archi: data.edges.length });
   const close = document.createElement("button");
   close.className = "link-button";
-  close.textContent = "Chiudi";
+  close.textContent = t("app.close");
   bar.append(title, close);
 
   const canvas = document.createElement("canvas");
@@ -141,11 +140,22 @@ export async function openGraph(): Promise<void> {
   canvas.height = H * dpr;
   const ctx = canvas.getContext("2d")!;
   ctx.scale(dpr, dpr);
-  // Colore d'inchiostro letto una volta sola: dentro `draw` costringeva il
-  // webview a un ricalcolo di stile a ogni frame, che da solo mangiava più
-  // del disegno. L'overlay si ricrea a ogni apertura, quindi un cambio di
-  // tema viene comunque raccolto.
-  const ink = getComputedStyle(overlay).color;
+  // I colori letti una volta sola: dentro `draw` costringevano il webview a un
+  // ricalcolo di stile a ogni frame, che da solo mangiava più del disegno.
+  // L'overlay si ricrea a ogni apertura, quindi un cambio di tema viene
+  // comunque raccolto.
+  //
+  // Vengono dai token (§12.4) e non più da tre esadecimali scritti qui. I tre
+  // di prima — `#888`, `#7aa2f7`, `#9ece6a` — erano di una **terza** tavolozza,
+  // che non era né quella della shell né quella del documento: il grafo era
+  // l'unica superficie di FubMD colorata da nessun tema, e un tema chiaro
+  // l'avrebbe lasciata indietro senza che niente diventasse rosso.
+  const stile = getComputedStyle(overlay);
+  const ink = stile.color;
+  const tinta = (nome: string) => stile.getPropertyValue(nome).trim() || ink;
+  const nodo = tinta("--graph-node");
+  const nodoAttivo = tinta("--graph-node-active");
+  const nodoSotto = tinta("--graph-node-hover");
   const TAU = 2 * Math.PI;
 
   const byId = new Map<string, SimNode>();
@@ -280,7 +290,7 @@ export async function openGraph(): Promise<void> {
     // Nodi spenti: un fill solo. Il `moveTo` prima di ogni arco evita che i
     // cerchi si colleghino fra loro dentro il path.
     ctx.globalAlpha = 0.8;
-    ctx.fillStyle = "#888";
+    ctx.fillStyle = nodo;
     ctx.beginPath();
     for (const n of nodes) {
       if (n === hovered || n.id === current) continue;
@@ -296,7 +306,7 @@ export async function openGraph(): Promise<void> {
       if (!attivo && n !== hovered) continue;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, TAU);
-      ctx.fillStyle = attivo ? "#7aa2f7" : "#9ece6a";
+      ctx.fillStyle = attivo ? nodoAttivo : nodoSotto;
       ctx.fill();
     }
 

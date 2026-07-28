@@ -8,8 +8,9 @@ import { EditorView, keymap } from "@codemirror/view";
 import { Compartment } from "@codemirror/state";
 import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { oneDark } from "@codemirror/theme-one-dark";
 import { indentWithTab } from "@codemirror/commands";
+import { temaEditor } from "./theme";
+import { temaCorrente, type Tema } from "../theme/theme";
 import { byteToCharIndex, charToByteIndex } from "../rules/offsets";
 import { editingExtensions } from "./editor-commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
@@ -37,6 +38,13 @@ export interface Editor {
   /// Accende o spegne la resa inline: è la differenza fra la modalità Live
   /// Preview e la modalità Sorgente (FEATURES 4.1).
   setLivePreview(on: boolean): void;
+  /// Passa all'altra luce (§12.4).
+  ///
+  /// I **colori** non passano di qui — sono `var(--…)` e li cambia il CSS da
+  /// solo, senza che l'editor lo sappia (`editor/theme.ts`). Passa di qui la
+  /// sola cosa che il CSS non può dire a CodeMirror: in che luce si trova, che
+  /// è un booleano nella sua configurazione.
+  setTheme(tema: Tema): void;
 }
 
 export interface EditorOptions {
@@ -66,6 +74,14 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   // documento né cronologia di undo.
   const preview = new Compartment();
 
+  // Il tema sta in un compartment per la stessa ragione della resa inline: si
+  // cambia luce a caldo, senza ricostruire l'editor e quindi senza perdere né
+  // il documento né la cronologia di undo. Il tema nasce con quello che la
+  // pagina sta già portando — `theme/theme.ts` lo scrive sulla radice prima che
+  // questa funzione venga chiamata — e non con un default cablato, che sarebbe
+  // un lampo di scuro a ogni nota aperta in tema chiaro.
+  const tema = new Compartment();
+
   const listener = EditorView.updateListener.of((u) => {
     if (u.docChanged && !programmatic) {
       opts.onChange(u.state.doc.toString());
@@ -90,7 +106,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       // La base GFM non è un dettaglio: senza, il parser non produce i nodi
       // di `~~barrato~~`/tabelle/todo e la live preview degrada in silenzio.
       markdown({ base: markdownLanguage }),
-      oneDark,
+      tema.of(temaEditor(temaCorrente())),
       EditorView.lineWrapping,
       preview.of(
         livePreview({
@@ -133,6 +149,9 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
             : [],
         ),
       });
+    },
+    setTheme(next: Tema) {
+      view.dispatch({ effects: tema.reconfigure(temaEditor(next)) });
     },
     revealByteOffset(byteOffset: number) {
       const pos = Math.min(

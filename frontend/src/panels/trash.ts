@@ -28,6 +28,7 @@ import {
   suspendSave,
 } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
+import { t } from "../i18n/strings";
 
 const trashListEl = $("#trash-list");
 
@@ -58,7 +59,7 @@ async function refreshTrash(): Promise<void> {
   if (entries.length === 0) {
     const vuoto = document.createElement("li");
     vuoto.className = "empty-note";
-    vuoto.textContent = "Il cestino è vuoto.";
+    vuoto.textContent = t("trash.is_empty");
     trashListEl.appendChild(vuoto);
     return;
   }
@@ -76,7 +77,7 @@ async function refreshTrash(): Promise<void> {
 
     const restore = document.createElement("button");
     restore.className = "link-button";
-    restore.textContent = "Ripristina";
+    restore.textContent = t("trash.restore");
     restore.addEventListener("click", () => void ripristina(entry.id, entry.original));
 
     li.append(name, when, restore);
@@ -99,7 +100,7 @@ async function ripristina(trashId: string, original: string): Promise<void> {
     // La domanda ha senso qui e in nessun altro ramo, ed è la variante
     // `already_exists` a dirlo: è per questo cliente che esiste.
     if (!isErrorKind(e, "already_exists")) {
-      notify(`«${pageName(original)}» non è stata ripristinata: ${errorText(e)}`, "guasto");
+      notify(t("trash.restore_failed", { doc: pageName(original), reason: errorText(e) }), "guasto");
       return;
     }
     // Il kernel non inventa nomi al posto dell'utente, quindi l'app ne propone
@@ -108,8 +109,8 @@ async function ripristina(trashId: string, original: string): Promise<void> {
     // a divergere.
     const proposta = await proposeFreeName(original);
     const ok = await confirm(
-      `«${pageName(original)}» esiste di nuovo. Ripristinare come «${pageName(proposta)}»?`,
-      { title: "Ripristina nota", okLabel: "Ripristina" },
+      t("trash.exists_again", { doc: pageName(original), proposta: pageName(proposta) }),
+      { title: t("trash.restore_title"), okLabel: t("trash.restore") },
     );
     if (!ok) return;
     restored = await restoreFromTrash(trashId, proposta);
@@ -123,10 +124,11 @@ async function ripristina(trashId: string, original: string): Promise<void> {
 async function emptyTrashPanel(): Promise<void> {
   const entries = await api.listTrash();
   if (entries.length === 0) return;
-  const ok = await confirm(
-    `Cancellare per sempre ${entries.length} element${entries.length === 1 ? "o" : "i"}?`,
-    { title: "Svuota cestino", danger: true, okLabel: "Svuota" },
-  );
+  const ok = await confirm(t("trash.confirm_empty", { count: entries.length }), {
+    title: t("trash.empty_title"),
+    danger: true,
+    okLabel: t("trash.empty_button"),
+  });
   if (!ok) return;
   notify(await svuota());
   await refreshTrash();
@@ -140,10 +142,10 @@ async function emptyTrashPanel(): Promise<void> {
 export async function trashWithConfirm(id: string): Promise<void> {
   const salvataggioInAttesa = suspendSave(id);
 
-  const ok = await confirm(`Spostare «${pageName(id)}» nel cestino?`, {
-    title: "Elimina nota",
+  const ok = await confirm(t("trash.confirm_delete", { doc: pageName(id) }), {
+    title: t("trash.delete_title"),
     danger: true,
-    okLabel: "Elimina",
+    okLabel: t("explorer.delete"),
   });
   if (!ok) {
     if (salvataggioInAttesa) resumeSave();

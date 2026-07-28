@@ -73,6 +73,10 @@ const FILTER_FIELD: &str = "filter";
 /// sarebbe sparito senza che nessuno avesse toccato lo stato di vista.
 const FILTER_STATE: &str = "filter";
 
+/// Il titolo del pannello. Era l'unica stringa di questo file rimasta fuori dal
+/// catalogo, ed era anche la più visibile: un pannello si vede sempre, il suo
+/// segnaposto solo quando è vuoto.
+const VIEW_TITLE: &str = "view_title";
 /// Il testo grigio dentro il campo filtro.
 const FILTER_PLACEHOLDER: &str = "filter_placeholder";
 /// Il vault non ha nessun tag.
@@ -87,10 +91,12 @@ const NO_MATCH: &str = "no_match";
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
+            .with(VIEW_TITLE, "Tag")
             .with(FILTER_PLACEHOLDER, "filtra i tag")
             .with(EMPTY, "Nessun tag.")
             .with(NO_MATCH, "Nessun tag col filtro."),
         StringCatalog::new("en")
+            .with(VIEW_TITLE, "Tags")
             .with(FILTER_PLACEHOLDER, "filter tags")
             .with(EMPTY, "No tags.")
             .with(NO_MATCH, "No tags match the filter."),
@@ -115,7 +121,7 @@ impl ViewProvider for TagPanelView {
             // Finché il posto era lettera morta la shell metteva il pannello a
             // destra per conoscenza privata; ora che il montaggio lo rispetta,
             // la dichiarazione dice la stessa cosa.
-            ViewSpec::new(TAGS_VIEW, "Tag", ViewSurface::RightSidebar)
+            ViewSpec::new(TAGS_VIEW, Text::key(VIEW_TITLE), ViewSurface::RightSidebar)
                 // I tag sono aggregati vault-wide: invecchiano a ogni modifica
                 // dell'indice, non al cambio di nota.
                 .refreshing(EventMask::of([

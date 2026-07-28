@@ -25,6 +25,8 @@ import type {
 } from "../host/contract";
 import { pageName } from "../rules/organizer";
 import { errorText } from "../host/errors";
+import { intrappolaFuoco } from "./a11y";
+import { type Chiave, t } from "../i18n/strings";
 
 /// Ciò che la palette chiede alla shell: eseguire gli intenti e dire qualcosa
 /// all'utente. Il resto (invocare, disegnare, chiedere) è suo.
@@ -77,19 +79,25 @@ export function needsPlan(spec: CommandSpec): boolean {
   return spec.scope.reach !== "document";
 }
 
-const REACH_LABELS: Record<CommandSpec["scope"]["reach"], string> = {
-  session: "questa sessione",
-  document: "una nota",
-  documents: "più note",
-  vault: "il vault",
-  settings: "le impostazioni",
+/// Il raggio dichiarato, come **chiave** e non come parola.
+///
+/// Una tabella di stringhe a livello di modulo si sarebbe risolta all'import,
+/// cioè una volta sola e nella lingua di quel momento: cambiare lingua avrebbe
+/// lasciato la palette a parlare quella di prima, e non lo avrebbe detto
+/// nessuno. Le chiavi non invecchiano; le parole sì.
+const REACH_KEYS: Record<CommandSpec["scope"]["reach"], Chiave> = {
+  session: "palette.reach.session",
+  document: "palette.reach.document",
+  documents: "palette.reach.documents",
+  vault: "palette.reach.vault",
+  settings: "palette.reach.settings",
 };
 
 /// Il raggio in una riga, per la palette: cosa tocca, e se si torna indietro.
 export function scopeLabel(spec: CommandSpec): string {
-  const dove = REACH_LABELS[spec.scope.reach];
-  const cosa = spec.scope.writes ? `scrive · ${dove}` : `legge · ${dove}`;
-  return spec.scope.reversible ? cosa : `${cosa} · non reversibile`;
+  const dove = t(REACH_KEYS[spec.scope.reach]);
+  const cosa = t(spec.scope.writes ? "palette.writes" : "palette.reads", { dove });
+  return spec.scope.reversible ? cosa : t("palette.irreversible", { cosa });
 }
 
 /// Gli argomenti JSON a partire da ciò che l'utente ha compilato.
@@ -183,7 +191,7 @@ export function planLines(plan: CommandPlan): string[] {
     const n = modifiche.get(doc);
     const nome = pageName(doc);
     if (n === undefined) return nome;
-    return `${nome} — ${n} ${n === 1 ? "modifica" : "modifiche"}`;
+    return t("palette.plan_edits", { doc: nome, count: n });
   });
 }
 
@@ -191,8 +199,13 @@ export function planLines(plan: CommandPlan): string[] {
 
 const OVERLAY_ID = "command-palette";
 
+/// Come si scioglie la trappola del fuoco della palette aperta.
+let sciogliPalette: (() => void) | null = null;
+
 export function closeCommandPalette() {
   document.getElementById(OVERLAY_ID)?.remove();
+  sciogliPalette?.();
+  sciogliPalette = null;
 }
 
 /// Apre la palette. Tre passi al più: scegli, compila, approva.
@@ -201,7 +214,7 @@ export async function openCommandPalette(host: PaletteHost) {
   try {
     specs = await api.listCommands();
   } catch (e) {
-    host.notify(`Comandi non disponibili: ${errorText(e)}`);
+    host.notify(t("palette.unavailable", { reason: errorText(e) }));
     return;
   }
   scegli(specs, apriOverlay(), host);
@@ -219,6 +232,14 @@ function apriOverlay(): HTMLElement {
   closeCommandPalette();
   const overlay = document.createElement("div");
   overlay.id = OVERLAY_ID;
+  // La palette è una modale a tutti gli effetti: copre lo schermo, chiede
+  // qualcosa e se ne va. Dirlo è ciò che fa annunciare «finestra di dialogo» a
+  // chi entra, invece di lasciarlo dentro un `div` sopra la pagina di prima —
+  // che continua a leggere e a essere raggiungibile col tab.
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", t("palette.title"));
+  overlay.tabIndex = -1;
   const box = document.createElement("div");
   box.className = "palette-box";
   overlay.appendChild(box);
@@ -226,6 +247,9 @@ function apriOverlay(): HTMLElement {
     if (e.target === overlay) closeCommandPalette();
   });
   document.body.appendChild(overlay);
+  // Dopo l'inserimento nel documento: `intrappolaFuoco` mette a fuoco il primo
+  // elemento, e un elemento fuori dal documento non lo può prendere.
+  sciogliPalette = intrappolaFuoco(overlay, closeCommandPalette);
   return box;
 }
 
@@ -234,7 +258,7 @@ function scegli(specs: CommandSpec[], box: HTMLElement, host: PaletteHost) {
   box.innerHTML = "";
   const input = document.createElement("input");
   input.className = "palette-input";
-  input.placeholder = "Comando…";
+  input.placeholder = t("palette.placeholder");
   const list = document.createElement("ul");
   list.className = "palette-list";
   box.append(input, list);
@@ -276,7 +300,7 @@ function scegli(specs: CommandSpec[], box: HTMLElement, host: PaletteHost) {
     if (visibili.length === 0) {
       const vuoto = document.createElement("li");
       vuoto.className = "palette-empty";
-      vuoto.textContent = "Nessun comando";
+      vuoto.textContent = t("palette.empty");
       list.appendChild(vuoto);
     }
   };
@@ -347,7 +371,7 @@ function compila(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
     const label = document.createElement("label");
     const nome = document.createElement("span");
     nome.className = "palette-label";
-    nome.textContent = param.required ? `${param.title} *` : param.title;
+    nome.textContent = param.required ? t("palette.required", { title: param.title }) : param.title;
     label.appendChild(nome);
     const campo = campoPer(param, datalist.id);
     campi.set(param.name, campo);
@@ -366,10 +390,10 @@ function compila(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
   const conferma = document.createElement("button");
   conferma.type = "submit";
   conferma.className = "primary";
-  conferma.textContent = needsPlan(spec) ? "Anteprima…" : "Esegui";
+  conferma.textContent = t(needsPlan(spec) ? "palette.preview" : "app.run");
   const annulla = document.createElement("button");
   annulla.type = "button";
-  annulla.textContent = "Annulla";
+  annulla.textContent = t("app.cancel");
   annulla.addEventListener("click", closeCommandPalette);
   azioni.append(conferma, annulla);
   form.appendChild(azioni);
@@ -422,7 +446,7 @@ function campoPer(
     case "documents": {
       const area = document.createElement("textarea");
       area.rows = 3;
-      area.placeholder = "un id per riga (vuoto = tutto il vault)";
+      area.placeholder = t("palette.docs_placeholder");
       return area;
     }
     default: {
@@ -495,7 +519,7 @@ function mostraPiano(
   azioni.className = "palette-actions";
   const applica = document.createElement("button");
   applica.className = spec.scope.reversible ? "primary" : "danger";
-  applica.textContent = "Applica";
+  applica.textContent = t("palette.apply");
   applica.disabled = plan.docs.length === 0;
   applica.addEventListener("click", async () => {
     applica.disabled = true;
@@ -508,7 +532,7 @@ function mostraPiano(
     }
   });
   const annulla = document.createElement("button");
-  annulla.textContent = "Annulla";
+  annulla.textContent = t("app.cancel");
   annulla.addEventListener("click", closeCommandPalette);
   azioni.append(applica, annulla);
   box.appendChild(azioni);

@@ -28,6 +28,7 @@ import { maskWants } from "../rules/mirrored";
 import { onAnyEvent, onEvent } from "../state/kernel";
 import { on } from "../state/store";
 import { errorText } from "../host/errors";
+import { t } from "../i18n/strings";
 
 export type EventType = KernelEvent["type"];
 
@@ -57,6 +58,17 @@ export interface Panel {
   /// è la regola di namespace del §7.4 applicata all'unico spazio di nomi che
   /// la shell possiede già.
   readonly id: string;
+  /// Come si chiama, **nell'inventario**.
+  ///
+  /// È l'unica stringa della shell che non passa dal catalogo (§12.4), e non
+  /// per dimenticanza: `registeredPanels()` non ha ancora un lettore — è il
+  /// pezzetto di §7.6 che riguarda la shell, e nessuna superficie lo mostra.
+  /// Tradurla oggi vorrebbe dire risolverla **al montaggio**, cioè congelarla
+  /// nella lingua di quel momento: un nome che non si vede e che, il giorno che
+  /// si vedesse, sarebbe già quello sbagliato. Il giorno che l'inventario avrà
+  /// una superficie, questo campo diventa una `Chiave` e la risolve chi
+  /// disegna — che è dove la 0040 mette la risoluzione anche per le view
+  /// dichiarate.
   readonly title: string;
   readonly placement: PanelPlacement;
   /// Gli eventi al cui arrivo questo pannello è invecchiato: la **maschera del
@@ -125,7 +137,7 @@ export async function refreshPanel(id: string, notice?: KernelNotice): Promise<v
   try {
     await panel.render(notice);
   } catch (e) {
-    console.error(`FubMD: il pannello «${id}» non si è ridisegnato: ${errorText(e)}`);
+    console.error(`FubMD: ${t("panel.render_failed", { panel: id, reason: errorText(e) })}`);
   }
 }
 

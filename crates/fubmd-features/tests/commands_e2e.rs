@@ -42,8 +42,17 @@ impl Vault {
         let mut ws = Workspace::new(&self.root, registry);
         // I plugin di prova si dichiarano prima di registrare (§7.3): il
         // kernel non presta capacità a una stringa.
-        ws.register_core_feature(COMMANDS_ID, COMMANDS_ID)
-            .expect("dichiarato");
+        // **Col catalogo**, e non `register_core_feature`: da quando i comandi
+        // parlano per chiavi, un banco che dichiara il plugin senza le sue
+        // stringhe vede uscire `done.replace` invece della frase — cioè
+        // esattamente l'ultimo gradino della 0040, e nel posto sbagliato. Qui
+        // si vuole la strada vera, quella che passa dal manifest.
+        ws.register_plugin(
+            fubmd_abi::traits::PluginManifest::core(COMMANDS_ID, COMMANDS_ID)
+                .speaking("it", fubmd_features::commands::catalog()),
+            fubmd_kernel::Trust::Core,
+        )
+        .expect("dichiarato");
         ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands))
             .expect("registrato");
         ws.reindex().expect("reindex");
@@ -84,7 +93,12 @@ fn a_bulk_replace_is_shown_before_it_is_done_and_then_done() {
         "il cane dorme, il cane mangia"
     );
     let notify = outcome.notify.expect("un'operazione in blocco si racconta");
-    assert!(notify.to_string().contains("2 sostituzioni"), "{notify}");
+    assert_eq!(
+        notify.to_string(),
+        "Sostituzioni: 2 · Note aggiornate: 1",
+        "e la frase arriva risolta: il kernel la traduce sulla via d'uscita, \
+         col catalogo di chi l'ha scritta"
+    );
 }
 
 #[test]
@@ -922,7 +936,7 @@ fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
 
     let messaggio = outcome.notify.expect("dice com'è andata");
     assert!(
-        messaggio.to_string().contains("1 impostazione applicata"),
+        messaggio.to_string().contains("applicate: 1"),
         "{messaggio}"
     );
     assert!(
@@ -966,7 +980,7 @@ fn simulating_an_import_counts_the_key_gate_too() {
         .notify
         .expect("dice cosa farebbe");
     assert!(
-        simulato.to_string().contains("1 impostazione applicata")
+        simulato.to_string().contains("applicate: 1")
             && simulato.to_string().contains("privacy.telemetry"),
         "la simulazione nomina già ciò che non entrerebbe: {simulato}"
     );
@@ -982,7 +996,7 @@ fn simulating_an_import_counts_the_key_gate_too() {
         .notify
         .expect("dice com'è andata");
     assert!(
-        applicato.to_string().contains("1 impostazione applicata")
+        applicato.to_string().contains("applicate: 1")
             && applicato.to_string().contains("privacy.telemetry"),
         "e l'applicazione dice la stessa cosa: {applicato}"
     );

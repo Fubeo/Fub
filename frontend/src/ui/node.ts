@@ -32,6 +32,8 @@
 // nodo, ed è esattamente ciò che questo file esiste per evitare.
 import type { ActionRef, FieldValue, UiNode, UiValue } from "../host/contract";
 import { setSanitizedHtml } from "./sanitize";
+import { attivabile, identificatore, nonAttivabile } from "./a11y";
+import { t } from "../i18n/strings";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -180,6 +182,13 @@ function aggiorna(
         riga.classList.toggle("selected", next.selected);
         collega(riga, next.action, onAction);
       }
+      // Gli stati ARIA seguono il nodo anche quando l'elemento è riusato: una
+      // cartella che si apre e resta `aria-expanded="false"` è una cartella
+      // che, per chi la legge, non si è aperta.
+      if (next.selected) el.setAttribute("aria-selected", "true");
+      else el.removeAttribute("aria-selected");
+      if (next.children.length > 0) el.setAttribute("aria-expanded", String(next.expanded));
+      else el.removeAttribute("aria-expanded");
       figli(contenitoreFigli(el), next.children, onAction);
       return true;
     }
@@ -410,12 +419,24 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
     }
     case "list": {
       const el = div("ui-list");
+      // Un `div` pieno di `div` non è una lista per nessuno tranne che per chi
+      // la guarda: il ruolo è ciò che permette a un lettore di schermo di dire
+      // «lista, sei elementi» e di saltarla, invece di leggerla tutta.
+      el.setAttribute("role", "list");
       for (const item of node.items) el.appendChild(renderUiNode(item, onAction));
       return el;
     }
     case "list_item": {
       const el = div("ui-list-item");
+      el.setAttribute("role", "listitem");
       el.classList.toggle("selected", node.selected);
+      // `selected` è uno stato del nodo (§2.1), e va detto anche a chi non
+      // vede lo sfondo cambiato. `aria-current` e non `aria-selected`: il
+      // secondo vale dentro un widget di selezione (una listbox), e questa è
+      // una lista — dichiarare uno stato in un contesto che non lo prevede è
+      // il modo di farlo ignorare in silenzio.
+      if (node.selected) el.setAttribute("aria-current", "true");
+      else el.removeAttribute("aria-current");
       collega(el, node.action, onAction);
       const title = div("ui-list-item-title");
       title.textContent = node.title;
@@ -453,6 +474,12 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
       el.src = node.url;
       el.style.height = `${node.height}px`;
       el.setAttribute("sandbox", "allow-scripts");
+      // Un `<iframe>` senza `title` è, per chi lo incontra navigando, «frame»
+      // e basta — e non c'è modo di sapere se valga la pena entrarci. Il
+      // contratto non porta un titolo per questo nodo, quindi il meglio che si
+      // possa dire è l'indirizzo: è poco, ed è comunque l'unica cosa vera che
+      // la shell sappia. Un titolo vero è roba del contratto, non di qui.
+      el.title = node.url;
       return el;
     }
     case "section": {
@@ -499,6 +526,7 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
     }
     case "tree": {
       const el = div("ui-tree");
+      el.setAttribute("role", "tree");
       for (const root of node.roots) el.appendChild(renderUiNode(root, onAction));
       return el;
     }
@@ -508,9 +536,26 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
       riga.textContent = node.label;
       riga.classList.toggle("selected", node.selected);
       collega(riga, node.action, onAction);
+      // Il ruolo sta sul **contenitore** e non sull'etichetta, perché è il
+      // contenitore ad avere i figli: un `treeitem` che non contiene il proprio
+      // gruppo è un albero piatto per chi lo legge. Il nome però viene
+      // dall'etichetta e non dal contenitore, o sarebbe l'etichetta *più tutto
+      // il sottoalbero* — che su una cartella con cento note è un nome lungo
+      // cento note.
+      const idEtichetta = identificatore("albero");
+      riga.id = idEtichetta;
+      el.setAttribute("role", "treeitem");
+      el.setAttribute("aria-labelledby", idEtichetta);
+      if (node.selected) el.setAttribute("aria-selected", "true");
       el.appendChild(riga);
       const figli = div("ui-children");
       figli.hidden = !node.expanded;
+      // `aria-expanded` solo su chi ha davvero dei figli: dichiararlo su una
+      // foglia annuncia «compresso» a chi non ha niente da espandere.
+      if (node.children.length > 0) {
+        el.setAttribute("aria-expanded", String(node.expanded));
+        figli.setAttribute("role", "group");
+      }
       for (const child of node.children) figli.appendChild(renderUiNode(child, onAction));
       el.appendChild(figli);
       return el;
@@ -528,6 +573,11 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
     }
     case "tab": {
       const el = div("ui-tab");
+      // Il pannello di una scheda. L'`aria-labelledby` che lo lega alla sua
+      // linguetta lo mette `intestazioniSchede`, perché è là che le linguette
+      // nascono e solo là si sa quale appartiene a quale.
+      el.setAttribute("role", "tabpanel");
+      el.id = identificatore("scheda");
       const corpo = div("ui-children");
       for (const child of node.children) corpo.appendChild(renderUiNode(child, onAction));
       el.appendChild(corpo);
@@ -559,6 +609,12 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
       if (node.label) {
         const testo = div("ui-progress-label");
         testo.textContent = node.label;
+        // La `<progress>` prende il nome dall'etichetta che le sta accanto.
+        // Senza, un lettore di schermo annuncia «barra di avanzamento, 40%» —
+        // e il 40% *di cosa* è precisamente l'informazione che serve.
+        const id = identificatore("avanzamento");
+        testo.id = id;
+        barra.setAttribute("aria-labelledby", id);
         el.appendChild(testo);
       }
       return el;
@@ -722,18 +778,26 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
     }
     case "pending": {
       const el = div("ui-pending");
+      // I due stati del §2.5 sono le uniche cose che compaiono **da sole**,
+      // dopo che l'utente ha smesso di guardare: chi non vede lo schermo non
+      // ha modo di accorgersene se nessuno glielo dice. `status` e non
+      // `alert`: «sto caricando» non interrompe ciò che si sta leggendo.
+      el.setAttribute("role", "status");
       el.textContent = node.label ?? "…";
       return el;
     }
     case "failed": {
       const el = div("ui-failed");
+      // Qui invece sì: un guasto è la cosa che va detta subito, o l'utente
+      // resta ad aspettare un pannello che ha già smesso di provarci.
+      el.setAttribute("role", "alert");
       const messaggio = div("ui-failed-message");
       messaggio.textContent = node.message;
       el.appendChild(messaggio);
       if (node.retry) {
         const bottone = document.createElement("button");
         bottone.className = "ui-button";
-        bottone.textContent = "Riprova";
+        bottone.textContent = t("app.retry");
         collega(bottone, node.retry, onAction);
         el.appendChild(bottone);
       }
@@ -752,10 +816,20 @@ function div(className: string): HTMLElement {
   return el;
 }
 
+/// Il contenitore di un campo, con la sua etichetta.
+///
+/// L'etichetta era un `<div>`, e questa è la riga più costosa di tutta la
+/// passata: un `<div>` accanto a un `<input>` è testo che *sembra* un'etichetta
+/// ma non lo è per nessuno tranne che per chi guarda. Un lettore di schermo che
+/// arriva su quel campo annuncia «casella di testo», e basta — il nome del
+/// campo lo ha letto un attimo prima, come frase sciolta, senza modo di
+/// collegarlo. Adesso è un `<label>` vero, e `campoConNome` lo lega al
+/// controllo che gli sta dentro.
 function campo(className: string, label: string | null): HTMLElement {
   const el = div(className);
   if (label) {
-    const testo = div("ui-field-label");
+    const testo = document.createElement("label");
+    testo.className = "ui-field-label";
     testo.textContent = label;
     el.appendChild(testo);
   }
@@ -800,7 +874,77 @@ function campoTestuale(
 
 function campoConNome(el: HTMLElement, field: string): HTMLElement {
   el.dataset.campo = field;
+  legaEtichetta(el, field);
   return el;
+}
+
+/// Lega l'etichetta di un campo al controllo che nomina.
+///
+/// Passa da qui **ogni** campo del protocollo, che è il motivo per cui sta qui
+/// e non in sei posti: `campoConNome` è l'ultima cosa che ogni ramo dei campi
+/// chiama prima di restituire, quindi è l'unico punto in cui il controllo
+/// esiste già e l'etichetta pure.
+///
+/// I due casi che non lega, e vanno bene entrambi:
+///
+/// - **Il gruppo di radio.** Non c'è un controllo solo da nominare, ce ne sono
+///   N, e ognuno ha già la propria `<label>` che lo avvolge. L'etichetta del
+///   gruppo diventa allora una didascalia — che un `for` verso un solo bottone
+///   renderebbe peggio, non meglio, perché nominerebbe la prima opzione col
+///   nome del gruppo.
+/// - **La casella di spunta.** Il suo contenitore *è* la `<label>`, e
+///   l'avvolgimento è già un legame — quello implicito, che vale quanto il
+///   `for` e non ha bisogno di un id.
+///
+/// # Quando l'etichetta non c'è affatto
+///
+/// `label` è `Option<Text>` per cinque campi su sette (`text_area`, `number`,
+/// `select`, `slider`, `date_picker`), e chi la lascia vuota non sta chiedendo
+/// un campo anonimo: sta dicendo che il contesto attorno lo spiega già. Solo
+/// che il contesto lo vede chi guarda lo schermo — chi ascolta sente «casella
+/// di testo» e deve compilarla a indovinare. È il difetto che il presidio di
+/// questa voce ha trovato per primo.
+///
+/// Il ripiego è il **nome del campo**, ed è brutto apposta: `tags` non è prosa,
+/// è un identificatore, e si nota. È lo stesso gradino ultimo della scala della
+/// [decisione 0040](../../../docs/decisions/0040-chi-localizza.md) — «brutto,
+/// onesto e soprattutto cercabile» —, per la stessa ragione: un ripiego che
+/// inventasse un'etichetta plausibile («Testo») renderebbe un campo senza nome
+/// indistinguibile da uno nominato male.
+function legaEtichetta(el: HTMLElement, field: string): void {
+  // Un gruppo di radio si nomina **in blocco** anche qui: mettere il nome del
+  // campo su ogni bottone coprirebbe l'etichetta della singola opzione, che è
+  // l'unica cosa buona che quel bottone abbia già.
+  const radio = el.querySelector("input[type=radio]") !== null;
+  // Per decidere se un nome *esiste* vale ogni `.ui-field-label` — anche lo
+  // `<span>` della casella di spunta, che nomina per avvolgimento. Per
+  // decidere se **legarlo** vale solo la `<label>`, che è l'unica ad avere un
+  // `for`.
+  const visibile = el.querySelector<HTMLElement>(":scope > .ui-field-label");
+  if (!visibile) {
+    if (radio) {
+      el.setAttribute("role", "radiogroup");
+      el.setAttribute("aria-label", field);
+      return;
+    }
+    el.querySelector<HTMLElement>("input, textarea, select")?.setAttribute("aria-label", field);
+    return;
+  }
+
+  const etichetta = el.querySelector<HTMLLabelElement>(":scope > label.ui-field-label");
+  if (!etichetta || etichetta.htmlFor) return;
+  const controllo = el.querySelector<HTMLElement>("input, textarea, select");
+  if (!controllo) return;
+  // Il nome va al **gruppo**, che è ciò che `radiogroup` esiste per rendere
+  // nominabile.
+  if (radio) {
+    if (!etichetta.id) etichetta.id = identificatore("gruppo");
+    el.setAttribute("role", "radiogroup");
+    el.setAttribute("aria-labelledby", etichetta.id);
+    return;
+  }
+  if (!controllo.id) controllo.id = identificatore("campo");
+  etichetta.htmlFor = controllo.id;
 }
 
 /// Registra come si legge il valore di questo campo, adesso.
@@ -814,10 +958,18 @@ function collega(el: HTMLElement, action: ActionRef | null, onAction: ActionHand
   if (precedente) el.removeEventListener("click", precedente);
   if (!action) {
     el.classList.remove("clickable");
+    // Non basta togliere il click: se questo elemento era attivabile e viene
+    // riusato dal riconciliatore (§2.8) per un nodo senza azione, resterebbe
+    // nel giro del tab senza fare niente.
+    nonAttivabile(el);
     azioni.delete(el);
     return;
   }
   el.classList.add("clickable");
+  // Cliccabile e attivabile sono la stessa cosa, e da qui in poi lo sono per
+  // costruzione: passa di qui **ogni** azione di **ogni** nodo dichiarativo,
+  // quindi anche quelli dei pannelli che non sono ancora stati scritti.
+  attivabile(el);
   const handler = (e: Event) => {
     e.preventDefault();
     void invia(el, action, onAction);
@@ -877,11 +1029,27 @@ function intestazioniSchede(el: HTMLElement, tabs: UiNode[], onAction: ActionHan
   const barra = el.querySelector<HTMLElement>(":scope > .ui-tab-bar");
   if (!barra) return;
   barra.replaceChildren();
+  barra.setAttribute("role", "tablist");
+  // I pannelli, nell'ordine in cui stanno: servono a legare ogni linguetta al
+  // suo (`aria-controls`) e viceversa (`aria-labelledby`). È la coppia che
+  // permette a un lettore di schermo di dire «scheda 2 di 3, selezionata» e di
+  // saltare direttamente al contenuto invece di leggere anche le altre.
+  const pannelli = Array.from(
+    el.querySelectorAll<HTMLElement>(":scope > .ui-children > .ui-tab"),
+  );
   tabs.forEach((tab, i) => {
     if (tab.node !== "tab") return;
     const bottone = document.createElement("button");
     bottone.className = "ui-tab-button";
     bottone.textContent = tab.label;
+    bottone.setAttribute("role", "tab");
+    const pannello = pannelli[i];
+    if (pannello) {
+      const idLinguetta = identificatore("linguetta");
+      bottone.id = idLinguetta;
+      bottone.setAttribute("aria-controls", pannello.id);
+      pannello.setAttribute("aria-labelledby", idLinguetta);
+    }
     bottone.addEventListener("click", () => {
       mostraScheda(el, i);
       // Chi ha chiesto di saperlo lo sa; chi non ha dichiarato un'azione non
@@ -890,7 +1058,41 @@ function intestazioniSchede(el: HTMLElement, tabs: UiNode[], onAction: ActionHan
     });
     barra.appendChild(bottone);
   });
+  frecceFraSchede(barra, el);
   segnaSchedaAttiva(el);
+}
+
+/// Le frecce dentro una barra di schede: ← → per spostarsi, Home/Fine per
+/// andare agli estremi.
+///
+/// L'ascoltatore sta sulla **barra** e non sulle linguette, e si registra una
+/// volta sola: `intestazioniSchede` ridisegna i figli a ogni giro, e un
+/// ascoltatore per linguetta sarebbe un ascoltatore in più a ogni ridisegno su
+/// un elemento che nel frattempo è stato buttato.
+function frecceFraSchede(barra: HTMLElement, gruppo: HTMLElement): void {
+  if (barra.dataset.frecce === "sì") return;
+  barra.dataset.frecce = "sì";
+  barra.addEventListener("keydown", (e) => {
+    const passo =
+      e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : e.key === "Home" ? 0 : e.key === "End" ? 0 : null;
+    if (passo === null) return;
+    const bottoni = Array.from(
+      barra.querySelectorAll<HTMLElement>(":scope > .ui-tab-button"),
+    );
+    if (bottoni.length === 0) return;
+    const attiva = Number(gruppo.dataset.attiva ?? "0");
+    const prossima =
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? bottoni.length - 1
+          : // Il giro si chiude: dall'ultima si torna alla prima. È ciò che
+            // fa un tab widget nativo, e chi ci arriva col tasto se lo aspetta.
+            (attiva + passo + bottoni.length) % bottoni.length;
+    e.preventDefault();
+    bottoni[prossima]?.click();
+    bottoni[prossima]?.focus();
+  });
 }
 
 function mostraScheda(el: HTMLElement, indice: number): void {
@@ -902,7 +1104,14 @@ function segnaSchedaAttiva(el: HTMLElement): void {
   const attiva = Number(el.dataset.attiva ?? "0");
   const corpo = el.querySelector<HTMLElement>(":scope > .ui-children");
   const bottoni = el.querySelectorAll<HTMLElement>(":scope > .ui-tab-bar > .ui-tab-button");
-  bottoni.forEach((b, i) => b.classList.toggle("selected", i === attiva));
+  bottoni.forEach((b, i) => {
+    b.classList.toggle("selected", i === attiva);
+    b.setAttribute("aria-selected", String(i === attiva));
+    // Il tab visita **il gruppo**, non ogni linguetta: dentro ci si muove con
+    // le frecce. È la convenzione dei tab widget, ed è ciò che evita che una
+    // barra da otto schede diventi otto fermate prima del contenuto.
+    b.tabIndex = i === attiva ? 0 : -1;
+  });
   if (!corpo) return;
   Array.from(corpo.children).forEach((c, i) => {
     if (c instanceof HTMLElement) c.hidden = i !== attiva;

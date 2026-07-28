@@ -5,6 +5,7 @@
 // chi li manda. Una copia per sorgente sarebbe una copia da tenere allineata:
 // il giorno che la si dimentica, un comando naviga e una view no.
 import type { CommandEffect, ViewUpdate } from "../host/contract";
+import { t } from "../i18n/strings";
 import { isOpen, openDocument, revealByteOffset } from "../panels/document";
 import { searchFor } from "../panels/search";
 import { notify } from "./notify";
@@ -69,11 +70,11 @@ async function raccogliExport(payload: unknown): Promise<void> {
   const json = JSON.stringify(payload, null, 2);
   try {
     await navigator.clipboard.writeText(json);
-    notify("Impostazioni copiate negli appunti.");
+    notify(t("settings.exported_clipboard"));
   } catch {
     // Senza permesso sugli appunti resta la console, che per un JSON di venti
     // righe è più di niente — e il messaggio dice dov'è finito.
     console.info(json);
-    notify("Impostazioni esportate: sono nella console (appunti non disponibili).", "guasto");
+    notify(t("settings.exported_console"), "guasto");
   }
 }

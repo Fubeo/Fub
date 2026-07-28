@@ -1,0 +1,233 @@
+//! Il presidio dei **cataloghi** (§12.4): che le stringhe dichiarate esistano,
+//! in tutte le lingue, e che non ne resti nessuna cablata.
+//!
+//! È la metà meccanica di questa voce. L'altra — riempire otto cataloghi — è
+//! lavoro che si fa una volta; questa è ciò che impedisce che si disfi, e senza
+//! si disferebbe **in silenzio**, che è la forma di rottura peggiore che le
+//! stringhe abbiano: la scala della
+//! [decisione 0040](../../../docs/decisions/0040-chi-localizza.md) non fallisce
+//! mai, degrada. Una chiave senza voce non è un errore, è la chiave nuda
+//! stampata a schermo; una lingua tradotta a metà non è un errore, è metà
+//! pannello nell'altra lingua; una stringa dimenticata dentro una `ViewSpec`
+//! non è un errore, è italiano per tutti. Tre modi di rompersi, zero rossi.
+//!
+//! Qui diventano tre rossi.
+//!
+//! # Le tre domande
+//!
+//! 1. **Le lingue dicono le stesse cose.** I cataloghi di un componente hanno
+//!    tutti lo stesso insieme di chiavi. Chi aggiunge una riga in italiano e
+//!    dimentica l'inglese lo scopre adesso e non da una segnalazione.
+//! 2. **Ciò che si dichiara si può tradurre.** Ogni chiave che una `ViewSpec` o
+//!    una `CommandSpec` porta ha una voce in ogni catalogo del suo componente.
+//! 3. **Non è rimasto niente di cablato.** Nessuna delle stringhe dichiarate è
+//!    un `Text::Literal`: un letterale lì dentro è prosa che nessun catalogo
+//!    potrà mai raggiungere, ed è precisamente com'erano tutte prima di questa
+//!    voce.
+//!
+//! Ciò che questo presidio **non** copre, e va detto: le chiavi che nascono
+//! mentre un comando gira — un errore, il riassunto di un piano — non si
+//! possono camminare da fuori, perché non esistono finché qualcosa non succede.
+//! Le copre la domanda 1 dal lato del catalogo (se una lingua ne ha una e
+//! l'altra no, è rosso) e i test dei comandi dall'altro, che le risolvono
+//! davvero invece di stamparne il `Display`.
+use fubmd_abi::settings::SettingKind;
+use fubmd_abi::text::{StringCatalog, Text};
+use fubmd_abi::traits::{CommandProvider, ViewProvider};
+use fubmd_features::{
+    BacklinksView, CoreCommands, OutlineView, StatsView, TagPanelView, BACKLINKS_ID, BLOCKS_ID,
+    COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID, VERSIONING_ID,
+};
+
+/// Le chiavi che un `Text` dichiarato porta con sé, e il grido quando invece è
+/// prosa cablata.
+fn chiave(text: &Text, dove: &str, chiavi: &mut Vec<String>, cablate: &mut Vec<String>) {
+    match text {
+        Text::Message(m) => chiavi.push(m.key.clone()),
+        // Vuoto è lecito: una descrizione che nessuno ha scritto non è una
+        // stringa italiana, è l'assenza di una stringa.
+        Text::Literal(s) if s.is_empty() => {}
+        Text::Literal(s) => cablate.push(format!("{dove}: «{s}»")),
+    }
+}
+
+/// Un componente e ciò che dichiara: i cataloghi, e le chiavi delle sue spec.
+struct Componente {
+    id: &'static str,
+    cataloghi: Vec<StringCatalog>,
+    chiavi: Vec<String>,
+    cablate: Vec<String>,
+}
+
+fn componenti() -> Vec<Componente> {
+    let mut out = Vec::new();
+
+    let mut viste = |id: &'static str, cataloghi: Vec<StringCatalog>, p: &dyn ViewProvider| {
+        let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
+        for spec in p.views() {
+            chiave(
+                &spec.title,
+                &format!("{id}: titolo della view «{}»", spec.id),
+                &mut chiavi,
+                &mut cablate,
+            );
+        }
+        out.push(Componente {
+            id,
+            cataloghi,
+            chiavi,
+            cablate,
+        });
+    };
+    viste(
+        BACKLINKS_ID,
+        fubmd_features::backlinks::catalog(),
+        &BacklinksView,
+    );
+    viste(OUTLINE_ID, fubmd_features::outline::catalog(), &OutlineView);
+    viste(TAGS_ID, fubmd_features::tags::catalog(), &TagPanelView);
+    viste(STATS_ID, fubmd_features::stats::catalog(), &StatsView);
+
+    // I comandi: titolo, descrizione, e le due di ogni parametro.
+    let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
+    for spec in CoreCommands.commands() {
+        chiave(
+            &spec.title,
+            &format!("{COMMANDS_ID}: titolo di «{}»", spec.id),
+            &mut chiavi,
+            &mut cablate,
+        );
+        chiave(
+            &spec.description,
+            &format!("{COMMANDS_ID}: descrizione di «{}»", spec.id),
+            &mut chiavi,
+            &mut cablate,
+        );
+        for p in &spec.params {
+            let dove = format!("{COMMANDS_ID}: «{}» / `{}`", spec.id, p.name);
+            chiave(&p.title, &dove, &mut chiavi, &mut cablate);
+            chiave(&p.description, &dove, &mut chiavi, &mut cablate);
+        }
+    }
+    out.push(Componente {
+        id: COMMANDS_ID,
+        cataloghi: fubmd_features::commands::catalog(),
+        chiavi,
+        cablate,
+    });
+
+    // I due che non dichiarano spec ma parlano lo stesso: quando qualcosa va
+    // storto (la ricerca) e quando un rendering non c'è (i blocchi).
+    for (id, cataloghi) in [
+        (SEARCH_ID, fubmd_features::search::catalog()),
+        (BLOCKS_ID, fubmd_features::blocks::catalog()),
+        (VERSIONING_ID, fubmd_features::versioning::catalog()),
+    ] {
+        out.push(Componente {
+            id,
+            cataloghi,
+            chiavi: Vec::new(),
+            cablate: Vec::new(),
+        });
+    }
+    out
+}
+
+#[test]
+fn ogni_lingua_dice_le_stesse_cose() {
+    let mut buchi = Vec::new();
+    for c in componenti() {
+        assert!(
+            c.cataloghi.len() >= 2,
+            "«{}» ha un catalogo in una lingua sola: la seconda è ciò che rende \
+             il catalogo un catalogo e non un file di stringhe",
+            c.id
+        );
+        let riferimento = &c.cataloghi[0];
+        for altro in &c.cataloghi[1..] {
+            for k in riferimento.entries.keys() {
+                if !altro.entries.contains_key(k) {
+                    buchi.push(format!("{}: «{k}» manca in «{}»", c.id, altro.locale));
+                }
+            }
+            for k in altro.entries.keys() {
+                if !riferimento.entries.contains_key(k) {
+                    buchi.push(format!(
+                        "{}: «{k}» c'è in «{}» e non in «{}»",
+                        c.id, altro.locale, riferimento.locale
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        buchi.is_empty(),
+        "una lingua tradotta a metà non fallisce, degrada — e chi legge vede la \
+         chiave nuda:\n  {}",
+        buchi.join("\n  ")
+    );
+}
+
+#[test]
+fn ogni_chiave_dichiarata_ha_una_voce() {
+    let mut buchi = Vec::new();
+    for c in componenti() {
+        for k in &c.chiavi {
+            for catalogo in &c.cataloghi {
+                if !catalogo.entries.contains_key(k) {
+                    buchi.push(format!("{}: «{k}» manca in «{}»", c.id, catalogo.locale));
+                }
+            }
+        }
+    }
+    assert!(
+        buchi.is_empty(),
+        "una chiave senza voce scende all'ultimo gradino della 0040 — brutto, \
+         onesto, e davanti a chi guarda:\n  {}",
+        buchi.join("\n  ")
+    );
+}
+
+#[test]
+fn niente_prosa_cablata_in_ciò_che_si_dichiara() {
+    let cablate: Vec<String> = componenti().into_iter().flat_map(|c| c.cablate).collect();
+    assert!(
+        cablate.is_empty(),
+        "una stringa dentro una spec è prosa che nessun catalogo può \
+         raggiungere: era così che stavano tutte prima del §12.4\n  {}",
+        cablate.join("\n  ")
+    );
+}
+
+#[test]
+fn le_impostazioni_del_core_parlano_anche_loro() {
+    // Le impostazioni non sono di un componente di questo crate — le dichiarano
+    // `fubmd-host` e `fubmd-kernel` — ma passano dalla stessa strada, e la
+    // stessa strada vuole lo stesso presidio. Qui si guarda quelle del kernel,
+    // che è l'unico dei due che questo crate vede; le altre le guarda il banco
+    // di `fubmd-host`.
+    let cataloghi = fubmd_kernel::locale::catalog();
+    let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
+    for spec in fubmd_kernel::locale::locale_settings() {
+        let dove = format!("locale: `{}`", spec.key);
+        chiave(&spec.label, &dove, &mut chiavi, &mut cablate);
+        chiave(&spec.description, &dove, &mut chiavi, &mut cablate);
+        chiave(&spec.group, &dove, &mut chiavi, &mut cablate);
+        if let SettingKind::Choice { options, .. } = &spec.kind {
+            for o in options {
+                chiave(&o.label, &dove, &mut chiavi, &mut cablate);
+            }
+        }
+    }
+    assert!(cablate.is_empty(), "{cablate:?}");
+    let mancanti: Vec<String> = chiavi
+        .iter()
+        .flat_map(|k| {
+            cataloghi
+                .iter()
+                .filter(move |c| !c.entries.contains_key(k))
+                .map(move |c| format!("«{k}» manca in «{}»", c.locale))
+        })
+        .collect();
+    assert!(mancanti.is_empty(), "{}", mancanti.join(", "));
+}

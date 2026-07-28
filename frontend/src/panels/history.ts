@@ -20,8 +20,10 @@
 import { api } from "../host/ipc";
 import { on, state } from "../state/store";
 import { $ } from "../ui/dom";
+import { attivabile } from "../ui/a11y";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import { flushPendingSave, isOpen, reloadCurrent } from "./document";
+import { t } from "../i18n/strings";
 
 const historyPanelEl = $("#history-panel");
 const historyListEl = $("#history-list");
@@ -70,9 +72,7 @@ async function updateHistory(id: string): Promise<void> {
   if (!state.versioningOn) return;
   const versions = await api.listVersions(id);
   historySummaryEl.textContent =
-    versions.length === 0
-      ? "nessuna versione"
-      : `${versions.length} version${versions.length === 1 ? "e" : "i"}`;
+    versions.length === 0 ? t("history.none") : t("history.count", { count: versions.length });
   historyListEl.innerHTML = "";
   historyPreviewEl.hidden = true;
 
@@ -87,11 +87,11 @@ async function updateHistory(id: string): Promise<void> {
     size.className = "version-size";
     // La più recente è lo stato attuale della nota: dirlo evita di ripristinare
     // ciò che è già sullo schermo.
-    size.textContent = i === 0 ? "attuale" : `${version.size} B`;
+    size.textContent = i === 0 ? t("history.current") : t("history.size", { size: version.size });
 
     const restore = document.createElement("button");
     restore.className = "link-button";
-    restore.textContent = "Ripristina";
+    restore.textContent = t("history.restore");
     restore.addEventListener("click", (e) => {
       e.stopPropagation();
       void restoreVersion(id, version.ts);
@@ -101,6 +101,7 @@ async function updateHistory(id: string): Promise<void> {
     // L'anteprima si carica solo quando serve: elencare le versioni non deve
     // costare la lettura di tutte.
     li.addEventListener("click", () => void showVersionPreview(id, version.ts));
+    attivabile(li);
     historyListEl.appendChild(li);
   }
 }

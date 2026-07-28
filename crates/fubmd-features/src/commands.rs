@@ -50,6 +50,7 @@ use fubmd_abi::edit::{EditRequest, TextEdit};
 use fubmd_abi::error::PluginError;
 use fubmd_abi::model::{Block, DocId, DocumentModel, Span, TaskMarker};
 use fubmd_abi::settings::{SettingEntry, SettingKind, SettingSource, SettingValue};
+use fubmd_abi::text::{Arg, StringCatalog, Text};
 use fubmd_abi::traits::{BacklinkRef, CommandProvider, HostApi, IndexQuery, IndexResult};
 
 /// Id del provider: lo spazio dati e la registrazione, come per le view.
@@ -97,6 +98,682 @@ pub const SETTINGS_NS: &str = "settings.export";
 const SENZA_TITOLO: &str = "Senza titolo";
 const ESTENSIONE_PREDEFINITA: &str = "md";
 
+/// Un comando del core, col titolo e la descrizione presi dal catalogo.
+///
+/// Le chiavi si **derivano dall'id** — `vault.replace` diventa
+/// `vault.replace.title` e `vault.replace.desc` —, e non è pigrizia: era
+/// l'alternativa a settantotto costanti, una per ogni pezzo di prosa di
+/// quattordici comandi e ventisei parametri, e settantotto costanti usate una
+/// volta sola sono un secondo elenco da tenere allineato al primo. L'id di un
+/// comando è già identità stabile per contratto — «cambiarla rompe scorciatoie,
+/// macro e automazioni che la nominano» —, quindi derivarne le chiavi non
+/// aggiunge nessuna fragilità che non ci fosse.
+///
+/// Ciò che una chiave derivata perde è il compilatore: una chiave sbagliata non
+/// è più un errore di compilazione, è una stringa che scende alla chiave nuda.
+/// Al suo posto c'è un presidio che vale di più, perché copre anche le chiavi
+/// costanti — `ogni_chiave_dichiarata_ha_una_voce`, in fondo a questo file:
+/// cammina sulle spec vere e pretende che ogni chiave che producono abbia una
+/// voce in **tutte** le lingue del catalogo.
+fn comando(id: &str) -> CommandSpec {
+    CommandSpec::new(id, Text::key(format!("{id}.title"))).describing(Text::key(format!("{id}.desc")))
+}
+
+/// Un parametro, con le chiavi derivate da comando e nome.
+fn parametro(comando: &str, name: &str, kind: ParamKind) -> ParamSpec {
+    ParamSpec::new(name, Text::key(format!("{comando}.{name}.title")), kind)
+        .describing(Text::key(format!("{comando}.{name}.desc")))
+}
+
+/// Un messaggio con un argomento solo: la forma di due terzi delle righe che
+/// un comando scrive.
+fn uno(key: &str, name: &str, value: &str) -> Text {
+    Text::message(key, vec![Arg::text(name, value)])
+}
+
+/// Un messaggio su due documenti: da chi a chi.
+fn due(key: &str, doc: &str, to: &str) -> Text {
+    Text::message(
+        key,
+        vec![Arg::text(A_DOC, doc), Arg::text(A_TO, to)],
+    )
+}
+
+/// Un messaggio con un conteggio solo.
+fn conto(key: &str, n: usize) -> Text {
+    Text::message(key, vec![Arg::int(A_COUNT, n as i64)])
+}
+
+/// Un messaggio con due conteggi.
+fn conto2(key: &str, a: &str, na: usize, b: &str, nb: usize) -> Text {
+    Text::message(
+        key,
+        vec![Arg::int(a, na as i64), Arg::int(b, nb as i64)],
+    )
+}
+
+/// Il messaggio dell'archiviazione: quante note, in che cartella, e — se ce ne
+/// sono — quelle rimaste indietro.
+fn archivio(key: &str, n: usize, folder: &str, falliti: Option<String>) -> Text {
+    let mut args = vec![
+        Arg::int(A_COUNT, n as i64),
+        Arg::text(A_FOLDER, folder),
+    ];
+    if let Some(f) = falliti {
+        args.push(Arg::text(A_FAILED, f));
+    }
+    Text::message(key, args)
+}
+
+/// Le chiavi delle righe che i comandi scrivono **mentre girano**: gli errori,
+/// i riassunti di un piano, e ciò che si dice quando è andata.
+///
+/// Queste sono costanti e le chiavi delle spec no, e la differenza non è di
+/// gusto: una chiave di spec la produce `comando()` a partire dall'id, e chi la
+/// legge ha l'id davanti; queste invece stanno sparse in millecinquecento righe
+/// di comandi, e scritte a mano si sarebbero scritte diverse due volte.
+///
+/// I prefissi dicono **quando** si leggono, ed è l'unica cosa che serve sapere
+/// per tradurle: `E_` mentre qualcosa non si può fare, `Y_` in simulazione
+/// (*se* lo facessi), `P_` nel riassunto di un piano, `D_` a cose fatte.
+const E_NO_ACTIVE_PANE: &str = "err.no_active_pane";
+const E_NO_OPEN_NOTE: &str = "err.no_open_note";
+const E_NOTHING_SELECTED: &str = "err.nothing_selected";
+const E_EMPTY_SELECTION: &str = "err.empty_selection";
+const E_DIRTY_SELECTION: &str = "err.dirty_selection";
+const E_SELECTION_OUTSIDE: &str = "err.selection_outside";
+const E_SELECTION_HAS_LINK: &str = "err.selection_has_link";
+const E_EMPTY_FIND: &str = "err.empty_find";
+const E_EMPTY_TO: &str = "err.empty_to";
+const E_NO_NOTE_GIVEN: &str = "err.no_note_given";
+const E_NOT_IN_TRASH: &str = "err.not_in_trash";
+const E_TASK_NO_NOTE: &str = "err.task_no_note";
+const E_TASK_NO_POSITION: &str = "err.task_no_position";
+const E_TASK_WRONG_PANE: &str = "err.task_wrong_pane";
+const E_TASK_NO_CARET: &str = "err.task_no_caret";
+const E_TASK_DIRTY_BUFFER: &str = "err.task_dirty_buffer";
+const E_TASK_NOT_FOUND: &str = "err.task_not_found";
+const E_NOT_A_TOGGLE: &str = "err.not_a_toggle";
+const E_NOT_A_NUMBER: &str = "err.not_a_number";
+const E_UNDECLARED_KEY: &str = "err.undeclared_key";
+const E_NOT_PROGRAM_WRITABLE: &str = "err.not_program_writable";
+const E_NOT_JSON: &str = "err.not_json";
+const E_NOT_AN_OBJECT: &str = "err.not_an_object";
+
+const P_WIKILINK: &str = "plan.wikilink";
+const P_REPLACE: &str = "plan.replace";
+const P_CREATE: &str = "plan.create";
+const P_RENAME: &str = "plan.rename";
+const P_TRASH: &str = "plan.trash";
+const P_RESTORE: &str = "plan.restore";
+const P_EMPTY_TRASH: &str = "plan.empty_trash";
+const P_ARCHIVE: &str = "plan.archive";
+const P_TASK_DONE: &str = "plan.task_done";
+const P_TASK_TODO: &str = "plan.task_todo";
+const P_SETTINGS_SET: &str = "plan.settings_set";
+const P_SETTINGS_RESET: &str = "plan.settings_reset";
+const P_SETTINGS_IMPORT: &str = "plan.settings_import";
+
+const Y_SETTINGS_SET: &str = "dry.settings_set";
+const Y_SETTINGS_RESET: &str = "dry.settings_reset";
+
+const D_WIKILINK: &str = "done.wikilink";
+const D_REPLACE: &str = "done.replace";
+const D_REPLACE_PARTIAL: &str = "done.replace_partial";
+const D_CREATE: &str = "done.create";
+const D_RENAME: &str = "done.rename";
+const D_TRASH: &str = "done.trash";
+const D_RESTORE: &str = "done.restore";
+const D_EMPTY_TRASH: &str = "done.empty_trash";
+const D_ARCHIVE: &str = "done.archive";
+const D_ARCHIVE_PARTIAL: &str = "done.archive_partial";
+const D_SETTINGS_SET: &str = "done.settings_set";
+const D_SETTINGS_RESET: &str = "done.settings_reset";
+const D_SETTINGS_EXPORT: &str = "done.settings_export";
+const D_SETTINGS_IMPORT: &str = "done.settings_import";
+const D_SETTINGS_IMPORT_PARTIAL: &str = "done.settings_import_partial";
+
+/// I nomi degli argomenti.
+const A_DOC: &str = "doc";
+const A_TO: &str = "to";
+const A_TEXT: &str = "text";
+const A_ENTRY: &str = "entry";
+const A_KEY: &str = "key";
+const A_VALUE: &str = "value";
+const A_FROM: &str = "from";
+const A_REASON: &str = "reason";
+const A_REASONS: &str = "reasons";
+const A_COUNT: &str = "count";
+const A_SKIPPED: &str = "skipped";
+const A_OCCURRENCES: &str = "occurrences";
+const A_NOTES: &str = "notes";
+const A_FAILED: &str = "failed";
+const A_FOLDER: &str = "folder";
+const A_AT: &str = "at";
+
+/// Le stringhe dei comandi: quattordici titoli, quattordici descrizioni,
+/// ventisei etichette di parametro e le righe che un comando scrive quando ha
+/// finito.
+///
+/// È il catalogo più grande del repo, ed è anche quello che si vede di più: la
+/// palette è **la** superficie in cui un utente legge prosa scritta da un
+/// componente, e finché queste righe erano `&str` dentro le spec, la palette
+/// era italiana per chiunque — compreso chi aveva scelto `en` nelle
+/// impostazioni e vedeva già il resto in inglese.
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![catalogo_it(), catalogo_en()]
+}
+
+fn catalogo_it() -> StringCatalog {
+    StringCatalog::new("it")
+        .with("search.open.title", "Cerca nel vault")
+        .with(
+            "search.open.desc",
+            "Esegue una ricerca full-text sul vault e mostra i risultati. \
+             Non modifica niente.",
+        )
+        .with("search.open.query.title", "Cerca")
+        .with(
+            "search.open.query.desc",
+            "La query, nella stessa sintassi della barra di ricerca \
+             (`tags:nome` filtra per tag).",
+        )
+        .with("selection.wikilink.title", "Trasforma la selezione in wikilink")
+        .with(
+            "selection.wikilink.desc",
+            "Avvolge il testo selezionato nel pannello attivo fra doppie \
+             quadre, creando un riferimento a una nota con quel nome. \
+             Richiede una selezione e un buffer salvato.",
+        )
+        .with("vault.replace.title", "Sostituisci in tutte le note")
+        .with(
+            "vault.replace.desc",
+            "Sostituisce ogni occorrenza di un testo con un altro, in tutte \
+             le note del vault o solo in quelle indicate. Simulandolo si \
+             ottiene l'elenco delle note impattate e le modifiche esatte, \
+             senza scrivere niente.",
+        )
+        .with("vault.replace.find.title", "Cerca")
+        .with("vault.replace.find.desc", "Il testo da sostituire. Non può essere vuoto.")
+        .with("vault.replace.replace.title", "Sostituisci con")
+        .with("vault.replace.replace.desc", "Il testo nuovo. Vuoto cancella le occorrenze.")
+        .with("vault.replace.whole_word.title", "Solo parole intere")
+        .with(
+            "vault.replace.whole_word.desc",
+            "Se vero, sostituisce solo le occorrenze che non sono parte di una \
+             parola più lunga. Default: falso.",
+        )
+        .with("vault.replace.docs.title", "Solo in queste note")
+        .with(
+            "vault.replace.docs.desc",
+            "Gli id delle note su cui operare. Assente = tutto il vault; \
+             elenco vuoto = nessuna nota.",
+        )
+        .with("note.create.title", "Nuova nota")
+        .with(
+            "note.create.desc",
+            "Crea una nota vuota e la apre. Senza nome nasce «Senza titolo», e \
+             se quel nome è preso «Senza titolo 1», «2», … Un nome senza \
+             estensione diventa una nota markdown.",
+        )
+        .with("note.create.name.title", "Nome")
+        .with(
+            "note.create.name.desc",
+            "Il nome o il path della nota, estensione compresa se diversa da \
+             `.md`. Assente = «Senza titolo».",
+        )
+        .with("note.rename.title", "Rinomina nota")
+        .with(
+            "note.rename.desc",
+            "Rinomina o sposta una nota e riscrive i wikilink entranti che la \
+             nominavano, così i riferimenti non si rompono. I link per alias \
+             non vengono toccati.",
+        )
+        .with("note.rename.doc.title", "Nota")
+        .with("note.rename.doc.desc", "La nota da rinominare.")
+        .with("note.rename.to.title", "Nuovo path")
+        .with(
+            "note.rename.to.desc",
+            "Il path nuovo, estensione compresa. Cambiare la cartella sposta \
+             la nota.",
+        )
+        .with("note.trash.title", "Sposta nel cestino")
+        .with(
+            "note.trash.desc",
+            "Sposta una nota nel cestino del vault. La nota esce dagli indici \
+             ma non è distrutta: si recupera con «Ripristina dal cestino».",
+        )
+        .with("note.trash.doc.title", "Nota")
+        .with("note.trash.doc.desc", "La nota da cestinare. Assente = quella aperta.")
+        .with("trash.restore.title", "Ripristina dal cestino")
+        .with(
+            "trash.restore.desc",
+            "Riporta nel vault una voce del cestino. Se il path d'origine è di \
+             nuovo occupato serve un nome nuovo: senza, il ripristino è \
+             rifiutato invece di sovrascrivere.",
+        )
+        .with("trash.restore.entry.title", "Voce del cestino")
+        .with("trash.restore.entry.desc", "L'id della voce nel cestino (`.trash/…`).")
+        .with("trash.restore.to.title", "Ripristina come")
+        .with("trash.restore.to.desc", "Path alternativo. Assente = il path d'origine.")
+        .with("trash.empty.title", "Svuota il cestino")
+        .with(
+            "trash.empty.desc",
+            "Cancella definitivamente tutte le voci del cestino. Da qui non si \
+             torna indietro.",
+        )
+        .with("vault.archive.title", "Archivia le note")
+        .with(
+            "vault.archive.desc",
+            "Sposta le note indicate in una cartella, una rinomina alla volta: \
+             i wikilink che le nominano vengono riscritti come per una rinomina \
+             singola. Simulandolo si ottiene l'elenco di dove finirebbe ciascuna.",
+        )
+        .with("vault.archive.docs.title", "Note da archiviare")
+        .with("vault.archive.docs.desc", "Gli id delle note da spostare.")
+        .with("vault.archive.folder.title", "Cartella")
+        .with("vault.archive.folder.desc", "Dove spostarle. Assente = «Archivio».")
+        .with("note.task.toggle.title", "Spunta il task")
+        .with(
+            "note.task.toggle.desc",
+            "Spunta o de-spunta la voce di task che si trova in una posizione \
+             del documento: `[ ]` diventa `[x]` e ogni altro stato torna `[ ]`. \
+             Senza argomenti agisce sul task sotto il cursore del pannello \
+             attivo. Scrive un carattere solo.",
+        )
+        .with("note.task.toggle.doc.title", "Nota")
+        .with(
+            "note.task.toggle.doc.desc",
+            "La nota su cui agire. Assente = quella del pannello attivo.",
+        )
+        .with("note.task.toggle.at.title", "Posizione")
+        .with(
+            "note.task.toggle.at.desc",
+            "Posizione in byte dentro il documento: si spunta il task che la \
+             contiene, il più interno se sono annidati. Assente = il cursore \
+             del pannello attivo.",
+        )
+        .with("settings.set.title", "Cambia un'impostazione")
+        .with(
+            "settings.set.desc",
+            "Scrive il valore di una chiave dichiarata, nel livello che la \
+             chiave dichiara (il vault o la macchina). Solo le chiavi che si \
+             sono dichiarate scrivibili da un programma: le altre le cambia chi \
+             le sta guardando, dal pannello.",
+        )
+        .with("settings.set.key.title", "Chiave")
+        .with("settings.set.key.desc", "La chiave, es. `versioning.enabled`.")
+        .with("settings.set.value.title", "Valore")
+        .with(
+            "settings.set.value.desc",
+            "Il valore, letto secondo la specie dichiarata dalla chiave: \
+             `true`/`false` per un interruttore, un numero, il testo, o valori \
+             separati da virgola per un elenco.",
+        )
+        .with("settings.reset.title", "Azzera un'impostazione")
+        .with(
+            "settings.reset.desc",
+            "Dimentica ciò che era stato deciso per una chiave: torna a valere \
+             il livello sotto, che è il default solo se non c'era niente in mezzo.",
+        )
+        .with("settings.reset.key.title", "Chiave")
+        .with("settings.reset.key.desc", "La chiave da azzerare.")
+        .with("settings.export.title", "Esporta le impostazioni")
+        .with(
+            "settings.export.desc",
+            "Restituisce in JSON le impostazioni **decise** — non i default, che \
+             non sono una scelta di nessuno. Non scrive un file: dove salvarlo \
+             lo sa chi ha il dialogo di sistema, e un comando del registro non \
+             ha (e non deve avere) accesso al filesystem fuori dal vault.",
+        )
+        .with("settings.import.title", "Importa le impostazioni")
+        .with(
+            "settings.import.desc",
+            "Applica una configurazione esportata. Ciò che non si può applicare \
+             — una chiave che nessuno dichiara, un valore fuori specie, una \
+             chiave non scrivibile da un programma — viene **contato e detto**, \
+             non applicato a metà in silenzio.",
+        )
+        .with("settings.import.json.title", "Configurazione")
+        .with("settings.import.json.desc", "L'oggetto JSON `{{\"chiave\": valore}}`.")
+        .with(E_NO_ACTIVE_PANE, "Nessun pannello attivo.")
+        .with(E_NO_OPEN_NOTE, "Nessuna nota aperta nel pannello attivo.")
+        .with(E_NOTHING_SELECTED, "Niente di selezionato.")
+        .with(E_EMPTY_SELECTION, "La selezione è vuota: non c'è testo da trasformare.")
+        .with(
+            E_DIRTY_SELECTION,
+            "Il buffer ha modifiche non salvate: salva prima di trasformare la selezione.",
+        )
+        .with(E_SELECTION_OUTSIDE, "La selezione non sta dentro il documento.")
+        .with(E_SELECTION_HAS_LINK, "La selezione contiene già un riferimento.")
+        .with(E_EMPTY_FIND, "`find` non può essere vuoto: sostituirebbe il nulla ovunque.")
+        .with(E_EMPTY_TO, "`to` non può essere vuoto.")
+        .with(
+            E_NO_NOTE_GIVEN,
+            "Nessuna nota indicata e nessuna nota aperta nel pannello attivo.",
+        )
+        .with(E_NOT_IN_TRASH, "`{entry}` non è nel cestino.")
+        .with(E_TASK_NO_NOTE, "Nessuna nota: né in `doc`, né nel pannello attivo.")
+        .with(
+            E_TASK_NO_POSITION,
+            "Nessuna posizione in `at`, e nessun pannello attivo da cui prenderla.",
+        )
+        .with(
+            E_TASK_WRONG_PANE,
+            "`at` non c'è e il cursore non è in {doc}: dire su quale nota agire \
+             senza dire dove non basta.",
+        )
+        .with(E_TASK_NO_CARET, "Nessun cursore nel pannello attivo.")
+        .with(
+            E_TASK_DIRTY_BUFFER,
+            "Il buffer ha modifiche non salvate: salva prima di spuntare, o dì la \
+             posizione in `at`.",
+        )
+        .with(E_TASK_NOT_FOUND, "Nessuna voce di task alla posizione {at} di {doc}.")
+        .with(E_NOT_A_TOGGLE, "`{value}` non è un interruttore (`true` o `false`).")
+        .with(E_NOT_A_NUMBER, "`{value}` non è un numero.")
+        .with(E_UNDECLARED_KEY, "Nessuno ha dichiarato l'impostazione `{key}`.")
+        .with(
+            E_NOT_PROGRAM_WRITABLE,
+            "`{key}` non è scrivibile da un programma: la cambia l'utente.",
+        )
+        .with(E_NOT_JSON, "Non è un JSON valido: {reason}")
+        .with(E_NOT_AN_OBJECT, "Atteso un oggetto `{{\"chiave\": valore}}`.")
+        .with(P_WIKILINK, "«{text}» diventa un riferimento in {doc}")
+        .with(P_REPLACE, "Sostituzioni: {occurrences} · Note: {notes}")
+        .with(P_CREATE, "Crea «{doc}»")
+        .with(P_RENAME, "«{doc}» diventa «{to}»")
+        .with(P_TRASH, "«{doc}» va nel cestino")
+        .with(P_RESTORE, "«{entry}» torna come «{doc}»")
+        .with(P_EMPTY_TRASH, "Voci da cancellare per sempre: {count}")
+        .with(P_ARCHIVE, "Note da archiviare in «{folder}»: {count}")
+        .with(P_TASK_DONE, "Task spuntata in {doc}")
+        .with(P_TASK_TODO, "Task da fare in {doc}")
+        .with(P_SETTINGS_SET, "Cambia `{key}`")
+        .with(P_SETTINGS_RESET, "Azzera `{key}`")
+        .with(P_SETTINGS_IMPORT, "Impostazioni da applicare: {count}")
+        .with(Y_SETTINGS_SET, "`{key}` passerebbe da {from} a {value}")
+        .with(
+            Y_SETTINGS_RESET,
+            "`{key}` smetterebbe di valere {value} per decisione di qualcuno",
+        )
+        .with(D_WIKILINK, "Creato il riferimento a «{text}»")
+        .with(D_REPLACE, "Sostituzioni: {occurrences} · Note aggiornate: {notes}")
+        .with(
+            D_REPLACE_PARTIAL,
+            "Sostituzioni: {occurrences} · Note aggiornate: {notes} · Non \
+             modificate: {failed}",
+        )
+        .with(D_CREATE, "Creata «{doc}»")
+        .with(D_RENAME, "«{doc}» rinominata in «{to}»")
+        .with(D_TRASH, "«{doc}» spostata nel cestino")
+        .with(D_RESTORE, "Ripristinata «{doc}»")
+        .with(D_EMPTY_TRASH, "Cestino svuotato · Voci cancellate per sempre: {count}")
+        .with(D_ARCHIVE, "Note archiviate in «{folder}»: {count}")
+        .with(
+            D_ARCHIVE_PARTIAL,
+            "Note archiviate in «{folder}»: {count} · Non spostate: {failed}",
+        )
+        .with(D_SETTINGS_SET, "`{key}` adesso vale {value}")
+        .with(D_SETTINGS_RESET, "`{key}` è tornata al valore di prima")
+        .with(D_SETTINGS_EXPORT, "Impostazioni da salvare: {count}")
+        .with(D_SETTINGS_IMPORT, "Impostazioni applicate: {count}")
+        .with(
+            D_SETTINGS_IMPORT_PARTIAL,
+            "Impostazioni applicate: {count} · Saltate: {skipped} ({reasons})",
+        )
+}
+
+fn catalogo_en() -> StringCatalog {
+    StringCatalog::new("en")
+        .with("search.open.title", "Search the vault")
+        .with(
+            "search.open.desc",
+            "Runs a full-text search over the vault and shows the results. \
+             Changes nothing.",
+        )
+        .with("search.open.query.title", "Search")
+        .with(
+            "search.open.query.desc",
+            "The query, in the same syntax as the search bar (`tags:name` \
+             filters by tag).",
+        )
+        .with("selection.wikilink.title", "Turn the selection into a wikilink")
+        .with(
+            "selection.wikilink.desc",
+            "Wraps the text selected in the active pane in double brackets, \
+             creating a reference to a note with that name. Needs a selection \
+             and a saved buffer.",
+        )
+        .with("vault.replace.title", "Replace across all notes")
+        .with(
+            "vault.replace.desc",
+            "Replaces every occurrence of a text with another one, in all the \
+             notes of the vault or only in the ones given. Simulating it gives \
+             the list of affected notes and the exact changes, writing nothing.",
+        )
+        .with("vault.replace.find.title", "Find")
+        .with("vault.replace.find.desc", "The text to replace. Cannot be empty.")
+        .with("vault.replace.replace.title", "Replace with")
+        .with("vault.replace.replace.desc", "The new text. Empty deletes the occurrences.")
+        .with("vault.replace.whole_word.title", "Whole words only")
+        .with(
+            "vault.replace.whole_word.desc",
+            "If true, replaces only the occurrences that are not part of a \
+             longer word. Default: false.",
+        )
+        .with("vault.replace.docs.title", "Only in these notes")
+        .with(
+            "vault.replace.docs.desc",
+            "The ids of the notes to work on. Absent = the whole vault; empty \
+             list = no note.",
+        )
+        .with("note.create.title", "New note")
+        .with(
+            "note.create.desc",
+            "Creates an empty note and opens it. With no name it is born \
+             «Untitled», and if that name is taken «Untitled 1», «2», … A name \
+             without extension becomes a markdown note.",
+        )
+        .with("note.create.name.title", "Name")
+        .with(
+            "note.create.name.desc",
+            "The name or the path of the note, extension included if it is not \
+             `.md`. Absent = «Untitled».",
+        )
+        .with("note.rename.title", "Rename note")
+        .with(
+            "note.rename.desc",
+            "Renames or moves a note and rewrites the incoming wikilinks that \
+             named it, so the references do not break. Links by alias are left \
+             alone.",
+        )
+        .with("note.rename.doc.title", "Note")
+        .with("note.rename.doc.desc", "The note to rename.")
+        .with("note.rename.to.title", "New path")
+        .with(
+            "note.rename.to.desc",
+            "The new path, extension included. Changing the folder moves the note.",
+        )
+        .with("note.trash.title", "Move to trash")
+        .with(
+            "note.trash.desc",
+            "Moves a note to the vault trash. The note leaves the indexes but \
+             is not destroyed: you get it back with «Restore from trash».",
+        )
+        .with("note.trash.doc.title", "Note")
+        .with("note.trash.doc.desc", "The note to trash. Absent = the open one.")
+        .with("trash.restore.title", "Restore from trash")
+        .with(
+            "trash.restore.desc",
+            "Brings a trash entry back into the vault. If the original path is \
+             taken again a new name is needed: without one, the restore is \
+             refused instead of overwriting.",
+        )
+        .with("trash.restore.entry.title", "Trash entry")
+        .with("trash.restore.entry.desc", "The id of the entry in the trash (`.trash/…`).")
+        .with("trash.restore.to.title", "Restore as")
+        .with("trash.restore.to.desc", "Alternative path. Absent = the original path.")
+        .with("trash.empty.title", "Empty the trash")
+        .with(
+            "trash.empty.desc",
+            "Deletes every trash entry for good. There is no way back from here.",
+        )
+        .with("vault.archive.title", "Archive the notes")
+        .with(
+            "vault.archive.desc",
+            "Moves the given notes into a folder, one rename at a time: the \
+             wikilinks that name them are rewritten as for a single rename. \
+             Simulating it gives the list of where each one would end up.",
+        )
+        .with("vault.archive.docs.title", "Notes to archive")
+        .with("vault.archive.docs.desc", "The ids of the notes to move.")
+        .with("vault.archive.folder.title", "Folder")
+        .with("vault.archive.folder.desc", "Where to move them. Absent = «Archive».")
+        .with("note.task.toggle.title", "Toggle the task")
+        .with(
+            "note.task.toggle.desc",
+            "Ticks or unticks the task item found at a position in the \
+             document: `[ ]` becomes `[x]` and every other state goes back to \
+             `[ ]`. With no arguments it works on the task under the cursor of \
+             the active pane. It writes a single character.",
+        )
+        .with("note.task.toggle.doc.title", "Note")
+        .with(
+            "note.task.toggle.doc.desc",
+            "The note to work on. Absent = the one of the active pane.",
+        )
+        .with("note.task.toggle.at.title", "Position")
+        .with(
+            "note.task.toggle.at.desc",
+            "Position in bytes inside the document: the task containing it is \
+             ticked, the innermost one if they are nested. Absent = the cursor \
+             of the active pane.",
+        )
+        .with("settings.set.title", "Change a setting")
+        .with(
+            "settings.set.desc",
+            "Writes the value of a declared key, at the level the key declares \
+             (the vault or the machine). Only the keys that declared themselves \
+             writable by a program: the others are changed by whoever is \
+             looking at them, from the panel.",
+        )
+        .with("settings.set.key.title", "Key")
+        .with("settings.set.key.desc", "The key, e.g. `versioning.enabled`.")
+        .with("settings.set.value.title", "Value")
+        .with(
+            "settings.set.value.desc",
+            "The value, read according to the kind the key declares: \
+             `true`/`false` for a toggle, a number, the text, or comma-separated \
+             values for a list.",
+        )
+        .with("settings.reset.title", "Reset a setting")
+        .with(
+            "settings.reset.desc",
+            "Forgets what had been decided for a key: the level below applies \
+             again, which is the default only if there was nothing in between.",
+        )
+        .with("settings.reset.key.title", "Key")
+        .with("settings.reset.key.desc", "The key to reset.")
+        .with("settings.export.title", "Export the settings")
+        .with(
+            "settings.export.desc",
+            "Returns the **decided** settings as JSON — not the defaults, which \
+             are nobody's choice. It does not write a file: where to save it is \
+             known by whoever has the system dialog, and a command of the \
+             registry does not have (and must not have) access to the \
+             filesystem outside the vault.",
+        )
+        .with("settings.import.title", "Import the settings")
+        .with(
+            "settings.import.desc",
+            "Applies an exported configuration. What cannot be applied — a key \
+             nobody declares, a value of the wrong kind, a key not writable by \
+             a program — is **counted and told**, not half-applied in silence.",
+        )
+        .with("settings.import.json.title", "Configuration")
+        .with("settings.import.json.desc", "The JSON object `{{\"key\": value}}`.")
+        .with(E_NO_ACTIVE_PANE, "No active pane.")
+        .with(E_NO_OPEN_NOTE, "No note open in the active pane.")
+        .with(E_NOTHING_SELECTED, "Nothing selected.")
+        .with(E_EMPTY_SELECTION, "The selection is empty: there is no text to transform.")
+        .with(
+            E_DIRTY_SELECTION,
+            "The buffer has unsaved changes: save before transforming the selection.",
+        )
+        .with(E_SELECTION_OUTSIDE, "The selection is not inside the document.")
+        .with(E_SELECTION_HAS_LINK, "The selection already contains a reference.")
+        .with(E_EMPTY_FIND, "`find` cannot be empty: it would replace nothing everywhere.")
+        .with(E_EMPTY_TO, "`to` cannot be empty.")
+        .with(E_NO_NOTE_GIVEN, "No note given and no note open in the active pane.")
+        .with(E_NOT_IN_TRASH, "`{entry}` is not in the trash.")
+        .with(E_TASK_NO_NOTE, "No note: neither in `doc`, nor in the active pane.")
+        .with(
+            E_TASK_NO_POSITION,
+            "No position in `at`, and no active pane to take it from.",
+        )
+        .with(
+            E_TASK_WRONG_PANE,
+            "`at` is missing and the cursor is not in {doc}: saying which note to \
+             act on without saying where is not enough.",
+        )
+        .with(E_TASK_NO_CARET, "No cursor in the active pane.")
+        .with(
+            E_TASK_DIRTY_BUFFER,
+            "The buffer has unsaved changes: save before ticking, or say the \
+             position in `at`.",
+        )
+        .with(E_TASK_NOT_FOUND, "No task item at position {at} of {doc}.")
+        .with(E_NOT_A_TOGGLE, "`{value}` is not a toggle (`true` or `false`).")
+        .with(E_NOT_A_NUMBER, "`{value}` is not a number.")
+        .with(E_UNDECLARED_KEY, "Nobody has declared the setting `{key}`.")
+        .with(
+            E_NOT_PROGRAM_WRITABLE,
+            "`{key}` is not writable by a program: the user changes it.",
+        )
+        .with(E_NOT_JSON, "Not valid JSON: {reason}")
+        .with(E_NOT_AN_OBJECT, "Expected an object `{{\"key\": value}}`.")
+        .with(P_WIKILINK, "«{text}» becomes a reference in {doc}")
+        .with(P_REPLACE, "Replacements: {occurrences} · Notes: {notes}")
+        .with(P_CREATE, "Create «{doc}»")
+        .with(P_RENAME, "«{doc}» becomes «{to}»")
+        .with(P_TRASH, "«{doc}» goes to the trash")
+        .with(P_RESTORE, "«{entry}» comes back as «{doc}»")
+        .with(P_EMPTY_TRASH, "Entries to delete for good: {count}")
+        .with(P_ARCHIVE, "Notes to archive in «{folder}»: {count}")
+        .with(P_TASK_DONE, "Task ticked in {doc}")
+        .with(P_TASK_TODO, "Task to do in {doc}")
+        .with(P_SETTINGS_SET, "Change `{key}`")
+        .with(P_SETTINGS_RESET, "Reset `{key}`")
+        .with(P_SETTINGS_IMPORT, "Settings to apply: {count}")
+        .with(Y_SETTINGS_SET, "`{key}` would go from {from} to {value}")
+        .with(Y_SETTINGS_RESET, "`{key}` would stop being {value} by someone's decision")
+        .with(D_WIKILINK, "Created the reference to «{text}»")
+        .with(D_REPLACE, "Replacements: {occurrences} · Notes updated: {notes}")
+        .with(
+            D_REPLACE_PARTIAL,
+            "Replacements: {occurrences} · Notes updated: {notes} · Not changed: {failed}",
+        )
+        .with(D_CREATE, "Created «{doc}»")
+        .with(D_RENAME, "«{doc}» renamed to «{to}»")
+        .with(D_TRASH, "«{doc}» moved to the trash")
+        .with(D_RESTORE, "Restored «{doc}»")
+        .with(D_EMPTY_TRASH, "Trash emptied · Entries deleted for good: {count}")
+        .with(D_ARCHIVE, "Notes archived in «{folder}»: {count}")
+        .with(
+            D_ARCHIVE_PARTIAL,
+            "Notes archived in «{folder}»: {count} · Not moved: {failed}",
+        )
+        .with(D_SETTINGS_SET, "`{key}` is now {value}")
+        .with(D_SETTINGS_RESET, "`{key}` is back to what it was before")
+        .with(D_SETTINGS_EXPORT, "Settings to save: {count}")
+        .with(D_SETTINGS_IMPORT, "Settings applied: {count}")
+        .with(
+            D_SETTINGS_IMPORT_PARTIAL,
+            "Settings applied: {count} · Skipped: {skipped} ({reasons})",
+        )
+}
+
 /// I comandi ufficiali. Senza stato: tutto ciò che gli serve lo chiede
 /// all'host, come farebbe un plugin.
 #[derive(Default)]
@@ -107,171 +784,55 @@ impl CoreCommands {
     /// legge senza montare un workspace.
     pub fn specs() -> Vec<CommandSpec> {
         vec![
-            CommandSpec::new(SEARCH_OPEN, "Cerca nel vault")
-                .describing(
-                    "Esegue una ricerca full-text sul vault e mostra i risultati. \
-                     Non modifica niente.",
-                )
+            comando(SEARCH_OPEN)
                 .with_keybinding("Mod-Shift-f")
-                .with_param(
-                    ParamSpec::new("query", "Cerca", ParamKind::Text)
-                        .describing(
-                            "La query, nella stessa sintassi della barra di ricerca \
-                             (`tags:nome` filtra per tag).",
-                        )
-                        .required(),
-                ),
-            CommandSpec::new(SELECTION_WIKILINK, "Trasforma la selezione in wikilink")
-                .describing(
-                    "Avvolge il testo selezionato nel pannello attivo fra doppie \
-                     quadre, creando un riferimento a una nota con quel nome. \
-                     Richiede una selezione e un buffer salvato.",
-                )
+                .with_param(parametro(SEARCH_OPEN, "query", ParamKind::Text).required()),
+            comando(SELECTION_WIKILINK)
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            CommandSpec::new(VAULT_REPLACE, "Sostituisci in tutte le note")
-                .describing(
-                    "Sostituisce ogni occorrenza di un testo con un altro, in tutte \
-                     le note del vault o solo in quelle indicate. Simulandolo si \
-                     ottiene l'elenco delle note impattate e le modifiche esatte, \
-                     senza scrivere niente.",
-                )
-                .with_param(
-                    ParamSpec::new("find", "Cerca", ParamKind::Text)
-                        .describing("Il testo da sostituire. Non può essere vuoto.")
-                        .required(),
-                )
-                .with_param(
-                    ParamSpec::new("replace", "Sostituisci con", ParamKind::Text)
-                        .describing("Il testo nuovo. Vuoto cancella le occorrenze.")
-                        .required(),
-                )
-                .with_param(
-                    ParamSpec::new("whole_word", "Solo parole intere", ParamKind::Bool).describing(
-                        "Se vero, sostituisce solo le occorrenze che non sono \
-                             parte di una parola più lunga. Default: falso.",
-                    ),
-                )
-                .with_param(
-                    ParamSpec::new("docs", "Solo in queste note", ParamKind::Documents).describing(
-                        "Gli id delle note su cui operare. Assente = tutto il \
-                             vault; elenco vuoto = nessuna nota.",
-                    ),
-                )
+            comando(VAULT_REPLACE)
+                .with_param(parametro(VAULT_REPLACE, "find", ParamKind::Text).required())
+                .with_param(parametro(VAULT_REPLACE, "replace", ParamKind::Text).required())
+                .with_param(parametro(VAULT_REPLACE, "whole_word", ParamKind::Bool))
+                .with_param(parametro(VAULT_REPLACE, "docs", ParamKind::Documents))
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
             // --- strutturali (decisione 0013) ---------------------------------------
-            CommandSpec::new(NOTE_CREATE, "Nuova nota")
-                .describing(
-                    "Crea una nota vuota e la apre. Senza nome nasce «Senza \
-                     titolo», e se quel nome è preso «Senza titolo 1», «2», … \
-                     Un nome senza estensione diventa una nota markdown.",
-                )
-                .with_param(ParamSpec::new("name", "Nome", ParamKind::Text).describing(
-                    "Il nome o il path della nota, estensione compresa se \
-                         diversa da `.md`. Assente = «Senza titolo».",
-                ))
+            comando(NOTE_CREATE)
+                .with_param(parametro(NOTE_CREATE, "name", ParamKind::Text))
                 // Una nota sola, e il cestino la rende reversibile.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            CommandSpec::new(NOTE_RENAME, "Rinomina nota")
-                .describing(
-                    "Rinomina o sposta una nota e riscrive i wikilink entranti \
-                     che la nominavano, così i riferimenti non si rompono. I \
-                     link per alias non vengono toccati.",
-                )
-                .with_param(
-                    ParamSpec::new("doc", "Nota", ParamKind::Document)
-                        .describing("La nota da rinominare.")
-                        .required(),
-                )
-                .with_param(
-                    ParamSpec::new("to", "Nuovo path", ParamKind::Text)
-                        .describing(
-                            "Il path nuovo, estensione compresa. Cambiare la \
-                             cartella sposta la nota.",
-                        )
-                        .required(),
-                )
+            comando(NOTE_RENAME)
+                .with_param(parametro(NOTE_RENAME, "doc", ParamKind::Document).required())
+                .with_param(parametro(NOTE_RENAME, "to", ParamKind::Text).required())
                 // `Documents` e non `Document`: una rinomina riscrive anche
                 // ogni nota che linkava la vecchia. Dichiarare `Document`
                 // sarebbe la bugia che il piano del dry-run smaschera.
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
-            CommandSpec::new(NOTE_TRASH, "Sposta nel cestino")
-                .describing(
-                    "Sposta una nota nel cestino del vault. La nota esce dagli \
-                     indici ma non è distrutta: si recupera con «Ripristina dal \
-                     cestino».",
-                )
-                .with_param(
-                    ParamSpec::new("doc", "Nota", ParamKind::Document)
-                        .describing("La nota da cestinare. Assente = quella aperta."),
-                )
+            comando(NOTE_TRASH)
+                .with_param(parametro(NOTE_TRASH, "doc", ParamKind::Document))
                 // Reversibile, e non per ottimismo: la reversibilità è
                 // `trash.restore`, che sta in questo stesso registro.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            CommandSpec::new(TRASH_RESTORE, "Ripristina dal cestino")
-                .describing(
-                    "Riporta nel vault una voce del cestino. Se il path \
-                     d'origine è di nuovo occupato serve un nome nuovo: senza, \
-                     il ripristino è rifiutato invece di sovrascrivere.",
-                )
-                .with_param(
-                    ParamSpec::new("entry", "Voce del cestino", ParamKind::Text)
-                        .describing("L'id della voce nel cestino (`.trash/…`).")
-                        .required(),
-                )
-                .with_param(
-                    ParamSpec::new("to", "Ripristina come", ParamKind::Text)
-                        .describing("Path alternativo. Assente = il path d'origine."),
-                )
+            comando(TRASH_RESTORE)
+                .with_param(parametro(TRASH_RESTORE, "entry", ParamKind::Text).required())
+                .with_param(parametro(TRASH_RESTORE, "to", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            CommandSpec::new(TRASH_EMPTY, "Svuota il cestino")
-                .describing(
-                    "Cancella definitivamente tutte le voci del cestino. Da qui \
-                     non si torna indietro.",
-                )
+            comando(TRASH_EMPTY)
                 .with_scope(CommandScope::writing(CommandReach::Vault).irreversible()),
-            CommandSpec::new(VAULT_ARCHIVE, "Archivia le note")
-                .describing(
-                    "Sposta le note indicate in una cartella, una rinomina alla \
-                     volta: i wikilink che le nominano vengono riscritti come \
-                     per una rinomina singola. Simulandolo si ottiene l'elenco \
-                     di dove finirebbe ciascuna.",
-                )
-                .with_param(
-                    ParamSpec::new("docs", "Note da archiviare", ParamKind::Documents)
-                        .describing("Gli id delle note da spostare.")
-                        .required(),
-                )
-                .with_param(
-                    ParamSpec::new("folder", "Cartella", ParamKind::Text)
-                        .describing("Dove spostarle. Assente = «Archivio»."),
-                )
+            comando(VAULT_ARCHIVE)
+                .with_param(parametro(VAULT_ARCHIVE, "docs", ParamKind::Documents).required())
+                .with_param(parametro(VAULT_ARCHIVE, "folder", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
-            CommandSpec::new(NOTE_TASK_TOGGLE, "Spunta il task")
-                .describing(
-                    "Spunta o de-spunta la voce di task che si trova in una \
-                     posizione del documento: `[ ]` diventa `[x]` e ogni altro \
-                     stato torna `[ ]`. Senza argomenti agisce sul task sotto il \
-                     cursore del pannello attivo. Scrive un carattere solo.",
-                )
-                // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
-                // quella la tiene l'editor, che spunta le todo delle righe
-                // selezionate nel **buffer** (`editor-commands.ts`). Sono due
-                // gesti su due oggetti diversi — il buffer e il file — e dare a
-                // entrambi la stessa combinazione vorrebbe dire che l'accordo
-                // fa due cose a seconda di chi vince la corsa. Chi la invoca
-                // oggi è chi ha una posizione da dare: la palette, un altro
-                // comando, un plugin.
-                .with_param(
-                    ParamSpec::new("doc", "Nota", ParamKind::Document)
-                        .describing("La nota su cui agire. Assente = quella del pannello attivo."),
-                )
-                .with_param(
-                    ParamSpec::new("at", "Posizione", ParamKind::Number).describing(
-                        "Posizione in byte dentro il documento: si spunta il task \
-                         che la contiene, il più interno se sono annidati. \
-                         Assente = il cursore del pannello attivo.",
-                    ),
-                )
+            // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
+            // quella la tiene l'editor, che spunta le todo delle righe
+            // selezionate nel **buffer** (`editor-commands.ts`). Sono due
+            // gesti su due oggetti diversi — il buffer e il file — e dare a
+            // entrambi la stessa combinazione vorrebbe dire che l'accordo
+            // fa due cose a seconda di chi vince la corsa. Chi la invoca
+            // oggi è chi ha una posizione da dare: la palette, un altro
+            // comando, un plugin.
+            comando(NOTE_TASK_TOGGLE)
+                .with_param(parametro(NOTE_TASK_TOGGLE, "doc", ParamKind::Document))
+                .with_param(parametro(NOTE_TASK_TOGGLE, "at", ParamKind::Number))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             // --- le impostazioni (§11.1) --------------------------------
             //
@@ -285,65 +846,20 @@ impl CoreCommands {
             // senza clienti dalla decisione 0010: questi sono i suoi primi
             // quattro, e chi invoca sa da lì che sta per toccare la
             // configurazione e non delle note.
-            CommandSpec::new(SETTINGS_SET, "Cambia un'impostazione")
-                .describing(
-                    "Scrive il valore di una chiave dichiarata, nel livello che \
-                     la chiave dichiara (il vault o la macchina). Solo le chiavi \
-                     che si sono dichiarate scrivibili da un programma: le altre \
-                     le cambia chi le sta guardando, dal pannello.",
-                )
-                .with_param(
-                    ParamSpec::new("key", "Chiave", ParamKind::Text)
-                        .describing("La chiave, es. `versioning.enabled`.")
-                        .required(),
-                )
-                .with_param(
-                    ParamSpec::new("value", "Valore", ParamKind::Text)
-                        .describing(
-                            "Il valore, letto secondo la specie dichiarata dalla \
-                             chiave: `true`/`false` per un interruttore, un numero, \
-                             il testo, o valori separati da virgola per un elenco.",
-                        )
-                        .required(),
-                )
+            comando(SETTINGS_SET)
+                .with_param(parametro(SETTINGS_SET, "key", ParamKind::Text).required())
+                .with_param(parametro(SETTINGS_SET, "value", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
-            CommandSpec::new(SETTINGS_RESET, "Azzera un'impostazione")
-                .describing(
-                    "Dimentica ciò che era stato deciso per una chiave: torna a \
-                     valere il livello sotto, che è il default solo se non c'era \
-                     niente in mezzo.",
-                )
-                .with_param(
-                    ParamSpec::new("key", "Chiave", ParamKind::Text)
-                        .describing("La chiave da azzerare.")
-                        .required(),
-                )
+            comando(SETTINGS_RESET)
+                .with_param(parametro(SETTINGS_RESET, "key", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
-            CommandSpec::new(SETTINGS_EXPORT, "Esporta le impostazioni")
-                .describing(
-                    "Restituisce in JSON le impostazioni **decise** — non i \
-                     default, che non sono una scelta di nessuno. Non scrive un \
-                     file: dove salvarlo lo sa chi ha il dialogo di sistema, e un \
-                     comando del registro non ha (e non deve avere) accesso al \
-                     filesystem fuori dal vault.",
-                )
-                .with_scope(CommandScope {
-                    writes: false,
-                    reach: CommandReach::Settings,
-                    reversible: true,
-                }),
-            CommandSpec::new(SETTINGS_IMPORT, "Importa le impostazioni")
-                .describing(
-                    "Applica una configurazione esportata. Ciò che non si può \
-                     applicare — una chiave che nessuno dichiara, un valore fuori \
-                     specie, una chiave non scrivibile da un programma — viene \
-                     **contato e detto**, non applicato a metà in silenzio.",
-                )
-                .with_param(
-                    ParamSpec::new("json", "Configurazione", ParamKind::Text)
-                        .describing("L'oggetto JSON `{\"chiave\": valore}`.")
-                        .required(),
-                )
+            comando(SETTINGS_EXPORT).with_scope(CommandScope {
+                writes: false,
+                reach: CommandReach::Settings,
+                reversible: true,
+            }),
+            comando(SETTINGS_IMPORT)
+                .with_param(parametro(SETTINGS_IMPORT, "json", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
         ]
     }
@@ -408,25 +924,19 @@ fn selection_wikilink(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let stato = |why: &str| PluginError::BadArgs(why.to_string().into());
+    let stato = |key: &str| PluginError::BadArgs(Text::key(key));
     let context = host
         .active_context()
-        .ok_or_else(|| stato("nessun pannello attivo"))?;
-    let doc = context
-        .doc
-        .ok_or_else(|| stato("nessuna nota aperta nel pannello attivo"))?;
-    let selection = context
-        .selection
-        .ok_or_else(|| stato("niente di selezionato"))?;
+        .ok_or_else(|| stato(E_NO_ACTIVE_PANE))?;
+    let doc = context.doc.ok_or_else(|| stato(E_NO_OPEN_NOTE))?;
+    let selection = context.selection.ok_or_else(|| stato(E_NOTHING_SELECTED))?;
     if selection.is_empty() {
-        return Err(stato("la selezione è vuota: non c'è testo da trasformare"));
+        return Err(stato(E_EMPTY_SELECTION));
     }
     // La regola dello span della decisione 0007: senza span la selezione ha coordinate che
     // valgono per il buffer e non per il file. Scrivere lì significa tagliare i
     // byte sbagliati proprio mentre l'utente scrive.
-    let span = selection.span.ok_or_else(|| {
-        stato("il buffer ha modifiche non salvate: salva prima di trasformare la selezione")
-    })?;
+    let span = selection.span.ok_or_else(|| stato(E_DIRTY_SELECTION))?;
 
     let source = host.read_document(&doc)?;
     // Il testo che verrà sostituito è quello del **file**, non quello del
@@ -434,9 +944,9 @@ fn selection_wikilink(
     // prenderlo da qui lo rende vero per costruzione invece che per fiducia.
     let selected = source
         .get(span.start..span.end)
-        .ok_or_else(|| stato("la selezione non sta dentro il documento"))?;
+        .ok_or_else(|| stato(E_SELECTION_OUTSIDE))?;
     if selected.contains("[[") || selected.contains(']') {
-        return Err(stato("la selezione contiene già un riferimento"));
+        return Err(stato(E_SELECTION_HAS_LINK));
     }
 
     let request = EditRequest::new(
@@ -447,7 +957,10 @@ fn selection_wikilink(
     if mode.is_dry_run() {
         return Ok(
             CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
-                format!("«{selected}» diventa un riferimento in {doc}"),
+                Text::message(
+                    P_WIKILINK,
+                    vec![Arg::text(A_TEXT, selected), Arg::text(A_DOC, doc.as_str())],
+                ),
                 vec![PlannedEdit::new(doc, request)],
             ))),
         );
@@ -464,7 +977,10 @@ fn selection_wikilink(
         },
         None => CommandEffect::Done,
     };
-    Ok(CommandOutcome::notify(format!("Creato il riferimento a «{selected}»")).with_effect(effect))
+    Ok(
+        CommandOutcome::notify(Text::message(D_WIKILINK, vec![Arg::text(A_TEXT, selected)]))
+            .with_effect(effect),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -484,11 +1000,7 @@ fn vault_replace(
         // stringa vuota è un argomento valido per la specie e senza senso per
         // questo comando. Il vocabolario dei parametri resta piccolo apposta —
         // ciò che una specie non esprime lo dice il comando, e lo dice qui.
-        return Err(PluginError::BadArgs(
-            "`find` non può essere vuoto: sostituirebbe il nulla ovunque"
-                .to_string()
-                .into(),
-        ));
+        return Err(PluginError::BadArgs(Text::key(E_EMPTY_FIND)));
     }
 
     let targets = match args.documents("docs") {
@@ -519,11 +1031,7 @@ fn vault_replace(
         ));
     }
 
-    let summary = format!(
-        "{} in {}",
-        plurale(occorrenze, "sostituzione", "sostituzioni"),
-        plurale(planned.len(), "nota", "note")
-    );
+    let summary = conto2(P_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, planned.len());
 
     if mode.is_dry_run() {
         return Ok(CommandOutcome::done()
@@ -542,10 +1050,18 @@ fn vault_replace(
             Err(e) => falliti.push(format!("{doc} ({e})")),
         }
     }
-    let mut notify = format!("{}, {} aggiornate", summary, plurale(fatte, "nota", "note"));
-    if !falliti.is_empty() {
-        notify.push_str(&format!("; non modificate: {}", falliti.join(", ")));
-    }
+    let notify = if falliti.is_empty() {
+        conto2(D_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, fatte)
+    } else {
+        Text::message(
+            D_REPLACE_PARTIAL,
+            vec![
+                Arg::int(A_OCCURRENCES, occorrenze as i64),
+                Arg::int(A_NOTES, fatte as i64),
+                Arg::text(A_FAILED, falliti.join(", ")),
+            ],
+        )
+    };
     Ok(CommandOutcome::notify(notify))
 }
 
@@ -573,7 +1089,7 @@ fn con_estensione(name: &str) -> String {
     }
 }
 
-fn piano(summary: String, docs: Vec<DocId>) -> CommandOutcome {
+fn piano(summary: Text, docs: Vec<DocId>) -> CommandOutcome {
     let plan = docs
         .into_iter()
         .fold(CommandPlan::of_edits(summary, Vec::new()), |p, d| {
@@ -598,14 +1114,14 @@ fn note_create(
     };
 
     if mode.is_dry_run() {
-        return Ok(piano(format!("Crea «{id}»"), vec![id]));
+        return Ok(piano(uno(P_CREATE, A_DOC, id.as_str()), vec![id]));
     }
 
     // `create_document` e non `write_document`: se il path è occupato questo
     // comando deve fallire, non sovrascrivere una nota dell'utente.
     host.create_document(&id, "")?;
-    Ok(CommandOutcome::notify(format!("Creata «{id}»"))
-        .with_effect(CommandEffect::Navigate { doc: id }))
+    let notify = uno(D_CREATE, A_DOC, id.as_str());
+    Ok(CommandOutcome::notify(notify).with_effect(CommandEffect::Navigate { doc: id }))
 }
 
 fn note_rename(
@@ -620,7 +1136,7 @@ fn note_rename(
         .text("to")
         .map(str::trim)
         .filter(|t| !t.is_empty())
-        .ok_or_else(|| PluginError::BadArgs("`to` non può essere vuoto".to_string().into()))?;
+        .ok_or_else(|| PluginError::BadArgs(Text::key(E_EMPTY_TO)))?;
     let to = DocId::new(con_estensione(to));
 
     if mode.is_dry_run() {
@@ -640,15 +1156,13 @@ fn note_rename(
                 }
             }
         }
-        return Ok(piano(format!("«{doc}» diventa «{to}»"), docs));
+        return Ok(piano(due(P_RENAME, doc.as_str(), to.as_str()), docs));
     }
 
     host.rename_document(&doc, &to)?;
     // Nessun `Navigate`: chi guardava quella nota la segue attraverso
     // `document-renamed`, e chi ne guardava un'altra non deve essere spostato.
-    Ok(CommandOutcome::notify(format!(
-        "«{doc}» rinominata in «{to}»"
-    )))
+    Ok(CommandOutcome::notify(due(D_RENAME, doc.as_str(), to.as_str())))
 }
 
 fn note_trash(
@@ -660,21 +1174,15 @@ fn note_trash(
         .document("doc")
         .or_else(|| host.active_context().and_then(|c| c.doc))
         .ok_or_else(|| {
-            PluginError::BadArgs(
-                "nessuna nota indicata e nessuna nota aperta nel pannello attivo"
-                    .to_string()
-                    .into(),
-            )
+            PluginError::BadArgs(Text::key(E_NO_NOTE_GIVEN))
         })?;
 
     if mode.is_dry_run() {
-        return Ok(piano(format!("«{doc}» va nel cestino"), vec![doc]));
+        return Ok(piano(uno(P_TRASH, A_DOC, doc.as_str()), vec![doc]));
     }
 
     host.trash_document(&doc)?;
-    Ok(CommandOutcome::notify(format!(
-        "«{doc}» spostata nel cestino"
-    )))
+    Ok(CommandOutcome::notify(uno(D_TRASH, A_DOC, doc.as_str())))
 }
 
 fn trash_restore(
@@ -698,36 +1206,36 @@ fn trash_restore(
             .list_trash()?
             .into_iter()
             .find(|e| e.id == entry)
-            .ok_or_else(|| PluginError::BadArgs(format!("`{entry}` non è nel cestino").into()))?;
+            .ok_or_else(|| {
+                PluginError::BadArgs(uno(E_NOT_IN_TRASH, A_ENTRY, entry.as_str()))
+            })?;
         let target = to.unwrap_or(voce.original);
-        return Ok(piano(
-            format!("«{entry}» torna come «{target}»"),
-            vec![target],
-        ));
+        let summary = Text::message(
+            P_RESTORE,
+            vec![
+                Arg::text(A_ENTRY, entry.as_str()),
+                Arg::text(A_DOC, target.as_str()),
+            ],
+        );
+        return Ok(piano(summary, vec![target]));
     }
 
     let target = host.restore_document(&entry, to)?;
-    Ok(CommandOutcome::notify(format!("Ripristinata «{target}»"))
-        .with_effect(CommandEffect::Navigate { doc: target }))
+    let notify = uno(D_RESTORE, A_DOC, target.as_str());
+    Ok(CommandOutcome::notify(notify).with_effect(CommandEffect::Navigate { doc: target }))
 }
 
 fn trash_empty(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
     if mode.is_dry_run() {
         let voci = host.list_trash()?;
         return Ok(piano(
-            format!(
-                "Cancella definitivamente {}",
-                plurale(voci.len(), "voce", "voci")
-            ),
+            conto(P_EMPTY_TRASH, voci.len()),
             voci.into_iter().map(|e| e.id).collect(),
         ));
     }
 
     let quante = host.empty_trash()?;
-    Ok(CommandOutcome::notify(format!(
-        "Cestino svuotato: {} cancellate per sempre",
-        plurale(quante as usize, "voce", "voci")
-    )))
+    Ok(CommandOutcome::notify(conto(D_EMPTY_TRASH, quante as usize)))
 }
 
 // ---------------------------------------------------------------------------
@@ -803,10 +1311,7 @@ fn vault_archive(
             }
             edits.extend(plan.edits);
         }
-        let summary = format!(
-            "{} in «{folder}»",
-            plurale(docs.len(), "nota archiviata", "note archiviate")
-        );
+        let summary = archivio(P_ARCHIVE, docs.len(), &folder, None);
         let mut plan = CommandPlan::of_edits(summary, edits);
         for d in docs_toccati {
             plan = plan.with_doc(d);
@@ -814,13 +1319,11 @@ fn vault_archive(
         return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
     }
 
-    let mut notify = format!(
-        "{} in «{folder}»",
-        plurale(fatte, "nota archiviata", "note archiviate")
-    );
-    if !falliti.is_empty() {
-        notify.push_str(&format!("; non spostate: {}", falliti.join(", ")));
-    }
+    let notify = if falliti.is_empty() {
+        archivio(D_ARCHIVE, fatte, &folder, None)
+    } else {
+        archivio(D_ARCHIVE_PARTIAL, fatte, &folder, Some(falliti.join(", ")))
+    };
     Ok(CommandOutcome::notify(notify))
 }
 
@@ -859,13 +1362,13 @@ fn note_task_toggle(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let stato = |why: String| PluginError::BadArgs(why.into());
+    let stato = |text: Text| PluginError::BadArgs(text);
     let context = host.active_context();
 
     let doc = args
         .document("doc")
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
-        .ok_or_else(|| stato("nessuna nota: né in `doc`, né nel pannello attivo".into()))?;
+        .ok_or_else(|| stato(Text::key(E_TASK_NO_NOTE)))?;
 
     // La posizione: quella detta, o quella del cursore. Le due non si mescolano
     // — un `doc` detto e un `at` no vorrebbe dire spuntare in una nota il task
@@ -874,38 +1377,37 @@ fn note_task_toggle(
     let at = match args.number("at") {
         Some(n) => posizione(n)?,
         None => {
-            let context = context.as_ref().ok_or_else(|| {
-                stato("nessuna posizione in `at`, e nessun pannello attivo da cui prenderla".into())
-            })?;
+            let context = context
+                .as_ref()
+                .ok_or_else(|| stato(Text::key(E_TASK_NO_POSITION)))?;
             if context.doc.as_ref() != Some(&doc) {
-                return Err(stato(format!(
-                    "`at` non c'è e il cursore non è in {doc}: dire su quale nota \
-                     agire senza dire dove non basta"
-                )));
+                return Err(stato(uno(E_TASK_WRONG_PANE, A_DOC, doc.as_str())));
             }
             let selection = context
                 .selection
                 .as_ref()
-                .ok_or_else(|| stato("nessun cursore nel pannello attivo".into()))?;
+                .ok_or_else(|| stato(Text::key(E_TASK_NO_CARET)))?;
             // La regola dello span della decisione 0007, per la stessa ragione di
             // `selection.wikilink`: a buffer sporco le coordinate valgono per il
             // buffer, e il modello che si sta per chiedere è quello del **file**.
             selection
                 .span
-                .ok_or_else(|| {
-                    stato(
-                        "il buffer ha modifiche non salvate: salva prima di spuntare, \
-                         o dì la posizione in `at`"
-                            .into(),
-                    )
-                })?
+                .ok_or_else(|| stato(Text::key(E_TASK_DIRTY_BUFFER)))?
                 .start
         }
     };
 
     let model = host.read_model(&doc)?;
     let marker = task_at(&model, at)
-        .ok_or_else(|| stato(format!("nessuna voce di task alla posizione {at} di {doc}")))?;
+        .ok_or_else(|| {
+            stato(Text::message(
+                E_TASK_NOT_FOUND,
+                vec![
+                    Arg::int(A_AT, at as i64),
+                    Arg::text(A_DOC, doc.as_str()),
+                ],
+            ))
+        })?;
 
     let (simbolo, fatto) = match marker.symbol {
         None => ("x", true),
@@ -915,11 +1417,7 @@ fn note_task_toggle(
         host.document_revision(&doc)?,
         vec![TextEdit::replace(marker.span, simbolo)],
     );
-    let summary = if fatto {
-        format!("Task spuntata in {doc}")
-    } else {
-        format!("Task da fare in {doc}")
-    };
+    let summary = uno(if fatto { P_TASK_DONE } else { P_TASK_TODO }, A_DOC, doc.as_str());
 
     if mode.is_dry_run() {
         return Ok(
@@ -1067,18 +1565,18 @@ fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
 /// `ParamSpec`, un livello più in là: qui la specie non la dichiara il comando,
 /// la dichiara la chiave che si sta toccando.
 fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginError> {
-    let male = |atteso: &str| PluginError::BadArgs(format!("`{raw}` non è {atteso}").into());
+    let male = |key: &str| PluginError::BadArgs(uno(key, A_VALUE, raw));
     match kind {
         SettingKind::Toggle { .. } => match raw.trim().to_ascii_lowercase().as_str() {
             "true" | "1" | "on" | "sì" | "si" => Ok(SettingValue::Toggle(true)),
             "false" | "0" | "off" | "no" => Ok(SettingValue::Toggle(false)),
-            _ => Err(male("un interruttore (`true` o `false`)")),
+            _ => Err(male(E_NOT_A_TOGGLE)),
         },
         SettingKind::Number { .. } => raw
             .trim()
             .parse::<f64>()
             .map(SettingValue::Number)
-            .map_err(|_| male("un numero")),
+            .map_err(|_| male(E_NOT_A_NUMBER)),
         SettingKind::Text { .. } | SettingKind::Choice { .. } => {
             Ok(SettingValue::Text(raw.to_string()))
         }
@@ -1100,7 +1598,7 @@ fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> 
         .into_iter()
         .find(|e| e.spec.key == key)
         .ok_or_else(|| {
-            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
+            PluginError::BadArgs(uno(E_UNDECLARED_KEY, A_KEY, key))
         })
 }
 
@@ -1117,13 +1615,11 @@ fn nega_se_non_scrivibile(entry: &SettingEntry) -> Result<(), PluginError> {
     if entry.spec.program_writable {
         return Ok(());
     }
-    Err(PluginError::PermissionDenied(
-        format!(
-            "`{}` non è scrivibile da un programma: la cambia l'utente",
-            entry.spec.key
-        )
-        .into(),
-    ))
+    Err(PluginError::PermissionDenied(uno(
+        E_NOT_PROGRAM_WRITABLE,
+        A_KEY,
+        &entry.spec.key,
+    )))
 }
 
 fn settings_set(
@@ -1142,20 +1638,23 @@ fn settings_set(
     // si mostra è il messaggio. È il limite dichiarato di `CommandPlan` su
     // questo raggio, non una dimenticanza.
     if mode.is_dry_run() {
-        return Ok(CommandOutcome::notify(format!(
-            "`{key}` passerebbe da {} a {}",
-            mostra(&entry.value),
-            mostra(&value)
+        return Ok(CommandOutcome::notify(Text::message(
+            Y_SETTINGS_SET,
+            vec![
+                Arg::text(A_KEY, key),
+                Arg::text(A_FROM, mostra(&entry.value)),
+                Arg::text(A_VALUE, mostra(&value)),
+            ],
         ))
         .with_effect(CommandEffect::Plan(CommandPlan {
-            summary: format!("cambia `{key}`").into(),
+            summary: uno(P_SETTINGS_SET, A_KEY, key),
             ..CommandPlan::default()
         })));
     }
     host.set_setting(key, value.clone())?;
-    Ok(CommandOutcome::notify(format!(
-        "`{key}` adesso vale {}",
-        mostra(&value)
+    Ok(CommandOutcome::notify(Text::message(
+        D_SETTINGS_SET,
+        vec![Arg::text(A_KEY, key), Arg::text(A_VALUE, mostra(&value))],
     )))
 }
 
@@ -1168,19 +1667,17 @@ fn settings_reset(
     let entry = entry_of(host, key)?;
     nega_se_non_scrivibile(&entry)?;
     if mode.is_dry_run() {
-        return Ok(CommandOutcome::notify(format!(
-            "`{key}` smetterebbe di valere {} per decisione di qualcuno",
-            mostra(&entry.value)
+        return Ok(CommandOutcome::notify(Text::message(
+            Y_SETTINGS_RESET,
+            vec![Arg::text(A_KEY, key), Arg::text(A_VALUE, mostra(&entry.value))],
         ))
         .with_effect(CommandEffect::Plan(CommandPlan {
-            summary: format!("azzera `{key}`").into(),
+            summary: uno(P_SETTINGS_RESET, A_KEY, key),
             ..CommandPlan::default()
         })));
     }
     host.reset_setting(key)?;
-    Ok(CommandOutcome::notify(format!(
-        "`{key}` è tornata al valore di prima"
-    )))
+    Ok(CommandOutcome::notify(uno(D_SETTINGS_RESET, A_KEY, key)))
 }
 
 /// Esporta ciò che **qualcuno ha deciso**, e non i default.
@@ -1201,10 +1698,7 @@ fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError
         }
     }
     let quante = decise.len();
-    Ok(CommandOutcome::notify(format!(
-        "{} da salvare",
-        plurale(quante, "impostazione", "impostazioni")
-    ))
+    Ok(CommandOutcome::notify(conto(D_SETTINGS_EXPORT, quante))
     .with_effect(CommandEffect::Custom {
         ns: SETTINGS_NS.to_string(),
         payload: serde_json::Value::Object(decise),
@@ -1224,10 +1718,10 @@ fn settings_import(
 ) -> Result<CommandOutcome, PluginError> {
     let raw = args.text("json").expect("parametro obbligatorio");
     let parsed: serde_json::Value = serde_json::from_str(raw)
-        .map_err(|e| PluginError::BadArgs(format!("non è un JSON valido: {e}").into()))?;
+        .map_err(|e| PluginError::BadArgs(uno(E_NOT_JSON, A_REASON, &e.to_string())))?;
     let object = parsed
         .as_object()
-        .ok_or_else(|| PluginError::BadArgs("atteso un oggetto `{\"chiave\": valore}`".into()))?;
+        .ok_or_else(|| PluginError::BadArgs(Text::key(E_NOT_AN_OBJECT)))?;
 
     let dichiarate: std::collections::BTreeMap<String, SettingEntry> = declared(host)?
         .into_iter()
@@ -1274,26 +1768,31 @@ fn settings_import(
         }
     }
 
-    let mut messaggio = plurale(
-        applicate,
-        "impostazione applicata",
-        "impostazioni applicate",
-    );
-    if !saltate.is_empty() {
-        messaggio.push_str(&format!(
-            ", {} saltate: {}",
-            saltate.len(),
-            saltate.join(", ")
-        ));
-    }
+    let messaggio = if saltate.is_empty() {
+        conto(D_SETTINGS_IMPORT, applicate)
+    } else {
+        Text::message(
+            D_SETTINGS_IMPORT_PARTIAL,
+            vec![
+                Arg::int(A_COUNT, applicate as i64),
+                Arg::int(A_SKIPPED, saltate.len() as i64),
+                // Le ragioni per cui una chiave è saltata attraversano come
+                // **dato**, non come prosa da tradurre, e restano in italiano.
+                // Non è pigrizia: metà di quelle ragioni non sono di questo
+                // file — vengono da `SettingKind::rejects`, che sta nel
+                // **contratto** e scrive italiano cablato. Finché quel buco non
+                // ha un proprietario (nessun catalogo appartiene all'ABI),
+                // tradurre le due righe di qui lascerebbe una frase mezza in
+                // una lingua e mezza nell'altra, che è peggio di una
+                // dichiaratamente in una sola.
+                Arg::text(A_REASONS, saltate.join(", ")),
+            ],
+        )
+    };
     let outcome = CommandOutcome::notify(messaggio);
     Ok(if mode.is_dry_run() {
         outcome.with_effect(CommandEffect::Plan(CommandPlan {
-            summary: format!(
-                "applica {}",
-                plurale(applicate, "impostazione", "impostazioni")
-            )
-            .into(),
+            summary: conto(P_SETTINGS_IMPORT, applicate),
             ..CommandPlan::default()
         }))
     } else {
@@ -1301,20 +1800,26 @@ fn settings_import(
     })
 }
 
-/// Un valore come lo legge un umano dentro un messaggio.
+/// Un valore dentro un messaggio, **come dato**.
+///
+/// Diceva «acceso» e «spento» e «niente», cioè tre parole italiane che
+/// finivano dentro una frase composta altrove — e una parola dentro una frase è
+/// la cosa che il motore dei template della 0040 non sa comporre: un argomento
+/// è `ArgValue`, e `ArgValue::Text` è dato per definizione («se andasse
+/// tradotto sarebbe una chiave, non un argomento»).
+///
+/// Quindi un interruttore si mostra come `true`/`false`, che è la stessa cosa
+/// che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
+/// povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
+/// che non è parola di nessuno.
 fn mostra(value: &SettingValue) -> String {
     match value {
-        SettingValue::Toggle(true) => "acceso".into(),
-        SettingValue::Toggle(false) => "spento".into(),
+        SettingValue::Toggle(v) => format!("`{v}`"),
         SettingValue::Number(n) => n.to_string(),
         SettingValue::Text(t) => format!("`{t}`"),
-        SettingValue::List(l) if l.is_empty() => "niente".into(),
+        SettingValue::List(l) if l.is_empty() => "—".into(),
         SettingValue::List(l) => l.join(", "),
     }
-}
-
-fn plurale(n: usize, uno: &str, molti: &str) -> String {
-    format!("{n} {}", if n == 1 { uno } else { molti })
 }
 
 #[cfg(test)]
@@ -1324,6 +1829,7 @@ mod tests {
     use fubmd_abi::model::{DocId, ListItem};
     use fubmd_abi::session::{Selection, ViewContext};
     use fubmd_abi::settings::SettingSpec;
+    use fubmd_abi::text::Strings;
     use fubmd_abi::traits::VaultRead;
     use serde_json::json;
 
@@ -1342,6 +1848,19 @@ mod tests {
             .expect("comando dichiarato");
         spec.validate_args(&args)?;
         CoreCommands.invoke(command, args, mode, host)
+    }
+
+    /// Un `Text` **come lo legge chi guarda**: risolto col catalogo di questo
+    /// componente, invece che stampato col suo `Display`.
+    ///
+    /// `Display` c'è ancora e serve — è la forma per il log della 0041 — ma per
+    /// un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
+    /// asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
+    /// adesso provano anche che quella chiave nel catalogo ci sia.
+    fn reso(text: &Text) -> String {
+        let catalogo = catalog();
+        let locale = fubmd_abi::locale::Locale::default();
+        Strings::new(&catalogo, "it", &locale).render(text)
     }
 
     fn piano(outcome: &CommandOutcome) -> &CommandPlan {
@@ -1413,7 +1932,7 @@ mod tests {
         let PluginError::BadArgs(msg) = err else {
             panic!("uno stato che non permette l'operazione si spiega")
         };
-        assert!(msg.to_string().contains("non salvate"), "{msg}");
+        assert!(reso(&msg).contains("non salvate"), "{}", reso(&msg));
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
             "una nota di prova",
@@ -1477,10 +1996,11 @@ mod tests {
             "le note senza occorrenze non entrano nel piano"
         );
         assert_eq!(plan.edit_count(), 3);
-        assert!(
-            plan.summary.to_string().contains("3 sostituzioni"),
-            "{}",
-            plan.summary
+        assert_eq!(
+            reso(&plan.summary),
+            "Sostituzioni: 3 · Note: 2",
+            "il riassunto conta le sostituzioni e le note, e lo dice nella \
+             lingua di chi legge"
         );
         assert_eq!(
             host.read_document(&DocId::new("a.md")).unwrap(),
@@ -1644,7 +2164,7 @@ mod tests {
         let PluginError::BadArgs(msg) = err else {
             panic!("uno stato che non permette l'operazione si spiega")
         };
-        assert!(msg.to_string().contains("non salvate"), "{msg}");
+        assert!(reso(&msg).contains("non salvate"), "{}", reso(&msg));
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
             TASK_SOURCE,

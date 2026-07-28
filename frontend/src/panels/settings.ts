@@ -30,8 +30,10 @@ import { impostazioni } from "../host/query";
 import type { BundleInfo, SettingEntry, SettingValue, VaultEntry } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
+import { intrappolaFuoco } from "../ui/a11y";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
+import { t } from "../i18n/strings";
 
 /// Un gruppo del form: l'intestazione e le sue righe, nell'ordine in cui il
 /// canale dati le ha date (che è l'ordine di chiave).
@@ -61,7 +63,7 @@ export function raggruppa(entries: SettingEntry[]): Gruppo[] {
     if (esistente) esistente.righe.push(entry);
     else gruppi.push({ titolo: entry.spec.group, righe: [entry] });
   }
-  if (sciolte.length > 0) gruppi.push({ titolo: "Altro", righe: sciolte });
+  if (sciolte.length > 0) gruppi.push({ titolo: t("settings.group.other"), righe: sciolte });
   return gruppi;
 }
 
@@ -72,14 +74,14 @@ export function raggruppa(entries: SettingEntry[]): Gruppo[] {
 /// una del vault si toccano allo stesso modo e si comportano diversamente su
 /// un'altra macchina.
 export function provenienza(entry: SettingEntry): string {
-  const dove = entry.spec.scope === "machine" ? "questa macchina" : "questo vault";
+  const dove = t(entry.spec.scope === "machine" ? "settings.scope.machine" : "settings.scope.vault");
   switch (entry.source) {
     case "default":
-      return `valore predefinito · vale per ${dove}`;
+      return t("settings.source.default", { dove });
     case "machine":
-      return "scelto per questa macchina";
+      return t("settings.source.machine");
     case "vault":
-      return "scelto per questo vault";
+      return t("settings.source.vault");
   }
 }
 
@@ -143,13 +145,29 @@ export function mountSettings(hooks: Ganci): void {
   onEvent("vault_closed", () => chiudi());
 }
 
+/// Come si scioglie la trappola del fuoco, quando il pannello è aperto.
+///
+/// È `null` a pannello chiuso, ed è il modo in cui `chiudi()` resta idempotente:
+/// lo chiamano il pulsante, Escape e l'evento `vault_closed`, e senza questa
+/// guardia il secondo giro rimetterebbe il fuoco dove stava *prima del primo*.
+let sciogli: (() => void) | null = null;
+
 async function apri(): Promise<void> {
+  if (sciogli) return;
   panelEl.hidden = false;
+  // Il fuoco entra e resta: mentre le impostazioni sono aperte, sono quello che
+  // si sta facendo (è la ragione per cui stanno sopra tutto anche visivamente,
+  // scritta accanto al loro `z-index`). Una modale da cui il tab scappa mette
+  // chi non vede a parlare con la UI sotto, che è ancora lì e non è più quella
+  // che ha davanti.
+  sciogli = intrappolaFuoco(panelEl, chiudi);
   await disegna();
 }
 
 function chiudi(): void {
   panelEl.hidden = true;
+  sciogli?.();
+  sciogli = null;
 }
 
 /// Quale disegno è l'ultimo chiesto.
@@ -167,7 +185,11 @@ let generazione = 0;
 async function disegna(): Promise<void> {
   const mia = ++generazione;
   for (const bottone of tabsEl.querySelectorAll<HTMLButtonElement>("button[data-scheda]")) {
-    bottone.classList.toggle("active", bottone.dataset.scheda === scheda);
+    const scelta = bottone.dataset.scheda === scheda;
+    bottone.classList.toggle("active", scelta);
+    // La classe la vede chi guarda, `aria-selected` chi ascolta: erano la
+    // stessa informazione detta a metà delle persone.
+    bottone.setAttribute("aria-selected", String(scelta));
   }
   let nodi: HTMLElement[];
   try {
@@ -177,7 +199,7 @@ async function disegna(): Promise<void> {
   } catch (e) {
     // Un pannello che non riesce a leggere lo dice: il §20.2 avrà il canale
     // vero, e finché non c'è questo è il posto più visibile che ha.
-    nodi = [riga("muted", `Non riesco a leggere: ${errorText(e)}`)];
+    nodi = [riga("muted", t("settings.read_failed", { reason: errorText(e) }))];
   }
   if (mia !== generazione) return;
   bodyEl.replaceChildren(...nodi);
@@ -188,7 +210,7 @@ async function disegna(): Promise<void> {
 async function disegnaForm(): Promise<HTMLElement[]> {
   const entries = await impostazioni();
   if (entries.length === 0) {
-    return [riga("muted", "Nessun componente dichiara impostazioni.")];
+    return [riga("muted", t("settings.none"))];
   }
   const nodi: HTMLElement[] = [];
   for (const gruppo of raggruppa(entries)) {
@@ -225,8 +247,8 @@ function disegnaRiga(entry: SettingEntry): HTMLElement {
   if (entry.source !== "default") {
     const azzera = document.createElement("button");
     azzera.className = "link-button";
-    azzera.textContent = "Azzera";
-    azzera.title = "Dimentica questa scelta: torna a valere il livello sotto";
+    azzera.textContent = t("settings.reset");
+    azzera.title = t("settings.reset.hint");
     azzera.addEventListener("click", () => {
       void scrivi(() => api.resetSetting(entry.spec.key));
     });
@@ -295,7 +317,7 @@ function campo(entry: SettingEntry): HTMLElement {
       if (!kind.options.some((o) => o.value === corrente)) {
         const fuori = document.createElement("option");
         fuori.value = corrente;
-        fuori.textContent = `${corrente} (fuori dalle scelte dichiarate)`;
+        fuori.textContent = t("settings.off_choices", { value: corrente });
         fuori.selected = true;
         select.append(fuori);
       }
@@ -334,7 +356,7 @@ async function scrivi(azione: () => Promise<void>): Promise<void> {
   try {
     await azione();
   } catch (e) {
-    notify(`Impostazione non cambiata: ${errorText(e)}`, "guasto");
+    notify(t("settings.not_changed", { reason: errorText(e) }), "guasto");
   }
   await disegna();
 }
@@ -344,12 +366,7 @@ async function scrivi(azione: () => Promise<void>): Promise<void> {
 async function disegnaComponenti(): Promise<HTMLElement[]> {
   const bundles = await api.listBundles();
   return [
-    riga(
-      "muted",
-      "Un componente spento si smonta subito e non viene più montato " +
-        "all'apertura del vault: non registra niente, e le sue impostazioni " +
-        "non compaiono.",
-    ),
+    riga("muted", t("settings.components_hint")),
     ...bundles.map(disegnaComponente),
   ];
 }
@@ -379,7 +396,7 @@ function disegnaComponente(bundle: BundleInfo): HTMLElement {
         // appese nella sidebar e i suoi comandi nella palette.
         await ganci.ricaricaProvider();
       } catch (e) {
-        notify(`Componente non cambiato: ${errorText(e)}`, "guasto");
+        notify(t("settings.component_not_changed", { reason: errorText(e) }), "guasto");
       }
       await disegna();
     })();
@@ -393,7 +410,7 @@ function disegnaComponente(bundle: BundleInfo): HTMLElement {
 async function disegnaVault(): Promise<HTMLElement[]> {
   const vaults = await api.knownVaults();
   if (vaults.length === 0) {
-    return [riga("muted", "Nessun vault ancora aperto da questa macchina.")];
+    return [riga("muted", t("settings.no_vaults"))];
   }
   return vaults.map(disegnaVaultRiga);
 }
@@ -411,7 +428,7 @@ function disegnaVaultRiga(vault: VaultEntry): HTMLElement {
 
   const apri = document.createElement("button");
   apri.className = "link-button";
-  apri.textContent = "Apri";
+  apri.textContent = t("settings.open");
   apri.addEventListener("click", () => {
     void (async () => {
       try {
@@ -423,7 +440,7 @@ function disegnaVaultRiga(vault: VaultEntry): HTMLElement {
         await ganci.apriVault(vault.root);
         chiudi();
       } catch (e) {
-        notify(`Vault non aperto: ${errorText(e)}`, "guasto");
+        notify(t("settings.open_failed", { reason: errorText(e) }), "guasto");
       }
     })();
   });
@@ -431,15 +448,15 @@ function disegnaVaultRiga(vault: VaultEntry): HTMLElement {
   const preferito = document.createElement("button");
   preferito.className = "link-button";
   preferito.textContent = vault.favorite ? "★" : "☆";
-  preferito.title = vault.favorite ? "Togli dai preferiti" : "Appunta fra i preferiti";
+  preferito.title = t(vault.favorite ? "settings.unfavourite" : "settings.favourite");
   preferito.addEventListener("click", () => {
     void scriviVault(() => api.setVaultFavorite(vault.root, !vault.favorite));
   });
 
   const dimentica = document.createElement("button");
   dimentica.className = "link-button";
-  dimentica.textContent = "Dimentica";
-  dimentica.title = "Toglie dall'elenco. Non cancella niente dal disco.";
+  dimentica.textContent = t("settings.forget");
+  dimentica.title = t("settings.forget.hint");
   dimentica.addEventListener("click", () => {
     void scriviVault(() => api.forgetVault(vault.root));
   });
@@ -452,7 +469,7 @@ async function scriviVault(azione: () => Promise<void>): Promise<void> {
   try {
     await azione();
   } catch (e) {
-    notify(`Registro dei vault: ${errorText(e)}`, "guasto");
+    notify(t("settings.registry_failed", { reason: errorText(e) }), "guasto");
   }
   await disegna();
 }
@@ -471,7 +488,7 @@ function riga(className: string, testo: string): HTMLElement {
 
 /// Il valore di una riga come lo scriverebbe un umano.
 export function mostra(value: SettingValue): string {
-  if (typeof value === "boolean") return value ? "acceso" : "spento";
-  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "niente";
+  if (typeof value === "boolean") return t(value ? "settings.on" : "settings.off");
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : t("settings.nothing");
   return String(value);
 }
