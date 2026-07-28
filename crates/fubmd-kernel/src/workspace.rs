@@ -2744,7 +2744,12 @@ impl Workspace {
             |ws| &mut ws.providers.handlers,
             |ws, handlers| {
                 for (id, handler) in handlers.iter_mut() {
-                    if !handler.subscribed().contains(notice.kind()) {
+                    // La maschera per intero (§10.1): la specie, il prefisso di
+                    // topic per i custom, il soggetto. La regola sta nel
+                    // contratto (`fubmd_abi::rules::events`) e non qui, perché
+                    // il secondo lettore è la shell — che decide da sé quando
+                    // ridisegnare una view dichiarata.
+                    if !handler.subscribed().wants(&notice.event) {
                         continue;
                     }
                     let attore = Actor::Plugin { id: id.clone() };

@@ -20,7 +20,7 @@
 import { api } from "../host/ipc";
 import { on, state } from "../state/store";
 import { $ } from "../ui/dom";
-import { registerPanel } from "../ui/panel-host";
+import { refreshOn, registerPanel } from "../ui/panel-host";
 import { flushPendingSave, isOpen, reloadCurrent } from "./document";
 
 const historyPanelEl = $("#history-panel");
@@ -41,7 +41,7 @@ export function mountHistory(): void {
     id: "shell:history",
     title: "Cronologia",
     placement: "right_sidebar",
-    refresh: ["document_changed"],
+    refresh: refreshOn("document_changed"),
     followsDoc: true,
     // Versioning spento significa pannello assente (D7), non pannello vuoto:
     // nascosto non si interroga nulla.

@@ -947,7 +947,24 @@ interface events {
         /// Una view è invecchiata per un motivo che il vault non conosce.
         view-invalidated,
     }
-    type event-mask = list<event-kind>;
+    /// Ritagliata dalla decisione 0033 (§10.1), pre-freeze: `event-mask` era
+    /// `type event-mask = list<event-kind>` e adesso è un record a tre campi.
+    /// Non è un'aggiunta e non finge di esserlo — un alias che cambia
+    /// destinazione rompe chiunque abbia già compilato — ed è per questo che sta
+    /// nello stesso commit che tocca `wit/fubmd/abi.wit`. Dopo M4 la stessa
+    /// mossa vorrà una versione nuova accanto a questa, non una riga cambiata
+    /// dentro.
+    record subject-document { id: doc-id }
+    record subject-folder { path: string }
+    variant subject {
+        document(subject-document),
+        folder(subject-folder),
+    }
+    record event-mask {
+        kinds: list<event-kind>,
+        topics: list<string>,
+        subjects: list<subject>,
+    }
 
     /// Identità di un lotto (decisione 0011). Come `job-id`, sul confine JSON viaggia
     /// come stringa; qui resta `u64`, che non ha il problema dei 2⁵³.

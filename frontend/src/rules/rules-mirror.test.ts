@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { pageName, resolutionKey, taskChecked } from "./mirrored";
+import {
+  folderContains,
+  maskWants,
+  pageName,
+  resolutionKey,
+  taskChecked,
+  topicMatches,
+} from "./mirrored";
 import { byteToCharIndex, charToByteIndex } from "./offsets";
 // La fixture è generata dalle regole Rust — vedi
 // `crates/fubmd-abi/tests/rules_mirror.rs`.
@@ -34,6 +41,11 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   task_checked: (c) => taskChecked(c.symbol ?? null),
   byte_to_utf16: (c) => byteToCharIndex(c.text, c.byte),
   utf16_to_byte: (c) => charToByteIndex(c.text, c.unit),
+  // La maschera di un abbonamento (§10.1). `mask_name` è solo l'etichetta che
+  // rende leggibile un caso fallito: la regola guarda `mask` ed `event`.
+  topic_matches: (c) => topicMatches(c.prefix, c.topic),
+  folder_contains: (c) => folderContains(c.folder, c.id),
+  mask_wants: (c) => maskWants(c.mask, c.event),
 };
 
 describe("mirror delle regole TS↔Rust", () => {
@@ -73,6 +85,29 @@ describe("mirror delle regole TS↔Rust", () => {
     expect(
       fixture.byte_to_utf16.some((c) => c.byte !== c.out),
       "manca un testo in cui byte e code unit non coincidono",
+    ).toBe(true);
+
+    // I due prefissi sbagliano nello stesso modo, e il caso che li distingue da
+    // uno `startsWith` è uno solo per ciascuno: il nome che comincia uguale.
+    expect(
+      fixture.topic_matches.some((c) => String(c.topic).startsWith(String(c.prefix)) && !c.out),
+      "manca il topic che comincia col prefisso e NON deve passare",
+    ).toBe(true);
+    expect(
+      fixture.folder_contains.some((c) => String(c.id).startsWith(String(c.folder)) && !c.out),
+      "manca la cartella che è prefisso di caratteri e NON contiene",
+    ).toBe(true);
+
+    // E la maschera: il rename che esce dal soggetto è il caso che una lettura
+    // plausibile (guardare il solo path d'arrivo) sbaglierebbe.
+    expect(
+      fixture.mask_wants.some(
+        (c) =>
+          (c.event as { type: string }).type === "document_renamed" &&
+          c.mask_name === "stretta" &&
+          c.out,
+      ),
+      "manca il rename che esce dal soggetto e deve arrivare comunque",
     ).toBe(true);
   });
 });

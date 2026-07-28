@@ -286,16 +286,11 @@ impl Host {
         //
         // Acceso **dopo** la scansione: gli eventi che `reindex` emette sono il
         // vault che si popola, non il vault che cambia, e la shell li leggerebbe
-        // come un temporale di modifiche. È il comportamento di prima, ed è
-        // deliberato — il freno e il raggruppamento sono il §10.2.
+        // come un temporale di modifiche. Il freno e il raggruppamento stanno
+        // dentro il ponte (§10.2, [`crate::bridge`]) e non qui: questa riga
+        // decide *quando* accendere, quella *cosa passa*.
         if let Some(sink) = &self.sink {
-            let rx = ws.bus().subscribe();
-            let sink = sink.clone();
-            std::thread::spawn(move || {
-                while let Ok(notice) = rx.recv() {
-                    sink.emit(&notice);
-                }
-            });
+            crate::bridge::spawn(ws.bus().subscribe(), sink.clone());
         }
 
         let workspace = Arc::new(RwLock::new(ws));

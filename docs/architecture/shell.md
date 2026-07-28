@@ -188,6 +188,14 @@ Cosa ci si guadagna, oltre alla simmetria:
   pannello fermo senza che nulla lo dicesse.
 - **Un pannello che lancia non zittisce gli altri**, e lo fa l'host: la regola
   del bus vale ora anche per il disegno.
+- **La maschera si applica con la regola del contratto**, non con un `includes`
+  scritto qui: `refresh` è una `EventMask` intera
+  ([decisione 0033](../decisions/0033-la-grana-di-un-abbonamento.md)) — specie,
+  prefissi di topic, soggetto — e a deciderla è `maskWants`
+  (`rules/mirrored.ts`), gemella della funzione del kernel e legata a lei dalla
+  fixture generata. Una view dichiarata che si restringe a una cartella si
+  ridisegna per quella cartella anche qui; con la lista di specie di prima, la
+  shell avrebbe ignorato la restrizione in silenzio.
 - **Il registro è l'inventario** di quali superfici questa shell abbia davvero
   — il pezzetto di [§7.6](../roadmap/07-il-confine.md) che le riguarda.
 

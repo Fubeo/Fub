@@ -66,7 +66,7 @@ use fubmd_abi::custom::{
 };
 use fubmd_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
-use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
+use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Subject};
 use fubmd_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
     ParseContext, RenderOptions, RenderTarget, SourceKind,
@@ -170,7 +170,6 @@ wit_type! {
     ActionId => "action-id",
     JobId => "job-id",
     BatchId => "batch-id",
-    EventMask => "event-mask",
     BlockRef => "block-ref",
     InlineRef => "inline-ref",
     UiRef => "ui-ref",
@@ -241,6 +240,8 @@ wit_type! {
     PluginError => "plugin-error",
     Event => "event",
     EventKind => "event-kind",
+    EventMask => "event-mask",
+    Subject => "subject",
     Actor => "actor",
     Origin => "origin",
     Notice => "notice",
@@ -1746,6 +1747,13 @@ fn event_kind_name(k: EventKind) -> &'static str {
     }
 }
 
+fn subject_case(s: &Subject) -> Case {
+    match s {
+        Subject::Document { id } => case_rec("document", "subject-document", vec![("id", wit(id))]),
+        Subject::Folder { path } => case_rec("folder", "subject-folder", vec![("path", wit(path))]),
+    }
+}
+
 fn actor_case(a: &Actor) -> Case {
     match a {
         Actor::User => case("user"),
@@ -2509,6 +2517,15 @@ fn conform(source: &str) -> Result<(), String> {
             event_case(&Event::VaultClosed {
                 root: String::new(),
             }),
+        ],
+    );
+
+    contract.variant_src(
+        "subject",
+        ("event.rs", "Subject"),
+        &[
+            subject_case(&Subject::document("")),
+            subject_case(&Subject::folder("")),
         ],
     );
 
@@ -3839,6 +3856,24 @@ fn conform(source: &str) -> Result<(), String> {
         &[("event", wit(&event)), ("origin", wit(&origin))],
     );
 
+    // La maschera di un abbonamento (§10.1, decisione 0033). Era un alias su
+    // `list<event-kind>`; adesso è un record a tre campi, e il terzo porta un
+    // variant suo — i due record di payload (`subject-document`,
+    // `subject-folder`) se li rivendica `variant_src` qui sotto.
+    let EventMask {
+        kinds,
+        topics,
+        subjects,
+    } = EventMask::all();
+    contract.record(
+        "event-mask",
+        &[
+            ("kinds", wit(&kinds)),
+            ("topics", wit(&topics)),
+            ("subjects", wit(&subjects)),
+        ],
+    );
+
     // Import/export. Nessun campo porta un percorso di filesystem: la sorgente
     // è `bytes` e l'esito è `bytes`, e chi apre e chi posa è l'host.
     let TransferNote {
@@ -3989,9 +4024,6 @@ fn conform(source: &str) -> Result<(), String> {
 
     let BatchId(raw) = BatchId(0);
     contract.alias("batch-id", wit(&raw));
-
-    let EventMask(kinds) = EventMask::all();
-    contract.alias("event-mask", wit(&kinds));
 
     let Revision(raw) = Revision::default();
     contract.alias("revision", wit(&raw));

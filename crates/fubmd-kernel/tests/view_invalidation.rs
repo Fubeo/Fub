@@ -78,7 +78,7 @@ struct Ascoltatore(Log);
 
 impl EventHandler for Ascoltatore {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![EventKind::ViewInvalidated])
+        EventMask::of([EventKind::ViewInvalidated])
     }
 
     fn handle(&mut self, notice: &Notice, _host: &mut dyn HostApi) -> Result<(), PluginError> {

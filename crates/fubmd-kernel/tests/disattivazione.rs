@@ -489,7 +489,7 @@ struct Ultimo;
 
 impl EventHandler for Ultimo {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![EventKind::VaultClosed])
+        EventMask::of([EventKind::VaultClosed])
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {

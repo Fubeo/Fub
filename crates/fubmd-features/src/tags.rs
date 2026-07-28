@@ -68,7 +68,7 @@ impl ViewProvider for TagPanelView {
             ViewSpec::new(TAGS_VIEW, "Tag", ViewSurface::RightSidebar)
                 // I tag sono aggregati vault-wide: invecchiano a ogni modifica
                 // dell'indice, non al cambio di nota.
-                .refreshing(EventMask(vec![
+                .refreshing(EventMask::of([
                     EventKind::IndexUpdated,
                     EventKind::BatchEnded,
                 ]))

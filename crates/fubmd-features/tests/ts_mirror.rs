@@ -27,7 +27,7 @@ use fubmd_abi::command::{
 };
 use fubmd_abi::edit::{EditRequest, Revision, TextEdit};
 use fubmd_abi::error::PluginError;
-use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
+use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Subject};
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
@@ -685,19 +685,35 @@ fn expected() -> Value {
             last_sync_error: Some("Nota.md: frontmatter illeggibile".into()),
         })],
         "UiAction": ui_action_samples(),
-        "ViewSpec": [to_value(
-            ViewSpec::new("v", "V", ViewSurface::RightSidebar)
-                .refreshing(EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]))
-                .following(ContextMask(vec![ContextKind::Document, ContextKind::Selection]))
-                .with_params(vec![fubmd_abi::command::ParamSpec::new(
-                    "tag",
-                    "Tag",
-                    fubmd_abi::command::ParamKind::Text,
-                )])
-                .with_icon("tag")
-                .ordered(2)
-                .sized(280),
-        )],
+        "ViewSpec": [
+            to_value(
+                ViewSpec::new("v", "V", ViewSurface::RightSidebar)
+                    .refreshing(EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]))
+                    .following(ContextMask(vec![ContextKind::Document, ContextKind::Selection]))
+                    .with_params(vec![fubmd_abi::command::ParamSpec::new(
+                        "tag",
+                        "Tag",
+                        fubmd_abi::command::ParamKind::Text,
+                    )])
+                    .with_icon("tag")
+                    .ordered(2)
+                    .sized(280),
+            ),
+            // La maschera **stretta** (§10.1): senza un campione che porti un
+            // topic e tutte e due le specie di soggetto, il mirror TS vedrebbe
+            // solo liste vuote — cioè non vedrebbe la parte che questa
+            // decisione ha aggiunto.
+            to_value(
+                ViewSpec::new("v2", "V2", ViewSurface::Bottom).refreshing(
+                    EventMask::of([EventKind::DocumentChanged, EventKind::Custom])
+                        .on_topics(["com.acme.tasks"])
+                        .about([
+                            Subject::document("Progetti/Alpha.md"),
+                            Subject::folder("Diario"),
+                        ]),
+                ),
+            ),
+        ],
         // Un esemplare vivo: è ciò che la shell manda a ogni `render_view`, e
         // il campo `params` è il varco che il §2.3 apre.
         "ViewInstance": [

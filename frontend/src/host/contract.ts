@@ -313,6 +313,26 @@ export type KernelEvent =
   // in cui smettere di disegnarlo — non il momento di chiedergli qualcosa.
   | { type: "vault_closed"; root: string };
 
+// DOVE: il soggetto di un abbonamento (rispecchia fubmd_abi::event::Subject,
+// §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un
+// cittadino del kernel; la stringa vuota è la radice.
+export type Subject =
+  | { kind: "document"; id: string }
+  | { kind: "folder"; path: string };
+
+// A COSA si è abbonati (rispecchia fubmd_abi::event::EventMask, §10.1): le
+// specie, i prefissi di topic dei custom, il soggetto. I tre sono in AND, e
+// ognuno vuoto vuol dire *non filtro*.
+//
+// Applicarla non è affare di questo file: la regola è **una sola** e sta in
+// `rules/mirrored.ts` (`maskWants`), gemella di
+// `fubmd_abi::rules::events::mask_wants` e legata a lei dalla fixture generata.
+export interface EventMask {
+  kinds: KernelEvent["type"][];
+  topics: string[];
+  subjects: Subject[];
+}
+
 // Chi ha CHIESTO l'operazione da cui un evento nasce (rispecchia
 // fubmd_abi::event::Actor). Non chi l'ha eseguita: un comando invocato da
 // un'automazione porta l'origine dell'automazione.
@@ -361,7 +381,7 @@ export interface ViewSpec {
   id: string;
   title: string;
   surface: ViewSurface;
-  refresh: KernelEvent["type"][];
+  refresh: EventMask;
   follows: ContextKind[];
   // Gli argomenti con cui si apre un'istanza: gli stessi ParamSpec dei comandi.
   // Vuoto = una sola istanza, quella che la shell monta da sé.

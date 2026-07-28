@@ -45,7 +45,7 @@ impl ViewProvider for BacklinksView {
             ViewSpec::new(BACKLINKS_VIEW, "Backlink", ViewSurface::RightSidebar)
                 // I backlink invecchiano quando il grafo cambia: ogni modifica
                 // al vault arriva come `IndexUpdated`.
-                .refreshing(EventMask(vec![
+                .refreshing(EventMask::of([
                     EventKind::IndexUpdated,
                     EventKind::BatchEnded,
                 ]))

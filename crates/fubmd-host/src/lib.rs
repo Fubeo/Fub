@@ -67,6 +67,7 @@
 //!
 //! Il §8.2 elencava anche lo storage del §15.1.
 
+mod bridge;
 pub mod jobs;
 pub mod mount;
 pub mod records;

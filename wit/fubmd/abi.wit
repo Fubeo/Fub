@@ -897,8 +897,11 @@ interface events {
     /// non tratta il rename come remove+add. (`from` è keyword WIT: `%from`.)
     record event-document-renamed { %from: doc-id, to: doc-id }
     record event-vault-opened { root: string }
-    /// Varco di estensione: eventi dei plugin, topic namespaced
-    /// (`"<plugin-id>/<nome>"`).
+    /// Varco di estensione: eventi dei plugin, con topic namespaced come ogni
+    /// altro nome del contratto (§7.4): `ns:nome`, col `ns` di chi emette, e la
+    /// regola la fa rispettare l'host quando l'evento passa (decisione 0021).
+    /// Ci si abbona a grana `custom` più un PREFISSO di topic
+    /// (`event-mask.topics`, decisione 0033).
     record event-custom { topic: string, payload: json }
     /// Esito di un job in background (vedi `host-api.spawn-job`): consegnato
     /// sul giro sincrono normale, riconosciuto dal lanciatore tramite `id`.
@@ -966,7 +969,47 @@ interface events {
         /// Il vault sta per chiudersi (decisione 0029).
         vault-closed,
     }
-    type event-mask = list<event-kind>;
+    /// DOVE: il soggetto di un abbonamento (§10.1, decisione 0033).
+    ///
+    /// Un documento si nomina con la sua identità, che è il path; una cartella
+    /// con il PREFISSO di path, perché nel kernel una cartella non è ancora un
+    /// cittadino — lo diventa col §14.3, e quel giorno questa variante guadagna
+    /// un tipo invece di una stringa. La forma della maschera non poteva
+    /// aspettarlo: allargarla dopo il freeze costerebbe una migrazione, mentre
+    /// il tipo del soggetto è una variante in più.
+    record subject-document { id: doc-id }
+    /// Tutto ciò che sta DENTRO la cartella, a qualunque profondità. Il
+    /// confronto è per segmento e non per caratteri: `Progetti` non contiene
+    /// `Progetti-vecchi/nota.md`. La stringa vuota è la radice.
+    record subject-folder { path: string }
+    variant subject {
+        document(subject-document),
+        folder(subject-folder),
+    }
+
+    /// A COSA un handler è abbonato: le specie, il topic dei custom, il
+    /// soggetto (§10.1, decisione 0033).
+    ///
+    /// Era `list<event-kind>` e basta, e con quella sola grana ogni handler si
+    /// svegliava per OGNI custom di OGNI plugin e per OGNI documento del vault:
+    /// N feature × M documenti, sull'evento più caldo che il contratto abbia.
+    ///
+    /// I tre campi sono in AND, e ognuno vuoto vuol dire *non filtro* — una
+    /// maschera scritta prima di questa decisione riceve ciò che riceveva.
+    /// `topics` sono PREFISSI nella forma `ns:nome` del §7.4, spezzati sui
+    /// separatori del contratto (`:` e `.`) e non sui caratteri: `com.acme` non
+    /// è un prefisso di `com.acmecorp:x`.
+    ///
+    /// Il filtro di soggetto vale per i soli eventi che un documento lo
+    /// nominano: `overflow`, `vault-closed` e `job-done` passano anche a chi si
+    /// è abbonato a una cartella sola, perché nessuno dei tre si riscopre
+    /// riguardando il vault. Un rename è del soggetto di partenza E di quello
+    /// d'arrivo; un lotto arriva se ha toccato il soggetto.
+    record event-mask {
+        kinds: list<event-kind>,
+        topics: list<string>,
+        subjects: list<subject>,
+    }
 
     /// Identità di un lotto (decisione 0011). Come `job-id`, sul confine JSON viaggia
     /// come stringa; qui resta `u64`, che non ha il problema dei 2⁵³.

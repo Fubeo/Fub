@@ -717,10 +717,14 @@
       "id": "v",
       "title": "V",
       "surface": "right_sidebar",
-      "refresh": [
-        "index_updated",
-        "batch_ended"
-      ],
+      "refresh": {
+        "kinds": [
+          "index_updated",
+          "batch_ended"
+        ],
+        "topics": [],
+        "subjects": []
+      },
       "follows": [
         "document",
         "selection"
@@ -740,6 +744,37 @@
       "order": 2,
       "open_by_default": false,
       "preferred_size": 280,
+      "closable": true
+    },
+    {
+      "id": "v2",
+      "title": "V2",
+      "surface": "bottom",
+      "refresh": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Progetti/Alpha.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Diario"
+          }
+        ]
+      },
+      "follows": [],
+      "params": [],
+      "icon": null,
+      "order": 0,
+      "open_by_default": false,
+      "preferred_size": null,
       "closable": true
     }
   ],

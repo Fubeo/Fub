@@ -43,6 +43,8 @@ cronologico di chiusura.
 | [0030](0030-il-rilevamento-si-puo-chiedere.md) | Il rilevamento si può chiedere: una bandiera sola, e gli esiti che smettono di essere buttati | §9.7 | 2026-07-27 |
 | [0031](0031-chi-possiede-i-bundle.md) | Chi possiede i bundle: una strada sola per montare, e chi smette avvisato mentre è ancora intero | §9.3 (**prima metà**) | 2026-07-27 |
 | [0032](0032-il-runner-dei-job.md) | Il runner dei job: chi esegue, chi lo può fermare, e chi non si porta via il vault | §9.3 (**seconda metà**) — chiude la voce e la [seduta 9](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | 2026-07-27 |
+| [0033](0033-la-grana-di-un-abbonamento.md) | La grana di un abbonamento: il topic, il soggetto, e i prefissi che non sono `starts_with` | §10.1 | 2026-07-28 |
+| [0034](0034-il-freno-e-il-raggruppamento.md) | Il freno e il raggruppamento: il tetto sta con chi ritira, la finestra è la velocità di chi consuma | §10.2 | 2026-07-28 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
