@@ -10,6 +10,9 @@
 //!   non conosce*: la sintassi innestata su un provider che non la conosce, e il
 //!   renderer registrato per un `custom_kind`;
 //! - [`EventBus`] — pub/sub degli eventi del vault;
+//! - [`SettingsStore`] — *com'è configurato questo vault* (§11.1): gli schemi
+//!   che i plugin dichiarano nel manifest, i due livelli di valori (vault e
+//!   macchina) e la precedenza fra loro;
 //! - [`Workspace`] — l'orchestratore che li mette insieme.
 //!
 //! # I cinque proprietari (§8.1)
@@ -56,6 +59,7 @@ pub mod registry;
 pub mod renderer;
 pub mod safety;
 pub mod session;
+pub mod settings;
 pub mod syntax;
 mod tag_counts;
 pub mod time;
@@ -74,6 +78,7 @@ pub use plugins::{PluginInfo, PluginRegistry, Registration, RegistrationKind, Re
 pub use registry::{FormatRegistry, RegistryConflict};
 pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererRegistry};
 pub use session::Session;
+pub use settings::{write_atomic, MachineSettings, SettingsStore, SharedSettings};
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{TrashEntry, Vault, TRASH_DIR};
 pub use workspace::{valid_doc_id, GraphUpdate, Trust, Workspace, MAIN_PANE};

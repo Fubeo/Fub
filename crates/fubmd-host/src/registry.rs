@@ -99,6 +99,10 @@ pub enum BundleError {
     /// La dichiarazione è stata rifiutata dal kernel: id doppio, nome fuori dal
     /// proprio namespace, requisito che nessuno offre.
     Declaration(RegistryError),
+    /// Si è chiesto di accendere un bundle che questo host non sa montare
+    /// (§11.1). È un errore e non un silenzio: «l'ho riacceso» e «ho scritto
+    /// male l'id» devono essere due risposte diverse.
+    Unknown(String),
     /// [`Plugin::activate`] è fallita. La dichiarazione appena fatta è stata
     /// **ritirata**: un bundle che non si è attivato non resta nell'inventario
     /// del §7.6, o «dichiarato» smetterebbe di voler dire «montato».
@@ -117,6 +121,9 @@ impl std::fmt::Display for BundleError {
             BundleError::Declaration(e) => write!(f, "{e}"),
             BundleError::Activation { id, error } => {
                 write!(f, "`{id}` non si è attivato: {error}")
+            }
+            BundleError::Unknown(id) => {
+                write!(f, "`{id}` non è un bundle che questo host sa montare")
             }
         }
     }
@@ -145,9 +152,37 @@ struct MountedBundle {
 /// ([decisione 0028](../../../docs/decisions/0028-come-un-componente-smette.md)),
 /// e [`Plugin::run_job`], che è il corpo di un job e che il runner del §9.3
 /// dovrà pur chiedere a qualcuno.
+///
+/// # I **conosciuti**, e perché ci vogliono (§11.1)
+///
+/// Prima di questa voce la tabella di montaggio era una variabile locale di
+/// `mount()`: i bundle esistevano per il tempo del ciclo che li montava, e
+/// quindi *smontarne uno era definitivo* — `unmount` toglieva, e per rimettere
+/// non c'era niente da cui ripartire. Un interruttore che si può solo spegnere
+/// non è un interruttore.
+///
+/// Adesso il registry tiene anche chi **non** è montato: è quello che rende
+/// vero il §11.1, e insieme è ciò che permette di non montare all'avvio ciò che
+/// l'utente ha spento (`plugins.disabled`) senza che diventi invisibile.
 #[derive(Default)]
 pub struct BundleRegistry {
+    /// I bundle che questo host sa montare, in ordine di tabella. Chi è qui e
+    /// non in `mounted` è **spento**, non assente.
+    known: Vec<Arc<dyn Bundle>>,
     mounted: Vec<MountedBundle>,
+}
+
+/// Una riga dell'inventario dei bundle: chi c'è, come si chiama, e se è acceso.
+///
+/// Non è [`PluginInfo`](fubmd_kernel::PluginInfo) e non lo sostituisce: quello
+/// racconta chi è **dichiarato nel kernel**, e un bundle spento non lo è
+/// affatto. La differenza è il punto — «spento» e «non c'è» sono due stati
+/// diversi, e senza questo elenco il secondo si mangerebbe il primo.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct BundleInfo {
+    pub id: String,
+    pub name: String,
+    pub mounted: bool,
 }
 
 impl BundleRegistry {
@@ -207,6 +242,51 @@ impl BundleRegistry {
         self.mounted.iter().map(|m| m.id.as_str()).collect()
     }
 
+    /// Aggiunge un bundle ai **conosciuti**, senza montarlo.
+    ///
+    /// È il primo dei due passi della tabella di montaggio: prima si dichiara
+    /// cosa esiste, poi si accende ciò che l'utente non ha spento. Chi passa di
+    /// qui e non da [`enable`](BundleRegistry::enable) resta una riga
+    /// nell'inventario con `mounted: false`.
+    pub fn remember(&mut self, bundle: Arc<dyn Bundle>) {
+        let id = bundle.manifest().id;
+        self.known.retain(|b| b.manifest().id != id);
+        self.known.push(bundle);
+    }
+
+    /// Chi questo host sa montare, e chi è acceso adesso.
+    pub fn inventory(&self) -> Vec<BundleInfo> {
+        self.known
+            .iter()
+            .map(|b| {
+                let manifest = b.manifest();
+                BundleInfo {
+                    mounted: self.mounted.iter().any(|m| m.id == manifest.id),
+                    id: manifest.id,
+                    name: manifest.name,
+                }
+            })
+            .collect()
+    }
+
+    /// **Accende** un bundle conosciuto: gli stessi quattro passi di
+    /// [`mount`](BundleRegistry::mount), su un bundle che era spento.
+    ///
+    /// Un id che non è fra i conosciuti non si accende inventandolo: è
+    /// `Ok(vec![…])` con un avviso? No — è un errore, ed è l'unico modo di
+    /// distinguere «l'ho riacceso» da «ho scritto male l'id». Un bundle già
+    /// acceso invece è un no-op senza avvisi: accendere ciò che è acceso è già
+    /// il risultato voluto.
+    pub fn enable(&mut self, ws: &mut Workspace, id: &str) -> Result<Vec<String>, BundleError> {
+        if self.mounted.iter().any(|m| m.id == id) {
+            return Ok(Vec::new());
+        }
+        let Some(bundle) = self.known.iter().find(|b| b.manifest().id == id).cloned() else {
+            return Err(BundleError::Unknown(id.to_string()));
+        };
+        self.mount(bundle.as_ref(), ws)
+    }
+
     /// **Il corpo di un job.** Chi drena `take_pending_jobs` sa a quale plugin
     /// chiederlo (è il campo che la
     /// [0028](../../../docs/decisions/0028-come-un-componente-smette.md) ha
@@ -264,8 +344,10 @@ impl BundleRegistry {
     /// tutto, e poi il kernel che gli toglie i provider e la dichiarazione
     /// ([`Workspace::deactivate_plugin`]).
     ///
-    /// È l'inverso esatto di [`mount`](BundleRegistry::mount), e sarà la strada
-    /// di chi spegne una feature dalle impostazioni (§11.1).
+    /// È l'inverso esatto di [`mount`](BundleRegistry::mount), ed è la strada di
+    /// chi spegne una feature dalle impostazioni (§11.1). Il bundle resta fra i
+    /// **conosciuti**: spegnere non è dimenticare, o non ci sarebbe niente da
+    /// riaccendere.
     pub fn unmount(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
         let mut errors = self.stop(ws, id);
         match ws.deactivate_plugin(id) {

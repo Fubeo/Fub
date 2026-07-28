@@ -855,6 +855,124 @@ interface ui {
     }
 }
 
+/// Le IMPOSTAZIONI (§11.1): cosa un componente dichiara di poter configurare, e
+/// in che forma il valore torna indietro.
+///
+/// Lo schema sta nel manifest (`plugin.plugin-manifest.settings`) e non in un
+/// provider da registrare: la dichiarazione viene PRIMA di `activate`, e il
+/// primo cliente vero di un'impostazione è un `activate` che deve sapere se la
+/// sua feature è accesa. Ne segue che l'insieme delle chiavi di un componente è
+/// il suo manifest, e che ciò che sta nel file di configurazione senza essere
+/// dichiarato resta lì senza essere letto — questo NON è lo spazio
+/// chiave→valore che la decisione 0013 ha tolto.
+///
+/// Cosa non entra, detto: i SEGRETI. Il file è JSON in chiaro e il valore è
+/// leggibile da chiunque possa interrogare il canale dati; una chiave d'API
+/// vuole un portachiavi di sistema, che sarà una capacità sua.
+interface settings {
+    use ui.{ui-option};
+
+    /// DOVE un'impostazione ha il diritto di stare.
+    ///
+    /// Due livelli e non tre: «profilo/portable» non è un posto in cui cercare
+    /// un valore, è DOVE STA il livello macchina, e lo decide chi monta. Un
+    /// terzo strato di merge sarebbe un terzo posto in cui la stessa chiave può
+    /// valere un'altra cosa, senza che nessuno dei tre sappia dire chi ha vinto.
+    ///
+    /// Non è una preferenza di chi scrive lo schema: è una regola di sicurezza.
+    /// Un vault è dato che ARRIVA DA FUORI — si scarica, si sincronizza, lo
+    /// passa un collega — e un vault che decidesse impostazioni della macchina
+    /// sarebbe un file che cambia il comportamento di chi lo apre. Le chiavi
+    /// `machine` scritte in un `.fubmd/settings.json` si IGNORANO.
+    enum setting-scope {
+        /// Del vault: sta in `.fubmd/settings.json`, viaggia col vault, ed è
+        /// autorevole per quel vault.
+        vault,
+        /// Della macchina: tema, scorciatoie, vault recenti. Non viaggia.
+        machine,
+    }
+
+    record setting-toggle { %default: bool }
+    /// Gli estremi li usa chi disegna il campo e li rispetta chi scrive il
+    /// valore: fuori intervallo è un RIFIUTO e non un arrotondamento — un
+    /// valore corretto in silenzio è un valore che l'utente non ha scelto e non
+    /// sa di non avere.
+    record setting-number { %default: f64, min: option<f64>, max: option<f64> }
+    record setting-text { %default: string }
+    /// Una fra N. Le opzioni sono le stesse di un `select` perché valore ed
+    /// etichetta sono due cose anche qui: una scelta che è anche la propria
+    /// etichetta non si può localizzare (§12.1).
+    record setting-choice { %default: string, options: list<ui-option> }
+    /// Un elenco di stringhe: gli id dei plugin spenti, le cartelle escluse.
+    /// Il protocollo di UI non ha un editor di liste, quindi chi disegna lo
+    /// MOSTRA e non lo edita, e si cambia dal comando che lo scrive.
+    record setting-list { %default: list<string> }
+    /// Di che specie è un'impostazione, COL SUO DEFAULT DENTRO: sono la stessa
+    /// informazione detta una volta, e un `default` in un campo accanto sarebbe
+    /// un caso da validare a ogni lettura.
+    variant setting-kind {
+        toggle(setting-toggle),
+        number(setting-number),
+        text(setting-text),
+        choice(setting-choice),
+        %list(setting-list),
+    }
+
+    /// Il valore di un'impostazione. Sul confine JSON è NUDO (`true`, `12`,
+    /// `"scuro"`, `["a"]`): un `.fubmd/settings.json` si apre con un editor di
+    /// testo e si legge in una diff, e un valore etichettato lo renderebbe
+    /// illeggibile per guadagnare un'ambiguità che non c'è — la specie la
+    /// dichiara lo schema.
+    variant setting-value {
+        toggle(bool),
+        number(f64),
+        text(string),
+        %list(list<string>),
+    }
+
+    /// Un'impostazione DICHIARATA: come si chiama, cosa vuol dire, dove sta e
+    /// chi la può scrivere.
+    record setting-spec {
+        /// Con la regola dei nomi del §7.4: il core nomina nudo
+        /// (`versioning.enabled`), un plugin dentro il proprio id.
+        key: string,
+        label: string,
+        /// In prosa: è l'unica cosa che chi non ha scritto il plugin legge per
+        /// decidere se toccarla.
+        description: string,
+        /// Sotto quale intestazione raggrupparla nel form. Vuoto = in fondo.
+        group: string,
+        scope: setting-scope,
+        kind: setting-kind,
+        /// UN PROGRAMMA LA PUÒ SCRIVERE? È il residuo che la decisione 0010
+        /// aveva lasciato aperto: `command-reach.settings` diceva che un
+        /// comando può toccare la configurazione, e nessuno schema diceva
+        /// QUALI CHIAVI. È per chiave e non per famiglia perché la riga non
+        /// negoziabile — privacy e AI non si spostano da sole — non è una
+        /// proprietà di chi scrive: è una proprietà di ciò che si scrive.
+        /// Default `false`, per la regola di `trust`: ciò che si ottiene
+        /// dimenticandosi di dichiarare non può essere più di ciò che si
+        /// ottiene dichiarando.
+        program-writable: bool,
+    }
+
+    /// Da dove viene il valore che si sta leggendo. Serve a chi disegna il form
+    /// («questa la stai sovrascrivendo per questo vault») e a chi azzera:
+    /// azzerare fa RICADERE al livello sotto, che non è sempre il default.
+    enum setting-source { %default, machine, vault }
+
+    /// Una riga di configurazione RISOLTA: lo schema, il valore che vale
+    /// adesso, e da dove viene. I tre insieme e non tre domande separate: un
+    /// form che chiedesse gli schemi da una parte e i valori dall'altra avrebbe
+    /// due risposte da riconciliare, e le riconcilierebbe male ogni volta che
+    /// un valore cambia fra le due chiamate.
+    record setting-entry {
+        spec: setting-spec,
+        value: setting-value,
+        source: setting-source,
+    }
+}
+
 /// Job: il varco per il lavoro lungo. Le chiamate dei trait sono sincrone e
 /// brevi (a M5 una deadline le tronca); rete, calcolo pesante e vault camminato
 /// per intero passano da un job, eseguito dall'host FUORI dal giro sincrono del
@@ -917,6 +1035,7 @@ interface events {
     use json.{json};
     use model.{doc-id};
     use jobs.{job-id, job-progress};
+    use settings.{setting-scope};
     use errors.{plugin-error};
 
     record event-document-changed { id: doc-id }
@@ -982,6 +1101,16 @@ interface events {
     /// chiamarlo per nota — e per questo è recuperabile: ciò che lo riscopre è
     /// `index-query.jobs`, e chi consegna ne tiene l'ultimo per job.
     record event-job-progress { id: job-id, progress: job-progress }
+    /// Un'impostazione è cambiata (§11.1): la chiave, e il livello in cui il
+    /// valore è stato scritto o da cui è stato tolto.
+    ///
+    /// NON porta il valore nuovo: chi reagisce lo rilegge
+    /// (`host-settings-read.setting`), e una copia dentro l'evento
+    /// invecchierebbe — due scritture ravvicinate consegnate in ordine inverso
+    /// lascerebbero chi ascolta convinto di un valore che non è più quello. Per
+    /// la stessa ragione NON è recuperabile: il valore si rilegge, il *cambio*
+    /// no, e chi si spegne quando lo spengono deve saperlo anche a coda piena.
+    record event-setting-changed { key: string, scope: setting-scope }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -996,6 +1125,7 @@ interface events {
         vault-closed(event-vault-closed),
         job-started(event-job-started),
         job-progress(event-job-progress),
+        setting-changed(event-setting-changed),
     }
 
     enum event-kind {
@@ -1019,6 +1149,8 @@ interface events {
         /// A che punto è un lavoro lungo (§10.3): il canale più fitto che il
         /// contratto abbia.
         job-progress,
+        /// Una chiave di configurazione è cambiata (§11.1).
+        setting-changed,
     }
     /// DOVE: il soggetto di un abbonamento (§10.1, decisione 0033).
     ///
@@ -1257,6 +1389,7 @@ interface index {
     use json.{json};
     use model.{doc-id, document-model, span, heading, property-value, property-scalar};
     use jobs.{job-status};
+    use settings.{setting-entry};
     use errors.{plugin-error};
 
     /// La finestra chiesta su una risposta: sta nella DOMANDA perché chi la
@@ -1470,6 +1603,14 @@ interface index {
         /// canale possono buttarli — e senza questa domanda quel troncamento
         /// sarebbe una perdita definitiva.
         jobs,
+        /// COM'È CONFIGURATO QUESTO VAULT? (§11.1) La terza che chiede del
+        /// vault e non del suo contenuto. Torna le impostazioni RISOLTE — lo
+        /// schema dichiarato, il valore che vale adesso, il livello da cui
+        /// viene — e passa da qui perché un elenco è DATI, e i dati hanno un
+        /// canale solo (decisione 0013): un `settings-list` fra le capacità
+        /// sarebbe stato il primo caso in cui la shell e un plugin chiedono la
+        /// stessa cosa a due porte diverse. `plugin` assente = tutte.
+        settings(option<string>),
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -1493,6 +1634,11 @@ interface index {
         /// kernel: la coda dei job è sua, e chi possiede i thread non sa niente
         /// di quelli che devono ancora entrargli in mano.
         jobs,
+        /// Chi risponde a «com'è configurato questo vault?» (§11.1). Ancora il
+        /// kernel, e stavolta si vede a occhio: lo schema lo tiene il registro
+        /// dei plugin, il valore lo store di configurazione, e stanno nello
+        /// stesso posto solo lì.
+        settings,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -1637,6 +1783,9 @@ interface index {
         /// I lavori lunghi vivi, in ordine di richiesta. Senza finestra come
         /// l'outline e per la stessa ragione: non cresce col vault.
         jobs(list<job-status>),
+        /// Le impostazioni risolte, in ordine di chiave. Senza finestra: il
+        /// loro numero cresce con i plugin montati, non col vault.
+        settings(list<setting-entry>),
     }
 
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel
@@ -2092,6 +2241,52 @@ interface host-data-write {
     data-remove: func(path: string) -> result<_, plugin-error>;
 }
 
+/// Leggere le impostazioni DICHIARATE (§11.1).
+///
+/// Qualunque chiave dichiarata, non solo le proprie: la configurazione non è un
+/// recinto e non contiene segreti (vedi `settings`), e un plugin di tema che non
+/// potesse leggere `editor.font-size` perché non è sua sarebbe un plugin di tema
+/// inutile. Ciò che è recintato è la SCRITTURA.
+interface host-settings-read {
+    use settings.{setting-value};
+    use errors.{plugin-error};
+
+    /// Il valore che vale adesso: quello del vault, quello della macchina, o il
+    /// default dello schema — in quest'ordine. Una chiave che NESSUNO HA
+    /// DICHIARATO è `bad-args` e non un `none`: lo schema è il contratto fra
+    /// chi legge e chi configura, e una chiave fuori schema è un errore di chi
+    /// la chiede. Un valore c'è sempre, perché il default fa parte della
+    /// dichiarazione.
+    setting: func(key: string) -> result<setting-value, plugin-error>;
+}
+
+/// Scrivere un'impostazione CHE SI È DICHIARATA SCRIVIBILE DA UN PROGRAMMA
+/// (§11.1) — la metà che la decisione 0010 aveva lasciato aperta.
+///
+/// Due condizioni, e nessuna delle due basta da sola: il permesso
+/// `fubmd:write-settings` nel manifest (CHI scrive) e `program-writable` sulla
+/// chiave (COSA si scrive). La seconda esiste perché il divieto che conta non
+/// riguarda chi chiede: un componente che potesse allargarsi i permessi da sé
+/// non ha permessi, e questo vale anche quando quel componente è un comando del
+/// core.
+interface host-settings-write {
+    use settings.{setting-value};
+    use errors.{plugin-error};
+
+    /// Scrive nel livello che lo `scope` della chiave dichiara: il vault, o la
+    /// macchina. Non è un parametro perché non è una scelta di chi scrive —
+    /// sarebbe il modo di far viaggiare un'impostazione che non deve viaggiare.
+    /// Il valore è convalidato contro la specie dichiarata: fuori schema è
+    /// `bad-args`, non un arrotondamento.
+    set-setting: func(key: string, value: setting-value) -> result<_, plugin-error>;
+    /// Dimentica ciò che era stato deciso: la chiave RICADE al livello sotto,
+    /// che è il default solo se non c'era niente in mezzo. È una funzione sua e
+    /// non `set-setting(default)` perché sono due cose diverse: scrivere il
+    /// default DECIDE che vale il default (e resta scritto quando il default
+    /// cambia), azzerare SMETTE DI DECIDERE.
+    reset-setting: func(key: string) -> result<_, plugin-error>;
+}
+
 /// Ciò che l'host sa e il guest no: che ore sono, e cosa sta guardando
 /// l'utente.
 ///
@@ -2248,6 +2443,7 @@ interface plugin {
     use errors.{plugin-error};
     use json.{json};
     use options.{option-map};
+    use settings.{setting-spec};
 
     /// Cosa un plugin dichiara di voler fare. Erano tre booleani — leggere,
     /// scrivere, rete — contro ciò che 20.1, 23.1 e 20.3 chiedono: appunti,
@@ -2282,6 +2478,12 @@ interface plugin {
         /// quale requisito manca. «Attivo ma degradato» è uno stato che nessuno
         /// prova e che ogni feature dovrebbe poi gestire.
         requires: list<string>,
+        /// Le IMPOSTAZIONI che dichiara (§11.1). Sta nel manifest e non in un
+        /// provider da registrare per la ragione di `provides`, un passo più in
+        /// là: la dichiarazione viene prima di `activate`, e il primo che legge
+        /// un'impostazione è proprio un `activate` che deve sapere se la sua
+        /// feature è accesa. Ogni chiave vale la regola del §7.4.
+        settings: list<setting-spec>,
     }
 
     manifest: func() -> plugin-manifest;
@@ -2451,7 +2653,7 @@ interface exporter {
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che
 /// implementa. Il kernel non distingue nativo da WASM.
 world plugin-world {
-    // Le dieci famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
+    // Le dodici famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
     // mondo che non importa `host-vault-write` non è un mondo che la rifiuta a
     // runtime, è un mondo in cui quella funzione non esiste. Il giorno che il
     // caricatore di M5 monterà un componente sotto sandbox stretta, ciò che
@@ -2467,6 +2669,8 @@ world plugin-world {
     import host-query;
     import host-commands;
     import host-services;
+    import host-settings-read;
+    import host-settings-write;
 
     export plugin;
     export format;

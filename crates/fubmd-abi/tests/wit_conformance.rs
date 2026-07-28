@@ -80,6 +80,9 @@ use fubmd_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
 };
 use fubmd_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
+use fubmd_abi::settings::{
+    SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
+};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, DocumentMatch, EventHandler, HealthCheck, HealthIssue, HostApi,
     IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, JobStatus, LinkDirection,
@@ -338,6 +341,14 @@ wit_type! {
     Paged<HealthIssue> => "vault-health-page",
     PluginManifest => "plugin-manifest",
     PluginPermissions => "plugin-permissions",
+
+    // Le impostazioni (§11.1).
+    SettingSpec => "setting-spec",
+    SettingKind => "setting-kind",
+    SettingValue => "setting-value",
+    SettingScope => "setting-scope",
+    SettingSource => "setting-source",
+    SettingEntry => "setting-entry",
 
     // Ciò che NON attraversa il confine: il ricevitore e le capacità dell'host.
     dyn HostApi => HOST,
@@ -1740,6 +1751,52 @@ fn event_case(e: &Event) -> Case {
             "event-job-progress",
             vec![("id", wit(id)), ("progress", wit(progress))],
         ),
+        Event::SettingChanged { key, scope } => case_rec(
+            "setting-changed",
+            "event-setting-changed",
+            vec![("key", wit(key)), ("scope", wit(scope))],
+        ),
+    }
+}
+
+/// La specie di un'impostazione: ogni caso porta un record dedicato, come per
+/// gli eventi — un payload anonimo con tre campi non si nomina in una diff.
+fn setting_kind_case(k: &SettingKind) -> Case {
+    match k {
+        SettingKind::Toggle { default } => {
+            case_rec("toggle", "setting-toggle", vec![("default", wit(default))])
+        }
+        SettingKind::Number { default, min, max } => case_rec(
+            "number",
+            "setting-number",
+            vec![
+                ("default", wit(default)),
+                ("min", wit(min)),
+                ("max", wit(max)),
+            ],
+        ),
+        SettingKind::Text { default } => {
+            case_rec("text", "setting-text", vec![("default", wit(default))])
+        }
+        SettingKind::Choice { default, options } => case_rec(
+            "choice",
+            "setting-choice",
+            vec![("default", wit(default)), ("options", wit(options))],
+        ),
+        SettingKind::List { default } => {
+            case_rec("list", "setting-list", vec![("default", wit(default))])
+        }
+    }
+}
+
+/// Il valore invece porta payload **nudi**: al confine JSON è `true`, `12`,
+/// `"scuro"`, `["a"]`, e la ragione sta nel doc di `SettingValue`.
+fn setting_value_case(v: &SettingValue) -> Case {
+    match v {
+        SettingValue::Toggle(b) => case_ty("toggle", wit(b)),
+        SettingValue::Number(n) => case_ty("number", wit(n)),
+        SettingValue::Text(t) => case_ty("text", wit(t)),
+        SettingValue::List(l) => case_ty("list", wit(l)),
     }
 }
 
@@ -1758,6 +1815,7 @@ fn event_kind_name(k: EventKind) -> &'static str {
         EventKind::VaultClosed => "vault-closed",
         EventKind::JobStarted => "job-started",
         EventKind::JobProgress => "job-progress",
+        EventKind::SettingChanged => "setting-changed",
     }
 }
 
@@ -1845,6 +1903,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
         ),
         IndexQuery::VaultStatus => case("vault-status"),
         IndexQuery::Jobs => case("jobs"),
+        IndexQuery::Settings { plugin } => case_ty("settings", wit(plugin)),
     }
 }
 
@@ -1900,6 +1959,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::Custom(ns) => case_ty("custom", wit(ns)),
         QueryKind::VaultStatus => case("vault-status"),
         QueryKind::Jobs => case("jobs"),
+        QueryKind::Settings => case("settings"),
     }
 }
 
@@ -1933,6 +1993,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Custom(v) => case_ty("custom", wit(v)),
         IndexResult::VaultStatus(v) => case_ty("vault-status", wit(v)),
         IndexResult::Jobs(v) => case_ty("jobs", wit(v)),
+        IndexResult::Settings(v) => case_ty("settings", wit(v)),
     }
 }
 
@@ -2542,6 +2603,10 @@ fn conform(source: &str) -> Result<(), String> {
                 id: JobId(0),
                 progress: JobProgress::default(),
             }),
+            event_case(&Event::SettingChanged {
+                key: String::new(),
+                scope: SettingScope::Vault,
+            }),
         ],
     );
 
@@ -2607,6 +2672,7 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             index_query_case(&IndexQuery::VaultStatus),
             index_query_case(&IndexQuery::Jobs),
+            index_query_case(&IndexQuery::Settings { plugin: None }),
         ],
     );
 
@@ -2624,6 +2690,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::Custom(serde_json::Value::Null)),
             index_result_case(&IndexResult::VaultStatus(VaultStatus::default())),
             index_result_case(&IndexResult::Jobs(vec![])),
+            index_result_case(&IndexResult::Settings(vec![])),
         ],
     );
 
@@ -2682,6 +2749,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::Custom(String::new())),
             query_kind_case(&QueryKind::VaultStatus),
             query_kind_case(&QueryKind::Jobs),
+            query_kind_case(&QueryKind::Settings),
         ],
     );
 
@@ -2793,6 +2861,7 @@ fn conform(source: &str) -> Result<(), String> {
             EventKind::VaultClosed,
             EventKind::JobStarted,
             EventKind::JobProgress,
+            EventKind::SettingChanged,
         ]
         .map(event_kind_name)
         .as_slice(),
@@ -3875,6 +3944,7 @@ fn conform(source: &str) -> Result<(), String> {
         permissions,
         provides,
         requires,
+        settings,
     } = PluginManifest {
         id: String::new(),
         name: String::new(),
@@ -3883,6 +3953,7 @@ fn conform(source: &str) -> Result<(), String> {
         permissions: PluginPermissions::default(),
         provides: Vec::new(),
         requires: Vec::new(),
+        settings: Vec::new(),
     };
     contract.record(
         "plugin-manifest",
@@ -3897,6 +3968,95 @@ fn conform(source: &str) -> Result<(), String> {
             // voce non scade col freeze.
             ("provides", wit(&provides)),
             ("requires", wit(&requires)),
+            // E lo schema delle impostazioni (§11.1), in fondo per la stessa
+            // ragione: uno schema che arriva dopo il freeze deve poter arrivare
+            // senza spostare niente di ciò che c'era.
+            ("settings", wit(&settings)),
+        ],
+    );
+
+    // Le impostazioni (§11.1): lo schema che un manifest dichiara, il valore
+    // che ne esce, e la riga risolta che il canale dati restituisce.
+    contract.enumeration_src(
+        "setting-scope",
+        ("settings.rs", "SettingScope"),
+        &["vault", "machine"],
+    );
+    contract.enumeration_src(
+        "setting-source",
+        ("settings.rs", "SettingSource"),
+        &["default", "machine", "vault"],
+    );
+    contract.variant_src(
+        "setting-kind",
+        ("settings.rs", "SettingKind"),
+        &[
+            setting_kind_case(&SettingKind::Toggle { default: false }),
+            setting_kind_case(&SettingKind::Number {
+                default: 0.0,
+                min: None,
+                max: None,
+            }),
+            setting_kind_case(&SettingKind::Text {
+                default: String::new(),
+            }),
+            setting_kind_case(&SettingKind::Choice {
+                default: String::new(),
+                options: Vec::new(),
+            }),
+            setting_kind_case(&SettingKind::List {
+                default: Vec::new(),
+            }),
+        ],
+    );
+    contract.variant_src(
+        "setting-value",
+        ("settings.rs", "SettingValue"),
+        &[
+            setting_value_case(&SettingValue::Toggle(false)),
+            setting_value_case(&SettingValue::Number(0.0)),
+            setting_value_case(&SettingValue::Text(String::new())),
+            setting_value_case(&SettingValue::List(Vec::new())),
+        ],
+    );
+
+    let SettingSpec {
+        key,
+        label,
+        description,
+        group,
+        scope,
+        kind,
+        program_writable,
+    } = SettingSpec::toggle("", "", false);
+    contract.record(
+        "setting-spec",
+        &[
+            ("key", wit(&key)),
+            ("label", wit(&label)),
+            ("description", wit(&description)),
+            ("group", wit(&group)),
+            ("scope", wit(&scope)),
+            ("kind", wit(&kind)),
+            ("program-writable", wit(&program_writable)),
+        ],
+    );
+
+    let SettingEntry {
+        spec,
+        value,
+        source,
+    } = SettingEntry {
+        spec: SettingSpec::toggle("", "", false),
+        value: SettingValue::Toggle(false),
+        source: SettingSource::Default,
+    };
+    contract.record(
+        "setting-entry",
+        &[
+            ("spec", wit(&spec)),
+            ("value", wit(&value)),
+            ("source", wit(&source)),
         ],
     );
 
@@ -4128,6 +4288,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("session");
     contract.types_only("edit");
     contract.types_only("transfer");
+    contract.types_only("settings");
 
     contract.method(
         "format",
@@ -4456,6 +4617,26 @@ fn conform(source: &str) -> Result<(), String> {
         &["prefix"],
     );
     contract.method(
+        "host-settings-read",
+        "setting",
+        <dyn HostApi>::setting
+            as fn(&'static dyn HostApi, &'static str) -> Result<SettingValue, PluginError>,
+        &["key"],
+    );
+    contract.method(
+        "host-settings-write",
+        "set-setting",
+        <dyn HostApi>::set_setting
+            as fn(Host, &'static str, SettingValue) -> Result<(), PluginError>,
+        &["key", "value"],
+    );
+    contract.method(
+        "host-settings-write",
+        "reset-setting",
+        <dyn HostApi>::reset_setting as fn(Host, &'static str) -> Result<(), PluginError>,
+        &["key"],
+    );
+    contract.method(
         "host-env",
         "now-unix-millis",
         <dyn HostApi>::now_unix_millis as fn(&'static dyn HostApi) -> u64,
@@ -4598,7 +4779,7 @@ fn conform(source: &str) -> Result<(), String> {
         .get("plugin-world")
         .cloned()
         .expect("world `plugin-world` assente dal WIT");
-    // Le dieci famiglie del §7.1. Il confronto è per contenimento e non per
+    // Le dodici famiglie del §7.1. Il confronto è per contenimento e non per
     // uguaglianza perché fra gli import risolti compaiono anche le interfacce
     // di soli **tipi** che le dieci usano (`model`, `errors`, `index`, …): sono
     // dipendenze del grafo, non capacità concesse.
@@ -4613,6 +4794,8 @@ fn conform(source: &str) -> Result<(), String> {
         "host-query",
         "host-commands",
         "host-services",
+        "host-settings-read",
+        "host-settings-write",
     ] {
         assert!(
             imports.contains(famiglia),
@@ -4621,7 +4804,7 @@ fn conform(source: &str) -> Result<(), String> {
     }
     assert!(
         !imports.contains("host-api"),
-        "`host-api` è stata divisa nelle dieci famiglie del §7.1: se riappare, \
+        "`host-api` è stata divisa nelle dodici famiglie del §7.1: se riappare, \
          è tornata la superficie che si concede per intero o per niente"
     );
     let expected_exports: BTreeSet<String> = [

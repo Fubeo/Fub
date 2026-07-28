@@ -7,6 +7,13 @@
 import type { CommandEffect, ViewUpdate } from "../host/contract";
 import { isOpen, openDocument, revealByteOffset } from "../panels/document";
 import { searchFor } from "../panels/search";
+import { notify } from "./notify";
+
+/// Il namespace con cui `settings.export` consegna ciò che ha esportato
+/// (`fubmd_features::SETTINGS_NS`). Il comando non scrive un file e non può:
+/// nessuna capacità dell'`HostApi` tocca il filesystem fuori dal vault
+/// (decisione 0013), e dove salvare lo sa **chi ha il dialogo di sistema**.
+export const SETTINGS_EXPORT_NS = "settings.export";
 
 /// I due tipi veri del confine, meno il caso che qui non c'entra: `replace`
 /// riguarda la view che lo ha mandato, e lo gestisce chi la monta. Scritto come
@@ -31,6 +38,10 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       searchFor(intent.query);
       break;
     case "custom":
+      if (intent.ns === SETTINGS_EXPORT_NS) {
+        await raccogliExport(intent.payload);
+        break;
+      }
       // Intento con namespace che questa shell non prevede: da contratto
       // non fa nulla (degrado garbato) — chi lo emette conta su una shell
       // che lo capisce, non su questa.
@@ -43,5 +54,26 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
     case "none":
     case "done":
       break;
+  }
+}
+
+/// L'export delle impostazioni: negli appunti, e lo si dice.
+///
+/// Gli appunti e non un file, perché è ciò che questa shell sa fare senza
+/// chiedere niente a nessuno; il giorno che ci sarà un dialogo di salvataggio,
+/// il payload che arriva qui è già quello giusto. Quel che conta è che
+/// **qualcuno lo raccolga**: un comando che consegna un intento a una shell che
+/// lo ignora è un export che finisce nel vuoto, con l'utente convinto di aver
+/// esportato.
+async function raccogliExport(payload: unknown): Promise<void> {
+  const json = JSON.stringify(payload, null, 2);
+  try {
+    await navigator.clipboard.writeText(json);
+    notify("Impostazioni copiate negli appunti.");
+  } catch {
+    // Senza permesso sugli appunti resta la console, che per un JSON di venti
+    // righe è più di niente — e il messaggio dice dov'è finito.
+    console.info(json);
+    notify("Impostazioni esportate: sono nella console (appunti non disponibili).", "guasto");
   }
 }

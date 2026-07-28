@@ -44,12 +44,14 @@ use fubmd_abi::model::DocId;
 use fubmd_abi::traits::JobId;
 use fubmd_abi::{Notice, PluginError};
 use fubmd_features::{VersionRef, VersionStore, VERSIONING_ID};
-use fubmd_kernel::Workspace;
+use fubmd_kernel::{MachineSettings, Workspace};
 
+use crate::config::{config_dir, machine_settings_path, vault_registry_path};
 use crate::mount::mount;
 use crate::records::{read_workspace_meta, write_workspace_meta, VaultInfo, WorkspaceMeta};
-use crate::registry::BundleRegistry;
+use crate::registry::{BundleInfo, BundleRegistry};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
+use crate::vaults::{VaultEntry, VaultRegistry};
 use crate::watcher::{VaultWatcher, WatcherFactory};
 
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
@@ -191,6 +193,14 @@ pub struct Host {
     sessions: Mutex<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
+    /// Il **livello macchina** della configurazione (§11.1), condiviso da tutti
+    /// i vault che questo host apre: la configurazione della macchina è una, e N
+    /// copie sarebbero N idee del tema.
+    machine: Arc<MachineSettings>,
+    /// Il **registro dei vault** (§11.1): recenti, preferiti, icone. Vive nello
+    /// stesso livello, che prima di questa voce non esisteva affatto — ed è la
+    /// ragione per cui la 0029 non poteva chiudere questa metà del §9.6.
+    vaults: VaultRegistry,
     /// Quanti thread esegue i job di **ogni** vault aperto (§9.3). Per vault e
     /// non in totale: i pool non si conoscono, come non si conoscono i vault.
     job_threads: usize,
@@ -217,8 +227,44 @@ impl Host {
             sessions: Mutex::new(Sessions::default()),
             watcher,
             sink: None,
+            // **In memoria di default**, come `Workspace::new`, e per la stessa
+            // ragione: chi non ha un'installazione — un test, un e2e headless —
+            // non deve scrivere nella cartella di configurazione di chi lo
+            // esegue. Un'app vera chiama `installed()` o `with_config_dir`, e se
+            // se ne dimentica il difetto si vede subito (il tema non sopravvive
+            // alla chiusura) invece che mai.
+            machine: MachineSettings::in_memory(),
+            vaults: VaultRegistry::in_memory(),
             job_threads: DEFAULT_JOB_THREADS,
         }
+    }
+
+    /// L'host di un'**installazione**: legge e scrive la configurazione della
+    /// macchina dove il sistema dice ([`config_dir`](crate::config_dir)).
+    ///
+    /// Un sistema che non sa dire dove sia — nessun `HOME` — lascia l'host in
+    /// memoria: perdere il tema è meglio di un'app che non parte.
+    pub fn installed() -> Self {
+        match config_dir() {
+            Some(dir) => Host::new().with_config_dir(dir.as_path()),
+            None => Host::new(),
+        }
+    }
+
+    /// Come [`installed`](Host::installed), su una cartella scelta: è la porta
+    /// di chi impacchetta, di chi ne tiene due, e dei test.
+    pub fn with_config_dir(mut self, dir: &Utf8Path) -> Self {
+        let (machine, warning) = MachineSettings::open(&machine_settings_path(dir));
+        if let Some(warning) = warning {
+            eprintln!("impostazioni della macchina: {warning}");
+        }
+        let (vaults, warning) = VaultRegistry::open(&vault_registry_path(dir));
+        if let Some(warning) = warning {
+            eprintln!("registro dei vault: {warning}");
+        }
+        self.machine = machine;
+        self.vaults = vaults;
+        self
     }
 
     /// Sostituisce il rilevatore. Un e2e headless passa `NoWatcher`.
@@ -277,7 +323,7 @@ impl Host {
             workspace: mut ws,
             registry,
             versions,
-        } = mount(&root)?;
+        } = mount(&root, Arc::clone(&self.machine))?;
         let registry = Arc::new(Mutex::new(registry));
 
         ws.reindex().map_err(|e| e.to_string())?;
@@ -354,7 +400,117 @@ impl Host {
         if let Some(perdente) = perdente {
             perdente.close();
         }
+        // Il vault entra fra i conosciuti (§11.1). Va **dopo** l'apertura
+        // riuscita, e non prima: un path che non si apre non è un vault
+        // recente, è un errore — e un elenco di recenti pieno di cartelle che
+        // non aprono è peggio di un elenco vuoto. Un registro che non riesce a
+        // scriversi non fa fallire l'apertura: è una comodità, non il vault.
+        if let Err(e) = self
+            .vaults
+            .note_opened(&root, fubmd_kernel::time::now_unix_millis())
+        {
+            eprintln!("registro dei vault: {e}");
+        }
         Ok(info)
+    }
+
+    // --- il registro dei vault (§11.1) -------------------------------------
+    //
+    // Ciò che questa macchina **conosce**, che è un'altra cosa da ciò che è
+    // aperto adesso (`vaults()`): il secondo muore col processo, il primo è la
+    // memoria fra un avvio e l'altro.
+
+    /// I vault conosciuti: prima i preferiti, poi i recenti.
+    pub fn known_vaults(&self) -> Vec<VaultEntry> {
+        self.vaults.list()
+    }
+
+    /// Appunta (o spunta) un vault. Il path **non** deve essere aperto: si
+    /// preferisce un vault anche quando è chiuso, ed è quasi sempre allora.
+    pub fn set_vault_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), String> {
+        self.vaults.set_favorite(&canonical(root)?, favorite)
+    }
+
+    /// L'icona e il nome con cui un vault compare nell'elenco.
+    pub fn set_vault_look(
+        &self,
+        root: &Utf8Path,
+        icon: Option<String>,
+        name: Option<String>,
+    ) -> Result<(), String> {
+        self.vaults.set_look(&canonical(root)?, icon, name)
+    }
+
+    /// Toglie un vault dall'elenco. **Non lo cancella dal disco**: dimenticare
+    /// una scorciatoia non è distruggere ciò a cui punta.
+    ///
+    /// Non canonicalizza: si dimentica anche una cartella che non esiste più,
+    /// che è il caso più comune per cui lo si fa.
+    pub fn forget_vault(&self, root: &Utf8Path) -> Result<(), String> {
+        self.vaults.forget(root)
+    }
+
+    // --- accendere e spegnere un componente (§11.1) -------------------------
+
+    /// Chi questo host sa montare, e chi è acceso in questo vault.
+    pub fn bundles(&self, vault: Option<&str>) -> Result<Vec<BundleInfo>, String> {
+        self.with_session(vault, |s| {
+            s.registry.lock().expect("registry avvelenato").inventory()
+        })
+    }
+
+    /// **Accende o spegne un componente**, adesso e per i prossimi avvii.
+    ///
+    /// Due cose, e nessuna delle due basta da sola: il montaggio (o lo
+    /// smontaggio) *adesso* — che è `BundleRegistry`, ed è host-side per
+    /// costruzione ([decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md):
+    /// l'`HostApi` non ha capacità di registrazione, quindi un plugin non può
+    /// montarsi da sé — e la riga scritta in `plugins.disabled`, che è ciò che
+    /// mancava al §11.1: «dove stare scritto fra un avvio e l'altro».
+    ///
+    /// Passa da qui e non da un comando del registro per la stessa ragione:
+    /// un comando gira dentro il kernel con un `HostApi`, e da lì il registry
+    /// dei bundle non si vede nemmeno. Ed è anche giusto che sia così — chi
+    /// accende e spegne un componente è **l'utente**, non un programma, e questa
+    /// è la porta da cui passa l'utente (`plugins.disabled` non si è dichiarata
+    /// scrivibile da un programma, apposta).
+    pub fn set_plugin_enabled(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        enabled: bool,
+    ) -> Result<Vec<String>, String> {
+        if id == crate::settings::CORE_ID {
+            return Err(format!(
+                "`{id}` non si spegne: è chi tiene l'elenco di ciò che è spento"
+            ));
+        }
+        self.with_session(vault, |session| {
+            let mut ws = session.workspace.write().expect("workspace avvelenato");
+            let mut registry = session.registry.lock().expect("registry avvelenato");
+            let mut errors = Vec::new();
+
+            // Prima il fatto, poi la memoria del fatto: se il montaggio fallisce
+            // non resta scritto che il componente è acceso.
+            if enabled {
+                registry.enable(&mut ws, id).map_err(|e| e.to_string())?;
+            } else {
+                errors.extend(registry.unmount(&mut ws, id).iter().map(|e| e.to_string()));
+            }
+
+            let mut disabled = crate::settings::disabled_plugins(&ws);
+            disabled.retain(|d| d != id);
+            if !enabled {
+                disabled.push(id.to_string());
+            }
+            disabled.sort();
+            ws.set_setting(
+                crate::settings::PLUGINS_DISABLED,
+                fubmd_abi::settings::SettingValue::List(disabled),
+            )
+            .map_err(|e| e.to_string())?;
+            Ok(errors)
+        })?
     }
 
     /// Chiude **un** vault: flush, `close` degli indici, disattivazione di ogni

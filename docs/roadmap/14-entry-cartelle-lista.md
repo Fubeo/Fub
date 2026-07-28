@@ -28,7 +28,9 @@ recente» non ha alcuna fonte.
 - [ ] **Metadata degli asset**: MIME, hash/checksum, dimensione — con il
       checksum arrivano gratis dedup (13.1), rilevamento duplicati (3.2) e
       verifica d'integrità (24.2).
-- [ ] **Politica cartella allegati** (configurabile, §11.1) e riferimenti
+- [ ] **Politica cartella allegati** — configurabile, e adesso si sa come: una
+      chiave dichiarata nel manifest di chi la legge
+      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)) — e riferimenti
       aggiornati su rinomina/spostamento, come già si fa per i wikilink.
 - [ ] **Thumbnail/cache derivate** in `.fubmd-data/` (mai autorevoli).
 

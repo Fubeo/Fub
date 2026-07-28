@@ -46,6 +46,7 @@ cronologico di chiusura.
 | [0033](0033-la-grana-di-un-abbonamento.md) | La grana di un abbonamento: il topic, il soggetto, e i prefissi che non sono `starts_with` | §10.1 | 2026-07-28 |
 | [0034](0034-il-freno-e-il-raggruppamento.md) | Il freno e il raggruppamento: il tetto sta con chi ritira, la finestra è la velocità di chi consuma | §10.2 | 2026-07-28 |
 | [0035](0035-il-lavoro-lungo-si-racconta.md) | Il lavoro lungo si racconta: chi guarda, cosa vede, e chi mette il nome sul progresso | §10.3 — chiude la [seduta 10](../roadmap/10-gli-eventi.md) | 2026-07-28 |
+| [0036](0036-le-impostazioni-e-i-tre-stati.md) | Le impostazioni: chi dichiara una chiave, dove sta il suo valore, e chi la può scrivere | §11.1 — chiude il primo residuo della [0010](0010-comando-descritto-a-una-macchina.md) | 2026-07-28 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

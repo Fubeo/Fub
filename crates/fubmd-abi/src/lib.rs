@@ -28,6 +28,9 @@
 //!   cosa è successo, **chi lo ha chiesto** e di quale **lotto** fa parte;
 //! - il **contesto di sessione** ([`session`]): quale pannello ha il focus, che
 //!   documento guarda, cosa c'è selezionato dentro;
+//! - le **impostazioni** ([`settings`]): cosa un componente dichiara di poter
+//!   configurare, su quale livello quel valore ha il diritto di stare, e quali
+//!   chiavi un programma può scrivere;
 //! - le **regole** ([`rules`]): la parte di una risposta che non dipende da chi
 //!   la dà — come si confrontano due proprietà, quando un path relativo diventa
 //!   un `DocId`, cosa conta come link rotto. Stanno qui e non nel kernel perché
@@ -50,6 +53,7 @@ pub mod options;
 pub mod query;
 pub mod rules;
 pub mod session;
+pub mod settings;
 pub mod traits;
 pub mod transfer;
 pub mod ui;
@@ -79,13 +83,17 @@ pub use query::{
     TextMode, TextQuery,
 };
 pub use session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
+pub use settings::{
+    SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
+};
 pub use traits::{
     BacklinkRef, CommandProvider, DataRead, DataWrite, DocumentMatch, EventHandler, HealthCheck,
     HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
     IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged, Plugin,
     PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
-    PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, TrashEntry,
-    VaultRead, VaultStructure, VaultWrite, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, SettingsRead,
+    SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewInstance, ViewProvider,
+    ViewSpec, ViewSurface,
 };
 pub use transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,

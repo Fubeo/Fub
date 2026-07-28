@@ -23,6 +23,7 @@ import { findByBinding, openCommandPalette, startCommand } from "./ui/palette";
 import { mountPanelHost } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
 import { mountActivity } from "./panels/activity";
+import { mountSettings } from "./panels/settings";
 import {
   closeDocument,
   mountDocument,
@@ -80,6 +81,21 @@ async function init(): Promise<void> {
   // va montato prima che il router parta.
   mountNotifications();
   mountActivity();
+  // Il pannello delle impostazioni (§11.1): il form lo genera lui dallo schema
+  // che i componenti dichiarano, e da lì passano anche i componenti da
+  // accendere e i vault conosciuti. Va montato prima del router, come il centro
+  // attività: si iscrive a `setting_changed`.
+  // Le due cose che il pannello di impostazioni fa fare al resto della shell e
+  // non sa fare da sé: aprire un vault (che è una dozzina di passi in ordine, e
+  // stanno scritti in un punto solo) e riscoprire i provider dopo che un
+  // componente si è acceso o spento.
+  mountSettings({
+    apriVault: openVaultPath,
+    ricaricaProvider: async () => {
+      await mountDeclaredViews();
+      await loadCommandSpecs();
+    },
+  });
 
   $("#open-vault").addEventListener("click", () => void pickVault());
 

@@ -17,6 +17,7 @@ use crate::format::DocumentFormat;
 use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
 use crate::query::{QueryExpr, QueryPredicate};
 use crate::session::{ContextMask, ViewContext};
+use crate::settings::{SettingEntry, SettingSpec, SettingValue};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
 // ---------------------------------------------------------------------------
@@ -478,6 +479,70 @@ pub trait DataWrite: DataRead {
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError>;
 }
 
+// --- le impostazioni (§11.1) -----------------------------------------------
+//
+// Sono **due** famiglie e non una, come per il vault e per i blob: leggere la
+// propria configurazione è ciò che un `activate` fa per sapere se è acceso, e
+// deve poterlo fare anche dal percorso di sola lettura; scriverla è un atto che
+// una simulazione non compie e che un plugin senza permesso non ha.
+//
+// Non c'è un `settings_list`: l'elenco con schema, valore e provenienza è una
+// **risposta con dei dati**, quindi passa dal canale dati
+// ([`IndexQuery::Settings`]) come i documenti, i tag e i backlink. La riga che
+// divide le due cose è quella della decisione 0013, applicata di nuovo.
+
+/// Leggere le impostazioni **dichiarate**.
+///
+/// Qualunque chiave dichiarata, non solo le proprie: la configurazione non è un
+/// recinto e non contiene segreti (vedi [`crate::settings`]), e un plugin di
+/// tema che non potesse leggere `editor.font-size` perché non è sua sarebbe un
+/// plugin di tema inutile. Ciò che è recintato è la **scrittura**.
+pub trait SettingsRead: Send + Sync {
+    /// Il valore che vale adesso per questa chiave: quello del vault, quello
+    /// della macchina, o il default dello schema — in quest'ordine.
+    ///
+    /// Una chiave che **nessuno ha dichiarato** è
+    /// [`PluginError::BadArgs`](crate::PluginError::BadArgs) e non `None`: lo
+    /// schema è il contratto fra chi legge e chi configura, e una chiave fuori
+    /// schema è un errore di chi la chiede — quasi sempre un refuso — non uno
+    /// stato del vault. Un valore c'è **sempre**, perché il default fa parte
+    /// della dichiarazione.
+    fn setting(&self, key: &str) -> Result<SettingValue, PluginError>;
+}
+
+/// Scrivere un'impostazione **che si è dichiarata scrivibile da un programma**.
+///
+/// È la metà che la [decisione 0010](../../../docs/decisions/0010-comando-descritto-a-una-macchina.md)
+/// aveva lasciato aperta. Due condizioni, e nessuna delle due basta da sola: il
+/// permesso `fubmd:write-settings` nel manifest (chi scrive), e
+/// [`SettingSpec::program_writable`](crate::settings::SettingSpec::program_writable)
+/// sulla chiave (cosa si scrive). La seconda esiste perché il divieto che conta
+/// — privacy e AI non si spostano da sole — non riguarda *chi* chiede: un
+/// componente che potesse allargarsi i permessi da sé non ha permessi, e questo
+/// vale anche quando quel componente è un comando del core.
+pub trait SettingsWrite: SettingsRead {
+    /// Scrive la chiave nel livello che il suo
+    /// [`scope`](crate::settings::SettingSpec::scope) dichiara: il vault, o la
+    /// macchina. Non è un parametro perché non è una scelta di chi scrive —
+    /// sarebbe il modo di far viaggiare un'impostazione che non deve viaggiare.
+    ///
+    /// Il valore è convalidato contro la specie dichiarata (intervallo di un
+    /// numero, elenco di una scelta): un valore fuori schema è
+    /// [`PluginError::BadArgs`](crate::PluginError::BadArgs), non un
+    /// arrotondamento.
+    fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError>;
+
+    /// Dimentica ciò che era stato deciso: la chiave **ricade** al livello
+    /// sotto, che è il default solo se non c'era niente in mezzo.
+    ///
+    /// È una capacità sua e non `set_setting(default)` perché sono due cose
+    /// diverse: scrivere il default *decide* che vale il default (e resta scritto
+    /// quando il default cambia), azzerare *smette di decidere*. È la differenza
+    /// che un «ripristina» deve fare, ed è il §11.1 per intero — l'import,
+    /// l'export e il reset sono comandi che stanno in piedi su questa riga.
+    fn reset_setting(&mut self, key: &str) -> Result<(), PluginError>;
+}
+
 /// Ciò che **l'host sa e il provider no**: che ore sono, e cosa sta guardando
 /// l'utente.
 ///
@@ -728,12 +793,12 @@ pub trait HostCommands: Send + Sync {
 ///
 /// Non si implementa: c'è una impl generica per chiunque abbia le quattro
 /// famiglie di lettura.
-pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv {}
+pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead {}
 
-impl<T: VaultRead + DataRead + HostQuery + HostEnv + ?Sized> ReadApi for T {}
+impl<T: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ?Sized> ReadApi for T {}
 
 /// Le capacità che il kernel concede a un provider/plugin: la **somma** delle
-/// dieci famiglie.
+/// dodici famiglie.
 ///
 /// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
 /// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
@@ -743,7 +808,7 @@ impl<T: VaultRead + DataRead + HostQuery + HostEnv + ?Sized> ReadApi for T {}
 /// freeze un metodo **aggiunto** a una famiglia è una minor, uno **tolto** è una
 /// major.
 ///
-/// Non si implementa e non si dichiara: chi ha le dieci famiglie ce l'ha, per
+/// Non si implementa e non si dichiara: chi ha le dodici famiglie ce l'ha, per
 /// la impl generica qui sotto. Chi lo **riceve** continua a scrivere
 /// `&mut dyn HostApi` come prima — è il tipo di chi può fare tutto, e a quello
 /// non è cambiato niente.
@@ -760,7 +825,14 @@ impl<T: VaultRead + DataRead + HostQuery + HostEnv + ?Sized> ReadApi for T {}
 /// **lettura** (`render_view`) invece gira sotto prestito condiviso e vede il
 /// mondo intero, indici compresi.
 pub trait HostApi:
-    ReadApi + VaultWrite + VaultStructure + DataWrite + HostEvents + HostCommands + HostServices
+    ReadApi
+    + VaultWrite
+    + VaultStructure
+    + DataWrite
+    + SettingsWrite
+    + HostEvents
+    + HostCommands
+    + HostServices
 {
 }
 
@@ -769,6 +841,7 @@ impl<T> HostApi for T where
         + VaultWrite
         + VaultStructure
         + DataWrite
+        + SettingsWrite
         + HostEvents
         + HostCommands
         + HostServices
@@ -1621,6 +1694,21 @@ pub enum IndexQuery {
     /// troncamento sarebbe una perdita definitiva, cioè un centro attività che
     /// mostra per sempre un lavoro finito.
     Jobs,
+    /// **Com'è configurato questo vault?** (§11.1)
+    ///
+    /// Torna le impostazioni *risolte*: lo schema che qualcuno ha dichiarato, il
+    /// valore che vale adesso e da quale livello viene. È la terza variante che
+    /// non chiede del contenuto ma del vault stesso, e passa da qui per la
+    /// ragione delle altre due — un elenco è **dati**, e i dati hanno un canale
+    /// solo (decisione 0013). Un `settings_list` sull'`HostApi` sarebbe stato il
+    /// primo caso in cui la shell e un plugin chiedono la stessa cosa a due
+    /// porte diverse.
+    ///
+    /// `plugin` assente = tutte, in ordine di chiave. Con un id, solo quelle
+    /// dichiarate da lui: è ciò che serve al pannello di **un** plugin, e ciò
+    /// che permette a chi disegna di non filtrare per prefisso — la chiave di
+    /// una feature del core non ha un prefisso da confrontare.
+    Settings { plugin: Option<String> },
 }
 
 impl IndexQuery {
@@ -1636,7 +1724,8 @@ impl IndexQuery {
             IndexQuery::Outline { .. }
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
-            | IndexQuery::Jobs => None,
+            | IndexQuery::Jobs
+            | IndexQuery::Settings { .. } => None,
         }
     }
 
@@ -1654,7 +1743,8 @@ impl IndexQuery {
             | IndexQuery::VaultHealth { .. }
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
-            | IndexQuery::Jobs => None,
+            | IndexQuery::Jobs
+            | IndexQuery::Settings { .. } => None,
         }
     }
 
@@ -1707,6 +1797,7 @@ impl IndexQuery {
             IndexQuery::Custom { ns, .. } => QueryKind::Custom(ns.clone()),
             IndexQuery::VaultStatus => QueryKind::VaultStatus,
             IndexQuery::Jobs => QueryKind::Jobs,
+            IndexQuery::Settings { .. } => QueryKind::Settings,
         }
     }
 }
@@ -1738,6 +1829,12 @@ pub enum QueryKind {
     /// thread — che pure sa quali sono partiti — non sa niente di quelli che
     /// devono ancora entrargli in mano.
     Jobs,
+    /// Chi risponde a «com'è configurato questo vault?» (§11.1). Il
+    /// proprietario è ancora il kernel, e stavolta per un motivo che si vede a
+    /// occhio: lo schema lo tiene il registro dei plugin, il valore lo tiene lo
+    /// store di configurazione, e sono due cose che stanno nello stesso posto
+    /// solo lì.
+    Settings,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -1904,6 +2001,14 @@ pub enum IndexResult {
     /// vault. Cresce con quanti job ci sono insieme, che è un numero piccolo per
     /// costruzione — i thread che li eseguono sono due.
     Jobs(Vec<JobStatus>),
+    /// Le impostazioni risolte (risposta a [`IndexQuery::Settings`]), in ordine
+    /// di chiave.
+    ///
+    /// Senza finestra come le due sopra: un'impostazione la dichiara qualcuno
+    /// che l'ha scritta a mano, quindi il loro numero cresce con i plugin
+    /// montati e non col vault. Il giorno che un plugin ne dichiarasse mille,
+    /// il problema non sarebbe la finestra.
+    Settings(Vec<SettingEntry>),
 }
 
 impl IndexResult {
@@ -1936,6 +2041,7 @@ impl IndexResult {
             IndexResult::Custom(_) => "custom",
             IndexResult::VaultStatus(_) => "vault-status",
             IndexResult::Jobs(_) => "jobs",
+            IndexResult::Settings(_) => "settings",
         }
     }
 }
@@ -2207,6 +2313,12 @@ impl PluginPermissions {
             crate::options::permission::WRITE_VAULT,
             crate::options::permission::RUN_COMMAND,
             crate::options::permission::CALL_SERVICE,
+            // Le impostazioni (§11.1): c'è perché ha un cliente vero — i comandi
+            // `settings.*` di `CoreCommands` — e non per completezza. Concederlo
+            // qui non apre niente di per sé: il secondo cancello è **la
+            // chiave**, e una chiave che non si è dichiarata scrivibile da un
+            // programma resta chiusa anche a chi ha questo permesso.
+            crate::options::permission::WRITE_SETTINGS,
         ])
     }
 }
@@ -2252,6 +2364,19 @@ pub struct PluginManifest {
     /// è uno stato che nessuno prova e che ogni feature deve poi gestire.
     #[serde(default)]
     pub requires: Vec<String>,
+    /// Le **impostazioni che dichiara** (§11.1): chiave, specie, default,
+    /// etichetta, gruppo.
+    ///
+    /// Sta qui e non in un `SettingsProvider` da registrare per la stessa
+    /// ragione di `provides`, un passo più in là: la dichiarazione viene prima
+    /// di [`Plugin::activate`], e il primo che legge un'impostazione è proprio
+    /// un `activate` che deve sapere se la sua feature è accesa. Uno schema
+    /// registrato dopo sarebbe uno schema assente nel momento in cui serve.
+    ///
+    /// Ogni chiave vale la regola del §7.4 come i nomi dei servizi: il core
+    /// nomina nudo (`versioning.enabled`), un plugin dentro il proprio id.
+    #[serde(default)]
+    pub settings: Vec<SettingSpec>,
 }
 
 impl PluginManifest {
@@ -2271,7 +2396,14 @@ impl PluginManifest {
             permissions: PluginPermissions::default(),
             provides: Vec::new(),
             requires: Vec::new(),
+            settings: Vec::new(),
         }
+    }
+
+    /// Le impostazioni che questo plugin dichiara (§11.1).
+    pub fn configuring(mut self, settings: Vec<SettingSpec>) -> Self {
+        self.settings = settings;
+        self
     }
 
     /// I servizi che questo plugin offre (§7.5).

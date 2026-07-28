@@ -6,9 +6,11 @@ use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::format::DocumentFormat;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::session::ViewContext;
+use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexQuery,
-    IndexResult, JobId, JobSpec, Page, Paged, TrashEntry, VaultRead, VaultStructure, VaultWrite,
+    IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TrashEntry, VaultRead,
+    VaultStructure, VaultWrite,
 };
 use fubmd_abi::{Event, PluginError};
 
@@ -44,6 +46,22 @@ impl KernelHost<'_> {
             return Err(PluginError::BadArgs("nome del blob vuoto".into()));
         }
         self.ws.plugin_data_path(self.plugin, rel)
+    }
+
+    /// Il secondo cancello della scrittura di un'impostazione (§11.1): il primo
+    /// è il permesso e lo applica il [`Guard`](super::Guard), questo è la
+    /// chiave e lo applica qui l'unico che ha lo schema davanti.
+    fn program_writable(&self, key: &str) -> Result<(), PluginError> {
+        match self.ws.setting_is_program_writable(key) {
+            Some(true) => Ok(()),
+            Some(false) => Err(PluginError::PermissionDenied(format!(
+                "l'impostazione `{key}` non si è dichiarata scrivibile da un \
+                 programma: la cambia chi la sta guardando"
+            ))),
+            None => Err(PluginError::BadArgs(format!(
+                "nessuno ha dichiarato l'impostazione `{key}`"
+            ))),
+        }
     }
 }
 
@@ -186,6 +204,37 @@ impl DataWrite for KernelHost<'_> {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
         }
+    }
+}
+
+impl SettingsRead for KernelHost<'_> {
+    fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
+        self.ws.setting(key)
+    }
+}
+
+impl SettingsWrite for KernelHost<'_> {
+    /// Scrive, **se la chiave si è dichiarata scrivibile da un programma**.
+    ///
+    /// Il cancello sta qui e non su [`Workspace::set_setting`], ed è la riga che
+    /// separa le due autorità: da questo host passano i *programmi* — un
+    /// comando, un plugin, una macro — mentre la persona davanti allo schermo
+    /// passa dalla shell, che scrive sul workspace. È la stessa distinzione
+    /// dell'origine (decisione 0012), applicata alla configurazione: un
+    /// componente che potesse allargarsi i permessi da sé non ha permessi, e
+    /// «da sé» vuol dire proprio *senza che nessuno abbia cliccato*.
+    ///
+    /// Il rifiuto nomina la chiave e dice cosa manca: chi scrive un plugin deve
+    /// capire in un colpo che la chiave non è sua da toccare, non che ha
+    /// sbagliato permesso.
+    fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError> {
+        self.program_writable(key)?;
+        self.ws.set_setting(key, value)
+    }
+
+    fn reset_setting(&mut self, key: &str) -> Result<(), PluginError> {
+        self.program_writable(key)?;
+        self.ws.reset_setting(key)
     }
 }
 

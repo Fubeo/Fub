@@ -49,6 +49,7 @@ use fubmd_abi::command::{
 use fubmd_abi::edit::{EditRequest, TextEdit};
 use fubmd_abi::error::PluginError;
 use fubmd_abi::model::{Block, DocId, DocumentModel, Span, TaskMarker};
+use fubmd_abi::settings::{SettingEntry, SettingKind, SettingSource, SettingValue};
 use fubmd_abi::traits::{BacklinkRef, CommandProvider, HostApi, IndexQuery, IndexResult};
 
 /// Id del provider: lo spazio dati e la registrazione, come per le view.
@@ -74,6 +75,17 @@ pub const TRASH_EMPTY: &str = "trash.empty";
 pub const VAULT_ARCHIVE: &str = "vault.archive";
 /// Spunta (o de-spunta) un task.
 pub const NOTE_TASK_TOGGLE: &str = "note.task.toggle";
+/// Cambia un'impostazione (§11.1).
+pub const SETTINGS_SET: &str = "settings.set";
+/// Riporta un'impostazione a ciò che valeva prima che qualcuno decidesse.
+pub const SETTINGS_RESET: &str = "settings.reset";
+/// Tira fuori la configurazione decisa, in JSON.
+pub const SETTINGS_EXPORT: &str = "settings.export";
+/// Rimette dentro una configurazione esportata.
+pub const SETTINGS_IMPORT: &str = "settings.import";
+
+/// Il `ns` con cui l'esito di `settings.export` arriva alla shell.
+pub const SETTINGS_NS: &str = "settings.export";
 
 /// Il nome di una nota senza nome, e l'estensione che le si dà.
 ///
@@ -261,6 +273,78 @@ impl CoreCommands {
                     ),
                 )
                 .with_scope(CommandScope::writing(CommandReach::Document)),
+            // --- le impostazioni (§11.1) --------------------------------
+            //
+            // Sono comandi e non codice dell'app per la ragione della
+            // decisione 0009 letta al contrario: import, export e reset sono
+            // esattamente le tre azioni che ogni app finisce per cablare in un
+            // pulsante, e cablarle vorrebbe dire che una CLI (27.1), una macro
+            // (16.2) e un centro di comando (22.4) non le hanno.
+            //
+            // Il **raggio** è `CommandReach::Settings`, che era vocabolario
+            // senza clienti dalla decisione 0010: questi sono i suoi primi
+            // quattro, e chi invoca sa da lì che sta per toccare la
+            // configurazione e non delle note.
+            CommandSpec::new(SETTINGS_SET, "Cambia un'impostazione")
+                .describing(
+                    "Scrive il valore di una chiave dichiarata, nel livello che \
+                     la chiave dichiara (il vault o la macchina). Solo le chiavi \
+                     che si sono dichiarate scrivibili da un programma: le altre \
+                     le cambia chi le sta guardando, dal pannello.",
+                )
+                .with_param(
+                    ParamSpec::new("key", "Chiave", ParamKind::Text)
+                        .describing("La chiave, es. `versioning.enabled`.")
+                        .required(),
+                )
+                .with_param(
+                    ParamSpec::new("value", "Valore", ParamKind::Text)
+                        .describing(
+                            "Il valore, letto secondo la specie dichiarata dalla \
+                             chiave: `true`/`false` per un interruttore, un numero, \
+                             il testo, o valori separati da virgola per un elenco.",
+                        )
+                        .required(),
+                )
+                .with_scope(CommandScope::writing(CommandReach::Settings)),
+            CommandSpec::new(SETTINGS_RESET, "Azzera un'impostazione")
+                .describing(
+                    "Dimentica ciò che era stato deciso per una chiave: torna a \
+                     valere il livello sotto, che è il default solo se non c'era \
+                     niente in mezzo.",
+                )
+                .with_param(
+                    ParamSpec::new("key", "Chiave", ParamKind::Text)
+                        .describing("La chiave da azzerare.")
+                        .required(),
+                )
+                .with_scope(CommandScope::writing(CommandReach::Settings)),
+            CommandSpec::new(SETTINGS_EXPORT, "Esporta le impostazioni")
+                .describing(
+                    "Restituisce in JSON le impostazioni **decise** — non i \
+                     default, che non sono una scelta di nessuno. Non scrive un \
+                     file: dove salvarlo lo sa chi ha il dialogo di sistema, e un \
+                     comando del registro non ha (e non deve avere) accesso al \
+                     filesystem fuori dal vault.",
+                )
+                .with_scope(CommandScope {
+                    writes: false,
+                    reach: CommandReach::Settings,
+                    reversible: true,
+                }),
+            CommandSpec::new(SETTINGS_IMPORT, "Importa le impostazioni")
+                .describing(
+                    "Applica una configurazione esportata. Ciò che non si può \
+                     applicare — una chiave che nessuno dichiara, un valore fuori \
+                     specie, una chiave non scrivibile da un programma — viene \
+                     **contato e detto**, non applicato a metà in silenzio.",
+                )
+                .with_param(
+                    ParamSpec::new("json", "Configurazione", ParamKind::Text)
+                        .describing("L'oggetto JSON `{\"chiave\": valore}`.")
+                        .required(),
+                )
+                .with_scope(CommandScope::writing(CommandReach::Settings)),
         ]
     }
 }
@@ -298,6 +382,10 @@ impl CommandProvider for CoreCommands {
             TRASH_EMPTY => trash_empty(mode, host),
             VAULT_ARCHIVE => vault_archive(args, mode, host),
             NOTE_TASK_TOGGLE => note_task_toggle(args, mode, host),
+            SETTINGS_SET => settings_set(args, mode, host),
+            SETTINGS_RESET => settings_reset(args, mode, host),
+            SETTINGS_EXPORT => settings_export(host),
+            SETTINGS_IMPORT => settings_import(args, mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string())),
         }
     }
@@ -942,6 +1030,278 @@ fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
     !parte_di_parola(prima) && !parte_di_parola(dopo)
 }
 
+// ---------------------------------------------------------------------------
+// settings.* (§11.1)
+// ---------------------------------------------------------------------------
+
+/// Le impostazioni **dichiarate**, chieste al canale dati come le chiederebbe
+/// la shell.
+///
+/// Passa da `query_index` e non da una capacità nuova perché è la regola della
+/// decisione 0013: un elenco è *dati*, e i dati hanno un canale solo. Ne segue
+/// una proprietà che serve qui e non altrove — un comando che elenca le
+/// impostazioni vede **le stesse righe** che vede il pannello, comprese quelle
+/// dei plugin di terzi, senza conoscerne nessuna.
+fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
+    match host.query_index(IndexQuery::Settings { plugin: None })? {
+        IndexResult::Settings(entries) => Ok(entries),
+        other => Err(PluginError::Internal(format!(
+            "risposta fuori tema: attese delle impostazioni, arrivato {}",
+            other.kind_name()
+        ))),
+    }
+}
+
+/// Legge un valore **dalla stringa**, secondo la specie che la chiave dichiara.
+///
+/// Un comando si compila da una riga di comando, da un JSON di automazione o da
+/// un modello (22.4): il suo `value` è testo, e a dargli un tipo è lo schema —
+/// che è l'unico posto in cui quel tipo è scritto. È la stessa mossa dei
+/// `ParamSpec`, un livello più in là: qui la specie non la dichiara il comando,
+/// la dichiara la chiave che si sta toccando.
+fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginError> {
+    let male = |atteso: &str| PluginError::BadArgs(format!("`{raw}` non è {atteso}"));
+    match kind {
+        SettingKind::Toggle { .. } => match raw.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "on" | "sì" | "si" => Ok(SettingValue::Toggle(true)),
+            "false" | "0" | "off" | "no" => Ok(SettingValue::Toggle(false)),
+            _ => Err(male("un interruttore (`true` o `false`)")),
+        },
+        SettingKind::Number { .. } => raw
+            .trim()
+            .parse::<f64>()
+            .map(SettingValue::Number)
+            .map_err(|_| male("un numero")),
+        SettingKind::Text { .. } | SettingKind::Choice { .. } => {
+            Ok(SettingValue::Text(raw.to_string()))
+        }
+        // La virgola e non il JSON: chi scrive `a, b` in un campo di testo sta
+        // scrivendo due voci, e chiedergli le virgolette vorrebbe dire fargli
+        // scrivere JSON dentro una stringa di un JSON.
+        SettingKind::List { .. } => Ok(SettingValue::List(
+            raw.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+        )),
+    }
+}
+
+/// La riga di una chiave, o l'errore che dice che non esiste.
+fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> {
+    declared(host)?
+        .into_iter()
+        .find(|e| e.spec.key == key)
+        .ok_or_else(|| {
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+        })
+}
+
+/// Il cancello della chiave, applicato **prima di sapere in che modo si sta
+/// girando**.
+///
+/// Un comando è un programma, quindi passa dai due cancelli come chiunque
+/// altro; ciò che questa funzione aggiunge è che il rifiuto arrivi **anche in
+/// simulazione**. Il gate vero resta quello dell'host
+/// ([`HostApi::set_setting`]), che è dove il non-scrivere è garantito e non
+/// promesso: qui si guadagna solo che il piano dica ciò che succederebbe
+/// davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
+fn nega_se_non_scrivibile(entry: &SettingEntry) -> Result<(), PluginError> {
+    if entry.spec.program_writable {
+        return Ok(());
+    }
+    Err(PluginError::PermissionDenied(format!(
+        "`{}` non è scrivibile da un programma: la cambia l'utente",
+        entry.spec.key
+    )))
+}
+
+fn settings_set(
+    args: Args,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let key = args.text("key").expect("parametro obbligatorio");
+    let raw = args.text("value").expect("parametro obbligatorio");
+    let entry = entry_of(host, key)?;
+    nega_se_non_scrivibile(&entry)?;
+    let value = parse_value(&entry.spec.kind, raw)?;
+
+    // La simulazione dice cosa cambierebbe **e da cosa**: un piano senza
+    // documenti sarebbe vuoto (un'impostazione non è una nota), quindi ciò che
+    // si mostra è il messaggio. È il limite dichiarato di `CommandPlan` su
+    // questo raggio, non una dimenticanza.
+    if mode.is_dry_run() {
+        return Ok(CommandOutcome::notify(format!(
+            "`{key}` passerebbe da {} a {}",
+            mostra(&entry.value),
+            mostra(&value)
+        ))
+        .with_effect(CommandEffect::Plan(CommandPlan {
+            summary: format!("cambia `{key}`"),
+            ..CommandPlan::default()
+        })));
+    }
+    host.set_setting(key, value.clone())?;
+    Ok(CommandOutcome::notify(format!(
+        "`{key}` adesso vale {}",
+        mostra(&value)
+    )))
+}
+
+fn settings_reset(
+    args: Args,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let key = args.text("key").expect("parametro obbligatorio");
+    let entry = entry_of(host, key)?;
+    nega_se_non_scrivibile(&entry)?;
+    if mode.is_dry_run() {
+        return Ok(CommandOutcome::notify(format!(
+            "`{key}` smetterebbe di valere {} per decisione di qualcuno",
+            mostra(&entry.value)
+        ))
+        .with_effect(CommandEffect::Plan(CommandPlan {
+            summary: format!("azzera `{key}`"),
+            ..CommandPlan::default()
+        })));
+    }
+    host.reset_setting(key)?;
+    Ok(CommandOutcome::notify(format!(
+        "`{key}` è tornata al valore di prima"
+    )))
+}
+
+/// Esporta ciò che **qualcuno ha deciso**, e non i default.
+///
+/// I default non sono una configurazione: sono ciò che vale quando non c'è una
+/// configurazione, e portarli dentro un export vorrebbe dire che reimportarlo
+/// **decide** tutto ciò che nessuno aveva deciso — cioè congela per sempre i
+/// default di oggi, compresi quelli che cambieranno.
+fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
+    let mut decise = serde_json::Map::new();
+    for entry in declared(host)? {
+        if entry.source != SettingSource::Default {
+            decise.insert(
+                entry.spec.key.clone(),
+                serde_json::to_value(&entry.value)
+                    .map_err(|e| PluginError::Internal(e.to_string()))?,
+            );
+        }
+    }
+    let quante = decise.len();
+    Ok(CommandOutcome::notify(format!(
+        "{} da salvare",
+        plurale(quante, "impostazione", "impostazioni")
+    ))
+    .with_effect(CommandEffect::Custom {
+        ns: SETTINGS_NS.to_string(),
+        payload: serde_json::Value::Object(decise),
+    }))
+}
+
+/// Rimette dentro una configurazione esportata, **una chiave alla volta**.
+///
+/// Non è tutto-o-niente, ed è una scelta: un file che nomina una chiave di un
+/// plugin che non c'è più non deve impedire di applicare le altre venti. Ciò
+/// che non entra viene **contato e detto** — che è la differenza fra un import
+/// parziale e un import parziale in silenzio.
+fn settings_import(
+    args: Args,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let raw = args.text("json").expect("parametro obbligatorio");
+    let parsed: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|e| PluginError::BadArgs(format!("non è un JSON valido: {e}")))?;
+    let object = parsed
+        .as_object()
+        .ok_or_else(|| PluginError::BadArgs("atteso un oggetto `{\"chiave\": valore}`".into()))?;
+
+    let dichiarate: std::collections::BTreeMap<String, SettingEntry> = declared(host)?
+        .into_iter()
+        .map(|e| (e.spec.key.clone(), e))
+        .collect();
+
+    let (mut applicate, mut saltate) = (0usize, Vec::new());
+    for (key, raw_value) in object {
+        let Some(entry) = dichiarate.get(key) else {
+            saltate.push(format!("`{key}` (nessuno la dichiara)"));
+            continue;
+        };
+        let value: SettingValue = match serde_json::from_value(raw_value.clone()) {
+            Ok(value) => value,
+            Err(_) => {
+                saltate.push(format!("`{key}` (valore illeggibile)"));
+                continue;
+            }
+        };
+        if let Some(why) = entry.spec.kind.rejects(&value) {
+            saltate.push(format!("`{key}` ({why})"));
+            continue;
+        }
+        // Il cancello della chiave si applica **anche in simulazione**, o il
+        // piano direbbe una cosa e l'applicazione ne farebbe un'altra: senza
+        // questa riga un dry-run su un file che nomina `privacy.telemetry`
+        // risponde «2 applicate», e l'apply subito dopo «1 applicata, 1
+        // saltata». Un piano che non è ciò che succederebbe non è un piano
+        // (decisione 0010).
+        if let Err(e) = nega_se_non_scrivibile(entry) {
+            saltate.push(format!("`{key}` ({e})"));
+            continue;
+        }
+        if mode.is_dry_run() {
+            applicate += 1;
+            continue;
+        }
+        match host.set_setting(key, value) {
+            Ok(()) => applicate += 1,
+            // Il rifiuto più importante è questo, e va **detto**: un file di
+            // impostazioni che passa di mano non sposta le chiavi che un
+            // programma non può scrivere.
+            Err(e) => saltate.push(format!("`{key}` ({e})")),
+        }
+    }
+
+    let mut messaggio = plurale(
+        applicate,
+        "impostazione applicata",
+        "impostazioni applicate",
+    );
+    if !saltate.is_empty() {
+        messaggio.push_str(&format!(
+            ", {} saltate: {}",
+            saltate.len(),
+            saltate.join(", ")
+        ));
+    }
+    let outcome = CommandOutcome::notify(messaggio);
+    Ok(if mode.is_dry_run() {
+        outcome.with_effect(CommandEffect::Plan(CommandPlan {
+            summary: format!(
+                "applica {}",
+                plurale(applicate, "impostazione", "impostazioni")
+            ),
+            ..CommandPlan::default()
+        }))
+    } else {
+        outcome
+    })
+}
+
+/// Un valore come lo legge un umano dentro un messaggio.
+fn mostra(value: &SettingValue) -> String {
+    match value {
+        SettingValue::Toggle(true) => "acceso".into(),
+        SettingValue::Toggle(false) => "spento".into(),
+        SettingValue::Number(n) => n.to_string(),
+        SettingValue::Text(t) => format!("`{t}`"),
+        SettingValue::List(l) if l.is_empty() => "niente".into(),
+        SettingValue::List(l) => l.join(", "),
+    }
+}
+
 fn plurale(n: usize, uno: &str, molti: &str) -> String {
     format!("{n} {}", if n == 1 { uno } else { molti })
 }
@@ -952,6 +1312,7 @@ mod tests {
     use crate::testing::MemoryHost;
     use fubmd_abi::model::{DocId, ListItem};
     use fubmd_abi::session::{Selection, ViewContext};
+    use fubmd_abi::settings::SettingSpec;
     use fubmd_abi::traits::VaultRead;
     use serde_json::json;
 
@@ -1330,6 +1691,92 @@ mod tests {
             host.read_document(&DocId::new("nota.md")).unwrap(),
             TASK_SOURCE
         );
+    }
+
+    /// La specie di una chiave la dichiara lo **schema**, e il comando la legge
+    /// da lì: è ciò che permette a `value` di essere testo — la sola forma che
+    /// un chiamante non interattivo (una CLI, un'automazione, un modello) sa
+    /// compilare.
+    #[test]
+    fn a_setting_value_is_read_according_to_the_kind_the_key_declares() {
+        let numero = SettingKind::Number {
+            default: 14.0,
+            min: Some(8.0),
+            max: Some(72.0),
+        };
+        assert_eq!(
+            parse_value(&numero, " 18 ").unwrap(),
+            SettingValue::Number(18.0)
+        );
+        assert!(parse_value(&numero, "grande").is_err());
+
+        let interruttore = SettingKind::Toggle { default: true };
+        assert_eq!(
+            parse_value(&interruttore, "off").unwrap(),
+            SettingValue::Toggle(false)
+        );
+        assert!(
+            parse_value(&interruttore, "forse").is_err(),
+            "un interruttore ha due stati, e «forse» non è uno di quelli"
+        );
+
+        // Un elenco si scrive con le virgole: chiedere il JSON vorrebbe dire
+        // far scrivere virgolette dentro una stringa di un JSON.
+        let elenco = SettingKind::List {
+            default: Vec::new(),
+        };
+        assert_eq!(
+            parse_value(&elenco, "a, b ,, c").unwrap(),
+            SettingValue::List(vec!["a".into(), "b".into(), "c".into()])
+        );
+    }
+
+    /// Il comando visto **dal contratto**: il doppio in memoria applica il
+    /// cancello della chiave come lo applica il kernel, quindi ciò che qui
+    /// passa è ciò che passa nell'app.
+    #[test]
+    fn the_command_refuses_a_key_that_is_not_program_writable_and_says_which() {
+        let mut host = MemoryHost::new()
+            .con_valore(
+                SettingSpec::toggle("versioning.enabled", "Versioning", true).program_writable(),
+                SettingValue::Toggle(true),
+            )
+            .con_impostazione(SettingSpec::toggle(
+                "privacy.telemetry",
+                "Telemetria",
+                false,
+            ));
+
+        let esito = invoke(
+            &mut host,
+            SETTINGS_SET,
+            json!({ "key": "versioning.enabled", "value": "false" }),
+            InvokeMode::Apply,
+        );
+        assert!(esito.is_ok(), "{esito:?}");
+
+        let errore = invoke(
+            &mut host,
+            SETTINGS_SET,
+            json!({ "key": "privacy.telemetry", "value": "true" }),
+            InvokeMode::Apply,
+        )
+        .expect_err("non si è dichiarata scrivibile da un programma");
+        assert!(
+            matches!(errore, PluginError::PermissionDenied(_)),
+            "{errore:?}"
+        );
+
+        // E una chiave che nessuno dichiara è un'altra cosa ancora: un errore
+        // di chi la chiede, non un permesso che manca.
+        let errore = invoke(
+            &mut host,
+            SETTINGS_SET,
+            json!({ "key": "boh", "value": "1" }),
+            InvokeMode::Apply,
+        )
+        .expect_err("nessuno la dichiara");
+        assert!(matches!(errore, PluginError::BadArgs(_)), "{errore:?}");
     }
 
     #[test]

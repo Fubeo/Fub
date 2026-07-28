@@ -320,7 +320,12 @@ export type KernelEvent =
   // A che punto è un lavoro lungo (§10.3). Il canale più fitto del contratto: il
   // ponte ne tiene l'ultimo per job dentro una raffica, e ciò che si perde si
   // riscopre con la query `jobs`.
-  | { type: "job_progress"; id: string; progress: JobProgress };
+  | { type: "job_progress"; id: string; progress: JobProgress }
+  // Un'impostazione è cambiata (§11.1). NON porta il valore nuovo: chi reagisce
+  // lo rilegge, e una copia dentro l'evento invecchierebbe — due scritture
+  // ravvicinate consegnate in ordine inverso lascerebbero chi ascolta convinto
+  // di un valore che non è più quello.
+  | { type: "setting_changed"; key: string; scope: SettingScope };
 
 // DOVE: il soggetto di un abbonamento (rispecchia fubmd_abi::event::Subject,
 // §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un
@@ -754,7 +759,12 @@ export type IndexQuery =
   // `job_started` e `job_progress` sono recuperabili, quindi i freni del canale
   // possono buttarli, e senza questa domanda quel troncamento sarebbe una
   // perdita definitiva.
-  | { kind: "jobs" };
+  | { kind: "jobs" }
+  // Com'è configurato questo vault? (§11.1) La terza che chiede del vault e non
+  // del suo contenuto. Torna le impostazioni RISOLTE — schema, valore che vale
+  // adesso, livello da cui viene — perché un elenco è dati, e i dati hanno un
+  // canale solo. `plugin` assente = tutte.
+  | { kind: "settings"; plugin?: string | null };
 
 // La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -769,7 +779,86 @@ export type IndexResult =
   | { kind: "vault_health"; value: Paged<HealthIssue> }
   | { kind: "custom"; value: unknown }
   | { kind: "vault_status"; value: VaultStatus }
-  | { kind: "jobs"; value: JobStatus[] };
+  | { kind: "jobs"; value: JobStatus[] }
+  | { kind: "settings"; value: SettingEntry[] };
+
+// --- le impostazioni (§11.1) ------------------------------------------------
+//
+// Rispecchiano `fubmd_abi::settings`. Il pezzo che si vede da qui e da nessun
+// altro lato: **il form lo genera questa shell**, dallo schema. Un provider
+// dichiara cosa si può configurare e legge i valori dall'`HostApi`; disegnare i
+// campi è della shell, e per questo questi tipi vivono nel contratto e non in un
+// albero `UiNode` — un albero sarebbe la UI di **un** provider, uno schema è ciò
+// da cui ogni pannello (questo, quello di un plugin, una CLI) sa costruirla.
+
+// DOVE un'impostazione ha il diritto di stare. Le chiavi `machine` scritte in un
+// `.fubmd/settings.json` si IGNORANO: un vault arriva da fuori, e non decide
+// della macchina di chi lo apre.
+export type SettingScope = "vault" | "machine";
+
+// Da dove viene il valore che si sta leggendo. `default` = nessuno ha deciso, ed
+// è ciò che permette al pannello di dire «questa la stai sovrascrivendo» e al
+// pulsante «azzera» di comparire solo dove serve.
+export type SettingSource = "default" | "machine" | "vault";
+
+// Di che specie è un'impostazione, col suo default dentro.
+export type SettingKind =
+  | { kind: "toggle"; default: boolean }
+  | { kind: "number"; default: number; min: number | null; max: number | null }
+  | { kind: "text"; default: string }
+  | { kind: "choice"; default: string; options: UiOption[] }
+  | { kind: "list"; default: string[] };
+
+// Il valore, NUDO sul confine JSON: `true`, `12`, `"scuro"`, `["a"]`. La specie
+// la dichiara lo schema, quindi un'etichetta non aggiungerebbe niente e
+// renderebbe illeggibile un file che si apre con un editor di testo.
+export type SettingValue = boolean | number | string | string[];
+
+export interface SettingSpec {
+  key: string;
+  label: string;
+  description: string;
+  // Sotto quale intestazione raggrupparla. Vuoto = le sciolte in fondo.
+  group: string;
+  scope: SettingScope;
+  kind: SettingKind;
+  // Un PROGRAMMA la può scrivere? Non riguarda questa shell — di qui passa
+  // l'utente, che le può cambiare tutte — riguarda `settings.set`, i plugin e le
+  // macro: il residuo della decisione 0010, chiuso per chiave.
+  program_writable: boolean;
+}
+
+// Una riga di configurazione risolta: è ciò che il pannello disegna.
+export interface SettingEntry {
+  spec: SettingSpec;
+  value: SettingValue;
+  source: SettingSource;
+}
+
+// Un componente che questo host sa montare, e se è acceso (rispecchia
+// `fubmd_host::BundleInfo`, §11.1).
+//
+// Non è `PluginInfo`: quello elenca chi è DICHIARATO NEL KERNEL, e un componente
+// spento non lo è affatto. La differenza è il punto — «spento» e «non c'è» sono
+// due stati diversi, e senza questo elenco il secondo si mangerebbe il primo.
+export interface BundleInfo {
+  id: string;
+  name: string;
+  mounted: boolean;
+}
+
+// Un vault che questa macchina conosce (rispecchia `fubmd_host::VaultEntry`,
+// §11.1): la memoria fra un avvio e l'altro, che è un'altra cosa da `OpenVaults`
+// — quello dice cosa è aperto ADESSO e muore col processo.
+export interface VaultEntry {
+  root: string;
+  // Vuoto = il nome della cartella, che chi disegna ricava da sé: memorizzarlo
+  // vorrebbe dire mostrare il nome vecchio dopo una rinomina della cartella.
+  name: string;
+  icon: string | null;
+  favorite: boolean;
+  last_opened: number;
+}
 
 // Che rapporto ha questo vault con il disco (rispecchia
 // fubmd_abi::traits::VaultStatus, §9.7). Tre domande diverse e non una: FubMD

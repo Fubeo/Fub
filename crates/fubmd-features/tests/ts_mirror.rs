@@ -31,6 +31,9 @@ use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Orig
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
+use fubmd_abi::settings::{
+    SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
+};
 use fubmd_abi::traits::{
     BacklinkRef, DocumentMatch, HealthCheck, IndexQuery, IndexResult, JobId, JobProgress,
     JobStatus, LinkDirection, NeighborRef, Page, Paged, PropertyEntry, PropertySelect, TagCount,
@@ -374,6 +377,10 @@ fn event_samples() -> Vec<Value> {
                 label: Some("esportando Diario/2026.md".into()),
             },
         },
+        Event::SettingChanged {
+            key: "versioning.enabled".into(),
+            scope: SettingScope::Vault,
+        },
     ];
     for e in &all {
         match e {
@@ -389,7 +396,8 @@ fn event_samples() -> Vec<Value> {
             | Event::VaultClosed { .. }
             | Event::BatchEnded { .. }
             | Event::JobStarted { .. }
-            | Event::JobProgress { .. } => {}
+            | Event::JobProgress { .. }
+            | Event::SettingChanged { .. } => {}
         }
     }
     all.iter().map(to_value).collect()
@@ -580,6 +588,10 @@ fn index_query_samples() -> Vec<Value> {
         },
         IndexQuery::VaultStatus,
         IndexQuery::Jobs,
+        IndexQuery::Settings { plugin: None },
+        IndexQuery::Settings {
+            plugin: Some("fubmd.versioning".into()),
+        },
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -594,7 +606,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::VaultHealth { .. }
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
-            | IndexQuery::Jobs => {}
+            | IndexQuery::Jobs
+            | IndexQuery::Settings { .. } => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -651,6 +664,37 @@ fn index_result_samples() -> Vec<Value> {
                 progress: None,
             },
         ]),
+        // Le impostazioni risolte: un interruttore col default, e una scelta
+        // decisa per questo vault. Le due righe insieme sono ciò che il pannello
+        // disegna — schema, valore, provenienza — e sono qui perché il valore
+        // sul confine JSON è **nudo** (`true`, `"scuro"`) e il mirror deve
+        // reggerlo senza etichetta.
+        IndexResult::Settings(vec![
+            SettingEntry {
+                spec: SettingSpec::toggle("versioning.enabled", "Versioning", true)
+                    .describing("Tiene uno storico delle modifiche.")
+                    .grouped("Vault")
+                    .program_writable(),
+                value: SettingValue::Toggle(true),
+                source: SettingSource::Default,
+            },
+            SettingEntry {
+                spec: SettingSpec::new(
+                    "appearance.theme",
+                    "Tema",
+                    SettingKind::Choice {
+                        default: "auto".into(),
+                        options: vec![
+                            UiOption::new("auto", "Automatico"),
+                            UiOption::new("scuro", "Scuro"),
+                        ],
+                    },
+                )
+                .per_machine(),
+                value: SettingValue::Text("scuro".into()),
+                source: SettingSource::Machine,
+            },
+        ]),
     ];
     for r in &all {
         match r {
@@ -663,10 +707,63 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::VaultHealth(_)
             | IndexResult::Custom(_)
             | IndexResult::VaultStatus(_)
-            | IndexResult::Jobs(_) => {}
+            | IndexResult::Jobs(_)
+            | IndexResult::Settings(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()
+}
+
+/// Un campione per **ogni specie** di impostazione (§11.1). L'esaustività la
+/// garantisce il `match` senza `_`: una specie nuova in Rust non compila finché
+/// non è qui, e da qui arriva al pannello — che il form lo genera la shell.
+fn setting_spec_samples() -> Vec<Value> {
+    let all = [
+        SettingKind::Toggle { default: true },
+        SettingKind::Number {
+            default: 14.0,
+            min: Some(8.0),
+            max: Some(72.0),
+        },
+        SettingKind::Text {
+            default: "Diario".into(),
+        },
+        SettingKind::Choice {
+            default: "auto".into(),
+            options: vec![
+                UiOption::new("auto", "Automatico"),
+                UiOption::new("scuro", "Scuro"),
+            ],
+        },
+        SettingKind::List {
+            default: vec!["fubmd.stats".into()],
+        },
+    ];
+    for k in &all {
+        match k {
+            SettingKind::Toggle { .. }
+            | SettingKind::Number { .. }
+            | SettingKind::Text { .. }
+            | SettingKind::Choice { .. }
+            | SettingKind::List { .. } => {}
+        }
+    }
+    all.into_iter()
+        .enumerate()
+        .map(|(i, kind)| {
+            let spec = SettingSpec::new(format!("prova.k{i}"), "Prova", kind)
+                .describing("Cosa fa, in prosa.")
+                .grouped("Prova");
+            // Una scrivibile da un programma e le altre no: è la riga della
+            // decisione 0010 chiusa per chiave, e il mirror deve vedere
+            // entrambe le forme.
+            to_value(if i == 0 {
+                spec.program_writable()
+            } else {
+                spec
+            })
+        })
+        .collect()
 }
 
 /// La fixture attesa, costruita dai tipi Rust.
@@ -680,6 +777,44 @@ fn expected() -> Value {
         "KernelEvent": event_samples(),
         "KernelNotice": notice_samples(),
         "Span": [to_value(Span::new(3, 7))],
+        "SettingSpec": setting_spec_samples(),
+        // Le tre provenienze, perché è da quelle che il pannello decide cosa
+        // dire («la stai sovrascrivendo per questo vault») e se mostrare
+        // «azzera»: con un campione solo non si vedrebbe nessuna delle due.
+        "SettingEntry": [
+            to_value(SettingEntry {
+                spec: SettingSpec::toggle("versioning.enabled", "Versioning", true)
+                    .describing("Tiene uno storico delle modifiche.")
+                    .grouped("Vault")
+                    .program_writable(),
+                value: SettingValue::Toggle(true),
+                source: SettingSource::Default,
+            }),
+            to_value(SettingEntry {
+                spec: SettingSpec::new(
+                    "appearance.theme",
+                    "Tema",
+                    SettingKind::Choice {
+                        default: "auto".into(),
+                        options: vec![UiOption::new("scuro", "Scuro")],
+                    },
+                )
+                .per_machine(),
+                value: SettingValue::Text("scuro".into()),
+                source: SettingSource::Machine,
+            }),
+            to_value(SettingEntry {
+                spec: SettingSpec::new(
+                    "plugins.disabled",
+                    "Componenti spenti",
+                    SettingKind::List {
+                        default: Vec::new(),
+                    },
+                ),
+                value: SettingValue::List(vec!["fubmd.stats".into()]),
+                source: SettingSource::Vault,
+            }),
+        ],
         // `hash` è un u64 pieno: sul confine JSON è una STRINGA (regola in
         // `fubmd_abi::ipc`) — il campione oltre 2^53 lo dimostra nella fixture.
         "VersionRef": [to_value(VersionRef { ts: 1, hash: u64::MAX, size: 3 })],

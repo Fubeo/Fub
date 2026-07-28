@@ -43,6 +43,7 @@ use fubmd_abi::PluginError;
 use crate::graph::{GraphSource, LinkGraph};
 use crate::health;
 use crate::registry::FormatRegistry;
+use crate::settings::SharedSettings;
 use crate::tag_counts::TagCounts;
 use crate::workspace::GraphUpdate;
 
@@ -128,6 +129,12 @@ pub(crate) struct CoreIndex {
     /// sopra: è una risposta del kernel, e le risposte del kernel sono un
     /// provider (decisione 0019).
     pub(crate) jobs: JobsState,
+    /// **Com'è configurato questo vault** (§11.1), e per la terza volta la
+    /// stessa ragione. È **condiviso** col workspace, come `registry`: lo
+    /// riempie chi dichiara un plugin, lo scrive chi tocca un interruttore, e
+    /// questo indice lo legge — una copia sarebbe una configurazione che
+    /// risponde a com'era al montaggio.
+    settings: SharedSettings,
 }
 
 /// Il fatto che il §9.7 rende interrogabile: se qualcuno vede le scritture
@@ -244,7 +251,7 @@ impl JobsState {
 }
 
 impl CoreIndex {
-    pub(crate) fn new(registry: Arc<FormatRegistry>) -> Self {
+    pub(crate) fn new(registry: Arc<FormatRegistry>, settings: SharedSettings) -> Self {
         CoreIndex {
             metas: BTreeMap::new(),
             tags: TagCounts::default(),
@@ -253,6 +260,7 @@ impl CoreIndex {
             registry,
             watch: WatchState::default(),
             jobs: JobsState::default(),
+            settings,
         }
     }
 
@@ -369,6 +377,10 @@ impl IndexProvider for CoreIndex {
             // l'unico che li conosce tutti — chi possiede i thread sa quali
             // sono partiti, non quali stanno per partire.
             QueryRoute::Query(QueryKind::Jobs),
+            // Com'è configurato (§11.1): ancora il kernel, e stavolta si vede a
+            // occhio — lo schema sta nel registro dei plugin, il valore nello
+            // store di configurazione, e nessun altro li ha tutti e due.
+            QueryRoute::Query(QueryKind::Settings),
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
@@ -509,6 +521,12 @@ impl IndexProvider for CoreIndex {
             ))),
             IndexQuery::VaultStatus => Ok(IndexResult::VaultStatus(self.watch.status())),
             IndexQuery::Jobs => Ok(IndexResult::Jobs(self.jobs.live())),
+            IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
+                self.settings
+                    .read()
+                    .expect("store di configurazione")
+                    .entries(plugin.as_deref()),
+            )),
         }
     }
 }

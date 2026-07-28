@@ -35,7 +35,9 @@ sessione sola: i vault aperti sono una mappa, ogni comando IPC accetta un
 `vault` opzionale, e il "corrente" è tornato a essere ciò che diceva di essere —
 una comodità della shell. Del §9.6 è rimasto fuori un punto solo, il **registro
 dei vault** (recenti, preferiti, icone), che è configurazione globale e si è
-spostato al [§11.1](11-impostazioni-e-i-tre-stati.md).
+spostato al ~~§11.1~~ — dove la
+[0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) lo ha chiuso,
+appoggiandolo al livello macchina che quel giorno non esisteva ancora.
 
 **E il rilevamento si può chiedere.** La ~~9.7~~ l'aveva aggiunta il settimo
 giro perché era la 9.5 sull'altro asse: là il watcher assente costava la
@@ -80,7 +82,10 @@ contro i panici c'è a tutte e otto le porte da cui si entra in un plugin — e 
 attorno alla chiamata del provider e a niente di più, perché il kernel ha
 invarianti da rimettere a posto e quel codice era già scritto per il ramo
 dell'errore — mentre la **disattivazione automatica no**, perché il meccanismo
-c'è ([0031](../decisions/0031-chi-possiede-i-bundle.md)) e mancano le due metà
-della frase: l'avviso (§20.2) e il modo di riaccendere (§11.1).
+c'è ([0031](../decisions/0031-chi-possiede-i-bundle.md)) e mancavano le due metà
+della frase: l'avviso (§20.2) e il modo di riaccendere. La seconda è arrivata con
+la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) — il registry tiene
+adesso anche i bundle **non** montati, e `plugins.disabled` dice fra un avvio e
+l'altro chi è spento — quindi ne resta una sola.
 
 Qui non resta niente.

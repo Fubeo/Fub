@@ -11,7 +11,7 @@
 use fubmd_abi::options::permission;
 use fubmd_abi::traits::PluginPermissions;
 use fubmd_abi::ui::UiNode;
-use fubmd_app_lib::{EmbedContent, OpenVaults, VaultInfo, WorkspaceMeta};
+use fubmd_app_lib::{BundleInfo, EmbedContent, OpenVaults, VaultEntry, VaultInfo, WorkspaceMeta};
 use fubmd_kernel::{
     PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
 };
@@ -98,6 +98,40 @@ fn expected() -> Value {
             roots: vec!["/vault".into(), "/altro".into()],
             current: Some("/vault".into()),
         })],
+        // I componenti che questo host sa montare (§11.1): il campione ne ha
+        // uno acceso e uno spento, perché con uno solo il record non direbbe
+        // ciò per cui esiste — che «spento» è uno stato, non un'assenza.
+        "BundleInfo": [
+            to_value(BundleInfo {
+                id: "fubmd.versioning".into(),
+                name: "Versioning".into(),
+                mounted: true,
+            }),
+            to_value(BundleInfo {
+                id: "fubmd.stats".into(),
+                name: "Statistiche".into(),
+                mounted: false,
+            }),
+        ],
+        // Il registro dei vault (§11.1): quello appuntato con la sua icona e un
+        // recente nudo, perché i campi opzionali hanno due forme e il mirror
+        // deve reggerle entrambe.
+        "VaultEntry": [
+            to_value(VaultEntry {
+                root: "/vault".into(),
+                name: "Diario".into(),
+                icon: Some("📓".into()),
+                favorite: true,
+                last_opened: 1_700_000_000_000,
+            }),
+            to_value(VaultEntry {
+                root: "/altro".into(),
+                name: String::new(),
+                icon: None,
+                favorite: false,
+                last_opened: 1_699_000_000_000,
+            }),
+        ],
         "WorkspaceMeta": [to_value(WorkspaceMeta {
             icons: [("p".to_string(), "📁".to_string())].into_iter().collect(),
             pinned: vec!["a.md".into()],

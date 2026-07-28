@@ -73,6 +73,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.19 · §10.1 | [0033 — La grana di un abbonamento](../decisions/0033-la-grana-di-un-abbonamento.md) |
 | §2.27 · §10.2 | [0034 — Il freno e il raggruppamento](../decisions/0034-il-freno-e-il-raggruppamento.md) |
 | §3.5 · §10.3 | [0035 — Il lavoro lungo si racconta](../decisions/0035-il-lavoro-lungo-si-racconta.md) |
+| §1.3 · §11.1 | [0036 — Le impostazioni](../decisions/0036-le-impostazioni-e-i-tre-stati.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -94,7 +95,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 
 | Vecchio | Nuovo | Voce |
 |---|---|---|
-| §1.3 | **§11.1** | Impostazioni e spegnibilità — oggi sono variabili d'ambiente |
 | §1.8 | **§12.1** | Stringhe e localizzazione al confine — decisione, non implementazione |
 | §1.10 | **§13.1** | Identità del documento — il path, e l'eventuale seconda chiave |
 | §1.11 | **§12.2** | Errori tipizzati al confine, non `String` |

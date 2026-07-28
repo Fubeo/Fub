@@ -8,6 +8,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
+  BundleInfo,
   CommandOutcome,
   CommandSpec,
   EmbedContent,
@@ -17,7 +18,9 @@ import type {
   InvokeMode,
   KernelNotice,
   RenderedDocument,
+  SettingValue,
   TrashEntry,
+  VaultEntry,
   UiNode,
   VaultInfo,
   VersionRef,
@@ -113,6 +116,38 @@ export const api = {
   readWorkspaceMeta: () => invoke<WorkspaceMeta>("read_workspace_meta"),
   writeWorkspaceMeta: (meta: WorkspaceMeta) =>
     invoke<void>("write_workspace_meta", { meta }),
+
+  // --- impostazioni, componenti, vault conosciuti (§11.1) ------------------
+  //
+  // **Leggere** le impostazioni non è qui: passa da `queryIndex` (`settings`),
+  // come i tag e i backlink — un elenco è dati, e i dati hanno un canale solo.
+  // Qui ci sono le tre cose che dati non sono.
+  //
+  // Scrivere passa da un comando IPC e non dal `settings.set` del registro
+  // perché sono **due autorità**: di qui passa la persona che ha cliccato
+  // sull'interruttore, di là un programma — che tocca solo le chiavi che si sono
+  // dichiarate scrivibili da un programma. Una strada sola vorrebbe dire o che
+  // l'utente non può cambiare le proprie impostazioni di privacy, o che un
+  // plugin può.
+  setSetting: (key: string, value: SettingValue) =>
+    invoke<void>("set_setting", { key, value }),
+  // Azzerare non è scrivere il default: la chiave **ricade** al livello sotto,
+  // che è il default solo se non c'era niente in mezzo.
+  resetSetting: (key: string) => invoke<void>("reset_setting", { key }),
+  // Chi questo host sa montare, e chi è acceso: non è `VaultInfo.plugins`, che
+  // elenca chi è dichiarato nel kernel — un componente spento non lo è.
+  listBundles: () => invoke<BundleInfo[]>("list_bundles"),
+  setPluginEnabled: (id: string, enabled: boolean) =>
+    invoke<string[]>("set_plugin_enabled", { id, enabled }),
+  // I vault che questa macchina conosce, fra un avvio e l'altro: un elenco di
+  // vault non sta in nessun vault, quindi vive nel livello macchina.
+  knownVaults: () => invoke<VaultEntry[]>("known_vaults"),
+  setVaultFavorite: (path: string, favorite: boolean) =>
+    invoke<void>("set_vault_favorite", { path, favorite }),
+  setVaultLook: (path: string, icon: string | null, name: string | null) =>
+    invoke<void>("set_vault_look", { path, icon, name }),
+  // Toglie dall'elenco. **Non cancella niente dal disco.**
+  forgetVault: (path: string) => invoke<void>("forget_vault", { path }),
 };
 
 /// Il canale eventi del kernel. Il ritorno è la disiscrizione.

@@ -26,6 +26,7 @@ use fubmd_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fubmd_abi::model::{DocId, DocumentModel, Span};
+use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{CommandProvider, EventHandler, HostApi};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
@@ -187,6 +188,15 @@ impl CommandProvider for TriesEverything {
         annota("trash", host.trash_document(&doc).map(|_| ()));
         annota("restore", host.restore_document(&doc, None).map(|_| ()));
         annota("empty", host.empty_trash().map(|_| ()));
+        // La configurazione sta in questo elenco perché è l'effetto **meno
+        // ritirabile** di tutti: sopravvive alla sessione, e una simulazione che
+        // spegnesse il versioning lo lascerebbe spento. Il guard risponde prima
+        // di guardare se la chiave esista, che è il verso giusto: un rifiuto per
+        // «stai simulando» non deve dipendere da cosa si stava per scrivere.
+        annota(
+            "setting",
+            host.set_setting("test.chiave", SettingValue::Toggle(true)),
+        );
         Ok(
             CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
                 "niente",
@@ -463,7 +473,7 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
     let quali: Vec<&str> = visti.iter().map(|(q, _)| *q).collect();
     assert_eq!(
         quali,
-        vec!["create", "rename", "trash", "restore", "empty"],
+        vec!["create", "rename", "trash", "restore", "empty", "setting"],
         "ogni capacità strutturale è stata rifiutata: se una passasse, \
          mancherebbe da questo elenco"
     );

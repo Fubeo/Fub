@@ -176,6 +176,12 @@ pub enum RegistryError {
     /// non ha perso niente: la sua chiamata sta tornando, e fuori da lì la
     /// stessa domanda si risponde per intero.
     Busy(String),
+    /// Una **chiave di impostazione** già dichiarata da un altro plugin
+    /// (§11.1). Non è un `Claimed` con una specie in più: quelli sono nomi di
+    /// *registrazioni*, questo è un nome che vive nel manifest e viene
+    /// dichiarato prima di ogni registrazione — e chi lo riceve non ha nemmeno
+    /// un provider da togliere.
+    Setting(String),
 }
 
 impl std::fmt::Display for RegistryError {
@@ -231,6 +237,7 @@ impl std::fmt::Display for RegistryError {
                  lì i provider sono in prestito, e ciò che non c'è nella tabella \
                  non si può togliere (si richiede a chiamata tornata)"
             ),
+            RegistryError::Setting(why) => write!(f, "{why}"),
         }
     }
 }
