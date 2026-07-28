@@ -235,6 +235,78 @@ pub struct VaultEntry {
     pub fingerprint: Option<Revision>,
 }
 
+/// Una **cartella** del vault (§14.3).
+///
+/// Esiste perché il disco ce l'ha, non perché il path di un file la nomini: è
+/// tutta la differenza fra una cartella e un prefisso. Prima di questa voce le
+/// cartelle nascevano dai path delle note e vivevano nel solo albero della
+/// shell, quindi una cartella vuota non c'era — e una cartella che restava
+/// vuota (cestinata l'ultima nota) spariva da sola, mentre sul disco c'era
+/// ancora.
+///
+/// La chiave è il path senza slash finale, come per
+/// [`QueryPredicate::Folder`](crate::query::QueryPredicate::Folder) e come per
+/// le chiavi dell'[organizzazione](crate::organization::Organization). **Non**
+/// è un [`DocId`], che nomina un *file* («estensione inclusa»): una cartella
+/// non si legge, non si scrive e non ha un modello, e chiamarla con lo stesso
+/// tipo avrebbe voluto dire che ogni firma che prende un `DocId` accetta anche
+/// una cartella senza saperlo. La radice del vault non è una voce: non ha un
+/// nome, non si rinomina e non si cancella.
+///
+/// Nome e cartella genitore **non sono campi**, per la ragione per cui il MIME
+/// di un allegato non lo è ([decisione 0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)):
+/// sono funzioni pure del path — l'ultimo segmento, e
+/// [`folder_of`](crate::query::folder_of) — e copiarle qui vorrebbe dire
+/// scriverne una copia per cartella di ogni vault.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VaultFolder {
+    /// Path relativo alla radice, separatori `/`, senza slash finale. Mai
+    /// vuoto: `""` è la radice, e la radice non è una voce.
+    pub path: String,
+    /// Quante **sottocartelle dirette** ha.
+    ///
+    /// Sta qui perché è ciò che serve a decidere se disegnare la freccetta che
+    /// apre, cioè prima di chiedere cosa c'è dentro: senza, un albero pigro
+    /// dovrebbe interrogare ogni cartella per sapere quali sono espandibili —
+    /// che è esattamente il giro per cartella che questa voce esiste per non
+    /// fare.
+    pub folders: u32,
+    /// Quanti **file diretti** ha, di ogni specie.
+    ///
+    /// Di ogni specie e non solo documenti: la domanda a cui risponde è «questa
+    /// cartella è vuota?», e una cartella con dentro solo un PNG non lo è.
+    pub entries: u32,
+}
+
+/// **Dove** guardare, per le domande che si fanno per cartella (§14.3, §14.4).
+///
+/// Due campi e non due varianti perché sono la stessa domanda con un raggio
+/// diverso, ed è la stessa coppia di
+/// [`QueryPredicate::Folder`](crate::query::QueryPredicate::Folder) — che è
+/// deliberato: la regola che decide se qualcosa ci sta dentro
+/// ([`in_folder`](crate::query::in_folder)) è una, e due copie divergerebbero
+/// sul caso che nessuno prova (la radice, che con `descendants` è tutto il
+/// vault).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderScope {
+    /// La cartella, senza slash finale. `""` è la radice del vault.
+    pub path: String,
+    /// Anche ciò che sta nelle sue discendenti. `false` = i soli figli
+    /// **diretti**, che è la domanda che disegna un livello di albero.
+    #[serde(default)]
+    pub descendants: bool,
+}
+
+impl FolderScope {
+    /// I figli diretti di questa cartella.
+    pub fn direct(path: impl Into<String>) -> Self {
+        FolderScope {
+            path: path.into(),
+            descendants: false,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Capability handle: l'unico modo con cui un provider tocca il mondo esterno.
 // Nativo → oggetto in-process diretto. WASM (M5) → proxy che reinoltra le
@@ -2064,6 +2136,38 @@ pub enum IndexQuery {
         /// file che la shell disegna.
         #[serde(default)]
         of_kind: Option<EntryKind>,
+        /// **In quale cartella** (§14.4). Assente = tutto il vault, che è
+        /// com'era prima che questo campo esistesse.
+        ///
+        /// È la metà che mancava al canale della lista: un albero disegna venti
+        /// righe e ne chiedeva diecimila, perché l'unica domanda possibile era
+        /// «tutto». Con `descendants: false` la risposta cresce con **la
+        /// cartella aperta** e non col vault, e la finestra si applica dopo il
+        /// filtro — cioè la pagina è una pagina di quella cartella.
+        #[serde(default)]
+        within: Option<FolderScope>,
+        #[serde(default)]
+        page: Option<Page>,
+    },
+    /// **Quali cartelle ci sono** (§14.3).
+    ///
+    /// Una variante sua e non una specie in più di
+    /// [`Entries`](IndexQuery::Entries): una cartella non ha dimensione, non ha
+    /// un contenuto da datare e non ha un'impronta, e infilarla in un
+    /// [`VaultEntry`] avrebbe voluto dire tre campi che mentono e un filtro da
+    /// ricordarsi in ogni cliente dell'anagrafe. Sono due domande, e chi
+    /// disegna un livello di albero le fa tutte e due.
+    ///
+    /// Le cartelle escono dalla **camminata del disco**, non dai path dei file:
+    /// una cartella vuota c'è, e resta lì quando la sua ultima nota va nel
+    /// cestino — che è ciò che è successo davvero sul disco.
+    Folders {
+        /// Da dove guardare. Assente = ogni cartella del vault, a ogni
+        /// profondità (l'elenco che serve a chi ne offre una da scegliere);
+        /// [`FolderScope::direct`] = un livello solo, che è ciò che apre un nodo
+        /// dell'albero.
+        #[serde(default)]
+        under: Option<FolderScope>,
         #[serde(default)]
         page: Option<Page>,
     },
@@ -2079,7 +2183,8 @@ impl IndexQuery {
             | IndexQuery::Neighbors { page, .. }
             | IndexQuery::PropertyValues { page, .. }
             | IndexQuery::VaultHealth { page, .. }
-            | IndexQuery::Entries { page, .. } => *page,
+            | IndexQuery::Entries { page, .. }
+            | IndexQuery::Folders { page, .. } => *page,
             IndexQuery::Outline { .. }
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
@@ -2110,8 +2215,10 @@ impl IndexQuery {
             | IndexQuery::Resolve { .. }
             // L'anagrafe non seleziona documenti: la sua domanda non è «quali
             // note combaciano» ma «cosa c'è», e un'espressione qui vorrebbe
-            // dire filtrare dei file con un linguaggio che parla di note.
-            | IndexQuery::Entries { .. } => None,
+            // dire filtrare dei file con un linguaggio che parla di note. Vale
+            // anche per le cartelle, che una nota non lo sono affatto.
+            | IndexQuery::Entries { .. }
+            | IndexQuery::Folders { .. } => None,
         }
     }
 
@@ -2168,6 +2275,7 @@ impl IndexQuery {
             IndexQuery::Organization => QueryKind::Organization,
             IndexQuery::Resolve { .. } => QueryKind::Resolve,
             IndexQuery::Entries { .. } => QueryKind::Entries,
+            IndexQuery::Folders { .. } => QueryKind::Folders,
         }
     }
 }
@@ -2232,6 +2340,12 @@ pub enum QueryKind {
     /// ma chi lo fa si prende anche il resto: la scansione, il rilevamento e la
     /// tabella che il kernel scrive sono la sua fonte, non la sua copia.
     Entries,
+    /// Chi risponde a «quali cartelle ci sono?» (§14.3). Il kernel, e per la
+    /// ragione di [`Entries`](QueryKind::Entries): una cartella la vede chi
+    /// cammina il disco. Le due famiglie restano **due**, così che un indice
+    /// che sappia elencare i file di un supporto remoto possa rivendicare la
+    /// prima senza doversi inventare la seconda.
+    Folders,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -2430,6 +2544,12 @@ pub enum IndexResult {
     /// numero di *file* invece che col numero di note, e in un vault vero gli
     /// allegati sono più delle note.
     Entries(Paged<VaultEntry>),
+    /// Le cartelle (risposta a [`IndexQuery::Folders`]), in ordine di path.
+    ///
+    /// A finestra come l'anagrafe: chieste `under` una cartella sono poche, ma
+    /// chieste su tutto il vault sono tante quante le cartelle — e chi ne offre
+    /// un elenco da scegliere non deve trasferirle tutte per mostrarne dieci.
+    Folders(Paged<VaultFolder>),
 }
 
 impl IndexResult {
@@ -2469,6 +2589,7 @@ impl IndexResult {
             IndexResult::Organization(_) => "organization",
             IndexResult::Resolved(_) => "resolved",
             IndexResult::Entries(_) => "entries",
+            IndexResult::Folders(_) => "folders",
         }
     }
 }

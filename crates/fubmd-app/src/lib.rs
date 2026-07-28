@@ -130,12 +130,15 @@ fn initial_vault() -> Option<String> {
     fubmd_host::initial_vault()
 }
 
-#[tauri::command]
-fn list_documents(host: State<Host>, vault: Option<String>) -> Result<Vec<String>, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
-    Ok(ws.documents().into_iter().map(|d| d.0).collect())
-}
+// `list_documents` **non è più un comando** (§14.4). Era l'ultimo dato che la
+// shell chiedeva fuori da `IndexQuery`, e la finestra che il contratto ha dal
+// §5.5 questo confine non l'ha mai usata: restituiva l'intero vault in un
+// `Vec<String>`, e chi disegnava venti righe ne riceveva diecimila. Chi vuole
+// l'elenco lo chiede con `IndexQuery::Entries`, che la specie la sceglie e la
+// pagina la taglia — e per cartella, che è ciò che serve a un albero.
+//
+// La **capacità** omonima resta dov'era (`VaultRead::list_documents`): quella
+// la `Page` la prende, ed è l'elenco dei plugin, non quello della shell.
 
 #[tauri::command]
 fn read_document(
@@ -706,7 +709,6 @@ pub fn run() {
             list_vaults,
             set_current_vault,
             initial_vault,
-            list_documents,
             read_document,
             write_document,
             list_trash,

@@ -111,9 +111,9 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.6 | **§15.5** | Politica dei path e del testo, in un modulo solo |
 | §2.7 | **§9.6** | Sessioni multiple |
 | §2.9 | **§9.4** | Disattivazione — oggi si può solo *non registrare* |
-| §2.11 | **§14.3** | Le cartelle non esistono nel kernel |
+| §2.11 | **§14.3** | Le cartelle non esistono nel kernel → [0047](../decisions/0047-la-cartella-esiste-nel-kernel.md) |
 | §2.12 | **§15.3** | Una versione di schema su ogni formato persistito |
-| §2.13 | **§14.4** | Il canale della lista documenti |
+| §2.13 | **§14.4** | Il canale della lista documenti → [0047](../decisions/0047-la-cartella-esiste-nel-kernel.md) |
 | §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |

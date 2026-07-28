@@ -1189,6 +1189,7 @@ impl Workspace {
         // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
         // che qualcuno rivendica quell'estensione, senza essere cambiato.
         let mut entries: Vec<VaultEntry> = scanned
+            .files
             .into_iter()
             .map(|file| VaultEntry {
                 fingerprint: self
@@ -1252,6 +1253,13 @@ impl Workspace {
         drop(sources);
 
         self.indexes.core.clear();
+        // Le cartelle prima delle voci, e dalla **camminata** e non dai path
+        // dei file (§14.3): una cartella vuota non compare in nessun path, e
+        // dedurle dai file vorrebbe dire che l'unica cartella che esiste è
+        // quella che ha già qualcosa dentro.
+        for folder in scanned.folders {
+            self.indexes.core.set_folder(folder);
+        }
         for entry in entries.drain(..) {
             self.indexes.core.set_entry(entry);
         }
@@ -1309,6 +1317,10 @@ impl Workspace {
             return self.indexes.core.remove_entry(id);
         };
         let kind = media::kind_of(id, &self.docs.registry.all_extensions());
+        // Un file che c'è dice che le cartelle che attraversa ci sono (§14.3):
+        // senza questa riga una nota creata in una cartella nuova comparirebbe
+        // in un albero che quella cartella non conosce fino alla riapertura.
+        self.indexes.core.ensure_folders_of(id);
         self.indexes.core.set_entry(VaultEntry {
             id: id.clone(),
             kind,

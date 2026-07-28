@@ -66,9 +66,12 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // `/private/var/…` — quindi il test passava su Linux e falliva solo lì.
     let atteso = v.root.canonicalize_utf8().expect("il tempdir esiste");
     assert_eq!(info.root, atteso.to_string());
-    let mut docs = info.documents.clone();
+    // L'elenco delle note **non è più** in `VaultInfo` (§14.4): si chiede al
+    // canale dati, che sa dire quale cartella e quante righe.
+    let aperto = host.workspace(None).expect("un vault è aperto");
+    let mut docs = aperto.read().unwrap().documents();
     docs.sort();
-    assert_eq!(docs, vec!["Cucina.md", "Rust.md"]);
+    assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
     assert_eq!(
         info.extensions,
         vec!["markdown", "md"],
@@ -249,7 +252,10 @@ fn due_vault_stanno_aperti_insieme_e_il_corrente_e_una_comodita() {
     let host = headless();
     host.open(&a.root).expect("primo vault");
     let second = host.open(&b.root).expect("secondo vault");
-    assert_eq!(second.documents, vec!["B.md"]);
+    assert_eq!(
+        second.root,
+        b.root.canonicalize_utf8().expect("esiste").to_string()
+    );
 
     assert_eq!(host.vaults().len(), 2, "il primo non è stato chiuso");
     let corrente = host.workspace(None).expect("c'è un corrente");

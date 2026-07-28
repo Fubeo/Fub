@@ -36,9 +36,10 @@ use fubmd_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
 use fubmd_abi::traits::{
-    BacklinkRef, DocumentMatch, EntryKind, HealthCheck, IndexQuery, IndexResult, JobId,
-    JobProgress, JobStatus, LinkDirection, NeighborRef, Page, Paged, PropertyEntry, PropertySelect,
-    TagCount, VaultEntry, VaultStatus, ViewInstance, ViewSpec, ViewSurface,
+    BacklinkRef, DocumentMatch, EntryKind, FolderScope, HealthCheck, IndexQuery, IndexResult,
+    JobId, JobProgress, JobStatus, LinkDirection, NeighborRef, Page, Paged, PropertyEntry,
+    PropertySelect, TagCount, VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewSpec,
+    ViewSurface,
 };
 use fubmd_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
@@ -663,12 +664,36 @@ fn index_query_samples() -> Vec<Value> {
         // «solo gli allegati» — e sul confine JSON la prima è `null`.
         IndexQuery::Entries {
             of_kind: None,
+            within: None,
             page: None,
         },
         IndexQuery::Entries {
             of_kind: Some(EntryKind::Asset),
+            within: None,
             page: Some(Page {
                 offset: 40,
+                limit: 20,
+            }),
+        },
+        // La lista **per cartella** (§14.4) e le cartelle stesse (§14.3): il
+        // campione col raggio dice cosa disegna un livello di albero — i figli
+        // diretti, non il sottoalbero.
+        IndexQuery::Entries {
+            of_kind: Some(EntryKind::Document),
+            within: Some(FolderScope::direct("Progetti")),
+            page: None,
+        },
+        IndexQuery::Folders {
+            under: None,
+            page: None,
+        },
+        IndexQuery::Folders {
+            under: Some(FolderScope {
+                path: "Progetti".into(),
+                descendants: true,
+            }),
+            page: Some(Page {
+                offset: 0,
                 limit: 20,
             }),
         },
@@ -690,7 +715,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::Settings { .. }
             | IndexQuery::Organization
             | IndexQuery::Resolve { .. }
-            | IndexQuery::Entries { .. } => {}
+            | IndexQuery::Entries { .. }
+            | IndexQuery::Folders { .. } => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -823,6 +849,21 @@ fn index_result_samples() -> Vec<Value> {
                 fingerprint: None,
             },
         ])),
+        // Le cartelle (§14.3): una con dentro qualcosa e una vuota — la
+        // seconda è ciò che prima non poteva esistere, perché una cartella
+        // nasceva dal path di un file.
+        IndexResult::Folders(Paged::all(vec![
+            VaultFolder {
+                path: "note".into(),
+                folders: 1,
+                entries: 12,
+            },
+            VaultFolder {
+                path: "note/bozze".into(),
+                folders: 0,
+                entries: 0,
+            },
+        ])),
     ];
     for r in &all {
         match r {
@@ -839,7 +880,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::Settings(_)
             | IndexResult::Organization(_)
             | IndexResult::Resolved(_)
-            | IndexResult::Entries(_) => {}
+            | IndexResult::Entries(_)
+            | IndexResult::Folders(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()

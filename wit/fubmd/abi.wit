@@ -1732,7 +1732,45 @@ interface index {
     /// tutte le specie.
     record index-query-entries {
         of-kind: option<entry-kind>,
+        /// IN QUALE CARTELLA (§14.4). Assente = tutto il vault, com'era prima
+        /// che questo campo esistesse. È la metà che mancava al canale della
+        /// lista: un albero disegna venti righe e ne chiedeva diecimila, perché
+        /// l'unica domanda possibile era «tutto».
+        within: option<folder-scope>,
         page: option<page>,
+    }
+    /// QUALI CARTELLE CI SONO (§14.3). `under` assente = ogni cartella del
+    /// vault, a ogni profondità; con `descendants: false` è un livello solo,
+    /// cioè ciò che apre un nodo dell'albero.
+    record index-query-folders {
+        under: option<folder-scope>,
+        page: option<page>,
+    }
+    /// DOVE guardare, per le domande che si fanno per cartella. Due campi e non
+    /// due varianti perché sono la stessa domanda con un raggio diverso — ed è
+    /// la stessa coppia del predicato `folder`, di proposito: la regola che
+    /// decide cosa ci sta dentro è una sola.
+    record folder-scope {
+        /// Senza slash finale. `""` è la radice del vault.
+        path: string,
+        /// Anche ciò che sta nelle discendenti. `false` = i soli figli diretti.
+        descendants: bool,
+    }
+    /// Una CARTELLA del vault (§14.3): esiste perché il disco ce l'ha, non
+    /// perché il path di un file la nomini — è tutta la differenza fra una
+    /// cartella e un prefisso. Non è un `doc-id`, che nomina un FILE: una
+    /// cartella non si legge, non si scrive e non ha un modello. Nome e
+    /// genitore non sono campi: sono funzioni pure del path.
+    record vault-folder {
+        /// Senza slash finale, mai vuoto: la radice non è una voce.
+        path: string,
+        /// Quante sottocartelle DIRETTE ha: è ciò che serve a decidere se
+        /// disegnare la freccetta che apre, cioè prima di chiedere cosa c'è
+        /// dentro.
+        folders: u32,
+        /// Quanti file diretti, DI OGNI SPECIE: la domanda a cui risponde è
+        /// «questa cartella è vuota?», e una con dentro solo un PNG non lo è.
+        entries: u32,
     }
     /// Una voce del vault: un file, con ciò che si sa di lui SENZA aprirlo.
     /// La chiave è il path, come per ogni altra cosa del vault (decisione
@@ -1830,6 +1868,12 @@ interface index {
         /// contenesse gli allegati senza che nessuna domanda li sappia chiedere
         /// sarebbe uno stato che il kernel tiene e nessuno può vedere.
         entries(index-query-entries),
+        /// QUALI CARTELLE CI SONO? (§14.3) Una variante sua e non una specie in
+        /// più di `entry-kind`: una cartella non ha dimensione, non ha un
+        /// contenuto da datare e non ha un'impronta, e infilarla in una
+        /// `vault-entry` avrebbe voluto dire tre campi che mentono e un filtro
+        /// da ricordarsi in ogni cliente dell'anagrafe.
+        folders(index-query-folders),
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -1875,6 +1919,11 @@ interface index {
         /// kernel, e stavolta per esclusione: l'anagrafe la costruisce chi
         /// cammina il disco, e nessun altro cammina il disco.
         entries,
+        /// Chi risponde a «quali cartelle ci sono?» (§14.3). Il kernel, e per
+        /// la ragione di `entries`. Le due famiglie restano DUE, così che un
+        /// indice che sappia elencare i file di un supporto remoto possa
+        /// rivendicare la prima senza doversi inventare la seconda.
+        folders,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -2010,6 +2059,11 @@ interface index {
         offset: u32,
         total: u32,
     }
+    record folders-page {
+        items: list<vault-folder>,
+        offset: u32,
+        total: u32,
+    }
 
     variant index-result {
         documents(documents-page),
@@ -2043,6 +2097,10 @@ interface index {
         /// col numero di note, e in un vault vero gli allegati sono più delle
         /// note.
         entries(entries-page),
+        /// Le cartelle, in ordine di path. A finestra come l'anagrafe: chieste
+        /// sotto una cartella sono poche, chieste su tutto il vault sono tante
+        /// quante le cartelle.
+        folders(folders-page),
     }
 
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel

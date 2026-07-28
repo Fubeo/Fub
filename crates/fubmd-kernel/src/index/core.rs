@@ -27,18 +27,21 @@
 //! troverebbe un conflitto di registrazione, non un ordine di montaggio che
 //! decide in silenzio.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use fubmd_abi::model::{
     canonical_tag, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
 };
-use fubmd_abi::query::{in_folder, Matches, QueryEvaluator, QueryPredicate};
+use fubmd_abi::query::{
+    in_folder, parent_folder, within_folder, Matches, QueryEvaluator, QueryPredicate,
+};
 use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
-    EntryKind, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobStatus,
-    LinkDirection, Paged, PredicateKind, QueryKind, QueryRoute, VaultEntry, VaultStatus,
+    EntryKind, FolderScope, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress,
+    JobStatus, LinkDirection, Paged, PredicateKind, QueryKind, QueryRoute, VaultEntry, VaultFolder,
+    VaultStatus,
 };
 use fubmd_abi::PluginError;
 
@@ -120,6 +123,19 @@ pub(crate) struct CoreIndex {
     /// `BTreeMap` per l'ordine, come `metas` e per lo stesso motivo: è ciò che
     /// rende stabile una risposta paginata.
     pub(crate) entries: BTreeMap<DocId, VaultEntry>,
+    /// **Le cartelle** (§14.3), come la camminata le ha viste.
+    ///
+    /// Un insieme di path e non una mappa di record: ciò che si sa di una
+    /// cartella — quante sottocartelle ha, quanti file — si **conta** dalle due
+    /// mappe ordinate quando qualcuno lo chiede, e costa il sottoalbero invece
+    /// del vault. Tenerlo scritto vorrebbe dire mantenerlo a ogni file che
+    /// nasce o muore, cioè un secondo conto che può divergere dal primo.
+    ///
+    /// Non si deduce dai path dei file, ed è il punto della voce: una cartella
+    /// vuota non compare in nessun path e c'è lo stesso; una cartella che resta
+    /// vuota perché la sua ultima nota è finita nel cestino resta lì, perché è
+    /// ciò che è successo davvero sul disco.
+    pub(crate) folders: BTreeSet<String>,
     /// I conteggi dei tag, mantenuti incrementalmente come il grafo: le
     /// interrogazioni sui tag rispondono da qui, senza O(vault).
     pub(crate) tags: TagCounts,
@@ -232,6 +248,35 @@ pub(crate) fn named_entry_in(entries: &BTreeMap<DocId, VaultEntry>, name: &str) 
 /// Il nome di un file dentro il suo path.
 fn file_name_of(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
+}
+
+/// Il primo path che può stare dentro `folder`, in una mappa ordinata per path.
+///
+/// I path di un sottoalbero sono **contigui** nell'ordine lessicografico, e
+/// questa è la loro soglia: da qui in poi, finché il prefisso regge, c'è solo
+/// roba di quella cartella. Per la radice è la stringa vuota, cioè tutto.
+fn subtree_start(folder: &str) -> String {
+    if folder.is_empty() {
+        String::new()
+    } else {
+        format!("{folder}/")
+    }
+}
+
+/// Quanti, fra i path ordinati che l'iteratore produce **a partire dalla
+/// soglia** di `folder`, le stanno direttamente dentro.
+///
+/// Il `take_while` è ciò che rende il conto proporzionale al sottoalbero e non
+/// al vault: appena il prefisso non regge più, il resto della mappa non si
+/// guarda. Per la radice il prefisso è vuoto e si guarda tutto — che è giusto,
+/// perché i figli della radice si contano una volta sola.
+fn count_direct<'a>(paths: impl Iterator<Item = &'a str>, folder: &str) -> u32 {
+    let prefix = subtree_start(folder);
+    paths
+        .take_while(|path| path.starts_with(&prefix))
+        .filter(|path| parent_folder(path) == folder)
+        .count()
+        .min(u32::MAX as usize) as u32
 }
 
 /// Il fatto che il §9.7 rende interrogabile: se qualcuno vede le scritture
@@ -356,6 +401,7 @@ impl CoreIndex {
         CoreIndex {
             metas: BTreeMap::new(),
             entries: BTreeMap::new(),
+            folders: BTreeSet::new(),
             tags: TagCounts::default(),
             graph: LinkGraph::default(),
             graph_update: GraphUpdate::default(),
@@ -389,6 +435,7 @@ impl CoreIndex {
     pub(crate) fn clear(&mut self) {
         self.metas.clear();
         self.entries.clear();
+        self.folders.clear();
         self.tags.clear();
     }
 
@@ -435,6 +482,59 @@ impl CoreIndex {
     /// Mette (o aggiorna) una voce dell'anagrafe.
     pub(crate) fn set_entry(&mut self, entry: VaultEntry) {
         self.entries.insert(entry.id.clone(), entry);
+    }
+
+    /// Mette una cartella fra quelle che ci sono (§14.3).
+    pub(crate) fn set_folder(&mut self, path: impl Into<String>) {
+        let path = path.into();
+        if !path.is_empty() {
+            self.folders.insert(path);
+        }
+    }
+
+    /// Registra le cartelle che un path **attraversa**, dalla radice in giù.
+    ///
+    /// Serve a chi tocca un file solo (il rilevatore, una scrittura): un file
+    /// che nasce in `a/b/c.md` dice che `a` e `a/b` esistono, e senza questa
+    /// riga l'albero non le vedrebbe fino alla riapertura del vault. Il
+    /// contrario non vale — cancellare l'ultimo file di una cartella **non**
+    /// toglie la cartella, perché sul disco c'è ancora.
+    pub(crate) fn ensure_folders_of(&mut self, id: &DocId) {
+        for folder in fubmd_abi::query::folders_of(id) {
+            self.set_folder(folder);
+        }
+    }
+
+    /// Le cartelle chieste, col conto di cosa contengono.
+    ///
+    /// I conti si fanno qui e non si tengono scritti: le due mappe sono
+    /// ordinate, quindi contare i figli diretti di una cartella costa il suo
+    /// sottoalbero e non il vault, e un conto ricavato non può divergere da ciò
+    /// da cui è ricavato.
+    fn folders_under(&self, under: Option<&FolderScope>) -> Vec<VaultFolder> {
+        self.folders
+            .iter()
+            .filter(|path| match under {
+                Some(scope) => within_folder(parent_folder(path), &scope.path, scope.descendants),
+                None => true,
+            })
+            .map(|path| {
+                let from = subtree_start(path);
+                VaultFolder {
+                    folders: count_direct(
+                        self.folders.range(from.clone()..).map(String::as_str),
+                        path,
+                    ),
+                    entries: count_direct(
+                        self.entries
+                            .range(DocId::new(from)..)
+                            .map(|(id, _)| id.as_str()),
+                        path,
+                    ),
+                    path: path.clone(),
+                }
+            })
+            .collect()
     }
 
     /// Toglie una voce dall'anagrafe, e dice **cosa era**: è l'unico momento in
@@ -553,6 +653,11 @@ impl IndexProvider for CoreIndex {
             // dei documenti filtrava per estensione, quindi di un PNG non
             // sapeva rispondere nemmeno che c'era.
             QueryRoute::Query(QueryKind::Entries),
+            // Quali cartelle ci sono (§14.3): il kernel, e per la stessa
+            // ragione — una cartella la vede chi cammina il disco. Prima non la
+            // vedeva nessuno: le cartelle esistevano solo come prefissi dei
+            // path delle note, dentro l'albero della shell.
+            QueryRoute::Query(QueryKind::Folders),
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
@@ -696,12 +801,28 @@ impl IndexProvider for CoreIndex {
                 );
                 Ok(IndexResult::VaultHealth(Paged::window(issues, page)))
             }
-            IndexQuery::Entries { of_kind, page } => Ok(IndexResult::Entries(Paged::window(
+            // Il filtro sta **prima** della finestra, e non è un dettaglio: una
+            // pagina tagliata sull'anagrafe intera e poi filtrata sarebbe una
+            // pagina con dentro un numero di righe che dipende da cosa c'è nel
+            // resto del vault (§14.4).
+            IndexQuery::Entries {
+                of_kind,
+                within,
+                page,
+            } => Ok(IndexResult::Entries(Paged::window(
                 self.entries
                     .values()
                     .filter(|e| of_kind.is_none_or(|k| e.kind == k))
+                    .filter(|e| match &within {
+                        Some(scope) => in_folder(&e.id, &scope.path, scope.descendants),
+                        None => true,
+                    })
                     .cloned()
                     .collect(),
+                page,
+            ))),
+            IndexQuery::Folders { under, page } => Ok(IndexResult::Folders(Paged::window(
+                self.folders_under(under.as_ref()),
                 page,
             ))),
             IndexQuery::Custom { ns, .. } => Err(PluginError::Unserved(

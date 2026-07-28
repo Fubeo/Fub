@@ -15,7 +15,11 @@ use serde::Serialize;
 #[derive(Serialize)]
 pub struct VaultInfo {
     pub root: String,
-    pub documents: Vec<String>,
+    // `documents` **non c'è più** (§14.4): l'apertura di un vault portava con sé
+    // l'elenco intero delle note, cioè diecimila righe per disegnarne venti — e
+    // lo portava *dentro un record*, dove una finestra non si può nemmeno
+    // chiedere. Chi ne vuole una parte la chiede a `IndexQuery::Entries`, che
+    // pagina e sa dire *quale cartella*.
     /// Le estensioni che i provider registrati gestiscono (minuscole, senza
     /// punto). Il frontend le usa per ricavare il "nome pagina" di un `DocId`
     /// senza cablare `.md`: quale sia l'estensione di un documento lo sanno i

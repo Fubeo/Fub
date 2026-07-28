@@ -17,17 +17,25 @@ import { COMANDI } from "../host/contract";
 import { emit, state } from "./store";
 import { t } from "../i18n/strings";
 
-/// Richiede la lista dei documenti e la annuncia. Chi disegna una lista si
+/// Annuncia che l'elenco dei documenti è cambiato. Chi ne disegna uno si
 /// iscrive a `documents`; nessuno chiama nessuno per nome.
 ///
-/// Dall'anagrafe (§14.1, §14.2) e non da `list_documents`, come il ridisegno
-/// dell'albero dopo un evento: le due strade alimentano la **stessa** lista, e
-/// lasciarne una sull'altro canale vorrebbe dire che l'elenco cambia di forma a
-/// seconda di chi l'ha chiesto.
-export async function refreshDocuments(): Promise<string[]> {
-  const docs = (await vociDelVault("document")).items.map((e) => e.id);
-  emit("documents", docs);
-  return docs;
+/// **Non porta più la lista** (§14.4): la portava, ed era l'intero vault
+/// chiesto a ogni creazione, rinomina o ripristino per ridisegnare venti righe.
+/// Chi disegna chiede la parte che gli serve — l'albero una cartella per volta,
+/// la palette i nomi che le servono — e questo segnale dice solo *quando*.
+export function refreshDocuments(): void {
+  emit("documents");
+}
+
+/// La prima nota del vault, in ordine di path, o `null` se non ce ne sono.
+///
+/// Una domanda con una finestra da **uno**, e non l'elenco intero da cui
+/// prendere il primo: è ciò che serve a chi deve aprire *qualcosa* dopo aver
+/// chiuso il documento che stava guardando.
+export async function primaNota(): Promise<string | null> {
+  const page = await vociDelVault("document", undefined, { offset: 0, limit: 1 });
+  return page.items[0]?.id ?? null;
 }
 
 /// Crea una nota e restituisce il suo id — **non** la apre.
@@ -40,7 +48,7 @@ export async function refreshDocuments(): Promise<string[]> {
 /// se è un errore da mostrare.
 export async function createNote(name?: string): Promise<string | null> {
   const outcome = await api.invokeCommand(COMANDI.crea, name ? { name } : undefined);
-  await refreshDocuments();
+  refreshDocuments();
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
 }
 
@@ -53,7 +61,7 @@ export async function createNote(name?: string): Promise<string | null> {
 /// essere un punto solo.
 export async function renameNote(from: string, to: string): Promise<void> {
   await api.invokeCommand(COMANDI.rinomina, { doc: from, to });
-  await refreshDocuments();
+  refreshDocuments();
 }
 
 /// Sposta una nota nel cestino.

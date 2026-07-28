@@ -15,8 +15,8 @@ Le nove che seguono non le ha trovate né un giro né una misura: le ha aperte u
 ricerca di FubMD è built-in e di classe *omnisearch*, e da lì in poi le voci sono
 la sottrazione fra ciò che quel comportamento richiede e ciò che il contratto sa
 dire ([seduta 21](roadmap/21-la-ricerca-predefinita.md)).
-Settanta sono chiuse, e i loro verbali stanno in
-[docs/decisions/](decisions/README.md); le altre trentanove sono qui, e
+Settantadue sono chiuse, e i loro verbali stanno in
+[docs/decisions/](decisions/README.md); le altre trentasette sono qui, e
 questo file è il loro **indice**.
 
 ## Come è organizzato
@@ -134,7 +134,7 @@ descrive una promessa.
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano: la [0036](decisions/0036-le-impostazioni-e-i-tre-stati.md) ha chiuso il primo — le impostazioni — e la [0037](decisions/0037-lo-stato-di-vista.md) il secondo; il sidecar dell'organizzazione è assorbito dalla [0038](decisions/0038-il-kernel-possiede-il-sidecar.md), e del §11.2 resta il **layout** — che aspetta il modello di layout | 1 | — |
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | **chiusa**: il locale nel contratto per primo ([0039](decisions/0039-il-locale-e-il-caso.md)), poi la domanda vera — chi localizza ([0040](decisions/0040-chi-localizza.md)) —, il suo **gemello dichiarato** l'errore ([0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)) e infine il catalogo della shell, che quelle decisioni avevano ristretto ([0042](decisions/0042-il-catalogo-della-shell.md)) | — | — |
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | **chiusa**: il path è la chiave per sempre e un id stabile è una proprietà ([0043](decisions/0043-il-path-e-la-chiave.md)), lo stato per-documento ha un posto dichiarato che il kernel migra e raccoglie ([0044](decisions/0044-lo-stato-per-documento.md)), e l'undo ha due pile che non si fondono ([0045](decisions/0045-l-undo-ha-due-pile.md)) | — | — |
-| **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati, a coppie: l'anagrafe del vault è decisa ([0046](decisions/0046-l-anagrafe-del-vault.md)) — un file esiste anche se nessuno lo parsa, e `reindex` non rilegge ciò che nessuno aspetta; restano la cartella come cittadino e il canale per-cartella della lista | 2 | — |
+| **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati, a coppie, e sono chiusi tutti e quattro: l'anagrafe del vault ([0046](decisions/0046-l-anagrafe-del-vault.md)) e la cartella come cittadino con la lista per cartella ([0047](decisions/0047-la-cartella-esiste-nel-kernel.md)); restano le due caselle del §14.1 — l'impronta degli allegati e la politica della cartella allegati | 0 | — |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | 7 | 1 |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 7 | — |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza | 3 | — |
@@ -145,7 +145,7 @@ descrive una promessa.
 
 ## Le voci
 
-Quarantuno. Il numero è quello con cui le nomina il resto del repo.
+Trentanove. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -206,8 +206,6 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
 | **§11.2** | [Tre stati diversi, zero contenitori](roadmap/11-impostazioni-e-i-tre-stati.md#112-tre-stati-diversi-zero-contenitori) | 11. Le impostazioni, e i tre stati | shell | **P2** |
-| **§14.3** | [Le cartelle non esistono nel kernel](roadmap/14-entry-cartelle-lista.md#143-le-cartelle-non-esistono-nel-kernel) | 14. Le entry, le cartelle, la lista | kernel | **P2** |
-| **§14.4** | [Il canale della lista documenti](roadmap/14-entry-cartelle-lista.md#144-il-canale-della-lista-documenti) | 14. Le entry, le cartelle, la lista | kernel | **P2** |
 | **§15.1** | [Astrazione sullo storage](roadmap/15-il-disco.md#151-astrazione-sullo-storage) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
 | **§15.2** | [Durabilità e recovery](roadmap/15-il-disco.md#152-durabilità-e-recovery) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
 | **§15.3** | [Una versione di schema su ogni formato persistito](roadmap/15-il-disco.md#153-una-versione-di-schema-su-ogni-formato-persistito) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
@@ -251,7 +249,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — quarantasei, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — quarantasette, uno
   per file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

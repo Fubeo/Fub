@@ -87,12 +87,13 @@ use fubmd_abi::settings::{
 };
 use fubmd_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fubmd_abi::traits::{
-    BacklinkRef, CommandProvider, DocumentMatch, EntryKind, EventHandler, HealthCheck, HealthIssue,
-    HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, JobStatus,
-    LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
+    BacklinkRef, CommandProvider, DocumentMatch, EntryKind, EventHandler, FolderScope, HealthCheck,
+    HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec,
+    JobStatus, LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
     PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertySort,
     PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, TagCount, TrashEntry,
-    VaultEntry, VaultStatus, ViewInstance, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
+    VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -331,6 +332,9 @@ wit_type! {
     // L'anagrafe (§14.1): che specie di file è, e cosa se ne sa senza aprirlo.
     EntryKind => "entry-kind",
     VaultEntry => "vault-entry",
+    // Le cartelle (§14.3): il modello, e il raggio delle domande per cartella.
+    VaultFolder => "vault-folder",
+    FolderScope => "folder-scope",
 
     // Import ed export: la sorgente arriva a byte e gli artefatti escono a
     // byte, quindi al confine non compare nessun percorso di filesystem.
@@ -360,6 +364,7 @@ wit_type! {
     Paged<PropertyCount> => "property-values-page",
     Paged<HealthIssue> => "vault-health-page",
     Paged<VaultEntry> => "entries-page",
+    Paged<VaultFolder> => "folders-page",
     PluginManifest => "plugin-manifest",
     PluginPermissions => "plugin-permissions",
 
@@ -1962,10 +1967,23 @@ fn index_query_case(q: &IndexQuery) -> Case {
             "index-query-resolve",
             vec![("target", wit(target)), ("from", wit(from))],
         ),
-        IndexQuery::Entries { of_kind, page } => case_rec(
+        IndexQuery::Entries {
+            of_kind,
+            within,
+            page,
+        } => case_rec(
             "entries",
             "index-query-entries",
-            vec![("of-kind", wit(of_kind)), ("page", wit(page))],
+            vec![
+                ("of-kind", wit(of_kind)),
+                ("within", wit(within)),
+                ("page", wit(page)),
+            ],
+        ),
+        IndexQuery::Folders { under, page } => case_rec(
+            "folders",
+            "index-query-folders",
+            vec![("under", wit(under)), ("page", wit(page))],
         ),
     }
 }
@@ -2026,6 +2044,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::Organization => case("organization"),
         QueryKind::Resolve => case("resolve"),
         QueryKind::Entries => case("entries"),
+        QueryKind::Folders => case("folders"),
     }
 }
 
@@ -2063,6 +2082,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Organization(v) => case_ty("organization", wit(v)),
         IndexResult::Resolved(v) => case_ty("resolved", wit(v)),
         IndexResult::Entries(v) => case_ty("entries", wit(v)),
+        IndexResult::Folders(v) => case_ty("folders", wit(v)),
     }
 }
 
@@ -2803,6 +2823,11 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             index_query_case(&IndexQuery::Entries {
                 of_kind: None,
+                within: None,
+                page: None,
+            }),
+            index_query_case(&IndexQuery::Folders {
+                under: None,
                 page: None,
             }),
         ],
@@ -2826,6 +2851,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::Organization(Organization::default())),
             index_result_case(&IndexResult::Resolved(None)),
             index_result_case(&IndexResult::Entries(Paged::all(vec![]))),
+            index_result_case(&IndexResult::Folders(Paged::all(vec![]))),
         ],
     );
 
@@ -2888,6 +2914,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::Organization),
             query_kind_case(&QueryKind::Resolve),
             query_kind_case(&QueryKind::Entries),
+            query_kind_case(&QueryKind::Folders),
         ],
     );
 
@@ -3940,6 +3967,30 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let VaultFolder {
+        path,
+        folders,
+        entries,
+    } = VaultFolder {
+        path: "note".into(),
+        folders: 0,
+        entries: 0,
+    };
+    contract.record(
+        "vault-folder",
+        &[
+            ("path", wit(&path)),
+            ("folders", wit(&folders)),
+            ("entries", wit(&entries)),
+        ],
+    );
+
+    let FolderScope { path, descendants } = FolderScope::direct("note");
+    contract.record(
+        "folder-scope",
+        &[("path", wit(&path)), ("descendants", wit(&descendants))],
+    );
+
     let BacklinkRef { source, context } = BacklinkRef {
         source: DocId::new("a"),
         context: None,
@@ -4159,6 +4210,10 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record(
         "entries-page",
         &paged_fields(&Paged::all(Vec::<VaultEntry>::new())),
+    );
+    contract.record(
+        "folders-page",
+        &paged_fields(&Paged::all(Vec::<VaultFolder>::new())),
     );
 
     let UiAction {

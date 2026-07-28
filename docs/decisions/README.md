@@ -57,6 +57,7 @@ cronologico di chiusura.
 | [0044](0044-lo-stato-per-documento.md) | Lo stato per-documento: un posto dichiarato, e chi ci passa dietro | §13.2 | 2026-07-28 |
 | [0045](0045-l-undo-ha-due-pile.md) | L'undo ha due pile, e non si fondono | §13.3 — chiude la [seduta 13](../roadmap/13-identita-del-documento.md) | 2026-07-28 |
 | [0046](0046-l-anagrafe-del-vault.md) | L'anagrafe del vault: cosa c'è, cosa ne so, e cosa non devo rileggere | §14.1 + §14.2 (**metà** della [seduta 14](../roadmap/14-entry-cartelle-lista.md)) | 2026-07-28 |
+| [0047](0047-la-cartella-esiste-nel-kernel.md) | La cartella esiste nel kernel, e la lista si chiede per cartella | §14.3 + §14.4 ([seduta 14](../roadmap/14-entry-cartelle-lista.md)) | 2026-07-29 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

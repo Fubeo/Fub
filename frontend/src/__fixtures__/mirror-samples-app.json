@@ -2,9 +2,6 @@
   "VaultInfo": [
     {
       "root": "/vault",
-      "documents": [
-        "a.md"
-      ],
       "extensions": [
         "md"
       ],

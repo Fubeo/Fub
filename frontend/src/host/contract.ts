@@ -12,7 +12,9 @@
 
 export interface VaultInfo {
   root: string;
-  documents: string[];
+  // `documents` NON C'È PIÙ (§14.4): l'apertura portava l'elenco intero delle
+  // note dentro un record, dove una finestra non si può nemmeno chiedere. Chi
+  // ne vuole una parte la chiede al canale dati.
   // Le estensioni che i provider registrati gestiscono (minuscole, senza
   // punto). Quale sia l'estensione di un documento lo sanno i FormatDescriptor
   // del backend: la UI non deve cablare ".md".
@@ -781,6 +783,14 @@ export function testoCercato(text: string): QueryExpr {
   };
 }
 
+// Questi documenti, per nome: la foglia che chiede «quali di questi esistono?».
+// Chi la valuta la restringe a ciò che l'indice conosce, quindi la risposta è
+// l'intersezione — ed è il modo di verificare un pugno di path in UNA domanda
+// invece di chiedere l'elenco del vault per cercarli dentro.
+export function questiDocumenti(docs: string[]): QueryExpr {
+  return { any: [{ all: [{ negated: false, predicate: { kind: "docs", docs } }] }] };
+}
+
 // Quali proprietà del frontmatter portarsi dietro in una risposta.
 export type PropertySelect = { kind: "none" } | { kind: "all" } | { kind: "keys"; keys: string[] };
 
@@ -894,7 +904,19 @@ export type IndexQuery =
   // specie. È il canale con cui questa shell costruisce l'albero: prima
   // chiedeva `list_documents`, che restituiva l'intero vault in un `string[]`
   // senza finestra e senza allegati.
-  | { kind: "entries"; of_kind?: EntryKind | null; page?: Page | null };
+  // `within` è la metà che mancava (§14.4): una lista PER CARTELLA, così che
+  // aprire un vault da diecimila note non trasferisca diecimila righe per
+  // disegnarne venti. Assente = tutto il vault, com'era prima.
+  | {
+      kind: "entries";
+      of_kind?: EntryKind | null;
+      within?: FolderScope | null;
+      page?: Page | null;
+    }
+  // Quali cartelle ci sono? (§14.3) Una domanda sua e non una specie in più di
+  // `EntryKind`: una cartella non ha dimensione, data né impronta. `under`
+  // assente = ogni cartella del vault, a ogni profondità.
+  | { kind: "folders"; under?: FolderScope | null; page?: Page | null };
 
 // La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -917,7 +939,8 @@ export type IndexResult =
   // rinominata via da sotto danno tutti e tre `null`, e chi ha chiesto sa che
   // deve proporre qualcos'altro.
   | { kind: "resolved"; value: string | null }
-  | { kind: "entries"; value: Paged<VaultEntry> };
+  | { kind: "entries"; value: Paged<VaultEntry> }
+  | { kind: "folders"; value: Paged<VaultFolder> };
 
 // CHE SPECIE DI FILE È (§14.1). Non è una proprietà del file: è una proprietà
 // del file dato chi è registrato adesso — un `.canvas` è `unknown` finché
@@ -939,6 +962,33 @@ export interface VaultEntry {
   // il caso normale per un allegato: leggerne i byte all'apertura è il costo
   // che l'anagrafe esiste per togliere.
   fingerprint: string | null;
+}
+
+// Una CARTELLA del vault (§14.3). Esiste perché il disco ce l'ha, non perché il
+// path di un file la nomini: una cartella vuota c'è, e una che resta vuota
+// perché la sua ultima nota è finita nel cestino resta lì. Prima le cartelle
+// vivevano solo qui — le costruiva `buildTree` dai path delle note — e il
+// kernel non ne sapeva niente.
+export interface VaultFolder {
+  // Senza slash finale, mai vuoto: la radice non è una voce.
+  path: string;
+  // Sottocartelle dirette: è ciò che dice se disegnare la freccetta che apre,
+  // senza dover prima chiedere cosa c'è dentro.
+  folders: number;
+  // File diretti, DI OGNI SPECIE: la domanda è «questa cartella è vuota?», e
+  // una con dentro solo un PNG non lo è.
+  entries: number;
+}
+
+// DOVE guardare, per le domande che si fanno per cartella (§14.3, §14.4). È la
+// stessa coppia del predicato `folder`, di proposito: la regola che decide cosa
+// ci sta dentro è una sola.
+export interface FolderScope {
+  // Senza slash finale. "" è la radice del vault.
+  path: string;
+  // `false` = i soli figli diretti, che è la domanda che disegna un livello di
+  // albero.
+  descendants: boolean;
 }
 
 // --- le impostazioni (§11.1) ------------------------------------------------

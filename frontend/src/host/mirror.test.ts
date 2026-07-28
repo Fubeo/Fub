@@ -343,6 +343,10 @@ function touchIndexQuery(q: IndexQuery): void {
     case "entries":
       if (q.of_kind != null) touchEntryKind(q.of_kind);
       return;
+    // Le cartelle (§14.3): la domanda che l'albero fa per ogni livello che
+    // apre. Non porta specie da nominare — una cartella non ne ha.
+    case "folders":
+      return;
     default:
       assertNever(q);
   }
@@ -423,6 +427,8 @@ function touchIndexResult(r: IndexResult): void {
     // salta in silenzio.
     case "entries":
       r.value.items.forEach((e: VaultEntry) => touchEntryKind(e.kind));
+      return;
+    case "folders":
       return;
     default:
       assertNever(r);
@@ -587,7 +593,6 @@ const PARTIAL_RECORD_KEYS: Record<string, { all: string[]; required: string[] }>
 const APP_RECORD_KEYS: Record<string, string[]> = {
   VaultInfo: keysOf<VaultInfo>({
     root: true,
-    documents: true,
     extensions: true,
     plugins: true,
   }),
