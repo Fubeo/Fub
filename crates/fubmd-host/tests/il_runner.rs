@@ -18,7 +18,10 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
-use fubmd_abi::traits::{HostApi, JobSpec, Plugin, PluginManifest};
+use fubmd_abi::traits::{
+    HostApi, HostEvents, IndexQuery, IndexResult, JobProgress, JobSpec, JobStatus, Plugin,
+    PluginManifest,
+};
 use fubmd_abi::{Event, PluginError};
 use fubmd_host::registry::Bundle;
 use fubmd_host::{Host, NoWatcher};
@@ -140,6 +143,22 @@ impl Plugin for Lavoratore {
                 self.passi.segna("sta calcolando");
                 self.passi.aspetta_il_via();
                 Ok(serde_json::json!(40 + 2))
+            }
+            // **Si racconta** (§10.3): tre passi, e a ogni passo dice a che
+            // punto è. Non nomina sé stesso — non conosce il proprio id — e
+            // aspetta il via fra un passo e l'altro perché il test possa
+            // guardarlo mentre è vivo.
+            "racconta" => {
+                for passo in 1..=3u64 {
+                    host.report_progress(JobProgress {
+                        done: passo,
+                        total: Some(3),
+                        label: Some(format!("passo {passo}")),
+                    });
+                    self.passi.segna(&format!("ha detto {passo}"));
+                    self.passi.aspetta_il_via();
+                }
+                Ok(serde_json::json!("raccontato"))
             }
             "esplodi" => panic!("il job è esploso"),
             altro => Err(PluginError::UnknownJob(altro.to_string())),
@@ -405,4 +424,120 @@ fn chiudere_ferma_il_pool_e_nessun_job_sparisce_in_silenzio() {
             .all(|e| matches!(e, PluginError::Cancelled(_))),
         "la chiusura racconta ciò che ha fermato: {chiusa:?}"
     );
+}
+
+// --- il lavoro lungo si racconta (§10.3, decisione 0035) --------------------
+
+/// I job vivi **adesso**, chiesti al canale dati come li chiede il centro
+/// attività della shell.
+fn vivi(host: &Host) -> Vec<JobStatus> {
+    host.with_session(None, |s| {
+        let ws = s.workspace().read().unwrap();
+        match ws
+            .query_index(IndexQuery::Jobs)
+            .expect("il kernel risponde")
+        {
+            IndexResult::Jobs(jobs) => jobs,
+            altro => panic!("risposta fuori tema: {}", altro.kind_name()),
+        }
+    })
+    .expect("aperto")
+}
+
+/// Il giro intero di ciò che il centro attività guarda: il lavoro **compare**
+/// quando è accettato, **dice dove è arrivato** mentre cammina, e **sparisce**
+/// quando finisce — senza che nessuno debba tenere il conto.
+///
+/// Prova insieme le tre metà della voce, e non si possono separare: un elenco
+/// che non si svuota è peggio di un elenco che non c'è, e un progresso che
+/// nessuno può riconciliare è un canale senza freno.
+#[test]
+fn un_job_che_cammina_compare_dice_dove_e_arrivato_e_sparisce() {
+    let v = Vault::nuovo();
+    let (passi, regia) = passi();
+    let (host, eventi) = banco(&v, &passi);
+
+    let id = chiedi(&host, "racconta", serde_json::json!(null));
+
+    // 1. Compare **subito**, prima ancora che un thread lo prenda in mano: è
+    //    ciò che permette di fermare un job che sta ancora aspettando.
+    let avvio = eventi
+        .recv_timeout(Duration::from_secs(10))
+        .expect("l'avvio di un job è un evento");
+    assert!(
+        matches!(&avvio.event, Event::JobStarted { id: quale, job } if *quale == id && job == "racconta"),
+        "il primo evento è l'avvio: {:?}",
+        avvio.event
+    );
+
+    // 2. Dice dove è arrivato, e chi arriva dopo lo può **chiedere**: sono le
+    //    due strade per la stessa verità, e devono dire la stessa cosa.
+    //
+    //    Si **guarda** dentro il ciclo e si **giudica** dopo, ed è una regola di
+    //    questo banco e non una preferenza: mentre il job è fermo alla barriera
+    //    un'asserzione che cade lascerebbe il thread del pool in attesa di un
+    //    via che nessuno darà più, e la suite si pianterebbe invece di
+    //    diventare rossa.
+    let mut visti: Vec<Vec<JobStatus>> = Vec::new();
+    for passo in 1..=3u64 {
+        regia.aspetta(&format!("ha detto {passo}"));
+        visti.push(vivi(&host));
+        regia.via();
+    }
+    for (n, vivo) in visti.iter().enumerate() {
+        let passo = n as u64 + 1;
+        assert_eq!(vivo.len(), 1, "un solo lavoro in volo: {vivo:?}");
+        assert_eq!(vivo[0].id, id);
+        assert_eq!(vivo[0].job, "racconta");
+        assert_eq!(vivo[0].plugin, SPIA, "la riga dice di chi è il lavoro");
+        assert_eq!(
+            vivo[0].progress,
+            Some(JobProgress {
+                done: passo,
+                total: Some(3),
+                label: Some(format!("passo {passo}")),
+            }),
+            "chi chiede vede l'ultimo passo raccontato"
+        );
+    }
+
+    // 3. Finisce, e da lì non è più vivo: l'elenco si svuota **prima** che
+    //    l'esito parta, o chi riceve `job-done` e ricontrolla troverebbe ancora
+    //    là dentro il lavoro che gli è appena stato detto finito.
+    let (job, result) = esito(&eventi);
+    assert_eq!(job, "racconta");
+    assert_eq!(result.expect("è arrivato in fondo"), "raccontato");
+    assert!(
+        vivi(&host).is_empty(),
+        "un job finito non è più un lavoro in corso"
+    );
+    host.close();
+}
+
+/// Il progresso **non lo si può firmare a nome di un altro**, e la ragione è
+/// che non c'è dove scrivere il nome: `report_progress` non ha un parametro per
+/// l'identità, e a metterla è l'host del job.
+///
+/// Qui si prova il caso in cui quell'identità non c'è: un `JobHost` costruito a
+/// mano — le capacità di un plugin fuori dal pool — non è l'host di nessun job,
+/// e il suo `report_progress` non inventa una riga nell'elenco.
+#[test]
+fn fuori_da_un_job_il_progresso_non_ha_di_chi_essere() {
+    let v = Vault::nuovo();
+    let (passi, _regia) = passi();
+    let (host, _eventi) = banco(&v, &passi);
+
+    let ws = host.workspace(None).expect("aperto");
+    let mut fuori = fubmd_host::JobHost::new(ws, SPIA);
+    fuori.report_progress(JobProgress {
+        done: 1,
+        total: Some(2),
+        label: Some("da nessuna parte".into()),
+    });
+
+    assert!(
+        vivi(&host).is_empty(),
+        "un progresso senza job non fa comparire niente"
+    );
+    host.close();
 }

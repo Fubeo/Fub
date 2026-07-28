@@ -33,13 +33,22 @@
 //! ricordarsi di chiamare, e un job scritto prima che la cancellazione esistesse
 //! si ferma comunque.
 //!
-//! Ciò che **non** rifiuta sono le cinque capacità che non possono fallire —
-//! `free_name`, `format_of`, `now_unix_millis`, `active_context`, `emit` — e non
-//! è una dimenticanza: non hanno dove metterlo, un rifiuto. Nessuna delle cinque
-//! cambia il vault, e la ragione è strutturale: nel contratto **tutto ciò che
-//! cambia il vault può fallire**, quindi tutto ciò che cambia il vault si può
-//! rifiutare. `emit` resta aperta di proposito — l'ultima cosa che un job
-//! annullato può voler dire è che sta smettendo.
+//! Ciò che **non** rifiuta sono le sei capacità che non possono fallire —
+//! `free_name`, `format_of`, `now_unix_millis`, `active_context`, `emit`,
+//! `report_progress` — e non è una dimenticanza: non hanno dove metterlo, un
+//! rifiuto. Nessuna delle sei cambia il vault, e la ragione è strutturale: nel
+//! contratto **tutto ciò che cambia il vault può fallire**, quindi tutto ciò che
+//! cambia il vault si può rifiutare. Le ultime due restano aperte di proposito —
+//! l'ultima cosa che un job annullato può voler dire è che sta smettendo, e a
+//! che punto era.
+//!
+//! # E il progresso, che è l'identità al contrario
+//!
+//! La cancellazione arriva al job perché il suo host **smette di servirlo**; il
+//! progresso esce dal job perché il suo host **lo firma**. Sono la stessa mossa
+//! nei due versi: le due cose che un job non sa di sé — quando smettere e come
+//! si chiama — le sa chi lo esegue (§10.3,
+//! [decisione 0035](../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md)).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -51,8 +60,8 @@ use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
-    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, ReadApi, TrashEntry, VaultRead,
-    VaultStructure, VaultWrite,
+    IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi, TrashEntry,
+    VaultRead, VaultStructure, VaultWrite,
 };
 use fubmd_abi::{Event, PluginError};
 use fubmd_kernel::Workspace;
@@ -77,6 +86,20 @@ use fubmd_kernel::Workspace;
 pub struct JobHost {
     workspace: Arc<RwLock<Workspace>>,
     plugin: String,
+    /// **L'identità che il job non ha** (§10.3,
+    /// [decisione 0035](../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md)).
+    ///
+    /// `Plugin::run_job` riceve il nome dell'entry point, gli argomenti e
+    /// l'host — non l'id — quindi un job non può nominare sé stesso in un
+    /// evento. Chi può è questo host, e per questo
+    /// [`report_progress`](fubmd_abi::traits::HostEvents::report_progress) non
+    /// ha un parametro per l'id: non c'è modo di sbagliarlo e non c'è modo di
+    /// raccontare il progresso di un altro.
+    ///
+    /// `None` è l'host di nessun job — quello che un test costruisce a mano per
+    /// avere le capacità di un plugin fuori dal pool. Lì un progresso non ha di
+    /// chi essere, e la porta torna a essere il no-op che il contratto dichiara.
+    job: Option<JobId>,
     /// La bandiera dell'**annullamento** (§9.3, decisione 0032): alzata, ogni
     /// capacità che può dire di no dice di no.
     ///
@@ -99,8 +122,19 @@ impl JobHost {
         JobHost {
             workspace,
             plugin: plugin.into(),
+            job: None,
             cancelled: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Dice a questo host **di quale job** è l'host, che è tutto ciò che serve
+    /// perché il job possa raccontarsi (§10.3).
+    ///
+    /// Come la bandiera dell'annullamento, l'id lo sa il runner: sono le due
+    /// cose che il job non può sapere di sé — quando smettere, e come si chiama.
+    pub fn for_job(mut self, id: JobId) -> Self {
+        self.job = Some(id);
+        self
     }
 
     /// Lega questo host alla bandiera con cui il suo job si può **annullare**.
@@ -275,6 +309,27 @@ impl HostEvents for JobHost {
     /// chi possiede i thread.
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError> {
         self.write_result(|h| h.spawn_job(spec))
+    }
+
+    /// **Il timbro**: il job dice a che punto è, e chi lo dice per lui è questo
+    /// host, che l'identità ce l'ha (§10.3).
+    ///
+    /// Non passa da `with_host` come tutto il resto, e non è una scorciatoia: le
+    /// capacità sono ciò che si presta a un *plugin*, e qui il fatto da
+    /// registrare non è del plugin — è di **questo job**, che il contratto non
+    /// dà modo di nominare. Il prestito esclusivo lo prende lo stesso, perché
+    /// dall'altra parte c'è una tabella da aggiornare e una coda da drenare.
+    ///
+    /// Non si nega a un job annullato, come `emit`: l'ultima cosa che un job che
+    /// sta smettendo può voler dire è a che punto era arrivato.
+    fn report_progress(&mut self, progress: JobProgress) {
+        let Some(id) = self.job else {
+            return;
+        };
+        self.workspace
+            .write()
+            .expect("workspace avvelenato")
+            .note_job_progress(id, progress);
     }
 }
 

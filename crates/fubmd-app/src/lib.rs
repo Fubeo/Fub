@@ -22,7 +22,7 @@ use fubmd_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::event::Actor;
 use fubmd_abi::model::DocId;
 use fubmd_abi::session::ViewContext;
-use fubmd_abi::traits::{IndexQuery, IndexResult, ViewInstance, ViewSpec};
+use fubmd_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fubmd_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fubmd_abi::Notice;
 use fubmd_features::VersionRef;
@@ -404,6 +404,26 @@ fn query_index(
     ws.query_index(query).map_err(|e| e.to_string())
 }
 
+/// **Ferma un lavoro lungo** (§10.3): l'altro capo di `Host::cancel_job`, che
+/// finora usavano solo i presidi.
+///
+/// L'id arriva come **stringa** perché è un u64 pieno e `JSON.parse` perde i
+/// bit oltre 2⁵³ in silenzio (la regola sta in `fubmd_abi::ipc`): un job che
+/// non si annulla una volta ogni tanto sarebbe il difetto peggiore di questa
+/// riga, perché somiglia a un job lento.
+///
+/// Non c'è un «job sconosciuto», ed è una decisione della 0032: annullare un
+/// job un istante prima che parta deve valere quanto annullarne uno in volo, e
+/// un pulsante premuto quando il lavoro è appena finito non è un errore da
+/// mostrare — è la cosa più normale che l'utente faccia.
+#[tauri::command]
+fn cancel_job(host: State<Host>, id: String, vault: Option<String>) -> Result<(), String> {
+    let id = id
+        .parse::<u64>()
+        .map_err(|_| format!("identità di job non valida: `{id}`"))?;
+    host.cancel_job(vault.as_deref(), JobId(id))
+}
+
 // --- versioning ------------------------------------------------------------
 //
 // Il kernel non sa che il versioning esiste, e comporre le due metà — lo store
@@ -502,6 +522,7 @@ pub fn run() {
             list_commands,
             invoke_command,
             query_index,
+            cancel_job,
             resolve_link,
             list_versions,
             read_version,

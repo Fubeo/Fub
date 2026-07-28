@@ -94,6 +94,37 @@
            qualcosa e se ne va). Vuote finché nessuna view le dichiara. -->
       <div id="views-ribbon" hidden></div>
       <footer id="views-status" hidden></footer>
+      <!-- La barra di stato della shell (§10.3), che è un'altra cosa da
+           `#views-status`: quella la riempiono le view dichiarate, questa è
+           **della shell** e c'è sempre. Ci stanno le due cose che l'utente deve
+           poter guardare in qualunque momento senza che nulla lo interrompa:
+           cosa sta girando, e cosa gli è stato detto. -->
+      <footer id="statusbar">
+        <span id="statusbar-fill"></span>
+        <button id="activity-button" type="button" aria-expanded="false" title="I lavori in corso">
+          Attività
+        </button>
+        <button id="notify-button" type="button" aria-expanded="false" title="Gli avvisi recenti">
+          Avvisi
+        </button>
+      </footer>
+      <div id="activity-panel" hidden>
+        <div class="panel-title">
+          <span>Attività</span>
+          <button id="activity-close" class="link-button" title="Chiudi">Chiudi</button>
+        </div>
+        <ul id="activity-list"></ul>
+      </div>
+      <div id="notify-panel" hidden>
+        <div class="panel-title">
+          <span>Avvisi</span>
+          <button id="notify-clear" class="link-button" title="Dimentica gli avvisi">
+            Pulisci
+          </button>
+          <button id="notify-close" class="link-button" title="Chiudi">Chiudi</button>
+        </div>
+        <ul id="notify-list"></ul>
+      </div>
       <div id="views-modal" hidden></div>
     </div>
     <script type="module" src="/src/main.ts"></script>

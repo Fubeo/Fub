@@ -13,6 +13,7 @@ import { api } from "./ipc";
 import type {
   DocumentMatch,
   IndexQuery,
+  JobStatus,
   IndexResult,
   NeighborRef,
   Page,
@@ -79,6 +80,17 @@ export async function archiDelVault(): Promise<NeighborRef[]> {
     page: null,
   };
   return open(await api.queryIndex(query), "neighbors").items;
+}
+
+/// I lavori lunghi **vivi**, dal più vecchio: quelli che stanno girando e
+/// quelli che aspettano un thread libero (§10.3).
+///
+/// È la **riconciliazione** del centro attività, non il suo canale normale: le
+/// righe le muovono gli eventi (`job_started`, `job_progress`, `job_done`), e
+/// questa domanda serve quando quel filo si è interrotto — all'apertura del
+/// pannello, e dopo un `overflow`, che vuol dire esattamente *richiedi*.
+export async function lavoriInCorso(): Promise<JobStatus[]> {
+  return open(await api.queryIndex({ kind: "jobs" }), "jobs");
 }
 
 /// Che rapporto ha questo vault con il disco (§9.7): FubMD saprebbe che è

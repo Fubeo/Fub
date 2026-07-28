@@ -99,6 +99,13 @@ export const api = {
   // Adesso la shell ha le stesse capacità di un plugin, e una variante nuova
   // del contratto non chiede un comando in più.
   queryIndex: (query: IndexQuery) => invoke<IndexResult>("query_index", { query }),
+  // Ferma un lavoro lungo (§10.3). L'id viaggia come **stringa**: è un u64
+  // pieno, e `JSON.parse` perde i bit oltre 2⁵³ in silenzio — un job che ogni
+  // tanto non si annulla somiglierebbe a un job lento.
+  //
+  // Non c'è un «job sconosciuto» da gestire: annullare un job appena finito è la
+  // cosa più normale che l'utente faccia, e il backend risponde di sì.
+  cancelJob: (id: string) => invoke<void>("cancel_job", { id }),
   resolveLink: (page: string) => invoke<string | null>("resolve_link", { page }),
   listVersions: (id: string) => invoke<VersionRef[]>("list_versions", { id }),
   readVersion: (id: string, ts: number) => invoke<string>("read_version", { id, ts }),

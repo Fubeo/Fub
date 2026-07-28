@@ -61,7 +61,7 @@ use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
-    JobId, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
+    JobId, JobProgress, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
     ViewInstance, ViewProvider, ViewSpec,
 };
 use fubmd_abi::transfer::{
@@ -2778,8 +2778,47 @@ impl Workspace {
     /// Sta qui e non nell'host perché il contatore è del workspace: un host è
     /// un prestito per la durata di una chiamata, e un'identità che si conta
     /// dentro un prestito ricomincerebbe da capo a ogni prestito.
+    ///
+    /// Da qui il job è **vivo e visibile** (§10.3): entra nella tabella che
+    /// [`IndexQuery::Jobs`](fubmd_abi::traits::IndexQuery::Jobs) racconta, e ne
+    /// esce un [`Event::JobStarted`]. L'origine non la si tocca: è quella del
+    /// giro in corso, cioè di **chi ha chiesto** il lavoro — che è la sola cosa
+    /// che l'evento non porta nei propri campi.
     pub(crate) fn enqueue_job(&mut self, plugin: &str, spec: JobSpec) -> JobId {
-        self.dispatch.enqueue_job(plugin, spec)
+        let job = spec.job.clone();
+        let id = self.dispatch.enqueue_job(plugin, spec);
+        self.indexes.core.jobs.accepted(id, &job, plugin);
+        self.emit_event(Event::JobStarted { id, job });
+        id
+    }
+
+    /// **A che punto è** un job (§10.3, decisione 0035).
+    ///
+    /// Non è una capacità e non passa dall'[`HostApi`](fubmd_abi::traits::HostApi):
+    /// è la porta di chi *esegue* il job — il `JobHost` di `fubmd-host`, che
+    /// l'identità ce l'ha — e proprio per questo l'id non è un parametro che un
+    /// job possa sbagliare o fingere. Il job dal canto suo chiama
+    /// [`report_progress`](fubmd_abi::traits::HostEvents::report_progress), che
+    /// non nomina nessuno.
+    ///
+    /// Un progresso per un job **non più vivo** non si registra e non si emette:
+    /// chi lo timbra gira su un altro thread, e fra il suo ultimo passo e
+    /// l'esito ci sta di tutto — far ricomparire una riga già chiusa sarebbe un
+    /// centro attività che mostra un lavoro finito.
+    ///
+    /// L'origine è il **plugin di cui il job è**, e non il kernel come per
+    /// l'esito: `JobDone` lo emette il kernel perché il job lo ha eseguito lui e
+    /// chi lo ha chiesto si riconosce dall'`id`, mentre un progresso è il
+    /// racconto che il job fa di sé — «questo lo sto facendo io».
+    pub fn note_job_progress(&mut self, id: JobId, progress: JobProgress) {
+        if !self.indexes.core.jobs.progressed(id, progress.clone()) {
+            return;
+        }
+        let plugin = self.indexes.core.jobs.owner(id);
+        self.as_actor(Actor::Plugin { id: plugin }, |ws| {
+            ws.emit_event(Event::JobProgress { id, progress });
+            ws.dispatch_pending();
+        });
     }
 
     /// **Il campanello dei job** (§9.3), da dare a chi possiede i thread.
@@ -2825,12 +2864,18 @@ impl Workspace {
     /// dall'`id` — che è il campo fatto apposta. Intestarglielo direbbe «questo
     /// lo hai chiesto tu adesso», che è vero solo a metà e proprio nel senso
     /// sbagliato per un handler che salta le proprie scritture.
+    ///
+    /// È anche il momento in cui il job **smette di essere vivo**: la riga esce
+    /// dalla tabella del §10.3 *prima* che l'evento parta, o chi riceve
+    /// `job-done` e ricontrolla l'elenco troverebbe ancora là dentro il lavoro
+    /// che gli è appena stato detto finito.
     pub fn complete_job(
         &mut self,
         id: JobId,
         job: impl Into<String>,
         result: std::result::Result<serde_json::Value, PluginError>,
     ) {
+        self.indexes.core.jobs.finished(id);
         self.as_actor(Actor::Kernel, |ws| {
             ws.emit_event(Event::JobDone {
                 id,

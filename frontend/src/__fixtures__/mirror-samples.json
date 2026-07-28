@@ -356,6 +356,20 @@
     {
       "type": "vault_closed",
       "root": "/vault"
+    },
+    {
+      "type": "job_started",
+      "id": "18446744073709551615",
+      "job": "export"
+    },
+    {
+      "type": "job_progress",
+      "id": "18446744073709551615",
+      "progress": {
+        "done": 12,
+        "total": 300,
+        "label": "esportando Diario/2026.md"
+      }
     }
   ],
   "KernelNotice": [
@@ -549,6 +563,9 @@
     },
     {
       "kind": "vault_status"
+    },
+    {
+      "kind": "jobs"
     }
   ],
   "IndexResult": [
@@ -637,6 +654,29 @@
         "sync_failures": 1,
         "last_sync_error": "Nota.md: frontmatter illeggibile"
       }
+    },
+    {
+      "kind": "jobs",
+      "value": [
+        {
+          "id": "1",
+          "job": "export",
+          "plugin": "fubmd.transfer",
+          "since": 1700000000000,
+          "progress": {
+            "done": 12,
+            "total": 300,
+            "label": "esportando Diario/2026.md"
+          }
+        },
+        {
+          "id": "2",
+          "job": "reindex",
+          "plugin": "fubmd.search",
+          "since": 1700000000500,
+          "progress": null
+        }
+      ]
     }
   ],
   "BacklinkRef": [
@@ -664,6 +704,33 @@
       "watching": true,
       "sync_failures": 1,
       "last_sync_error": "Nota.md: frontmatter illeggibile"
+    }
+  ],
+  "JobProgress": [
+    {
+      "done": 12,
+      "total": 300,
+      "label": "esportando Diario/2026.md"
+    }
+  ],
+  "JobStatus": [
+    {
+      "id": "1",
+      "job": "export",
+      "plugin": "fubmd.transfer",
+      "since": 1700000000000,
+      "progress": {
+        "done": 12,
+        "total": 300,
+        "label": "esportando Diario/2026.md"
+      }
+    },
+    {
+      "id": "2",
+      "job": "reindex",
+      "plugin": "fubmd.search",
+      "since": 1700000000500,
+      "progress": null
     }
   ],
   "UiAction": [

@@ -209,7 +209,10 @@ oggi, una migrazione domani); le altre restano al freeze.
 - [x] **Operazioni strutturali e parità plugin↔nativo** — fatto con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md), che ha
       **chiuso l'elenco** delle capacità: `create_document`, `rename_document`,
       `trash_document`, `list_trash`, `restore_document`, `empty_trash`,
-      `run_command`; via `storage_get`/`storage_set`; ventidue metodi in tutto.
+      `run_command`; via `storage_get`/`storage_set`; ventidue metodi in tutto
+      (ventitré con `report_progress`, aggiunto dalla
+      [decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md): la
+      porta con cui un job si racconta, additiva).
       Primo cliente vero: le cinque azioni strutturali della shell migrate a
       `CoreCommands`, con **sei comandi Tauri spariti**, più `vault.archive` che
       compone via `run_command`. Le decisioni che il freeze avrebbe reso
@@ -407,7 +410,7 @@ oggi, una migrazione domani); le altre restano al freeze.
 | WIT **vivo da M2**, freeze a M4 | La regola d'oro diventa verificabile ad ogni commit, non un atto di fede a fine corsa. |
 | Primo plugin **nativo** prima del WASM | Separa "il confine è giusto?" da "il runtime WASM funziona?"; M5 resta meccanico. |
 | JSON libero come `string` in WIT | Preserva l'escape hatch (`attrs`/`args`) senza esplodere il contratto. |
-| L'`HostApi` è **chiusa** dalla [decisione 0013](../decisions/0013-elenco-delle-capacita.md) | Ventidue metodi, e ogni capacità esclusa ha una ragione scritta: dopo il freeze, una capacità mancante è una feature che non potrà mai essere un plugin, e "non ci avevamo pensato" non è un motivo che si possa leggere fra sei mesi. |
+| L'`HostApi` è **chiusa** dalla [decisione 0013](../decisions/0013-elenco-delle-capacita.md) | Ventitré metodi, e ogni capacità esclusa ha una ragione scritta: dopo il freeze, una capacità mancante è una feature che non potrà mai essere un plugin, e "non ci avevamo pensato" non è un motivo che si possa leggere fra sei mesi. |
 | Cambi additivi versionati post-freeze | Stabilità per i plugin di terzi senza bloccare l'evoluzione. |
 
 ## Criteri di accettazione

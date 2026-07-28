@@ -24,6 +24,8 @@ import type {
   Subject,
   TagCount,
   VaultStatus,
+  JobProgress,
+  JobStatus,
   FieldValue,
   TrashEntry,
   UiAction,
@@ -219,6 +221,13 @@ function touchEvent(e: KernelEvent): void {
     case "batch_ended":
     case "view_invalidated":
     case "vault_closed":
+    case "job_started":
+      return;
+    // Il ciclo di un lavoro lungo (§10.3): la riga compare, dice dove è
+    // arrivata, sparisce. Il progresso è l'unico dei tre con un payload da
+    // toccare — l'evento porta il record, non tre campi sciolti.
+    case "job_progress":
+      e.progress.done;
       return;
     default:
       assertNever(e);
@@ -260,6 +269,7 @@ function touchIndexQuery(q: IndexQuery): void {
     case "vault_health":
     case "custom":
     case "vault_status":
+    case "jobs":
       return;
     default:
       assertNever(q);
@@ -300,6 +310,9 @@ function touchIndexResult(r: IndexResult): void {
     case "custom":
     case "vault_status":
       return;
+    case "jobs":
+      r.value.forEach((j) => j.progress?.done);
+      return;
     default:
       assertNever(r);
   }
@@ -333,6 +346,14 @@ const RECORD_KEYS: Record<string, string[]> = {
     watching: true,
     sync_failures: true,
     last_sync_error: true,
+  }),
+  JobProgress: keysOf<JobProgress>({ done: true, total: true, label: true }),
+  JobStatus: keysOf<JobStatus>({
+    id: true,
+    job: true,
+    plugin: true,
+    since: true,
+    progress: true,
   }),
   ViewSpec: keysOf<ViewSpec>({
     id: true,

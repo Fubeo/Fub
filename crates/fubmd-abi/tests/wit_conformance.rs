@@ -82,11 +82,11 @@ use fubmd_abi::query::{
 use fubmd_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, DocumentMatch, EventHandler, HealthCheck, HealthIssue, HostApi,
-    IndexProvider, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef, Page,
-    Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry,
-    PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi,
-    ServiceProvider, TagCount, TrashEntry, VaultStatus, ViewInstance, ViewProvider, ViewSpec,
-    ViewSurface, ABI_VERSION,
+    IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, JobStatus, LinkDirection,
+    NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind,
+    PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertySort, PropertyTest,
+    QueryKind, QueryRoute, ReadApi, ServiceProvider, TagCount, TrashEntry, VaultStatus,
+    ViewInstance, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -285,6 +285,8 @@ wit_type! {
     DocumentMatch => "document-match",
     TagCount => "tag-count",
     VaultStatus => "vault-status",
+    JobProgress => "job-progress",
+    JobStatus => "job-status",
     TrashEntry => "trash-entry",
     Page => "page",
     LinkDirection => "link-direction",
@@ -1728,6 +1730,16 @@ fn event_case(e: &Event) -> Case {
             "event-vault-closed",
             vec![("root", wit(root))],
         ),
+        Event::JobStarted { id, job } => case_rec(
+            "job-started",
+            "event-job-started",
+            vec![("id", wit(id)), ("job", wit(job))],
+        ),
+        Event::JobProgress { id, progress } => case_rec(
+            "job-progress",
+            "event-job-progress",
+            vec![("id", wit(id)), ("progress", wit(progress))],
+        ),
     }
 }
 
@@ -1744,6 +1756,8 @@ fn event_kind_name(k: EventKind) -> &'static str {
         EventKind::BatchEnded => "batch-ended",
         EventKind::ViewInvalidated => "view-invalidated",
         EventKind::VaultClosed => "vault-closed",
+        EventKind::JobStarted => "job-started",
+        EventKind::JobProgress => "job-progress",
     }
 }
 
@@ -1830,6 +1844,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
             vec![("ns", wit(ns)), ("query", wit(query))],
         ),
         IndexQuery::VaultStatus => case("vault-status"),
+        IndexQuery::Jobs => case("jobs"),
     }
 }
 
@@ -1884,6 +1899,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::VaultHealth => case("vault-health"),
         QueryKind::Custom(ns) => case_ty("custom", wit(ns)),
         QueryKind::VaultStatus => case("vault-status"),
+        QueryKind::Jobs => case("jobs"),
     }
 }
 
@@ -1916,6 +1932,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::VaultHealth(v) => case_ty("vault-health", wit(v)),
         IndexResult::Custom(v) => case_ty("custom", wit(v)),
         IndexResult::VaultStatus(v) => case_ty("vault-status", wit(v)),
+        IndexResult::Jobs(v) => case_ty("jobs", wit(v)),
     }
 }
 
@@ -2517,6 +2534,14 @@ fn conform(source: &str) -> Result<(), String> {
             event_case(&Event::VaultClosed {
                 root: String::new(),
             }),
+            event_case(&Event::JobStarted {
+                id: JobId(0),
+                job: String::new(),
+            }),
+            event_case(&Event::JobProgress {
+                id: JobId(0),
+                progress: JobProgress::default(),
+            }),
         ],
     );
 
@@ -2581,6 +2606,7 @@ fn conform(source: &str) -> Result<(), String> {
                 query: serde_json::Value::Null,
             }),
             index_query_case(&IndexQuery::VaultStatus),
+            index_query_case(&IndexQuery::Jobs),
         ],
     );
 
@@ -2597,6 +2623,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::VaultHealth(Paged::all(vec![]))),
             index_result_case(&IndexResult::Custom(serde_json::Value::Null)),
             index_result_case(&IndexResult::VaultStatus(VaultStatus::default())),
+            index_result_case(&IndexResult::Jobs(vec![])),
         ],
     );
 
@@ -2654,6 +2681,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::VaultHealth),
             query_kind_case(&QueryKind::Custom(String::new())),
             query_kind_case(&QueryKind::VaultStatus),
+            query_kind_case(&QueryKind::Jobs),
         ],
     );
 
@@ -2763,6 +2791,8 @@ fn conform(source: &str) -> Result<(), String> {
             EventKind::BatchEnded,
             EventKind::ViewInvalidated,
             EventKind::VaultClosed,
+            EventKind::JobStarted,
+            EventKind::JobProgress,
         ]
         .map(event_kind_name)
         .as_slice(),
@@ -3610,6 +3640,42 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    // Il lavoro lungo che si racconta (§10.3): il progresso, e la riga che
+    // `index-query.jobs` restituisce.
+    let JobProgress { done, total, label } = JobProgress::default();
+    contract.record(
+        "job-progress",
+        &[
+            ("done", wit(&done)),
+            ("total", wit(&total)),
+            ("label", wit(&label)),
+        ],
+    );
+
+    let JobStatus {
+        id,
+        job,
+        plugin,
+        since,
+        progress,
+    } = JobStatus {
+        id: JobId(0),
+        job: String::new(),
+        plugin: String::new(),
+        since: 0,
+        progress: None,
+    };
+    contract.record(
+        "job-status",
+        &[
+            ("id", wit(&id)),
+            ("job", wit(&job)),
+            ("plugin", wit(&plugin)),
+            ("since", wit(&since)),
+            ("progress", wit(&progress)),
+        ],
+    );
+
     let NeighborRef { doc, via, depth } = NeighborRef {
         doc: DocId::new("a"),
         via: DocId::new("b"),
@@ -4355,6 +4421,12 @@ fn conform(source: &str) -> Result<(), String> {
         "spawn-job",
         <dyn HostApi>::spawn_job as fn(Host, JobSpec) -> Result<JobId, PluginError>,
         &["spec"],
+    );
+    contract.method(
+        "host-events",
+        "report-progress",
+        <dyn HostApi>::report_progress as fn(Host, JobProgress),
+        &["progress"],
     );
     contract.method(
         "host-data-read",

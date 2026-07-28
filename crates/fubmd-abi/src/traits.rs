@@ -66,6 +66,61 @@ impl<'de> Deserialize<'de> for JobId {
     }
 }
 
+/// **A che punto è** un lavoro lungo (§10.3, decisione 0035).
+///
+/// Un record solo, e lo usano tutti e due i modi di sapere a che punto è un
+/// job: l'evento [`Event::JobProgress`](crate::Event::JobProgress) — che lo dice
+/// quando cambia — e [`JobStatus`] — che lo dice a chi arriva dopo e chiede.
+/// Due definizioni di "progresso" sarebbero due idee di cosa mostrare, e la
+/// seconda si accorgerebbe di essere diversa dalla prima solo davanti
+/// all'utente.
+///
+/// Non c'è nessun campo che dica «finito»: un job finisce con
+/// [`Event::JobDone`](crate::Event::JobDone), che porta l'esito, ed è l'unica
+/// cosa che vuol dire finire. Un `done == total` è una barra piena, non un
+/// lavoro concluso.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobProgress {
+    /// Quante unità sono state fatte. Cosa sia un'unità lo decide il job: note
+    /// esportate, byte scaricati, file letti.
+    pub done: u64,
+    /// Quante ne saranno in tutto, **se il job lo sa**. Assente = indeterminato,
+    /// che è un caso vero (uno scaricamento senza `Content-Length`, una
+    /// scansione che non ha ancora finito di contare) e non un dato mancante:
+    /// chi disegna mostra un'attesa senza barra invece di una barra che mente.
+    pub total: Option<u64>,
+    /// Cosa sta facendo adesso, per chi guarda: «esportando `Diario/2026.md`».
+    ///
+    /// È prosa composta dal job, come [`VaultStatus::last_sync_error`] e come il
+    /// messaggio di un [`PluginError`]: quando il §12.1 dirà come si localizza
+    /// una stringa al confine, lo dirà anche per questa.
+    pub label: Option<String>,
+}
+
+/// Un lavoro lungo **vivo**: la risposta a [`IndexQuery::Jobs`] (§10.3).
+///
+/// «Vivo» va dal momento in cui il job è stato accettato
+/// ([`Event::JobStarted`](crate::Event::JobStarted)) a quello in cui ne è
+/// tornato l'esito ([`Event::JobDone`](crate::Event::JobDone)): comprende quindi
+/// anche i job che aspettano un thread libero, ed è deliberato — un job in coda
+/// si annulla come uno in volo (decisione 0032), quindi chi guarda deve poterlo
+/// vedere per poterlo fermare.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobStatus {
+    pub id: JobId,
+    /// Il nome dell'entry point (`JobSpec::job`).
+    pub job: String,
+    /// Chi lo ha chiesto, e con le cui capacità gira.
+    pub plugin: String,
+    /// Quando è stato accettato, in millisecondi dall'epoca UNIX: è ciò che
+    /// permette a chi guarda di dire «da tre minuti» senza tenere un cronometro
+    /// per ogni riga.
+    pub since: u64,
+    /// L'ultimo progresso riferito, se il job ne ha riferito uno. Assente non
+    /// vuol dire fermo: vuol dire che quel job non racconta.
+    pub progress: Option<JobProgress>,
+}
+
 // ---------------------------------------------------------------------------
 // Cestino: la forma di ciò che è stato cancellato ma non distrutto.
 // ---------------------------------------------------------------------------
@@ -487,6 +542,39 @@ pub trait HostEvents: Send + Sync {
     /// richiesta e non una chiamata — è il **tempo**: il job gira quando l'host
     /// lo esegue, non adesso.
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
+
+    /// **A che punto sono**: da chiamare dentro [`Plugin::run_job`], quanto
+    /// spesso si vuole (§10.3, decisione 0035).
+    ///
+    /// # Perché è una capacità se il progresso è un evento
+    ///
+    /// Lo è, e resta un evento: ciò che finisce sul canale è
+    /// [`Event::JobProgress`](crate::Event::JobProgress), con la regola della
+    /// decisione 0013 — *ciò che si limita a informare è un evento*. Questa è la
+    /// **porta**, come [`emit`](HostEvents::emit) è la porta di ogni altro
+    /// evento, e c'è per una ragione sola: un job **non conosce il proprio
+    /// `JobId`**. [`Plugin::run_job`] riceve il nome dell'entry point, gli
+    /// argomenti e l'host — non l'identità — quindi non può nominare sé stesso
+    /// in un evento, e chi l'identità ce l'ha è il suo host. Passando da qui
+    /// l'id non è un parametro: **non si può sbagliare e non si può fingere**,
+    /// che è la stessa proprietà per cui un topic di custom non si può emettere
+    /// sotto il nome di un altro (§7.4).
+    ///
+    /// # Fuori da un job non fa niente, e non è una dimenticanza
+    ///
+    /// Il default è un no-op: lo eredita ogni host che non sia quello di un job.
+    /// Un progresso ha bisogno di una **fine** per essere un progresso, e
+    /// l'unica cosa che nel contratto ha una fine dichiarata è un job
+    /// ([`Event::JobDone`](crate::Event::JobDone)); una chiamata sincrona finisce
+    /// tornando, e mentre gira tiene il prestito esclusivo del workspace — chi
+    /// vuole raccontarsi mentre lavora, per costruzione, è un job.
+    ///
+    /// Come `emit`, non ha esito: un host che non la concede non rifiuta, tace.
+    /// E come `emit` **non la si nega a un job annullato**: l'ultima cosa che un
+    /// job che sta smettendo può voler dire è a che punto era.
+    fn report_progress(&mut self, progress: JobProgress) {
+        let _ = progress;
+    }
 }
 
 /// Il canale dati: interrogare l'indice.
@@ -1516,6 +1604,23 @@ pub enum IndexQuery {
     /// vivo, un vault senza rilevamento e uno con rilevamento erano
     /// indistinguibili da fuori.
     VaultStatus,
+    /// **Cosa sta girando adesso in questo vault?** (§10.3)
+    ///
+    /// La seconda variante che non chiede del contenuto ma del vault stesso, e
+    /// passa da qui per la ragione della [`VaultStatus`](IndexQuery::VaultStatus):
+    /// i suoi clienti sono i due che il canale dati ce li ha già — la shell, che
+    /// disegna il centro attività, e una feature, che di comandi IPC non ne ha
+    /// nessuno.
+    ///
+    /// È anche la **riconciliazione** di quel centro, ed è la ragione per cui
+    /// esiste invece di lasciar contare gli eventi: `job-started` e
+    /// `job-progress` si riscoprono chiedendo
+    /// ([`Event::is_recoverable`](crate::Event::is_recoverable)), quindi i freni
+    /// del canale (decisione 0034) possono buttarli — e chi li butta manda un
+    /// `overflow`, che vuol dire *richiedi*. Senza questa domanda quel
+    /// troncamento sarebbe una perdita definitiva, cioè un centro attività che
+    /// mostra per sempre un lavoro finito.
+    Jobs,
 }
 
 impl IndexQuery {
@@ -1528,9 +1633,10 @@ impl IndexQuery {
             | IndexQuery::Neighbors { page, .. }
             | IndexQuery::PropertyValues { page, .. }
             | IndexQuery::VaultHealth { page, .. } => *page,
-            IndexQuery::Outline { .. } | IndexQuery::Custom { .. } | IndexQuery::VaultStatus => {
-                None
-            }
+            IndexQuery::Outline { .. }
+            | IndexQuery::Custom { .. }
+            | IndexQuery::VaultStatus
+            | IndexQuery::Jobs => None,
         }
     }
 
@@ -1547,7 +1653,8 @@ impl IndexQuery {
             | IndexQuery::Outline { .. }
             | IndexQuery::VaultHealth { .. }
             | IndexQuery::Custom { .. }
-            | IndexQuery::VaultStatus => None,
+            | IndexQuery::VaultStatus
+            | IndexQuery::Jobs => None,
         }
     }
 
@@ -1599,6 +1706,7 @@ impl IndexQuery {
             IndexQuery::VaultHealth { .. } => QueryKind::VaultHealth,
             IndexQuery::Custom { ns, .. } => QueryKind::Custom(ns.clone()),
             IndexQuery::VaultStatus => QueryKind::VaultStatus,
+            IndexQuery::Jobs => QueryKind::Jobs,
         }
     }
 }
@@ -1624,6 +1732,12 @@ pub enum QueryKind {
     /// conosce sia l'esito delle sincronizzazioni sia il fatto — passatogli da
     /// chi monta — che un rilevatore ci sia.
     VaultStatus,
+    /// Chi risponde a «cosa sta girando adesso?» (§10.3). Il proprietario è di
+    /// nuovo il kernel, e di nuovo non per abitudine: la coda dei job è sua
+    /// (`spawn_job` conta gli id, `complete_job` chiude), e chi possiede i
+    /// thread — che pure sa quali sono partiti — non sa niente di quelli che
+    /// devono ancora entrargli in mano.
+    Jobs,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -1783,6 +1897,13 @@ pub enum IndexResult {
     /// Il rapporto fra questo vault e il disco (risposta a
     /// [`IndexQuery::VaultStatus`]).
     VaultStatus(VaultStatus),
+    /// I lavori lunghi vivi (risposta a [`IndexQuery::Jobs`]), in ordine di
+    /// [`JobId`] — cioè di richiesta.
+    ///
+    /// Senza finestra, come l'outline e per la stessa ragione: non cresce col
+    /// vault. Cresce con quanti job ci sono insieme, che è un numero piccolo per
+    /// costruzione — i thread che li eseguono sono due.
+    Jobs(Vec<JobStatus>),
 }
 
 impl IndexResult {
@@ -1814,6 +1935,7 @@ impl IndexResult {
             IndexResult::VaultHealth(_) => "vault-health",
             IndexResult::Custom(_) => "custom",
             IndexResult::VaultStatus(_) => "vault-status",
+            IndexResult::Jobs(_) => "jobs",
         }
     }
 }

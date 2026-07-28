@@ -140,11 +140,17 @@ kernel.
       la **severità** (avviso o guasto: un flush fallito e una versione non
       salvata non chiedono la stessa cosa a chi legge), il **soggetto** (quale
       documento, quale plugin — l'`Origin` c'è già e porta l'attore), e se
-      `progress` sia la stessa variante con un contatore o una seconda. Il §10.3
-      (centro notifiche) e il §24.1 (progresso) sono i suoi due consumatori, e i
-      job sono ciò che rende il secondo non vuoto — dalla
-      [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) un job
-      cammina il vault davvero, quindi ha davvero un progresso da raccontare.
+      `progress` sia la stessa variante con un contatore o una seconda.
+      **Le ultime due domande hanno già risposta**, e la porta la
+      [0035](../decisions/0035-il-lavoro-lungo-si-racconta.md): il progresso è
+      una variante **sua** (`job-progress`, col suo record `job-progress { done,
+      total, label }`), perché parla di un lavoro che ha un'identità e una fine,
+      mentre un avviso parla di un fatto e basta; e il suo consumatore — il
+      centro attività del §10.3 — c'è ed è vivo. Resta quindi la sola prima
+      metà: severità e soggetto di **ciò che va storto**, con dentro il tipo del
+      §12.2. Il posto dove atterrerà, invece, adesso esiste: il centro notifiche
+      ha storico, raggruppamento e tono, e aspetta solo di essere alimentato da
+      un evento invece che da venti chiamanti della shell.
 
 *Sblocca:* 10.5 (notification center, alert stale notes / broken links / sync
 errors / backup errors / plugin errors — ~28 voci che oggi non hanno una
@@ -254,9 +260,14 @@ visibile), 20.2 (log plugin).
       vault, la palette è vuota e **ogni scorciatoia dichiarata è morta**, senza
       una riga da nessuna parte. (La palette, quando è lei a ricaricarli, un
       `notify` lo fa: `ui/palette.ts`.)
-- [ ] Cosa serve, e non è un centro notifiche: una **superficie minima** dove un
-      messaggio possa comparire (il §10.3 la farà bella; qui basta che esista),
-      più uno **stato di salvataggio** accanto al documento. Il precedente è già
+- [ ] Cosa serve, e non è più costruire un centro notifiche: **quello c'è**
+      (§10.3, [decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)
+      — toast, storico, raggruppamento, due toni, e una porta sola, `notify`).
+      Quel che manca è **portarci dentro i quattordici**, e uno **stato di
+      salvataggio** accanto al documento. L'ordine si è invertito rispetto a come
+      questa voce se lo aspettava, e non cambia niente di ciò che le resta da
+      fare: la superficie minima esisteva già, quindi la voce che doveva farla
+      bella non ha dovuto aspettare. Il precedente è già
       in repo e vale come regola: l'unico fallimento che oggi arriva all'utente è
       quello dell'avvio, che scrive nella barra del vault perché *«è il posto
       più visibile che la shell ha»* (`main.ts`, in coda). La regola è scritta,

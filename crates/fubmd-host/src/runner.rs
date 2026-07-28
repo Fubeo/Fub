@@ -204,7 +204,11 @@ impl Shared {
                 job.spec.job
             ))),
             Some(plugin) => {
+                // Le due cose che il job non sa di sé, e che sa il runner:
+                // quando deve smettere (la bandiera) e come si chiama (l'id,
+                // §10.3 — senza, non potrebbe raccontare a che punto è).
                 let mut host = JobHost::new(self.workspace.clone(), &job.plugin)
+                    .for_job(job.id)
                     .cancelled_by(Arc::clone(&flag));
                 // Un job che pania costa il job. La rete è la stessa del
                 // kernel, applicata all'ultima porta che ne era rimasta fuori —

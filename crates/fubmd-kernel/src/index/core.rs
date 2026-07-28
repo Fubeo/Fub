@@ -35,8 +35,8 @@ use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Frontmatter, Heading
 use fubmd_abi::query::{in_folder, Matches, QueryEvaluator, QueryPredicate};
 use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
-    HostApi, IndexProvider, IndexQuery, IndexResult, LinkDirection, Paged, PredicateKind,
-    QueryKind, QueryRoute, VaultStatus,
+    HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobStatus, LinkDirection,
+    Paged, PredicateKind, QueryKind, QueryRoute, VaultStatus,
 };
 use fubmd_abi::PluginError;
 
@@ -124,6 +124,10 @@ pub(crate) struct CoreIndex {
     /// router — cioè rimettere il ramo privilegiato che quella decisione ha
     /// tolto.
     pub(crate) watch: WatchState,
+    /// **Cosa sta girando adesso** (§10.3), per la stessa ragione della riga
+    /// sopra: è una risposta del kernel, e le risposte del kernel sono un
+    /// provider (decisione 0019).
+    pub(crate) jobs: JobsState,
 }
 
 /// Il fatto che il §9.7 rende interrogabile: se qualcuno vede le scritture
@@ -164,6 +168,81 @@ impl WatchState {
     }
 }
 
+/// **I lavori lunghi vivi** (§10.3, decisione 0035): da quando il kernel
+/// accetta un job a quando ne riconsegna l'esito.
+///
+/// È una tabella e non un conto, ed è ciò che permette al centro attività di
+/// **riconciliare**: gli eventi del ciclo di un job sono recuperabili
+/// ([`Event::is_recoverable`](fubmd_abi::Event::is_recoverable)) proprio perché
+/// c'è questa, e senza di essa il canale più fitto del contratto sarebbe l'unico
+/// che non si può frenare.
+///
+/// `BTreeMap` per l'ordine, e la chiave è il **numero** dentro il [`JobId`] e
+/// non l'id: un `JobId` è opaco per contratto — chi lo ordina sta assumendo
+/// qualcosa che l'host non gli deve — e l'unico che quell'assunzione la può
+/// fare è chi i numeri li assegna, cioè questo kernel. Ne esce l'elenco
+/// nell'ordine in cui il lavoro è stato chiesto, che è l'unico che chi guarda
+/// riconosce.
+#[derive(Default)]
+pub(crate) struct JobsState {
+    live: BTreeMap<u64, JobStatus>,
+}
+
+impl JobsState {
+    /// Un job è stato accettato: da qui è vivo, e da qui si vede.
+    ///
+    /// Il `since` lo prende chi accetta e non chi chiede: è il momento in cui il
+    /// kernel se ne è fatto carico, e un job che aspetta un thread libero è già
+    /// in attesa da allora.
+    pub(crate) fn accepted(&mut self, id: JobId, job: &str, plugin: &str) {
+        self.live.insert(
+            id.0,
+            JobStatus {
+                id,
+                job: job.to_string(),
+                plugin: plugin.to_string(),
+                since: crate::time::now_unix_millis(),
+                progress: None,
+            },
+        );
+    }
+
+    /// Registra un progresso, e dice se il job era **vivo**.
+    ///
+    /// Il `false` non è pignoleria: un progresso che arriva per un job già
+    /// concluso — l'host che lo timbra gira su un altro thread, e fra il suo
+    /// ultimo passo e l'esito ci sta di tutto — non deve far ricomparire una
+    /// riga nel centro attività. Chi lo riceve non lo emette nemmeno.
+    pub(crate) fn progressed(&mut self, id: JobId, progress: JobProgress) -> bool {
+        match self.live.get_mut(&id.0) {
+            Some(status) => {
+                status.progress = Some(progress);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Di chi è questo job, se è ancora vivo. Serve a intestargli il proprio
+    /// progresso: l'origine di un `job-progress` è il plugin che sta lavorando,
+    /// e chi timbra l'evento ha in mano l'id, non il nome.
+    pub(crate) fn owner(&self, id: JobId) -> String {
+        self.live
+            .get(&id.0)
+            .map(|status| status.plugin.clone())
+            .unwrap_or_default()
+    }
+
+    /// L'esito è tornato: il job smette di essere vivo.
+    pub(crate) fn finished(&mut self, id: JobId) {
+        self.live.remove(&id.0);
+    }
+
+    pub(crate) fn live(&self) -> Vec<JobStatus> {
+        self.live.values().cloned().collect()
+    }
+}
+
 impl CoreIndex {
     pub(crate) fn new(registry: Arc<FormatRegistry>) -> Self {
         CoreIndex {
@@ -173,6 +252,7 @@ impl CoreIndex {
             graph_update: GraphUpdate::default(),
             registry,
             watch: WatchState::default(),
+            jobs: JobsState::default(),
         }
     }
 
@@ -285,6 +365,10 @@ impl IndexProvider for CoreIndex {
             // sincronizzazioni e il fatto — passatogli da chi monta — che un
             // rilevatore ci sia.
             QueryRoute::Query(QueryKind::VaultStatus),
+            // Cosa sta girando (§10.3): di nuovo il kernel, e di nuovo perché è
+            // l'unico che li conosce tutti — chi possiede i thread sa quali
+            // sono partiti, non quali stanno per partire.
+            QueryRoute::Query(QueryKind::Jobs),
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
@@ -424,6 +508,7 @@ impl IndexProvider for CoreIndex {
                 "l'indice del kernel non estende il canale: `{ns}`"
             ))),
             IndexQuery::VaultStatus => Ok(IndexResult::VaultStatus(self.watch.status())),
+            IndexQuery::Jobs => Ok(IndexResult::Jobs(self.jobs.live())),
         }
     }
 }

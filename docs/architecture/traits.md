@@ -182,6 +182,10 @@ pub trait VaultRead: Send + Sync {
     fn empty_trash(&mut self) -> Result<u64, PluginError>;
     fn emit(&mut self, event: Event);
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
+    // a che punto sono ([decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)):
+    // la porta di un job che si racconta. L'id non è un parametro — lo timbra
+    // l'host del job, che è l'unico ad averlo.
+    fn report_progress(&mut self, progress: JobProgress);
     // storage persistente per-plugin (namespace imposto dall'host)
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError>;
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError>;
@@ -201,15 +205,15 @@ pub trait VaultRead: Send + Sync {
 }
 ```
 
-**Cinque di queste capacità non sanno dire di no**, ed è una proprietà delle
-loro firme: `emit`, `free_name`, `format_of`, `now_unix_millis`,
-`active_context` non restituiscono un `Result`, quindi una politica che le nega
-può solo dare la risposta nulla. La lezione per l'elenco della
+**Sei di queste capacità non sanno dire di no**, ed è una proprietà delle
+loro firme: `emit`, `report_progress`, `free_name`, `format_of`,
+`now_unix_millis`, `active_context` non restituiscono un `Result`, quindi una
+politica che le nega può solo dare la risposta nulla. La lezione per l'elenco della
 [decisione 0013](../decisions/0013-elenco-delle-capacita.md): una capacità nuova
 porti un esito **anche quando "non può fallire"** — non potendo fallire, non può
 nemmeno essere negata.
 
-**L'elenco è chiuso ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).** Ventidue metodi, e da qui in avanti aggiungerne
+**L'elenco è chiuso ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).** Ventitré metodi, e da qui in avanti aggiungerne
 uno è una minor, toglierne uno una major. Il giro che lo ha chiuso ha anche
 **tolto** `storage_get/set` — l'unica rottura, con la linea di base ritagliata
 in `wit/frozen/0.1.0.wit` — e ha deciso a verbale, una per una, anche le
@@ -218,11 +222,29 @@ capacità che restano fuori: allegati (§14.1 non ha il modello), rete (§9.1 +
 `log` (informano e non aspettano risposta: sono eventi, non capacità). Il
 verbale sta nella [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
 
+Il ventitreesimo metodo è arrivato dopo, e **non riapre quella regola**:
+`report_progress` è la *porta* di un evento (`Event::JobProgress`), come `emit`
+è la porta di ogni altro, e c'è perché un job non conosce il proprio `JobId` —
+`run_job` riceve nome, argomenti e host, non l'identità. Siccome l'id non è un
+parametro, un job non può sbagliarlo né fingere quello di un altro; e fuori da
+un job la porta è un no-op, perché un progresso ha bisogno di una **fine** per
+essere un progresso, e l'unica cosa che nel contratto ne ha una dichiarata è un
+job ([decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)).
+
 `JobSpec { job, payload }` e `JobId(u64)` sono il varco del **lavoro lungo**:
 `spawn_job` accoda e ritorna subito; l'esito arriva come `Event::JobDone` con lo
 stesso `JobId` (il lanciatore lo conserva e riconosce il proprio). Il corpo del
 job è `Plugin::run_job` (vedi sotto), eseguito fuori dal kernel; il `payload`
 porta gli **argomenti** del job, non il suo input — quello se lo legge da sé.
+
+Il ciclo è visibile per intero: `Event::JobStarted { id, job }` quando il kernel
+lo accetta (non quando parte: quando parta lo sa solo chi possiede i thread, e un
+job in coda si annulla come uno in volo), `Event::JobProgress { id, progress }`
+quante volte il job vuole, `Event::JobDone` alla fine. `JobProgress { done,
+total, label }` è **un record solo** per l'evento e per la risposta a
+`IndexQuery::Jobs`, che elenca i job **vivi** (`JobStatus { id, job, plugin,
+since, progress }`) — ed è quella query a rendere *recuperabili* i primi due
+eventi, cioè frenabili come tutti gli altri.
 
 **Le operazioni strutturali le ha chieste il registro dei comandi.** Crea,
 rinomina e cestina restavano cablate nella shell perché il contratto non sapeva
@@ -505,7 +527,7 @@ pub trait IndexProvider: Send + Sync {
 ```
 
 `IndexQuery { Documents, Backlinks, Outline, Tags, Neighbors, PropertyValues,
-VaultHealth, Custom, VaultStatus }` — è il **canale dati verso le view**, e ciò
+VaultHealth, Custom, VaultStatus, Jobs }` — è il **canale dati verso le view**, e ciò
 che non è esprimibile qui diventa un comando bespoke dell'app, cioè una
 superficie che un plugin non potrà mai avere. Le risposte stanno in
 `IndexResult`, con gli stessi nomi.
@@ -514,7 +536,9 @@ Le forme che portano: `DocumentMatch { doc, score?, snippet?, highlights,
 properties }`, `BacklinkRef { source, context }`, `NeighborRef { doc, via,
 depth }`, `TagCount { name, count }`, `PropertyCount { value, count }`,
 `HealthIssue { doc, check, detail, span }`,
-`VaultStatus { watching, sync_failures, last_sync_error }`.
+`VaultStatus { watching, sync_failures, last_sync_error }`,
+`JobStatus { id, job, plugin, since, progress }` con
+`JobProgress { done, total, label }`.
 
 `VaultStatus` è l'unica variante che non chiede niente **sul contenuto** del
 vault: chiede del vault stesso — *sa quando cambia da fuori?* — e sta qui per la
@@ -645,7 +669,8 @@ di terzi *possa* persistere, non che tutti persistano allo stesso modo.
 `Neighbors` (dal grafo), `Outline` (dai metadati di un documento), `Tags` e
 `PropertyValues` (dai metadati dell'intero vault), `VaultHealth` (dal grafo e dai
 link in cache), `VaultStatus` (dalla bandiera del rilevamento e dal conto delle
-sincronizzazioni fallite), più le foglie `Property`/`Tag`/`Folder`/`Linked`:
+sincronizzazioni fallite), `Jobs` (dalla tabella dei lavori lunghi vivi, che
+tiene lui perché è lui a contare gli id e a chiuderli), più le foglie `Property`/`Tag`/`Folder`/`Linked`:
 hanno tutte una sola fonte di verità *dentro* il kernel, e duplicarla creerebbe
 una seconda verità divergente. `VaultStatus` è il caso limite che lo mostra: la
 bandiera del rilevamento gliela **presta chi monta** (`Workspace::watch_flag`,
@@ -707,7 +732,8 @@ pub trait EventHandler: Send + Sync {
 `Event { VaultOpened { root }, DocumentChanged { id }, DocumentRemoved { id },
 DocumentRenamed { from, to }, IndexUpdated, JobDone { id, job, result },
 Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed },
-ViewInvalidated { view, instance }, VaultClosed { root } }`,
+ViewInvalidated { view, instance }, VaultClosed { root },
+JobStarted { id, job }, JobProgress { id, progress } }`,
 `EventKind` (stesso set, senza payload),
 `EventMask { kinds, topics, subjects }` con
 `Subject { Document { id }, Folder { path } }`.
@@ -747,6 +773,15 @@ ViewInvalidated { view, instance }, VaultClosed { root } }`,
   e [plugin-boundary.md](plugin-boundary.md)): l'esito del lavoro in background
   consegnato sul giro sincrono normale. Le eventuali scritture le fa l'handler
   che lo riceve — mai il job stesso.
+- `JobStarted { id, job }` e `JobProgress { id, progress }` sono le altre due
+  tappe del ciclo di un lavoro lungo
+  ([decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)): la prima
+  la emette il kernel quando **accetta** il job, la seconda l'host del job quando
+  il job chiama `report_progress` — e la firma l'host perché il job il proprio id
+  non lo conosce. Sono gli unici due eventi **recuperabili** che non si
+  riscoprono guardando il vault: li si riscopre **chiedendo**
+  (`IndexQuery::Jobs`), ed è quella query a permettere ai due freni del canale di
+  sacrificare il traffico più fitto che il contratto avrà.
 - `Overflow { dropped }` segnala che la coda eventi è stata **troncata** (budget
   anti-ping-pong esaurito): `dropped` eventi non sono stati consegnati. Chi
   deriva stato dagli eventi (indice, grafo, cache, frontend) deve considerarlo

@@ -32,9 +32,9 @@ use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
 use fubmd_abi::traits::{
-    BacklinkRef, DocumentMatch, HealthCheck, IndexQuery, IndexResult, JobId, LinkDirection,
-    NeighborRef, Page, Paged, PropertyEntry, PropertySelect, TagCount, VaultStatus, ViewInstance,
-    ViewSpec, ViewSurface,
+    BacklinkRef, DocumentMatch, HealthCheck, IndexQuery, IndexResult, JobId, JobProgress,
+    JobStatus, LinkDirection, NeighborRef, Page, Paged, PropertyEntry, PropertySelect, TagCount,
+    VaultStatus, ViewInstance, ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
@@ -359,6 +359,21 @@ fn event_samples() -> Vec<Value> {
         Event::VaultClosed {
             root: "/vault".into(),
         },
+        Event::JobStarted {
+            id: JobId(u64::MAX),
+            job: "export".into(),
+        },
+        // Un progresso **raccontato per intero** (§10.3): con i default il
+        // mirror TS non vedrebbe né il totale né l'etichetta, cioè due terzi
+        // della forma.
+        Event::JobProgress {
+            id: JobId(u64::MAX),
+            progress: JobProgress {
+                done: 12,
+                total: Some(300),
+                label: Some("esportando Diario/2026.md".into()),
+            },
+        },
     ];
     for e in &all {
         match e {
@@ -372,7 +387,9 @@ fn event_samples() -> Vec<Value> {
             | Event::ViewInvalidated { .. }
             | Event::Custom { .. }
             | Event::VaultClosed { .. }
-            | Event::BatchEnded { .. } => {}
+            | Event::BatchEnded { .. }
+            | Event::JobStarted { .. }
+            | Event::JobProgress { .. } => {}
         }
     }
     all.iter().map(to_value).collect()
@@ -562,6 +579,7 @@ fn index_query_samples() -> Vec<Value> {
             query: json!({"x": 1}),
         },
         IndexQuery::VaultStatus,
+        IndexQuery::Jobs,
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -575,7 +593,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::PropertyValues { .. }
             | IndexQuery::VaultHealth { .. }
             | IndexQuery::Custom { .. }
-            | IndexQuery::VaultStatus => {}
+            | IndexQuery::VaultStatus
+            | IndexQuery::Jobs => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -609,6 +628,29 @@ fn index_result_samples() -> Vec<Value> {
             sync_failures: 1,
             last_sync_error: Some("Nota.md: frontmatter illeggibile".into()),
         }),
+        // Due lavori in volo (§10.3): uno che racconta a che punto è e uno che
+        // non racconta affatto, che sono le due forme che il centro attività
+        // deve saper disegnare.
+        IndexResult::Jobs(vec![
+            JobStatus {
+                id: JobId(1),
+                job: "export".into(),
+                plugin: "fubmd.transfer".into(),
+                since: 1_700_000_000_000,
+                progress: Some(JobProgress {
+                    done: 12,
+                    total: Some(300),
+                    label: Some("esportando Diario/2026.md".into()),
+                }),
+            },
+            JobStatus {
+                id: JobId(2),
+                job: "reindex".into(),
+                plugin: "fubmd.search".into(),
+                since: 1_700_000_000_500,
+                progress: None,
+            },
+        ]),
     ];
     for r in &all {
         match r {
@@ -620,7 +662,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::PropertyValues(_)
             | IndexResult::VaultHealth(_)
             | IndexResult::Custom(_)
-            | IndexResult::VaultStatus(_) => {}
+            | IndexResult::VaultStatus(_)
+            | IndexResult::Jobs(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -684,6 +727,35 @@ fn expected() -> Value {
             sync_failures: 1,
             last_sync_error: Some("Nota.md: frontmatter illeggibile".into()),
         })],
+        // Il lavoro lungo che si racconta (§10.3): un progresso che dice tutto
+        // — coi default il mirror non vedrebbe né il totale né l'etichetta — e
+        // le due righe che il centro attività deve saper disegnare, quella che
+        // racconta e quella che non racconta.
+        "JobProgress": [to_value(JobProgress {
+            done: 12,
+            total: Some(300),
+            label: Some("esportando Diario/2026.md".into()),
+        })],
+        "JobStatus": [
+            to_value(JobStatus {
+                id: JobId(1),
+                job: "export".into(),
+                plugin: "fubmd.transfer".into(),
+                since: 1_700_000_000_000,
+                progress: Some(JobProgress {
+                    done: 12,
+                    total: Some(300),
+                    label: Some("esportando Diario/2026.md".into()),
+                }),
+            }),
+            to_value(JobStatus {
+                id: JobId(2),
+                job: "reindex".into(),
+                plugin: "fubmd.search".into(),
+                since: 1_700_000_000_500,
+                progress: None,
+            }),
+        ],
         "UiAction": ui_action_samples(),
         "ViewSpec": [
             to_value(

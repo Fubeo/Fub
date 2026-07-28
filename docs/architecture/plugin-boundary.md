@@ -503,6 +503,17 @@ strada propria — i **job** — invece di fingere che non esista:
    lanciatore riconosce il proprio `JobId` e legge il **risultato** — che non è
    più il solo effetto che un job poteva avere.
 
+E in mezzo il job **si racconta**
+([decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)): il ciclo
+sta tutto sul canale — `JobStarted` quando il kernel accetta la richiesta,
+`JobProgress` quante volte il job vuole, `JobDone` alla fine — e chi arriva dopo
+può chiedere l'elenco dei vivi con `IndexQuery::Jobs`. La porta è
+`HostApi::report_progress(JobProgress { done, total, label })`, e **non nomina
+il job**: `run_job` non riceve l'identità, quindi a metterla è l'host del job.
+Ne segue la proprietà che una firma con l'id fra i parametri non avrebbe —
+nessuno può raccontare il progresso di un altro — e il no-op fuori da un job,
+dove un progresso non avrebbe una fine di cui essere il progresso.
+
 Conseguenze:
 
 - il giro sincrono resta **breve per definizione**: la deadline di M5 può
@@ -521,17 +532,21 @@ Conseguenze:
   un errore (timeout dell'host);
 - **si può annullare, e la cancellazione è cooperativa**: `Host::cancel_job`
   alza una bandiera, e da quel momento l'host del job **rifiuta** ogni capacità
-  fallibile con `PluginError::Cancelled` (le cinque infallibili — `free_name`,
-  `format_of`, `now_unix_millis`, `active_context`, `emit` — non hanno dove
-  metterlo, un rifiuto). Nel contratto non compare nessuna capacità nuova: un
+  fallibile con `PluginError::Cancelled` (le sei infallibili — `free_name`,
+  `format_of`, `now_unix_millis`, `active_context`, `emit`, `report_progress` —
+  non hanno dove metterlo, un rifiuto; le ultime due restano aperte di
+  proposito, perché l'ultima cosa che un job che smette può voler dire è che sta
+  smettendo, e a che punto era). Nel contratto non compare nessuna capacità nuova: un
   job scritto prima che la cancellazione esistesse si ferma comunque, alla prima
   cosa che prova a fare. Il limite è dichiarato — **un job che non chiama mai
   l'host arriva in fondo**, perché in Rust un thread non si uccide; la risposta
   vera è la deadline di M5. Chiudere il vault annulla tutto, ferma il pool e
   aspetta chi ha già cominciato: nessun job sparisce senza il suo `JobDone`;
-- lo **streaming** (progressi incrementali di un job) non è ancora nel
-  contratto: se servirà (AI, indicizzazioni lunghe) si aggiungerà un canale di
-  progresso *prima* del freeze — vedi [../appendix/ai-autocomplete.md](../appendix/ai-autocomplete.md).
+- il **progresso** c'è (vedi sopra), lo **streaming** no: un job consegna un
+  esito solo, e chi vuole mandare risultati parziali oggi lo fa con un
+  `Event::Custom` suo. Se servirà davvero (AI, indicizzazioni lunghe) sarà un
+  canale in più *prima* del freeze — vedi
+  [../appendix/ai-autocomplete.md](../appendix/ai-autocomplete.md).
 
 ## Onestà sul modello di minaccia: nativo = fidato
 
