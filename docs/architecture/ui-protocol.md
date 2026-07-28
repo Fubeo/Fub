@@ -60,7 +60,8 @@ quando il valore si assesta.
 
 `TextInput`, `TextArea`, `Number`, `Checkbox`, `Select`, `Radio`, `Slider`,
 `DatePicker` (data civile ISO-8601: una stringa, non un istante — il tempo
-civile è il §12.3), e `Form { children, submit_label, submit }`, che inviando
+civile è nel locale, [decisione 0039](../decisions/0039-il-locale-e-il-caso.md)),
+e `Form { children, submit_label, submit }`, che inviando
 manda **tutti** i campi contenuti.
 
 **Il varco, e i due stati**

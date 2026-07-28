@@ -18,6 +18,8 @@ import type {
   Actor,
   KernelEvent,
   KernelNotice,
+  HourCycle,
+  Locale,
   QueryExpr,
   PaneMode,
   Selection,
@@ -41,6 +43,7 @@ import type {
   ViewContext,
   ViewSpec,
   ViewUpdate,
+  Weekday,
   Organization,
 } from "./contract";
 // Le fixture sono generate dai tipi Rust (serde) — vedi
@@ -413,6 +416,16 @@ const RECORD_KEYS: Record<string, string[]> = {
   // `undefined` e serde lo rifiuterebbe a runtime, non in compilazione.
   ViewContext: keysOf<ViewContext>({ pane: true, doc: true, selection: true, mode: true }),
   Selection: keysOf<Selection>({ span: true, text: true }),
+  // Il locale (§12.3): l'altro tipo che la shell costruisce e il kernel
+  // consuma, quindi vale la stessa ragione del contesto — un campo dimenticato
+  // di qua arriverebbe `undefined`, e serde lo rifiuterebbe a runtime.
+  Locale: keysOf<Locale>({
+    language: true,
+    timezone: true,
+    utc_offset_minutes: true,
+    first_day_of_week: true,
+    hour_cycle: true,
+  }),
   // I comandi: la palette disegna ciò che la spec dichiara, quindi un campo
   // nuovo in Rust non deve poter restare invisibile di qua.
   CommandSpec: keysOf<CommandSpec>({
@@ -515,6 +528,7 @@ describe("mirror TS↔Rust", () => {
       "UiAction",
       "ViewContext",
       "Selection",
+      "Locale",
       "CommandSpec",
       "CommandOutcome",
       "SettingSpec",
@@ -710,6 +724,33 @@ describe("mirror TS↔Rust", () => {
     );
     expect(sporca, "manca il campione col buffer sporco").toBeTruthy();
     expect(typeof sporca!.selection!.text).toBe("string");
+  });
+
+  it("ogni giorno e ogni orologio prodotti da Rust sono del mirror", () => {
+    // Come per `PaneMode`: due enum senza discriminante da esaurire, quindi la
+    // prova è che ciò che Rust serializza sia assegnabile al tipo TS e che il
+    // tipo TS non abbia valori in più.
+    const giorni: Weekday[] = [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday",
+    ];
+    const orologi: HourCycle[] = ["h23", "h12"];
+    for (const l of fixture.Locale as Locale[]) {
+      expect(giorni).toContain(l.first_day_of_week);
+      expect(orologi).toContain(l.hour_cycle);
+      expect(typeof l.utc_offset_minutes).toBe("number");
+    }
+    // Il campione che un campo in ore avrebbe reso inesprimibile: il contratto
+    // conta i minuti perché i fusi a mezz'ora e a tre quarti d'ora esistono.
+    const spezzato = (fixture.Locale as Locale[]).find(
+      (l) => l.utc_offset_minutes % 60 !== 0,
+    );
+    expect(spezzato, "manca il campione col fuso non a ore intere").toBeTruthy();
   });
 
   it("gli u64 identità/impronta attraversano l'IPC come stringhe", () => {

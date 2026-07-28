@@ -14,6 +14,7 @@ use crate::edit::{EditReport, EditRequest, Revision};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
 use crate::format::DocumentFormat;
+use crate::locale::Locale;
 use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
 use crate::organization::Organization;
 use crate::query::{QueryExpr, QueryPredicate};
@@ -601,14 +602,31 @@ pub trait ViewStateWrite: ViewStateRead {
     ) -> Result<(), PluginError>;
 }
 
-/// Ciò che **l'host sa e il provider no**: che ore sono, e cosa sta guardando
-/// l'utente.
+/// Il tetto di [`HostEnv::random_bytes`], in byte.
 ///
-/// Le due capacità sembrano lontane e sono la stessa specie di cosa — un fatto
-/// dell'host che chi gira dentro il confine non può calcolarsi — e si negano
-/// insieme: un componente sotto sandbox può non avere orologio (WASI lo può
-/// negare) e può non avere titolo a sapere quale nota è aperta. Averle in una
-/// famiglia sola è ciò che permette di dirlo in un posto solo.
+/// Sedici byte sono un UUID, trentadue una chiave: mille sono già due ordini di
+/// grandezza sopra ogni identità che si possa voler generare. Il tetto c'è
+/// perché una capacità senza tetto è un modo di far allocare all'host quanto
+/// pare a chi chiama — la stessa disciplina del freno degli eventi
+/// ([decisione 0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)),
+/// dove il tetto sta con chi ritira.
+pub const MAX_RANDOM_BYTES: u32 = 1024;
+
+/// Ciò che **l'host sa e il provider no**: che ore sono, in che fuso e in che
+/// lingua, quanto caso serve, e cosa sta guardando l'utente.
+///
+/// Le quattro capacità sembrano lontane e sono la stessa specie di cosa — un
+/// fatto dell'host che chi gira dentro il confine non può calcolarsi — e si
+/// negano insieme: un componente sotto sandbox può non avere orologio (WASI lo
+/// può negare), non avere entropia (WASI la può negare allo stesso modo), e non
+/// avere titolo a sapere quale nota è aperta. Averle in una famiglia sola è ciò
+/// che permette di dirlo in un posto solo.
+///
+/// Il §12.3 ne ha aggiunte due, con l'argomento dell'orologio applicato dove non
+/// lo era: un componente che chiamasse `SystemTime::now` sarebbe non testabile e
+/// non funzionante sotto sandbox, e **lo stesso vale per il caso** — che serve a
+/// ogni identità che FubMD genera (2.2, 8.3, 5.2, 13.3) — e per il **locale**,
+/// senza il quale l'orologio sa dire *quando* e non sa dirlo a nessuno.
 pub trait HostEnv: Send + Sync {
     /// Millisecondi dall'epoca UNIX, secondo l'host.
     ///
@@ -617,6 +635,62 @@ pub trait HostEnv: Send + Sync {
     /// deterministico nei test. Un plugin che chiamasse `SystemTime::now` per
     /// conto proprio sarebbe non testabile e, sotto sandbox, non funzionante.
     fn now_unix_millis(&self) -> u64;
+
+    /// In che lingua legge chi guarda, in che fuso vive, con che calendario
+    /// (§12.3).
+    ///
+    /// È il gemello dell'orologio: `now_unix_millis` dà millisecondi UTC, cioè
+    /// *quando* è successo, e senza questo record non c'è modo di dirlo a
+    /// qualcuno — né di ordinare due titoli come li ordinerebbe lui, né di
+    /// sapere che il suo lunedì è il primo giorno della settimana.
+    ///
+    /// **Non ha un gemello che scrive**, e per la stessa ragione di
+    /// [`active_context`](HostEnv::active_context): in che lingua legge l'utente
+    /// è una decisione dell'utente sull'app, non una capacità da concedere a un
+    /// plugin. Chi lo pubblica è la shell, e chi lo decide è la persona davanti
+    /// allo schermo attraverso le chiavi `locale.*` (§11.1).
+    ///
+    /// Un host che non ha sentito nessuno rende [`Locale::default`]: lingua
+    /// indeterminata, UTC, ISO 8601. È deterministico di proposito — è la stessa
+    /// ragione per cui l'orologio è una capacità.
+    ///
+    /// Si chiama `user_locale` e non `locale` perché il nome dice **di chi**:
+    /// non è il locale del processo né quello del vault, è quello della persona
+    /// davanti allo schermo, ed è l'unico che conti quando si decide come
+    /// mostrarle una data.
+    fn user_locale(&self) -> Locale;
+
+    /// `n` byte di **caso**, per generare un'identità.
+    ///
+    /// Sotto WASI il caso non c'è di default: è letteralmente lo stesso buco
+    /// dell'orologio, un metodo più in là. Ogni identità che FubMD genera lo
+    /// chiede — UUID per nota (2.2), Zettelkasten id (8.3), id di blocco (5.2, e
+    /// la [decisione 0003](../../../docs/decisions/0003-modello-del-documento.md)),
+    /// id di annotazione (13.3) — e senza, ognuna di quelle feature si
+    /// arrangerebbe con l'orologio, che a due chiamate nello stesso millisecondo
+    /// dà lo stesso valore.
+    ///
+    /// # Byte, e non un UUID
+    ///
+    /// Perché le identità che servono sono **quattro forme diverse** e un metodo
+    /// che ne rendesse una lascerebbe le altre tre a reimplementarsi: la
+    /// capacità è l'entropia, che solo l'host ha, mentre la forma (UUID v4, v7,
+    /// un id corto per un blocco) è codice di libreria e sta nell'SDK
+    /// ([`fubmd_sdk::ids`](https://docs.rs/fubmd-sdk)).
+    ///
+    /// # Per l'identità, non per i segreti
+    ///
+    /// Ciò che questa capacità promette è che due chiamate non diano lo stesso
+    /// valore, non che il prossimo valore sia **imprevedibile**. Chi generasse
+    /// da qui un token di sessione o una chiave farebbe l'errore che questa riga
+    /// esiste per non far fare: quando servirà un generatore crittografico sarà
+    /// una capacità sua, con una firma sua — come il portachiavi di sistema per
+    /// i segreti ([`crate::settings`]).
+    ///
+    /// `n` è limitato a [`MAX_RANDOM_BYTES`]: oltre, l'host rende ciò che può.
+    /// Un plugin che ne chiedesse un gigabyte non ha un caso d'uso, ha un
+    /// difetto.
+    fn random_bytes(&self, n: u32) -> Vec<u8>;
 
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `None` = la shell non ne ha ancora

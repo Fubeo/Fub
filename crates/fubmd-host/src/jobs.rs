@@ -56,6 +56,7 @@ use std::sync::{Arc, RwLock};
 use fubmd_abi::command::CommandOutcome;
 use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::format::DocumentFormat;
+use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::SettingValue;
@@ -327,6 +328,17 @@ impl SettingsWrite for JobHost {
 impl HostEnv for JobHost {
     fn now_unix_millis(&self) -> u64 {
         self.reading(|h| h.now_unix_millis())
+    }
+
+    /// Come il contesto qui sotto: quello di **adesso**. Un job che dura può
+    /// attraversare un cambio di lingua o l'ora legale, e ciò che scrive dopo va
+    /// scritto come lo legge chi lo sta aspettando.
+    fn user_locale(&self) -> Locale {
+        self.reading(|h| h.user_locale())
+    }
+
+    fn random_bytes(&self, n: u32) -> Vec<u8> {
+        self.reading(|h| h.random_bytes(n))
     }
 
     /// Che pannello guarda l'utente **adesso**, non quando il job è partito: un

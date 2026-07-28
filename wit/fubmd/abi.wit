@@ -1938,6 +1938,38 @@ interface session {
     type context-mask = list<context-kind>;
 }
 
+/// Chi legge, e da dove: la lingua, il fuso, il calendario (§12.3). Vedi
+/// `crates/fubmd-abi/src/locale.rs`.
+///
+/// È il gemello dell'orologio: `now-unix-millis` dà millisecondi UTC, cioè
+/// QUANDO è successo, e senza questi campi non c'è modo di dirlo a qualcuno.
+/// Lo pubblica la shell — che nella webview ha un ICU intero — e il kernel lo
+/// custodisce senza derivarlo, come il contesto di sessione.
+interface intl {
+    /// Il primo giorno della settimana. Non si deriva dalla lingua: `en-US`
+    /// comincia di domenica e `en-GB` di lunedì.
+    enum weekday { monday, tuesday, wednesday, thursday, friday, saturday, sunday }
+
+    /// Orologio a 24 (`14:30`) o a 12 ore (`2:30 PM`).
+    enum hour-cycle { h23, h12 }
+
+    /// Un record solo e non quattro capacità: chi lo chiede lo chiede tutto —
+    /// formattare una data vuole il fuso E la lingua E l'orologio — e quattro
+    /// chiamate darebbero quattro istantanee di momenti diversi.
+    ///
+    /// `utc-offset-minutes` è l'offset di ADESSO e vale per adesso: chi fa
+    /// aritmetica su date passate usa `timezone`, che porta con sé le regole
+    /// dell'ora legale. Minuti e non ore perché esistono i fusi a mezz'ora
+    /// (`Asia/Kolkata`) e a tre quarti d'ora (`Asia/Kathmandu`).
+    record locale {
+        language: string,
+        timezone: string,
+        utc-offset-minutes: s16,
+        first-day-of-week: weekday,
+        hour-cycle: hour-cycle,
+    }
+}
+
 /// Modificare **un pezzo** di documento: l'edit come coppia (span, testo) sopra
 /// la revisione su cui è stato calcolato. Vedi `crates/fubmd-abi/src/edit.rs`.
 interface edit {
@@ -2413,11 +2445,26 @@ interface host-view-state-write {
 /// non avere titolo a sapere quale nota è aperta.
 interface host-env {
     use session.{view-context};
+    use intl.{locale};
 
     /// Orologio dell'host: millisecondi dall'epoca Unix. Un plugin non ha
     /// accesso al tempo di sistema (WASI lo può negare, e in test serve
     /// deterministico): il tempo è una capacità come le altre.
     now-unix-millis: func() -> u64;
+    /// In che lingua legge chi guarda, in che fuso vive, con che calendario
+    /// (§12.3). Gemello dell'orologio: `now-unix-millis` dice QUANDO, questo
+    /// dice a chi. Non ha un gemello che scrive, per la stessa ragione di
+    /// `active-context`: in che lingua legge l'utente è una decisione
+    /// dell'utente sull'app, non una capacità da concedere. Un host che non ha
+    /// sentito nessuno rende il default: lingua indeterminata, UTC, ISO 8601.
+    user-locale: func() -> locale;
+    /// `n` byte di CASO, per generare un'identità. Sotto WASI il caso non c'è
+    /// di default: è lo stesso buco dell'orologio, un metodo più in là. Byte e
+    /// non un UUID perché le identità che servono sono quattro forme diverse
+    /// (2.2, 8.3, 5.2, 13.3): la capacità è l'entropia, la forma è codice di
+    /// libreria. PER L'IDENTITÀ, NON PER I SEGRETI: promette che due chiamate
+    /// non diano lo stesso valore, non che il prossimo sia imprevedibile.
+    random-bytes: func(n: u32) -> list<u8>;
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `none` = la shell non ne ha ancora
     /// pubblicato uno. Lo imposta la shell; una view lo chiede quando ne ha

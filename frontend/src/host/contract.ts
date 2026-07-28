@@ -551,6 +551,37 @@ export interface ViewContext {
   mode: PaneMode;
 }
 
+// --- il locale (rispecchia fubmd_abi::locale) ------------------------------
+//
+// Il secondo tipo che viaggia dalla shell al kernel, e per la stessa ragione
+// del contesto: lo sa la shell e non il kernel. Qui `Intl` porta un ICU intero
+// — lingua, nome IANA del fuso, offset, primo giorno della settimana — mentre
+// il lato Rust, per rispondere alla stessa domanda, avrebbe bisogno di un
+// database dei fusi orari.
+
+export type Weekday =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export type HourCycle = "h23" | "h12";
+
+// `utc_offset_minutes` è l'offset di ADESSO, e vale per adesso: chi fa
+// aritmetica su date passate usa `timezone`, che porta con sé le regole
+// dell'ora legale. Minuti e non ore perché esistono i fusi a mezz'ora
+// (`Asia/Kolkata`) e a tre quarti d'ora (`Asia/Kathmandu`).
+export interface Locale {
+  language: string;
+  timezone: string;
+  utc_offset_minutes: number;
+  first_day_of_week: Weekday;
+  hour_cycle: HourCycle;
+}
+
 /// L'unico pannello di questa shell, e il `MAIN_PANE` del kernel.
 ///
 /// Sta qui e non nel pannello del documento perché è un **valore del confine**,

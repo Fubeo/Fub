@@ -44,7 +44,7 @@ use fubmd_abi::model::DocId;
 use fubmd_abi::traits::JobId;
 use fubmd_abi::{Notice, PluginError};
 use fubmd_features::{VersionRef, VersionStore, VERSIONING_ID};
-use fubmd_kernel::{MachineSettings, ViewStates, Workspace};
+use fubmd_kernel::{MachineSettings, SystemLocale, ViewStates, Workspace};
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::mount::mount;
@@ -209,6 +209,12 @@ pub struct Host {
     /// Quanti thread esegue i job di **ogni** vault aperto (§9.3). Per vault e
     /// non in totale: i pool non si conoscono, come non si conoscono i vault.
     job_threads: usize,
+    /// Il **locale di sistema** (§12.3): ciò che la shell riporta della lingua,
+    /// del fuso e del calendario. Condiviso come il livello macchina e per la
+    /// stessa ragione — la lingua di chi guarda è una, e N copie sarebbero N
+    /// idee di che ore sono. Non si apre da un file: non è uno stato che dura,
+    /// è ciò che il sistema **è adesso**, e chi lo sa lo ridice a ogni avvio.
+    system_locale: Arc<SystemLocale>,
 }
 
 impl Default for Host {
@@ -242,7 +248,24 @@ impl Host {
             view_states: ViewStates::in_memory(),
             vaults: VaultRegistry::in_memory(),
             job_threads: DEFAULT_JOB_THREADS,
+            system_locale: Arc::new(SystemLocale::default()),
         }
+    }
+
+    /// Il locale di sistema condiviso: la shell ci scrive ciò che il sistema
+    /// dice ([`Host::publish_locale`]), e ogni vault aperto lo legge.
+    pub fn system_locale(&self) -> Arc<SystemLocale> {
+        Arc::clone(&self.system_locale)
+    }
+
+    /// La shell riporta lingua, fuso e calendario del sistema (§12.3). Rende
+    /// `true` se è cambiato qualcosa rispetto all'ultima volta.
+    ///
+    /// Vale per **tutti** i vault aperti in un colpo solo, ed è il punto: un
+    /// `set_active_context` si pubblica per vault perché il contesto è di un
+    /// pannello, questo no — la lingua non è di un vault.
+    pub fn publish_locale(&self, locale: fubmd_abi::Locale) -> bool {
+        self.system_locale.publish(locale)
     }
 
     /// L'host di un'**installazione**: legge e scrive la configurazione della
@@ -338,6 +361,7 @@ impl Host {
             &root,
             Arc::clone(&self.machine),
             Arc::clone(&self.view_states),
+            Arc::clone(&self.system_locale),
         )?;
         let registry = Arc::new(Mutex::new(registry));
 

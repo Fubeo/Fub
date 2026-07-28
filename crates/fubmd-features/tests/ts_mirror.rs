@@ -28,6 +28,7 @@ use fubmd_abi::command::{
 use fubmd_abi::edit::{EditRequest, Revision, TextEdit};
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Subject};
+use fubmd_abi::locale::{HourCycle, Locale, Weekday};
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
@@ -990,6 +991,28 @@ fn expected() -> Value {
             span: Some(Span::new(0, 4)),
             text: "ciao".into(),
         })],
+        // Il locale (§12.3): l'altro tipo che viaggia dalla shell al kernel, e
+        // il secondo dopo il contesto di sessione. Tre campioni perché tre sono
+        // i casi che il mirror deve reggere: nessuno ha ancora parlato, un fuso
+        // a ore intere, e uno a tre quarti d'ora — che è quello che un campo in
+        // ore avrebbe reso inesprimibile.
+        "Locale": [
+            to_value(Locale::default()),
+            to_value(Locale {
+                language: "it-IT".into(),
+                timezone: "Europe/Rome".into(),
+                utc_offset_minutes: 120,
+                first_day_of_week: Weekday::Monday,
+                hour_cycle: HourCycle::H23,
+            }),
+            to_value(Locale {
+                language: "en-US".into(),
+                timezone: "Asia/Kathmandu".into(),
+                utc_offset_minutes: 345,
+                first_day_of_week: Weekday::Sunday,
+                hour_cycle: HourCycle::H12,
+            }),
+        ],
         // I comandi: la shell legge le spec per disegnare la palette e gli
         // esiti per sapere cosa fare dopo. Un parametro di specie nuova, o un
         // effetto nuovo, non deve poter passare inosservato dall'altra parte.

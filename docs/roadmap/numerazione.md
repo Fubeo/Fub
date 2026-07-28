@@ -75,6 +75,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §3.5 · §10.3 | [0035 — Il lavoro lungo si racconta](../decisions/0035-il-lavoro-lungo-si-racconta.md) |
 | §1.3 · §11.1 | [0036 — Le impostazioni](../decisions/0036-le-impostazioni-e-i-tre-stati.md) |
 | §2.14 · §11.3 | [0038 — Il kernel possiede il sidecar](../decisions/0038-il-kernel-possiede-il-sidecar.md) |
+| §1.25 · §12.3 | [0039 — Il locale e il caso](../decisions/0039-il-locale-e-il-caso.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -100,7 +101,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §1.10 | **§13.1** | Identità del documento — il path, e l'eventuale seconda chiave |
 | §1.11 | **§12.2** | Errori tipizzati al confine, non `String` |
 | §1.17 | **§13.3** | L'undo non ha un proprietario |
-| §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §2.1 | **§15.1** | Astrazione sullo storage |
 | §2.2 | **§14.1** | Il vault non è solo documenti |

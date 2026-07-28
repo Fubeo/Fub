@@ -1131,6 +1131,29 @@
       "text": "ciao"
     }
   ],
+  "Locale": [
+    {
+      "language": "und",
+      "timezone": "",
+      "utc_offset_minutes": 0,
+      "first_day_of_week": "monday",
+      "hour_cycle": "h23"
+    },
+    {
+      "language": "it-IT",
+      "timezone": "Europe/Rome",
+      "utc_offset_minutes": 120,
+      "first_day_of_week": "monday",
+      "hour_cycle": "h23"
+    },
+    {
+      "language": "en-US",
+      "timezone": "Asia/Kathmandu",
+      "utc_offset_minutes": 345,
+      "first_day_of_week": "sunday",
+      "hour_cycle": "h12"
+    }
+  ],
   "CommandSpec": [
     {
       "id": "test.every",

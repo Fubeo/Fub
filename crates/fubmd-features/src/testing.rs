@@ -18,6 +18,7 @@ use fubmd_abi::command::CommandOutcome;
 use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::event::Event;
 use fubmd_abi::format::DocumentFormat;
+use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel, Heading, Span};
 use fubmd_abi::session::{PaneMode, Selection, ViewContext};
 use fubmd_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue};
@@ -76,6 +77,14 @@ pub struct MemoryHost {
     /// perché questo doppio lo dà a un provider solo, e non ha un id da
     /// timbrargli: il recinto fra proprietari è del kernel e si prova là.
     view_state: Mutex<BTreeMap<(String, String), serde_json::Value>>,
+    /// Il locale servito da [`HostEnv::locale`], come lo comporrebbe il kernel
+    /// dopo aver sentito la shell e le impostazioni (§12.3). Il default è quello
+    /// del contratto — lingua indeterminata, UTC — perché un banco che partisse
+    /// italiano nasconderebbe proprio i posti in cui una feature dà per scontata
+    /// una lingua.
+    locale: Mutex<Locale>,
+    /// Contatore da cui [`HostEnv::random_bytes`] deriva byte deterministici.
+    entropy: AtomicU64,
 }
 
 impl MemoryHost {
@@ -83,6 +92,13 @@ impl MemoryHost {
         let host = MemoryHost::default();
         host.now.store(1_700_000_000_000, Ordering::Relaxed);
         host
+    }
+
+    /// Il locale che questo doppio serve: chi prova una feature che formatta o
+    /// che ordina lo dichiara, invece di scoprire il default.
+    pub fn con_locale(self, locale: Locale) -> Self {
+        *self.locale.lock().unwrap() = locale;
+        self
     }
 
     /// Sposta l'orologio in avanti di `ms`.
@@ -550,6 +566,26 @@ impl HostEnv for MemoryHost {
         self.now.load(Ordering::Relaxed)
     }
 
+    fn user_locale(&self) -> Locale {
+        self.locale.lock().unwrap().clone()
+    }
+
+    /// Deterministico, come l'orologio di questo banco: i byte sono un contatore
+    /// in little-endian. Un test che generasse identità **vere** non potrebbe
+    /// asserire su ciò che produce, e un banco che non si può asserire non
+    /// presidia niente. Che siano diversi a ogni chiamata è tutto ciò che serve
+    /// a chi verifica di non collidere.
+    fn random_bytes(&self, n: u32) -> Vec<u8> {
+        // Il contatore in little-endian nei primi otto byte, l'indice negli
+        // altri. Due chiamate non danno mai lo stesso blocco — che è la sola
+        // promessa della capacità vera — e ogni chiamata è prevedibile, che è la
+        // sola cosa che rende asseribile un test.
+        let base = self.entropy.fetch_add(1, Ordering::Relaxed).to_le_bytes();
+        (0..n as usize)
+            .map(|i| base.get(i).copied().unwrap_or(i as u8))
+            .collect()
+    }
+
     fn active_context(&self) -> Option<ViewContext> {
         self.context.lock().unwrap().clone()
     }
@@ -670,6 +706,40 @@ impl HostServices for MemoryHost {
 mod tests {
     use super::*;
     use fubmd_abi::format::{FormatCapabilities, FormatDescriptor};
+    use fubmd_abi::locale::{HourCycle, Weekday};
+
+    /// Il locale del doppio parte **indeterminato**, come quello del contratto:
+    /// un banco che partisse italiano nasconderebbe proprio i posti in cui una
+    /// feature dà per scontata una lingua. Chi ne prova una che formatta o che
+    /// ordina lo dichiara, e allora lo vede.
+    #[test]
+    fn the_double_starts_with_nobody_having_spoken() {
+        let host = MemoryHost::new();
+        assert_eq!(host.user_locale(), Locale::default());
+        assert!(!host.user_locale().has_language());
+
+        let host = host.con_locale(Locale {
+            language: "it-IT".into(),
+            timezone: "Europe/Rome".into(),
+            utc_offset_minutes: 120,
+            first_day_of_week: Weekday::Monday,
+            hour_cycle: HourCycle::H23,
+        });
+        assert_eq!(host.user_locale().language_base(), "it");
+        assert_eq!(host.user_locale().utc_offset_minutes, 120);
+    }
+
+    /// L'entropia del doppio è **deterministica e mai ripetuta**: la prima
+    /// proprietà rende asseribile un test, la seconda è la sola promessa della
+    /// capacità vera.
+    #[test]
+    fn the_doubles_entropy_never_repeats() {
+        let host = MemoryHost::new();
+        let primo = host.random_bytes(16);
+        let secondo = host.random_bytes(16);
+        assert_eq!(primo.len(), 16);
+        assert_ne!(primo, secondo);
+    }
 
     /// Il doppio risponde per **estensione**, che è la stessa chiave del
     /// registro vero: una feature che si prova qui e poi gira sul kernel deve
