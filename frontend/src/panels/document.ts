@@ -17,7 +17,7 @@
 import { createEditor, type Editor } from "../editor/editor";
 import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
-import { riferimentoRisolto, tagDelVault } from "../host/query";
+import { riferimentoRisolto, tagDelVault, vociDelVault } from "../host/query";
 import { MAIN_PANE } from "../host/contract";
 import type { PaneMode, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -59,7 +59,13 @@ export function mountDocument(deps: DocumentDeps): void {
     // Le sorgenti dei completamenti sono l'IPC, ammorbidite: prima che un
     // vault sia aperto rispondono vuoto, non con un errore in console.
     completions: {
-      listNotes: () => api.listDocuments().catch(() => []),
+      // Dal canale dati (§14.4): l'autocompletamento vuole i nomi di **tutte**
+      // le note, quindi qui la lista resta intera — cambia la porta, non la
+      // domanda. Il §21 la cambierà anche di forma.
+      listNotes: () =>
+        vociDelVault("document")
+          .then((page) => page.items.map((e) => e.id))
+          .catch(() => []),
       listTags: () => tagDelVault().catch(() => []),
     },
   });

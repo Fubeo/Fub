@@ -73,6 +73,19 @@ pub struct ScannedFile {
     pub mtime: u64,
 }
 
+/// Cosa la camminata ha trovato: i file, **e le cartelle** (§14.3).
+///
+/// Le cartelle sono un elenco a parte e non si deducono dai path dei file, ed è
+/// tutta la differenza fra una cartella e un prefisso: una cartella vuota non
+/// compare in nessun path e c'è lo stesso. Costa zero — la camminata le
+/// attraversa comunque per trovare i file.
+pub struct Scan {
+    pub files: Vec<ScannedFile>,
+    /// Path relativi senza slash finale, in ordine. La radice non c'è: non ha
+    /// un nome, non si rinomina e non si cancella.
+    pub folders: Vec<String>,
+}
+
 /// L'mtime in millisecondi UNIX. Vedi
 /// [`VaultEntry::mtime`](fubmd_abi::traits::VaultEntry::mtime) per il perché
 /// dei millisecondi e non dei secondi né dei nanosecondi.
@@ -125,7 +138,8 @@ impl Vault {
         rel.components().any(|c| is_ignored_name(c.as_str()))
     }
 
-    /// **Tutti** i file del vault, in ordine di id, con dimensione e data.
+    /// **Tutto** ciò che il vault contiene, in ordine: i file con dimensione e
+    /// data, e le cartelle (§14.3).
     ///
     /// Era `list_documents(&extensions)`, e la differenza è il §14.1: la
     /// scansione filtrava per estensione, quindi ciò che nessun provider
@@ -138,14 +152,18 @@ impl Vault {
     /// Dimensione e data si prendono **qui e non dopo**, ed è ciò che rende
     /// l'anagrafe gratis: la camminata ha già in mano ogni voce di directory, e
     /// una `stat` per file chiesta più tardi sarebbe un secondo giro sul disco.
-    pub fn scan(&self) -> Result<Vec<ScannedFile>> {
-        let mut out = Vec::new();
+    pub fn scan(&self) -> Result<Scan> {
+        let mut out = Scan {
+            files: Vec::new(),
+            folders: Vec::new(),
+        };
         self.walk(&self.root, &mut out)?;
-        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out.files.sort_by(|a, b| a.id.cmp(&b.id));
+        out.folders.sort();
         Ok(out)
     }
 
-    fn walk(&self, dir: &Utf8Path, out: &mut Vec<ScannedFile>) -> Result<()> {
+    fn walk(&self, dir: &Utf8Path, out: &mut Scan) -> Result<()> {
         let entries = std::fs::read_dir(dir).map_err(|e| KernelError::Io {
             path: dir.to_owned(),
             source: e,
@@ -166,13 +184,14 @@ impl Vault {
                 source: e,
             })?;
             if file_type.is_dir() {
+                out.folders.push(self.doc_id_for_path(&path)?.0);
                 self.walk(&path, out)?;
             } else if file_type.is_file() {
                 let meta = entry.metadata().map_err(|e| KernelError::Io {
                     path: path.clone(),
                     source: e,
                 })?;
-                out.push(ScannedFile {
+                out.files.push(ScannedFile {
                     id: self.doc_id_for_path(&path)?,
                     size: meta.len(),
                     mtime: mtime_millis(&meta),

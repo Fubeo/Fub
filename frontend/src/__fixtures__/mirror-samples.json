@@ -764,13 +764,40 @@
     {
       "kind": "entries",
       "of_kind": null,
+      "within": null,
       "page": null
     },
     {
       "kind": "entries",
       "of_kind": "asset",
+      "within": null,
       "page": {
         "offset": 40,
+        "limit": 20
+      }
+    },
+    {
+      "kind": "entries",
+      "of_kind": "document",
+      "within": {
+        "path": "Progetti",
+        "descendants": false
+      },
+      "page": null
+    },
+    {
+      "kind": "folders",
+      "under": null,
+      "page": null
+    },
+    {
+      "kind": "folders",
+      "under": {
+        "path": "Progetti",
+        "descendants": true
+      },
+      "page": {
+        "offset": 0,
         "limit": 20
       }
     }
@@ -985,6 +1012,25 @@
         ],
         "offset": 0,
         "total": 3
+      }
+    },
+    {
+      "kind": "folders",
+      "value": {
+        "items": [
+          {
+            "path": "note",
+            "folders": 1,
+            "entries": 12
+          },
+          {
+            "path": "note/bozze",
+            "folders": 0,
+            "entries": 0
+          }
+        ],
+        "offset": 0,
+        "total": 2
       }
     }
   ],

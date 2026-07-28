@@ -28,8 +28,10 @@ export interface Signals {
   /// Un vault è stato aperto (payload: la sua radice). Chi tiene stato legato
   /// al vault — cartelle aperte, spazio attivo, pannelli — riparte da qui.
   vault: [root: string];
-  /// La lista dei documenti del vault è cambiata.
-  documents: [docs: string[]];
+  /// La lista dei documenti del vault è cambiata. **Senza payload** (§14.4):
+  /// portava l'intero elenco, e chi lo riceveva ne disegnava venti righe. Dice
+  /// quando, non cosa: la parte che serve la chiede chi disegna.
+  documents: [];
   /// Il documento aperto è cambiato, o si è chiuso (`null`).
   "active-doc": [doc: string | null];
   /// L'organizzazione (icone, appuntate, ordinamenti, spazi, spazio attivo,
@@ -83,10 +85,6 @@ export interface ShellState {
   vaultRoot: string;
   /// Il documento aperto nel pannello, se c'è.
   currentDoc: string | null;
-  /// L'ultima lista di documenti disegnata: serve a ridisegnare la sidebar
-  /// senza richiederla al kernel a ogni ritocco dell'organizzazione. Non è una
-  /// verità, è un'eco — chi crea o rinomina passa comunque dal kernel.
-  knownDocs: string[];
   /// Il buffer ha modifiche non ancora scritte su disco? Finché è sporco, il
   /// buffer è la verità del documento aperto (vedi
   /// docs/architecture/data-model.md, "Fonte di verità"): non va MAI
@@ -126,7 +124,6 @@ export function metaVuota(): Organization {
 export const state: ShellState = {
   vaultRoot: "",
   currentDoc: null,
-  knownDocs: [],
   dirty: false,
   mode: "live_preview",
   handledExtensions: ["md"],

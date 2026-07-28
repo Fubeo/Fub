@@ -838,7 +838,6 @@ fn info_of(session: &VaultSession) -> VaultInfo {
     let ws = session.workspace.read().expect("workspace avvelenato");
     VaultInfo {
         root: ws.root().to_string(),
-        documents: ws.documents().into_iter().map(|d| d.0).collect(),
         extensions: ws.extensions(),
         plugins: ws.plugins(),
     }

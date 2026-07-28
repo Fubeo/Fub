@@ -5,7 +5,8 @@
 // la logica dell'alberatura (cosa è una cartella, cosa è una folder note, che
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
-import { vociDelVault } from "../host/query";
+import { cartelleDelVault, contenutoDiCartella, documentiEsistenti } from "../host/query";
+import type { VaultFolder } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import {
   loadOrganization,
@@ -17,15 +18,15 @@ import {
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
 import { createNote, refreshDocuments, renameNote } from "../state/vault";
 import {
-  allFolders,
-  buildTree,
   childName,
-  findFolder,
+  folderNoteCandidates,
+  folderNoteIn,
   folderNoteOf,
   orderedNames,
   pageName,
   parentOf,
-  type FolderNode,
+  sortContent,
+  type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { attivabile } from "../ui/a11y";
@@ -46,6 +47,29 @@ const pinnedListEl = $("#pinned-list");
 /// Il drag in corso nella sidebar, se c'è.
 let drag: { path: string; kind: "note" | "folder"; parent: string } | null = null;
 
+/// Ciò che serve a disegnare l'albero, come il kernel l'ha risposto (§14.3,
+/// §14.4).
+///
+/// **Solo le cartelle visibili**: la radice (o lo spazio attivo) e ognuna di
+/// quelle aperte. Prima qui c'era l'elenco di tutte le note del vault e
+/// l'albero se lo costruiva la shell; adesso un vault da diecimila note ne
+/// trasferisce quante ne sono a schermo.
+interface Vista {
+  /// Il contenuto di ogni cartella visibile, non ordinato: l'ordine dipende
+  /// dall'organizzazione, che cambia senza che il kernel c'entri.
+  cartelle: Map<string, FolderContent>;
+  /// I documenti «attesi» che esistono davvero: le folder note possibili delle
+  /// cartelle disegnate, e le note appuntate. Una domanda sola per entrambe —
+  /// sono la stessa domanda, «quali di questi path ci sono».
+  esistenti: Set<string>;
+}
+
+let vista: Vista = { cartelle: new Map(), esistenti: new Set() };
+/// L'impronta dell'ultima vista disegnata: gli eventi del kernel arrivano a
+/// ogni salvataggio con una risposta quasi sempre identica, e ricostruire
+/// l'albero distrugge gli `<li>` sotto il mouse.
+let ultimaFirma = "";
+
 export function mountExplorer(): void {
   $("#new-note").addEventListener("click", () => void newNote());
   spaceTitleEl.addEventListener("click", openSpaceNote);
@@ -59,11 +83,11 @@ export function mountExplorer(): void {
   renderSpaceTitle();
 
   // Una lista chiesta esplicitamente (apertura del vault, creazione, rinomina,
-  // ripristino) si disegna sempre.
-  on("documents", renderFileList);
-  // L'organizzazione cambiata ridisegna la stessa lista: icone, pin e ordine
-  // non passano dal kernel.
-  on("organization", () => renderFileList(state.knownDocs));
+  // ripristino) si richiede sempre: il segnale dice *quando*, non *cosa*.
+  on("documents", () => void refreshFromKernel(true));
+  // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
+  // icone, pin e ordine non passano dal kernel.
+  on("organization", renderFileList);
   on("active-doc", markActive);
 
   // Una rinomina non è solo una lista invecchiata: l'organizzazione (icona,
@@ -84,7 +108,7 @@ export function mountExplorer(): void {
 
   // Dentro un lotto (decisione 0011) `index_updated` NON arriva: arriva
   // `batch_ended`, una volta sola. È tutta la differenza fra una rinomina con
-  // 200 backlink che costa 201 giri di `list_documents` e una che ne costa uno.
+  // 200 backlink che costa 201 giri di domande e una che ne costa uno.
   // Nessun `visible`: l'albero si tiene aggiornato anche mentre la sidebar
   // mostra la ricerca o il cestino, perché alimenta anche ciò che si vede
   // altrove (le appuntate, la striscia degli spazi).
@@ -93,35 +117,81 @@ export function mountExplorer(): void {
     title: "Note",
     placement: "left_sidebar",
     refresh: refreshOn("index_updated", "batch_ended"),
-    render: refreshFromKernel,
+    render: () => refreshFromKernel(),
   });
 }
 
-/// La lista dopo un evento del kernel.
+/// Chiede al kernel ciò che serve a disegnare, e ridisegna se è cambiato.
+///
+/// Le domande sono **per cartella** (§14.3, §14.4): una coppia per ogni
+/// cartella visibile — le sue sottocartelle e le sue note — più una che chiede
+/// quali fra le folder note possibili e le appuntate esistono davvero. Un
+/// livello alla volta, in parallelo: aprire una cartella non costa il vault, e
+/// aprirne una in fondo non costa più che aprirne una in cima.
 ///
 /// Ricostruire la lista distrugge gli `<li>`: un click a cavallo del rebuild
 /// (mousedown sul vecchio nodo, mouseup su quello nuovo) non produce nessun
 /// `click` e all'utente sembra servire un doppio click. Gli eventi del kernel
-/// arrivano a ogni salvataggio con una lista quasi sempre identica: qui si
-/// ricostruisce solo se è cambiata davvero.
-async function refreshFromKernel(): Promise<void> {
-  // Dall'anagrafe (§14.1, §14.2) e non da `list_documents`: era l'ultimo dato
-  // che questa shell chiedeva **fuori** da `IndexQuery` (§14.4), cioè l'unico
-  // che un provider non avrebbe saputo chiedere. Un giro solo: la specie la
-  // sceglie la domanda, non un secondo filtro qui.
-  //
-  // `document` e non tutte le specie: cosa succeda cliccando un allegato — e
-  // quindi se abbia senso disegnarlo in questo albero — è del §14.3/§14.4, che
-  // danno alla cartella un modello e alla lista un canale per-cartella. Qui è
-  // cambiato **da dove arriva** l'elenco, non cosa contiene.
-  const docs = (await vociDelVault("document")).items.map((e) => e.id);
-  const uguale =
-    docs.length === state.knownDocs.length && docs.every((d, i) => d === state.knownDocs[i]);
-  if (!uguale) renderFileList(docs);
+/// arrivano a ogni salvataggio con una risposta quasi sempre identica: qui si
+/// ricostruisce solo se è cambiata davvero, o se a chiederlo è un gesto
+/// dell'utente (`forza`), che una risposta identica ce l'ha per costruzione.
+async function refreshFromKernel(forza = false): Promise<void> {
+  const cartelle = await caricaVisibili();
+  const attesi = [
+    ...[...cartelle.values()].flatMap((c) =>
+      c.folders.flatMap((f) => folderNoteCandidates(f.path, state.handledExtensions)),
+    ),
+    ...state.meta.pinned,
+  ];
+  const nuova: Vista = { cartelle, esistenti: await documentiEsistenti(attesi) };
+  const firma = impronta(nuova);
+  if (!forza && firma === ultimaFirma) return;
+  ultimaFirma = firma;
+  vista = nuova;
+  renderFileList();
 }
 
-function renderFileList(docs: string[]): void {
-  state.knownDocs = docs;
+/// Il contenuto delle sole cartelle **visibili**: la radice dello spazio
+/// attivo, e ricorsivamente quelle aperte.
+///
+/// Un livello per volta, e le cartelle di un livello insieme: sono domande
+/// indipendenti, e farle in fila vorrebbe dire pagare la latenza dell'IPC una
+/// volta per cartella aperta.
+async function caricaVisibili(): Promise<Map<string, FolderContent>> {
+  const out = new Map<string, FolderContent>();
+  let livello = [state.activeSpace ?? ""];
+  while (livello.length > 0) {
+    const contenuti = await Promise.all(livello.map((path) => contenutoDiCartella(path)));
+    const prossimo: string[] = [];
+    contenuti.forEach((contenuto, i) => {
+      const path = livello[i]!;
+      out.set(path, { path, ...contenuto });
+      for (const sub of contenuto.folders) {
+        if (state.expanded.has(sub.path)) prossimo.push(sub.path);
+      }
+    });
+    livello = prossimo;
+  }
+  return out;
+}
+
+/// Cosa il kernel ha risposto, in una stringa: due viste con la stessa impronta
+/// disegnano lo stesso albero.
+function impronta(v: Vista): string {
+  const cartelle = [...v.cartelle.entries()].map(
+    ([path, c]) =>
+      `${path}[${c.folders.map((f) => `${f.path}:${f.folders}:${f.entries}`).join(",")}][${c.notes.join(",")}]`,
+  );
+  return `${cartelle.join(";")}|${[...v.esistenti].sort().join(",")}`;
+}
+
+/// Il contenuto di una cartella nell'ordine in cui si vede, se è caricata.
+function figli(path: string): FolderContent | null {
+  const content = vista.cartelle.get(path);
+  return content ? sortContent(content, state.meta) : null;
+}
+
+function renderFileList(): void {
   // Uno spazio rimosso (o la cui cartella non esiste più) non può restare
   // selezionato: si torna a casa senza dire niente.
   if (state.activeSpace !== null && !state.meta.spaces.includes(state.activeSpace)) {
@@ -130,7 +200,7 @@ function renderFileList(docs: string[]): void {
   }
   renderSpaceStrip();
   renderSpaceTitle();
-  renderPinned(docs);
+  renderPinned();
   // Chi stava navigando da tastiera non deve perdere il posto: aprire una
   // cartella ridisegna **tutto** l'albero, e senza questa riga il fuoco
   // tornerebbe in cima al documento a ogni freccia destra — cioè la
@@ -141,7 +211,7 @@ function renderFileList(docs: string[]): void {
     attiva instanceof HTMLElement && fileListEl.contains(attiva) ? attiva.dataset.path : undefined;
 
   fileListEl.innerHTML = "";
-  renderChildren(buildTree(docs, state.meta, state.activeSpace ?? ""), fileListEl);
+  renderChildren(state.activeSpace ?? "", fileListEl);
 
   roving(daRimettere);
   if (daRimettere !== undefined) voce(daRimettere)?.focus();
@@ -252,7 +322,13 @@ function frecceNellAlbero(): void {
 /// I figli di una cartella, ricorsivamente: prima le sottocartelle (col loro
 /// sottoalbero, se aperte), poi le note. La folder note non compare tra i
 /// figli: è la cartella stessa, e la apre il click sulla sua riga.
-function renderChildren(node: FolderNode, ul: HTMLElement): void {
+///
+/// Si disegna da ciò che è **caricato**: una cartella aperta il cui contenuto
+/// non è ancora arrivato non disegna figli, e li disegnerà il ridisegno che
+/// segue il caricamento.
+function renderChildren(path: string, ul: HTMLElement): void {
+  const node = figli(path);
+  if (!node) return;
   for (const sub of node.folders) {
     const li = document.createElement("li");
     const riga = folderRow(sub);
@@ -263,12 +339,16 @@ function renderChildren(node: FolderNode, ul: HTMLElement): void {
     // gruppo è un albero che, letto, risulta piatto. Il **nome** viene invece
     // dalla riga, o sarebbe la cartella più tutte le note che ci stanno dentro.
     voceAlbero(li, riga, sub.path);
-    li.setAttribute("aria-expanded", String(aperta));
+    // `aria-expanded` solo su ciò che ha qualcosa da aprire: una cartella vuota
+    // è una foglia, e annunciarla «compressa» prometterebbe un contenuto che
+    // non c'è. Che una cartella possa essere vuota è nuovo (§14.3): prima una
+    // cartella nasceva dal path di una nota, quindi ne aveva sempre almeno una.
+    if (!vuota(sub)) li.setAttribute("aria-expanded", String(aperta));
     if (aperta) {
       const nested = document.createElement("ul");
       nested.className = "tree-children";
       nested.setAttribute("role", "group");
-      renderChildren(sub, nested);
+      renderChildren(sub.path, nested);
       li.appendChild(nested);
     }
     ul.appendChild(li);
@@ -340,35 +420,49 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   return row;
 }
 
+/// Una cartella senza niente dentro: né sottocartelle né file, di nessuna
+/// specie. I due conti arrivano dal kernel col resto della riga (§14.3), quindi
+/// saperlo non costa una domanda in più.
+function vuota(folder: VaultFolder): boolean {
+  return folder.folders === 0 && folder.entries === 0;
+}
+
 /// La riga di una cartella: freccia per aprire/chiudere, click che apre la
 /// folder note se c'è (altrimenti apre/chiude, come la freccia).
-function folderRow(folder: FolderNode): HTMLElement {
+function folderRow(folder: VaultFolder): HTMLElement {
   const row = document.createElement("div");
   row.className = "row folder";
   row.title = folder.path;
 
   const chevron = document.createElement("span");
   chevron.className = "chevron";
-  chevron.textContent = state.expanded.has(folder.path) ? "▾" : "▸";
-  chevron.addEventListener("click", (e) => {
-    e.stopPropagation();
-    toggleFolder(folder.path);
-  });
+  // Niente freccia su una cartella vuota: lo spazio resta (l'allineamento dei
+  // fratelli è lo stesso), ma non si promette un contenuto che non c'è.
+  if (!vuota(folder)) {
+    chevron.textContent = state.expanded.has(folder.path) ? "▾" : "▸";
+    chevron.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleFolder(folder.path);
+    });
+  }
   row.appendChild(chevron);
   row.appendChild(rowIcon(state.meta.icons[folder.path] ?? "📁"));
 
   const name = document.createElement("span");
   name.className = "row-name";
-  name.textContent = folder.name;
+  name.textContent = childName(folder.path);
   row.appendChild(name);
 
-  const fnote = folderNoteOf(folder, state.handledExtensions);
+  // La folder note di una cartella **non aperta** non si sa guardandoci dentro
+  // — guardarci dentro è il giro che questa voce toglie. Si sa perché il
+  // kernel ha già detto quali, fra i path che potrebbero esserlo, esistono.
+  const fnote = folderNoteIn(folder.path, state.handledExtensions, vista.esistenti);
   if (fnote) row.classList.add("has-note");
   row.addEventListener("click", () => {
     if (fnote) {
       void openDocument(fnote);
-      if (!state.expanded.has(folder.path)) toggleFolder(folder.path);
-    } else {
+      if (!state.expanded.has(folder.path) && !vuota(folder)) toggleFolder(folder.path);
+    } else if (!vuota(folder)) {
       toggleFolder(folder.path);
     }
   });
@@ -390,10 +484,12 @@ function rowIcon(icon: string): HTMLElement {
   return span;
 }
 
+/// Apre o chiude una cartella. Aprirne una **chiede il suo contenuto**
+/// (§14.4): non c'era in memoria, perché in memoria c'è ciò che si vede.
 function toggleFolder(path: string): void {
   if (!state.expanded.delete(path)) state.expanded.add(path);
   saveExpanded();
-  renderFileList(state.knownDocs);
+  void refreshFromKernel(true);
 }
 
 function markActive(): void {
@@ -412,9 +508,14 @@ function markActive(): void {
 
 // --- appuntate, icone, spazi ------------------------------------------------
 
-function renderPinned(docs: string[]): void {
-  const presenti = new Set(docs);
-  const pinned = state.meta.pinned.filter((id) => presenti.has(id));
+/// Le appuntate che esistono ancora.
+///
+/// Quali esistano lo dice il kernel — sono nella stessa domanda delle folder
+/// note (§14.4) — e non un elenco del vault da cui pescarle: un'appuntata è un
+/// path scritto nel sidecar, e verificarne cinque non è una ragione per
+/// chiedere diecimila righe.
+function renderPinned(): void {
+  const pinned = state.meta.pinned.filter((id) => vista.esistenti.has(id));
   pinnedTitleEl.hidden = pinned.length === 0;
   pinnedListEl.hidden = pinned.length === 0;
   pinnedListEl.innerHTML = "";
@@ -475,7 +576,7 @@ function renderSpaceStrip(): void {
   add.className = "space-chip add";
   add.textContent = "+";
   add.title = t("explorer.new_space");
-  add.addEventListener("click", (e) => pickNewSpace(e));
+  add.addEventListener("click", (e) => void pickNewSpace(e));
   spaceStripEl.appendChild(add);
 }
 
@@ -489,10 +590,12 @@ function renderSpaceTitle(): void {
   spaceTitleEl.classList.toggle("clickable", state.activeSpace !== null);
 }
 
+/// Cambiare spazio cambia la **radice** dell'albero, quindi cambia quali
+/// cartelle sono visibili: si richiede, non si ridisegna soltanto.
 function selectSpace(path: string | null): void {
   state.activeSpace = path;
   saveActiveSpace();
-  renderFileList(state.knownDocs);
+  void refreshFromKernel(true);
 }
 
 /// Registra una cartella come spazio (se già non lo è) e la seleziona.
@@ -511,10 +614,14 @@ function removeSpace(path: string): void {
 }
 
 /// Il "+" della striscia: un menu con le cartelle del vault non ancora spazi.
-function pickNewSpace(at: MouseEvent): void {
-  const candidate = allFolders(buildTree(state.knownDocs, state.meta)).filter(
-    (f) => !state.meta.spaces.includes(f.path),
-  );
+///
+/// Le cartelle le elenca il kernel (§14.3), a ogni profondità: prima si
+/// ricavavano dai path delle note, quindi una cartella vuota non compariva —
+/// ed è esattamente quella che si vuole poter eleggere a spazio prima di
+/// riempirla.
+async function pickNewSpace(at: MouseEvent): Promise<void> {
+  const tutte = await cartelleDelVault();
+  const candidate = tutte.items.filter((f) => !state.meta.spaces.includes(f.path));
   if (candidate.length === 0) {
     showContextMenu(at, [{ label: t("explorer.no_folders"), run: () => {} }]);
     return;
@@ -529,9 +636,12 @@ function pickNewSpace(at: MouseEvent): void {
 }
 
 /// Il nome dello spazio nel titolo apre la sua folder note, se esiste.
+///
+/// Lo spazio attivo è la **radice** dell'albero disegnato, quindi il suo
+/// contenuto è già in mano: non serve chiederlo di nuovo.
 function openSpaceNote(): void {
   if (state.activeSpace === null) return;
-  const node = findFolder(buildTree(state.knownDocs, state.meta), state.activeSpace);
+  const node = figli(state.activeSpace);
   const fnote = node && folderNoteOf(node, state.handledExtensions);
   if (fnote) void openDocument(fnote);
 }
@@ -562,14 +672,14 @@ function startRename(li: HTMLElement, id: string): void {
   const annulla = () => {
     if (chiuso) return;
     chiuso = true;
-    renderFileList(state.knownDocs);
+    renderFileList();
   };
   const conferma = async () => {
     if (chiuso) return;
     chiuso = true;
     const nuovo = input.value.trim();
     if (!nuovo || nuovo === pageName(id)) {
-      renderFileList(state.knownDocs);
+      renderFileList();
       return;
     }
     await renameDoc(id, nuovo);
@@ -597,7 +707,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
     await renameNote(from, to);
   } catch (e) {
     console.error(`FubMD: ${t("explorer.rename_failed", { doc: from, to, reason: errorText(e) })}`);
-    renderFileList(state.knownDocs);
+    renderFileList();
   }
   // `currentDoc` lo aggiorna l'evento `document_renamed`: l'identità è il path,
   // e chi la migra è un solo punto.
@@ -622,7 +732,7 @@ async function convertToFolder(id: string): Promise<void> {
   }
   state.expanded.add(folderPath);
   saveExpanded();
-  renderFileList(state.knownDocs);
+  void refreshFromKernel(true);
 }
 
 // --- drag & drop ------------------------------------------------------------
@@ -694,8 +804,11 @@ function clearDropMarks(): void {
 
 /// Riscrive l'ordine scelto a mano di una cartella: la lista completa dei nomi
 /// nell'ordine visibile, col trascinato nella posizione nuova.
+///
+/// La cartella è quella dei due fratelli che si stanno riordinando, quindi è a
+/// schermo, quindi è caricata: `figli` la trova senza chiedere niente.
 function applyReorder(parent: string, dragged: string, target: string, before: boolean): void {
-  const node = findFolder(buildTree(state.knownDocs, state.meta), parent);
+  const node = figli(parent);
   if (!node) return;
   const names = orderedNames(node).filter((n) => n !== dragged);
   const at = names.indexOf(target);

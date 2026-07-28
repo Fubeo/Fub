@@ -14,6 +14,7 @@ import type {
   Organization,
   DocumentMatch,
   EntryKind,
+  FolderScope,
   IndexQuery,
   JobStatus,
   SettingEntry,
@@ -25,9 +26,10 @@ import type {
   QueryExpr,
   TagCount,
   VaultEntry,
+  VaultFolder,
   VaultStatus,
 } from "./contract";
-import { OGNI_DOCUMENTO } from "./contract";
+import { OGNI_DOCUMENTO, questiDocumenti } from "./contract";
 
 /// Apre la risposta, o dice **cosa** è arrivato invece.
 ///
@@ -61,6 +63,19 @@ export async function documentiCheCombaciano(
     page: page ?? null,
   };
   return open(await api.queryIndex(query), "documents");
+}
+
+/// Quali di questi documenti **esistono**, in una domanda sola.
+///
+/// La foglia `docs` la valuta chi ha i metadati in cache, e la restringe a ciò
+/// che conosce: la risposta è l'intersezione. Serve a chi tiene dei path
+/// scritti da qualche altra parte — le note appuntate nel sidecar, la folder
+/// note che una cartella *potrebbe* avere — e prima si faceva cercandoli dentro
+/// l'elenco intero del vault, che è il giro che il §14.4 esiste per togliere.
+export async function documentiEsistenti(docs: string[]): Promise<Set<string>> {
+  if (docs.length === 0) return new Set();
+  const page = await documentiCheCombaciano(questiDocumenti(docs));
+  return new Set(page.items.map((m) => m.doc));
 }
 
 /// I tag del vault con la loro frequenza.
@@ -149,13 +164,56 @@ export async function riferimentoRisolto(
 /// La finestra c'è dal primo giorno: è la stessa `Page` di ogni altra risposta
 /// paginata, e chiedere tutto vuol dire ometterla — non passare un limite
 /// grande.
-export async function vociDelVault(of_kind?: EntryKind, page?: Page): Promise<Paged<VaultEntry>> {
+export async function vociDelVault(
+  of_kind?: EntryKind,
+  within?: FolderScope,
+  page?: Page,
+): Promise<Paged<VaultEntry>> {
   const query: IndexQuery = {
     kind: "entries",
     of_kind: of_kind ?? null,
+    within: within ?? null,
     page: page ?? null,
   };
   return open(await api.queryIndex(query), "entries");
+}
+
+/// Le cartelle (§14.3), in ordine di path.
+///
+/// `under` assente = ogni cartella del vault, a ogni profondità: è l'elenco da
+/// cui si sceglie (uno spazio, una destinazione). Con `{ path, descendants:
+/// false }` è **un livello solo**, cioè ciò che serve ad aprire un nodo
+/// dell'albero senza chiedere il resto del vault.
+///
+/// Le cartelle arrivano dal kernel e non si deducono più dai path delle note:
+/// una cartella vuota c'è, e una che è rimasta vuota non sparisce.
+export async function cartelleDelVault(
+  under?: FolderScope,
+  page?: Page,
+): Promise<Paged<VaultFolder>> {
+  const query: IndexQuery = {
+    kind: "folders",
+    under: under ?? null,
+    page: page ?? null,
+  };
+  return open(await api.queryIndex(query), "folders");
+}
+
+/// I figli diretti di una cartella: le sottocartelle e le note, in **una sola
+/// coppia di domande** (§14.3, §14.4).
+///
+/// È la forma che disegna un livello di albero, e le due domande partono
+/// insieme perché sono indipendenti: aspettare la prima per fare la seconda
+/// raddoppierebbe l'attesa di ogni cartella che si apre.
+export async function contenutoDiCartella(
+  path: string,
+): Promise<{ folders: VaultFolder[]; notes: string[] }> {
+  const scope: FolderScope = { path, descendants: false };
+  const [folders, notes] = await Promise.all([
+    cartelleDelVault(scope),
+    vociDelVault("document", scope),
+  ]);
+  return { folders: folders.items, notes: notes.items.map((e) => e.id) };
 }
 
 /// Che rapporto ha questo vault con il disco (§9.7): FubMD saprebbe che è

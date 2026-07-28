@@ -248,7 +248,11 @@ fn oltre_il_millisecondo() {
 
 fn entries(ws: &Workspace, of_kind: Option<EntryKind>, page: Option<Page>) -> Vec<VaultEntry> {
     let IndexResult::Entries(page) = ws
-        .query_index(IndexQuery::Entries { of_kind, page })
+        .query_index(IndexQuery::Entries {
+            of_kind,
+            within: None,
+            page,
+        })
         .expect("il kernel serve l'anagrafe")
     else {
         panic!("attesa l'anagrafe");
@@ -465,6 +469,7 @@ fn l_anagrafe_si_filtra_per_specie_e_si_chiede_a_pagine() {
     let IndexResult::Entries(pagina) = ws
         .query_index(IndexQuery::Entries {
             of_kind: Some(EntryKind::Asset),
+            within: None,
             page: Some(Page::new(2, 3)),
         })
         .expect("query")
@@ -487,6 +492,7 @@ fn l_anagrafe_si_filtra_per_specie_e_si_chiede_a_pagine() {
     let IndexResult::Entries(fuori) = ws
         .query_index(IndexQuery::Entries {
             of_kind: Some(EntryKind::Asset),
+            within: None,
             page: Some(Page::new(99, 3)),
         })
         .expect("query")

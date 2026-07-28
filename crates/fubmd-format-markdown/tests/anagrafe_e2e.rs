@@ -104,6 +104,7 @@ fn spostare_un_allegato_porta_con_se_chi_lo_mostra() {
     let IndexResult::Entries(page) = ws
         .query_index(IndexQuery::Entries {
             of_kind: Some(EntryKind::Asset),
+            within: None,
             page: None,
         })
         .expect("il kernel serve l'anagrafe")

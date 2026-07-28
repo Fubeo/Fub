@@ -11,12 +11,12 @@ import "./style.css";
 import { hasPlugin } from "./host/contract";
 import { pickFolder } from "./host/dialog";
 import { api } from "./host/ipc";
-import { statoDelVault } from "./host/query";
+import { statoDelVault, vociDelVault } from "./host/query";
 import { startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
 import { loadOrganization } from "./state/organization";
 import { emit, loadActiveSpace, loadExpanded, loadMode, state } from "./state/store";
-import { loadCommandSpecs } from "./state/vault";
+import { loadCommandSpecs, primaNota } from "./state/vault";
 import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
 import { mountNotifications, notify } from "./ui/notify";
@@ -49,7 +49,12 @@ const vaultPathEl = $("#vault-path");
 const paletteHost = {
   onEffect: applyIntent,
   notify,
-  listDocuments: () => api.listDocuments().catch(() => []),
+  // Dal canale dati (§14.4): la palette cerca fra tutte le note, quindi la
+  // lista resta intera — è la porta che cambia, non la domanda.
+  listDocuments: () =>
+    vociDelVault("document")
+      .then((page) => page.items.map((e) => e.id))
+      .catch(() => []),
 };
 
 async function init(): Promise<void> {
@@ -195,7 +200,7 @@ async function openVaultPath(dir: string): Promise<void> {
 
   closeDocument();
   clearSearch();
-  emit("documents", info.documents);
+  emit("documents");
 
   // Le view dichiarative si scoprono dal backend, non da id cablati. E come le
   // view, i comandi: l'elenco serve alle scorciatoie dichiarate — la palette lo
@@ -206,7 +211,10 @@ async function openVaultPath(dir: string): Promise<void> {
 
   await avvisaSeNessunoGuarda();
 
-  if (info.documents.length > 0) await openDocument(info.documents[0]);
+  // La prima nota, chiesta con una finestra da uno (§14.4): l'apertura del
+  // vault non porta più l'elenco intero, e per aprirne una non serve.
+  const prima = await primaNota();
+  if (prima) await openDocument(prima);
 }
 
 /// Se questo vault non ha il rilevamento delle modifiche esterne, dirlo (§9.7).

@@ -255,18 +255,31 @@ pub fn folders_of(doc: &DocId) -> Vec<String> {
 
 /// La cartella che contiene il documento (`""` se sta nella radice).
 pub fn folder_of(doc: &DocId) -> String {
-    doc.as_str()
-        .rsplit_once('/')
-        .map(|(dir, _)| dir.to_string())
-        .unwrap_or_default()
+    parent_folder(doc.as_str()).to_string()
+}
+
+/// La cartella che contiene un path, qualunque cosa quel path nomini: un file o
+/// **un'altra cartella** (§14.3). `""` per chi sta nella radice.
+pub fn parent_folder(path: &str) -> &str {
+    path.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("")
 }
 
 /// Il documento sta in questa cartella? Con `descendants`, anche in una sua
 /// discendente. `path` senza slash finale; `""` è la radice — e la radice con
 /// `descendants` è tutto il vault.
 pub fn in_folder(doc: &DocId, path: &str, descendants: bool) -> bool {
+    within_folder(parent_folder(doc.as_str()), path, descendants)
+}
+
+/// La regola sotto [`in_folder`], scritta su ciò che **contiene** invece che su
+/// ciò che è contenuto: `own` è la cartella di chi si sta valutando.
+///
+/// Esiste perché la stessa domanda si fa su due cose diverse (§14.3): per un
+/// file `own` è la cartella che lo contiene, per una **cartella** è la sua
+/// genitrice — e da lì in poi le regole sono le stesse, radice compresa. Con
+/// due funzioni sarebbero due, e divergerebbero sul caso che nessuno prova.
+pub fn within_folder(own: &str, path: &str, descendants: bool) -> bool {
     let path = path.trim_end_matches('/');
-    let own = folder_of(doc);
     if descendants {
         path.is_empty() || own == path || own.strip_prefix(path).is_some_and(|r| r.starts_with('/'))
     } else {

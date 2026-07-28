@@ -32,7 +32,6 @@ fn expected() -> Value {
     json!({
         "VaultInfo": [to_value(VaultInfo {
             root: "/vault".into(),
-            documents: vec!["a.md".into()],
             extensions: vec!["md".into()],
             // Il campione porta un plugin con una registrazione: un inventario
             // vuoto sarebbe una lista, non l'inventario del §7.6, e non

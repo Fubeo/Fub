@@ -12,6 +12,7 @@ import { api } from "../host/ipc";
 import {
   emptyTrash as svuota,
   proposeFreeName,
+  primaNota,
   refreshDocuments,
   restoreFromTrash,
   trashNote,
@@ -117,7 +118,7 @@ async function ripristina(trashId: string, original: string): Promise<void> {
   }
   await refreshTrash();
   showPanel("files");
-  await refreshDocuments();
+  refreshDocuments();
   await openDocument(restored);
 }
 
@@ -157,9 +158,12 @@ export async function trashWithConfirm(id: string): Promise<void> {
     // Il buffer sporco di un documento cancellato muore col documento: non è
     // una perdita silenziosa, è l'azione che l'utente ha appena confermato.
     closeDocument();
-    const docs = await refreshDocuments();
-    if (docs.length > 0) await openDocument(docs[0]);
+    refreshDocuments();
+    // La prima nota che c'è, chiesta con una finestra da uno: prendere il primo
+    // elemento di un elenco intero era chiedere il vault per aprirne una (§14.4).
+    const prima = await primaNota();
+    if (prima) await openDocument(prima);
   } else {
-    await refreshDocuments();
+    refreshDocuments();
   }
 }

@@ -33,7 +33,10 @@ import type {
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
-  listDocuments: () => invoke<string[]>("list_documents"),
+  // `listDocuments` **non c'è più** (§14.4): restituiva l'intero vault in un
+  // `string[]`, senza finestra e senza saper dire *quale cartella*. Chi vuole
+  // l'elenco lo chiede dal canale dati (`vociDelVault`, `contenutoDiCartella`),
+  // che è la stessa porta da cui lo chiederebbe un plugin.
   readDocument: (id: string) => invoke<string>("read_document", { id }),
   writeDocument: (id: string, source: string) =>
     invoke<void>("write_document", { id, source }),
