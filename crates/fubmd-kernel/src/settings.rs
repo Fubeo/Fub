@@ -114,10 +114,11 @@ static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 ///
 /// Le due righe che la rendono vera e non solo dichiarata:
 ///
-/// - il temporaneo ha un nome **unico**. Con un `.tmp` fisso, due processi che
-///   salvano insieme — due installazioni sulla stessa `FUBMD_CONFIG_DIR`, che
-///   `fubmd_host::config` dichiara di voler reggere — si scrivono addosso, e ciò
-///   che atterra è metà dell'uno e metà dell'altro;
+/// - il temporaneo ha un nome **unico**. Con un `.tmp` fisso, due scritture
+///   davvero contemporanee — due processi sulla stessa cartella di
+///   configurazione, o due thread di questo — si scrivono addosso sul
+///   temporaneo, e ciò che la rename fa atterrare è metà dell'uno e metà
+///   dell'altro;
 /// - il temporaneo si **sincronizza prima della rename**. Temp+rename dà
 ///   atomicità *rispetto a chi legge*, non durabilità rispetto a un crash: senza
 ///   `sync_all` il nome nuovo può atterrare con dietro un contenuto che non è
@@ -125,6 +126,19 @@ static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 ///   per non produrre. La cartella si sincronizza dopo, e a farlo si prova
 ///   soltanto: su Windows una cartella non si apre come file, e lì la rename ha
 ///   un'altra semantica.
+///
+/// Ciò che **non** dà, e va detto qui perché il nome invita a crederlo: questa è
+/// l'atomicità di *un file*, non di un *aggiornamento*. Chi la chiama passa il
+/// contenuto intero, e lo compone dalla propria copia in memoria: due processi
+/// sulla stessa cartella di configurazione atterrano quindi ognuno un file
+/// integro, e il secondo che salva cancella le chiavi che il primo ha scritto
+/// dopo la sua ultima lettura. Dentro un processo il caso non esiste — il livello
+/// macchina è **uno** (`Arc<MachineSettings>`, decisione 0036) e le due finestre
+/// del sidecar le ha chiuse la 0038 scrivendo per chiave — fra processi resta, ed
+/// è scritto fra le cose scoperte della 0036. La via d'uscita è un lock del file
+/// o una rilettura sotto lock prima di ricomporre, ed è **§15.2** (durabilità e
+/// recovery) e non il §15.3, che di questa funzione sposta la casa e non la
+/// semantica.
 pub fn write_atomic(path: &Utf8Path, bytes: &[u8]) -> Result<(), String> {
     let dir = path.parent().expect("un file sta sempre in una cartella");
     std::fs::create_dir_all(dir).map_err(|e| format!("non riesco a creare {dir}: {e}"))?;

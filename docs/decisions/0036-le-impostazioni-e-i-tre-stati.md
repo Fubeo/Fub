@@ -328,6 +328,17 @@ saperlo anche quando la coda è piena.
 - **La migrazione della chiave sul rename** (§11.3) e la **primitiva generale di
   scrittura atomica** (§15.3): `write_atomic` è `pub` nel kernel con un cliente
   solo fuori (il registro dei vault), e il §15.3 la sposterà senza riscriverla.
+- **Due processi sulla stessa cartella di configurazione si cancellano le chiavi
+  a vicenda.** `write_atomic` dà l'atomicità di *un file* e non di un
+  *aggiornamento*: chi la chiama compone il contenuto intero dalla propria copia
+  in memoria, quindi la seconda installazione che salva atterra un file integro
+  senza le chiavi che la prima aveva scritto dopo che lei aveva letto. Dentro un
+  processo il caso non esiste, ed è tutto il punto dell'`Arc<MachineSettings>`
+  condiviso qui sopra — il livello macchina è **uno**. Fra processi resta, e la
+  risposta non è di questa voce: è un lock del file o una rilettura sotto lock
+  prima di ricomporre, cioè lo strato che il **§15.2** copre. Sta scritto lì e
+  sul doc di `write_atomic`, dove lo legge chi fosse tentato di credere che il
+  nome della funzione prometta anche questo.
 - **Un cambio di chiave `Machine` non attraversa i vault aperti.** Il *valore*
   sì — il livello è condiviso, ed è tutto il punto di condividerlo — ma
   `Event::SettingChanged` esce sul bus del vault che ha scritto, e i bus sono uno
