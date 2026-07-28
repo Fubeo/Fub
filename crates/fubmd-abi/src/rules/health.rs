@@ -8,17 +8,19 @@
 //! # Cosa NON è un link rotto (e perché è dichiarato qui)
 //!
 //! - Un **URL** non punta al vault: non risolvere è la sua condizione normale.
-//! - Un **allegato** — `![](img/foto.png)`, cioè un path con un'estensione che
-//!   nessun `FormatProvider` rivendica — oggi nel kernel *non esiste*: la lista
-//!   dei documenti filtra per estensione, e un PNG non è un documento.
-//!   Segnalarlo come rotto vorrebbe dire riempire il rapporto di falsi
-//!   positivi, uno per immagine; ignorarlo in silenzio vorrebbe dire mentire.
-//!   Si ignora **dichiarandolo**: gli allegati orfani e i riferimenti rotti agli
-//!   allegati sono 13.1, e nascono col modello degli asset (§14.1).
+//! - Un **allegato che c'è** — `![](img/foto.png)` con il PNG al suo posto. Fino
+//!   al §14.1 *nessun* riferimento ad allegato era giudicabile, e la ragione era
+//!   dichiarata qui sopra: nel kernel un PNG non esisteva, quindi «c'è» e «non
+//!   c'è» erano la stessa risposta e segnalarli tutti avrebbe riempito il
+//!   rapporto di falsi positivi, uno per immagine. Con l'anagrafe la differenza
+//!   si può fare, e le due metà si separano: quello che c'è non è un problema,
+//!   quello che manca **è un link rotto** — ed è il caso che l'utente vede
+//!   davvero, perché è un'immagine che non si carica.
 //!
-//! Restano rotti: i wikilink che non risolvono a nessuna nota e i link markdown
-//! a documenti (path senza estensione, o con un'estensione di documento) che non
-//! esistono. È la promessa che il vault può mantenere oggi, per intero.
+//! Restano rotti: i wikilink che non risolvono a nessuna nota, i link markdown a
+//! documenti (path senza estensione, o con un'estensione di documento) che non
+//! esistono, e i riferimenti a un file — di qualunque specie — che il vault non
+//! ha.
 //!
 //! [`IndexQuery::VaultHealth`]: crate::traits::IndexQuery::VaultHealth
 
@@ -36,6 +38,21 @@ pub trait LinkResolver {
     fn resolve_wiki(&self, page: &str) -> Option<DocId>;
     /// Il documento a cui punta `target` scritto dentro `source`, se c'è.
     fn resolve_path(&self, source: &DocId, target: &str) -> Option<DocId>;
+    /// Il **file** che un riferimento nomina, di qualunque specie: un allegato,
+    /// o qualcosa che nessuno sa cosa sia (§14.1).
+    ///
+    /// È una domanda diversa da [`resolve_path`](LinkResolver::resolve_path) e
+    /// non la sua versione permissiva: là si cerca una **nota**, quindi un path
+    /// senza estensione vale e l'estensione si può sottintendere; qui si cerca
+    /// un file, e `img/foto.png` è quel file o non è niente.
+    ///
+    /// Prende il [`LinkTarget`] intero e non una stringa perché le due specie di
+    /// riferimento si cercano in due modi, ed è la stessa differenza che c'è fra
+    /// le note: un path si cerca **per path**, relativo a chi lo scrive; un
+    /// wikilink si cerca **per nome** — `![[foto.png]]` è il modo in cui
+    /// Obsidian incorpora un allegato, e finché un PNG nel kernel non esisteva
+    /// quel riferimento risultava rotto anche quando l'immagine era lì.
+    fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId>;
 }
 
 /// La destinazione **come era scritta** se il link è rotto, `None` se risolve o
@@ -57,11 +74,25 @@ pub fn broken_target<R: LinkResolver + ?Sized>(
             // contro heading e ancore del bersaglio è la voce dichiarata in coda
             // alla decisione 0003, e un link a una nota che esiste non è rotto
             // perché punta a un titolo che non c'è più — è un'altra diagnosi.
-            resolver.resolve_wiki(page).is_none().then(|| page.clone())
+            //
+            // Se non è una nota può essere un **allegato incorporato**
+            // (`![[foto.png]]`, §14.1): finché il vault non sapeva di avere dei
+            // PNG, quel riferimento risultava rotto anche con l'immagine al suo
+            // posto — un falso positivo per ogni immagine incorporata.
+            (resolver.resolve_wiki(page).is_none()
+                && resolver.resolve_entry(source, &link.target).is_none())
+            .then(|| page.clone())
         }
         LinkTarget::Path(path) => {
+            // Un allegato si cerca **per quello che è scritto**, un documento
+            // anche per quello che è sottinteso (l'estensione). Sono due
+            // domande, e la seconda non sa rispondere alla prima: `resolve_path`
+            // cerca fra le note, e fra le note un PNG non c'è mai.
             if is_attachment(path, doc_extensions) {
-                return None;
+                return resolver
+                    .resolve_entry(source, &link.target)
+                    .is_none()
+                    .then(|| path.clone());
             }
             resolver
                 .resolve_path(source, path)

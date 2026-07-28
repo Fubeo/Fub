@@ -39,6 +39,8 @@ import type {
   UiNode,
   ViewInstance,
   PluginInfo,
+  KnownVault,
+  EntryKind,
   VaultEntry,
   VaultInfo,
   VersionRef,
@@ -272,6 +274,19 @@ function touchEvent(e: KernelEvent): void {
     case "setting_changed":
       e.key;
       return;
+    // I tre dell'anagrafe (§14.1). Si toccano la **specie**, che è la sola
+    // ragione per cui non sono i tre eventi dei documenti: chi ascolta
+    // `document_changed` è codice scritto per un documento, e un PNG
+    // consegnato lì sarebbe una bugia retroattiva.
+    case "entry_changed":
+    case "entry_removed":
+      touchEntryKind(e.kind);
+      return;
+    case "entry_renamed":
+      touchEntryKind(e.kind);
+      e.from;
+      e.to;
+      return;
     default:
       assertNever(e);
   }
@@ -321,6 +336,12 @@ function touchIndexQuery(q: IndexQuery): void {
     // riferimento che la shell passa al kernel senza saperlo nominare.
     case "resolve":
       touchLinkTarget(q.target);
+      return;
+    // L'anagrafe (§14.1, §14.2): `of_kind` assente = tutte le specie, ed è la
+    // sola domanda del canale che risponde anche su ciò che non è un
+    // documento.
+    case "entries":
+      if (q.of_kind != null) touchEntryKind(q.of_kind);
       return;
     default:
       assertNever(q);
@@ -397,8 +418,28 @@ function touchIndexResult(r: IndexResult): void {
     case "organization":
     case "resolved":
       return;
+    // Ogni specie dev'essere **nominabile** da questa shell: una specie nuova
+    // in Rust deve arrivare qui come rosso, non come una voce che l'albero
+    // salta in silenzio.
+    case "entries":
+      r.value.items.forEach((e: VaultEntry) => touchEntryKind(e.kind));
+      return;
     default:
       assertNever(r);
+  }
+}
+
+/// La specie di una voce del vault (§14.1). Non è una proprietà del file: un
+/// `.canvas` è `unknown` finché nessuno rivendica quell'estensione, e diventa
+/// `document` senza che un byte cambi.
+function touchEntryKind(k: EntryKind): void {
+  switch (k) {
+    case "document":
+    case "asset":
+    case "unknown":
+      return;
+    default:
+      assertNever(k);
   }
 }
 
@@ -563,7 +604,11 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
   OpenVaults: keysOf<OpenVaults>({ roots: true, current: true }),
   BundleInfo: keysOf<BundleInfo>({ id: true, name: true, mounted: true }),
-  VaultEntry: keysOf<VaultEntry>({
+  // La chiave resta il nome del tipo RUST (`fubmd_host::VaultEntry`), che è
+  // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché
+  // l'anagrafe del §14.1 porta lo stesso nome dal contratto (vedi
+  // `contract.ts`).
+  VaultEntry: keysOf<KnownVault>({
     root: true,
     name: true,
     icon: true,

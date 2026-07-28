@@ -129,7 +129,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::PluginError;
 use crate::model::DocId;
 use crate::settings::SettingScope;
-use crate::traits::{JobId, JobProgress};
+use crate::traits::{EntryKind, JobId, JobProgress};
 
 /// Identità di un lotto (decisione 0011): le N scritture che la portano sono una cosa
 /// sola.
@@ -403,6 +403,45 @@ pub enum Event {
     /// ma non si può riscoprire che è cambiato — e chi si spegne quando lo
     /// spengono deve saperlo anche quando la coda è piena.
     SettingChanged { key: String, scope: SettingScope },
+    /// Un file che **non è un documento** è comparso o è cambiato (§14.1): un
+    /// allegato, o qualcosa che nessuno sa cosa sia.
+    ///
+    /// I tre eventi dell'anagrafe sono i gemelli dei tre dei documenti, e sono
+    /// tre e non uno per la stessa ragione: l'abbonamento ha la grana del
+    /// [`EventKind`] ([decisione 0033](../../../docs/decisions/0033-la-grana-di-un-abbonamento.md)),
+    /// e chi vuole sapere solo delle sparizioni — una cache di miniature, un
+    /// pannello degli allegati — deve poterlo dire senza ricevere tutto e
+    /// filtrare il payload.
+    ///
+    /// # Perché non `DocumentChanged`
+    ///
+    /// Perché sarebbe una bugia che qualcuno legge. `DocumentChanged` ha, da
+    /// contratto, un lettore che ne riparsa il modello, ne rilegge l'outline, ne
+    /// ricalcola i backlink: consegnargli un PNG vuol dire fargli chiedere il
+    /// modello di un'immagine. E la bugia sarebbe **retroattiva** — ogni handler
+    /// scritto prima di questa voce comincerebbe a ricevere file che non ha mai
+    /// chiesto, senza aver cambiato una riga.
+    ///
+    /// `kind` non è mai [`EntryKind::Document`]: quelli hanno i loro tre eventi.
+    /// C'è perché chi ascolta filtra su di lui (un generatore di miniature vuole
+    /// gli `Asset`) e perché su una **sparizione** non si può più chiedere: la
+    /// voce non c'è più, e l'unico momento in cui la sua specie è ancora nota è
+    /// questo.
+    EntryChanged { id: DocId, kind: EntryKind },
+    /// Un file che non è un documento non c'è più (§14.1).
+    EntryRemoved { id: DocId, kind: EntryKind },
+    /// Un file che non è un documento ha cambiato path (§14.1).
+    ///
+    /// Come per [`DocumentRenamed`](Event::DocumentRenamed), **l'identità è il
+    /// path**: chi tiene stato attaccato a un allegato — una miniatura, una
+    /// trascrizione, un OCR — migra la chiave invece di trattarlo come una
+    /// sparizione seguita da una comparsa, o butta via un lavoro che era ancora
+    /// buono.
+    EntryRenamed {
+        from: DocId,
+        to: DocId,
+        kind: EntryKind,
+    },
 }
 
 impl Event {
@@ -422,6 +461,9 @@ impl Event {
             Event::JobStarted { .. } => EventKind::JobStarted,
             Event::JobProgress { .. } => EventKind::JobProgress,
             Event::SettingChanged { .. } => EventKind::SettingChanged,
+            Event::EntryChanged { .. } => EventKind::EntryChanged,
+            Event::EntryRemoved { .. } => EventKind::EntryRemoved,
+            Event::EntryRenamed { .. } => EventKind::EntryRenamed,
         }
     }
 
@@ -434,6 +476,14 @@ impl Event {
         match self {
             Event::DocumentChanged { id } | Event::DocumentRemoved { id } => Some(id),
             Event::DocumentRenamed { to, .. } => Some(to),
+            // I tre dell'anagrafe **non** rispondono qui, e non è una
+            // dimenticanza: questa risposta finisce nell'elenco `changed` di un
+            // [`BatchEnded`](Event::BatchEnded), che il contratto descrive come
+            // i *documenti* che il lotto ha toccato. Chi ridisegna su quella
+            // lista chiede il modello di ciò che ci trova dentro. Un allegato
+            // che si muove dentro un lotto resta visibile a chi si è abbonato
+            // ai suoi eventi, che arrivano interi — è `index-updated` l'unico
+            // evento che un lotto coalizza, non gli altri.
             _ => None,
         }
     }
@@ -470,7 +520,15 @@ impl Event {
             // particolare **deve** essere sacrificabile, o il canale più caldo
             // del contratto sarebbe l'unico senza freno.
             | Event::JobStarted { .. }
-            | Event::JobProgress { .. } => true,
+            | Event::JobProgress { .. }
+            // I tre dell'anagrafe si riscoprono **chiedendola**
+            // ([`IndexQuery::Entries`](crate::traits::IndexQuery::Entries)),
+            // che è metà della ragione per cui quella variante esiste: chi
+            // riceve un `overflow` ricostruisce l'elenco dei file invece di
+            // restare fermo su un allegato che non c'è più.
+            | Event::EntryChanged { .. }
+            | Event::EntryRemoved { .. }
+            | Event::EntryRenamed { .. } => true,
             Event::VaultOpened { .. }
             | Event::VaultClosed { .. }
             | Event::JobDone { .. }
@@ -504,6 +562,12 @@ impl Event {
             Event::DocumentChanged { id } | Event::DocumentRemoved { id } => vec![id],
             Event::DocumentRenamed { from, to } => vec![from, to],
             Event::BatchEnded { changed, .. } => changed.iter().collect(),
+            // Qui invece sì: la domanda è *questo evento riguarda la tua
+            // cartella?*, e una cartella la riguarda un PNG che ci entra quanto
+            // una nota. Chi si abbona a `Progetti/` per tenerne l'indice
+            // aggiornato vuole sapere anche dell'allegato che ci compare.
+            Event::EntryChanged { id, .. } | Event::EntryRemoved { id, .. } => vec![id],
+            Event::EntryRenamed { from, to, .. } => vec![from, to],
             _ => Vec::new(),
         }
     }
@@ -540,6 +604,12 @@ pub enum EventKind {
     JobProgress,
     /// Una chiave di configurazione è cambiata (§11.1).
     SettingChanged,
+    /// Un file che non è un documento è comparso o è cambiato (§14.1).
+    EntryChanged,
+    /// Un file che non è un documento non c'è più (§14.1).
+    EntryRemoved,
+    /// Un file che non è un documento ha cambiato path (§14.1).
+    EntryRenamed,
 }
 
 /// **Dove**: il soggetto di un abbonamento (decisione 0033).
@@ -646,6 +716,9 @@ impl EventMask {
             EventKind::VaultClosed,
             EventKind::JobStarted,
             EventKind::JobProgress,
+            EventKind::EntryChanged,
+            EventKind::EntryRemoved,
+            EventKind::EntryRenamed,
         ])
     }
 

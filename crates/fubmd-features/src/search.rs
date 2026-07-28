@@ -48,12 +48,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use camino::Utf8Path;
+use fubmd_abi::edit::Revision;
 use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery};
 use fubmd_abi::text::{Arg, StringCatalog, Text};
 use fubmd_abi::traits::{
-    DocumentMatch, HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, PredicateKind,
-    QueryRoute,
+    DocumentMatch, EntryKind, HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged,
+    PredicateKind, QueryRoute, VaultEntry,
 };
 use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
@@ -113,6 +114,25 @@ struct Manifest {
     opstamp: u64,
     /// `DocId` → impronta del contenuto indicizzato.
     docs: HashMap<String, u64>,
+    /// `DocId` → la revisione del **sorgente** da cui quel contenuto è stato
+    /// ricavato, cioè ciò che permette di rispondere a
+    /// [`IndexProvider::up_to_date`] **senza che nessuno legga il file**
+    /// (§14.2).
+    ///
+    /// È un'informazione diversa da `docs`, non una ridondanza: `docs` è
+    /// l'impronta del *modello* — id, testo, tag — e serve a non riscrivere in
+    /// tantivy ciò che è identico *dopo* il parse; questa è l'impronta dei
+    /// **byte del file**, la stessa che il kernel tiene in anagrafe, e serve a
+    /// non arrivare al parse. Non si può derivare l'una dall'altra: fra le due
+    /// c'è un parser.
+    ///
+    /// Assente per un documento indicizzato **senza** che nessuno abbia
+    /// dichiarato di che revisione fosse — cioè per ogni scrittura a sessione
+    /// aperta, dove il kernel alimenta l'indice senza passare da `up_to_date`.
+    /// Vuol dire «alla prossima apertura rileggimelo», che è il verso giusto in
+    /// cui sbagliare.
+    #[serde(default)]
+    sources: HashMap<String, String>,
 }
 
 /// Impronta stabile di ciò che finisce nell'indice per un documento.
@@ -237,6 +257,25 @@ pub struct SearchIndex {
     reader: IndexReader,
     fields: Fields,
     fingerprints: HashMap<DocId, u64>,
+    /// `DocId` → revisione del sorgente indicizzato (vedi [`Manifest::sources`]).
+    sources: HashMap<DocId, Revision>,
+    /// Ciò che il kernel ha **appena dichiarato** chiedendo cosa è già a posto:
+    /// `DocId` → revisione del sorgente che sta per consegnare.
+    ///
+    /// Serve perché [`IndexProvider::on_document_indexed`] riceve un *modello*,
+    /// e da un modello la revisione del sorgente non si ricalcola. L'unico
+    /// posto in cui questo indice la vede è la domanda del kernel, e questa
+    /// mappa è il tempo che passa fra la domanda e la consegna: si riempie in
+    /// [`IndexProvider::up_to_date`] e si **consuma** documento per documento.
+    /// Consumare e non consultare è il punto: un documento che arriva senza
+    /// dichiarazione — perché qualcuno l'ha salvato a sessione aperta — non
+    /// deve raccogliere la revisione che la domanda dell'avvio aveva lasciato
+    /// lì, che sarebbe quella di *prima* della modifica.
+    ///
+    /// `Mutex` perché la domanda arriva su `&self`: è una lettura per il
+    /// contratto, ed è giusto che lo sia — chiedere cosa un indice ha già non
+    /// lo cambia.
+    announced: Mutex<HashMap<DocId, Revision>>,
     /// Ci sono scritture accettate ma non ancora committate? Atomico perché lo
     /// spegne anche una `query`, che ha solo `&self`.
     dirty: AtomicBool,
@@ -309,6 +348,8 @@ impl SearchIndex {
             reader,
             fields,
             fingerprints: HashMap::new(),
+            sources: HashMap::new(),
+            announced: Mutex::new(HashMap::new()),
             dirty: AtomicBool::new(false),
             opstamp: AtomicU64::new(opstamp),
             manifest_at: None,
@@ -597,8 +638,41 @@ impl SearchIndex {
             .into_iter()
             .map(|(id, h)| (DocId::new(id), h))
             .collect();
+        // Solo le revisioni di ciò che risulta indicizzato: una revisione senza
+        // il documento a cui appartiene non è un'informazione parziale, è una
+        // risposta sbagliata a `up_to_date` che aspetta di essere data.
+        self.sources = manifest
+            .sources
+            .into_iter()
+            .map(|(id, r)| (DocId::new(id), Revision::new(r)))
+            .filter(|(id, _)| self.fingerprints.contains_key(id))
+            .collect();
         self.manifest_at = Some(manifest.opstamp);
         Ok(())
+    }
+
+    /// Prende nota di **che revisione** è il documento appena indicizzato,
+    /// consumando ciò che la domanda del kernel aveva dichiarato.
+    ///
+    /// Nessuna dichiarazione = si dimentica quella di prima. È la sola scelta
+    /// che non mente: tenerla vorrebbe dire attribuire al testo di adesso la
+    /// revisione del testo di allora, e alla riapertura saltare un documento
+    /// modificato.
+    fn note_source(&mut self, id: &DocId) {
+        match self.announced.lock().expect("mutex").remove(id) {
+            Some(revision) => self.sources.insert(id.clone(), revision),
+            None => self.sources.remove(id),
+        };
+    }
+
+    /// Dimentica tutto di un documento: l'impronta del modello, quella del
+    /// sorgente e la dichiarazione che era in volo. Le tre insieme, perché una
+    /// sola che sopravvivesse alle altre sarebbe una promessa senza il
+    /// documento dietro.
+    fn forget(&mut self, id: &DocId) {
+        self.fingerprints.remove(id);
+        self.sources.remove(id);
+        self.announced.lock().expect("mutex").remove(id);
     }
 
     /// Rende durevoli le impronte, se quelle su disco non sono già le nostre.
@@ -620,6 +694,11 @@ impl SearchIndex {
                 .fingerprints
                 .iter()
                 .map(|(id, h)| (id.as_str().to_string(), *h))
+                .collect(),
+            sources: self
+                .sources
+                .iter()
+                .map(|(id, r)| (id.as_str().to_string(), r.0.clone()))
                 .collect(),
         };
         let raw = serde_json::to_vec(&manifest)
@@ -1009,12 +1088,63 @@ impl IndexProvider for SearchIndex {
         self.load_manifest(host)
     }
 
+    /// Cosa è già a posto, guardando solo l'anagrafe (§14.2).
+    ///
+    /// La domanda che mancava: prima il kernel leggeva e parsava l'intero vault
+    /// e *poi* consegnava tutto a chi ce l'aveva già. Qui si risponde senza
+    /// aprire un file, confrontando la revisione del sorgente che il kernel
+    /// dichiara con quella da cui è stato ricavato ciò che sta nell'indice.
+    ///
+    /// Tre cautele, tutte nello stesso verso — dire «ce l'ho» a sproposito
+    /// farebbe **saltare** un documento, cioè mentire in silenzio, mentre dire
+    /// «mandamelo» di troppo costa una rilettura:
+    ///
+    /// - senza impronta dichiarata non si risponde: chi non sa di che revisione
+    ///   è un file non può sapere se è la sua;
+    /// - la revisione deve stare accanto a un documento davvero indicizzato
+    ///   (`fingerprints`), e le due mappe arrivano dallo stesso manifest, che è
+    ///   già respinto in blocco se cita un'altra epoca o un altro schema;
+    /// - ciò che non è un documento non è affar suo. Il kernel oggi manda solo
+    ///   documenti, ma un provider che ci contasse leggerebbe il contratto più
+    ///   stretto di com'è scritto.
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        let mut announced = self.announced.lock().expect("mutex");
+        announced.clear();
+        let mut current = Vec::new();
+        for entry in entries {
+            let (EntryKind::Document, Some(revision)) = (entry.kind, entry.fingerprint.as_ref())
+            else {
+                continue;
+            };
+            if self.sources.get(&entry.id) == Some(revision)
+                && self.fingerprints.contains_key(&entry.id)
+            {
+                current.push(entry.id.clone());
+                // **Non** si dichiara ciò che si è appena detto di avere: quel
+                // documento non arriverà, e una dichiarazione che resta lì ad
+                // aspettare verrebbe raccolta dalla prima consegna successiva —
+                // cioè dal primo salvataggio a sessione aperta, che porta un
+                // testo nuovo e si prenderebbe la revisione di quello vecchio.
+                // Se poi arrivasse lo stesso (un altro indice non ce l'aveva),
+                // si resta senza revisione e lo si rilegge alla prossima
+                // apertura: il verso sicuro dello sbaglio.
+                continue;
+            }
+            announced.insert(entry.id.clone(), revision.clone());
+        }
+        current
+    }
+
     fn on_document_indexed(&mut self, doc: &DocumentModel) {
         let print = fingerprint(doc);
-        // Contenuto identico a quello già indicizzato: non c'è niente da fare.
-        // È questo salto — non una scorciatoia all'avvio — a rendere rapida la
-        // riapertura di un vault non toccato.
+        // Contenuto identico a quello già indicizzato: non c'è niente da fare
+        // in tantivy. È questo salto — non una scorciatoia all'avvio — a rendere
+        // rapida la riapertura di un vault non toccato. La revisione del
+        // sorgente si aggiorna lo stesso: un file può cambiare senza che il
+        // modello cambi (una riga di frontmatter che nessuno indicizza), e
+        // lasciarci quella vecchia vorrebbe dire farlo rileggere per sempre.
         if self.fingerprints.get(&doc.id) == Some(&print) {
+            self.note_source(&doc.id);
             return;
         }
         // tantivy non aggiorna: si cancella il termine e si riscrive.
@@ -1028,21 +1158,23 @@ impl IndexProvider for SearchIndex {
             // prossimo passaggio riproverà.
             let Some(writer) = guard.as_ref() else {
                 drop(guard);
-                self.fingerprints.remove(&doc.id);
+                self.forget(&doc.id);
                 return;
             };
             writer.delete_term(term);
             if writer.add_document(td).is_err() {
                 drop(guard);
-                self.fingerprints.remove(&doc.id);
+                self.forget(&doc.id);
                 return;
             }
         }
         self.fingerprints.insert(doc.id.clone(), print);
+        self.note_source(&doc.id);
         self.dirty.store(true, Ordering::Release);
     }
 
     fn on_document_removed(&mut self, id: &DocId) {
+        self.sources.remove(id);
         if self.fingerprints.remove(id).is_none() {
             return;
         }
@@ -1054,6 +1186,12 @@ impl IndexProvider for SearchIndex {
     }
 
     fn reconcile(&mut self, ids: &[DocId]) {
+        // Fine del giro d'apertura: le consegne che la domanda annunciava sono
+        // arrivate tutte, e ciò che resta dichiarato è di un documento che non
+        // è arrivato — un parse fallito, un file sparito fra la scansione e la
+        // lettura. Tenerlo vorrebbe dire consegnarlo a chi passa dopo.
+        self.announced.lock().expect("mutex").clear();
+
         let alive: std::collections::HashSet<&DocId> = ids.iter().collect();
         let dead: Vec<DocId> = self
             .fingerprints
@@ -1071,7 +1209,7 @@ impl IndexProvider for SearchIndex {
             }
         }
         for id in &dead {
-            self.fingerprints.remove(id);
+            self.forget(id);
         }
         self.dirty.store(true, Ordering::Release);
     }
@@ -1488,6 +1626,216 @@ mod tests {
 
         let idx = open(&path, &mut host);
         assert_eq!(idx.len(), 0);
+    }
+
+    // --- la domanda che mancava (§14.2) ------------------------------------
+
+    /// Una voce d'anagrafe come la costruisce il kernel: la specie, e
+    /// l'impronta del **sorgente** se qualcuno ne ha già avuto i byte in mano.
+    fn voce(id: &str, source: Option<&str>) -> VaultEntry {
+        VaultEntry {
+            id: DocId::new(id),
+            kind: EntryKind::Document,
+            size: 0,
+            mtime: 0,
+            fingerprint: source.map(Revision::of),
+        }
+    }
+
+    /// Il giro dell'apertura come lo fa il kernel: prima si chiede cosa c'è
+    /// già, poi si consegna ciò che non c'era.
+    fn giro(idx: &mut SearchIndex, vault: &[(&str, &str)]) -> Vec<String> {
+        let entries: Vec<VaultEntry> = vault
+            .iter()
+            .map(|(id, source)| voce(id, Some(source)))
+            .collect();
+        let gia = idx.up_to_date(&entries);
+        for (id, source) in vault {
+            if gia.iter().any(|d| d.as_str() == *id) {
+                continue;
+            }
+            idx.on_document_indexed(&doc(id, source));
+        }
+        gia.iter().map(|d| d.to_string()).collect()
+    }
+
+    #[test]
+    fn alla_prima_apertura_non_ce_niente_di_gia_a_posto() {
+        let (_g, path) = tmp();
+        let (idx, _host) = fresh(&path);
+        assert!(
+            idx.up_to_date(&[voce("a.md", Some("contenuto"))])
+                .is_empty(),
+            "un indice vuoto chiede tutto, che è il verso sicuro dello sbaglio"
+        );
+    }
+
+    #[test]
+    fn alla_riapertura_si_riconosce_cio_che_non_e_cambiato() {
+        let (_g, path) = tmp();
+        let mut host = MemoryHost::new();
+        let vault = [("a.md", "il gatto"), ("b.md", "il cane")];
+        {
+            let mut idx = open(&path, &mut host);
+            assert!(
+                giro(&mut idx, &vault).is_empty(),
+                "il primo giro non sa niente"
+            );
+            idx.flush(&mut host).unwrap();
+        }
+
+        // Le impronte dei sorgenti sono nel manifest, accanto a quelle dei
+        // modelli: sono due informazioni diverse, e fra le due c'è un parser.
+        let manifest = manifest_of(&host);
+        assert_eq!(manifest.sources.len(), 2);
+        assert_eq!(
+            manifest.sources.get("a.md"),
+            Some(&Revision::of("il gatto").0)
+        );
+
+        let mut idx = open(&path, &mut host);
+        let mut gia = giro(&mut idx, &vault);
+        gia.sort();
+        assert_eq!(
+            gia,
+            ["a.md", "b.md"],
+            "e alla riapertura si risponde SENZA che nessuno abbia aperto un file"
+        );
+        assert_eq!(search(&idx, "gatto").len(), 1, "e l'indice è ancora quello");
+    }
+
+    #[test]
+    fn cio_che_e_cambiato_ad_app_chiusa_non_risulta_a_posto() {
+        let (_g, path) = tmp();
+        let mut host = MemoryHost::new();
+        {
+            let mut idx = open(&path, &mut host);
+            giro(&mut idx, &[("a.md", "il gatto"), ("b.md", "il cane")]);
+            idx.flush(&mut host).unwrap();
+        }
+
+        let mut idx = open(&path, &mut host);
+        let gia = giro(&mut idx, &[("a.md", "il gatto"), ("b.md", "il criceto")]);
+        assert_eq!(gia, ["a.md"], "solo quello con la stessa impronta");
+        assert_eq!(
+            search(&idx, "criceto").len(),
+            1,
+            "e l'altro è stato riletto"
+        );
+        assert_eq!(search(&idx, "cane").len(), 0);
+    }
+
+    #[test]
+    fn senza_impronta_dichiarata_non_si_risponde() {
+        // Il kernel non calcola l'impronta di ciò che non deve leggere: chi non
+        // sa di che revisione è un file non può sapere se è la sua.
+        let (_g, path) = tmp();
+        let mut host = MemoryHost::new();
+        {
+            let mut idx = open(&path, &mut host);
+            giro(&mut idx, &[("a.md", "il gatto")]);
+            idx.flush(&mut host).unwrap();
+        }
+        let idx = open(&path, &mut host);
+        assert!(idx.up_to_date(&[voce("a.md", None)]).is_empty());
+        // E ciò che non è un documento non è affar suo, per quanta impronta
+        // porti: il kernel oggi manda solo documenti, ma leggerlo più stretto di
+        // com'è scritto sarebbe un'assunzione, non una lettura.
+        let mut allegato = voce("a.md", Some("il gatto"));
+        allegato.kind = EntryKind::Asset;
+        assert!(idx.up_to_date(&[allegato]).is_empty());
+    }
+
+    #[test]
+    fn un_manifest_di_un_altra_epoca_si_porta_via_anche_le_impronte_dei_sorgenti() {
+        let (_g, path) = tmp();
+        let mut host = MemoryHost::new();
+        {
+            let mut idx = open(&path, &mut host);
+            giro(&mut idx, &[("a.md", "il gatto")]);
+            idx.flush(&mut host).unwrap();
+        }
+        let mut m = manifest_of(&host);
+        m.opstamp += 1;
+        put_manifest(&mut host, &m);
+
+        let idx = open(&path, &mut host);
+        assert!(
+            idx.up_to_date(&[voce("a.md", Some("il gatto"))]).is_empty(),
+            "il guardiano è uno solo: se il manifest è di un'altra epoca non se ne \
+             crede nessuna parte — dire «ce l'ho» a sproposito farebbe SALTARE un \
+             documento, cioè mentire in silenzio"
+        );
+    }
+
+    #[test]
+    fn una_scrittura_a_sessione_aperta_non_eredita_la_revisione_di_prima() {
+        // Il caso in cui la mappa mentirebbe: alla riapertura il kernel dichiara
+        // le revisioni di *adesso*, poi l'utente salva, e l'indice riceve un
+        // documento nuovo senza che nessuno gli abbia detto di che revisione è.
+        // Tenere quella dichiarata all'avvio vorrebbe dire attribuire al testo di
+        // adesso la revisione del testo di allora — e alla riapertura saltare un
+        // documento modificato.
+        let (_g, path) = tmp();
+        let mut host = MemoryHost::new();
+        {
+            let mut idx = open(&path, &mut host);
+            giro(&mut idx, &[("a.md", "il gatto")]);
+            idx.flush(&mut host).unwrap();
+        }
+        {
+            let mut idx = open(&path, &mut host);
+            giro(&mut idx, &[("a.md", "il gatto")]);
+            // Salvataggio a sessione aperta: nessuna domanda prima.
+            idx.on_document_indexed(&doc("a.md", "il cane"));
+            idx.close(&mut host).unwrap();
+        }
+        assert!(
+            !manifest_of(&host).sources.contains_key("a.md"),
+            "nessuna dichiarazione = nessuna promessa: alla prossima apertura lo si rilegge"
+        );
+
+        let idx = open(&path, &mut host);
+        assert!(idx.up_to_date(&[voce("a.md", Some("il cane"))]).is_empty());
+    }
+
+    #[test]
+    fn un_documento_uscito_dal_vault_non_lascia_una_revisione_dietro() {
+        let (_g, path) = tmp();
+        let mut host = MemoryHost::new();
+        let mut idx = open(&path, &mut host);
+        giro(&mut idx, &[("a.md", "il gatto"), ("b.md", "il cane")]);
+
+        idx.on_document_removed(&DocId::new("a.md"));
+        idx.reconcile(&[DocId::new("b.md")]);
+        idx.flush(&mut host).unwrap();
+        assert_eq!(
+            manifest_of(&host).sources.keys().collect::<Vec<_>>(),
+            ["b.md"],
+            "una revisione senza il documento dietro è una risposta sbagliata che \
+             aspetta di essere data"
+        );
+    }
+
+    #[test]
+    fn una_modifica_che_non_cambia_il_modello_aggiorna_lo_stesso_la_revisione() {
+        // Due sorgenti diversi che danno lo stesso modello: succede davvero —
+        // una riga di frontmatter che nessuno indicizza, uno spazio in fondo.
+        // Se la revisione non si aggiornasse, quel documento risulterebbe
+        // «cambiato» a ogni apertura, per sempre.
+        let (_g, path) = tmp();
+        let mut host = MemoryHost::new();
+        let mut idx = open(&path, &mut host);
+        idx.up_to_date(&[voce("a.md", Some("prima"))]);
+        idx.on_document_indexed(&doc("a.md", "testo identico"));
+        idx.up_to_date(&[voce("a.md", Some("dopo"))]);
+        idx.on_document_indexed(&doc("a.md", "testo identico"));
+        idx.flush(&mut host).unwrap();
+
+        assert_eq!(
+            manifest_of(&host).sources.get("a.md"),
+            Some(&Revision::of("dopo").0)
+        );
     }
 
     #[test]

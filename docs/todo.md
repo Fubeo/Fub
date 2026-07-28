@@ -15,8 +15,8 @@ Le nove che seguono non le ha trovate né un giro né una misura: le ha aperte u
 ricerca di FubMD è built-in e di classe *omnisearch*, e da lì in poi le voci sono
 la sottrazione fra ciò che quel comportamento richiede e ciò che il contratto sa
 dire ([seduta 21](roadmap/21-la-ricerca-predefinita.md)).
-Sessantotto sono chiuse, e i loro verbali stanno in
-[docs/decisions/](decisions/README.md); le altre quarantuno sono qui, e
+Settanta sono chiuse, e i loro verbali stanno in
+[docs/decisions/](decisions/README.md); le altre trentanove sono qui, e
 questo file è il loro **indice**.
 
 ## Come è organizzato
@@ -134,7 +134,7 @@ descrive una promessa.
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano: la [0036](decisions/0036-le-impostazioni-e-i-tre-stati.md) ha chiuso il primo — le impostazioni — e la [0037](decisions/0037-lo-stato-di-vista.md) il secondo; il sidecar dell'organizzazione è assorbito dalla [0038](decisions/0038-il-kernel-possiede-il-sidecar.md), e del §11.2 resta il **layout** — che aspetta il modello di layout | 1 | — |
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | **chiusa**: il locale nel contratto per primo ([0039](decisions/0039-il-locale-e-il-caso.md)), poi la domanda vera — chi localizza ([0040](decisions/0040-chi-localizza.md)) —, il suo **gemello dichiarato** l'errore ([0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)) e infine il catalogo della shell, che quelle decisioni avevano ristretto ([0042](decisions/0042-il-catalogo-della-shell.md)) | — | — |
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | **chiusa**: il path è la chiave per sempre e un id stabile è una proprietà ([0043](decisions/0043-il-path-e-la-chiave.md)), lo stato per-documento ha un posto dichiarato che il kernel migra e raccoglie ([0044](decisions/0044-lo-stato-per-documento.md)), e l'undo ha due pile che non si fondono ([0045](decisions/0045-l-undo-ha-due-pile.md)) | — | — |
-| **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | lo stesso lavoro visto da quattro lati | 4 | — |
+| **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati, a coppie: l'anagrafe del vault è decisa ([0046](decisions/0046-l-anagrafe-del-vault.md)) — un file esiste anche se nessuno lo parsa, e `reindex` non rilegge ciò che nessuno aspetta; restano la cartella come cittadino e il canale per-cartella della lista | 2 | — |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | 7 | 1 |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 7 | — |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza | 3 | — |
@@ -206,8 +206,6 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
 | **§11.2** | [Tre stati diversi, zero contenitori](roadmap/11-impostazioni-e-i-tre-stati.md#112-tre-stati-diversi-zero-contenitori) | 11. Le impostazioni, e i tre stati | shell | **P2** |
-| **§14.1** | [Il vault non è solo documenti](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti) | 14. Le entry, le cartelle, la lista | kernel | **P2** |
-| **§14.2** | [Nessun metadato di entry: né mtime, né dimensione, né impronta](roadmap/14-entry-cartelle-lista.md#142-nessun-metadato-di-entry-né-mtime-né-dimensione-né-impronta) | 14. Le entry, le cartelle, la lista | kernel | **P2** |
 | **§14.3** | [Le cartelle non esistono nel kernel](roadmap/14-entry-cartelle-lista.md#143-le-cartelle-non-esistono-nel-kernel) | 14. Le entry, le cartelle, la lista | kernel | **P2** |
 | **§14.4** | [Il canale della lista documenti](roadmap/14-entry-cartelle-lista.md#144-il-canale-della-lista-documenti) | 14. Le entry, le cartelle, la lista | kernel | **P2** |
 | **§15.1** | [Astrazione sullo storage](roadmap/15-il-disco.md#151-astrazione-sullo-storage) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |

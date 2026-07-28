@@ -56,10 +56,18 @@ cronologico di chiusura.
 | [0043](0043-il-path-e-la-chiave.md) | Il path è la chiave, e un id stabile è una proprietà | §13.1 | 2026-07-28 |
 | [0044](0044-lo-stato-per-documento.md) | Lo stato per-documento: un posto dichiarato, e chi ci passa dietro | §13.2 | 2026-07-28 |
 | [0045](0045-l-undo-ha-due-pile.md) | L'undo ha due pile, e non si fondono | §13.3 — chiude la [seduta 13](../roadmap/13-identita-del-documento.md) | 2026-07-28 |
+| [0046](0046-l-anagrafe-del-vault.md) | L'anagrafe del vault: cosa c'è, cosa ne so, e cosa non devo rileggere | §14.1 + §14.2 (**metà** della [seduta 14](../roadmap/14-entry-cartelle-lista.md)) | 2026-07-28 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
 nel momento in cui la voce di `todo.md` si chiude.
+
+La [0046](0046-l-anagrafe-del-vault.md) chiude **due voci in un verbale solo**,
+ed è il caso opposto a quello della 0031/0032: là una voce era troppo grande per
+un verbale, qui due voci erano lo stesso lavoro visto da due lati — il piano lo
+diceva già («vanno fatte nella stessa passata»), e scriverle in due verbali
+avrebbe voluto dire raccontare due volte la stessa scansione. La seduta 14 resta
+aperta con le altre due, che sono l'altra coppia.
 
 La [0044](0044-lo-stato-per-documento.md) è il primo verbale che esiste **per
 via di un altro**: il §13.2 era una generalizzazione condizionale — «se

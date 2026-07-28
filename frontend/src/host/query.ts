@@ -13,6 +13,7 @@ import { api } from "./ipc";
 import type {
   Organization,
   DocumentMatch,
+  EntryKind,
   IndexQuery,
   JobStatus,
   SettingEntry,
@@ -23,6 +24,7 @@ import type {
   Paged,
   QueryExpr,
   TagCount,
+  VaultEntry,
   VaultStatus,
 } from "./contract";
 import { OGNI_DOCUMENTO } from "./contract";
@@ -135,6 +137,25 @@ export async function riferimentoRisolto(
     await api.queryIndex({ kind: "resolve", target, from: from ?? null }),
     "resolved",
   );
+}
+
+/// Cosa c'è nel vault (§14.1, §14.2): l'anagrafe, in ordine di path.
+///
+/// `of_kind` assente = tutte le specie, allegati e sconosciuti compresi — ed è
+/// la ragione per cui questa domanda non è `documents` con un filtro: risponde
+/// anche su ciò che nessun provider sa parsare, e un PNG nel vault prima di
+/// questa voce semplicemente non esisteva.
+///
+/// La finestra c'è dal primo giorno: è la stessa `Page` di ogni altra risposta
+/// paginata, e chiedere tutto vuol dire ometterla — non passare un limite
+/// grande.
+export async function vociDelVault(of_kind?: EntryKind, page?: Page): Promise<Paged<VaultEntry>> {
+  const query: IndexQuery = {
+    kind: "entries",
+    of_kind: of_kind ?? null,
+    page: page ?? null,
+  };
+  return open(await api.queryIndex(query), "entries");
 }
 
 /// Che rapporto ha questo vault con il disco (§9.7): FubMD saprebbe che è

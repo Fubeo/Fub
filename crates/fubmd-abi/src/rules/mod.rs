@@ -30,6 +30,8 @@
 //!   che il kernel migra al rename e raccoglie alla cancellazione (§13.2);
 //! - [`events`] — **chi riceve cosa**: la maschera di un abbonamento, col
 //!   prefisso di topic e il soggetto (§10.1);
+//! - [`media`] — **che specie di file è**: documento, allegato o ignoto, e che
+//!   tipo di contenuto porta (§14.1);
 //! - [`path`] — la chiave di risoluzione (trim, NFC, minuscolo), i link
 //!   markdown relativi, il percent-encoding;
 //! - [`properties`] — filtro, ordinamento e faccette sul frontmatter;
@@ -60,6 +62,7 @@ pub mod doc_data;
 pub mod events;
 pub mod health;
 pub mod ids;
+pub mod media;
 pub mod path;
 pub mod properties;
 pub mod tag;

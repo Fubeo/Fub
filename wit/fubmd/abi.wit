@@ -70,6 +70,27 @@ interface model {
     /// Path relativo al vault, separatori `/`, estensione inclusa.
     type doc-id = string;
 
+    /// CHE SPECIE DI FILE È (§14.1). Tre casi, e il terzo è il punto: prima il
+    /// vault vedeva i documenti e basta. NON è una proprietà del file, è una
+    /// proprietà del file dato chi è registrato adesso: un `.canvas` è
+    /// `unknown` finché nessuno rivendica quell'estensione.
+    ///
+    /// Sta qui, nel modello, e non in `index` dove si usa di più, perché anche
+    /// `events` ne ha bisogno e un'interfaccia di eventi non può dipendere da
+    /// una di query: il vocabolario comune sta nel posto comune.
+    enum entry-kind {
+        /// Un `format-provider` rivendica la sua estensione: ha un modello, sta
+        /// nell'indice, è ciò che `host-api.list-documents` restituisce.
+        document,
+        /// Un allegato: un tipo di contenuto che si sa nominare e che nessuno
+        /// parsa.
+        asset,
+        /// Il vault lo vede e nessuno sa cosa sia. Non è un errore: un file che
+        /// nessuno riconosce esiste lo stesso — occupa spazio, si cancella per
+        /// sbaglio, e un backup che lo saltasse lo perderebbe in silenzio.
+        unknown,
+    }
+
     /// Intervallo [start, end) in byte sulla sorgente.
     ///
     /// Lato Rust i campi sono `usize` (indicizzano `&str` in memoria); qui sono
@@ -1080,7 +1101,7 @@ interface jobs {
 /// Eventi del ciclo di vita del vault.
 interface events {
     use json.{json};
-    use model.{doc-id};
+    use model.{doc-id, entry-kind};
     use jobs.{job-id, job-progress};
     use settings.{setting-scope};
     use errors.{plugin-error};
@@ -1158,6 +1179,27 @@ interface events {
     /// la stessa ragione NON è recuperabile: il valore si rilegge, il *cambio*
     /// no, e chi si spegne quando lo spengono deve saperlo anche a coda piena.
     record event-setting-changed { key: string, scope: setting-scope }
+    /// Un file che NON è un documento è comparso o è cambiato (§14.1): un
+    /// allegato, o qualcosa che nessuno sa cosa sia.
+    ///
+    /// Non è un `document-changed`, e non per pignoleria: quell'evento ha, da
+    /// contratto, un lettore che ne riparsa il modello e ne ricalcola i
+    /// backlink, e consegnargli un PNG vuol dire fargli chiedere il modello di
+    /// un'immagine. La bugia sarebbe anche RETROATTIVA — ogni handler scritto
+    /// prima di questa voce comincerebbe a ricevere file che non ha mai chiesto.
+    ///
+    /// `kind` non è mai `document`: quelli hanno i loro tre eventi. C'è perché
+    /// chi ascolta filtra su di lui, e perché su una sparizione non si può più
+    /// chiedere — la voce non c'è più, e questo è l'ultimo momento in cui la sua
+    /// specie è nota.
+    record event-entry-changed { id: doc-id, kind: entry-kind }
+    /// Un file che non è un documento non c'è più (§14.1).
+    record event-entry-removed { id: doc-id, kind: entry-kind }
+    /// Un file che non è un documento ha cambiato path (§14.1). Come per i
+    /// documenti l'identità È il path: chi tiene una miniatura, una
+    /// trascrizione o un OCR migra la chiave invece di buttare via un lavoro
+    /// ancora buono. (`from` è keyword WIT: `%from`.)
+    record event-entry-renamed { %from: doc-id, to: doc-id, kind: entry-kind }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -1173,6 +1215,9 @@ interface events {
         job-started(event-job-started),
         job-progress(event-job-progress),
         setting-changed(event-setting-changed),
+        entry-changed(event-entry-changed),
+        entry-removed(event-entry-removed),
+        entry-renamed(event-entry-renamed),
     }
 
     enum event-kind {
@@ -1198,6 +1243,12 @@ interface events {
         job-progress,
         /// Una chiave di configurazione è cambiata (§11.1).
         setting-changed,
+        /// Un file che non è un documento è comparso o è cambiato (§14.1).
+        entry-changed,
+        /// Un file che non è un documento non c'è più (§14.1).
+        entry-removed,
+        /// Un file che non è un documento ha cambiato path (§14.1).
+        entry-renamed,
     }
     /// DOVE: il soggetto di un abbonamento (§10.1, decisione 0033).
     ///
@@ -1491,7 +1542,8 @@ interface command {
 /// full-text).
 interface index {
     use json.{json};
-    use model.{doc-id, document-model, span, heading, property-value, property-scalar, link-target};
+    use model.{doc-id, document-model, span, heading, property-value, property-scalar, link-target, entry-kind};
+    use edit.{revision};
     use jobs.{job-status};
     use settings.{setting-entry};
     use organization.{organization};
@@ -1674,6 +1726,33 @@ interface index {
         check: health-check,
         page: option<page>,
     }
+    /// COSA C'È NEL VAULT (§14.1, §14.2): l'anagrafe, non l'indice. È la sola
+    /// domanda del canale che risponde anche su ciò che non è un documento —
+    /// un PNG, uno ZIP, un file che nessuno sa cosa sia. `of-kind` assente =
+    /// tutte le specie.
+    record index-query-entries {
+        of-kind: option<entry-kind>,
+        page: option<page>,
+    }
+    /// Una voce del vault: un file, con ciò che si sa di lui SENZA aprirlo.
+    /// La chiave è il path, come per ogni altra cosa del vault (decisione
+    /// 0043).
+    record vault-entry {
+        id: doc-id,
+        kind: entry-kind,
+        size: u64,
+        /// Ultima modifica in MILLISECONDI unix: col secondo, due scritture
+        /// della stessa dimensione nello stesso secondo sono indistinguibili —
+        /// raro per un umano, normale per uno script. E non nanosecondi: questo
+        /// numero attraversa l'IPC come JSON, e oltre 2^53 non sopravvive a un
+        /// double.
+        mtime: u64,
+        /// L'identità del CONTENUTO, quando qualcuno l'ha già avuto in mano.
+        /// Assente = nessuno ha ancora pagato la lettura dei suoi byte, e per
+        /// un allegato è il caso normale: leggerli tutti all'apertura è il
+        /// costo che l'anagrafe esiste per togliere.
+        fingerprint: option<revision>,
+    }
     /// Varco di estensione: query di provider di terzi, con namespace
     /// (`ns` = plugin id). Chi non l'ha dichiarato non la riceve; se non l'ha
     /// dichiarato nessuno, il chiamante riceve `unserved`.
@@ -1744,6 +1823,13 @@ interface index {
         /// plugin no. La risposta è UNA o NESSUNA e non è paginata, perché
         /// risolvere non è cercare.
         resolve(index-query-resolve),
+        /// COSA C'È NEL VAULT? (§14.1, §14.2) La quinta che chiede del vault e
+        /// non del suo contenuto — e la prima che risponde su ciò che non è una
+        /// nota. Esiste per la stessa ragione per cui la decisione 0013 ha
+        /// tenuto `create-folder` FUORI dalle capacità: un'anagrafe che
+        /// contenesse gli allegati senza che nessuna domanda li sappia chiedere
+        /// sarebbe uno stato che il kernel tiene e nessuno può vedere.
+        entries(index-query-entries),
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -1785,6 +1871,10 @@ interface index {
         /// Un redirect è ciò che si dice quando la risposta è NONE, e vive
         /// accanto a questa domanda, non al suo posto.
         resolve,
+        /// Chi risponde a «cosa c'è in questo vault?» (§14.1, §14.2). Il
+        /// kernel, e stavolta per esclusione: l'anagrafe la costruisce chi
+        /// cammina il disco, e nessun altro cammina il disco.
+        entries,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -1915,6 +2005,11 @@ interface index {
         offset: u32,
         total: u32,
     }
+    record entries-page {
+        items: list<vault-entry>,
+        offset: u32,
+        total: u32,
+    }
 
     variant index-result {
         documents(documents-page),
@@ -1943,6 +2038,11 @@ interface index {
         /// qualcos'altro — creare la nota, seguire un redirect, aprire il
         /// browser.
         resolved(option<doc-id>),
+        /// Cosa c'è nel vault, in ordine di `doc-id`. A FINESTRA, e qui più che
+        /// altrove: è l'unica risposta che cresce col numero di FILE invece che
+        /// col numero di note, e in un vault vero gli allegati sono più delle
+        /// note.
+        entries(entries-page),
     }
 
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel
@@ -1990,6 +2090,20 @@ interface index {
     /// e sconsigliato, e chi non vuole farlo lo prova misurando, non
     /// dichiarando.
     query: func(query: index-query) -> result<index-result, plugin-error>;
+    /// DI QUESTE VOCI, QUALI HAI GIÀ COSÌ COME SONO? (§14.2) Il kernel la
+    /// chiama durante la scansione, PRIMA di leggere e parsare. Senza, leggeva
+    /// e parsava tutto il vault a ogni apertura prima ancora di chiedere
+    /// all'indice se gli interessava — e la promessa di `reconcile` («gli
+    /// immutati non si reindicizzano») era vera per chi indicizza e falsa per
+    /// chi alimenta.
+    ///
+    /// Arrivano le voci dei soli documenti, con dimensione, data e — quando il
+    /// kernel ce l'ha — l'impronta del contenuto; si risponde con gli id che si
+    /// hanno già DUREVOLMENTE e nella stessa versione. Un elenco vuoto vuol dire
+    /// «mandami tutto», ed è deliberato che sia ciò che si ottiene non
+    /// pensandoci: sbagliare da questa parte costa una reindicizzazione,
+    /// dall'altra un indice che mente.
+    up-to-date: func(entries: list<vault-entry>) -> list<doc-id>;
 }
 
 /// Il contesto di sessione: quale pannello ha il focus, che documento guarda,

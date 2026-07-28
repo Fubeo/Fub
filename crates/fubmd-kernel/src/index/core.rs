@@ -37,11 +37,12 @@ use fubmd_abi::model::{
 use fubmd_abi::query::{in_folder, Matches, QueryEvaluator, QueryPredicate};
 use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
-    HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobStatus, LinkDirection,
-    Paged, PredicateKind, QueryKind, QueryRoute, VaultStatus,
+    EntryKind, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobStatus,
+    LinkDirection, Paged, PredicateKind, QueryKind, QueryRoute, VaultEntry, VaultStatus,
 };
 use fubmd_abi::PluginError;
 
+use crate::entries::StoredMeta;
 use crate::graph::{GraphSource, LinkGraph};
 use crate::health;
 use crate::organization::OrganizationStore;
@@ -108,6 +109,17 @@ pub(crate) struct CoreIndex {
     /// si taglia dall'iteratore senza materializzare il resto. Il costo è un
     /// `log n` per lettura invece di un `1`, su una mappa che sta in RAM.
     pub(crate) metas: BTreeMap<DocId, DocMeta>,
+    /// **L'anagrafe**: ogni file del vault, non solo le note (§14.1).
+    ///
+    /// È l'insieme di cui `metas` è il sottoinsieme dei documenti, e le due
+    /// mappe non si fondono per la ragione per cui esistono entrambe: di un
+    /// documento si sa cosa c'è dentro, di una voce si sa che c'è. Fondendole,
+    /// ogni lettore dei metadati avrebbe dovuto chiedersi a ogni riga se quella
+    /// nota è una nota.
+    ///
+    /// `BTreeMap` per l'ordine, come `metas` e per lo stesso motivo: è ciò che
+    /// rende stabile una risposta paginata.
+    pub(crate) entries: BTreeMap<DocId, VaultEntry>,
     /// I conteggi dei tag, mantenuti incrementalmente come il grafo: le
     /// interrogazioni sui tag rispondono da qui, senza O(vault).
     pub(crate) tags: TagCounts,
@@ -147,6 +159,79 @@ pub(crate) struct CoreIndex {
     /// interrogabile affatto — la leggeva un comando IPC, quindi la sapeva
     /// chiedere la shell e nessun altro.
     organization: Arc<OrganizationStore>,
+}
+
+/// Il **file** che un path nomina dentro un'anagrafe, se c'è — di qualunque
+/// specie (§14.1).
+///
+/// Funzione libera e non metodo perché il suo cliente non è solo l'indice: la
+/// usa il controllo di salute, che riceve l'anagrafe e non chi la tiene.
+pub(crate) fn resolve_entry_in(
+    entries: &BTreeMap<DocId, VaultEntry>,
+    source: &DocId,
+    target: &LinkTarget,
+) -> Option<DocId> {
+    let raw = match target {
+        // Un wikilink nomina un file **per nome**, come nomina una nota per
+        // nome: `![[foto.png]]` è il modo in cui si incorpora un allegato.
+        LinkTarget::Wiki { page, .. } => return named_entry_in(entries, page),
+        LinkTarget::Path(raw) => raw,
+        // Il mondo esterno non è nel vault.
+        LinkTarget::Url(_) => return None,
+    };
+    let path = fubmd_abi::rules::path::resolve_against(source, raw)?;
+    let id = DocId::new(path);
+    if entries.contains_key(&id) {
+        return Some(id);
+    }
+    // Ripiego, e non è pignoleria: macOS scrive i nomi dei file in NFD e i
+    // link si digitano in NFC, quindi il confronto byte a byte manca
+    // esattamente i nomi accentati. La chiave di risoluzione le riconcilia (è
+    // la stessa regola con cui il grafo indicizza), e si paga solo quando il
+    // confronto esatto ha già detto di no — cioè su un riferimento che sta per
+    // essere dichiarato rotto.
+    let key = fubmd_abi::rules::path::resolution_key(id.as_str());
+    entries
+        .keys()
+        .find(|other| fubmd_abi::rules::path::resolution_key(other.as_str()) == key)
+        .cloned()
+}
+
+/// Il file che un **nome** nomina, fra quelli che non sono documenti (§14.1).
+///
+/// La regola è quella dei wikilink fra note, e lo è di proposito: si confronta
+/// la chiave di risoluzione (trim, NFC, minuscolo) contro il **nome del file
+/// con la sua estensione** — che è come si scrive `![[foto.png]]` — o contro il
+/// path intero, per chi disambigua scrivendolo. Fra omonimi vince il più vicino
+/// alla radice, e a parità l'ordine dei path: la stessa regola del grafo, perché
+/// due regole di risoluzione in un'app sola sono due risposte alla stessa
+/// domanda.
+///
+/// I documenti restano fuori: quelli li risolve il grafo, che conosce anche gli
+/// alias. Chi chiama prova prima lui.
+pub(crate) fn named_entry_in(entries: &BTreeMap<DocId, VaultEntry>, name: &str) -> Option<DocId> {
+    let wanted = fubmd_abi::rules::path::resolution_key(name);
+    if wanted.is_empty() {
+        return None;
+    }
+    entries
+        .iter()
+        .filter(|(_, entry)| entry.kind != EntryKind::Document)
+        .map(|(id, _)| id)
+        .filter(|id| {
+            let key = fubmd_abi::rules::path::resolution_key(id.as_str());
+            key == wanted
+                || fubmd_abi::rules::path::resolution_key(file_name_of(id.as_str())) == wanted
+        })
+        // Il più vicino alla radice, e a parità il primo in ordine di path:
+        // `BTreeMap` li offre già ordinati, quindi `min_by_key` è stabile.
+        .min_by_key(|id| id.as_str().matches('/').count())
+        .cloned()
+}
+
+/// Il nome di un file dentro il suo path.
+fn file_name_of(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
 }
 
 /// Il fatto che il §9.7 rende interrogabile: se qualcuno vede le scritture
@@ -270,6 +355,7 @@ impl CoreIndex {
     ) -> Self {
         CoreIndex {
             metas: BTreeMap::new(),
+            entries: BTreeMap::new(),
             tags: TagCounts::default(),
             graph: LinkGraph::default(),
             graph_update: GraphUpdate::default(),
@@ -302,7 +388,60 @@ impl CoreIndex {
 
     pub(crate) fn clear(&mut self) {
         self.metas.clear();
+        self.entries.clear();
         self.tags.clear();
+    }
+
+    /// Rimette in cache i metadati di un documento **senza riaprirlo** (§14.2):
+    /// è la strada che l'anagrafe apre, e l'unica differenza con
+    /// [`on_document_indexed`](IndexProvider::on_document_indexed) è che qui il
+    /// modello non c'è — non è stato parsato, perché il file non è stato letto.
+    ///
+    /// Il grafo non si tocca: chi chiama è `reindex`, che lo ricostruisce in
+    /// blocco alla fine (la risoluzione dei wikilink dipende dall'insieme
+    /// intero, e un `upsert` per documento non lo saprebbe).
+    pub(crate) fn restore(&mut self, id: &DocId, meta: StoredMeta) {
+        self.tags
+            .upsert_names(id, meta.tags.iter().map(String::as_str));
+        self.metas.insert(
+            id.clone(),
+            DocMeta {
+                id: id.clone(),
+                frontmatter: meta.frontmatter,
+                outline: meta.outline,
+                links: meta.links,
+            },
+        );
+    }
+
+    /// Ciò che di un documento va scritto nell'anagrafe perché la prossima
+    /// apertura non debba riaprirlo.
+    pub(crate) fn stored_meta(&self, id: &DocId) -> Option<StoredMeta> {
+        let meta = self.metas.get(id)?;
+        Some(StoredMeta {
+            frontmatter: meta.frontmatter.clone(),
+            outline: meta.outline.clone(),
+            links: meta.links.clone(),
+            tags: self.tags.names_of(id),
+        })
+    }
+
+    /// Il **file** che un riferimento nomina, se il vault ce l'ha — di
+    /// qualunque specie (§14.1).
+    pub(crate) fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId> {
+        resolve_entry_in(&self.entries, source, target)
+    }
+
+    /// Mette (o aggiorna) una voce dell'anagrafe.
+    pub(crate) fn set_entry(&mut self, entry: VaultEntry) {
+        self.entries.insert(entry.id.clone(), entry);
+    }
+
+    /// Toglie una voce dall'anagrafe, e dice **cosa era**: è l'unico momento in
+    /// cui la sua specie si può ancora sapere, ed è ciò che un evento di
+    /// sparizione deve portare con sé.
+    pub(crate) fn remove_entry(&mut self, id: &DocId) -> Option<EntryKind> {
+        self.entries.remove(id).map(|e| e.kind)
     }
 
     pub(crate) fn rebuild_graph(&mut self) {
@@ -408,6 +547,12 @@ impl IndexProvider for CoreIndex {
             // Prima rispondeva solo alla shell, per un comando IPC scritto
             // apposta.
             QueryRoute::Query(QueryKind::Resolve),
+            // Cosa c'è nel vault (§14.1): il kernel, per esclusione — l'anagrafe
+            // la costruisce chi cammina il disco, e nessun altro cammina il
+            // disco. Prima questa domanda non si poteva fare affatto: la lista
+            // dei documenti filtrava per estensione, quindi di un PNG non
+            // sapeva rispondere nemmeno che c'era.
+            QueryRoute::Query(QueryKind::Entries),
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
@@ -538,11 +683,27 @@ impl IndexProvider for CoreIndex {
                 let issues = health::run(
                     check,
                     self.metas.iter().map(|(id, m)| (id, m.links.as_slice())),
-                    &self.graph,
+                    // Il risolutore è il grafo **più l'anagrafe** (§14.1): il
+                    // grafo sa dove arriva un link fra note, l'anagrafe sa se
+                    // il PNG che una nota mostra c'è davvero. Con il solo grafo
+                    // la seconda domanda non era rispondibile, e l'unica cosa
+                    // onesta che si poteva fare era tacere su ogni allegato.
+                    &health::VaultView {
+                        graph: &self.graph,
+                        entries: &self.entries,
+                    },
                     &self.registry.all_extensions(),
                 );
                 Ok(IndexResult::VaultHealth(Paged::window(issues, page)))
             }
+            IndexQuery::Entries { of_kind, page } => Ok(IndexResult::Entries(Paged::window(
+                self.entries
+                    .values()
+                    .filter(|e| of_kind.is_none_or(|k| e.kind == k))
+                    .cloned()
+                    .collect(),
+                page,
+            ))),
             IndexQuery::Custom { ns, .. } => Err(PluginError::Unserved(
                 format!("l'indice del kernel non estende il canale: `{ns}`").into(),
             )),

@@ -357,7 +357,17 @@ export type KernelEvent =
   // lo rilegge, e una copia dentro l'evento invecchierebbe — due scritture
   // ravvicinate consegnate in ordine inverso lascerebbero chi ascolta convinto
   // di un valore che non è più quello.
-  | { type: "setting_changed"; key: string; scope: SettingScope };
+  | { type: "setting_changed"; key: string; scope: SettingScope }
+  // Un file che NON è un documento è cambiato, sparito o è stato rinominato
+  // (§14.1). Sono tre eventi in più e non tre casi in più di
+  // `document_changed`, e la ragione è retroattiva: chi ascolta
+  // `document_changed` è codice scritto quando un documento era l'unica cosa
+  // che il vault contenesse, e consegnargli un PNG lo farebbe leggere un
+  // modello che non esiste. `kind` non è mai `document` — per quello ci sono
+  // già i tre eventi di prima.
+  | { type: "entry_changed"; id: string; kind: EntryKind }
+  | { type: "entry_removed"; id: string; kind: EntryKind }
+  | { type: "entry_renamed"; from: string; to: string; kind: EntryKind };
 
 // DOVE: il soggetto di un abbonamento (rispecchia fubmd_abi::event::Subject,
 // §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un
@@ -877,7 +887,14 @@ export type IndexQuery =
   // alla cartella di chi li ospita. Prima era `resolve_link`, un comando IPC
   // scritto apposta — cioè un fatto sul vault che questa shell conosceva e un
   // provider no.
-  | { kind: "resolve"; target: LinkTarget; from?: string | null };
+  | { kind: "resolve"; target: LinkTarget; from?: string | null }
+  // Cosa c'è nel vault? (§14.1, §14.2) L'anagrafe, non l'indice: è la sola
+  // domanda del canale che risponde anche su ciò che non è un documento — un
+  // PNG, uno ZIP, un file che nessuno sa cosa sia. `of_kind` assente = tutte le
+  // specie. È il canale con cui questa shell costruisce l'albero: prima
+  // chiedeva `list_documents`, che restituiva l'intero vault in un `string[]`
+  // senza finestra e senza allegati.
+  | { kind: "entries"; of_kind?: EntryKind | null; page?: Page | null };
 
 // La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -899,7 +916,30 @@ export type IndexResult =
   // ed è metà del valore di questa risposta: link rotto, URL esterno e nota
   // rinominata via da sotto danno tutti e tre `null`, e chi ha chiesto sa che
   // deve proporre qualcos'altro.
-  | { kind: "resolved"; value: string | null };
+  | { kind: "resolved"; value: string | null }
+  | { kind: "entries"; value: Paged<VaultEntry> };
+
+// CHE SPECIE DI FILE È (§14.1). Non è una proprietà del file: è una proprietà
+// del file dato chi è registrato adesso — un `.canvas` è `unknown` finché
+// nessuno rivendica quell'estensione, e diventa `document` senza che un byte
+// cambi. Per questo non si persiste da nessuna parte.
+export type EntryKind = "document" | "asset" | "unknown";
+
+// Una voce del vault: un file, con ciò che si sa di lui SENZA aprirlo.
+export interface VaultEntry {
+  // La chiave è il path, come per ogni altra cosa del vault (decisione 0043).
+  id: string;
+  kind: EntryKind;
+  size: number;
+  // Ultima modifica in MILLISECONDI unix. Millisecondi perché serve a
+  // riconoscere una modifica, non a mostrare una data; non nanosecondi perché
+  // oltre 2^53 un intero non sopravvive al `double` del JSON.
+  mtime: number;
+  // L'identità del CONTENUTO, quando qualcuno l'ha già avuto in mano. `null` è
+  // il caso normale per un allegato: leggerne i byte all'apertura è il costo
+  // che l'anagrafe esiste per togliere.
+  fingerprint: string | null;
+}
 
 // --- le impostazioni (§11.1) ------------------------------------------------
 //
@@ -969,7 +1009,16 @@ export interface BundleInfo {
 // Un vault che questa macchina conosce (rispecchia `fubmd_host::VaultEntry`,
 // §11.1): la memoria fra un avvio e l'altro, che è un'altra cosa da `OpenVaults`
 // — quello dice cosa è aperto ADESSO e muore col processo.
-export interface VaultEntry {
+//
+// Si chiama `KnownVault` e non `VaultEntry` come il tipo Rust perché in Rust i
+// due `VaultEntry` — questo e quello dell'anagrafe
+// (`fubmd_abi::traits::VaultEntry`, sopra) — stanno in crate diversi, e in
+// TypeScript no: due `interface` omonime **si fondono in silenzio**, e il
+// risultato sarebbe un tipo con dieci campi che nessuna delle due parti
+// riconosce. Il nome che cede è questo, perché l'altro è nel contratto
+// congelato (`vault-entry` nel WIT) e questo è un record della shell. Il nome
+// nuovo è anche quello del comando che lo porta (`known_vaults`).
+export interface KnownVault {
   root: string;
   // Vuoto = il nome della cartella, che chi disegna ricava da sé: memorizzarlo
   // vorrebbe dire mostrare il nome vecchio dopo una rinomina della cartella.

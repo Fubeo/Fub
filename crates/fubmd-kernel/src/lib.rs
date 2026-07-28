@@ -49,6 +49,7 @@ pub mod bus;
 pub mod dispatcher;
 mod docdata;
 pub mod documents;
+mod entries;
 pub mod error;
 pub mod graph;
 mod health;

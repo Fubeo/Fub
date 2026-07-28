@@ -36,9 +36,9 @@ use fubmd_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
 use fubmd_abi::traits::{
-    BacklinkRef, DocumentMatch, HealthCheck, IndexQuery, IndexResult, JobId, JobProgress,
-    JobStatus, LinkDirection, NeighborRef, Page, Paged, PropertyEntry, PropertySelect, TagCount,
-    VaultStatus, ViewInstance, ViewSpec, ViewSurface,
+    BacklinkRef, DocumentMatch, EntryKind, HealthCheck, IndexQuery, IndexResult, JobId,
+    JobProgress, JobStatus, LinkDirection, NeighborRef, Page, Paged, PropertyEntry, PropertySelect,
+    TagCount, VaultEntry, VaultStatus, ViewInstance, ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
@@ -382,6 +382,25 @@ fn event_samples() -> Vec<Value> {
             key: "versioning.enabled".into(),
             scope: SettingScope::Vault,
         },
+        // I tre eventi dell'anagrafe (§14.1). Portano la **specie**, ed è
+        // l'unica ragione per cui non sono i tre eventi dei documenti: chi
+        // ascolta `DocumentChanged` è codice scritto per un documento, e
+        // consegnargli un PNG sarebbe una bugia retroattiva. `Asset` e non
+        // `Unknown` nel campione perché è il caso che si vede — un allegato
+        // aggiunto, spostato, cancellato.
+        Event::EntryChanged {
+            id: DocId::new("allegati/foto.png"),
+            kind: EntryKind::Asset,
+        },
+        Event::EntryRemoved {
+            id: DocId::new("allegati/foto.png"),
+            kind: EntryKind::Unknown,
+        },
+        Event::EntryRenamed {
+            from: DocId::new("allegati/foto.png"),
+            to: DocId::new("media/foto.png"),
+            kind: EntryKind::Asset,
+        },
     ];
     for e in &all {
         match e {
@@ -398,7 +417,10 @@ fn event_samples() -> Vec<Value> {
             | Event::BatchEnded { .. }
             | Event::JobStarted { .. }
             | Event::JobProgress { .. }
-            | Event::SettingChanged { .. } => {}
+            | Event::SettingChanged { .. }
+            | Event::EntryChanged { .. }
+            | Event::EntryRemoved { .. }
+            | Event::EntryRenamed { .. } => {}
         }
     }
     all.iter().map(to_value).collect()
@@ -636,6 +658,20 @@ fn index_query_samples() -> Vec<Value> {
             target: LinkTarget::Url("https://example.org".into()),
             from: None,
         },
+        // L'anagrafe (§14.1, §14.2): due campioni perché `of_kind` assente e
+        // `of_kind` presente sono le due domande vere — «tutto ciò che c'è» e
+        // «solo gli allegati» — e sul confine JSON la prima è `null`.
+        IndexQuery::Entries {
+            of_kind: None,
+            page: None,
+        },
+        IndexQuery::Entries {
+            of_kind: Some(EntryKind::Asset),
+            page: Some(Page {
+                offset: 40,
+                limit: 20,
+            }),
+        },
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -653,7 +689,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::Jobs
             | IndexQuery::Settings { .. }
             | IndexQuery::Organization
-            | IndexQuery::Resolve { .. } => {}
+            | IndexQuery::Resolve { .. }
+            | IndexQuery::Entries { .. } => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -759,6 +796,33 @@ fn index_result_samples() -> Vec<Value> {
         // confine JSON è `null`, che è la forma che il mirror deve reggere.
         IndexResult::Resolved(Some(DocId::new("note/a.md"))),
         IndexResult::Resolved(None),
+        // L'anagrafe risponde a pagine, e le tre voci sono le tre specie: un
+        // documento con l'impronta (qualcuno ne ha già letto i byte), un
+        // allegato senza (nessuno li legge apposta), e un file che nessuno sa
+        // cosa sia — che è metà della ragione per cui l'anagrafe esiste.
+        IndexResult::Entries(Paged::all(vec![
+            VaultEntry {
+                id: DocId::new("note/a.md"),
+                kind: EntryKind::Document,
+                size: 1_024,
+                mtime: 1_769_000_000_000,
+                fingerprint: Some(Revision::new("0123456789abcdef")),
+            },
+            VaultEntry {
+                id: DocId::new("allegati/foto.png"),
+                kind: EntryKind::Asset,
+                size: 204_800,
+                mtime: 1_769_000_001_000,
+                fingerprint: None,
+            },
+            VaultEntry {
+                id: DocId::new("archivio.zip"),
+                kind: EntryKind::Unknown,
+                size: 9_000_000,
+                mtime: 1_769_000_002_000,
+                fingerprint: None,
+            },
+        ])),
     ];
     for r in &all {
         match r {
@@ -774,7 +838,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::Jobs(_)
             | IndexResult::Settings(_)
             | IndexResult::Organization(_)
-            | IndexResult::Resolved(_) => {}
+            | IndexResult::Resolved(_)
+            | IndexResult::Entries(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()

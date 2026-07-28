@@ -27,7 +27,7 @@
 // privacy, o un plugin potrebbe.
 import { api } from "../host/ipc";
 import { impostazioni } from "../host/query";
-import type { BundleInfo, SettingEntry, SettingValue, VaultEntry } from "../host/contract";
+import type { BundleInfo, SettingEntry, SettingValue, KnownVault } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
 import { intrappolaFuoco } from "../ui/a11y";
@@ -415,7 +415,7 @@ async function disegnaVault(): Promise<HTMLElement[]> {
   return vaults.map(disegnaVaultRiga);
 }
 
-function disegnaVaultRiga(vault: VaultEntry): HTMLElement {
+function disegnaVaultRiga(vault: KnownVault): HTMLElement {
   const el = document.createElement("div");
   el.className = "setting-row";
   const testo = document.createElement("div");

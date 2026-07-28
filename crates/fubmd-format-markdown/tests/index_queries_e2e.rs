@@ -50,6 +50,12 @@ fn vault() -> (tempfile::TempDir, Workspace) {
         "Diario.md",
         "---\ntipo: nota\n---\nNessuno mi nomina. ![foto](img/foto.png)\n",
     );
+    // Il PNG esiste **davvero**, e da qui in poi la differenza si vede (§14.1):
+    // prima il kernel non sapeva che gli allegati esistessero e il controllo di
+    // salute taceva su tutti, quindi questo file poteva anche non esserci.
+    // Adesso l'anagrafe lo vede, e il silenzio su questo link è una risposta —
+    // «c'è» — invece di un'astensione.
+    write("img/foto.png", "\u{89}PNG\r\n\u{1a}\n");
 
     let mut registry = FormatRegistry::new();
     registry

@@ -48,7 +48,7 @@
 //! (cancellazioni ad app chiusa): lo chiude [`IndexProvider::reconcile`] in
 //! [`Workspace::reindex`].
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 
@@ -63,9 +63,9 @@ use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValue};
 use fubmd_abi::text::{Localize, Strings, Text};
 use fubmd_abi::traits::{
-    BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
-    JobId, JobProgress, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
-    ViewInstance, ViewProvider, ViewSpec,
+    BacklinkRef, CommandProvider, EntryKind, EventHandler, HostApi, IndexProvider, IndexQuery,
+    IndexResult, JobId, JobProgress, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi,
+    ServiceProvider, VaultEntry, ViewInstance, ViewProvider, ViewSpec,
 };
 use fubmd_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -75,12 +75,14 @@ use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_abi::{Actor, Event, Notice, PluginError};
 use serde::{Deserialize, Serialize};
 
+use fubmd_abi::rules::media;
 use fubmd_abi::rules::path as rules_path;
 use fubmd_abi::rules::path::{resolution_key, strip_ext};
 
 use crate::bus::EventBus;
 use crate::dispatcher::{Dispatcher, JobBell, PendingJob, ToDeliver};
 use crate::documents::{extension_of, DocumentStore};
+use crate::entries::{EntryStore, StoredEntry};
 use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
@@ -260,6 +262,16 @@ pub struct Workspace {
     /// ha la **storia** di ciò che gli altri hanno fatto, che nessuno dei
     /// cinque poteva tenere senza sapere degli altri quattro.
     undo: UndoStack,
+    /// **Ciò che si sapeva del vault l'ultima volta** (§14.2): la tabella
+    /// dell'anagrafe su disco, con dimensione, data, impronta e — dei documenti
+    /// — i metadati che risparmiano una riapertura.
+    ///
+    /// Non è un sesto proprietario più di quanto lo siano `closed` e
+    /// `settings`: è la **memoria** di uno dei cinque (l'indice del kernel), e
+    /// sta qui perché a riempirla è la scansione, che è del workspace. È anche
+    /// l'unico stato di questa lista che si può buttare senza perdere niente —
+    /// è derivato, e il vault resta la verità.
+    entry_store: EntryStore,
     /// Quali spazi per-documento non hanno potuto seguire una rinomina (§13.2).
     ///
     /// Un `Vec` nudo e non un `Arc<RwLock<…>>` come le altre due liste di
@@ -317,6 +329,9 @@ impl Workspace {
             organization,
             system_locale: Arc::new(SystemLocale::default()),
             undo: UndoStack::default(),
+            // L'anagrafe è **del vault**, come l'organizzazione: si apre col
+            // root e non si riceve da chi monta.
+            entry_store: EntryStore::open(root),
             doc_data_warnings: Vec::new(),
         }
     }
@@ -1139,29 +1154,111 @@ impl Workspace {
         activated.map_err(RegistryError::Activate)
     }
 
-    /// Riparsa tutti i documenti del vault, ricostruisce il grafo e allinea
-    /// gli indici registrati.
+    /// Guarda cosa c'è nel vault, ricostruisce il grafo e allinea gli indici
+    /// registrati — **rileggendo e riparsando solo ciò che serve** (§14.1,
+    /// §14.2).
     ///
-    /// Per gli indici questo **non** è un rebuild: ogni documento passa da
-    /// `on_document_indexed` (un indice persistente riconosce e salta gli
-    /// immutati) e [`IndexProvider::reconcile`] gli dice qual è l'insieme
-    /// completo, così cancella ciò che è sparito ad app chiusa.
+    /// # Cosa succede, in ordine
+    ///
+    /// 1. **La scansione vede tutti i file**, non solo le estensioni dei
+    ///    provider registrati: da qui nasce l'anagrafe, e da qui in poi un PNG
+    ///    nel vault esiste.
+    /// 2. Di ogni voce si porta avanti ciò che l'anagrafe scritta l'ultima
+    ///    volta ne sapeva, **se descrive ancora quel file** (dimensione e data).
+    /// 3. I documenti di cui non si sa niente si leggono, e leggendoli se ne
+    ///    calcola l'impronta: è l'unico posto in cui si calcola: dove i byte
+    ///    sono già in mano.
+    /// 4. Si chiede agli indici registrati **cosa hanno già**
+    ///    ([`IndexProvider::up_to_date`]). Prima non glielo si chiedeva: il
+    ///    kernel leggeva e parsava tutto e poi lo consegnava a chi ce l'aveva
+    ///    già.
+    /// 5. Un documento si salta — niente lettura, niente parse, niente
+    ///    alimentazione — solo se l'anagrafe ne ha i metadati, l'impronta
+    ///    combacia e **ogni** indice ha detto di averlo. Tutto il resto passa
+    ///    dalla strada di sempre.
+    ///
+    /// Per gli indici questo **non** è un rebuild: chi riceve un documento lo
+    /// ha chiesto (o non ha detto niente, che vuol dire la stessa cosa), e
+    /// [`IndexProvider::reconcile`] dice a tutti qual è l'insieme completo, così
+    /// ognuno cancella ciò che è sparito ad app chiusa.
     pub fn reindex(&mut self) -> Result<()> {
-        let ids = self
-            .docs
-            .vault
-            .list_documents(&self.docs.registry.all_extensions())?;
+        let scanned = self.docs.vault.scan()?;
+        let doc_extensions = self.docs.registry.all_extensions();
+
+        // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
+        // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
+        // che qualcuno rivendica quell'estensione, senza essere cambiato.
+        let mut entries: Vec<VaultEntry> = scanned
+            .into_iter()
+            .map(|file| VaultEntry {
+                fingerprint: self
+                    .entry_store
+                    .known(&file.id)
+                    .filter(|known| known.describes(file.size, file.mtime))
+                    .and_then(|known| known.fingerprint.clone()),
+                kind: media::kind_of(&file.id, &doc_extensions),
+                id: file.id,
+                size: file.size,
+                mtime: file.mtime,
+            })
+            .collect();
+
+        // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
+        // dopo un `git checkout` che ha ritimbrato mille file senza cambiarne
+        // uno, la data non combacia ma il contenuto sì — e chi tiene l'impronta
+        // (l'anagrafe, e chi risponde alla domanda del punto 4) li riconosce
+        // tutti e mille.
+        let mut sources: BTreeMap<DocId, String> = BTreeMap::new();
+        for entry in entries.iter_mut() {
+            if entry.kind != EntryKind::Document || entry.fingerprint.is_some() {
+                continue;
+            }
+            let source = self.docs.vault.read(&entry.id)?;
+            entry.fingerprint = Some(Revision::of(&source));
+            sources.insert(entry.id.clone(), source);
+        }
+
+        let documents: Vec<VaultEntry> = entries
+            .iter()
+            .filter(|e| e.kind == EntryKind::Document)
+            .cloned()
+            .collect();
+        let already = self.indexes.up_to_date(&documents);
+
         // Prima si parsa TUTTO, poi si muta: un parse fallito a metà lascia il
         // workspace com'era. I modelli interi vivono solo qui, il tempo di
         // alimentare indici e conteggi: in cache restano i metadati.
-        let mut models = Vec::with_capacity(ids.len());
-        for id in ids {
-            let src = self.docs.vault.read(&id)?;
-            let model = self.docs.parse(&id, &src)?;
-            models.push((id, model));
+        let mut models = Vec::new();
+        let mut restored = Vec::new();
+        for entry in &documents {
+            let remembered = self
+                .entry_store
+                .known(&entry.id)
+                .filter(|known| known.fingerprint == entry.fingerprint)
+                .and_then(|known| known.meta.clone());
+            match remembered {
+                Some(meta) if already.contains(&entry.id) => {
+                    restored.push((entry.id.clone(), meta))
+                }
+                _ => {
+                    let source = match sources.remove(&entry.id) {
+                        Some(source) => source,
+                        None => self.docs.vault.read(&entry.id)?,
+                    };
+                    models.push(self.docs.parse(&entry.id, &source)?);
+                }
+            }
         }
+        drop(sources);
+
         self.indexes.core.clear();
-        for (_, model) in &models {
+        for entry in entries.drain(..) {
+            self.indexes.core.set_entry(entry);
+        }
+        for (id, meta) in restored {
+            self.indexes.core.restore(&id, meta);
+        }
+        for model in &models {
             self.indexes.on_document_indexed(model);
         }
         drop(models);
@@ -1183,6 +1280,7 @@ impl Workspace {
         // disco no. È il momento giusto perché l'anagrafe è appena stata
         // ricostruita, cioè è al suo massimo di verità.
         self.collect_doc_data();
+        self.store_entries();
 
         // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
         // dichiara di esistere (decisione 0012).
@@ -1194,6 +1292,72 @@ impl Workspace {
             ws.dispatch_pending();
         });
         Ok(())
+    }
+
+    /// Rimette in anagrafe un file che è appena cambiato, chiedendo al disco
+    /// quanto è grande e di quando è (§14.1).
+    ///
+    /// Un file che non c'è più esce dall'anagrafe invece di restarci con i
+    /// numeri di prima: `stat` che non risponde e file sparito sono la stessa
+    /// cosa per chi tiene un elenco di ciò che esiste.
+    ///
+    /// La **specie** si ricalcola qui e non si porta dietro: è la stessa regola
+    /// della scansione, e vale anche a metà sessione — un provider registrato
+    /// dopo l'apertura cambia cosa è un documento.
+    fn touch_entry(&mut self, id: &DocId, fingerprint: Option<Revision>) -> Option<EntryKind> {
+        let Some((size, mtime)) = self.docs.vault.stat(id) else {
+            return self.indexes.core.remove_entry(id);
+        };
+        let kind = media::kind_of(id, &self.docs.registry.all_extensions());
+        self.indexes.core.set_entry(VaultEntry {
+            id: id.clone(),
+            kind,
+            size,
+            mtime,
+            fingerprint,
+        });
+        Some(kind)
+    }
+
+    /// Scrive l'anagrafe, perché la prossima apertura non debba rifare ciò che
+    /// questa ha appena fatto (§14.2).
+    ///
+    /// Si scrive **qui e alla chiusura**, non a ogni salvataggio: è un file che
+    /// contiene una riga per file del vault, e riscriverlo a ogni battuta
+    /// sarebbe pagare l'intero vault per un documento. Fra un giro e l'altro
+    /// l'anagrafe vive in memoria; se il processo muore prima di scriverla, la
+    /// riapertura rilegge tutto — cioè si comporta come prima che questa voce
+    /// esistesse, che è il degrado giusto per un dato derivato.
+    ///
+    /// L'esito non risale, e non perché non interessi: un'apertura riuscita non
+    /// deve fallire perché una cache non si è scritta. Non finisce nemmeno in
+    /// [`IndexQuery::VaultStatus`](fubmd_abi::traits::IndexQuery::VaultStatus),
+    /// che è il fatto interrogabile del §9.7 e dice un'altra cosa — *questo
+    /// vault vede le scritture altrui* —: allargarlo a «e poi non ho scritto una
+    /// cache» renderebbe quel numero la somma di due incidenti diversi. Va su
+    /// `stderr` come il sidecar del cestino, ed è il §20.2 che gli darà una
+    /// destinazione vera.
+    fn store_entries(&mut self) {
+        let table = self
+            .indexes
+            .core
+            .entries
+            .values()
+            .map(|entry| {
+                (
+                    entry.id.clone(),
+                    StoredEntry {
+                        size: entry.size,
+                        mtime: entry.mtime,
+                        fingerprint: entry.fingerprint.clone(),
+                        meta: self.indexes.core.stored_meta(&entry.id),
+                    },
+                )
+            })
+            .collect();
+        if let Err(e) = self.entry_store.store(table) {
+            eprintln!("anagrafe: {e}");
+        }
     }
 
     /// Elenco ordinato dei documenti indicizzati.
@@ -1254,7 +1418,7 @@ impl Workspace {
         // pur avendo scritto.
         let model = self.docs.parse(id, source)?;
         self.docs.vault.write(id, source)?;
-        self.ingest_model(id, model);
+        self.ingest_model(id, model, Revision::of(source));
         self.dispatch_pending();
         Ok(())
     }
@@ -1315,14 +1479,20 @@ impl Workspace {
 
     fn ingest(&mut self, id: &DocId, source: &str) -> Result<()> {
         let model = self.docs.parse(id, source)?;
-        self.ingest_model(id, model);
+        self.ingest_model(id, model, Revision::of(source));
         Ok(())
     }
 
     /// La coda di ogni scrittura: indici, conteggi tag, grafo, metadati in
     /// cache, eventi. Prende il modello già parsato — è ciò che permette a
     /// `write_document` di parsare prima di toccare il disco.
-    fn ingest_model(&mut self, id: &DocId, model: DocumentModel) {
+    fn ingest_model(&mut self, id: &DocId, model: DocumentModel, fingerprint: Revision) {
+        // L'anagrafe segue ogni scrittura (§14.1): dimensione, data e impronta
+        // di un documento appena scritto sono cambiate, e una voce ferma a
+        // prima direbbe che il file è quello di ieri — a chi la interroga
+        // adesso, e alla prossima apertura, che sull'anagrafe decide cosa
+        // rileggere.
+        self.touch_entry(id, Some(fingerprint));
         // Gli indici vedono la modifica nella stessa operazione del grafo:
         // stessa verità, nessun canale che può perdere pezzi per strada. E la
         // vedono ADESSO, sul modello intero: è l'unico momento in cui corpo e
@@ -1343,9 +1513,16 @@ impl Workspace {
     }
 
     /// Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
-    /// esiste ed è un formato gestito, rimuove se sparito. Restituisce `true`
-    /// se qualcosa è cambiato. Path fuori dal vault, ignorati dal vault o senza
-    /// provider: nessun effetto.
+    /// esiste ed è un documento, aggiorna l'anagrafe se è un file di
+    /// un'altra specie, toglie se è sparito. Restituisce `true` se qualcosa è
+    /// cambiato. Path fuori dal vault o ignorati dal vault: nessun effetto.
+    ///
+    /// **Un file senza provider non è più «nessun effetto»** (§14.1): era il
+    /// ramo con cui un PNG copiato nel vault a FubMD aperto spariva senza
+    /// lasciare traccia, e il vault dichiarava di non saperne niente fino alla
+    /// riapertura successiva — cioè fino a quando la scansione lo avrebbe visto
+    /// comunque. Adesso entra in anagrafe e lo annuncia, con gli eventi che
+    /// nominano ciò che è: un allegato, non un documento.
     ///
     /// Il filtro dei path ignorati è lo **stesso** della scansione
     /// ([`Vault::is_ignored`](crate::vault::Vault::is_ignored)) e non una sua copia: le due porte d'ingresso del
@@ -1383,7 +1560,7 @@ impl Workspace {
         };
         let ext = extension_of(&id).unwrap_or_default();
         if self.docs.registry.provider_for_ext(&ext).is_none() {
-            return Ok(false);
+            return self.sync_entry_here(&id, abs);
         }
         if abs.exists() {
             self.refresh_from_disk(&id)?;
@@ -1397,12 +1574,63 @@ impl Workspace {
         }
     }
 
+    /// La stessa sincronizzazione per un file che **non è un documento**: si
+    /// aggiorna l'anagrafe e si dice cosa è successo, senza leggere niente
+    /// (§14.1).
+    ///
+    /// Non si legge e non si parsa perché non c'è niente da parsare, e non si
+    /// calcola l'impronta perché costerebbe i byte di un file che nessuno ha
+    /// chiesto: l'anagrafe dice che c'è, quanto è grande e di quando è, che è
+    /// tutto ciò che si può sapere gratis.
+    fn sync_entry_here(&mut self, id: &DocId, abs: &Utf8Path) -> Result<bool> {
+        self.as_actor(Actor::Watcher, |ws| {
+            if abs.exists() {
+                let prima = ws.indexes.core.entries.get(id).cloned();
+                let fingerprint = match (&prima, ws.docs.vault.stat(id)) {
+                    // Stessa dimensione e stessa data: è lo stesso contenuto, e
+                    // un'impronta che qualcuno aveva calcolato vale ancora.
+                    (Some(e), Some((size, mtime))) if e.size == size && e.mtime == mtime => {
+                        e.fingerprint.clone()
+                    }
+                    // Cambiato: l'impronta di prima descriveva un altro
+                    // contenuto, e tenerla sarebbe scrivere una bugia in
+                    // anagrafe. Chi la vorrà la calcolerà leggendo i byte.
+                    _ => None,
+                };
+                let Some(kind) = ws.touch_entry(id, fingerprint) else {
+                    return Ok(false);
+                };
+                if ws.indexes.core.entries.get(id) == prima.as_ref() {
+                    // Nessuna differenza: un rilevatore che riferisce due volte
+                    // lo stesso fatto non è un fatto due volte.
+                    return Ok(false);
+                }
+                ws.emit_event(Event::EntryChanged {
+                    id: id.clone(),
+                    kind,
+                });
+                ws.dispatch_pending();
+                return Ok(true);
+            }
+            let Some(kind) = ws.indexes.core.remove_entry(id) else {
+                return Ok(false);
+            };
+            ws.emit_event(Event::EntryRemoved {
+                id: id.clone(),
+                kind,
+            });
+            ws.dispatch_pending();
+            Ok(true)
+        })
+    }
+
     /// Rimuove un documento (usato dal file watcher su cancellazione).
     pub fn remove_document(&mut self, id: &DocId) {
         if self.indexes.core.contains(id) {
             // La nota con il focus non esiste più: `active_context` non deve
             // continuare a nominarla alle view (né tenerne una selezione).
             self.session.invalidate(id, ContextChange::Gone);
+            self.indexes.core.remove_entry(id);
             self.indexes.on_document_removed(id);
             if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
                 self.indexes.core.rebuild_graph();
@@ -1625,6 +1853,13 @@ impl Workspace {
             return Ok(());
         }
         if !self.indexes.core.metas.contains_key(from) {
+            // Non è un documento, ma il vault potrebbe conoscerlo lo stesso
+            // (§14.1): spostare un allegato è la stessa operazione, con una
+            // coda diversa — non c'è niente da riparsare, e i riferimenti che
+            // lo seguono sono quelli che lo mostrano.
+            if self.indexes.core.entries.contains_key(from) {
+                return self.rename_entry_in_batch(from, to);
+            }
             return Err(KernelError::NotFound(from.to_string()));
         }
         // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
@@ -1648,7 +1883,7 @@ impl Workspace {
         self.docs.vault.rename(from, to)?;
         let source = self.docs.vault.read(to)?;
         let model = self.docs.parse(to, &source)?;
-        self.migrate_identity(from, to, model);
+        self.migrate_identity(from, to, model, Revision::of(&source));
 
         // Il piano si applica TUTTO, anche se una sorgente fallisce: abortire
         // a metà lascerebbe link misti vecchio/nuovo senza possibilità di
@@ -1681,6 +1916,170 @@ impl Workspace {
         Ok(())
     }
 
+    /// Sposta un file che **non è un documento**, e porta i riferimenti con sé
+    /// (§14.1).
+    ///
+    /// È il gemello di [`rename_document_in_batch`](Workspace::rename_document_in_batch)
+    /// e le differenze sono tutte per sottrazione: non si legge, non si parsa,
+    /// non c'è un modello da rimettere in cache e non c'è un provider da
+    /// pretendere — anzi, **pretenderlo sarebbe il difetto**: rinominare
+    /// `foto.png` in `foto2.png` non deve richiedere che qualcuno sappia parsare
+    /// i PNG.
+    ///
+    /// Ciò che resta identico è la parte che conta per chi guarda: i documenti
+    /// che mostravano quell'immagine continuano a mostrarla, perché i loro
+    /// riferimenti vengono riscritti nella stessa operazione. Senza, spostare un
+    /// allegato in una cartella «allegati» — cioè la prima cosa che si fa
+    /// mettendo ordine — romperebbe ogni nota che lo incorpora.
+    fn rename_entry_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
+        let case_only = from.as_str().to_lowercase() == to.as_str().to_lowercase();
+        if self.indexes.core.entries.contains_key(to)
+            || self.indexes.core.metas.contains_key(to)
+            || (!case_only && self.docs.vault.exists(to))
+        {
+            return Err(KernelError::AlreadyExists(to.to_string()));
+        }
+
+        // Il piano PRIMA di spostare: si risolve con il vecchio path ancora in
+        // vigore, come per i documenti.
+        let plan = self.entry_rewrite_plan(from, to);
+        self.docs.vault.rename(from, to)?;
+
+        let fingerprint = self
+            .indexes
+            .core
+            .entries
+            .get(from)
+            .and_then(|e| e.fingerprint.clone());
+        self.indexes.core.remove_entry(from);
+        // L'impronta segue il file: un rename sposta i byte senza toccarli.
+        let kind = self
+            .touch_entry(to, fingerprint)
+            .unwrap_or(EntryKind::Unknown);
+        // E lo seguono anche le due cose che seguono ogni identità che cambia:
+        // ciò che l'utente gli ha attaccato addosso (§11.3) e lo spazio
+        // per-documento di chiunque altro (§13.2). Un allegato può essere
+        // appuntato e può avere una miniatura, e nessuna delle due è meno sua
+        // per il fatto che nessuno lo parsa.
+        if let Err(e) = self.organization.migrate(from.as_str(), to.as_str()) {
+            self.organization.warn(format!(
+                "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {e}"
+            ));
+        }
+        self.migrate_doc_data(from, to);
+
+        let mut falliti: Vec<String> = Vec::new();
+        for (src, request) in plan {
+            if let Err(e) = self.apply_edit(&src, request) {
+                falliti.push(format!("{src}: {e}"));
+            }
+        }
+        self.emit_event(Event::EntryRenamed {
+            from: from.clone(),
+            to: to.clone(),
+            kind,
+        });
+        self.emit_event(Event::IndexUpdated);
+        self.dispatch_pending();
+        if !falliti.is_empty() {
+            return Err(KernelError::LinkRewrite(falliti.join("; ")));
+        }
+        Ok(())
+    }
+
+    /// Per ogni documento che **mostra** o nomina `from`, la modifica che
+    /// riscrive il suo riferimento verso `to` (§14.1).
+    ///
+    /// Le sorgenti non si chiedono al grafo, e non è una scorciatoia: un
+    /// allegato non è un nodo del grafo — non ha backlink, perché non ha link
+    /// uscenti e non partecipa alla risoluzione per nome delle note. Si cammina
+    /// quindi la cache dei metadati, che i link ce li ha tutti. È un giro
+    /// sull'intero vault, e si paga quando qualcuno sposta un allegato: cioè
+    /// quanto costa già un rename di nota con molti backlink.
+    fn entry_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
+        let mut plan = Vec::new();
+        for (src, meta) in &self.indexes.core.metas {
+            let Ok(source_text) = self.docs.vault.read(src) else {
+                continue;
+            };
+            let mut edits: Vec<TextEdit> = Vec::new();
+            for link in &meta.links {
+                if self.indexes.core.resolve_entry(src, &link.target).as_ref() != Some(from) {
+                    continue;
+                }
+                let (written, replacement, from_end) = match &link.target {
+                    // Un wikilink nomina per nome: il nome nuovo, che è il nome
+                    // del file con la sua estensione. Se il vault ha già un
+                    // omonimo del nome d'arrivo si scrive il path intero, che è
+                    // sempre univoco — la stessa regola delle note.
+                    LinkTarget::Wiki { page, .. } => {
+                        let name = to.as_str().rsplit('/').next().unwrap_or(to.as_str());
+                        let contended = self.indexes.core.entries.keys().any(|id| {
+                            // Né il nome d'arrivo né quello di partenza contano
+                            // come omonimi: il piano si calcola con il vecchio
+                            // path **ancora in anagrafe**, e senza escluderlo
+                            // uno spostamento che non cambia il nome del file
+                            // risulterebbe conteso da sé stesso — cioè ogni
+                            // `![[foto.png]]` diventerebbe un path intero anche
+                            // quando nel vault c'è una foto sola.
+                            id != to
+                                && id != from
+                                && fubmd_abi::rules::path::resolution_key(
+                                    id.as_str().rsplit('/').next().unwrap_or(id.as_str()),
+                                ) == fubmd_abi::rules::path::resolution_key(name)
+                        });
+                        let nuovo = if contended {
+                            to.as_str().to_string()
+                        } else {
+                            name.to_string()
+                        };
+                        (page.as_str(), nuovo, false)
+                    }
+                    LinkTarget::Path(written) => {
+                        let (path, fragment) = rules_path::split_fragment(written);
+                        let nuovo = if path.trim_start().starts_with('/') {
+                            // Un link dalla radice resta dalla radice: è una
+                            // scelta di stile di chi scrive, e il rename non è il
+                            // momento di discuterla.
+                            format!("/{}", rules_path::percent_encode_path(to.as_str()))
+                        } else {
+                            rules_path::relative_ref(src, to)
+                        };
+                        let rewritten = format!("{nuovo}{fragment}");
+                        if rewritten == *written {
+                            continue;
+                        }
+                        (written.as_str(), rewritten, true)
+                    }
+                    LinkTarget::Url(_) => continue,
+                };
+                let Some(slice) = source_text.get(link.span.start..link.span.end) else {
+                    continue;
+                };
+                let found = if from_end {
+                    slice.rfind(written)
+                } else {
+                    slice.find(written)
+                };
+                let Some(rel) = found else {
+                    continue;
+                };
+                let start = link.span.start + rel;
+                edits.push(TextEdit::replace(
+                    Span::new(start, start + written.len()),
+                    replacement,
+                ));
+            }
+            if !edits.is_empty() {
+                plan.push((
+                    src.clone(),
+                    EditRequest::new(Revision::of(&source_text), edits),
+                ));
+            }
+        }
+        plan
+    }
+
     /// Migra l'identità di un documento il cui file è **già** al path nuovo:
     /// modelli, documento attivo, grafo, indici, evento [`Event::DocumentRenamed`].
     ///
@@ -1688,7 +2087,17 @@ impl Workspace {
     /// (che prima sposta il file) e di
     /// [`sync_renamed_path`](Workspace::sync_renamed_path) (dove il file lo ha
     /// già spostato qualcun altro).
-    fn migrate_identity(&mut self, from: &DocId, to: &DocId, model: DocumentModel) {
+    fn migrate_identity(
+        &mut self,
+        from: &DocId,
+        to: &DocId,
+        model: DocumentModel,
+        fingerprint: Revision,
+    ) {
+        // L'anagrafe migra come tutto il resto: la chiave è il path, e il path
+        // è cambiato.
+        self.indexes.core.remove_entry(from);
+        self.touch_entry(to, Some(fingerprint));
         // La nota aperta segue il rename anche qui: senza, `active_context`
         // risponderebbe col path vecchio e outline/backlink si svuoterebbero
         // fino al prossimo cambio nota. Va fatto nel kernel, non nella shell:
@@ -1775,10 +2184,15 @@ impl Workspace {
             .flatten()
             .filter(|id| self.indexes.core.metas.contains_key(id));
         let Some(from_id) = from_id else {
-            // Niente da migrare: al più in `to` è comparso qualcosa. Il corpo
-            // interno, non la porta: chi ci ha chiamati registrerà l'esito una
-            // volta sola (§9.7).
-            return self.sync_path_here(to);
+            // Nessuna **identità di documento** da migrare — ma le due mezze
+            // verità vanno dette entrambe (§14.1): in `to` può essere comparso
+            // qualcosa, e da `from` può essere sparito. Finché il vault vedeva
+            // solo documenti la seconda non esisteva; adesso sì, e saltarla
+            // lascerebbe in anagrafe un allegato che nessuno può più aprire,
+            // fino alla riapertura del vault. Il corpo interno, non la porta:
+            // chi ci ha chiamati registrerà l'esito una volta sola (§9.7).
+            let partito = self.sync_path_here(from)?;
+            return Ok(self.sync_path_here(to)? || partito);
         };
         let to_id = (!self.docs.vault.is_ignored(to))
             .then(|| self.docs.vault.doc_id_for_path(to).ok())
@@ -1802,7 +2216,7 @@ impl Workspace {
         }
         let source = self.docs.vault.read(&to_id)?;
         let model = self.docs.parse(&to_id, &source)?;
-        self.migrate_identity(&from_id, &to_id, model);
+        self.migrate_identity(&from_id, &to_id, model, Revision::of(&source));
         self.emit_event(Event::IndexUpdated);
         self.dispatch_pending();
         Ok(true)

@@ -30,10 +30,11 @@ pub(crate) mod core;
 pub mod plan;
 pub(crate) mod routing;
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{IndexProvider, IndexQuery, IndexResult};
+use fubmd_abi::traits::{IndexProvider, IndexQuery, IndexResult, VaultEntry};
 use fubmd_abi::PluginError;
 
 pub(crate) use core::CoreIndex;
@@ -177,6 +178,37 @@ impl Indexes {
                 index.on_document_removed(id)
             });
         }
+    }
+
+    /// **Cosa hanno già tutti**, di queste voci (§14.2): l'intersezione delle
+    /// risposte, non l'unione.
+    ///
+    /// L'intersezione perché un documento si salta solo se **nessuno** lo
+    /// aspetta: basta un indice che non ce l'ha, e il kernel deve comunque
+    /// leggerlo e parsarlo per darglielo — a quel punto tanto vale darlo a
+    /// tutti, che è ciò che rende il salto un tutto-o-niente per documento e
+    /// non una consegna a metà.
+    ///
+    /// Senza indici registrati l'intersezione è l'insieme intero, ed è la
+    /// risposta giusta e non un caso limite: se nessuno aspetta niente, non
+    /// c'è niente da rileggere per nessuno.
+    ///
+    /// Chi pania rispondendo non blocca l'apertura, e non fa nemmeno saltare
+    /// niente: si porta via solo la propria risposta, che senza di lui è vuota
+    /// — cioè «mandami tutto», che è il verso sicuro dello sbaglio.
+    pub(crate) fn up_to_date(&self, entries: &[VaultEntry]) -> BTreeSet<DocId> {
+        let mut agreed: BTreeSet<DocId> = entries.iter().map(|e| e.id.clone()).collect();
+        for (id, index) in self.providers.iter() {
+            if agreed.is_empty() {
+                break;
+            }
+            let theirs =
+                crate::safety::calling(id, "dicendo cosa ha già", || Ok(index.up_to_date(entries)))
+                    .unwrap_or_default();
+            let theirs: BTreeSet<&DocId> = theirs.iter().collect();
+            agreed.retain(|id| theirs.contains(id));
+        }
+        agreed
     }
 
     pub(crate) fn reconcile(&mut self, ids: &[DocId]) {
