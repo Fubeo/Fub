@@ -47,6 +47,7 @@
 
 pub mod bus;
 pub mod dispatcher;
+mod docdata;
 pub mod documents;
 pub mod error;
 pub mod graph;
@@ -66,6 +67,7 @@ pub mod settings;
 pub mod syntax;
 mod tag_counts;
 pub mod time;
+mod undo;
 pub mod vault;
 pub mod viewstate;
 pub mod workspace;

@@ -15,7 +15,9 @@ use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
 use crate::format::DocumentFormat;
 use crate::locale::Locale;
-use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
+use crate::model::{
+    DocId, DocumentModel, Heading, LinkTarget, PropertyScalar, PropertyValue, Span,
+};
 use crate::organization::Organization;
 use crate::query::{QueryExpr, QueryPredicate};
 use crate::session::{ContextMask, ViewContext};
@@ -909,6 +911,40 @@ pub trait HostCommands: Send + Sync {
         command: &str,
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError>;
+
+    /// **Annulla l'ultima operazione annullabile**, e dice quale era (§13.3).
+    ///
+    /// `Ok(None)` = non c'era niente da annullare, e non è un errore: è la
+    /// risposta normale a un vault appena aperto, e un comando che la riceve ha
+    /// una frase da mostrare e non un guasto da riferire.
+    ///
+    /// Sta qui accanto a [`run_command`](HostCommands::run_command) perché la
+    /// pila che consuma è fatta di [`Undo`](crate::command::Undo) — cioè, per
+    /// metà, di comandi — e perché è la stessa specie di atto: fare qualcosa che
+    /// qualcun altro ha dichiarato di saper fare. È una capacità e non un
+    /// comando del registro per la ragione della decisione 0009 letta al
+    /// contrario: la pila è **privata del kernel**, e un comando riceve solo
+    /// l'`HostApi` — quindi «togli l'ultima voce e falla» non è scrivibile senza
+    /// una firma. Il comando che la invoca c'è lo stesso, ed è quello che
+    /// compare nella palette.
+    ///
+    /// Tre cose che questa firma dice non dicendole:
+    ///
+    /// - **Annullare non è annullabile**: mentre un annullamento gira, la pila
+    ///   non cresce. Senza, la prima cosa annullabile che si trova sarebbe
+    ///   l'annullamento stesso, e Ctrl-Z due volte non farebbe niente due volte.
+    ///   Il *redo* è un'altra pila e un'altra decisione, e oggi non c'è.
+    /// - **La pila dura quanto il vault aperto.** È la cronologia «per
+    ///   sessione» che FEATURES 4.2 chiede, e non di più: farla sopravvivere a
+    ///   una chiusura vorrebbe dire tenerla su disco *e* accorgersi di ciò che
+    ///   è cambiato mentre l'app era spenta, cioè un journal (§15.2) e non una
+    ///   pila.
+    /// - **Un annullamento può fallire come qualunque scrittura**, e il caso che
+    ///   conta è [`PluginError::Conflict`]: il documento è cambiato da quando
+    ///   l'operazione lo aveva toccato, quindi tornare indietro cancellerebbe il
+    ///   lavoro di qualcun altro. Fallire lì è il comportamento giusto, e la
+    ///   voce resta consumata — riprovare vorrebbe dire riprovare a cancellarlo.
+    fn undo_last(&mut self) -> Result<Option<Text>, PluginError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1872,6 +1908,53 @@ pub enum IndexQuery {
     /// con **ciò che l'utente ha toccato a mano** — le note che ha appuntato, le
     /// cartelle a cui ha dato un'icona.
     Organization,
+    /// **Cosa nomina questo riferimento, adesso?** (§13.1)
+    ///
+    /// È l'altra metà della decisione 0043: se il path è la chiave per sempre,
+    /// allora un riferimento *scritto* — un `[[Wikilink]]`, un `[t](a/b.md)` —
+    /// non è una chiave, è un nome che va risolto, e la risoluzione ha regole
+    /// (nome più vicino alla radice fra omonimi, alias del frontmatter, path
+    /// relativo alla cartella di chi scrive) che vivono nel kernel.
+    ///
+    /// Finché quelle regole non uscivano di lì, la risposta la sapeva **la sola
+    /// shell**, per un comando IPC scritto apposta (`resolve_link`): un fatto
+    /// sul vault che il core conosceva e un provider no — la stessa asimmetria
+    /// che il canale dati esiste per non avere (decisione 0019). Con questa
+    /// variante il comando bespoke sparisce e la domanda ha una porta sola.
+    ///
+    /// I clienti veri sono tre e nessuno è ipotetico: la navigazione da un
+    /// wikilink (la shell, oggi), un comando che riceve il nome di una nota
+    /// invece del suo path — [`Args::document`](crate::command::Args::document)
+    /// costruisce un [`DocId`] dalla stringa e **non risolve niente** — e i
+    /// redirect da note rinominate (FEATURES 7.1), che la 0043 ha dichiarato
+    /// essere una feature sopra il kernel: una tabella di alias che ascolta
+    /// `DocumentRenamed` esiste già oggi, ciò che le mancava era qualcuno che le
+    /// facesse la domanda.
+    ///
+    /// La risposta è **una o nessuna**, e non è paginata: risolvere non è
+    /// cercare. Chi vuole i candidati di una ricerca per nome chiede
+    /// [`Documents`](IndexQuery::Documents) con
+    /// [`TextField::Name`](crate::query::TextField::Name), che è un'altra
+    /// domanda e ha un'altra risposta.
+    Resolve {
+        /// Il bersaglio, nel vocabolario del modello: è ciò che un
+        /// [`FormatProvider`](crate::format::FormatProvider) produce parsando, e
+        /// riusarlo evita che il chiamante debba dire *di che specie* è il
+        /// riferimento con una convenzione sua.
+        ///
+        /// [`LinkTarget::Url`] risolve a `None` e non è un errore: la domanda
+        /// «questo riferimento è una nota del vault?» ha una risposta anche
+        /// quando è no, ed è ciò che permette di passare qui l'esito di
+        /// [`LinkTarget::classify`] senza filtrarlo prima.
+        target: LinkTarget,
+        /// Il documento **dentro cui** il riferimento è scritto. Serve ai
+        /// [`LinkTarget::Path`], che sono relativi alla cartella di chi li
+        /// ospita; assente = relativi alla radice del vault. Per un
+        /// [`LinkTarget::Wiki`] non cambia niente, perché la regola Obsidian non
+        /// guarda da dove si sta scrivendo.
+        #[serde(default)]
+        from: Option<DocId>,
+    },
 }
 
 impl IndexQuery {
@@ -1889,7 +1972,8 @@ impl IndexQuery {
             | IndexQuery::VaultStatus
             | IndexQuery::Jobs
             | IndexQuery::Settings { .. }
-            | IndexQuery::Organization => None,
+            | IndexQuery::Organization
+            | IndexQuery::Resolve { .. } => None,
         }
     }
 
@@ -1909,7 +1993,8 @@ impl IndexQuery {
             | IndexQuery::VaultStatus
             | IndexQuery::Jobs
             | IndexQuery::Settings { .. }
-            | IndexQuery::Organization => None,
+            | IndexQuery::Organization
+            | IndexQuery::Resolve { .. } => None,
         }
     }
 
@@ -1964,6 +2049,7 @@ impl IndexQuery {
             IndexQuery::Jobs => QueryKind::Jobs,
             IndexQuery::Settings { .. } => QueryKind::Settings,
             IndexQuery::Organization => QueryKind::Organization,
+            IndexQuery::Resolve { .. } => QueryKind::Resolve,
         }
     }
 }
@@ -2007,6 +2093,18 @@ pub enum QueryKind {
     /// questa domanda non aveva un proprietario affatto — la sapeva fare la
     /// shell, e nessun altro.
     Organization,
+    /// Chi risponde a «cosa nomina questo riferimento?» (§13.1). Il proprietario
+    /// è il kernel perché la risoluzione è una funzione del **grafo**, che è
+    /// suo: gli omonimi si dirimono per distanza dalla radice e gli alias
+    /// stanno in un indice che solo lui tiene.
+    ///
+    /// Che sia una famiglia con un padrone solo — e quindi che un plugin di
+    /// redirect **non** possa scavalcarla — è deliberato: chi risolvesse al
+    /// posto del kernel deciderebbe anche dove puntano i link nel grafo, cioè
+    /// riscriverebbe l'anagrafe del vault dal di fuori. Un redirect è ciò che si
+    /// dice quando la risposta è `None`, e vive accanto a questa domanda, non al
+    /// suo posto.
+    Resolve,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -2187,6 +2285,17 @@ pub enum IndexResult {
     /// Un record e non una lista, perché è **una** cosa e non un elenco: chi la
     /// chiede la disegna intera (la sidebar) o ne guarda un campo.
     Organization(Organization),
+    /// Il documento che un riferimento nomina, o nessuno (risposta a
+    /// [`IndexQuery::Resolve`]).
+    ///
+    /// `None` non è un errore ed è metà del valore di questa risposta: un
+    /// link rotto, un `Url` verso il mondo esterno e una nota rinominata via da
+    /// sotto danno tutti e tre `None`, e chi ha chiesto sa che deve proporre
+    /// qualcos'altro — creare la nota (§21.7), seguire un redirect, aprire il
+    /// browser. Distinguerli qui vorrebbe dire mettere nella risposta di una
+    /// domanda sull'anagrafe le ragioni di chi non c'è, che sono di chi
+    /// chiede.
+    Resolved(Option<DocId>),
 }
 
 impl IndexResult {
@@ -2224,6 +2333,7 @@ impl IndexResult {
             IndexResult::Jobs(_) => "jobs",
             IndexResult::Settings(_) => "settings",
             IndexResult::Organization(_) => "organization",
+            IndexResult::Resolved(_) => "resolved",
         }
     }
 }

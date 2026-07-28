@@ -12,6 +12,8 @@ import type {
   EventMask,
   IndexQuery,
   IndexResult,
+  LinkTarget,
+  UndoStep,
   NeighborRef,
   OpenVaults,
   RenderedDocument,
@@ -314,8 +316,37 @@ function touchIndexQuery(q: IndexQuery): void {
     case "settings":
     case "organization":
       return;
+    // Ogni **specie di bersaglio** dev'essere risolvibile: una variante nuova
+    // di `LinkTarget` in Rust deve arrivare qui come rosso, non come un
+    // riferimento che la shell passa al kernel senza saperlo nominare.
+    case "resolve":
+      touchLinkTarget(q.target);
+      return;
     default:
       assertNever(q);
+  }
+}
+
+function touchUndoStep(s: UndoStep): void {
+  switch (s.kind) {
+    case "edit":
+    case "command":
+      return;
+    default:
+      assertNever(s);
+  }
+}
+
+function touchLinkTarget(t: LinkTarget): void {
+  switch (t.kind) {
+    case "wiki":
+      t.value.page;
+      return;
+    case "url":
+    case "path":
+      return;
+    default:
+      assertNever(t);
   }
 }
 
@@ -364,6 +395,7 @@ function touchIndexResult(r: IndexResult): void {
       r.value.forEach((e: SettingEntry) => touchSettingKind(e.spec.kind));
       return;
     case "organization":
+    case "resolved":
       return;
     default:
       assertNever(r);
@@ -465,7 +497,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     params: true,
     scope: true,
   }),
-  CommandOutcome: keysOf<CommandOutcome>({ notify: true, effect: true }),
+  CommandOutcome: keysOf<CommandOutcome>({ notify: true, effect: true, undo: true }),
   // L'errore (§12.2): due chiavi, ed è la forma su cui la shell rama. Se Rust
   // ne aggiungesse una terza senza che di qua se ne sappia niente, sarebbe
   // un'informazione che arriva a chi disegna e che chi disegna non guarda.
@@ -690,7 +722,13 @@ describe("mirror TS↔Rust", () => {
   });
 
   it("ogni effetto e ogni specie di parametro prodotti da Rust sono gestiti dal mirror", () => {
-    for (const s of fixture.CommandOutcome) touchCommandEffect((s as CommandOutcome).effect);
+    for (const s of fixture.CommandOutcome) {
+      touchCommandEffect((s as CommandOutcome).effect);
+      // Ogni **specie di passo** di un annullamento dev'essere nominabile di
+      // qua: una variante nuova in Rust deve arrivare come rosso, non come un
+      // passo che la shell inoltra senza sapere cos'è.
+      (s as CommandOutcome).undo?.steps.forEach(touchUndoStep);
+    }
     for (const s of fixture.CommandSpec) {
       const spec = s as CommandSpec;
       spec.params.forEach((p) => touchParamKind(p.kind));

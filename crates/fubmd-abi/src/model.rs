@@ -31,11 +31,41 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Identificatore stabile di un documento nel vault.
+/// L'identità di un documento nel vault: **il path**, e non un'altra cosa.
 ///
 /// È il path relativo al vault, normalizzato con separatori `/` e senza
 /// estensione implicita rimossa (il path è la verità). La risoluzione dei
-/// wikilink → `DocId` è compito del kernel, non dei provider.
+/// wikilink → `DocId` è compito del kernel, non dei provider; la domanda con
+/// cui gliela si chiede è
+/// [`IndexQuery::Resolve`](crate::traits::IndexQuery::Resolve).
+///
+/// # Il path è la chiave **per sempre** (decisione 0043)
+///
+/// Non è una scelta rimandata a quando qualcuno chiederà un id stabile: è
+/// decisa, ed è decisa *contro* la seconda strada — un `DocRef` a due forme
+/// (path *oppure* id opaco) che ogni firma del contratto avrebbe dovuto
+/// prendere al posto di questa. La ragione sta tutta in una domanda: **dove
+/// vivrebbe quell'id?**
+///
+/// - *Fuori dal file*, in una tabella `path → id`: non sopravvive a ciò per cui
+///   esiste. Una nota rinominata mentre FubMD è chiuso lascia la tabella che
+///   nomina il path vecchio, e il path nuovo senza id — cioè esattamente il
+///   caso che l'id stabile doveva coprire. È il path con un costume addosso, e
+///   in più un file da tenere in sincronia.
+/// - *Dentro il file*, nel frontmatter: sopravvive davvero — ma allora **è una
+///   proprietà**, e le proprietà il contratto le sa già dire
+///   ([`Frontmatter::property`], [`IndexQuery::Documents`] con
+///   [`QueryPredicate::Property`]). L'«UUID opzionale per nota» e l'id
+///   Zettelkasten di FEATURES sono esprimibili **oggi**, senza toccare una
+///   firma, e restano ciò che sono: un dato del documento, non la sua chiave.
+///
+/// Quindi la seconda forma o è già esprimibile, o non funziona. Ciò che resta a
+/// carico di questa scelta è la **migrazione della chiave** a ogni rinomina, che
+/// è per sempre un problema del kernel: dove atterra lo stato per-documento di
+/// chi non è il kernel lo dice [`rules::doc_data`](crate::rules::doc_data).
+///
+/// [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
+/// [`QueryPredicate::Property`]: crate::query::QueryPredicate::Property
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct DocId(pub String);
 

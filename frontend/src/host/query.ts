@@ -17,6 +17,7 @@ import type {
   JobStatus,
   SettingEntry,
   IndexResult,
+  LinkTarget,
   NeighborRef,
   Page,
   Paged,
@@ -113,6 +114,27 @@ export async function impostazioni(plugin?: string): Promise<SettingEntry[]> {
 /// shell sapeva chiedere e un provider no.
 export async function organizzazione(): Promise<Organization> {
   return open(await api.queryIndex({ kind: "organization" }), "organization");
+}
+
+/// Cosa nomina questo riferimento, adesso (§13.1): il documento del vault, o
+/// `null`.
+///
+/// `from` è il documento **dentro cui** il riferimento è scritto, e serve ai
+/// `path`, che sono relativi alla cartella di chi li ospita; per un wikilink
+/// non cambia niente. `null` non è un errore: un link rotto, un URL esterno e
+/// una nota rinominata via da sotto danno tutti e tre `null`, e chi ha chiesto
+/// decide cosa proporre.
+///
+/// Prima era `resolve_link`, un comando IPC scritto apposta — cioè la sola
+/// risposta sul vault che questa shell sapeva chiedere e un provider no.
+export async function riferimentoRisolto(
+  target: LinkTarget,
+  from?: string,
+): Promise<string | null> {
+  return open(
+    await api.queryIndex({ kind: "resolve", target, from: from ?? null }),
+    "resolved",
+  );
 }
 
 /// Che rapporto ha questo vault con il disco (§9.7): FubMD saprebbe che è

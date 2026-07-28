@@ -58,6 +58,19 @@ Lo spazio persistente è `.fubmd-data/plugins/<id>/`, **dentro al vault**: i dat
 derivati da un vault appartengono a quel vault, e copiarlo o metterlo in sync se
 li porta dietro.
 
+Dentro quello spazio c'è **un posto dichiarato** per ciò che è attaccato a *una
+nota* ([decisione 0044](../decisions/0044-lo-stato-per-documento.md)):
+`doc/<documento codificato>/<nome>`, con la convenzione — e il suo inverso — in
+[`fubmd_abi::rules::doc_data`](../../crates/fubmd-abi/src/rules/doc_data.rs).
+Non è una capacità in più: è `data_*` con un prefisso che il **kernel
+riconosce**, e riconoscendolo lo migra al rename e lo raccoglie quando la nota
+non è più né nel vault né nel cestino. Chi ci mette qualcosa smette di doversi
+migrare la chiave da sé — cioè smette di avere il buco che tutte le copie di
+quel rito avevano: chi ascolta `DocumentRenamed` non sente ciò che è successo
+mentre non c'era. La riga da ricordare è che **sotto `doc/` sta ciò che non ha
+senso senza il documento**: ciò che deve sopravvivergli (i tombstone del
+versioning) sta fuori.
+
 L'altra metà, dal §11.1 ([decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)),
 è la **configurazione** — `setting` / `set_setting` / `reset_setting` — ed è
 un'altra cosa da `data_*` sotto ogni aspetto che conta: le chiavi le **dichiara
@@ -142,6 +155,15 @@ per una ragione scritta ([decisione 0013](../decisions/0013-elenco-delle-capacit
   *entrato* nel kernel e resta lui per tutta la catena), non apre un lotto suo.
   Un comando non può invocare sé stesso nemmeno per giro: la catena è nota
   all'host e il rifiuto nomina il ciclo.
+- **`undo_last() -> Option<Text>`** — annulla l'ultima operazione annullabile e
+  dice quale era ([decisione 0045](../decisions/0045-l-undo-ha-due-pile.md)). È
+  una capacità e non un comando del registro per la 0009 letta al contrario: la
+  pila è **privata del kernel**, e un `CommandProvider` riceve solo l'`HostApi`
+  — «togli l'ultima voce e falla» non è scrivibile senza una firma. Il comando
+  che la invoca c'è lo stesso (`vault.undo`) ed è quello che compare nella
+  palette. Al confine ha **due** controlli e non uno: annullare è invocare *ed*
+  è, sempre, scrivere — e ciò che scrive non passa dal recinto del chiamante,
+  perché a eseguirlo è il kernel.
 
 `run_command` è anche la ragione per cui i `CommandProvider` sono gli unici
 provider **condivisi** (`Arc`) invece che estratti dal workspace per la durata

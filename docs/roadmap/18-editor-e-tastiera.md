@@ -60,15 +60,16 @@ raccoglie.
       `apply_edit`, cioè per i *provider*. Quel che la 0030 ha aggiunto è che
       adesso il rischio è **misurabile** da qui: con `VaultStatus.watching` a
       `false` la copertura è nulla, e si sa.
-- [ ] **La history di undo attraversa le note, e questo è un bug da chiudere
-      subito.** L'`EditorView` è costruito una volta (`editor/editor.ts`, da
-      `panels/document.ts`) e `setDoc` cambia documento con un `dispatch` di `changes`
-      normali, che finiscono nella history di `basicSetup`: dopo un cambio nota un
-      Ctrl-Z scrive nella nota aperta il testo di quella precedente, e l'autosave
-      lo persiste. Si chiude svuotando la history in `setDoc`, o marcando quel
-      `dispatch` come non annullabile. **Non aspetta** la decisione sui due
-      livelli di undo (§13.3, P0, contratto): quella dice chi possiede la storia
-      di un documento, questa è una perdita di dati a portata di scorciatoia.
+- [x] ~~**La history di undo attraversa le note, e questo è un bug da chiudere
+      subito.**~~ **Chiuso** con la
+      [0045](../decisions/0045-l-undo-ha-due-pile.md), che è arrivata prima del
+      previsto: la voce diceva «non aspetta la decisione sui due livelli di
+      undo», e la decisione è venuta con la seduta 13 invece che dopo. Delle due
+      riparazioni che la voce proponeva ne funziona **una sola** — marcare il
+      `dispatch` come non annullabile lascia in pila le modifiche *dell'altra
+      nota*, ancora applicabili a questa — e CodeMirror non ha uno «svuota la
+      history»: `setDoc` ricostruisce lo stato. Il presidio è
+      `frontend/src/editor/editor.test.ts`, verificato rosso sul codice di prima.
 
 ### 18.2 Comandi e tastiera
 

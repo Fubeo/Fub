@@ -53,7 +53,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode};
+use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode, UndoStep};
 use fubmd_abi::custom::{CustomRenderer, SyntaxRule};
 use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::format::{DocumentFormat, RenderOptions};
@@ -61,7 +61,7 @@ use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValue};
-use fubmd_abi::text::{Localize, Strings};
+use fubmd_abi::text::{Localize, Strings, Text};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
     JobId, JobProgress, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
@@ -93,6 +93,7 @@ use crate::registry::FormatRegistry;
 use crate::renderer::{self, RenderedDocument};
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
+use crate::undo::UndoStack;
 use crate::vault::TrashEntry;
 use crate::viewstate::ViewStates;
 
@@ -251,6 +252,21 @@ pub struct Workspace {
     /// impostazioni e lo stato di vista — la lingua di chi guarda non cambia
     /// perché si apre un secondo vault.
     system_locale: Arc<SystemLocale>,
+    /// La pila delle operazioni annullabili di **questa sessione** (§13.3).
+    ///
+    /// Non è un sesto proprietario dei cinque del §8.1, ed è la seconda volta
+    /// che vale la pena dirlo (la prima è `closed`): quei cinque rispondono
+    /// alla domanda «di chi è questo dato», e questa pila non ha un dato suo —
+    /// ha la **storia** di ciò che gli altri hanno fatto, che nessuno dei
+    /// cinque poteva tenere senza sapere degli altri quattro.
+    undo: UndoStack,
+    /// Quali spazi per-documento non hanno potuto seguire una rinomina (§13.2).
+    ///
+    /// Un `Vec` nudo e non un `Arc<RwLock<…>>` come le altre due liste di
+    /// avvisi: qui a scrivere è **solo** `migrate_identity`, che ha già il
+    /// prestito esclusivo del workspace. Un lucchetto in più non renderebbe
+    /// visibile niente a nessuno che non lo veda già.
+    doc_data_warnings: Vec<String>,
 }
 
 impl Workspace {
@@ -300,6 +316,8 @@ impl Workspace {
             view_states: ViewStates::in_memory(),
             organization,
             system_locale: Arc::new(SystemLocale::default()),
+            undo: UndoStack::default(),
+            doc_data_warnings: Vec::new(),
         }
     }
 
@@ -1159,6 +1177,13 @@ impl Workspace {
         // indice è stato derivato, il vault è la verità (M4: notifica).
         let _ = self.flush_indexes();
 
+        // La raccolta dello stato per-documento (§13.2) passa di qui e non da
+        // un evento: la cancellazione definitiva si può perdere — svuotare il
+        // cestino ad app chiusa non lo annuncia nessuno — mentre un giro sul
+        // disco no. È il momento giusto perché l'anagrafe è appena stata
+        // ricostruita, cioè è al suo massimo di verità.
+        self.collect_doc_data();
+
         // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
         // dichiara di esistere (decisione 0012).
         self.as_actor(Actor::Kernel, |ws| {
@@ -1550,6 +1575,11 @@ impl Workspace {
         // anche se il documento non era indicizzato, e chi tiene stato migra
         // la chiave sull'evento.
         if target != original {
+            // Lo stato per-documento segue la chiave anche qui, e va fatto nel
+            // kernel per la ragione di sempre: l'evento dice la stessa cosa, ma
+            // la coda ha un budget e può troncare (decisione 0034), e chi tiene
+            // stato autorevole non può dipendere da una consegna best-effort.
+            self.migrate_doc_data(&original, &target);
             self.emit_event(Event::DocumentRenamed {
                 from: original,
                 to: target.clone(),
@@ -1686,6 +1716,17 @@ impl Workspace {
                  {to}: {e}"
             ));
         }
+        // **E lo stesso vale per lo stato per-documento di chiunque altro**
+        // (§13.2). Sta accanto all'organizzazione perché è la stessa cosa vista
+        // in generale: quella è lo stato per-documento *del kernel*, questo è
+        // quello di tutti gli altri, e finché il kernel non lo migrava ognuno se
+        // lo migrava da sé ascoltando l'evento — cioè nessuno lo migrava per il
+        // rename fatto ad app chiusa o da un'altra applicazione.
+        //
+        // Cammina il **disco** e non i plugin montati, di proposito: chi è
+        // spento oggi non deve riaccendersi domani con le chiavi di ieri, ed è
+        // esattamente chi non può accorgersene da solo.
+        self.migrate_doc_data(from, to);
         // Per ogni indice — quello del kernel compreso — il rename è
         // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
         // tiene stato *per-documento* invece migra la chiave sull'evento
@@ -2129,6 +2170,13 @@ impl Workspace {
     }
 
     /// Risolve il nome di un wikilink a un documento esistente.
+    ///
+    /// È il comodo del kernel per sé e per i propri banchi di prova. Chi sta
+    /// **fuori** — la shell, un provider — passa da
+    /// [`IndexQuery::Resolve`](fubmd_abi::traits::IndexQuery::Resolve), che è la
+    /// stessa risposta per tutti e le tre specie di bersaglio invece di una
+    /// sola: finché questa era raggiungibile solo per un comando IPC scritto
+    /// apposta, era un fatto sul vault che la shell conosceva e un plugin no.
     pub fn resolve_link(&self, page: &str) -> Option<DocId> {
         self.indexes.core.graph.resolve_wiki(page)
     }
@@ -2716,8 +2764,55 @@ impl Workspace {
         // risolto, che è giusto, perché il catalogo giusto è quello di chi ha
         // scritto la frase e non quello di chi la inoltra.
         self.localize(&owner, &mut outcome);
+        // La pila dell'annullamento si riempie **a profondità zero** (§13.3):
+        // una macro di tre rinomine è *una* cosa che qualcuno ha chiesto,
+        // quindi una voce sola — la stessa regola per cui è un `batch-ended`
+        // solo (decisione 0011). Chi compone comandi compone anche il loro
+        // inverso, e `Undo::steps` esiste per permetterglielo.
+        //
+        // Solo `Apply`: una simulazione non ha fatto niente, e mettere in pila
+        // l'inverso di ciò che non è successo sarebbe la scala per uscire dalla
+        // simulazione — annullare qualcosa che non è mai stato fatto.
+        if mode == InvokeMode::Apply && self.providers.command_stack.is_empty() {
+            if let Some(undo) = outcome.undo.clone() {
+                self.undo.push(undo);
+            }
+        }
         self.dispatch_pending();
         Ok(outcome)
+    }
+
+    /// Annulla l'ultima operazione annullabile, e dice quale era (§13.3).
+    ///
+    /// `Ok(None)` = non c'era niente, e non è un errore: è la risposta normale a
+    /// un vault appena aperto.
+    ///
+    /// I passi girano nell'ordine in cui l'operazione li ha elencati, che è già
+    /// quello in cui vanno eseguiti: chi esegue non riordina, perché riordinare
+    /// vorrebbe dire capire cosa dipende da cosa, e lo sa meglio chi ha scritto
+    /// l'operazione.
+    pub(crate) fn undo_last(&mut self) -> std::result::Result<Option<Text>, PluginError> {
+        let Some(undo) = self.undo.pop() else {
+            return Ok(None);
+        };
+        // Tutto dentro un lotto solo: annullare una rinomina che aveva riscritto
+        // quaranta sorgenti è un gesto, quindi un `batch-ended` e un ridisegno.
+        let prima = self.undo.begin_replay();
+        let esito = self.batch(|ws| {
+            for step in &undo.steps {
+                match step {
+                    UndoStep::Edit(planned) => {
+                        ws.apply_edit(&planned.doc, planned.edit.clone())?;
+                    }
+                    UndoStep::Command { command, args } => {
+                        ws.invoke_command_here(command, args.clone(), InvokeMode::Apply)?;
+                    }
+                }
+            }
+            Ok::<(), PluginError>(())
+        });
+        self.undo.end_replay(prima);
+        esito.map(|()| Some(undo.label))
     }
 
     /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
@@ -3343,6 +3438,57 @@ impl Workspace {
     /// mostra, e svuotandole se ne fa carico.
     pub fn organization_warnings(&self) -> Vec<String> {
         self.organization.take_warnings()
+    }
+
+    /// Quali spazi per-documento non hanno potuto seguire una rinomina (§13.2).
+    /// Chi monta le mostra, e svuotandole se ne fa carico.
+    pub fn doc_data_warnings(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.doc_data_warnings)
+    }
+
+    /// Porta dietro a una rinomina lo stato per-documento di **ogni** plugin
+    /// (§13.2), e annota chi non ce l'ha fatta.
+    ///
+    /// Non torna un `Result` e non può tornarlo: chi la chiama ha già spostato
+    /// il file, e annullare una rinomina riuscita perché un plugin non ha potuto
+    /// seguirla sarebbe il verso sbagliato. È la stessa regola
+    /// dell'organizzazione, applicata a chi non è il kernel.
+    fn migrate_doc_data(&mut self, from: &DocId, to: &DocId) {
+        let roots = self.docs.plugin_data_roots();
+        for errore in crate::docdata::migrate(&roots, from, to) {
+            self.doc_data_warnings.push(format!(
+                "lo stato per-documento di {from} non ha potuto seguire la rinomina \
+                 in {to} — {errore}"
+            ));
+        }
+    }
+
+    /// Toglie lo stato per-documento delle note che non esistono più (§13.2).
+    ///
+    /// È un **giro sul disco** e non una reazione a un evento, ed è la sola
+    /// forma che funziona: la cancellazione definitiva la si può perdere (una
+    /// nota tolta dal cestino ad app chiusa non la annuncia nessuno), un giro
+    /// no. Gira all'apertura, quando l'anagrafe è appena stata ricostruita.
+    ///
+    /// «Non esiste più» vuol dire né indicizzata **né nel cestino**: una nota
+    /// cestinata è recuperabile, e ripristinarla senza i suoi dati sarebbe una
+    /// perdita silenziosa fatta da chi doveva impedirla.
+    fn collect_doc_data(&mut self) -> usize {
+        let roots = self.docs.plugin_data_roots();
+        if roots.is_empty() {
+            return 0;
+        }
+        let cestinate: std::collections::HashSet<DocId> = self
+            .docs
+            .list_trash()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|e| e.original)
+            .collect();
+        let metas = &self.indexes.core.metas;
+        crate::docdata::collect(&roots, &|doc: &DocId| {
+            metas.contains_key(doc) || cestinate.contains(doc)
+        })
     }
 
     /// Cosa è andato storto **leggendo** la configurazione: un file malformato,

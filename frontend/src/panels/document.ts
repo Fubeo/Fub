@@ -17,7 +17,7 @@
 import { createEditor, type Editor } from "../editor/editor";
 import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
-import { tagDelVault } from "../host/query";
+import { riferimentoRisolto, tagDelVault } from "../host/query";
 import { MAIN_PANE } from "../host/contract";
 import type { PaneMode, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -149,7 +149,7 @@ export function isOpen(id: string): boolean {
 /// che l'utente abbia scritto la prima riga — è il grafo a ricucirlo.
 export async function openWikilink(page: string): Promise<void> {
   if (!page) return; // [[#Sezione]]: link interno alla nota, per ora nulla
-  const target = await api.resolveLink(page);
+  const target = await riferimentoRisolto({ kind: "wiki", value: { page } });
   if (target) {
     await openDocument(target);
     return;

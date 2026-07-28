@@ -53,10 +53,20 @@ cronologico di chiusura.
 | [0040](0040-chi-localizza.md) | Chi localizza: il testo che porta la propria provenienza | §12.1 | 2026-07-28 |
 | [0041](0041-un-errore-e-testo-che-qualcuno-legge.md) | Un errore è testo che qualcuno legge — e una domanda su cui qualcuno rama | §12.2 | 2026-07-28 |
 | [0042](0042-il-catalogo-della-shell.md) | Il catalogo della shell, e la luce in cui si legge | §12.4 — chiude la [seduta 12](../roadmap/12-stringhe-errori-locale.md) | 2026-07-28 |
+| [0043](0043-il-path-e-la-chiave.md) | Il path è la chiave, e un id stabile è una proprietà | §13.1 | 2026-07-28 |
+| [0044](0044-lo-stato-per-documento.md) | Lo stato per-documento: un posto dichiarato, e chi ci passa dietro | §13.2 | 2026-07-28 |
+| [0045](0045-l-undo-ha-due-pile.md) | L'undo ha due pile, e non si fondono | §13.3 — chiude la [seduta 13](../roadmap/13-identita-del-documento.md) | 2026-07-28 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
 nel momento in cui la voce di `todo.md` si chiude.
+
+La [0044](0044-lo-stato-per-documento.md) è il primo verbale che esiste **per
+via di un altro**: il §13.2 era una generalizzazione condizionale — «se
+l'identità resta il path…» — e la [0043](0043-il-path-e-la-chiave.md) ha reso
+vera la condizione. Le due si leggono in fila, come la 0031 e la 0032, ma per la
+ragione opposta: là una voce era troppo grande per un verbale solo, qui erano due
+voci e la prima ha deciso cosa fosse la seconda.
 
 La [0037](0037-lo-stato-di-vista.md) è il secondo caso di mezza voce, e
 diversamente dal primo la seconda metà **non ha ancora una data**: il layout del

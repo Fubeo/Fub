@@ -26,6 +26,8 @@
 //!
 //! - [`ids`] — **di chi è un id**: la regola dei namespace, per tutti e otto
 //!   gli spazi di nomi del contratto (§7.4);
+//! - [`doc_data`] — **dove sta ciò che è attaccato a una nota**: il prefisso
+//!   che il kernel migra al rename e raccoglie alla cancellazione (§13.2);
 //! - [`events`] — **chi riceve cosa**: la maschera di un abbonamento, col
 //!   prefisso di topic e il soggetto (§10.1);
 //! - [`path`] — la chiave di risoluzione (trim, NFC, minuscolo), i link
@@ -54,6 +56,7 @@
 //!
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
 
+pub mod doc_data;
 pub mod events;
 pub mod health;
 pub mod ids;

@@ -682,17 +682,6 @@ fn forget_vault(host: State<Host>, path: String) -> Result<(), PluginError> {
     host.forget_vault(&Utf8PathBuf::from(path))
 }
 
-#[tauri::command]
-fn resolve_link(
-    host: State<Host>,
-    page: String,
-    vault: Option<String>,
-) -> Result<Option<String>, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
-    Ok(ws.resolve_link(&page).map(|d| d.0))
-}
-
 pub fn run() {
     // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
     // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
@@ -733,7 +722,6 @@ pub fn run() {
             invoke_command,
             query_index,
             cancel_job,
-            resolve_link,
             list_versions,
             read_version,
             restore_version,

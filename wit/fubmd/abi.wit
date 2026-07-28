@@ -1416,6 +1416,62 @@ interface command {
     record command-outcome {
         notify: option<text>,
         effect: command-effect,
+        /// Come si torna indietro, se si può (§13.3). NONE = non annullabile,
+        /// ed è il default onesto: un comando che non lo dichiara non promette
+        /// niente, e chi annulla non indovina l'inverso di un'operazione che
+        /// non lo ha detto. La forma sta qui e non in un registro dell'host
+        /// perché l'inverso lo conosce solo chi ha fatto l'operazione — l'host
+        /// vede una scrittura, non QUALE GESTO l'ha prodotta.
+        undo: option<undo>,
+    }
+
+    /// Un passo di un annullamento. Le due varianti non sono due meccanismi:
+    /// sono le due SPECIE DI COSA che un'operazione può aver fatto. La prima è
+    /// una modifica a un testo, e il contratto ne conosce già l'inverso
+    /// (`edit-report.inverse`); la seconda è un cambiamento STRUTTURALE — una
+    /// nota creata, cestinata, rinominata — di cui non esiste un inverso
+    /// testuale, perché non c'è nessun testo che sia cambiato.
+    ///
+    /// Per la seconda il contratto NON ha un linguaggio di operazioni inverse
+    /// (`restore`, `trash`, `rename`), che sarebbe un secondo vocabolario da
+    /// tenere allineato a quello dei comandi a ogni capacità nuova: ha un
+    /// comando, col suo id e i suoi argomenti. Le operazioni un nome ce l'hanno
+    /// già (decisione 0009) e chi annulla sa già eseguirle. Annullare una
+    /// rinomina è una rinomina all'incontrario.
+    record undo-step-command {
+        command: string,
+        args: json,
+    }
+    variant undo-step {
+        /// La `base` è la revisione che l'operazione ha PRODOTTO: è così che un
+        /// annullamento si accorge che qualcuno ha scritto nel frattempo,
+        /// invece di cancellargli il lavoro.
+        edit(planned-edit),
+        command(undo-step-command),
+    }
+    /// Come si torna indietro da un'operazione, e come si chiama la cosa che si
+    /// annullerebbe.
+    ///
+    /// DUE PILE, E PERCHÉ NON SI FONDONO. L'undo del TESTO vive nell'editor: è
+    /// per-documento (e per-pannello con la decisione 0007), il suo soggetto è
+    /// un buffer che non è ancora sul disco, e non passa dal contratto. L'undo
+    /// delle OPERAZIONI vive nel kernel: il suo soggetto è ciò che sul disco ci
+    /// è già arrivato. Non si fondono perché non hanno lo stesso soggetto — a
+    /// decidere quale risponde è il FUOCO, non la cronologia. E si incontrano in
+    /// un punto solo, dove il contratto sa già cosa dire: se si annulla mentre
+    /// l'editor tiene un buffer sporco dello stesso documento, la base non
+    /// combacia e l'host risponde `conflict` invece di cancellare ciò che
+    /// l'utente stava scrivendo (decisione 0008).
+    record undo {
+        /// Cosa si annullerebbe, per l'utente. Non è il `notify` dell'esito:
+        /// quello dice cosa è successo, questo dice cosa si disferebbe, e la
+        /// seconda frase si legge mesi dopo in un menu.
+        label: text,
+        /// I passi, NELL'ORDINE IN CUI VANNO ESEGUITI — che è il contrario di
+        /// quello in cui le cose sono successe. Chi esegue non riordina:
+        /// riordinare vorrebbe dire capire cosa dipende da cosa, e lo sa meglio
+        /// chi ha scritto l'operazione.
+        steps: list<undo-step>,
     }
 
     commands: func() -> list<command-spec>;
@@ -1435,7 +1491,7 @@ interface command {
 /// full-text).
 interface index {
     use json.{json};
-    use model.{doc-id, document-model, span, heading, property-value, property-scalar};
+    use model.{doc-id, document-model, span, heading, property-value, property-scalar, link-target};
     use jobs.{job-status};
     use settings.{setting-entry};
     use organization.{organization};
@@ -1625,6 +1681,16 @@ interface index {
         ns: string,
         query: json,
     }
+    /// COSA NOMINA QUESTO RIFERIMENTO, ADESSO? (§13.1) `from` è il documento
+    /// dentro cui il riferimento è scritto: serve ai `path`, che sono relativi
+    /// alla cartella di chi li ospita (assente = relativi alla radice). Per un
+    /// wikilink non cambia niente — la regola Obsidian non guarda da dove si
+    /// sta scrivendo.
+    record index-query-resolve {
+        target: link-target,
+        /// (`from` è keyword WIT: `%from`.)
+        %from: option<doc-id>,
+    }
     variant index-query {
         documents(index-query-documents),
         backlinks(index-query-backlinks),
@@ -1668,6 +1734,16 @@ interface index {
         /// shell sapeva chiedere e un plugin no. Senza parametri, perché
         /// l'organizzazione di un vault è UNA.
         organization,
+        /// COSA NOMINA QUESTO RIFERIMENTO, ADESSO? (§13.1) L'altra metà della
+        /// decisione 0043: se il path è la chiave per sempre, un riferimento
+        /// SCRITTO non è una chiave ma un nome, e risolverlo ha regole — fra
+        /// omonimi vince il più vicino alla radice, poi gli alias, e un path è
+        /// relativo a chi lo scrive — che vivono nel kernel. Finché non
+        /// uscivano di lì la risposta la sapeva la sola shell, per un comando
+        /// IPC scritto apposta: un fatto sul vault che il core conosceva e un
+        /// plugin no. La risposta è UNA o NESSUNA e non è paginata, perché
+        /// risolvere non è cercare.
+        resolve(index-query-resolve),
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -1701,6 +1777,14 @@ interface index {
         /// il sidecar lo leggevano due funzioni dell'host con `std::fs`, questa
         /// domanda non aveva un proprietario affatto.
         organization,
+        /// Chi risponde a «cosa nomina questo riferimento?» (§13.1). Il kernel,
+        /// perché la risoluzione è una funzione del GRAFO, che è suo. Che sia
+        /// una famiglia con un padrone solo — e che quindi un plugin di
+        /// redirect non possa scavalcarla — è deliberato: chi risolvesse al
+        /// posto del kernel deciderebbe anche dove puntano i link nel grafo.
+        /// Un redirect è ciò che si dice quando la risposta è NONE, e vive
+        /// accanto a questa domanda, non al suo posto.
+        resolve,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -1852,6 +1936,13 @@ interface index {
         /// cosa sola e non un elenco — chi la chiede la disegna intera (la
         /// sidebar) o ne guarda un campo.
         organization(organization),
+        /// Il documento che un riferimento nomina, o nessuno. NONE non è un
+        /// errore ed è metà del valore di questa risposta: un link rotto, un
+        /// `url` verso il mondo esterno e una nota rinominata via da sotto
+        /// danno tutti e tre NONE, e chi ha chiesto sa che deve proporre
+        /// qualcos'altro — creare la nota, seguire un redirect, aprire il
+        /// browser.
+        resolved(option<doc-id>),
     }
 
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel
@@ -2660,6 +2751,7 @@ interface host-commands {
     use json.{json};
     use errors.{plugin-error};
     use command.{command-outcome};
+    use text.{text};
 
     /// Invoca un comando del registro (decisione 0009): è ciò che rende componibili macro
     /// e automazioni senza che un plugin debba conoscere gli altri.
@@ -2672,6 +2764,28 @@ interface host-commands {
     /// comandi è un `batch-ended` solo. Un comando non può invocare sé stesso,
     /// nemmeno per giro: `bad-args` nomina il ciclo.
     run-command: func(command: string, args: json) -> result<command-outcome, plugin-error>;
+
+    /// ANNULLA L'ULTIMA OPERAZIONE ANNULLABILE, e dice quale era (§13.3).
+    /// `ok(none)` = non c'era niente da annullare, e non è un errore: è la
+    /// risposta normale a un vault appena aperto.
+    ///
+    /// È una capacità e non un comando del registro per la decisione 0009 letta
+    /// al contrario: la pila è PRIVATA DEL KERNEL, e un comando riceve solo
+    /// l'`host-api` — quindi «togli l'ultima voce e falla» non è scrivibile
+    /// senza una firma. Il comando che la invoca c'è lo stesso, ed è quello che
+    /// compare nella palette.
+    ///
+    /// Tre cose che questa firma dice non dicendole. ANNULLARE NON È
+    /// ANNULLABILE: mentre un annullamento gira la pila non cresce, o la prima
+    /// cosa annullabile che si trova sarebbe l'annullamento stesso; il redo è
+    /// un'altra pila e un'altra decisione. LA PILA DURA QUANTO IL VAULT APERTO:
+    /// è la cronologia «per sessione» di FEATURES 4.2, e farla sopravvivere a
+    /// una chiusura vuol dire accorgersi di ciò che è cambiato ad app spenta,
+    /// cioè un journal (§15.2) e non una pila. UN ANNULLAMENTO PUÒ FALLIRE come
+    /// qualunque scrittura, e il caso che conta è `conflict`: il documento è
+    /// cambiato da quando l'operazione lo aveva toccato, quindi tornare
+    /// indietro cancellerebbe il lavoro di qualcun altro.
+    undo-last: func() -> result<option<text>, plugin-error>;
 }
 
 /// Reazione agli eventi (`EventHandler`).

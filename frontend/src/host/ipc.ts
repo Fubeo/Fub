@@ -114,7 +114,6 @@ export const api = {
   // Non c'è un «job sconosciuto» da gestire: annullare un job appena finito è la
   // cosa più normale che l'utente faccia, e il backend risponde di sì.
   cancelJob: (id: string) => invoke<void>("cancel_job", { id }),
-  resolveLink: (page: string) => invoke<string | null>("resolve_link", { page }),
   listVersions: (id: string) => invoke<VersionRef[]>("list_versions", { id }),
   readVersion: (id: string, ts: number) => invoke<string>("read_version", { id, ts }),
   restoreVersion: (id: string, ts: number) => invoke<void>("restore_version", { id, ts }),

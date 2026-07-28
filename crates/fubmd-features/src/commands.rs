@@ -44,7 +44,7 @@
 
 use fubmd_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    InvokeMode, ParamKind, ParamSpec, PlannedEdit,
+    InvokeMode, ParamKind, ParamSpec, PlannedEdit, Undo, UndoStep,
 };
 use fubmd_abi::edit::{EditRequest, TextEdit};
 use fubmd_abi::error::PluginError;
@@ -84,6 +84,8 @@ pub const SETTINGS_RESET: &str = "settings.reset";
 pub const SETTINGS_EXPORT: &str = "settings.export";
 /// Rimette dentro una configurazione esportata.
 pub const SETTINGS_IMPORT: &str = "settings.import";
+/// Annulla l'ultima operazione annullabile (§13.3).
+pub const VAULT_UNDO: &str = "vault.undo";
 
 /// Il `ns` con cui l'esito di `settings.export` arriva alla shell.
 pub const SETTINGS_NS: &str = "settings.export";
@@ -102,8 +104,8 @@ const ESTENSIONE_PREDEFINITA: &str = "md";
 ///
 /// Le chiavi si **derivano dall'id** — `vault.replace` diventa
 /// `vault.replace.title` e `vault.replace.desc` —, e non è pigrizia: era
-/// l'alternativa a settantotto costanti, una per ogni pezzo di prosa di
-/// quattordici comandi e ventisei parametri, e settantotto costanti usate una
+/// l'alternativa a ottantadue costanti, una per ogni pezzo di prosa di
+/// quindici comandi e ventisei parametri, e ottantadue costanti usate una
 /// volta sola sono un secondo elenco da tenere allineato al primo. L'id di un
 /// comando è già identità stabile per contratto — «cambiarla rompe scorciatoie,
 /// macro e automazioni che la nominano» —, quindi derivarne le chiavi non
@@ -232,6 +234,19 @@ const D_SETTINGS_RESET: &str = "done.settings_reset";
 const D_SETTINGS_EXPORT: &str = "done.settings_export";
 const D_SETTINGS_IMPORT: &str = "done.settings_import";
 const D_SETTINGS_IMPORT_PARTIAL: &str = "done.settings_import_partial";
+const D_UNDONE: &str = "done.undone";
+const D_NOTHING_TO_UNDO: &str = "done.nothing_to_undo";
+const P_UNDO: &str = "plan.undo";
+
+/// Le etichette dell'annullamento: cosa si disferebbe, non cosa è successo.
+const U_WIKILINK: &str = "undo.wikilink";
+const U_REPLACE: &str = "undo.replace";
+const U_CREATE: &str = "undo.create";
+const U_RENAME: &str = "undo.rename";
+const U_TRASH: &str = "undo.trash";
+const U_RESTORE: &str = "undo.restore";
+const U_ARCHIVE: &str = "undo.archive";
+const U_TASK: &str = "undo.task";
 
 /// I nomi degli argomenti.
 const A_DOC: &str = "doc";
@@ -250,8 +265,9 @@ const A_NOTES: &str = "notes";
 const A_FAILED: &str = "failed";
 const A_FOLDER: &str = "folder";
 const A_AT: &str = "at";
+const A_WHAT: &str = "what";
 
-/// Le stringhe dei comandi: quattordici titoli, quattordici descrizioni,
+/// Le stringhe dei comandi: quindici titoli, quindici descrizioni,
 /// ventisei etichette di parametro e le righe che un comando scrive quando ha
 /// finito.
 ///
@@ -522,6 +538,33 @@ fn catalogo_it() -> StringCatalog {
             D_SETTINGS_IMPORT_PARTIAL,
             "Impostazioni applicate: {count} · Saltate: {skipped} ({reasons})",
         )
+        // --- l'annullamento (§13.3) ---------------------------------------
+        //
+        // Le etichette `undo.*` dicono **cosa si disferebbe**, non cosa è
+        // successo: sono la frase che si legge in un menu, mesi dopo, e per
+        // questo cominciano dal verbo di ciò che tornerebbe indietro.
+        .with("vault.undo.title", "Annulla l'ultima operazione")
+        .with(
+            "vault.undo.desc",
+            "Disfa l'ultima operazione annullabile fatta in questo vault: una \
+             rinomina, una nota cestinata, una sostituzione. Non è l'annulla \
+             dell'editor, che riguarda il testo che stai scrivendo e risponde a \
+             Ctrl-Z.",
+        )
+        .with(P_UNDO, "Disferebbe l'ultima operazione annullabile")
+        .with(D_UNDONE, "Annullato: {what}")
+        .with(D_NOTHING_TO_UNDO, "Niente da annullare")
+        .with(U_WIKILINK, "il riferimento a «{text}»")
+        .with(
+            U_REPLACE,
+            "le sostituzioni · Occorrenze: {occurrences} · Note: {notes}",
+        )
+        .with(U_CREATE, "la creazione di «{doc}»")
+        .with(U_RENAME, "la rinomina di «{doc}» in «{to}»")
+        .with(U_TRASH, "«{doc}» nel cestino")
+        .with(U_RESTORE, "il ripristino di «{doc}»")
+        .with(U_ARCHIVE, "l'archiviazione in «{folder}» · Note: {count}")
+        .with(U_TASK, "la task spuntata in {doc}")
 }
 
 fn catalogo_en() -> StringCatalog {
@@ -772,6 +815,27 @@ fn catalogo_en() -> StringCatalog {
             D_SETTINGS_IMPORT_PARTIAL,
             "Settings applied: {count} · Skipped: {skipped} ({reasons})",
         )
+        .with("vault.undo.title", "Undo the last operation")
+        .with(
+            "vault.undo.desc",
+            "Undoes the last undoable operation in this vault: a rename, a note \
+             sent to the trash, a replacement. This is not the editor's undo, \
+             which is about the text you are typing and answers to Ctrl-Z.",
+        )
+        .with(P_UNDO, "Would undo the last undoable operation")
+        .with(D_UNDONE, "Undone: {what}")
+        .with(D_NOTHING_TO_UNDO, "Nothing to undo")
+        .with(U_WIKILINK, "the reference to “{text}”")
+        .with(
+            U_REPLACE,
+            "the replacements · Occurrences: {occurrences} · Notes: {notes}",
+        )
+        .with(U_CREATE, "creating “{doc}”")
+        .with(U_RENAME, "renaming “{doc}” to “{to}”")
+        .with(U_TRASH, "sending “{doc}” to the trash")
+        .with(U_RESTORE, "restoring “{doc}”")
+        .with(U_ARCHIVE, "archiving into “{folder}” · Notes: {count}")
+        .with(U_TASK, "the task ticked in {doc}")
 }
 
 /// I comandi ufficiali. Senza stato: tutto ciò che gli serve lo chiede
@@ -861,6 +925,22 @@ impl CoreCommands {
             comando(SETTINGS_IMPORT)
                 .with_param(parametro(SETTINGS_IMPORT, "json", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
+            // --- l'annullamento (§13.3) ---------------------------------
+            //
+            // La scorciatoia **non** è `Mod-z`: quella è dell'editor, che
+            // annulla il testo del buffer. Sono due pile con due soggetti
+            // diversi (`Undo`), e a decidere quale risponde è il fuoco — dare a
+            // entrambe lo stesso accordo vorrebbe dire che Ctrl-Z fa due cose a
+            // seconda di chi vince la corsa, che è la stessa ragione per cui
+            // `note.task.toggle` non prende `Mod-Enter`.
+            //
+            // Il raggio è `Vault` e non `Documents`: cosa toccherà lo sa la
+            // voce in cima alla pila, non la spec — e dichiarare il raggio
+            // stretto sarebbe la bugia che il piano smaschera. Reversibile no:
+            // il redo è un'altra pila, e oggi non c'è.
+            comando(VAULT_UNDO)
+                .with_keybinding("Mod-Alt-z")
+                .with_scope(CommandScope::writing(CommandReach::Vault).irreversible()),
         ]
     }
 }
@@ -898,6 +978,7 @@ impl CommandProvider for CoreCommands {
             TRASH_EMPTY => trash_empty(mode, host),
             VAULT_ARCHIVE => vault_archive(args, mode, host),
             NOTE_TASK_TOGGLE => note_task_toggle(args, mode, host),
+            VAULT_UNDO => vault_undo(mode, host),
             SETTINGS_SET => settings_set(args, mode, host),
             SETTINGS_RESET => settings_reset(args, mode, host),
             SETTINGS_EXPORT => settings_export(host),
@@ -967,6 +1048,10 @@ fn selection_wikilink(
     }
 
     let report = host.apply_edit(&doc, request)?;
+    let undo = Undo::of_edits(
+        Text::message(U_WIKILINK, vec![Arg::text(A_TEXT, selected)]),
+        vec![PlannedEdit::new(doc.clone(), report.inverse())],
+    );
     // Dov'è finito il testo nuovo: è il rapporto a saperlo, nelle coordinate
     // del documento riscritto (decisione 0008). Senza, la shell dovrebbe ricalcolare uno
     // spostamento che l'host ha già calcolato.
@@ -979,6 +1064,7 @@ fn selection_wikilink(
     };
     Ok(
         CommandOutcome::notify(Text::message(D_WIKILINK, vec![Arg::text(A_TEXT, selected)]))
+            .undoable(undo)
             .with_effect(effect),
     )
 }
@@ -1044,9 +1130,18 @@ fn vault_replace(
     // rendere visibile, non un dettaglio da inghiottire.
     let mut fatte = 0usize;
     let mut falliti: Vec<String> = Vec::new();
+    // L'inverso si raccoglie **mentre si scrive**, non ricalcolandolo dopo: il
+    // rapporto di ogni modifica porta le coordinate nuove e il testo tolto, e
+    // `EditReport::inverse` ne fa una richiesta come le altre (decisione 0008).
+    // Ricalcolarlo dopo vorrebbe dire rileggere N documenti e cercarci dentro
+    // il testo sostituito — cioè indovinare quali occorrenze erano le nostre.
+    let mut indietro: Vec<PlannedEdit> = Vec::new();
     for PlannedEdit { doc, edit } in planned {
         match host.apply_edit(&doc, edit) {
-            Ok(_) => fatte += 1,
+            Ok(report) => {
+                fatte += 1;
+                indietro.push(PlannedEdit::new(doc, report.inverse()));
+            }
             Err(e) => falliti.push(format!("{doc} ({e})")),
         }
     }
@@ -1062,7 +1157,15 @@ fn vault_replace(
             ],
         )
     };
-    Ok(CommandOutcome::notify(notify))
+    // Anche una sostituzione **parziale** è annullabile, e per ciò che è
+    // riuscito: è il verso giusto, perché è proprio quando qualcosa è andato
+    // storto che si vuole tornare indietro. Le note fallite non hanno un
+    // inverso da fare — non è successo niente, su di loro.
+    let undo = Undo::of_edits(
+        conto2(U_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, fatte),
+        indietro,
+    );
+    Ok(CommandOutcome::notify(notify).undoable(undo))
 }
 
 // ---------------------------------------------------------------------------
@@ -1121,7 +1224,19 @@ fn note_create(
     // comando deve fallire, non sovrascrivere una nota dell'utente.
     host.create_document(&id, "")?;
     let notify = uno(D_CREATE, A_DOC, id.as_str());
-    Ok(CommandOutcome::notify(notify).with_effect(CommandEffect::Navigate { doc: id }))
+    // L'inverso di «crea» è «cestina», ed è un comando che sta in questo stesso
+    // registro: l'annullamento non ha bisogno di un verbo suo (§13.3). Che sia
+    // il **cestino** e non una cancellazione definitiva non è prudenza — è che
+    // l'inverso di un gesto reversibile deve restare reversibile, o annullare
+    // sarebbe più distruttivo di ciò che annulla.
+    let undo = Undo::by_command(
+        uno(U_CREATE, A_DOC, id.as_str()),
+        NOTE_TRASH,
+        serde_json::json!({ "doc": id.as_str() }),
+    );
+    Ok(CommandOutcome::notify(notify)
+        .undoable(undo)
+        .with_effect(CommandEffect::Navigate { doc: id }))
 }
 
 fn note_rename(
@@ -1160,9 +1275,20 @@ fn note_rename(
     }
 
     host.rename_document(&doc, &to)?;
+    // L'inverso di una rinomina è **la rinomina all'incontrario**, e con essa
+    // torna indietro gratis anche tutto ciò che la rinomina si era portata
+    // dietro: i wikilink riscritti nelle sorgenti, l'organizzazione, lo stato
+    // per-documento. È l'argomento per cui `UndoStep::Command` esiste — un
+    // linguaggio di operazioni inverse avrebbe dovuto rifare quel lavoro, e
+    // rifarlo *uguale*.
+    let undo = Undo::by_command(
+        due(U_RENAME, to.as_str(), doc.as_str()),
+        NOTE_RENAME,
+        serde_json::json!({ "doc": to.as_str(), "to": doc.as_str() }),
+    );
     // Nessun `Navigate`: chi guardava quella nota la segue attraverso
     // `document-renamed`, e chi ne guardava un'altra non deve essere spostato.
-    Ok(CommandOutcome::notify(due(D_RENAME, doc.as_str(), to.as_str())))
+    Ok(CommandOutcome::notify(due(D_RENAME, doc.as_str(), to.as_str())).undoable(undo))
 }
 
 fn note_trash(
@@ -1181,8 +1307,17 @@ fn note_trash(
         return Ok(piano(uno(P_TRASH, A_DOC, doc.as_str()), vec![doc]));
     }
 
-    host.trash_document(&doc)?;
-    Ok(CommandOutcome::notify(uno(D_TRASH, A_DOC, doc.as_str())))
+    let cestinata = host.trash_document(&doc)?;
+    // L'inverso è il ripristino, **con il path d'origine dichiarato**: senza
+    // `to`, un ripristino torna al nome originale, e se nel frattempo qualcuno
+    // ha occupato quel path fallisce. Dirlo esplicitamente non cambia il caso
+    // normale e rende leggibile ciò che l'annullamento promette.
+    let undo = Undo::by_command(
+        uno(U_TRASH, A_DOC, doc.as_str()),
+        TRASH_RESTORE,
+        serde_json::json!({ "entry": cestinata.as_str(), "to": doc.as_str() }),
+    );
+    Ok(CommandOutcome::notify(uno(D_TRASH, A_DOC, doc.as_str())).undoable(undo))
 }
 
 fn trash_restore(
@@ -1222,7 +1357,45 @@ fn trash_restore(
 
     let target = host.restore_document(&entry, to)?;
     let notify = uno(D_RESTORE, A_DOC, target.as_str());
-    Ok(CommandOutcome::notify(notify).with_effect(CommandEffect::Navigate { doc: target }))
+    // E l'inverso del ripristino è di nuovo il cestino: le due voci si
+    // rimandano l'una all'altra, che è ciò che rende annullabile anche
+    // l'annullamento — se non fosse per la bandiera che dice che un
+    // annullamento non entra in pila, sarebbe un ciclo.
+    let undo = Undo::by_command(
+        uno(U_RESTORE, A_DOC, target.as_str()),
+        NOTE_TRASH,
+        serde_json::json!({ "doc": target.as_str() }),
+    );
+    Ok(CommandOutcome::notify(notify)
+        .undoable(undo)
+        .with_effect(CommandEffect::Navigate { doc: target }))
+}
+
+/// Annulla l'ultima operazione annullabile (§13.3).
+///
+/// Il comando è **sottile come gli strutturali**, e per la stessa ragione: tutto
+/// ciò che fa lo chiede all'host. Che esista comunque, invece di lasciare la
+/// capacità nuda, è ciò che gli dà un posto nella palette, una scorciatoia e una
+/// descrizione per un umano — le tre cose che la decisione 0009 dà gratis a
+/// qualunque comando e a nessuna capacità.
+///
+/// In simulazione non prova ad annullare e non guarda nemmeno la pila: un piano
+/// onesto direbbe *quali* documenti tornerebbero indietro, e per saperlo
+/// bisognerebbe togliere la voce dalla pila — cioè fare metà dell'operazione per
+/// raccontarla. Dice quindi la sola cosa vera che può dire senza toccare niente.
+fn vault_undo(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
+    if mode.is_dry_run() {
+        return Ok(piano(Text::key(P_UNDO), Vec::new()));
+    }
+    match host.undo_last()? {
+        Some(cosa) => Ok(CommandOutcome::notify(Text::message(
+            D_UNDONE,
+            vec![Arg::text(A_WHAT, cosa.as_literal().unwrap_or_default())],
+        ))),
+        // Niente da annullare non è un errore: è la risposta normale a un vault
+        // appena aperto, e chi la riceve ha una frase da mostrare.
+        None => Ok(CommandOutcome::notify(Text::key(D_NOTHING_TO_UNDO))),
+    }
 }
 
 fn trash_empty(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
@@ -1276,6 +1449,11 @@ fn vault_archive(
     let mut plans: Vec<CommandPlan> = Vec::new();
     let mut fatte = 0usize;
     let mut falliti: Vec<String> = Vec::new();
+    // I passi dell'annullamento della macro sono quelli dei comandi invocati.
+    // È la terza cosa che si compone gratis passando da `run_command` — dopo il
+    // piano e il lotto — e la sola che questa funzione deve **girare**: si
+    // torna indietro dall'ultima rinomina, non dalla prima.
+    let mut indietro: Vec<UndoStep> = Vec::new();
 
     for doc in &docs {
         let nome = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
@@ -1292,10 +1470,16 @@ fn vault_archive(
                 effect: CommandEffect::Plan(plan),
                 ..
             }) => plans.push(plan),
-            Ok(_) => fatte += 1,
+            Ok(esito) => {
+                fatte += 1;
+                if let Some(undo) = esito.undo {
+                    indietro.extend(undo.steps);
+                }
+            }
             Err(e) => falliti.push(format!("{doc} ({e})")),
         }
     }
+    indietro.reverse();
 
     if mode.is_dry_run() {
         // L'unione dei piani dei passi. `docs` prima di `edits` perché è
@@ -1324,7 +1508,10 @@ fn vault_archive(
     } else {
         archivio(D_ARCHIVE_PARTIAL, fatte, &folder, Some(falliti.join(", ")))
     };
-    Ok(CommandOutcome::notify(notify))
+    Ok(CommandOutcome::notify(notify).undoable(Undo {
+        label: archivio(U_ARCHIVE, fatte, &folder, None),
+        steps: indietro,
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -1429,6 +1616,10 @@ fn note_task_toggle(
     }
 
     let report = host.apply_edit(&doc, request)?;
+    let undo = Undo::of_edits(
+        uno(U_TASK, A_DOC, doc.as_str()),
+        vec![PlannedEdit::new(doc.clone(), report.inverse())],
+    );
     let effect = match report.applied.first() {
         Some(applied) => CommandEffect::Reveal {
             doc,
@@ -1436,7 +1627,9 @@ fn note_task_toggle(
         },
         None => CommandEffect::Done,
     };
-    Ok(CommandOutcome::notify(summary).with_effect(effect))
+    Ok(CommandOutcome::notify(summary)
+        .undoable(undo)
+        .with_effect(effect))
 }
 
 /// Un `at` che arriva come numero JSON diventa un offset in byte, o si spiega.

@@ -199,6 +199,8 @@ pub trait VaultRead: Send + Sync {
     // comporre: invocare un comando del registro ([decisione 0009](../decisions/0009-registro-dei-comandi.md))
     fn run_command(&mut self, command: &str, args: serde_json::Value)
         -> Result<CommandOutcome, PluginError>;
+    // tornare indietro: la pila è del kernel ([decisione 0045](../decisions/0045-l-undo-ha-due-pile.md), §13.3)
+    fn undo_last(&mut self) -> Result<Option<Text>, PluginError>;
     // chiamare un altro plugin ([decisione 0021](../decisions/0021-il-confine.md), §7.5)
     fn call_service(&mut self, service: &str, method: &str, args: serde_json::Value)
         -> Result<serde_json::Value, PluginError>;
@@ -527,7 +529,8 @@ pub trait IndexProvider: Send + Sync {
 ```
 
 `IndexQuery { Documents, Backlinks, Outline, Tags, Neighbors, PropertyValues,
-VaultHealth, Custom, VaultStatus, Jobs }` — è il **canale dati verso le view**, e ciò
+VaultHealth, Custom, VaultStatus, Jobs, Settings, Organization, Resolve }` — è il
+**canale dati verso le view**, e ciò
 che non è esprimibile qui diventa un comando bespoke dell'app, cioè una
 superficie che un plugin non potrà mai avere. Le risposte stanno in
 `IndexResult`, con gli stessi nomi.
@@ -539,6 +542,15 @@ depth }`, `TagCount { name, count }`, `PropertyCount { value, count }`,
 `VaultStatus { watching, sync_failures, last_sync_error }`,
 `JobStatus { id, job, plugin, since, progress }` con
 `JobProgress { done, total, label }`.
+
+`Resolve { target: LinkTarget, from: Option<DocId> }` → `Resolved(Option<DocId>)`
+è la domanda «cosa nomina questo riferimento, adesso?»
+([decisione 0043](../decisions/0043-il-path-e-la-chiave.md), §13.1). Il bersaglio
+è un `LinkTarget` e non una stringa perché `a/b.md` è due cose — un wikilink per
+path *e* un link markdown relativo — e le due non risolvono allo stesso posto:
+chi chiede dice di che specie è il riferimento perché lo sa. È l'ultima domanda
+sul vault che la shell sapeva fare e un plugin no (era `resolve_link`, un comando
+IPC scritto apposta).
 
 `VaultStatus` è l'unica variante che non chiede niente **sul contenuto** del
 vault: chiede del vault stesso — *sa quando cambia da fuori?* — e sta qui per la
@@ -955,12 +967,12 @@ di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `FormatProvider` | `MarkdownProvider` (comrak) ✅ | altri formati (futuro) | unico "sa" del markdown |
 | `IndexProvider` | `CoreIndex` (grafo, metadati, tag) ✅ | `SearchIndex` (tantivy) **M2** ✅ | `routes` dichiarate alla registrazione; `activate`/`flush`/`close` con `HostApi`: persiste via `data_*`, e alla chiusura restituisce il lock della cartella ([decisione 0028](../decisions/0028-come-un-componente-smette.md)) |
 | `ViewProvider` | `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` ✅ **M2** | **M2** (graph-data) | quattro provider veri; `query_index`+`active_context`; canale metadata (`Outline`/`Tags`); `ViewUpdate` `Navigate`/`Reveal`/`RunSearch`; `ViewSpec.follows` per il contesto |
-| `CommandProvider` | — | `CoreCommands` ✅ **M2** ([decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md), [decisione 0013](../decisions/0013-elenco-delle-capacita.md)) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura; nove comandi, cinque dei quali strutturali (le azioni che la shell cablava) e uno che compone (`vault.archive` via `run_command`) |
+| `CommandProvider` | — | `CoreCommands` ✅ **M2** ([decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md), [decisione 0013](../decisions/0013-elenco-delle-capacita.md)) | registro + palette; argomenti convalidati dall'host; `writes`/`dry-run` fatti rispettare con un host in sola lettura; quindici comandi, cinque dei quali strutturali (le azioni che la shell cablava), uno che compone (`vault.archive` via `run_command`) e uno che disfa (`vault.undo`, [0045](../decisions/0045-l-undo-ha-due-pile.md)) |
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([decisione 0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([decisione 0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md)**: 22 metodi, `storage_*` tolto, strutturali + `run_command` aggiunti; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica ([decisione 0008](../decisions/0008-modifica-chirurgica.md)); 24 con `read_model` e `format_of`, che la [0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha aggiunto con lo stesso criterio — un cliente vero che le chiede. Oggi sono **31**, contando i metodi delle quattordici famiglie: le sette arrivate dopo sono `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)) e le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md)**: 22 metodi, `storage_*` tolto, strutturali + `run_command` aggiunti; `free_name` chiesto dall'import, `apply_edit`/`document_revision` dalla modifica chirurgica ([decisione 0008](../decisions/0008-modifica-chirurgica.md)); 24 con `read_model` e `format_of`, che la [0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha aggiunto con lo stesso criterio — un cliente vero che le chiede. Oggi sono **32**, contando i metodi delle quattordici famiglie: le otto arrivate dopo sono `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)) e `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)) — quest'ultima con l'argomento esplicito, perché la pila che consuma è privata del kernel e nessun comando potrebbe raggiungerla. Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore

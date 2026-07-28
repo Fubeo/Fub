@@ -488,6 +488,20 @@ pub struct CommandOutcome {
     pub notify: Option<Text>,
     /// Cosa deve fare la shell dopo.
     pub effect: CommandEffect,
+    /// Come si torna indietro, se si può (§13.3).
+    ///
+    /// `None` vuol dire **non annullabile**, ed è il default onesto: un comando
+    /// che non lo dichiara non promette niente, e chi annulla non prova a
+    /// indovinare l'inverso di un'operazione che non lo ha detto. La forma è nel
+    /// contratto e non in un registro dell'host perché l'inverso lo conosce solo
+    /// chi ha fatto l'operazione — l'host vede una scrittura, non *quale gesto*
+    /// l'ha prodotta.
+    /// `default` e non `skip_serializing_if`: il campo viaggia **sempre**,
+    /// anche a `null`. È la regola che il contratto applica già a `notify` e a
+    /// `ViewContext` — un campo che a volte c'è e a volte no è un campo che chi
+    /// disegna scopre assente il giorno in cui gli serve.
+    #[serde(default)]
+    pub undo: Option<Undo>,
 }
 
 impl CommandOutcome {
@@ -496,6 +510,7 @@ impl CommandOutcome {
         CommandOutcome {
             notify: None,
             effect: CommandEffect::Done,
+            undo: None,
         }
     }
 
@@ -504,6 +519,7 @@ impl CommandOutcome {
         CommandOutcome {
             notify: Some(message.into()),
             effect: CommandEffect::Done,
+            undo: None,
         }
     }
 
@@ -511,6 +527,124 @@ impl CommandOutcome {
         self.effect = effect;
         self
     }
+
+    /// Dichiara come si torna indietro (§13.3).
+    pub fn undoable(mut self, undo: Undo) -> Self {
+        self.undo = Some(undo);
+        self
+    }
+}
+
+// ---------------------------------------------------------------------------
+// L'annullamento di un'operazione (§13.3)
+// ---------------------------------------------------------------------------
+
+/// Come si torna indietro da un'operazione, e come si chiama la cosa che si
+/// annullerebbe.
+///
+/// # Due pile, e perché non si fondono
+///
+/// L'undo del **testo** vive nell'editor: è per-documento (e per-pannello con la
+/// decisione 0007), il suo soggetto è un buffer che non è ancora sul disco, e non
+/// passa dal contratto. L'undo delle **operazioni** vive nel kernel: il suo
+/// soggetto è ciò che sul disco ci è già arrivato.
+///
+/// Non sono due metà della stessa pila e non si fondono, perché non hanno lo
+/// stesso soggetto: fonderle vorrebbe dire ordinare fra loro «ho scritto tre
+/// lettere» e «ho rinominato quaranta note», che non hanno un ordine comune —
+/// il primo gesto non è ancora successo per il vault, e il secondo non è mai
+/// successo per il buffer. **A decidere quale delle due risponde è il fuoco**,
+/// non la cronologia: Ctrl-Z nell'editor annulla il testo, «Annulla l'ultima
+/// operazione» annulla l'operazione.
+///
+/// E le due si incontrano in un punto solo, dove il contratto sa già cosa dire:
+/// se un'operazione si annulla mentre l'editor tiene un buffer sporco dello
+/// stesso documento, la [`EditRequest::base`] non combacia e l'host risponde
+/// [`PluginError::Conflict`](crate::PluginError::Conflict) invece di cancellare
+/// ciò che l'utente stava scrivendo. Non è una guardia aggiunta per l'undo: è la
+/// decisione 0008 che vale anche qui.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Undo {
+    /// Cosa si annullerebbe, per l'utente («Annulla: rinomina di Nota.md»).
+    ///
+    /// È un [`Text`] e non il [`notify`](CommandOutcome::notify) dell'esito
+    /// perché sono due frasi diverse: quella dice *cosa è successo*, questa dice
+    /// *cosa si disferebbe*, e la seconda si legge mesi dopo in un menu.
+    pub label: Text,
+    /// I passi che riportano indietro, **nell'ordine in cui vanno eseguiti**.
+    ///
+    /// Che è il contrario di quello in cui le cose sono successe, e vale la pena
+    /// dirlo qui perché è la sola cosa che un comando composto deve ricordarsi:
+    /// una macro che ha rinominato A, poi B, poi C torna indietro da C. Chi
+    /// esegue non riordina niente — riordinare vorrebbe dire capire cosa
+    /// dipende da cosa, e nessuno lo sa meglio di chi ha scritto l'operazione.
+    pub steps: Vec<UndoStep>,
+}
+
+impl Undo {
+    /// Un annullamento fatto di sole modifiche al testo: l'inverso della
+    /// decisione 0008, una richiesta per documento.
+    pub fn of_edits(label: impl Into<Text>, edits: Vec<PlannedEdit>) -> Self {
+        Undo {
+            label: label.into(),
+            steps: edits.into_iter().map(UndoStep::Edit).collect(),
+        }
+    }
+
+    /// Un annullamento che si fa **rieseguendo un comando**.
+    pub fn by_command(
+        label: impl Into<Text>,
+        command: impl Into<String>,
+        args: serde_json::Value,
+    ) -> Self {
+        Undo {
+            label: label.into(),
+            steps: vec![UndoStep::Command {
+                command: command.into(),
+                args,
+            }],
+        }
+    }
+
+    /// Non c'è niente da annullare (nessun passo).
+    pub fn is_empty(&self) -> bool {
+        self.steps.is_empty()
+    }
+}
+
+/// Un passo di un annullamento.
+///
+/// Le due varianti non sono due meccanismi: sono le **due specie di cosa** che
+/// un'operazione può aver fatto. La prima è una modifica a un testo, e il
+/// contratto ne conosce già l'inverso ([`EditReport::inverse`]). La seconda è un
+/// cambiamento **strutturale** — una nota creata, cestinata, rinominata — di cui
+/// non esiste un inverso *testuale*, perché non c'è nessun testo che sia
+/// cambiato.
+///
+/// Per la seconda il contratto poteva prendere due strade, e ne ha presa una
+/// sola: **non** un linguaggio di operazioni inverse (`Restore { … }`,
+/// `Trash { … }`, `Rename { … }`), che sarebbe stato un secondo vocabolario
+/// accanto a quello dei comandi, da tenere allineato con esso a ogni capacità
+/// nuova. Invece: un comando, col suo id e i suoi argomenti. Le operazioni un
+/// nome ce l'hanno già (decisione 0009), e chi esegue un annullamento sa già
+/// eseguirle (`run_command`). Annullare una rinomina è una rinomina
+/// all'incontrario; annullare una cancellazione è un ripristino dal cestino.
+///
+/// [`EditReport::inverse`]: crate::edit::EditReport::inverse
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UndoStep {
+    /// Riapplica questa modifica a questo documento.
+    ///
+    /// La [`base`](EditRequest::base) è la revisione che l'operazione ha
+    /// **prodotto**: è così che un annullamento si accorge che qualcuno ha
+    /// scritto nel frattempo, invece di cancellargli il lavoro.
+    Edit(PlannedEdit),
+    /// Esegui questo comando.
+    Command {
+        command: String,
+        args: serde_json::Value,
+    },
 }
 
 /// Ciò che la shell deve fare dopo un comando.
@@ -749,6 +883,13 @@ impl Localize for CommandOutcome {
     fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
         self.notify.visit_texts(visit);
         self.effect.visit_texts(visit);
+        // L'etichetta dell'annullamento passa di qui **subito**, e non quando
+        // qualcuno la mostrerà: la pila la tiene il kernel, e il catalogo con
+        // cui risolverla è quello di chi ha scritto la frase (§12.1). Chi
+        // disegna il menu mesi dopo non sa più di chi era.
+        if let Some(undo) = &mut self.undo {
+            visit(&mut undo.label);
+        }
     }
 }
 

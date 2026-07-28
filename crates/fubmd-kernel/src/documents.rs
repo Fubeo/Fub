@@ -205,6 +205,29 @@ impl DocumentStore {
             .join(PLUGIN_DATA_DIR)
             .join(plugin)
     }
+
+    /// Le radici degli spazi dati **che esistono sul disco**, montati o no.
+    ///
+    /// Il «o no» è la parte che conta (§13.2): un plugin spento oggi non deve
+    /// tornare acceso domani con le chiavi di ieri. La migrazione al rename e la
+    /// raccolta camminano il disco, non il registro dei montati — chi non c'è
+    /// non può accorgersi di niente, ed è esattamente chi ha più bisogno che
+    /// qualcun altro se ne accorga per lui.
+    pub(crate) fn plugin_data_roots(&self) -> Vec<Utf8PathBuf> {
+        let plugins = self.vault.root().join(DATA_DIR).join(PLUGIN_DATA_DIR);
+        let Ok(entries) = std::fs::read_dir(&plugins) else {
+            return Vec::new();
+        };
+        let mut out: Vec<Utf8PathBuf> = entries
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+            .filter_map(|e| Utf8PathBuf::from_path_buf(e.path()).ok())
+            .collect();
+        // In ordine, perché gli errori che ne escono finiscono in un messaggio
+        // e un messaggio che cambia ordine a ogni giro non si confronta.
+        out.sort();
+        out
+    }
 }
 
 /// L'estensione di un `DocId`, in minuscolo e senza il punto.

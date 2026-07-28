@@ -58,7 +58,7 @@ use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
 use fubmd_abi::arena::{self, BlockRef, InlineRef, UiRef};
 use fubmd_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    InvokeMode, ParamKind, ParamSpec, PlannedEdit,
+    InvokeMode, ParamKind, ParamSpec, PlannedEdit, Undo, UndoStep,
 };
 use fubmd_abi::custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
@@ -256,6 +256,8 @@ wit_type! {
     // I comandi: la dichiarazione (decisione 0010) e l'invocazione (decisione 0009).
     CommandSpec => "command-spec",
     CommandOutcome => "command-outcome",
+    Undo => "undo",
+    UndoStep => "undo-step",
     CommandEffect => "command-effect",
     CommandPlan => "command-plan",
     PlannedEdit => "planned-edit",
@@ -1933,6 +1935,11 @@ fn index_query_case(q: &IndexQuery) -> Case {
         IndexQuery::Jobs => case("jobs"),
         IndexQuery::Settings { plugin } => case_ty("settings", wit(plugin)),
         IndexQuery::Organization => case("organization"),
+        IndexQuery::Resolve { target, from } => case_rec(
+            "resolve",
+            "index-query-resolve",
+            vec![("target", wit(target)), ("from", wit(from))],
+        ),
     }
 }
 
@@ -1990,6 +1997,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::Jobs => case("jobs"),
         QueryKind::Settings => case("settings"),
         QueryKind::Organization => case("organization"),
+        QueryKind::Resolve => case("resolve"),
     }
 }
 
@@ -2025,6 +2033,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Jobs(v) => case_ty("jobs", wit(v)),
         IndexResult::Settings(v) => case_ty("settings", wit(v)),
         IndexResult::Organization(v) => case_ty("organization", wit(v)),
+        IndexResult::Resolved(v) => case_ty("resolved", wit(v)),
     }
 }
 
@@ -2092,6 +2101,17 @@ fn command_effect_case(e: &CommandEffect) -> Case {
             "open-view",
             "command-effect-open-view",
             vec![("view", wit(view)), ("params", wit(params))],
+        ),
+    }
+}
+
+fn undo_step_case(s: &UndoStep) -> Case {
+    match s {
+        UndoStep::Edit(planned) => case_ty("edit", wit(planned)),
+        UndoStep::Command { command, args } => case_rec(
+            "command",
+            "undo-step-command",
+            vec![("command", wit(command)), ("args", wit(args))],
         ),
     }
 }
@@ -2727,6 +2747,10 @@ fn conform(source: &str) -> Result<(), String> {
             index_query_case(&IndexQuery::Jobs),
             index_query_case(&IndexQuery::Settings { plugin: None }),
             index_query_case(&IndexQuery::Organization),
+            index_query_case(&IndexQuery::Resolve {
+                target: LinkTarget::wiki(""),
+                from: None,
+            }),
         ],
     );
 
@@ -2746,6 +2770,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::Jobs(vec![])),
             index_result_case(&IndexResult::Settings(vec![])),
             index_result_case(&IndexResult::Organization(Organization::default())),
+            index_result_case(&IndexResult::Resolved(None)),
         ],
     );
 
@@ -2806,6 +2831,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::Jobs),
             query_kind_case(&QueryKind::Settings),
             query_kind_case(&QueryKind::Organization),
+            query_kind_case(&QueryKind::Resolve),
         ],
     );
 
@@ -3534,10 +3560,36 @@ fn conform(source: &str) -> Result<(), String> {
             .as_slice(),
     );
 
-    let CommandOutcome { notify, effect } = CommandOutcome::done();
+    let CommandOutcome {
+        notify,
+        effect,
+        undo,
+    } = CommandOutcome::done();
     contract.record(
         "command-outcome",
-        &[("notify", wit(&notify)), ("effect", wit(&effect))],
+        &[
+            ("notify", wit(&notify)),
+            ("effect", wit(&effect)),
+            ("undo", wit(&undo)),
+        ],
+    );
+
+    // L'annullamento (§13.3): il record e le due specie di passo.
+    let Undo { label, steps } = Undo::of_edits(Text::key(""), vec![]);
+    contract.record("undo", &[("label", wit(&label)), ("steps", wit(&steps))]);
+    contract.variant_src(
+        "undo-step",
+        ("command.rs", "UndoStep"),
+        &[
+            undo_step_case(&UndoStep::Edit(PlannedEdit::new(
+                DocId::new(""),
+                EditRequest::new(Revision::default(), vec![]),
+            ))),
+            undo_step_case(&UndoStep::Command {
+                command: String::new(),
+                args: serde_json::Value::Null,
+            }),
+        ],
     );
 
     contract.variant_src(
@@ -4881,6 +4933,13 @@ fn conform(source: &str) -> Result<(), String> {
         <dyn HostApi>::run_command
             as fn(Host, &'static str, serde_json::Value) -> Result<CommandOutcome, PluginError>,
         &["command", "args"],
+    );
+
+    contract.method(
+        "host-commands",
+        "undo-last",
+        <dyn HostApi>::undo_last as fn(Host) -> Result<Option<Text>, PluginError>,
+        &[],
     );
 
     contract.method(
