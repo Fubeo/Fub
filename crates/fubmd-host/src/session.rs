@@ -48,7 +48,7 @@ use fubmd_kernel::{MachineSettings, ViewStates, Workspace};
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::mount::mount;
-use crate::records::{read_workspace_meta, write_workspace_meta, VaultInfo, WorkspaceMeta};
+use crate::records::VaultInfo;
 use crate::registry::{BundleInfo, BundleRegistry};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
@@ -690,14 +690,50 @@ impl Host {
         ws.write_document(id, &source).map_err(|e| e.to_string())
     }
 
-    // --- organizzazione del vault ------------------------------------------
+    // --- organizzazione del vault (§11.3) ----------------------------------
+    //
+    // **Leggerla non è qui**: passa da `query_index` (`IndexQuery::Organization`),
+    // come le impostazioni e i tag — un elenco è dati, e i dati hanno un canale
+    // solo. Qui c'è solo lo scrivere, e **per chiave**: prima erano due funzioni
+    // che leggevano e riscrivevano il blob intero, quindi due finestre sullo
+    // stesso vault erano una lost update.
 
-    pub fn read_meta(&self, vault: Option<&str>) -> Result<WorkspaceMeta, String> {
-        read_workspace_meta(&self.root(vault)?)
+    /// L'emoji accanto a una nota o a una cartella (`None` la toglie).
+    pub fn set_icon(
+        &self,
+        vault: Option<&str>,
+        path: &str,
+        icon: Option<String>,
+    ) -> Result<(), String> {
+        self.with_session(vault, |s| {
+            s.workspace.read().unwrap().set_icon(path, icon.clone())
+        })?
     }
 
-    pub fn write_meta(&self, vault: Option<&str>, meta: &WorkspaceMeta) -> Result<(), String> {
-        write_workspace_meta(&self.root(vault)?, meta)
+    /// Appunta o spunta una nota.
+    pub fn set_pinned(&self, vault: Option<&str>, id: &str, pinned: bool) -> Result<(), String> {
+        self.with_session(vault, |s| {
+            s.workspace.read().unwrap().set_pinned(id, pinned)
+        })?
+    }
+
+    /// Registra o toglie una cartella dagli spazi.
+    pub fn set_space(&self, vault: Option<&str>, path: &str, is_space: bool) -> Result<(), String> {
+        self.with_session(vault, |s| {
+            s.workspace.read().unwrap().set_space(path, is_space)
+        })?
+    }
+
+    /// L'ordine scelto a mano dei figli di una cartella (vuoto = alfabetico).
+    pub fn set_order(
+        &self,
+        vault: Option<&str>,
+        folder: &str,
+        names: Vec<String>,
+    ) -> Result<(), String> {
+        self.with_session(vault, |s| {
+            s.workspace.read().unwrap().set_order(folder, names.clone())
+        })?
     }
 }
 

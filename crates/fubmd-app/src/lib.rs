@@ -36,7 +36,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // risponderebbe con gli stessi — e l'app li ri-esporta, perché è lei a farli
 // attraversare il confine: il mirror TS e la sua fixture
 // (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
-pub use fubmd_host::{BundleInfo, EmbedContent, VaultEntry, VaultInfo, WorkspaceMeta};
+pub use fubmd_host::{BundleInfo, EmbedContent, VaultEntry, VaultInfo};
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
 /// `frontend/src/host/contract.ts`.
@@ -459,23 +459,63 @@ fn restore_version(
     host.restore_version(vault.as_deref(), &DocId::new(id), ts)
 }
 
-// --- organizzazione del vault ----------------------------------------------
+// --- organizzazione del vault (§11.3) ---------------------------------------
 //
-// Il sidecar `.fubmd/workspace.json` è stato del vault e vive nell'host; qui
-// restano le due firme IPC.
+// **Leggerla non è qui**: passa da `query_index` (`IndexQuery::Organization`),
+// come le impostazioni e i tag — un elenco è dati, e i dati hanno un canale solo
+// (decisione 0013). Prima era un comando IPC che restituiva il blob intero,
+// quindi una cosa che la shell sapeva chiedere e un plugin no.
+//
+// E si scrive **per chiave**. Prima erano due funzioni, `read_workspace_meta` e
+// `write_workspace_meta`: la shell rileggeva tutto, cambiava un campo e
+// riscriveva tutto. Con due finestre sullo stesso vault quella è una *lost
+// update* — la seconda che salva cancella ciò che ha fatto la prima, e nessuna
+// delle due se ne accorge. Sono comandi IPC e non capacità dell'`HostApi`
+// perché nessun plugin le chiede ancora: una capacità concessa a nessuno è
+// superficie da mantenere e sandboxare per sempre.
 
+/// L'emoji accanto a una nota o a una cartella (`None` la toglie).
 #[tauri::command]
-fn read_workspace_meta(host: State<Host>, vault: Option<String>) -> Result<WorkspaceMeta, String> {
-    host.read_meta(vault.as_deref())
-}
-
-#[tauri::command]
-fn write_workspace_meta(
+fn set_icon(
     host: State<Host>,
-    meta: WorkspaceMeta,
+    path: String,
+    icon: Option<String>,
     vault: Option<String>,
 ) -> Result<(), String> {
-    host.write_meta(vault.as_deref(), &meta)
+    host.set_icon(vault.as_deref(), &path, icon)
+}
+
+/// Appunta o spunta una nota.
+#[tauri::command]
+fn set_pinned(
+    host: State<Host>,
+    id: String,
+    pinned: bool,
+    vault: Option<String>,
+) -> Result<(), String> {
+    host.set_pinned(vault.as_deref(), &id, pinned)
+}
+
+/// Registra o toglie una cartella dagli spazi.
+#[tauri::command]
+fn set_space(
+    host: State<Host>,
+    path: String,
+    space: bool,
+    vault: Option<String>,
+) -> Result<(), String> {
+    host.set_space(vault.as_deref(), &path, space)
+}
+
+/// L'ordine scelto a mano dei figli di una cartella (vuoto = alfabetico).
+#[tauri::command]
+fn set_order(
+    host: State<Host>,
+    folder: String,
+    names: Vec<String>,
+    vault: Option<String>,
+) -> Result<(), String> {
+    host.set_order(vault.as_deref(), &folder, names)
 }
 
 // --- impostazioni, componenti, vault conosciuti (§11.1) --------------------
@@ -669,8 +709,10 @@ pub fn run() {
             list_versions,
             read_version,
             restore_version,
-            read_workspace_meta,
-            write_workspace_meta,
+            set_icon,
+            set_pinned,
+            set_space,
+            set_order,
             set_setting,
             reset_setting,
             view_state,

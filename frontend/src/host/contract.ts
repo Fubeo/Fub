@@ -764,7 +764,12 @@ export type IndexQuery =
   // del suo contenuto. Torna le impostazioni RISOLTE — schema, valore che vale
   // adesso, livello da cui viene — perché un elenco è dati, e i dati hanno un
   // canale solo. `plugin` assente = tutte.
-  | { kind: "settings"; plugin?: string | null };
+  | { kind: "settings"; plugin?: string | null }
+  // Com'è organizzato questo vault? (§11.3) La quarta che chiede del vault e
+  // non del suo contenuto: icone, appuntate, ordinamenti, spazi. Prima era un
+  // comando IPC che restituiva il blob intero, cioè una cosa che questa shell
+  // sapeva chiedere e un provider no.
+  | { kind: "organization" };
 
 // La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -780,7 +785,8 @@ export type IndexResult =
   | { kind: "custom"; value: unknown }
   | { kind: "vault_status"; value: VaultStatus }
   | { kind: "jobs"; value: JobStatus[] }
-  | { kind: "settings"; value: SettingEntry[] };
+  | { kind: "settings"; value: SettingEntry[] }
+  | { kind: "organization"; value: Organization };
 
 // --- le impostazioni (§11.1) ------------------------------------------------
 //
@@ -920,12 +926,14 @@ export interface TrashEntry {
   size: number;
 }
 
-// Metadati di organizzazione del vault (rispecchia fubmd_app::WorkspaceMeta):
-// icone, note appuntate, ordinamenti per-cartella e spazio attivo. Vivono nel
-// sidecar `.fubmd/workspace.json` dentro il vault, che il kernel ignora. Le
-// chiavi sono path relativi al vault: DocId per le note, path senza slash
-// finale per le cartelle ("" è la radice).
-export interface WorkspaceMeta {
+// L'organizzazione del vault (rispecchia fubmd_abi::organization::Organization):
+// icone, note appuntate, ordinamenti per-cartella, spazi. Vive nel sidecar
+// `.fubmd/workspace.json` dentro il vault, e dal §11.3 lo possiede il KERNEL —
+// prima erano due funzioni dell'host con `std::fs` nudo, e questo tipo si
+// chiamava `WorkspaceMeta` perché era dell'app. Le chiavi sono path relativi al
+// vault: DocId per le note, path senza slash finale per le cartelle ("" è la
+// radice).
+export interface Organization {
   icons: Record<string, string>;
   pinned: string[];
   order: Record<string, string[]>;

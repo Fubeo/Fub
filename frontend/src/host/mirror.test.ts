@@ -41,7 +41,7 @@ import type {
   ViewContext,
   ViewSpec,
   ViewUpdate,
-  WorkspaceMeta,
+  Organization,
 } from "./contract";
 // Le fixture sono generate dai tipi Rust (serde) — vedi
 // `crates/fubmd-features/tests/ts_mirror.rs` (tipi del contratto) e
@@ -280,6 +280,7 @@ function touchIndexQuery(q: IndexQuery): void {
     case "vault_status":
     case "jobs":
     case "settings":
+    case "organization":
       return;
     default:
       assertNever(q);
@@ -329,6 +330,8 @@ function touchIndexResult(r: IndexResult): void {
     // per la stessa ragione — il form lo genera questa shell.
     case "settings":
       r.value.forEach((e: SettingEntry) => touchSettingKind(e.spec.kind));
+      return;
+    case "organization":
       return;
     default:
       assertNever(r);
@@ -433,6 +436,15 @@ const RECORD_KEYS: Record<string, string[]> = {
     program_writable: true,
   }),
   SettingEntry: keysOf<SettingEntry>({ spec: true, value: true, source: true }),
+  // L'organizzazione del vault (§11.3): stava fra i record dell'app e si
+  // chiamava `WorkspaceMeta` — col §11.3 è salita nel contratto, perché la si
+  // chiede dal canale dati e non più da un comando IPC.
+  Organization: keysOf<Organization>({
+    icons: true,
+    pinned: true,
+    order: true,
+    spaces: true,
+  }),
 };
 
 /// I record con campi **facoltativi**, che serde omette quando non ci sono: il
@@ -479,12 +491,6 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     icon: true,
     favorite: true,
     last_opened: true,
-  }),
-  WorkspaceMeta: keysOf<WorkspaceMeta>({
-    icons: true,
-    pinned: true,
-    order: true,
-    spaces: true,
   }),
 };
 

@@ -211,6 +211,20 @@ oggi, una migrazione domani); le altre restano al freeze.
   si rilegge da sotto un prestito condiviso (mentre si disegna) e da lì non si
   deve poter scrivere — la stessa ragione per cui `read-api` esiste.
 
+- **L'organizzazione del vault, chiesta dal canale dati**
+  ([decisione 0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)).
+  `index-query.organization`, `query-kind.organization`,
+  `index-result.organization(organization)` e il record `organization`, tutti
+  **in coda** ai rispettivi variant e quindi additivi.
+
+  La scelta che scadeva col freeze non era il contenitore — quello è un file, e
+  un file si cambia — ma **dove vive la domanda**. Restando un comando IPC
+  sarebbe stata visibile alla shell e non a una feature, che di comandi non ne ha
+  nessuno: la stessa asimmetria del rilevamento (0030), e la stessa risposta. Le
+  *scritture* invece non entrano nel contratto, ed è la regola del §1.6 applicata
+  al contrario: nessun plugin le chiede ancora, e una capacità concessa a nessuno
+  è superficie da mantenere e sandboxare per sempre.
+
 **Da chiudere al freeze:**
 
 - [x] **Il grafo nel contratto** — fatto con la [decisione 0005](../decisions/0005-canale-dati-verso-le-view.md): `IndexQuery::Neighbors { doc,

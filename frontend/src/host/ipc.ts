@@ -27,7 +27,6 @@ import type {
   ViewContext,
   ViewSpec,
   ViewUpdate,
-  WorkspaceMeta,
 } from "./contract";
 
 export const api = {
@@ -113,9 +112,17 @@ export const api = {
   listVersions: (id: string) => invoke<VersionRef[]>("list_versions", { id }),
   readVersion: (id: string, ts: number) => invoke<string>("read_version", { id, ts }),
   restoreVersion: (id: string, ts: number) => invoke<void>("restore_version", { id, ts }),
-  readWorkspaceMeta: () => invoke<WorkspaceMeta>("read_workspace_meta"),
-  writeWorkspaceMeta: (meta: WorkspaceMeta) =>
-    invoke<void>("write_workspace_meta", { meta }),
+  // L'organizzazione del vault (§11.3): icone, appuntate, ordinamenti, spazi.
+  //
+  // **Leggerla non è qui**: passa da `queryIndex` (`organization`), come le
+  // impostazioni e i tag. Prima erano due comandi che leggevano e riscrivevano
+  // il blob intero, e con due finestre sullo stesso vault quella era una lost
+  // update — la seconda che salva cancella ciò che ha fatto la prima. Adesso si
+  // scrive per chiave, e il kernel tiene la verità.
+  setIcon: (path: string, icon: string | null) => invoke<void>("set_icon", { path, icon }),
+  setPinned: (id: string, pinned: boolean) => invoke<void>("set_pinned", { id, pinned }),
+  setSpace: (path: string, space: boolean) => invoke<void>("set_space", { path, space }),
+  setOrder: (folder: string, names: string[]) => invoke<void>("set_order", { folder, names }),
 
   // --- impostazioni, componenti, vault conosciuti (§11.1) ------------------
   //

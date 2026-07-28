@@ -592,6 +592,7 @@ fn index_query_samples() -> Vec<Value> {
         IndexQuery::Settings {
             plugin: Some("fubmd.versioning".into()),
         },
+        IndexQuery::Organization,
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -607,7 +608,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
             | IndexQuery::Jobs
-            | IndexQuery::Settings { .. } => {}
+            | IndexQuery::Settings { .. }
+            | IndexQuery::Organization => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -695,6 +697,18 @@ fn index_result_samples() -> Vec<Value> {
                 source: SettingSource::Machine,
             },
         ]),
+        // L'organizzazione del vault (§11.3): un record e non una lista, con un
+        // campione per campo — o il mirror TS non proverebbe le mappe.
+        IndexResult::Organization(fubmd_abi::organization::Organization {
+            icons: [("note/a.md".to_string(), "📌".to_string())]
+                .into_iter()
+                .collect(),
+            pinned: vec!["note/a.md".into()],
+            order: [("note".to_string(), vec!["a.md".to_string()])]
+                .into_iter()
+                .collect(),
+            spaces: vec!["note".into()],
+        }),
     ];
     for r in &all {
         match r {
@@ -708,7 +722,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::Custom(_)
             | IndexResult::VaultStatus(_)
             | IndexResult::Jobs(_)
-            | IndexResult::Settings(_) => {}
+            | IndexResult::Settings(_)
+            | IndexResult::Organization(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -855,6 +870,19 @@ fn expected() -> Value {
             size: 5,
         })],
         "TagCount": [to_value(TagCount { name: "rust".into(), count: 2 })],
+        // L'organizzazione del vault (§11.3). Stava nel mirror dell'**app** e
+        // si chiamava `WorkspaceMeta`: col §11.3 è salita nel contratto, perché
+        // la si chiede dal canale dati e non più da un comando IPC.
+        "Organization": [to_value(fubmd_abi::organization::Organization {
+            icons: [("note/a.md".to_string(), "📌".to_string())]
+                .into_iter()
+                .collect(),
+            pinned: vec!["note/a.md".into()],
+            order: [("note".to_string(), vec!["a.md".to_string()])]
+                .into_iter()
+                .collect(),
+            spaces: vec!["note".into()],
+        })],
         // Il rilevamento acceso e già inciampato (§9.7): coi default il mirror
         // non vedrebbe né un `true` né una stringa dentro l'opzione.
         "VaultStatus": [to_value(VaultStatus {

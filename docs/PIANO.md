@@ -268,8 +268,9 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   vede subito. La feature invece c'è ed è spedita (sidebar ad albero, icone,
   folder notes, spazi, appuntate, ordinamento drag & drop, cartella come radice,
   sidecar `.fubmd/workspace.json`); il suo design vive nel codice
-  (`frontend/src/rules/organizer.ts`, `panels/explorer.ts`) e il debito che si porta dietro è il
-  §11.3 (il sidecar da assorbire nello store di configurazione). Il testo si
+  (`frontend/src/rules/organizer.ts`, `panels/explorer.ts`), e il debito che si
+  portava dietro — il sidecar fuori da ogni disciplina — è chiuso col §11.3
+  ([decisione 0038](decisions/0038-il-kernel-possiede-il-sidecar.md)). Il testo si
   recupera da git (`git show 0a4ee40^:docs/ORGANIZZAZIONE_VAULT.md`), quindi la
   scelta è fra riscriverlo e togliere la voce — non fra tenerlo e perderlo.
 

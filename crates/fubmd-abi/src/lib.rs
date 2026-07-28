@@ -50,6 +50,7 @@ pub mod format;
 pub mod ipc;
 pub mod model;
 pub mod options;
+pub mod organization;
 pub mod query;
 pub mod rules;
 pub mod session;

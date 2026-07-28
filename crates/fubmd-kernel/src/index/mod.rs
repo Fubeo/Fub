@@ -40,6 +40,7 @@ pub(crate) use core::CoreIndex;
 pub use routing::RouteConflict;
 pub(crate) use routing::{RouteTable, Target};
 
+use crate::organization::OrganizationStore;
 use crate::providers::ProviderTable;
 use crate::registry::FormatRegistry;
 use crate::settings::SharedSettings;
@@ -63,8 +64,12 @@ pub(crate) struct Indexes {
 }
 
 impl Indexes {
-    pub(crate) fn new(registry: Arc<FormatRegistry>, settings: SharedSettings) -> Self {
-        let core = CoreIndex::new(registry, settings);
+    pub(crate) fn new(
+        registry: Arc<FormatRegistry>,
+        settings: SharedSettings,
+        organization: Arc<OrganizationStore>,
+    ) -> Self {
+        let core = CoreIndex::new(registry, settings, organization);
         let mut routes = RouteTable::default();
         routes
             .declare(Target::Core, &core.routes())

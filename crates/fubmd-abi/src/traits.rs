@@ -15,6 +15,7 @@ use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
 use crate::format::DocumentFormat;
 use crate::model::{DocId, DocumentModel, Heading, PropertyScalar, PropertyValue, Span};
+use crate::organization::Organization;
 use crate::query::{QueryExpr, QueryPredicate};
 use crate::session::{ContextMask, ViewContext};
 use crate::settings::{SettingEntry, SettingSpec, SettingValue};
@@ -1774,6 +1775,21 @@ pub enum IndexQuery {
     /// che permette a chi disegna di non filtrare per prefisso — la chiave di
     /// una feature del core non ha un prefisso da confrontare.
     Settings { plugin: Option<String> },
+    /// **Com'è organizzato questo vault?** (§11.3)
+    ///
+    /// Icone, note appuntate, ordinamenti scelti a mano, spazi. Passa da qui e
+    /// non da un comando IPC per la ragione delle altre quattro varianti che
+    /// chiedono del vault e non del contenuto: un elenco è **dati**, e i dati
+    /// hanno un canale solo (decisione 0013). Prima era un comando IPC che
+    /// restituiva il blob intero, quindi era una cosa che la shell sapeva
+    /// chiedere e un provider no — la stessa asimmetria che il canale dati
+    /// esiste per non avere.
+    ///
+    /// Senza parametri: l'organizzazione di un vault è una, e chi ne vuole un
+    /// pezzo lo prende dal record. Non è paginata perché non cresce col vault ma
+    /// con **ciò che l'utente ha toccato a mano** — le note che ha appuntato, le
+    /// cartelle a cui ha dato un'icona.
+    Organization,
 }
 
 impl IndexQuery {
@@ -1790,7 +1806,8 @@ impl IndexQuery {
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
             | IndexQuery::Jobs
-            | IndexQuery::Settings { .. } => None,
+            | IndexQuery::Settings { .. }
+            | IndexQuery::Organization => None,
         }
     }
 
@@ -1809,7 +1826,8 @@ impl IndexQuery {
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
             | IndexQuery::Jobs
-            | IndexQuery::Settings { .. } => None,
+            | IndexQuery::Settings { .. }
+            | IndexQuery::Organization => None,
         }
     }
 
@@ -1863,6 +1881,7 @@ impl IndexQuery {
             IndexQuery::VaultStatus => QueryKind::VaultStatus,
             IndexQuery::Jobs => QueryKind::Jobs,
             IndexQuery::Settings { .. } => QueryKind::Settings,
+            IndexQuery::Organization => QueryKind::Organization,
         }
     }
 }
@@ -1900,6 +1919,12 @@ pub enum QueryKind {
     /// store di configurazione, e sono due cose che stanno nello stesso posto
     /// solo lì.
     Settings,
+    /// Chi risponde a «com'è organizzato questo vault?» (§11.3). Il proprietario
+    /// è il kernel, e stavolta è una **conquista** e non una constatazione:
+    /// finché il sidecar lo leggevano due funzioni dell'host con `std::fs`,
+    /// questa domanda non aveva un proprietario affatto — la sapeva fare la
+    /// shell, e nessun altro.
+    Organization,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -2074,6 +2099,12 @@ pub enum IndexResult {
     /// montati e non col vault. Il giorno che un plugin ne dichiarasse mille,
     /// il problema non sarebbe la finestra.
     Settings(Vec<SettingEntry>),
+    /// L'organizzazione del vault (risposta a [`IndexQuery::Organization`]):
+    /// icone, appuntate, ordinamenti, spazi.
+    ///
+    /// Un record e non una lista, perché è **una** cosa e non un elenco: chi la
+    /// chiede la disegna intera (la sidebar) o ne guarda un campo.
+    Organization(Organization),
 }
 
 impl IndexResult {
@@ -2107,6 +2138,7 @@ impl IndexResult {
             IndexResult::VaultStatus(_) => "vault-status",
             IndexResult::Jobs(_) => "jobs",
             IndexResult::Settings(_) => "settings",
+            IndexResult::Organization(_) => "organization",
         }
     }
 }

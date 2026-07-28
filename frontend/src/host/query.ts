@@ -11,6 +11,7 @@
 // plugin. È solo il posto dove la risposta si apre.
 import { api } from "./ipc";
 import type {
+  Organization,
   DocumentMatch,
   IndexQuery,
   JobStatus,
@@ -102,6 +103,16 @@ export async function lavoriInCorso(): Promise<JobStatus[]> {
 /// non avrebbe.
 export async function impostazioni(plugin?: string): Promise<SettingEntry[]> {
   return open(await api.queryIndex({ kind: "settings", plugin: plugin ?? null }), "settings");
+}
+
+/// Com'è organizzato questo vault (§11.3): icone, note appuntate, ordinamenti
+/// scelti a mano, spazi.
+///
+/// Dal canale dati e non da un comando suo, come tutto il resto qui dentro:
+/// prima era un comando IPC che restituiva il blob intero, cioè una cosa che la
+/// shell sapeva chiedere e un provider no.
+export async function organizzazione(): Promise<Organization> {
+  return open(await api.queryIndex({ kind: "organization" }), "organization");
 }
 
 /// Che rapporto ha questo vault con il disco (§9.7): FubMD saprebbe che è

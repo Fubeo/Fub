@@ -1,8 +1,8 @@
 // L'organizzazione del vault come la vede la sidebar: dai DocId piatti del
 // kernel (path tipo `Progetti/Alpha.md`) all'albero di cartelle e note, con
-// l'ordinamento scelto a mano nel sidecar (`WorkspaceMeta`). Solo logica: il
+// l'ordinamento scelto a mano nel sidecar (`Organization`). Solo logica: il
 // DOM sta in main.ts, e il kernel non sa nulla di tutto questo.
-import type { WorkspaceMeta } from "../host/contract";
+import type { Organization } from "../host/contract";
 // Le regole che hanno una gemella Rust stanno in un file solo, e da lì le
 // riprende chiunque: qui servono il nome pagina e la chiave di risoluzione.
 import { childName, pageName, resolutionKey } from "./mirrored";
@@ -31,7 +31,7 @@ export function parentOf(path: string): string {
 /// cartella = quello spazio, e il resto del vault non esiste). Le cartelle
 /// nascono dai path delle note, non dal filesystem — una cartella senza note
 /// (dirette o discendenti) non c'è.
-export function buildTree(docs: string[], meta: WorkspaceMeta, rootPath = ""): FolderNode {
+export function buildTree(docs: string[], meta: Organization, rootPath = ""): FolderNode {
   const prefix = rootPath ? `${rootPath}/` : "";
   const root: FolderNode = {
     name: rootPath ? childName(rootPath) : "",
@@ -118,7 +118,7 @@ export function orderedNames(folder: FolderNode): string[] {
   return [...folder.folders.map((f) => f.name), ...folder.notes.map(childName)];
 }
 
-function sortNode(node: FolderNode, meta: WorkspaceMeta) {
+function sortNode(node: FolderNode, meta: Organization) {
   const custom = meta.order[node.path] ?? [];
   node.folders.sort((a, b) => compareNames(a.name, b.name, custom));
   node.notes.sort((a, b) => compareNames(childName(a), childName(b), custom));

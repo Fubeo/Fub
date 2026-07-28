@@ -14,7 +14,7 @@
 // Cosa NON sta qui: lo stato che appartiene a un pannello solo (i risultati di
 // ricerca, le voci del cestino, l'anteprima di una versione). Uno store che
 // raccoglie tutto torna a essere l'oggetto-dio, con un file diverso.
-import type { CommandSpec, PaneMode, WorkspaceMeta } from "../host/contract";
+import type { CommandSpec, Organization, PaneMode } from "../host/contract";
 import { api } from "../host/ipc";
 
 // --- i segnali --------------------------------------------------------------
@@ -101,11 +101,14 @@ export interface ShellState {
   /// il pannello della cronologia non esiste, e non si interroga.
   versioningOn: boolean;
   /// L'organizzazione del vault (icone, appuntate, ordinamenti, spazi): il
-  /// sidecar `.fubmd/workspace.json`. Autorevole, non derivato.
-  meta: WorkspaceMeta;
-  /// Un sidecar illeggibile congela l'organizzazione: si lavora col default ma
-  /// non si salva, perché salvare sovrascriverebbe ciò che l'utente ha già.
-  metaBroken: boolean;
+  /// sidecar `.fubmd/workspace.json`. Autorevole, non derivato — e dal §11.3 la
+  /// possiede il **kernel**, quindi questo è uno specchio e non la verità.
+  ///
+  /// Non c'è più un `metaBroken`: il congelamento di un sidecar illeggibile lo
+  /// fa il kernel, che rifiuta le scritture una per una invece di seppellire ciò
+  /// che non è riuscito a leggere. Un secondo posto in cui ricordarsi di non
+  /// salvare era un posto in cui dimenticarsene.
+  meta: Organization;
   /// Lo spazio selezionato nella striscia (null = "home", tutto il vault).
   activeSpace: string | null;
   /// Cartelle aperte nell'albero.
@@ -115,7 +118,7 @@ export interface ShellState {
   commandSpecs: CommandSpec[];
 }
 
-export function metaVuota(): WorkspaceMeta {
+export function metaVuota(): Organization {
   return { icons: {}, pinned: [], order: {}, spaces: [] };
 }
 
@@ -128,7 +131,6 @@ export const state: ShellState = {
   handledExtensions: ["md"],
   versioningOn: false,
   meta: metaVuota(),
-  metaBroken: false,
   activeSpace: null,
   expanded: new Set(),
   commandSpecs: [],

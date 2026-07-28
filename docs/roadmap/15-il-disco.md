@@ -78,10 +78,14 @@ network share), 2.3 (drive rimovibili).
       store del versioning ce l'ha pure (`versioning.rs`, campo nel manifest e
       controllo al caricamento) ed è **autorevole** — quindi la disciplina esiste già
       in repo, applicata al caso difficile. Non è un buco: è il modello.
-- [ ] **Non ce l'hanno i due che scrivono JSON nudo**: il sidecar del cestino
-      (`vault.rs`, un `serde_json::to_string` senza campo di versione) e
-      `.fubmd/workspace.json` (§11.3). E non l'avranno per imitazione — di quale
-      dei due precedenti? — impostazioni, allegati, canvas e database: dati
+- [ ] **Non ce l'ha chi scrive JSON nudo**: il sidecar del cestino
+      (`vault.rs`, un `serde_json::to_string` senza campo di versione). Erano
+      due: `.fubmd/workspace.json` ce l'ha dal §11.3
+      ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)), insieme alla
+      scrittura atomica e al rifiuto di sovrascrivere ciò che non si è letto —
+      quindi il modello adesso ha tre esempi e questa voce ne ha uno solo da
+      raggiungere. E non l'avranno per imitazione — di quale
+      dei precedenti? — allegati, canvas e database: dati
       **autorevoli**, che se non si leggono non si ricostruiscono. Costa un campo
       per formato oggi; domani è un formato da indovinare a valle di una
       segnalazione utente.
@@ -94,8 +98,9 @@ network share), 2.3 (drive rimovibili).
 *ex §2.29 · kernel · **P0** — è P0 la **scelta della forma**, non il parametro; la metà documentale è P2*
 
 - [ ] **Quattro posti, quattro discipline diverse, nessun documento che li
-      elenchi**: `<vault>/.fubmd/workspace.json` (autorevole, scritto dall'app
-      con `std::fs` — è il §11.3), `.fubmd-data/plugins/<id>/` (assegnato dal
+      elenchi**: `<vault>/.fubmd/workspace.json` (autorevole, e dal §11.3
+      scritto dal **kernel** con la disciplina degli altri suoi file),
+      `.fubmd-data/plugins/<id>/` (assegnato dal
       kernel, recintato dalla firma), `.fubmd-data/index/` (derivato),
       `<vault>/.trash/`. E ne stavano per arrivare almeno otto: i primi tre sono
       **arrivati** con la

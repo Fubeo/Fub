@@ -42,6 +42,7 @@ use fubmd_abi::PluginError;
 
 use crate::graph::{GraphSource, LinkGraph};
 use crate::health;
+use crate::organization::OrganizationStore;
 use crate::registry::FormatRegistry;
 use crate::settings::SharedSettings;
 use crate::tag_counts::TagCounts;
@@ -135,6 +136,15 @@ pub(crate) struct CoreIndex {
     /// questo indice lo legge — una copia sarebbe una configurazione che
     /// risponde a com'era al montaggio.
     settings: SharedSettings,
+    /// **Com'è organizzato questo vault** (§11.3): icone, appuntate,
+    /// ordinamenti, spazi. Condiviso col workspace come `settings`, e per la
+    /// stessa ragione — lo scrive chi appunta una nota, e questo indice lo
+    /// legge; una copia risponderebbe con com'era al montaggio.
+    ///
+    /// Che sia qui è il guadagno di questa voce: prima l'organizzazione non era
+    /// interrogabile affatto — la leggeva un comando IPC, quindi la sapeva
+    /// chiedere la shell e nessun altro.
+    organization: Arc<OrganizationStore>,
 }
 
 /// Il fatto che il §9.7 rende interrogabile: se qualcuno vede le scritture
@@ -251,7 +261,11 @@ impl JobsState {
 }
 
 impl CoreIndex {
-    pub(crate) fn new(registry: Arc<FormatRegistry>, settings: SharedSettings) -> Self {
+    pub(crate) fn new(
+        registry: Arc<FormatRegistry>,
+        settings: SharedSettings,
+        organization: Arc<OrganizationStore>,
+    ) -> Self {
         CoreIndex {
             metas: BTreeMap::new(),
             tags: TagCounts::default(),
@@ -261,6 +275,7 @@ impl CoreIndex {
             watch: WatchState::default(),
             jobs: JobsState::default(),
             settings,
+            organization,
         }
     }
 
@@ -381,6 +396,10 @@ impl IndexProvider for CoreIndex {
             // occhio — lo schema sta nel registro dei plugin, il valore nello
             // store di configurazione, e nessun altro li ha tutti e due.
             QueryRoute::Query(QueryKind::Settings),
+            // Com'è organizzato (§11.3): il kernel possiede il sidecar, quindi
+            // è l'unico che può rispondere. Prima non poteva rispondere
+            // nessuno: la domanda non passava dal canale dati affatto.
+            QueryRoute::Query(QueryKind::Organization),
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
@@ -521,6 +540,7 @@ impl IndexProvider for CoreIndex {
             ))),
             IndexQuery::VaultStatus => Ok(IndexResult::VaultStatus(self.watch.status())),
             IndexQuery::Jobs => Ok(IndexResult::Jobs(self.jobs.live())),
+            IndexQuery::Organization => Ok(IndexResult::Organization(self.organization.snapshot())),
             IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
                 self.settings
                     .read()
