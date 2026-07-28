@@ -19,6 +19,7 @@ use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::model::{Heading, Span};
 use fubmd_abi::session::{ContextKind, ContextMask, Selection};
+use fubmd_abi::text::{StringCatalog, Text};
 use fubmd_abi::traits::{
     HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
@@ -46,7 +47,7 @@ pub struct OutlineView;
 impl ViewProvider for OutlineView {
     fn views(&self) -> Vec<ViewSpec> {
         vec![
-            ViewSpec::new(OUTLINE_VIEW, "Struttura", ViewSurface::RightSidebar)
+            ViewSpec::new(OUTLINE_VIEW, Text::key(VIEW_TITLE), ViewSurface::RightSidebar)
                 // Gli heading cambiano quando cambia il documento:
                 // `IndexUpdated` copre ogni scrittura (anche quelle arrivate
                 // dal watcher).
@@ -73,10 +74,10 @@ impl ViewProvider for OutlineView {
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         let Some(context) = host.active_context() else {
-            return Ok(placeholder("Nessuna nota aperta."));
+            return Ok(placeholder(NO_ACTIVE_DOC));
         };
         let Some(active) = context.doc else {
-            return Ok(placeholder("Nessuna nota aperta."));
+            return Ok(placeholder(NO_ACTIVE_DOC));
         };
         let headings = match host.query_index(IndexQuery::Outline { doc: active })? {
             IndexResult::Outline(h) => h,
@@ -132,8 +133,35 @@ fn payload_span(payload: &serde_json::Value) -> Option<Span> {
     Some(Span::new(start, end))
 }
 
-fn placeholder(text: &str) -> UiNode {
-    UiNode::empty_state(text)
+/// Il segnaposto. Prende una **chiave**, non una stringa: la prosa sta nel
+/// [`catalog`], che è dato di manifest e non codice.
+fn placeholder(key: &str) -> UiNode {
+    UiNode::empty_state(Text::key(key))
+}
+
+/// Il titolo del pannello, che è testo come il resto di ciò che ci sta dentro.
+/// Era l'unica stringa di questo file a stare in una `ViewSpec` invece che in un
+/// `UiNode`, ed è quella che si vede sempre — anche quando il pannello è vuoto.
+const VIEW_TITLE: &str = "view_title";
+/// Nessuna nota aperta: non è un errore, è uno stato.
+const NO_ACTIVE_DOC: &str = "no_active_doc";
+/// La nota aperta non ha heading.
+const EMPTY: &str = "empty";
+
+/// Le stringhe del pannello struttura. Vedi
+/// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
+/// componente e non nella shell.
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(VIEW_TITLE, "Struttura")
+            .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
+            .with(EMPTY, "Nessun heading."),
+        StringCatalog::new("en")
+            .with(VIEW_TITLE, "Outline")
+            .with(NO_ACTIVE_DOC, "No note open.")
+            .with(EMPTY, "No headings."),
+    ]
 }
 
 /// L'indice dell'heading che **contiene** `caret`: l'ultimo che comincia prima
@@ -163,7 +191,7 @@ fn section_of(headings: &[Heading], caret: usize) -> Option<usize> {
 /// dice «cursore qui».
 pub fn build_outline_view(headings: &[Heading], caret: Option<usize>) -> UiNode {
     if headings.is_empty() {
-        return placeholder("Nessun heading.");
+        return placeholder(EMPTY);
     }
     let corrente = caret.and_then(|c| section_of(headings, c));
     let (roots, _) = subtree(headings, 0, 0, corrente);

@@ -329,3 +329,49 @@ fn un_host_senza_installazione_ricorda_solo_finche_dura() {
         "e su disco no: un test non scrive nel profilo di chi lo esegue"
     );
 }
+
+/// La chiave del tema è nominata **da due parti** (§12.4), e questo è il filo
+/// che le tiene insieme.
+///
+/// `appearance.theme` esiste qui, in `core_settings()`; ma chi la legge è la
+/// shell, che è TypeScript e non può importare una costante Rust — quindi se
+/// la riscrive (`frontend/src/theme/theme.ts`). Due stringhe uguali per
+/// convenzione sono due stringhe che divergono, e questa divergerebbe **in
+/// silenzio**: l'impostazione resterebbe nel pannello, si potrebbe cambiare, e
+/// non succederebbe niente. Nessun compilatore ha modo di accorgersene, il che
+/// è esattamente la condizione in cui la 0014 chiede un presidio meccanico.
+///
+/// Il verso del controllo è quello utile: si legge la chiave **dal file della
+/// shell** e si chiede al core se la conosce. Al contrario — cercare la
+/// stringa di Rust dentro il TypeScript — passerebbe anche trovandola in un
+/// commento.
+#[test]
+fn la_chiave_del_tema_e_la_stessa_di_qua_e_di_la() {
+    let theme_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../frontend/src/theme/theme.ts");
+    let sorgente = std::fs::read_to_string(&theme_ts)
+        .unwrap_or_else(|e| panic!("la shell non ha più {}: {e}", theme_ts.display()));
+
+    let dichiarata = sorgente
+        .lines()
+        .find_map(|riga| riga.strip_prefix("export const CHIAVE_TEMA = \"")?.strip_suffix("\";"))
+        .expect(
+            "in `theme/theme.ts` non c'è più una riga `export const CHIAVE_TEMA = \"…\";`: \
+             o la chiave si chiama in un altro modo, o questo presidio sta leggendo il vuoto",
+        )
+        .to_string();
+
+    let core = fubmd_host::settings::core_settings();
+    let chiavi: Vec<&str> = core.iter().map(|s| s.key.as_str()).collect();
+    assert!(
+        chiavi.contains(&dichiarata.as_str()),
+        "la shell legge l'impostazione «{dichiarata}», che il core non dichiara: \
+         il tema si potrebbe cambiare dal pannello senza che cambi niente. \
+         Le chiavi dichiarate sono {chiavi:?}"
+    );
+    assert_eq!(
+        dichiarata,
+        fubmd_host::settings::APPEARANCE_THEME,
+        "la shell e il core nominano due chiavi diverse"
+    );
+}

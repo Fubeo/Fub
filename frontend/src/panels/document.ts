@@ -15,6 +15,7 @@
 // pannello, quindi il giorno che i pannelli saranno due nessuno dovrà
 // inventarsi da dove viene la risposta.
 import { createEditor, type Editor } from "../editor/editor";
+import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
 import { tagDelVault } from "../host/query";
 import { MAIN_PANE } from "../host/contract";
@@ -25,6 +26,7 @@ import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
 import { clearPreview, setPreviewVisible, updatePreview } from "./preview";
 import { errorText } from "../host/errors";
+import { t } from "../i18n/strings";
 
 export interface DocumentDeps {
   /// Click su un `#tag` nella live preview. Iniettato invece che importato:
@@ -213,10 +215,7 @@ async function saveCurrent(): Promise<void> {
 async function reloadIfClean(id: string, daFuori = false): Promise<void> {
   if (state.dirty) {
     console.warn(
-      daFuori
-        ? `FubMD: ${id} è stato cambiato da un'altra applicazione mentre il buffer è sporco: ` +
-            `il buffer vince e quella modifica andrà persa al prossimo salvataggio.`
-        : `FubMD: ${id} è cambiato su disco mentre il buffer è sporco: il buffer vince.`,
+      `FubMD: ${daFuori ? t("document.overwritten", { doc: id }) : t("document.changed_on_disk", { doc: id })}`,
     );
     return;
   }
@@ -310,7 +309,12 @@ export async function setMode(next: PaneMode): Promise<void> {
   // Sorgente = la stessa configurazione senza la resa inline.
   editor.setLivePreview(next === "live_preview");
   for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
-    b.classList.toggle("active", b.dataset.mode === next);
+    const scelta = b.dataset.mode === next;
+    b.classList.toggle("active", scelta);
+    // Quale modalità è accesa lo diceva solo lo sfondo. `aria-pressed` lo dice
+    // a chi non lo vede — ed è l'informazione che serve *prima* di premere, non
+    // dopo: senza, i tre pulsanti sono tre comandi indistinguibili.
+    b.setAttribute("aria-pressed", String(scelta));
   }
   setPreviewVisible(next === "reading");
   saveMode(next);
@@ -329,4 +333,14 @@ export function revealByteOffset(byteOffset: number): void {
 
 export function focusEditor(): void {
   editor.focus();
+}
+
+/// Porta l'editor nell'altra luce (§12.4).
+///
+/// Passa da qui e non da `theme/theme.ts` perché l'editor è di questo pannello:
+/// il modulo del tema non lo conosce, e non deve — sa solo che *qualcuno* vuole
+/// essere avvisato. È lo stesso disaccoppiamento con cui il pannello riceve gli
+/// altri collegamenti col mondo.
+export function setEditorTheme(tema: Tema): void {
+  editor.setTheme(tema);
 }

@@ -29,6 +29,8 @@
 //
 // [decisione 0013]: ../../../docs/decisions/0013-elenco-delle-capacita.md
 
+import { onLingua, t } from "../i18n/strings";
+
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
@@ -134,6 +136,12 @@ function mostra(avviso: Avviso): void {
   if (vecchio) vecchio.remove();
   const toast = document.createElement("div");
   toast.id = "toast";
+  // Il toast è **l'unica** cosa che compare senza che l'utente l'abbia chiesta,
+  // e sparisce da sola dopo qualche secondo: chi non guarda lo schermo non ha
+  // nessun altro modo di saperlo. `status` e non `alert` per la stessa ragione
+  // per cui non ruba il fuoco — informa senza interrompere (§10.3), e `alert`
+  // taglierebbe la parola a metà frase.
+  toast.setAttribute("role", "status");
   toast.dataset.tono = avviso.tono;
   // Testo semplice: ciò che arriva da un provider non diventa mai markup
   // (stessa regola di `SearchHit.snippet` e `UiNode` non fidato).
@@ -151,7 +159,8 @@ function mostra(avviso: Avviso): void {
 function ridisegna(): void {
   const pulsante = document.getElementById("notify-button");
   if (pulsante) {
-    pulsante.textContent = daLeggere > 0 ? `Avvisi ${daLeggere}` : "Avvisi";
+    pulsante.textContent =
+      daLeggere > 0 ? t("notices.count", { count: daLeggere }) : t("notices.title");
     pulsante.classList.toggle("ha-novita", daLeggere > 0);
     pulsante.setAttribute("aria-expanded", String(aperto));
   }
@@ -167,7 +176,7 @@ function ridisegna(): void {
   if (storico.length === 0) {
     const vuoto = document.createElement("li");
     vuoto.className = "muted";
-    vuoto.textContent = "Nessun avviso.";
+    vuoto.textContent = t("notices.none");
     lista.appendChild(vuoto);
     return;
   }
@@ -191,5 +200,10 @@ export function mountNotifications(): void {
   document.getElementById("notify-button")?.addEventListener("click", () => apriStorico());
   document.getElementById("notify-clear")?.addEventListener("click", () => svuotaStorico());
   document.getElementById("notify-close")?.addEventListener("click", () => apriStorico(false));
+  // Come per il centro attività: il pulsante porta un conteggio, quindi non lo
+  // può scrivere `applicaStringhe` — e il testo **degli avvisi** resta com'era,
+  // perché un avviso è già stato detto e ridirlo in un'altra lingua vorrebbe
+  // dire riscrivere la storia di ciò che è successo.
+  onLingua(ridisegna);
   ridisegna();
 }

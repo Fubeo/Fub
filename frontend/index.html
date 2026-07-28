@@ -6,142 +6,361 @@
     <title>FubMD</title>
   </head>
   <body>
+    <!-- Il salto al contenuto (§12.4). È il primo elemento del documento e si
+         vede solo quando prende il fuoco: senza, chi naviga da tastiera deve
+         attraversare la topbar, la ricerca e l'intero albero delle note — che
+         su un vault vero sono centinaia di fermate — prima di arrivare al
+         posto dove si scrive. -->
+    <a href="#editor" class="skip-link" data-i18n="app.skip_to_editor">Vai all'editor</a>
     <div id="app">
       <header id="topbar">
         <span class="brand">FubMD</span>
-        <button id="open-vault">Apri vault…</button>
-        <button id="show-graph" title="Il grafo dei collegamenti del vault">Grafo</button>
-        <button id="open-settings" title="Le impostazioni di questo vault e di questa macchina">
+        <button id="open-vault" data-i18n="app.open_vault">Apri vault…</button>
+        <button
+          id="show-graph"
+          data-i18n="app.graph"
+          data-i18n-title="app.graph.hint"
+          title="Il grafo dei collegamenti del vault"
+        >
+          Grafo
+        </button>
+        <button
+          id="open-settings"
+          data-i18n="app.settings"
+          data-i18n-title="app.settings.hint"
+          title="Le impostazioni di questo vault e di questa macchina"
+        >
           Impostazioni
         </button>
         <!-- Le tre modalità esclusive del pannello (FEATURES 4.1). Non sono
              decorazione della shell: la modalità attraversa il confine dentro
-             `ViewContext`, e le view che la seguono cambiano di conseguenza. -->
-        <span id="mode-switch">
-          <button data-mode="source" title="Solo sorgente, nessuna resa inline">Sorgente</button>
-          <button data-mode="live_preview" class="active" title="Sorgente con resa inline">
+             `ViewContext`, e le view che la seguono cambiano di conseguenza.
+             `role="group"` + `aria-pressed` e non tre pulsanti sciolti: sono
+             esclusive, e chi le ascolta deve sentire *quale* è accesa, non tre
+             comandi che si somigliano. -->
+        <span
+          id="mode-switch"
+          role="group"
+          data-i18n-label="mode.group"
+          aria-label="Modalità del pannello"
+        >
+          <button
+            data-mode="source"
+            data-i18n="mode.source"
+            data-i18n-title="mode.source.hint"
+            title="Solo sorgente, nessuna resa inline"
+            aria-pressed="false"
+          >
+            Sorgente
+          </button>
+          <button
+            data-mode="live_preview"
+            class="active"
+            data-i18n="mode.live"
+            data-i18n-title="mode.live.hint"
+            title="Sorgente con resa inline"
+            aria-pressed="true"
+          >
             Live
           </button>
-          <button data-mode="reading" title="Sola lettura, senza editor">Lettura</button>
+          <button
+            data-mode="reading"
+            data-i18n="mode.reading"
+            data-i18n-title="mode.reading.hint"
+            title="Sola lettura, senza editor"
+            aria-pressed="false"
+          >
+            Lettura
+          </button>
         </span>
         <span id="vault-path" class="muted"></span>
       </header>
       <main id="layout">
-        <aside id="sidebar">
+        <aside id="sidebar" data-i18n-label="region.notes" aria-label="Note e ricerca">
           <input
             id="search-input"
             type="search"
+            data-i18n-placeholder="search.placeholder"
             placeholder="Cerca nel vault…"
+            data-i18n-label="search.hint"
+            aria-label="Cerca nel vault"
             autocomplete="off"
             spellcheck="false"
           />
           <div id="search-panel" hidden>
-            <div class="panel-title" id="search-summary">Risultati</div>
-            <ul id="search-results"></ul>
+            <div
+              class="panel-title"
+              id="search-summary"
+              role="heading"
+              aria-level="2"
+              data-i18n="search.results"
+            >
+              Risultati
+            </div>
+            <ul id="search-results" role="list"></ul>
           </div>
           <div id="files-panel">
             <div id="space-strip"></div>
-            <div class="panel-title" id="files-title">
+            <div class="panel-title" id="files-title" role="heading" aria-level="2">
               <span id="space-title">Note</span>
-              <button id="new-note" class="link-button" title="Crea una nota nuova">
+              <button
+                id="new-note"
+                class="link-button"
+                data-i18n="explorer.new"
+                data-i18n-title="explorer.new.hint"
+                title="Crea una nota nuova"
+              >
                 + Nuova
               </button>
-              <button id="show-trash" class="link-button" title="Apri il cestino">
+              <button
+                id="show-trash"
+                class="link-button"
+                data-i18n="trash.title"
+                data-i18n-title="trash.hint"
+                title="Apri il cestino"
+              >
                 Cestino
               </button>
             </div>
-            <div class="panel-title" id="pinned-title" hidden><span>Appuntate</span></div>
-            <ul id="pinned-list" hidden></ul>
-            <ul id="file-list"></ul>
+            <div class="panel-title" id="pinned-title" role="heading" aria-level="2" hidden>
+              <span data-i18n="explorer.pinned">Appuntate</span>
+            </div>
+            <ul id="pinned-list" role="list" hidden></ul>
+            <ul
+              id="file-list"
+              role="tree"
+              data-i18n-label="explorer.notes.hint"
+              aria-label="Note del vault"
+            ></ul>
           </div>
           <div id="views-left"></div>
           <div id="trash-panel" hidden>
-            <div class="panel-title">
-              <span>Cestino</span>
-              <button id="empty-trash" class="link-button" title="Cancella tutto per sempre">
+            <div class="panel-title" role="heading" aria-level="2">
+              <span data-i18n="trash.title">Cestino</span>
+              <button
+                id="empty-trash"
+                class="link-button"
+                data-i18n="trash.empty_button"
+                data-i18n-title="trash.empty_button.hint"
+                title="Cancella tutto per sempre"
+              >
                 Svuota
               </button>
-              <button id="close-trash" class="link-button" title="Torna alle note">
+              <button
+                id="close-trash"
+                class="link-button"
+                data-i18n="app.close"
+                data-i18n-title="trash.back"
+                title="Torna alle note"
+              >
                 Chiudi
               </button>
             </div>
-            <ul id="trash-list"></ul>
+            <ul id="trash-list" role="list"></ul>
           </div>
         </aside>
-        <section id="editor-pane">
+        <section id="editor-pane" data-i18n-label="region.document" aria-label="Documento">
           <div id="editor"></div>
           <!-- La modalità Lettura: lo stesso documento reso, non editabile.
                Non è un pannello sempre acceso accanto all'editor — è l'editor
                che lascia il posto, ed è perché `PaneMode` è un enum di
                modalità **esclusive**. -->
-          <div id="preview" class="markdown-preview" hidden></div>
+          <div id="preview" class="markdown-preview" tabindex="0" hidden></div>
         </section>
-        <section id="right-pane">
+        <section id="right-pane" data-i18n-label="region.sidebars" aria-label="Pannelli laterali">
           <!-- Le view dichiarative (Struttura, Tag, Backlink, …) si montano
                qui per placement: gli id e i titoli li dichiara il backend. -->
           <div id="views-right"></div>
           <div id="history-panel" hidden>
-            <div class="panel-title">
-              <span>Cronologia</span>
+            <div class="panel-title" role="heading" aria-level="2">
+              <span data-i18n="history.title">Cronologia</span>
               <span id="history-summary" class="muted"></span>
             </div>
-            <ul id="history-list"></ul>
-            <pre id="history-preview" hidden></pre>
+            <ul id="history-list" role="list"></ul>
+            <pre id="history-preview" tabindex="0" hidden></pre>
           </div>
         </section>
-        <section id="views-bottom" hidden></section>
+        <section
+          id="views-bottom"
+          data-i18n-label="region.bottom"
+          aria-label="Pannelli in basso"
+          hidden
+        ></section>
       </main>
       <!-- Le superfici che il §2.2 ha nominato e questa shell sa ospitare: la
            barra di stato (ciò che informa senza interrompere), la ribbon (i
            pulsanti che aprono qualcosa) e la modale (la view che chiede
            qualcosa e se ne va). Vuote finché nessuna view le dichiara. -->
-      <div id="views-ribbon" hidden></div>
-      <footer id="views-status" hidden></footer>
+      <div
+        id="views-ribbon"
+        role="toolbar"
+        data-i18n-label="region.ribbon"
+        aria-label="Azioni dei componenti"
+        hidden
+      ></div>
+      <!-- Era un `<footer>`, ed erano due: questo e `#statusbar`. Un documento
+           con due `contentinfo` è un documento in cui chi naviga per punti di
+           riferimento ne trova due chiamati uguale e deve aprirli entrambi per
+           sapere quale sia quello che cerca. Quello **della shell** resta il
+           `<footer>`; questo, che è la superficie delle view dichiarate, è una
+           regione col suo nome. -->
+      <div
+        id="views-status"
+        role="region"
+        data-i18n-label="region.status"
+        aria-label="Stato dei componenti"
+        hidden
+      ></div>
       <!-- La barra di stato della shell (§10.3), che è un'altra cosa da
            `#views-status`: quella la riempiono le view dichiarate, questa è
            **della shell** e c'è sempre. Ci stanno le due cose che l'utente deve
            poter guardare in qualunque momento senza che nulla lo interrompa:
            cosa sta girando, e cosa gli è stato detto. -->
-      <footer id="statusbar">
+      <footer id="statusbar" data-i18n-label="region.statusbar" aria-label="Barra di stato">
         <span id="statusbar-fill"></span>
-        <button id="activity-button" type="button" aria-expanded="false" title="I lavori in corso">
+        <!-- Il **testo** di questi due pulsanti non porta un `data-i18n`, e non
+             è una dimenticanza: ci sta un conteggio («Attività 3»), quindi lo
+             scrive chi conosce il numero — `panels/activity.ts` e
+             `ui/notify.ts`, che si iscrivono a `onLingua` e si rifanno da sé.
+             Due proprietari per la stessa parola vorrebbero dire che l'ultimo
+             a girare cancella il conteggio dell'altro. Il `title`, che di
+             numeri non ne ha, resta qui. -->
+        <button
+          id="activity-button"
+          type="button"
+          aria-expanded="false"
+          aria-controls="activity-panel"
+          data-i18n-title="activity.hint"
+          title="I lavori in corso"
+        >
           Attività
         </button>
-        <button id="notify-button" type="button" aria-expanded="false" title="Gli avvisi recenti">
+        <button
+          id="notify-button"
+          type="button"
+          aria-expanded="false"
+          aria-controls="notify-panel"
+          data-i18n-title="notices.hint"
+          title="Gli avvisi recenti"
+        >
           Avvisi
         </button>
       </footer>
-      <div id="activity-panel" hidden>
-        <div class="panel-title">
-          <span>Attività</span>
-          <button id="activity-close" class="link-button" title="Chiudi">Chiudi</button>
+      <div
+        id="activity-panel"
+        role="region"
+        data-i18n-label="activity.title"
+        aria-label="Attività"
+        hidden
+      >
+        <div class="panel-title" role="heading" aria-level="2">
+          <span data-i18n="activity.title">Attività</span>
+          <button
+            id="activity-close"
+            class="link-button"
+            data-i18n="app.close"
+            data-i18n-title="app.close"
+            title="Chiudi"
+          >
+            Chiudi
+          </button>
         </div>
-        <ul id="activity-list"></ul>
+        <ul id="activity-list" role="list"></ul>
       </div>
-      <div id="notify-panel" hidden>
-        <div class="panel-title">
-          <span>Avvisi</span>
-          <button id="notify-clear" class="link-button" title="Dimentica gli avvisi">
+      <!-- Gli avvisi si **annunciano**: è l'unica superficie che dice qualcosa
+           che l'utente non ha chiesto, e `aria-live="polite"` è ciò che la fa
+           arrivare anche a chi non la sta guardando — al primo momento in cui
+           non sta leggendo altro, che è quello che «polite» significa. -->
+      <div
+        id="notify-panel"
+        role="region"
+        data-i18n-label="notices.title"
+        aria-label="Avvisi"
+        aria-live="polite"
+        aria-relevant="additions"
+        hidden
+      >
+        <div class="panel-title" role="heading" aria-level="2">
+          <span data-i18n="notices.title">Avvisi</span>
+          <button
+            id="notify-clear"
+            class="link-button"
+            data-i18n="notices.clear"
+            data-i18n-title="notices.clear.hint"
+            title="Dimentica gli avvisi"
+          >
             Pulisci
           </button>
-          <button id="notify-close" class="link-button" title="Chiudi">Chiudi</button>
+          <button
+            id="notify-close"
+            class="link-button"
+            data-i18n="app.close"
+            data-i18n-title="app.close"
+            title="Chiudi"
+          >
+            Chiudi
+          </button>
         </div>
-        <ul id="notify-list"></ul>
+        <ul id="notify-list" role="list"></ul>
       </div>
       <!-- Il pannello delle impostazioni (§11.1). Le tre schede sono le tre
            cose che questa voce fa esistere: la configurazione (form generato
            dallo schema che i componenti dichiarano), i componenti accesi e
            spenti, e i vault che questa macchina conosce — l'elenco che non
-           poteva stare in nessun vault. -->
-      <div id="settings-panel" hidden>
+           poteva stare in nessun vault.
+           È una **modale**: mentre è aperta, è quello che si sta facendo. Il
+           fuoco ci resta dentro e Escape la chiude (`ui/a11y.ts`). -->
+      <div
+        id="settings-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        tabindex="-1"
+        hidden
+      >
         <div class="panel-title">
-          <span>Impostazioni</span>
-          <span id="settings-tabs">
-            <button data-scheda="impostazioni" class="active">Configurazione</button>
-            <button data-scheda="componenti">Componenti</button>
-            <button data-scheda="vault">Vault</button>
+          <span id="settings-title" data-i18n="settings.title">Impostazioni</span>
+          <span
+            id="settings-tabs"
+            role="tablist"
+            data-i18n-label="settings.tabs"
+            aria-label="Sezioni delle impostazioni"
+          >
+            <button
+              data-scheda="impostazioni"
+              class="active"
+              role="tab"
+              aria-selected="true"
+              data-i18n="settings.tab.config"
+            >
+              Configurazione
+            </button>
+            <button
+              data-scheda="componenti"
+              role="tab"
+              aria-selected="false"
+              data-i18n="settings.tab.components"
+            >
+              Componenti
+            </button>
+            <button
+              data-scheda="vault"
+              role="tab"
+              aria-selected="false"
+              data-i18n="settings.tab.vaults"
+            >
+              Vault
+            </button>
           </span>
-          <button id="settings-close" class="link-button" title="Chiudi">Chiudi</button>
+          <button
+            id="settings-close"
+            class="link-button"
+            data-i18n="app.close"
+            data-i18n-title="app.close"
+            title="Chiudi"
+          >
+            Chiudi
+          </button>
         </div>
         <div id="settings-body"></div>
         <!-- La superficie `settings_tab` del contratto (§2.2), che questa shell
@@ -152,7 +371,21 @@
              console. -->
         <div id="views-settings"></div>
       </div>
-      <div id="views-modal" hidden></div>
+      <!-- L'`aria-label` è il **ripiego**: il nome vero è il titolo della view
+           che occupa la superficie, e glielo lega `ui/views.ts` con un
+           `aria-labelledby` — che vince su questo quando c'è. Qui resta per il
+           momento in cui non c'è nessuno: una modale vuota è nascosta, ma un
+           nome che esiste solo quando il contenuto è arrivato è un nome che
+           manca proprio nell'istante in cui qualcosa va storto. -->
+      <div
+        id="views-modal"
+        role="dialog"
+        aria-modal="true"
+        data-i18n-label="app.dialog"
+        aria-label="Finestra di dialogo"
+        tabindex="-1"
+        hidden
+      ></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

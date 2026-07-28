@@ -78,6 +78,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.25 · §12.3 | [0039 — Il locale e il caso](../decisions/0039-il-locale-e-il-caso.md) |
 | §1.8 · §12.1 | [0040 — Chi localizza](../decisions/0040-chi-localizza.md) |
 | §1.11 · §12.2 | [0041 — Un errore è testo che qualcuno legge](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) |
+| §3.3 · §12.4 | [0042 — Il catalogo della shell](../decisions/0042-il-catalogo-della-shell.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -119,7 +120,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.29 | **§15.4** | I dati persistiti non hanno né una mappa né una classe |
 | §3.1 | **§1.2** | Smontare il monolite |
 | §3.2 | **§18.2** | Comandi e tastiera |
-| §3.3 | **§12.4** | Tema, token, accessibilità |
 | §3.6 | **§2.9** | Prestazioni della UI |
 | §3.7 | **§18.1** | Editor |
 | §3.8 | **§4.4** | Due parser per la stessa sintassi |

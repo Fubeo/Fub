@@ -1,50 +1,358 @@
-/* I token della shell: i colori (e le due proprietà tipografiche) da cui tutto
-   il resto deriva con `var(…)`.
-   
-   Stanno in un file loro perché il §1.1 nomina `theme/` come il contenitore che
-   non esisteva: 950 righe di CSS con diciotto custom property non sono un
-   sistema di token, e senza un posto dove metterli i temi (6.2), gli snippet
-   CSS dell'utente e l'alto contrasto (25.1) sarebbero finiti dentro
-   `style.css`, cioè dentro le regole dei componenti.
-   
-   Questo file è la METÀ che si poteva fare oggi: il contenitore, e i valori di
-   adesso spostati dentro senza toccarli. Il sistema vero — scala di token
-   semantici, chiaro/scuro/sistema, override per vault e per nota — è 6.2/25.1,
-   e va deciso lì; qui c'è il posto dove atterrerà. */
+/* I token della shell: i valori da cui tutto il resto deriva con `var(…)`.
+ *
+ * Il file esisteva già ed era dichiaratamente **metà** — il contenitore che il
+ * §1.1 nominava, coi diciotto colori di allora spostati dentro senza toccarli.
+ * Questa è l'altra metà: la **scala**, e i due temi.
+ *
+ * # I tre strati, e perché sono tre
+ *
+ * 1. **Le dimensioni** — spazi, raggi, tipografia, pesi, ombre, piani. Non
+ *    dipendono dal tema: un padding non cambia perché cambia la luce. Stanno in
+ *    `:root` e basta.
+ * 2. **I colori semantici** — `--bg`, `--text`, `--danger`, … Sono nomi di
+ *    *ruolo*, mai di tinta: chi scrive una regola dice «questo è il fondo di una
+ *    superficie sollevata», non «questo è grigio scuro». È la stessa regola che
+ *    il §2.2 impone ai provider (*«un provider sceglie intenti semantici, mai
+ *    colori»*), applicata alla shell che finora se la risparmiava.
+ * 3. **I colori della sintassi** — `--syn-*`. Sono colori semantici anche loro,
+ *    ma di un vocabolario diverso (una parola chiave, una stringa, un titolo), e
+ *    hanno un cliente solo: il tema dell'editor.
+ *
+ * # Dove stanno i due temi, e perché il chiaro è l'unico blocco in più
+ *
+ * Il tema scuro sta in `:root`, il chiaro in `:root[data-theme="light"]`. Non
+ * c'è un blocco `[data-theme="dark"]`, e non c'è una `@media
+ * (prefers-color-scheme)`: sono le due forme che **duplicherebbero** i valori
+ * scuri — una volta nella media query e una volta nel selettore d'attributo — e
+ * due liste di venti colori che devono restare uguali sono due liste che
+ * divergono. La media query non serve perché a risolvere «come il sistema»
+ * pensa la shell (`theme/theme.ts`), che guarda `matchMedia` e scrive sempre un
+ * tema **concreto** sull'elemento radice. Il vantaggio non è solo di righe: la
+ * scelta diventa una funzione pura di due argomenti, e una funzione pura si
+ * prova (`theme/theme.test.ts`); una media query no.
+ *
+ * Conseguenza voluta: `data-theme="dark"` funziona per costruzione — non
+ * trovando nessun blocco più specifico, restano i valori di `:root`.
+ *
+ * # Cosa NON sta qui
+ *
+ * Gli override per vault e per nota, gli snippet CSS dell'utente e l'alto
+ * contrasto: sono 6.2 e 25.1, e atterreranno su questi nomi. È il motivo per cui
+ * la scala è semantica e non una tavolozza: un tema di terze parti ridichiara
+ * venticinque ruoli, non milleduecento regole.
+ */
 :root {
+  /* --- le dimensioni ----------------------------------------------------- */
+
+  /* Gli spazi. La scala è quella che la shell **già usava** (2, 4, 6, 8, 10,
+     12, 16), raccolta e chiusa: i valori dispari che erano rimasti in giro —
+     3px, 5px, 11px, 14px, 18px — erano differenze che nessuno aveva scelto, e
+     sono state tirate sul gradino accanto. I numeri che restano letterali in
+     `style.css` sono quelli **strutturali** (la colonna da 240px, un bordo da
+     1px, l'altezza massima di una lista): non sono spaziatura, e metterli in
+     questa scala vorrebbe dire che cambiarla li muove. */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 16px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+
+  /* I raggi. Erano sette valori distinti fra 2px e 10px per quattro intenzioni:
+     il segno appena smussato, il controllo, la superficie che galleggia, la
+     pastiglia. */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+
+  /* La tipografia. `--font-mono` esisteva già come `var(--mono, monospace)` in
+     due regole — cioè come token **mai definito**, che è il modo più silenzioso
+     di non avere un token: il ripiego funzionava, quindi nessuno se ne
+     accorgeva. */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+
+  --weight-medium: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.35;
+
+  /* Il maiuscoletto dei titoli di pannello: due proprietà che vanno sempre
+     insieme, e che separate si erano già disallineate (`0.6px` in un posto,
+     `0.04em` in un altro, per la stessa riga). */
+  --tracking-caps: 0.6px;
+
+  /* I piani. Erano sei numeri sparsi fra 50 e 90, e l'ordine fra loro era
+     leggibile solo confrontandoli a mano in file diversi. Qui l'ordine è la
+     lista: chi ne aggiunge uno vede subito sopra e sotto cosa passa. */
+  /* `--z-overlay` e `--z-menu` valgono lo stesso numero, ed è voluto: oggi il
+     grafo e il menu contestuale stanno sullo stesso piano, e nessuno dei due si
+     apre sopra l'altro. Sono però due ruoli, non uno — il giorno che il grafo
+     avrà un menu contestuale suo, separarli è cambiare un numero qui invece che
+     scoprire in quale dei due file stava scritto. */
+  --z-overlay: 50;
+  --z-menu: 50;
+  --z-picker: 60;
+  --z-popover: 70;
+  --z-dialog: 80;
+  /* Il toast stava a 80 come il pannello delle impostazioni, e vinceva **per
+     ordine nel DOM** — `ui/notify.ts` lo appende al `body`, quindi arriva
+     ultimo. Vinceva quindi per una ragione che nessuno aveva scritto e che un
+     riordino avrebbe rovesciato in silenzio. Qui è dichiarato. */
+  --z-toast: 85;
+  --z-modal: 90;
+
+  /* --- i colori semantici: il tema scuro --------------------------------- */
+
+  /* Le superfici, dalla più profonda alla più vicina. `--bg-hover` era
+     `--bg-input` usato per un'altra cosa in undici regole: due ruoli sullo
+     stesso valore sono due ruoli che non si possono più cambiare separatamente,
+     ed è proprio ciò che un tema chiaro chiede di fare. */
   --bg: #1e1e24;
   --bg-elev: #26262e;
   --bg-input: #2d2d38;
+  --bg-hover: #2d2d38;
+
   --border: #35353f;
+
   --text: #e6e6ea;
   --muted: #9a9aa8;
+
+  /* I due accenti non sono una tinta e la sua sfumatura: sono due **ruoli**, e
+     il presidio del contrasto li ha separati per sempre. `--accent` è un
+     **fondo** (il pieno di un bottone) e un **segno** (un bordo, un contorno di
+     selezione): come segno gli basta il 3:1, come fondo porta con sé
+     `--accent-contrast`. `--accent-soft` è un **inchiostro**: sta sopra le
+     superfici, e gli tocca la soglia del testo — sopra `--bg-input`, che è la
+     peggiore delle quattro, era a 4,18:1 ed è salito qui. */
   --accent: #6d5efc;
-  --accent-soft: #8a7dff;
+  --accent-soft: #9286ff;
+  /* Il testo **sopra** l'accento. Era `white` cablato in due regole, ed è la
+     riga che un tema chiaro non può ereditare: su un accento chiaro il bianco
+     sparisce.
+
+     Il bianco sopra `#6d5efc` sta a **4,51:1**, cioè passa AA per il secondo
+     decimale — ed è lo stesso numero che il tema chiaro ha rifiutato scurendo
+     il proprio accento. Qui non si può fare la stessa cosa: scurire l'accento
+     su un fondo scuro lo spegne contro il fondo, e `--accent` sopra `--bg` è
+     già a 3,68:1, cioè a un passo dal minimo dei segni. È un margine che non
+     c'è, non un margine che nessuno ha guardato: `theme/contrast.test.ts` lo
+     ricalcola a ogni giro, e la via d'uscita vera è la tavolozza ad alto
+     contrasto del 25.1. */
+  --accent-contrast: #ffffff;
+
+  /* Gli intenti della shell. Prima non esistevano e al loro posto si prendeva
+     `--doc-danger` — cioè il rosso del **documento**, che è un'altra cosa: uno
+     è il colore con cui un wikilink rotto si scrive dentro una nota, l'altro è
+     il colore con cui la shell dice che qualcosa è andato storto. Erano lo
+     stesso valore per caso, e un tema che cambia la superficie del documento li
+     avrebbe separati senza che nessuno l'avesse deciso. E il presidio del
+     contrasto li ha poi separati **davvero**, con due numeri diversi: il rosso
+     della shell finisce sopra `--bg-input` (una pastiglia), quello del
+     documento sopra `--doc-bg`, e le due soglie cadono in due punti diversi. */
+  --danger: #e2747d;
+  --danger-wash: rgb(224 108 117 / 18%);
+  --danger-contrast: #1a1a1a;
+
+  /* L'anello del fuoco (§12.4). Non è l'accento: deve reggere sopra l'accento
+     stesso — un pulsante primario che prende il fuoco lo mostra su fondo
+     accento — quindi è un colore a parte, non un alias. */
+  --focus-ring: #b9b0ff;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* Il velo sotto una superficie modale, e le ombre. Cambiano col tema perché
+     un'ombra nera al 45% sotto una finestra chiara è una macchia. */
+  --scrim: rgb(0 0 0 / 45%);
+  --shadow-sm: 0 6px 20px rgb(0 0 0 / 45%);
+  --shadow-md: 0 8px 28px rgb(0 0 0 / 50%);
+  --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
+
+  /* Il grafo dei collegamenti disegna su canvas, cioè fuori dalla portata di
+     qualunque regola CSS: i suoi colori li legge `panels/graph.ts` da qui con
+     `getComputedStyle`. Sono token come gli altri proprio perché quella
+     superficie, non essendo raggiungibile dal foglio di stile, è quella che si
+     dimentica per prima quando si cambia tema. */
+  --graph-node: #8a8a99;
+  --graph-node-active: #8a7dff;
+  --graph-node-hover: #98c379;
+
+  /* --- la superficie del documento --------------------------------------- */
 
   /* La tavolozza della **superficie del documento**: i colori con cui la nota
-     si scrive (il tema dell'editor) e con cui si legge. Stanno qui, in un
-     posto solo, perché le tre modalità di 4.1 devono essere la stessa nota
-     vista in tre modi — non tre note diverse. I valori vengono dal tema
-     dell'editor (oneDark); li usano sia `.markdown-preview` (Lettura) sia il
-     tema della live preview in `livepreview.ts`, che li legge come `var(…)`.
-     Cambiarli qui li cambia in tutte e tre le modalità insieme. */
+     si scrive (il tema dell'editor) e con cui si legge. Stanno qui, in un posto
+     solo, perché le tre modalità di 4.1 devono essere la stessa nota vista in
+     tre modi — non tre note diverse. Li usano `.markdown-preview` (Lettura), il
+     tema della live preview (`livepreview.ts`) e adesso anche il tema
+     dell'editor (`editor/theme.ts`), che prima portava i propri: finché quello
+     era `oneDark`, questa promessa era vera solo perché i valori qui sotto erano
+     stati **ricopiati** da lui a mano. */
   --doc-bg: #282c34;
   --doc-fg: #abb2bf;
   --doc-link: #82aaff;
   /* I titoli hanno un colore, e ce l'hanno anche in scrittura: è il tema di
-     sintassi dell'editor a darglielo (oneDark colora i marcatori `#`). Senza
-     questa riga, passare in Lettura spegneva i titoli — la differenza più
-     visibile fra le due superfici. */
+     sintassi a darglielo. Senza questa riga, passare in Lettura spegneva i
+     titoli — la differenza più visibile fra le due superfici. È lo stesso
+     valore di `--syn-heading`, e non un alias, perché sono due domande diverse:
+     una è «di che colore è un `<h1>` reso», l'altra «di che colore è il testo
+     che il parser ha marcato come titolo». */
   --doc-heading: #e06c75;
-  --doc-danger: #e06c75;
+  --doc-danger: #e17179;
   /* Riempimenti e righe in alpha su grigio: reggono su qualunque fondo, ed è
-     il motivo per cui la live preview li usava già così. */
-  --doc-fill: rgba(135, 135, 135, 0.16);
-  --doc-fill-soft: rgba(135, 135, 135, 0.1);
-  --doc-rule: rgba(135, 135, 135, 0.45);
-  --doc-rule-soft: rgba(135, 135, 135, 0.28);
-  --doc-highlight: rgba(255, 205, 0, 0.28);
+     il motivo per cui la live preview li usava già così — e il motivo per cui
+     il tema chiaro ne ridichiara solo due. */
+  --doc-fill: rgb(135 135 135 / 16%);
+  --doc-fill-soft: rgb(135 135 135 / 10%);
+  --doc-rule: rgb(135 135 135 / 45%);
+  --doc-rule-soft: rgb(135 135 135 / 28%);
+  --doc-highlight: rgb(255 205 0 / 28%);
 
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 14px;
+  /* Ciò che l'editor disegna e la resa non ha: il cursore, la selezione, la
+     riga corrente, il margine coi numeri. */
+  --doc-caret: #528bff;
+  --doc-selection: #3e4451;
+  --doc-active-line: #2c313a;
+  /* I numeri di riga sono testo che qualcuno legge, non decorazione: valevano
+     `#7d8799` — lo stesso grigio dei commenti — e stavano a 3,86:1. */
+  --doc-gutter-fg: #8b94a4;
+  --doc-tooltip-bg: #353a42;
+
+  /* --- i colori della sintassi ------------------------------------------- */
+
+  /* Il tema scuro è **One Dark**, che è ciò che l'editor già montava come
+     pacchetto (`@codemirror/theme-one-dark`); il chiaro è **One Light**, che è
+     il suo gemello ufficiale. Prenderli in coppia non è un gusto: è ciò che
+     rende «la stessa nota in due luci» un'affermazione vera invece di due
+     tavolozze scelte da persone diverse.
+
+     Ed è il motivo per cui questi dieci colori — soli, in tutto il file — non
+     reggono la soglia AA del testo: tre al buio e sette in luce stanno fra
+     3:1 e 4,5:1. Portarceli vorrebbe dire ritoccarli uno alla volta, e ciò che
+     resterebbe non sarebbe più né One Dark né One Light, ma una tavolozza
+     scelta un colore per volta da chi passava di lì — cioè esattamente la cosa
+     che prenderli in coppia serviva a evitare. Il debito è dichiarato per nome
+     in `theme/contrast.test.ts`, che tiene fermo il pavimento dei segni (3:1)
+     e verifica che l'elenco di chi sta sotto AA sia **quello e non un altro**;
+     la tavolozza che passa AA dappertutto è il 25.1. */
+  --syn-keyword: #c678dd;
+  --syn-name: #e06c75;
+  --syn-function: #61afef;
+  --syn-literal: #d19a66;
+  --syn-type: #e5c07b;
+  --syn-operator: #56b6c2;
+  --syn-comment: #7d8799;
+  --syn-string: #98c379;
+  --syn-heading: #e06c75;
+  --syn-invalid: #ffffff;
+
+  /* --- ciò che vale per tutta la pagina ---------------------------------- */
+
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  /* Dice al motore in che luce siamo: da qui prendono il verso le barre di
+     scorrimento, il cursore di testo e i controlli nativi (`<progress>`,
+     `<input type="checkbox">`), che nessuna nostra regola raggiunge. Senza,
+     un tema chiaro ha ancora le scrollbar scure. */
+  color-scheme: dark;
+}
+
+/* Il tema chiaro: **solo** i colori che cambiano. Le dimensioni non si
+   ridichiarano, e i riempimenti in alpha su grigio nemmeno — sono stati scelti
+   perché reggono su entrambi i fondi, e ridichiararli sarebbe la duplicazione
+   che questo file evita. */
+:root[data-theme="light"] {
+  --bg: #f7f7f9;
+  /* Sollevato, in luce, vuol dire **più chiaro**: la topbar e i pannelli
+     galleggiano verso il bianco, non verso il nero. È la sola riga di questo
+     blocco che inverte una direzione invece di cambiare un valore. */
+  --bg-elev: #ffffff;
+  --bg-input: #ececf1;
+  --bg-hover: #e8e8ee;
+
+  --border: #d9d9e0;
+
+  --text: #1c1c22;
+  --muted: #5f5f6b;
+
+  /* L'accento scurisce. Il bianco sopra `#6d5efc` sta a 4,51:1 — cioè passa la
+     soglia AA per il quinto decimale, che vuol dire che non la passa: basta un
+     antialiasing o un pulsante disabilitato al 50% di opacità e sotto ci
+     finisce. Sopra `#4f3fd6` sta a 7,0:1. I due numeri non stanno qui per
+     fiducia: li ricalcola `theme/contrast.test.ts` a ogni giro, sulle coppie
+     che i token dichiarano di formare.
+
+     E `--accent-soft` scurisce con lui, per il verso opposto a quello del tema
+     scuro: là «tenue» vuol dire più chiaro dell'accento, qui più scuro, perché
+     da questa parte è il fondo a essere chiaro. Valeva `#6d5efc` — l'accento
+     del tema scuro, ricopiato — e come inchiostro stava a 4,21:1 sul fondo
+     dell'app. */
+  --accent: #4f3fd6;
+  --accent-soft: #5d4cfc;
+  --accent-contrast: #ffffff;
+
+  --danger: #c0392f;
+  --danger-wash: rgb(192 57 47 / 12%);
+  --danger-contrast: #ffffff;
+
+  --focus-ring: #3b2fbd;
+
+  --scrim: rgb(20 20 30 / 35%);
+  --shadow-sm: 0 4px 14px rgb(20 20 40 / 12%);
+  --shadow-md: 0 6px 20px rgb(20 20 40 / 14%);
+  --shadow-lg: 0 10px 30px rgb(20 20 40 / 18%);
+
+  --doc-bg: #fafafa;
+  --doc-fg: #383a42;
+  /* Il blu di One Light è `#4078f2` e sopra `#fafafa` sta a 3,88:1: un
+     wikilink è testo, e la soglia del testo è 4,5:1. Scurito quanto basta. */
+  --doc-link: #2b69f1;
+  --doc-heading: #e45649;
+  --doc-danger: #c0392f;
+  --doc-highlight: rgb(255 205 0 / 45%);
+
+  --doc-caret: #526fff;
+  --doc-selection: #dcdde0;
+  --doc-active-line: #f0f0f0;
+  /* Il grigio del margine di One Light (`#9d9d9f`) sul suo fondo sta a
+     2,59:1 — il numero più basso dell'intera tavolozza chiara. */
+  --doc-gutter-fg: #727275;
+  --doc-tooltip-bg: #f0f0f0;
+
+  /* Un pallino del grafo non è testo, ma è ciò che distingue un nodo dal
+     vuoto: `#9a9aa8` sul fondo chiaro stava a 2,60:1, sotto il minimo dei
+     segni. */
+  --graph-node: #8b8b9b;
+  --graph-node-active: #4f3fd6;
+  --graph-node-hover: #3f8c3e;
+
+  --syn-keyword: #a626a4;
+  --syn-name: #e45649;
+  --syn-function: #4078f2;
+  --syn-literal: #986801;
+  --syn-type: #c18401;
+  --syn-operator: #0184bc;
+  /* L'unico colore di One Light spostato, e di quel tanto che serve a superare
+     il pavimento dei segni: `#a0a1a7` sul fondo del documento stava a 2,47:1,
+     cioè sotto la soglia che vale perfino per una linea. Resta sotto la soglia
+     del testo, come metà di questa tavolozza, ed è il debito che
+     `theme/contrast.test.ts` tiene in elenco. */
+  --syn-comment: #8d8e96;
+  --syn-string: #50a14f;
+  --syn-heading: #e45649;
+  --syn-invalid: #ca1243;
+
+  color-scheme: light;
 }

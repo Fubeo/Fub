@@ -34,9 +34,8 @@ ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuov
 
 - [ ] **E2E** dell'app reale (tauri-driver/Playwright) sui flussi critici:
       apri vault, scrivi, rinomina, cerca, ripristina.
-- [ ] **Il check di accessibilità automatico è stato spostato al
-      [§12.4](12-stringhe-errori-locale.md#124-tema-token-accessibilità)**, che
-      possiede già l'argomento («passata di accessibilità strutturale: ruoli
+- [x] **Il check di accessibilità automatico è stato spostato al §12.4**, che
+      possedeva già l'argomento («passata di accessibilità strutturale: ruoli
       ARIA, focus visibile, focus trap, navigazione da tastiera, skip link»). Due
       ragioni. La prima è che un presidio senza la passata che deve presidiare
       non ha niente da tenere fermo: si scrive **dopo**, e allora si scrive dove
@@ -49,6 +48,11 @@ ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuov
       seduta ha sostituito. Ora la resa è ferma, e la passata di accessibilità
       ha finalmente qualcosa di stabile su cui girare — resta il fatto che si
       scrive **dopo** la passata, dove sta lei.
+      **Fatto**, insieme alla passata, dalla
+      [decisione 0042](../decisions/0042-il-catalogo-della-shell.md):
+      `frontend/src/ui/a11y-check.ts` e il suo presidio, che gira sulla scocca
+      vera. La previsione era giusta — il costo è calato, e il check presidia
+      una resa che nel frattempo si era fermata.
 
 ### 17.3 Osservabilità
 

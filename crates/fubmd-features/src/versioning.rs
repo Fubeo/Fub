@@ -67,6 +67,7 @@ use std::sync::{Arc, Mutex};
 
 use fubmd_abi::event::{Event, EventKind, EventMask, Notice};
 use fubmd_abi::model::DocId;
+use fubmd_abi::text::{Arg, StringCatalog, Text};
 use fubmd_abi::traits::{EventHandler, HostApi};
 use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
@@ -77,6 +78,52 @@ pub const VERSIONING_ID: &str = "fubmd.versioning";
 
 /// Versione del formato dello store. Da incrementare se cambia la struttura
 /// su disco: un indice di un'altra epoca si butta e si ricostruisce.
+/// Le chiavi delle stringhe che il versioning scrive a un umano. Sono **tutte**
+/// messaggi d'errore, ed è la conseguenza diretta della
+/// [decisione 0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md):
+/// un componente senza pannelli non ha prosa da mostrare finché non va storto
+/// qualcosa, e allora ne ha soltanto quella. Le righe che restano in italiano
+/// cablato — gli `eprintln!` di questo file — non sono qui apposta: sono log, e
+/// il log è la forma per chi sviluppa, non per chi legge (0041, `Display`).
+const NO_VERSIONS: &str = "no_versions";
+const NO_SUCH_VERSION: &str = "no_such_version";
+const CONTENT_GONE: &str = "content_gone";
+const UNREADABLE: &str = "unreadable";
+const META_UNWRITABLE: &str = "meta_unwritable";
+const INDEX_UNWRITABLE: &str = "index_unwritable";
+/// I nomi degli argomenti.
+const DOC: &str = "doc";
+const WHEN: &str = "when";
+const PATH: &str = "path";
+const REASON: &str = "reason";
+
+/// Le stringhe del versioning. Vedi
+/// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
+/// componente e non nella shell.
+///
+/// Le etichette del suo **interruttore** non stanno qui: le dichiara chi
+/// dichiara lo schema (`fubmd_host::settings::versioning_settings`), e il suo
+/// catalogo arriva al montaggio accanto a questo, come secondo catalogo della
+/// stessa lingua.
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(NO_VERSIONS, "Nessuna versione di {doc}.")
+            .with(NO_SUCH_VERSION, "La versione del {when} di {doc} non c'è.")
+            .with(CONTENT_GONE, "Il contenuto di {path} è sparito.")
+            .with(UNREADABLE, "{path} non si legge: {reason}")
+            .with(META_UNWRITABLE, "Non riesco a scrivere i metadati delle versioni: {reason}")
+            .with(INDEX_UNWRITABLE, "Non riesco a scrivere l'indice delle versioni: {reason}"),
+        StringCatalog::new("en")
+            .with(NO_VERSIONS, "No version of {doc}.")
+            .with(NO_SUCH_VERSION, "There is no version of {doc} from {when}.")
+            .with(CONTENT_GONE, "The content of {path} is gone.")
+            .with(UNREADABLE, "{path} cannot be read: {reason}")
+            .with(META_UNWRITABLE, "Cannot write the versions metadata: {reason}")
+            .with(INDEX_UNWRITABLE, "Cannot write the versions index: {reason}"),
+    ]
+}
+
 const SCHEMA_VERSION: u32 = 1;
 
 const INDEX_FILE: &str = "versions.json";
@@ -316,17 +363,34 @@ impl VersionStore {
         let doc = inner
             .docs
             .get(id.as_str())
-            .ok_or_else(|| PluginError::BadArgs(format!("nessuna versione di {id}").into()))?;
+            .ok_or_else(|| {
+                PluginError::BadArgs(Text::message(
+                    NO_VERSIONS,
+                    vec![Arg::text(DOC, id.as_str())],
+                ))
+            })?;
         if !doc.versions.iter().any(|v| v.ts == ts) {
-            return Err(PluginError::BadArgs(
-                format!("versione {ts} di {id}: non c'è").into(),
-            ));
+            return Err(PluginError::BadArgs(Text::message(
+                NO_SUCH_VERSION,
+                // Un istante, non una data già scritta: il fuso e il calendario
+                // di chi legge li conosce chi risolve, non chi solleva
+                // l'errore. È la ragione per cui `ArgValue::Timestamp` esiste.
+                vec![Arg::timestamp(WHEN, ts), Arg::text(DOC, id.as_str())],
+            )));
         }
         let path = blob(&doc.dir, &snapshot_name(ts, id.as_str()));
         let bytes = host.data_read(&path)?.ok_or_else(|| {
-            PluginError::Internal(format!("{path}: il contenuto è sparito").into())
+            PluginError::Internal(Text::message(
+                CONTENT_GONE,
+                vec![Arg::text(PATH, path.clone())],
+            ))
         })?;
-        String::from_utf8(bytes).map_err(|e| PluginError::Internal(format!("{path}: {e}").into()))
+        String::from_utf8(bytes).map_err(|e| {
+            PluginError::Internal(Text::message(
+                UNREADABLE,
+                vec![Arg::text(PATH, path), Arg::text(REASON, e.to_string())],
+            ))
+        })
     }
 
     /// Questo documento ha già una storia?
@@ -468,8 +532,12 @@ impl Inner {
             doc_id: id.to_string(),
             deleted_at: doc.deleted_at,
         };
-        let raw = serde_json::to_vec(&meta)
-            .map_err(|e| PluginError::Internal(format!("meta versioni: {e}").into()))?;
+        let raw = serde_json::to_vec(&meta).map_err(|e| {
+            PluginError::Internal(Text::message(
+                META_UNWRITABLE,
+                vec![Arg::text(REASON, e.to_string())],
+            ))
+        })?;
         host.data_write(&blob(&doc.dir, META_FILE), &raw)
     }
 
@@ -478,8 +546,12 @@ impl Inner {
             schema_version: SCHEMA_VERSION,
             docs: self.docs.clone(),
         };
-        let raw = serde_json::to_vec(&index)
-            .map_err(|e| PluginError::Internal(format!("indice versioni: {e}").into()))?;
+        let raw = serde_json::to_vec(&index).map_err(|e| {
+            PluginError::Internal(Text::message(
+                INDEX_UNWRITABLE,
+                vec![Arg::text(REASON, e.to_string())],
+            ))
+        })?;
         host.data_write(INDEX_FILE, &raw)
     }
 }

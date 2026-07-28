@@ -6,6 +6,9 @@
 // callback. Stavano in `main.ts` insieme a tutto il resto, ed è la ragione per
 // cui un pannello nuovo non poteva averle senza copiarle.
 
+import { t } from "../i18n/strings";
+import { intrappolaFuoco } from "./a11y";
+
 export interface MenuItem {
   label: string;
   /// Voce distruttiva: la si distingue perché sia difficile sbagliarla.
@@ -13,14 +16,22 @@ export interface MenuItem {
   run: () => void;
 }
 
+/// Come si scioglie la trappola del fuoco del menu aperto.
+let sciogliMenu: (() => void) | null = null;
+
 export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   closeContextMenu();
   const menu = document.createElement("div");
   menu.id = "context-menu";
+  // Un menu è un menu: il ruolo è ciò che fa annunciare «menu, cinque voci» e
+  // permette di uscirne sapendo di esserci entrati.
+  menu.setAttribute("role", "menu");
+  menu.tabIndex = -1;
   menu.style.left = `${at.clientX}px`;
   menu.style.top = `${at.clientY}px`;
   for (const item of items) {
     const b = document.createElement("button");
+    b.setAttribute("role", "menuitem");
     b.textContent = item.label;
     if (item.danger) b.className = "danger";
     b.addEventListener("click", () => {
@@ -30,6 +41,10 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
     menu.appendChild(b);
   }
   document.body.appendChild(menu);
+  // Il fuoco entra nel menu e non ne esce col tab, ed Escape lo chiude. Senza,
+  // un menu contestuale era raggiungibile **solo** col tasto destro del mouse:
+  // per chi naviga da tastiera, rinominare o eliminare una nota non esisteva.
+  sciogliMenu = intrappolaFuoco(menu, closeContextMenu);
   // Il primo click fuori chiude: `once` evita di dover disiscrivere a mano, e
   // il ritardo evita che sia questo stesso click ad attivarlo.
   setTimeout(() => document.addEventListener("click", closeContextMenu, { once: true }), 0);
@@ -37,6 +52,8 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
 
 export function closeContextMenu(): void {
   document.getElementById("context-menu")?.remove();
+  sciogliMenu?.();
+  sciogliMenu = null;
 }
 
 const ICON_PRESETS = [
@@ -51,12 +68,18 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   document.getElementById("icon-picker")?.remove();
   const pop = document.createElement("div");
   pop.id = "icon-picker";
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", t("icons.choose"));
+  pop.tabIndex = -1;
   pop.style.left = `${Math.min(at.clientX, window.innerWidth - 240)}px`;
   pop.style.top = `${at.clientY}px`;
 
+  let sciogli: (() => void) | null = null;
   const chiudi = () => {
     pop.remove();
     document.removeEventListener("mousedown", fuori, true);
+    sciogli?.();
+    sciogli = null;
   };
   const fuori = (e: MouseEvent) => {
     if (!pop.contains(e.target as Node)) chiudi();
@@ -71,13 +94,23 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   for (const emoji of ICON_PRESETS) {
     const b = document.createElement("button");
     b.textContent = emoji;
+    // Un pulsante il cui unico contenuto è un'emoji prende il nome dal nome
+    // Unicode del carattere, letto in inglese in mezzo a un'interfaccia
+    // italiana. Un nome migliore vorrebbe una tabella di traduzioni che questa
+    // shell non ha e che non è di questa voce; dichiarare esplicitamente
+    // l'emoji come nome accessibile almeno rende l'annuncio **uno** e
+    // prevedibile, invece di lasciarlo a come ciascun motore descrive i simboli.
+    b.setAttribute("aria-label", emoji);
     b.addEventListener("click", () => applica(emoji));
     grid.appendChild(b);
   }
   pop.appendChild(grid);
 
   const input = document.createElement("input");
-  input.placeholder = "un'emoji qualsiasi…";
+  input.placeholder = t("icons.any");
+  // Il segnaposto non è un'etichetta: sparisce appena si scrive, e per chi
+  // ascolta non c'è mai stato.
+  input.setAttribute("aria-label", t("icons.any"));
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && input.value.trim()) applica(input.value.trim());
     else if (e.key === "Escape") chiudi();
@@ -86,11 +119,18 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
 
   const rimuovi = document.createElement("button");
   rimuovi.className = "icon-none";
-  rimuovi.textContent = "Senza icona";
+  rimuovi.textContent = t("icons.none");
   rimuovi.addEventListener("click", () => applica(null));
   pop.appendChild(rimuovi);
 
   document.body.appendChild(pop);
+  // La trappola prima del `focus()` esplicito: `intrappolaFuoco` metterebbe il
+  // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
+  // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare
+  // venti pulsanti. Le due righe non sono in conflitto: la seconda sposta il
+  // fuoco dentro la stessa superficie, che è dove la trappola lo vuole.
+  const sciogliPop = intrappolaFuoco(pop, chiudi);
+  sciogli = sciogliPop;
   input.focus();
   document.addEventListener("mousedown", fuori, true);
 }

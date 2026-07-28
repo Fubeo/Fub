@@ -50,6 +50,7 @@ use std::sync::Mutex;
 use camino::Utf8Path;
 use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery};
+use fubmd_abi::text::{Arg, StringCatalog, Text};
 use fubmd_abi::traits::{
     DocumentMatch, HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, PredicateKind,
     QueryRoute,
@@ -272,7 +273,7 @@ impl SearchIndex {
             std::fs::create_dir_all(dir).map_err(|e| io_err(dir, e))?;
             index = Some(
                 Index::create_in_dir(dir, schema.clone())
-                    .map_err(|e| PluginError::Internal(format!("creazione indice: {e}").into()))?,
+                    .map_err(|e| PluginError::Internal(motivo(INDEX_CREATE, e)))?,
             );
         }
         let index = index.expect("appena creato se assente");
@@ -282,13 +283,13 @@ impl SearchIndex {
         // istanza di FubMD ha già questo vault aperto, e la sua copia è viva e
         // corretta. Si rinuncia alla ricerca, non ai dati di qualcun altro.
         let writer: IndexWriter = index.writer(WRITER_HEAP).map_err(|e| {
-            PluginError::Internal(
-                format!(
-                    "writer indice ({dir}): {e} — un'altra istanza di FubMD ha \
-                 forse questo vault già aperto"
-                )
-                .into(),
-            )
+            PluginError::Internal(Text::message(
+                INDEX_LOCKED,
+                vec![
+                    Arg::text(PATH, dir.to_string()),
+                    Arg::text(REASON, e.to_string()),
+                ],
+            ))
         })?;
         let reader = index
             .reader_builder()
@@ -296,7 +297,7 @@ impl SearchIndex {
             // sospeso): niente thread di watch sul meta.json.
             .reload_policy(ReloadPolicy::Manual)
             .try_into()
-            .map_err(|e| PluginError::Internal(format!("reader indice: {e}").into()))?;
+            .map_err(|e| PluginError::Internal(motivo(INDEX_READER, e)))?;
 
         // L'epoca dell'indice sul disco. Le impronte che le corrispondono
         // arrivano da `activate`, l'unico posto dove c'è un host per leggerle.
@@ -343,8 +344,113 @@ fn wipe(dir: &Utf8Path) -> Result<(), PluginError> {
     Ok(())
 }
 
+/// Le chiavi delle stringhe della ricerca.
+///
+/// Sono **tutte** messaggi d'errore, come nel versioning e per la stessa
+/// ragione: la ricerca non disegna niente — il pannello è della shell, e i
+/// risultati sono dati — quindi l'unica prosa che scrive è quella di quando non
+/// riesce. Undici delle tredici sono un fallimento della libreria d'indice
+/// impacchettato (vedi [`motivo`]); le altre due sono le due domande che la
+/// ricerca non serve.
+const INDEX_CREATE: &str = "index_create";
+const INDEX_LOCKED: &str = "index_locked";
+const INDEX_READER: &str = "index_reader";
+const INDEX_COMMIT: &str = "index_commit";
+const INDEX_RELOAD: &str = "index_reload";
+const INDEX_CLOSE: &str = "index_close";
+const MANIFEST_WRITE: &str = "manifest_write";
+const COUNT: &str = "count";
+const SEARCH: &str = "search";
+const SNIPPET: &str = "snippet";
+const DOC_READ: &str = "doc_read";
+const TOKENIZER: &str = "tokenizer";
+const IO: &str = "io";
+const UNSERVED_LEAF: &str = "unserved_leaf";
+const UNSERVED_FAMILY: &str = "unserved_family";
+const SELECT_UNSUPPORTED: &str = "select_unsupported";
+/// I nomi degli argomenti.
+const PATH: &str = "path";
+const REASON: &str = "reason";
+const WHAT: &str = "what";
+
+/// Le stringhe della ricerca. Vedi
+/// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
+/// componente e non nella shell.
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(INDEX_CREATE, "Non riesco a creare l'indice di ricerca: {reason}")
+            .with(
+                INDEX_LOCKED,
+                "L'indice di ricerca in {path} è occupato: {reason} — un'altra \
+                 istanza di FubMD ha forse questo vault già aperto.",
+            )
+            .with(INDEX_READER, "Non riesco a leggere l'indice di ricerca: {reason}")
+            .with(INDEX_COMMIT, "Non riesco a salvare l'indice di ricerca: {reason}")
+            .with(INDEX_RELOAD, "Non riesco a ricaricare l'indice di ricerca: {reason}")
+            .with(INDEX_CLOSE, "Non riesco a chiudere l'indice di ricerca: {reason}")
+            .with(MANIFEST_WRITE, "Non riesco a scrivere il manifest dell'indice: {reason}")
+            .with(COUNT, "Non riesco a contare i risultati: {reason}")
+            .with(SEARCH, "La ricerca non è riuscita: {reason}")
+            .with(SNIPPET, "Non riesco a preparare l'anteprima di un risultato: {reason}")
+            .with(DOC_READ, "Non riesco a leggere un documento dall'indice: {reason}")
+            .with(TOKENIZER, "Non riesco ad analizzare il testo cercato: {reason}")
+            .with(IO, "{path} non si legge: {reason}")
+            .with(UNSERVED_LEAF, "La ricerca non valuta questa condizione: {what}")
+            .with(UNSERVED_FAMILY, "La ricerca non serve questa famiglia di domande: {what}")
+            .with(
+                SELECT_UNSUPPORTED,
+                "La ricerca non ordina per proprietà e non sceglie le colonne: \
+                 quello lo fa chi ha il frontmatter.",
+            ),
+        StringCatalog::new("en")
+            .with(INDEX_CREATE, "Cannot create the search index: {reason}")
+            .with(
+                INDEX_LOCKED,
+                "The search index in {path} is busy: {reason} — another instance of \
+                 FubMD may already have this vault open.",
+            )
+            .with(INDEX_READER, "Cannot read the search index: {reason}")
+            .with(INDEX_COMMIT, "Cannot save the search index: {reason}")
+            .with(INDEX_RELOAD, "Cannot reload the search index: {reason}")
+            .with(INDEX_CLOSE, "Cannot close the search index: {reason}")
+            .with(MANIFEST_WRITE, "Cannot write the index manifest: {reason}")
+            .with(COUNT, "Cannot count the results: {reason}")
+            .with(SEARCH, "The search failed: {reason}")
+            .with(SNIPPET, "Cannot build the preview of a result: {reason}")
+            .with(DOC_READ, "Cannot read a document from the index: {reason}")
+            .with(TOKENIZER, "Cannot analyse the searched text: {reason}")
+            .with(IO, "{path} cannot be read: {reason}")
+            .with(UNSERVED_LEAF, "The search does not evaluate this condition: {what}")
+            .with(UNSERVED_FAMILY, "The search does not serve this family of questions: {what}")
+            .with(
+                SELECT_UNSUPPORTED,
+                "The search does not sort by property and does not pick columns: \
+                 that is for whoever has the frontmatter.",
+            ),
+    ]
+}
+
 fn io_err(path: &Utf8Path, e: std::io::Error) -> PluginError {
-    PluginError::Internal(format!("{path}: {e}").into())
+    PluginError::Internal(Text::message(
+        IO,
+        vec![
+            Arg::text(PATH, path.to_string()),
+            Arg::text(REASON, e.to_string()),
+        ],
+    ))
+}
+
+/// Il guscio comune degli undici fallimenti di libreria: una chiave che dice
+/// **cosa** non è riuscito, e la causa così come la racconta chi l'ha vista.
+///
+/// Il `{reason}` resta la frase di Tantivy, in inglese, e non c'è modo di
+/// tradurla: viene da fuori. Il degrado però è quello giusto — la frase che la
+/// contiene si legge nella lingua di chi guarda, e la causa resta cercabile
+/// così com'è, che è precisamente ciò che serve per riportarla a chi la sa
+/// leggere.
+fn motivo(key: &str, e: impl std::fmt::Display) -> Text {
+    Text::message(key, vec![Arg::text(REASON, e.to_string())])
 }
 
 impl SearchIndex {
@@ -420,10 +526,10 @@ impl SearchIndex {
         };
         let opstamp = writer
             .commit()
-            .map_err(|e| PluginError::Internal(format!("commit indice: {e}").into()))?;
+            .map_err(|e| PluginError::Internal(motivo(INDEX_COMMIT, e)))?;
         self.reader
             .reload()
-            .map_err(|e| PluginError::Internal(format!("reload indice: {e}").into()))?;
+            .map_err(|e| PluginError::Internal(motivo(INDEX_RELOAD, e)))?;
         self.opstamp.store(opstamp, Ordering::Relaxed);
         self.dirty.store(false, Ordering::Release);
         Ok(())
@@ -478,7 +584,7 @@ impl SearchIndex {
                 .collect(),
         };
         let raw = serde_json::to_vec(&manifest)
-            .map_err(|e| PluginError::Internal(format!("manifest: {e}").into()))?;
+            .map_err(|e| PluginError::Internal(motivo(MANIFEST_WRITE, e)))?;
         host.data_write(MANIFEST, &raw)?;
         self.manifest_at = Some(opstamp);
         Ok(())
@@ -521,7 +627,7 @@ impl SearchIndex {
 
         let total = searcher
             .search(&*query, &tantivy::collector::Count)
-            .map_err(|e| PluginError::Internal(format!("conteggio: {e}").into()))?;
+            .map_err(|e| PluginError::Internal(motivo(COUNT, e)))?;
         let (offset, limit) = match page {
             // Senza finestra si restituisce tutto ciò che combacia: il tetto è
             // il conteggio, non un numero inventato qui.
@@ -542,7 +648,7 @@ impl SearchIndex {
             .order_by_score();
         let top = searcher
             .search(&*query, &collector)
-            .map_err(|e| PluginError::Internal(format!("ricerca: {e}").into()))?;
+            .map_err(|e| PluginError::Internal(motivo(SEARCH, e)))?;
 
         // Gli snippet li generano le sole foglie di **testo**: evidenziare la
         // cartella o il tag per cui una nota è stata selezionata non vuol dire
@@ -558,7 +664,7 @@ impl SearchIndex {
                         .collect::<Vec<_>>(),
                 ));
                 let mut gen = SnippetGenerator::create(&searcher, &*text_query, f.body)
-                    .map_err(|e| PluginError::Internal(format!("snippet: {e}").into()))?;
+                    .map_err(|e| PluginError::Internal(motivo(SNIPPET, e)))?;
                 gen.set_max_num_chars(SNIPPET_CHARS);
                 Some(gen)
             }
@@ -568,7 +674,7 @@ impl SearchIndex {
         for (score, address) in top {
             let doc: TantivyDocument = searcher
                 .doc(address)
-                .map_err(|e| PluginError::Internal(format!("lettura documento: {e}").into()))?;
+                .map_err(|e| PluginError::Internal(motivo(DOC_READ, e)))?;
             let Some(id) = doc.get_first(f.doc_id).and_then(|v| v.as_str()) else {
                 continue;
             };
@@ -703,9 +809,10 @@ impl SearchIndex {
             }
             // Il routing non manda qui ciò che non è stato dichiarato: se
             // succede è un errore del kernel, non una domanda malposta.
-            other => Err(PluginError::Unserved(
-                format!("la ricerca non valuta questa foglia: {other:?}").into(),
-            )),
+            other => Err(PluginError::Unserved(Text::message(
+                UNSERVED_LEAF,
+                vec![Arg::text(WHAT, format!("{other:?}"))],
+            ))),
         }
     }
 
@@ -798,7 +905,7 @@ impl SearchIndex {
         let mut analyzer = self
             .index
             .tokenizer_for_field(field)
-            .map_err(|e| PluginError::Internal(format!("tokenizer: {e}").into()))?;
+            .map_err(|e| PluginError::Internal(motivo(TOKENIZER, e)))?;
         let mut terms = Vec::new();
         let mut stream = analyzer.token_stream(text);
         while let Some(token) = stream.next() {
@@ -958,7 +1065,7 @@ impl IndexProvider for SearchIndex {
         };
         writer
             .wait_merging_threads()
-            .map_err(|e| PluginError::Internal(format!("chiusura indice: {e}").into()))
+            .map_err(|e| PluginError::Internal(motivo(INDEX_CLOSE, e)))
     }
 
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
@@ -975,12 +1082,7 @@ impl IndexProvider for SearchIndex {
                 // cache. Se arrivasse comunque, rispondere ignorandolo sarebbe
                 // mentire in silenzio.
                 if sort.is_some() || !select.is_none() {
-                    return Err(PluginError::BadArgs(
-                        "la ricerca seleziona: ordinare per proprietà e scegliere \
-                         le colonne li fa chi ha il frontmatter"
-                            .to_string()
-                            .into(),
-                    ));
+                    return Err(PluginError::BadArgs(Text::key(SELECT_UNSUPPORTED)));
                 }
                 Ok(IndexResult::Documents(self.search(&matching, page)?))
             }
@@ -990,9 +1092,10 @@ impl IndexProvider for SearchIndex {
             // Prima questo `match` doveva dirlo variante per variante con dei
             // `BadArgs`, perché era così che si scopriva chi servisse cosa;
             // adesso il routing è dichiarato e questo ramo è irraggiungibile.
-            other => Err(PluginError::Unserved(
-                format!("la ricerca non serve questa famiglia: {:?}", other.kind()).into(),
-            )),
+            other => Err(PluginError::Unserved(Text::message(
+                UNSERVED_FAMILY,
+                vec![Arg::text(WHAT, format!("{:?}", other.kind()))],
+            ))),
         }
     }
 }

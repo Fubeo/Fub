@@ -28,11 +28,13 @@ import {
   type FolderNode,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
+import { attivabile } from "../ui/a11y";
 import { pickIcon, showContextMenu } from "../ui/menu";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import { focusEditor, flushPendingSave, openDocument } from "./document";
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
+import { onLingua, t } from "../i18n/strings";
 
 const fileListEl = $("#file-list");
 const filesTitleEl = $("#files-title");
@@ -47,7 +49,14 @@ let drag: { path: string; kind: "note" | "folder"; parent: string } | null = nul
 export function mountExplorer(): void {
   $("#new-note").addEventListener("click", () => void newNote());
   spaceTitleEl.addEventListener("click", openSpaceNote);
+  frecceNellAlbero();
   wireRootDropTarget();
+  // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
+  // a casa dice «Note», dentro uno spazio dice il nome dello spazio. Un
+  // `data-i18n` sopra glielo riscriverebbe a «Note» a ogni cambio di lingua,
+  // cioè proprio quando l'utente non ha cambiato spazio.
+  onLingua(renderSpaceTitle);
+  renderSpaceTitle();
 
   // Una lista chiesta esplicitamente (apertura del vault, creazione, rinomina,
   // ripristino) si disegna sempre.
@@ -113,8 +122,122 @@ function renderFileList(docs: string[]): void {
   renderSpaceStrip();
   renderSpaceTitle();
   renderPinned(docs);
+  // Chi stava navigando da tastiera non deve perdere il posto: aprire una
+  // cartella ridisegna **tutto** l'albero, e senza questa riga il fuoco
+  // tornerebbe in cima al documento a ogni freccia destra — cioè la
+  // navigazione da tastiera si romperebbe proprio nel momento in cui la si sta
+  // usando.
+  const attiva = document.activeElement;
+  const daRimettere =
+    attiva instanceof HTMLElement && fileListEl.contains(attiva) ? attiva.dataset.path : undefined;
+
   fileListEl.innerHTML = "";
   renderChildren(buildTree(docs, state.meta, state.activeSpace ?? ""), fileListEl);
+
+  roving(daRimettere);
+  if (daRimettere !== undefined) voce(daRimettere)?.focus();
+}
+
+/// Le voci dell'albero, nell'ordine in cui si vedono.
+///
+/// «Che si vedono» è gratis: una cartella chiusa non disegna i propri figli
+/// (`renderChildren`), quindi ciò che è nel DOM è esattamente ciò che è a
+/// schermo. Se un giorno l'albero disegnasse tutto e nascondesse col CSS,
+/// questa funzione diventerebbe il posto da cui filtrare — ed è il motivo per
+/// cui è una funzione e non una `querySelectorAll` ripetuta tre volte.
+function vociAlbero(): HTMLElement[] {
+  return Array.from(fileListEl.querySelectorAll<HTMLElement>('li[role="treeitem"]'));
+}
+
+function voce(path: string): HTMLElement | undefined {
+  return vociAlbero().find((v) => v.dataset.path === path);
+}
+
+/// Accende il `tabindex` di **una** voce sola: quella che il tab troverà
+/// entrando nell'albero.
+///
+/// L'ordine di preferenza è quello che serve a chi arriva: dove si era, poi la
+/// nota aperta, poi la prima. Senza il secondo caso, entrare nell'albero
+/// riporterebbe sempre in cima anche quando si sta lavorando su una nota in
+/// fondo.
+function roving(preferita?: string): void {
+  const voci = vociAlbero();
+  if (voci.length === 0) return;
+  const scelta =
+    (preferita !== undefined ? voci.find((v) => v.dataset.path === preferita) : undefined) ??
+    voci.find((v) => v.dataset.path === state.currentDoc) ??
+    voci[0]!;
+  for (const v of voci) v.tabIndex = v === scelta ? 0 : -1;
+}
+
+/// Le frecce dentro l'albero (§12.4).
+///
+/// Sono i tasti di un elenco di file, e sono quelli che chiunque prova per
+/// primo: su e giù per scorrere, destra per aprire, sinistra per chiudere o per
+/// risalire, Invio per aprire la nota. L'ascoltatore è **uno**, sul contenitore
+/// — le voci si ridisegnano a ogni giro, e un ascoltatore per riga sarebbe un
+/// ascoltatore in più a ogni ridisegno su elementi già buttati via.
+function frecceNellAlbero(): void {
+  fileListEl.addEventListener("keydown", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    const corrente = target.closest<HTMLElement>('li[role="treeitem"]');
+    if (!corrente) return;
+
+    const voci = vociAlbero();
+    const i = voci.indexOf(corrente);
+    const espansa = corrente.getAttribute("aria-expanded");
+    const path = corrente.dataset.path;
+
+    const vai = (n: HTMLElement | undefined) => {
+      if (!n) return;
+      for (const v of voci) v.tabIndex = v === n ? 0 : -1;
+      n.focus();
+    };
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        vai(voci[i + 1]);
+        return;
+      case "ArrowUp":
+        e.preventDefault();
+        vai(voci[i - 1]);
+        return;
+      case "Home":
+        e.preventDefault();
+        vai(voci[0]);
+        return;
+      case "End":
+        e.preventDefault();
+        vai(voci[voci.length - 1]);
+        return;
+      case "ArrowRight":
+        e.preventDefault();
+        // Chiusa: si apre. Aperta: si scende dentro. È la stessa freccia con
+        // due significati, e sono l'uno la continuazione dell'altro.
+        if (espansa === "false" && path !== undefined) toggleFolder(path);
+        else if (espansa === "true") vai(voci[i + 1]);
+        return;
+      case "ArrowLeft": {
+        e.preventDefault();
+        if (espansa === "true" && path !== undefined) {
+          toggleFolder(path);
+          return;
+        }
+        // Altrimenti si risale al genitore, che è il `treeitem` che contiene
+        // questo — non il precedente nell'elenco, che sarebbe un fratello.
+        vai(corrente.parentElement?.closest<HTMLElement>('li[role="treeitem"]') ?? undefined);
+        return;
+      }
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        corrente.querySelector<HTMLElement>(":scope > .row")?.click();
+        return;
+      default:
+    }
+  });
 }
 
 /// I figli di una cartella, ricorsivamente: prima le sottocartelle (col loro
@@ -123,10 +246,19 @@ function renderFileList(docs: string[]): void {
 function renderChildren(node: FolderNode, ul: HTMLElement): void {
   for (const sub of node.folders) {
     const li = document.createElement("li");
-    li.appendChild(folderRow(sub));
-    if (state.expanded.has(sub.path)) {
+    const riga = folderRow(sub);
+    li.appendChild(riga);
+    const aperta = state.expanded.has(sub.path);
+    // Il ruolo sta sul `<li>` e non sulla riga, perché il `<li>` è ciò che
+    // contiene anche il sottoalbero: un `treeitem` che non contiene il proprio
+    // gruppo è un albero che, letto, risulta piatto. Il **nome** viene invece
+    // dalla riga, o sarebbe la cartella più tutte le note che ci stanno dentro.
+    voceAlbero(li, riga, sub.path);
+    li.setAttribute("aria-expanded", String(aperta));
+    if (aperta) {
       const nested = document.createElement("ul");
       nested.className = "tree-children";
+      nested.setAttribute("role", "group");
       renderChildren(sub, nested);
       li.appendChild(nested);
     }
@@ -136,10 +268,36 @@ function renderChildren(node: FolderNode, ul: HTMLElement): void {
   for (const id of node.notes) {
     if (id === fnote) continue;
     const li = document.createElement("li");
-    li.appendChild(noteRow(id, { draggable: true }));
+    const riga = noteRow(id, { draggable: true });
+    li.appendChild(riga);
+    voceAlbero(li, riga, id);
+    // Una nota non si espande: dichiarare `aria-expanded` su una foglia
+    // annuncia «compressa» a chi non ha niente da aprire.
+    if (id === state.currentDoc) li.setAttribute("aria-selected", "true");
     ul.appendChild(li);
   }
 }
+
+/// Fa di un `<li>` una voce d'albero: il ruolo, il nome preso dalla riga, e il
+/// posto nel giro del tab.
+///
+/// `tabIndex = -1` per tutti, e poi `roving()` ne accende **uno**: è la
+/// convenzione dei widget ad albero, e la ragione è pratica. Un vault con
+/// duecento note darebbe duecento fermate del tab fra la ricerca e l'editor;
+/// con una sola, il tab entra nell'albero e le frecce ci si muovono dentro —
+/// che è come si muove chiunque abbia mai usato un elenco di file.
+function voceAlbero(li: HTMLElement, riga: HTMLElement, path: string): void {
+  const nome = riga.querySelector<HTMLElement>(".row-name");
+  if (nome) {
+    if (!nome.id) nome.id = `voce-${++contatoreVoci}`;
+    li.setAttribute("aria-labelledby", nome.id);
+  }
+  li.setAttribute("role", "treeitem");
+  li.dataset.path = path;
+  li.tabIndex = -1;
+}
+
+let contatoreVoci = 0;
 
 /// La riga di una nota, usata sia nell'albero sia tra le appuntate (dove il
 /// drag non ha senso: l'ordine delle appuntate è l'ordine in cui si appunta).
@@ -159,11 +317,14 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
     e.preventDefault();
     const appuntata = state.meta.pinned.includes(id);
     showContextMenu(e, [
-      { label: "Rinomina", run: () => startRename(row, id) },
-      { label: "Icona…", run: () => scegliIcona(e, id) },
-      { label: appuntata ? "Togli dalle appuntate" : "Appunta", run: () => togglePin(id) },
-      { label: "Converti in cartella", run: () => void convertToFolder(id) },
-      { label: "Elimina", danger: true, run: () => void trashWithConfirm(id) },
+      { label: t("explorer.rename"), run: () => startRename(row, id) },
+      { label: t("explorer.icon"), run: () => scegliIcona(e, id) },
+      {
+        label: appuntata ? t("explorer.unpin") : t("explorer.pin"),
+        run: () => togglePin(id),
+      },
+      { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
+      { label: t("explorer.delete"), danger: true, run: () => void trashWithConfirm(id) },
     ]);
   });
   if (opts.draggable) wireDrag(row, id, "note");
@@ -205,8 +366,8 @@ function folderRow(folder: FolderNode): HTMLElement {
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     showContextMenu(e, [
-      { label: "Icona…", run: () => scegliIcona(e, folder.path) },
-      { label: "Usa come spazio", run: () => addSpace(folder.path) },
+      { label: t("explorer.icon"), run: () => scegliIcona(e, folder.path) },
+      { label: t("explorer.as_space"), run: () => addSpace(folder.path) },
     ]);
   });
   wireDrag(row, folder.path, "folder");
@@ -230,6 +391,14 @@ function markActive(): void {
   document
     .querySelectorAll<HTMLElement>("#files-panel .row.note")
     .forEach((row) => row.classList.toggle("active", row.title === state.currentDoc));
+  // Qual è la nota aperta è uno **stato**, e va detto anche a chi non vede lo
+  // sfondo cambiare. Sta qui e non in `renderChildren` perché cambiare nota non
+  // ridisegna l'albero: se stesse solo di là, l'annuncio resterebbe sulla nota
+  // di prima fino al primo ridisegno per un'altra ragione.
+  for (const li of vociAlbero()) {
+    if (li.dataset.path === state.currentDoc) li.setAttribute("aria-selected", "true");
+    else li.removeAttribute("aria-selected");
+  }
 }
 
 // --- appuntate, icone, spazi ------------------------------------------------
@@ -242,7 +411,13 @@ function renderPinned(docs: string[]): void {
   pinnedListEl.innerHTML = "";
   for (const id of pinned) {
     const li = document.createElement("li");
-    li.appendChild(noteRow(id, { draggable: false }));
+    const riga = noteRow(id, { draggable: false });
+    // Le appuntate sono una lista piatta e non un albero: qui il bersaglio del
+    // tab è la riga stessa, che è anche ciò che si clicca. Sono poche per
+    // costruzione — le appunta l'utente — quindi non serve il `roving` che
+    // l'albero usa per non diventare duecento fermate.
+    attivabile(riga);
+    li.appendChild(riga);
     pinnedListEl.appendChild(li);
   }
 }
@@ -267,7 +442,7 @@ function renderSpaceStrip(): void {
   const home = document.createElement("button");
   home.className = "space-chip" + (state.activeSpace === null ? " active" : "");
   home.textContent = "🏠";
-  home.title = "Tutto il vault";
+  home.title = t("explorer.whole_vault");
   home.addEventListener("click", () => selectSpace(null));
   spaceStripEl.appendChild(home);
 
@@ -280,8 +455,8 @@ function renderSpaceStrip(): void {
     chip.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       showContextMenu(e, [
-        { label: "Icona…", run: () => scegliIcona(e, path) },
-        { label: "Togli dagli spazi", run: () => removeSpace(path) },
+        { label: t("explorer.icon"), run: () => scegliIcona(e, path) },
+        { label: t("explorer.not_a_space"), run: () => removeSpace(path) },
       ]);
     });
     spaceStripEl.appendChild(chip);
@@ -290,7 +465,7 @@ function renderSpaceStrip(): void {
   const add = document.createElement("button");
   add.className = "space-chip add";
   add.textContent = "+";
-  add.title = "Nuovo spazio da una cartella";
+  add.title = t("explorer.new_space");
   add.addEventListener("click", (e) => pickNewSpace(e));
   spaceStripEl.appendChild(add);
 }
@@ -300,7 +475,7 @@ function renderSpaceStrip(): void {
 function renderSpaceTitle(): void {
   spaceTitleEl.textContent =
     state.activeSpace === null
-      ? "Note"
+      ? t("explorer.notes")
       : `${state.meta.icons[state.activeSpace] ?? "🗂️"} ${childName(state.activeSpace)}`;
   spaceTitleEl.classList.toggle("clickable", state.activeSpace !== null);
 }
@@ -332,7 +507,7 @@ function pickNewSpace(at: MouseEvent): void {
     (f) => !state.meta.spaces.includes(f.path),
   );
   if (candidate.length === 0) {
-    showContextMenu(at, [{ label: "Nessuna cartella disponibile", run: () => {} }]);
+    showContextMenu(at, [{ label: t("explorer.no_folders"), run: () => {} }]);
     return;
   }
   showContextMenu(
@@ -412,7 +587,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   try {
     await renameNote(from, to);
   } catch (e) {
-    console.error(`FubMD: rinomina di ${from} in ${to} rifiutata: ${errorText(e)}`);
+    console.error(`FubMD: ${t("explorer.rename_failed", { doc: from, to, reason: errorText(e) })}`);
     renderFileList(state.knownDocs);
   }
   // `currentDoc` lo aggiorna l'evento `document_renamed`: l'identità è il path,
@@ -433,7 +608,7 @@ async function convertToFolder(id: string): Promise<void> {
   try {
     await renameNote(id, `${folderPath}/${childName(id)}`);
   } catch (e) {
-    console.error(`FubMD: non riesco a convertire ${id} in cartella: ${errorText(e)}`);
+    console.error(`FubMD: ${t("explorer.to_folder_failed", { doc: id, reason: errorText(e) })}`);
     return;
   }
   state.expanded.add(folderPath);
@@ -526,7 +701,13 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   try {
     await renameNote(id, to);
   } catch (e) {
-    console.error(`FubMD: non riesco a spostare ${id} in ${folderPath || "radice"}: ${errorText(e)}`);
+    console.error(
+      `FubMD: ${t("explorer.move_failed", {
+        doc: id,
+        folder: folderPath || t("explorer.root"),
+        reason: errorText(e),
+      })}`,
+    );
     return;
   }
   if (folderPath) state.expanded.add(folderPath);

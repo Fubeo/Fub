@@ -34,7 +34,14 @@ impl Vault {
         let mut ws = Workspace::new(&self.root, registry);
         // I plugin di prova si dichiarano prima di registrare (§7.3): il
         // kernel non presta capacità a una stringa.
-        ws.register_core_feature(STATS_ID, STATS_ID)
+        // Col catalogo, non `register_core_feature`: il pannello parla per
+        // chiavi, e un banco senza le sue stringhe legge `doc_counts` — che è
+        // l'ultimo gradino della 0040 e non ciò che questo test vuole provare.
+        ws.register_plugin(
+            fubmd_abi::traits::PluginManifest::core(STATS_ID, STATS_ID)
+                .speaking("it", fubmd_features::stats::catalog()),
+            fubmd_kernel::Trust::Core,
+        )
             .expect("dichiarato");
         ws.register_view_provider(STATS_ID, Box::new(StatsView))
             .expect("registrato");
@@ -77,8 +84,8 @@ fn the_selection_text_survives_a_dirty_buffer_where_a_span_would_not() {
     assert_eq!(
         testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
         vec![
-            "4 parole · 18 caratteri".to_string(),
-            "selezione: 3 parole · 21 caratteri".to_string()
+            "Parole: 4 · Caratteri: 18".to_string(),
+            "Selezione — parole: 3 · caratteri: 21".to_string()
         ],
         "il documento viene dal vault, la selezione dal buffer: contare la \
          seconda ritagliando il primo darebbe i byte sbagliati"
@@ -93,7 +100,7 @@ fn the_selection_text_survives_a_dirty_buffer_where_a_span_would_not() {
     assert_eq!(
         testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
         vec![
-            "4 parole · 18 caratteri".to_string(),
+            "Parole: 4 · Caratteri: 18".to_string(),
             "~1 min di lettura".to_string()
         ]
     );
@@ -118,7 +125,7 @@ fn a_write_makes_the_kernel_drop_the_selection_under_it() {
         .expect("riscrive");
     assert_eq!(
         testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
-        vec!["4 parole · 28 caratteri".to_string()],
+        vec!["Parole: 4 · Caratteri: 28".to_string()],
         "il sorgente sotto la selezione è cambiato: la selezione cade, e col \
          conteggio se ne va anche la riga che la mostrava"
     );

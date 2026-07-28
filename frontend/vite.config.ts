@@ -21,5 +21,10 @@ export default defineConfig({
     // stringa di zero caratteri, non la troverebbe mai, e non lo direbbe a
     // nessuno. Un presidio che non può fallire è peggio di nessun presidio.
     css: true,
+    // In che lingua gira la suite, e perché la domanda esiste: sta scritto in
+    // `src/test-setup.ts`. In breve: `t()` risolve su `navigator.language`, e
+    // senza questa riga i presidi che guardano del testo passerebbero o
+    // fallirebbero a seconda del locale della macchina che li lancia.
+    setupFiles: ["./src/test-setup.ts"],
   },
 });

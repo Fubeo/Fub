@@ -37,6 +37,7 @@ use std::sync::RwLock;
 
 use fubmd_abi::locale::{HourCycle, Locale, Weekday};
 use fubmd_abi::settings::{SettingKind, SettingSpec};
+use fubmd_abi::text::{StringCatalog, Text};
 use fubmd_abi::ui::UiOption;
 
 /// La lingua in cui leggere l'interfaccia. Vuota = quella del sistema.
@@ -112,62 +113,142 @@ pub fn locale_settings() -> Vec<SettingSpec> {
     vec![
         SettingSpec::new(
             LANGUAGE,
-            "Lingua",
+            Text::key(L_LANGUAGE),
             SettingKind::Text {
                 default: AS_SYSTEM.into(),
             },
         )
-        .describing(
-            "Il tag BCP-47 della lingua dell'interfaccia (`it`, `it-IT`, `en-US`). \
-             Vuoto = quella del sistema.",
-        )
-        .grouped("Locale")
+        .describing(Text::key(L_LANGUAGE_DESC))
+        .grouped(Text::key(L_GROUP))
         .per_machine(),
         SettingSpec::new(
             TIMEZONE,
-            "Fuso orario",
+            Text::key(L_TIMEZONE),
             SettingKind::Text {
                 default: AS_SYSTEM.into(),
             },
         )
-        .describing(
-            "Il nome IANA del fuso (`Europe/Rome`). Vuoto = quello del sistema. \
-             Cambiarlo qui non cambia l'orologio del sistema: cambia come FubMD \
-             mostra le date.",
-        )
-        .grouped("Locale")
+        .describing(Text::key(L_TIMEZONE_DESC))
+        .grouped(Text::key(L_GROUP))
         .per_machine(),
         SettingSpec::new(
             FIRST_DAY,
-            "Primo giorno della settimana",
+            Text::key(L_FIRST_DAY),
             SettingKind::Choice {
                 default: AS_SYSTEM.into(),
                 options: vec![
-                    UiOption::new(AS_SYSTEM, "Come il sistema"),
-                    UiOption::new("monday", "Lunedì"),
-                    UiOption::new("saturday", "Sabato"),
-                    UiOption::new("sunday", "Domenica"),
+                    UiOption::new(AS_SYSTEM, Text::key(AS_SYSTEM_KEY)),
+                    UiOption::new("monday", Text::key(L_MONDAY)),
+                    UiOption::new("saturday", Text::key(L_SATURDAY)),
+                    UiOption::new("sunday", Text::key(L_SUNDAY)),
                 ],
             },
         )
-        .describing("Da che giorno comincia la settimana nel calendario.")
-        .grouped("Locale")
+        .describing(Text::key(L_FIRST_DAY_DESC))
+        .grouped(Text::key(L_GROUP))
         .per_machine(),
         SettingSpec::new(
             HOUR_CYCLE,
-            "Orologio",
+            Text::key(L_HOUR_CYCLE),
             SettingKind::Choice {
                 default: AS_SYSTEM.into(),
                 options: vec![
-                    UiOption::new(AS_SYSTEM, "Come il sistema"),
-                    UiOption::new("h23", "24 ore"),
-                    UiOption::new("h12", "12 ore"),
+                    UiOption::new(AS_SYSTEM, Text::key(AS_SYSTEM_KEY)),
+                    UiOption::new("h23", Text::key(L_H23)),
+                    UiOption::new("h12", Text::key(L_H12)),
                 ],
             },
         )
-        .describing("Se mostrare le ore da 0 a 23 o da 1 a 12 con AM/PM.")
-        .grouped("Locale")
+        .describing(Text::key(L_HOUR_CYCLE_DESC))
+        .grouped(Text::key(L_GROUP))
         .per_machine(),
+    ]
+}
+
+/// Le chiavi delle stringhe del locale. Nude, come vuole il contratto: a
+/// qualificarle è l'host con l'id del componente che le porta — il core.
+const L_GROUP: &str = "locale.group";
+/// «Come il sistema»: pubblica, perché la dice anche una chiave che non è del
+/// locale — `appearance.theme` — e due traduzioni della stessa scelta in due
+/// tendine vicine sono la prima cosa che si nota.
+pub const AS_SYSTEM_KEY: &str = "locale.as_system";
+const L_LANGUAGE: &str = "locale.language";
+const L_LANGUAGE_DESC: &str = "locale.language.desc";
+const L_TIMEZONE: &str = "locale.timezone";
+const L_TIMEZONE_DESC: &str = "locale.timezone.desc";
+const L_FIRST_DAY: &str = "locale.first_day";
+const L_FIRST_DAY_DESC: &str = "locale.first_day.desc";
+const L_MONDAY: &str = "locale.first_day.monday";
+const L_SATURDAY: &str = "locale.first_day.saturday";
+const L_SUNDAY: &str = "locale.first_day.sunday";
+const L_HOUR_CYCLE: &str = "locale.hour_cycle";
+const L_HOUR_CYCLE_DESC: &str = "locale.hour_cycle.desc";
+const L_H23: &str = "locale.hour_cycle.h23";
+const L_H12: &str = "locale.hour_cycle.h12";
+
+/// Le stringhe delle impostazioni del locale, nelle due lingue che questo repo
+/// scrive.
+///
+/// Sta **qui** e non accanto alle altre chiavi del core, che vivono in
+/// `fubmd-host`, per la ragione più semplice che ci sia: le impostazioni che
+/// descrive stanno qui. Un catalogo che si allontana dalle stringhe che
+/// traduce è un catalogo che si aggiorna a metà.
+///
+/// Le due metà arrivano al montaggio come **due cataloghi della stessa
+/// lingua**, e si sommano: vedi
+/// [`Strings::template`](fubmd_abi::text::Strings::template).
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(L_GROUP, "Locale")
+            .with(AS_SYSTEM_KEY, "Come il sistema")
+            .with(L_LANGUAGE, "Lingua")
+            .with(
+                L_LANGUAGE_DESC,
+                "Il tag BCP-47 della lingua dell'interfaccia (`it`, `it-IT`, `en-US`). \
+                 Vuoto = quella del sistema.",
+            )
+            .with(L_TIMEZONE, "Fuso orario")
+            .with(
+                L_TIMEZONE_DESC,
+                "Il nome IANA del fuso (`Europe/Rome`). Vuoto = quello del sistema. \
+                 Cambiarlo qui non cambia l'orologio del sistema: cambia come FubMD \
+                 mostra le date.",
+            )
+            .with(L_FIRST_DAY, "Primo giorno della settimana")
+            .with(L_FIRST_DAY_DESC, "Da che giorno comincia la settimana nel calendario.")
+            .with(L_MONDAY, "Lunedì")
+            .with(L_SATURDAY, "Sabato")
+            .with(L_SUNDAY, "Domenica")
+            .with(L_HOUR_CYCLE, "Orologio")
+            .with(L_HOUR_CYCLE_DESC, "Se mostrare le ore da 0 a 23 o da 1 a 12 con AM/PM.")
+            .with(L_H23, "24 ore")
+            .with(L_H12, "12 ore"),
+        StringCatalog::new("en")
+            .with(L_GROUP, "Locale")
+            .with(AS_SYSTEM_KEY, "Same as system")
+            .with(L_LANGUAGE, "Language")
+            .with(
+                L_LANGUAGE_DESC,
+                "The BCP-47 tag of the interface language (`it`, `it-IT`, `en-US`). \
+                 Empty = the system one.",
+            )
+            .with(L_TIMEZONE, "Time zone")
+            .with(
+                L_TIMEZONE_DESC,
+                "The IANA name of the time zone (`Europe/Rome`). Empty = the system \
+                 one. Changing it here does not change the system clock: it changes \
+                 how FubMD shows dates.",
+            )
+            .with(L_FIRST_DAY, "First day of the week")
+            .with(L_FIRST_DAY_DESC, "Which day the calendar week starts on.")
+            .with(L_MONDAY, "Monday")
+            .with(L_SATURDAY, "Saturday")
+            .with(L_SUNDAY, "Sunday")
+            .with(L_HOUR_CYCLE, "Clock")
+            .with(L_HOUR_CYCLE_DESC, "Whether to show hours from 0 to 23 or from 1 to 12 with AM/PM.")
+            .with(L_H23, "24-hour")
+            .with(L_H12, "12-hour"),
     ]
 }
 
