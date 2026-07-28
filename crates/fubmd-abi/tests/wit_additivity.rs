@@ -47,14 +47,14 @@
 //! linea di base — cioè con un commit che tocca `wit/frozen/0.1.0.wit`, che in
 //! review si vede. Dopo M4 quel file non si tocca più: si aggiunge
 //! `wit/frozen/<nuova-versione>.wit` e si lascia il precedente a fare da
-//! presidio. La regola in prosa sta in `wit/frozen/README.md`.
+//! presidio. La regola in prosa sta in `docs/architecture/wit-congelato.md`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
 
-const CURRENT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../wit/fubmd/abi.wit");
-const FROZEN_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../wit/frozen");
+const CURRENT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/wit/fubmd/abi.wit");
+const FROZEN_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/wit/frozen");
 
 // ---------------------------------------------------------------------------
 // Il contratto ridotto a ciò che si confronta

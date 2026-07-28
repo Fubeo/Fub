@@ -16,7 +16,7 @@
 // Da qui in poi sì.
 //
 // Uso:
-//   node scripts/check-doc-links.mjs [cartella]
+//   node .github/scripts/check-doc-links.mjs [cartella]
 // senza argomenti parte dalla cartella corrente (in CI: la radice del repo).
 // Exit code 1 se c'è almeno un link rotto, 0 altrimenti.
 //

@@ -75,7 +75,7 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
   condizionale deve risolversi quando può.
 - **La prosa si scrive lo stesso, perché è l'unica cosa che sarebbe servita.**
   Il trait ([`IndexProvider::query`](../../crates/fubmd-abi/src/traits.rs)) e il
-  WIT ([`index.query`](../../wit/fubmd/abi.wit)) adesso dicono per esteso ciò che
+  WIT ([`index.query`](../../crates/fubmd-abi/wit/fubmd/abi.wit)) adesso dicono per esteso ciò che
   era implicito: due `query` possono essere in volo insieme, serializzare è
   **permesso e sconsigliato**, e chi vuole sapere se il proprio indice scala lo
   misura. Non è una garanzia e non finge di esserlo: è la differenza fra un

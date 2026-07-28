@@ -269,7 +269,7 @@ provider venga — costa la chiamata, non il vault.**
 - **Contratto:** `PluginError::Cancelled` / `cancelled(string)` è **in coda** al
   variant, quindi additiva; `wit_conformance` (che verifica anche l'ordine dei
   casi contro la dichiarazione Rust) e `wit_additivity` (contro
-  `wit/frozen/0.1.0.wit`) sono verdi.
+  `crates/fubmd-abi/wit/frozen/0.1.0.wit`) sono verdi.
 - **Mirror TS invariato**: `UPDATE_MIRROR=1` su `ts_mirror_app` e `ts_mirror` non
   produce nessuna differenza — `PluginError` non attraversa l'IPC come tipo.
   `cd frontend && npx vitest run` (11 file, 173 test) e `npx tsc --noEmit`:

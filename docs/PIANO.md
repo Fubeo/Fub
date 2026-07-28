@@ -139,12 +139,19 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
 
 ## Mappa dei documenti
 
+Questa è la mappa **di dettaglio**, documento per documento. La porta di
+`docs/` — i percorsi di lettura, le convenzioni, dove va un file nuovo — è
+[README.md](README.md).
+
 **Architettura** (trasversale ai milestone):
+- [architecture/mappa-visuale.md](architecture/mappa-visuale.md) — l'intera architettura in un diagramma: i sette crate, la shell, il disco, e tratteggiato ciò che non esiste ancora.
 - [architecture/data-model.md](architecture/data-model.md) — `DocumentModel`, `Block`/`Inline`, `Span`, `LinkTarget`, escape hatch `Custom`.
 - [architecture/traits.md](architecture/traits.md) — i 7 trait del contratto, chi li implementa e a quale milestone, la tabella di esprimibilità WIT.
 - [architecture/ui-protocol.md](architecture/ui-protocol.md) — protocollo `UiNode`, mapping sul frontend, regola dell'escape hatch web-view.
 - [architecture/plugin-boundary.md](architecture/plugin-boundary.md) — `Plugin`/`HostApi`/`PluginManifest`, modello capability ibrido, sandbox WASM.
 - [architecture/shell.md](architecture/shell.md) — l'albero del frontend, la cucitura unica con l'host, i due bus.
+- [architecture/wit.md](architecture/wit.md) — il contratto nella lingua dei componenti WASM: perché l'albero `wit/` esiste e cosa presidia.
+- [architecture/wit-congelato.md](architecture/wit-congelato.md) — la linea di base versione per versione, e la promessa di additività su cui poggia il freeze di M4.
 
 **Milestone**:
 - [milestones/M2-search-graph.md](milestones/M2-search-graph.md) — ricerca (tantivy), grafo/indice incrementali, graph view, outline/tag panel, "crea nota".
@@ -267,7 +274,7 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   nel posto in cui si va a cercare *cosa resta da fare*, dove non li rilegge
   nessuno; è la [decisione 0014](decisions/0014-i-verbali-fuori-da-todo.md), che
   porta con sé anche il **check dei link interni** in CI
-  (`scripts/check-doc-links.mjs`), perché spostare i file crea una promessa
+  (`.github/scripts/check-doc-links.mjs`), perché spostare i file crea una promessa
   nuova ogni volta e una promessa senza presidio meccanico decade.
 - `ORGANIZZAZIONE_VAULT.md` — **cancellato con la [decisione 0003](decisions/0003-modello-del-documento.md)** (commit `0a4ee40`), e
   questa riga ha continuato a linkarlo insieme a quella di M2 qui sotto: è il
@@ -333,7 +340,7 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   dichiarativi, rendering callout/embed/math. La command palette
   (`CommandProvider`) è **anticipata a M2** con la [decisione 0009](decisions/0009-registro-dei-comandi.md).
 - **M4 — Hardening del contratto + WIT** → [dettaglio](milestones/M4-wit-hardening.md)
-  Freeze della superficie dei trait; `wit/fubmd/*.wit` (già vivo da M2) rispecchia
+  Freeze della superficie dei trait; `crates/fubmd-abi/wit/fubmd/*.wit` (già vivo da M2) rispecchia
   `fubmd-abi`; test di conformità; primo plugin nativo via `Plugin`/`HostApi`.
   La **checklist del freeze** vive lì e rimanda alle voci marcate **P0** in
   [todo.md](todo.md), che è l'elenco autorevole: sul documento di milestone

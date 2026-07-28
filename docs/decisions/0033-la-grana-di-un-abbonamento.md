@@ -58,8 +58,8 @@ comunque, perché è ciò che non si può perdere.**
   nessuno, e `wit_additivity` lo ha detto con la frase che ha scritto per questo
   caso — *le due uscite oneste sono renderlo additivo, oppure, solo finché il
   freeze di M4 non è avvenuto, ritagliare la linea di base con un commit che
-  tocca `wit/frozen/` e lo dice*. È la seconda, ed è visibile: nello stesso
-  commit c'è la riga in `wit/frozen/0.1.0.wit`, col perché accanto. Dopo M4 la
+  tocca `crates/fubmd-abi/wit/frozen/` e lo dice*. È la seconda, ed è visibile: nello stesso
+  commit c'è la riga in `crates/fubmd-abi/wit/frozen/0.1.0.wit`, col perché accanto. Dopo M4 la
   stessa mossa vorrà una versione nuova **accanto** a quella, non una riga
   cambiata dentro.
 
@@ -205,7 +205,7 @@ comunque, perché è ciò che non si può perdere.**
     `rules-mirror.test.ts` diventa rosso sul caso `com.acmecorp`. Le due
     implementazioni non possono divergere in silenzio.
 - **Contratto:** `event-mask` da alias a record è una **rottura dichiarata**
-  pre-freeze; `wit/frozen/0.1.0.wit` è ritagliato nello stesso commit e dice
+  pre-freeze; `crates/fubmd-abi/wit/frozen/0.1.0.wit` è ritagliato nello stesso commit e dice
   perché. `wit_conformance` (che verifica anche l'ordine dei casi del `subject`
   contro la dichiarazione Rust) e `wit_additivity` sono verdi.
 - **Mirror TS rigenerato** (`UPDATE_MIRROR=1` su `ts_mirror` e `rules_mirror`),

@@ -221,7 +221,7 @@ soltanto chi risponde a chi non ne nomina uno.**
     fallisce con `Nessun vault aperto su /tmp/…/../…`, cioè lo stesso vault
     diventa due chiavi.
 - **Contratto:** `Event::VaultClosed { root }` e `EventKind::VaultClosed` sono
-  **additivi e in coda** al variant e all'enum (`wit/fubmd/abi.wit`), presidiati
+  **additivi e in coda** al variant e all'enum (`crates/fubmd-abi/wit/fubmd/abi.wit`), presidiati
   da `wit_conformance`; `EventMask::all()` li include. Il mirror TS è
   rigenerato (`UPDATE_MIRROR=1` su `fubmd-features` e `fubmd-app`), con il
   record nuovo `OpenVaults` fra i campioni dell'app.

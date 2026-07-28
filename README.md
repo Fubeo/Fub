@@ -45,7 +45,21 @@ markdown; e `fubmd-host` non dipende da `tauri`, perché chi monta deve poter
 essere preso da una CLI, da un'API locale o da un e2e headless senza portarsi
 dietro un webview.
 
-## Stato: Milestone 1 — app usabile ✅
+## Documentazione
+
+Tutta in **[`docs/`](docs/)**, e si entra da
+**[docs/README.md](docs/README.md)**: da lì partono i quattro percorsi — capire
+il progetto, scrivere codice, sapere perché una cosa è così, sapere cosa manca.
+
+Le due scorciatoie usate più spesso: la
+[mappa visuale dell'architettura](docs/architecture/mappa-visuale.md) per il
+colpo d'occhio, e i [verbali delle decisioni](docs/decisions/README.md) per il
+perché.
+
+## Cosa c'è già
+
+Milestone 1 è chiusa dal 24/07/2026 e M2 è quasi finita. In concreto, oggi
+l'app fa questo:
 
 - Vault compatibile Obsidian (`.md` + frontmatter YAML, `[[wikilink]]`, `#tag`,
   callout, embed `![[...]]`).
@@ -54,9 +68,14 @@ dietro un webview.
 - Kernel: scansione vault, grafo dei link con risoluzione stile Obsidian
   (nome / alias / path, shortest-path fra omonimi), backlink, event bus,
   file watcher debounced.
+- Ricerca full-text incrementale su tantivy, CRUD con cestino e versioning,
+  organizzazione del vault, otto feature ufficiali montate come provider.
 - Frontend: file explorer, editor CodeMirror 6, anteprima live, navigazione
-  `[[wikilink]]`, pannello backlink reso via il protocollo di **UI dichiarativa**.
-- 33 test (unit + un end-to-end sul vault di esempio).
+  `[[wikilink]]`, graph view, e i pannelli resi via il protocollo di **UI
+  dichiarativa**.
+
+Lo stato preciso — cosa è aperto, con che priorità — sta in
+[docs/todo.md](docs/todo.md), che è l'unico posto dove si aggiorna.
 
 ## Come si avvia
 

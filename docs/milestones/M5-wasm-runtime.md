@@ -14,8 +14,8 @@ contratto. Il kernel non deve distinguere un provider nativo da uno WASM.
 
 Oggi commentato nel workspace (`Cargo.toml`) e assente da `crates/`. M5 lo crea:
 - **Runtime:** wasmtime con **component model**; carica componenti `wasm32-wasip2`
-  (compilati a parte con `cargo component`, vedi `plugins/README.md`).
-- **Bindings:** generati dal `wit/fubmd/*.wit` congelato a [M4](M4-wit-hardening.md).
+  (compilati a parte con `cargo component`).
+- **Bindings:** generati dal `crates/fubmd-abi/wit/fubmd/*.wit` congelato a [M4](M4-wit-hardening.md).
 - **Invariante:** `fubmd-wasm-host` dipende da wasmtime; `fubmd-kernel`/`fubmd-abi`
   **no** (l'host vive al confine, il kernel resta agnostico — vedi
   [../PIANO.md](../PIANO.md)).

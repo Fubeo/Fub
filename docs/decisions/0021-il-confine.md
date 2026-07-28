@@ -250,7 +250,7 @@ rivendicato due volte, il giro nominato, e l'inventario.
 pulito, **172 test vitest**, `vite build` ok.
 
 Linea di base del WIT **ritagliata** (pre-freeze) con la ragione dentro
-`wit/frozen/0.1.0.wit` e la riga in `wit/frozen/README.md`: è la rottura più
+`crates/fubmd-abi/wit/frozen/0.1.0.wit` e la riga in `docs/architecture/wit-congelato.md`: è la rottura più
 larga fatta finora — ventiquattro funzioni cambiano nome qualificato e un record
 si sposta — ed è l'ultima che riguarda l'`host-api`.
 

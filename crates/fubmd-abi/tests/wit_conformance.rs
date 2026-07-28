@@ -106,7 +106,7 @@ use fubmd_abi::ui::{
 };
 
 // CARGO_MANIFEST_DIR = crates/fubmd-abi ; il contratto è alla radice del repo.
-const WIT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../wit/fubmd/abi.wit");
+const WIT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/wit/fubmd/abi.wit");
 
 /// Segnaposto per il ricevitore (`&self`): non attraversa il confine.
 const SELF: &str = "«self»";

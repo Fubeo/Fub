@@ -58,7 +58,7 @@ peggiore.
   comportarsi, per sempre.
 - **Le parti che contano scadono col freeze di M4.** `TextQuery`, `TextMode`,
   `TextField` e `DocumentMatch` sono già nel contratto e già nel WIT
-  ([`wit/fubmd/abi.wit`](../../wit/fubmd/abi.wit)). Una variante aggiunta oggi
+  ([`crates/fubmd-abi/wit/fubmd/abi.wit`](../../crates/fubmd-abi/wit/fubmd/abi.wit)). Una variante aggiunta oggi
   costa una variante; dopo il freeze costa una minor, e toglierla una major. La
   decisione non poteva aspettare che qualcuno avesse voglia di scrivere il
   motore: doveva arrivare prima che la firma si chiudesse.
@@ -134,7 +134,7 @@ perché eventualmente da noi debba fare altro.
 
 ## Verifica
 
-- `node scripts/check-doc-links.mjs` — verde: i rimandi nuovi (questo verbale, la
+- `node .github/scripts/check-doc-links.mjs` — verde: i rimandi nuovi (questo verbale, la
   seduta 21, le righe di `todo.md`, `PIANO.md`, `strozzature.md`, `leva.md`,
   `numerazione.md`, `FEATURES.md`, `M2`, `traits.md` e `README.md`) risolvono
   tutti, ancore comprese.

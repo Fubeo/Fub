@@ -85,7 +85,7 @@ interpreta — cioè fuori dalla convalida dell'host.
 
 *Il modo sta nella firma, e rompe `invoke`.* Era la scelta che il M4 chiamava
 "della famiglia di `RenderOptions`: da fare per prima o mai", e va fatta adesso
-(linea di base ritagliata in `wit/frozen/0.1.0.wit`). La ragione non è
+(linea di base ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`). La ragione non è
 l'eleganza: con il modo nella firma, il non-scrivere lo può garantire l'**host**,
 prestando un `HostApi` in sola lettura. Un `CommandOutcome::Plan` da solo avrebbe
 lasciato il dry-run alla buona volontà di chi implementa, cioè a una convenzione

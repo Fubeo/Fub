@@ -18,7 +18,7 @@ Stanno insieme perché **le prime tre sono lo stesso record**. `TextQuery` porta
 il testo, la modalità e i campi; `DocumentMatch` porta l'estratto e gli
 evidenziati. La tolleranza ai refusi (21.1), il prefisso mentre si digita (21.2)
 e le coordinate dell'estratto (21.3) toccano quei due tipi, tutti e due sono già
-nel WIT ([`wit/fubmd/abi.wit`](../../wit/fubmd/abi.wit)), e tutti e due si
+nel WIT ([`crates/fubmd-abi/wit/fubmd/abi.wit`](../../crates/fubmd-abi/wit/fubmd/abi.wit)), e tutti e due si
 congelano a **M4**. Deciderle separate significa aprire tre volte la stessa
 firma, e la seconda volta con la prima già congelata — che è esattamente ciò che
 è successo al lotto e all'origine, e per cui la
