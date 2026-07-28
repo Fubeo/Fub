@@ -64,6 +64,7 @@ pub mod syntax;
 mod tag_counts;
 pub mod time;
 pub mod vault;
+pub mod viewstate;
 pub mod workspace;
 
 pub use bus::{EventBus, Subscription};
@@ -81,4 +82,5 @@ pub use session::Session;
 pub use settings::{write_atomic, MachineSettings, SettingsStore, SharedSettings};
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{TrashEntry, Vault, TRASH_DIR};
+pub use viewstate::ViewStates;
 pub use workspace::{valid_doc_id, GraphUpdate, Trust, Workspace, MAIN_PANE};

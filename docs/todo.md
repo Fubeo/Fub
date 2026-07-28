@@ -131,7 +131,7 @@ descrive una promessa.
 | **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio è scomposto ([0022](decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](decisions/0023-chi-monta-il-kernel.md)), il lock è a grana fine ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e la ricerca non si rimette più in fila da sé ([0026](decisions/0026-due-query-insieme.md)) | — | — |
 | **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | **chiusa**: un componente che smette ([0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), [0028](decisions/0028-come-un-componente-smette.md)), il vault e le sessioni multiple ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)), il rilevamento che si può chiedere ([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)), chi possiede i bundle ([0031](decisions/0031-chi-possiede-i-bundle.md)) e chi esegue il lavoro lungo ([0032](decisions/0032-il-runner-dei-job.md)) | — | — |
 | **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | **chiusa**: lo stesso canale a tre distanze — chi si abbona ([0033](decisions/0033-la-grana-di-un-abbonamento.md)), cosa passa ([0034](decisions/0034-il-freno-e-il-raggruppamento.md)), chi lo mostra ([0035](decisions/0035-il-lavoro-lungo-si-racconta.md)) | — | — |
-| **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano: la [0036](decisions/0036-le-impostazioni-e-i-tre-stati.md) ha chiuso il primo — le impostazioni — e per gli altri due ha deciso la sola cosa che scadeva, cioè **dove non vanno** | 2 | — |
+| **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano: la [0036](decisions/0036-le-impostazioni-e-i-tre-stati.md) ha chiuso il primo — le impostazioni — e la [0037](decisions/0037-lo-stato-di-vista.md) il secondo; del §11.2 resta il **layout**, che aspetta il modello di layout | 2 | — |
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | chi localizza le stringhe localizza anche gli errori | 4 | 3 |
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | l'identità, ciò che le sta attaccato, la sua storia | 3 | 2 |
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | lo stesso lavoro visto da quattro lati | 4 | — |
@@ -166,8 +166,10 @@ e resta il grafo, che è l'ultimo pannello nativo), la
 resta il moltiplicatore), la
 [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md#112-tre-stati-diversi-zero-contenitori)
 (la **decisione** è presa con la [0036](decisions/0036-le-impostazioni-e-i-tre-stati.md),
-che ha detto dove i due stati senza contenitore non vanno; restano i
-contenitori), la
+che ha detto dove i due stati senza contenitore non vanno, e **mezza voce** è
+chiusa dalla [0037](decisions/0037-lo-stato-di-vista.md): lo stato di vista c'è,
+resta il layout — che aspetta il modello di layout, perché oggi l'area principale
+è un pannello solo e non c'è niente da disporre), la
 [§16.7](roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
 (il terzo presidio — quello che si spegneva da solo aprendo `docs/` come vault —
 non si spegne più; restano i due elenchi scritti a mano, che sono la voce) e la
@@ -256,7 +258,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — trentasei, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — trentasette, uno
   per file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

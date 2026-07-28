@@ -71,6 +71,19 @@ pub fn vault_registry_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
     config_dir.join("vaults.json")
 }
 
+/// Il file dello **stato di vista** (§11.2) dentro una cartella di
+/// configurazione.
+///
+/// Terzo file accanto agli altri due, per la stessa ragione del secondo: non è
+/// un'impostazione — non ha uno schema, non lo decide l'utente, e un pannello di
+/// impostazioni con dentro lo scroll di ieri sarebbe stato il segno che la
+/// distinzione mancava. Qui e non nel vault perché **non viaggia col vault**: lo
+/// scroll di ieri sul portatile non è un fatto sul vault, e sincronizzarlo
+/// vorrebbe dire far litigare due macchine su dove si era rimasti.
+pub fn view_states_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
+    config_dir.join("view-state.json")
+}
+
 fn env_path(key: &str) -> Option<Utf8PathBuf> {
     std::env::var(key)
         .ok()
@@ -137,9 +150,10 @@ mod tests {
     }
 
     #[test]
-    fn i_due_file_stanno_accanto_e_non_dentro() {
+    fn i_tre_file_stanno_accanto_e_non_dentro() {
         let dir = Utf8PathBuf::from("/config");
         assert_eq!(machine_settings_path(&dir), "/config/settings.json");
         assert_eq!(vault_registry_path(&dir), "/config/vaults.json");
+        assert_eq!(view_states_path(&dir), "/config/view-state.json");
     }
 }

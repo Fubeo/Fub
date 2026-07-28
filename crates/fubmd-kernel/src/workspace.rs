@@ -90,6 +90,7 @@ use crate::renderer::{self, RenderedDocument};
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::vault::TrashEntry;
+use crate::viewstate::ViewStates;
 
 /// Il pannello di una shell che ne ha uno solo.
 ///
@@ -234,6 +235,9 @@ pub struct Workspace {
     /// di quella condivisione, la stessa di
     /// `WatchState::watching` e di `CoreIndex::registry`.
     settings: SharedSettings,
+    /// Lo stato di vista di questa macchina (§11.2), condiviso fra i vault
+    /// aperti come il livello macchina delle impostazioni.
+    view_states: Arc<ViewStates>,
 }
 
 impl Workspace {
@@ -273,7 +277,20 @@ impl Workspace {
             session: Session::default(),
             closed: false,
             settings,
+            view_states: ViewStates::in_memory(),
         }
+    }
+
+    /// Aggancia lo stato di vista della macchina (§11.2).
+    ///
+    /// Builder e non parametro di [`with_machine_settings`](Workspace::with_machine_settings)
+    /// perché è la stessa scelta fatta là e per la stessa ragione: il default è
+    /// **in memoria**, cioè ciò che serve a un test, e chi ha un'installazione
+    /// lo sostituisce in una riga. Un default che scrive nella cartella di
+    /// configurazione di chi esegue la suite è un difetto che si scopre tardi.
+    pub fn with_view_states(mut self, states: Arc<ViewStates>) -> Self {
+        self.view_states = states;
+        self
     }
 
     /// Sceglie la strategia di aggiornamento del grafo (default: incrementale).
@@ -842,8 +859,27 @@ impl Workspace {
     /// ha (§7.1), e prende `&self` perché una lettura gira sotto prestito
     /// condiviso del workspace.
     pub(crate) fn read_host_for<'a>(&'a self, plugin: &'a str) -> Guard<ReadHost<'a>, Granted> {
+        self.read_host_for_view(plugin, None)
+    }
+
+    /// Come [`read_host_for`](Workspace::read_host_for), **per conto di un
+    /// esemplare di view**.
+    ///
+    /// L'esemplare è ciò che rende la chiave dello stato di vista (§11.2) di chi
+    /// disegna e non di chiunque: lo timbra l'host, come l'id di un job nella
+    /// 0035, perché è l'unico dei due a saperlo con certezza. `None` = non si
+    /// sta disegnando una view, e allora uno stato di vista non c'è.
+    pub(crate) fn read_host_for_view<'a>(
+        &'a self,
+        plugin: &'a str,
+        instance: Option<&'a str>,
+    ) -> Guard<ReadHost<'a>, Granted> {
         Guard::new(
-            ReadHost { ws: self, plugin },
+            ReadHost {
+                ws: self,
+                plugin,
+                instance,
+            },
             self.providers.plugins.granted(plugin),
         )
     }
@@ -860,6 +896,17 @@ impl Workspace {
         plugin: &'a str,
         mode: InvokeMode,
     ) -> Guard<KernelHost<'a>, Granted> {
+        self.host_for_view(plugin, mode, None)
+    }
+
+    /// Come [`host_for`](Workspace::host_for), per conto di un esemplare di
+    /// view: vedi [`read_host_for_view`](Workspace::read_host_for_view).
+    pub(crate) fn host_for_view<'a>(
+        &'a mut self,
+        plugin: &'a str,
+        mode: InvokeMode,
+        instance: Option<&'a str>,
+    ) -> Guard<KernelHost<'a>, Granted> {
         // La politica si prende **prima**: dopo, `self` è prestato all'host.
         let granted = self.providers.plugins.granted(plugin);
         Guard::new(
@@ -867,6 +914,7 @@ impl Workspace {
                 ws: self,
                 plugin,
                 mode,
+                instance,
             },
             granted,
         )
@@ -2211,7 +2259,7 @@ impl Workspace {
         // di quanto lo legga da un'azione. Che il guard qui avvolga un
         // `ReadHost` invece di un `KernelHost` non cambia niente per la
         // politica — è la stessa, e non sa cosa ci sia sotto.
-        let host = self.read_host_for(&registered.id);
+        let host = self.read_host_for_view(&registered.id, Some(instance.instance.as_str()));
         let tree = crate::safety::calling(
             &registered.id,
             &format!("disegnando `{}`", instance.view),
@@ -2246,7 +2294,8 @@ impl Workspace {
             |ws| &mut ws.providers.views,
             |ws, views| {
                 let registered = &mut views[at];
-                let mut host = ws.host_for(&registered.id, InvokeMode::Apply);
+                let mut host =
+                    ws.host_for_view(&registered.id, InvokeMode::Apply, Some(&instance.instance));
                 // Dentro il prestito, non attorno: il `lend` deve **rimettere a
                 // posto** la tabella delle view anche quando il provider pania,
                 // e lo fa perché il panico non arriva fin qui.
@@ -2485,6 +2534,7 @@ impl Workspace {
                     ws: self,
                     plugin: &owner,
                     mode: InvokeMode::DryRun,
+                    instance: None,
                 },
                 (ReadOnly { why }, granted),
             );
@@ -3042,6 +3092,39 @@ impl Workspace {
             .read()
             .expect("store di configurazione")
             .entries(plugin)
+    }
+
+    // --- lo stato di vista (§11.2) -----------------------------------------
+    //
+    // Le due porte sono **due**, come per le impostazioni e per la stessa
+    // ragione: queste prendono il proprietario come argomento perché le chiama
+    // chi *è* la shell (che non è un plugin e non ha un id da timbrare); un
+    // provider passa invece dalle capacità, dove il proprietario e l'esemplare
+    // li mette l'host e non si possono nominare.
+
+    /// Ciò che questo esemplare aveva salvato sotto questa chiave, su questa
+    /// macchina e per questo vault.
+    pub fn view_state(&self, owner: &str, instance: &str, key: &str) -> Option<serde_json::Value> {
+        self.view_states
+            .get(self.root().as_str(), owner, instance, key)
+    }
+
+    /// Salva (`Some`) o dimentica (`None`) lo stato di vista di un esemplare.
+    pub fn set_view_state(
+        &self,
+        owner: &str,
+        instance: &str,
+        key: &str,
+        value: Option<serde_json::Value>,
+    ) -> std::result::Result<(), String> {
+        self.view_states
+            .set(self.root().as_str(), owner, instance, key, value)
+    }
+
+    /// Lo stato di vista della macchina, da condividere col prossimo vault che
+    /// si apre. Gemello di [`machine_settings`](Workspace::machine_settings).
+    pub fn view_states(&self) -> Arc<ViewStates> {
+        Arc::clone(&self.view_states)
     }
 
     /// Cosa è andato storto **leggendo** la configurazione: un file malformato,

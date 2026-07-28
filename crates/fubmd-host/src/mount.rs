@@ -38,7 +38,7 @@ use fubmd_features::{
     BACKLINKS_ID, BLOCKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, MachineSettings, RegistryError, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, MachineSettings, RegistryError, Trust, ViewStates, Workspace};
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
 use crate::settings::{
@@ -137,7 +137,11 @@ impl Bundle for CoreBundle {
 /// questo repo**, non una condizione che l'utente possa produrre — si dice su
 /// stderr e si tira dritto, che è ciò che faceva prima. Il canale giusto per
 /// dirlo è il §20.2, e non esiste ancora.
-pub fn mount(root: &Utf8Path, machine: Arc<MachineSettings>) -> Result<Mounted, String> {
+pub fn mount(
+    root: &Utf8Path,
+    machine: Arc<MachineSettings>,
+    view_states: Arc<ViewStates>,
+) -> Result<Mounted, String> {
     let mut formats = FormatRegistry::new();
     // Il primo registrato è anche quello che dà l'estensione alle note nuove
     // (`FormatRegistry::default_extension`). Un conflitto qui è impossibile con
@@ -147,7 +151,8 @@ pub fn mount(root: &Utf8Path, machine: Arc<MachineSettings>) -> Result<Mounted, 
         return Err(format!("provider di formato in conflitto: {e}"));
     }
 
-    let mut ws = Workspace::with_machine_settings(root, formats, machine);
+    let mut ws =
+        Workspace::with_machine_settings(root, formats, machine).with_view_states(view_states);
 
     // Lo store delle versioni nasce dentro il bundle e serve fuori: è la
     // composizione delle due metà, e il contenitore è il modo in cui chi monta
@@ -176,7 +181,7 @@ pub fn mount(root: &Utf8Path, machine: Arc<MachineSettings>) -> Result<Mounted, 
             register_view(ws, OUTLINE_ID, Box::new(OutlineView))
         })),
         Arc::new(CoreBundle::new(TAGS_ID, "Tag", |ws| {
-            register_view(ws, TAGS_ID, Box::new(TagPanelView::default()))
+            register_view(ws, TAGS_ID, Box::new(TagPanelView))
         })),
         Arc::new(CoreBundle::new(STATS_ID, "Statistiche", |ws| {
             register_view(ws, STATS_ID, Box::new(StatsView))

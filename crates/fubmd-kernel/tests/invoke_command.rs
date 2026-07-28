@@ -197,6 +197,16 @@ impl CommandProvider for TriesEverything {
             "setting",
             host.set_setting("test.chiave", SettingValue::Toggle(true)),
         );
+        // Lo stato di vista (§11.2) è in questo elenco per la stessa ragione
+        // della configurazione: sopravvive alla sessione. Una prova a vuoto che
+        // spostasse lo scroll di un pannello avrebbe lasciato dietro di sé
+        // l'unica cosa che doveva non lasciare. E il cancello risponde **prima**
+        // di guardare se ci sia un esemplare: un rifiuto per «stai simulando»
+        // non deve dipendere da chi stava scrivendo.
+        annota(
+            "view-state",
+            host.set_view_state("scroll", Some(serde_json::json!(10))),
+        );
         Ok(
             CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
                 "niente",
@@ -473,7 +483,15 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
     let quali: Vec<&str> = visti.iter().map(|(q, _)| *q).collect();
     assert_eq!(
         quali,
-        vec!["create", "rename", "trash", "restore", "empty", "setting"],
+        vec![
+            "create",
+            "rename",
+            "trash",
+            "restore",
+            "empty",
+            "setting",
+            "view-state"
+        ],
         "ogni capacità strutturale è stata rifiutata: se una passasse, \
          mancherebbe da questo elenco"
     );

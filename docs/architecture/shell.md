@@ -234,17 +234,24 @@ chiuse:
   valori che divergono sono, da contratto, un cambio di pannello a ogni
   pubblicazione del contesto: si vedrebbe come «si ridisegna tutto» e non
   porterebbe a nessuna delle due righe.
-- **Lo stato di vista, e il layout** ([§11.2](../roadmap/11-impostazioni-e-i-tre-stati.md)).
-  Il §11.1 ha dato una casa alla prima delle tre cose che non ne avevano — le
-  **impostazioni**, che durano e viaggiano col vault — e ha lasciato scritto dove
-  andranno le altre due: lo *stato di vista* (scroll, sezioni collassate, tab
-  attiva) è per-macchina **e per-pannello**, quindi non è una chiave di
-  configurazione ma una mappa indicizzata da `PaneId`; il *layout* ha più
-  configurazioni per lo stesso utente, quindi non è un valore ma un insieme
-  nominato. È la ragione per cui oggi lo stato di vista di questa shell sta
-  ancora in `localStorage` (spazio attivo, cartelle espanse) e quello dei
-  provider non sta da nessuna parte: sono due contenitori che vanno decisi
-  insieme al modello di layout, non prima.
+- **Il layout** ([§11.2](../roadmap/11-impostazioni-e-i-tre-stati.md), metà
+  rimasta). Il §11.1 ha dato una casa alla prima delle tre cose che non ne
+  avevano — le **impostazioni**, che durano e viaggiano col vault — e la
+  [decisione 0037](../decisions/0037-lo-stato-di-vista.md) alla seconda: lo
+  *stato di vista* (scroll, sezioni collassate, filtro, scheda attiva) è
+  per-macchina **e per esemplare**, e sta in un file della macchina che il
+  kernel possiede, con due famiglie di capacità per chi lo chiede dal contratto.
+  Questa shell ci è dentro: modalità, cartelle aperte e spazio selezionato non
+  stanno più in `localStorage`, che moriva col profilo della webview e non lo
+  conosceva nessuno fuori di lì.
+
+  Resta il *layout*, e resta perché ha più configurazioni per lo stesso utente:
+  non è un valore ma un insieme nominato, e va deciso col modello di layout
+  ([§1.2](../roadmap/01-piano-infrastrutturale.md), seduta 18). Nemmeno lo stato
+  di vista **del layout** si poteva scrivere prima: oggi l'area principale è un
+  pannello solo, quindi non c'è niente da salvare — e la chiave dello stato di
+  vista porta l'esemplare della view proprio perché il giorno che i pannelli
+  saranno più d'uno ognuno avrà il suo senza cambiare formato.
 - **Cestino e cronologia come `ViewProvider` veri.** Il modo di montarli è ormai
   uno — la regola 5 qui sopra — ma sono pannelli **nativi** che dichiarano, non
   provider che disegnano con `UiNode`. Dipendeva dai nodi di input e da un modo

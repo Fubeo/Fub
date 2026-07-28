@@ -4637,6 +4637,23 @@ fn conform(source: &str) -> Result<(), String> {
         &["key"],
     );
     contract.method(
+        "host-view-state-read",
+        "view-state",
+        <dyn HostApi>::view_state
+            as fn(
+                &'static dyn HostApi,
+                &'static str,
+            ) -> Result<Option<serde_json::Value>, PluginError>,
+        &["key"],
+    );
+    contract.method(
+        "host-view-state-write",
+        "set-view-state",
+        <dyn HostApi>::set_view_state
+            as fn(Host, &'static str, Option<serde_json::Value>) -> Result<(), PluginError>,
+        &["key", "value"],
+    );
+    contract.method(
         "host-env",
         "now-unix-millis",
         <dyn HostApi>::now_unix_millis as fn(&'static dyn HostApi) -> u64,
@@ -4779,10 +4796,10 @@ fn conform(source: &str) -> Result<(), String> {
         .get("plugin-world")
         .cloned()
         .expect("world `plugin-world` assente dal WIT");
-    // Le dodici famiglie del §7.1. Il confronto è per contenimento e non per
-    // uguaglianza perché fra gli import risolti compaiono anche le interfacce
-    // di soli **tipi** che le dieci usano (`model`, `errors`, `index`, …): sono
-    // dipendenze del grafo, non capacità concesse.
+    // Le quattordici famiglie del §7.1. Il confronto è per contenimento e non
+    // per uguaglianza perché fra gli import risolti compaiono anche le
+    // interfacce di soli **tipi** che quelle usano (`model`, `errors`, `index`,
+    // …): sono dipendenze del grafo, non capacità concesse.
     for famiglia in [
         "host-vault-read",
         "host-vault-write",
@@ -4796,6 +4813,8 @@ fn conform(source: &str) -> Result<(), String> {
         "host-services",
         "host-settings-read",
         "host-settings-write",
+        "host-view-state-read",
+        "host-view-state-write",
     ] {
         assert!(
             imports.contains(famiglia),
@@ -4804,7 +4823,7 @@ fn conform(source: &str) -> Result<(), String> {
     }
     assert!(
         !imports.contains("host-api"),
-        "`host-api` è stata divisa nelle dodici famiglie del §7.1: se riappare, \
+        "`host-api` è stata divisa nelle quattordici famiglie del §7.1: se riappare, \
          è tornata la superficie che si concede per intero o per niente"
     );
     let expected_exports: BTreeSet<String> = [

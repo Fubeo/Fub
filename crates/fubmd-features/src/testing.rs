@@ -24,7 +24,7 @@ use fubmd_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue
 use fubmd_abi::traits::{
     BacklinkRef, DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
     IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TagCount,
-    TrashEntry, VaultRead, VaultStructure, VaultWrite,
+    TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
 use fubmd_abi::PluginError;
 
@@ -67,6 +67,15 @@ pub struct MemoryHost {
     /// del kernel e si prova là — qui si prova che una feature legge la propria
     /// configurazione dall'`HostApi` e non da una variabile d'ambiente.
     settings: Mutex<BTreeMap<String, (SettingSpec, Option<SettingValue>)>>,
+    /// L'esemplare di view per conto del quale questo doppio sta agendo (§11.2).
+    /// `None` — il default — è «non si sta disegnando nessuna view», ed è la
+    /// condizione in cui lo stato di vista non c'è: chi prova una view che
+    /// ricorda qualcosa lo dice con [`MemoryHost::con_esemplare`].
+    view_instance: Mutex<Option<String>>,
+    /// (esemplare, chiave) → valore. Il proprietario **non** è nella chiave
+    /// perché questo doppio lo dà a un provider solo, e non ha un id da
+    /// timbrargli: il recinto fra proprietari è del kernel e si prova là.
+    view_state: Mutex<BTreeMap<(String, String), serde_json::Value>>,
 }
 
 impl MemoryHost {
@@ -227,6 +236,24 @@ impl MemoryHost {
             .unwrap()
             .insert(spec.key.clone(), (spec, Some(value)));
         self
+    }
+
+    /// Dice per conto di **quale esemplare di view** questo doppio sta agendo
+    /// (stile builder), che è ciò che dà uno stato di vista a chi lo usa.
+    ///
+    /// Nell'app l'esemplare lo timbra l'host e nessuno lo nomina; qui lo nomina
+    /// il test, perché il test è il chiamante — è la stessa asimmetria per cui
+    /// `Workspace::view_state` prende il proprietario e la capacità no.
+    pub fn con_esemplare(self, instance: &str) -> Self {
+        *self.view_instance.lock().unwrap() = Some(instance.to_string());
+        self
+    }
+
+    /// Cambia esemplare **tenendo ciò che è stato salvato**: è come riaprire lo
+    /// stesso pannello in un'altra istanza, ed è il modo di provare che due
+    /// esemplari non si mescolano senza costruire due host.
+    pub fn passa_a_esemplare(&self, instance: &str) {
+        *self.view_instance.lock().unwrap() = Some(instance.to_string());
     }
 }
 
@@ -473,6 +500,47 @@ impl SettingsWrite for MemoryHost {
             )));
         }
         *slot = None;
+        Ok(())
+    }
+}
+
+/// Lo stato di vista del doppio è quello di **un esemplare per volta**, e senza
+/// esemplare non c'è: leggere torna `None`, scrivere è `BadArgs`. Non è una
+/// mutilazione per comodità — è ciò che risponde l'host vero fuori da una view
+/// (`KernelHost`), e un doppio che accettasse la scrittura farebbe passare un
+/// provider che nell'app perde quello che crede di ricordare.
+impl ViewStateRead for MemoryHost {
+    fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
+        let Some(instance) = self.view_instance.lock().unwrap().clone() else {
+            return Ok(None);
+        };
+        Ok(self
+            .view_state
+            .lock()
+            .unwrap()
+            .get(&(instance, key.to_string()))
+            .cloned())
+    }
+}
+
+impl ViewStateWrite for MemoryHost {
+    fn set_view_state(
+        &mut self,
+        key: &str,
+        value: Option<serde_json::Value>,
+    ) -> Result<(), PluginError> {
+        let instance = self.view_instance.lock().unwrap().clone().ok_or_else(|| {
+            PluginError::BadArgs(
+                "lo stato di vista è di un esemplare di view: dillo con \
+                 `MemoryHost::con_esemplare`"
+                    .into(),
+            )
+        })?;
+        let mut states = self.view_state.lock().unwrap();
+        match value {
+            Some(v) => states.insert((instance, key.to_string()), v),
+            None => states.remove(&(instance, key.to_string())),
+        };
         Ok(())
     }
 }

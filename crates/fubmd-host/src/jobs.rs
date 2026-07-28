@@ -62,7 +62,8 @@ use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
     IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi, SettingsRead,
-    SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite,
+    SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead,
+    ViewStateWrite,
 };
 use fubmd_abi::{Event, PluginError};
 use fubmd_kernel::Workspace;
@@ -283,6 +284,27 @@ impl DataWrite for JobHost {
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
         self.write_result(|h| h.data_remove(path))
+    }
+}
+
+/// Un job non disegna una view, quindi **non ha uno stato di vista**: leggere
+/// torna `None` (che è il caso normale di chi non ha mai salvato) e scrivere è
+/// l'errore che il contratto dichiara. Non è una mutilazione di questo host: è
+/// la stessa riga che vale per un `EventHandler` e per un comando, scritta qui
+/// perché qui la si legge.
+impl ViewStateRead for JobHost {
+    fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
+        self.read_result(|h| h.view_state(key))
+    }
+}
+
+impl ViewStateWrite for JobHost {
+    fn set_view_state(
+        &mut self,
+        key: &str,
+        value: Option<serde_json::Value>,
+    ) -> Result<(), PluginError> {
+        self.write_result(|h| h.set_view_state(key, value.clone()))
     }
 }
 

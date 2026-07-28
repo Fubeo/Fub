@@ -23,8 +23,15 @@ vista è per-macchina *e per-pannello*, quindi non è una chiave di configurazio
 ma una mappa indicizzata da `PaneId`; il layout ha più configurazioni per lo
 stesso utente, quindi non è un valore ma un insieme nominato. Nessuno dei due
 entra in quello store, e la ragione sta scritta in `fubmd_abi::settings` — dove
-la leggerà chi fosse tentato di infilarceli. Di questa seduta resta quindi
-l'**esecuzione** del §11.2: i due contenitori non ci sono ancora.
+la leggerà chi fosse tentato di infilarceli.
+
+Poi la [0037](../decisions/0037-lo-stato-di-vista.md) ha eseguito **metà** del
+§11.2: lo stato di vista c'è — due famiglie di capacità, un file della macchina
+che il kernel possiede, la chiave composta dall'host con dentro l'esemplare — e
+la shell ci è dentro. Il *layout* resta, e resta per una ragione che non è la
+pigrizia: oggi l'area principale è un pannello solo, quindi non c'è niente da
+disporre. Aspetta il modello di layout ([§1.2](01-piano-infrastrutturale.md),
+seduta 18).
 
 Con loro il sidecar dell'organizzazione (11.3), che lo store di configurazione
 deve **assorbire** e non affiancare — è già un precedente fuori da ogni
@@ -42,9 +49,9 @@ scrive.
 
 ### 11.2 Tre stati diversi, zero contenitori
 
-*ex §3.10 · shell · **P2** — **deciso** con la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md), che ha detto dove i due stati non vanno; resta l'esecuzione*
+*ex §3.10 · shell · **P2** — **mezza voce chiusa** con la [0037](../decisions/0037-lo-stato-di-vista.md) (lo stato di vista c'è, ed è nel contratto); resta il **layout**, che aspetta il modello di layout ([§1.2](01-piano-infrastrutturale.md), seduta 18)*
 
-- [ ] **Un `ViewProvider` non ha dove tenere il proprio stato di vista**:
+- [x] **Un `ViewProvider` non ha dove tenere il proprio stato di vista**:
       scroll, sezioni collassate, filtro corrente, tab attiva. Non ha **niente**,
       e da poco ha meno di prima: la [decisione 0013](../decisions/0013-elenco-delle-capacita.md)
       ha **ritirato** lo `storage_*` volatile a chiave→valore — l'unica rottura
@@ -55,7 +62,14 @@ scrive.
       oggi è il solo `data_*` (`abi/traits.rs`), che è persistente, su
       path e pensato per i dati che durano e viaggiano col vault — mentre lo stato
       di vista è per-macchina e per-pane, e non deve viaggiare. Il ritiro non ha
-      creato il buco: ha tolto l'illusione che fosse tappato.
+      creato il buco: ha tolto l'illusione che fosse tappato. **Chiuso** con la
+      [0037](../decisions/0037-lo-stato-di-vista.md): due famiglie di capacità
+      (`view_state` / `set_view_state`), un file della macchina che il kernel
+      possiede, e la chiave composta dall'host con dentro l'**esemplare** — non
+      un `PaneId`, che la 0036 aveva nominato per illustrazione e che oggi non
+      esiste. Non è lo `storage_*` che rientra dalla finestra: quello era
+      volatile, di chiunque e senza recinto; questo dura, è per esemplare, e non
+      viaggia col vault.
 - [x] **Sono tre cose distinte, e vanno decise insieme o nasceranno con tre
       meccanismi incompatibili**: le **impostazioni** (durano e viaggiano col
       vault), lo **stato di vista/sessione** (per-macchina, per-pane —
@@ -68,11 +82,16 @@ scrive.
       chiave — e il layout ha più configurazioni per lo stesso utente, quindi è
       un insieme nominato. La ragione sta in `fubmd_abi::settings`, dove la
       legge chi fosse tentato di infilarceli.
-- [ ] **Restano i due contenitori**: oggi lo stato di vista della shell sta in
-      `localStorage` (spazio attivo, cartelle espanse), quello dei provider non
-      sta da nessuna parte, e il layout non esiste. È l'esecuzione di questa
-      voce, e non ha più niente da decidere sopra di sé: la disciplina della
-      cartella (`.fubmd/`, scrittura atomica, versione di schema) c'è già.
+- [ ] **Resta il layout** — l'altro contenitore. Il primo è fatto: lo stato di
+      vista della shell non sta più in `localStorage` (modalità, cartelle aperte,
+      spazio selezionato sono passati nel file della macchina) e quello dei
+      provider ha una casa, col pannello dei tag come primo cliente vero.
+      Il layout invece **aspetta**, e non per mancanza di disciplina: oggi
+      l'area principale è un pannello solo, quindi non c'è nessuna disposizione
+      da salvare, e un formato deciso adesso descriverebbe una cosa che non c'è
+      ancora. Si decide col modello di layout ([§1.2](01-piano-infrastrutturale.md),
+      seduta 18) — dove nasce anche ciò che gli darebbe senso: più pannelli,
+      quindi più esemplari, quindi qualcosa da disporre.
 
 ### 11.3 Il sidecar dell'organizzazione, da assorbire
 

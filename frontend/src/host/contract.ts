@@ -930,7 +930,9 @@ export interface WorkspaceMeta {
   pinned: string[];
   order: Record<string, string[]>;
   // Cartelle registrate come "spazi" (striscia di icone), nel loro ordine.
-  // Lo spazio SELEZIONATO è stato di vista per-macchina: localStorage.
+  // Lo spazio SELEZIONATO non è organizzazione del vault: è stato di vista
+  // per-macchina (§11.2), e sta nel file della macchina — non qui e non più in
+  // `localStorage`.
   spaces: string[];
 }
 
