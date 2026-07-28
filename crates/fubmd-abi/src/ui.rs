@@ -46,6 +46,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::text::{Localize, Text};
+
 /// Id di un'azione richiamabile dalla UI (torna al provider via `on_action`).
 ///
 /// È **opaco**: un id non è un canale dati. Ciò che il provider deve sapere per
@@ -142,15 +144,17 @@ pub struct FieldValue {
 ///
 /// `value` è ciò che torna nei [`FieldValue`], `label` è ciò che si legge: che
 /// siano due campi e non uno è la differenza fra una scelta che si può
-/// localizzare (§12.1) e una che è anche la sua etichetta.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// localizzare e una che è anche la sua etichetta. Il §12.1 ha dato un tipo a
+/// quella differenza — `value` è identità e resta una `String`, `label` è
+/// [`Text`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UiOption {
     pub value: String,
-    pub label: String,
+    pub label: Text,
 }
 
 impl UiOption {
-    pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn new(value: impl Into<String>, label: impl Into<Text>) -> Self {
         UiOption {
             value: value.into(),
             label: label.into(),
@@ -158,33 +162,67 @@ impl UiOption {
     }
 }
 
+impl Localize for UiOption {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.label);
+    }
+}
+
 /// Una voce di [`UiKind::KeyValue`].
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// **Tutte e due** le metà sono [`Text`], ed è il caso che mostra perché il tipo
+/// porta la propria provenienza invece di essere una chiave: l'etichetta di una
+/// riga è quasi sempre da tradurre (*«Creata il»*), il valore quasi mai (una
+/// data, un conteggio, un path). Con due tipi diversi il provider avrebbe dovuto
+/// scegliere per il tipo invece che per il dato.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct KeyValueEntry {
-    pub label: String,
-    pub value: String,
+    pub label: Text,
+    pub value: Text,
+}
+
+impl KeyValueEntry {
+    pub fn new(label: impl Into<Text>, value: impl Into<Text>) -> Self {
+        KeyValueEntry {
+            label: label.into(),
+            value: value.into(),
+        }
+    }
+}
+
+impl Localize for KeyValueEntry {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.label);
+        visit(&mut self.value);
+    }
 }
 
 /// Una colonna di [`UiKind::Table`].
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TableColumn {
-    pub title: String,
+    pub title: Text,
     pub align: Align,
 }
 
 impl TableColumn {
-    pub fn new(title: impl Into<String>) -> Self {
+    pub fn new(title: impl Into<Text>) -> Self {
         TableColumn {
             title: title.into(),
             align: Align::Start,
         }
     }
 
-    pub fn aligned(title: impl Into<String>, align: Align) -> Self {
+    pub fn aligned(title: impl Into<Text>, align: Align) -> Self {
         TableColumn {
             title: title.into(),
             align,
         }
+    }
+}
+
+impl Localize for TableColumn {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.title);
     }
 }
 
@@ -217,18 +255,18 @@ pub enum UiKind {
         children: Vec<UiNode>,
     },
     Text {
-        content: String,
+        content: Text,
     },
     Heading {
         level: u8,
-        content: String,
+        content: Text,
     },
     List {
         items: Vec<UiNode>,
     },
     ListItem {
-        title: String,
-        subtitle: Option<String>,
+        title: Text,
+        subtitle: Option<Text>,
         action: Option<ActionRef>,
         /// È l'elemento **corrente**? Non è stile: è l'unica cosa che una lista
         /// non sa dire di sé, e senza di essa chi ce l'ha se la scrive nel
@@ -238,7 +276,7 @@ pub enum UiKind {
         selected: bool,
     },
     Button {
-        label: String,
+        label: Text,
         intent: Intent,
         action: ActionRef,
     },
@@ -261,7 +299,7 @@ pub enum UiKind {
     /// disturba il provider per una piega (e che con la chiave sopravvive al
     /// ridisegno).
     Section {
-        title: String,
+        title: Text,
         collapsed: bool,
         children: Vec<UiNode>,
     },
@@ -286,7 +324,7 @@ pub enum UiKind {
     /// Una voce di [`UiKind::Tree`]: l'annidamento passa dai `children`, che
     /// sono altri `TreeItem`.
     TreeItem {
-        label: String,
+        label: Text,
         expanded: bool,
         action: Option<ActionRef>,
         /// Come per [`UiKind::ListItem`]: l'elemento corrente.
@@ -302,12 +340,12 @@ pub enum UiKind {
     /// scheda viene scelta: la shell cambia scheda da sé — non serve un giro
     /// dal provider per una piega — e avvisa solo chi ha chiesto di saperlo.
     Tab {
-        label: String,
+        label: Text,
         action: Option<ActionRef>,
         children: Vec<UiNode>,
     },
     Badge {
-        label: String,
+        label: Text,
         intent: Intent,
     },
     /// Un'icona dal repertorio della shell. Un nome che la shell non conosce
@@ -319,13 +357,13 @@ pub enum UiKind {
     /// caso normale di chi non sa quanto manca.
     Progress {
         value: Option<f32>,
-        label: Option<String>,
+        label: Option<Text>,
     },
     Separator,
     /// Il vuoto detto bene: non c'è niente **e** questo è ciò che si può fare.
     EmptyState {
-        title: String,
-        detail: Option<String>,
+        title: Text,
+        detail: Option<Text>,
         action: Option<ActionRef>,
     },
     KeyValue {
@@ -344,21 +382,21 @@ pub enum UiKind {
     // valore solo quando qualcun altro — un bottone, un form — invia.
     TextInput {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: String,
-        placeholder: Option<String>,
+        placeholder: Option<Text>,
         action: Option<ActionRef>,
     },
     TextArea {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: String,
         rows: u32,
         action: Option<ActionRef>,
     },
     Number {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: Option<f64>,
         min: Option<f64>,
         max: Option<f64>,
@@ -367,7 +405,7 @@ pub enum UiKind {
     },
     Checkbox {
         field: String,
-        label: String,
+        label: Text,
         value: bool,
         action: Option<ActionRef>,
     },
@@ -375,7 +413,7 @@ pub enum UiKind {
     /// [`UiValue::Choices`], altrimenti come [`UiValue::Text`].
     Select {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: Vec<String>,
         options: Vec<UiOption>,
         multiple: bool,
@@ -387,14 +425,14 @@ pub enum UiKind {
     /// da cercare — e chi disegna deve poterla rispettare.
     Radio {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: Option<String>,
         options: Vec<UiOption>,
         action: Option<ActionRef>,
     },
     Slider {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: f64,
         min: f64,
         max: f64,
@@ -407,7 +445,7 @@ pub enum UiKind {
     /// punto sulla linea del tempo.
     DatePicker {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: Option<String>,
         action: Option<ActionRef>,
     },
@@ -416,7 +454,7 @@ pub enum UiKind {
     /// distingue un form da una fila di input sciolti.
     Form {
         children: Vec<UiNode>,
-        submit_label: String,
+        submit_label: Text,
         submit: ActionRef,
     },
 
@@ -434,13 +472,13 @@ pub enum UiKind {
     /// È un nodo e non una risposta di `render_view` perché il caso normale è
     /// **parziale** — la testata c'è, la tabella arriva.
     Pending {
-        label: Option<String>,
+        label: Option<Text>,
     },
     /// «Non ce l'ho fatta», con l'invito a riprovare quando c'è. Distinto da un
     /// `PluginError` restituito da `render_view`: quello dice che la view non si
     /// è disegnata, questo che una sua parte non ha un dato.
     Failed {
-        message: String,
+        message: Text,
         retry: Option<ActionRef>,
     },
 }
@@ -476,13 +514,13 @@ impl UiNode {
         UiNode::stack(Axis::Row, gap, children)
     }
 
-    pub fn text(content: impl Into<String>) -> Self {
+    pub fn text(content: impl Into<Text>) -> Self {
         UiNode::new(UiKind::Text {
             content: content.into(),
         })
     }
 
-    pub fn heading(level: u8, content: impl Into<String>) -> Self {
+    pub fn heading(level: u8, content: impl Into<Text>) -> Self {
         UiNode::new(UiKind::Heading {
             level,
             content: content.into(),
@@ -495,8 +533,8 @@ impl UiNode {
 
     /// Una voce cliccabile: titolo, sottotitolo, e l'azione col suo payload.
     pub fn list_item(
-        title: impl Into<String>,
-        subtitle: Option<String>,
+        title: impl Into<Text>,
+        subtitle: Option<Text>,
         action: Option<ActionRef>,
     ) -> Self {
         UiNode::new(UiKind::ListItem {
@@ -507,7 +545,7 @@ impl UiNode {
         })
     }
 
-    pub fn button(label: impl Into<String>, intent: Intent, action: ActionRef) -> Self {
+    pub fn button(label: impl Into<Text>, intent: Intent, action: ActionRef) -> Self {
         UiNode::new(UiKind::Button {
             label: label.into(),
             intent,
@@ -519,14 +557,14 @@ impl UiNode {
         UiNode::new(UiKind::Separator)
     }
 
-    pub fn badge(label: impl Into<String>, intent: Intent) -> Self {
+    pub fn badge(label: impl Into<Text>, intent: Intent) -> Self {
         UiNode::new(UiKind::Badge {
             label: label.into(),
             intent,
         })
     }
 
-    pub fn empty_state(title: impl Into<String>) -> Self {
+    pub fn empty_state(title: impl Into<Text>) -> Self {
         UiNode::new(UiKind::EmptyState {
             title: title.into(),
             detail: None,
@@ -534,11 +572,11 @@ impl UiNode {
         })
     }
 
-    pub fn pending(label: Option<String>) -> Self {
+    pub fn pending(label: Option<Text>) -> Self {
         UiNode::new(UiKind::Pending { label })
     }
 
-    pub fn failed(message: impl Into<String>, retry: Option<ActionRef>) -> Self {
+    pub fn failed(message: impl Into<Text>, retry: Option<ActionRef>) -> Self {
         UiNode::new(UiKind::Failed {
             message: message.into(),
             retry,
@@ -619,6 +657,126 @@ impl UiNode {
         self.children()
             .into_iter()
             .try_for_each(UiNode::validate_untrusted)
+    }
+}
+
+impl Localize for UiNode {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        self.kind.visit_texts(visit);
+    }
+}
+
+/// Dove stanno i [`Text`] di un albero di UI, e come ci si scende.
+///
+/// Il `match` è esaustivo per la stessa ragione di [`UiNode::children`], e con
+/// la stessa storia alle spalle: una variante nuova con un'etichetta dentro deve
+/// **rompere la compilazione qui**, non arrivare all'utente in inglese perché
+/// nessuno si è ricordato di elencarla. È anche la ragione per cui questo non è
+/// un attraversamento generico scritto nel kernel — lì un buco sarebbe stato
+/// silenzioso.
+///
+/// La discesa nei figli passa dagli stessi campi di `children`, ma **scritta a
+/// parte**: `children` presta riferimenti condivisi, e localizzare è una
+/// scrittura.
+impl Localize for UiKind {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        match self {
+            UiKind::Stack { children, .. }
+            | UiKind::List { items: children }
+            | UiKind::Row {
+                cells: children, ..
+            }
+            | UiKind::Tree { roots: children }
+            | UiKind::Tabs {
+                tabs: children,
+                active: _,
+            }
+            | UiKind::Custom {
+                fallback: children, ..
+            } => children.visit_texts(visit),
+            UiKind::Table { columns, rows } => {
+                columns.visit_texts(visit);
+                rows.visit_texts(visit);
+            }
+            UiKind::Text { content } | UiKind::Heading { content, .. } => visit(content),
+            UiKind::ListItem {
+                title, subtitle, ..
+            } => {
+                visit(title);
+                subtitle.visit_texts(visit);
+            }
+            UiKind::Button { label, .. }
+            | UiKind::Badge { label, .. }
+            | UiKind::Checkbox { label, .. } => visit(label),
+            UiKind::Section {
+                title, children, ..
+            } => {
+                visit(title);
+                children.visit_texts(visit);
+            }
+            UiKind::TreeItem {
+                label, children, ..
+            }
+            | UiKind::Tab {
+                label, children, ..
+            } => {
+                visit(label);
+                children.visit_texts(visit);
+            }
+            UiKind::Progress { label, .. }
+            | UiKind::Pending { label }
+            | UiKind::TextArea { label, .. }
+            | UiKind::Number { label, .. }
+            | UiKind::Slider { label, .. }
+            | UiKind::DatePicker { label, .. } => label.visit_texts(visit),
+            UiKind::EmptyState { title, detail, .. } => {
+                visit(title);
+                detail.visit_texts(visit);
+            }
+            UiKind::KeyValue { entries } => entries.visit_texts(visit),
+            UiKind::TextInput {
+                label, placeholder, ..
+            } => {
+                label.visit_texts(visit);
+                placeholder.visit_texts(visit);
+            }
+            UiKind::Select { label, options, .. } | UiKind::Radio { label, options, .. } => {
+                label.visit_texts(visit);
+                options.visit_texts(visit);
+            }
+            UiKind::Form {
+                children,
+                submit_label,
+                ..
+            } => {
+                children.visit_texts(visit);
+                visit(submit_label);
+            }
+            UiKind::Failed { message, .. } => visit(message),
+            // Nessun testo da leggere: markup, url, nomi di icona, separatori.
+            // Sono i campi che il §12.1 lascia `String` perché non sono prosa —
+            // vedi il doc di [`crate::text`].
+            UiKind::Html { .. } | UiKind::WebView { .. } | UiKind::Icon { .. } => {}
+            UiKind::Separator => {}
+        }
+    }
+}
+
+impl Localize for ViewUpdate {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        // Esaustivo come il `match` gemello di `Workspace::view_action`, che
+        // decide quali aggiornamenti portano un albero da validare: le due liste
+        // devono restare la stessa lista.
+        match self {
+            ViewUpdate::Replace { root } | ViewUpdate::Patch { node: root, .. } => {
+                root.visit_texts(visit)
+            }
+            ViewUpdate::None
+            | ViewUpdate::Navigate { .. }
+            | ViewUpdate::Reveal { .. }
+            | ViewUpdate::RunSearch { .. }
+            | ViewUpdate::Custom { .. } => {}
+        }
     }
 }
 

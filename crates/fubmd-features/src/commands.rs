@@ -1138,7 +1138,7 @@ fn settings_set(
             mostra(&value)
         ))
         .with_effect(CommandEffect::Plan(CommandPlan {
-            summary: format!("cambia `{key}`"),
+            summary: format!("cambia `{key}`").into(),
             ..CommandPlan::default()
         })));
     }
@@ -1163,7 +1163,7 @@ fn settings_reset(
             mostra(&entry.value)
         ))
         .with_effect(CommandEffect::Plan(CommandPlan {
-            summary: format!("azzera `{key}`"),
+            summary: format!("azzera `{key}`").into(),
             ..CommandPlan::default()
         })));
     }
@@ -1282,7 +1282,8 @@ fn settings_import(
             summary: format!(
                 "applica {}",
                 plurale(applicate, "impostazione", "impostazioni")
-            ),
+            )
+            .into(),
             ..CommandPlan::default()
         }))
     } else {
@@ -1344,14 +1345,14 @@ mod tests {
     fn every_command_declares_what_it_does_and_how_far_it_reaches() {
         for spec in CoreCommands::specs() {
             assert!(
-                !spec.description.trim().is_empty(),
+                !spec.description.to_string().trim().is_empty(),
                 "`{}` senza descrizione: è l'unico ingrediente su cui un \
                  chiamante non umano sceglie",
                 spec.id
             );
             for param in &spec.params {
                 assert!(
-                    !param.description.trim().is_empty(),
+                    !param.description.to_string().trim().is_empty(),
                     "`{}.{}` senza descrizione",
                     spec.id,
                     param.name
@@ -1466,7 +1467,11 @@ mod tests {
             "le note senza occorrenze non entrano nel piano"
         );
         assert_eq!(plan.edit_count(), 3);
-        assert!(plan.summary.contains("3 sostituzioni"), "{}", plan.summary);
+        assert!(
+            plan.summary.to_string().contains("3 sostituzioni"),
+            "{}",
+            plan.summary
+        );
         assert_eq!(
             host.read_document(&DocId::new("a.md")).unwrap(),
             "il gatto e il gatto"

@@ -34,6 +34,7 @@
 //! [`Workspace::register_plugin`]: crate::Workspace::register_plugin
 
 use fubmd_abi::rules::ids::{self, IdFault, Owner};
+use fubmd_abi::text::StringCatalog;
 use fubmd_abi::traits::{PluginManifest, QueryRoute};
 use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
@@ -307,6 +308,16 @@ impl PluginRegistry {
     /// Il grado di fiducia di un plugin dichiarato.
     pub fn trust_of(&self, plugin: &str) -> Option<Trust> {
         self.get(plugin).map(|e| e.trust)
+    }
+
+    /// I cataloghi di stringhe di un plugin dichiarato, con la lingua in cui è
+    /// scritto (§12.1). Chi non è dichiarato non ha catalogo — e non è un caso
+    /// da segnalare: è l'ultimo gradino della scala, la chiave nuda.
+    pub fn strings_of(&self, plugin: &str) -> (&[StringCatalog], &str) {
+        match self.get(plugin) {
+            Some(e) => (&e.manifest.strings, e.manifest.default_locale.as_str()),
+            None => (&[], ""),
+        }
     }
 
     /// Chi può nominare cosa, per un plugin dichiarato: il core nomina anche

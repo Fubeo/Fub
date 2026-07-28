@@ -76,6 +76,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.3 · §11.1 | [0036 — Le impostazioni](../decisions/0036-le-impostazioni-e-i-tre-stati.md) |
 | §2.14 · §11.3 | [0038 — Il kernel possiede il sidecar](../decisions/0038-il-kernel-possiede-il-sidecar.md) |
 | §1.25 · §12.3 | [0039 — Il locale e il caso](../decisions/0039-il-locale-e-il-caso.md) |
+| §1.8 · §12.1 | [0040 — Chi localizza](../decisions/0040-chi-localizza.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |

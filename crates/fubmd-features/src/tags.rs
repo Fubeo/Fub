@@ -42,6 +42,7 @@ use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::query::QueryExpr;
 use fubmd_abi::session::ContextMask;
+use fubmd_abi::text::{StringCatalog, Text};
 use fubmd_abi::traits::{
     HostApi, IndexQuery, IndexResult, ReadApi, TagCount, ViewInstance, ViewProvider, ViewSpec,
     ViewSurface,
@@ -71,6 +72,30 @@ const FILTER_FIELD: &str = "filter";
 /// campo avrebbe cambiato in silenzio la chiave salvata, e il filtro di chiunque
 /// sarebbe sparito senza che nessuno avesse toccato lo stato di vista.
 const FILTER_STATE: &str = "filter";
+
+/// Il testo grigio dentro il campo filtro.
+const FILTER_PLACEHOLDER: &str = "filter_placeholder";
+/// Il vault non ha nessun tag.
+const EMPTY: &str = "empty";
+/// I tag ci sono, ma nessuno passa il filtro. È un altro stato, e lo dice
+/// diversamente: cancellare il filtro è un'azione, creare un tag è un'altra.
+const NO_MATCH: &str = "no_match";
+
+/// Le stringhe del pannello tag. Vedi
+/// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
+/// componente e non nella shell.
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(FILTER_PLACEHOLDER, "filtra i tag")
+            .with(EMPTY, "Nessun tag.")
+            .with(NO_MATCH, "Nessun tag col filtro."),
+        StringCatalog::new("en")
+            .with(FILTER_PLACEHOLDER, "filter tags")
+            .with(EMPTY, "No tags.")
+            .with(NO_MATCH, "No tags match the filter."),
+    ]
+}
 
 /// Il pannello tag.
 ///
@@ -205,7 +230,7 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
         field: FILTER_FIELD.to_string(),
         label: None,
         value: filter.to_string(),
-        placeholder: Some("filtra i tag".to_string()),
+        placeholder: Some(Text::key(FILTER_PLACEHOLDER)),
         action: Some(ActionRef::new(FILTER)),
     })
     // La chiave è ciò che dice al riconciliatore «questo campo è lo stesso di
@@ -213,11 +238,7 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
     .with_key(FILTER_FIELD);
 
     let corpo = if visibili.is_empty() {
-        UiNode::empty_state(if tags.is_empty() {
-            "Nessun tag."
-        } else {
-            "Nessun tag col filtro."
-        })
+        UiNode::empty_state(Text::key(if tags.is_empty() { EMPTY } else { NO_MATCH }))
     } else {
         UiNode::list(
             visibili
@@ -225,7 +246,7 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
                 .map(|t| {
                     UiNode::list_item(
                         format!("#{}", t.name),
-                        Some(t.count.to_string()),
+                        Some(Text::from(t.count.to_string())),
                         Some(ActionRef::with(SEARCH, serde_json::json!({ TAG: t.name }))),
                     )
                     .with_key(t.name.clone())
@@ -254,7 +275,7 @@ mod tests {
     fn voci(tree: &UiNode) -> Vec<String> {
         fn walk(node: &UiNode, out: &mut Vec<String>) {
             match &node.kind {
-                UiKind::ListItem { title, .. } => out.push(title.clone()),
+                UiKind::ListItem { title, .. } => out.push(title.to_string()),
                 UiKind::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
                 UiKind::List { items } => items.iter().for_each(|c| walk(c, out)),
                 _ => {}

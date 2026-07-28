@@ -28,7 +28,8 @@
 //! Quindi il locale segue la strada del contesto di sessione
 //! ([decisione 0007](../../../docs/decisions/0007-contesto-di-sessione.md)): lo
 //! **pubblica la shell**, il kernel lo custodisce senza derivarlo, e chi sta
-//! dentro il confine lo **chiede** con [`HostEnv::locale`](crate::traits::HostEnv::locale).
+//! dentro il confine lo **chiede** con
+//! [`HostEnv::user_locale`](crate::traits::HostEnv::user_locale).
 //! Come `active_context`, non ha un gemello che scrive nell'`HostApi`: in che
 //! lingua leggo non è una capacità da concedere a un plugin.
 //!
@@ -208,6 +209,69 @@ impl Locale {
     pub fn to_civil_millis(&self, utc_millis: u64) -> i64 {
         utc_millis as i64 + self.utc_offset_minutes as i64 * 60_000
     }
+
+    /// L'istante come lo legge un orologio da parete dell'utente:
+    /// `2026-07-28 14:30`, o `2026-07-28 2:30 PM` con
+    /// [`HourCycle::H12`](crate::locale::HourCycle::H12).
+    ///
+    /// È la sola formattazione **davvero dipendente dal locale** che il
+    /// contratto sa fare a M2, ed esiste per rendere concreto l'argomento con
+    /// cui gli argomenti di un [`Message`](crate::text::Message) sono tipizzati:
+    /// un provider che avesse formattato la data per conto proprio avrebbe
+    /// scritto UTC a un utente che vive altrove, e nessuno a valle avrebbe più
+    /// potuto correggerlo. Qui l'offset e l'orologio arrivano da chi li conosce.
+    ///
+    /// **Cosa non promette:** l'ordine dei campi è ISO 8601 per tutti, e `AM`/`PM`
+    /// non sono tradotti. Sono i due pezzi che vogliono una tabella CLDR, e la
+    /// tabella non c'è; quando arriverà, arriverà *qui* — che è il punto: la
+    /// forma del tipo è congelata, il formattatore no.
+    pub fn format_timestamp(&self, utc_millis: u64) -> String {
+        let civil = self.to_civil_millis(utc_millis);
+        // Divisione euclidea: un istante prima del 1970 (o un offset negativo
+        // applicato all'epoca) ha millisecondi negativi, e il troncamento verso
+        // lo zero darebbe l'ora sbagliata e il giorno dopo.
+        let days = civil.div_euclid(86_400_000);
+        let in_day = civil.rem_euclid(86_400_000);
+        let (y, m, d) = civil_from_days(days);
+        let (hh, mm) = ((in_day / 3_600_000) as u64, (in_day % 3_600_000) / 60_000);
+        match self.hour_cycle {
+            HourCycle::H23 => format!("{y:04}-{m:02}-{d:02} {hh:02}:{mm:02}"),
+            HourCycle::H12 => {
+                let suffix = if hh < 12 { "AM" } else { "PM" };
+                let h12 = match hh % 12 {
+                    0 => 12,
+                    h => h,
+                };
+                format!("{y:04}-{m:02}-{d:02} {h12}:{mm:02} {suffix}")
+            }
+        }
+    }
+}
+
+/// Data civile (anno, mese, giorno) dai giorni trascorsi dall'epoca UNIX.
+///
+/// È l'algoritmo `civil_from_days` di Howard Hinnant: calendario gregoriano
+/// proiettato all'indietro, esatto su tutto l'intervallo esprimibile. L'idea è
+/// spostare l'inizio dell'anno a marzo, così i giorni bisestili cadono in fondo
+/// e l'aritmetica del mese diventa lineare.
+///
+/// Sta nel contratto e non nel kernel — dov'era, privata, al servizio dei nomi
+/// del cestino — perché adesso ha due clienti e uno dei due è dentro il confine:
+/// [`Locale::format_timestamp`] è ciò che rende leggibile un
+/// [`ArgValue::Timestamp`](crate::text::ArgValue::Timestamp), e nessun host può
+/// prestare al contratto un pezzo di sé.
+pub fn civil_from_days(days: i64) -> (i64, u64, u64) {
+    // Origine spostata al 2000-03-01, primo giorno di un'era di 400 anni.
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64; // giorno nell'era, [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365; // [0, 399]
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // giorno nell'anno di marzo
+    let mp = (5 * doy + 2) / 153; // mese con marzo = 0
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe as i64 + era * 400;
+    (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
 #[cfg(test)]
@@ -253,6 +317,54 @@ mod tests {
             ..Locale::default()
         };
         assert_eq!(honolulu.to_civil_millis(0), -600 * 60_000);
+    }
+
+    /// L'unica formattazione che dipende davvero da chi guarda: lo stesso
+    /// istante, tre locali, tre stringhe.
+    #[test]
+    fn the_same_instant_reads_differently_to_different_people() {
+        // 2026-07-28T12:30:00Z
+        let istante = 1_785_241_800_000;
+        let utc = Locale::default();
+        assert_eq!(utc.format_timestamp(istante), "2026-07-28 12:30");
+
+        let roma = Locale {
+            utc_offset_minutes: 120,
+            ..Locale::default()
+        };
+        assert_eq!(roma.format_timestamp(istante), "2026-07-28 14:30");
+
+        let new_york = Locale {
+            utc_offset_minutes: -240,
+            hour_cycle: HourCycle::H12,
+            ..Locale::default()
+        };
+        assert_eq!(new_york.format_timestamp(istante), "2026-07-28 8:30 AM");
+    }
+
+    /// Mezzogiorno e mezzanotte sono i due casi in cui un orologio a 12 ore
+    /// sbaglia, se chi lo scrive fa `hh % 12` e non ci ripensa.
+    #[test]
+    fn twelve_hour_clocks_have_no_hour_zero() {
+        let l = Locale {
+            hour_cycle: HourCycle::H12,
+            ..Locale::default()
+        };
+        assert_eq!(l.format_timestamp(0), "1970-01-01 12:00 AM");
+        assert_eq!(l.format_timestamp(12 * 3_600_000), "1970-01-01 12:00 PM");
+        assert_eq!(l.format_timestamp(13 * 3_600_000), "1970-01-01 1:00 PM");
+    }
+
+    /// Un offset negativo applicato all'epoca porta i millisecondi civili sotto
+    /// zero: col troncamento verso lo zero il giorno sarebbe quello dopo e
+    /// l'ora sarebbe negativa.
+    #[test]
+    fn the_day_before_the_epoch_is_the_day_before() {
+        let honolulu = Locale {
+            utc_offset_minutes: -600,
+            ..Locale::default()
+        };
+        assert_eq!(honolulu.format_timestamp(0), "1969-12-31 14:00");
     }
 
     #[test]

@@ -135,7 +135,7 @@ impl CustomRenderer for DiagramRenderer {
             return Ok(CustomRendering::Fallback);
         };
         let fallback = UiNode::new(UiKind::Section {
-            title: format!("Diagramma ({engine})"),
+            title: format!("Diagramma ({engine})").into(),
             collapsed: true,
             children: vec![UiNode::new(UiKind::Stack {
                 dir: Axis::Column,

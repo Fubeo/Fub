@@ -59,6 +59,7 @@ pub mod query;
 pub mod rules;
 pub mod session;
 pub mod settings;
+pub mod text;
 pub mod traits;
 pub mod transfer;
 pub mod ui;
@@ -92,6 +93,7 @@ pub use session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewCon
 pub use settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
+pub use text::{Arg, ArgValue, Localize, Message, StringCatalog, Strings, Text};
 pub use traits::{
     BacklinkRef, CommandProvider, DataRead, DataWrite, DocumentMatch, EventHandler, HealthCheck,
     HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,

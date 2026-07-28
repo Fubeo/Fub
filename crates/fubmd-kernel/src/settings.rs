@@ -439,16 +439,29 @@ impl SettingsStore {
 
     /// Tutte le righe risolte, o quelle di un plugin, in ordine di chiave.
     pub fn entries(&self, plugin: Option<&str>) -> Vec<SettingEntry> {
+        self.entries_by_owner(plugin)
+            .into_iter()
+            .map(|(_, e)| e)
+            .collect()
+    }
+
+    /// Le stesse, **con chi le ha dichiarate**: il proprietario non sta nella
+    /// [`SettingSpec`] (e non ci deve stare, vedi [`Declared`]), ma è ciò che
+    /// dice quale catalogo di stringhe risolve le sue etichette (§12.1).
+    pub fn entries_by_owner(&self, plugin: Option<&str>) -> Vec<(String, SettingEntry)> {
         self.specs
             .values()
             .filter(|d| plugin.is_none_or(|p| d.plugin == p))
             .map(|d| {
                 let (value, source) = self.resolve(d);
-                SettingEntry {
-                    spec: d.spec.clone(),
-                    value,
-                    source,
-                }
+                (
+                    d.plugin.clone(),
+                    SettingEntry {
+                        spec: d.spec.clone(),
+                        value,
+                        source,
+                    },
+                )
             })
             .collect()
     }

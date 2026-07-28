@@ -81,7 +81,7 @@ fn disegnato(ws: &Workspace, instance: &str) -> String {
     let UiKind::EmptyState { title, .. } = &node.kind else {
         panic!("questo pannello disegna un empty-state")
     };
-    title.clone()
+    title.to_string()
 }
 
 fn ricorda(ws: &mut Workspace, instance: &str, cosa: &str) -> Result<ViewUpdate, PluginError> {

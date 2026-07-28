@@ -55,7 +55,7 @@ impl Vault {
 fn titles(tree: &UiNode) -> Vec<String> {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         if let UiKind::TreeItem { label, .. } = &node.kind {
-            out.push(label.clone());
+            out.push(label.to_string());
         }
         for c in node.children() {
             walk(c, out);

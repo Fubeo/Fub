@@ -31,6 +31,7 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8Path;
 use fubmd_abi::settings::SettingSpec;
+use fubmd_abi::text::StringCatalog;
 use fubmd_abi::traits::{Plugin, PluginManifest};
 use fubmd_features::{
     BacklinksView, CoreCommands, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer,
@@ -80,6 +81,13 @@ struct CoreBundle {
     /// tutte, ed è giusto: una feature che non ha niente da configurare non
     /// dichiara niente, e il pannello non le trova una riga vuota.
     settings: Vec<SettingSpec>,
+    /// Le stringhe che questa feature dichiara (§12.1), con la lingua in cui è
+    /// scritta. Vuoto per quasi tutte, ed è il **degrado garbato** del §12.1 in
+    /// azione: chi non dichiara continua a restituire prosa italiana cablata, e
+    /// si vede in italiano. Non è una svista che aspetta un fix — è la ragione
+    /// per cui `Text::Literal` è il default.
+    default_locale: &'static str,
+    strings: Vec<StringCatalog>,
     #[allow(clippy::type_complexity)]
     register: Box<dyn Fn(&mut Workspace) -> Vec<String> + Send + Sync>,
 }
@@ -94,6 +102,8 @@ impl CoreBundle {
             id,
             name,
             settings: Vec::new(),
+            default_locale: "",
+            strings: Vec::new(),
             register: Box::new(register),
         }
     }
@@ -103,11 +113,20 @@ impl CoreBundle {
         self.settings = settings;
         self
     }
+
+    /// Le stringhe che questa riga dichiara, e la lingua in cui sono scritte.
+    fn speaking(mut self, default_locale: &'static str, strings: Vec<StringCatalog>) -> Self {
+        self.default_locale = default_locale;
+        self.strings = strings;
+        self
+    }
 }
 
 impl Bundle for CoreBundle {
     fn manifest(&self) -> PluginManifest {
-        PluginManifest::core(self.id, self.name).configuring(self.settings.clone())
+        PluginManifest::core(self.id, self.name)
+            .configuring(self.settings.clone())
+            .speaking(self.default_locale, self.strings.clone())
     }
 
     /// Le feature ufficiali sono core, e lo dicono qui: il grado di fiducia è
@@ -178,15 +197,21 @@ pub fn mount(
             })
             .configuring(versioning_settings()),
         ),
-        Arc::new(CoreBundle::new(BACKLINKS_ID, "Backlink", |ws| {
-            register_view(ws, BACKLINKS_ID, Box::new(BacklinksView))
-        })),
+        Arc::new(
+            CoreBundle::new(BACKLINKS_ID, "Backlink", |ws| {
+                register_view(ws, BACKLINKS_ID, Box::new(BacklinksView))
+            })
+            .speaking("it", fubmd_features::backlinks::catalog()),
+        ),
         Arc::new(CoreBundle::new(OUTLINE_ID, "Struttura", |ws| {
             register_view(ws, OUTLINE_ID, Box::new(OutlineView))
         })),
-        Arc::new(CoreBundle::new(TAGS_ID, "Tag", |ws| {
-            register_view(ws, TAGS_ID, Box::new(TagPanelView))
-        })),
+        Arc::new(
+            CoreBundle::new(TAGS_ID, "Tag", |ws| {
+                register_view(ws, TAGS_ID, Box::new(TagPanelView))
+            })
+            .speaking("it", fubmd_features::tags::catalog()),
+        ),
         Arc::new(CoreBundle::new(STATS_ID, "Statistiche", |ws| {
             register_view(ws, STATS_ID, Box::new(StatsView))
         })),
