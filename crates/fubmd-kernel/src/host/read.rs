@@ -7,7 +7,7 @@ use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{
     DataRead, HostEnv, HostQuery, IndexQuery, IndexResult, Page, Paged, SettingsRead, TrashEntry,
-    VaultRead,
+    VaultRead, ViewStateRead,
 };
 use fubmd_abi::PluginError;
 
@@ -30,6 +30,9 @@ use crate::workspace::{collect_data_files, fenced_doc_id, plugin_error, Workspac
 pub(crate) struct ReadHost<'a> {
     pub(crate) ws: &'a Workspace,
     pub(crate) plugin: &'a str,
+    /// L'esemplare di view per conto del quale si sta leggendo (§11.2), se ce
+    /// n'è uno. Lo timbra il workspace, non lo passa il provider.
+    pub(crate) instance: Option<&'a str>,
 }
 
 impl VaultRead for ReadHost<'_> {
@@ -95,6 +98,22 @@ impl DataRead for ReadHost<'_> {
         collect_data_files(&root, &dir, &mut out);
         out.sort_unstable();
         Ok(out)
+    }
+}
+
+/// Rileggere lo stato di vista è una **lettura**, e questo è il percorso che
+/// serve davvero: una view rilegge il proprio scroll — o le sezioni che aveva
+/// collassato — mentre si disegna, cioè da sotto il prestito condiviso, che è
+/// esattamente il momento in cui le serve.
+///
+/// `instance` a `None` (nessun esemplare: non si sta disegnando una view) torna
+/// `None` e non un errore, come dichiara il contratto: chi non sta disegnando
+/// per conto di un'istanza non ha uno stato di vista da rileggere.
+impl ViewStateRead for ReadHost<'_> {
+    fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
+        Ok(self
+            .instance
+            .and_then(|instance| self.ws.view_state(self.plugin, instance, key)))
     }
 }
 

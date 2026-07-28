@@ -515,6 +515,59 @@ fn reset_setting(host: State<Host>, key: String, vault: Option<String>) -> Resul
     ws.reset_setting(&key).map_err(|e| e.to_string())
 }
 
+// --- lo stato di vista della shell (§11.2) ---------------------------------
+//
+// La shell **non è un plugin**: non ha un manifest, non le si concedono
+// capacità, e passa dall'API del `Workspace` invece che dall'`HostApi`. Per
+// questo qui proprietario ed esemplare sono argomenti di una funzione e non
+// qualcosa che l'host timbra — ma li timbra comunque **questa porta**, non il
+// webview: se arrivassero da JS, una pagina qualunque potrebbe rileggere (e
+// riscrivere) lo stato di vista di un provider. È la stessa riga dell'id di un
+// job nella decisione 0035, applicata al confine di sotto.
+
+/// Il proprietario sotto cui va lo stato di vista della shell. Un id come quello
+/// di un plugin, e col prefisso del progetto: divide il recinto della shell da
+/// quello di chiunque altro, senza fare di lei un caso speciale nel formato.
+const SHELL_OWNER: &str = "fubmd.shell";
+
+/// L'esemplare della shell. **Uno solo**, oggi, e dichiararlo qui è più onesto
+/// che lasciarlo implicito: l'area principale è un pannello solo, quindi non c'è
+/// niente da distinguere. Quando arriverà il modello di layout (§1.2) i pannelli
+/// avranno un esemplare per uno, e sarà quello a comparire qui.
+const SHELL_INSTANCE: &str = "window";
+
+/// Ciò che la shell aveva salvato sotto questa chiave, per **questo vault** e su
+/// **questa macchina**.
+///
+/// `None` è il caso normale del primo avvio, non un errore: chi non ha mai
+/// salvato niente disegna il proprio default.
+#[tauri::command]
+fn view_state(
+    host: State<Host>,
+    key: String,
+    vault: Option<String>,
+) -> Result<Option<serde_json::Value>, String> {
+    let ws = host.workspace(vault.as_deref())?;
+    let ws = ws.read().unwrap();
+    Ok(ws.view_state(SHELL_OWNER, SHELL_INSTANCE, &key))
+}
+
+/// Salva (`Some`) o dimentica (`None`) lo stato di vista della shell.
+#[tauri::command]
+fn set_view_state(
+    host: State<Host>,
+    key: String,
+    value: Option<serde_json::Value>,
+    vault: Option<String>,
+) -> Result<(), String> {
+    let ws = host.workspace(vault.as_deref())?;
+    // Prestito **condiviso**: lo store ha il suo lucchetto dentro, e prendere
+    // qui quello esclusivo del workspace bloccherebbe chi legge per il tempo di
+    // una scrittura su disco — per salvare uno scroll.
+    let ws = ws.read().unwrap();
+    ws.set_view_state(SHELL_OWNER, SHELL_INSTANCE, &key, value)
+}
+
 /// Chi questo host sa montare, e chi è acceso in questo vault. Non è
 /// `VaultInfo.plugins`: quello elenca chi è **dichiarato nel kernel**, e un
 /// componente spento non lo è — «spento» e «non c'è» sono due stati diversi.
@@ -620,6 +673,8 @@ pub fn run() {
             write_workspace_meta,
             set_setting,
             reset_setting,
+            view_state,
+            set_view_state,
             list_bundles,
             set_plugin_enabled,
             known_vaults,

@@ -47,10 +47,16 @@ cronologico di chiusura.
 | [0034](0034-il-freno-e-il-raggruppamento.md) | Il freno e il raggruppamento: il tetto sta con chi ritira, la finestra è la velocità di chi consuma | §10.2 | 2026-07-28 |
 | [0035](0035-il-lavoro-lungo-si-racconta.md) | Il lavoro lungo si racconta: chi guarda, cosa vede, e chi mette il nome sul progresso | §10.3 — chiude la [seduta 10](../roadmap/10-gli-eventi.md) | 2026-07-28 |
 | [0036](0036-le-impostazioni-e-i-tre-stati.md) | Le impostazioni: chi dichiara una chiave, dove sta il suo valore, e chi la può scrivere | §11.1 — chiude il primo residuo della [0010](0010-comando-descritto-a-una-macchina.md) | 2026-07-28 |
+| [0037](0037-lo-stato-di-vista.md) | Lo stato di vista: di chi è lo scroll, dove vive, e perché non viaggia col vault | §11.2 (**prima metà**) — resta il layout | 2026-07-28 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
 nel momento in cui la voce di `todo.md` si chiude.
+
+La [0037](0037-lo-stato-di-vista.md) è il secondo caso di mezza voce, e
+diversamente dal primo la seconda metà **non ha ancora una data**: il layout del
+§11.2 aspetta il modello di layout, perché oggi l'area principale è un pannello
+solo e non c'è nessuna disposizione da salvare. La voce resta aperta, come deve.
 
 La [0031](0031-chi-possiede-i-bundle.md) è la prima che ne ha chiusa **mezza**:
 il §9.3 chiedeva quattro cose, e le ultime tre — il runner, la cancellazione,

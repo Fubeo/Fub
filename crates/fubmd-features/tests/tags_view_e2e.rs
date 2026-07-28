@@ -38,7 +38,7 @@ impl Vault {
         // kernel non presta capacità a una stringa.
         ws.register_core_feature(TAGS_ID, TAGS_ID)
             .expect("dichiarato");
-        ws.register_view_provider(TAGS_ID, Box::new(TagPanelView::default()))
+        ws.register_view_provider(TAGS_ID, Box::new(TagPanelView))
             .expect("registrato");
         ws.reindex().expect("reindex");
         ws

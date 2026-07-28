@@ -2287,6 +2287,67 @@ interface host-settings-write {
     reset-setting: func(key: string) -> result<_, plugin-error>;
 }
 
+/// Rileggere lo STATO DI VISTA del proprio esemplare (§11.2): lo scroll, le
+/// sezioni collassate, il filtro corrente, la scheda attiva.
+///
+/// È il terzo dei tre stati che la seduta 11 teneva insieme, e si definisce per
+/// dove NON va. Non è un'impostazione (`host-settings-*`): quella ha un valore
+/// per chiave e la decide l'utente, questo ha un valore per ESEMPLARE e non lo
+/// decide nessuno — si deposita mentre si guarda, e un pannello di impostazioni
+/// con dentro lo scroll di ieri sarebbe stato il segno che la distinzione
+/// mancava. Non è un blob (`host-data-*`): quelli vivono dentro il vault e
+/// viaggiano con lui, mentre lo scroll di ieri sul portatile non è un fatto sul
+/// vault — sincronizzarlo vorrebbe dire far litigare due macchine su dove si era
+/// rimasti. Vive quindi nella cartella di configurazione della macchina, con la
+/// disciplina della decisione 0036: versione di schema, scrittura atomica, e un
+/// file che non si è potuto leggere NON SI RISCRIVE.
+///
+/// La chiave la compone l'host: chi scrive (l'id del componente) e QUALE
+/// ESEMPLARE, che dalla decisione 0007 è già «quale delle tre istanze di questa
+/// view sono io». Nessuno dei due è un parametro — è la stessa mossa dell'id di
+/// un job nella 0035: se lo fossero, un provider potrebbe rileggere lo scroll di
+/// un altro, e due pannelli aperti sullo stesso vault si sovrascriverebbero a
+/// vicenda credendo di ricordare.
+interface host-view-state-read {
+    use json.{json};
+    use errors.{plugin-error};
+
+    /// Ciò che questo esemplare aveva salvato sotto questa chiave.
+    ///
+    /// `none` NON è un errore ed è il caso normale: la prima volta che una view
+    /// si disegna nessuno le ha ancora salvato niente, e un provider che dovesse
+    /// distinguere «mai scritto» da «errore» per disegnare la propria prima riga
+    /// avrebbe un ramo che nessuno prova.
+    ///
+    /// FUORI DA UN ESEMPLARE DI VIEW È `none`, sempre: chi non sta disegnando né
+    /// reagendo per conto di un'istanza non ha uno stato di vista da rileggere,
+    /// e inventargliene uno vorrebbe dire dargli quello di qualcun altro.
+    view-state: func(key: string) -> result<option<json>, plugin-error>;
+}
+
+/// Ricordare lo stato di vista del proprio esemplare (§11.2).
+///
+/// Due famiglie e non una, per la ragione già scritta sui blob: si rilegge
+/// mentre si disegna — da sotto un prestito condiviso — e non si deve poter
+/// scrivere mentre si disegna.
+interface host-view-state-write {
+    use json.{json};
+    use errors.{plugin-error};
+
+    /// Salva (`some`) o dimentica (`none`) lo stato sotto questa chiave.
+    ///
+    /// Dimenticare è `none` e non una funzione a sé perché qui — a differenza
+    /// delle impostazioni — non ci sono livelli sotto a cui ricadere: una chiave
+    /// c'è o non c'è, e `null` è un valore JSON come un altro che sarebbe stato
+    /// ambiguo scrivere per dire «scordatelo».
+    ///
+    /// FUORI DA UN ESEMPLARE DI VIEW È UN ERRORE e non un silenzio: leggere a
+    /// vuoto è il caso normale di chi non ha ancora salvato niente, scrivere nel
+    /// vuoto è invece qualcuno che crede di ricordare e non ricorderà — cioè un
+    /// difetto che si vede solo alla riapertura, quando è tardi.
+    set-view-state: func(key: string, value: option<json>) -> result<_, plugin-error>;
+}
+
 /// Ciò che l'host sa e il guest no: che ore sono, e cosa sta guardando
 /// l'utente.
 ///
@@ -2653,7 +2714,7 @@ interface exporter {
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che
 /// implementa. Il kernel non distingue nativo da WASM.
 world plugin-world {
-    // Le dodici famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
+    // Le quattordici famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
     // mondo che non importa `host-vault-write` non è un mondo che la rifiuta a
     // runtime, è un mondo in cui quella funzione non esiste. Il giorno che il
     // caricatore di M5 monterà un componente sotto sandbox stretta, ciò che
@@ -2671,6 +2732,8 @@ world plugin-world {
     import host-services;
     import host-settings-read;
     import host-settings-write;
+    import host-view-state-read;
+    import host-view-state-write;
 
     export plugin;
     export format;

@@ -15,6 +15,7 @@
 // ricerca, le voci del cestino, l'anteprima di una versione). Uno store che
 // raccoglie tutto torna a essere l'oggetto-dio, con un file diverso.
 import type { CommandSpec, PaneMode, WorkspaceMeta } from "../host/contract";
+import { api } from "../host/ipc";
 
 // --- i segnali --------------------------------------------------------------
 //
@@ -133,53 +134,91 @@ export const state: ShellState = {
   commandSpecs: [],
 };
 
-// --- lo stato di vista, per macchina ----------------------------------------
+// --- lo stato di vista, per macchina (§11.2) --------------------------------
 //
 // Modalità, cartelle aperte e spazio selezionato non sono organizzazione del
-// vault: sono «come sto guardando questa roba adesso, su questa macchina». Su
-// un altro dispositivo sarebbero rumore, e infatti non entrano nel sidecar —
-// stanno in `localStorage`. Le chiavi sono raccolte qui perché una chiave di
-// persistenza scritta in due punti diverge al primo refuso.
+// vault: sono «come sto guardando questa roba adesso, su questa macchina». Su un
+// altro dispositivo sarebbero rumore, e infatti non entrano nel sidecar.
+//
+// Stavano in `localStorage`, che era il posto giusto per la ragione giusta e
+// sbagliato per due che si vedono usandolo: moriva col profilo della webview, e
+// non lo conosceva nessuno fuori di lì — un backend che voglia sapere dove si
+// era rimasti (o potarlo quando si dimentica un vault) non poteva. Ora passano
+// dalla stessa porta di tutto il resto, e il file è del kernel.
+//
+// **Il vault non è più nella chiave.** Non serve comporlo: lo store lo mette
+// come prima chiave da sé, ed è anche più corretto — `state.vaultRoot` è la
+// stringa che la shell ha in mano, il root canonico lo conosce il backend.
+//
+// Cosa cambia per chi guarda: la **modalità** era globale (una chiave sola per
+// tutte le cartelle) e ora è per vault. È un cambiamento voluto: un vault di
+// appunti che si legge e uno di note che si scrive non hanno ragione di
+// condividere la modalità, e chi ne teneva uno solo non vede differenza.
+//
+// Le chiavi sono raccolte qui perché una chiave di persistenza scritta in due
+// punti diverge al primo refuso.
 
-const MODE_KEY = "fubmd.mode";
+const MODE_KEY = "mode";
+const EXPANDED_KEY = "expanded";
+const ACTIVE_SPACE_KEY = "activeSpace";
 
-function expandedKey(): string {
-  return `fubmd:expanded:${state.vaultRoot}`;
-}
-
-function activeSpaceKey(): string {
-  return `fubmd:space:${state.vaultRoot}`;
-}
-
-/// La modalità dell'ultima sessione, se ne resta traccia.
-export function loadMode(): PaneMode {
-  const salvata = localStorage.getItem(MODE_KEY);
+/// La modalità con cui si guardava questo vault, se ne resta traccia.
+///
+/// Un valore che non è una delle tre modalità vale come nessun valore: il file
+/// si apre con un editor di testo, e una parola scritta a mano dentro `mode` non
+/// vale una shell che parte in uno stato che non esiste.
+export async function loadMode(): Promise<PaneMode> {
+  const salvata = await leggi<string>(MODE_KEY);
   return salvata === "source" || salvata === "reading" || salvata === "live_preview"
     ? salvata
     : "live_preview";
 }
 
 export function saveMode(mode: PaneMode): void {
-  localStorage.setItem(MODE_KEY, mode);
+  scrivi(MODE_KEY, mode);
 }
 
-export function loadExpanded(): void {
-  try {
-    state.expanded = new Set(JSON.parse(localStorage.getItem(expandedKey()) ?? "[]"));
-  } catch {
-    state.expanded = new Set();
-  }
+export async function loadExpanded(): Promise<void> {
+  const salvate = await leggi<string[]>(EXPANDED_KEY);
+  state.expanded = new Set(Array.isArray(salvate) ? salvate : []);
 }
 
 export function saveExpanded(): void {
-  localStorage.setItem(expandedKey(), JSON.stringify([...state.expanded]));
+  // Nessuna cartella aperta si **dimentica** invece di scrivere una lista vuota:
+  // è ciò che significa, e il file non si porta dietro una riga per ogni vault
+  // che qualcuno ha aperto e richiuso.
+  scrivi(EXPANDED_KEY, state.expanded.size > 0 ? [...state.expanded] : null);
 }
 
-export function loadActiveSpace(): void {
-  state.activeSpace = localStorage.getItem(activeSpaceKey());
+export async function loadActiveSpace(): Promise<void> {
+  const salvato = await leggi<string>(ACTIVE_SPACE_KEY);
+  state.activeSpace = typeof salvato === "string" ? salvato : null;
 }
 
 export function saveActiveSpace(): void {
-  if (state.activeSpace === null) localStorage.removeItem(activeSpaceKey());
-  else localStorage.setItem(activeSpaceKey(), state.activeSpace);
+  scrivi(ACTIVE_SPACE_KEY, state.activeSpace);
+}
+
+/// Rileggere: **assente non è un errore**, ed è il caso normale del primo avvio.
+/// Nemmeno un errore lo è, qui: senza vault aperto — o con un file di stato che
+/// non si è potuto leggere — si riparte dal default, che è ciò che la shell
+/// mostrava prima che qualcuno guardasse qualcosa. Perdere lo scroll è meglio di
+/// una shell che non parte.
+async function leggi<T>(key: string): Promise<T | null> {
+  try {
+    return await api.viewState<T>(key);
+  } catch {
+    return null;
+  }
+}
+
+/// Ricordare, **senza aspettare**: chi apre una cartella nell'albero non deve
+/// fermarsi per una scrittura su disco. È anche la ragione per cui il fallimento
+/// qui si scrive in console e non si mostra: l'unico modo di raccontarlo sarebbe
+/// un avviso a ogni click, per un file di cache che al prossimo avvio si
+/// riscrive da sé.
+function scrivi(key: string, value: unknown): void {
+  void api.setViewState(key, value).catch((e) => {
+    console.warn(`FubMD: non ho potuto ricordare \`${key}\``, e);
+  });
 }

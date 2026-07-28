@@ -195,6 +195,21 @@ oggi, una migrazione domani); le altre restano al freeze.
   schema è pubblico per costruzione e questo store non contiene segreti — ciò
   che è recintato è la scrittura, e la recinta un cancello per chiave
   (`program-writable`) sopra il permesso `fubmd:write-settings`.
+- **Lo stato di vista, il secondo dei tre stati senza contenitore**
+  ([decisione 0037](../decisions/0037-lo-stato-di-vista.md)). Additiva anche
+  questa, e piccola: due `interface` nuove — `host-view-state-read` (in
+  `read-api`) e `host-view-state-write` (solo in `host-api`) — con un metodo per
+  una, che portano le famiglie di capacità da dodici a **quattordici**. Nessun
+  tipo nuovo: il valore è un `json`, che sul confine è già una stringa.
+
+  Cosa scadeva col freeze non era il contenitore ma **due scelte di firma**. La
+  prima: chi scrive e su quale esemplare **non sono parametri** — li timbra
+  l'host, come l'id di un job nella [0035](../decisions/0035-il-lavoro-lungo-si-racconta.md).
+  Aggiungerli dopo sarebbe stata una major, e toglierli dopo averli concessi lo
+  sarebbe stata di più: sono la sola cosa che rende quello stato *proprio* invece
+  che di chiunque lo chieda. La seconda: sono **due** famiglie e non una, perché
+  si rilegge da sotto un prestito condiviso (mentre si disegna) e da lì non si
+  deve poter scrivere — la stessa ragione per cui `read-api` esiste.
 
 **Da chiudere al freeze:**
 

@@ -17,15 +17,15 @@ use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexQuery,
     IndexResult, JobId, JobSpec, Page, Paged, PluginPermissions, SettingsRead, SettingsWrite,
-    TrashEntry, VaultRead, VaultStructure, VaultWrite,
+    TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
 use fubmd_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le dodici famiglie di capacità, come nomi su cui una politica risponde.
+/// Le quattordici famiglie di capacità, come nomi su cui una politica risponde.
 ///
-/// Sono esattamente i dodici trait di `fubmd_abi::traits`, e non è una
+/// Sono esattamente i quattordici trait di `fubmd_abi::traits`, e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono restare la stessa lista, e il presidio è
 /// che [`Guard`] non compila se una famiglia non è coperta.
@@ -55,6 +55,10 @@ pub enum Capability {
     SettingsRead,
     /// Scrivere quelle che si sono dichiarate scrivibili da un programma.
     SettingsWrite,
+    /// Rileggere lo stato di vista del proprio esemplare (§11.2).
+    ViewStateRead,
+    /// Ricordarlo.
+    ViewStateWrite,
 }
 
 impl Capability {
@@ -62,7 +66,7 @@ impl Capability {
     /// [`CapabilitySet`] senza scrivere l'elenco una seconda volta: se una
     /// famiglia nascesse e non finisse qui, nascerebbe negata a tutti — che è
     /// il modo giusto di sbagliare, ma va visto.
-    pub const ALL: [Capability; 12] = [
+    pub const ALL: [Capability; 14] = [
         Capability::VaultRead,
         Capability::VaultWrite,
         Capability::VaultStructure,
@@ -75,6 +79,8 @@ impl Capability {
         Capability::Services,
         Capability::SettingsRead,
         Capability::SettingsWrite,
+        Capability::ViewStateRead,
+        Capability::ViewStateWrite,
     ];
 
     /// Il permesso del core che governa questa famiglia, se ce n'è uno.
@@ -99,7 +105,12 @@ impl Capability {
             // manifest di chi lo dichiara — e questo store non contiene segreti,
             // per regola scritta (`fubmd_abi::settings`). Ciò che si recinta è
             // la scrittura, e lì i cancelli sono due.
-            Capability::DataRead
+            // Lo stato di vista sta nel proprio recinto come i blob, e per la
+            // stessa ragione non è un permesso dichiarabile: quello che si
+            // legge e si scrive è già solo il proprio.
+            Capability::ViewStateRead
+            | Capability::ViewStateWrite
+            | Capability::DataRead
             | Capability::DataWrite
             | Capability::Env
             | Capability::Events
@@ -157,6 +168,10 @@ impl Policy for ReadOnly {
             // sopravvive alla sessione, e una simulazione che spegnesse il
             // versioning lo lascerebbe spento.
             | Capability::SettingsWrite
+            // Ricordare dove si era rimasti sopravvive alla simulazione come
+            // ci sopravvive un blob: una prova a vuoto che spostasse lo scroll
+            // avrebbe lasciato dietro di sé l'unica cosa che doveva non fare.
+            | Capability::ViewStateWrite
             // Un evento emesso e un job lanciato sono effetti che una
             // simulazione non può ritirare: il `DocumentChanged` finto fa
             // ricaricare l'editor, il job rientra quando la simulazione è
@@ -174,6 +189,10 @@ impl Policy for ReadOnly {
             | Capability::Query
             | Capability::Env
             | Capability::SettingsRead
+            // Rileggere dove si era rimasti non è un effetto: una simulazione
+            // che disegnasse una view senza il suo scroll mostrerebbe una cosa
+            // diversa da quella che l'utente ha davanti.
+            | Capability::ViewStateRead
             | Capability::Commands => None,
         }
     }
@@ -464,6 +483,28 @@ impl<H: SettingsWrite, P: Policy> SettingsWrite for Guard<H, P> {
             format!("azzerare l'impostazione `{key}`")
         })?;
         self.inner.reset_setting(key)
+    }
+}
+
+impl<H: ViewStateRead, P: Policy> ViewStateRead for Guard<H, P> {
+    fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
+        self.check(Capability::ViewStateRead, || {
+            format!("rileggere lo stato di vista `{key}`")
+        })?;
+        self.inner.view_state(key)
+    }
+}
+
+impl<H: ViewStateWrite, P: Policy> ViewStateWrite for Guard<H, P> {
+    fn set_view_state(
+        &mut self,
+        key: &str,
+        value: Option<serde_json::Value>,
+    ) -> Result<(), PluginError> {
+        self.check(Capability::ViewStateWrite, || {
+            format!("ricordare lo stato di vista `{key}`")
+        })?;
+        self.inner.set_view_state(key, value)
     }
 }
 

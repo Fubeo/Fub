@@ -146,8 +146,28 @@ export const api = {
     invoke<void>("set_vault_favorite", { path, favorite }),
   setVaultLook: (path: string, icon: string | null, name: string | null) =>
     invoke<void>("set_vault_look", { path, icon, name }),
-  // Toglie dall'elenco. **Non cancella niente dal disco.**
+  // Toglie dall'elenco. **Non cancella niente dal disco.** Dimentica anche come
+  // lo si stava guardando (§11.2): riaprire fra un anno un vault dimenticato non
+  // deve ritrovare le cartelle aperte com'erano.
   forgetVault: (path: string) => invoke<void>("forget_vault", { path }),
+
+  // --- lo stato di vista (§11.2) ------------------------------------------
+  //
+  // Dove la shell era rimasta: la modalità, le cartelle aperte, lo spazio
+  // selezionato. Stava in `localStorage`, che era il posto giusto per la ragione
+  // giusta — non viaggia col vault — e sbagliato per due che si vedono usandolo:
+  // moriva col profilo della webview (una reinstallazione, un `clear site data`,
+  // e non c'era più), e non lo conosceva nessuno **fuori** dalla webview. Ora è
+  // un file della macchina che il kernel possiede, gemello delle impostazioni.
+  //
+  // Il vault non è un parametro: lo mette la porta, come per tutto il resto qui
+  // dentro. Nemmeno il proprietario e l'esemplare lo sono — li timbra il lato
+  // Rust, o una pagina qualunque potrebbe rileggere lo stato di un provider.
+  viewState: <T>(key: string) => invoke<T | null>("view_state", { key }),
+  // `null` **dimentica** la chiave: è ciò che «non c'è» significa, e tiene il
+  // file dalla parte di chi lo pota.
+  setViewState: (key: string, value: unknown) =>
+    invoke<void>("set_view_state", { key, value: value ?? null }),
 };
 
 /// Il canale eventi del kernel. Il ritorno è la disiscrizione.

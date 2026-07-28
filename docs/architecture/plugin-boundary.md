@@ -14,7 +14,7 @@ Un plugin non tocca mai il filesystem o il bus direttamente: passa da `HostApi`
 applicare i permessi.
 
 Dalla [decisione 0021](../decisions/0021-il-confine.md) l'`HostApi` è la
-**somma di famiglie** — dodici dal §11.1, al confine WIT altrettante `interface`
+**somma di famiglie** — quattordici dal §11.2, al confine WIT altrettante `interface`
 importate una per una dal `plugin-world` — e il punto di applicazione esiste davvero: il kernel
 tiene un [registro dei plugin](../../crates/fubmd-kernel/src/plugins.rs) con
 manifest, permessi e grado di fiducia, e ogni host nasce dentro un

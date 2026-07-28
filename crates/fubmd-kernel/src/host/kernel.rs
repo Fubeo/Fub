@@ -10,7 +10,7 @@ use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexQuery,
     IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TrashEntry, VaultRead,
-    VaultStructure, VaultWrite,
+    VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
 use fubmd_abi::{Event, PluginError};
 
@@ -36,6 +36,9 @@ pub(crate) struct KernelHost<'a> {
     /// import) è [`InvokeMode::Apply`], che è la verità: lì non si sta
     /// simulando niente.
     pub(crate) mode: InvokeMode,
+    /// L'esemplare di view per conto del quale si sta agendo (§11.2), se ce n'è
+    /// uno. Lo timbra il workspace, non lo passa il provider.
+    pub(crate) instance: Option<&'a str>,
 }
 
 impl KernelHost<'_> {
@@ -210,6 +213,36 @@ impl DataWrite for KernelHost<'_> {
 impl SettingsRead for KernelHost<'_> {
     fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
         self.ws.setting(key)
+    }
+}
+
+impl ViewStateRead for KernelHost<'_> {
+    fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
+        Ok(self
+            .instance
+            .and_then(|instance| self.ws.view_state(self.plugin, instance, key)))
+    }
+}
+
+impl ViewStateWrite for KernelHost<'_> {
+    fn set_view_state(
+        &mut self,
+        key: &str,
+        value: Option<serde_json::Value>,
+    ) -> Result<(), PluginError> {
+        // Fuori da un esemplare è un **errore** e non un silenzio: leggere a
+        // vuoto è il caso normale di chi non ha ancora salvato niente, scrivere
+        // nel vuoto è invece qualcuno che crede di ricordare e non ricorderà.
+        let instance = self.instance.ok_or_else(|| {
+            PluginError::BadArgs(
+                "lo stato di vista è di un esemplare di view: qui non se ne sta \
+                 disegnando né servendo nessuno"
+                    .into(),
+            )
+        })?;
+        self.ws
+            .set_view_state(self.plugin, instance, key, value)
+            .map_err(PluginError::Internal)
     }
 }
 

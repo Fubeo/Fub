@@ -48,7 +48,10 @@ const paletteHost = {
 };
 
 async function init(): Promise<void> {
-  state.mode = loadMode();
+  // La modalità **non si carica qui**: è per vault (§11.2), e un vault non c'è
+  // ancora. La carica `openVaultPath`, e chi apre applica; senza vault iniziale
+  // resta questo default, che è ciò che la shell mostrava prima che qualcuno
+  // guardasse qualcosa.
   document.body.dataset.mode = state.mode;
 
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
@@ -118,13 +121,12 @@ async function init(): Promise<void> {
   await startKernelRouter();
 
   const initial = await api.initialVault();
+  // Chi apre un vault applica anche la sua modalità (§11.2): è là dentro che si
+  // sa quale sia. Senza vault iniziale la applica qui, perché la stessa porta
+  // fa anche il cablaggio — classe attiva, resa inline, superficie di lettura —
+  // e la finestra vuota deve comunque essere in uno stato coerente.
   if (initial) await openVaultPath(initial);
-  // La modalità iniziale passa dalla stessa porta di un click sul commutatore
-  // — il cablaggio (classe attiva, resa inline, superficie di lettura,
-  // contesto pubblicato) sta in un punto solo invece che in due che devono
-  // restare d'accordo. Dopo l'apertura del vault, non prima: il contesto si
-  // pubblica quando c'è un workspace a cui pubblicarlo.
-  await setMode(state.mode);
+  else await setMode(state.mode);
 }
 
 async function pickVault(): Promise<void> {
@@ -143,8 +145,17 @@ async function openVaultPath(dir: string): Promise<void> {
   state.versioningOn = hasPlugin(info, "fubmd.versioning");
 
   await loadOrganization();
-  loadExpanded();
-  loadActiveSpace();
+  // Lo stato di vista di **questo** vault (§11.2): come lo si stava guardando.
+  // Dopo l'apertura, perché è il backend a tenerlo e la chiave è il vault
+  // aperto; e prima del segnale, perché chi si iscrive disegna con questi.
+  state.mode = await loadMode();
+  await loadExpanded();
+  await loadActiveSpace();
+  // La modalità passa dalla stessa porta di un click sul commutatore: il
+  // cablaggio (classe attiva, resa inline, superficie di lettura, contesto
+  // pubblicato) sta in un punto solo invece che in due che devono restare
+  // d'accordo.
+  await setMode(state.mode);
   // Da qui in poi lo stato del vault è coerente: chi ne dipende può ripartire.
   emit("vault", info.root);
 

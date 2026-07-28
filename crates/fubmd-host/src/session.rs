@@ -44,9 +44,9 @@ use fubmd_abi::model::DocId;
 use fubmd_abi::traits::JobId;
 use fubmd_abi::{Notice, PluginError};
 use fubmd_features::{VersionRef, VersionStore, VERSIONING_ID};
-use fubmd_kernel::{MachineSettings, Workspace};
+use fubmd_kernel::{MachineSettings, ViewStates, Workspace};
 
-use crate::config::{config_dir, machine_settings_path, vault_registry_path};
+use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::mount::mount;
 use crate::records::{read_workspace_meta, write_workspace_meta, VaultInfo, WorkspaceMeta};
 use crate::registry::{BundleInfo, BundleRegistry};
@@ -197,6 +197,11 @@ pub struct Host {
     /// i vault che questo host apre: la configurazione della macchina è una, e N
     /// copie sarebbero N idee del tema.
     machine: Arc<MachineSettings>,
+    /// Lo **stato di vista** (§11.2): dove ogni esemplare di view era rimasto.
+    /// Condiviso come il livello macchina e per la stessa ragione — i vault
+    /// aperti sono N e la macchina è una — e potato da chi dimentica un vault
+    /// ([`Host::forget_vault`]).
+    view_states: Arc<ViewStates>,
     /// Il **registro dei vault** (§11.1): recenti, preferiti, icone. Vive nello
     /// stesso livello, che prima di questa voce non esisteva affatto — ed è la
     /// ragione per cui la 0029 non poteva chiudere questa metà del §9.6.
@@ -234,6 +239,7 @@ impl Host {
             // se ne dimentica il difetto si vede subito (il tema non sopravvive
             // alla chiusura) invece che mai.
             machine: MachineSettings::in_memory(),
+            view_states: ViewStates::in_memory(),
             vaults: VaultRegistry::in_memory(),
             job_threads: DEFAULT_JOB_THREADS,
         }
@@ -262,8 +268,13 @@ impl Host {
         if let Some(warning) = warning {
             eprintln!("registro dei vault: {warning}");
         }
+        let (view_states, warning) = ViewStates::open(&view_states_path(dir));
+        if let Some(warning) = warning {
+            eprintln!("stato di vista: {warning}");
+        }
         self.machine = machine;
         self.vaults = vaults;
+        self.view_states = view_states;
         self
     }
 
@@ -323,7 +334,11 @@ impl Host {
             workspace: mut ws,
             registry,
             versions,
-        } = mount(&root, Arc::clone(&self.machine))?;
+        } = mount(
+            &root,
+            Arc::clone(&self.machine),
+            Arc::clone(&self.view_states),
+        )?;
         let registry = Arc::new(Mutex::new(registry));
 
         ws.reindex().map_err(|e| e.to_string())?;
@@ -446,8 +461,17 @@ impl Host {
     ///
     /// Non canonicalizza: si dimentica anche una cartella che non esiste più,
     /// che è il caso più comune per cui lo si fa.
+    ///
+    /// **Dimentica anche come lo si stava guardando** (§11.2): senza questa riga
+    /// il file dello stato di vista sarebbe l'unico posto del progetto che cresce
+    /// e non cala mai, e riaprendo fra un anno un vault dimenticato le cartelle
+    /// sarebbero ancora aperte com'erano. Il registro per primo, perché è lui che
+    /// l'utente vede: se la potatura fallisce dopo, resta un residuo in un file
+    /// di cache — e lo si dice — invece di uno scroll perso per un vault che è
+    /// rimasto in elenco.
     pub fn forget_vault(&self, root: &Utf8Path) -> Result<(), String> {
-        self.vaults.forget(root)
+        self.vaults.forget(root)?;
+        self.view_states.forget_vault(root.as_str())
     }
 
     // --- accendere e spegnere un componente (§11.1) -------------------------

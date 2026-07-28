@@ -93,7 +93,7 @@ pub use traits::{
     PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
     PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, SettingsRead,
     SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewInstance, ViewProvider,
-    ViewSpec, ViewSurface,
+    ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface,
 };
 pub use transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,

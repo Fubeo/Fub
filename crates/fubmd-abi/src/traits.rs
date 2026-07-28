@@ -543,6 +543,63 @@ pub trait SettingsWrite: SettingsRead {
     fn reset_setting(&mut self, key: &str) -> Result<(), PluginError>;
 }
 
+// --- lo stato di vista (§11.2) ----------------------------------------------
+//
+// Dove un provider tiene lo scroll, le sezioni collassate, il filtro corrente,
+// la scheda attiva. È il caso proprio che la decisione 0013 aveva lasciato senza
+// contenitore togliendo lo `storage_*` volatile — e non è quello che rientra
+// dalla finestra, perché le tre proprietà che gli mancavano ci sono tutte:
+//
+// - **non viaggia col vault.** Vive nella cartella di configurazione della
+//   macchina, accanto alle impostazioni di macchina (decisione 0036). Lo scroll
+//   di ieri sul portatile non è un fatto sul vault, e sincronizzarlo vorrebbe
+//   dire far litigare due finestre su dove si era rimasti;
+// - **è per esemplare**, non per view: la chiave la compone l'host con
+//   [`ViewInstance::instance`], che è già «quale delle tre istanze di questa
+//   view sono io» (decisione 0007). Lo stesso pannello aperto due volte ha due
+//   scroll, ed è la ragione per cui il §11.2 diceva *per-pannello*;
+// - **è recintato**, come i blob: la chiave è la propria, e l'id di chi scrive
+//   non è un parametro.
+//
+// Sono **due** famiglie e non una, per la ragione già scritta sui blob: si
+// rilegge mentre si disegna, e non si deve poter scrivere mentre si disegna.
+
+/// Rileggere lo stato di vista del proprio esemplare.
+pub trait ViewStateRead: Send + Sync {
+    /// Lo stato salvato sotto questa chiave, o `None` se non ce n'è.
+    ///
+    /// Assente non è un errore ed è il caso **normale**: la prima volta che una
+    /// view si disegna nessuno le ha ancora salvato niente, e un provider che
+    /// dovesse distinguere «mai scritto» da «errore» per disegnare la propria
+    /// prima riga avrebbe un ramo che nessuno prova.
+    ///
+    /// **Fuori da un esemplare di view è `None`**, sempre: chi non sta
+    /// disegnando né reagendo per conto di un'istanza non ha uno stato di vista
+    /// da rileggere, e inventargliene uno vorrebbe dire dargli quello di
+    /// qualcun altro.
+    fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError>;
+}
+
+/// Ricordare lo stato di vista del proprio esemplare.
+pub trait ViewStateWrite: ViewStateRead {
+    /// Salva (`Some`) o dimentica (`None`) lo stato sotto questa chiave.
+    ///
+    /// `None` e non una capacità a sé perché qui — a differenza delle
+    /// impostazioni — non ci sono livelli sotto a cui ricadere: una chiave c'è o
+    /// non c'è, e `null` è un valore JSON come un altro che sarebbe stato
+    /// ambiguo scrivere per dire «scordatelo».
+    ///
+    /// **Fuori da un esemplare di view è un errore** e non un silenzio: leggere
+    /// a vuoto è il caso normale di chi non ha ancora salvato niente, scrivere
+    /// nel vuoto è invece qualcuno che crede di ricordare e non ricorderà —
+    /// cioè un difetto che si vede solo alla riapertura, quando è tardi.
+    fn set_view_state(
+        &mut self,
+        key: &str,
+        value: Option<serde_json::Value>,
+    ) -> Result<(), PluginError>;
+}
+
 /// Ciò che **l'host sa e il provider no**: che ore sono, e cosa sta guardando
 /// l'utente.
 ///
@@ -793,12 +850,18 @@ pub trait HostCommands: Send + Sync {
 ///
 /// Non si implementa: c'è una impl generica per chiunque abbia le quattro
 /// famiglie di lettura.
-pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead {}
+pub trait ReadApi:
+    VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ViewStateRead
+{
+}
 
-impl<T: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ?Sized> ReadApi for T {}
+impl<T: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ViewStateRead + ?Sized> ReadApi
+    for T
+{
+}
 
 /// Le capacità che il kernel concede a un provider/plugin: la **somma** delle
-/// dodici famiglie.
+/// quattordici famiglie.
 ///
 /// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
 /// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
@@ -808,7 +871,7 @@ impl<T: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ?Sized> Read
 /// freeze un metodo **aggiunto** a una famiglia è una minor, uno **tolto** è una
 /// major.
 ///
-/// Non si implementa e non si dichiara: chi ha le dodici famiglie ce l'ha, per
+/// Non si implementa e non si dichiara: chi ha le quattordici famiglie ce l'ha, per
 /// la impl generica qui sotto. Chi lo **riceve** continua a scrivere
 /// `&mut dyn HostApi` come prima — è il tipo di chi può fare tutto, e a quello
 /// non è cambiato niente.
@@ -830,6 +893,7 @@ pub trait HostApi:
     + VaultStructure
     + DataWrite
     + SettingsWrite
+    + ViewStateWrite
     + HostEvents
     + HostCommands
     + HostServices
@@ -842,6 +906,7 @@ impl<T> HostApi for T where
         + VaultStructure
         + DataWrite
         + SettingsWrite
+        + ViewStateWrite
         + HostEvents
         + HostCommands
         + HostServices
