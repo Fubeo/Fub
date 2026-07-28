@@ -161,14 +161,14 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   [decisione 0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e le
   ultime nove non le ha trovate nessuna delle due: le ha **aperte** una decisione
   di prodotto, la [0025](decisions/0025-la-ricerca-predefinita.md); le
-  quarantotto chiuse sono uscite di lì e stanno in
+  sessanta chiuse sono uscite di lì e stanno in
   [decisions/](decisions/README.md).
   Le voci **non** sono raggruppate per strato ma per **seduta**: venti
   sedute più quella nata dalla 0025, e una seduta è un insieme di voci che
   conviene decidere in una volta sola, perché sono la stessa domanda vista da
   lati diversi e deciderle separate significa deciderle male. Ogni seduta è un
   file in [roadmap/](roadmap/), con in testa la ragione per cui quelle voci
-  stanno insieme; `todo.md` è l'**indice** — le sedute, le sessantuno voci
+  stanno insieme; `todo.md` è l'**indice** — le sedute, le quarantanove voci
   ancora aperte con strato e priorità, e gli allegati. Il piano lo diceva già, sparso in una
   ventina di note («vanno decise insieme», «va prima di», «o due terzi della
   risposta saranno inutilizzabili»): questa è quella conoscenza messa nella

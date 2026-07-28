@@ -68,8 +68,11 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         "le estensioni le dichiara il provider markdown, non la UI"
     );
 
-    // Le otto feature ufficiali si sono **dichiarate**: è la proprietà che una
+    // Le feature ufficiali si sono **dichiarate**: è la proprietà che una
     // suite per-feature non può vedere, perché ognuna ne dichiara una sola.
+    // `fubmd.core` non registra niente e c'è lo stesso: è il bundle che dà un
+    // proprietario alle impostazioni dell'app (§11.1), e «dichiarato con zero
+    // registrazioni» è uno stato vero.
     let mut plugins: Vec<&str> = info.plugins.iter().map(|p| p.id.as_str()).collect();
     plugins.sort();
     assert_eq!(
@@ -78,6 +81,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
             "fubmd.backlinks",
             "fubmd.blocks",
             "fubmd.commands",
+            "fubmd.core",
             "fubmd.outline",
             "fubmd.search",
             "fubmd.stats",

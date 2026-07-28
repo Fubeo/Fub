@@ -1374,3 +1374,83 @@ body[data-mode="reading"] #editor {
 .ui-failed-message {
   margin-bottom: 4px;
 }
+
+/* --- il pannello delle impostazioni (§11.1) -------------------------------
+ *
+ * Una **modale della shell**, non una superficie in più del layout: le
+ * impostazioni si aprono, si guardano e si chiudono, e finché il modello di
+ * layout (§1.2) non esiste una finestra vera non ha dove stare. Sta sopra
+ * tutto (`z-index` maggiore delle due della barra di stato) perché è l'unica
+ * cosa che, mentre è aperta, è quella che si sta facendo. */
+#settings-panel {
+  position: fixed;
+  inset: 48px 10% 48px 10%;
+  z-index: 80;
+  overflow-y: auto;
+  padding: 6px 14px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 50%);
+  font-size: 13px;
+}
+
+#settings-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 12px;
+}
+
+#settings-tabs button {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+#settings-tabs button.active {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Una riga per impostazione: il testo che spiega a sinistra, il controllo a
+ * destra. La descrizione e la provenienza stanno **sotto l'etichetta** e non in
+ * un tooltip: quale livello vince è ciò che un utente non può dedurre, e un
+ * tooltip lo nasconde proprio a chi non sa di doverlo cercare. */
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.setting-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-text label {
+  display: block;
+  font-weight: 600;
+}
+
+.setting-source {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.setting-row input[type="text"],
+.setting-row input[type="number"],
+.setting-row select {
+  min-width: 140px;
+  padding: 3px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+}

@@ -4,8 +4,10 @@ use fubmd_abi::edit::Revision;
 use fubmd_abi::format::DocumentFormat;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::session::ViewContext;
+use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{
-    DataRead, HostEnv, HostQuery, IndexQuery, IndexResult, Page, Paged, TrashEntry, VaultRead,
+    DataRead, HostEnv, HostQuery, IndexQuery, IndexResult, Page, Paged, SettingsRead, TrashEntry,
+    VaultRead,
 };
 use fubmd_abi::PluginError;
 
@@ -18,7 +20,7 @@ use crate::workspace::{collect_data_files, fenced_doc_id, plugin_error, Workspac
 /// carico che il futuro `RwLock` parallelizza — e un
 /// [`KernelHost`](super::KernelHost) è per costruzione un prestito esclusivo.
 ///
-/// **Implementa quattro famiglie e non le altre cinque**, e prima del §7.1 non
+/// **Implementa cinque famiglie e non le altre sette**, e prima del §7.1 non
 /// era così: implementava l'`HostApi` intero, e le dodici capacità che non
 /// poteva servire erano altrettanti `unreachable!()` con sopra un commento che
 /// spiegava perché nessuno ci sarebbe arrivato. Il commento diceva il vero e
@@ -93,6 +95,17 @@ impl DataRead for ReadHost<'_> {
         collect_data_files(&root, &dir, &mut out);
         out.sort_unstable();
         Ok(out)
+    }
+}
+
+/// Leggere la configurazione è una **lettura**, e sta qui per il caso che l'ha
+/// fatta nascere: una view che disegna diversamente a seconda di come è
+/// configurata — il pannello di una feature che mostra ciò che quella feature
+/// ha acceso — deve poterlo chiedere mentre disegna, cioè da sotto il prestito
+/// condiviso.
+impl SettingsRead for ReadHost<'_> {
+    fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
+        self.ws.setting(key)
     }
 }
 

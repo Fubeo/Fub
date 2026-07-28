@@ -20,10 +20,11 @@ use fubmd_abi::event::Event;
 use fubmd_abi::format::DocumentFormat;
 use fubmd_abi::model::{DocId, DocumentModel, Heading, Span};
 use fubmd_abi::session::{PaneMode, Selection, ViewContext};
+use fubmd_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue};
 use fubmd_abi::traits::{
     BacklinkRef, DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
-    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, TagCount, TrashEntry, VaultRead,
-    VaultStructure, VaultWrite,
+    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TagCount,
+    TrashEntry, VaultRead, VaultStructure, VaultWrite,
 };
 use fubmd_abi::PluginError;
 
@@ -61,6 +62,11 @@ pub struct MemoryHost {
     trash: Mutex<BTreeMap<String, (TrashEntry, String)>>,
     /// Contatore per timbrare le voci del cestino con id distinti.
     trashed: AtomicU64,
+    /// Le impostazioni **dichiarate** (§11.1) e ciò che è stato scritto: il
+    /// doppio tiene un livello solo, perché la precedenza fra i due livelli è
+    /// del kernel e si prova là — qui si prova che una feature legge la propria
+    /// configurazione dall'`HostApi` e non da una variabile d'ambiente.
+    settings: Mutex<BTreeMap<String, (SettingSpec, Option<SettingValue>)>>,
 }
 
 impl MemoryHost {
@@ -198,6 +204,28 @@ impl MemoryHost {
     /// con questa estensione (stile builder).
     pub fn con_formato(self, ext: &str, format: DocumentFormat) -> Self {
         self.formats.lock().unwrap().insert(ext.to_string(), format);
+        self
+    }
+
+    /// **Dichiara** un'impostazione, come farebbe il manifest di chi la offre
+    /// (stile builder). Senza dichiarazione una chiave non esiste: è la stessa
+    /// regola del kernel, e il doppio la ripete perché è quella che una feature
+    /// incontra.
+    pub fn con_impostazione(self, spec: SettingSpec) -> Self {
+        self.settings
+            .lock()
+            .unwrap()
+            .insert(spec.key.clone(), (spec, None));
+        self
+    }
+
+    /// Dichiara un'impostazione **e le dà un valore**, come se l'utente
+    /// l'avesse scritta.
+    pub fn con_valore(self, spec: SettingSpec, value: SettingValue) -> Self {
+        self.settings
+            .lock()
+            .unwrap()
+            .insert(spec.key.clone(), (spec, Some(value)));
         self
     }
 }
@@ -402,6 +430,53 @@ impl DataWrite for MemoryHost {
     }
 }
 
+impl SettingsRead for MemoryHost {
+    fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
+        let settings = self.settings.lock().unwrap();
+        let (spec, value) = settings.get(key).ok_or_else(|| {
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+        })?;
+        Ok(value.clone().unwrap_or_else(|| spec.kind.default_value()))
+    }
+}
+
+impl SettingsWrite for MemoryHost {
+    /// Il doppio applica **il cancello della chiave** e non quello del
+    /// permesso: il secondo è del guard del kernel, il primo è ciò che una
+    /// feature scritta come un plugin deve trovarsi davanti anche qui — o il
+    /// test proverebbe una scrittura che nell'app vera è un rifiuto.
+    fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError> {
+        let mut settings = self.settings.lock().unwrap();
+        let (spec, slot) = settings.get_mut(key).ok_or_else(|| {
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+        })?;
+        if !spec.program_writable {
+            return Err(PluginError::PermissionDenied(format!(
+                "l'impostazione `{key}` non si è dichiarata scrivibile da un programma"
+            )));
+        }
+        if let Some(why) = spec.kind.rejects(&value) {
+            return Err(PluginError::BadArgs(format!("`{key}`: {why}")));
+        }
+        *slot = Some(value);
+        Ok(())
+    }
+
+    fn reset_setting(&mut self, key: &str) -> Result<(), PluginError> {
+        let mut settings = self.settings.lock().unwrap();
+        let (spec, slot) = settings.get_mut(key).ok_or_else(|| {
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+        })?;
+        if !spec.program_writable {
+            return Err(PluginError::PermissionDenied(format!(
+                "l'impostazione `{key}` non si è dichiarata scrivibile da un programma"
+            )));
+        }
+        *slot = None;
+        Ok(())
+    }
+}
+
 impl HostEnv for MemoryHost {
     fn now_unix_millis(&self) -> u64 {
         self.now.load(Ordering::Relaxed)
@@ -452,12 +527,41 @@ impl HostQuery for MemoryHost {
                 self.tags.lock().unwrap().clone(),
                 page,
             ))),
+            // Le impostazioni le serve, e dal canale dati come il kernel: una
+            // feature che le disegnasse chiedendole a una porta diversa nel test
+            // non proverebbe la strada che percorre nell'app.
+            // Il filtro per plugin **non lo sa servire**, e lo dice invece di
+            // ignorarlo: questo doppio non registra chi possiede una chiave, e
+            // rispondere «tutte» a chi ne ha chieste alcune farebbe passare per
+            // il motivo sbagliato ogni prova che si fidasse del filtro.
+            IndexQuery::Settings { plugin: Some(_) } => Err(PluginError::Unserved(
+                "MemoryHost non sa di chi è una chiave: chiedi tutte le \
+                 impostazioni, o usa un Workspace vero"
+                    .into(),
+            )),
+            IndexQuery::Settings { plugin: None } => Ok(IndexResult::Settings(
+                self.settings
+                    .lock()
+                    .unwrap()
+                    .values()
+                    .map(|(spec, value)| SettingEntry {
+                        spec: spec.clone(),
+                        value: value.clone().unwrap_or_else(|| spec.kind.default_value()),
+                        source: match value {
+                            Some(_) => SettingSource::Vault,
+                            None => SettingSource::Default,
+                        },
+                    })
+                    .collect(),
+            )),
             // Il doppio non ha né indice né grafo né frontmatter: per tutto il
             // resto non c'è nessuno che serva la domanda, ed è quella la
             // risposta — non un `BadArgs`, che direbbe che la domanda è
             // malposta.
             _ => Err(PluginError::Unserved(
-                "MemoryHost serve solo backlink, outline e tag seminati a mano".into(),
+                "MemoryHost serve solo backlink, outline, tag e impostazioni \
+                 seminati a mano"
+                    .into(),
             )),
         }
     }

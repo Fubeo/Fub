@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MAIN_PANE } from "./contract";
 import type {
   BacklinkRef,
+  BundleInfo,
   CommandEffect,
   CommandOutcome,
   CommandScope,
@@ -21,6 +22,8 @@ import type {
   PaneMode,
   Selection,
   Span,
+  SettingEntry,
+  SettingKind,
   Subject,
   TagCount,
   VaultStatus,
@@ -32,6 +35,7 @@ import type {
   UiNode,
   ViewInstance,
   PluginInfo,
+  VaultEntry,
   VaultInfo,
   VersionRef,
   ViewContext,
@@ -229,6 +233,11 @@ function touchEvent(e: KernelEvent): void {
     case "job_progress":
       e.progress.done;
       return;
+    // Un'impostazione è cambiata (§11.1): la chiave dice *cosa riguardarsi*, e
+    // il valore nuovo non c'è apposta — chi reagisce lo rilegge.
+    case "setting_changed":
+      e.key;
+      return;
     default:
       assertNever(e);
   }
@@ -270,6 +279,7 @@ function touchIndexQuery(q: IndexQuery): void {
     case "custom":
     case "vault_status":
     case "jobs":
+    case "settings":
       return;
     default:
       assertNever(q);
@@ -313,8 +323,30 @@ function touchIndexResult(r: IndexResult): void {
     case "jobs":
       r.value.forEach((j) => j.progress?.done);
       return;
+    // Ogni specie di impostazione dev'essere **disegnabile**: una specie nuova
+    // in Rust deve arrivare qui come rosso, non come una riga che il pannello
+    // salta in silenzio. È la stessa regola dei `param_kind` della palette, e
+    // per la stessa ragione — il form lo genera questa shell.
+    case "settings":
+      r.value.forEach((e: SettingEntry) => touchSettingKind(e.spec.kind));
+      return;
     default:
       assertNever(r);
+  }
+}
+
+function touchSettingKind(k: SettingKind): void {
+  switch (k.kind) {
+    case "toggle":
+    case "number":
+    case "text":
+    case "list":
+      return;
+    case "choice":
+      k.options.forEach((o) => o.label);
+      return;
+    default:
+      assertNever(k);
   }
 }
 
@@ -389,6 +421,18 @@ const RECORD_KEYS: Record<string, string[]> = {
     scope: true,
   }),
   CommandOutcome: keysOf<CommandOutcome>({ notify: true, effect: true }),
+  // Le impostazioni (§11.1): il pannello disegna ciò che la spec dichiara,
+  // quindi un campo nuovo in Rust non deve poter restare invisibile di qua.
+  SettingSpec: keysOf<SettingEntry["spec"]>({
+    key: true,
+    label: true,
+    description: true,
+    group: true,
+    scope: true,
+    kind: true,
+    program_writable: true,
+  }),
+  SettingEntry: keysOf<SettingEntry>({ spec: true, value: true, source: true }),
 };
 
 /// I record con campi **facoltativi**, che serde omette quando non ci sono: il
@@ -428,6 +472,14 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true, parts: true }),
   RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
   OpenVaults: keysOf<OpenVaults>({ roots: true, current: true }),
+  BundleInfo: keysOf<BundleInfo>({ id: true, name: true, mounted: true }),
+  VaultEntry: keysOf<VaultEntry>({
+    root: true,
+    name: true,
+    icon: true,
+    favorite: true,
+    last_opened: true,
+  }),
   WorkspaceMeta: keysOf<WorkspaceMeta>({
     icons: true,
     pinned: true,
@@ -459,6 +511,8 @@ describe("mirror TS↔Rust", () => {
       "Selection",
       "CommandSpec",
       "CommandOutcome",
+      "SettingSpec",
+      "SettingEntry",
     ]) {
       expect(fixture[type], `manca il tipo ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
@@ -613,6 +667,27 @@ describe("mirror TS↔Rust", () => {
         expect(Object.keys(sample as object).sort()).toEqual(keys);
       }
     }
+  });
+
+  it("ogni specie di impostazione prodotta da Rust è disegnabile dal pannello", () => {
+    // Il form lo **genera questa shell** dallo schema (§11.1): una specie che
+    // Rust sa dichiarare e che di qua non ha un ramo sarebbe una riga che il
+    // pannello salta in silenzio — cioè un'impostazione che esiste e che
+    // l'utente non può toccare.
+    const specs = fixture.SettingSpec as SettingEntry["spec"][];
+    for (const spec of specs) touchSettingKind(spec.kind);
+    const specie = new Set(specs.map((s) => s.kind.kind));
+    expect(specie.size, "manca un campione per specie").toBe(5);
+
+    // E le tre provenienze, che sono ciò da cui il pannello decide se mostrare
+    // «azzera»: senza tutte e tre, il ramo che conta non lo esercita nessuno.
+    const entries = fixture.SettingEntry as SettingEntry[];
+    expect(new Set(entries.map((e) => e.source))).toEqual(
+      new Set(["default", "machine", "vault"]),
+    );
+    // Il valore è NUDO: un booleano, non `{kind, value}`.
+    const toggle = entries.find((e) => e.spec.kind.kind === "toggle");
+    expect(typeof toggle!.value).toBe("boolean");
   });
 
   it("ogni modalità prodotta da Rust è una modalità del mirror", () => {

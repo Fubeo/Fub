@@ -19,6 +19,7 @@
             "fubmd:call-service": true,
             "fubmd:read-vault": true,
             "fubmd:run-command": true,
+            "fubmd:write-settings": true,
             "fubmd:write-vault": true
           },
           "registrations": [
@@ -85,6 +86,34 @@
         "/altro"
       ],
       "current": "/vault"
+    }
+  ],
+  "BundleInfo": [
+    {
+      "id": "fubmd.versioning",
+      "name": "Versioning",
+      "mounted": true
+    },
+    {
+      "id": "fubmd.stats",
+      "name": "Statistiche",
+      "mounted": false
+    }
+  ],
+  "VaultEntry": [
+    {
+      "root": "/vault",
+      "name": "Diario",
+      "icon": "📓",
+      "favorite": true,
+      "last_opened": 1700000000000
+    },
+    {
+      "root": "/altro",
+      "name": "",
+      "icon": null,
+      "favorite": false,
+      "last_opened": 1699000000000
     }
   ],
   "WorkspaceMeta": [

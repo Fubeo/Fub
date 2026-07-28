@@ -264,6 +264,17 @@ pub mod permission {
     /// superficie che un plugin offre a un altro. Chi concede l'uno non ha
     /// detto niente sull'altro.
     pub const CALL_SERVICE: &str = "fubmd:call-service";
+    /// Scrivere le impostazioni
+    /// ([`SettingsWrite`](crate::traits::SettingsWrite)) — quelle che si sono
+    /// dichiarate scrivibili da un programma.
+    ///
+    /// **Leggerle non ha un permesso** e non è una dimenticanza: uno schema è
+    /// pubblico per costruzione (lo si legge dal manifest di chi lo dichiara) e
+    /// questo store non contiene segreti, per regola scritta
+    /// ([`crate::settings`]). Scriverle sì, e con un secondo cancello sulla
+    /// chiave: il permesso dice *chi*, `program_writable` dice *cosa* — perché
+    /// il divieto che conta, privacy e AI, non dipende da chi sta chiedendo.
+    pub const WRITE_SETTINGS: &str = "fubmd:write-settings";
 }
 
 #[cfg(test)]

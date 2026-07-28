@@ -14,6 +14,7 @@ import type {
   DocumentMatch,
   IndexQuery,
   JobStatus,
+  SettingEntry,
   IndexResult,
   NeighborRef,
   Page,
@@ -91,6 +92,16 @@ export async function archiDelVault(): Promise<NeighborRef[]> {
 /// pannello, e dopo un `overflow`, che vuol dire esattamente *richiedi*.
 export async function lavoriInCorso(): Promise<JobStatus[]> {
   return open(await api.queryIndex({ kind: "jobs" }), "jobs");
+}
+
+/// Com'è configurato questo vault (§11.1): schema, valore che vale adesso, e
+/// livello da cui viene, in ordine di chiave.
+///
+/// È la stessa domanda che fa un plugin, e la fa dallo stesso canale: il
+/// pannello delle impostazioni non ha un comando privilegiato che una feature
+/// non avrebbe.
+export async function impostazioni(plugin?: string): Promise<SettingEntry[]> {
+  return open(await api.queryIndex({ kind: "settings", plugin: plugin ?? null }), "settings");
 }
 
 /// Che rapporto ha questo vault con il disco (§9.7): FubMD saprebbe che è

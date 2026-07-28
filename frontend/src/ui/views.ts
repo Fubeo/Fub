@@ -16,14 +16,14 @@
 //
 // # Le superfici che questa shell ospita, e quelle che no
 //
-// Il contratto ne nomina dieci (§2.2). Questa shell ne ospita sei — le tre
-// sidebar/basso di prima, più barra di stato, ribbon e modale — e le altre
-// quattro le dichiara **non ospitate** invece di lasciarle cadere in silenzio:
-// area principale, menu, menu contestuale e scheda di impostazioni vogliono
-// rispettivamente il modello di layout (§1.2, che è la feature 3.3), un menu
-// applicativo e un pannello di impostazioni, e nessuno dei tre esiste ancora.
-// Una view che le chiede riceve un avviso che la nomina: è il minimo che il
-// §20.4 chiede, in attesa della superficie vera dove dirlo.
+// Il contratto ne nomina dieci (§2.2). Questa shell ne ospita **sette** — le
+// tre sidebar/basso di prima, più barra di stato, ribbon, modale e, dal §11.1,
+// la scheda di impostazioni — e le altre tre le dichiara **non ospitate**
+// invece di lasciarle cadere in silenzio: area principale, menu e menu
+// contestuale vogliono il modello di layout (§1.2, che è la feature 3.3) e un
+// menu applicativo, che non esistono ancora. Una view che le chiede riceve un
+// avviso che la nomina: è il minimo che il §20.4 chiede, in attesa della
+// superficie vera dove dirlo.
 import { api } from "../host/ipc";
 import type { ActionRef, FieldValue, UiNode, ViewSpec, ViewSurface } from "../host/contract";
 import { $ } from "./dom";
@@ -38,6 +38,7 @@ const viewsBottomEl = $("#views-bottom");
 const viewsStatusEl = $("#views-status");
 const viewsRibbonEl = $("#views-ribbon");
 const viewsModalEl = $("#views-modal");
+const viewsSettingsEl = $("#views-settings");
 
 /// Un esemplare montato: dove disegnarlo, e con che identità e parametri
 /// chiederlo al kernel.
@@ -67,10 +68,15 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
       return viewsRibbonEl;
     case "modal":
       return viewsModalEl;
+    // La scheda di impostazioni (§11.1): il pannello adesso c'è, e questa è la
+    // sua area per le view dichiarate. Non è una scheda **per view** — quello
+    // vuole il modello di layout (§1.2) — è la superficie che il contratto
+    // nomina, ospitata dove ha senso.
+    case "settings_tab":
+      return viewsSettingsEl;
     case "main":
     case "menu":
     case "context_menu":
-    case "settings_tab":
       return null;
   }
 }
@@ -82,7 +88,6 @@ const NON_OSPITATE: Record<string, string> = {
   main: "l'area principale ha un editor solo: serve il modello di layout (§1.2, FEATURES 3.3)",
   menu: "questa shell non ha un menu applicativo",
   context_menu: "questa shell non ha un menu contestuale estendibile",
-  settings_tab: "questa shell non ha ancora un pannello di impostazioni (§11.1)",
 };
 
 /// Scopre le view dal backend e le monta sulla superficie che dichiarano.
@@ -103,6 +108,7 @@ export async function mountDeclaredViews(): Promise<void> {
     viewsStatusEl,
     viewsRibbonEl,
     viewsModalEl,
+    viewsSettingsEl,
   ]) {
     el.replaceChildren();
   }

@@ -13,18 +13,19 @@ use fubmd_abi::format::DocumentFormat;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::options::permission;
 use fubmd_abi::session::ViewContext;
+use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexQuery,
-    IndexResult, JobId, JobSpec, Page, Paged, PluginPermissions, TrashEntry, VaultRead,
-    VaultStructure, VaultWrite,
+    IndexResult, JobId, JobSpec, Page, Paged, PluginPermissions, SettingsRead, SettingsWrite,
+    TrashEntry, VaultRead, VaultStructure, VaultWrite,
 };
 use fubmd_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le dieci famiglie di capacità, come nomi su cui una politica risponde.
+/// Le dodici famiglie di capacità, come nomi su cui una politica risponde.
 ///
-/// Sono esattamente i dieci trait di `fubmd_abi::traits`, e non è una
+/// Sono esattamente i dodici trait di `fubmd_abi::traits`, e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono restare la stessa lista, e il presidio è
 /// che [`Guard`] non compila se una famiglia non è coperta.
@@ -50,6 +51,10 @@ pub enum Capability {
     Commands,
     /// Chiamare i servizi offerti dagli altri plugin (§7.5).
     Services,
+    /// Leggere le impostazioni dichiarate (§11.1).
+    SettingsRead,
+    /// Scrivere quelle che si sono dichiarate scrivibili da un programma.
+    SettingsWrite,
 }
 
 impl Capability {
@@ -57,7 +62,7 @@ impl Capability {
     /// [`CapabilitySet`] senza scrivere l'elenco una seconda volta: se una
     /// famiglia nascesse e non finisse qui, nascerebbe negata a tutti — che è
     /// il modo giusto di sbagliare, ma va visto.
-    pub const ALL: [Capability; 10] = [
+    pub const ALL: [Capability; 12] = [
         Capability::VaultRead,
         Capability::VaultWrite,
         Capability::VaultStructure,
@@ -68,6 +73,8 @@ impl Capability {
         Capability::Events,
         Capability::Commands,
         Capability::Services,
+        Capability::SettingsRead,
+        Capability::SettingsWrite,
     ];
 
     /// Il permesso del core che governa questa famiglia, se ce n'è uno.
@@ -86,9 +93,17 @@ impl Capability {
             Capability::VaultWrite | Capability::VaultStructure => Some(permission::WRITE_VAULT),
             Capability::Commands => Some(permission::RUN_COMMAND),
             Capability::Services => Some(permission::CALL_SERVICE),
-            Capability::DataRead | Capability::DataWrite | Capability::Env | Capability::Events => {
-                None
-            }
+            Capability::SettingsWrite => Some(permission::WRITE_SETTINGS),
+            // Leggere la configurazione non ha un permesso, e non è una
+            // dimenticanza: uno schema è pubblico per costruzione — sta nel
+            // manifest di chi lo dichiara — e questo store non contiene segreti,
+            // per regola scritta (`fubmd_abi::settings`). Ciò che si recinta è
+            // la scrittura, e lì i cancelli sono due.
+            Capability::DataRead
+            | Capability::DataWrite
+            | Capability::Env
+            | Capability::Events
+            | Capability::SettingsRead => None,
         }
     }
 }
@@ -138,6 +153,10 @@ impl Policy for ReadOnly {
             Capability::VaultWrite
             | Capability::VaultStructure
             | Capability::DataWrite
+            // Cambiare la configurazione è l'effetto meno ritirabile di tutti:
+            // sopravvive alla sessione, e una simulazione che spegnesse il
+            // versioning lo lascerebbe spento.
+            | Capability::SettingsWrite
             // Un evento emesso e un job lanciato sono effetti che una
             // simulazione non può ritirare: il `DocumentChanged` finto fa
             // ricaricare l'editor, il job rientra quando la simulazione è
@@ -154,6 +173,7 @@ impl Policy for ReadOnly {
             | Capability::DataRead
             | Capability::Query
             | Capability::Env
+            | Capability::SettingsRead
             | Capability::Commands => None,
         }
     }
@@ -419,6 +439,31 @@ impl<H: DataWrite, P: Policy> DataWrite for Guard<H, P> {
             format!("cancellare il blob `{path}`")
         })?;
         self.inner.data_remove(path)
+    }
+}
+
+impl<H: SettingsRead, P: Policy> SettingsRead for Guard<H, P> {
+    fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
+        self.check(Capability::SettingsRead, || {
+            format!("leggere l'impostazione `{key}`")
+        })?;
+        self.inner.setting(key)
+    }
+}
+
+impl<H: SettingsWrite, P: Policy> SettingsWrite for Guard<H, P> {
+    fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError> {
+        self.check(Capability::SettingsWrite, || {
+            format!("scrivere l'impostazione `{key}`")
+        })?;
+        self.inner.set_setting(key, value)
+    }
+
+    fn reset_setting(&mut self, key: &str) -> Result<(), PluginError> {
+        self.check(Capability::SettingsWrite, || {
+            format!("azzerare l'impostazione `{key}`")
+        })?;
+        self.inner.reset_setting(key)
     }
 }
 

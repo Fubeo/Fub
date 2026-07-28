@@ -11,6 +11,9 @@
         <span class="brand">FubMD</span>
         <button id="open-vault">Apri vault…</button>
         <button id="show-graph" title="Il grafo dei collegamenti del vault">Grafo</button>
+        <button id="open-settings" title="Le impostazioni di questo vault e di questa macchina">
+          Impostazioni
+        </button>
         <!-- Le tre modalità esclusive del pannello (FEATURES 4.1). Non sono
              decorazione della shell: la modalità attraversa il confine dentro
              `ViewContext`, e le view che la seguono cambiano di conseguenza. -->
@@ -124,6 +127,30 @@
           <button id="notify-close" class="link-button" title="Chiudi">Chiudi</button>
         </div>
         <ul id="notify-list"></ul>
+      </div>
+      <!-- Il pannello delle impostazioni (§11.1). Le tre schede sono le tre
+           cose che questa voce fa esistere: la configurazione (form generato
+           dallo schema che i componenti dichiarano), i componenti accesi e
+           spenti, e i vault che questa macchina conosce — l'elenco che non
+           poteva stare in nessun vault. -->
+      <div id="settings-panel" hidden>
+        <div class="panel-title">
+          <span>Impostazioni</span>
+          <span id="settings-tabs">
+            <button data-scheda="impostazioni" class="active">Configurazione</button>
+            <button data-scheda="componenti">Componenti</button>
+            <button data-scheda="vault">Vault</button>
+          </span>
+          <button id="settings-close" class="link-button" title="Chiudi">Chiudi</button>
+        </div>
+        <div id="settings-body"></div>
+        <!-- La superficie `settings_tab` del contratto (§2.2), che questa shell
+             dichiarava non ospitata: le view che la chiedono si montano qui,
+             sotto il form. Una scheda per view vuole il modello di layout
+             (§1.2, FEATURES 3.3), che non c'è: intanto la superficie esiste e
+             una view che la chiede si vede, invece di finire in un avviso in
+             console. -->
+        <div id="views-settings"></div>
       </div>
       <div id="views-modal" hidden></div>
     </div>

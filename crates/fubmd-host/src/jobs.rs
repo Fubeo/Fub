@@ -58,10 +58,11 @@ use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::format::DocumentFormat;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::session::ViewContext;
+use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
-    IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi, TrashEntry,
-    VaultRead, VaultStructure, VaultWrite,
+    IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi, SettingsRead,
+    SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite,
 };
 use fubmd_abi::{Event, PluginError};
 use fubmd_kernel::Workspace;
@@ -198,7 +199,7 @@ impl JobHost {
     }
 }
 
-// Le dieci famiglie. Sono trentadue righe di delega e nessuna decisione: ogni
+// Le dodici famiglie. Sono righe di delega e nessuna decisione: ogni
 // decisione è già stata presa un livello più in basso (il recinto dei `DocId`,
 // la politica dei permessi, il dispatch degli eventi), e ripeterne una qui
 // sarebbe una seconda idea della stessa regola.
@@ -282,6 +283,22 @@ impl DataWrite for JobHost {
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
         self.write_result(|h| h.data_remove(path))
+    }
+}
+
+impl SettingsRead for JobHost {
+    fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
+        self.read_result(|h| h.setting(key))
+    }
+}
+
+impl SettingsWrite for JobHost {
+    fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError> {
+        self.write_result(|h| h.set_setting(key, value.clone()))
+    }
+
+    fn reset_setting(&mut self, key: &str) -> Result<(), PluginError> {
+        self.write_result(|h| h.reset_setting(key))
     }
 }
 

@@ -22,6 +22,7 @@ use fubmd_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::event::Actor;
 use fubmd_abi::model::DocId;
 use fubmd_abi::session::ViewContext;
+use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fubmd_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fubmd_abi::Notice;
@@ -35,7 +36,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // risponderebbe con gli stessi — e l'app li ri-esporta, perché è lei a farli
 // attraversare il confine: il mirror TS e la sua fixture
 // (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
-pub use fubmd_host::{EmbedContent, VaultInfo, WorkspaceMeta};
+pub use fubmd_host::{BundleInfo, EmbedContent, VaultEntry, VaultInfo, WorkspaceMeta};
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
 /// `frontend/src/host/contract.ts`.
@@ -477,6 +478,90 @@ fn write_workspace_meta(
     host.write_meta(vault.as_deref(), &meta)
 }
 
+// --- impostazioni, componenti, vault conosciuti (§11.1) --------------------
+//
+// **Leggere** le impostazioni non è qui**: passa da `query_index`
+// (`IndexQuery::Settings`), come i tag e i backlink — un elenco è dati, e i dati
+// hanno un canale solo. Qui ci sono le tre cose che dati non sono: scrivere,
+// accendere un componente, e la memoria fra un avvio e l'altro.
+//
+// Perché scrivere passa da un comando IPC e non dal `settings.set` del registro:
+// sono due autorità diverse, ed è la distinzione della decisione 0012 applicata
+// alla configurazione. Da qui passa **la persona davanti allo schermo**, che ha
+// cliccato su un interruttore; da `settings.set` passa un *programma*, e quello
+// tocca solo le chiavi che si sono dichiarate scrivibili da un programma. Se
+// fossero la stessa strada, o l'utente non potrebbe cambiare le proprie
+// impostazioni di privacy, o un plugin potrebbe.
+
+/// Scrive un'impostazione **per conto dell'utente**.
+#[tauri::command]
+fn set_setting(
+    host: State<Host>,
+    key: String,
+    value: SettingValue,
+    vault: Option<String>,
+) -> Result<(), String> {
+    let ws = host.workspace(vault.as_deref())?;
+    let mut ws = ws.write().unwrap();
+    ws.set_setting(&key, value).map_err(|e| e.to_string())
+}
+
+/// Dimentica ciò che era stato deciso per una chiave: torna a valere il livello
+/// sotto.
+#[tauri::command]
+fn reset_setting(host: State<Host>, key: String, vault: Option<String>) -> Result<(), String> {
+    let ws = host.workspace(vault.as_deref())?;
+    let mut ws = ws.write().unwrap();
+    ws.reset_setting(&key).map_err(|e| e.to_string())
+}
+
+/// Chi questo host sa montare, e chi è acceso in questo vault. Non è
+/// `VaultInfo.plugins`: quello elenca chi è **dichiarato nel kernel**, e un
+/// componente spento non lo è — «spento» e «non c'è» sono due stati diversi.
+#[tauri::command]
+fn list_bundles(host: State<Host>, vault: Option<String>) -> Result<Vec<BundleInfo>, String> {
+    host.bundles(vault.as_deref())
+}
+
+/// Accende o spegne un componente, adesso e per i prossimi avvii. Restituisce
+/// ciò che è andato storto **spegnendo**, che non è un motivo per non spegnere.
+#[tauri::command]
+fn set_plugin_enabled(
+    host: State<Host>,
+    id: String,
+    enabled: bool,
+    vault: Option<String>,
+) -> Result<Vec<String>, String> {
+    host.set_plugin_enabled(vault.as_deref(), &id, enabled)
+}
+
+/// I vault che questa macchina conosce: preferiti, poi recenti.
+#[tauri::command]
+fn known_vaults(host: State<Host>) -> Vec<VaultEntry> {
+    host.known_vaults()
+}
+
+#[tauri::command]
+fn set_vault_favorite(host: State<Host>, path: String, favorite: bool) -> Result<(), String> {
+    host.set_vault_favorite(&Utf8PathBuf::from(path), favorite)
+}
+
+#[tauri::command]
+fn set_vault_look(
+    host: State<Host>,
+    path: String,
+    icon: Option<String>,
+    name: Option<String>,
+) -> Result<(), String> {
+    host.set_vault_look(&Utf8PathBuf::from(path), icon, name)
+}
+
+/// Toglie un vault dall'elenco dei conosciuti. **Non lo cancella dal disco.**
+#[tauri::command]
+fn forget_vault(host: State<Host>, path: String) -> Result<(), String> {
+    host.forget_vault(&Utf8PathBuf::from(path))
+}
+
 #[tauri::command]
 fn resolve_link(
     host: State<Host>,
@@ -497,7 +582,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(Host::new().with_sink(sink))
+        // `installed()` e non `new()`: è qui che FubMD è un'**installazione** —
+        // con una cartella di configurazione, un livello macchina e un registro
+        // dei vault. Un test o un e2e headless costruiscono `Host::new()`, che
+        // lavora in memoria e non tocca la configurazione di chi lo esegue.
+        .manage(Host::installed().with_sink(sink))
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
             Ok(())
@@ -529,6 +618,14 @@ pub fn run() {
             restore_version,
             read_workspace_meta,
             write_workspace_meta,
+            set_setting,
+            reset_setting,
+            list_bundles,
+            set_plugin_enabled,
+            known_vaults,
+            set_vault_favorite,
+            set_vault_look,
+            forget_vault,
         ])
         .build(tauri::generate_context!())
         .expect("errore durante l'avvio di FubMD")

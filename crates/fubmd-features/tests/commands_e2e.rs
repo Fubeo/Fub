@@ -16,7 +16,8 @@ use fubmd_abi::session::{Selection, ViewContext};
 use fubmd_abi::PluginError;
 use fubmd_features::{
     CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TRASH, SELECTION_WIKILINK,
-    TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
+    SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
+    TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -202,7 +203,7 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
     let vault = Vault::new();
     let ws = vault.open();
     let specs = ws.commands();
-    assert_eq!(specs.len(), 10, "i dieci comandi ufficiali");
+    assert_eq!(specs.len(), 14, "i quattordici comandi ufficiali");
     let replace = specs
         .iter()
         .find(|s| s.id == VAULT_REPLACE)
@@ -651,5 +652,271 @@ fn the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps() {
             DocId::new("indice.md")
         ],
         "e simulare non ha spostato niente, nemmeno attraverso i comandi invocati"
+    );
+}
+
+// --- i comandi delle impostazioni (§11.1) -----------------------------------
+//
+// Sono i primi clienti di `CommandReach::Settings`, che dalla decisione 0010 era
+// vocabolario senza nessuno che lo usasse. Qui si prova ciò che solo il kernel
+// vero può dire: che la scrittura passa dai **due cancelli** (il permesso e la
+// chiave), che una simulazione non sposta niente, e che l'export tira fuori ciò
+// che qualcuno ha deciso e non i default.
+
+/// Un vault coi comandi montati e due chiavi dichiarate: una che un programma
+/// può scrivere, e una no.
+fn vault_con_impostazioni() -> (Vault, Workspace) {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.register_plugin(
+        fubmd_abi::traits::PluginManifest::core("fubmd.versioning", "Versioning").configuring(
+            vec![
+                fubmd_abi::settings::SettingSpec::toggle("versioning.enabled", "Versioning", true)
+                    .grouped("Vault")
+                    .program_writable(),
+                fubmd_abi::settings::SettingSpec::toggle("privacy.telemetry", "Telemetria", false),
+            ],
+        ),
+        fubmd_kernel::Trust::Core,
+    )
+    .expect("dichiarato");
+    (vault, ws)
+}
+
+fn valore(ws: &Workspace, key: &str) -> fubmd_abi::settings::SettingValue {
+    ws.setting(key).expect("dichiarata")
+}
+
+#[test]
+fn a_command_writes_a_setting_reading_its_type_from_the_declared_schema() {
+    let (_vault, mut ws) = vault_con_impostazioni();
+
+    // `value` è **testo**, e a dargli un tipo è lo schema: è la forma che un
+    // chiamante non interattivo (una CLI, un'automazione, un modello) sa
+    // compilare senza conoscere la specie della chiave.
+    let outcome = ws
+        .invoke_command(
+            SETTINGS_SET,
+            serde_json::json!({ "key": "versioning.enabled", "value": "false" }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("scrive");
+    assert!(
+        outcome.notify.is_some(),
+        "un comando che cambia qualcosa lo dice"
+    );
+    assert_eq!(
+        valore(&ws, "versioning.enabled"),
+        fubmd_abi::settings::SettingValue::Toggle(false)
+    );
+
+    // Azzerare non è scrivere il default: è **smettere di decidere**, e da qui
+    // in poi la chiave segue di nuovo lo schema.
+    ws.invoke_command(
+        SETTINGS_RESET,
+        serde_json::json!({ "key": "versioning.enabled" }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("azzera");
+    assert_eq!(
+        valore(&ws, "versioning.enabled"),
+        fubmd_abi::settings::SettingValue::Toggle(true)
+    );
+}
+
+#[test]
+fn a_program_cannot_move_a_key_that_did_not_declare_itself_program_writable() {
+    let (_vault, mut ws) = vault_con_impostazioni();
+    let errore = ws
+        .invoke_command(
+            SETTINGS_SET,
+            serde_json::json!({ "key": "privacy.telemetry", "value": "true" }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("la chiave non si è dichiarata scrivibile da un programma");
+    assert!(
+        matches!(errore, PluginError::PermissionDenied(_)),
+        "è un rifiuto di permesso, non un argomento sbagliato: {errore:?}"
+    );
+    assert_eq!(
+        valore(&ws, "privacy.telemetry"),
+        fubmd_abi::settings::SettingValue::Toggle(false),
+        "e il valore è rimasto quello che era"
+    );
+}
+
+#[test]
+fn simulating_a_setting_change_says_what_would_change_and_changes_nothing() {
+    let (_vault, mut ws) = vault_con_impostazioni();
+    let outcome = ws
+        .invoke_command(
+            SETTINGS_SET,
+            serde_json::json!({ "key": "versioning.enabled", "value": "false" }),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .expect("simula");
+    assert!(matches!(outcome.effect, CommandEffect::Plan(_)));
+    assert_eq!(
+        valore(&ws, "versioning.enabled"),
+        fubmd_abi::settings::SettingValue::Toggle(true),
+        "una simulazione che spegnesse il versioning lo lascerebbe spento: è \
+         l'effetto meno ritirabile di tutti, perché sopravvive alla sessione"
+    );
+}
+
+#[test]
+fn export_carries_what_someone_decided_and_import_puts_it_back() {
+    let (_vault, mut ws) = vault_con_impostazioni();
+
+    // Niente deciso: l'export è vuoto. I default non sono una configurazione —
+    // portarli dentro vorrebbe dire che reimportare **decide** tutto ciò che
+    // nessuno aveva deciso, congelando i default di oggi.
+    let outcome = ws
+        .invoke_command(
+            SETTINGS_EXPORT,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("esporta");
+    let CommandEffect::Custom { ns, payload } = outcome.effect else {
+        panic!("l'export esce come intento custom: dove salvarlo lo sa la shell")
+    };
+    assert_eq!(ns, SETTINGS_NS);
+    assert_eq!(payload, serde_json::json!({}));
+
+    ws.set_setting(
+        "versioning.enabled",
+        fubmd_abi::settings::SettingValue::Toggle(false),
+    )
+    .expect("scritto");
+    let outcome = ws
+        .invoke_command(
+            SETTINGS_EXPORT,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("esporta");
+    let CommandEffect::Custom { payload, .. } = outcome.effect else {
+        panic!("intento custom")
+    };
+    assert_eq!(payload, serde_json::json!({ "versioning.enabled": false }));
+
+    // E rimetterlo dentro dopo aver azzerato lo riporta com'era: il giro
+    // completo, che è ciò per cui import ed export esistono.
+    ws.reset_setting("versioning.enabled").expect("azzerato");
+    let json = serde_json::to_string(&payload).unwrap();
+    ws.invoke_command(
+        SETTINGS_IMPORT,
+        serde_json::json!({ "json": json }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("importa");
+    assert_eq!(
+        valore(&ws, "versioning.enabled"),
+        fubmd_abi::settings::SettingValue::Toggle(false)
+    );
+}
+
+#[test]
+fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
+    let (_vault, mut ws) = vault_con_impostazioni();
+    let outcome = ws
+        .invoke_command(
+            SETTINGS_IMPORT,
+            serde_json::json!({
+                "json": r#"{
+                    "versioning.enabled": false,
+                    "privacy.telemetry": true,
+                    "com.acme.mai-vista": 3
+                }"#
+            }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("importa ciò che può");
+
+    let messaggio = outcome.notify.expect("dice com'è andata");
+    assert!(
+        messaggio.contains("1 impostazione applicata"),
+        "{messaggio}"
+    );
+    assert!(messaggio.contains("privacy.telemetry"), "{messaggio}");
+    assert!(messaggio.contains("com.acme.mai-vista"), "{messaggio}");
+    assert_eq!(
+        valore(&ws, "versioning.enabled"),
+        fubmd_abi::settings::SettingValue::Toggle(false),
+        "ciò che si poteva applicare è applicato"
+    );
+    assert_eq!(
+        valore(&ws, "privacy.telemetry"),
+        fubmd_abi::settings::SettingValue::Toggle(false),
+        "e un file di impostazioni che passa di mano non sposta le chiavi che \
+         un programma non può scrivere"
+    );
+}
+
+/// Il cancello della chiave vale **anche in simulazione**, e questa prova è il
+/// perché: un piano che dicesse «due applicate» prima di un'applicazione che ne
+/// applica una non è un piano, è un preventivo. La decisione 0010 chiede che
+/// simulare dica ciò che succederebbe, e ciò che succederebbe qui è un rifiuto.
+#[test]
+fn simulating_an_import_counts_the_key_gate_too() {
+    let (_vault, mut ws) = vault_con_impostazioni();
+    let json = r#"{ "versioning.enabled": false, "privacy.telemetry": true }"#;
+
+    let simulato = ws
+        .invoke_command(
+            SETTINGS_IMPORT,
+            serde_json::json!({ "json": json }),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .expect("simula")
+        .notify
+        .expect("dice cosa farebbe");
+    assert!(
+        simulato.contains("1 impostazione applicata") && simulato.contains("privacy.telemetry"),
+        "la simulazione nomina già ciò che non entrerebbe: {simulato}"
+    );
+
+    let applicato = ws
+        .invoke_command(
+            SETTINGS_IMPORT,
+            serde_json::json!({ "json": json }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("importa")
+        .notify
+        .expect("dice com'è andata");
+    assert!(
+        applicato.contains("1 impostazione applicata") && applicato.contains("privacy.telemetry"),
+        "e l'applicazione dice la stessa cosa: {applicato}"
+    );
+}
+
+/// Lo stesso, sul comando singolo: simulare una chiave che un programma non può
+/// scrivere è un rifiuto, non un piano.
+#[test]
+fn simulating_a_write_on_a_locked_key_is_a_refusal_and_not_a_plan() {
+    let (_vault, mut ws) = vault_con_impostazioni();
+    let errore = ws
+        .invoke_command(
+            SETTINGS_SET,
+            serde_json::json!({ "key": "privacy.telemetry", "value": "true" }),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .expect_err("simulare un rifiuto è un rifiuto");
+    assert!(
+        matches!(errore, PluginError::PermissionDenied(_)),
+        "{errore:?}"
     );
 }

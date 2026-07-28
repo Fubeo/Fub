@@ -170,7 +170,7 @@ che lo ha prodotto.
 
 ### 21.6 I pesi dei campi sono una costante di compilazione
 
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel · **P2** — va con la §11.1*
+*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel · **P2** — andava con la ~~§11.1~~, che adesso le ha dato dove atterrare*
 
 - [ ] **Il boost ×4 su `page_name` è cablato in `search.rs`** (ed è documentato
       in [M2](../milestones/M2-search-graph.md): «chi cerca *Rust* vuole prima la
@@ -183,10 +183,12 @@ che lo ha prodotto.
       plausibile è la seconda: un peso è una **preferenza**, non un fatto sul
       vault, e i fatti sul vault sono ciò che il linguaggio delle query contiene
       (`abi/query.rs`, «un predicato è un fatto sul vault, non un servizio»).
-- [ ] **Ma le impostazioni oggi sono variabili d'ambiente** (§11.1), quindi
-      questa voce non ha dove atterrare finché quella è aperta. È la ragione per
-      cui è P2 e non P1: non è bloccata da una firma, è bloccata da un
-      contenitore.
+- [x] ~~**Ma le impostazioni oggi sono variabili d'ambiente** (§11.1), quindi
+      questa voce non ha dove atterrare finché quella è aperta.~~ Il contenitore
+      c'è ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)): il
+      provider di ricerca dichiara le chiavi nel proprio manifest e le legge da
+      lì. Resta P2 e non diventa P1, perché non è mai stata bloccata da una
+      firma: era bloccata da un contenitore, e adesso è solo lavoro.
 
 ### 21.7 Ricerche recenti, e la nota che la ricerca non ha trovato
 

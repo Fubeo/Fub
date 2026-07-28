@@ -149,11 +149,18 @@ come la sua specie e non ha parametri.
 `SettingsTab`. Non è un modello di layout: dice **a cosa ci si attacca**, non
 come lo spazio è diviso.
 
-Questa shell ne ospita sei; area principale, menu, menu contestuale e scheda di
-impostazioni vogliono rispettivamente il modello di layout (feature 3.3), un menu
-applicativo, un menu contestuale estendibile e il pannello di impostazioni
-(§11.1). Una view che le chiede **riceve un avviso che la nomina** invece di
-sparire in silenzio.
+Questa shell ne ospita **sette**: le sei di prima più la scheda di impostazioni,
+che dal §11.1 ([decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md))
+ha un pannello dove stare. Le tre che restano — area principale, menu, menu
+contestuale — vogliono il modello di layout (feature 3.3), un menu applicativo e
+un menu contestuale estendibile. Una view che le chiede **riceve un avviso che la
+nomina** invece di sparire in silenzio.
+
+La scheda di impostazioni è ospitata con un limite dichiarato: le view che la
+chiedono si montano **tutte nella stessa area**, sotto il form generato dallo
+schema, e non ognuna in una scheda sua — una scheda per view vuole il modello di
+layout come tutto il resto. La superficie però esiste, e una view che la dichiara
+si vede.
 
 `ViewSpec` porta anche come si presenta: `icon`, `order` (crescente, i pari
 merito nell'ordine di registrazione), `open_by_default`, `preferred_size`

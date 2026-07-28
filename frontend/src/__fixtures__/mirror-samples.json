@@ -370,6 +370,11 @@
         "total": 300,
         "label": "esportando Diario/2026.md"
       }
+    },
+    {
+      "type": "setting_changed",
+      "key": "versioning.enabled",
+      "scope": "vault"
     }
   ],
   "KernelNotice": [
@@ -438,6 +443,140 @@
     {
       "start": 3,
       "end": 7
+    }
+  ],
+  "SettingSpec": [
+    {
+      "key": "prova.k0",
+      "label": "Prova",
+      "description": "Cosa fa, in prosa.",
+      "group": "Prova",
+      "scope": "vault",
+      "kind": {
+        "kind": "toggle",
+        "default": true
+      },
+      "program_writable": true
+    },
+    {
+      "key": "prova.k1",
+      "label": "Prova",
+      "description": "Cosa fa, in prosa.",
+      "group": "Prova",
+      "scope": "vault",
+      "kind": {
+        "kind": "number",
+        "default": 14.0,
+        "min": 8.0,
+        "max": 72.0
+      },
+      "program_writable": false
+    },
+    {
+      "key": "prova.k2",
+      "label": "Prova",
+      "description": "Cosa fa, in prosa.",
+      "group": "Prova",
+      "scope": "vault",
+      "kind": {
+        "kind": "text",
+        "default": "Diario"
+      },
+      "program_writable": false
+    },
+    {
+      "key": "prova.k3",
+      "label": "Prova",
+      "description": "Cosa fa, in prosa.",
+      "group": "Prova",
+      "scope": "vault",
+      "kind": {
+        "kind": "choice",
+        "default": "auto",
+        "options": [
+          {
+            "value": "auto",
+            "label": "Automatico"
+          },
+          {
+            "value": "scuro",
+            "label": "Scuro"
+          }
+        ]
+      },
+      "program_writable": false
+    },
+    {
+      "key": "prova.k4",
+      "label": "Prova",
+      "description": "Cosa fa, in prosa.",
+      "group": "Prova",
+      "scope": "vault",
+      "kind": {
+        "kind": "list",
+        "default": [
+          "fubmd.stats"
+        ]
+      },
+      "program_writable": false
+    }
+  ],
+  "SettingEntry": [
+    {
+      "spec": {
+        "key": "versioning.enabled",
+        "label": "Versioning",
+        "description": "Tiene uno storico delle modifiche.",
+        "group": "Vault",
+        "scope": "vault",
+        "kind": {
+          "kind": "toggle",
+          "default": true
+        },
+        "program_writable": true
+      },
+      "value": true,
+      "source": "default"
+    },
+    {
+      "spec": {
+        "key": "appearance.theme",
+        "label": "Tema",
+        "description": "",
+        "group": "",
+        "scope": "machine",
+        "kind": {
+          "kind": "choice",
+          "default": "auto",
+          "options": [
+            {
+              "value": "scuro",
+              "label": "Scuro"
+            }
+          ]
+        },
+        "program_writable": false
+      },
+      "value": "scuro",
+      "source": "machine"
+    },
+    {
+      "spec": {
+        "key": "plugins.disabled",
+        "label": "Componenti spenti",
+        "description": "",
+        "group": "",
+        "scope": "vault",
+        "kind": {
+          "kind": "list",
+          "default": []
+        },
+        "program_writable": false
+      },
+      "value": [
+        "fubmd.stats"
+      ],
+      "source": "vault"
     }
   ],
   "VersionRef": [
@@ -566,6 +705,14 @@
     },
     {
       "kind": "jobs"
+    },
+    {
+      "kind": "settings",
+      "plugin": null
+    },
+    {
+      "kind": "settings",
+      "plugin": "fubmd.versioning"
     }
   ],
   "IndexResult": [
@@ -675,6 +822,53 @@
           "plugin": "fubmd.search",
           "since": 1700000000500,
           "progress": null
+        }
+      ]
+    },
+    {
+      "kind": "settings",
+      "value": [
+        {
+          "spec": {
+            "key": "versioning.enabled",
+            "label": "Versioning",
+            "description": "Tiene uno storico delle modifiche.",
+            "group": "Vault",
+            "scope": "vault",
+            "kind": {
+              "kind": "toggle",
+              "default": true
+            },
+            "program_writable": true
+          },
+          "value": true,
+          "source": "default"
+        },
+        {
+          "spec": {
+            "key": "appearance.theme",
+            "label": "Tema",
+            "description": "",
+            "group": "",
+            "scope": "machine",
+            "kind": {
+              "kind": "choice",
+              "default": "auto",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatico"
+                },
+                {
+                  "value": "scuro",
+                  "label": "Scuro"
+                }
+              ]
+            },
+            "program_writable": false
+          },
+          "value": "scuro",
+          "source": "machine"
         }
       ]
     }

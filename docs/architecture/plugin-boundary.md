@@ -14,8 +14,8 @@ Un plugin non tocca mai il filesystem o il bus direttamente: passa da `HostApi`
 applicare i permessi.
 
 Dalla [decisione 0021](../decisions/0021-il-confine.md) l'`HostApi` è la
-**somma di dieci famiglie** — al confine WIT dieci `interface` importate una per
-una dal `plugin-world` — e il punto di applicazione esiste davvero: il kernel
+**somma di famiglie** — dodici dal §11.1, al confine WIT altrettante `interface`
+importate una per una dal `plugin-world` — e il punto di applicazione esiste davvero: il kernel
 tiene un [registro dei plugin](../../crates/fubmd-kernel/src/plugins.rs) con
 manifest, permessi e grado di fiducia, e ogni host nasce dentro un
 `Guard<H, P: Policy>` che nega ciò che la politica del suo plugin non concede.
@@ -39,7 +39,8 @@ errore, e un host intestato a un id sconosciuto nega tutto dicendo perché.
 Un plugin ricorda in un modo solo: `data_read/write/remove/list`, path → blob di
 byte, persistente.
 
-Ce n'erano **due**. `storage_get/set` — chiave → JSON, volatile, "per le
+Ce n'erano **due**, e adesso di nuovo due, ma non le stesse.
+`storage_get/set` — chiave → JSON, volatile, "per le
 preferenze e i cursori" — è stato tolto dal contratto con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md), ritagliando la
 linea di base (`wit/frozen/0.1.0.wit`), che è la sola rottura di quel giro. La
 ragione, per esteso nella [decisione 0013](../decisions/0013-elenco-delle-capacita.md): con `data_*` da una parte e le
@@ -56,6 +57,29 @@ un campo, ed è più corto.
 Lo spazio persistente è `.fubmd-data/plugins/<id>/`, **dentro al vault**: i dati
 derivati da un vault appartengono a quel vault, e copiarlo o metterlo in sync se
 li porta dietro.
+
+L'altra metà, dal §11.1 ([decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)),
+è la **configurazione** — `setting` / `set_setting` / `reset_setting` — ed è
+un'altra cosa da `data_*` sotto ogni aspetto che conta: le chiavi le **dichiara
+un manifest** (non se le inventa chi scrive), il valore lo decide l'utente (non
+il plugin), il file è leggibile a mano, e ciò che il file contiene senza che
+nessuno lo dichiari resta lì senza essere letto. Non è lo `storage_*` che
+rientra dalla finestra: è ciò che quel ritaglio aveva lasciato senza casa.
+
+**I due cancelli della scrittura**, ed è la parte che riguarda il confine: il
+permesso `fubmd:write-settings` dice *chi* può scrivere, e
+`SettingSpec.program_writable` dice *cosa* si può scrivere — con `false` come
+default, per la stessa regola di `Trust::default`. La seconda esiste perché il
+divieto che conta (privacy e AI non si spostano da sole) non dipende da chi
+chiede: un componente che potesse allargarsi i permessi da sé non ha permessi.
+La persona davanti allo schermo passa da un'altra porta — la shell scrive sul
+workspace — ed è la distinzione dell'origine
+([decisione 0012](../decisions/0012-origine-degli-eventi.md)) applicata alla
+configurazione.
+
+**Cosa la configurazione NON è**: un posto per i segreti. Il file è JSON in
+chiaro e il valore è leggibile da chiunque possa interrogare il canale dati; una
+chiave d'API vuole un portachiavi di sistema, che sarà una capacità sua.
 
 **Perché blob e non un'API filesystem scoped.** Un filesystem scoped chiede al
 plugin di comporre path e all'host di verificarli: il recinto diventa una
@@ -575,9 +599,11 @@ a niente di più**: dentro quella chiamata il kernel ha invarianti da rimettere 
 posto (la tabella dei provider prestata, le pile di comandi e servizi, il lotto,
 l'attore) e quel codice gira già sul ramo dell'errore. Senza la rete, un provider
 che pania sotto il prestito esclusivo avvelenava il `RwLock` del workspace e
-rendeva il vault irraggiungibile fino al riavvio. Non disattiva niente — il
-meccanismo esiste (`BundleRegistry::unmount`) ma manca sia il canale per dare
-l'avviso (§20.2) sia il modo di riaccendere a runtime (§11.1). L'isolamento vero
+rendeva il vault irraggiungibile fino al riavvio. Non disattiva niente — il meccanismo esiste
+(`BundleRegistry::unmount`), e dal §11.1 esiste anche il modo di **riaccendere**
+(`BundleRegistry::enable`, con lo stato scritto in `plugins.disabled`); quel che
+manca perché un panico costi più della chiamata è il canale per dare l'avviso
+(§20.2). L'isolamento vero
 — un plugin che non si porta via nemmeno la memoria — resta la sandbox di M5
 ([decisione 0032](../decisions/0032-il-runner-dei-job.md)).
 

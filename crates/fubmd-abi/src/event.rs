@@ -128,6 +128,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
+use crate::settings::SettingScope;
 use crate::traits::{JobId, JobProgress};
 
 /// Identità di un lotto (decisione 0011): le N scritture che la portano sono una cosa
@@ -386,6 +387,22 @@ pub enum Event {
     /// ponte verso la shell ne tiene **l'ultimo per job** dentro una raffica
     /// (decisione 0034): venti passi avanti in un giro sono un passo avanti.
     JobProgress { id: JobId, progress: JobProgress },
+    /// Un'impostazione è cambiata (§11.1): la chiave, e il livello in cui il
+    /// valore è stato scritto o da cui è stato tolto.
+    ///
+    /// Non porta il **valore nuovo**, ed è deliberato: chi reagisce a una
+    /// configurazione la rilegge
+    /// ([`SettingsRead::setting`](crate::traits::SettingsRead::setting)), e un
+    /// valore dentro l'evento sarebbe una seconda copia che invecchia — due
+    /// scritture ravvicinate consegnate in ordine inverso, o una consegna persa,
+    /// lascerebbero chi ascolta convinto di un valore che non è più quello. La
+    /// chiave dice *cosa riguardarsi*, che è l'unica cosa che non si può dedurre
+    /// da sola.
+    ///
+    /// Per la stessa ragione **non è recuperabile**: si può rileggere il valore,
+    /// ma non si può riscoprire che è cambiato — e chi si spegne quando lo
+    /// spengono deve saperlo anche quando la coda è piena.
+    SettingChanged { key: String, scope: SettingScope },
 }
 
 impl Event {
@@ -404,6 +421,7 @@ impl Event {
             Event::ViewInvalidated { .. } => EventKind::ViewInvalidated,
             Event::JobStarted { .. } => EventKind::JobStarted,
             Event::JobProgress { .. } => EventKind::JobProgress,
+            Event::SettingChanged { .. } => EventKind::SettingChanged,
         }
     }
 
@@ -457,7 +475,9 @@ impl Event {
             | Event::VaultClosed { .. }
             | Event::JobDone { .. }
             | Event::Overflow { .. }
-            | Event::Custom { .. } => false,
+            | Event::Custom { .. }
+            // Vedi il doc della variante: il valore si rilegge, il *cambio* no.
+            | Event::SettingChanged { .. } => false,
         }
     }
 
@@ -518,6 +538,8 @@ pub enum EventKind {
     /// A che punto è un lavoro lungo (§10.3). Chi si abbona a questo si abbona
     /// al canale più fitto che il contratto abbia.
     JobProgress,
+    /// Una chiave di configurazione è cambiata (§11.1).
+    SettingChanged,
 }
 
 /// **Dove**: il soggetto di un abbonamento (decisione 0033).
@@ -844,6 +866,12 @@ mod tests {
             },
             Event::Overflow { dropped: 1 },
             Event::VaultClosed { root: "/v".into() },
+            // Il valore si rilegge, il *cambio* no — e chi si spegne quando lo
+            // spengono deve saperlo anche a coda piena.
+            Event::SettingChanged {
+                key: "versioning.enabled".into(),
+                scope: crate::settings::SettingScope::Vault,
+            },
         ] {
             assert!(
                 !event.is_recoverable(),

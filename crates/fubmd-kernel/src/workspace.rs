@@ -50,7 +50,7 @@
 
 use std::collections::BTreeSet;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode};
@@ -59,6 +59,7 @@ use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::format::{DocumentFormat, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::session::ViewContext;
+use fubmd_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValue};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
     JobId, JobProgress, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
@@ -87,6 +88,7 @@ use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, Regis
 use crate::registry::FormatRegistry;
 use crate::renderer::{self, RenderedDocument};
 use crate::session::{ContextChange, Session};
+use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::vault::TrashEntry;
 
 /// Il pannello di una shell che ne ha uno solo.
@@ -222,22 +224,55 @@ pub struct Workspace {
     /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
     /// sola: chiudere due volte non è chiudere due volte.
     closed: bool,
+    /// *Com'è configurato questo vault* (§11.1): gli schemi che i plugin
+    /// dichiarano nel manifest, i valori dei due livelli, e la precedenza.
+    ///
+    /// **Non è un sesto proprietario** più di quanto lo sia `closed`: è una
+    /// tabella che due dei cinque devono vedere uguale — il registro dei
+    /// provider la riempie dichiarando, l'indice del kernel la legge per
+    /// rispondere a [`IndexQuery::Settings`] — e l'`Arc<RwLock<…>>` è la forma
+    /// di quella condivisione, la stessa di
+    /// `WatchState::watching` e di `CoreIndex::registry`.
+    settings: SharedSettings,
 }
 
 impl Workspace {
-    /// Crea un workspace su una radice con un registry di provider già popolato.
+    /// Crea un workspace su una radice con un registry di provider già
+    /// popolato, e **senza livello macchina**: le impostazioni di macchina
+    /// vivono in memoria e non toccano il disco.
+    ///
+    /// È il default giusto per chi non ha un'installazione — un test, un
+    /// e2e headless — e sbagliato per un'app: chi monta davvero passa da
+    /// [`with_machine_settings`](Workspace::with_machine_settings), e senza
+    /// quella riga il tema scelto dall'utente non sopravvive alla chiusura.
+    /// Che sia questo il default e non l'altro è deliberato: una suite di test
+    /// che scrivesse nella cartella di configurazione di chi la esegue è un
+    /// difetto che si scopre tardi e per vie traverse.
     pub fn new(root: impl AsRef<Utf8Path>, registry: FormatRegistry) -> Self {
+        Workspace::with_machine_settings(root, registry, MachineSettings::in_memory())
+    }
+
+    /// Come [`new`](Workspace::new), col livello macchina **condiviso** fra
+    /// tutti i vault aperti da questo host (§11.1).
+    pub fn with_machine_settings(
+        root: impl AsRef<Utf8Path>,
+        registry: FormatRegistry,
+        machine: Arc<MachineSettings>,
+    ) -> Self {
         // Il registry è condiviso con l'indice del kernel invece che copiato:
         // "quali estensioni sono documenti" è una domanda sola (vedi
         // `CoreIndex::registry`).
         let registry = Arc::new(registry);
+        let root = root.as_ref();
+        let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(root, machine)));
         Workspace {
             docs: DocumentStore::new(root, Arc::clone(&registry)),
-            indexes: Indexes::new(registry),
+            indexes: Indexes::new(registry, Arc::clone(&settings)),
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
             closed: false,
+            settings,
         }
     }
 
@@ -308,7 +343,31 @@ impl Workspace {
                 requires: missing,
             });
         }
-        self.providers.plugins.declare(manifest, trust)
+        // E le **chiavi di impostazione** (§11.1), che sono nomi come i servizi
+        // e valgono la stessa regola. Vanno dichiarate qui e non alla prima
+        // lettura per la ragione che tiene lo schema nel manifest: il primo che
+        // legge una chiave è l'`activate` del plugin che l'ha dichiarata, e
+        // arriva **dopo** questa riga e prima di qualunque altra occasione.
+        for spec in &manifest.settings {
+            fubmd_abi::rules::ids::check(&spec.key, owner).map_err(RegistryError::Namespace)?;
+        }
+        let (id, specs) = (manifest.id.clone(), manifest.settings.clone());
+        // La dichiarazione del plugin **prima** dello schema, e non per gusto
+        // dell'ordine: se fosse al contrario, un id doppio lascerebbe dietro le
+        // chiavi di un plugin che non è mai stato dichiarato — e a toglierle non
+        // ci sarebbe nessuno, perché `deactivate_plugin` non conosce chi non è
+        // mai entrato.
+        self.providers.plugins.declare(manifest, trust)?;
+        if let Err(why) = self
+            .settings
+            .write()
+            .expect("store di configurazione")
+            .declare(&id, &specs)
+        {
+            self.providers.plugins.retire(&id);
+            return Err(RegistryError::Setting(why));
+        }
+        Ok(())
     }
 
     /// Registra chi **offre** i servizi che il suo manifest dichiara (§7.5).
@@ -516,6 +575,15 @@ impl Workspace {
         }
 
         self.providers.plugins.retire(plugin);
+        // Lo schema delle sue impostazioni se ne va con lui: da qui in poi le
+        // sue chiavi non si leggono e non si scrivono, che è ciò che vuol dire
+        // «quella feature non c'è». I **valori** restano scritti dov'erano —
+        // spegnere una feature non è riconfigurarla, e riaccenderla ritrova come
+        // l'avevi lasciata.
+        self.settings
+            .write()
+            .expect("store di configurazione")
+            .withdraw(plugin);
 
         // I job che aveva in coda non partiranno: il loro corpo è
         // `Plugin::run_job`, e quel plugin non c'è più. Ognuno riceve il proprio
@@ -2884,6 +2952,118 @@ impl Workspace {
             });
             ws.dispatch_pending();
         });
+    }
+
+    // --- le impostazioni (§11.1) -------------------------------------------
+    //
+    // Il workspace è l'unico che le può servire: lo schema lo tiene il registro
+    // dei plugin (arriva dal manifest, alla dichiarazione) e il valore lo tiene
+    // lo store, e le due cose si incontrano solo qui.
+
+    /// Il valore che vale adesso per una chiave dichiarata.
+    pub fn setting(&self, key: &str) -> std::result::Result<SettingValue, PluginError> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .effective(key)
+            .map(|(value, _)| value)
+    }
+
+    /// Come [`setting`](Workspace::setting), ma dice anche **da dove viene**.
+    pub fn setting_source(
+        &self,
+        key: &str,
+    ) -> std::result::Result<(SettingValue, SettingSource), PluginError> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .effective(key)
+    }
+
+    /// Scrive una chiave, e **lo dice**: la scrittura di un'impostazione è un
+    /// fatto che riguarda chi la legge, e senza l'evento un interruttore
+    /// spostato in una finestra resterebbe invisibile a tutto il resto finché
+    /// qualcuno non ricarica.
+    ///
+    /// L'attore è quello corrente, come per ogni altra scrittura: chi ha chiesto
+    /// è chi è entrato nel kernel (decisione 0012), e questa capacità passa da
+    /// un comando o da un plugin, mai dal kernel di sua iniziativa.
+    pub fn set_setting(
+        &mut self,
+        key: &str,
+        value: SettingValue,
+    ) -> std::result::Result<(), PluginError> {
+        let scope = self
+            .settings
+            .write()
+            .expect("store di configurazione")
+            .set(key, value)?;
+        self.announce_setting(key, scope);
+        Ok(())
+    }
+
+    /// Azzera una chiave: ricade al livello sotto (vedi
+    /// [`SettingsWrite::reset_setting`](fubmd_abi::traits::SettingsWrite::reset_setting)).
+    pub fn reset_setting(&mut self, key: &str) -> std::result::Result<(), PluginError> {
+        let scope = self
+            .settings
+            .write()
+            .expect("store di configurazione")
+            .reset(key)?;
+        self.announce_setting(key, scope);
+        Ok(())
+    }
+
+    fn announce_setting(&mut self, key: &str, scope: SettingScope) {
+        let key = key.to_string();
+        self.emit_event(Event::SettingChanged { key, scope });
+        if !self.dispatch.in_provider_call() {
+            self.dispatch_pending();
+        }
+    }
+
+    /// Questa chiave si è dichiarata scrivibile da un programma? `None` = non
+    /// è dichiarata affatto, che è un no diverso e va detto diverso.
+    ///
+    /// Lo chiede l'host dei plugin prima di scrivere (§11.1): il permesso dice
+    /// *chi*, questo dice *cosa*.
+    pub fn setting_is_program_writable(&self, key: &str) -> Option<bool> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .spec(key)
+            .map(|spec| spec.program_writable)
+    }
+
+    /// Le impostazioni risolte, tutte o di un plugin: è la risposta che il
+    /// canale dati restituisce a [`IndexQuery::Settings`].
+    pub fn settings_entries(&self, plugin: Option<&str>) -> Vec<SettingEntry> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .entries(plugin)
+    }
+
+    /// Cosa è andato storto **leggendo** la configurazione: un file malformato,
+    /// una chiave di macchina scritta dentro un vault, un valore che non regge
+    /// la specie dichiarata. Chi monta le mostra, e svuotandole se ne fa carico.
+    pub fn settings_warnings(&mut self) -> Vec<String> {
+        self.settings
+            .write()
+            .expect("store di configurazione")
+            .take_warnings()
+    }
+
+    /// Il livello macchina di questo workspace, da condividere con il prossimo
+    /// vault che si apre (§11.1): la configurazione della macchina è **una**, e
+    /// N copie sarebbero N idee del tema.
+    pub fn machine_settings(&self) -> Arc<MachineSettings> {
+        Arc::clone(
+            self.settings
+                .read()
+                .expect("store di configurazione")
+                .machine(),
+        )
     }
 
     // --- interni ---------------------------------------------------------

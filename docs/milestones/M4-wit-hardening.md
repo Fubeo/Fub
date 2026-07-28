@@ -170,6 +170,31 @@ oggi, una migrazione domani); le altre restano al freeze.
   tre campi invece di un booleano, perché «FubMD saprebbe», «è già successo
   qualcosa che non ho saputo leggere» e «cosa» sono tre domande, e un vault
   senza rilevamento non è un vault che ha appena mancato un file.
+- **Le impostazioni, che erano l'unica parte del contratto senza un contenitore**
+  ([decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)). È
+  l'aggiunta più larga fatta prima del freeze, ed è tutta **additiva**: una
+  `interface settings` nuova (`setting-scope`, `setting-kind` col default dentro,
+  `setting-value` nudo sul confine JSON, `setting-spec`, `setting-source`,
+  `setting-entry`), `plugin-manifest.settings` **in coda** al record,
+  `event-setting-changed` in coda a `event` e `setting-changed` in coda a
+  `event-kind`, `index-query.settings(option<string>)` →
+  `query-kind.settings` → `index-result.settings(list<setting-entry>)` in coda a
+  tutti e tre, e due famiglie nuove — `host-settings-read` (in `read-api`) e
+  `host-settings-write` (solo in `host-api`) — che portano le famiglie di
+  capacità da dieci a **dodici**.
+
+  Cosa scadeva col freeze non era l'esistenza dello store ma **tre scelte di
+  forma**, e sono le tre che il verbale difende: lo schema sta nel *manifest* e
+  non in un `SettingsProvider` (la dichiarazione deve venire prima di
+  `activate`, o il primo cliente vero legge un default che l'utente aveva
+  cambiato); i livelli sono *due* e non tre (il terzo non è un posto in cui
+  cercare un valore, è dove sta il livello macchina); e leggere passa dal
+  **canale dati** e non da una capacità, perché un elenco è dati e i dati hanno
+  un canale solo ([0013](../decisions/0013-elenco-delle-capacita.md)). Le due
+  famiglie sono separate per la stessa ragione per cui `read-api` esiste: uno
+  schema è pubblico per costruzione e questo store non contiene segreti — ciò
+  che è recintato è la scrittura, e la recinta un cancello per chiave
+  (`program-writable`) sopra il permesso `fubmd:write-settings`.
 
 **Da chiudere al freeze:**
 
@@ -364,8 +389,12 @@ oggi, una migrazione domani); le altre restano al freeze.
          diversa: non «l'utente approva questa esecuzione?» ma «questo componente
          può, in generale?».
       Resta aperto sopra questa firma, dichiarato: ~~l'**attribuzione**~~
-      (fatta, [decisione 0012](../decisions/0012-origine-degli-eventi.md) + [decisione 0011](../decisions/0011-il-lotto.md)), le **impostazioni scrivibili da un programma**
-      (§11.1: il vocabolario c'è, `CommandReach::Settings`, lo schema no),
+      (fatta, [decisione 0012](../decisions/0012-origine-degli-eventi.md) + [decisione 0011](../decisions/0011-il-lotto.md)), ~~le **impostazioni scrivibili da un programma**~~
+      (fatte, [decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md):
+      il vocabolario era `CommandReach::Settings` e adesso lo schema c'è —
+      `SettingSpec.program_writable`, **per chiave** e con default `false`, più il
+      permesso `fubmd:write-settings` che dice *chi*; nessuno dei due basta da
+      solo, e la persona davanti allo schermo passa da un'altra porta),
       ~~i **comandi strutturali**~~ (fatti, [decisione 0013](../decisions/0013-elenco-delle-capacita.md): cinque comandi, sei comandi
       Tauri in meno) e i **comandi della shell** (toggle dei pannelli: il registro vive nel kernel e
       il frontend non può registrarvisi — §18.2).

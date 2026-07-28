@@ -69,6 +69,9 @@ frontend/src/
     sidebar.ts     quale pannello della sidebar occupa lo spazio
     graph.ts       il grafo su canvas (superficie privilegiata, fuori da UiNode)
     activity.ts    il centro attività: cosa sta girando, a che punto è, come si ferma (§10.3)
+    settings.ts    il pannello di impostazioni: il form generato dallo schema che
+                   i componenti dichiarano, i componenti da accendere e spegnere,
+                   i vault conosciuti (§11.1)
 
   editor/        i moduli CodeMirror, autonomi e iniettati
     editor.ts, editor-commands.ts, completions.ts, livepreview.ts
@@ -231,6 +234,17 @@ chiuse:
   valori che divergono sono, da contratto, un cambio di pannello a ogni
   pubblicazione del contesto: si vedrebbe come «si ridisegna tutto» e non
   porterebbe a nessuna delle due righe.
+- **Lo stato di vista, e il layout** ([§11.2](../roadmap/11-impostazioni-e-i-tre-stati.md)).
+  Il §11.1 ha dato una casa alla prima delle tre cose che non ne avevano — le
+  **impostazioni**, che durano e viaggiano col vault — e ha lasciato scritto dove
+  andranno le altre due: lo *stato di vista* (scroll, sezioni collassate, tab
+  attiva) è per-macchina **e per-pannello**, quindi non è una chiave di
+  configurazione ma una mappa indicizzata da `PaneId`; il *layout* ha più
+  configurazioni per lo stesso utente, quindi non è un valore ma un insieme
+  nominato. È la ragione per cui oggi lo stato di vista di questa shell sta
+  ancora in `localStorage` (spazio attivo, cartelle espanse) e quello dei
+  provider non sta da nessuna parte: sono due contenitori che vanno decisi
+  insieme al modello di layout, non prima.
 - **Cestino e cronologia come `ViewProvider` veri.** Il modo di montarli è ormai
   uno — la regola 5 qui sopra — ma sono pannelli **nativi** che dichiarano, non
   provider che disegnano con `UiNode`. Dipendeva dai nodi di input e da un modo

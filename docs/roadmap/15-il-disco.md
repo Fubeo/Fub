@@ -97,10 +97,17 @@ network share), 2.3 (drive rimovibili).
       elenchi**: `<vault>/.fubmd/workspace.json` (autorevole, scritto dall'app
       con `std::fs` — è il §11.3), `.fubmd-data/plugins/<id>/` (assegnato dal
       kernel, recintato dalla firma), `.fubmd-data/index/` (derivato),
-      `<vault>/.trash/`. E stanno per arrivarne almeno otto: configurazione
-      globale e profili (§11.1, cap. 28), temi e snippet (6.2), plugin installati
-      (20.2), journal (§15.2), thumbnail e cache derivate (§14.1), crash buffer
-      (§15.2), backup (18.2), layout salvati (§11.2).
+      `<vault>/.trash/`. E ne stavano per arrivare almeno otto: i primi tre sono
+      **arrivati** con la
+      [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) —
+      `<vault>/.fubmd/settings.json` (autorevole, viaggia col vault) e, nella
+      cartella di configurazione della macchina, `settings.json` e `vaults.json`
+      (il registro dei vault). Sono anche i primi che nascono con la disciplina
+      invece che senza: versione di schema in testa al file e scrittura atomica
+      (`fubmd_kernel::settings::write_atomic`). Restano da arrivare temi e
+      snippet (6.2), plugin installati (20.2), journal (§15.2), thumbnail e cache
+      derivate (§14.1), crash buffer (§15.2), backup (18.2), layout salvati
+      (§11.2) — e restano da mettere in fila con i primi quattro, che è la voce.
 - [ ] **Il punto nuovo non è dove stanno: è che `data_*` non dichiara se ciò che
       scrive è derivato o autorevole.** Gli snapshot del versioning non si
       ricostruiscono da niente e vivono sotto `.fubmd-data/`, che il codice
@@ -172,7 +179,9 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 - [ ] **`IGNORED_DIRS` (`vault.rs`) è un `&[&str]` nel sorgente**, e la
       regola sta bene in un punto solo (`is_ignored_name`, usata da scansione e
       watcher). Il problema non è dove sta: è che è **una** politica quando ne
-      servono cinque, e come **codice** quando serve come dato per-vault (§11.1).
+      servono cinque, e come **codice** quando serve come dato per-vault — che
+      adesso ha dove stare: una chiave dichiarata, per-vault
+      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)).
 - [ ] **Le cinque, tutte su uno stesso albero**: ignore configurabile e
       `.gitignore` (3.1), file nascosti visibili su richiesta (3.2), esclusione
       cartelle dalla ricerca (9.1), esclusione dal sync (18.1), esclusione dal

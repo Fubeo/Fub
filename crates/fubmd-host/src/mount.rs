@@ -30,6 +30,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8Path;
+use fubmd_abi::settings::SettingSpec;
 use fubmd_abi::traits::{Plugin, PluginManifest};
 use fubmd_features::{
     BacklinksView, CoreCommands, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer,
@@ -37,10 +38,12 @@ use fubmd_features::{
     BACKLINKS_ID, BLOCKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, RegistryError, Trust, Workspace};
+use fubmd_kernel::{FormatRegistry, MachineSettings, RegistryError, Trust, Workspace};
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
-use crate::settings::versioning_enabled;
+use crate::settings::{
+    core_settings, disabled_plugins, versioning_enabled, versioning_settings, CORE_ID,
+};
 
 /// Ciò che esce dal montaggio: il workspace con tutto registrato, chi possiede i
 /// bundle, e la metà dello store delle versioni che resta in mano a chi ha
@@ -71,6 +74,10 @@ pub struct Mounted {
 struct CoreBundle {
     id: &'static str,
     name: &'static str,
+    /// Le impostazioni che questa feature dichiara (§11.1). Vuoto per quasi
+    /// tutte, ed è giusto: una feature che non ha niente da configurare non
+    /// dichiara niente, e il pannello non le trova una riga vuota.
+    settings: Vec<SettingSpec>,
     #[allow(clippy::type_complexity)]
     register: Box<dyn Fn(&mut Workspace) -> Vec<String> + Send + Sync>,
 }
@@ -84,14 +91,21 @@ impl CoreBundle {
         CoreBundle {
             id,
             name,
+            settings: Vec::new(),
             register: Box::new(register),
         }
+    }
+
+    /// Le impostazioni che questa riga della tabella dichiara.
+    fn configuring(mut self, settings: Vec<SettingSpec>) -> Self {
+        self.settings = settings;
+        self
     }
 }
 
 impl Bundle for CoreBundle {
     fn manifest(&self) -> PluginManifest {
-        PluginManifest::core(self.id, self.name)
+        PluginManifest::core(self.id, self.name).configuring(self.settings.clone())
     }
 
     /// Le feature ufficiali sono core, e lo dicono qui: il grado di fiducia è
@@ -123,7 +137,7 @@ impl Bundle for CoreBundle {
 /// questo repo**, non una condizione che l'utente possa produrre — si dice su
 /// stderr e si tira dritto, che è ciò che faceva prima. Il canale giusto per
 /// dirlo è il §20.2, e non esiste ancora.
-pub fn mount(root: &Utf8Path) -> Result<Mounted, String> {
+pub fn mount(root: &Utf8Path, machine: Arc<MachineSettings>) -> Result<Mounted, String> {
     let mut formats = FormatRegistry::new();
     // Il primo registrato è anche quello che dà l'estensione alle note nuove
     // (`FormatRegistry::default_extension`). Un conflitto qui è impossibile con
@@ -133,40 +147,82 @@ pub fn mount(root: &Utf8Path) -> Result<Mounted, String> {
         return Err(format!("provider di formato in conflitto: {e}"));
     }
 
-    let mut ws = Workspace::new(root, formats);
+    let mut ws = Workspace::with_machine_settings(root, formats, machine);
 
     // Lo store delle versioni nasce dentro il bundle e serve fuori: è la
     // composizione delle due metà, e il contenitore è il modo in cui chi monta
     // la riceve senza che il kernel debba sapere che il versioning esiste.
     let store: Arc<Mutex<Option<VersionStore>>> = Arc::default();
-    let bundles = vec![
-        CoreBundle::new(SEARCH_ID, "Ricerca", register_search),
-        CoreBundle::new(VERSIONING_ID, "Versioning", {
-            let store = store.clone();
-            move |ws: &mut Workspace| register_versioning(ws, &store)
-        }),
-        CoreBundle::new(BACKLINKS_ID, "Backlink", |ws| {
+    let bundles: Vec<Arc<dyn Bundle>> = vec![
+        // Per **primo**, e non per gusto dell'ordine: è lui a dichiarare
+        // `plugins.disabled`, cioè la chiave che dice quali degli altri non
+        // vanno montati. Un bundle che non registra niente e che esiste per
+        // dare un proprietario a una chiave è una riga strana da leggere, ed è
+        // meno strana dell'alternativa — appendere la configurazione dell'app a
+        // una feature che si può spegnere.
+        Arc::new(CoreBundle::new(CORE_ID, "FubMD", |_| Vec::new()).configuring(core_settings())),
+        Arc::new(CoreBundle::new(SEARCH_ID, "Ricerca", register_search)),
+        Arc::new(
+            CoreBundle::new(VERSIONING_ID, "Versioning", {
+                let store = store.clone();
+                move |ws: &mut Workspace| register_versioning(ws, &store)
+            })
+            .configuring(versioning_settings()),
+        ),
+        Arc::new(CoreBundle::new(BACKLINKS_ID, "Backlink", |ws| {
             register_view(ws, BACKLINKS_ID, Box::new(BacklinksView))
-        }),
-        CoreBundle::new(OUTLINE_ID, "Struttura", |ws| {
+        })),
+        Arc::new(CoreBundle::new(OUTLINE_ID, "Struttura", |ws| {
             register_view(ws, OUTLINE_ID, Box::new(OutlineView))
-        }),
-        CoreBundle::new(TAGS_ID, "Tag", |ws| {
+        })),
+        Arc::new(CoreBundle::new(TAGS_ID, "Tag", |ws| {
             register_view(ws, TAGS_ID, Box::new(TagPanelView::default()))
-        }),
-        CoreBundle::new(STATS_ID, "Statistiche", |ws| {
+        })),
+        Arc::new(CoreBundle::new(STATS_ID, "Statistiche", |ws| {
             register_view(ws, STATS_ID, Box::new(StatsView))
-        }),
-        CoreBundle::new(COMMANDS_ID, "Comandi", register_commands),
-        CoreBundle::new(BLOCKS_ID, "Blocchi", register_blocks),
+        })),
+        Arc::new(CoreBundle::new(COMMANDS_ID, "Comandi", register_commands)),
+        Arc::new(CoreBundle::new(BLOCKS_ID, "Blocchi", register_blocks)),
     ];
 
+    // **Due passi, e in questo ordine.** Prima si dichiara al registry cosa
+    // esiste — anche ciò che resterà spento, o «spento» diventerebbe
+    // indistinguibile da «non installato» e non ci sarebbe niente da
+    // riaccendere — e poi si accende.
     let mut registry = BundleRegistry::new();
     for bundle in &bundles {
-        match registry.mount(bundle, &mut ws) {
+        registry.remember(Arc::clone(bundle));
+    }
+    // Il core per primo e da solo: è lui che dichiara `plugins.disabled`, quindi
+    // finché non è montato la domanda «chi è spento?» non ha nemmeno uno schema
+    // a cui rivolgersi. Ed è anche la ragione per cui il core non è spegnibile:
+    // l'elenco degli spenti vive dentro di lui.
+    if let Err(e) = registry.enable(&mut ws, CORE_ID) {
+        return Err(format!("il bundle di core non si monta: {e}"));
+    }
+    let disabled = disabled_plugins(&ws);
+    for bundle in &bundles {
+        let id = bundle.manifest().id;
+        if id == CORE_ID {
+            continue;
+        }
+        if disabled.contains(&id) {
+            // Non è un avviso da stderr: è una scelta dell'utente, e la si vede
+            // dall'inventario dei bundle (`BundleRegistry::inventory`).
+            continue;
+        }
+        match registry.enable(&mut ws, &id) {
             Ok(warnings) => warnings.iter().for_each(|w| eprintln!("{w}")),
             Err(e) => eprintln!("bundle non montato: {e}"),
         }
+    }
+
+    // Cosa è andato storto **leggendo** la configurazione: un file malformato,
+    // una chiave di macchina scritta dentro un vault, un valore che non regge la
+    // specie dichiarata. Vanno lette dopo il montaggio, perché è il montaggio a
+    // dichiarare gli schemi contro cui quei valori si misurano.
+    for warning in ws.settings_warnings() {
+        eprintln!("impostazioni: {warning}");
     }
 
     // Ciò che qualcuno produce e nessuno disegna: il conto che il §3.2 chiedeva
@@ -226,7 +282,7 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
 /// qui: è policy della feature, e scatta sull'evento `VaultOpened` che `reindex`
 /// emette dopo il montaggio.
 fn register_versioning(ws: &mut Workspace, store: &Mutex<Option<VersionStore>>) -> Vec<String> {
-    if !versioning_enabled() {
+    if !versioning_enabled(ws) {
         return Vec::new();
     }
     let opened = match ws.with_host(VERSIONING_ID, VersionStore::open) {
