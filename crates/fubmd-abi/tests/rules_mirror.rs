@@ -36,7 +36,9 @@
 //!   requisiti che devono divergere, e una fixture che li legasse nascerebbe
 //!   rossa e resterebbe rossa. Vedi `fubmd_abi::rules`.
 
+use fubmd_abi::event::{BatchId, Event, EventKind, EventMask, Subject};
 use fubmd_abi::model::{DocId, TaskMarker};
+use fubmd_abi::rules::events::{folder_contains, topic_matches};
 use fubmd_abi::rules::path::resolution_key;
 use fubmd_abi::Span;
 use serde_json::{json, Value};
@@ -108,6 +110,138 @@ fn task_checked_cases() -> Vec<Value> {
             })
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// La maschera di un abbonamento (§10.1)
+// ---------------------------------------------------------------------------
+//
+// È la regola con **due applicatori veri**: il kernel, che consegna a un
+// `EventHandler`, e la shell, che decide quando ridisegnare una view dichiarata
+// (`ui/panel-host.ts`). Le altre regole di questo file sono duplicate per
+// comodità — la UI le vuole prima di un giro IPC — questa lo è per necessità, e
+// due letture diverse della stessa maschera vorrebbero dire un pannello che si
+// ridisegna meno di quanto il contratto promette, in silenzio.
+
+/// I due prefissi, e i casi in cui `starts_with` sbaglierebbe.
+fn topic_matches_cases() -> Vec<Value> {
+    [
+        ("com.acme", "com.acme:done"),
+        ("com.acme", "com.acme.tasks:done"),
+        ("com.acme", "com.acmecorp:done"),
+        ("com.acme.tasks:board", "com.acme.tasks:board.moved"),
+        ("com.acme.tasks:board", "com.acme.tasks:boards"),
+        ("com.acme.tasks:done", "com.acme.tasks:done"),
+        ("", "chiunque:qualunque"),
+        ("fubmd", "fubmd:index.rebuilt"),
+        ("fubmd:index", "fubmd:index.rebuilt"),
+        ("fubmd:index", "fubmd:indexer.done"),
+    ]
+    .into_iter()
+    .map(|(prefix, topic)| {
+        json!({"prefix": prefix, "topic": topic, "out": topic_matches(prefix, topic)})
+    })
+    .collect()
+}
+
+fn folder_contains_cases() -> Vec<Value> {
+    [
+        ("Progetti", "Progetti/Alpha.md"),
+        ("Progetti", "Progetti/2026/Alpha.md"),
+        ("Progetti/", "Progetti/Alpha.md"),
+        ("Progetti", "Progetti-vecchi/Alpha.md"),
+        ("Progetti", "Progetti"),
+        ("Progetti", "Alpha.md"),
+        ("", "Alpha.md"),
+        ("/", "Progetti/Alpha.md"),
+        ("Progetti/2026", "Progetti/2026/Alpha.md"),
+        ("Progetti/2026", "Progetti/2027/Alpha.md"),
+    ]
+    .into_iter()
+    .map(|(folder, id)| json!({"folder": folder, "id": id, "out": folder_contains(folder, id)}))
+    .collect()
+}
+
+/// La regola per intero: la specie, il topic, il soggetto — e i casi che
+/// distinguono una lettura giusta da una plausibile (il rename che esce dalla
+/// cartella, il lotto che la interseca, ciò che non nomina nessun documento e
+/// deve passare comunque).
+fn mask_wants_cases() -> Vec<Value> {
+    let stretta = EventMask::of([
+        EventKind::DocumentChanged,
+        EventKind::DocumentRenamed,
+        EventKind::BatchEnded,
+        EventKind::Custom,
+        EventKind::Overflow,
+        EventKind::VaultClosed,
+    ])
+    .on_topics(["com.acme.tasks"])
+    .about([
+        Subject::document("Diario/oggi.md"),
+        Subject::folder("Progetti"),
+    ]);
+    let larga = EventMask::of([EventKind::DocumentChanged, EventKind::Custom]);
+    let eventi = [
+        Event::DocumentChanged {
+            id: DocId::new("Progetti/Alpha.md"),
+        },
+        Event::DocumentChanged {
+            id: DocId::new("Altro/Beta.md"),
+        },
+        Event::DocumentChanged {
+            id: DocId::new("Diario/oggi.md"),
+        },
+        // Il rename è del soggetto di partenza E di quello d'arrivo.
+        Event::DocumentRenamed {
+            from: DocId::new("Progetti/Alpha.md"),
+            to: DocId::new("Altro/Alpha.md"),
+        },
+        Event::DocumentRenamed {
+            from: DocId::new("Altro/Alpha.md"),
+            to: DocId::new("Altro/Gamma.md"),
+        },
+        Event::BatchEnded {
+            batch: BatchId(1),
+            changed: vec![DocId::new("Altro/a.md"), DocId::new("Progetti/b.md")],
+        },
+        Event::BatchEnded {
+            batch: BatchId(2),
+            changed: vec![DocId::new("Altro/a.md")],
+        },
+        // Un lotto che ha toccato il solo indice non nomina niente: passa.
+        Event::BatchEnded {
+            batch: BatchId(3),
+            changed: vec![],
+        },
+        Event::Custom {
+            topic: "com.acme.tasks:done".into(),
+            payload: json!({}),
+        },
+        Event::Custom {
+            topic: "com.altro.note:done".into(),
+            payload: json!({}),
+        },
+        // Ciò che non si riscopre riguardando il vault passa qualunque
+        // soggetto: perderlo sarebbe perdere l'unica copia di un fatto.
+        Event::Overflow { dropped: 7 },
+        Event::VaultClosed {
+            root: "/vault".into(),
+        },
+        // La specie non dichiarata non arriva, e viene prima di tutto il resto.
+        Event::IndexUpdated,
+    ];
+    let mut out = Vec::new();
+    for (nome, mask) in [("stretta", &stretta), ("larga", &larga)] {
+        for event in &eventi {
+            out.push(json!({
+                "mask_name": nome,
+                "mask": mask,
+                "event": event,
+                "out": mask.wants(event),
+            }));
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +328,9 @@ fn expected() -> Value {
         "page_name": page_name_cases(),
         "resolution_key": resolution_key_cases(),
         "task_checked": task_checked_cases(),
+        "topic_matches": topic_matches_cases(),
+        "folder_contains": folder_contains_cases(),
+        "mask_wants": mask_wants_cases(),
         "byte_to_utf16": offset_cases(true),
         "utf16_to_byte": offset_cases(false),
     })

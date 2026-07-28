@@ -7,69 +7,20 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): lo stesso canale a 
 ---
 
 Tre voci sullo stesso canale, viste a tre distanze: chi si abbona e con quale
-grana (10.1, ed è firma), quanti messaggi passano il ponte verso la webview
-(10.2), e chi li mostra all'utente (10.3). La terza è già decisa a metà — la
-[decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha stabilito che `notify` **non** è una capacità dell'`HostApi` ma un
-evento — e quella
-decisione è la ragione per cui le tre stanno insieme: il centro notifiche è il
-primo cliente vero del ponte, e il ponte non ha una politica sua.
+grana, quanti messaggi passano il ponte verso la webview, e chi li mostra
+all'utente. **Le prime due sono chiuse**, ed erano la stessa domanda posta ai due
+capi del canale — *a chi interessa questo evento?* — una volta a chi si abbona
+([0033](../decisions/0033-la-grana-di-un-abbonamento.md): il prefisso di topic e
+il soggetto) e una volta a chi consegna
+([0034](../decisions/0034-il-freno-e-il-raggruppamento.md): il tetto degli
+arretrati e il raggruppamento della raffica).
 
-### 10.1 L'abbonamento agli eventi non filtra
-
-*ex §1.19 · contratto · **P0** — la forma della maschera è contratto*
-
-- [ ] **La maschera è un `Vec<EventKind>` su 9 varianti** (`EventMask`,
-      `abi/event.rs`; la nona è `BatchEnded`, che ha portato la
-      [decisione 0011](../decisions/0011-il-lotto.md) — e la maschera cresce
-      **per varianti**, che è il punto di questa voce), e a
-      [`Event::Custom`] ci si abbona a grana `EventKind::Custom`
-      (consegna in `deliver_to_handlers`, `workspace.rs`): con i moduli
-      FubSuite che si parlano fra loro (21.2), ogni handler si sveglia per
-      **ogni** custom di **ogni** plugin.
-- [ ] **Il prefisso di topic non va inventato: c'è già, ed è deciso.** Il
-      formato è quello del §7.4 — `ns:nome`, col `ns` di chi emette — e la
-      [decisione 0021](../decisions/0021-il-confine.md) lo impone all'host nel
-      momento in cui l'evento passa. Qui resta il solo **match sul prefisso** in
-      `EventMask`, che è l'altra metà: senza, chi si abbona ai custom li riceve
-      tutti.
-- [ ] **Manca la grana del soggetto**, ed è la metà che va davvero inventata:
-      nessuno può abbonarsi a "i cambiamenti di questa cartella" o "di questo
-      documento", quindi l'evento più caldo (`DocumentChanged`) sveglia tutti,
-      N feature × M documenti. Per documento il soggetto è già nominabile (è il
-      `DocId`); per cartella è un prefisso di path, e chi rende la cartella un
-      cittadino del kernel è il §14.3. La forma della maschera è contratto, e va
-      allargata prima che le famiglie di provider si moltiplichino.
-
-### 10.2 Il ponte degli eventi non ha né freno né raggruppamento
-
-*ex §2.27 · kernel · **P2** — il primo cliente vero sarà il progresso dei job, che dalla [0032](../decisions/0032-il-runner-dei-job.md) girano ma non sanno dire a che punto sono*
-
-- [ ] **`EventBus` usa canali `std::mpsc` illimitati** (`kernel/bus.rs`:
-      `channel()`, non `sync_channel`) e il ponte verso la webview emette **un
-      messaggio IPC per evento**, da un thread dedicato che fa `recv()` e `emit`
-      in un ciclo senza freno (il ponte è avviato da `Host::open`,
-      `host/session.rs`, e il sink che emette sta in `app/lib.rs`). Un
-      subscriber lento non
-      rallenta nessuno: accumula memoria, in silenzio, senza un tetto — l'opposto
-      del `DISPATCH_BUDGET` (`dispatcher.rs`) che protegge gli handler.
-- [ ] **E ogni evento costa un giro di shell**: a ogni `index_updated` (o
-      `batch_ended`) la shell rifà `list_documents` e ridisegna ogni view
-      iscritta. La [decisione 0011](../decisions/0011-il-lotto.md) ha ridotto gli eventi *che costano un ridisegno* —
-      dentro un lotto ne arriva uno solo, e una rinomina con 200 backlink è
-      passata da 201 giri a 1 — ma non ha toccato il **numero di messaggi IPC**:
-      i 200 `document_changed` attraversano il ponte lo stesso, uno per uno.
-      Resta che il ponte non ha una politica sua — coalescing per tipo, finestra
-      temporale, tetto oltre il quale si degrada a "riconcilia tutto", che è poi
-      ciò che `Event::Overflow` già significa per gli handler.
-- [ ] Va con il lavoro lungo, che emetterà progresso: sarà il canale più caldo
-      di tutti — il §8.3 lo nominava, ma la
-      [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha
-      chiuso il lock e lasciato il lavoro lungo alla firma dei job, chiusa con la
-      [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), e al runner,
-      chiuso con la [0032](../decisions/0032-il-runner-dei-job.md). Adesso i job
-      girano davvero, e ciò che manca è proprio **dire a che punto sono**: un job
-      non ha modo di emettere un progresso e questo ponte non avrebbe come
-      reggerlo. Va quindi con §10.3 (il centro attività è il suo primo cliente).
+Resta la terza, che era già decisa a metà — la
+[decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha stabilito che
+`notify` **non** è una capacità dell'`HostApi` ma un evento — e quella decisione
+è la ragione per cui le tre stavano insieme: il centro notifiche è il primo
+cliente vero del ponte, e il ponte non aveva una politica sua. Adesso ce l'ha, e
+quel che manca alla terza è solo il posto in cui l'utente guarda.
 
 ### 10.3 Notifiche e attività in background
 
@@ -97,8 +48,20 @@ primo cliente vero del ponte, e il ponte non ha una politica sua.
       chiuso la firma e la [0032](../decisions/0032-il-runner-dei-job.md) il
       runner: qui sta il posto in cui l'utente lo vede e lo ferma. Fermarlo ha
       già la sua porta — `Host::cancel_job`, che oggi usano solo i presidi — e
-      quel che manca è **vederlo**: nessun job sa dire «sono al 40%», e il
-      progresso è il §10.2 qui sopra. Il §8.3 è chiuso con la
-      [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md), che
-      il lavoro lungo non lo ha spostato — ha reso misurabile quanto costa
-      tenerlo dov'è.
+      quel che manca è **vederlo**.
+- [ ] **Il progresso di un job è di questa voce, e la 0034 ha lasciato il nodo
+      sciolto a metà.** Il rimando era circolare — il §10.2 lo mandava qui e
+      questa voce lo rimandava là — e la
+      [0034](../decisions/0034-il-freno-e-il-raggruppamento.md) ne ha tagliato la
+      metà che le competeva: il ponte adesso regge il canale più caldo che ci
+      sarà. Resta la domanda che qui va decisa **col centro attività davanti**,
+      e porta con sé un fatto scoperto misurando: **un job non conosce il proprio
+      `JobId`**. `Plugin::run_job` riceve la `JobSpec` e l'host, non l'identità,
+      quindi non può emettere un evento che lo nomini — chi l'identità ce l'ha è
+      il suo host. Per la regola della
+      [0013](../decisions/0013-elenco-delle-capacita.md) il progresso è un
+      **evento** (si limita a informare); ma l'unico che può emetterlo con l'id
+      giusto è l'host del job, cioè un `report_progress` che sarebbe una
+      **capacità**. Scegliere senza sapere cosa l'utente deve vedere — una barra?
+      un conto? un'etichetta che cambia? — vorrebbe dire scegliere la firma prima
+      del requisito.

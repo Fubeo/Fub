@@ -664,7 +664,7 @@ struct ChainingHandler {
 
 impl EventHandler for ChainingHandler {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![EventKind::DocumentChanged, EventKind::Custom])
+        EventMask::of([EventKind::DocumentChanged, EventKind::Custom])
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -741,7 +741,7 @@ struct PingPongHandler {
 impl EventHandler for PingPongHandler {
     fn subscribed(&self) -> EventMask {
         // DocumentChanged è la miccia; Custom è il rimbalzo infinito.
-        EventMask(vec![EventKind::DocumentChanged, EventKind::Custom])
+        EventMask::of([EventKind::DocumentChanged, EventKind::Custom])
     }
 
     fn handle(&mut self, _notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -806,7 +806,7 @@ struct JobRequestingHandler {
 
 impl EventHandler for JobRequestingHandler {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![EventKind::DocumentChanged, EventKind::JobDone])
+        EventMask::of([EventKind::DocumentChanged, EventKind::JobDone])
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {

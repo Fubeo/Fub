@@ -62,6 +62,27 @@
 //! ciò che permette al suo stesso handler di dire «questa l'ho scritta io» senza
 //! tenere una contabilità privata.
 //!
+//! # La grana di un abbonamento (decisione 0033): il topic, e il soggetto
+//!
+//! Una [`EventMask`] era una lista di [`EventKind`], e con quella sola grana
+//! chi si abbonava ai custom li riceveva **tutti** — ogni topic di ogni plugin —
+//! e chi si abbonava a `document-changed` si svegliava per **ogni** documento
+//! del vault. Sul canale più caldo del contratto sono N feature × M documenti,
+//! e il costo non lo paga chi aggiunge l'abbonamento: lo pagano tutti gli altri,
+//! a ogni scrittura.
+//!
+//! I campi sono tre e sono in **and**: le specie, i **prefissi di topic**
+//! (`ns:nome` del §7.4, spezzati sui separatori del contratto e non sui
+//! caratteri) e i **soggetti** ([`Subject`]) — un documento, o una cartella
+//! come prefisso di path finché il §14.3 non ne fa un cittadino del kernel.
+//! Ognuno vuoto vuol dire *non filtro*: una maschera scritta prima di questa
+//! decisione riceve esattamente ciò che riceveva.
+//!
+//! La regola sta in [`crate::rules::events`] e non qui accanto perché ha **due**
+//! lettori: il kernel, che consegna agli handler, e la shell, che decide da sé
+//! quando ridisegnare una view dichiarata. Due letture della stessa maschera
+//! sono due modi di restringerla, e il secondo non lo vedrebbe nessun test.
+//!
 //! # Cosa resta deliberatamente fuori
 //!
 //! - **L'annullamento** di un lotto (§15.2 + §13.3): vedi sopra.
@@ -343,6 +364,65 @@ impl Event {
             _ => None,
         }
     }
+
+    /// Questo evento si **riscopre riguardando il vault**?
+    ///
+    /// È la classificazione su cui poggia ogni freno del canale (§10.2,
+    /// decisione 0034): quando una coda va sopra il tetto, ciò che è
+    /// recuperabile si può buttare — al suo posto arriva un
+    /// [`Overflow`](Event::Overflow), che dice «riconcilia da zero» ed è più
+    /// forte di ognuno dei singoli eventi buttati. Ciò che recuperabile non è
+    /// passa comunque, perché porta **l'unica copia di un fatto**: l'esito di un
+    /// job lo aspetta chi lo ha chiesto, il payload di un custom non lo
+    /// ricostruisce nessuno, l'apertura e la chiusura di un vault non si
+    /// deducono da come il vault è fatto, e un `Overflow` buttato via è
+    /// esattamente il messaggio che stava dicendo di aver buttato via qualcosa.
+    ///
+    /// Sta qui e non in chi frena perché i freni sono **due** — il tetto del bus
+    /// e il raggruppamento del ponte — e una seconda idea di cosa sia sacrificabile
+    /// sarebbe un evento perso in silenzio da uno dei due.
+    pub fn is_recoverable(&self) -> bool {
+        match self {
+            Event::DocumentChanged { .. }
+            | Event::DocumentRemoved { .. }
+            | Event::DocumentRenamed { .. }
+            | Event::IndexUpdated
+            | Event::BatchEnded { .. }
+            | Event::ViewInvalidated { .. } => true,
+            Event::VaultOpened { .. }
+            | Event::VaultClosed { .. }
+            | Event::JobDone { .. }
+            | Event::Overflow { .. }
+            | Event::Custom { .. } => false,
+        }
+    }
+
+    /// I documenti che questo evento **nomina**, per decidere se riguarda un
+    /// soggetto ([`EventMask::about`]).
+    ///
+    /// Non è [`Event::touched`] al plurale, e le differenze sono le due che
+    /// contano:
+    ///
+    /// - un **rename** ne nomina due, il path di partenza e quello d'arrivo.
+    ///   `touched` risponde a *cosa scrivere nell'elenco di un lotto* e dice il
+    ///   nuovo; qui la domanda è *questo evento riguarda la tua cartella?*, e
+    ///   una nota che se ne va riguarda la cartella da cui esce esattamente
+    ///   quanto quella in cui entra;
+    /// - un **lotto** li nomina tutti, ed è ciò che rende un abbonamento per
+    ///   cartella utile dentro un lotto invece che cieco.
+    ///
+    /// Vuoto = l'evento non parla di documenti (`index-updated`, `overflow`,
+    /// `vault-closed`, `job-done`, un custom, un lotto che ha toccato il solo
+    /// indice): chi filtra per soggetto lo lascia **passare**, perché filtrarlo
+    /// via vorrebbe dire perdere in silenzio proprio ciò che non si può perdere.
+    pub fn names(&self) -> Vec<&DocId> {
+        match self {
+            Event::DocumentChanged { id } | Event::DocumentRemoved { id } => vec![id],
+            Event::DocumentRenamed { from, to } => vec![from, to],
+            Event::BatchEnded { changed, .. } => changed.iter().collect(),
+            _ => Vec::new(),
+        }
+    }
 }
 
 /// Il "tipo" di un evento, senza payload — per gli abbonamenti.
@@ -371,13 +451,97 @@ pub enum EventKind {
     VaultClosed,
 }
 
-/// Insieme di tipi di evento a cui un handler è abbonato.
+/// **Dove**: il soggetto di un abbonamento (decisione 0033).
+///
+/// Un documento si nomina con la sua identità, che è il path
+/// ([`DocId`]); una cartella si nomina con il **prefisso** di path, perché nel
+/// kernel una cartella non è ancora un cittadino — lo diventa col §14.3, e
+/// quel giorno questa variante guadagna un tipo invece di una stringa. La
+/// forma della maschera è contratto e non poteva aspettarlo: allargarla dopo il
+/// freeze costerebbe una migrazione di versione, mentre il tipo del soggetto è
+/// una variante in più.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Subject {
+    /// Questo documento, e nessun altro.
+    Document { id: DocId },
+    /// Tutto ciò che sta **dentro** questa cartella, a qualunque profondità.
+    /// Il confronto è per segmento e non per caratteri: `Progetti` non contiene
+    /// `Progetti-vecchi/nota.md`. La stringa vuota è la radice, cioè tutto il
+    /// vault.
+    Folder { path: String },
+}
+
+impl Subject {
+    pub fn document(id: impl Into<String>) -> Self {
+        Subject::Document { id: DocId::new(id) }
+    }
+
+    pub fn folder(path: impl Into<String>) -> Self {
+        Subject::Folder { path: path.into() }
+    }
+
+    /// Questo documento sta nel soggetto?
+    pub fn holds(&self, doc: &DocId) -> bool {
+        match self {
+            Subject::Document { id } => id == doc,
+            Subject::Folder { path } => crate::rules::events::folder_contains(path, doc.as_str()),
+        }
+    }
+}
+
+/// **A cosa** un handler è abbonato: le specie, il topic dei custom, il
+/// soggetto.
+///
+/// Era una lista di [`EventKind`] e basta, e con quella sola grana ogni handler
+/// si svegliava per **ogni** custom di **ogni** plugin e per **ogni** documento
+/// del vault: N feature × M documenti, sull'evento più caldo che il contratto
+/// abbia. I tre campi sono in **and** fra loro, e ognuno vuoto vuol dire *non
+/// filtro*, che è il comportamento di prima — una maschera scritta prima della
+/// decisione 0033 continua a ricevere esattamente ciò che riceveva.
+///
+/// # Cosa il soggetto **non** toglie
+///
+/// Un evento che non nomina nessun documento passa il filtro del soggetto
+/// invece di non passarlo: `overflow` («riconcilia da zero»), `vault-closed`
+/// («l'ultimo giro per rendere durevole ciò che hai in memoria») e `job-done`
+/// («l'esito che hai chiesto») non sono meno tuoi perché ti sei abbonato a una
+/// cartella. La regola opposta — filtrare via ciò che non nomina un soggetto —
+/// avrebbe fatto perdere in silenzio proprio i tre eventi che non si possono
+/// perdere.
+///
+/// Un **rename** è del soggetto di partenza *e* di quello d'arrivo: chi guarda
+/// una cartella deve sapere che una nota se n'è andata, che è l'unico modo di
+/// smettere di tenerne lo stato.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EventMask(pub Vec<EventKind>);
+pub struct EventMask {
+    /// Le specie. Vuota = nessun evento: un handler che non dichiara niente non
+    /// riceve niente.
+    pub kinds: Vec<EventKind>,
+    /// I **prefissi di topic** dei custom, nella forma `ns:nome` del §7.4 —
+    /// `com.acme.tasks` (tutto ciò che quel plugin emette) o
+    /// `com.acme.tasks:board` (una famiglia sola). Vuota = tutti i custom.
+    ///
+    /// Il prefisso si spezza sui separatori del contratto (`:` e `.`), non sui
+    /// caratteri: `acme` non è un prefisso di `acmecorp:x`, o filtrare avrebbe
+    /// solo cambiato il plugin sbagliato che si sveglia.
+    pub topics: Vec<String>,
+    /// **Dove**. Vuota = tutto il vault.
+    pub subjects: Vec<Subject>,
+}
 
 impl EventMask {
+    /// Una maschera sulle sole specie: nessun filtro di topic, nessuno di
+    /// soggetto.
+    pub fn of(kinds: impl IntoIterator<Item = EventKind>) -> Self {
+        EventMask {
+            kinds: kinds.into_iter().collect(),
+            ..EventMask::default()
+        }
+    }
+
     pub fn all() -> Self {
-        EventMask(vec![
+        EventMask::of([
             EventKind::VaultOpened,
             EventKind::DocumentChanged,
             EventKind::DocumentRemoved,
@@ -392,8 +556,32 @@ impl EventMask {
         ])
     }
 
+    /// Restringe i custom a questi prefissi di topic.
+    pub fn on_topics(mut self, topics: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.topics = topics.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Restringe a questi soggetti ciò che un soggetto ce l'ha.
+    pub fn about(mut self, subjects: impl IntoIterator<Item = Subject>) -> Self {
+        self.subjects = subjects.into_iter().collect();
+        self
+    }
+
+    /// La specie è dichiarata? È **metà** della domanda: l'altra metà — il topic
+    /// e il soggetto — la fa [`EventMask::wants`], che è ciò che il kernel
+    /// chiama per decidere una consegna.
     pub fn contains(&self, kind: EventKind) -> bool {
-        self.0.contains(&kind)
+        self.kinds.contains(&kind)
+    }
+
+    /// Questo evento va consegnato a chi ha dichiarato questa maschera?
+    ///
+    /// È la regola per intero, e sta in [`crate::rules::events`] perché la
+    /// applica anche la shell — che decide da sé quando ridisegnare una view
+    /// dichiarata, e senza la stessa regola la restringerebbe a modo suo.
+    pub fn wants(&self, event: &Event) -> bool {
+        crate::rules::events::mask_wants(self, event)
     }
 
     /// La maschera dichiara `index-updated` senza `batch-ended`?
@@ -441,6 +629,11 @@ mod tests {
                 batch: BatchId(1),
                 changed: vec![],
             },
+            Event::ViewInvalidated {
+                view: "v".into(),
+                instance: None,
+            },
+            Event::VaultClosed { root: "/v".into() },
         ] {
             assert!(
                 all.contains(event.kind()),
@@ -452,15 +645,51 @@ mod tests {
 
     #[test]
     fn a_mask_that_watches_the_index_must_watch_batches_too() {
-        assert!(EventMask(vec![EventKind::IndexUpdated]).misses_batches());
+        assert!(EventMask::of([EventKind::IndexUpdated]).misses_batches());
         assert!(
-            !EventMask(vec![EventKind::IndexUpdated, EventKind::BatchEnded]).misses_batches(),
+            !EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]).misses_batches(),
             "dichiarare tutti e due è la forma giusta, non un doppione"
         );
         assert!(
-            !EventMask(vec![EventKind::DocumentChanged]).misses_batches(),
+            !EventMask::of([EventKind::DocumentChanged]).misses_batches(),
             "chi segue i documenti non perde niente in un lotto: quelli passano tutti"
         );
+    }
+
+    #[test]
+    fn a_subscription_can_name_a_topic_and_a_place() {
+        // Il caso della voce: due plugin che si parlano, e un handler che si
+        // sveglia solo per i propri.
+        let miei = EventMask::of([EventKind::Custom]).on_topics(["com.acme.tasks"]);
+        assert!(miei.wants(&Event::Custom {
+            topic: "com.acme.tasks:done".into(),
+            payload: serde_json::Value::Null,
+        }));
+        assert!(!miei.wants(&Event::Custom {
+            topic: "com.altro.note:done".into(),
+            payload: serde_json::Value::Null,
+        }));
+
+        // E l'evento più caldo, ristretto a una cartella.
+        let qui = EventMask::of([EventKind::DocumentChanged]).about([Subject::folder("Progetti")]);
+        assert!(qui.wants(&Event::DocumentChanged {
+            id: DocId::new("Progetti/Alpha.md"),
+        }));
+        assert!(!qui.wants(&Event::DocumentChanged {
+            id: DocId::new("Diario/2026-07-28.md"),
+        }));
+    }
+
+    #[test]
+    fn a_mask_survives_the_json_boundary_whole() {
+        let mask = EventMask::of([EventKind::Custom, EventKind::DocumentChanged])
+            .on_topics(["com.acme.tasks:board"])
+            .about([
+                Subject::document("Progetti/Alpha.md"),
+                Subject::folder("Diario"),
+            ]);
+        let json = serde_json::to_string(&mask).unwrap();
+        assert_eq!(serde_json::from_str::<EventMask>(&json).unwrap(), mask);
     }
 
     #[test]
@@ -490,6 +719,43 @@ mod tests {
             json.contains(r#""batch":"7""#),
             "l'id di lotto attraversa il JSON come stringa: {json}"
         );
+    }
+
+    #[test]
+    fn what_an_overflow_replaces_is_exactly_what_it_covers() {
+        // Un `Overflow` dice «riconcilia da zero»: copre ogni evento che si
+        // riscopre riguardando il vault, e nessuno di quelli che portano l'unica
+        // copia di un fatto.
+        for event in [
+            Event::DocumentChanged {
+                id: DocId::new("a.md"),
+            },
+            Event::IndexUpdated,
+            Event::BatchEnded {
+                batch: BatchId(1),
+                changed: vec![],
+            },
+        ] {
+            assert!(event.is_recoverable(), "{event:?} lo si riscopre guardando");
+        }
+        for event in [
+            Event::JobDone {
+                id: JobId(1),
+                job: "j".into(),
+                result: Ok(serde_json::Value::Null),
+            },
+            Event::Custom {
+                topic: "p:x".into(),
+                payload: serde_json::Value::Null,
+            },
+            Event::Overflow { dropped: 1 },
+            Event::VaultClosed { root: "/v".into() },
+        ] {
+            assert!(
+                !event.is_recoverable(),
+                "{event:?} porta l'unica copia di un fatto: buttarlo è perderlo"
+            );
+        }
     }
 
     #[test]

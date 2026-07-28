@@ -18,7 +18,7 @@ import {
 import { pageName } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { notify } from "../ui/notify";
-import { registerPanel } from "../ui/panel-host";
+import { refreshOn, registerPanel } from "../ui/panel-host";
 import {
   closeDocument,
   isOpen,
@@ -40,7 +40,7 @@ export function mountTrash(): void {
     id: "shell:trash",
     title: "Cestino",
     placement: "left_sidebar",
-    refresh: ["index_updated", "batch_ended"],
+    refresh: refreshOn("index_updated", "batch_ended"),
     visible: () => isPanelVisible("trash"),
     render: refreshTrash,
   });

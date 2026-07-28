@@ -19,10 +19,10 @@ use std::time::Duration;
 use camino::Utf8PathBuf;
 use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{HostApi, JobSpec, Plugin, PluginManifest};
-use fubmd_abi::{Event, Notice, PluginError};
+use fubmd_abi::{Event, PluginError};
 use fubmd_host::registry::Bundle;
 use fubmd_host::{Host, NoWatcher};
-use fubmd_kernel::Trust;
+use fubmd_kernel::{Subscription, Trust};
 
 const SPIA: &str = "test.lavoratore";
 
@@ -173,7 +173,7 @@ impl Bundle for BundleLavoratore {
 
 /// Un host headless con un vault aperto, il bundle di prova montato e **un solo
 /// thread** nel pool: un thread solo rende osservabile l'ordine.
-fn banco(v: &Vault, passi: &Passi) -> (Host, Receiver<Notice>) {
+fn banco(v: &Vault, passi: &Passi) -> (Host, Subscription) {
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
         .with_job_threads(1);
@@ -214,7 +214,7 @@ fn chiedi(host: &Host, job: &str, payload: serde_json::Value) -> fubmd_abi::trai
 }
 
 /// Il primo `JobDone` che arriva, o il fallimento del test.
-fn esito(eventi: &Receiver<Notice>) -> (String, Result<serde_json::Value, PluginError>) {
+fn esito(eventi: &Subscription) -> (String, Result<serde_json::Value, PluginError>) {
     let scadenza = std::time::Instant::now() + Duration::from_secs(10);
     while std::time::Instant::now() < scadenza {
         match eventi.recv_timeout(Duration::from_millis(200)) {

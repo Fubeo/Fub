@@ -168,6 +168,19 @@ che la view guarda. Sono separate perché un cursore che si muove non è un fatt
 del vault: farlo passare dall'event bus significherebbe consegnare ogni battuta
 di tasto a ogni handler registrato.
 
+`refresh` non è una lista di specie: è la maschera per intero
+([decisione 0033](../decisions/0033-la-grana-di-un-abbonamento.md)) — le specie,
+i prefissi di topic dei custom e il **soggetto** (un documento, una cartella) —
+e ad applicarla è la shell, con la stessa regola del kernel (`maskWants` in
+`frontend/src/rules/mirrored.ts`, gemella di
+`fubmd_abi::rules::events::mask_wants` e legata a lei dalla fixture generata).
+Finché la shell filtrava sulle sole specie, una view poteva restringere quanto
+voleva e lei la ridisegnava lo stesso: la promessa del contratto sarebbe stata
+vera nel kernel e falsa in finestra. Per la stessa ragione i pannelli **nativi**
+di questa shell dichiarano una maschera e non una lista (`refreshOn(...)` in
+`ui/panel-host.ts`): due forme vorrebbero dire due strade per montare un
+pannello.
+
 La shell pubblica il contesto con `set_active_context` e riceve **gli id delle
 view da ridisegnare**: il conto lo fa il kernel, che conosce le `follows`. Senza
 questa metà del protocollo l'unica strada sarebbe ridisegnarle tutte a ogni

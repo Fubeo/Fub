@@ -803,7 +803,7 @@ enum Passata {
 
 impl EventHandler for VersioningHandler {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![
+        EventMask::of([
             EventKind::VaultOpened,
             EventKind::DocumentChanged,
             EventKind::DocumentRenamed,

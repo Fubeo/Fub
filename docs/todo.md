@@ -15,8 +15,8 @@ Le nove che seguono non le ha trovate né un giro né una misura: le ha aperte u
 ricerca di FubMD è built-in e di classe *omnisearch*, e da lì in poi le voci sono
 la sottrazione fra ciò che quel comportamento richiede e ciò che il contratto sa
 dire ([seduta 21](roadmap/21-la-ricerca-predefinita.md)).
-Cinquantasei sono chiuse, e i loro verbali stanno in
-[docs/decisions/](decisions/README.md); le altre cinquantatré sono qui, e
+Cinquantotto sono chiuse, e i loro verbali stanno in
+[docs/decisions/](decisions/README.md); le altre cinquantuno sono qui, e
 questo file è il loro **indice**.
 
 ## Come è organizzato
@@ -130,7 +130,7 @@ descrive una promessa.
 | **7** | [Il confine](roadmap/07-il-confine.md) | *la disciplina del confine, da chi lo attraversa e da chi lo presta.* Deciso con la [0021](decisions/0021-il-confine.md) | — | — |
 | **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio è scomposto ([0022](decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](decisions/0023-chi-monta-il-kernel.md)), il lock è a grana fine ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e la ricerca non si rimette più in fila da sé ([0026](decisions/0026-due-query-insieme.md)) | — | — |
 | **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | **chiusa**: un componente che smette ([0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), [0028](decisions/0028-come-un-componente-smette.md)), il vault e le sessioni multiple ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)), il rilevamento che si può chiedere ([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)), chi possiede i bundle ([0031](decisions/0031-chi-possiede-i-bundle.md)) e chi esegue il lavoro lungo ([0032](decisions/0032-il-runner-dei-job.md)) | — | — |
-| **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | lo stesso canale a tre distanze: chi si abbona, cosa passa, chi lo mostra | 3 | 1 |
+| **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | lo stesso canale a tre distanze: chi si abbona, cosa passa, chi lo mostra — le prime due chiuse ([0033](decisions/0033-la-grana-di-un-abbonamento.md), [0034](decisions/0034-il-freno-e-il-raggruppamento.md)) | 1 | — |
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano | 3 | — |
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | chi localizza le stringhe localizza anche gli errori | 4 | 3 |
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | l'identità, ciò che le sta attaccato, la sua storia | 3 | 2 |
@@ -145,7 +145,7 @@ descrive una promessa.
 
 ## Le voci
 
-Cinquantatré. Il numero è quello con cui le nomina il resto del repo.
+Cinquantuno. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere qui
 e non servono: una voce chiusa **sparisce** — da questa tabella, dal conteggio
@@ -196,8 +196,6 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 | **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
 | **§3.3** | [La UI di un plugin non ha modo di entrare nella shell](roadmap/18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | 18. L'editor e la tastiera *(da 3)* | shell | **P1** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
-| **§10.1** | [L'abbonamento agli eventi non filtra](roadmap/10-gli-eventi.md#101-labbonamento-agli-eventi-non-filtra) | 10. Gli eventi: grana, freno, destinatari | contratto | **P0** |
-| **§10.2** | [Il ponte degli eventi non ha né freno né raggruppamento](roadmap/10-gli-eventi.md#102-il-ponte-degli-eventi-non-ha-né-freno-né-raggruppamento) | 10. Gli eventi: grana, freno, destinatari | kernel | **P2** |
 | **§10.3** | [Notifiche e attività in background](roadmap/10-gli-eventi.md#103-notifiche-e-attività-in-background) | 10. Gli eventi: grana, freno, destinatari | shell | **P2** |
 | **§11.1** | [Impostazioni e spegnibilità — oggi sono variabili d'ambiente](roadmap/11-impostazioni-e-i-tre-stati.md#111-impostazioni-e-spegnibilità--oggi-sono-variabili-dambiente) | 11. Le impostazioni, e i tre stati | contratto | **P1** |
 | **§11.2** | [Tre stati diversi, zero contenitori](roadmap/11-impostazioni-e-i-tre-stati.md#112-tre-stati-diversi-zero-contenitori) | 11. Le impostazioni, e i tre stati | shell | **P2** |
@@ -256,7 +254,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — trentadue, uno per
-  file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
+- [I verbali delle decisioni chiuse](decisions/README.md) — trentaquattro, uno
+  per file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.

@@ -708,7 +708,9 @@ pub trait EventHandler: Send + Sync {
 DocumentRenamed { from, to }, IndexUpdated, JobDone { id, job, result },
 Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed },
 ViewInvalidated { view, instance }, VaultClosed { root } }`,
-`EventKind` (stesso set, senza payload), `EventMask(Vec<EventKind>)`.
+`EventKind` (stesso set, senza payload),
+`EventMask { kinds, topics, subjects }` con
+`Subject { Document { id }, Folder { path } }`.
 
 - `Origin` dice **chi ha chiesto** l'operazione ([decisione 0012](../decisions/0012-origine-degli-eventi.md)), non chi l'ha eseguita:
   un comando invocato da un'automazione porta l'origine dell'automazione. È
@@ -756,10 +758,32 @@ ViewInvalidated { view, instance }, VaultClosed { root } }`,
   lascia lo stato derivato a *mentire* su chi esiste e con che nome. La
   riconciliazione parte da `HostApi::list_documents`, che è lì per questo (vedi
   `VersioningHandler::reconcile_after_overflow` come esempio di riferimento).
+  Le sorgenti di un `Overflow` sono **tre**, e dicono tutte la stessa cosa: il
+  budget del dispatch (agli handler), il **tetto degli arretrati** di un
+  subscriber del bus e il **tetto della raffica** del ponte verso la shell — le
+  ultime due dalla [decisione 0034](../decisions/0034-il-freno-e-il-raggruppamento.md).
+  Cosa i freni possano buttare non è una politica di chi frena ma una proprietà
+  dell'evento: `Event::is_recoverable()` distingue ciò che si riscopre
+  riguardando il vault (documenti, indice, lotti, inviti a ridisegnare) da ciò
+  che porta **l'unica copia di un fatto** (l'esito di un job, il payload di un
+  custom, l'apertura e la chiusura di un vault, e l'`Overflow` stesso), e il
+  secondo gruppo passa sempre.
 - `Custom { topic, payload }` è il varco per gli eventi dei plugin (topic
-  namespaced `"<plugin-id>/<nome>"`): è anche il canale con cui i plugin
-  comunicano fra loro. L'abbonamento è a grana `EventKind::Custom`; il filtro
-  sul topic è dell'handler.
+  namespaced `ns:nome`, §7.4): è anche il canale con cui i plugin comunicano fra
+  loro.
+- **La maschera dice tre cose, non una** ([decisione 0033](../decisions/0033-la-grana-di-un-abbonamento.md)):
+  le specie (`kinds`), i **prefissi di topic** dei custom (`topics`) e il
+  **soggetto** (`subjects` — un documento, o una cartella come prefisso di path
+  finché il §14.3 non ne fa un cittadino del kernel). I tre sono in and, e ognuno
+  vuoto vuol dire *non filtro*. I prefissi si spezzano sui separatori del
+  contratto (`:` e `.` per i nomi, `/` per i path) e non sui caratteri:
+  `com.acme` non è un prefisso di `com.acmecorp:x`. Il filtro di soggetto vale
+  per i soli eventi che un documento lo **nominano** (`Event::names`): un rename
+  ne nomina due — chi guarda una cartella deve sapere che una nota se n'è andata
+  — e `Overflow`, `VaultClosed` e `JobDone` non ne nominano nessuno e passano
+  comunque, perché nessuno dei tre si riscopre riguardando il vault. La regola
+  sta in `fubmd_abi::rules::events` perché la applicano in due: il kernel per
+  consegnare, la shell per decidere quando ridisegnare una view dichiarata.
 
 **Dispatch (deciso, implementato in `fubmd-kernel`):** gli handler girano
 dentro al kernel **a coda, mai ricorsivamente**. Ogni operazione mutante del

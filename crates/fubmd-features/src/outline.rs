@@ -50,7 +50,7 @@ impl ViewProvider for OutlineView {
                 // Gli heading cambiano quando cambia il documento:
                 // `IndexUpdated` copre ogni scrittura (anche quelle arrivate
                 // dal watcher).
-                .refreshing(EventMask(vec![
+                .refreshing(EventMask::of([
                     EventKind::IndexUpdated,
                     EventKind::BatchEnded,
                 ]))

@@ -361,7 +361,7 @@ struct Automa {
 
 impl EventHandler for Automa {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![EventKind::DocumentChanged])
+        EventMask::of([EventKind::DocumentChanged])
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {

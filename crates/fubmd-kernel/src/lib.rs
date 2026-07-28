@@ -62,7 +62,7 @@ pub mod time;
 pub mod vault;
 pub mod workspace;
 
-pub use bus::EventBus;
+pub use bus::{EventBus, Subscription};
 pub use dispatcher::{Dispatcher, JobBell, PendingJob};
 pub use documents::DocumentStore;
 pub use error::{KernelError, Result};

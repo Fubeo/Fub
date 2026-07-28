@@ -65,7 +65,7 @@ pub use custom::{
 };
 pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 pub use error::{FormatError, PluginError};
-pub use event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin};
+pub use event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Subject};
 pub use format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
     RenderOptions, RenderTarget, SourceKind,

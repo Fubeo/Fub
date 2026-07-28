@@ -23,11 +23,22 @@
 // `placement`, ma chi glielo ritaglia è ancora l'HTML per i nativi e
 // `ui/views.ts` per le dichiarate. Tab, split e pane sono l'altra metà del
 // §1.2, che è una feature (FEATURES 3.3) e non un refactor.
-import type { KernelEvent, KernelNotice, ViewSpec } from "../host/contract";
+import type { EventMask, KernelEvent, KernelNotice, ViewSpec } from "../host/contract";
+import { maskWants } from "../rules/mirrored";
 import { onAnyEvent, onEvent } from "../state/kernel";
 import { on } from "../state/store";
 
 export type EventType = KernelEvent["type"];
+
+/// Una maschera sulle sole specie: nessun filtro di topic, nessuno di soggetto.
+///
+/// È `EventMask::of` scritta di qua, e serve ai pannelli **nativi** — che sono
+/// di questa shell e guardano tutto il vault. Una view dichiarata non passa da
+/// qui: la sua maschera arriva dal provider, e può essere più stretta di così
+/// (§10.1).
+export function refreshOn(...kinds: EventType[]): EventMask {
+  return { kinds, topics: [], subjects: [] };
+}
 
 /// Dove sta un pannello.
 ///
@@ -47,11 +58,19 @@ export interface Panel {
   readonly id: string;
   readonly title: string;
   readonly placement: PanelPlacement;
-  /// Gli eventi del kernel al cui arrivo questo pannello è invecchiato.
+  /// Gli eventi al cui arrivo questo pannello è invecchiato: la **maschera del
+  /// contratto**, non un elenco di specie (§10.1).
+  ///
+  /// Che sia la stessa forma non è simmetria: `ViewSpec.refresh` arriva di qui
+  /// così com'è, e una view dichiarata può restringere per topic e per soggetto.
+  /// Se questa fosse rimasta una lista di specie, la shell avrebbe **ignorato**
+  /// quelle due restrizioni — cioè avrebbe ridisegnato di più di quanto il
+  /// provider ha chiesto, che è la stessa promessa mancata del §10.1 vista dal
+  /// lato che disegna. I pannelli nativi la scrivono con [`refreshOn`].
   ///
   /// `overflow` **non va dichiarato**: non è un fatto del dominio, è la coda
   /// troncata — ci pensa l'host, riconciliando tutti da zero.
-  readonly refresh: readonly EventType[];
+  readonly refresh: EventMask;
   /// Invecchia anche quando cambia il documento aperto?
   ///
   /// È il `follows` del contratto, ridotto all'unica parte di contesto che la
@@ -127,7 +146,11 @@ export function mountPanelHost(): void {
     // ridisegna «chi è interessato» ma **tutti**.
     if (n.event.type === "overflow") return;
     for (const panel of registro.values()) {
-      if (panel.refresh.includes(n.event.type)) void refreshPanel(panel.id, n);
+      // La regola è quella del contratto (`rules/mirrored.ts`, gemella di
+      // `fubmd_abi::rules::events::mask_wants`), non un `includes` scritto qui:
+      // due letture della stessa maschera sarebbero un pannello che si ridisegna
+      // quando il provider aveva chiesto di no, e non lo direbbe nessun test.
+      if (maskWants(panel.refresh, n.event)) void refreshPanel(panel.id, n);
     }
   });
   // Eventi persi (coda troncata): ciò che deriva dagli eventi si riconcilia da

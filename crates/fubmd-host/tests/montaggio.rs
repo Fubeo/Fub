@@ -118,7 +118,7 @@ struct Orecchio {
 
 impl EventHandler for Orecchio {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![EventKind::VaultClosed])
+        EventMask::of([EventKind::VaultClosed])
     }
 
     fn handle(&mut self, notice: &Notice, _host: &mut dyn HostApi) -> Result<(), PluginError> {

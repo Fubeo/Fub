@@ -17,6 +17,7 @@
 //
 // **Non aggiungere qui una regola senza la sua gemella Rust e i suoi casi nella
 // fixture**: sarebbe di nuovo una copia che nessuno confronta.
+import type { EventMask, KernelEvent, Subject } from "../host/contract";
 
 /// L'ultimo segmento di un path: `Progetti/Alpha.md` → `Alpha.md`.
 ///
@@ -62,4 +63,81 @@ export function resolutionKey(s: string): string {
 /// `null` è la casella vuota.
 export function taskChecked(symbol: string | null): boolean {
   return symbol === "x" || symbol === "X";
+}
+
+/// Questo topic sta sotto questo prefisso?
+///
+/// Gemella di `fubmd_abi::rules::events::topic_matches` (§10.1). I separatori
+/// sono i due della regola dei nomi (§7.4): `:` fra namespace e nome, `.` dentro
+/// l'uno e dentro l'altro. Non è `startsWith` per una ragione sola: `com.acme`
+/// è un prefisso di caratteri di `com.acmecorp:x`, e un filtro che lo accettasse
+/// non toglierebbe il difetto — un abbonato che si sveglia per roba altrui —
+/// cambierebbe solo di chi è la roba.
+export function topicMatches(prefix: string, topic: string): boolean {
+  if (prefix === "") return true;
+  if (!topic.startsWith(prefix)) return false;
+  const next = topic[prefix.length];
+  return next === undefined || next === ":" || next === ".";
+}
+
+/// Questo documento sta dentro questa cartella, a qualunque profondità?
+///
+/// Gemella di `fubmd_abi::rules::events::folder_contains`. La cartella è un
+/// prefisso di path perché nel kernel una cartella non esiste ancora (§14.3);
+/// la stringa vuota è la radice, e un `/` in coda non cambia niente.
+export function folderContains(folder: string, id: string): boolean {
+  const f = folder.replace(/\/+$/, "");
+  if (f === "") return true;
+  return id.length > f.length && id.startsWith(f) && id[f.length] === "/";
+}
+
+/// I documenti che un evento **nomina**, per decidere se riguarda un soggetto.
+///
+/// Gemella di `Event::names`. Un rename ne nomina due — chi guarda una cartella
+/// deve sapere che una nota se n'è andata — e un lotto li nomina tutti. Vuoto =
+/// l'evento non parla di documenti, e chi filtra per soggetto lo lascia passare.
+export function eventNames(event: KernelEvent): string[] {
+  switch (event.type) {
+    case "document_changed":
+    case "document_removed":
+      return [event.id];
+    case "document_renamed":
+      return [event.from, event.to];
+    case "batch_ended":
+      return event.changed;
+    default:
+      return [];
+  }
+}
+
+/// Questo evento va consegnato a chi ha dichiarato questa maschera?
+///
+/// Gemella di `fubmd_abi::rules::events::mask_wants` (§10.1), ed è la regola che
+/// la shell applica per decidere quando ridisegnare un pannello. Che sia la
+/// stessa del kernel non è un commento: è la fixture generata di
+/// `crates/fubmd-abi/tests/rules_mirror.rs`.
+///
+/// I tre filtri sono in and, e ognuno vuoto vuol dire *non filtro*. Il soggetto
+/// vale per i soli eventi che un documento lo nominano: `overflow`,
+/// `vault_closed` e `job_done` passano comunque, perché nessuno dei tre si
+/// riscopre riguardando il vault.
+export function maskWants(mask: EventMask, event: KernelEvent): boolean {
+  if (!mask.kinds.includes(event.type)) return false;
+  if (event.type === "custom" && mask.topics.length > 0) {
+    if (!mask.topics.some((p) => topicMatches(p, event.topic))) return false;
+  }
+  if (mask.subjects.length > 0) {
+    const named = eventNames(event);
+    if (named.length > 0 && !named.some((doc) => mask.subjects.some((s) => subjectHolds(s, doc)))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Questo documento sta nel soggetto? Gemella di `Subject::holds`.
+export function subjectHolds(subject: Subject, doc: string): boolean {
+  return subject.kind === "document"
+    ? subject.id === doc
+    : folderContains(subject.path, doc);
 }

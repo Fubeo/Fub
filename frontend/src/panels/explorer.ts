@@ -23,7 +23,7 @@ import {
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { pickIcon, showContextMenu } from "../ui/menu";
-import { registerPanel } from "../ui/panel-host";
+import { refreshOn, registerPanel } from "../ui/panel-host";
 import { focusEditor, flushPendingSave, openDocument } from "./document";
 import { trashWithConfirm } from "./trash";
 
@@ -72,7 +72,7 @@ export function mountExplorer(): void {
     id: "shell:explorer",
     title: "Note",
     placement: "left_sidebar",
-    refresh: ["index_updated", "batch_ended"],
+    refresh: refreshOn("index_updated", "batch_ended"),
     render: refreshFromKernel,
   });
 }

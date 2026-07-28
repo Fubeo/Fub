@@ -8,6 +8,7 @@ import type {
   CommandSpec,
   DocumentMatch,
   EmbedContent,
+  EventMask,
   IndexQuery,
   IndexResult,
   NeighborRef,
@@ -20,6 +21,7 @@ import type {
   PaneMode,
   Selection,
   Span,
+  Subject,
   TagCount,
   VaultStatus,
   FieldValue,
@@ -303,6 +305,16 @@ function touchIndexResult(r: IndexResult): void {
   }
 }
 
+function touchSubject(s: Subject): void {
+  switch (s.kind) {
+    case "document":
+    case "folder":
+      return;
+    default:
+      assertNever(s);
+  }
+}
+
 /// L'insieme esatto delle chiavi di un record TS: `Record<keyof T, true>`
 /// obbliga il literal ad avere **tutte e sole** le chiavi di `T`, così se il
 /// tipo TS cambia senza aggiornare questa lista non compila.
@@ -501,6 +513,28 @@ describe("mirror TS↔Rust", () => {
 
   it("ogni KernelEvent prodotto da Rust è una variante gestita dal mirror", () => {
     for (const s of fixture.KernelEvent) touchEvent(s as KernelEvent);
+  });
+
+  // La maschera di un abbonamento (§10.1) non ha una voce sua nella fixture:
+  // viaggia dentro `ViewSpec.refresh`, ed è da lì che la si presidia. Le due
+  // cose che possono divergere in silenzio sono un campo nuovo del record — la
+  // shell lo ignorerebbe, cioè filtrerebbe meno di quanto il contratto promette
+  // — e una specie nuova di soggetto, che `assertNever` ferma.
+  it("la maschera di una view ha le chiavi del mirror, e ogni soggetto è gestito", () => {
+    const maschere = (fixture.ViewSpec as ViewSpec[]).map((s) => s.refresh);
+    expect(maschere.length).toBeGreaterThan(0);
+    const chiavi = keysOf<EventMask>({ kinds: true, topics: true, subjects: true });
+    for (const m of maschere) {
+      expect(Object.keys(m).sort()).toEqual(chiavi);
+      m.kinds.forEach((k) => expect(typeof k).toBe("string"));
+      m.subjects.forEach(touchSubject);
+    }
+    // Il campione stretto esiste apposta: senza, `topics` e `subjects`
+    // sarebbero liste vuote in ogni campione e nessuno avrebbe mai toccato la
+    // parte che la decisione 0033 ha aggiunto.
+    const stretta = maschere.find((m) => m.topics.length > 0);
+    expect(stretta, "manca il campione con un prefisso di topic").toBeTruthy();
+    expect(stretta!.subjects.map((s) => s.kind)).toEqual(["document", "folder"]);
   });
 
   // Ciò che il ponte Tauri consegna davvero non è un evento nudo ma un

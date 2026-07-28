@@ -70,6 +70,8 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.22 · §9.5 | [0029 — Chiudere un vault, e chiuderli tutti](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md) |
 | §2.7 · §9.6 | [0029 — Chiudere un vault, e chiuderli tutti](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md) |
 | §9.7 | [0030 — Il rilevamento si può chiedere](../decisions/0030-il-rilevamento-si-puo-chiedere.md) |
+| §1.19 · §10.1 | [0033 — La grana di un abbonamento](../decisions/0033-la-grana-di-un-abbonamento.md) |
+| §2.27 · §10.2 | [0034 — Il freno e il raggruppamento](../decisions/0034-il-freno-e-il-raggruppamento.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -96,7 +98,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §1.10 | **§13.1** | Identità del documento — il path, e l'eventuale seconda chiave |
 | §1.11 | **§12.2** | Errori tipizzati al confine, non `String` |
 | §1.17 | **§13.3** | L'undo non ha un proprietario |
-| §1.19 | **§10.1** | L'abbonamento agli eventi non filtra |
 | §1.25 | **§12.3** | Caso, tempo civile e locale — le capacità che il dogfooding non ha ancora toccato |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §2.1 | **§15.1** | Astrazione sullo storage |
@@ -114,7 +115,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
 | §2.24 | **§13.2** | Lo stato per-documento: ogni feature se lo migra da sé |
-| §2.27 | **§10.2** | Il ponte degli eventi non ha né freno né raggruppamento |
 | §2.29 | **§15.4** | I dati persistiti non hanno né una mappa né una classe |
 | §3.1 | **§1.2** | Smontare il monolite |
 | §3.2 | **§18.2** | Comandi e tastiera |

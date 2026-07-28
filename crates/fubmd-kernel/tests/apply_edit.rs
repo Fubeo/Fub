@@ -425,7 +425,7 @@ struct Correttore {
 
 impl EventHandler for Correttore {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![EventKind::DocumentChanged])
+        EventMask::of([EventKind::DocumentChanged])
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -495,7 +495,7 @@ struct ScriveAltrove;
 
 impl EventHandler for ScriveAltrove {
     fn subscribed(&self) -> EventMask {
-        EventMask(vec![EventKind::DocumentChanged])
+        EventMask::of([EventKind::DocumentChanged])
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {

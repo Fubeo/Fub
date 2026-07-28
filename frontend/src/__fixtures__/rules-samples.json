@@ -109,6 +109,745 @@
       "out": false
     }
   ],
+  "topic_matches": [
+    {
+      "prefix": "com.acme",
+      "topic": "com.acme:done",
+      "out": true
+    },
+    {
+      "prefix": "com.acme",
+      "topic": "com.acme.tasks:done",
+      "out": true
+    },
+    {
+      "prefix": "com.acme",
+      "topic": "com.acmecorp:done",
+      "out": false
+    },
+    {
+      "prefix": "com.acme.tasks:board",
+      "topic": "com.acme.tasks:board.moved",
+      "out": true
+    },
+    {
+      "prefix": "com.acme.tasks:board",
+      "topic": "com.acme.tasks:boards",
+      "out": false
+    },
+    {
+      "prefix": "com.acme.tasks:done",
+      "topic": "com.acme.tasks:done",
+      "out": true
+    },
+    {
+      "prefix": "",
+      "topic": "chiunque:qualunque",
+      "out": true
+    },
+    {
+      "prefix": "fubmd",
+      "topic": "fubmd:index.rebuilt",
+      "out": true
+    },
+    {
+      "prefix": "fubmd:index",
+      "topic": "fubmd:index.rebuilt",
+      "out": true
+    },
+    {
+      "prefix": "fubmd:index",
+      "topic": "fubmd:indexer.done",
+      "out": false
+    }
+  ],
+  "folder_contains": [
+    {
+      "folder": "Progetti",
+      "id": "Progetti/Alpha.md",
+      "out": true
+    },
+    {
+      "folder": "Progetti",
+      "id": "Progetti/2026/Alpha.md",
+      "out": true
+    },
+    {
+      "folder": "Progetti/",
+      "id": "Progetti/Alpha.md",
+      "out": true
+    },
+    {
+      "folder": "Progetti",
+      "id": "Progetti-vecchi/Alpha.md",
+      "out": false
+    },
+    {
+      "folder": "Progetti",
+      "id": "Progetti",
+      "out": false
+    },
+    {
+      "folder": "Progetti",
+      "id": "Alpha.md",
+      "out": false
+    },
+    {
+      "folder": "",
+      "id": "Alpha.md",
+      "out": true
+    },
+    {
+      "folder": "/",
+      "id": "Progetti/Alpha.md",
+      "out": true
+    },
+    {
+      "folder": "Progetti/2026",
+      "id": "Progetti/2026/Alpha.md",
+      "out": true
+    },
+    {
+      "folder": "Progetti/2026",
+      "id": "Progetti/2027/Alpha.md",
+      "out": false
+    }
+  ],
+  "mask_wants": [
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md"
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Altro/Beta.md"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Diario/oggi.md"
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "document_renamed",
+        "from": "Progetti/Alpha.md",
+        "to": "Altro/Alpha.md"
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "document_renamed",
+        "from": "Altro/Alpha.md",
+        "to": "Altro/Gamma.md"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "1",
+        "changed": [
+          "Altro/a.md",
+          "Progetti/b.md"
+        ]
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "2",
+        "changed": [
+          "Altro/a.md"
+        ]
+      },
+      "out": false
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "3",
+        "changed": []
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "custom",
+        "topic": "com.acme.tasks:done",
+        "payload": {}
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "custom",
+        "topic": "com.altro.note:done",
+        "payload": {}
+      },
+      "out": false
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "overflow",
+        "dropped": 7
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "vault_closed",
+        "root": "/vault"
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ]
+      },
+      "event": {
+        "type": "index_updated"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md"
+      },
+      "out": true
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Altro/Beta.md"
+      },
+      "out": true
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Diario/oggi.md"
+      },
+      "out": true
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "document_renamed",
+        "from": "Progetti/Alpha.md",
+        "to": "Altro/Alpha.md"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "document_renamed",
+        "from": "Altro/Alpha.md",
+        "to": "Altro/Gamma.md"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "1",
+        "changed": [
+          "Altro/a.md",
+          "Progetti/b.md"
+        ]
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "2",
+        "changed": [
+          "Altro/a.md"
+        ]
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "3",
+        "changed": []
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "custom",
+        "topic": "com.acme.tasks:done",
+        "payload": {}
+      },
+      "out": true
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "custom",
+        "topic": "com.altro.note:done",
+        "payload": {}
+      },
+      "out": true
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "overflow",
+        "dropped": 7
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "vault_closed",
+        "root": "/vault"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": []
+      },
+      "event": {
+        "type": "index_updated"
+      },
+      "out": false
+    }
+  ],
   "byte_to_utf16": [
     {
       "text": "ascii puro",

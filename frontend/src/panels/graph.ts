@@ -16,7 +16,7 @@ import { archiDelVault, documentiCheCombaciano } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { state } from "../state/store";
 import { $ } from "../ui/dom";
-import { registerPanel } from "../ui/panel-host";
+import { refreshOn, registerPanel } from "../ui/panel-host";
 
 interface SimNode {
   id: string;
@@ -66,7 +66,7 @@ export function mountGraph(h: GraphHost): void {
     id: "shell:graph",
     title: "Grafo",
     placement: "overlay",
-    refresh: [],
+    refresh: refreshOn(),
     visible: () => document.getElementById(OVERLAY_ID) !== null,
     render: openGraph,
   });

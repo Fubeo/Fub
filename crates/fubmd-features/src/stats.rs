@@ -78,7 +78,7 @@ impl ViewProvider for StatsView {
             ViewSpec::new(STATS_VIEW, "Statistiche", ViewSurface::StatusBar)
                 // Il conteggio del documento invecchia a ogni scrittura (anche
                 // quelle del watcher): `IndexUpdated` le copre tutte.
-                .refreshing(EventMask(vec![
+                .refreshing(EventMask::of([
                     EventKind::IndexUpdated,
                     EventKind::BatchEnded,
                 ]))

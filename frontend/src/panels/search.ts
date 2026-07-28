@@ -4,7 +4,7 @@ import { testoCercato } from "../host/contract";
 import { documentiCheCombaciano } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { $ } from "../ui/dom";
-import { registerPanel } from "../ui/panel-host";
+import { refreshOn, registerPanel } from "../ui/panel-host";
 import { openDocument } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
 
@@ -32,7 +32,7 @@ export function mountSearch(): void {
     id: "shell:search",
     title: "Risultati",
     placement: "left_sidebar",
-    refresh: ["index_updated", "batch_ended"],
+    refresh: refreshOn("index_updated", "batch_ended"),
     visible: () => isPanelVisible("search"),
     render: scheduleSearch,
   });

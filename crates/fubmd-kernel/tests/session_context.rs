@@ -75,7 +75,7 @@ struct Spia {
 impl ViewProvider for Spia {
     fn views(&self) -> Vec<ViewSpec> {
         vec![ViewSpec::new(self.id, self.id, ViewSurface::RightSidebar)
-            .refreshing(EventMask(vec![
+            .refreshing(EventMask::of([
                 EventKind::IndexUpdated,
                 EventKind::BatchEnded,
             ]))
