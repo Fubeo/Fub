@@ -216,12 +216,18 @@ pub fn catalog() -> Vec<StringCatalog> {
                  mostra le date.",
             )
             .with(L_FIRST_DAY, "Primo giorno della settimana")
-            .with(L_FIRST_DAY_DESC, "Da che giorno comincia la settimana nel calendario.")
+            .with(
+                L_FIRST_DAY_DESC,
+                "Da che giorno comincia la settimana nel calendario.",
+            )
             .with(L_MONDAY, "Lunedì")
             .with(L_SATURDAY, "Sabato")
             .with(L_SUNDAY, "Domenica")
             .with(L_HOUR_CYCLE, "Orologio")
-            .with(L_HOUR_CYCLE_DESC, "Se mostrare le ore da 0 a 23 o da 1 a 12 con AM/PM.")
+            .with(
+                L_HOUR_CYCLE_DESC,
+                "Se mostrare le ore da 0 a 23 o da 1 a 12 con AM/PM.",
+            )
             .with(L_H23, "24 ore")
             .with(L_H12, "12 ore"),
         StringCatalog::new("en")
@@ -246,7 +252,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(L_SATURDAY, "Saturday")
             .with(L_SUNDAY, "Sunday")
             .with(L_HOUR_CYCLE, "Clock")
-            .with(L_HOUR_CYCLE_DESC, "Whether to show hours from 0 to 23 or from 1 to 12 with AM/PM.")
+            .with(
+                L_HOUR_CYCLE_DESC,
+                "Whether to show hours from 0 to 23 or from 1 to 12 with AM/PM.",
+            )
             .with(L_H23, "24-hour")
             .with(L_H12, "12-hour"),
     ]

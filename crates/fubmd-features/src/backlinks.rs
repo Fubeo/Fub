@@ -42,22 +42,24 @@ pub struct BacklinksView;
 
 impl ViewProvider for BacklinksView {
     fn views(&self) -> Vec<ViewSpec> {
-        vec![
-            ViewSpec::new(BACKLINKS_VIEW, Text::key(VIEW_TITLE), ViewSurface::RightSidebar)
-                // I backlink invecchiano quando il grafo cambia: ogni modifica
-                // al vault arriva come `IndexUpdated`.
-                .refreshing(EventMask::of([
-                    EventKind::IndexUpdated,
-                    EventKind::BatchEnded,
-                ]))
-                // …e quando cambia la nota guardata. Non dove ci si trova
-                // dentro: i backlink di una nota sono gli stessi da ogni punto
-                // di essa, e seguire la selezione qui sarebbe una query per
-                // battuta di tasto.
-                .following(ContextMask::document())
-                .with_icon("backlink")
-                .open_by_default(),
-        ]
+        vec![ViewSpec::new(
+            BACKLINKS_VIEW,
+            Text::key(VIEW_TITLE),
+            ViewSurface::RightSidebar,
+        )
+        // I backlink invecchiano quando il grafo cambia: ogni modifica
+        // al vault arriva come `IndexUpdated`.
+        .refreshing(EventMask::of([
+            EventKind::IndexUpdated,
+            EventKind::BatchEnded,
+        ]))
+        // …e quando cambia la nota guardata. Non dove ci si trova
+        // dentro: i backlink di una nota sono gli stessi da ogni punto
+        // di essa, e seguire la selezione qui sarebbe una query per
+        // battuta di tasto.
+        .following(ContextMask::document())
+        .with_icon("backlink")
+        .open_by_default()]
     }
 
     fn render_view(
@@ -178,7 +180,10 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
     UiNode::column(
         6,
         vec![
-            UiNode::heading(3, Text::message(COUNT, vec![Arg::int(A_COUNT, refs.len() as i64)])),
+            UiNode::heading(
+                3,
+                Text::message(COUNT, vec![Arg::int(A_COUNT, refs.len() as i64)]),
+            ),
             UiNode::list(items),
         ],
     )

@@ -27,12 +27,10 @@ fn cataloghi_del_core() -> Vec<StringCatalog> {
 /// Le chiavi che uno schema dichiara, e la prosa che ci fosse rimasta.
 fn chiavi(specs: &[SettingSpec]) -> (Vec<String>, Vec<String>) {
     let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
-    let una = |t: &Text, dove: &str, chiavi: &mut Vec<String>, cablate: &mut Vec<String>| {
-        match t {
-            Text::Message(m) => chiavi.push(m.key.clone()),
-            Text::Literal(s) if s.is_empty() => {}
-            Text::Literal(s) => cablate.push(format!("{dove}: «{s}»")),
-        }
+    let una = |t: &Text, dove: &str, chiavi: &mut Vec<String>, cablate: &mut Vec<String>| match t {
+        Text::Message(m) => chiavi.push(m.key.clone()),
+        Text::Literal(s) if s.is_empty() => {}
+        Text::Literal(s) => cablate.push(format!("{dove}: «{s}»")),
     };
     for spec in specs {
         let dove = format!("`{}`", spec.key);
@@ -84,7 +82,10 @@ fn le_impostazioni_dell_app_hanno_tutte_una_voce_in_tutte_le_lingue() {
 
     let (chiavi_v, cablate_v) = chiavi(&fubmd_host::settings::versioning_settings());
     assert!(cablate_v.is_empty(), "{cablate_v:?}");
-    let buchi_v = mancanti(&chiavi_v, &fubmd_host::settings::versioning_settings_catalog());
+    let buchi_v = mancanti(
+        &chiavi_v,
+        &fubmd_host::settings::versioning_settings_catalog(),
+    );
     assert!(buchi_v.is_empty(), "{}", buchi_v.join("\n  "));
 }
 
@@ -119,7 +120,10 @@ fn le_due_metà_del_core_non_si_pestano_i_piedi() {
 
 #[test]
 fn ogni_lingua_del_core_dice_le_stesse_cose() {
-    for cataloghi in [cataloghi_del_core(), fubmd_host::settings::versioning_settings_catalog()] {
+    for cataloghi in [
+        cataloghi_del_core(),
+        fubmd_host::settings::versioning_settings_catalog(),
+    ] {
         let per_lingua: std::collections::BTreeMap<&str, std::collections::BTreeSet<&String>> =
             cataloghi.iter().fold(Default::default(), |mut acc, c| {
                 acc.entry(c.locale.as_str())

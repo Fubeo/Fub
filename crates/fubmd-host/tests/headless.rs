@@ -58,7 +58,14 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     let host = headless();
     let info = host.open(&v.root).expect("il vault si apre");
 
-    assert_eq!(info.root, v.root.to_string());
+    // La radice torna **canonica**, e non è un dettaglio del test: è la chiave
+    // delle sessioni (`session.rs::canonical`), cioè ciò per cui `/vault` e un
+    // link simbolico che ci punta non aprono due sessioni sullo stesso vault.
+    // Confrontarla col path grezzo bocciava il prodotto per una proprietà che
+    // ha: su macOS un tempdir è `/var/folders/…`, che è un symlink a
+    // `/private/var/…` — quindi il test passava su Linux e falliva solo lì.
+    let atteso = v.root.canonicalize_utf8().expect("il tempdir esiste");
+    assert_eq!(info.root, atteso.to_string());
     let mut docs = info.documents.clone();
     docs.sort();
     assert_eq!(docs, vec!["Cucina.md", "Rust.md"]);
