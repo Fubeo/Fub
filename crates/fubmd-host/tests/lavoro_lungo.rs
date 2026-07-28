@@ -7,11 +7,13 @@
 //! ciò che la firma nuova compra, provato invece che detto:
 //!
 //! 1. un job **cammina** il vault e ci **scrive**, dal proprio thread;
-//! 2. mentre cammina, **chi salva non aspetta** — ed è il confronto con la
-//!    strada di prima a dirlo, nella stessa corsa e sullo stesso vault;
+//! 2. mentre cammina, **chi salva entra lo stesso** — non alla fine, come con la
+//!    strada di prima, ed è il confronto fra le due a dirlo nella stessa corsa e
+//!    sullo stesso vault;
 //! 3. se il vault cambia mentre il job calcola, la guardia che se ne accorge è
 //!    quella di tutti: la `base` della decisione 0008, e `Conflict`.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, RwLock};
 use std::time::{Duration, Instant};
 
@@ -164,7 +166,9 @@ fn un_job_che_non_tocca_lhost_resta_un_calcolo_puro() {
     ));
 }
 
-/// Quanto aspetta **un** salvataggio che arriva mentre `camminata` gira.
+/// **Dove era arrivata la camminata** quando un salvataggio che l'ha trovata in
+/// corso è finalmente entrato — e, per chi legge il messaggio di un fallimento,
+/// quanto ha aspettato l'orologio.
 ///
 /// È la misura del §8.3, riusata qui perché la domanda è la stessa vista da
 /// un'altra parte: là si chiedeva se una lettura facesse aspettare chi salva,
@@ -175,21 +179,43 @@ fn un_job_che_non_tocca_lhost_resta_un_calcolo_puro() {
 /// banco un indice ricommittato mille volte. La `camminata` riceve la barriera e
 /// la sblocca **quando è partita** — è quel momento a definire l'intervallo, e
 /// una `sleep` al suo posto misurerebbe la macchina invece della proprietà.
-fn attesa_di_chi_salva(ws: &Arc<RwLock<Workspace>>, camminata: impl FnOnce(&Barrier)) -> Duration {
+///
+/// Il contatore lo incrementa chi cammina, **dopo** ogni lettura; chi salva lo
+/// legge quando ha ottenuto il prestito esclusivo, cioè quando l'altro è per
+/// forza fermo. Che possa sbagliare di un documento — l'incremento sta appena
+/// fuori dalla lettura — non tocca nessuna delle due asserzioni, che distinguono
+/// «durante» da «alla fine».
+struct Ingresso {
+    /// Quante note la camminata aveva letto quando chi salva è entrato.
+    letti: usize,
+    /// Quanto ha aspettato. Non ci si asserisce sopra — vedi
+    /// [`mentre_un_job_cammina_il_vault_chi_salva_non_aspetta`] — ma è ciò che
+    /// rende leggibile un fallimento.
+    atteso: Duration,
+}
+
+fn ingresso_di_chi_salva(
+    ws: &Arc<RwLock<Workspace>>,
+    camminata: impl FnOnce(&Barrier, &AtomicUsize),
+) -> Ingresso {
     let via = Arc::new(Barrier::new(2));
+    let letti = Arc::new(AtomicUsize::new(0));
     let salvatore = {
-        let (ws, via) = (ws.clone(), via.clone());
+        let (ws, via, letti) = (ws.clone(), via.clone(), letti.clone());
         std::thread::spawn(move || {
             via.wait();
             let t = Instant::now();
             let mut w = ws.write().unwrap();
-            let atteso = t.elapsed();
+            let ingresso = Ingresso {
+                letti: letti.load(Ordering::SeqCst),
+                atteso: t.elapsed(),
+            };
             w.write_document(&DocId::new("Nota 0.md"), "# Nota 0\n\nsalvata\n")
                 .expect("il salvataggio riesce");
-            atteso
+            ingresso
         })
     };
-    camminata(&via);
+    camminata(&via, &letti);
     salvatore.join().expect("il thread di chi salva non pania")
 }
 
@@ -202,31 +228,51 @@ fn attesa_di_chi_salva(ws: &Arc<RwLock<Workspace>>, camminata: impl FnOnce(&Barr
 /// camminata, che è la forma esatta di ciò che il §9.1 chiamava «fare lì, in
 /// esclusiva sul workspace, il lavoro che il job doveva togliere da lì».
 ///
-/// Il confronto è un **rapporto** e non una soglia in millisecondi: le due
-/// colonne girano sulla stessa macchina nella stessa corsa, quindi una macchina
-/// lenta le allunga tutte e due. Ciò che non si allunga è la distanza — chi
-/// salva aspetta *una* lettura da una parte, *tutte* dall'altra.
+/// Ciò che si asserisce è **dove chi salva riesce a entrare**: durante la
+/// camminata da una parte, solo alla sua fine dall'altra. E non quanto aspetta.
+///
+/// La differenza non è cosmetica, ed è costata una CI rossa. La prima stesura
+/// chiedeva un **rapporto** fra i due tempi — dieci a uno — ragionando che una
+/// macchina lenta allunga entrambe le colonne e lascia intatta la distanza. È
+/// vero della velocità della macchina e falso di ciò che decide davvero questa
+/// attesa, che è **come il sistema operativo arbitra un `RwLock`**. Su Linux chi
+/// salva entra in poche centinaia di nanosecondi: il futex mette in coda chi
+/// scrive e i lettori che arrivano dopo non lo scavalcano, e il rapporto misurato
+/// è nell'ordine delle diecimila volte. Su macOS chi legge può rientrare mentre
+/// chi scrive è in coda, e la stessa riga ha misurato 3,46 ms su 10,5 ms di
+/// camminata: rapporto tre, e rosso — con il codice giusto sotto.
+///
+/// Un test che cade per una proprietà del lock di sistema non sta guardando ciò
+/// per cui esiste. Quello che il `JobHost` decide è **quando il prestito viene
+/// rilasciato**: per chiamata, o una volta sola per tutto il job. Chi salva
+/// entrerà nel primo spiraglio che quella scelta apre — al primo se il sistema
+/// accoda chi scrive, dopo cinquanta se lo lascia affamare — ma *uno spiraglio
+/// esiste*, e con il prestito unico non ne esiste nessuno fino alla fine. Quello
+/// è il confine netto, vale su ogni sistema e a ogni velocità, e cade
+/// esattamente sul difetto che questa voce esisteva per togliere.
 #[test]
 fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
-    let v = vault(150);
+    const NOTE: usize = 150;
+    let v = vault(NOTE);
     let host = aperto(&v);
     let ws = host.workspace(None).unwrap();
 
     let con_job = {
         let ws_job = ws.clone();
-        attesa_di_chi_salva(&ws, |via| {
+        ingresso_di_chi_salva(&ws, |via, letti| {
             let job_host = JobHost::new(ws_job, INVENTARIO);
             let documenti = job_host.list_documents(None).unwrap().items;
             via.wait();
             for id in &documenti {
                 let _ = job_host.read_model(id);
+                letti.fetch_add(1, Ordering::SeqCst);
             }
         })
     };
 
     let nel_giro_sincrono = {
         let ws_prestito = ws.clone();
-        attesa_di_chi_salva(&ws, |via| {
+        ingresso_di_chi_salva(&ws, |via, letti| {
             // Un prestito solo, tenuto per tutta la camminata: è la strada di
             // prima, ed era l'unica che avesse il chiamante di un job.
             let w = ws_prestito.read().unwrap();
@@ -234,17 +280,27 @@ fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
             via.wait();
             for id in &documenti {
                 let _ = w.read_model(id);
+                letti.fetch_add(1, Ordering::SeqCst);
             }
         })
     };
 
     assert!(
-        con_job * 10 < nel_giro_sincrono,
-        "chi salva ha aspettato {con_job:?} mentre il job camminava il vault, \
-         contro {nel_giro_sincrono:?} con la camminata dentro un prestito solo: \
-         le due strade costano ormai lo stesso, cioè il `JobHost` tiene il \
-         prestito per la durata del job invece che per quella di una chiamata — \
-         ed è il difetto che la voce esisteva per togliere"
+        con_job.letti < NOTE,
+        "chi salva è entrato dopo {} note su {NOTE} — cioè a camminata finita, \
+         avendo aspettato {:?}: il `JobHost` tiene il prestito per la durata del \
+         job invece che per quella di una chiamata, ed è il difetto che la voce \
+         esisteva per togliere",
+        con_job.letti,
+        con_job.atteso
+    );
+    assert_eq!(
+        nel_giro_sincrono.letti, NOTE,
+        "la colonna di controllo non sta più controllando niente: con un prestito \
+         solo, tenuto per tutta la camminata, chi salva non può entrare prima \
+         della fine — se ci è entrato dopo {} note su {NOTE} (attesa {:?}), è \
+         cambiato il senso della riga qui sopra, non il risultato",
+        nel_giro_sincrono.letti, nel_giro_sincrono.atteso
     );
 }
 
