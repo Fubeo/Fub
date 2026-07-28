@@ -400,8 +400,14 @@ Il rapporto (`EditReport { revision, applied }`) torna nelle coordinate del
 testo **nuovo** e porta ciò che è stato sostituito: con quei due pezzi si mette
 il cursore dove l'utente se lo aspetta (16.1) e si costruisce l'edit **inverso**,
 che è un edit come gli altri (`EditReport::inverse`). Di chi sia la proprietà
-dell'undo resta una domanda aperta (§13.3 del piano); la forma con cui si
-esprimerà è questa.
+dell'undo non è più una domanda aperta — l'ha decisa la
+[0045](../decisions/0045-l-undo-ha-due-pile.md), e la risposta è che le pile
+sono **due** e non si fondono: il testo nell'editor, le operazioni nel kernel.
+Questa è la forma con cui la seconda esprime i propri passi testuali
+(`UndoStep::Edit`), e la previsione che era scritta qui si è avverata alla
+lettera: l'inverso di una modifica il contratto lo sapeva già dire, ed è
+l'inverso di un cambiamento **strutturale** che ha avuto bisogno di una forma
+nuova — un comando, non un vocabolario.
 
 Il primo cliente è il kernel stesso: la riscrittura dei wikilink su rename
 (`Workspace::rename_document`) applica ora un `EditRequest` per sorgente invece

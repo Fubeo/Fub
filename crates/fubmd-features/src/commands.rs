@@ -1281,8 +1281,17 @@ fn note_rename(
     // per-documento. È l'argomento per cui `UndoStep::Command` esiste — un
     // linguaggio di operazioni inverse avrebbe dovuto rifare quel lavoro, e
     // rifarlo *uguale*.
+    //
+    // L'etichetta e gli argomenti vanno in **verso opposto**, ed è la sola riga
+    // di questa funzione in cui vale la pena guardarci due volte: gli argomenti
+    // sono l'operazione da fare (`to` → `doc`, la rinomina all'incontrario),
+    // l'etichetta è l'operazione da **disfare** (`doc` → `to`, quella appena
+    // fatta). Scriverle nello stesso verso è il refuso naturale qui, e produce
+    // un «Annullato: la rinomina di «Nuova.md» in «Vecchia.md»» che nomina il
+    // rimedio invece del male — come tutte le altre `undo.*`, questa nomina ciò
+    // che è successo.
     let undo = Undo::by_command(
-        due(U_RENAME, to.as_str(), doc.as_str()),
+        due(U_RENAME, doc.as_str(), to.as_str()),
         NOTE_RENAME,
         serde_json::json!({ "doc": to.as_str(), "to": doc.as_str() }),
     );
