@@ -76,6 +76,7 @@ use fubmd_abi::model::{
     PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
 };
 use fubmd_abi::options::OptionMap;
+use fubmd_abi::organization::Organization;
 use fubmd_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
 };
@@ -350,6 +351,9 @@ wit_type! {
     SettingSource => "setting-source",
     SettingEntry => "setting-entry",
 
+    // L'organizzazione del vault (§11.3).
+    Organization => "organization",
+
     // Ciò che NON attraversa il confine: il ricevitore e le capacità dell'host.
     dyn HostApi => HOST,
     dyn ReadApi => HOST,
@@ -401,6 +405,16 @@ impl<T: WitType> WitType for Vec<T> {
 impl<T: WitType> WitType for [T] {
     fn wit() -> String {
         format!("list<{}>", T::wit())
+    }
+}
+
+/// Una mappa ordinata attraversa il confine come **lista di coppie**: il WIT non
+/// ha un tipo mappa, e la lista è ciò che ogni binding genera comunque. Ordinata
+/// (`BTreeMap`) e non a hash, perché al confine l'ordine deve essere lo stesso a
+/// ogni chiamata — altrimenti due risposte identiche si serializzano diverse.
+impl<K: WitType, V: WitType> WitType for BTreeMap<K, V> {
+    fn wit() -> String {
+        format!("list<tuple<{}, {}>>", K::wit(), V::wit())
     }
 }
 
@@ -1904,6 +1918,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
         IndexQuery::VaultStatus => case("vault-status"),
         IndexQuery::Jobs => case("jobs"),
         IndexQuery::Settings { plugin } => case_ty("settings", wit(plugin)),
+        IndexQuery::Organization => case("organization"),
     }
 }
 
@@ -1960,6 +1975,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::VaultStatus => case("vault-status"),
         QueryKind::Jobs => case("jobs"),
         QueryKind::Settings => case("settings"),
+        QueryKind::Organization => case("organization"),
     }
 }
 
@@ -1994,6 +2010,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::VaultStatus(v) => case_ty("vault-status", wit(v)),
         IndexResult::Jobs(v) => case_ty("jobs", wit(v)),
         IndexResult::Settings(v) => case_ty("settings", wit(v)),
+        IndexResult::Organization(v) => case_ty("organization", wit(v)),
     }
 }
 
@@ -2673,6 +2690,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_query_case(&IndexQuery::VaultStatus),
             index_query_case(&IndexQuery::Jobs),
             index_query_case(&IndexQuery::Settings { plugin: None }),
+            index_query_case(&IndexQuery::Organization),
         ],
     );
 
@@ -2691,6 +2709,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::VaultStatus(VaultStatus::default())),
             index_result_case(&IndexResult::Jobs(vec![])),
             index_result_case(&IndexResult::Settings(vec![])),
+            index_result_case(&IndexResult::Organization(Organization::default())),
         ],
     );
 
@@ -2750,6 +2769,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::VaultStatus),
             query_kind_case(&QueryKind::Jobs),
             query_kind_case(&QueryKind::Settings),
+            query_kind_case(&QueryKind::Organization),
         ],
     );
 
@@ -4060,6 +4080,22 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let Organization {
+        icons,
+        pinned,
+        order,
+        spaces,
+    } = Organization::default();
+    contract.record(
+        "organization",
+        &[
+            ("icons", wit(&icons)),
+            ("pinned", wit(&pinned)),
+            ("order", wit(&order)),
+            ("spaces", wit(&spaces)),
+        ],
+    );
+
     let JobSpec { job, payload } = JobSpec {
         job: String::new(),
         payload: serde_json::Value::Null,
@@ -4289,6 +4325,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("edit");
     contract.types_only("transfer");
     contract.types_only("settings");
+    contract.types_only("organization");
 
     contract.method(
         "format",

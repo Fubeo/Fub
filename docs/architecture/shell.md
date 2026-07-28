@@ -45,7 +45,7 @@ frontend/src/
     store.ts       i campi condivisi + il bus dei segnali + lo stato di vista
     kernel.ts      il router degli eventi del kernel
     vault.ts       le operazioni sul vault (tutte dal registro comandi)
-    organization.ts  il sidecar .fubmd/workspace.json
+    organization.ts  l'organizzazione del vault: specchio + le quattro scritture
 
   ui/            le primitive di interfaccia, senza dominio (un'eccezione: intents.ts)
     node.ts        il renderer di `UiNode`
@@ -247,7 +247,7 @@ chiuse:
 
   Resta il *layout*, e resta perché ha più configurazioni per lo stesso utente:
   non è un valore ma un insieme nominato, e va deciso col modello di layout
-  ([§1.2](../roadmap/01-piano-infrastrutturale.md), seduta 18). Nemmeno lo stato
+  ([§1.2](../roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite), seduta 18). Nemmeno lo stato
   di vista **del layout** si poteva scrivere prima: oggi l'area principale è un
   pannello solo, quindi non c'è niente da salvare — e la chiave dello stato di
   vista porta l'esemplare della view proprio perché il giorno che i pannelli

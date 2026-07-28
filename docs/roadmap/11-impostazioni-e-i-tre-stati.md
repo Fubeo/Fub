@@ -30,13 +30,14 @@ Poi la [0037](../decisions/0037-lo-stato-di-vista.md) ha eseguito **metà** del
 che il kernel possiede, la chiave composta dall'host con dentro l'esemplare — e
 la shell ci è dentro. Il *layout* resta, e resta per una ragione che non è la
 pigrizia: oggi l'area principale è un pannello solo, quindi non c'è niente da
-disporre. Aspetta il modello di layout ([§1.2](01-piano-infrastrutturale.md),
+disporre. Aspetta il modello di layout ([§1.2](18-editor-e-tastiera.md#12-smontare-il-monolite),
 seduta 18).
 
-Con loro il sidecar dell'organizzazione (11.3), che lo store di configurazione
-deve **assorbire** e non affiancare — è già un precedente fuori da ogni
-disciplina, e ogni feature che scriverà qualcosa sceglierà il posto per
-imitazione dell'ultima che ha guardato.
+Il sidecar dell'organizzazione (~~11.3~~) è **assorbito**, con la
+[0038](../decisions/0038-il-kernel-possiede-il-sidecar.md): lo possiede il
+kernel, con la disciplina degli altri suoi file, e la voce si ritira. Era un
+precedente fuori da ogni disciplina, e ogni feature che avesse scritto qualcosa
+avrebbe scelto il posto per imitazione dell'ultima che aveva guardato.
 
 Con la 0036 si è chiuso anche il primo dei due residui aperti della
 [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md): **quali
@@ -49,7 +50,7 @@ scrive.
 
 ### 11.2 Tre stati diversi, zero contenitori
 
-*ex §3.10 · shell · **P2** — **mezza voce chiusa** con la [0037](../decisions/0037-lo-stato-di-vista.md) (lo stato di vista c'è, ed è nel contratto); resta il **layout**, che aspetta il modello di layout ([§1.2](01-piano-infrastrutturale.md), seduta 18)*
+*ex §3.10 · shell · **P2** — **mezza voce chiusa** con la [0037](../decisions/0037-lo-stato-di-vista.md) (lo stato di vista c'è, ed è nel contratto); resta il **layout**, che aspetta il modello di layout ([§1.2](18-editor-e-tastiera.md#12-smontare-il-monolite), seduta 18)*
 
 - [x] **Un `ViewProvider` non ha dove tenere il proprio stato di vista**:
       scroll, sezioni collassate, filtro corrente, tab attiva. Non ha **niente**,
@@ -89,27 +90,6 @@ scrive.
       Il layout invece **aspetta**, e non per mancanza di disciplina: oggi
       l'area principale è un pannello solo, quindi non c'è nessuna disposizione
       da salvare, e un formato deciso adesso descriverebbe una cosa che non c'è
-      ancora. Si decide col modello di layout ([§1.2](01-piano-infrastrutturale.md),
+      ancora. Si decide col modello di layout ([§1.2](18-editor-e-tastiera.md#12-smontare-il-monolite),
       seduta 18) — dove nasce anche ciò che gli darebbe senso: più pannelli,
       quindi più esemplari, quindi qualcosa da disporre.
-
-### 11.3 Il sidecar dell'organizzazione, da assorbire
-
-*ex §2.14 · kernel · **P2** — da **assorbire**, non da affiancare*
-
-- [ ] **`.fubmd/workspace.json` è un precedente fuori da ogni disciplina**: lo
-      leggono e scrivono due funzioni con `std::fs` (`host/records.rs`). Sono dati
-      **autorevoli** — icone, appuntate, ordinamenti, spazi — senza scrittura
-      atomica, senza versione di schema (§15.3), fuori dal cestino e dal
-      versioning, con la migrazione sui rename in TypeScript
-      (`migrateOrganization`, `state/organization.ts`):
-      una nota rinominata da un'altra app **a FubMD chiusa** orfanizza icona,
-      pin e ordinamento in silenzio, perché quell'evento non lo vede nessuno.
-- [ ] Lo store di configurazione deve **assorbirlo**, non affiancarlo: spazio
-      dati proprio, migrazione della chiave lato kernel sull'evento
-      `DocumentRenamed`, stessa disciplina del resto. Lo store adesso **esiste**
-      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)) e porta con sé
-      esattamente ciò che a questo file manca: la stessa cartella (`.fubmd/`), la
-      scrittura atomica (`write_atomic`, che il §15.3 sposterà senza riscriverla)
-      e una versione di schema. Non resta da inventare la disciplina, ma da
-      applicarla a un file che è nato senza.

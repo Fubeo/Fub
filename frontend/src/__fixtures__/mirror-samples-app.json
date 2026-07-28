@@ -115,23 +115,5 @@
       "favorite": false,
       "last_opened": 1699000000000
     }
-  ],
-  "WorkspaceMeta": [
-    {
-      "icons": {
-        "p": "📁"
-      },
-      "pinned": [
-        "a.md"
-      ],
-      "order": {
-        "": [
-          "a.md"
-        ]
-      },
-      "spaces": [
-        "p"
-      ]
-    }
   ]
 }

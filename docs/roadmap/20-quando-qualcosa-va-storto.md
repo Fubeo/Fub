@@ -237,14 +237,15 @@ visibile), 20.2 (log plugin).
       (§18.1); questa voce è ciò che serve **prima** e comunque, perché lo stesso
       buco copre altri undici avvisi che un dialogo di conflitto non riguarda.
 - [ ] **Un'organizzazione congelata è una sessione di lavoro buttata.**
-      Se `.fubmd/workspace.json` non si legge, la shell alza `metaBroken` e
-      **smette di salvare** per non sovrascrivere ciò che c'è
-      (`state/organization.ts`). La decisione è giusta. Ciò che manca è dirlo:
-      da quel momento
-      ogni icona, ogni nota appuntata, ogni riordino e ogni spazio vengono
-      accettati, disegnati e scartati, per tutta la sessione, senza un segno.
-      È il §11.3 (il sidecar da assorbire, oggi scritto senza atomicità) visto
-      dal lato di chi lo usa.
+      Se `.fubmd/workspace.json` non si legge, non lo si sovrascrive: la
+      decisione è giusta, ed è la stessa della configurazione. Ciò che manca è
+      **dirlo a chi sta lavorando**. Dal §11.3
+      ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)) il rifiuto
+      almeno *torna al chiamante* — è il kernel a negare ogni scrittura, una per
+      una, invece di una shell che smetteva di salvare in silenzio — e la shell
+      lo scrive in console. Ma la console di un'app impacchettata non si apre:
+      finché non c'è una superficie, ogni icona e ogni riordino continuano a
+      essere accettati, disegnati e persi senza un segno che l'utente veda.
 - [ ] **Gli altri punti dello stesso buco**, sparsi per la shell: una view che
       non si ridisegna lascia montato l'albero precedente (`ui/panel-host.ts`) —
       cioè un pannello **stantio identico a uno vivo**, che è il sintomo che il

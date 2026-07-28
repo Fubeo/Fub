@@ -7,7 +7,13 @@
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
 import { api } from "../host/ipc";
 import { onEvent } from "../state/kernel";
-import { migrateOrganization, saveOrganization } from "../state/organization";
+import {
+  loadOrganization,
+  setIcon,
+  setOrder,
+  setPinned,
+  setSpace,
+} from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
 import { createNote, refreshDocuments, renameNote } from "../state/vault";
 import {
@@ -51,15 +57,19 @@ export function mountExplorer(): void {
   on("active-doc", markActive);
 
   // Una rinomina non è solo una lista invecchiata: l'organizzazione (icona,
-  // pin, ordine) è indicizzata per path e va **traslocata prima** del
-  // ridisegno. Resta un'iscrizione diretta, e non una riga in più nel
-  // `refresh` del pannello, proprio per quel «prima»: il router consegna gli
-  // ascoltatori generici — l'host dei pannelli è uno di quelli — prima dei
-  // tipizzati, quindi un ridisegno innescato dal registro partirebbe con
-  // l'organizzazione ancora al path vecchio.
-  onEvent("document_renamed", (e) => {
-    migrateOrganization(e.from, e.to);
-    void refreshFromKernel();
+  // pin, ordine) è indicizzata per path, e va riletta prima del ridisegno.
+  //
+  // **Traslocarla non è più affare di questa shell** (§11.3): la fa il kernel
+  // dentro l'operazione che sposta l'identità, quindi vale anche per le
+  // rinomine che questa finestra non ha innescato. Qui resta la rilettura —
+  // e resta un'iscrizione diretta, non una riga nel `refresh` del pannello,
+  // perché il router consegna gli ascoltatori generici prima dei tipizzati e un
+  // ridisegno innescato dal registro partirebbe con l'organizzazione vecchia.
+  onEvent("document_renamed", () => {
+    void (async () => {
+      await loadOrganization();
+      await refreshFromKernel();
+    })();
   });
 
   // Dentro un lotto (decisione 0011) `index_updated` NON arriva: arriva
@@ -237,17 +247,12 @@ function renderPinned(docs: string[]): void {
 }
 
 function togglePin(id: string): void {
-  const i = state.meta.pinned.indexOf(id);
-  if (i === -1) state.meta.pinned.push(id);
-  else state.meta.pinned.splice(i, 1);
-  void saveOrganization();
+  void setPinned(id, !state.meta.pinned.includes(id));
 }
 
 function scegliIcona(at: MouseEvent, path: string): void {
   pickIcon(at, (icon) => {
-    if (icon) state.meta.icons[path] = icon;
-    else delete state.meta.icons[path];
-    void saveOrganization();
+    void setIcon(path, icon ?? null);
   });
 }
 
@@ -307,22 +312,17 @@ function selectSpace(path: string | null): void {
 
 /// Registra una cartella come spazio (se già non lo è) e la seleziona.
 function addSpace(path: string): void {
-  if (!state.meta.spaces.includes(path)) {
-    state.meta.spaces.push(path);
-    void saveOrganization();
-  }
+  if (!state.meta.spaces.includes(path)) void setSpace(path, true);
   selectSpace(path);
 }
 
 /// Toglie lo spazio dalla striscia. La cartella e le note restano dove sono:
 /// uno spazio è solo un punto di vista, non un contenitore.
 function removeSpace(path: string): void {
-  const i = state.meta.spaces.indexOf(path);
-  if (i === -1) return;
-  state.meta.spaces.splice(i, 1);
+  if (!state.meta.spaces.includes(path)) return;
   if (state.activeSpace === path) state.activeSpace = null;
   saveActiveSpace();
-  void saveOrganization();
+  void setSpace(path, false);
 }
 
 /// Il "+" della striscia: un menu con le cartelle del vault non ancora spazi.
@@ -516,8 +516,7 @@ function applyReorder(parent: string, dragged: string, target: string, before: b
   const at = names.indexOf(target);
   if (at === -1) return;
   names.splice(before ? at : at + 1, 0, dragged);
-  state.meta.order[parent] = names;
-  void saveOrganization();
+  void setOrder(parent, names);
 }
 
 async function moveIntoFolder(id: string, folderPath: string): Promise<void> {

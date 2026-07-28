@@ -196,7 +196,7 @@ grana sbagliata.
 **Il layout, adesso.** Il §11.2 chiedeva due contenitori e ne consegna uno. Non è
 una scorciatoia: oggi l'area principale è **un pannello solo**, quindi non esiste
 nessuna disposizione da salvare, e un formato deciso adesso descriverebbe una
-cosa che non c'è. Va col modello di layout ([§1.2](../roadmap/01-piano-infrastrutturale.md),
+cosa che non c'è. Va col modello di layout ([§1.2](../roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite),
 seduta 18), che è anche dove nasce ciò che gli darebbe senso.
 
 ## Cosa resta scoperto (e dove è scritto)

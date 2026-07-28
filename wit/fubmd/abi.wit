@@ -973,6 +973,44 @@ interface settings {
     }
 }
 
+/// L'ORGANIZZAZIONE di un vault (§11.3): icone, note appuntate, ordinamenti
+/// scelti a mano, spazi.
+///
+/// Vive in `.fubmd/workspace.json`, DENTRO il vault, ed è la differenza con lo
+/// stato di vista (§11.2): questa VIAGGIA COL VAULT — chi sincronizza le sue
+/// note si porta dietro il modo in cui le ha messe in ordine, e chi passa un
+/// vault a un collega gliene passa uno organizzato.
+///
+/// È un dato AUTOREVOLE e non derivato, che è la riga da cui discende il resto:
+/// perso, non si ricostruisce da niente. Un `.fubmd-data/` si cancella e si rifà
+/// con una scansione; questo no. Per questo il file ha la disciplina della
+/// decisione 0036: versione di schema, scrittura atomica, e un file che non si è
+/// potuto leggere NON SI RISCRIVE.
+interface organization {
+    /// Le chiavi sono path relativi al vault: un `doc-id` per le note, un path
+    /// di cartella senza slash finale per le cartelle (`""` è la radice).
+    ///
+    /// Il path È l'identità di un documento (§13.1), quindi una rinomina cambia
+    /// la chiave sotto ognuna di queste mappe. A migrarla è il KERNEL, dentro
+    /// l'operazione che sposta l'identità e non su un evento: la coda degli
+    /// eventi ha un budget e può troncare (decisione 0034), e un dato autorevole
+    /// non può dipendere da una consegna best-effort.
+    record organization {
+        /// path → emoji mostrata accanto al nome.
+        icons: list<tuple<string, string>>,
+        /// Note appuntate in cima, nell'ordine scelto.
+        pinned: list<string>,
+        /// cartella → nomi dei figli nell'ordine scelto a mano; chi non compare
+        /// segue in ordine alfabetico.
+        order: list<tuple<string, list<string>>>,
+        /// Cartelle registrate come «spazi», nell'ordine in cui appaiono.
+        /// QUALE sia selezionato non sta qui: è stato di vista (§11.2), quindi
+        /// per-macchina. Il confine passa lì — `spaces` è una decisione sul
+        /// vault (viaggia), lo spazio attivo è dove sto guardando adesso (no).
+        spaces: list<string>,
+    }
+}
+
 /// Job: il varco per il lavoro lungo. Le chiamate dei trait sono sincrone e
 /// brevi (a M5 una deadline le tronca); rete, calcolo pesante e vault camminato
 /// per intero passano da un job, eseguito dall'host FUORI dal giro sincrono del
@@ -1390,6 +1428,7 @@ interface index {
     use model.{doc-id, document-model, span, heading, property-value, property-scalar};
     use jobs.{job-status};
     use settings.{setting-entry};
+    use organization.{organization};
     use errors.{plugin-error};
 
     /// La finestra chiesta su una risposta: sta nella DOMANDA perché chi la
@@ -1611,6 +1650,14 @@ interface index {
         /// sarebbe stato il primo caso in cui la shell e un plugin chiedono la
         /// stessa cosa a due porte diverse. `plugin` assente = tutte.
         settings(option<string>),
+        /// COM'È ORGANIZZATO QUESTO VAULT? (§11.3) La quarta che chiede del
+        /// vault e non del suo contenuto: icone, note appuntate, ordinamenti
+        /// scelti a mano, spazi. Passa da qui per la ragione delle altre tre —
+        /// un elenco è DATI — e prima non passava da nessuna parte: era un
+        /// comando IPC che restituiva il blob intero, cioè una cosa che la
+        /// shell sapeva chiedere e un plugin no. Senza parametri, perché
+        /// l'organizzazione di un vault è UNA.
+        organization,
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -1639,6 +1686,11 @@ interface index {
         /// dei plugin, il valore lo store di configurazione, e stanno nello
         /// stesso posto solo lì.
         settings,
+        /// Chi risponde a «com'è organizzato questo vault?» (§11.3). Ancora il
+        /// kernel, e stavolta è una CONQUISTA e non una constatazione: finché
+        /// il sidecar lo leggevano due funzioni dell'host con `std::fs`, questa
+        /// domanda non aveva un proprietario affatto.
+        organization,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -1786,6 +1838,10 @@ interface index {
         /// Le impostazioni risolte, in ordine di chiave. Senza finestra: il
         /// loro numero cresce con i plugin montati, non col vault.
         settings(list<setting-entry>),
+        /// L'organizzazione del vault: un RECORD e non una lista, perché è una
+        /// cosa sola e non un elenco — chi la chiede la disegna intera (la
+        /// sidebar) o ne guarda un campo.
+        organization(organization),
     }
 
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel

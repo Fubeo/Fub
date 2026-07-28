@@ -74,6 +74,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.27 · §10.2 | [0034 — Il freno e il raggruppamento](../decisions/0034-il-freno-e-il-raggruppamento.md) |
 | §3.5 · §10.3 | [0035 — Il lavoro lungo si racconta](../decisions/0035-il-lavoro-lungo-si-racconta.md) |
 | §1.3 · §11.1 | [0036 — Le impostazioni](../decisions/0036-le-impostazioni-e-i-tre-stati.md) |
+| §2.14 · §11.3 | [0038 — Il kernel possiede il sidecar](../decisions/0038-il-kernel-possiede-il-sidecar.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -110,7 +111,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.11 | **§14.3** | Le cartelle non esistono nel kernel |
 | §2.12 | **§15.3** | Una versione di schema su ogni formato persistito |
 | §2.13 | **§14.4** | Il canale della lista documenti |
-| §2.14 | **§11.3** | Il sidecar dell'organizzazione, da assorbire |
 | §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
 | §2.20 | **§14.2** | Nessun metadato di entry: né mtime, né dimensione, né impronta |
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |

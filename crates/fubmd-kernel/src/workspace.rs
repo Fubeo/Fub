@@ -83,6 +83,7 @@ use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
 use crate::index::Indexes;
+use crate::organization::OrganizationStore;
 use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
 use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
 use crate::registry::FormatRegistry;
@@ -238,6 +239,10 @@ pub struct Workspace {
     /// Lo stato di vista di questa macchina (§11.2), condiviso fra i vault
     /// aperti come il livello macchina delle impostazioni.
     view_states: Arc<ViewStates>,
+    /// L'organizzazione di **questo** vault (§11.3): icone, appuntate,
+    /// ordinamenti, spazi. Condiviso con l'indice del kernel, che è chi risponde
+    /// a `IndexQuery::Organization`.
+    organization: Arc<OrganizationStore>,
 }
 
 impl Workspace {
@@ -269,15 +274,23 @@ impl Workspace {
         let registry = Arc::new(registry);
         let root = root.as_ref();
         let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(root, machine)));
+        // L'organizzazione è **del vault**, quindi si apre col root e non si
+        // riceve da chi monta: è la differenza con il livello macchina e con lo
+        // stato di vista, che sono della macchina e valgono per N vault.
+        let (organization, warning) = OrganizationStore::open(root);
+        if let Some(warning) = warning {
+            organization.warn(warning);
+        }
         Workspace {
             docs: DocumentStore::new(root, Arc::clone(&registry)),
-            indexes: Indexes::new(registry, Arc::clone(&settings)),
+            indexes: Indexes::new(registry, Arc::clone(&settings), Arc::clone(&organization)),
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
             closed: false,
             settings,
             view_states: ViewStates::in_memory(),
+            organization,
         }
     }
 
@@ -1559,6 +1572,27 @@ impl Workspace {
         // vale anche per i rename non innescati da lei.
         self.session
             .invalidate(from, ContextChange::Renamed(to.clone()));
+        // **L'organizzazione segue l'identità** (§11.3): icona, pin e posto
+        // nell'ordinamento sono attaccati alla nota, non al suo vecchio path.
+        //
+        // Qui e non sull'evento `DocumentRenamed`, che pure lo direbbe: la coda
+        // ha un budget e può troncare (decisione 0034), e l'organizzazione è un
+        // dato **autorevole** — perso, non si ricostruisce da niente. Un dato
+        // così non può dipendere da una consegna dichiaratamente best-effort.
+        // Ne segue il guadagno che si vede: passando di qui migra anche la
+        // rinomina fatta da **un'altra app** mentre FubMD è aperto, perché
+        // `sync_renamed_path` arriva allo stesso punto.
+        //
+        // L'errore non risale: il file è già stato spostato, e far fallire una
+        // rinomina riuscita perché un'icona non si è spostata sarebbe il verso
+        // sbagliato. La rinomina vale, l'icona resta indietro, e qualcuno lo
+        // dice (`organization_warnings`).
+        if let Err(e) = self.organization.migrate(from.as_str(), to.as_str()) {
+            self.organization.warn(format!(
+                "l'organizzazione di {from} non ha potuto seguire la rinomina in \
+                 {to}: {e}"
+            ));
+        }
         // Per ogni indice — quello del kernel compreso — il rename è
         // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
         // tiene stato *per-documento* invece migra la chiave sull'evento
@@ -3125,6 +3159,52 @@ impl Workspace {
     /// si apre. Gemello di [`machine_settings`](Workspace::machine_settings).
     pub fn view_states(&self) -> Arc<ViewStates> {
         Arc::clone(&self.view_states)
+    }
+
+    // --- l'organizzazione del vault (§11.3) --------------------------------
+    //
+    // **Per chiave, non a blob intero**, ed è la riga che questa voce esiste
+    // per scrivere: prima la shell rileggeva tutto, cambiava un campo e
+    // riscriveva tutto, quindi due finestre sullo stesso vault erano una *lost
+    // update* — la seconda che salva cancella ciò che ha fatto la prima, e
+    // nessuna delle due se ne accorge.
+    //
+    // Non sono capacità dell'`HostApi` ma metodi del workspace: **nessun plugin
+    // le chiede ancora**, e una capacità concessa a nessuno è superficie da
+    // mantenere, documentare e sandboxare per sempre — è la regola del §1.6, e
+    // vale anche quando la cosa da non aggiungere è comoda. Leggere invece passa
+    // dal canale dati, che chiunque ha.
+
+    /// L'organizzazione di questo vault: icone, appuntate, ordinamenti, spazi.
+    pub fn organization(&self) -> fubmd_abi::organization::Organization {
+        self.organization.snapshot()
+    }
+
+    /// L'emoji accanto a una nota o a una cartella (`None` la toglie).
+    pub fn set_icon(&self, path: &str, icon: Option<String>) -> std::result::Result<(), String> {
+        self.organization.set_icon(path, icon)
+    }
+
+    /// Appunta o spunta una nota.
+    pub fn set_pinned(&self, id: &str, pinned: bool) -> std::result::Result<(), String> {
+        self.organization.set_pinned(id, pinned)
+    }
+
+    /// Registra o toglie una cartella dagli spazi.
+    pub fn set_space(&self, path: &str, is_space: bool) -> std::result::Result<(), String> {
+        self.organization.set_space(path, is_space)
+    }
+
+    /// L'ordine scelto a mano dei figli di una cartella (vuoto = alfabetico).
+    pub fn set_order(&self, folder: &str, names: Vec<String>) -> std::result::Result<(), String> {
+        self.organization.set_order(folder, names)
+    }
+
+    /// Cosa è andato storto con l'organizzazione: il file illeggibile
+    /// all'apertura, o una migrazione che non si è potuta scrivere. Chi monta le
+    /// mostra, e svuotandole se ne fa carico.
+    pub fn organization_warnings(&self) -> Vec<String> {
+        self.organization.take_warnings()
     }
 
     /// Cosa è andato storto **leggendo** la configurazione: un file malformato,

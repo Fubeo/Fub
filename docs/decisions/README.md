@@ -48,6 +48,7 @@ cronologico di chiusura.
 | [0035](0035-il-lavoro-lungo-si-racconta.md) | Il lavoro lungo si racconta: chi guarda, cosa vede, e chi mette il nome sul progresso | §10.3 — chiude la [seduta 10](../roadmap/10-gli-eventi.md) | 2026-07-28 |
 | [0036](0036-le-impostazioni-e-i-tre-stati.md) | Le impostazioni: chi dichiara una chiave, dove sta il suo valore, e chi la può scrivere | §11.1 — chiude il primo residuo della [0010](0010-comando-descritto-a-una-macchina.md) | 2026-07-28 |
 | [0037](0037-lo-stato-di-vista.md) | Lo stato di vista: di chi è lo scroll, dove vive, e perché non viaggia col vault | §11.2 (**prima metà**) — resta il layout | 2026-07-28 |
+| [0038](0038-il-kernel-possiede-il-sidecar.md) | Il kernel possiede il sidecar: chi scrive l'organizzazione, e chi la porta dietro a un rename | §11.3 | 2026-07-28 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

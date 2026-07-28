@@ -1,7 +1,12 @@
 //! Il gemello di `crates/fubmd-features/tests/ts_mirror.rs` per i tipi che il
-//! webview riceve dall'**app** e non dal contratto: `VaultInfo`,
-//! `EmbedContent`, `WorkspaceMeta`. Erano il caso peggiore del confine — mirror
-//! TS di struct dell'app che nessun test legava.
+//! webview riceve dall'**app** e non dal contratto: `VaultInfo`, `EmbedContent`.
+//! Erano il caso peggiore del confine — mirror TS di struct dell'app che nessun
+//! test legava.
+//!
+//! `WorkspaceMeta` stava qui, e non ci sta più: col §11.3 è diventata
+//! `Organization` ed è **salita nel contratto** (`fubmd_abi::organization`),
+//! quindi il suo campione è nel mirror gemello — quello delle risposte del
+//! canale dati, dove ora la si chiede.
 //!
 //! Stesso meccanismo: la fixture è generata da serde (la stessa
 //! serializzazione che attraversa l'IPC), committata, e verificata dal lato TS
@@ -11,7 +16,7 @@
 use fubmd_abi::options::permission;
 use fubmd_abi::traits::PluginPermissions;
 use fubmd_abi::ui::UiNode;
-use fubmd_app_lib::{BundleInfo, EmbedContent, OpenVaults, VaultEntry, VaultInfo, WorkspaceMeta};
+use fubmd_app_lib::{BundleInfo, EmbedContent, OpenVaults, VaultEntry, VaultInfo};
 use fubmd_kernel::{
     PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
 };
@@ -132,12 +137,6 @@ fn expected() -> Value {
                 last_opened: 1_699_000_000_000,
             }),
         ],
-        "WorkspaceMeta": [to_value(WorkspaceMeta {
-            icons: [("p".to_string(), "📁".to_string())].into_iter().collect(),
-            pinned: vec!["a.md".into()],
-            order: [("".to_string(), vec!["a.md".to_string()])].into_iter().collect(),
-            spaces: vec!["p".into()],
-        })],
     })
 }
 

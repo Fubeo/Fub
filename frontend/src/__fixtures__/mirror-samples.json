@@ -713,6 +713,9 @@
     {
       "kind": "settings",
       "plugin": "fubmd.versioning"
+    },
+    {
+      "kind": "organization"
     }
   ],
   "IndexResult": [
@@ -871,6 +874,25 @@
           "source": "machine"
         }
       ]
+    },
+    {
+      "kind": "organization",
+      "value": {
+        "icons": {
+          "note/a.md": "📌"
+        },
+        "pinned": [
+          "note/a.md"
+        ],
+        "order": {
+          "note": [
+            "a.md"
+          ]
+        },
+        "spaces": [
+          "note"
+        ]
+      }
     }
   ],
   "BacklinkRef": [
@@ -891,6 +913,24 @@
     {
       "name": "rust",
       "count": 2
+    }
+  ],
+  "Organization": [
+    {
+      "icons": {
+        "note/a.md": "📌"
+      },
+      "pinned": [
+        "note/a.md"
+      ],
+      "order": {
+        "note": [
+          "a.md"
+        ]
+      },
+      "spaces": [
+        "note"
+      ]
     }
   ],
   "VaultStatus": [
