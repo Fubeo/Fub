@@ -123,7 +123,13 @@ export function svuotaStorico(): void {
 /// Il toast: l'avviso **mentre succede**. Sovrascrive il precedente di
 /// proposito — chi guarda lo schermo legge l'ultimo, e ciò che ha perso sta
 /// nello storico, che è la ragione per cui lo storico esiste.
+///
+/// **Non interrompe chi sta già guardando lo storico.** Il toast e la lista
+/// occupano lo stesso angolo e dicono la stessa cosa: a pannello aperto la riga
+/// nuova compare in cima da sé, e un rettangolo sopra la lista coprirebbe
+/// proprio ciò che l'utente è andato a leggere.
 function mostra(avviso: Avviso): void {
+  if (aperto) return;
   const vecchio = document.getElementById("toast");
   if (vecchio) vecchio.remove();
   const toast = document.createElement("div");
