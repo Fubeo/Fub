@@ -21,7 +21,7 @@ import type {
   RenderedDocument,
   SettingValue,
   TrashEntry,
-  VaultEntry,
+  KnownVault,
   UiNode,
   VaultInfo,
   VersionRef,
@@ -153,7 +153,7 @@ export const api = {
     invoke<string[]>("set_plugin_enabled", { id, enabled }),
   // I vault che questa macchina conosce, fra un avvio e l'altro: un elenco di
   // vault non sta in nessun vault, quindi vive nel livello macchina.
-  knownVaults: () => invoke<VaultEntry[]>("known_vaults"),
+  knownVaults: () => invoke<KnownVault[]>("known_vaults"),
   setVaultFavorite: (path: string, favorite: boolean) =>
     invoke<void>("set_vault_favorite", { path, favorite }),
   setVaultLook: (path: string, icon: string | null, name: string | null) =>

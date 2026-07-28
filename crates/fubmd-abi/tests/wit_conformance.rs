@@ -87,12 +87,12 @@ use fubmd_abi::settings::{
 };
 use fubmd_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fubmd_abi::traits::{
-    BacklinkRef, CommandProvider, DocumentMatch, EventHandler, HealthCheck, HealthIssue, HostApi,
-    IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, JobStatus, LinkDirection,
-    NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind,
-    PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertySort, PropertyTest,
-    QueryKind, QueryRoute, ReadApi, ServiceProvider, TagCount, TrashEntry, VaultStatus,
-    ViewInstance, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
+    BacklinkRef, CommandProvider, DocumentMatch, EntryKind, EventHandler, HealthCheck, HealthIssue,
+    HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, JobStatus,
+    LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
+    PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertySort,
+    PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, TagCount, TrashEntry,
+    VaultEntry, VaultStatus, ViewInstance, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -328,6 +328,9 @@ wit_type! {
     PropertyCount => "property-count",
     HealthCheck => "health-check",
     HealthIssue => "health-issue",
+    // L'anagrafe (§14.1): che specie di file è, e cosa se ne sa senza aprirlo.
+    EntryKind => "entry-kind",
+    VaultEntry => "vault-entry",
 
     // Import ed export: la sorgente arriva a byte e gli artefatti escono a
     // byte, quindi al confine non compare nessun percorso di filesystem.
@@ -356,6 +359,7 @@ wit_type! {
     Paged<NeighborRef> => "neighbors-page",
     Paged<PropertyCount> => "property-values-page",
     Paged<HealthIssue> => "vault-health-page",
+    Paged<VaultEntry> => "entries-page",
     PluginManifest => "plugin-manifest",
     PluginPermissions => "plugin-permissions",
 
@@ -1786,6 +1790,21 @@ fn event_case(e: &Event) -> Case {
             "event-setting-changed",
             vec![("key", wit(key)), ("scope", wit(scope))],
         ),
+        Event::EntryChanged { id, kind } => case_rec(
+            "entry-changed",
+            "event-entry-changed",
+            vec![("id", wit(id)), ("kind", wit(kind))],
+        ),
+        Event::EntryRemoved { id, kind } => case_rec(
+            "entry-removed",
+            "event-entry-removed",
+            vec![("id", wit(id)), ("kind", wit(kind))],
+        ),
+        Event::EntryRenamed { from, to, kind } => case_rec(
+            "entry-renamed",
+            "event-entry-renamed",
+            vec![("from", wit(from)), ("to", wit(to)), ("kind", wit(kind))],
+        ),
     }
 }
 
@@ -1846,6 +1865,9 @@ fn event_kind_name(k: EventKind) -> &'static str {
         EventKind::JobStarted => "job-started",
         EventKind::JobProgress => "job-progress",
         EventKind::SettingChanged => "setting-changed",
+        EventKind::EntryChanged => "entry-changed",
+        EventKind::EntryRemoved => "entry-removed",
+        EventKind::EntryRenamed => "entry-renamed",
     }
 }
 
@@ -1940,6 +1962,11 @@ fn index_query_case(q: &IndexQuery) -> Case {
             "index-query-resolve",
             vec![("target", wit(target)), ("from", wit(from))],
         ),
+        IndexQuery::Entries { of_kind, page } => case_rec(
+            "entries",
+            "index-query-entries",
+            vec![("of-kind", wit(of_kind)), ("page", wit(page))],
+        ),
     }
 }
 
@@ -1998,6 +2025,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::Settings => case("settings"),
         QueryKind::Organization => case("organization"),
         QueryKind::Resolve => case("resolve"),
+        QueryKind::Entries => case("entries"),
     }
 }
 
@@ -2034,6 +2062,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Settings(v) => case_ty("settings", wit(v)),
         IndexResult::Organization(v) => case_ty("organization", wit(v)),
         IndexResult::Resolved(v) => case_ty("resolved", wit(v)),
+        IndexResult::Entries(v) => case_ty("entries", wit(v)),
     }
 }
 
@@ -2061,6 +2090,14 @@ fn health_check_name(c: HealthCheck) -> &'static str {
     match c {
         HealthCheck::BrokenLinks => "broken-links",
         HealthCheck::OrphanDocuments => "orphan-documents",
+    }
+}
+
+fn entry_kind_name(k: EntryKind) -> &'static str {
+    match k {
+        EntryKind::Document => "document",
+        EntryKind::Asset => "asset",
+        EntryKind::Unknown => "unknown",
     }
 }
 
@@ -2680,6 +2717,19 @@ fn conform(source: &str) -> Result<(), String> {
                 key: String::new(),
                 scope: SettingScope::Vault,
             }),
+            event_case(&Event::EntryChanged {
+                id: DocId::new("a"),
+                kind: EntryKind::Asset,
+            }),
+            event_case(&Event::EntryRemoved {
+                id: DocId::new("a"),
+                kind: EntryKind::Asset,
+            }),
+            event_case(&Event::EntryRenamed {
+                from: DocId::new("a"),
+                to: DocId::new("b"),
+                kind: EntryKind::Asset,
+            }),
         ],
     );
 
@@ -2751,6 +2801,10 @@ fn conform(source: &str) -> Result<(), String> {
                 target: LinkTarget::wiki(""),
                 from: None,
             }),
+            index_query_case(&IndexQuery::Entries {
+                of_kind: None,
+                page: None,
+            }),
         ],
     );
 
@@ -2771,6 +2825,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::Settings(vec![])),
             index_result_case(&IndexResult::Organization(Organization::default())),
             index_result_case(&IndexResult::Resolved(None)),
+            index_result_case(&IndexResult::Entries(Paged::all(vec![]))),
         ],
     );
 
@@ -2832,6 +2887,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::Settings),
             query_kind_case(&QueryKind::Organization),
             query_kind_case(&QueryKind::Resolve),
+            query_kind_case(&QueryKind::Entries),
         ],
     );
 
@@ -2899,6 +2955,14 @@ fn conform(source: &str) -> Result<(), String> {
             .as_slice(),
     );
 
+    contract.enumeration_src(
+        "entry-kind",
+        ("traits.rs", "EntryKind"),
+        [EntryKind::Document, EntryKind::Asset, EntryKind::Unknown]
+            .map(entry_kind_name)
+            .as_slice(),
+    );
+
     contract.variant_src(
         "format-error",
         ("error.rs", "FormatError"),
@@ -2947,6 +3011,9 @@ fn conform(source: &str) -> Result<(), String> {
             EventKind::JobStarted,
             EventKind::JobProgress,
             EventKind::SettingChanged,
+            EventKind::EntryChanged,
+            EventKind::EntryRemoved,
+            EventKind::EntryRenamed,
         ]
         .map(event_kind_name)
         .as_slice(),
@@ -3849,6 +3916,30 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let VaultEntry {
+        id,
+        kind,
+        size,
+        mtime,
+        fingerprint,
+    } = VaultEntry {
+        id: DocId::new("a.md"),
+        kind: EntryKind::Document,
+        size: 0,
+        mtime: 0,
+        fingerprint: None,
+    };
+    contract.record(
+        "vault-entry",
+        &[
+            ("id", wit(&id)),
+            ("kind", wit(&kind)),
+            ("size", wit(&size)),
+            ("mtime", wit(&mtime)),
+            ("fingerprint", wit(&fingerprint)),
+        ],
+    );
+
     let BacklinkRef { source, context } = BacklinkRef {
         source: DocId::new("a"),
         context: None,
@@ -4064,6 +4155,10 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record(
         "vault-health-page",
         &paged_fields(&Paged::all(Vec::<HealthIssue>::new())),
+    );
+    contract.record(
+        "entries-page",
+        &paged_fields(&Paged::all(Vec::<VaultEntry>::new())),
     );
 
     let UiAction {
@@ -4670,6 +4765,13 @@ fn conform(source: &str) -> Result<(), String> {
         "reconcile",
         <dyn IndexProvider>::reconcile as fn(&'static mut dyn IndexProvider, &'static [DocId]),
         &["ids"],
+    );
+    contract.method(
+        "index",
+        "up-to-date",
+        <dyn IndexProvider>::up_to_date
+            as fn(&'static dyn IndexProvider, &'static [VaultEntry]) -> Vec<DocId>,
+        &["entries"],
     );
     contract.method(
         "index",

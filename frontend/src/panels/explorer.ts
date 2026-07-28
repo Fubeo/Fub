@@ -5,7 +5,7 @@
 // la logica dell'alberatura (cosa è una cartella, cosa è una folder note, che
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
-import { api } from "../host/ipc";
+import { vociDelVault } from "../host/query";
 import { onEvent } from "../state/kernel";
 import {
   loadOrganization,
@@ -105,7 +105,16 @@ export function mountExplorer(): void {
 /// arrivano a ogni salvataggio con una lista quasi sempre identica: qui si
 /// ricostruisce solo se è cambiata davvero.
 async function refreshFromKernel(): Promise<void> {
-  const docs = await api.listDocuments();
+  // Dall'anagrafe (§14.1, §14.2) e non da `list_documents`: era l'ultimo dato
+  // che questa shell chiedeva **fuori** da `IndexQuery` (§14.4), cioè l'unico
+  // che un provider non avrebbe saputo chiedere. Un giro solo: la specie la
+  // sceglie la domanda, non un secondo filtro qui.
+  //
+  // `document` e non tutte le specie: cosa succeda cliccando un allegato — e
+  // quindi se abbia senso disegnarlo in questo albero — è del §14.3/§14.4, che
+  // danno alla cartella un modello e alla lista un canale per-cartella. Qui è
+  // cambiato **da dove arriva** l'elenco, non cosa contiene.
+  const docs = (await vociDelVault("document")).items.map((e) => e.id);
   const uguale =
     docs.length === state.knownDocs.length && docs.every((d, i) => d === state.knownDocs[i]);
   if (!uguale) renderFileList(docs);

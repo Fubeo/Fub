@@ -12,14 +12,20 @@
 // per questo che qui non c'è quasi nulla — la logica sta nelle feature, e
 // questo modulo è solo il posto dove la shell smette di avere scorciatoie.
 import { api } from "../host/ipc";
+import { vociDelVault } from "../host/query";
 import { COMANDI } from "../host/contract";
 import { emit, state } from "./store";
 import { t } from "../i18n/strings";
 
 /// Richiede la lista dei documenti e la annuncia. Chi disegna una lista si
 /// iscrive a `documents`; nessuno chiama nessuno per nome.
+///
+/// Dall'anagrafe (§14.1, §14.2) e non da `list_documents`, come il ridisegno
+/// dell'albero dopo un evento: le due strade alimentano la **stessa** lista, e
+/// lasciarne una sull'altro canale vorrebbe dire che l'elenco cambia di forma a
+/// seconda di chi l'ha chiesto.
 export async function refreshDocuments(): Promise<string[]> {
-  const docs = await api.listDocuments();
+  const docs = (await vociDelVault("document")).items.map((e) => e.id);
   emit("documents", docs);
   return docs;
 }

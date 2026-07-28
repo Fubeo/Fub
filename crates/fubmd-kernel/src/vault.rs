@@ -48,11 +48,40 @@ struct TrashSidecar {
 /// Un componente di path che il vault non deve mai guardare.
 ///
 /// Unico punto di verità della regola: la usano sia la scansione
-/// ([`Vault::list_documents`]) sia il percorso del watcher
+/// ([`Vault::scan`]) sia il percorso del watcher
 /// ([`Vault::is_ignored`]). Finché viveva solo dentro la scansione, ogni file
 /// spostato nel cestino tornava dentro dalla porta di servizio del watcher.
 fn is_ignored_name(name: &str) -> bool {
     name.starts_with('.') || IGNORED_DIRS.contains(&name)
+}
+
+/// Un file trovato dalla scansione: il path, e le due cose che il filesystem
+/// dice **senza aprirlo** (§14.2).
+///
+/// Non è una [`VaultEntry`](fubmd_abi::traits::VaultEntry) e le manca la
+/// specie, di proposito: quale sia dipende dai provider registrati, e il vault
+/// non li conosce. È la stessa linea che divide `Vault` da `DocumentStore` —
+/// qui ci sono i file, di là c'è cosa significano.
+pub struct ScannedFile {
+    pub id: DocId,
+    pub size: u64,
+    /// Millisecondi UNIX; `0` se il filesystem non sa dire la data (esiste:
+    /// alcuni filesystem di rete). Zero non è «1970», è «non lo so», e la
+    /// conseguenza è quella giusta — una data che non si conosce non combacia
+    /// mai con quella di prima, quindi quel file si rilegge invece di essere
+    /// dato per immutato.
+    pub mtime: u64,
+}
+
+/// L'mtime in millisecondi UNIX. Vedi
+/// [`VaultEntry::mtime`](fubmd_abi::traits::VaultEntry::mtime) per il perché
+/// dei millisecondi e non dei secondi né dei nanosecondi.
+fn mtime_millis(meta: &std::fs::Metadata) -> u64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis().min(u64::MAX as u128) as u64)
+        .unwrap_or(0)
 }
 
 pub struct Vault {
@@ -96,16 +125,27 @@ impl Vault {
         rel.components().any(|c| is_ignored_name(c.as_str()))
     }
 
-    /// Elenca i documenti del vault le cui estensioni sono tra quelle date
-    /// (senza punto, minuscole). Salta le directory ignorate e i file nascosti.
-    pub fn list_documents(&self, extensions: &[String]) -> Result<Vec<DocId>> {
+    /// **Tutti** i file del vault, in ordine di id, con dimensione e data.
+    ///
+    /// Era `list_documents(&extensions)`, e la differenza è il §14.1: la
+    /// scansione filtrava per estensione, quindi ciò che nessun provider
+    /// rivendicava — un PNG, uno ZIP, un `.canvas` — non esisteva affatto per
+    /// FubMD. Adesso il vault dice **cosa c'è**, e a dividerlo in specie è chi
+    /// conosce i provider registrati
+    /// ([`rules::media::kind_of`](fubmd_abi::rules::media::kind_of)): il vault
+    /// non sa cosa sia un documento, e non deve saperlo per sapere cosa contiene.
+    ///
+    /// Dimensione e data si prendono **qui e non dopo**, ed è ciò che rende
+    /// l'anagrafe gratis: la camminata ha già in mano ogni voce di directory, e
+    /// una `stat` per file chiesta più tardi sarebbe un secondo giro sul disco.
+    pub fn scan(&self) -> Result<Vec<ScannedFile>> {
         let mut out = Vec::new();
-        self.walk(&self.root, extensions, &mut out)?;
-        out.sort();
+        self.walk(&self.root, &mut out)?;
+        out.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(out)
     }
 
-    fn walk(&self, dir: &Utf8Path, exts: &[String], out: &mut Vec<DocId>) -> Result<()> {
+    fn walk(&self, dir: &Utf8Path, out: &mut Vec<ScannedFile>) -> Result<()> {
         let entries = std::fs::read_dir(dir).map_err(|e| KernelError::Io {
             path: dir.to_owned(),
             source: e,
@@ -126,16 +166,29 @@ impl Vault {
                 source: e,
             })?;
             if file_type.is_dir() {
-                self.walk(&path, exts, out)?;
+                self.walk(&path, out)?;
             } else if file_type.is_file() {
-                if let Some(ext) = path.extension() {
-                    if exts.iter().any(|e| e.eq_ignore_ascii_case(ext)) {
-                        out.push(self.doc_id_for_path(&path)?);
-                    }
-                }
+                let meta = entry.metadata().map_err(|e| KernelError::Io {
+                    path: path.clone(),
+                    source: e,
+                })?;
+                out.push(ScannedFile {
+                    id: self.doc_id_for_path(&path)?,
+                    size: meta.len(),
+                    mtime: mtime_millis(&meta),
+                });
             }
         }
         Ok(())
+    }
+
+    /// Dimensione e data di **un** file, per chi ne sincronizza uno solo (il
+    /// rilevatore). `None` = non c'è più, o non si riesce a leggerne i
+    /// metadati — che per chi chiama sono la stessa cosa: non c'è niente da
+    /// mettere in anagrafe.
+    pub fn stat(&self, id: &DocId) -> Option<(u64, u64)> {
+        let meta = std::fs::metadata(self.path_for(id)).ok()?;
+        meta.is_file().then(|| (meta.len(), mtime_millis(&meta)))
     }
 
     pub fn read(&self, id: &DocId) -> Result<String> {

@@ -219,7 +219,11 @@ nemmeno essere negata.
 uno è una minor, toglierne uno una major. Il giro che lo ha chiuso ha anche
 **tolto** `storage_get/set` — l'unica rottura, con la linea di base ritagliata
 in `wit/frozen/0.1.0.wit` — e ha deciso a verbale, una per una, anche le
-capacità che restano fuori: allegati (§14.1 non ha il modello), rete (§9.1 +
+capacità che restano fuori: allegati (§14.1 non aveva il modello — adesso ce
+l'ha, con la [decisione 0046](../decisions/0046-l-anagrafe-del-vault.md), e la
+capacità sarà **additiva** quando qualcuno la chiederà: un allegato oggi si
+elenca (`IndexQuery::Entries`), si sposta coi riferimenti dietro e si vede
+mancare dal controllo di salute, ma non si scrive dall'`HostApi`), rete (§9.1 +
 §7.3), tempo differito (§8.3), `create_folder` (§14.3), `notify`/`progress`/
 `log` (informano e non aspettano risposta: sono eventi, non capacità). Il
 verbale sta nella [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
@@ -522,14 +526,23 @@ pub trait IndexProvider: Send + Sync {
     fn on_document_indexed(&mut self, doc: &DocumentModel);
     fn on_document_removed(&mut self, id: &DocId);
     fn reconcile(&mut self, ids: &[DocId]);
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> { Vec::new() }
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn close(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 }
 ```
 
+`up_to_date` è **la domanda che mancava** ([decisione
+0046](../decisions/0046-l-anagrafe-del-vault.md), §14.2): all'apertura il kernel
+chiede a ogni indice cosa ha già — con l'anagrafe in mano, cioè senza aprire un
+file — e legge e parsa solo il resto. Prima leggeva e parsava tutto e *poi*
+consegnava a chi ce l'aveva già. Il default è la lista vuota, che vuol dire
+«mandami tutto»: chi non la implementa non si accorge che esiste, e il kernel
+salta un documento solo se **ogni** indice lo ha rivendicato.
+
 `IndexQuery { Documents, Backlinks, Outline, Tags, Neighbors, PropertyValues,
-VaultHealth, Custom, VaultStatus, Jobs, Settings, Organization, Resolve }` — è il
+VaultHealth, Custom, VaultStatus, Jobs, Settings, Organization, Resolve, Entries }` — è il
 **canale dati verso le view**, e ciò
 che non è esprimibile qui diventa un comando bespoke dell'app, cioè una
 superficie che un plugin non potrà mai avere. Le risposte stanno in
@@ -541,7 +554,21 @@ depth }`, `TagCount { name, count }`, `PropertyCount { value, count }`,
 `HealthIssue { doc, check, detail, span }`,
 `VaultStatus { watching, sync_failures, last_sync_error }`,
 `JobStatus { id, job, plugin, since, progress }` con
-`JobProgress { done, total, label }`.
+`JobProgress { done, total, label }`,
+`VaultEntry { id, kind, size, mtime, fingerprint? }` con
+`EntryKind { Document, Asset, Unknown }`.
+
+`Entries { of_kind: Option<EntryKind>, page: Option<Page> }` → `Entries(Paged<VaultEntry>)`
+è **l'anagrafe del vault** ([decisione
+0046](../decisions/0046-l-anagrafe-del-vault.md), §14.1 + §14.2): la sola domanda
+del canale che risponde anche su ciò che non è un documento — un PNG, uno ZIP, un
+file che nessuno sa cosa sia. La **specie non è persistita**: è una proprietà del
+file *dato chi è registrato adesso*, e un `.canvas` diventa `Document` il giorno
+che qualcuno rivendica quell'estensione, senza che un byte cambi. Il MIME non è
+un campo ma una regola (`rules::media::mime_of`), perché è funzione pura del
+nome; `fingerprint` è la stessa `Revision` di `document_revision` e c'è solo dove
+qualcuno ha già avuto i byte in mano — leggere ogni allegato all'apertura è
+proprio il costo che l'anagrafe esiste per togliere.
 
 `Resolve { target: LinkTarget, from: Option<DocId> }` → `Resolved(Option<DocId>)`
 è la domanda «cosa nomina questo riferimento, adesso?»
@@ -745,7 +772,10 @@ pub trait EventHandler: Send + Sync {
 DocumentRenamed { from, to }, IndexUpdated, JobDone { id, job, result },
 Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed },
 ViewInvalidated { view, instance }, VaultClosed { root },
-JobStarted { id, job }, JobProgress { id, progress } }`,
+JobStarted { id, job }, JobProgress { id, progress },
+SettingChanged { key, scope },
+EntryChanged { id, kind }, EntryRemoved { id, kind },
+EntryRenamed { from, to, kind } }`,
 `EventKind` (stesso set, senza payload),
 `EventMask { kinds, topics, subjects }` con
 `Subject { Document { id }, Folder { path } }`.
@@ -781,6 +811,16 @@ JobStarted { id, job }, JobProgress { id, progress } }`,
   risposta, e la chiusura non si annulla.
 - `DocumentRenamed` esiste perché **l'identità è il path**: un rename non è
   remove+add (vedi [data-model.md](data-model.md), "Identità e rename").
+- `EntryChanged` / `EntryRemoved` / `EntryRenamed` sono i **tre gemelli per ciò
+  che non è un documento** ([decisione 0046](../decisions/0046-l-anagrafe-del-vault.md),
+  §14.1): un PNG copiato nel vault, un allegato spostato, uno cancellato. Portano
+  la `kind`, e non è mai `Document` — per quello ci sono già i tre di sopra. Che
+  siano tre eventi in più e non tre casi in più dei primi è una scelta
+  **retroattiva**: chi ascolta `DocumentChanged` è codice scritto quando un
+  documento era l'unica cosa che il vault contenesse, e consegnargli un PNG lo
+  farebbe leggere un modello che non esiste. Sono **recuperabili** — entrano in
+  `names()` e non in `touched()`, perché nominano un file e non un documento
+  toccato — e si riscoprono chiedendo `IndexQuery::Entries`.
 - `JobDone { id, job, result }` è il rientro dei **job** (vedi `HostApi` sopra
   e [plugin-boundary.md](plugin-boundary.md)): l'esito del lavoro in background
   consegnato sul giro sincrono normale. Le eventuali scritture le fa l'handler

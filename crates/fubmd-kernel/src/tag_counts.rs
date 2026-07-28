@@ -46,16 +46,26 @@ struct KeyEntry {
 impl TagCounts {
     /// Registra (o aggiorna) il contributo di una nota.
     pub(crate) fn upsert(&mut self, id: &DocId, tags: &[Tag]) {
+        self.upsert_names(id, tags.iter().map(|t| t.name.as_str()));
+    }
+
+    /// Come [`upsert`](TagCounts::upsert), dai soli **nomi**.
+    ///
+    /// È la porta da cui rientra ciò che l'anagrafe si è ricordata (§14.2): di
+    /// una nota immutata il kernel non riapre il file, quindi non ha dei
+    /// [`Tag`] con i loro span — ha i nomi, che è tutto ciò che questo
+    /// aggregatore ha mai guardato.
+    pub(crate) fn upsert_names<'a>(&mut self, id: &DocId, names: impl Iterator<Item = &'a str>) {
         self.remove(id);
-        if tags.is_empty() {
-            return;
-        }
         let mut contribution: Contribution = BTreeMap::new();
-        for tag in tags {
+        for name in names {
             contribution
-                .entry(canonical_tag(&tag.name))
+                .entry(canonical_tag(name))
                 .or_default()
-                .insert(tag.name.clone());
+                .insert(name.to_string());
+        }
+        if contribution.is_empty() {
+            return;
         }
         for (key, grafie) in &contribution {
             let entry = self.keys.entry(key.clone()).or_default();
@@ -94,6 +104,19 @@ impl TagCounts {
     pub(crate) fn clear(&mut self) {
         self.keys.clear();
         self.docs.clear();
+    }
+
+    /// Le **grafie** con cui una nota scrive i propri tag, in ordine.
+    ///
+    /// È il verso opposto di [`upsert_names`](TagCounts::upsert_names): serve a
+    /// scrivere l'anagrafe, che di ogni documento ricorda ciò che servirebbe a
+    /// riparlarne senza riaprirlo. Le grafie e non le chiavi canoniche, perché
+    /// è la grafia che il pannello dei tag mostra.
+    pub(crate) fn names_of(&self, id: &DocId) -> Vec<String> {
+        self.docs
+            .get(id)
+            .map(|contribution| contribution.values().flatten().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// I tag del vault, ordinati per chiave canonica: la risposta a

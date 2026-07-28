@@ -375,6 +375,22 @@
       "type": "setting_changed",
       "key": "versioning.enabled",
       "scope": "vault"
+    },
+    {
+      "type": "entry_changed",
+      "id": "allegati/foto.png",
+      "kind": "asset"
+    },
+    {
+      "type": "entry_removed",
+      "id": "allegati/foto.png",
+      "kind": "unknown"
+    },
+    {
+      "type": "entry_renamed",
+      "from": "allegati/foto.png",
+      "to": "media/foto.png",
+      "kind": "asset"
     }
   ],
   "KernelNotice": [
@@ -744,6 +760,19 @@
         "value": "https://example.org"
       },
       "from": null
+    },
+    {
+      "kind": "entries",
+      "of_kind": null,
+      "page": null
+    },
+    {
+      "kind": "entries",
+      "of_kind": "asset",
+      "page": {
+        "offset": 40,
+        "limit": 20
+      }
     }
   ],
   "IndexResult": [
@@ -929,6 +958,34 @@
     {
       "kind": "resolved",
       "value": null
+    },
+    {
+      "kind": "entries",
+      "value": {
+        "items": [
+          {
+            "id": "note/a.md",
+            "kind": "document",
+            "size": 1024,
+            "mtime": 1769000000000,
+            "fingerprint": "0123456789abcdef"
+          },
+          {
+            "id": "allegati/foto.png",
+            "kind": "asset",
+            "size": 204800,
+            "mtime": 1769000001000
+          },
+          {
+            "id": "archivio.zip",
+            "kind": "unknown",
+            "size": 9000000,
+            "mtime": 1769000002000
+          }
+        ],
+        "offset": 0,
+        "total": 3
+      }
     }
   ],
   "BacklinkRef": [

@@ -153,6 +153,89 @@ pub struct TrashEntry {
 }
 
 // ---------------------------------------------------------------------------
+// L'anagrafe: cosa c'è nel vault, e non solo quali note (§14.1, §14.2).
+// ---------------------------------------------------------------------------
+
+/// Che specie di file è una voce del vault.
+///
+/// Tre casi e non due, e il terzo è il punto: prima di questa voce il vault
+/// vedeva i documenti e **basta** — un PNG accanto a una nota non esisteva per
+/// FubMD, né come allegato né come file. Le tre risposte sono tre cose che si
+/// fanno diversamente: un documento si parsa, un allegato si mostra o si apre
+/// con l'applicazione di sistema, un ignoto si nomina e non si tocca.
+///
+/// **Non è una proprietà del file**: è una proprietà del file *dato chi è
+/// registrato adesso*. La regola sta in
+/// [`rules::media::kind_of`](crate::rules::media::kind_of), prende le estensioni
+/// dei provider come parametro, e il giorno che qualcuno rivendica `.canvas`
+/// quei file diventano `Document` senza essere cambiati di un byte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EntryKind {
+    /// Un `FormatProvider` rivendica la sua estensione: ha un modello, sta
+    /// nell'indice, è ciò che
+    /// [`list_documents`](VaultRead::list_documents) restituisce.
+    Document,
+    /// Un allegato: un tipo di contenuto che sappiamo nominare
+    /// ([`rules::media::mime_of`](crate::rules::media::mime_of)) e che nessuno
+    /// parsa.
+    Asset,
+    /// Il vault lo vede e nessuno sa cosa sia. Non è un errore ed è metà del
+    /// valore dell'anagrafe: un file che nessuno riconosce **esiste** lo stesso
+    /// — occupa spazio, si può cancellare per sbaglio, e un backup che lo
+    /// saltasse lo perderebbe in silenzio.
+    Unknown,
+}
+
+/// Una voce del vault: un file, con ciò che si sa di lui **senza aprirlo**.
+///
+/// È l'anagrafe che mancava (§14.1, §14.2), e le due mancanze erano una sola:
+/// il kernel non vedeva ciò che non è un documento, e dei documenti non teneva
+/// né la data né la dimensione — quindi «apri in fretta un vault grande»,
+/// «trova i duplicati», «note modificate di recente» e «cosa è cambiato da
+/// ieri» non avevano una **fonte**, non una implementazione.
+///
+/// La chiave è il path, come per ogni altra cosa del vault
+/// ([decisione 0043](../../../docs/decisions/0043-il-path-e-la-chiave.md)):
+/// [`DocId`] nomina *un file del vault*, e non un secondo tipo identico che
+/// significhi la stessa cosa per gli allegati.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VaultEntry {
+    /// Il path relativo alla radice del vault, separatori `/`.
+    pub id: DocId,
+    pub kind: EntryKind,
+    /// Byte del file sul disco.
+    pub size: u64,
+    /// Ultima modifica, in **millisecondi** UNIX.
+    ///
+    /// Millisecondi e non secondi come [`TrashEntry::deleted_at`], perché qui
+    /// il numero non serve a *mostrare* una data ma a **riconoscere una
+    /// modifica**: con la granularità del secondo, due scritture della stessa
+    /// dimensione nello stesso secondo sono indistinguibili — che è raro per un
+    /// umano e normale per uno script. E non nanosecondi, che pure il
+    /// filesystem sa dare: questo numero attraversa l'IPC come JSON, e oltre
+    /// 2^53 un intero non sopravvive a un `double`.
+    pub mtime: u64,
+    /// L'identità del **contenuto**, quando qualcuno l'ha già avuto in mano.
+    ///
+    /// `None` non vuol dire «file vuoto» e non vuol dire «mai letto»: vuol dire
+    /// che nessuno ha ancora pagato la lettura dei suoi byte. È la stessa
+    /// impronta di [`VaultRead::document_revision`] — l'identità di un
+    /// contenuto è una cosa sola, e un secondo tipo opaco accanto a
+    /// [`Revision`] sarebbe due nomi per la stessa idea.
+    ///
+    /// **Quando si calcola**: dove i byte sono già in mano, mai aprendo un file
+    /// apposta. Il kernel la calcola sui documenti che deve comunque leggere per
+    /// parsarli; per un allegato non la calcola nessuno, perché leggere ogni
+    /// byte di ogni PNG all'apertura è esattamente il costo che l'anagrafe
+    /// esiste per togliere. Chi la vorrà — dedup (13.1), duplicati (3.2),
+    /// integrità (24.2) — la farà calcolare da un job, che è il posto del
+    /// lavoro lungo ([decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<Revision>,
+}
+
+// ---------------------------------------------------------------------------
 // Capability handle: l'unico modo con cui un provider tocca il mondo esterno.
 // Nativo → oggetto in-process diretto. WASM (M5) → proxy che reinoltra le
 // chiamate come host function attraverso il confine.
@@ -1955,6 +2038,35 @@ pub enum IndexQuery {
         #[serde(default)]
         from: Option<DocId>,
     },
+    /// **Cosa c'è nel vault**: l'anagrafe, non l'indice (§14.1, §14.2).
+    ///
+    /// È la sola domanda del canale che risponde anche su ciò che **non** è un
+    /// documento, ed è per questo che è una variante e non un filtro di
+    /// [`Documents`](IndexQuery::Documents): là si chiedono note, con
+    /// frontmatter e rilevanza; qui si chiede *cosa c'è sul disco*, e la
+    /// risposta include un PNG, uno ZIP e un file che nessuno sa cosa sia.
+    ///
+    /// La ragione per cui esiste è la stessa per cui la
+    /// [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md)
+    /// ha tenuto `create_folder` **fuori** dalle capacità: un'anagrafe che
+    /// contenesse gli allegati senza che nessuna domanda li sappia chiedere
+    /// sarebbe uno stato che il kernel tiene e nessuno può vedere. Passa di qui
+    /// e non da una capacità nuova perché è **una risposta con dei dati**, e
+    /// quelle passano dal canale dati
+    /// ([decisione 0019](../../../docs/decisions/0019-il-canale-dati.md)).
+    ///
+    /// L'ordine è quello dei [`DocId`], come per i documenti e per la stessa
+    /// ragione: è ciò che rende stabile una risposta paginata.
+    Entries {
+        /// Solo una specie, o tutte. `Some(Asset)` è la domanda «quali allegati
+        /// ci sono», che è quella che serve a un pannello degli allegati e a
+        /// chi cerca gli orfani; `None` è l'anagrafe intera, cioè l'albero dei
+        /// file che la shell disegna.
+        #[serde(default)]
+        of_kind: Option<EntryKind>,
+        #[serde(default)]
+        page: Option<Page>,
+    },
 }
 
 impl IndexQuery {
@@ -1966,7 +2078,8 @@ impl IndexQuery {
             | IndexQuery::Tags { page, .. }
             | IndexQuery::Neighbors { page, .. }
             | IndexQuery::PropertyValues { page, .. }
-            | IndexQuery::VaultHealth { page, .. } => *page,
+            | IndexQuery::VaultHealth { page, .. }
+            | IndexQuery::Entries { page, .. } => *page,
             IndexQuery::Outline { .. }
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
@@ -1994,7 +2107,11 @@ impl IndexQuery {
             | IndexQuery::Jobs
             | IndexQuery::Settings { .. }
             | IndexQuery::Organization
-            | IndexQuery::Resolve { .. } => None,
+            | IndexQuery::Resolve { .. }
+            // L'anagrafe non seleziona documenti: la sua domanda non è «quali
+            // note combaciano» ma «cosa c'è», e un'espressione qui vorrebbe
+            // dire filtrare dei file con un linguaggio che parla di note.
+            | IndexQuery::Entries { .. } => None,
         }
     }
 
@@ -2050,6 +2167,7 @@ impl IndexQuery {
             IndexQuery::Settings { .. } => QueryKind::Settings,
             IndexQuery::Organization => QueryKind::Organization,
             IndexQuery::Resolve { .. } => QueryKind::Resolve,
+            IndexQuery::Entries { .. } => QueryKind::Entries,
         }
     }
 }
@@ -2105,6 +2223,15 @@ pub enum QueryKind {
     /// dice quando la risposta è `None`, e vive accanto a questa domanda, non al
     /// suo posto.
     Resolve,
+    /// Chi risponde a «cosa c'è in questo vault?» (§14.1, §14.2). Il
+    /// proprietario è il kernel, e stavolta per esclusione: l'anagrafe la
+    /// costruisce chi cammina il disco, e nessun altro cammina il disco.
+    ///
+    /// Un indice di terzi può **sostituirla** come ogni altra famiglia — un
+    /// giorno, un indice che tiene il proprio elenco su un supporto remoto —
+    /// ma chi lo fa si prende anche il resto: la scansione, il rilevamento e la
+    /// tabella che il kernel scrive sono la sua fonte, non la sua copia.
+    Entries,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -2296,6 +2423,13 @@ pub enum IndexResult {
     /// domanda sull'anagrafe le ragioni di chi non c'è, che sono di chi
     /// chiede.
     Resolved(Option<DocId>),
+    /// Cosa c'è nel vault (risposta a [`IndexQuery::Entries`]), in ordine di
+    /// [`DocId`].
+    ///
+    /// **A finestra**, e qui più che altrove: è l'unica risposta che cresce col
+    /// numero di *file* invece che col numero di note, e in un vault vero gli
+    /// allegati sono più delle note.
+    Entries(Paged<VaultEntry>),
 }
 
 impl IndexResult {
@@ -2334,6 +2468,7 @@ impl IndexResult {
             IndexResult::Settings(_) => "settings",
             IndexResult::Organization(_) => "organization",
             IndexResult::Resolved(_) => "resolved",
+            IndexResult::Entries(_) => "entries",
         }
     }
 }
@@ -2510,6 +2645,42 @@ pub trait IndexProvider: Send + Sync {
     /// `due_ricerche_stanno_nell_indice_insieme`), e lo fa perché per un anno
     /// non lo faceva senza che si vedesse.
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
+
+    /// **Di queste voci, quali hai già così come sono?** Il kernel la chiama
+    /// durante la scansione, prima di leggere e parsare (§14.2).
+    ///
+    /// È la domanda che mancava, e la sua assenza costava una riapertura intera:
+    /// il kernel leggeva e parsava **tutto** il vault a ogni apertura *prima
+    /// ancora di chiedere all'indice se gli interessava*, e l'indice —
+    /// persistente, con tutto già dentro — si limitava a riscrivere ciò che
+    /// aveva. La promessa scritta in [`reconcile`](IndexProvider::reconcile) («i
+    /// documenti immutati non vanno reindicizzati») era vera per chi indicizza e
+    /// falsa per chi alimenta.
+    ///
+    /// # Cosa arriva, e su cosa si risponde
+    ///
+    /// Le [`VaultEntry`] dei soli documenti, con dimensione, data e — quando il
+    /// kernel ce l'ha — l'impronta del contenuto. Un indice risponde con gli id
+    /// che ha già **durevolmente** e nella stessa versione: dopo un `git
+    /// checkout` che ha ritimbrato mille file senza cambiarne uno, chi tiene
+    /// l'impronta li riconosce tutti e mille.
+    ///
+    /// # Il default dice di no, ed è la risposta giusta
+    ///
+    /// Un elenco vuoto significa «mandami tutto», cioè il comportamento di
+    /// prima. È deliberato che sia quello che si ottiene **non pensandoci**: un
+    /// indice che rispondesse di sì per sbaglio resterebbe indietro in silenzio,
+    /// e un indice che dice di no paga una reindicizzazione che non serviva.
+    /// Sbagliare da questa parte costa tempo; dall'altra costa un indice che
+    /// mente.
+    ///
+    /// Chi risponde deve dire la verità su **ciò che è durevole**, non su ciò
+    /// che ha in memoria: chi ha appena buttato il proprio stato perché la
+    /// versione dello schema non combaciava non ha niente, e dirlo è l'unica
+    /// cosa che gli impedisce di restare vuoto per sempre.
+    fn up_to_date(&self, _entries: &[VaultEntry]) -> Vec<DocId> {
+        Vec::new()
+    }
 }
 
 // ---------------------------------------------------------------------------

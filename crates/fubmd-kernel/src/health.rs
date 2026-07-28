@@ -13,19 +13,42 @@
 //!
 //! [`IndexQuery::VaultHealth`]: fubmd_abi::traits::IndexQuery::VaultHealth
 
-use fubmd_abi::model::{DocId, Link};
+use fubmd_abi::model::{DocId, Link, LinkTarget};
 use fubmd_abi::rules::health::{broken_target, LinkResolver};
 use fubmd_abi::traits::{HealthCheck, HealthIssue};
 
-use crate::graph::LinkGraph;
+use std::collections::BTreeMap;
 
-impl LinkResolver for LinkGraph {
+use fubmd_abi::traits::VaultEntry;
+
+use crate::graph::LinkGraph;
+use crate::index::core::resolve_entry_in;
+
+/// Il vault **come lo vede un controllo di salute**: il grafo dei link e
+/// l'anagrafe, insieme.
+///
+/// Sono due cose e non una perché rispondono a due domande diverse: dove arriva
+/// un link fra note lo sa il grafo, se il PNG che una nota mostra esiste lo sa
+/// l'anagrafe (§14.1). Finché il risolutore era il solo grafo la seconda domanda
+/// non era rispondibile — un allegato nel kernel non esisteva — e l'unica cosa
+/// onesta che si potesse fare era **tacere su ogni allegato**, che è ciò che il
+/// modulo delle regole dichiarava di fare.
+pub(crate) struct VaultView<'a> {
+    pub(crate) graph: &'a LinkGraph,
+    pub(crate) entries: &'a BTreeMap<DocId, VaultEntry>,
+}
+
+impl LinkResolver for VaultView<'_> {
     fn resolve_wiki(&self, page: &str) -> Option<DocId> {
-        LinkGraph::resolve_wiki(self, page)
+        self.graph.resolve_wiki(page)
     }
 
     fn resolve_path(&self, source: &DocId, target: &str) -> Option<DocId> {
-        LinkGraph::resolve_path(self, source, target)
+        self.graph.resolve_path(source, target)
+    }
+
+    fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId> {
+        resolve_entry_in(self.entries, source, target)
     }
 }
 
@@ -36,21 +59,21 @@ impl LinkResolver for LinkGraph {
 /// `FormatProvider` rivendica — servono a distinguere un link a una nota da un
 /// riferimento a un allegato. L'ordine della risposta è quello dei documenti,
 /// poi quello dei link nel sorgente: deterministico, perché è paginato.
-pub fn run<'a>(
+pub(crate) fn run<'a>(
     check: HealthCheck,
     docs: impl Iterator<Item = (&'a DocId, &'a [Link])>,
-    graph: &LinkGraph,
+    view: &VaultView<'_>,
     doc_extensions: &[String],
 ) -> Vec<HealthIssue> {
     match check {
-        HealthCheck::BrokenLinks => broken_links(docs, graph, doc_extensions),
-        HealthCheck::OrphanDocuments => orphans(docs.map(|(id, _)| id), graph),
+        HealthCheck::BrokenLinks => broken_links(docs, view, doc_extensions),
+        HealthCheck::OrphanDocuments => orphans(docs.map(|(id, _)| id), view.graph),
     }
 }
 
 fn broken_links<'a>(
     docs: impl Iterator<Item = (&'a DocId, &'a [Link])>,
-    graph: &LinkGraph,
+    graph: &VaultView<'_>,
     doc_extensions: &[String],
 ) -> Vec<HealthIssue> {
     let mut issues = Vec::new();
@@ -85,7 +108,8 @@ fn orphans<'a>(docs: impl Iterator<Item = &'a DocId>, graph: &LinkGraph) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fubmd_abi::model::{DocumentModel, LinkTarget, Span};
+    use fubmd_abi::model::{DocumentModel, Span};
+    use fubmd_abi::traits::EntryKind;
 
     fn md() -> Vec<String> {
         vec!["md".to_string()]
@@ -115,11 +139,41 @@ mod tests {
         }
     }
 
+    /// Un'anagrafe con dentro questi file (specie irrilevante per il
+    /// controllo: conta che ci **siano**).
+    fn anagrafe(paths: &[&str]) -> BTreeMap<DocId, VaultEntry> {
+        paths
+            .iter()
+            .map(|p| {
+                let id = DocId::new(*p);
+                (
+                    id.clone(),
+                    VaultEntry {
+                        id,
+                        kind: EntryKind::Asset,
+                        size: 0,
+                        mtime: 0,
+                        fingerprint: None,
+                    },
+                )
+            })
+            .collect()
+    }
+
     fn issues(check: HealthCheck, docs: &[DocumentModel], graph: &LinkGraph) -> Vec<HealthIssue> {
+        issues_con(check, docs, graph, &anagrafe(&[]))
+    }
+
+    fn issues_con(
+        check: HealthCheck,
+        docs: &[DocumentModel],
+        graph: &LinkGraph,
+        entries: &BTreeMap<DocId, VaultEntry>,
+    ) -> Vec<HealthIssue> {
         run(
             check,
             docs.iter().map(|d| (&d.id, d.links.as_slice())),
-            graph,
+            &VaultView { graph, entries },
             &md(),
         )
     }
@@ -143,21 +197,72 @@ mod tests {
     }
 
     #[test]
-    fn an_attachment_is_not_a_broken_link() {
-        // Un PNG nel kernel non esiste (§14.1): segnalarlo riempirebbe il
-        // rapporto di falsi positivi, uno per immagine.
+    fn un_allegato_che_ce_non_e_un_link_rotto() {
+        // Prima del §14.1 questa asserzione era «il png resta **sempre**
+        // fuori», e non poteva essere altrimenti: un PNG nel kernel non
+        // esisteva, quindi «c'è» e «non c'è» erano la stessa risposta e
+        // segnalarli tutti avrebbe riempito il rapporto di un falso positivo
+        // per immagine.
         let docs = vec![doc(
             "a.md",
             vec![path("img/foto.png"), path("note/b.md"), path("note/c")],
         )];
         let graph = LinkGraph::build(docs.iter());
-        let found = issues(HealthCheck::BrokenLinks, &docs, &graph);
+        let found = issues_con(
+            HealthCheck::BrokenLinks,
+            &docs,
+            &graph,
+            &anagrafe(&["img/foto.png"]),
+        );
         let broken: Vec<&str> = found.iter().filter_map(|i| i.detail.as_deref()).collect();
         assert_eq!(
             broken,
             vec!["note/b.md", "note/c"],
-            "il png resta fuori, i due path a documenti no"
+            "il png c'è, i due path a documenti no"
         );
+    }
+
+    #[test]
+    fn un_allegato_che_manca_e_un_link_rotto() {
+        // Ed è il caso che l'utente vede davvero: un'immagine che non si
+        // carica. È la metà della promessa che il vault non poteva mantenere
+        // finché non sapeva cosa avesse dentro.
+        let docs = vec![doc(
+            "note/a.md",
+            vec![path("../img/foto.png"), path("img/sparita.png")],
+        )];
+        let graph = LinkGraph::build(docs.iter());
+        let found = issues_con(
+            HealthCheck::BrokenLinks,
+            &docs,
+            &graph,
+            &anagrafe(&["img/foto.png"]),
+        );
+        let broken: Vec<&str> = found.iter().filter_map(|i| i.detail.as_deref()).collect();
+        assert_eq!(
+            broken,
+            vec!["img/sparita.png"],
+            "il riferimento relativo risolve e non è rotto; quello che non \
+             nomina niente sì"
+        );
+        assert!(
+            found[0].span.is_some(),
+            "un allegato mancante ha un punto nel sorgente, come ogni link rotto"
+        );
+    }
+
+    #[test]
+    fn lancora_non_fa_parte_del_nome_di_un_allegato() {
+        // `documento.pdf#page=3` nomina il PDF: il frammento è per chi lo apre.
+        let docs = vec![doc("a.md", vec![path("doc/manuale.pdf#page=3")])];
+        let graph = LinkGraph::build(docs.iter());
+        assert!(issues_con(
+            HealthCheck::BrokenLinks,
+            &docs,
+            &graph,
+            &anagrafe(&["doc/manuale.pdf"])
+        )
+        .is_empty());
     }
 
     #[test]

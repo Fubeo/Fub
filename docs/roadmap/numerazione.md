@@ -32,6 +32,8 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.10 · §13.1 | [0043 — Il path è la chiave](../decisions/0043-il-path-e-la-chiave.md) |
 | §2.24 · §13.2 | [0044 — Lo stato per-documento](../decisions/0044-lo-stato-per-documento.md) |
 | §1.17 · §13.3 | [0045 — L'undo ha due pile](../decisions/0045-l-undo-ha-due-pile.md) |
+| §2.2 · §14.1 | [0046 — L'anagrafe del vault](../decisions/0046-l-anagrafe-del-vault.md) |
+| §2.20 · §14.2 | [0046 — L'anagrafe del vault](../decisions/0046-l-anagrafe-del-vault.md) |
 | §3.11 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §3.13 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §1.2 · §2.1 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
@@ -105,7 +107,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 |---|---|---|
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §2.1 | **§15.1** | Astrazione sullo storage |
-| §2.2 | **§14.1** | Il vault non è solo documenti |
 | §2.5 | **§15.2** | Durabilità e recovery |
 | §2.6 | **§15.5** | Politica dei path e del testo, in un modulo solo |
 | §2.7 | **§9.6** | Sessioni multiple |
@@ -114,7 +115,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.12 | **§15.3** | Una versione di schema su ogni formato persistito |
 | §2.13 | **§14.4** | Il canale della lista documenti |
 | §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
-| §2.20 | **§14.2** | Nessun metadato di entry: né mtime, né dimensione, né impronta |
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
 | §2.29 | **§15.4** | I dati persistiti non hanno né una mappa né una classe |

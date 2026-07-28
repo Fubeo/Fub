@@ -99,7 +99,14 @@ network share), 2.3 (drive rimovibili).
       ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)), insieme alla
       scrittura atomica e al rifiuto di sovrascrivere ciò che non si è letto —
       quindi il modello adesso ha tre esempi e questa voce ne ha uno solo da
-      raggiungere. E non l'avranno per imitazione — di quale
+      raggiungere. **Quattro**, da quando esiste l'anagrafe
+      ([0046](../decisions/0046-l-anagrafe-del-vault.md)):
+      `.fubmd-data/entries.json` nasce col campo di versione, e non perché serva
+      a migrare — un derivato non si migra, si rifà — ma perché senza un numero
+      in testa la versione dopo dovrebbe *indovinare* che un file senza campo
+      viene da prima. È l'avvertenza di questa seduta applicata: la versione si
+      anticipa a ogni formato che nasce, invece di aspettare il turno della
+      voce. E non l'avranno per imitazione — di quale
       dei precedenti? — allegati, canvas e database: dati
       **autorevoli**, che se non si leggono non si ricostruiscono. Costa un campo
       per formato oggi; domani è un formato da indovinare a valle di una
@@ -128,6 +135,15 @@ network share), 2.3 (drive rimovibili).
       snippet (6.2), plugin installati (20.2), journal (§15.2), thumbnail e cache
       derivate (§14.1), crash buffer (§15.2), backup (18.2), layout salvati
       (§11.2) — e restano da mettere in fila con i primi quattro, che è la voce.
+      Nel frattempo ne è arrivato un altro, `.fubmd-data/entries.json`
+      ([0046](../decisions/0046-l-anagrafe-del-vault.md)), ed è il caso che mostra
+      **perché** questa voce serve: è **derivato** — illeggibile si butta e si
+      ricostruisce, all'opposto del sidecar dell'organizzazione che si rifiuta di
+      sovrascrivere ciò che non ha potuto leggere — e la classe è scritta **in
+      prosa in testa al modulo**, dedotta dalla radice in cui il file sta.
+      Finché la classe non è dicibile nel contratto, ogni posto nuovo la ripete a
+      parole e chi arriva dopo la deduce per imitazione: che è esattamente ciò
+      che questa voce esiste per togliere.
 - [ ] **Il punto nuovo non è dove stanno: è che `data_*` non dichiara se ciò che
       scrive è derivato o autorevole.** Gli snapshot del versioning non si
       ricostruiscono da niente e vivono sotto `.fubmd-data/`, che il codice
