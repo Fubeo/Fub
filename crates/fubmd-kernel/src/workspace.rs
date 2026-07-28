@@ -57,6 +57,7 @@ use fubmd_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode}
 use fubmd_abi::custom::{CustomRenderer, SyntaxRule};
 use fubmd_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::format::{DocumentFormat, RenderOptions};
+use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValue};
@@ -83,6 +84,7 @@ use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
 use crate::index::Indexes;
+use crate::locale::SystemLocale;
 use crate::organization::OrganizationStore;
 use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
 use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
@@ -243,6 +245,11 @@ pub struct Workspace {
     /// ordinamenti, spazi. Condiviso con l'indice del kernel, che è chi risponde
     /// a `IndexQuery::Organization`.
     organization: Arc<OrganizationStore>,
+    /// Ciò che la shell riporta del sistema: lingua, fuso, calendario (§12.3).
+    /// Condiviso fra tutti i vault aperti, come il livello macchina delle
+    /// impostazioni e lo stato di vista — la lingua di chi guarda non cambia
+    /// perché si apre un secondo vault.
+    system_locale: Arc<SystemLocale>,
 }
 
 impl Workspace {
@@ -291,6 +298,7 @@ impl Workspace {
             settings,
             view_states: ViewStates::in_memory(),
             organization,
+            system_locale: Arc::new(SystemLocale::default()),
         }
     }
 
@@ -304,6 +312,42 @@ impl Workspace {
     pub fn with_view_states(mut self, states: Arc<ViewStates>) -> Self {
         self.view_states = states;
         self
+    }
+
+    /// Aggancia il locale di sistema **condiviso** fra i vault aperti (§12.3).
+    ///
+    /// Builder come [`with_view_states`](Workspace::with_view_states) e per la
+    /// stessa ragione: il default è un locale indeterminato, che è ciò che serve
+    /// a un test e a un host senza shell, e chi ha una finestra lo sostituisce
+    /// in una riga.
+    pub fn with_system_locale(mut self, locale: Arc<SystemLocale>) -> Self {
+        self.system_locale = locale;
+        self
+    }
+
+    /// Il locale **che vale adesso**: ciò che la shell riporta del sistema, con
+    /// sopra le chiavi `locale.*` che l'utente ha scelto (§12.3).
+    ///
+    /// È ciò che [`HostEnv::locale`](fubmd_abi::HostEnv::locale) rende, e ciò
+    /// che la shell ridisegna quando cambia. Si ricompone a ogni chiamata invece
+    /// di tenere una copia risolta: le due sorgenti cambiano da due parti — la
+    /// shell che ripubblica, l'utente che scrive un'impostazione — e una copia
+    /// che non si accorge di una delle due è il modo in cui la lingua resta
+    /// quella di prima finché non si riavvia.
+    pub fn locale(&self) -> Locale {
+        let system = self.system_locale.get();
+        crate::locale::resolve(&system, |key| {
+            self.setting(key).ok().and_then(|v| match v {
+                SettingValue::Text(s) => Some(s),
+                _ => None,
+            })
+        })
+    }
+
+    /// Il locale di sistema condiviso: chi monta lo passa alla shell perché ci
+    /// scriva ciò che il sistema dice.
+    pub fn system_locale(&self) -> Arc<SystemLocale> {
+        Arc::clone(&self.system_locale)
     }
 
     /// Sceglie la strategia di aggiornamento del grafo (default: incrementale).

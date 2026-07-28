@@ -2,6 +2,7 @@
 
 use fubmd_abi::edit::Revision;
 use fubmd_abi::format::DocumentFormat;
+use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::SettingValue;
@@ -131,6 +132,14 @@ impl SettingsRead for ReadHost<'_> {
 impl HostEnv for ReadHost<'_> {
     fn now_unix_millis(&self) -> u64 {
         crate::time::now_unix_millis()
+    }
+
+    fn user_locale(&self) -> Locale {
+        self.ws.locale()
+    }
+
+    fn random_bytes(&self, n: u32) -> Vec<u8> {
+        crate::random::random_bytes(n)
     }
 
     fn active_context(&self) -> Option<ViewContext> {

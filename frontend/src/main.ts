@@ -13,6 +13,7 @@ import { pickFolder } from "./host/dialog";
 import { api } from "./host/ipc";
 import { statoDelVault } from "./host/query";
 import { startKernelRouter } from "./state/kernel";
+import { mountLocale } from "./state/locale";
 import { loadOrganization } from "./state/organization";
 import { emit, loadActiveSpace, loadExpanded, loadMode, state } from "./state/store";
 import { loadCommandSpecs } from "./state/vault";
@@ -119,6 +120,13 @@ async function init(): Promise<void> {
   });
 
   await startKernelRouter();
+
+  // Il locale del sistema (§12.3), **prima** di aprire il vault: da qui in poi
+  // ogni `render_view` lo trova già pubblicato, invece di disegnare il primo
+  // giro con la lingua indeterminata e correggersi dopo. Chi lo cambia da fuori
+  // — impostazioni del sistema, ora legale — se ne accorge al ritorno del
+  // focus, e allora si ridisegna ciò che è appeso al contesto.
+  mountLocale(() => void mountDeclaredViews());
 
   const initial = await api.initialVault();
   // Chi apre un vault applica anche la sua modalità (§11.2): è là dentro che si

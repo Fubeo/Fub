@@ -10,6 +10,7 @@ use std::sync::Arc;
 use fubmd_abi::command::CommandOutcome;
 use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::format::DocumentFormat;
+use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::options::permission;
 use fubmd_abi::session::ViewContext;
@@ -516,6 +517,29 @@ impl<H: HostEnv, P: Policy> HostEnv for Guard<H, P> {
             self.inner.now_unix_millis()
         } else {
             0
+        }
+    }
+
+    fn user_locale(&self) -> Locale {
+        // Senza esito. Il locale di default è già la risposta del contratto per
+        // «nessuno me l'ha detto»: lingua indeterminata, UTC, ISO 8601. Chi non
+        // ha la capacità riceve quindi ciò che riceverebbe un host senza shell,
+        // non un locale plausibile e falso.
+        if self.allows(Capability::Env) {
+            self.inner.user_locale()
+        } else {
+            Locale::default()
+        }
+    }
+
+    fn random_bytes(&self, n: u32) -> Vec<u8> {
+        // Senza esito, e il vuoto è la sola risposta onesta: dei byte fissi
+        // sarebbero identità che collidono, e chi li genera non ha modo di
+        // accorgersene finché due note non hanno lo stesso id.
+        if self.allows(Capability::Env) {
+            self.inner.random_bytes(n)
+        } else {
+            Vec::new()
         }
     }
 

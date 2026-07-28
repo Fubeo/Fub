@@ -20,6 +20,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use fubmd_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::event::Actor;
+use fubmd_abi::locale::Locale;
 use fubmd_abi::model::DocId;
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::SettingValue;
@@ -246,6 +247,21 @@ fn set_active_context(
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     Ok(ws.set_active_context(context))
+}
+
+/// La shell riporta cosa il **sistema** dice: lingua, fuso, calendario (§12.3).
+///
+/// Lo pubblica la webview perché è l'unica che lo sappia davvero — `Intl` porta
+/// un ICU intero, il lato Rust avrebbe bisogno di un database dei fusi orari per
+/// dare una risposta peggiore — e lo pubblica **una volta per tutti i vault**:
+/// la lingua di chi guarda non è di un vault, a differenza del contesto di
+/// pannello qui sopra. Ciò che l'utente ha scelto nelle chiavi `locale.*` sta
+/// sopra a questo, e le due cose le compone il kernel.
+///
+/// Restituisce `true` se qualcosa è cambiato: la shell ridisegna solo allora.
+#[tauri::command]
+fn set_system_locale(host: State<Host>, locale: Locale) -> bool {
+    host.publish_locale(locale)
 }
 
 /// Le view offerte dai provider registrati, nell'ordine di registrazione.
@@ -698,6 +714,7 @@ pub fn run() {
             render_preview,
             render_embed,
             set_active_context,
+            set_system_locale,
             list_views,
             render_view,
             view_action,

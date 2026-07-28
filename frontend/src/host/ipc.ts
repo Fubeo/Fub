@@ -17,6 +17,7 @@ import type {
   IndexResult,
   InvokeMode,
   KernelNotice,
+  Locale,
   RenderedDocument,
   SettingValue,
   TrashEntry,
@@ -57,6 +58,11 @@ export const api = {
   // strada sarebbe ridisegnarle tutte a ogni movimento del cursore.
   setActiveContext: (context: ViewContext | null) =>
     invoke<string[]>("set_active_context", { context }),
+  // Il locale del sistema (§12.3): uno per l'app e non per vault, perché la
+  // lingua di chi guarda non è di un vault. Risponde `true` se è cambiato
+  // qualcosa rispetto all'ultima volta — solo allora vale ridisegnare.
+  setSystemLocale: (locale: Locale) =>
+    invoke<boolean>("set_system_locale", { locale }),
   // Le view offerte dai provider registrati: la shell le monta per
   // `placement`, senza cablare gli id — una view di plugin compare da sola.
   listViews: () => invoke<ViewSpec[]>("list_views"),

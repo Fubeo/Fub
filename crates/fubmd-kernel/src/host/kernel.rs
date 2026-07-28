@@ -4,6 +4,7 @@ use camino::Utf8PathBuf;
 use fubmd_abi::command::{CommandOutcome, InvokeMode};
 use fubmd_abi::edit::{EditReport, EditRequest, Revision};
 use fubmd_abi::format::DocumentFormat;
+use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::SettingValue;
@@ -274,6 +275,14 @@ impl SettingsWrite for KernelHost<'_> {
 impl HostEnv for KernelHost<'_> {
     fn now_unix_millis(&self) -> u64 {
         crate::time::now_unix_millis()
+    }
+
+    fn user_locale(&self) -> Locale {
+        self.ws.locale()
+    }
+
+    fn random_bytes(&self, n: u32) -> Vec<u8> {
+        crate::random::random_bytes(n)
     }
 
     fn active_context(&self) -> Option<ViewContext> {

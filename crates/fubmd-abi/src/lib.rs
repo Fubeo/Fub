@@ -28,6 +28,9 @@
 //!   cosa è successo, **chi lo ha chiesto** e di quale **lotto** fa parte;
 //! - il **contesto di sessione** ([`session`]): quale pannello ha il focus, che
 //!   documento guarda, cosa c'è selezionato dentro;
+//! - il **locale** ([`locale`]): in che lingua legge chi guarda, in che fuso
+//!   vive, con che calendario — il fatto dell'host senza il quale un orologio
+//!   sa dire *quando*, e non sa dirlo a nessuno;
 //! - le **impostazioni** ([`settings`]): cosa un componente dichiara di poter
 //!   configurare, su quale livello quel valore ha il diritto di stare, e quali
 //!   chiavi un programma può scrivere;
@@ -48,6 +51,7 @@ pub mod error;
 pub mod event;
 pub mod format;
 pub mod ipc;
+pub mod locale;
 pub mod model;
 pub mod options;
 pub mod organization;
@@ -75,6 +79,7 @@ pub use format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
     RenderOptions, RenderTarget, SourceKind,
 };
+pub use locale::{HourCycle, Locale, Weekday};
 pub use model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
 };
@@ -94,7 +99,7 @@ pub use traits::{
     PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
     PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, SettingsRead,
     SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewInstance, ViewProvider,
-    ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface,
+    ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface, MAX_RANDOM_BYTES,
 };
 pub use transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,

@@ -71,6 +71,7 @@ use fubmd_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
     ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
+use fubmd_abi::locale::{HourCycle, Locale, Weekday};
 use fubmd_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
     PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
@@ -282,6 +283,11 @@ wit_type! {
     ViewContext => "view-context",
     ContextKind => "context-kind",
     ContextMask => "context-mask",
+
+    // Il locale (§12.3): chi legge, e da dove.
+    Locale => "locale",
+    Weekday => "weekday",
+    HourCycle => "hour-cycle",
     IndexQuery => "index-query",
     IndexResult => "index-result",
     BacklinkRef => "backlink-ref",
@@ -2090,6 +2096,25 @@ fn pane_mode_name(m: PaneMode) -> &'static str {
     }
 }
 
+fn weekday_name(d: Weekday) -> &'static str {
+    match d {
+        Weekday::Monday => "monday",
+        Weekday::Tuesday => "tuesday",
+        Weekday::Wednesday => "wednesday",
+        Weekday::Thursday => "thursday",
+        Weekday::Friday => "friday",
+        Weekday::Saturday => "saturday",
+        Weekday::Sunday => "sunday",
+    }
+}
+
+fn hour_cycle_name(h: HourCycle) -> &'static str {
+    match h {
+        HourCycle::H23 => "h23",
+        HourCycle::H12 => "h12",
+    }
+}
+
 fn context_kind_name(k: ContextKind) -> &'static str {
     match k {
         ContextKind::Document => "document",
@@ -3659,6 +3684,50 @@ fn conform(source: &str) -> Result<(), String> {
         .as_slice(),
     );
 
+    // --- il locale (§12.3)
+
+    let Locale {
+        language,
+        timezone,
+        utc_offset_minutes,
+        first_day_of_week,
+        hour_cycle,
+    } = Locale::default();
+    contract.record(
+        "locale",
+        &[
+            ("language", wit(&language)),
+            ("timezone", wit(&timezone)),
+            ("utc-offset-minutes", wit(&utc_offset_minutes)),
+            ("first-day-of-week", wit(&first_day_of_week)),
+            ("hour-cycle", wit(&hour_cycle)),
+        ],
+    );
+
+    contract.enumeration_src(
+        "weekday",
+        ("locale.rs", "Weekday"),
+        [
+            Weekday::Monday,
+            Weekday::Tuesday,
+            Weekday::Wednesday,
+            Weekday::Thursday,
+            Weekday::Friday,
+            Weekday::Saturday,
+            Weekday::Sunday,
+        ]
+        .map(weekday_name)
+        .as_slice(),
+    );
+
+    contract.enumeration_src(
+        "hour-cycle",
+        ("locale.rs", "HourCycle"),
+        [HourCycle::H23, HourCycle::H12]
+            .map(hour_cycle_name)
+            .as_slice(),
+    );
+
     let TrashEntry {
         id,
         original,
@@ -4322,6 +4391,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("events");
     contract.types_only("errors");
     contract.types_only("session");
+    contract.types_only("intl");
     contract.types_only("edit");
     contract.types_only("transfer");
     contract.types_only("settings");
@@ -4702,6 +4772,18 @@ fn conform(source: &str) -> Result<(), String> {
         <dyn HostApi>::query_index
             as fn(&'static dyn HostApi, IndexQuery) -> Result<IndexResult, PluginError>,
         &["query"],
+    );
+    contract.method(
+        "host-env",
+        "user-locale",
+        <dyn HostApi>::user_locale as fn(&'static dyn HostApi) -> Locale,
+        &[],
+    );
+    contract.method(
+        "host-env",
+        "random-bytes",
+        <dyn HostApi>::random_bytes as fn(&'static dyn HostApi, u32) -> Vec<u8>,
+        &["n"],
     );
     contract.method(
         "host-env",

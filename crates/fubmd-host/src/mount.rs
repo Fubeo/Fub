@@ -38,7 +38,9 @@ use fubmd_features::{
     BACKLINKS_ID, BLOCKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, MachineSettings, RegistryError, Trust, ViewStates, Workspace};
+use fubmd_kernel::{
+    FormatRegistry, MachineSettings, RegistryError, SystemLocale, Trust, ViewStates, Workspace,
+};
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
 use crate::settings::{
@@ -141,6 +143,7 @@ pub fn mount(
     root: &Utf8Path,
     machine: Arc<MachineSettings>,
     view_states: Arc<ViewStates>,
+    system_locale: Arc<SystemLocale>,
 ) -> Result<Mounted, String> {
     let mut formats = FormatRegistry::new();
     // Il primo registrato è anche quello che dà l'estensione alle note nuove
@@ -151,8 +154,9 @@ pub fn mount(
         return Err(format!("provider di formato in conflitto: {e}"));
     }
 
-    let mut ws =
-        Workspace::with_machine_settings(root, formats, machine).with_view_states(view_states);
+    let mut ws = Workspace::with_machine_settings(root, formats, machine)
+        .with_view_states(view_states)
+        .with_system_locale(system_locale);
 
     // Lo store delle versioni nasce dentro il bundle e serve fuori: è la
     // composizione delle due metà, e il contenitore è il modo in cui chi monta

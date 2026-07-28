@@ -42,8 +42,13 @@ pub const VERSIONING_ENABLED: &str = "versioning.enabled";
 pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 
 /// Le impostazioni del bundle di core.
+///
+/// Le chiavi `locale.*` (§12.3) stanno qui e non in una feature per la stessa
+/// ragione di `plugins.disabled`: in che lingua legge l'utente non è di nessun
+/// componente, è dell'applicazione — e appenderle a una feature vorrebbe dire
+/// che spegnendo quella feature sparisce la lingua.
 pub fn core_settings() -> Vec<SettingSpec> {
-    vec![SettingSpec::new(
+    let mut settings = vec![SettingSpec::new(
         PLUGINS_DISABLED,
         "Componenti spenti",
         SettingKind::List {
@@ -55,11 +60,13 @@ pub fn core_settings() -> Vec<SettingSpec> {
          vault. Si cambiano accendendo e spegnendo un componente, non scrivendo \
          qui dentro.",
     )
-    .grouped("Componenti")]
+    .grouped("Componenti")];
     // **Non** `program_writable`, ed è la riga che conta: un componente che
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
     // tutto ciò che gli sta accanto — compreso ciò che lo controlla. Chi
     // accende e spegne è la persona davanti allo schermo, e passa dalla shell.
+    settings.extend(fubmd_kernel::locale::locale_settings());
+    settings
 }
 
 /// Le impostazioni del bundle del versioning.
