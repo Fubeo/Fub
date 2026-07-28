@@ -193,7 +193,7 @@ pub fn validate_params(
     params: &[ParamSpec],
     args: &serde_json::Value,
 ) -> Result<(), PluginError> {
-    let bad = |msg: String| Err(PluginError::BadArgs(format!("`{subject}`: {msg}")));
+    let bad = |msg: String| Err(PluginError::BadArgs(format!("`{subject}`: {msg}").into()));
     let empty = serde_json::Map::new();
     let object = match args {
         serde_json::Value::Object(map) => map,
@@ -800,7 +800,7 @@ mod tests {
             panic!("un argomento che manca è BadArgs")
         };
         assert!(
-            msg.contains("find"),
+            msg.to_string().contains("find"),
             "il messaggio nomina cosa manca: {msg}"
         );
     }
@@ -847,7 +847,7 @@ mod tests {
             panic!("BadArgs")
         };
         assert!(
-            msg.contains("regex") && msg.contains("find"),
+            msg.to_string().contains("regex") && msg.to_string().contains("find"),
             "il messaggio dice cosa è di troppo e cosa era dichiarato: {msg}"
         );
     }
@@ -881,7 +881,7 @@ mod tests {
             panic!("BadArgs")
         };
         assert!(
-            msg.contains("html") && msg.contains("pdf"),
+            msg.to_string().contains("html") && msg.to_string().contains("pdf"),
             "chi sbaglia una scelta deve leggere quali erano: {msg}"
         );
     }

@@ -401,7 +401,7 @@ impl SettingsStore {
 
     fn declared(&self, key: &str) -> Result<&Declared, PluginError> {
         self.specs.get(key).ok_or_else(|| {
-            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
         })
     }
 
@@ -475,7 +475,7 @@ impl SettingsStore {
     pub fn set(&mut self, key: &str, value: SettingValue) -> Result<SettingScope, PluginError> {
         let spec = self.declared(key)?.spec.clone();
         if let Some(why) = spec.kind.rejects(&value) {
-            return Err(PluginError::BadArgs(format!("`{key}`: {why}")));
+            return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
         }
         self.write(&spec, Some(value))
     }
@@ -495,10 +495,12 @@ impl SettingsStore {
             SettingScope::Machine => self
                 .machine
                 .write(&spec.key, value)
-                .map_err(PluginError::Internal)?,
+                .map_err(|e| PluginError::Internal(e.into()))?,
             SettingScope::Vault => {
                 if !self.vault_readable {
-                    return Err(PluginError::Internal(non_lo_sovrascrivo(&self.vault_path)));
+                    return Err(PluginError::Internal(
+                        non_lo_sovrascrivo(&self.vault_path).into(),
+                    ));
                 }
                 // Su disco prima, in memoria dopo: la ragione è la stessa
                 // scritta su `MachineSettings::write`.
@@ -511,7 +513,7 @@ impl SettingsStore {
                         next.remove(&spec.key);
                     }
                 }
-                store(&self.vault_path, &next).map_err(PluginError::Internal)?;
+                store(&self.vault_path, &next).map_err(|e| PluginError::Internal(e.into()))?;
                 self.vault = next;
             }
         }

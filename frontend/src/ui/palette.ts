@@ -24,6 +24,7 @@ import type {
   ParamSpec,
 } from "../host/contract";
 import { pageName } from "../rules/organizer";
+import { errorText } from "../host/errors";
 
 /// Ciò che la palette chiede alla shell: eseguire gli intenti e dire qualcosa
 /// all'utente. Il resto (invocare, disegnare, chiedere) è suo.
@@ -200,7 +201,7 @@ export async function openCommandPalette(host: PaletteHost) {
   try {
     specs = await api.listCommands();
   } catch (e) {
-    host.notify(`Comandi non disponibili: ${e}`);
+    host.notify(`Comandi non disponibili: ${errorText(e)}`);
     return;
   }
   scegli(specs, apriOverlay(), host);
@@ -523,7 +524,7 @@ async function consegna(outcome: CommandOutcome, host: PaletteHost) {
 /// sta guardando: un errore in console sarebbe un comando che non ha fatto
 /// niente in silenzio.
 function fallito(e: unknown, box: HTMLElement, host: PaletteHost) {
-  const messaggio = String(e);
+  const messaggio = errorText(e);
   const errore = box.querySelector(".palette-error") ?? document.createElement("div");
   errore.className = "palette-error";
   errore.textContent = messaggio;

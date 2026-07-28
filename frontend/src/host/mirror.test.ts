@@ -45,10 +45,13 @@ import type {
   ViewUpdate,
   Weekday,
   Organization,
+  PluginError,
+  PluginErrorKind,
 } from "./contract";
 // Le fixture sono generate dai tipi Rust (serde) — vedi
 // `crates/fubmd-features/tests/ts_mirror.rs` (tipi del contratto) e
 // `crates/fubmd-app/tests/ts_mirror_app.rs` (tipi dell'app).
+import { asPluginError, errorText, isErrorKind } from "./errors";
 import samples from "../__fixtures__/mirror-samples.json";
 import appSamples from "../__fixtures__/mirror-samples-app.json";
 
@@ -196,6 +199,32 @@ function touchParamKind(k: CommandSpec["params"][number]["kind"]): void {
       return;
     case "choice":
       k.value.forEach((c) => c.title);
+      return;
+    default:
+      assertNever(k);
+  }
+}
+
+// Le dodici specie di fallimento che il contratto sa distinguere (§12.2).
+//
+// L'esaustivita' e' il punto: un `kind` nuovo in Rust che qui non avesse un
+// ramo sarebbe una distinzione che il backend fa e la shell no — cioe'
+// esattamente il difetto che la decisione 0041 e' venuta a togliere, riaperto
+// dall'altro capo.
+function touchPluginErrorKind(k: PluginErrorKind): void {
+  switch (k) {
+    case "unknown_command":
+    case "unknown_view":
+    case "unknown_job":
+    case "bad_args":
+    case "permission_denied":
+    case "internal":
+    case "conflict":
+    case "unserved":
+    case "cancelled":
+    case "not_found":
+    case "already_exists":
+    case "io":
       return;
     default:
       assertNever(k);
@@ -437,6 +466,10 @@ const RECORD_KEYS: Record<string, string[]> = {
     scope: true,
   }),
   CommandOutcome: keysOf<CommandOutcome>({ notify: true, effect: true }),
+  // L'errore (§12.2): due chiavi, ed è la forma su cui la shell rama. Se Rust
+  // ne aggiungesse una terza senza che di qua se ne sappia niente, sarebbe
+  // un'informazione che arriva a chi disegna e che chi disegna non guarda.
+  PluginError: keysOf<PluginError>({ kind: true, message: true }),
   // Le impostazioni (§11.1): il pannello disegna ciò che la spec dichiara,
   // quindi un campo nuovo in Rust non deve poter restare invisibile di qua.
   SettingSpec: keysOf<SettingEntry["spec"]>({
@@ -533,6 +566,7 @@ describe("mirror TS↔Rust", () => {
       "CommandOutcome",
       "SettingSpec",
       "SettingEntry",
+      "PluginError",
     ]) {
       expect(fixture[type], `manca il tipo ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
@@ -667,6 +701,33 @@ describe("mirror TS↔Rust", () => {
     const ricco = (fixture.CommandSpec as CommandSpec[]).find((s) => s.params.length > 1);
     expect(ricco, "manca il campione con un parametro per specie").toBeTruthy();
     expect(ricco!.params.some((p) => p.kind.kind === "choice")).toBe(true);
+  });
+
+  it("ogni specie di fallimento che Rust sa dire ha un ramo di qua", () => {
+    const errori = fixture.PluginError as PluginError[];
+    for (const e of errori) touchPluginErrorKind(e.kind);
+    // I tre campioni sono i tre che il cestino deve saper distinguere: senza
+    // `already_exists` distinto dagli altri due, il ripristino torna a fare la
+    // domanda sbagliata a chiunque (§12.2).
+    expect(new Set(errori.map((e) => e.kind))).toEqual(
+      new Set(["already_exists", "not_found", "io"]),
+    );
+  });
+
+  it("l'errore si riconosce dalla forma, e non da una sottostringa nella prosa", () => {
+    // `asPluginError` guarda la STRUTTURA: ciò che attraversa l'IPC è JSON, e
+    // da questa parte non c'è nessuna classe da riconoscere. Un guasto della
+    // webview non deve poter passare per un errore del backend.
+    const esiste = fixture.PluginError.find(
+      (e) => (e as PluginError).kind === "already_exists",
+    )!;
+    expect(isErrorKind(esiste, "already_exists")).toBe(true);
+    expect(isErrorKind(esiste, "io")).toBe(false);
+    expect(errorText(esiste)).toBe((esiste as PluginError).message);
+
+    expect(asPluginError(new TypeError("rotto qui dentro"))).toBeNull();
+    expect(asPluginError("una stringa, come prima della 0041")).toBeNull();
+    expect(errorText(new TypeError("rotto qui dentro"))).toContain("rotto qui dentro");
   });
 
   it("i record hanno esattamente le chiavi del tipo TS", () => {

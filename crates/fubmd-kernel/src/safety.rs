@@ -64,7 +64,7 @@ pub fn calling<R>(
     what: &str,
     f: impl FnOnce() -> Result<R, PluginError>,
 ) -> Result<R, PluginError> {
-    caught(who, what, PluginError::Internal, f)
+    caught(who, what, |m| PluginError::Internal(m.into()), f)
 }
 
 /// Come [`calling`], per chi risponde di no in un'altra lingua: `wrap` è la

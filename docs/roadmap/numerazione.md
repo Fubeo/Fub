@@ -77,6 +77,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.14 · §11.3 | [0038 — Il kernel possiede il sidecar](../decisions/0038-il-kernel-possiede-il-sidecar.md) |
 | §1.25 · §12.3 | [0039 — Il locale e il caso](../decisions/0039-il-locale-e-il-caso.md) |
 | §1.8 · §12.1 | [0040 — Chi localizza](../decisions/0040-chi-localizza.md) |
+| §1.11 · §12.2 | [0041 — Un errore è testo che qualcuno legge](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -98,9 +99,7 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 
 | Vecchio | Nuovo | Voce |
 |---|---|---|
-| §1.8 | **§12.1** | Stringhe e localizzazione al confine — decisione, non implementazione |
 | §1.10 | **§13.1** | Identità del documento — il path, e l'eventuale seconda chiave |
-| §1.11 | **§12.2** | Errori tipizzati al confine, non `String` |
 | §1.17 | **§13.3** | L'undo non ha un proprietario |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §2.1 | **§15.1** | Astrazione sullo storage |

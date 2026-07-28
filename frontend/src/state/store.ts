@@ -16,6 +16,7 @@
 // raccoglie tutto torna a essere l'oggetto-dio, con un file diverso.
 import type { CommandSpec, Organization, PaneMode } from "../host/contract";
 import { api } from "../host/ipc";
+import { errorText } from "../host/errors";
 
 // --- i segnali --------------------------------------------------------------
 //
@@ -70,7 +71,7 @@ export function emit<K extends keyof Signals>(signal: K, ...args: Signals[K]): v
     try {
       (listener as (...a: Signals[K]) => void)(...args);
     } catch (e) {
-      console.error(`FubMD: un ascoltatore di «${signal}» ha lanciato: ${e}`);
+      console.error(`FubMD: un ascoltatore di «${signal}» ha lanciato: ${errorText(e)}`);
     }
   }
 }

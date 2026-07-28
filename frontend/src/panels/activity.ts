@@ -32,6 +32,7 @@ import { onAnyEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
 import { notify } from "../ui/notify";
 import type { Tono } from "../ui/notify";
+import { errorText } from "../host/errors";
 
 /// Una riga del centro attività. È `JobStatus` senza i campi che una riga non
 /// disegna: chi arriva da un evento non conosce né il plugin né l'istante, e
@@ -250,6 +251,6 @@ async function annulla(lavoro: Lavoro): Promise<void> {
   try {
     await api.cancelJob(lavoro.id);
   } catch (e) {
-    notify(`Non sono riuscito a fermare «${etichettaDi(lavoro)}»: ${e}`, "guasto");
+    notify(`Non sono riuscito a fermare «${etichettaDi(lavoro)}»: ${errorText(e)}`, "guasto");
   }
 }

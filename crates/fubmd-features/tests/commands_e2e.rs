@@ -349,7 +349,10 @@ fn the_whole_life_of_a_note_goes_through_the_registry() {
             Actor::User,
         )
         .expect_err("il path è occupato");
-    assert!(matches!(e, PluginError::Internal(_)), "{e}");
+    // `AlreadyExists` e non `Internal` (§12.2): fino alla 0041 «il path è
+    // occupato» arrivava a chi disegna come «errore interno del plugin», e
+    // l'unico modo di riconoscerlo era cercare una sottostringa nella prosa.
+    assert!(matches!(e, PluginError::AlreadyExists(_)), "{e}");
 
     ws.invoke_command(
         NOTE_RENAME,
@@ -401,6 +404,77 @@ fn the_whole_life_of_a_note_goes_through_the_registry() {
         .expect("dice quante")
         .to_string()
         .contains('0'));
+}
+
+/// Il ripristino su un path **occupato** risponde `AlreadyExists`, e ci arriva
+/// attraverso tutta la catena.
+///
+/// È il presidio del cliente vero del §12.2
+/// ([decisione 0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)):
+/// `frontend/src/panels/trash.ts` rama su `already_exists` per decidere se
+/// chiedere «lo ripristino con un altro nome?», e prima aveva un `catch` nudo
+/// che faceva quella domanda a *qualunque* fallimento — anche a un disco pieno,
+/// dove la risposta affermativa ritentava qualcosa che sarebbe fallito uguale.
+///
+/// La catena ha tre anelli e ognuno può romperlo in silenzio: il kernel produce
+/// `KernelError::AlreadyExists`, il `From` lo traduce senza appiattirlo, e il
+/// comando lo propaga con un `?` invece di riavvolgerlo. Un `map_err` di troppo
+/// in mezzo non farebbe fallire niente — renderebbe solo *morto* quel ramo, e
+/// la shell tornerebbe a fare la domanda sbagliata senza che nessun test lo
+/// dica.
+#[test]
+fn restoring_onto_an_occupied_path_says_exactly_that() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+
+    ws.invoke_command(
+        NOTE_CREATE,
+        serde_json::json!({ "name": "Idee.md" }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("crea");
+    ws.invoke_command(
+        NOTE_TRASH,
+        serde_json::json!({ "doc": "Idee.md" }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("cestina");
+
+    // Il path torna occupato mentre la nota è nel cestino: è esattamente il caso
+    // in cui la domanda della shell ha senso.
+    ws.invoke_command(
+        NOTE_CREATE,
+        serde_json::json!({ "name": "Idee.md" }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("ricrea sullo stesso path");
+
+    let voce = ws.list_trash().expect("cestino")[0].id.clone();
+    let e = ws
+        .invoke_command(
+            TRASH_RESTORE,
+            serde_json::json!({ "entry": voce.as_str() }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("il path originale è occupato");
+    assert!(
+        matches!(e, PluginError::AlreadyExists(_)),
+        "è la variante su cui il cestino rama, e senza la domanda torna sbagliata: {e}"
+    );
+
+    // E col nome che la shell propone, passa: l'altro capo dello stesso ramo.
+    let libero = ws.free_name(&DocId::new("Idee.md"));
+    ws.invoke_command(
+        TRASH_RESTORE,
+        serde_json::json!({ "entry": voce.as_str(), "to": libero.as_str() }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("ripristina con un altro nome");
 }
 
 #[test]

@@ -326,7 +326,7 @@ impl Host {
     /// Non c'è un «job sconosciuto»: annullare un job un istante prima che parta
     /// deve valere quanto annullarne uno in volo, e una risposta negativa lo
     /// renderebbe una corsa. L'altro lato — il pulsante — è il §10.3.
-    pub fn cancel_job(&self, vault: Option<&str>, id: JobId) -> Result<(), String> {
+    pub fn cancel_job(&self, vault: Option<&str>, id: JobId) -> Result<(), PluginError> {
         self.with_session(vault, |s| s.cancel_job(id))
     }
 
@@ -338,9 +338,14 @@ impl Host {
     /// ripagare e il lock dell'indice da riprendere — e se la seconda apertura
     /// falliva non si tornava alla prima. Succedeva riaprendo lo stesso vault
     /// dal dialogo, e in sviluppo a ogni ricarica della pagina.
-    pub fn open(&self, root: &Utf8Path) -> Result<VaultInfo, String> {
+    pub fn open(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
         if !root.is_dir() {
-            return Err(format!("Non è una cartella valida: {root}"));
+            // `NotFound` e non `BadArgs`: chi arriva qui ha scelto una cartella
+            // da un dialogo, o ha riaperto un recente. Non ha sbagliato a
+            // scrivere — quella cartella non c'è (più).
+            return Err(PluginError::NotFound(
+                format!("Non è una cartella valida: {root}").into(),
+            ));
         }
         let root = canonical(root)?;
 
@@ -362,10 +367,14 @@ impl Host {
             Arc::clone(&self.machine),
             Arc::clone(&self.view_states),
             Arc::clone(&self.system_locale),
-        )?;
+        )
+        // Le due cose che fanno fallire il montaggio sono un provider di formato
+        // in conflitto con sé stesso e il bundle di core che non si monta: è
+        // ciò che questo binario si porta dietro, non il disco di chi apre.
+        .map_err(|e| PluginError::Internal(e.into()))?;
         let registry = Arc::new(Mutex::new(registry));
 
-        ws.reindex().map_err(|e| e.to_string())?;
+        ws.reindex().map_err(PluginError::from)?;
 
         // Ponte eventi kernel → sink (thread dedicato che vive quanto il bus).
         //
@@ -383,7 +392,14 @@ impl Host {
         // (§9.7): così `Host::is_watching` e `IndexQuery::VaultStatus`
         // rispondono dallo stesso bit, e non da due idee di com'è andata.
         let watching = workspace.read().expect("workspace avvelenato").watch_flag();
-        let watcher = self.watcher.start(&root, workspace.clone(), watching)?;
+        // La fabbrica del watcher resta a `String`: è una cucitura interna
+        // dell'host — chi la sostituisce sostituisce un modo di guardare una
+        // cartella, non parla col contratto — e il suo unico fallimento è il
+        // sistema che non concede di guardare. Si nomina qui, una volta.
+        let watcher = self
+            .watcher
+            .start(&root, workspace.clone(), watching)
+            .map_err(|e| PluginError::Io(e.into()))?;
 
         // Il pool parte **dopo** la scansione e dopo il ponte eventi: i job che
         // `reindex` ha fatto accodare sono già in coda, e il primo giro del pool
@@ -466,7 +482,7 @@ impl Host {
 
     /// Appunta (o spunta) un vault. Il path **non** deve essere aperto: si
     /// preferisce un vault anche quando è chiuso, ed è quasi sempre allora.
-    pub fn set_vault_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), String> {
+    pub fn set_vault_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
         self.vaults.set_favorite(&canonical(root)?, favorite)
     }
 
@@ -476,7 +492,7 @@ impl Host {
         root: &Utf8Path,
         icon: Option<String>,
         name: Option<String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), PluginError> {
         self.vaults.set_look(&canonical(root)?, icon, name)
     }
 
@@ -493,15 +509,19 @@ impl Host {
     /// l'utente vede: se la potatura fallisce dopo, resta un residuo in un file
     /// di cache — e lo si dice — invece di uno scroll perso per un vault che è
     /// rimasto in elenco.
-    pub fn forget_vault(&self, root: &Utf8Path) -> Result<(), String> {
+    pub fn forget_vault(&self, root: &Utf8Path) -> Result<(), PluginError> {
         self.vaults.forget(root)?;
-        self.view_states.forget_vault(root.as_str())
+        // Il sidecar dello stato di vista ha un fallimento solo — scriverlo —
+        // e chi lo riceve non ha altro da fare che riprovare.
+        self.view_states
+            .forget_vault(root.as_str())
+            .map_err(|e| PluginError::Io(e.into()))
     }
 
     // --- accendere e spegnere un componente (§11.1) -------------------------
 
     /// Chi questo host sa montare, e chi è acceso in questo vault.
-    pub fn bundles(&self, vault: Option<&str>) -> Result<Vec<BundleInfo>, String> {
+    pub fn bundles(&self, vault: Option<&str>) -> Result<Vec<BundleInfo>, PluginError> {
         self.with_session(vault, |s| {
             s.registry.lock().expect("registry avvelenato").inventory()
         })
@@ -527,10 +547,10 @@ impl Host {
         vault: Option<&str>,
         id: &str,
         enabled: bool,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<String>, PluginError> {
         if id == crate::settings::CORE_ID {
-            return Err(format!(
-                "`{id}` non si spegne: è chi tiene l'elenco di ciò che è spento"
+            return Err(PluginError::BadArgs(
+                format!("`{id}` non si spegne: è chi tiene l'elenco di ciò che è spento").into(),
             ));
         }
         self.with_session(vault, |session| {
@@ -541,7 +561,7 @@ impl Host {
             // Prima il fatto, poi la memoria del fatto: se il montaggio fallisce
             // non resta scritto che il componente è acceso.
             if enabled {
-                registry.enable(&mut ws, id).map_err(|e| e.to_string())?;
+                registry.enable(&mut ws, id).map_err(PluginError::from)?;
             } else {
                 errors.extend(registry.unmount(&mut ws, id).iter().map(|e| e.to_string()));
             }
@@ -555,8 +575,7 @@ impl Host {
             ws.set_setting(
                 crate::settings::PLUGINS_DISABLED,
                 fubmd_abi::settings::SettingValue::List(disabled),
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
             Ok(errors)
         })?
     }
@@ -567,12 +586,14 @@ impl Host {
     ///
     /// Se era il corrente, corrente diventa un altro dei vault aperti — o
     /// nessuno, se non ne restano.
-    pub fn close_vault(&self, root: &Utf8Path) -> Result<Vec<PluginError>, String> {
+    pub fn close_vault(&self, root: &Utf8Path) -> Result<Vec<PluginError>, PluginError> {
         let root = canonical(root)?;
         let session = {
             let mut sessions = self.sessions.lock().unwrap();
             let Some(session) = sessions.open.remove(&root) else {
-                return Err(format!("Nessun vault aperto su {root}."));
+                return Err(PluginError::NotFound(
+                    format!("Nessun vault aperto su {root}.").into(),
+                ));
             };
             if sessions.current.as_ref() == Some(&root) {
                 sessions.current = sessions.open.keys().next().cloned();
@@ -616,11 +637,13 @@ impl Host {
     }
 
     /// Rende corrente un vault già aperto.
-    pub fn set_current(&self, root: &Utf8Path) -> Result<(), String> {
+    pub fn set_current(&self, root: &Utf8Path) -> Result<(), PluginError> {
         let root = canonical(root)?;
         let mut sessions = self.sessions.lock().unwrap();
         if !sessions.open.contains_key(&root) {
-            return Err(format!("Nessun vault aperto su {root}."));
+            return Err(PluginError::NotFound(
+                format!("Nessun vault aperto su {root}.").into(),
+            ));
         }
         sessions.current = Some(root);
         Ok(())
@@ -636,30 +659,29 @@ impl Host {
         &self,
         vault: Option<&str>,
         f: impl FnOnce(&VaultSession) -> R,
-    ) -> Result<R, String> {
+    ) -> Result<R, PluginError> {
         let sessions = self.sessions.lock().unwrap();
         let key = match vault {
             Some(path) => canonical(Utf8Path::new(path))?,
             None => sessions
                 .current
                 .clone()
-                .ok_or_else(|| "Nessun vault aperto.".to_string())?,
+                .ok_or_else(|| PluginError::NotFound("Nessun vault aperto.".into()))?,
         };
-        let session = sessions
-            .open
-            .get(&key)
-            .ok_or_else(|| format!("Nessun vault aperto su {key}."))?;
+        let session = sessions.open.get(&key).ok_or_else(|| {
+            PluginError::NotFound(format!("Nessun vault aperto su {key}.").into())
+        })?;
         Ok(f(session))
     }
 
     /// Un handle clonato al workspace di un vault (o del corrente), o l'errore
     /// se non è aperto.
-    pub fn workspace(&self, vault: Option<&str>) -> Result<Arc<RwLock<Workspace>>, String> {
+    pub fn workspace(&self, vault: Option<&str>) -> Result<Arc<RwLock<Workspace>>, PluginError> {
         self.with_session(vault, |s| s.workspace.clone())
     }
 
     /// La radice del vault (o del corrente).
-    pub fn root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, String> {
+    pub fn root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
         self.with_session(vault, |s| s.root.clone())
     }
 
@@ -680,38 +702,50 @@ impl Host {
     /// Lo store delle versioni di un vault, o l'errore se il versioning è
     /// spento: un chiamante che risponde "vuoto" quando la feature non c'è
     /// racconterebbe che non ci sono versioni, che è un'altra cosa.
-    pub fn versions(&self, vault: Option<&str>) -> Result<VersionStore, String> {
+    pub fn versions(&self, vault: Option<&str>) -> Result<VersionStore, PluginError> {
         self.with_session(vault, |s| s.versions.clone())?
-            .ok_or_else(|| "Versioning disattivato.".to_string())
+            // `Unserved` e non `Internal`: nessuno serve le versioni in questo
+            // vault perche' la feature e' spenta, e chi disegna deve poter dire
+            // «accendi il versioning» invece di «qualcosa e' andato storto».
+            .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))
     }
 
     pub fn list_versions(
         &self,
         vault: Option<&str>,
         id: &DocId,
-    ) -> Result<Vec<VersionRef>, String> {
+    ) -> Result<Vec<VersionRef>, PluginError> {
         Ok(self.versions(vault)?.list(id))
     }
 
     /// Rileggere una versione passa dall'`HostApi` come tutto il resto: l'host
     /// presta al versioning le sue stesse capacità (`Workspace::with_host`), non
     /// una scorciatoia sul filesystem.
-    pub fn read_version(&self, vault: Option<&str>, id: &DocId, ts: u64) -> Result<String, String> {
+    pub fn read_version(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        ts: u64,
+    ) -> Result<String, PluginError> {
         let store = self.versions(vault)?;
         let ws = self.workspace(vault)?;
         let mut ws = ws.write().unwrap();
         ws.with_host(VERSIONING_ID, |host| store.read(id, ts, host))
-            .map_err(|e| e.to_string())
     }
 
     /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
     /// grafo, indici ed eventi come ogni altra modifica — e siccome passa dagli
     /// eventi, genera a sua volta uno snapshot. Il ripristino è annullabile.
-    pub fn restore_version(&self, vault: Option<&str>, id: &DocId, ts: u64) -> Result<(), String> {
+    pub fn restore_version(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        ts: u64,
+    ) -> Result<(), PluginError> {
         let source = self.read_version(vault, id, ts)?;
         let ws = self.workspace(vault)?;
         let mut ws = ws.write().unwrap();
-        ws.write_document(id, &source).map_err(|e| e.to_string())
+        ws.write_document(id, &source).map_err(PluginError::from)
     }
 
     // --- organizzazione del vault (§11.3) ----------------------------------
@@ -728,23 +762,45 @@ impl Host {
         vault: Option<&str>,
         path: &str,
         icon: Option<String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), PluginError> {
         self.with_session(vault, |s| {
-            s.workspace.read().unwrap().set_icon(path, icon.clone())
+            s.workspace
+                .read()
+                .unwrap()
+                .set_icon(path, icon.clone())
+                .map_err(|e| PluginError::Io(e.into()))
         })?
     }
 
     /// Appunta o spunta una nota.
-    pub fn set_pinned(&self, vault: Option<&str>, id: &str, pinned: bool) -> Result<(), String> {
+    pub fn set_pinned(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        pinned: bool,
+    ) -> Result<(), PluginError> {
         self.with_session(vault, |s| {
-            s.workspace.read().unwrap().set_pinned(id, pinned)
+            s.workspace
+                .read()
+                .unwrap()
+                .set_pinned(id, pinned)
+                .map_err(|e| PluginError::Io(e.into()))
         })?
     }
 
     /// Registra o toglie una cartella dagli spazi.
-    pub fn set_space(&self, vault: Option<&str>, path: &str, is_space: bool) -> Result<(), String> {
+    pub fn set_space(
+        &self,
+        vault: Option<&str>,
+        path: &str,
+        is_space: bool,
+    ) -> Result<(), PluginError> {
         self.with_session(vault, |s| {
-            s.workspace.read().unwrap().set_space(path, is_space)
+            s.workspace
+                .read()
+                .unwrap()
+                .set_space(path, is_space)
+                .map_err(|e| PluginError::Io(e.into()))
         })?
     }
 
@@ -754,9 +810,13 @@ impl Host {
         vault: Option<&str>,
         folder: &str,
         names: Vec<String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), PluginError> {
         self.with_session(vault, |s| {
-            s.workspace.read().unwrap().set_order(folder, names.clone())
+            s.workspace
+                .read()
+                .unwrap()
+                .set_order(folder, names.clone())
+                .map_err(|e| PluginError::Io(e.into()))
         })?
     }
 }
@@ -779,11 +839,12 @@ fn info_of(session: &VaultSession) -> VaultInfo {
 /// lock che l'indice della prima tiene sulla propria cartella. Un path che non
 /// si canonicalizza (non esiste, o non è leggibile) è un errore qui, dove si può
 /// ancora dire quale.
-fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, String> {
+fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
     let canonical = root
         .canonicalize()
-        .map_err(|e| format!("non riesco a risolvere {root}: {e}"))?;
-    Utf8PathBuf::from_path_buf(canonical).map_err(|p| format!("path non UTF-8: {}", p.display()))
+        .map_err(|e| PluginError::Io(format!("non riesco a risolvere {root}: {e}").into()))?;
+    Utf8PathBuf::from_path_buf(canonical)
+        .map_err(|p| PluginError::Io(format!("path non UTF-8: {}", p.display()).into()))
 }
 
 /// [`DocId`] da input non fidato: la stessa validazione del kernel
@@ -793,6 +854,6 @@ fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, String> {
 /// Sta qui e non nella colla Tauri perché il webview non è l'unico "fuori": la
 /// CLI riceve argomenti, l'API locale riceve path, e una seconda copia di
 /// questa riga sarebbe una seconda idea di cosa sia un id accettabile.
-pub fn doc_id(raw: &str) -> Result<DocId, String> {
-    fubmd_kernel::valid_doc_id(raw).map_err(|e| e.to_string())
+pub fn doc_id(raw: &str) -> Result<DocId, PluginError> {
+    fubmd_kernel::valid_doc_id(raw).map_err(PluginError::from)
 }

@@ -31,6 +31,7 @@ import type { BundleInfo, SettingEntry, SettingValue, VaultEntry } from "../host
 import { onEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
 import { notify } from "../ui/notify";
+import { errorText } from "../host/errors";
 
 /// Un gruppo del form: l'intestazione e le sue righe, nell'ordine in cui il
 /// canale dati le ha date (che è l'ordine di chiave).
@@ -176,7 +177,7 @@ async function disegna(): Promise<void> {
   } catch (e) {
     // Un pannello che non riesce a leggere lo dice: il §20.2 avrà il canale
     // vero, e finché non c'è questo è il posto più visibile che ha.
-    nodi = [riga("muted", `Non riesco a leggere: ${e}`)];
+    nodi = [riga("muted", `Non riesco a leggere: ${errorText(e)}`)];
   }
   if (mia !== generazione) return;
   bodyEl.replaceChildren(...nodi);
@@ -333,7 +334,7 @@ async function scrivi(azione: () => Promise<void>): Promise<void> {
   try {
     await azione();
   } catch (e) {
-    notify(`Impostazione non cambiata: ${e}`, "guasto");
+    notify(`Impostazione non cambiata: ${errorText(e)}`, "guasto");
   }
   await disegna();
 }
@@ -378,7 +379,7 @@ function disegnaComponente(bundle: BundleInfo): HTMLElement {
         // appese nella sidebar e i suoi comandi nella palette.
         await ganci.ricaricaProvider();
       } catch (e) {
-        notify(`Componente non cambiato: ${e}`, "guasto");
+        notify(`Componente non cambiato: ${errorText(e)}`, "guasto");
       }
       await disegna();
     })();
@@ -422,7 +423,7 @@ function disegnaVaultRiga(vault: VaultEntry): HTMLElement {
         await ganci.apriVault(vault.root);
         chiudi();
       } catch (e) {
-        notify(`Vault non aperto: ${e}`, "guasto");
+        notify(`Vault non aperto: ${errorText(e)}`, "guasto");
       }
     })();
   });
@@ -451,7 +452,7 @@ async function scriviVault(azione: () => Promise<void>): Promise<void> {
   try {
     await azione();
   } catch (e) {
-    notify(`Registro dei vault: ${e}`, "guasto");
+    notify(`Registro dei vault: ${errorText(e)}`, "guasto");
   }
   await disegna();
 }

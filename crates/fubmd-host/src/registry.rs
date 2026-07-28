@@ -131,6 +131,53 @@ impl std::fmt::Display for BundleError {
 
 impl std::error::Error for BundleError {}
 
+/// Perché un bundle non è montato, **come lo vede chi l'ha chiesto** (§12.2).
+///
+/// Le quattro varianti non sono quattro modi di dire la stessa cosa, e
+/// appiattirle su [`PluginError::Internal`] toglieva a chi accende un
+/// componente l'unica cosa che gli serve sapere: se ha sbagliato l'id, se il
+/// componente è troppo nuovo per questo host, o se è il componente ad avere un
+/// difetto.
+///
+/// L'ultima riga è quella che conta di più: un'attivazione fallita **porta già
+/// un `PluginError`**, scritto da chi non si è attivato. Riavvolgerlo in un
+/// `Internal` avrebbe cancellato una risposta giusta per rimpiazzarla con una
+/// generica — e con essa il catalogo di chi l'aveva scritta.
+impl From<BundleError> for PluginError {
+    fn from(e: BundleError) -> Self {
+        match e {
+            // Non è un difetto di nessuno: questo host non parla quel
+            // contratto. È la stessa forma di «nessuno serve questa domanda».
+            BundleError::Abi { .. } => PluginError::Unserved(e.to_string().into()),
+            // «L'ho riacceso» e «ho scritto male l'id» devono essere due
+            // risposte diverse: è la ragione per cui la variante esiste, e
+            // sopravvive alla traduzione solo restando distinta qui.
+            BundleError::Unknown(_) => PluginError::NotFound(e.to_string().into()),
+            // La dichiarazione respinta dal kernel è un difetto di chi ha
+            // scritto il bundle: id doppio, nome fuori dal namespace, requisito
+            // che nessuno offre.
+            BundleError::Declaration(_) => PluginError::Internal(e.to_string().into()),
+            // La risposta di chi non si è attivato, **preservata**: il suo
+            // `kind` è più informato di qualunque cosa si possa mettere qui.
+            BundleError::Activation { .. } => e.into_activation_error(),
+        }
+    }
+}
+
+impl BundleError {
+    /// L'errore di un'attivazione fallita, con l'id di chi non si è attivato
+    /// premesso al messaggio: chi lo riceve deve sapere **chi** ha detto di no,
+    /// e il `kind` di chi l'ha detto è quello che vale.
+    fn into_activation_error(self) -> PluginError {
+        let BundleError::Activation { id, mut error } = self else {
+            unreachable!("chiamata solo sul ramo Activation")
+        };
+        let message = error.message_mut();
+        *message = format!("`{id}` non si è attivato: {message}").into();
+        error
+    }
+}
+
 /// Un bundle montato: l'id con cui è dichiarato, e il suo plugin.
 ///
 /// Il plugin è un `Arc` e non un `Box` dalla
@@ -329,10 +376,13 @@ impl BundleRegistry {
         // invece di aspettare in silenzio la fine di un export.
         let out = match Arc::get_mut(&mut bundle.plugin) {
             Some(plugin) => ws.with_host(id, |host| plugin.deactivate(host)).err(),
-            None => Some(PluginError::Internal(format!(
-                "`{id}` ha un job ancora in volo: il suo `deactivate` non è stato \
+            None => Some(PluginError::Internal(
+                format!(
+                    "`{id}` ha un job ancora in volo: il suo `deactivate` non è stato \
                  chiamato (chi spegne un bundle ferma prima i suoi job)"
-            ))),
+                )
+                .into(),
+            )),
         };
         // Qui l'ultima copia cade, ed è il momento in cui un bundle nativo
         // lascia andare ciò che il `deactivate` non ha saputo lasciare.
@@ -352,7 +402,7 @@ impl BundleRegistry {
         let mut errors = self.stop(ws, id);
         match ws.deactivate_plugin(id) {
             Ok(errs) => errors.extend(errs),
-            Err(e) => errors.push(PluginError::Internal(e.to_string())),
+            Err(e) => errors.push(PluginError::Internal(e.to_string().into())),
         }
         errors
     }

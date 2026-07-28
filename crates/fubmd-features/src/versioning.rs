@@ -316,17 +316,17 @@ impl VersionStore {
         let doc = inner
             .docs
             .get(id.as_str())
-            .ok_or_else(|| PluginError::BadArgs(format!("nessuna versione di {id}")))?;
+            .ok_or_else(|| PluginError::BadArgs(format!("nessuna versione di {id}").into()))?;
         if !doc.versions.iter().any(|v| v.ts == ts) {
-            return Err(PluginError::BadArgs(format!(
-                "versione {ts} di {id}: non c'è"
-            )));
+            return Err(PluginError::BadArgs(
+                format!("versione {ts} di {id}: non c'è").into(),
+            ));
         }
         let path = blob(&doc.dir, &snapshot_name(ts, id.as_str()));
-        let bytes = host
-            .data_read(&path)?
-            .ok_or_else(|| PluginError::Internal(format!("{path}: il contenuto è sparito")))?;
-        String::from_utf8(bytes).map_err(|e| PluginError::Internal(format!("{path}: {e}")))
+        let bytes = host.data_read(&path)?.ok_or_else(|| {
+            PluginError::Internal(format!("{path}: il contenuto è sparito").into())
+        })?;
+        String::from_utf8(bytes).map_err(|e| PluginError::Internal(format!("{path}: {e}").into()))
     }
 
     /// Questo documento ha già una storia?
@@ -469,7 +469,7 @@ impl Inner {
             deleted_at: doc.deleted_at,
         };
         let raw = serde_json::to_vec(&meta)
-            .map_err(|e| PluginError::Internal(format!("meta versioni: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("meta versioni: {e}").into()))?;
         host.data_write(&blob(&doc.dir, META_FILE), &raw)
     }
 
@@ -479,7 +479,7 @@ impl Inner {
             docs: self.docs.clone(),
         };
         let raw = serde_json::to_vec(&index)
-            .map_err(|e| PluginError::Internal(format!("indice versioni: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("indice versioni: {e}").into()))?;
         host.data_write(INDEX_FILE, &raw)
     }
 }

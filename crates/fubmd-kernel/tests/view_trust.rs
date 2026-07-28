@@ -50,7 +50,7 @@ impl ViewProvider for Puppet {
         _host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         if instance.view != self.id {
-            return Err(PluginError::UnknownView(instance.view.clone()));
+            return Err(PluginError::UnknownView(instance.view.clone().into()));
         }
         Ok(self.tree.clone())
     }

@@ -280,7 +280,7 @@ impl VaultRead for MemoryHost {
             .unwrap()
             .get(id.as_str())
             .cloned()
-            .ok_or_else(|| PluginError::BadArgs(format!("{id} non esiste")))
+            .ok_or_else(|| PluginError::BadArgs(format!("{id} non esiste").into()))
     }
 
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
@@ -305,7 +305,7 @@ impl VaultRead for MemoryHost {
             .unwrap()
             .get(id.as_str())
             .cloned()
-            .ok_or_else(|| PluginError::Internal(format!("{id}: nessun modello seminato")))
+            .ok_or_else(|| PluginError::Internal(format!("{id}: nessun modello seminato").into()))
     }
 
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
@@ -372,7 +372,7 @@ impl VaultWrite for MemoryHost {
 impl VaultStructure for MemoryHost {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
         if self.docs.lock().unwrap().contains_key(id.as_str()) {
-            return Err(PluginError::BadArgs(format!("{id} esiste già")));
+            return Err(PluginError::BadArgs(format!("{id} esiste già").into()));
         }
         self.write_document(id, source)
     }
@@ -387,11 +387,11 @@ impl VaultStructure for MemoryHost {
             return Ok(());
         }
         if docs.contains_key(to.as_str()) {
-            return Err(PluginError::BadArgs(format!("{to} esiste già")));
+            return Err(PluginError::BadArgs(format!("{to} esiste già").into()));
         }
         let source = docs
             .remove(from.as_str())
-            .ok_or_else(|| PluginError::BadArgs(format!("{from} non esiste")))?;
+            .ok_or_else(|| PluginError::BadArgs(format!("{from} non esiste").into()))?;
         docs.insert(to.to_string(), source);
         Ok(())
     }
@@ -423,7 +423,7 @@ impl VaultStructure for MemoryHost {
             .unwrap()
             .get(entry.as_str())
             .cloned()
-            .ok_or_else(|| PluginError::BadArgs(format!("{entry} non è nel cestino")))?;
+            .ok_or_else(|| PluginError::BadArgs(format!("{entry} non è nel cestino").into()))?;
         let target = to.unwrap_or(voce.original);
         self.create_document(&target, &source)?;
         self.trash.lock().unwrap().remove(entry.as_str());
@@ -477,7 +477,7 @@ impl SettingsRead for MemoryHost {
     fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
         let settings = self.settings.lock().unwrap();
         let (spec, value) = settings.get(key).ok_or_else(|| {
-            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
         })?;
         Ok(value.clone().unwrap_or_else(|| spec.kind.default_value()))
     }
@@ -491,15 +491,16 @@ impl SettingsWrite for MemoryHost {
     fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError> {
         let mut settings = self.settings.lock().unwrap();
         let (spec, slot) = settings.get_mut(key).ok_or_else(|| {
-            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
         })?;
         if !spec.program_writable {
-            return Err(PluginError::PermissionDenied(format!(
-                "l'impostazione `{key}` non si è dichiarata scrivibile da un programma"
-            )));
+            return Err(PluginError::PermissionDenied(
+                format!("l'impostazione `{key}` non si è dichiarata scrivibile da un programma")
+                    .into(),
+            ));
         }
         if let Some(why) = spec.kind.rejects(&value) {
-            return Err(PluginError::BadArgs(format!("`{key}`: {why}")));
+            return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
         }
         *slot = Some(value);
         Ok(())
@@ -508,12 +509,13 @@ impl SettingsWrite for MemoryHost {
     fn reset_setting(&mut self, key: &str) -> Result<(), PluginError> {
         let mut settings = self.settings.lock().unwrap();
         let (spec, slot) = settings.get_mut(key).ok_or_else(|| {
-            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
         })?;
         if !spec.program_writable {
-            return Err(PluginError::PermissionDenied(format!(
-                "l'impostazione `{key}` non si è dichiarata scrivibile da un programma"
-            )));
+            return Err(PluginError::PermissionDenied(
+                format!("l'impostazione `{key}` non si è dichiarata scrivibile da un programma")
+                    .into(),
+            ));
         }
         *slot = None;
         Ok(())
@@ -681,7 +683,7 @@ impl HostCommands for MemoryHost {
         command: &str,
         _args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
-        Err(PluginError::UnknownCommand(command.to_string()))
+        Err(PluginError::UnknownCommand(command.into()))
     }
 }
 
@@ -696,9 +698,9 @@ impl HostServices for MemoryHost {
         _method: &str,
         _args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
-        Err(PluginError::Unserved(format!(
-            "MemoryHost non ha un registro dei plugin: nessuno offre `{service}`"
-        )))
+        Err(PluginError::Unserved(
+            format!("MemoryHost non ha un registro dei plugin: nessuno offre `{service}`").into(),
+        ))
     }
 }
 
@@ -775,6 +777,8 @@ mod tests {
     fn the_double_refuses_to_invent_a_model_nobody_seeded() {
         let host = MemoryHost::new().con_documento("nota.md", "# c'è");
         let esito = host.read_model(&DocId::new("nota.md"));
-        assert!(matches!(esito, Err(PluginError::Internal(msg)) if msg.contains("nota.md")));
+        assert!(
+            matches!(esito, Err(PluginError::Internal(msg)) if msg.to_string().contains("nota.md"))
+        );
     }
 }

@@ -16,7 +16,7 @@ use fubmd_abi::traits::{
 use fubmd_abi::{Event, PluginError};
 
 use crate::error::KernelError;
-use crate::workspace::{collect_data_files, fenced_doc_id, plugin_error, Workspace};
+use crate::workspace::{collect_data_files, fenced_doc_id, Workspace};
 
 /// L'[`HostApi`](fubmd_abi::traits::HostApi) del kernel: chiamate dirette,
 /// costo zero.
@@ -58,13 +58,16 @@ impl KernelHost<'_> {
     fn program_writable(&self, key: &str) -> Result<(), PluginError> {
         match self.ws.setting_is_program_writable(key) {
             Some(true) => Ok(()),
-            Some(false) => Err(PluginError::PermissionDenied(format!(
-                "l'impostazione `{key}` non si è dichiarata scrivibile da un \
+            Some(false) => Err(PluginError::PermissionDenied(
+                format!(
+                    "l'impostazione `{key}` non si è dichiarata scrivibile da un \
                  programma: la cambia chi la sta guardando"
-            ))),
-            None => Err(PluginError::BadArgs(format!(
-                "nessuno ha dichiarato l'impostazione `{key}`"
-            ))),
+                )
+                .into(),
+            )),
+            None => Err(PluginError::BadArgs(
+                format!("nessuno ha dichiarato l'impostazione `{key}`").into(),
+            )),
         }
     }
 }
@@ -72,14 +75,12 @@ impl KernelHost<'_> {
 impl VaultRead for KernelHost<'_> {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
         let id = fenced_doc_id(id)?;
-        self.ws
-            .read_source(&id)
-            .map_err(|e| PluginError::Internal(e.to_string()))
+        self.ws.read_source(&id).map_err(PluginError::from)
     }
 
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
         let id = fenced_doc_id(id)?;
-        self.ws.document_revision(&id).map_err(plugin_error)
+        self.ws.document_revision(&id).map_err(PluginError::from)
     }
 
     fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
@@ -92,7 +93,7 @@ impl VaultRead for KernelHost<'_> {
 
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
         let id = fenced_doc_id(id)?;
-        self.ws.read_model(&id).map_err(plugin_error)
+        self.ws.read_model(&id).map_err(PluginError::from)
     }
 
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
@@ -104,7 +105,7 @@ impl VaultRead for KernelHost<'_> {
     }
 
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
-        self.ws.list_trash().map_err(plugin_error)
+        self.ws.list_trash().map_err(PluginError::from)
     }
 }
 
@@ -120,12 +121,12 @@ impl VaultWrite for KernelHost<'_> {
         let id = fenced_doc_id(id)?;
         self.ws
             .write_document(&id, source)
-            .map_err(|e| PluginError::Internal(e.to_string()))
+            .map_err(PluginError::from)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
         let id = fenced_doc_id(id)?;
-        self.ws.apply_edit(&id, request).map_err(plugin_error)
+        self.ws.apply_edit(&id, request).map_err(PluginError::from)
     }
 }
 
@@ -135,21 +136,27 @@ impl VaultStructure for KernelHost<'_> {
         // Il rifiuto È la capacità: `write_document` sovrascrive, e se questa
         // facesse lo stesso non ci sarebbe motivo di averla.
         if self.ws.is_taken(&id) {
-            return Err(plugin_error(KernelError::AlreadyExists(id.to_string())));
+            return Err(PluginError::from(KernelError::AlreadyExists(
+                id.to_string(),
+            )));
         }
-        self.ws.write_document(&id, source).map_err(plugin_error)?;
+        self.ws
+            .write_document(&id, source)
+            .map_err(PluginError::from)?;
         Ok(())
     }
 
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
         let from = fenced_doc_id(from)?;
         let to = fenced_doc_id(to)?;
-        self.ws.rename_document(&from, &to).map_err(plugin_error)
+        self.ws
+            .rename_document(&from, &to)
+            .map_err(PluginError::from)
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
         let id = fenced_doc_id(id)?;
-        self.ws.delete_document(&id).map_err(plugin_error)
+        self.ws.delete_document(&id).map_err(PluginError::from)
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
@@ -158,14 +165,16 @@ impl VaultStructure for KernelHost<'_> {
         // `restore_from_trash` cercando la voce fra quelle che esistono — un id
         // che non è nel cestino è `NotFound`, non un path da spazzolare. Il
         // `to`, che invece atterra nel vault, lo valida il kernel.
-        self.ws.restore_from_trash(entry, to).map_err(plugin_error)
+        self.ws
+            .restore_from_trash(entry, to)
+            .map_err(PluginError::from)
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
         self.ws
             .empty_trash()
             .map(|n| n as u64)
-            .map_err(plugin_error)
+            .map_err(PluginError::from)
     }
 }
 
@@ -176,7 +185,7 @@ impl DataRead for KernelHost<'_> {
             Ok(bytes) => Ok(Some(bytes)),
             // Mancare non è un errore: chi legge uno store vuoto lo scopre così.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
+            Err(e) => Err(PluginError::Internal(format!("{path}: {e}").into())),
         }
     }
 
@@ -195,9 +204,10 @@ impl DataWrite for KernelHost<'_> {
         let path = self.data_blob(path)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| PluginError::Internal(format!("{parent}: {e}")))?;
+                .map_err(|e| PluginError::Internal(format!("{parent}: {e}").into()))?;
         }
-        std::fs::write(&path, bytes).map_err(|e| PluginError::Internal(format!("{path}: {e}")))
+        std::fs::write(&path, bytes)
+            .map_err(|e| PluginError::Internal(format!("{path}: {e}").into()))
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
@@ -206,7 +216,7 @@ impl DataWrite for KernelHost<'_> {
             Ok(()) => Ok(()),
             // Idempotente: cancellare ciò che non c'è è già il risultato voluto.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
+            Err(e) => Err(PluginError::Internal(format!("{path}: {e}").into())),
         }
     }
 }
@@ -243,7 +253,7 @@ impl ViewStateWrite for KernelHost<'_> {
         })?;
         self.ws
             .set_view_state(self.plugin, instance, key, value)
-            .map_err(PluginError::Internal)
+            .map_err(|e| PluginError::Internal(e.into()))
     }
 }
 

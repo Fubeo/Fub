@@ -2199,10 +2199,13 @@ impl IndexResult {
     pub fn documents(self) -> Result<Paged<DocumentMatch>, PluginError> {
         match self {
             IndexResult::Documents(docs) => Ok(docs),
-            other => Err(PluginError::Internal(format!(
-                "risposta fuori tema: attesi dei documenti, arrivato {}",
-                other.kind_name()
-            ))),
+            other => Err(PluginError::Internal(
+                format!(
+                    "risposta fuori tema: attesi dei documenti, arrivato {}",
+                    other.kind_name()
+                )
+                .into(),
+            )),
         }
     }
 
@@ -2743,7 +2746,7 @@ pub trait Plugin: Send + Sync {
         host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
         let (_, _) = (payload, host);
-        Err(PluginError::UnknownJob(job.to_string()))
+        Err(PluginError::UnknownJob(job.to_string().into()))
     }
 }
 

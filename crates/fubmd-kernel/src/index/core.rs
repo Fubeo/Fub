@@ -366,9 +366,9 @@ impl QueryEvaluator for CoreIndex {
                     .filter(|id| self.metas.contains_key(id))
                     .cloned(),
             )),
-            other => Err(PluginError::Unserved(format!(
-                "l'indice del kernel non valuta questa foglia: {other:?}"
-            ))),
+            other => Err(PluginError::Unserved(
+                format!("l'indice del kernel non valuta questa foglia: {other:?}").into(),
+            )),
         }
     }
 }
@@ -535,9 +535,9 @@ impl IndexProvider for CoreIndex {
                 );
                 Ok(IndexResult::VaultHealth(Paged::window(issues, page)))
             }
-            IndexQuery::Custom { ns, .. } => Err(PluginError::Unserved(format!(
-                "l'indice del kernel non estende il canale: `{ns}`"
-            ))),
+            IndexQuery::Custom { ns, .. } => Err(PluginError::Unserved(
+                format!("l'indice del kernel non estende il canale: `{ns}`").into(),
+            )),
             IndexQuery::VaultStatus => Ok(IndexResult::VaultStatus(self.watch.status())),
             IndexQuery::Jobs => Ok(IndexResult::Jobs(self.jobs.live())),
             IndexQuery::Organization => Ok(IndexResult::Organization(self.organization.snapshot())),

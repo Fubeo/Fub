@@ -161,7 +161,7 @@ impl Plugin for Lavoratore {
                 Ok(serde_json::json!("raccontato"))
             }
             "esplodi" => panic!("il job è esploso"),
-            altro => Err(PluginError::UnknownJob(altro.to_string())),
+            altro => Err(PluginError::UnknownJob(altro.into())),
         }
     }
 }

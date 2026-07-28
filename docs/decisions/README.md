@@ -51,6 +51,7 @@ cronologico di chiusura.
 | [0038](0038-il-kernel-possiede-il-sidecar.md) | Il kernel possiede il sidecar: chi scrive l'organizzazione, e chi la porta dietro a un rename | §11.3 | 2026-07-28 |
 | [0039](0039-il-locale-e-il-caso.md) | Il locale e il caso: ciò che l'host sa e nessuno gli aveva chiesto | §12.3 | 2026-07-28 |
 | [0040](0040-chi-localizza.md) | Chi localizza: il testo che porta la propria provenienza | §12.1 | 2026-07-28 |
+| [0041](0041-un-errore-e-testo-che-qualcuno-legge.md) | Un errore è testo che qualcuno legge — e una domanda su cui qualcuno rama | §12.2 | 2026-07-28 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

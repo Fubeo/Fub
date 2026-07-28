@@ -1318,5 +1318,19 @@
         }
       }
     }
+  ],
+  "PluginError": [
+    {
+      "kind": "already_exists",
+      "message": "Progetti/Idee.md"
+    },
+    {
+      "kind": "not_found",
+      "message": "Fantasma.md"
+    },
+    {
+      "kind": "io",
+      "message": "disco pieno"
+    }
   ]
 }

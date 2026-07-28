@@ -74,10 +74,9 @@ impl ImportProvider for MarkdownImport {
         // errore, non una riga di giornale su un import per il resto riuscito.
         let text = source.text()?;
         let stem = source.stem().ok_or_else(|| {
-            PluginError::BadArgs(format!(
-                "`{}` non dà un nome di documento utilizzabile",
-                source.name
-            ))
+            PluginError::BadArgs(
+                format!("`{}` non dà un nome di documento utilizzabile", source.name).into(),
+            )
         })?;
 
         let mut report = ImportReport::new(request.mode);
@@ -88,7 +87,7 @@ impl ImportProvider for MarkdownImport {
         // il documento si scrive **com'era**, che è la sola forma di import
         // markdown fedele (`serialize` è generazione, non round-trip).
         let model = crate::parse::parse_markdown(text, &ParseContext::obsidian(wanted.as_str()))
-            .map_err(|e| PluginError::BadArgs(e.to_string()))?;
+            .map_err(|e| PluginError::BadArgs(e.to_string().into()))?;
         report.log.push(
             TransferNote::info(format!(
                 "{} link, {} tag, {} heading",
@@ -185,10 +184,13 @@ impl ExportProvider for MarkdownExport {
         host: &dyn ReadApi,
     ) -> Result<ExportReport, PluginError> {
         if request.target != TARGET_FILES && request.target != TARGET_SINGLE {
-            return Err(PluginError::BadArgs(format!(
-                "`{}` non è una destinazione di questo provider",
-                request.target
-            )));
+            return Err(PluginError::BadArgs(
+                format!(
+                    "`{}` non è una destinazione di questo provider",
+                    request.target
+                )
+                .into(),
+            ));
         }
         // «Con o senza metadati» sono due voci letterali di 17.2, ed è l'unica
         // opzione che il markdown ha davvero: tutto il resto (tema, allegati,
