@@ -20,6 +20,7 @@ use crate::organization::Organization;
 use crate::query::{QueryExpr, QueryPredicate};
 use crate::session::{ContextMask, ViewContext};
 use crate::settings::{SettingEntry, SettingSpec, SettingValue};
+use crate::text::{Localize, StringCatalog, Text};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
 // ---------------------------------------------------------------------------
@@ -1142,7 +1143,7 @@ impl ViewInstance {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ViewSpec {
     pub id: String,
-    pub title: String,
+    pub title: Text,
     pub surface: ViewSurface,
     /// Dichiarazione di interesse: gli eventi al cui arrivo la shell deve
     /// ridisegnare questa view (chiamare di nuovo `render_view`).
@@ -1216,7 +1217,7 @@ impl ViewSpec {
     /// dichiarato qui e si aggiunge col builder: con dieci campi, una `ViewSpec`
     /// scritta a mano diventa un elenco di `Default::default()` in cui la riga
     /// che conta non si distingue.
-    pub fn new(id: impl Into<String>, title: impl Into<String>, surface: ViewSurface) -> Self {
+    pub fn new(id: impl Into<String>, title: impl Into<Text>, surface: ViewSurface) -> Self {
         ViewSpec {
             id: id.into(),
             title: title.into(),
@@ -1281,6 +1282,13 @@ impl ViewSpec {
     /// devono ricevere la stessa risposta sullo stesso argomento sbagliato.
     pub fn validate_params(&self, params: &serde_json::Value) -> Result<(), PluginError> {
         crate::command::validate_params(&self.id, &self.params, params)
+    }
+}
+
+impl Localize for ViewSpec {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.title);
+        self.params.visit_texts(visit);
     }
 }
 
@@ -2548,6 +2556,33 @@ pub struct PluginManifest {
     /// nomina nudo (`versioning.enabled`), un plugin dentro il proprio id.
     #[serde(default)]
     pub settings: Vec<SettingSpec>,
+    /// Le **stringhe che dichiara** (§12.1), una voce per lingua.
+    ///
+    /// Sta nel manifest per le stesse due ragioni di `settings`, più una terza
+    /// che è solo delle stringhe. Le prime due: si legge **prima** di montare —
+    /// una palette di comandi mostra i titoli di componenti che nessuno ha
+    /// ancora attivato — e un catalogo registrato da
+    /// [`Plugin::activate`](crate::traits::Plugin::activate) sarebbe assente
+    /// esattamente quando serve. La terza: un catalogo è **dato**, e dato nel
+    /// manifest vuol dire che si corregge una traduzione senza ricompilare, e
+    /// che a M5 un componente WASM non se lo scrive a build time.
+    ///
+    /// Le chiavi qui dentro sono **nude**, e questa è la differenza deliberata
+    /// dalle chiavi delle impostazioni: quelle vivono in un archivio solo e
+    /// devono quindi qualificarsi col nome di chi le dichiara
+    /// (`versioning.enabled`); un catalogo appartiene a un componente e basta,
+    /// quindi la qualifica è **strutturale** — un plugin non ha nemmeno il modo
+    /// di nominare la stringa di un altro.
+    #[serde(default)]
+    pub strings: Vec<StringCatalog>,
+    /// La lingua in cui questo componente è scritto: il penultimo gradino della
+    /// scala di [`Strings`](crate::text::Strings), quello che si usa quando la
+    /// lingua di chi guarda non ha catalogo.
+    ///
+    /// Vuoto = nessun ripiego, e si scende dritti alla chiave nuda. È il
+    /// default corretto per chi non dichiara stringhe.
+    #[serde(default)]
+    pub default_locale: String,
 }
 
 impl PluginManifest {
@@ -2568,12 +2603,30 @@ impl PluginManifest {
             provides: Vec::new(),
             requires: Vec::new(),
             settings: Vec::new(),
+            strings: Vec::new(),
+            default_locale: String::new(),
         }
     }
 
     /// Le impostazioni che questo plugin dichiara (§11.1).
     pub fn configuring(mut self, settings: Vec<SettingSpec>) -> Self {
         self.settings = settings;
+        self
+    }
+
+    /// Le stringhe che questo plugin dichiara (§12.1), con la lingua in cui è
+    /// scritto.
+    ///
+    /// Le due cose insieme e non in due metodi: un catalogo senza lingua di
+    /// ripiego è la metà che si dimentica, e si dimentica in silenzio — le
+    /// chiavi restano nude solo per chi legge in un'altra lingua.
+    pub fn speaking(
+        mut self,
+        default_locale: impl Into<String>,
+        strings: Vec<StringCatalog>,
+    ) -> Self {
+        self.default_locale = default_locale.into();
+        self.strings = strings;
         self
     }
 

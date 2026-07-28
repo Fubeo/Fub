@@ -85,6 +85,7 @@ use fubmd_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, 
 use fubmd_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
+use fubmd_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, DocumentMatch, EventHandler, HealthCheck, HealthIssue, HostApi,
     IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, JobStatus, LinkDirection,
@@ -288,6 +289,13 @@ wit_type! {
     Locale => "locale",
     Weekday => "weekday",
     HourCycle => "hour-cycle",
+
+    // Il testo che si legge (§12.1).
+    Text => "text",
+    Message => "message",
+    Arg => "arg",
+    ArgValue => "arg-value",
+    StringCatalog => "string-catalog",
     IndexQuery => "index-query",
     IndexResult => "index-result",
     BacklinkRef => "backlink-ref",
@@ -2408,21 +2416,21 @@ fn conform(source: &str) -> Result<(), String> {
                 children: vec![],
             }),
             ui_kind_case(&arena::UiKind::Text {
-                content: String::new(),
+                content: Text::default(),
             }),
             ui_kind_case(&arena::UiKind::Heading {
                 level: 1,
-                content: String::new(),
+                content: Text::default(),
             }),
             ui_kind_case(&arena::UiKind::List { items: vec![] }),
             ui_kind_case(&arena::UiKind::ListItem {
-                title: String::new(),
+                title: Text::default(),
                 subtitle: None,
                 action: None,
                 selected: false,
             }),
             ui_kind_case(&arena::UiKind::Button {
-                label: String::new(),
+                label: Text::default(),
                 intent: Intent::Neutral,
                 action: ActionRef::new(""),
             }),
@@ -2434,7 +2442,7 @@ fn conform(source: &str) -> Result<(), String> {
                 height: 0,
             }),
             ui_kind_case(&arena::UiKind::Section {
-                title: String::new(),
+                title: Text::default(),
                 collapsed: false,
                 children: vec![],
             }),
@@ -2448,7 +2456,7 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             ui_kind_case(&arena::UiKind::Tree { roots: vec![] }),
             ui_kind_case(&arena::UiKind::TreeItem {
-                label: String::new(),
+                label: Text::default(),
                 expanded: false,
                 action: None,
                 selected: false,
@@ -2459,12 +2467,12 @@ fn conform(source: &str) -> Result<(), String> {
                 tabs: vec![],
             }),
             ui_kind_case(&arena::UiKind::Tab {
-                label: String::new(),
+                label: Text::default(),
                 action: None,
                 children: vec![],
             }),
             ui_kind_case(&arena::UiKind::Badge {
-                label: String::new(),
+                label: Text::default(),
                 intent: Intent::Neutral,
             }),
             ui_kind_case(&arena::UiKind::Icon {
@@ -2476,7 +2484,7 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             ui_kind_case(&arena::UiKind::Separator),
             ui_kind_case(&arena::UiKind::EmptyState {
-                title: String::new(),
+                title: Text::default(),
                 detail: None,
                 action: None,
             }),
@@ -2506,7 +2514,7 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             ui_kind_case(&arena::UiKind::Checkbox {
                 field: String::new(),
-                label: String::new(),
+                label: Text::default(),
                 value: false,
                 action: None,
             }),
@@ -2542,7 +2550,7 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             ui_kind_case(&arena::UiKind::Form {
                 children: vec![],
-                submit_label: String::new(),
+                submit_label: Text::default(),
                 submit: ActionRef::new(""),
             }),
             ui_kind_case(&arena::UiKind::Custom {
@@ -2552,7 +2560,7 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             ui_kind_case(&arena::UiKind::Pending { label: None }),
             ui_kind_case(&arena::UiKind::Failed {
-                message: String::new(),
+                message: Text::default(),
                 retry: None,
             }),
         ],
@@ -3704,6 +3712,40 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    // Il testo che si legge (§12.1). `text` è un tipo di CONTRATTO e non di
+    // IPC: sul filo verso la shell un `literal` è una stringa nuda, perché
+    // quando ci arriva il kernel ha già risolto tutto.
+    contract.variant_src(
+        "text",
+        ("text.rs", "Text"),
+        &[
+            case_ty("literal", wit_of::<String>()),
+            case_ty("message", wit_of::<Message>()),
+        ],
+    );
+    let Message { key, args } = Message::default();
+    contract.record("message", &[("key", wit(&key)), ("args", wit(&args))]);
+    let arg = Arg::int("n", 0);
+    contract.record(
+        "arg",
+        &[("name", wit(&arg.name)), ("value", wit(&arg.value))],
+    );
+    contract.variant_src(
+        "arg-value",
+        ("text.rs", "ArgValue"),
+        &[
+            case_ty("text", wit_of::<String>()),
+            case_ty("int", "s64".to_string()),
+            case_ty("float", wit_of::<f64>()),
+            case_ty("timestamp", wit_of::<u64>()),
+        ],
+    );
+    let StringCatalog { locale, entries } = StringCatalog::default();
+    contract.record(
+        "string-catalog",
+        &[("locale", wit(&locale)), ("entries", wit(&entries))],
+    );
+
     contract.enumeration_src(
         "weekday",
         ("locale.rs", "Weekday"),
@@ -4002,8 +4044,8 @@ fn conform(source: &str) -> Result<(), String> {
     );
 
     let KeyValueEntry { label, value } = KeyValueEntry {
-        label: String::new(),
-        value: String::new(),
+        label: Text::default(),
+        value: Text::default(),
     };
     contract.record(
         "key-value-entry",
@@ -4034,6 +4076,8 @@ fn conform(source: &str) -> Result<(), String> {
         provides,
         requires,
         settings,
+        strings,
+        default_locale,
     } = PluginManifest {
         id: String::new(),
         name: String::new(),
@@ -4043,6 +4087,8 @@ fn conform(source: &str) -> Result<(), String> {
         provides: Vec::new(),
         requires: Vec::new(),
         settings: Vec::new(),
+        strings: Vec::new(),
+        default_locale: String::new(),
     };
     contract.record(
         "plugin-manifest",
@@ -4061,6 +4107,11 @@ fn conform(source: &str) -> Result<(), String> {
             // ragione: uno schema che arriva dopo il freeze deve poter arrivare
             // senza spostare niente di ciò che c'era.
             ("settings", wit(&settings)),
+            // E il catalogo delle stringhe (§12.1), in fondo per la stessa
+            // ragione ancora: chi si è congelato senza tradurre nulla non deve
+            // spostarsi per far posto a chi traduce.
+            ("strings", wit(&strings)),
+            ("default-locale", wit(&default_locale)),
         ],
     );
 
@@ -4392,6 +4443,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("errors");
     contract.types_only("session");
     contract.types_only("intl");
+    contract.types_only("text");
     contract.types_only("edit");
     contract.types_only("transfer");
     contract.types_only("settings");

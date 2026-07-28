@@ -524,6 +524,7 @@ interface renderer {
 interface ui {
     use json.{json};
     use model.{span};
+    use text.{text};
 
     type action-id = string;
 
@@ -563,14 +564,18 @@ interface ui {
     /// torna, `label` ciò che si legge — cioè ciò che si localizza (§12.1).
     record ui-option {
         value: string,
-        label: string,
+        label: text,
     }
+    /// TUTTE E DUE le metà sono `text`, ed è il caso che mostra perché il tipo
+    /// porta la propria provenienza invece di essere una chiave: l'etichetta di
+    /// una riga è quasi sempre da tradurre («Creata il»), il valore quasi mai
+    /// (una data, un conteggio, un path).
     record key-value-entry {
-        label: string,
-        value: string,
+        label: text,
+        value: text,
     }
     record table-column {
-        title: string,
+        title: text,
         align: align,
     }
 
@@ -584,11 +589,11 @@ interface ui {
     }
     record ui-heading {
         level: u8,
-        content: string,
+        content: text,
     }
     record ui-list-item {
-        title: string,
-        subtitle: option<string>,
+        title: text,
+        subtitle: option<text>,
         action: option<action-ref>,
         /// È l'elemento CORRENTE? Non è stile: è l'unica cosa che una lista non
         /// sa dire di sé, e senza chi ce l'ha se la scrive nel titolo — il §2.7
@@ -596,7 +601,7 @@ interface ui {
         selected: bool,
     }
     record ui-button {
-        label: string,
+        label: text,
         intent: intent,
         action: action-ref,
     }
@@ -608,7 +613,7 @@ interface ui {
     /// INIZIALE: la piega è faccenda della shell, che non disturba il provider
     /// per aprirla — e con la chiave sopravvive al ridisegno.
     record ui-section {
-        title: string,
+        title: text,
         collapsed: bool,
         children: list<ui-ref>,
     }
@@ -625,7 +630,7 @@ interface ui {
     /// Una voce di `tree`: l'annidamento passa dai `children`, che sono altri
     /// `tree-item`.
     record ui-tree-item {
-        label: string,
+        label: text,
         expanded: bool,
         action: option<action-ref>,
         selected: bool,
@@ -639,24 +644,24 @@ interface ui {
     /// `action`, se c'è, scatta quando la scheda viene scelta: la shell cambia
     /// scheda da sé e avvisa solo chi ha chiesto di saperlo.
     record ui-tab {
-        label: string,
+        label: text,
         action: option<action-ref>,
         children: list<ui-ref>,
     }
     record ui-badge {
-        label: string,
+        label: text,
         intent: intent,
     }
     /// `value` in 0.0..=1.0; assente = indeterminato, che è il caso normale di
     /// chi non sa quanto manca.
     record ui-progress {
         value: option<f32>,
-        label: option<string>,
+        label: option<text>,
     }
     /// Il vuoto detto bene: non c'è niente E questo è ciò che si può fare.
     record ui-empty-state {
-        title: string,
-        detail: option<string>,
+        title: text,
+        detail: option<text>,
         action: option<action-ref>,
     }
     /// I nodi di input portano `field` (la chiave sotto cui il valore torna in
@@ -665,21 +670,21 @@ interface ui {
     /// quando il valore si assesta.
     record ui-text-input {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: string,
-        placeholder: option<string>,
+        placeholder: option<text>,
         action: option<action-ref>,
     }
     record ui-text-area {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: string,
         rows: u32,
         action: option<action-ref>,
     }
     record ui-number {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: option<f64>,
         min: option<f64>,
         max: option<f64>,
@@ -688,13 +693,13 @@ interface ui {
     }
     record ui-checkbox {
         field: string,
-        label: string,
+        label: text,
         value: bool,
         action: option<action-ref>,
     }
     record ui-select {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: list<string>,
         options: list<ui-option>,
         multiple: bool,
@@ -702,14 +707,14 @@ interface ui {
     }
     record ui-radio {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: option<string>,
         options: list<ui-option>,
         action: option<action-ref>,
     }
     record ui-slider {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: f64,
         min: f64,
         max: f64,
@@ -721,7 +726,7 @@ interface ui {
     /// ha scritto su un calendario, non un punto sulla linea del tempo.
     record ui-date-picker {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: option<string>,
         action: option<action-ref>,
     }
@@ -729,7 +734,7 @@ interface ui {
     /// propria: è ciò che distingue un form da una fila di input sciolti.
     record ui-form {
         children: list<ui-ref>,
-        submit-label: string,
+        submit-label: text,
         submit: action-ref,
     }
     /// Widget che il protocollo non prevede: la shell che conosce `ns` disegna
@@ -745,12 +750,12 @@ interface ui {
     /// `plugin-error` restituito da `render-view`: quello dice che la view non
     /// si è disegnata, questo che una sua parte non ha un dato.
     record ui-failed {
-        message: string,
+        message: text,
         retry: option<action-ref>,
     }
     variant ui-kind {
         stack(ui-stack),
-        text(string),
+        %text(text),
         heading(ui-heading),
         %list(list<ui-ref>),
         list-item(ui-list-item),
@@ -788,7 +793,7 @@ interface ui {
         /// «Non ancora»: il dato non c'è perché qualcuno lo sta preparando
         /// (§2.5). È un nodo e non una risposta di `render-view` perché il caso
         /// normale è PARZIALE — la testata c'è, la tabella arriva.
-        pending(option<string>),
+        pending(option<text>),
         failed(ui-failed),
     }
 
@@ -871,6 +876,7 @@ interface ui {
 /// vuole un portachiavi di sistema, che sarà una capacità sua.
 interface settings {
     use ui.{ui-option};
+    use text.{text};
 
     /// DOVE un'impostazione ha il diritto di stare.
     ///
@@ -936,12 +942,15 @@ interface settings {
         /// Con la regola dei nomi del §7.4: il core nomina nudo
         /// (`versioning.enabled`), un plugin dentro il proprio id.
         key: string,
-        label: string,
+        label: text,
         /// In prosa: è l'unica cosa che chi non ha scritto il plugin legge per
         /// decidere se toccarla.
-        description: string,
+        description: text,
         /// Sotto quale intestazione raggrupparla nel form. Vuoto = in fondo.
-        group: string,
+        /// È un `text` come le altre due: chi disegna raggruppa per
+        /// INTESTAZIONE RISOLTA e non per una chiave — stessa semantica di
+        /// prima, quando il campo era prosa libera.
+        group: text,
         scope: setting-scope,
         kind: setting-kind,
         /// UN PROGRAMMA LA PUÒ SCRIVERE? È il residuo che la decisione 0010
@@ -1286,6 +1295,7 @@ interface command {
     use model.{doc-id, span};
     use edit.{edit-request};
     use errors.{plugin-error};
+    use text.{text};
 
     /// La specie di un argomento. Vocabolario chiuso e piccolo: sono le specie
     /// che un chiamante qualunque sa produrre senza conoscere il comando. NON
@@ -1308,15 +1318,15 @@ interface command {
     /// Una scelta: il valore che viaggia e l'etichetta che si legge.
     record choice {
         value: string,
-        title: string,
+        title: text,
     }
     /// Un argomento di un comando. Un parametro non obbligatorio assente non ha
     /// un default nel contratto: cosa farne lo decide il comando, che è l'unico
     /// a saperlo.
     record param-spec {
         name: string,
-        title: string,
-        description: string,
+        title: text,
+        description: text,
         kind: param-kind,
         required: bool,
     }
@@ -1339,8 +1349,8 @@ interface command {
     /// sceglie.
     record command-spec {
         id: string,
-        title: string,
-        description: string,
+        title: text,
+        description: text,
         keybinding: option<string>,
         params: list<param-spec>,
         scope: command-scope,
@@ -1365,7 +1375,7 @@ interface command {
     /// dettaglio mostrabile come diff. L'host completa `docs` con i documenti
     /// degli `edits`: quell'elenco è ciò che l'utente approva.
     record command-plan {
-        summary: string,
+        summary: text,
         docs: list<doc-id>,
         edits: list<planned-edit>,
     }
@@ -1404,7 +1414,7 @@ interface command {
     /// un enum perché le due cose capitano insieme. `notify` è TESTO SEMPLICE,
     /// mai markup.
     record command-outcome {
-        notify: option<string>,
+        notify: option<text>,
         effect: command-effect,
     }
 
@@ -1970,6 +1980,71 @@ interface intl {
     }
 }
 
+/// Il TESTO CHE SI LEGGE: una stringa, o una chiave con i suoi argomenti
+/// (§12.1). Vedi `crates/fubmd-abi/src/text.rs`.
+///
+/// Le due risposte ovvie sono sbagliate in modo simmetrico. Se traduce il
+/// PROVIDER, ogni componente si porta un runtime i18n e la qualità della
+/// traduzione dell'app è la peggiore fra quelle installate — e soprattutto un
+/// messaggio già composto non si traduce più. Se TUTTO È UNA CHIAVE, il nome di
+/// un tag e il path di un file — la maggioranza di ciò che attraversa il confine
+/// verso uno schermo — devono passare da un catalogo che non li contiene.
+///
+/// Quindi il tipo porta la propria PROVENIENZA: `literal` è un dato e viaggia
+/// com'è, `message` è una chiave che il KERNEL risolve sulla via d'uscita — non
+/// la shell, che è uno dei tre host previsti (app, CLI, API locale) mentre il
+/// kernel è l'unico posto che ognuno attraversa.
+interface text {
+    use intl.{locale};
+
+    /// Testo destinato a un umano. Dopo la risoluzione del kernel è sempre un
+    /// `literal`: sul filo verso la shell è quindi una stringa nuda.
+    variant text {
+        /// Un dato: il nome di un tag, un path, il titolo di una nota.
+        literal(string),
+        /// Una chiave del catalogo di chi l'ha scritta, coi suoi argomenti.
+        message(message),
+    }
+
+    /// La chiave è NUDA, e qui sta la differenza deliberata dalle chiavi delle
+    /// impostazioni: quelle vivono in un archivio solo e devono qualificarsi col
+    /// nome di chi le dichiara (`versioning.enabled`); un catalogo appartiene a
+    /// un componente e basta, quindi la qualifica è STRUTTURALE — un plugin non
+    /// ha nemmeno il modo di nominare la stringa di un altro.
+    record message {
+        key: string,
+        args: list<arg>,
+    }
+
+    record arg {
+        name: string,
+        value: arg-value,
+    }
+
+    /// TIPIZZATO, non una stringa già formattata. Chi passasse `"28/07/2026"`
+    /// avrebbe già deciso il calendario e il fuso di un utente che non conosce;
+    /// chi passasse `"3"` avrebbe già buttato via ciò con cui si sceglie una
+    /// forma plurale. Il dato arriva intero e chi conosce il `locale` decide
+    /// come si legge.
+    variant arg-value {
+        %text(string),
+        int(s64),
+        float(f64),
+        /// Millisecondi dall'epoca UNIX, UTC: l'unico argomento che a M2 si
+        /// formatta davvero secondo il locale.
+        timestamp(u64),
+    }
+
+    /// Le stringhe di un componente in UNA lingua. Sta nel manifest come lo
+    /// schema delle impostazioni, più una ragione che è solo sua: un catalogo è
+    /// DATO, e dato nel manifest vuol dire che una traduzione si corregge senza
+    /// ricompilare e che un componente di terzi non se la scrive a build time.
+    record string-catalog {
+        locale: string,
+        entries: list<tuple<string, string>>,
+    }
+}
+
 /// Modificare **un pezzo** di documento: l'edit come coppia (span, testo) sopra
 /// la revisione su cui è stato calcolato. Vedi `crates/fubmd-abi/src/edit.rs`.
 interface edit {
@@ -2025,6 +2100,7 @@ interface view {
     use session.{context-mask};
     use command.{param-spec};
     use errors.{plugin-error};
+    use text.{text};
 
     /// Dove una view si ANCORA. Non è come si disegna — quello è l'albero
     /// `ui-node` — ma quale superficie della finestra occupa. Erano tre, e con
@@ -2065,7 +2141,7 @@ interface view {
 
     record view-spec {
         id: string,
-        title: string,
+        title: text,
         surface: view-surface,
         /// Dichiarazione di interesse: gli eventi al cui arrivo la shell deve
         /// ridisegnare la view. Vuota = nessun ridisegno event-driven.
@@ -2608,6 +2684,7 @@ interface plugin {
     use json.{json};
     use options.{option-map};
     use settings.{setting-spec};
+    use text.{string-catalog};
 
     /// Cosa un plugin dichiara di voler fare. Erano tre booleani — leggere,
     /// scrivere, rete — contro ciò che 20.1, 23.1 e 20.3 chiedono: appunti,
@@ -2648,6 +2725,15 @@ interface plugin {
         /// un'impostazione è proprio un `activate` che deve sapere se la sua
         /// feature è accesa. Ogni chiave vale la regola del §7.4.
         settings: list<setting-spec>,
+        /// Le STRINGHE che dichiara (§12.1), una voce per lingua. Stessa
+        /// ragione di `settings` — si legge prima di montare, e un catalogo
+        /// registrato da `activate` sarebbe assente quando serve — più una che
+        /// è solo sua: un catalogo è dato, quindi si corregge una traduzione
+        /// senza ricompilare.
+        strings: list<string-catalog>,
+        /// La lingua in cui il componente è scritto: il penultimo gradino della
+        /// scala di ripiego. Vuoto = si scende dritti alla chiave nuda.
+        default-locale: string,
     }
 
     manifest: func() -> plugin-manifest;

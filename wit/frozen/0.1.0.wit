@@ -524,6 +524,7 @@ interface renderer {
 interface ui {
     use json.{json};
     use model.{span};
+    use text.{text};
 
     type action-id = string;
 
@@ -563,14 +564,18 @@ interface ui {
     /// torna, `label` ciò che si legge — cioè ciò che si localizza (§12.1).
     record ui-option {
         value: string,
-        label: string,
+        label: text,
     }
+    /// TUTTE E DUE le metà sono `text`, ed è il caso che mostra perché il tipo
+    /// porta la propria provenienza invece di essere una chiave: l'etichetta di
+    /// una riga è quasi sempre da tradurre («Creata il»), il valore quasi mai
+    /// (una data, un conteggio, un path).
     record key-value-entry {
-        label: string,
-        value: string,
+        label: text,
+        value: text,
     }
     record table-column {
-        title: string,
+        title: text,
         align: align,
     }
 
@@ -584,11 +589,11 @@ interface ui {
     }
     record ui-heading {
         level: u8,
-        content: string,
+        content: text,
     }
     record ui-list-item {
-        title: string,
-        subtitle: option<string>,
+        title: text,
+        subtitle: option<text>,
         action: option<action-ref>,
         /// È l'elemento CORRENTE? Non è stile: è l'unica cosa che una lista non
         /// sa dire di sé, e senza chi ce l'ha se la scrive nel titolo — il §2.7
@@ -596,7 +601,7 @@ interface ui {
         selected: bool,
     }
     record ui-button {
-        label: string,
+        label: text,
         intent: intent,
         action: action-ref,
     }
@@ -608,7 +613,7 @@ interface ui {
     /// INIZIALE: la piega è faccenda della shell, che non disturba il provider
     /// per aprirla — e con la chiave sopravvive al ridisegno.
     record ui-section {
-        title: string,
+        title: text,
         collapsed: bool,
         children: list<ui-ref>,
     }
@@ -625,7 +630,7 @@ interface ui {
     /// Una voce di `tree`: l'annidamento passa dai `children`, che sono altri
     /// `tree-item`.
     record ui-tree-item {
-        label: string,
+        label: text,
         expanded: bool,
         action: option<action-ref>,
         selected: bool,
@@ -639,24 +644,24 @@ interface ui {
     /// `action`, se c'è, scatta quando la scheda viene scelta: la shell cambia
     /// scheda da sé e avvisa solo chi ha chiesto di saperlo.
     record ui-tab {
-        label: string,
+        label: text,
         action: option<action-ref>,
         children: list<ui-ref>,
     }
     record ui-badge {
-        label: string,
+        label: text,
         intent: intent,
     }
     /// `value` in 0.0..=1.0; assente = indeterminato, che è il caso normale di
     /// chi non sa quanto manca.
     record ui-progress {
         value: option<f32>,
-        label: option<string>,
+        label: option<text>,
     }
     /// Il vuoto detto bene: non c'è niente E questo è ciò che si può fare.
     record ui-empty-state {
-        title: string,
-        detail: option<string>,
+        title: text,
+        detail: option<text>,
         action: option<action-ref>,
     }
     /// I nodi di input portano `field` (la chiave sotto cui il valore torna in
@@ -665,21 +670,21 @@ interface ui {
     /// quando il valore si assesta.
     record ui-text-input {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: string,
-        placeholder: option<string>,
+        placeholder: option<text>,
         action: option<action-ref>,
     }
     record ui-text-area {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: string,
         rows: u32,
         action: option<action-ref>,
     }
     record ui-number {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: option<f64>,
         min: option<f64>,
         max: option<f64>,
@@ -688,13 +693,13 @@ interface ui {
     }
     record ui-checkbox {
         field: string,
-        label: string,
+        label: text,
         value: bool,
         action: option<action-ref>,
     }
     record ui-select {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: list<string>,
         options: list<ui-option>,
         multiple: bool,
@@ -702,14 +707,14 @@ interface ui {
     }
     record ui-radio {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: option<string>,
         options: list<ui-option>,
         action: option<action-ref>,
     }
     record ui-slider {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: f64,
         min: f64,
         max: f64,
@@ -721,7 +726,7 @@ interface ui {
     /// ha scritto su un calendario, non un punto sulla linea del tempo.
     record ui-date-picker {
         field: string,
-        label: option<string>,
+        label: option<text>,
         value: option<string>,
         action: option<action-ref>,
     }
@@ -729,7 +734,7 @@ interface ui {
     /// propria: è ciò che distingue un form da una fila di input sciolti.
     record ui-form {
         children: list<ui-ref>,
-        submit-label: string,
+        submit-label: text,
         submit: action-ref,
     }
     /// Widget che il protocollo non prevede: la shell che conosce `ns` disegna
@@ -745,12 +750,12 @@ interface ui {
     /// `plugin-error` restituito da `render-view`: quello dice che la view non
     /// si è disegnata, questo che una sua parte non ha un dato.
     record ui-failed {
-        message: string,
+        message: text,
         retry: option<action-ref>,
     }
     variant ui-kind {
         stack(ui-stack),
-        text(string),
+        %text(text),
         heading(ui-heading),
         %list(list<ui-ref>),
         list-item(ui-list-item),
@@ -788,7 +793,7 @@ interface ui {
         /// «Non ancora»: il dato non c'è perché qualcuno lo sta preparando
         /// (§2.5). È un nodo e non una risposta di `render-view` perché il caso
         /// normale è PARZIALE — la testata c'è, la tabella arriva.
-        pending(option<string>),
+        pending(option<text>),
         failed(ui-failed),
     }
 
@@ -855,10 +860,177 @@ interface ui {
     }
 }
 
+/// Le IMPOSTAZIONI (§11.1): cosa un componente dichiara di poter configurare, e
+/// in che forma il valore torna indietro.
+///
+/// Lo schema sta nel manifest (`plugin.plugin-manifest.settings`) e non in un
+/// provider da registrare: la dichiarazione viene PRIMA di `activate`, e il
+/// primo cliente vero di un'impostazione è un `activate` che deve sapere se la
+/// sua feature è accesa. Ne segue che l'insieme delle chiavi di un componente è
+/// il suo manifest, e che ciò che sta nel file di configurazione senza essere
+/// dichiarato resta lì senza essere letto — questo NON è lo spazio
+/// chiave→valore che la decisione 0013 ha tolto.
+///
+/// Cosa non entra, detto: i SEGRETI. Il file è JSON in chiaro e il valore è
+/// leggibile da chiunque possa interrogare il canale dati; una chiave d'API
+/// vuole un portachiavi di sistema, che sarà una capacità sua.
+interface settings {
+    use ui.{ui-option};
+    use text.{text};
+
+    /// DOVE un'impostazione ha il diritto di stare.
+    ///
+    /// Due livelli e non tre: «profilo/portable» non è un posto in cui cercare
+    /// un valore, è DOVE STA il livello macchina, e lo decide chi monta. Un
+    /// terzo strato di merge sarebbe un terzo posto in cui la stessa chiave può
+    /// valere un'altra cosa, senza che nessuno dei tre sappia dire chi ha vinto.
+    ///
+    /// Non è una preferenza di chi scrive lo schema: è una regola di sicurezza.
+    /// Un vault è dato che ARRIVA DA FUORI — si scarica, si sincronizza, lo
+    /// passa un collega — e un vault che decidesse impostazioni della macchina
+    /// sarebbe un file che cambia il comportamento di chi lo apre. Le chiavi
+    /// `machine` scritte in un `.fubmd/settings.json` si IGNORANO.
+    enum setting-scope {
+        /// Del vault: sta in `.fubmd/settings.json`, viaggia col vault, ed è
+        /// autorevole per quel vault.
+        vault,
+        /// Della macchina: tema, scorciatoie, vault recenti. Non viaggia.
+        machine,
+    }
+
+    record setting-toggle { %default: bool }
+    /// Gli estremi li usa chi disegna il campo e li rispetta chi scrive il
+    /// valore: fuori intervallo è un RIFIUTO e non un arrotondamento — un
+    /// valore corretto in silenzio è un valore che l'utente non ha scelto e non
+    /// sa di non avere.
+    record setting-number { %default: f64, min: option<f64>, max: option<f64> }
+    record setting-text { %default: string }
+    /// Una fra N. Le opzioni sono le stesse di un `select` perché valore ed
+    /// etichetta sono due cose anche qui: una scelta che è anche la propria
+    /// etichetta non si può localizzare (§12.1).
+    record setting-choice { %default: string, options: list<ui-option> }
+    /// Un elenco di stringhe: gli id dei plugin spenti, le cartelle escluse.
+    /// Il protocollo di UI non ha un editor di liste, quindi chi disegna lo
+    /// MOSTRA e non lo edita, e si cambia dal comando che lo scrive.
+    record setting-list { %default: list<string> }
+    /// Di che specie è un'impostazione, COL SUO DEFAULT DENTRO: sono la stessa
+    /// informazione detta una volta, e un `default` in un campo accanto sarebbe
+    /// un caso da validare a ogni lettura.
+    variant setting-kind {
+        toggle(setting-toggle),
+        number(setting-number),
+        text(setting-text),
+        choice(setting-choice),
+        %list(setting-list),
+    }
+
+    /// Il valore di un'impostazione. Sul confine JSON è NUDO (`true`, `12`,
+    /// `"scuro"`, `["a"]`): un `.fubmd/settings.json` si apre con un editor di
+    /// testo e si legge in una diff, e un valore etichettato lo renderebbe
+    /// illeggibile per guadagnare un'ambiguità che non c'è — la specie la
+    /// dichiara lo schema.
+    variant setting-value {
+        toggle(bool),
+        number(f64),
+        text(string),
+        %list(list<string>),
+    }
+
+    /// Un'impostazione DICHIARATA: come si chiama, cosa vuol dire, dove sta e
+    /// chi la può scrivere.
+    record setting-spec {
+        /// Con la regola dei nomi del §7.4: il core nomina nudo
+        /// (`versioning.enabled`), un plugin dentro il proprio id.
+        key: string,
+        label: text,
+        /// In prosa: è l'unica cosa che chi non ha scritto il plugin legge per
+        /// decidere se toccarla.
+        description: text,
+        /// Sotto quale intestazione raggrupparla nel form. Vuoto = in fondo.
+        /// È un `text` come le altre due: chi disegna raggruppa per
+        /// INTESTAZIONE RISOLTA e non per una chiave — stessa semantica di
+        /// prima, quando il campo era prosa libera.
+        group: text,
+        scope: setting-scope,
+        kind: setting-kind,
+        /// UN PROGRAMMA LA PUÒ SCRIVERE? È il residuo che la decisione 0010
+        /// aveva lasciato aperto: `command-reach.settings` diceva che un
+        /// comando può toccare la configurazione, e nessuno schema diceva
+        /// QUALI CHIAVI. È per chiave e non per famiglia perché la riga non
+        /// negoziabile — privacy e AI non si spostano da sole — non è una
+        /// proprietà di chi scrive: è una proprietà di ciò che si scrive.
+        /// Default `false`, per la regola di `trust`: ciò che si ottiene
+        /// dimenticandosi di dichiarare non può essere più di ciò che si
+        /// ottiene dichiarando.
+        program-writable: bool,
+    }
+
+    /// Da dove viene il valore che si sta leggendo. Serve a chi disegna il form
+    /// («questa la stai sovrascrivendo per questo vault») e a chi azzera:
+    /// azzerare fa RICADERE al livello sotto, che non è sempre il default.
+    enum setting-source { %default, machine, vault }
+
+    /// Una riga di configurazione RISOLTA: lo schema, il valore che vale
+    /// adesso, e da dove viene. I tre insieme e non tre domande separate: un
+    /// form che chiedesse gli schemi da una parte e i valori dall'altra avrebbe
+    /// due risposte da riconciliare, e le riconcilierebbe male ogni volta che
+    /// un valore cambia fra le due chiamate.
+    record setting-entry {
+        spec: setting-spec,
+        value: setting-value,
+        source: setting-source,
+    }
+}
+
+/// L'ORGANIZZAZIONE di un vault (§11.3): icone, note appuntate, ordinamenti
+/// scelti a mano, spazi.
+///
+/// Vive in `.fubmd/workspace.json`, DENTRO il vault, ed è la differenza con lo
+/// stato di vista (§11.2): questa VIAGGIA COL VAULT — chi sincronizza le sue
+/// note si porta dietro il modo in cui le ha messe in ordine, e chi passa un
+/// vault a un collega gliene passa uno organizzato.
+///
+/// È un dato AUTOREVOLE e non derivato, che è la riga da cui discende il resto:
+/// perso, non si ricostruisce da niente. Un `.fubmd-data/` si cancella e si rifà
+/// con una scansione; questo no. Per questo il file ha la disciplina della
+/// decisione 0036: versione di schema, scrittura atomica, e un file che non si è
+/// potuto leggere NON SI RISCRIVE.
+interface organization {
+    /// Le chiavi sono path relativi al vault: un `doc-id` per le note, un path
+    /// di cartella senza slash finale per le cartelle (`""` è la radice).
+    ///
+    /// Il path È l'identità di un documento (§13.1), quindi una rinomina cambia
+    /// la chiave sotto ognuna di queste mappe. A migrarla è il KERNEL, dentro
+    /// l'operazione che sposta l'identità e non su un evento: la coda degli
+    /// eventi ha un budget e può troncare (decisione 0034), e un dato autorevole
+    /// non può dipendere da una consegna best-effort.
+    record organization {
+        /// path → emoji mostrata accanto al nome.
+        icons: list<tuple<string, string>>,
+        /// Note appuntate in cima, nell'ordine scelto.
+        pinned: list<string>,
+        /// cartella → nomi dei figli nell'ordine scelto a mano; chi non compare
+        /// segue in ordine alfabetico.
+        order: list<tuple<string, list<string>>>,
+        /// Cartelle registrate come «spazi», nell'ordine in cui appaiono.
+        /// QUALE sia selezionato non sta qui: è stato di vista (§11.2), quindi
+        /// per-macchina. Il confine passa lì — `spaces` è una decisione sul
+        /// vault (viaggia), lo spazio attivo è dove sto guardando adesso (no).
+        spaces: list<string>,
+    }
+}
+
 /// Job: il varco per il lavoro lungo. Le chiamate dei trait sono sincrone e
-/// brevi (a M5 una deadline le tronca); rete e calcolo pesante passano da un
-/// job, eseguito dall'host FUORI dal giro sincrono del kernel. Dentro al job
-/// non c'è host-api: input nel payload, output nel risultato.
+/// brevi (a M5 una deadline le tronca); rete, calcolo pesante e vault camminato
+/// per intero passano da un job, eseguito dall'host FUORI dal giro sincrono del
+/// kernel.
+///
+/// Dentro al job le capacità dell'host CI SONO (decisione 0027), e al confine
+/// non si vede: sono import del world, non un parametro di `run-job`. Ciò che
+/// va detto perché non si vede è la disciplina — il vault si vede PER CHIAMATA
+/// e non per job, quindi fra due chiamate può cambiare; la guardia contro quel
+/// cambio è quella di tutti (`vault-write.apply-edit` con la sua `base`, e
+/// `conflict` come risposta), e un job non è né una transazione né un lotto.
 interface jobs {
     use json.{json};
 
@@ -866,11 +1038,42 @@ interface jobs {
     /// nell'evento `job-done`.
     type job-id = u64;
 
-    /// Richiesta di lavoro in background: `job` è il nome dell'entry point
-    /// del plugin (`run-job`), `payload` porta tutto l'input necessario.
+    /// Richiesta di lavoro in background: `job` è il nome dell'entry point del
+    /// plugin (`run-job`), `payload` porta i suoi ARGOMENTI — quale cartella
+    /// esportare, quale URL importare. L'input il job se lo legge da sé: prima
+    /// della 0027 doveva leggerlo il chiamante, nel giro sincrono, e passarlo
+    /// qui dentro.
     record job-spec {
         job: string,
         payload: json,
+    }
+
+    /// A CHE PUNTO è un lavoro lungo (§10.3, decisione 0035). Un record solo per
+    /// tutti e due i modi di saperlo: l'evento `job-progress`, che lo dice
+    /// quando cambia, e `job-status`, che lo dice a chi arriva dopo e chiede.
+    ///
+    /// `total` assente = indeterminato (uno scaricamento senza `content-length`,
+    /// una scansione che non ha finito di contare): chi disegna mostra un'attesa
+    /// senza barra invece di una barra che mente. Nessun campo dice «finito»: un
+    /// job finisce con `job-done`, che porta l'esito.
+    record job-progress {
+        done: u64,
+        total: option<u64>,
+        label: option<string>,
+    }
+
+    /// Un lavoro lungo VIVO: la risposta a `index-query.jobs` (§10.3).
+    ///
+    /// Vivo va da `job-started` a `job-done`, quindi comprende i job che
+    /// aspettano un thread libero — ed è deliberato: uno in coda si annulla come
+    /// uno in volo (decisione 0032), quindi chi guarda deve poterlo vedere per
+    /// poterlo fermare. `since` è in millisecondi dall'epoca UNIX.
+    record job-status {
+        id: job-id,
+        job: string,
+        plugin: string,
+        since: u64,
+        progress: option<job-progress>,
     }
 }
 
@@ -878,7 +1081,8 @@ interface jobs {
 interface events {
     use json.{json};
     use model.{doc-id};
-    use jobs.{job-id};
+    use jobs.{job-id, job-progress};
+    use settings.{setting-scope};
     use errors.{plugin-error};
 
     record event-document-changed { id: doc-id }
@@ -887,8 +1091,11 @@ interface events {
     /// non tratta il rename come remove+add. (`from` è keyword WIT: `%from`.)
     record event-document-renamed { %from: doc-id, to: doc-id }
     record event-vault-opened { root: string }
-    /// Varco di estensione: eventi dei plugin, topic namespaced
-    /// (`"<plugin-id>/<nome>"`).
+    /// Varco di estensione: eventi dei plugin, con topic namespaced come ogni
+    /// altro nome del contratto (§7.4): `ns:nome`, col `ns` di chi emette, e la
+    /// regola la fa rispettare l'host quando l'evento passa (decisione 0021).
+    /// Ci si abbona a grana `custom` più un PREFISSO di topic
+    /// (`event-mask.topics`, decisione 0033).
     record event-custom { topic: string, payload: json }
     /// Esito di un job in background (vedi `host-api.spawn-job`): consegnato
     /// sul giro sincrono normale, riconosciuto dal lanciatore tramite `id`.
@@ -919,6 +1126,38 @@ interface events {
     /// evento guadagna anche l'origine, che una capacità si sarebbe dovuta far
     /// dichiarare da chi la chiama.
     record event-view-invalidated { view: string, instance: option<string> }
+    /// Il vault STA PER chiudersi: l'ultimo giro sincrono in cui è ancora
+    /// quello di prima, e il gemello di `vault-opened`. Arriva PRIMA che si
+    /// spenga qualcuno (decisione 0029): chi lo riceve è ancora registrato e
+    /// può ancora scrivere. Un indice non ne ha bisogno — ha `flush` e `close`,
+    /// che il kernel gli chiama subito dopo; ne ha bisogno chi indice non è.
+    record event-vault-closed { root: string }
+    /// Un lavoro lungo è stato ACCETTATO (§10.3, decisione 0035): il gemello
+    /// d'apertura di `job-done`, ed è il momento in cui un centro attività fa
+    /// comparire la riga. «Accettato» e non «partito»: lo emette il kernel
+    /// quando il job entra in coda, perché quando parta davvero lo sa solo chi
+    /// possiede i thread — e la differenza non cambia niente per chi guarda né
+    /// per chi ferma. Chi lo ha chiesto lo dice l'origine, non un campo.
+    record event-job-started { id: job-id, job: string }
+    /// A che punto è un lavoro lungo (§10.3, decisione 0035). Lo emette l'host
+    /// del job quando il job chiama `host-events.report-progress`: il fatto è un
+    /// evento (decisione 0013), e l'identità la mette chi ce l'ha, perché un job
+    /// NON conosce il proprio `job-id`.
+    ///
+    /// È il canale più caldo del contratto — un job che cammina il vault può
+    /// chiamarlo per nota — e per questo è recuperabile: ciò che lo riscopre è
+    /// `index-query.jobs`, e chi consegna ne tiene l'ultimo per job.
+    record event-job-progress { id: job-id, progress: job-progress }
+    /// Un'impostazione è cambiata (§11.1): la chiave, e il livello in cui il
+    /// valore è stato scritto o da cui è stato tolto.
+    ///
+    /// NON porta il valore nuovo: chi reagisce lo rilegge
+    /// (`host-settings-read.setting`), e una copia dentro l'evento
+    /// invecchierebbe — due scritture ravvicinate consegnate in ordine inverso
+    /// lascerebbero chi ascolta convinto di un valore che non è più quello. Per
+    /// la stessa ragione NON è recuperabile: il valore si rilegge, il *cambio*
+    /// no, e chi si spegne quando lo spengono deve saperlo anche a coda piena.
+    record event-setting-changed { key: string, scope: setting-scope }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -930,6 +1169,10 @@ interface events {
         custom(event-custom),
         batch-ended(event-batch-ended),
         view-invalidated(event-view-invalidated),
+        vault-closed(event-vault-closed),
+        job-started(event-job-started),
+        job-progress(event-job-progress),
+        setting-changed(event-setting-changed),
     }
 
     enum event-kind {
@@ -946,20 +1189,52 @@ interface events {
         batch-ended,
         /// Una view è invecchiata per un motivo che il vault non conosce.
         view-invalidated,
+        /// Il vault sta per chiudersi (decisione 0029).
+        vault-closed,
+        /// Un lavoro lungo è stato accettato (§10.3).
+        job-started,
+        /// A che punto è un lavoro lungo (§10.3): il canale più fitto che il
+        /// contratto abbia.
+        job-progress,
+        /// Una chiave di configurazione è cambiata (§11.1).
+        setting-changed,
     }
-    /// Ritagliata dalla decisione 0033 (§10.1), pre-freeze: `event-mask` era
-    /// `type event-mask = list<event-kind>` e adesso è un record a tre campi.
-    /// Non è un'aggiunta e non finge di esserlo — un alias che cambia
-    /// destinazione rompe chiunque abbia già compilato — ed è per questo che sta
-    /// nello stesso commit che tocca `wit/fubmd/abi.wit`. Dopo M4 la stessa
-    /// mossa vorrà una versione nuova accanto a questa, non una riga cambiata
-    /// dentro.
+    /// DOVE: il soggetto di un abbonamento (§10.1, decisione 0033).
+    ///
+    /// Un documento si nomina con la sua identità, che è il path; una cartella
+    /// con il PREFISSO di path, perché nel kernel una cartella non è ancora un
+    /// cittadino — lo diventa col §14.3, e quel giorno questa variante guadagna
+    /// un tipo invece di una stringa. La forma della maschera non poteva
+    /// aspettarlo: allargarla dopo il freeze costerebbe una migrazione, mentre
+    /// il tipo del soggetto è una variante in più.
     record subject-document { id: doc-id }
+    /// Tutto ciò che sta DENTRO la cartella, a qualunque profondità. Il
+    /// confronto è per segmento e non per caratteri: `Progetti` non contiene
+    /// `Progetti-vecchi/nota.md`. La stringa vuota è la radice.
     record subject-folder { path: string }
     variant subject {
         document(subject-document),
         folder(subject-folder),
     }
+
+    /// A COSA un handler è abbonato: le specie, il topic dei custom, il
+    /// soggetto (§10.1, decisione 0033).
+    ///
+    /// Era `list<event-kind>` e basta, e con quella sola grana ogni handler si
+    /// svegliava per OGNI custom di OGNI plugin e per OGNI documento del vault:
+    /// N feature × M documenti, sull'evento più caldo che il contratto abbia.
+    ///
+    /// I tre campi sono in AND, e ognuno vuoto vuol dire *non filtro* — una
+    /// maschera scritta prima di questa decisione riceve ciò che riceveva.
+    /// `topics` sono PREFISSI nella forma `ns:nome` del §7.4, spezzati sui
+    /// separatori del contratto (`:` e `.`) e non sui caratteri: `com.acme` non
+    /// è un prefisso di `com.acmecorp:x`.
+    ///
+    /// Il filtro di soggetto vale per i soli eventi che un documento lo
+    /// nominano: `overflow`, `vault-closed` e `job-done` passano anche a chi si
+    /// è abbonato a una cartella sola, perché nessuno dei tre si riscopre
+    /// riguardando il vault. Un rename è del soggetto di partenza E di quello
+    /// d'arrivo; un lotto arriva se ha toccato il soggetto.
     record event-mask {
         kinds: list<event-kind>,
         topics: list<string>,
@@ -1020,6 +1295,7 @@ interface command {
     use model.{doc-id, span};
     use edit.{edit-request};
     use errors.{plugin-error};
+    use text.{text};
 
     /// La specie di un argomento. Vocabolario chiuso e piccolo: sono le specie
     /// che un chiamante qualunque sa produrre senza conoscere il comando. NON
@@ -1042,15 +1318,15 @@ interface command {
     /// Una scelta: il valore che viaggia e l'etichetta che si legge.
     record choice {
         value: string,
-        title: string,
+        title: text,
     }
     /// Un argomento di un comando. Un parametro non obbligatorio assente non ha
     /// un default nel contratto: cosa farne lo decide il comando, che è l'unico
     /// a saperlo.
     record param-spec {
         name: string,
-        title: string,
-        description: string,
+        title: text,
+        description: text,
         kind: param-kind,
         required: bool,
     }
@@ -1073,8 +1349,8 @@ interface command {
     /// sceglie.
     record command-spec {
         id: string,
-        title: string,
-        description: string,
+        title: text,
+        description: text,
         keybinding: option<string>,
         params: list<param-spec>,
         scope: command-scope,
@@ -1099,7 +1375,7 @@ interface command {
     /// dettaglio mostrabile come diff. L'host completa `docs` con i documenti
     /// degli `edits`: quell'elenco è ciò che l'utente approva.
     record command-plan {
-        summary: string,
+        summary: text,
         docs: list<doc-id>,
         edits: list<planned-edit>,
     }
@@ -1138,7 +1414,7 @@ interface command {
     /// un enum perché le due cose capitano insieme. `notify` è TESTO SEMPLICE,
     /// mai markup.
     record command-outcome {
-        notify: option<string>,
+        notify: option<text>,
         effect: command-effect,
     }
 
@@ -1160,6 +1436,9 @@ interface command {
 interface index {
     use json.{json};
     use model.{doc-id, document-model, span, heading, property-value, property-scalar};
+    use jobs.{job-status};
+    use settings.{setting-entry};
+    use organization.{organization};
     use errors.{plugin-error};
 
     /// La finestra chiesta su una risposta: sta nella DOMANDA perché chi la
@@ -1359,6 +1638,36 @@ interface index {
         property-values(index-query-property-values),
         vault-health(index-query-vault-health),
         custom(index-query-custom),
+        /// QUESTO VAULT SA QUANDO CAMBIA DA FUORI? (§9.7) L'unica variante che
+        /// non chiede niente sul contenuto del vault: chiede del vault stesso.
+        /// Passa da qui e non da un comando suo perché i suoi due clienti sono
+        /// già qui — la shell ha `query-index`, una feature ha `host-query` e
+        /// nient'altro, e un comando IPC nuovo sarebbe stato visibile solo alla
+        /// prima delle due.
+        vault-status,
+        /// COSA STA GIRANDO ADESSO? (§10.3) La seconda variante che chiede del
+        /// vault e non del suo contenuto, e passa da qui per la stessa ragione
+        /// della precedente. È anche la RICONCILIAZIONE del centro attività:
+        /// `job-started` e `job-progress` sono recuperabili, quindi i freni del
+        /// canale possono buttarli — e senza questa domanda quel troncamento
+        /// sarebbe una perdita definitiva.
+        jobs,
+        /// COM'È CONFIGURATO QUESTO VAULT? (§11.1) La terza che chiede del
+        /// vault e non del suo contenuto. Torna le impostazioni RISOLTE — lo
+        /// schema dichiarato, il valore che vale adesso, il livello da cui
+        /// viene — e passa da qui perché un elenco è DATI, e i dati hanno un
+        /// canale solo (decisione 0013): un `settings-list` fra le capacità
+        /// sarebbe stato il primo caso in cui la shell e un plugin chiedono la
+        /// stessa cosa a due porte diverse. `plugin` assente = tutte.
+        settings(option<string>),
+        /// COM'È ORGANIZZATO QUESTO VAULT? (§11.3) La quarta che chiede del
+        /// vault e non del suo contenuto: icone, note appuntate, ordinamenti
+        /// scelti a mano, spazi. Passa da qui per la ragione delle altre tre —
+        /// un elenco è DATI — e prima non passava da nessuna parte: era un
+        /// comando IPC che restituiva il blob intero, cioè una cosa che la
+        /// shell sapeva chiedere e un plugin no. Senza parametri, perché
+        /// l'organizzazione di un vault è UNA.
+        organization,
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -1373,6 +1682,25 @@ interface index {
         property-values,
         vault-health,
         custom(string),
+        /// Chi risponde a «questo vault sa quando cambia da fuori?» (§9.7). Il
+        /// proprietario è il kernel: è l'unico che conosce sia l'esito delle
+        /// sincronizzazioni sia il fatto — passatogli da chi monta — che un
+        /// rilevatore ci sia.
+        vault-status,
+        /// Chi risponde a «cosa sta girando adesso?» (§10.3). Di nuovo il
+        /// kernel: la coda dei job è sua, e chi possiede i thread non sa niente
+        /// di quelli che devono ancora entrargli in mano.
+        jobs,
+        /// Chi risponde a «com'è configurato questo vault?» (§11.1). Ancora il
+        /// kernel, e stavolta si vede a occhio: lo schema lo tiene il registro
+        /// dei plugin, il valore lo store di configurazione, e stanno nello
+        /// stesso posto solo lì.
+        settings,
+        /// Chi risponde a «com'è organizzato questo vault?» (§11.3). Ancora il
+        /// kernel, e stavolta è una CONQUISTA e non una constatazione: finché
+        /// il sidecar lo leggevano due funzioni dell'host con `std::fs`, questa
+        /// domanda non aveva un proprietario affatto.
+        organization,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -1409,6 +1737,24 @@ interface index {
     record tag-count {
         name: string,
         count: u32,
+    }
+    /// Che rapporto ha questo vault con il disco (§9.7). Tre domande diverse e
+    /// non una: FubMD SAPREBBE che il vault è cambiato; È GIÀ successo qualcosa
+    /// che non ha saputo leggere; e cosa. Un booleano solo confonderebbe un
+    /// vault senza rilevamento — rischio noto e permanente — con un vault che il
+    /// rilevamento ce l'ha e ha appena mancato un file, che è un incidente.
+    record vault-status {
+        /// `false` = NESSUNO vede le scritture altrui: network share e cloud
+        /// drive, vault sincronizzati con strumenti esterni, oltre il limite di
+        /// inotify su vault grandi, e i tre host dove non esisterà affatto.
+        watching: bool,
+        /// Quante sincronizzazioni per-path sono fallite da quando il vault è
+        /// aperto.
+        sync-failures: u32,
+        /// L'ultimo di quei fallimenti, già composto. Messaggio e non codice: la
+        /// forma dell'errore al confine è §12.2, e quando ci sarà varrà anche
+        /// qui.
+        last-sync-error: option<string>,
     }
     record property-entry {
         key: string,
@@ -1495,6 +1841,17 @@ interface index {
         property-values(property-values-page),
         vault-health(vault-health-page),
         custom(json),
+        vault-status(vault-status),
+        /// I lavori lunghi vivi, in ordine di richiesta. Senza finestra come
+        /// l'outline e per la stessa ragione: non cresce col vault.
+        jobs(list<job-status>),
+        /// Le impostazioni risolte, in ordine di chiave. Senza finestra: il
+        /// loro numero cresce con i plugin montati, non col vault.
+        settings(list<setting-entry>),
+        /// L'organizzazione del vault: un RECORD e non una lista, perché è una
+        /// cosa sola e non un elenco — chi la chiede la disegna intera (la
+        /// sidebar) o ne guarda un campo.
+        organization(organization),
     }
 
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel
@@ -1517,6 +1874,30 @@ interface index {
     /// Punto di consistenza E di persistenza: al ritorno l'accettato è
     /// visibile alle query e durevole (via `host-api.data-*`).
     flush: func() -> result<_, plugin-error>;
+    /// L'ULTIMA chiamata: l'indice sta per smettere e lascia andare ciò che
+    /// tiene — segmenti mmappati, lock file, thread di merge. Il gemello di
+    /// `activate`. Il kernel chiama `flush` e poi questa; l'host c'è lo stesso,
+    /// perché una chiusura può avere qualcosa di suo da scrivere (un marcatore
+    /// di spegnimento pulito). Dopo, l'indice non riceve più niente.
+    ///
+    /// Senza default, e qui la ragione è il confine: un componente che l'host
+    /// smonta non esegue niente al proprio smontaggio — non c'è nessun `Drop` a
+    /// cui appoggiarsi — quindi senza questa funzione un indice di terzi non
+    /// avrebbe modo di chiudersi bene (decisione 0028).
+    close: func() -> result<_, plugin-error>;
+    /// Risponde a una domanda GIÀ DICHIARATA da `routes`.
+    ///
+    /// **Due `query` possono essere in volo insieme**, e il contratto non ha
+    /// modo di chiedere che lo siano davvero: è una lettura, il kernel la serve
+    /// sotto prestito condiviso del workspace, e un indice che si rimetta in
+    /// fila da sé con un lock proprio resta conforme — semplicemente, non
+    /// scala, e il prestito condiviso del kernel non lo attraversa. Non c'è
+    /// un campo che lo dichiari, e la ragione sta nella decisione 0026: una
+    /// dichiarazione del genere non potrebbe cambiare *cosa è lecito* (lo dice
+    /// già `Send + Sync`), quindi sarebbe un'informazione che nessuno può
+    /// verificare e su cui nessuno può agire. Serializzare è quindi permesso
+    /// e sconsigliato, e chi non vuole farlo lo prova misurando, non
+    /// dichiarando.
     query: func(query: index-query) -> result<index-result, plugin-error>;
 }
 
@@ -1565,6 +1946,103 @@ interface session {
     /// Le parti al cui cambio una view invecchia (vedi `view-spec.follows`).
     /// Vuota = la view non guarda il contesto.
     type context-mask = list<context-kind>;
+}
+
+/// Chi legge, e da dove: la lingua, il fuso, il calendario (§12.3). Vedi
+/// `crates/fubmd-abi/src/locale.rs`.
+///
+/// È il gemello dell'orologio: `now-unix-millis` dà millisecondi UTC, cioè
+/// QUANDO è successo, e senza questi campi non c'è modo di dirlo a qualcuno.
+/// Lo pubblica la shell — che nella webview ha un ICU intero — e il kernel lo
+/// custodisce senza derivarlo, come il contesto di sessione.
+interface intl {
+    /// Il primo giorno della settimana. Non si deriva dalla lingua: `en-US`
+    /// comincia di domenica e `en-GB` di lunedì.
+    enum weekday { monday, tuesday, wednesday, thursday, friday, saturday, sunday }
+
+    /// Orologio a 24 (`14:30`) o a 12 ore (`2:30 PM`).
+    enum hour-cycle { h23, h12 }
+
+    /// Un record solo e non quattro capacità: chi lo chiede lo chiede tutto —
+    /// formattare una data vuole il fuso E la lingua E l'orologio — e quattro
+    /// chiamate darebbero quattro istantanee di momenti diversi.
+    ///
+    /// `utc-offset-minutes` è l'offset di ADESSO e vale per adesso: chi fa
+    /// aritmetica su date passate usa `timezone`, che porta con sé le regole
+    /// dell'ora legale. Minuti e non ore perché esistono i fusi a mezz'ora
+    /// (`Asia/Kolkata`) e a tre quarti d'ora (`Asia/Kathmandu`).
+    record locale {
+        language: string,
+        timezone: string,
+        utc-offset-minutes: s16,
+        first-day-of-week: weekday,
+        hour-cycle: hour-cycle,
+    }
+}
+
+/// Il TESTO CHE SI LEGGE: una stringa, o una chiave con i suoi argomenti
+/// (§12.1). Vedi `crates/fubmd-abi/src/text.rs`.
+///
+/// Le due risposte ovvie sono sbagliate in modo simmetrico. Se traduce il
+/// PROVIDER, ogni componente si porta un runtime i18n e la qualità della
+/// traduzione dell'app è la peggiore fra quelle installate — e soprattutto un
+/// messaggio già composto non si traduce più. Se TUTTO È UNA CHIAVE, il nome di
+/// un tag e il path di un file — la maggioranza di ciò che attraversa il confine
+/// verso uno schermo — devono passare da un catalogo che non li contiene.
+///
+/// Quindi il tipo porta la propria PROVENIENZA: `literal` è un dato e viaggia
+/// com'è, `message` è una chiave che il KERNEL risolve sulla via d'uscita — non
+/// la shell, che è uno dei tre host previsti (app, CLI, API locale) mentre il
+/// kernel è l'unico posto che ognuno attraversa.
+interface text {
+    use intl.{locale};
+
+    /// Testo destinato a un umano. Dopo la risoluzione del kernel è sempre un
+    /// `literal`: sul filo verso la shell è quindi una stringa nuda.
+    variant text {
+        /// Un dato: il nome di un tag, un path, il titolo di una nota.
+        literal(string),
+        /// Una chiave del catalogo di chi l'ha scritta, coi suoi argomenti.
+        message(message),
+    }
+
+    /// La chiave è NUDA, e qui sta la differenza deliberata dalle chiavi delle
+    /// impostazioni: quelle vivono in un archivio solo e devono qualificarsi col
+    /// nome di chi le dichiara (`versioning.enabled`); un catalogo appartiene a
+    /// un componente e basta, quindi la qualifica è STRUTTURALE — un plugin non
+    /// ha nemmeno il modo di nominare la stringa di un altro.
+    record message {
+        key: string,
+        args: list<arg>,
+    }
+
+    record arg {
+        name: string,
+        value: arg-value,
+    }
+
+    /// TIPIZZATO, non una stringa già formattata. Chi passasse `"28/07/2026"`
+    /// avrebbe già deciso il calendario e il fuso di un utente che non conosce;
+    /// chi passasse `"3"` avrebbe già buttato via ciò con cui si sceglie una
+    /// forma plurale. Il dato arriva intero e chi conosce il `locale` decide
+    /// come si legge.
+    variant arg-value {
+        %text(string),
+        int(s64),
+        float(f64),
+        /// Millisecondi dall'epoca UNIX, UTC: l'unico argomento che a M2 si
+        /// formatta davvero secondo il locale.
+        timestamp(u64),
+    }
+
+    /// Le stringhe di un componente in UNA lingua. Sta nel manifest come lo
+    /// schema delle impostazioni, più una ragione che è solo sua: un catalogo è
+    /// DATO, e dato nel manifest vuol dire che una traduzione si corregge senza
+    /// ricompilare e che un componente di terzi non se la scrive a build time.
+    record string-catalog {
+        locale: string,
+        entries: list<tuple<string, string>>,
+    }
 }
 
 /// Modificare **un pezzo** di documento: l'edit come coppia (span, testo) sopra
@@ -1622,6 +2100,7 @@ interface view {
     use session.{context-mask};
     use command.{param-spec};
     use errors.{plugin-error};
+    use text.{text};
 
     /// Dove una view si ANCORA. Non è come si disegna — quello è l'albero
     /// `ui-node` — ma quale superficie della finestra occupa. Erano tre, e con
@@ -1662,7 +2141,7 @@ interface view {
 
     record view-spec {
         id: string,
-        title: string,
+        title: text,
         surface: view-surface,
         /// Dichiarazione di interesse: gli eventi al cui arrivo la shell deve
         /// ridisegnare la view. Vuota = nessun ridisegno event-driven.
@@ -1721,6 +2200,15 @@ interface errors {
         /// valore del routing dichiarato — chi disegna deve poter scegliere fra
         /// «installa un indice» e «qualcosa è andato storto».
         unserved(string),
+        /// ANNULLATO: il lavoro non è fallito, è stato fermato — da chi lo ha
+        /// chiesto, o dalla chiusura del vault. È l'unico esito che non è un
+        /// difetto di nessuno, e chi disegna deve poterlo dire diversamente:
+        /// senza, l'unica forma disponibile sarebbe `internal`, cioè «errore
+        /// interno del plugin» scritto sotto un pulsante che l'utente ha appena
+        /// premuto. Lo riceve chi chiama una capacità dell'host dopo che il
+        /// proprio job è stato annullato: la cancellazione non aggiunge una
+        /// capacità, toglie le altre.
+        cancelled(string),
     }
 }
 
@@ -1728,20 +2216,6 @@ interface errors {
 // Le capacità concesse dal kernel a un provider/plugin: l'unico varco col
 // mondo, in DIECI interfacce (§7.1).
 // ---------------------------------------------------------------------------
-//
-// LINEA DI BASE RITAGLIATA (pre-freeze, decisione 0021): fino a qui c'era
-// UNA interfaccia, `host-api`, con dentro tutte e ventiquattro le funzioni e
-// il record `trash-entry`. Ognuna di quelle funzioni cambia nome qualificato
-// — `host-api.read-document` diventa `host-vault-read.read-document` — e per
-// il presidio dell'additività questo è, giustamente, ventiquattro rimozioni
-// e un tipo spostato: la rottura più larga fatta finora, e l'ultima che
-// riguarda l'`host-api`, perché dopo il freeze una funzione non si sposta più
-// da un'interfaccia all'altra.
-//
-// Si fa adesso perché è il solo momento in cui costa una riga di diff invece
-// di una major, e perché ciò che compra non è ordine: è che il permesso di
-// scrivere possa **non essere importato**. Vedi il verbale della decisione
-// 0021.
 //
 // Erano una sola, `host-api`, e un'interfaccia sola si importa per intero o per
 // niente: un componente a cui non si vuole concedere la scrittura la riceveva
@@ -1931,6 +2405,113 @@ interface host-data-write {
     data-remove: func(path: string) -> result<_, plugin-error>;
 }
 
+/// Leggere le impostazioni DICHIARATE (§11.1).
+///
+/// Qualunque chiave dichiarata, non solo le proprie: la configurazione non è un
+/// recinto e non contiene segreti (vedi `settings`), e un plugin di tema che non
+/// potesse leggere `editor.font-size` perché non è sua sarebbe un plugin di tema
+/// inutile. Ciò che è recintato è la SCRITTURA.
+interface host-settings-read {
+    use settings.{setting-value};
+    use errors.{plugin-error};
+
+    /// Il valore che vale adesso: quello del vault, quello della macchina, o il
+    /// default dello schema — in quest'ordine. Una chiave che NESSUNO HA
+    /// DICHIARATO è `bad-args` e non un `none`: lo schema è il contratto fra
+    /// chi legge e chi configura, e una chiave fuori schema è un errore di chi
+    /// la chiede. Un valore c'è sempre, perché il default fa parte della
+    /// dichiarazione.
+    setting: func(key: string) -> result<setting-value, plugin-error>;
+}
+
+/// Scrivere un'impostazione CHE SI È DICHIARATA SCRIVIBILE DA UN PROGRAMMA
+/// (§11.1) — la metà che la decisione 0010 aveva lasciato aperta.
+///
+/// Due condizioni, e nessuna delle due basta da sola: il permesso
+/// `fubmd:write-settings` nel manifest (CHI scrive) e `program-writable` sulla
+/// chiave (COSA si scrive). La seconda esiste perché il divieto che conta non
+/// riguarda chi chiede: un componente che potesse allargarsi i permessi da sé
+/// non ha permessi, e questo vale anche quando quel componente è un comando del
+/// core.
+interface host-settings-write {
+    use settings.{setting-value};
+    use errors.{plugin-error};
+
+    /// Scrive nel livello che lo `scope` della chiave dichiara: il vault, o la
+    /// macchina. Non è un parametro perché non è una scelta di chi scrive —
+    /// sarebbe il modo di far viaggiare un'impostazione che non deve viaggiare.
+    /// Il valore è convalidato contro la specie dichiarata: fuori schema è
+    /// `bad-args`, non un arrotondamento.
+    set-setting: func(key: string, value: setting-value) -> result<_, plugin-error>;
+    /// Dimentica ciò che era stato deciso: la chiave RICADE al livello sotto,
+    /// che è il default solo se non c'era niente in mezzo. È una funzione sua e
+    /// non `set-setting(default)` perché sono due cose diverse: scrivere il
+    /// default DECIDE che vale il default (e resta scritto quando il default
+    /// cambia), azzerare SMETTE DI DECIDERE.
+    reset-setting: func(key: string) -> result<_, plugin-error>;
+}
+
+/// Rileggere lo STATO DI VISTA del proprio esemplare (§11.2): lo scroll, le
+/// sezioni collassate, il filtro corrente, la scheda attiva.
+///
+/// È il terzo dei tre stati che la seduta 11 teneva insieme, e si definisce per
+/// dove NON va. Non è un'impostazione (`host-settings-*`): quella ha un valore
+/// per chiave e la decide l'utente, questo ha un valore per ESEMPLARE e non lo
+/// decide nessuno — si deposita mentre si guarda, e un pannello di impostazioni
+/// con dentro lo scroll di ieri sarebbe stato il segno che la distinzione
+/// mancava. Non è un blob (`host-data-*`): quelli vivono dentro il vault e
+/// viaggiano con lui, mentre lo scroll di ieri sul portatile non è un fatto sul
+/// vault — sincronizzarlo vorrebbe dire far litigare due macchine su dove si era
+/// rimasti. Vive quindi nella cartella di configurazione della macchina, con la
+/// disciplina della decisione 0036: versione di schema, scrittura atomica, e un
+/// file che non si è potuto leggere NON SI RISCRIVE.
+///
+/// La chiave la compone l'host: chi scrive (l'id del componente) e QUALE
+/// ESEMPLARE, che dalla decisione 0007 è già «quale delle tre istanze di questa
+/// view sono io». Nessuno dei due è un parametro — è la stessa mossa dell'id di
+/// un job nella 0035: se lo fossero, un provider potrebbe rileggere lo scroll di
+/// un altro, e due pannelli aperti sullo stesso vault si sovrascriverebbero a
+/// vicenda credendo di ricordare.
+interface host-view-state-read {
+    use json.{json};
+    use errors.{plugin-error};
+
+    /// Ciò che questo esemplare aveva salvato sotto questa chiave.
+    ///
+    /// `none` NON è un errore ed è il caso normale: la prima volta che una view
+    /// si disegna nessuno le ha ancora salvato niente, e un provider che dovesse
+    /// distinguere «mai scritto» da «errore» per disegnare la propria prima riga
+    /// avrebbe un ramo che nessuno prova.
+    ///
+    /// FUORI DA UN ESEMPLARE DI VIEW È `none`, sempre: chi non sta disegnando né
+    /// reagendo per conto di un'istanza non ha uno stato di vista da rileggere,
+    /// e inventargliene uno vorrebbe dire dargli quello di qualcun altro.
+    view-state: func(key: string) -> result<option<json>, plugin-error>;
+}
+
+/// Ricordare lo stato di vista del proprio esemplare (§11.2).
+///
+/// Due famiglie e non una, per la ragione già scritta sui blob: si rilegge
+/// mentre si disegna — da sotto un prestito condiviso — e non si deve poter
+/// scrivere mentre si disegna.
+interface host-view-state-write {
+    use json.{json};
+    use errors.{plugin-error};
+
+    /// Salva (`some`) o dimentica (`none`) lo stato sotto questa chiave.
+    ///
+    /// Dimenticare è `none` e non una funzione a sé perché qui — a differenza
+    /// delle impostazioni — non ci sono livelli sotto a cui ricadere: una chiave
+    /// c'è o non c'è, e `null` è un valore JSON come un altro che sarebbe stato
+    /// ambiguo scrivere per dire «scordatelo».
+    ///
+    /// FUORI DA UN ESEMPLARE DI VIEW È UN ERRORE e non un silenzio: leggere a
+    /// vuoto è il caso normale di chi non ha ancora salvato niente, scrivere nel
+    /// vuoto è invece qualcuno che crede di ricordare e non ricorderà — cioè un
+    /// difetto che si vede solo alla riapertura, quando è tardi.
+    set-view-state: func(key: string, value: option<json>) -> result<_, plugin-error>;
+}
+
 /// Ciò che l'host sa e il guest no: che ore sono, e cosa sta guardando
 /// l'utente.
 ///
@@ -1940,11 +2521,26 @@ interface host-data-write {
 /// non avere titolo a sapere quale nota è aperta.
 interface host-env {
     use session.{view-context};
+    use intl.{locale};
 
     /// Orologio dell'host: millisecondi dall'epoca Unix. Un plugin non ha
     /// accesso al tempo di sistema (WASI lo può negare, e in test serve
     /// deterministico): il tempo è una capacità come le altre.
     now-unix-millis: func() -> u64;
+    /// In che lingua legge chi guarda, in che fuso vive, con che calendario
+    /// (§12.3). Gemello dell'orologio: `now-unix-millis` dice QUANDO, questo
+    /// dice a chi. Non ha un gemello che scrive, per la stessa ragione di
+    /// `active-context`: in che lingua legge l'utente è una decisione
+    /// dell'utente sull'app, non una capacità da concedere. Un host che non ha
+    /// sentito nessuno rende il default: lingua indeterminata, UTC, ISO 8601.
+    user-locale: func() -> locale;
+    /// `n` byte di CASO, per generare un'identità. Sotto WASI il caso non c'è
+    /// di default: è lo stesso buco dell'orologio, un metodo più in là. Byte e
+    /// non un UUID perché le identità che servono sono quattro forme diverse
+    /// (2.2, 8.3, 5.2, 13.3): la capacità è l'entropia, la forma è codice di
+    /// libreria. PER L'IDENTITÀ, NON PER I SEGRETI: promette che due chiamate
+    /// non diano lo stesso valore, non che il prossimo sia imprevedibile.
+    random-bytes: func(n: u32) -> list<u8>;
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `none` = la shell non ne ha ancora
     /// pubblicato uno. Lo imposta la shell; una view lo chiede quando ne ha
@@ -1962,14 +2558,30 @@ interface host-env {
 interface host-events {
     use events.{event};
     use errors.{plugin-error};
-    use jobs.{job-id, job-spec};
+    use jobs.{job-id, job-progress, job-spec};
 
-    /// L'unica capacità del contratto SENZA esito: un host che non la concede
-    /// non ha modo di rifiutare, può solo non emettere. Il silenzio è il no.
+    /// Una delle due capacità del contratto SENZA esito: un host che non la
+    /// concede non ha modo di rifiutare, può solo non emettere. Il silenzio è
+    /// il no.
     emit: func(event: event);
     /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
     /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
     spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
+    /// A CHE PUNTO SONO: da chiamare dentro `plugin.run-job`, quante volte si
+    /// vuole (§10.3, decisione 0035).
+    ///
+    /// È una capacità e il progresso resta un evento: ciò che finisce sul canale
+    /// è `event.job-progress`, e questa è la PORTA — come `emit` è la porta di
+    /// ogni altro evento. C'è perché un job non conosce il proprio `job-id`:
+    /// `run-job` riceve il nome dell'entry point, gli argomenti e le capacità,
+    /// non l'identità. Passando da qui l'id non è un parametro, quindi non si
+    /// può sbagliare e non si può raccontare il progresso di un altro.
+    ///
+    /// Fuori da un job non fa niente, e non è una dimenticanza: un progresso ha
+    /// bisogno di una FINE per essere un progresso, e l'unica cosa che nel
+    /// contratto ne ha una dichiarata è un job. Senza esito come `emit`, e come
+    /// `emit` non la si nega a un job annullato.
+    report-progress: func(progress: job-progress);
 }
 
 /// Il canale dati: interrogare l'indice.
@@ -2071,6 +2683,8 @@ interface plugin {
     use errors.{plugin-error};
     use json.{json};
     use options.{option-map};
+    use settings.{setting-spec};
+    use text.{string-catalog};
 
     /// Cosa un plugin dichiara di voler fare. Erano tre booleani — leggere,
     /// scrivere, rete — contro ciò che 20.1, 23.1 e 20.3 chiedono: appunti,
@@ -2105,13 +2719,32 @@ interface plugin {
         /// quale requisito manca. «Attivo ma degradato» è uno stato che nessuno
         /// prova e che ogni feature dovrebbe poi gestire.
         requires: list<string>,
+        /// Le IMPOSTAZIONI che dichiara (§11.1). Sta nel manifest e non in un
+        /// provider da registrare per la ragione di `provides`, un passo più in
+        /// là: la dichiarazione viene prima di `activate`, e il primo che legge
+        /// un'impostazione è proprio un `activate` che deve sapere se la sua
+        /// feature è accesa. Ogni chiave vale la regola del §7.4.
+        settings: list<setting-spec>,
+        /// Le STRINGHE che dichiara (§12.1), una voce per lingua. Stessa
+        /// ragione di `settings` — si legge prima di montare, e un catalogo
+        /// registrato da `activate` sarebbe assente quando serve — più una che
+        /// è solo sua: un catalogo è dato, quindi si corregge una traduzione
+        /// senza ricompilare.
+        strings: list<string-catalog>,
+        /// La lingua in cui il componente è scritto: il penultimo gradino della
+        /// scala di ripiego. Vuoto = si scende dritti alla chiave nuda.
+        default-locale: string,
     }
 
     manifest: func() -> plugin-manifest;
     activate: func() -> result<_, plugin-error>;
     deactivate: func() -> result<_, plugin-error>;
-    /// Corpo di un job (vedi `host-api.spawn-job`): eseguito fuori dal
-    /// kernel, senza host-api — input nel payload, output nel risultato.
+    /// Corpo di un job (vedi `host-events.spawn-job`): eseguito fuori dal giro
+    /// sincrono del kernel, CON le capacità dell'host — che qui non compaiono
+    /// perché il world le importa (decisione 0027). La disciplina che vale lì
+    /// dentro sta sull'interfaccia `jobs`; chi esegue chiama questa funzione
+    /// senza tenere niente in mano, o la prima capacità che il job usa
+    /// aspetterebbe il proprio chiamante.
     run-job: func(job: string, payload: json) -> result<json, plugin-error>;
 }
 
@@ -2270,7 +2903,7 @@ interface exporter {
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che
 /// implementa. Il kernel non distingue nativo da WASM.
 world plugin-world {
-    // Le dieci famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
+    // Le quattordici famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
     // mondo che non importa `host-vault-write` non è un mondo che la rifiuta a
     // runtime, è un mondo in cui quella funzione non esiste. Il giorno che il
     // caricatore di M5 monterà un componente sotto sandbox stretta, ciò che
@@ -2286,6 +2919,10 @@ world plugin-world {
     import host-query;
     import host-commands;
     import host-services;
+    import host-settings-read;
+    import host-settings-write;
+    import host-view-state-read;
+    import host-view-state-write;
 
     export plugin;
     export format;

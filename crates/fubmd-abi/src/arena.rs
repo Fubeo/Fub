@@ -34,6 +34,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model;
+use crate::text::Text;
 use crate::ui;
 
 /// Gli indici delle arene sono **newtype e non alias** di `u32`: un indice di
@@ -310,23 +311,23 @@ pub enum UiKind {
         children: Vec<UiRef>,
     },
     Text {
-        content: String,
+        content: Text,
     },
     Heading {
         level: u8,
-        content: String,
+        content: Text,
     },
     List {
         items: Vec<UiRef>,
     },
     ListItem {
-        title: String,
-        subtitle: Option<String>,
+        title: Text,
+        subtitle: Option<Text>,
         action: Option<ui::ActionRef>,
         selected: bool,
     },
     Button {
-        label: String,
+        label: Text,
         intent: ui::Intent,
         action: ui::ActionRef,
     },
@@ -338,7 +339,7 @@ pub enum UiKind {
         height: u32,
     },
     Section {
-        title: String,
+        title: Text,
         collapsed: bool,
         children: Vec<UiRef>,
     },
@@ -354,7 +355,7 @@ pub enum UiKind {
         roots: Vec<UiRef>,
     },
     TreeItem {
-        label: String,
+        label: Text,
         expanded: bool,
         action: Option<ui::ActionRef>,
         selected: bool,
@@ -365,12 +366,12 @@ pub enum UiKind {
         tabs: Vec<UiRef>,
     },
     Tab {
-        label: String,
+        label: Text,
         action: Option<ui::ActionRef>,
         children: Vec<UiRef>,
     },
     Badge {
-        label: String,
+        label: Text,
         intent: ui::Intent,
     },
     Icon {
@@ -378,12 +379,12 @@ pub enum UiKind {
     },
     Progress {
         value: Option<f32>,
-        label: Option<String>,
+        label: Option<Text>,
     },
     Separator,
     EmptyState {
-        title: String,
-        detail: Option<String>,
+        title: Text,
+        detail: Option<Text>,
         action: Option<ui::ActionRef>,
     },
     KeyValue {
@@ -391,21 +392,21 @@ pub enum UiKind {
     },
     TextInput {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: String,
-        placeholder: Option<String>,
+        placeholder: Option<Text>,
         action: Option<ui::ActionRef>,
     },
     TextArea {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: String,
         rows: u32,
         action: Option<ui::ActionRef>,
     },
     Number {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: Option<f64>,
         min: Option<f64>,
         max: Option<f64>,
@@ -414,13 +415,13 @@ pub enum UiKind {
     },
     Checkbox {
         field: String,
-        label: String,
+        label: Text,
         value: bool,
         action: Option<ui::ActionRef>,
     },
     Select {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: Vec<String>,
         options: Vec<ui::UiOption>,
         multiple: bool,
@@ -428,14 +429,14 @@ pub enum UiKind {
     },
     Radio {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: Option<String>,
         options: Vec<ui::UiOption>,
         action: Option<ui::ActionRef>,
     },
     Slider {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: f64,
         min: f64,
         max: f64,
@@ -444,13 +445,13 @@ pub enum UiKind {
     },
     DatePicker {
         field: String,
-        label: Option<String>,
+        label: Option<Text>,
         value: Option<String>,
         action: Option<ui::ActionRef>,
     },
     Form {
         children: Vec<UiRef>,
-        submit_label: String,
+        submit_label: Text,
         submit: ui::ActionRef,
     },
     Custom {
@@ -459,10 +460,10 @@ pub enum UiKind {
         fallback: Vec<UiRef>,
     },
     Pending {
-        label: Option<String>,
+        label: Option<Text>,
     },
     Failed {
-        message: String,
+        message: Text,
         retry: Option<ui::ActionRef>,
     },
 }

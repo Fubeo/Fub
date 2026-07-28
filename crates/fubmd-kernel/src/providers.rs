@@ -284,18 +284,24 @@ impl ProviderRegistry {
     // --- cosa hanno dichiarato ---------------------------------------------
 
     /// Le view offerte dai provider registrati, in ordine di registrazione.
-    pub(crate) fn view_specs(&self) -> Vec<ViewSpec> {
+    /// **Con chi le ha dichiarate**: il proprietario serve per risolverne i
+    /// testi, perché il catalogo giusto è quello suo e non uno solo per tutti
+    /// (§12.1). Prima esisteva anche la forma senza — l'elenco nudo — e non ha
+    /// più clienti: chi legge le spec le legge per mostrarle.
+    pub(crate) fn view_specs_by_owner(&self) -> Vec<(String, ViewSpec)> {
         self.views
             .iter()
-            .flat_map(|r| r.specs.iter().cloned())
+            .flat_map(|r| r.specs.iter().map(|s| (r.id.clone(), s.clone())))
             .collect()
     }
 
     /// I comandi offerti dai provider registrati, in ordine di registrazione.
-    pub(crate) fn command_specs(&self) -> Vec<CommandSpec> {
+    /// Con chi li ha dichiarati. Vedi
+    /// [`view_specs_by_owner`](Self::view_specs_by_owner).
+    pub(crate) fn command_specs_by_owner(&self) -> Vec<(String, CommandSpec)> {
         self.commands
             .iter()
-            .flat_map(|r| r.specs.iter().cloned())
+            .flat_map(|r| r.specs.iter().map(|s| (r.id.clone(), s.clone())))
             .collect()
     }
 

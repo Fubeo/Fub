@@ -20,6 +20,26 @@ lavora. Senza, l'identità di un nodo è la sua posizione — e una lista che si
 riordina si porta dietro il focus e la selezione di qualcun altro. Chi non ha
 liste che si riordinano può ometterla.
 
+## Ogni etichetta è un `Text`, non una `String`
+
+Dalla [decisione 0040](../decisions/0040-chi-localizza.md), **ogni campo che una
+persona legge** — `content`, `title`, `label`, `subtitle`, `placeholder`,
+`submit_label`, `message` — è un
+[`Text`](../../crates/fubmd-abi/src/text.rs): o un `Literal` (un dato: un nome di
+tag, un path) o un `Message` (una chiave del catalogo di chi l'ha scritta, coi
+suoi argomenti). A risolverlo è il **kernel**, sulla via d'uscita dal contratto.
+
+Per chi disegna nella shell non cambia niente, ed è deliberato: quando l'albero
+arriva alla webview ogni `Text` è già un `Literal`, e un `Literal` sul filo è una
+stringa nuda. Per chi scrive un provider cambia una cosa sola: i builder prendono
+`impl Into<Text>`, quindi `UiNode::text("ciao")` continua a funzionare e si legge
+in chiaro — è il degrado garbato, non un residuo.
+
+**Non** sono `Text`, e non lo diventeranno: `Icon.name` (un id del repertorio
+della shell), `Custom.ns`, `Html.html`, `WebView.url`, i `field` e i `value` dei
+nodi di input, il `value` di una `UiOption`. Tradurli romperebbe l'identità che
+sono.
+
 ## Le specie di nodo
 
 **Struttura di base**

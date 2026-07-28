@@ -57,6 +57,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::text::{Localize, Text};
 use crate::ui::UiOption;
 
 /// Dove un'impostazione ha il diritto di stare.
@@ -250,13 +251,22 @@ pub struct SettingSpec {
     /// La chiave, con la regola dei nomi del §7.4.
     pub key: String,
     /// Come si chiama per un umano.
-    pub label: String,
+    pub label: Text,
     /// Cosa fa, in prosa. È l'unica cosa che chi non ha scritto il plugin legge
     /// per decidere se toccarla.
-    pub description: String,
+    pub description: Text,
     /// Sotto quale intestazione raggrupparla nel form. Vuoto = le sciolte in
     /// fondo.
-    pub group: String,
+    ///
+    /// È un [`Text`] come le altre due, e questo dice una cosa sul
+    /// raggruppamento: chi disegna raggruppa per **intestazione risolta**, non
+    /// per una chiave. La conseguenza va detta — due componenti che scrivono la
+    /// stessa intestazione finiscono insieme, e due che la traducono
+    /// diversamente finiscono separati — ed è la stessa che valeva prima, quando
+    /// il campo era prosa libera. L'alternativa (una chiave di gruppo distinta
+    /// dal suo titolo) è la forma giusta il giorno che i gruppi diventeranno
+    /// ordinabili o annidati; oggi sarebbero due campi per dire una cosa.
+    pub group: Text,
     pub scope: SettingScope,
     pub kind: SettingKind,
     /// **Un programma la può scrivere?**
@@ -279,28 +289,28 @@ pub struct SettingSpec {
 impl SettingSpec {
     /// Un interruttore, acceso o spento di default. È la forma più comune: una
     /// feature che si può spegnere.
-    pub fn toggle(key: impl Into<String>, label: impl Into<String>, default: bool) -> Self {
+    pub fn toggle(key: impl Into<String>, label: impl Into<Text>, default: bool) -> Self {
         SettingSpec::new(key, label, SettingKind::Toggle { default })
     }
 
-    pub fn new(key: impl Into<String>, label: impl Into<String>, kind: SettingKind) -> Self {
+    pub fn new(key: impl Into<String>, label: impl Into<Text>, kind: SettingKind) -> Self {
         SettingSpec {
             key: key.into(),
             label: label.into(),
-            description: String::new(),
-            group: String::new(),
+            description: Text::default(),
+            group: Text::default(),
             scope: SettingScope::Vault,
             kind,
             program_writable: false,
         }
     }
 
-    pub fn describing(mut self, description: impl Into<String>) -> Self {
+    pub fn describing(mut self, description: impl Into<Text>) -> Self {
         self.description = description.into();
         self
     }
 
-    pub fn grouped(mut self, group: impl Into<String>) -> Self {
+    pub fn grouped(mut self, group: impl Into<Text>) -> Self {
         self.group = group.into();
         self
     }
@@ -351,6 +361,36 @@ pub struct SettingEntry {
     pub spec: SettingSpec,
     pub value: SettingValue,
     pub source: SettingSource,
+}
+
+impl Localize for SettingSpec {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.label);
+        visit(&mut self.description);
+        visit(&mut self.group);
+        self.kind.visit_texts(visit);
+    }
+}
+
+impl Localize for SettingKind {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        match self {
+            SettingKind::Choice { options, .. } => options.visit_texts(visit),
+            SettingKind::Toggle { .. }
+            | SettingKind::Number { .. }
+            | SettingKind::Text { .. }
+            | SettingKind::List { .. } => {}
+        }
+    }
+}
+
+/// Una voce **intera**, com'è quando esce verso chi disegna: schema, valore e
+/// provenienza. È lo schema a portare i testi — un [`SettingValue`] è dato
+/// dell'utente, e non si traduce.
+impl Localize for SettingEntry {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        self.spec.visit_texts(visit);
+    }
 }
 
 #[cfg(test)]

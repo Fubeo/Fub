@@ -99,10 +99,14 @@ resta tale il ciclo non c'è.
 Due cartelle dell'albero **non esistono ancora come codice**, e non è una
 dimenticanza:
 
-- `i18n/` — dipende dal [§12.1](../roadmap/12-stringhe-errori-locale.md), che è
-  una decisione non ancora presa: dove vive il catalogo, chi localizza gli
-  errori del confine, e in che forma. Fare la cartella prima della decisione
-  significa deciderla per inerzia.
+- `i18n/` — la [decisione 0040](../decisions/0040-chi-localizza.md) ha risposto
+  alla metà che riguardava i **provider**, e nel modo che toglie lavoro a questa
+  cartella: le loro stringhe le risolve il *kernel*, e alla shell arrivano già
+  come stringhe nude. Quello che resta qui è il catalogo di ciò che la shell
+  scrive di suo (`main.ts`, `panels/*.ts`) e il suo `t()`, cioè il §12.4 — più
+  gli errori del confine, che sono il §12.2 e non sono ancora decisi. La cartella
+  nasce quando nasce quel catalogo: farla prima significherebbe deciderlo per
+  inerzia.
 - `theme/` esiste ma con **solo i token di oggi**. Il sistema vero — scala
   semantica, chiaro/scuro/sistema, snippet CSS dell'utente, alto contrasto e
   reduced motion — è 6.2 e 25.1 di FEATURES; qui c'è il contenitore in cui

@@ -84,7 +84,7 @@ fn a_bulk_replace_is_shown_before_it_is_done_and_then_done() {
         "il cane dorme, il cane mangia"
     );
     let notify = outcome.notify.expect("un'operazione in blocco si racconta");
-    assert!(notify.contains("2 sostituzioni"), "{notify}");
+    assert!(notify.to_string().contains("2 sostituzioni"), "{notify}");
 }
 
 #[test]
@@ -396,7 +396,11 @@ fn the_whole_life_of_a_note_goes_through_the_registry() {
             Actor::User,
         )
         .expect("svuota");
-    assert!(outcome.notify.expect("dice quante").contains('0'));
+    assert!(outcome
+        .notify
+        .expect("dice quante")
+        .to_string()
+        .contains('0'));
 }
 
 #[test]
@@ -637,7 +641,7 @@ fn the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps() {
         );
     }
     assert!(
-        plan.summary.contains("Vecchie"),
+        plan.summary.to_string().contains("Vecchie"),
         "il riassunto è della macro, non dell'ultimo passo: {}",
         plan.summary
     );
@@ -844,11 +848,17 @@ fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
 
     let messaggio = outcome.notify.expect("dice com'è andata");
     assert!(
-        messaggio.contains("1 impostazione applicata"),
+        messaggio.to_string().contains("1 impostazione applicata"),
         "{messaggio}"
     );
-    assert!(messaggio.contains("privacy.telemetry"), "{messaggio}");
-    assert!(messaggio.contains("com.acme.mai-vista"), "{messaggio}");
+    assert!(
+        messaggio.to_string().contains("privacy.telemetry"),
+        "{messaggio}"
+    );
+    assert!(
+        messaggio.to_string().contains("com.acme.mai-vista"),
+        "{messaggio}"
+    );
     assert_eq!(
         valore(&ws, "versioning.enabled"),
         fubmd_abi::settings::SettingValue::Toggle(false),
@@ -882,7 +892,8 @@ fn simulating_an_import_counts_the_key_gate_too() {
         .notify
         .expect("dice cosa farebbe");
     assert!(
-        simulato.contains("1 impostazione applicata") && simulato.contains("privacy.telemetry"),
+        simulato.to_string().contains("1 impostazione applicata")
+            && simulato.to_string().contains("privacy.telemetry"),
         "la simulazione nomina già ciò che non entrerebbe: {simulato}"
     );
 
@@ -897,7 +908,8 @@ fn simulating_an_import_counts_the_key_gate_too() {
         .notify
         .expect("dice com'è andata");
     assert!(
-        applicato.contains("1 impostazione applicata") && applicato.contains("privacy.telemetry"),
+        applicato.to_string().contains("1 impostazione applicata")
+            && applicato.to_string().contains("privacy.telemetry"),
         "e l'applicazione dice la stessa cosa: {applicato}"
     );
 }

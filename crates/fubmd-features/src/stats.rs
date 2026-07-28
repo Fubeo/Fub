@@ -178,7 +178,7 @@ mod tests {
         children
             .iter()
             .map(|c| match &c.kind {
-                UiKind::Text { content } => content.clone(),
+                UiKind::Text { content } => content.to_string(),
                 other => panic!("nodo inatteso: {other:?}"),
             })
             .collect()

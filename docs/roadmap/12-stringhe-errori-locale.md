@@ -7,10 +7,10 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): chi localizza le st
 ---
 
 Una decisione sola con tre facce: se un provider riceve un `locale` e traduce,
-o restituisce **chiavi** che la shell risolve. Il §12.2 è il gemello dichiarato
-del §12.1 — «chi localizza le stringhe localizza anche gli errori, e un messaggio
-già composto non si traduce» — e il ~~§12.3~~ chiudeva il cerchio dal lato del
-dato.
+o restituisce **chiavi** che qualcun altro risolve. Il §12.2 è il gemello
+dichiarato del ~~§12.1~~ — «chi localizza le stringhe localizza anche gli errori,
+e un messaggio già composto non si traduce» — e il ~~§12.3~~ chiudeva il cerchio
+dal lato del dato.
 
 Ed è quello che si è preso per primo, con la
 [decisione 0039](../decisions/0039-il-locale-e-il-caso.md), proprio perché era
@@ -20,19 +20,19 @@ formattare. Adesso ce l'ha — `HostEnv::user_locale`, pubblicato dalla shell e
 composto dal kernel con le chiavi `locale.*` — e con lui il **caso**
 (`random_bytes`), che era lo stesso buco dell'orologio un metodo più in là.
 
-Restano le tre facce vere della domanda. Il catalogo della shell (12.4) non ha
-una cartella perché non ha ancora una decisione: è la prova che le tre sono
-una.
+Poi è arrivata la risposta vera, con la
+[decisione 0040](../decisions/0040-chi-localizza.md): **né una `String` né una
+chiave — un tipo che porta la propria provenienza**, `Text::Literal` per i dati e
+`Text::Message` per ciò che si traduce, risolto dal *kernel* sulla via d'uscita
+dal contratto col catalogo di chi l'ha scritto. È il ritaglio più largo fatto
+alla linea di base dopo quello della [0021](../decisions/0021-il-confine.md), e
+per la stessa ragione: ciò che scade col freeze è la **forma**, non la larghezza.
 
-### 12.1 Stringhe e localizzazione al confine — decisione, non implementazione
-
-*ex §1.8 · contratto · **P0** — è una scelta di forma dei tipi: dopo il freeze si cambia con una minor*
-
-- [ ] **Decidere ora chi localizza**: oggi un `ViewProvider` restituisce
-      `UiNode::Text { content: "Nessun backlink" }` — testo italiano cablato
-      dentro il provider. Con la localizzazione (25.2) o i provider ricevono un
-      `locale` e traducono, o restituiscono **chiavi** che la shell risolve. È
-      una scelta di forma dei tipi: dopo il freeze si cambia solo con una minor.
+Restano due facce. Il §12.2 è il gemello, ed è la prossima: un errore è oggi
+l'unica cosa che attraversa il confine verso uno schermo e **non si può ancora
+tradurre**, perché ogni variante di `PluginError` porta una `String`. Il catalogo
+della shell (12.4) non ha una cartella perché non ha ancora una decisione — ed è
+la prova che le tre erano una.
 
 ### 12.2 Errori tipizzati al confine, non `String`
 
@@ -46,9 +46,14 @@ una.
       la risposta «Ripristina» a quella domanda ritenta con un nome libero, che
       per un disco pieno fallirà di nuovo.
 - [ ] **`PluginError`/`KernelError` sono nel contratto**, quindi la forma scade
-      col freeze; ed è il gemello della decisione del §12.1 — chi localizza le
-      stringhe localizza anche gli errori, e un messaggio già composto non si
-      traduce.
+      col freeze; ed è il gemello della decisione del ~~§12.1~~ — chi localizza
+      le stringhe localizza anche gli errori, e un messaggio già composto non si
+      traduce. Adesso che la [0040](../decisions/0040-chi-localizza.md) ha deciso
+      *come* si localizza, questa voce sa già che forma prendere: il payload
+      diventa un `Text`, `Display` resta la forma per il log, e il confine Tauri
+      smette di restituire `Result<_, String>`. Restano da decidere le **varianti
+      che mancano** — `KernelError` non è nel contratto, quindi `NotFound`,
+      `AlreadyExists` e `Io` oggi arrivano tutte come prosa dentro un `internal`.
 
 *Sblocca:* 24.2 (error reporting chiaro, repair), 10.5 (alert e notifiche),
 16.3 (automation error handling, retry), 25.2.
@@ -76,4 +81,12 @@ una.
       superfici e metadati —, quindi il vincolo che teneva ferma questa voce non
       c'è più: prima, un check scritto avrebbe presidiato una resa che stava per
       essere sostituita.
-- [ ] **Catalogo stringhe** e `t()` (dipende dalla decisione del §12.1).
+- [ ] **Catalogo stringhe** e `t()` — e dopo la
+      [0040](../decisions/0040-chi-localizza.md) questa voce si è **ristretta**,
+      il che è il modo giusto in cui una dipendenza si risolve: le stringhe dei
+      provider le risolve il kernel, quindi qui resta solo ciò che la shell
+      scrive di suo (`main.ts`, `panels/*.ts`). Ci si aggiunge però una coda che
+      prima non c'era: **sei feature ufficiali su otto non hanno ancora un
+      catalogo** — backlink e tag sì — e continuano a restituire italiano
+      cablato. È il degrado garbato della 0040 in azione, non un difetto, ma è
+      lavoro che sta qui.

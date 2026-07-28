@@ -91,6 +91,7 @@ use serde::{Deserialize, Serialize};
 use crate::edit::EditRequest;
 use crate::error::PluginError;
 use crate::model::{DocId, Span};
+use crate::text::{Localize, Text};
 
 // ---------------------------------------------------------------------------
 // La dichiarazione di un comando
@@ -104,10 +105,10 @@ pub struct CommandSpec {
     /// cambiarla rompe scorciatoie, macro e automazioni che la nominano.
     pub id: String,
     /// Come si chiama per un umano, nella palette.
-    pub title: String,
+    pub title: Text,
     /// Cosa fa, in prosa. Vuota è lecito e sconsigliato: è l'unica cosa che un
     /// chiamante non umano legge per scegliere fra due comandi simili.
-    pub description: String,
+    pub description: Text,
     /// Suggerimento di scorciatoia, es. `"Mod-p"` (non vincolante: chi assegna
     /// davvero i tasti è la shell, e l'utente li può cambiare).
     pub keybinding: Option<String>,
@@ -120,18 +121,18 @@ pub struct CommandSpec {
 impl CommandSpec {
     /// Un comando di sola lettura, senza parametri: la forma minima, da cui si
     /// costruisce il resto.
-    pub fn new(id: impl Into<String>, title: impl Into<String>) -> Self {
+    pub fn new(id: impl Into<String>, title: impl Into<Text>) -> Self {
         CommandSpec {
             id: id.into(),
             title: title.into(),
-            description: String::new(),
+            description: Text::default(),
             keybinding: None,
             params: Vec::new(),
             scope: CommandScope::read_only(),
         }
     }
 
-    pub fn describing(mut self, description: impl Into<String>) -> Self {
+    pub fn describing(mut self, description: impl Into<Text>) -> Self {
         self.description = description.into();
         self
     }
@@ -243,10 +244,10 @@ pub struct ParamSpec {
     /// La chiave con cui l'argomento viaggia negli `args` (snake_case).
     pub name: String,
     /// L'etichetta per un umano che lo compila.
-    pub title: String,
+    pub title: Text,
     /// Cosa significa questo argomento. Come [`CommandSpec::description`]: la
     /// palette può farne a meno, un chiamante programmatico no.
-    pub description: String,
+    pub description: Text,
     pub kind: ParamKind,
     /// Senza di esso il comando non si può invocare. Un parametro non
     /// obbligatorio assente **non** ha un valore di default nel contratto: a
@@ -256,17 +257,17 @@ pub struct ParamSpec {
 }
 
 impl ParamSpec {
-    pub fn new(name: impl Into<String>, title: impl Into<String>, kind: ParamKind) -> Self {
+    pub fn new(name: impl Into<String>, title: impl Into<Text>, kind: ParamKind) -> Self {
         ParamSpec {
             name: name.into(),
             title: title.into(),
-            description: String::new(),
+            description: Text::default(),
             kind,
             required: false,
         }
     }
 
-    pub fn describing(mut self, description: impl Into<String>) -> Self {
+    pub fn describing(mut self, description: impl Into<Text>) -> Self {
         self.description = description.into();
         self
     }
@@ -357,14 +358,14 @@ impl ParamKind {
 
 /// Una scelta di un [`ParamKind::Choice`]: il valore che viaggia e l'etichetta
 /// che si legge.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Choice {
     pub value: String,
-    pub title: String,
+    pub title: Text,
 }
 
 impl Choice {
-    pub fn new(value: impl Into<String>, title: impl Into<String>) -> Self {
+    pub fn new(value: impl Into<String>, title: impl Into<Text>) -> Self {
         Choice {
             value: value.into(),
             title: title.into(),
@@ -484,7 +485,7 @@ pub struct CommandOutcome {
     /// [`SearchHit::snippet`](crate::traits::SearchHit::snippet), chi lo mostra
     /// lo inserisce come testo e mai come markup — un comando di terzi non ha un
     /// varco verso la webview privilegiata.
-    pub notify: Option<String>,
+    pub notify: Option<Text>,
     /// Cosa deve fare la shell dopo.
     pub effect: CommandEffect,
 }
@@ -499,7 +500,7 @@ impl CommandOutcome {
     }
 
     /// Fatto, con un messaggio per l'utente.
-    pub fn notify(message: impl Into<String>) -> Self {
+    pub fn notify(message: impl Into<Text>) -> Self {
         CommandOutcome {
             notify: Some(message.into()),
             effect: CommandEffect::Done,
@@ -572,7 +573,7 @@ pub enum CommandEffect {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct CommandPlan {
     /// Il piano in una riga, per l'utente («12 note, 34 sostituzioni»).
-    pub summary: String,
+    pub summary: Text,
     /// **Tutti** i documenti che verrebbero toccati, in ordine e senza
     /// ripetizioni. L'host lo completa con i documenti degli `edits`: chi
     /// approva deve vedere l'insieme vero, non quello che chi ha scritto il
@@ -587,7 +588,7 @@ pub struct CommandPlan {
 
 impl CommandPlan {
     /// Un piano fatto solo di modifiche: i documenti impattati sono i loro.
-    pub fn of_edits(summary: impl Into<String>, edits: Vec<PlannedEdit>) -> Self {
+    pub fn of_edits(summary: impl Into<Text>, edits: Vec<PlannedEdit>) -> Self {
         let mut plan = CommandPlan {
             summary: summary.into(),
             docs: Vec::new(),
@@ -702,6 +703,72 @@ pub struct PlannedEdit {
 impl PlannedEdit {
     pub fn new(doc: DocId, edit: EditRequest) -> Self {
         PlannedEdit { doc, edit }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dove stanno i Text (§12.1)
+// ---------------------------------------------------------------------------
+
+impl Localize for CommandSpec {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.title);
+        visit(&mut self.description);
+        self.params.visit_texts(visit);
+    }
+}
+
+impl Localize for ParamSpec {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.title);
+        visit(&mut self.description);
+        self.kind.visit_texts(visit);
+    }
+}
+
+impl Localize for ParamKind {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        match self {
+            ParamKind::Choice(choices) => choices.visit_texts(visit),
+            ParamKind::Text
+            | ParamKind::Number
+            | ParamKind::Bool
+            | ParamKind::Document
+            | ParamKind::Documents => {}
+        }
+    }
+}
+
+impl Localize for Choice {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.title);
+    }
+}
+
+impl Localize for CommandOutcome {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        self.notify.visit_texts(visit);
+        self.effect.visit_texts(visit);
+    }
+}
+
+impl Localize for CommandEffect {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        match self {
+            CommandEffect::Plan(plan) => plan.visit_texts(visit),
+            CommandEffect::Done
+            | CommandEffect::Navigate { .. }
+            | CommandEffect::Reveal { .. }
+            | CommandEffect::RunSearch { .. }
+            | CommandEffect::Custom { .. }
+            | CommandEffect::OpenView { .. } => {}
+        }
+    }
+}
+
+impl Localize for CommandPlan {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.summary);
     }
 }
 

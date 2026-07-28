@@ -14,6 +14,7 @@
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{EventKind, EventMask};
 use fubmd_abi::session::ContextMask;
+use fubmd_abi::text::{StringCatalog, Text};
 use fubmd_abi::traits::{
     BacklinkRef, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewProvider, ViewSpec,
     ViewSurface,
@@ -66,7 +67,7 @@ impl ViewProvider for BacklinksView {
     ) -> Result<UiNode, PluginError> {
         let Some(active) = host.active_context().and_then(|c| c.doc) else {
             // Nessuna nota aperta: non è un errore, è uno stato.
-            return Ok(placeholder("Nessuna nota aperta."));
+            return Ok(placeholder(NO_ACTIVE_DOC));
         };
         // Senza finestra: il pannello elenca tutti i backlink della nota
         // aperta, e chi ne ha migliaia ha un problema di vault, non di pagina.
@@ -107,16 +108,42 @@ impl ViewProvider for BacklinksView {
 /// Il segnaposto (nessun backlink / nessuna nota aperta). Ora è ciò che dice di
 /// essere — un `EmptyState` — invece di un testo dentro uno stack: la differenza
 /// si vede quando è la shell a doverlo disegnare diversamente dal contenuto.
-fn placeholder(text: &str) -> UiNode {
-    UiNode::empty_state(text)
+///
+/// Prende una **chiave**, non una stringa: è il §12.1 applicato al primo dei
+/// suoi clienti veri. La prosa sta nel [`catalog`], che è dato di manifest e non
+/// codice.
+fn placeholder(key: &str) -> UiNode {
+    UiNode::empty_state(Text::key(key))
 }
+
+/// Le stringhe del pannello backlink, nelle due lingue che questo repo scrive.
+///
+/// Il catalogo sta **qui e non nella shell** perché è di chi lo scrive: un
+/// plugin di terzi porterà il proprio nel proprio manifest, e la shell non deve
+/// conoscere le chiavi di nessuno. Le chiavi sono nude — la qualifica è il
+/// catalogo stesso, che appartiene a un componente solo.
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
+            .with(EMPTY, "Nessun backlink."),
+        StringCatalog::new("en")
+            .with(NO_ACTIVE_DOC, "No note open.")
+            .with(EMPTY, "No backlinks."),
+    ]
+}
+
+/// Nessuna nota aperta: non è un errore, è uno stato.
+const NO_ACTIVE_DOC: &str = "no_active_doc";
+/// La nota aperta non ha backlink.
+const EMPTY: &str = "empty";
 
 /// Costruisce l'albero `UiNode` del pannello backlink per un insieme di
 /// riferimenti entranti. Separato da [`BacklinksView`] perché è pura
 /// trasformazione dati→UI: si prova senza un host.
 pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
     if refs.is_empty() {
-        return placeholder("Nessun backlink.");
+        return placeholder(EMPTY);
     }
 
     let items = refs
@@ -124,7 +151,7 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
         .map(|r| {
             UiNode::list_item(
                 r.source.page_name(),
-                r.context.clone(),
+                r.context.clone().map(Text::from),
                 // l'azione porta il DocId sorgente nel payload, così il
                 // provider può navigare senza parsare il proprio id.
                 Some(ActionRef::with(

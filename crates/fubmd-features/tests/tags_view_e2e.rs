@@ -51,7 +51,7 @@ fn rows(tree: &UiNode) -> Vec<(String, Option<String>)> {
         match &node.kind {
             UiKind::ListItem {
                 title, subtitle, ..
-            } => out.push((title.clone(), subtitle.clone())),
+            } => out.push((title.to_string(), subtitle.as_ref().map(|s| s.to_string()))),
             UiKind::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
             UiKind::List { items } => items.iter().for_each(|c| walk(c, out)),
             _ => {}

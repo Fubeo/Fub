@@ -194,7 +194,7 @@ fn subtree(
         let (children, next) = subtree(headings, i + 1, h.level, corrente);
         nodi.push(
             UiNode::new(UiKind::TreeItem {
-                label: h.text.clone(),
+                label: h.text.clone().into(),
                 // Aperto: un outline che nasce chiuso non è un outline.
                 expanded: true,
                 action: Some(ActionRef::with(
@@ -249,7 +249,7 @@ mod tests {
                 else {
                     panic!("una voce d'albero è un tree-item")
                 };
-                out.push((depth, label.clone(), *selected));
+                out.push((depth, label.to_string(), *selected));
                 scendi(children, depth + 1, out);
             }
         }

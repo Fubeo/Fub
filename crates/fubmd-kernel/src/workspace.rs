@@ -61,6 +61,7 @@ use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValue};
+use fubmd_abi::text::{Localize, Strings};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult,
     JobId, JobProgress, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
@@ -342,6 +343,26 @@ impl Workspace {
                 _ => None,
             })
         })
+    }
+
+    /// **Risolve i testi** di ciò che sta uscendo dal contratto, col catalogo di
+    /// chi l'ha prodotto e nella lingua di chi guarda (§12.1).
+    ///
+    /// È il metodo che rende vera la riga del modulo
+    /// [`text`](fubmd_abi::text): dopo di lui ogni [`Text`] è un
+    /// [`Text::Literal`], che sul filo è una stringa nuda. Sta **qui** e non
+    /// nella shell perché la shell è uno dei tre host previsti — l'app, la CLI
+    /// (27.1), l'API locale (27.2) — e il kernel è l'unico posto che ognuno dei
+    /// tre attraversa: risolvere nella shell avrebbe voluto dire riscrivere la
+    /// scala di ripiego in ogni host, e sbagliarla in due su tre.
+    ///
+    /// Il locale si ricompone a ogni chiamata per la stessa ragione di
+    /// [`locale`](Workspace::locale): fra un render e il successivo l'utente può
+    /// aver cambiato lingua.
+    pub(crate) fn localize<T: Localize + ?Sized>(&self, plugin: &str, value: &mut T) {
+        let locale = self.locale();
+        let (catalogs, default_locale) = self.providers.plugins.strings_of(plugin);
+        Strings::new(catalogs, default_locale, &locale).localize(value);
     }
 
     /// Il locale di sistema condiviso: chi monta lo passa alla shell perché ci
@@ -2306,9 +2327,17 @@ impl Workspace {
         self.providers.refresh_specs(id)
     }
 
-    /// Le view offerte dai provider registrati, in ordine di registrazione.
+    /// Le view offerte dai provider registrati, in ordine di registrazione,
+    /// **coi titoli risolti** nella lingua di chi guarda (§12.1).
     pub fn views(&self) -> Vec<ViewSpec> {
-        self.providers.view_specs()
+        self.providers
+            .view_specs_by_owner()
+            .into_iter()
+            .map(|(owner, mut spec)| {
+                self.localize(&owner, &mut spec);
+                spec
+            })
+            .collect()
     }
 
     /// Rende una view e restituisce il suo albero di UI.
@@ -2338,12 +2367,17 @@ impl Workspace {
         // `ReadHost` invece di un `KernelHost` non cambia niente per la
         // politica — è la stessa, e non sa cosa ci sia sotto.
         let host = self.read_host_for_view(&registered.id, Some(instance.instance.as_str()));
-        let tree = crate::safety::calling(
+        let mut tree = crate::safety::calling(
             &registered.id,
             &format!("disegnando `{}`", instance.view),
             || registered.provider.render_view(instance, &host),
         )?;
         guard_ui(registered.trust, &tree)?;
+        // **Dopo** la validazione del confine di fiducia, non prima: risolvere
+        // una chiave non può trasformare un nodo innocuo in uno riservato — i
+        // `Text` non diventano markup — ma l'ordine giusto è comunque quello che
+        // non fa passare niente dal catalogo prima del controllo.
+        self.localize(&registered.id, &mut tree);
         Ok(tree)
     }
 
@@ -2384,7 +2418,10 @@ impl Workspace {
                 )
             },
         );
-        let update = updated?;
+        let mut update = updated?;
+        // Il proprietario è quello della view: un aggiornamento porta le
+        // stringhe di chi l'ha scritto, come l'albero che sostituisce.
+        let owner = self.providers.views[at].id.clone();
         // **Ogni** albero che l'aggiornamento porta con sé, non solo quello di
         // `Replace`: una `Patch` è un nodo che entra nella webview come gli
         // altri, ed è più piccola solo nella dimensione. Il `match` è esaustivo
@@ -2403,6 +2440,7 @@ impl Workspace {
         if let Some(albero) = albero {
             guard_ui(trust, albero)?;
         }
+        self.localize(&owner, &mut update);
         // Gli eventi accodati durante `on_action` arrivano ADESSO, dopo che la
         // chiamata del provider è tornata: è il contratto di consegna.
         self.dispatch_pending();
@@ -2471,7 +2509,14 @@ impl Workspace {
     /// elenco può essere una palette, ma anche una CLI o un modello, e nessuno
     /// dei due ha letto il codice del comando.
     pub fn commands(&self) -> Vec<CommandSpec> {
-        self.providers.command_specs()
+        self.providers
+            .command_specs_by_owner()
+            .into_iter()
+            .map(|(owner, mut spec)| {
+                self.localize(&owner, &mut spec);
+                spec
+            })
+            .collect()
     }
 
     /// Esegue — o **simula** — un comando.
@@ -2632,6 +2677,12 @@ impl Workspace {
             // ricordato di elencare ogni documento che i suoi edit nominano.
             plan.complete();
         }
+        // I testi dell'esito — la notifica, il riassunto di un piano — col
+        // catalogo di chi ha eseguito. `run_command` annidato passa da qui come
+        // l'invocazione dall'esterno: chi rientra riceve l'esito dell'altro già
+        // risolto, che è giusto, perché il catalogo giusto è quello di chi ha
+        // scritto la frase e non quello di chi la inoltra.
+        self.localize(&owner, &mut outcome);
         self.dispatch_pending();
         Ok(outcome)
     }
@@ -3166,10 +3217,18 @@ impl Workspace {
     /// Le impostazioni risolte, tutte o di un plugin: è la risposta che il
     /// canale dati restituisce a [`IndexQuery::Settings`].
     pub fn settings_entries(&self, plugin: Option<&str>) -> Vec<SettingEntry> {
-        self.settings
+        let righe = self
+            .settings
             .read()
             .expect("store di configurazione")
-            .entries(plugin)
+            .entries_by_owner(plugin);
+        righe
+            .into_iter()
+            .map(|(owner, mut entry)| {
+                self.localize(&owner, &mut entry);
+                entry
+            })
+            .collect()
     }
 
     // --- lo stato di vista (§11.2) -----------------------------------------

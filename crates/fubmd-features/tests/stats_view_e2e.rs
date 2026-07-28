@@ -50,7 +50,7 @@ fn testi(tree: &UiNode) -> Vec<String> {
     children
         .iter()
         .filter_map(|c| match &c.kind {
-            UiKind::Text { content } => Some(content.clone()),
+            UiKind::Text { content } => Some(content.to_string()),
             _ => None,
         })
         .collect()

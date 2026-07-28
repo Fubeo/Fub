@@ -63,7 +63,7 @@ fn backlink_titles(tree: &UiNode) -> Vec<String> {
             UiKind::List { items } => items
                 .iter()
                 .filter_map(|i| match &i.kind {
-                    UiKind::ListItem { title, .. } => Some(title.clone()),
+                    UiKind::ListItem { title, .. } => Some(title.to_string()),
                     _ => None,
                 })
                 .collect(),
