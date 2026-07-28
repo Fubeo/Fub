@@ -28,7 +28,7 @@ le capacità in mano, prese una chiamata alla volta
 storia di concorrenza del contratto, vedi
 [plugin-boundary.md](plugin-boundary.md), "Lavoro lungo: i job".
 
-Questa regola non è più solo un'asserzione: da **M2** un `wit/fubmd/*.wit` vivente
+Questa regola non è più solo un'asserzione: da **M2** un `crates/fubmd-abi/wit/fubmd/*.wit` vivente
 la rende verificabile ad ogni commit (vedi [M4](../milestones/M4-wit-hardening.md)
 per il congelamento formale).
 
@@ -218,7 +218,7 @@ nemmeno essere negata.
 **L'elenco è chiuso ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).** Ventitré metodi, e da qui in avanti aggiungerne
 uno è una minor, toglierne uno una major. Il giro che lo ha chiuso ha anche
 **tolto** `storage_get/set` — l'unica rottura, con la linea di base ritagliata
-in `wit/frozen/0.1.0.wit` — e ha deciso a verbale, una per una, anche le
+in `crates/fubmd-abi/wit/frozen/0.1.0.wit` — e ha deciso a verbale, una per una, anche le
 capacità che restano fuori: allegati (§14.1 non aveva il modello — adesso ce
 l'ha, con la [decisione 0046](../decisions/0046-l-anagrafe-del-vault.md), e la
 capacità sarà **additiva** quando qualcuno la chiederà: un allegato oggi si
@@ -1022,7 +1022,7 @@ del crate-contratto), ma cablata progressivamente.
 
 Ogni tipo che attraversa una firma di trait mappa su un costrutto WIT. Questa
 tabella è il checklist di conformità di M4; il `wit/` vivente di M2 la
-materializza in `wit/fubmd/*.wit` + test abi↔WIT.
+materializza in `crates/fubmd-abi/wit/fubmd/*.wit` + test abi↔WIT.
 
 | Tipo abi | Costrutto WIT |
 |---|---|
@@ -1152,7 +1152,7 @@ in `model::Block` non compila finché non entra anche nell'arena.
 
 ### Come la conformità è verificata
 
-`crates/fubmd-abi/tests/wit_conformance.rs` **parsa** `wit/fubmd/abi.wit` con
+`crates/fubmd-abi/tests/wit_conformance.rs` **parsa** `crates/fubmd-abi/wit/fubmd/abi.wit` con
 `wit-parser` (dev-dependency: l'invariante di `fubmd-abi` riguarda le dipendenze
 normali) e confronta **nomi e tipi dichiarati**, non sottostringhe del sorgente.
 Quattro pressioni:

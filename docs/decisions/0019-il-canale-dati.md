@@ -199,7 +199,7 @@ Tre cose sono venute fuori solo scrivendolo:
 
 Il presidio dell'additività ha nominato le rotture, ed è il suo mestiere: sono
 deliberate, sono pre-freeze, e la baseline è stata ritagliata con la ragione
-scritta dentro `wit/frozen/0.1.0.wit` (più la riga nella tabella dei ritagli del
+scritta dentro `crates/fubmd-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella dei ritagli del
 suo README).
 
 | cosa | perché |

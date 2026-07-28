@@ -137,7 +137,7 @@ bisogno di un posto da cui essere montato).
 *ex §4.8 · presidi · **P1** — va **prima** delle P0 del terzo giro*
 
 - [ ] **Ogni tipo nuovo tocca quattro posti**: Rust (`fubmd-abi`), WIT
-      (`wit/fubmd/abi.wit`), arena (`abi/src/arena.rs`, per i tipi ricorsivi) e
+      (`crates/fubmd-abi/wit/fubmd/abi.wit`), arena (`abi/src/arena.rs`, per i tipi ricorsivi) e
       mirror TS (`frontend/src/host/contract.ts` + la fixture). Che non divergano è
       presidiato — `wit_conformance.rs` parsa il WIT e confronta nomi e tipi
       nelle due direzioni, ed è uno dei test migliori del repo — ma il presidio
@@ -273,7 +273,7 @@ bisogno di un posto da cui essere montato).
       *quello che hai battuto*. Resta la parte di questa voce che riguarda
       l'elenco delle cinque capacità provate in fila.
 - [x] **E ce n'è un terzo che si spegne da solo, trovato facendolo girare.**
-      `scripts/check-doc-links.mjs` — il presidio che la [decisione 0014](../decisions/0014-i-verbali-fuori-da-todo.md) ha aggiunto
+      `.github/scripts/check-doc-links.mjs` — il presidio che la [decisione 0014](../decisions/0014-i-verbali-fuori-da-todo.md) ha aggiunto
       perché «una promessa senza presidio meccanico decade» — salta ogni cartella
       che contenga un `.fubmd-data/`, per non trattare un vault come
       documentazione. La regola è giusta e la conseguenza no: basta aprire una

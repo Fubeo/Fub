@@ -241,7 +241,7 @@ campo per ogni parametro dichiarato, mostra il piano quando il raggio lo merita.
 sono la stessa firma vista da due lati, e le firme costano un campo prima del
 freeze e una migrazione dopo: `CommandSpec` porta ora descrizione, parametri
 tipati e raggio dichiarato, e `invoke` prende un `InvokeMode` — la rottura di
-firma fatta adesso, con la linea di base ritagliata in `wit/frozen/0.1.0.wit`.
+firma fatta adesso, con la linea di base ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`.
 
 Le due cose che l'host **fa rispettare**, e che sono la differenza fra un
 registro leggibile e uno eseguibile da terzi: gli argomenti sono convalidati
@@ -283,7 +283,7 @@ L'attore è **chi ha chiesto**, non chi ha eseguito: è l'unica lettura per cui 
 campo esiste, e senza di essa l'automazione su-modifica di 16.2 si richiama da
 sola finché il `DISPATCH_BUDGET` non tronca. È la seconda rottura di firma del
 giro — `event-handler.handle` prendeva un `event` nudo — con la linea di base
-ritagliata in `wit/frozen/0.1.0.wit`; e `invoke_command` ha guadagnato un
+ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`; e `invoke_command` ha guadagnato un
 `by: Actor`, perché un'invocazione attribuita a un default è l'errore che 16.2
 esiste per non fare.
 
@@ -308,7 +308,7 @@ sei mesi, da una scartata apposta.
 Dentro: le **operazioni strutturali** (`create_document`, `rename_document`,
 `trash_document`, `list_trash`, `restore_document`, `empty_trash`) e
 `run_command`. Fuori: `storage_get`/`storage_set`, **tolte** — la sola rottura
-del giro, con la linea di base ritagliata in `wit/frozen/0.1.0.wit`.
+del giro, con la linea di base ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`.
 
 Le decisioni che il freeze avrebbe reso definitive, in breve: `create_document`
 **rifiuta** un path occupato (è l'unica differenza con `write_document`, ed è

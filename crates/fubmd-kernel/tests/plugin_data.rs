@@ -150,7 +150,7 @@ fn nothing_a_plugin_can_name_escapes_its_own_space() {
 }
 
 // Lo `storage_*` volatile è stato TOLTO dal contratto con la decisione 0013 (linea di base
-// ritagliata in `wit/frozen/0.1.0.wit`), e con esso il test che ne provava lo
+// ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`), e con esso il test che ne provava lo
 // spazio dei nomi. Ciò che quel test difendeva — due feature che scelgono la
 // stessa chiave generica non si pestano — resta vero e provato qui sopra per
 // `data_*`, dove il recinto sta nella firma invece che nell'implementazione.

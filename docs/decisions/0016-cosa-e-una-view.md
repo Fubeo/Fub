@@ -128,7 +128,7 @@ esercitato una parte diversa:
 
 Il presidio dell'additività ha nominato **sette** rotture, ed è il suo mestiere:
 sono deliberate, sono pre-freeze, e la baseline è stata ritagliata con la
-ragione scritta dentro `wit/frozen/0.1.0.wit` (più la riga nella tabella dei
+ragione scritta dentro `crates/fubmd-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella dei
 ritagli del suo README).
 
 | cosa | perché |

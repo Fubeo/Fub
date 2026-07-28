@@ -31,13 +31,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
-      - name: Conformità abi ↔ wit/fubmd/abi.wit
+      - name: Conformità abi ↔ crates/fubmd-abi/wit/fubmd/abi.wit
         run: cargo test -p fubmd-abi --test wit_conformance
       # La conformità confronta abi e WIT fra di loro, OGGI. Questa confronta il
-      # contratto con wit/frozen/, cioè con com'era quando è stato pubblicato:
+      # contratto con crates/fubmd-abi/wit/frozen/, cioè con com'era quando è stato pubblicato:
       # è la promessa del freeze di M4 ("si cresce solo per aggiunta") resa
-      # meccanica. Vedi wit/frozen/README.md.
-      - name: Additività del contratto (wit/frozen/)
+      # meccanica. Vedi crates/fubmd-abi/wit/frozen/README.md.
+      - name: Additività del contratto (crates/fubmd-abi/wit/frozen/)
         run: cargo test -p fubmd-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fubmd-abi --test dependency_invariant
@@ -125,7 +125,7 @@ jobs:
         with:
           node-version: 22
       - name: Link interni dei documenti
-        run: node scripts/check-doc-links.mjs
+        run: node .github/scripts/check-doc-links.mjs
 
   frontend:
     name: frontend (type-check + test + build)

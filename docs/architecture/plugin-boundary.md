@@ -42,7 +42,7 @@ byte, persistente.
 Ce n'erano **due**, e adesso di nuovo due, ma non le stesse.
 `storage_get/set` — chiave → JSON, volatile, "per le
 preferenze e i cursori" — è stato tolto dal contratto con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md), ritagliando la
-linea di base (`wit/frozen/0.1.0.wit`), che è la sola rottura di quel giro. La
+linea di base (`crates/fubmd-abi/wit/frozen/0.1.0.wit`), che è la sola rottura di quel giro. La
 ragione, per esteso nella [decisione 0013](../decisions/0013-elenco-delle-capacita.md): con `data_*` da una parte e le
 impostazioni del §11.1 dall'altra, allo store volatile non restava un caso d'uso
 — e il caso che sembrava suo, "ricordare qualcosa per la durata della sessione",
@@ -696,7 +696,7 @@ al frontend/all'IPC.
 ## Sandbox WASM (M5)
 
 - **Runtime:** wasmtime, **component model**; plugin come componenti
-  `wasm32-wasip2`, compilati a parte con `cargo component` (vedi `plugins/README.md`).
+  `wasm32-wasip2`, compilati a parte con `cargo component` (vedi [M5](../milestones/M5-wasm-runtime.md)).
 - **Isolamento di memoria:** dato dal component model; il plugin non vede la memoria
   del core, solo i dati che gli passano attraverso le host function.
 - **Rete:** negata di default; concessa solo se `network = true`. WASI networking

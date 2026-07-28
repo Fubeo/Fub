@@ -217,7 +217,7 @@ rotto ogni messaggio d'errore della shell.
 ## Cosa questo ha rotto, deliberatamente
 
 `wit_additivity.rs` è diventato rosso e la linea di base è stata **ritagliata**
-(`wit/frozen/0.1.0.wit`, con la riga in tabella che dice perché). Pre-freeze è la
+(`crates/fubmd-abi/wit/frozen/0.1.0.wit`, con la riga in tabella che dice perché). Pre-freeze è la
 procedura prevista.
 
 Ciò che ha rotto: **i nove payload di `plugin-error` passano da `string` a

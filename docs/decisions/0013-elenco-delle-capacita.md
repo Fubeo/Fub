@@ -129,7 +129,7 @@ qualcuno aggiungesse senza pensarci. Il giorno del §7.3, il rifiuto non va
 costruito: va solo dato un secondo motivo.
 
 *`storage_*` non sopravvive al freeze.* È l'unica rottura del giro e la linea di
-base è ritagliata (`wit/frozen/0.1.0.wit`, con la ragione scritta lì dentro).
+base è ritagliata (`crates/fubmd-abi/wit/frozen/0.1.0.wit`, con la ragione scritta lì dentro).
 Con `data_*` da una parte (persistente, recintato dalla firma) e le impostazioni
 del §11.1 dall'altra, allo store volatile a chiave→valore restava solo il caso
 «ricordare qualcosa per la durata della sessione» — che il chiamante aveva già

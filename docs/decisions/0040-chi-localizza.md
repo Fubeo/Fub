@@ -183,7 +183,7 @@ albero del contratto.
 ## Cosa questo ha rotto, deliberatamente
 
 Il presidio dell'additività (`wit_additivity.rs`) è diventato rosso, ed è stato
-**ritagliato**: `wit/frozen/0.1.0.wit` è stato riscritto, con la riga in tabella
+**ritagliato**: `crates/fubmd-abi/wit/frozen/0.1.0.wit` è stato riscritto, con la riga in tabella
 che dice perché. Pre-freeze è la procedura prevista — una rottura si fa vedendola
 in review, che è tutta la differenza con non vederla affatto.
 

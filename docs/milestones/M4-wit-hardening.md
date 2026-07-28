@@ -12,14 +12,15 @@ e non una rincorsa a firme non serializzabili. Provare l'intero confine con un
 
 ## Contesto: il `wit/` è già vivo da M2
 
-Decisione presa: `wit/fubmd/*.wit` **non** nasce a M4 — è mantenuto vivo fin da M2,
+Decisione presa: `crates/fubmd-abi/wit/fubmd/*.wit` **non** nasce a M4 — è mantenuto vivo fin da M2,
 con un test di conformità abi↔WIT che gira ad ogni commit. Così la "regola d'oro"
 (vedi [../architecture/traits.md](../architecture/traits.md)) è verificata in
 continuazione, non asserita. M4 è il punto in cui quel WIT viene **congelato** e
 promosso a contratto stabile.
 
-Stato repo: la cartella `wit/fubmd/` esiste già (vuota); `plugins/README.md` prevede
-componenti `wasm32-wasip2` compilati con `cargo component`.
+Stato repo: la cartella `crates/fubmd-abi/wit/fubmd/` esiste già (vuota); i plugin
+di esempio saranno componenti `wasm32-wasip2` compilati con `cargo component`, e
+la cartella `plugins/` nascerà con loro a [M5](M5-wasm-runtime.md).
 
 ## Design
 
@@ -39,7 +40,7 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
   già nel contratto e nel `wit/` da M2. Prima del freeze va deciso se ai job
   serve un canale di **progresso** (streaming) o se `JobDone` basta.
 
-### `wit/fubmd/*.wit` che rispecchia `fubmd-abi`
+### `crates/fubmd-abi/wit/fubmd/*.wit` che rispecchia `fubmd-abi`
 
 - File WIT organizzati per area: `model`, `format`, `ui`, `index`, `events`,
   `command`, `plugin`, `host-api`.
@@ -51,8 +52,8 @@ componenti `wasm32-wasip2` compilati con `cargo component`.
 
 ### Test di conformità abi↔WIT
 
-**È fatta** (vedi [wit/README.md](../../wit/README.md), e
-[wit/frozen/README.md](../../wit/frozen/README.md) per la gemella che confronta
+**È fatta** (vedi [architecture/wit.md](../architecture/wit.md), e
+[architecture/wit-congelato.md](../architecture/wit-congelato.md) per la gemella che confronta
 il contratto con com'era): il test parsa `abi.wit` con `wit-parser` e
 confronta nelle due direzioni — contratto morto incluso — **nomi e tipi**: campi
 dei record in ordine, payload dei casi di variant, destinazioni degli alias,
@@ -276,7 +277,7 @@ oggi, una migrazione domani); le altre restano al freeze.
       template di cancellare una nota), `list_trash` sta accanto a
       `list_documents` e non in `IndexQuery` (il cestino non è indicizzato), e
       `run_command` non prende né modo né attore né lotto — li eredita tutti e
-      tre. `wit/frozen/0.1.0.wit` **ritagliato** (`storage-*` era pubblicata).
+      tre. `crates/fubmd-abi/wit/frozen/0.1.0.wit` **ritagliato** (`storage-*` era pubblicata).
       Verbale capacità per capacità, incluse quelle che restano fuori, in
       [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
 - [x] **`create_note` in una cartella** — deciso col punto sopra:
@@ -308,7 +309,7 @@ oggi, una migrazione domani); le altre restano al freeze.
       solo quando le sue coordinate valgono anche per il sorgente del kernel.
       `ViewSpec` guadagna `follows: ContextMask`, o "ridisegna al cambio di nota
       attiva" diventerebbe "ridisegna a ogni battuta di tasto". Verbale in
-      [decisione 0007](../decisions/0007-contesto-di-sessione.md); `wit/frozen/0.1.0.wit` **ritagliato** (la
+      [decisione 0007](../decisions/0007-contesto-di-sessione.md); `crates/fubmd-abi/wit/frozen/0.1.0.wit` **ritagliato** (la
       firma di `active-document` era pubblicata).
 - [ ] **Identità del documento: il path è per sempre la chiave?**
       ([todo.md §13.1](../todo.md)) FEATURES chiede uuid opzionale (2.2), stable
@@ -352,7 +353,7 @@ oggi, una migrazione domani); le altre restano al freeze.
 - [x] **L'origine degli eventi** — fatta con la [decisione 0012](../decisions/0012-origine-degli-eventi.md), ed è **l'unica rottura di una
       firma già pubblicata** di questo giro: `event-handler.handle` prendeva un
       `event` nudo e adesso prende un `notice` (evento + origine). Linea di base
-      ritagliata in `wit/frozen/0.1.0.wit`, con la ragione accanto: senza
+      ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`, con la ragione accanto: senza
       l'origine sul parametro, un'automazione su-modifica che scrive non
       riconosce le proprie scritture e si richiama da sé finché il
       `DISPATCH_BUDGET` non tronca — cioè una rete di sicurezza al posto di una
@@ -397,7 +398,7 @@ oggi, una migrazione domani); le altre restano al freeze.
          un chiamante non umano sceglie a caso.
       2. **Dove vive il dry-run** → un argomento `mode: InvokeMode` su `invoke`,
          cioè la **rottura di firma fatta adesso** (linea di base ritagliata in
-         `wit/frozen/0.1.0.wit`, come per la [decisione 0007](../decisions/0007-contesto-di-sessione.md)). La variante
+         `crates/fubmd-abi/wit/frozen/0.1.0.wit`, come per la [decisione 0007](../decisions/0007-contesto-di-sessione.md)). La variante
          `CommandOutcome::Plan` da sola sarebbe stata una convenzione fra
          chiamante e comando; con il modo nella firma, l'host può *far
          rispettare* la simulazione — presta un `HostApi` in sola lettura, e un
@@ -473,7 +474,7 @@ oggi, una migrazione domani); le altre restano al freeze.
 
 ## Criteri di accettazione
 
-- `wit/fubmd/*.wit` copre l'intera superficie dei trait; il test di conformità
+- `crates/fubmd-abi/wit/fubmd/*.wit` copre l'intera superficie dei trait; il test di conformità
   abi↔WIT è verde e **rompe** su una divergenza introdotta ad arte.
 - Il primo plugin nativo si attiva, registra i suoi provider, funziona end-to-end e
   rispetta i permessi (un accesso fuori `vault_scope` è negato con
