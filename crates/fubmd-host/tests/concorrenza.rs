@@ -15,7 +15,7 @@
 //! tutti romperebbero per comodità.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
@@ -29,6 +29,29 @@ use fubmd_host::{Host, NoWatcher};
 /// sovrapposizione vera è impossibile, e il test lo dice invece di fallire.
 fn lettori() -> usize {
     std::thread::available_parallelism().map_or(2, |n| n.get().clamp(2, 8))
+}
+
+/// Il banco di misura è uno solo, e i due test di contesa devono farci il turno.
+///
+/// libtest esegue in parallelo i test dello stesso binario: senza questo turno
+/// i due girerebbero insieme, e ognuno dei due *è* la macchina occupata
+/// dell'altro. Quello che conta le letture sovrapposte tiene il prestito
+/// condiviso in ciclo stretto proprio mentre l'altro cronometra quanto ci mette
+/// a passare in scrittura — misurerebbero la contesa che si fanno da soli,
+/// invece di quella che il §8.3 ha comprato.
+static BANCO: Mutex<()> = Mutex::new(());
+
+/// Prende il turno di banco, avvelenamento compreso.
+///
+/// Se il test precedente è panicato il `Mutex` resta avvelenato, e qui non
+/// vuol dire niente: il dato protetto è `()`, non c'è nessuno stato invariante
+/// che un panico possa aver lasciato a metà. L'unica cosa che il turno serializa
+/// è il tempo, e il tempo non si corrompe. Ereditarlo e misurare è giusto:
+/// l'alternativa sarebbe un secondo rosso che nasconde il primo.
+fn turno_di_banco() -> MutexGuard<'static, ()> {
+    BANCO
+        .lock()
+        .unwrap_or_else(|avvelenato| avvelenato.into_inner())
 }
 
 struct Vault {
@@ -65,6 +88,7 @@ fn aperto(v: &Vault) -> Host {
 /// l'unico modo in cui questo test può fallire.
 #[test]
 fn due_letture_stanno_nel_workspace_insieme() {
+    let _turno = turno_di_banco();
     let v = vault(60);
     let host = aperto(&v);
     let ws = host.workspace(None).unwrap();
@@ -113,14 +137,14 @@ fn due_letture_stanno_nel_workspace_insieme() {
 /// ha visto un salvataggio aspettare **23 secondi**. Con il `RwLock` chi scrive
 /// si mette in coda e i lettori nuovi si fermano dietro di lui.
 ///
-/// Ciò che si misura è l'**attesa peggiore**, non quante scritture passano: in
-/// debug e su un vault piccolo passano comunque tutte, ed è per questo che un
-/// test sul conteggio sarebbe un falso presidio — passerebbe anche col
-/// prestito esclusivo. La separazione sta invece tutta nell'attesa, ed è di
-/// tre-quattro ordini di grandezza: da 147 ms a 2,2 s con `write()`, contro
-/// 0,2–0,3 ms con `read()`, in ogni taglia di vault provata. La soglia sotto è
-/// a 50 ms: 150× sopra ciò che il caso buono misura, 3× sotto il *migliore*
-/// dei casi cattivi.
+/// Ciò che si misura è l'**attesa mediana** di venti salvataggi, non quante
+/// scritture passano: in debug e su un vault piccolo passano comunque tutte, ed
+/// è per questo che un test sul conteggio sarebbe un falso presidio —
+/// passerebbe anche col prestito esclusivo. La separazione sta invece tutta
+/// nell'attesa, ed è di tre-quattro ordini di grandezza: da 147 ms a 2,2 s con
+/// `write()`, contro 0,2–0,3 ms con `read()`, in ogni taglia di vault provata.
+/// La soglia sotto è a 50 ms: 150× sopra ciò che il caso buono misura, 3× sotto
+/// il *migliore* dei casi cattivi.
 ///
 /// **Che questo valga dipende da `std`, non da noi**, e va detto: la
 /// documentazione di `RwLock` dichiara la politica di priorità dipendente dal
@@ -130,24 +154,40 @@ fn due_letture_stanno_nel_workspace_insieme() {
 /// quella piattaforma che dice di non avere la proprietà, e a quel punto la
 /// coda equa va scritta da noi.
 ///
-/// **L'altro modo di diventare rosso è una macchina occupata**, e non si
-/// distingue dal primo leggendo il numero: `lettori() * 2` thread in ciclo
-/// stretto contro una CI che sta già compilando altro possono far aspettare una
-/// `write()` per ragioni di scheduler e non di lock. La distinzione la fa il
-/// **secondo giro**: rilanciato da solo su una macchina scarica
-/// (`cargo test -p fubmd-host --test concorrenza`), un rosso che resta è la
-/// proprietà che non c'è più — un rosso che sparisce era il vicino di banco.
-/// La soglia non va alzata per farlo tacere: 50 ms sono già 150 volte l'attesa
-/// che il caso buono misura, e alzarla vuol dire smettere di vedere il caso
-/// cattivo (147 ms è il *migliore* dei prestiti esclusivi misurati).
+/// **Si guarda la mediana perché il massimo era la statistica sbagliata**, e
+/// non perché la soglia sia stata alzata per far tacere il test: la soglia è
+/// rimasta a 50 ms, con la taratura di prima — 150× il caso buono, 3× sotto il
+/// migliore dei cattivi — intatta. Ciò che è cambiato è quale dei venti
+/// campioni si legge, non dove sta l'asticella. Il massimo di venti è, per
+/// definizione, il campione più esposto al vicino di banco: basta che
+/// *un* lettore venga prelazionato mentre tiene il prestito condiviso perché
+/// quel singolo giro incassi un quanto di scheduler intero — su Windows sono
+/// 15–30 ms — e la CI ha misurato 101 ms contro i 50 della soglia con sotto il
+/// codice giusto, per poi tornare verde al rilancio successivo senza che
+/// nessuno avesse toccato niente.
+///
+/// E quel campione non porta segnale che gli altri non abbiano già: la firma
+/// del prestito esclusivo non è *un* giro lento, sono **tutti** i giri lenti.
+/// Sotto il `Mutex` che il §8.3 ha tolto ogni salvataggio viene scavalcato da
+/// ogni lettore in ciclo stretto, quindi ogni giro aspetta e la mediana sale
+/// insieme al massimo — anzi, prima, perché non ha bisogno che il caso peggiore
+/// si presenti. Leggere la mediana rinuncia solo alla sensibilità a ciò che non
+/// stiamo misurando. Il peggiore resta nel messaggio di fallimento: serve a
+/// capire un rosso, non a produrlo.
+///
+/// Per la stessa ragione i lettori sono `lettori()` e non il doppio. Su un
+/// runner a quattro core, otto thread in ciclo stretto non aumentano la contesa
+/// sul lock — quella satura molto prima — e aggiungono solo thread pronti che
+/// si contendono le CPU: rumore di scheduler versato dentro la misura.
 #[test]
 fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
+    let _turno = turno_di_banco();
     let v = vault(120);
     let host = aperto(&v);
     let ws = host.workspace(None).unwrap();
 
     let stop = Arc::new(AtomicBool::new(false));
-    let handles: Vec<_> = (0..(lettori() * 2))
+    let handles: Vec<_> = (0..lettori())
         .map(|t| {
             let (ws, stop) = (ws.clone(), stop.clone());
             std::thread::spawn(move || {
@@ -164,11 +204,13 @@ fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
     // I lettori entrano in regime prima che il salvataggio provi a passare.
     std::thread::sleep(Duration::from_millis(150));
 
-    let mut attesa_peggiore = Duration::ZERO;
+    // Si tengono tutte e venti: il verdetto vuole la mediana, il messaggio di
+    // fallimento vuole il peggiore, e nessuno dei due si ricava dall'altro.
+    let mut attese = Vec::with_capacity(20);
     for giro in 0..20 {
         let t = Instant::now();
         let mut w = ws.write().unwrap();
-        attesa_peggiore = attesa_peggiore.max(t.elapsed());
+        attese.push(t.elapsed());
         w.write_document(
             &DocId::new("Nota 0.md"),
             &format!("# Nota 0\n\ngiro {giro}\n"),
@@ -181,12 +223,17 @@ fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
         h.join().unwrap();
     }
 
+    attese.sort_unstable();
+    let mediana = attese[attese.len() / 2];
+    let peggiore = *attese.last().expect("venti giri, venti attese");
+
     assert!(
-        attesa_peggiore < Duration::from_millis(50),
-        "un salvataggio ha aspettato {attesa_peggiore:?} dietro ai lettori. \
-         Con il prestito condiviso l'attesa misurata è di frazioni di \
-         millisecondo; centinaia di millisecondi sono la firma del prestito \
-         esclusivo, cioè del `Mutex` che il §8.3 ha tolto."
+        mediana < Duration::from_millis(50),
+        "l'attesa mediana di un salvataggio dietro ai lettori è {mediana:?} \
+         (la peggiore dei venti giri: {peggiore:?}). Con il prestito condiviso \
+         l'attesa misurata è di frazioni di millisecondo; decine o centinaia di \
+         millisecondi *a ogni giro* sono la firma del prestito esclusivo, cioè \
+         del `Mutex` che il §8.3 ha tolto."
     );
 }
 
