@@ -193,8 +193,9 @@ impl ImportSource {
     /// ha modo di continuare, ed è esattamente il caso in cui l'errore è la
     /// risposta giusta e non una riga di giornale.
     pub fn text(&self) -> Result<&str, PluginError> {
-        std::str::from_utf8(&self.bytes)
-            .map_err(|e| PluginError::BadArgs(format!("`{}` non è testo UTF-8: {e}", self.name)))
+        std::str::from_utf8(&self.bytes).map_err(|e| {
+            PluginError::BadArgs(format!("`{}` non è testo UTF-8: {e}", self.name).into())
+        })
     }
 
     /// L'ultimo componente del nome, con entrambi i separatori.
@@ -455,9 +456,9 @@ impl ExportSelection {
                 IndexResult::Neighbors(p) => p.items.into_iter().map(|n| n.doc).collect(),
                 IndexResult::VaultHealth(p) => p.items.into_iter().map(|i| i.doc).collect(),
                 other => {
-                    return Err(PluginError::BadArgs(format!(
-                        "questa interrogazione non nomina documenti: {other:?}"
-                    )))
+                    return Err(PluginError::BadArgs(
+                        format!("questa interrogazione non nomina documenti: {other:?}").into(),
+                    ))
                 }
             },
         };

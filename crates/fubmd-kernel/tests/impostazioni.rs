@@ -160,7 +160,7 @@ fn senza_il_permesso_non_si_scrive_nemmeno_una_chiave_scrivibile() {
         host.set_setting("com.acme.tasks:mostra", SettingValue::Toggle(false))
     });
     assert!(
-        matches!(&negato, Err(PluginError::PermissionDenied(m)) if m.contains(permission::WRITE_SETTINGS)),
+        matches!(&negato, Err(PluginError::PermissionDenied(m)) if m.to_string().contains(permission::WRITE_SETTINGS)),
         "il rifiuto nomina il permesso che manca: {negato:?}"
     );
 

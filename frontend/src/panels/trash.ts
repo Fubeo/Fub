@@ -7,6 +7,7 @@
 // il path originale è di nuovo occupato — il kernel non inventa nomi al posto
 // dell'utente.
 import { confirm } from "../host/dialog";
+import { errorText, isErrorKind } from "../host/errors";
 import { api } from "../host/ipc";
 import {
   emptyTrash as svuota,
@@ -87,11 +88,24 @@ async function ripristina(trashId: string, original: string): Promise<void> {
   let restored: string;
   try {
     restored = await restoreFromTrash(trashId);
-  } catch {
-    // Il path originale è di nuovo occupato: il kernel non inventa nomi al
-    // posto dell'utente, quindi l'app ne propone uno e chiede. La convenzione
-    // «Nota», «Nota 1», … è del kernel: chiedergliela evita di averne una
-    // seconda implementazione qui, destinata a divergere.
+  } catch (e) {
+    // **Solo** se il path è di nuovo occupato (§12.2). Il `catch` era nudo, e
+    // trattava ogni fallimento come se fosse questo: con un disco pieno o un
+    // permesso negato l'utente si vedeva chiedere «esiste già: la ripristino
+    // con un altro nome?» — la domanda sbagliata — e rispondendo «Ripristina»
+    // ritentava con un nome libero, che falliva di nuovo per la vera ragione,
+    // che nessuno gli aveva mai detto.
+    //
+    // La domanda ha senso qui e in nessun altro ramo, ed è la variante
+    // `already_exists` a dirlo: è per questo cliente che esiste.
+    if (!isErrorKind(e, "already_exists")) {
+      notify(`«${pageName(original)}» non è stata ripristinata: ${errorText(e)}`, "guasto");
+      return;
+    }
+    // Il kernel non inventa nomi al posto dell'utente, quindi l'app ne propone
+    // uno e chiede. La convenzione «Nota», «Nota 1», … è del kernel:
+    // chiedergliela evita di averne una seconda implementazione qui, destinata
+    // a divergere.
     const proposta = await proposeFreeName(original);
     const ok = await confirm(
       `«${pageName(original)}» esiste di nuovo. Ripristinare come «${pageName(proposta)}»?`,

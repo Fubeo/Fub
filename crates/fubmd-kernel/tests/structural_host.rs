@@ -164,9 +164,12 @@ fn creating_over_an_existing_note_is_refused_and_writing_over_it_is_not() {
         let e = host
             .create_document(&id, "secondo")
             .expect_err("il path è occupato");
+        // Il `kind` dice già di che rifiuto si tratta (§12.2): chi chiama
+        // sceglie fra «lo salvo con un altro nome» e «riprova» senza leggere
+        // la frase. Il messaggio nomina comunque il documento.
         assert!(
-            matches!(e, PluginError::Internal(ref m) if m.contains("nota.md")),
-            "l'errore nomina il documento: {e}"
+            matches!(e, PluginError::AlreadyExists(ref m) if m.to_string().contains("nota.md")),
+            "l'errore dice che il path è occupato, e nomina il documento: {e}"
         );
 
         assert_eq!(
@@ -440,7 +443,7 @@ impl CommandProvider for Macro {
                 Ok(CommandOutcome::notify("passo fatto"))
             }
             OUROBOROS => host.run_command(OUROBOROS, serde_json::Value::Null),
-            other => Err(PluginError::UnknownCommand(other.to_string())),
+            other => Err(PluginError::UnknownCommand(other.into())),
         }
     }
 }

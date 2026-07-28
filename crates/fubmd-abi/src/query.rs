@@ -486,7 +486,7 @@ mod tests {
         fn predicate(&self, predicate: &QueryPredicate) -> Result<Matches, PluginError> {
             match predicate {
                 QueryPredicate::Docs { docs } => Ok(Matches::of_docs(docs.clone())),
-                other => Err(PluginError::BadArgs(format!("non mio: {other:?}"))),
+                other => Err(PluginError::BadArgs(format!("non mio: {other:?}").into())),
             }
         }
     }

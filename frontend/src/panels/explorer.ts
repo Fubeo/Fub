@@ -32,6 +32,7 @@ import { pickIcon, showContextMenu } from "../ui/menu";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import { focusEditor, flushPendingSave, openDocument } from "./document";
 import { trashWithConfirm } from "./trash";
+import { errorText } from "../host/errors";
 
 const fileListEl = $("#file-list");
 const filesTitleEl = $("#files-title");
@@ -411,7 +412,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   try {
     await renameNote(from, to);
   } catch (e) {
-    console.error(`FubMD: rinomina di ${from} in ${to} rifiutata: ${e}`);
+    console.error(`FubMD: rinomina di ${from} in ${to} rifiutata: ${errorText(e)}`);
     renderFileList(state.knownDocs);
   }
   // `currentDoc` lo aggiorna l'evento `document_renamed`: l'identità è il path,
@@ -432,7 +433,7 @@ async function convertToFolder(id: string): Promise<void> {
   try {
     await renameNote(id, `${folderPath}/${childName(id)}`);
   } catch (e) {
-    console.error(`FubMD: non riesco a convertire ${id} in cartella: ${e}`);
+    console.error(`FubMD: non riesco a convertire ${id} in cartella: ${errorText(e)}`);
     return;
   }
   state.expanded.add(folderPath);
@@ -525,7 +526,7 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   try {
     await renameNote(id, to);
   } catch (e) {
-    console.error(`FubMD: non riesco a spostare ${id} in ${folderPath || "radice"}: ${e}`);
+    console.error(`FubMD: non riesco a spostare ${id} in ${folderPath || "radice"}: ${errorText(e)}`);
     return;
   }
   if (folderPath) state.expanded.add(folderPath);

@@ -172,8 +172,8 @@ fn a_plugin_without_write_vault_cannot_write_even_though_the_host_could() {
         let PluginError::PermissionDenied(msg) = &err else {
             panic!("atteso permesso negato, trovato {err:?}");
         };
-        assert!(msg.contains("terzi.lettore"), "{msg}");
-        assert!(msg.contains(permission::WRITE_VAULT), "{msg}");
+        assert!(msg.to_string().contains("terzi.lettore"), "{msg}");
+        assert!(msg.to_string().contains(permission::WRITE_VAULT), "{msg}");
 
         // E le strutturali sono una famiglia a parte, negata dallo stesso
         // permesso: non è la scrittura di testo con un altro nome.
@@ -200,7 +200,7 @@ fn a_revoked_plugin_gets_nothing_at_all_not_even_reading() {
             .list_documents(None)
             .expect_err("un revocato non legge nemmeno");
         assert!(
-            matches!(&err, PluginError::PermissionDenied(msg) if msg.contains("revocato")),
+            matches!(&err, PluginError::PermissionDenied(msg) if msg.to_string().contains("revocato")),
             "{err:?}"
         );
     });
@@ -217,7 +217,7 @@ fn an_undeclared_id_is_refused_and_not_granted_in_blank() {
             .list_documents(None)
             .expect_err("un id non dichiarato non è un plugin");
         assert!(
-            matches!(&err, PluginError::PermissionDenied(msg) if msg.contains("non è un plugin dichiarato")),
+            matches!(&err, PluginError::PermissionDenied(msg) if msg.to_string().contains("non è un plugin dichiarato")),
             "{err:?}"
         );
     });
@@ -553,9 +553,9 @@ impl ServiceProvider for Contatore {
             // presta le sue, e lui non presta le proprie a chi chiama.
             "quante" => Ok(serde_json::json!(host.list_documents(None)?.total)),
             "eco" => Ok(args),
-            altro => Err(PluginError::BadArgs(format!(
-                "`{service}` non conosce `{altro}`"
-            ))),
+            altro => Err(PluginError::BadArgs(
+                format!("`{service}` non conosce `{altro}`").into(),
+            )),
         }
     }
 }
@@ -692,7 +692,7 @@ fn a_service_that_calls_itself_is_refused_by_name() {
     // Nominare il giro è la differenza fra un errore che si corregge e una
     // profondità massima che si aggira.
     assert!(
-        matches!(&err, PluginError::BadArgs(msg) if msg.contains("com.acme.giro → com.acme.giro")),
+        matches!(&err, PluginError::BadArgs(msg) if msg.to_string().contains("com.acme.giro → com.acme.giro")),
         "{err:?}"
     );
 }

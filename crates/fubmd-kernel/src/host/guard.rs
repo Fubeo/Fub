@@ -332,7 +332,9 @@ impl<H, P: Policy> Guard<H, P> {
     fn check(&self, cap: Capability, what: impl FnOnce() -> String) -> Result<(), PluginError> {
         match self.policy.denies(cap) {
             None => Ok(()),
-            Some(why) => Err(PluginError::PermissionDenied(format!("{}: {why}", what()))),
+            Some(why) => Err(PluginError::PermissionDenied(
+                format!("{}: {why}", what()).into(),
+            )),
         }
     }
 

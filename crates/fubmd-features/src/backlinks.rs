@@ -77,9 +77,9 @@ impl ViewProvider for BacklinksView {
         })? {
             IndexResult::Backlinks(refs) => refs,
             other => {
-                return Err(PluginError::Internal(format!(
-                    "query backlink: risposta fuori tema: {other:?}"
-                )))
+                return Err(PluginError::Internal(
+                    format!("query backlink: risposta fuori tema: {other:?}").into(),
+                ))
             }
         };
         Ok(build_backlinks_view(&refs.items))

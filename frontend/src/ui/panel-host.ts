@@ -27,6 +27,7 @@ import type { EventMask, KernelEvent, KernelNotice, ViewSpec } from "../host/con
 import { maskWants } from "../rules/mirrored";
 import { onAnyEvent, onEvent } from "../state/kernel";
 import { on } from "../state/store";
+import { errorText } from "../host/errors";
 
 export type EventType = KernelEvent["type"];
 
@@ -124,7 +125,7 @@ export async function refreshPanel(id: string, notice?: KernelNotice): Promise<v
   try {
     await panel.render(notice);
   } catch (e) {
-    console.error(`FubMD: il pannello «${id}» non si è ridisegnato: ${e}`);
+    console.error(`FubMD: il pannello «${id}» non si è ridisegnato: ${errorText(e)}`);
   }
 }
 

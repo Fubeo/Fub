@@ -342,7 +342,7 @@ fn the_arguments_are_validated_before_the_command_is_ever_called() {
         panic!("un argomento obbligatorio che manca è BadArgs")
     };
     assert!(
-        msg.contains("what"),
+        msg.to_string().contains("what"),
         "il messaggio nomina cosa manca: {msg}"
     );
 

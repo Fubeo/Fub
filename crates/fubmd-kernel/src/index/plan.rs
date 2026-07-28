@@ -55,7 +55,7 @@ pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, P
             let query = resolve_for(indexes, target, query)?;
             let index = indexes
                 .at(target)
-                .ok_or_else(|| PluginError::Unserved(format!("{kind:?}")))?;
+                .ok_or_else(|| PluginError::Unserved(format!("{kind:?}").into()))?;
             index.query(query)
         }
         // Nessuno: la sola famiglia che il kernel sa comporre da sé è
@@ -67,7 +67,7 @@ pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, P
                 select,
                 page,
             } => documents(indexes, matching, sort, select, page),
-            other => Err(PluginError::Unserved(describe(&other))),
+            other => Err(PluginError::Unserved(describe(&other).into())),
         },
     }
 }
@@ -130,10 +130,9 @@ struct Router<'a> {
 impl Router<'_> {
     /// Chiede a un indice i documenti di un'espressione che gli appartiene.
     fn ask(&self, target: Target, matching: QueryExpr) -> Result<Matches, PluginError> {
-        let index = self
-            .indexes
-            .at(target)
-            .ok_or_else(|| PluginError::Unserved("indice sparito dalla tabella".to_string()))?;
+        let index = self.indexes.at(target).ok_or_else(|| {
+            PluginError::Unserved("indice sparito dalla tabella".to_string().into())
+        })?;
         let answer = index.query(IndexQuery::Documents {
             matching,
             sort: None,
@@ -160,7 +159,7 @@ impl QueryEvaluator for Router<'_> {
             .evaluators(&kind)
             .first()
             .ok_or_else(|| {
-                PluginError::Unserved(format!("nessuno sa valutare questa foglia: {kind:?}"))
+                PluginError::Unserved(format!("nessuno sa valutare questa foglia: {kind:?}").into())
             })?;
         self.ask(target, QueryExpr::of(predicate.clone()))
     }

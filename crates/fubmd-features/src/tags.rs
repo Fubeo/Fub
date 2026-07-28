@@ -193,9 +193,9 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     })? {
         IndexResult::Tags(t) => t,
         other => {
-            return Err(PluginError::Internal(format!(
-                "query tag: risposta fuori tema: {other:?}"
-            )))
+            return Err(PluginError::Internal(
+                format!("query tag: risposta fuori tema: {other:?}").into(),
+            ))
         }
     };
     Ok(build_tags_view(&tags.items, &filter_of(host)?))

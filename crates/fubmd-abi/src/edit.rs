@@ -194,11 +194,14 @@ impl EditRequest {
     pub fn apply_to(&self, source: &str) -> Result<(String, EditReport), PluginError> {
         let current = Revision::of(source);
         if current != self.base {
-            return Err(PluginError::Conflict(format!(
-                "il sorgente è cambiato: l'edit è stato calcolato su {}, ora è {}",
-                self.base.as_str(),
-                current.as_str()
-            )));
+            return Err(PluginError::Conflict(
+                format!(
+                    "il sorgente è cambiato: l'edit è stato calcolato su {}, ora è {}",
+                    self.base.as_str(),
+                    current.as_str()
+                )
+                .into(),
+            ));
         }
 
         let mut ordered: Vec<&TextEdit> = self.edits.iter().collect();
@@ -207,44 +210,47 @@ impl EditRequest {
         for edit in &ordered {
             let span = edit.span;
             if span.start > span.end {
-                return Err(PluginError::BadArgs(format!(
-                    "span rovesciato: {}..{}",
-                    span.start, span.end
-                )));
+                return Err(PluginError::BadArgs(
+                    format!("span rovesciato: {}..{}", span.start, span.end).into(),
+                ));
             }
             if span.end > source.len() {
-                return Err(PluginError::BadArgs(format!(
-                    "span fuori dal sorgente: {}..{} su {} byte",
-                    span.start,
-                    span.end,
-                    source.len()
-                )));
+                return Err(PluginError::BadArgs(
+                    format!(
+                        "span fuori dal sorgente: {}..{} su {} byte",
+                        span.start,
+                        span.end,
+                        source.len()
+                    )
+                    .into(),
+                ));
             }
             if !source.is_char_boundary(span.start) || !source.is_char_boundary(span.end) {
                 // Tagliare un carattere UTF-8 a metà non produce un documento
                 // sbagliato: produce byte che non sono testo, e il documento
                 // non si riapre più.
-                return Err(PluginError::BadArgs(format!(
-                    "span a metà di un carattere: {}..{}",
-                    span.start, span.end
-                )));
+                return Err(PluginError::BadArgs(
+                    format!("span a metà di un carattere: {}..{}", span.start, span.end).into(),
+                ));
             }
             if let Some(prev) = previous {
                 if span.start < prev.end {
-                    return Err(PluginError::BadArgs(format!(
-                        "edit sovrapposti: {}..{} e {}..{}",
-                        prev.start, prev.end, span.start, span.end
-                    )));
+                    return Err(PluginError::BadArgs(
+                        format!(
+                            "edit sovrapposti: {}..{} e {}..{}",
+                            prev.start, prev.end, span.start, span.end
+                        )
+                        .into(),
+                    ));
                 }
                 if span.start == prev.start {
                     // Due edit che cominciano nello stesso punto (tipicamente
                     // due inserimenti) hanno un esito che dipende dall'ordine, e
                     // l'ordine qui non è dato: chi vuole due cose in un punto
                     // solo scrive un edit solo.
-                    return Err(PluginError::BadArgs(format!(
-                        "due edit nello stesso punto: {}",
-                        span.start
-                    )));
+                    return Err(PluginError::BadArgs(
+                        format!("due edit nello stesso punto: {}", span.start).into(),
+                    ));
                 }
             }
             previous = Some(span);

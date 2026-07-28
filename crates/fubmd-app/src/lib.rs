@@ -10,10 +10,18 @@
 //! decisione 0023).
 //!
 //! Ciò che resta in questo file è **solo** ciò che non esiste senza un webview:
-//! le firme `#[tauri::command]`, la traduzione degli errori in `String` per
-//! l'IPC, il ponte che inoltra gli eventi del kernel a `fubmd://event`, e
-//! `run()`. Se una riga di questo file può essere spiegata senza nominare
-//! Tauri, sta nel posto sbagliato.
+//! le firme `#[tauri::command]`, il ponte che inoltra gli eventi del kernel a
+//! `fubmd://event`, e `run()`. Se una riga di questo file può essere spiegata
+//! senza nominare Tauri, sta nel posto sbagliato.
+//!
+//! **Gli errori non si traducono più qui** (§12.2). Fino a questa seduta ogni
+//! firma era `Result<_, String>` e dodici `map_err(|e| e.to_string())`
+//! buttavano via il tipo sul confine: al frontend arrivava una frase italiana,
+//! e l'unico modo di distinguere «esiste già» da «disco pieno» era cercarci
+//! dentro una sottostringa — che `frontend/src/panels/trash.ts` non faceva
+//! nemmeno, intercettando con un `catch` nudo qualunque fallimento e chiedendo
+//! sempre la stessa cosa. Adesso passa un [`PluginError`], che è serializzabile
+//! e **discriminabile**: `{"kind": "already_exists", "message": …}`.
 
 use std::sync::Arc;
 
@@ -26,7 +34,7 @@ use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fubmd_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
-use fubmd_abi::Notice;
+use fubmd_abi::{Notice, PluginError};
 use fubmd_features::VersionRef;
 use fubmd_host::{doc_id, EventSink, Host};
 use fubmd_kernel::{RenderedDocument, TrashEntry};
@@ -74,7 +82,7 @@ impl EventSink for WebviewEvents {
 }
 
 #[tauri::command]
-fn open_vault(host: State<Host>, path: String) -> Result<VaultInfo, String> {
+fn open_vault(host: State<Host>, path: String) -> Result<VaultInfo, PluginError> {
     host.open(&Utf8PathBuf::from(path))
 }
 
@@ -98,7 +106,7 @@ fn list_vaults(host: State<Host>) -> OpenVaults {
 /// Rende corrente un vault già aperto. Aprirne uno nuovo lo fa `open_vault`,
 /// che lo rende corrente da sé.
 #[tauri::command]
-fn set_current_vault(host: State<Host>, path: String) -> Result<(), String> {
+fn set_current_vault(host: State<Host>, path: String) -> Result<(), PluginError> {
     host.set_current(&Utf8PathBuf::from(path))
 }
 
@@ -107,7 +115,7 @@ fn set_current_vault(host: State<Host>, path: String) -> Result<(), String> {
 /// motivo per non chiudere: la lista è quasi sempre vuota, e quando non lo è
 /// dice cosa non è diventato durevole.
 #[tauri::command]
-fn close_vault(host: State<Host>, path: String) -> Result<Vec<String>, String> {
+fn close_vault(host: State<Host>, path: String) -> Result<Vec<String>, PluginError> {
     Ok(host
         .close_vault(&Utf8PathBuf::from(path))?
         .into_iter()
@@ -123,17 +131,21 @@ fn initial_vault() -> Option<String> {
 }
 
 #[tauri::command]
-fn list_documents(host: State<Host>, vault: Option<String>) -> Result<Vec<String>, String> {
+fn list_documents(host: State<Host>, vault: Option<String>) -> Result<Vec<String>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.documents().into_iter().map(|d| d.0).collect())
 }
 
 #[tauri::command]
-fn read_document(host: State<Host>, id: String, vault: Option<String>) -> Result<String, String> {
+fn read_document(
+    host: State<Host>,
+    id: String,
+    vault: Option<String>,
+) -> Result<String, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
-    ws.read_source(&doc_id(&id)?).map_err(|e| e.to_string())
+    ws.read_source(&doc_id(&id)?).map_err(PluginError::from)
 }
 
 #[tauri::command]
@@ -142,11 +154,11 @@ fn write_document(
     id: String,
     source: String,
     vault: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     ws.write_document(&doc_id(&id)?, &source)
-        .map_err(|e| e.to_string())
+        .map_err(PluginError::from)
 }
 
 // Le cinque azioni STRUTTURALI — crea, rinomina, cestina, ripristina, svuota —
@@ -165,10 +177,10 @@ fn write_document(
 // risposta è un nome.
 
 #[tauri::command]
-fn list_trash(host: State<Host>, vault: Option<String>) -> Result<Vec<TrashEntry>, String> {
+fn list_trash(host: State<Host>, vault: Option<String>) -> Result<Vec<TrashEntry>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
-    ws.list_trash().map_err(|e| e.to_string())
+    ws.list_trash().map_err(PluginError::from)
 }
 
 /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, … a partire da un
@@ -183,7 +195,7 @@ fn propose_free_name(
     host: State<Host>,
     id: String,
     vault: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.free_name(&DocId::new(id)).0)
@@ -197,12 +209,10 @@ fn render_embed(
     page: String,
     heading: Option<String>,
     vault: Option<String>,
-) -> Result<EmbedContent, String> {
+) -> Result<EmbedContent, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
-    let (doc_id, content) = ws
-        .render_embed(&page, heading.as_deref())
-        .map_err(|e| e.to_string())?;
+    let (doc_id, content) = ws.render_embed(&page, heading.as_deref())?;
     Ok(EmbedContent {
         doc_id: doc_id.0,
         content,
@@ -214,11 +224,11 @@ fn render_preview(
     host: State<Host>,
     id: String,
     vault: Option<String>,
-) -> Result<RenderedDocument, String> {
+) -> Result<RenderedDocument, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     ws.render_preview(&DocId::new(id))
-        .map_err(|e| e.to_string())
+        .map_err(PluginError::from)
 }
 
 // --- view dichiarative (protocollo generico) -------------------------------
@@ -243,7 +253,7 @@ fn set_active_context(
     host: State<Host>,
     context: Option<ViewContext>,
     vault: Option<String>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     Ok(ws.set_active_context(context))
@@ -270,7 +280,7 @@ fn set_system_locale(host: State<Host>, locale: Locale) -> bool {
 /// ogni view nel contenitore del suo `placement` e la ridisegna quando arriva
 /// un evento della sua maschera `refresh`. Una view di plugin compare da sola.
 #[tauri::command]
-fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>, String> {
+fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.views())
@@ -291,11 +301,10 @@ fn render_view(
     instance: Option<String>,
     params: Option<serde_json::Value>,
     vault: Option<String>,
-) -> Result<UiNode, String> {
+) -> Result<UiNode, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     ws.render_view(&istanza(view, instance, params))
-        .map_err(|e| e.to_string())
 }
 
 /// Consegna un'azione della UI al provider della view e restituisce il suo
@@ -317,7 +326,7 @@ fn view_action(
     payload: Option<serde_json::Value>,
     fields: Option<Vec<FieldValue>>,
     vault: Option<String>,
-) -> Result<ViewUpdate, String> {
+) -> Result<ViewUpdate, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     ws.view_action(
@@ -328,7 +337,6 @@ fn view_action(
             fields: fields.unwrap_or_default(),
         },
     )
-    .map_err(|e| e.to_string())
 }
 
 /// L'istanza che la shell nomina, con i due default dell'esemplare unico.
@@ -358,7 +366,10 @@ fn istanza(
 /// le stesse informazioni che leggerebbero una CLI (27.1) o un chiamante
 /// programmatico (22.4) — questo comando IPC è solo il primo dei suoi clienti.
 #[tauri::command]
-fn list_commands(host: State<Host>, vault: Option<String>) -> Result<Vec<CommandSpec>, String> {
+fn list_commands(
+    host: State<Host>,
+    vault: Option<String>,
+) -> Result<Vec<CommandSpec>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.commands())
@@ -385,7 +396,7 @@ fn invoke_command(
     args: Option<serde_json::Value>,
     mode: Option<InvokeMode>,
     vault: Option<String>,
-) -> Result<CommandOutcome, String> {
+) -> Result<CommandOutcome, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
     ws.invoke_command(
@@ -394,7 +405,6 @@ fn invoke_command(
         mode.unwrap_or(InvokeMode::Apply),
         Actor::User,
     )
-    .map_err(|e| e.to_string())
 }
 
 /// Il canale dati, **generico**: il gemello di `render_view`/`view_action`.
@@ -415,10 +425,10 @@ fn query_index(
     host: State<Host>,
     query: IndexQuery,
     vault: Option<String>,
-) -> Result<IndexResult, String> {
+) -> Result<IndexResult, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
-    ws.query_index(query).map_err(|e| e.to_string())
+    ws.query_index(query)
 }
 
 /// **Ferma un lavoro lungo** (§10.3): l'altro capo di `Host::cancel_job`, che
@@ -434,10 +444,10 @@ fn query_index(
 /// un pulsante premuto quando il lavoro è appena finito non è un errore da
 /// mostrare — è la cosa più normale che l'utente faccia.
 #[tauri::command]
-fn cancel_job(host: State<Host>, id: String, vault: Option<String>) -> Result<(), String> {
+fn cancel_job(host: State<Host>, id: String, vault: Option<String>) -> Result<(), PluginError> {
     let id = id
         .parse::<u64>()
-        .map_err(|_| format!("identità di job non valida: `{id}`"))?;
+        .map_err(|_| PluginError::BadArgs(format!("identità di job non valida: `{id}`").into()))?;
     host.cancel_job(vault.as_deref(), JobId(id))
 }
 
@@ -451,7 +461,7 @@ fn list_versions(
     host: State<Host>,
     id: String,
     vault: Option<String>,
-) -> Result<Vec<VersionRef>, String> {
+) -> Result<Vec<VersionRef>, PluginError> {
     host.list_versions(vault.as_deref(), &DocId::new(id))
 }
 
@@ -461,7 +471,7 @@ fn read_version(
     id: String,
     ts: u64,
     vault: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, PluginError> {
     host.read_version(vault.as_deref(), &DocId::new(id), ts)
 }
 
@@ -471,7 +481,7 @@ fn restore_version(
     id: String,
     ts: u64,
     vault: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     host.restore_version(vault.as_deref(), &DocId::new(id), ts)
 }
 
@@ -497,7 +507,7 @@ fn set_icon(
     path: String,
     icon: Option<String>,
     vault: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     host.set_icon(vault.as_deref(), &path, icon)
 }
 
@@ -508,7 +518,7 @@ fn set_pinned(
     id: String,
     pinned: bool,
     vault: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     host.set_pinned(vault.as_deref(), &id, pinned)
 }
 
@@ -519,7 +529,7 @@ fn set_space(
     path: String,
     space: bool,
     vault: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     host.set_space(vault.as_deref(), &path, space)
 }
 
@@ -530,7 +540,7 @@ fn set_order(
     folder: String,
     names: Vec<String>,
     vault: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     host.set_order(vault.as_deref(), &folder, names)
 }
 
@@ -556,19 +566,19 @@ fn set_setting(
     key: String,
     value: SettingValue,
     vault: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
-    ws.set_setting(&key, value).map_err(|e| e.to_string())
+    ws.set_setting(&key, value)
 }
 
 /// Dimentica ciò che era stato deciso per una chiave: torna a valere il livello
 /// sotto.
 #[tauri::command]
-fn reset_setting(host: State<Host>, key: String, vault: Option<String>) -> Result<(), String> {
+fn reset_setting(host: State<Host>, key: String, vault: Option<String>) -> Result<(), PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
-    ws.reset_setting(&key).map_err(|e| e.to_string())
+    ws.reset_setting(&key)
 }
 
 // --- lo stato di vista della shell (§11.2) ---------------------------------
@@ -602,7 +612,7 @@ fn view_state(
     host: State<Host>,
     key: String,
     vault: Option<String>,
-) -> Result<Option<serde_json::Value>, String> {
+) -> Result<Option<serde_json::Value>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.view_state(SHELL_OWNER, SHELL_INSTANCE, &key))
@@ -615,20 +625,21 @@ fn set_view_state(
     key: String,
     value: Option<serde_json::Value>,
     vault: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     // Prestito **condiviso**: lo store ha il suo lucchetto dentro, e prendere
     // qui quello esclusivo del workspace bloccherebbe chi legge per il tempo di
     // una scrittura su disco — per salvare uno scroll.
     let ws = ws.read().unwrap();
     ws.set_view_state(SHELL_OWNER, SHELL_INSTANCE, &key, value)
+        .map_err(|e| PluginError::Io(e.into()))
 }
 
 /// Chi questo host sa montare, e chi è acceso in questo vault. Non è
 /// `VaultInfo.plugins`: quello elenca chi è **dichiarato nel kernel**, e un
 /// componente spento non lo è — «spento» e «non c'è» sono due stati diversi.
 #[tauri::command]
-fn list_bundles(host: State<Host>, vault: Option<String>) -> Result<Vec<BundleInfo>, String> {
+fn list_bundles(host: State<Host>, vault: Option<String>) -> Result<Vec<BundleInfo>, PluginError> {
     host.bundles(vault.as_deref())
 }
 
@@ -640,7 +651,7 @@ fn set_plugin_enabled(
     id: String,
     enabled: bool,
     vault: Option<String>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, PluginError> {
     host.set_plugin_enabled(vault.as_deref(), &id, enabled)
 }
 
@@ -651,7 +662,7 @@ fn known_vaults(host: State<Host>) -> Vec<VaultEntry> {
 }
 
 #[tauri::command]
-fn set_vault_favorite(host: State<Host>, path: String, favorite: bool) -> Result<(), String> {
+fn set_vault_favorite(host: State<Host>, path: String, favorite: bool) -> Result<(), PluginError> {
     host.set_vault_favorite(&Utf8PathBuf::from(path), favorite)
 }
 
@@ -661,13 +672,13 @@ fn set_vault_look(
     path: String,
     icon: Option<String>,
     name: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     host.set_vault_look(&Utf8PathBuf::from(path), icon, name)
 }
 
 /// Toglie un vault dall'elenco dei conosciuti. **Non lo cancella dal disco.**
 #[tauri::command]
-fn forget_vault(host: State<Host>, path: String) -> Result<(), String> {
+fn forget_vault(host: State<Host>, path: String) -> Result<(), PluginError> {
     host.forget_vault(&Utf8PathBuf::from(path))
 }
 
@@ -676,7 +687,7 @@ fn resolve_link(
     host: State<Host>,
     page: String,
     vault: Option<String>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
     Ok(ws.resolve_link(&page).map(|d| d.0))

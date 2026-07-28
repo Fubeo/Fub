@@ -2181,25 +2181,33 @@ interface view {
     on-action: func(instance: view-instance, action: ui-action) -> result<view-update, plugin-error>;
 }
 
-/// Errore prodotto da un plugin (nativo o WASM).
+/// Errore prodotto da un plugin (nativo o WASM), e la forma con cui OGNI
+/// fallimento arriva a chi disegna.
+///
+/// Il payload è un `text` e non una `string` (§12.2): un errore è testo che
+/// qualcuno legge, ed era l'unica cosa che attraversava il confine verso uno
+/// schermo senza poter essere tradotta. È il gemello dichiarato del §12.1 —
+/// chi localizza le stringhe localizza anche gli errori.
 interface errors {
+    use text.{text};
+
     variant plugin-error {
-        unknown-command(string),
-        unknown-view(string),
-        unknown-job(string),
-        bad-args(string),
-        permission-denied(string),
-        internal(string),
+        unknown-command(text),
+        unknown-view(text),
+        unknown-job(text),
+        bad-args(text),
+        permission-denied(text),
+        internal(text),
         /// Il sorgente su cui l'operazione era stata calcolata non è più quello
         /// (`edit-request.base`). Caso a sé e non `bad-args` perché è l'unico
         /// errore che non è una colpa di chi chiama: gli argomenti erano giusti
         /// quando li ha calcolati, e la risposta giusta è ricalcolare.
-        conflict(string),
+        conflict(text),
         /// NESSUNO serve questa domanda: nessun indice ha dichiarato la rotta
         /// che servirebbe. Distinguerlo da «chi la serve ha fallito» è metà del
         /// valore del routing dichiarato — chi disegna deve poter scegliere fra
         /// «installa un indice» e «qualcosa è andato storto».
-        unserved(string),
+        unserved(text),
         /// ANNULLATO: il lavoro non è fallito, è stato fermato — da chi lo ha
         /// chiesto, o dalla chiusura del vault. È l'unico esito che non è un
         /// difetto di nessuno, e chi disegna deve poterlo dire diversamente:
@@ -2208,7 +2216,26 @@ interface errors {
         /// premuto. Lo riceve chi chiama una capacità dell'host dopo che il
         /// proprio job è stato annullato: la cancellazione non aggiunge una
         /// capacità, toglie le altre.
-        cancelled(string),
+        cancelled(text),
+        /// NON C'È: il documento, la versione, la voce di cestino che si nomina
+        /// non esiste. Distinto da `bad-args` perché l'argomento ERA ben
+        /// formato — chi lo ha chiesto non ha sbagliato a scriverlo, semmai
+        /// qualcuno l'ha cancellato nel frattempo. Chi disegna deve poter dire
+        /// «non esiste più» invece di «hai sbagliato a chiedere», e chi
+        /// automatizza deve poter smettere invece di correggere.
+        not-found(text),
+        /// C'È GIÀ: il path che si vuole occupare è occupato. È l'unica
+        /// variante che rende vero il ramo del ripristino dal cestino: solo
+        /// qui la domanda «lo ripristino con un altro nome?» è quella giusta.
+        /// Con un `io` o un `permission-denied` è la domanda sbagliata, e la
+        /// risposta affermativa ritenta qualcosa che fallirà uguale.
+        already-exists(text),
+        /// IL SUPPORTO HA DETTO DI NO: disco pieno, file in uso, cartella
+        /// sparita sotto i piedi, path non UTF-8. Non è `internal`, e la
+        /// differenza è chi ha sbagliato: `internal` è un difetto di chi ha
+        /// scritto il codice, questo è il mondo. Chi disegna lo dice
+        /// diversamente («riprova», non «segnala un bug»).
+        io(text),
     }
 }
 

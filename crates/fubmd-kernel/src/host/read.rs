@@ -12,7 +12,7 @@ use fubmd_abi::traits::{
 };
 use fubmd_abi::PluginError;
 
-use crate::workspace::{collect_data_files, fenced_doc_id, plugin_error, Workspace};
+use crate::workspace::{collect_data_files, fenced_doc_id, Workspace};
 
 /// L'host del percorso di **lettura** (`Workspace::render_view`, l'export):
 /// presta `&Workspace`, non `&mut`.
@@ -39,9 +39,7 @@ pub(crate) struct ReadHost<'a> {
 impl VaultRead for ReadHost<'_> {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
         let id = fenced_doc_id(id)?;
-        self.ws
-            .read_source(&id)
-            .map_err(|e| PluginError::Internal(e.to_string()))
+        self.ws.read_source(&id).map_err(PluginError::from)
     }
 
     /// Leggere una revisione è una lettura: una view che prepara una modifica
@@ -49,7 +47,7 @@ impl VaultRead for ReadHost<'_> {
     /// consegnarla poi da `on_action`, dove l'host sa scrivere.
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
         let id = fenced_doc_id(id)?;
-        self.ws.document_revision(&id).map_err(plugin_error)
+        self.ws.document_revision(&id).map_err(PluginError::from)
     }
 
     fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
@@ -65,7 +63,7 @@ impl VaultRead for ReadHost<'_> {
     /// disegnando senza chiedere all'app di passargliela.
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
         let id = fenced_doc_id(id)?;
-        self.ws.read_model(&id).map_err(plugin_error)
+        self.ws.read_model(&id).map_err(PluginError::from)
     }
 
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
@@ -75,7 +73,7 @@ impl VaultRead for ReadHost<'_> {
     /// Elencare il cestino è una lettura: un pannello "cestino" è una view, e
     /// una view disegna dal percorso di render.
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
-        self.ws.list_trash().map_err(plugin_error)
+        self.ws.list_trash().map_err(PluginError::from)
     }
 }
 
@@ -88,7 +86,7 @@ impl DataRead for ReadHost<'_> {
         match std::fs::read(&path) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}"))),
+            Err(e) => Err(PluginError::Internal(format!("{path}: {e}").into())),
         }
     }
 

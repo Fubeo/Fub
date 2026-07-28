@@ -74,7 +74,7 @@ impl Plugin for Inventario {
                 )?;
                 Ok(serde_json::json!({ "note": documenti.total, "titoli": titoli }))
             }
-            altro => Err(PluginError::UnknownJob(altro.to_string())),
+            altro => Err(PluginError::UnknownJob(altro.into())),
         }
     }
 }

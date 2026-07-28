@@ -28,6 +28,7 @@
 import { api } from "../host/ipc";
 import { organizzazione } from "../host/query";
 import { emit, metaVuota, state } from "./store";
+import { errorText } from "../host/errors";
 
 /// Rilegge l'organizzazione del vault appena aperto. Non lancia: un sidecar
 /// rotto è una condizione prevista, non un avvio fallito — il kernel risponde
@@ -37,7 +38,7 @@ export async function loadOrganization(): Promise<void> {
   try {
     state.meta = await organizzazione();
   } catch (e) {
-    console.error(`FubMD: organizzazione del vault illeggibile: ${e}`);
+    console.error(`FubMD: organizzazione del vault illeggibile: ${errorText(e)}`);
     state.meta = metaVuota();
   }
 }
@@ -93,7 +94,7 @@ async function scrivi(
   try {
     await scrittura();
   } catch (e) {
-    console.error(`FubMD: organizzazione non salvata: ${e}`);
+    console.error(`FubMD: organizzazione non salvata: ${errorText(e)}`);
     return;
   }
   applica(state.meta);

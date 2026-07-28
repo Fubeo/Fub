@@ -7,6 +7,7 @@ import { $ } from "../ui/dom";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import { openDocument } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
+import { errorText } from "../host/errors";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -77,7 +78,7 @@ async function runSearch(): Promise<void> {
   } catch (e) {
     // Resta il caso in cui **nessuno** serve la ricerca: un vault aperto senza
     // indice full-text. È una mancanza, non zero risultati, e va detta.
-    if (seq === searchSeq) showSearchResults([], String(e));
+    if (seq === searchSeq) showSearchResults([], errorText(e));
     return;
   }
   if (seq !== searchSeq) return;

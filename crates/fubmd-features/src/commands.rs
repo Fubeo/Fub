@@ -386,7 +386,7 @@ impl CommandProvider for CoreCommands {
             SETTINGS_RESET => settings_reset(args, mode, host),
             SETTINGS_EXPORT => settings_export(host),
             SETTINGS_IMPORT => settings_import(args, mode, host),
-            other => Err(PluginError::UnknownCommand(other.to_string())),
+            other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
 }
@@ -408,7 +408,7 @@ fn selection_wikilink(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let stato = |why: &str| PluginError::BadArgs(why.to_string());
+    let stato = |why: &str| PluginError::BadArgs(why.to_string().into());
     let context = host
         .active_context()
         .ok_or_else(|| stato("nessun pannello attivo"))?;
@@ -485,7 +485,9 @@ fn vault_replace(
         // questo comando. Il vocabolario dei parametri resta piccolo apposta —
         // ciò che una specie non esprime lo dice il comando, e lo dice qui.
         return Err(PluginError::BadArgs(
-            "`find` non può essere vuoto: sostituirebbe il nulla ovunque".to_string(),
+            "`find` non può essere vuoto: sostituirebbe il nulla ovunque"
+                .to_string()
+                .into(),
         ));
     }
 
@@ -618,7 +620,7 @@ fn note_rename(
         .text("to")
         .map(str::trim)
         .filter(|t| !t.is_empty())
-        .ok_or_else(|| PluginError::BadArgs("`to` non può essere vuoto".to_string()))?;
+        .ok_or_else(|| PluginError::BadArgs("`to` non può essere vuoto".to_string().into()))?;
     let to = DocId::new(con_estensione(to));
 
     if mode.is_dry_run() {
@@ -659,7 +661,9 @@ fn note_trash(
         .or_else(|| host.active_context().and_then(|c| c.doc))
         .ok_or_else(|| {
             PluginError::BadArgs(
-                "nessuna nota indicata e nessuna nota aperta nel pannello attivo".to_string(),
+                "nessuna nota indicata e nessuna nota aperta nel pannello attivo"
+                    .to_string()
+                    .into(),
             )
         })?;
 
@@ -694,7 +698,7 @@ fn trash_restore(
             .list_trash()?
             .into_iter()
             .find(|e| e.id == entry)
-            .ok_or_else(|| PluginError::BadArgs(format!("`{entry}` non è nel cestino")))?;
+            .ok_or_else(|| PluginError::BadArgs(format!("`{entry}` non è nel cestino").into()))?;
         let target = to.unwrap_or(voce.original);
         return Ok(piano(
             format!("«{entry}» torna come «{target}»"),
@@ -855,7 +859,7 @@ fn note_task_toggle(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let stato = |why: String| PluginError::BadArgs(why);
+    let stato = |why: String| PluginError::BadArgs(why.into());
     let context = host.active_context();
 
     let doc = args
@@ -948,9 +952,9 @@ fn posizione(n: f64) -> Result<usize, PluginError> {
     if n.is_finite() && n >= 0.0 && n.fract() == 0.0 {
         Ok(n as usize)
     } else {
-        Err(PluginError::BadArgs(format!(
-            "`at` è una posizione in byte: {n} non lo è"
-        )))
+        Err(PluginError::BadArgs(
+            format!("`at` è una posizione in byte: {n} non lo è").into(),
+        ))
     }
 }
 
@@ -1045,10 +1049,13 @@ fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
 fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
     match host.query_index(IndexQuery::Settings { plugin: None })? {
         IndexResult::Settings(entries) => Ok(entries),
-        other => Err(PluginError::Internal(format!(
-            "risposta fuori tema: attese delle impostazioni, arrivato {}",
-            other.kind_name()
-        ))),
+        other => Err(PluginError::Internal(
+            format!(
+                "risposta fuori tema: attese delle impostazioni, arrivato {}",
+                other.kind_name()
+            )
+            .into(),
+        )),
     }
 }
 
@@ -1060,7 +1067,7 @@ fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
 /// `ParamSpec`, un livello più in là: qui la specie non la dichiara il comando,
 /// la dichiara la chiave che si sta toccando.
 fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginError> {
-    let male = |atteso: &str| PluginError::BadArgs(format!("`{raw}` non è {atteso}"));
+    let male = |atteso: &str| PluginError::BadArgs(format!("`{raw}` non è {atteso}").into());
     match kind {
         SettingKind::Toggle { .. } => match raw.trim().to_ascii_lowercase().as_str() {
             "true" | "1" | "on" | "sì" | "si" => Ok(SettingValue::Toggle(true)),
@@ -1093,7 +1100,7 @@ fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> 
         .into_iter()
         .find(|e| e.spec.key == key)
         .ok_or_else(|| {
-            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`"))
+            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
         })
 }
 
@@ -1110,10 +1117,13 @@ fn nega_se_non_scrivibile(entry: &SettingEntry) -> Result<(), PluginError> {
     if entry.spec.program_writable {
         return Ok(());
     }
-    Err(PluginError::PermissionDenied(format!(
-        "`{}` non è scrivibile da un programma: la cambia l'utente",
-        entry.spec.key
-    )))
+    Err(PluginError::PermissionDenied(
+        format!(
+            "`{}` non è scrivibile da un programma: la cambia l'utente",
+            entry.spec.key
+        )
+        .into(),
+    ))
 }
 
 fn settings_set(
@@ -1186,7 +1196,7 @@ fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError
             decise.insert(
                 entry.spec.key.clone(),
                 serde_json::to_value(&entry.value)
-                    .map_err(|e| PluginError::Internal(e.to_string()))?,
+                    .map_err(|e| PluginError::Internal(e.to_string().into()))?,
             );
         }
     }
@@ -1214,7 +1224,7 @@ fn settings_import(
 ) -> Result<CommandOutcome, PluginError> {
     let raw = args.text("json").expect("parametro obbligatorio");
     let parsed: serde_json::Value = serde_json::from_str(raw)
-        .map_err(|e| PluginError::BadArgs(format!("non è un JSON valido: {e}")))?;
+        .map_err(|e| PluginError::BadArgs(format!("non è un JSON valido: {e}").into()))?;
     let object = parsed
         .as_object()
         .ok_or_else(|| PluginError::BadArgs("atteso un oggetto `{\"chiave\": valore}`".into()))?;
@@ -1403,7 +1413,7 @@ mod tests {
         let PluginError::BadArgs(msg) = err else {
             panic!("uno stato che non permette l'operazione si spiega")
         };
-        assert!(msg.contains("non salvate"), "{msg}");
+        assert!(msg.to_string().contains("non salvate"), "{msg}");
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
             "una nota di prova",
@@ -1634,7 +1644,7 @@ mod tests {
         let PluginError::BadArgs(msg) = err else {
             panic!("uno stato che non permette l'operazione si spiega")
         };
-        assert!(msg.contains("non salvate"), "{msg}");
+        assert!(msg.to_string().contains("non salvate"), "{msg}");
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
             TASK_SOURCE,

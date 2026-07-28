@@ -462,7 +462,7 @@ fn i_job_in_coda_di_chi_si_spegne_ricevono_un_esito() {
         })
         .expect("il job ha avuto il suo `JobDone`");
     assert!(
-        matches!(esito, Err(PluginError::Internal(ref msg)) if msg.contains("prova.uno")),
+        matches!(esito, Err(PluginError::Internal(ref msg)) if msg.to_string().contains("prova.uno")),
         "e l'esito dice cosa è successo, nominando chi si è spento: {esito:?}"
     );
 }

@@ -104,6 +104,38 @@ export interface BacklinkRef {
   context: string | null;
 }
 
+// --- l'errore (rispecchia fubmd_abi::error::PluginError, §12.2) -------------
+
+// Il `kind` di un fallimento: le dodici specie che il contratto sa distinguere.
+//
+// Fino alla decisione 0041 questo tipo NON esisteva da questa parte, e non
+// perché nessuno l'avesse scritto: il confine Tauri stringava ogni errore, e
+// quel che arrivava qui era una frase italiana. Distinguere «esiste già» da
+// «disco pieno» voleva dire cercarci dentro una sottostringa — e `trash.ts` non
+// ci provava nemmeno, intercettando qualunque fallimento con un `catch` nudo e
+// chiedendo sempre la stessa cosa.
+export type PluginErrorKind =
+  | "unknown_command"
+  | "unknown_view"
+  | "unknown_job"
+  | "bad_args"
+  | "permission_denied"
+  | "internal"
+  | "conflict"
+  | "unserved"
+  | "cancelled"
+  | "not_found"
+  | "already_exists"
+  | "io";
+
+// Tag ADIACENTE (`kind`/`message`), come `UiValue`: il payload è già risolto —
+// il kernel lo traduce prima di lasciarlo uscire (§12.1) — quindi qui è una
+// stringa e non un `Text`.
+export interface PluginError {
+  kind: PluginErrorKind;
+  message: string;
+}
+
 // --- UI dichiarativa (rispecchia fubmd_abi::ui) -----------------------------
 
 // L'azione attaccata a un nodo: l'id e il payload che il PROVIDER si porta

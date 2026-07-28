@@ -32,6 +32,7 @@
 use std::sync::Mutex;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
 /// La versione di schema del file (§15.3).
@@ -153,11 +154,11 @@ impl VaultRegistry {
     }
 
     /// Un vault è stato aperto: entra nell'elenco, o risale in cima.
-    pub fn note_opened(&self, root: &Utf8Path, now: u64) -> Result<(), String> {
+    pub fn note_opened(&self, root: &Utf8Path, now: u64) -> Result<(), PluginError> {
         self.update(root, |entry| entry.last_opened = now)
     }
 
-    pub fn set_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), String> {
+    pub fn set_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
         self.update(root, |entry| entry.favorite = favorite)
     }
 
@@ -167,7 +168,7 @@ impl VaultRegistry {
         root: &Utf8Path,
         icon: Option<String>,
         name: Option<String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), PluginError> {
         self.update(root, |entry| {
             entry.icon = icon.clone();
             if let Some(name) = name.clone() {
@@ -179,7 +180,7 @@ impl VaultRegistry {
     /// Dimentica un vault. **Non lo tocca sul disco**, ed è tutto ciò che questa
     /// funzione fa: un registro che cancellasse i vault sarebbe un elenco di
     /// scorciatoie con il potere di distruggere ciò a cui puntano.
-    pub fn forget(&self, root: &Utf8Path) -> Result<(), String> {
+    pub fn forget(&self, root: &Utf8Path) -> Result<(), PluginError> {
         let mut entries = self.entries.lock().expect("registro dei vault");
         let mut next = entries.clone();
         next.retain(|e| e.root != root.as_str());
@@ -192,7 +193,7 @@ impl VaultRegistry {
     /// Al contrario, un salvataggio fallito lascerebbe il registro in memoria
     /// diverso da quello sul disco, e il chiamante che ha ricevuto l'errore non
     /// avrebbe modo di saperlo.
-    fn update(&self, root: &Utf8Path, f: impl FnOnce(&mut VaultEntry)) -> Result<(), String> {
+    fn update(&self, root: &Utf8Path, f: impl FnOnce(&mut VaultEntry)) -> Result<(), PluginError> {
         let mut entries = self.entries.lock().expect("registro dei vault");
         let mut next = entries.clone();
         let root = root.as_str();
@@ -234,23 +235,32 @@ impl VaultRegistry {
         Ok(())
     }
 
-    fn save(&self, entries: &[VaultEntry]) -> Result<(), String> {
+    fn save(&self, entries: &[VaultEntry]) -> Result<(), PluginError> {
         let Some(path) = &self.path else {
             return Ok(());
         };
         if !self.readable {
-            return Err(format!(
-                "{path} non si è potuto leggere all'apertura: FubMD non lo \
-                 sovrascrive, o i vault che ci sono elencati andrebbero persi. \
-                 Correggilo o spostalo, e riapri."
+            // `Io` e non `PermissionDenied`: nessuno ha negato un permesso, è un
+            // file che non si può usare — e il verbo che chi legge deve leggere
+            // è «correggilo e riapri», non «non ti è consentito».
+            return Err(PluginError::Io(
+                format!(
+                    "{path} non si è potuto leggere all'apertura: FubMD non lo \
+                     sovrascrive, o i vault che ci sono elencati andrebbero persi. \
+                     Correggilo o spostalo, e riapri."
+                )
+                .into(),
             ));
         }
         let file = RegistryFile {
             version: SCHEMA_VERSION,
             vaults: entries.to_vec(),
         };
-        let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
-        fubmd_kernel::write_atomic(path, json.as_bytes())
+        // Serializzare una struttura nostra che non serializza è un difetto di
+        // chi l'ha scritta, non il mondo: qui `Internal` è la verità.
+        let json = serde_json::to_string_pretty(&file)
+            .map_err(|e| PluginError::Internal(e.to_string().into()))?;
+        fubmd_kernel::write_atomic(path, json.as_bytes()).map_err(|e| PluginError::Io(e.into()))
     }
 }
 
@@ -346,7 +356,11 @@ mod tests {
         let e = reg
             .note_opened(Utf8Path::new("/vault"), 1)
             .expect_err("scrivere su un registro che non si è letto è un rifiuto");
-        assert!(e.contains("non lo sovrascrive"), "{e}");
+        assert!(
+            matches!(e, PluginError::Io(_)),
+            "un registro che non si è letto è il mondo, non un bug: {e}"
+        );
+        assert!(e.to_string().contains("non lo sovrascrive"), "{e}");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), rotto);
     }
 }

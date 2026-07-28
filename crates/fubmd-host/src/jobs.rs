@@ -156,10 +156,9 @@ impl JobHost {
     /// si annulla.
     fn stopped(&self) -> Result<(), PluginError> {
         if self.cancelled.load(Ordering::Relaxed) {
-            return Err(PluginError::Cancelled(format!(
-                "il job di `{}` è stato annullato",
-                self.plugin
-            )));
+            return Err(PluginError::Cancelled(
+                format!("il job di `{}` è stato annullato", self.plugin).into(),
+            ));
         }
         Ok(())
     }

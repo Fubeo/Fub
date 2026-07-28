@@ -11,6 +11,7 @@
 // diventare, con l'uso, il posto dove sta la logica di tutti.
 import { onKernelEvent } from "../host/ipc";
 import type { KernelEvent, KernelNotice, Origin } from "../host/contract";
+import { errorText } from "../host/errors";
 
 type EventType = KernelEvent["type"];
 
@@ -68,7 +69,7 @@ function chiama(fn: () => void): void {
   try {
     fn();
   } catch (e) {
-    console.error(`FubMD: un ascoltatore di eventi del kernel ha lanciato: ${e}`);
+    console.error(`FubMD: un ascoltatore di eventi del kernel ha lanciato: ${errorText(e)}`);
   }
 }
 

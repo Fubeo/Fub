@@ -28,32 +28,40 @@ dal contratto col catalogo di chi l'ha scritto. È il ritaglio più largo fatto
 alla linea di base dopo quello della [0021](../decisions/0021-il-confine.md), e
 per la stessa ragione: ciò che scade col freeze è la **forma**, non la larghezza.
 
-Restano due facce. Il §12.2 è il gemello, ed è la prossima: un errore è oggi
-l'unica cosa che attraversa il confine verso uno schermo e **non si può ancora
-tradurre**, perché ogni variante di `PluginError` porta una `String`. Il catalogo
-della shell (12.4) non ha una cartella perché non ha ancora una decisione — ed è
-la prova che le tre erano una.
+Il gemello l'ha chiuso la
+[decisione 0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md), che
+ha portato la stessa forma dove serviva di più: **anche un errore è testo che
+qualcuno legge** — e, in più, è una domanda su cui qualcuno rama. Il payload di
+ogni variante è un `Text`, la forma sul filo è discriminabile
+(`{kind, message}`), e tre varianti nuove — `not-found`, `already-exists`, `io`
+— distinguono ciò che prima passava tutto come `internal`. Il confine Tauri non
+stringa più niente.
 
-### 12.2 Errori tipizzati al confine, non `String`
+Resta **una** faccia, ed è il §12.4: il catalogo della shell non ha una cartella
+perché non ha ancora una decisione — ed è la prova che le tre erano una.
 
-*ex §1.11 · contratto · **P0** — il gemello dichiarato della 12.1*
+### ~~12.2 Errori tipizzati al confine, non `String`~~
 
-- [ ] **Un errore con codice e parametri**: i comandi Tauri restituiscono
-      `Result<_, String>` con la prosa italiana del kernel. Il costo è già
-      visibile: il ripristino dal cestino (`panels/trash.ts`) ha un `catch` nudo che
-      intercetta **qualunque** errore e assume "path di nuovo occupato", quindi
-      un errore di I/O o di permessi produce all'utente la domanda sbagliata — e
-      la risposta «Ripristina» a quella domanda ritenta con un nome libero, che
-      per un disco pieno fallirà di nuovo.
-- [ ] **`PluginError`/`KernelError` sono nel contratto**, quindi la forma scade
-      col freeze; ed è il gemello della decisione del ~~§12.1~~ — chi localizza
-      le stringhe localizza anche gli errori, e un messaggio già composto non si
-      traduce. Adesso che la [0040](../decisions/0040-chi-localizza.md) ha deciso
-      *come* si localizza, questa voce sa già che forma prendere: il payload
-      diventa un `Text`, `Display` resta la forma per il log, e il confine Tauri
-      smette di restituire `Result<_, String>`. Restano da decidere le **varianti
-      che mancano** — `KernelError` non è nel contratto, quindi `NotFound`,
-      `AlreadyExists` e `Io` oggi arrivano tutte come prosa dentro un `internal`.
+*ex §1.11 · contratto · **P0** — il gemello dichiarato della 12.1* ·
+**chiusa** dalla [decisione 0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)
+
+- [x] **Un errore con codice e parametri.** Il payload di ogni variante di
+      `PluginError` è un `Text` — quindi traducibile, con la stessa scala di
+      ripiego della 0040 — e la forma sul filo è **adiacente e discriminabile**:
+      `{"kind": "already_exists", "message": …}`. `Display` resta la forma per
+      il log.
+- [x] **Le varianti che mancavano**, nate da un cliente vero e non da una
+      tassonomia: `not-found`, `already-exists` e `io` in coda alle nove. Il
+      `catch` nudo di `panels/trash.ts` è adesso un ramo su
+      `already_exists`, e ogni altro fallimento si notifica invece di produrre
+      la domanda sbagliata.
+- [x] **Il confine non stringa più.** Trentacinque firme `#[tauri::command]`
+      passano da `Result<_, String>` a `Result<_, PluginError>`, e `fubmd-host`
+      parla `PluginError` fino in fondo — non converte l'app, o i cinque clienti
+      previsti dell'host si ridurrebbero la discriminabilità dalla prosa.
+      `KernelError` resta **fuori** dal contratto (è la lingua dell'host): la
+      traduzione è un `From` scritto una volta sola, con le quattro scelte non
+      ovvie motivate accanto al codice.
 
 *Sblocca:* 24.2 (error reporting chiaro, repair), 10.5 (alert e notifiche),
 16.3 (automation error handling, retry), 25.2.

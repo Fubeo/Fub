@@ -38,6 +38,7 @@ import { mountHistory } from "./panels/history";
 import { configurePreview } from "./panels/preview";
 import { clearSearch, mountSearch, searchFor } from "./panels/search";
 import { mountTrash } from "./panels/trash";
+import { errorText } from "./host/errors";
 
 const vaultPathEl = $("#vault-path");
 
@@ -212,5 +213,5 @@ async function avvisaSeNessunoGuarda(): Promise<void> {
 // chiede una superficie vera, che oggi non c'è.
 init().catch((e) => {
   console.error("FubMD: avvio fallito", e);
-  vaultPathEl.textContent = `avvio fallito: ${e}`;
+  vaultPathEl.textContent = `avvio fallito: ${errorText(e)}`;
 });

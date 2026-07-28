@@ -216,10 +216,11 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   non sa dire «a meno di un refuso» né, di conseguenza, «esattamente», e gli
   estratti sono ancorati allo snippet e non al documento, quindi cercare *dentro*
   la nota aperta è inesprimibile. Fuori da quei capitoli restano P0, e per la stessa ragione,
-  l'identità del documento (§13.1: il path è per sempre la chiave?), gli errori
-  tipizzati al confine (§12.2) e la decisione sulle stringhe e sul locale
-  (§12.1), che nessun contenitore della shell può prendere al posto del
-  contratto. Chiudono l'elenco i presidi (l'SDK come superficie di riuso,
+  l'identità del documento (§13.1: il path è per sempre la chiave?), che nessun
+  contenitore della shell può prendere al posto del contratto — le stringhe e il
+  locale (§12.1) e gli errori tipizzati al confine (§12.2) le hanno prese le
+  decisioni [0040](decisions/0040-chi-localizza.md) e
+  [0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md). Chiudono l'elenco i presidi (l'SDK come superficie di riuso,
   il banco di prova del kernel copiato diciotto volte, le regole scritte due
   volte in due linguaggi, un crate per bundle di feature) e il **debito**
   riportato dal quarto audit, che ha un milestone suo.

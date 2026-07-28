@@ -195,14 +195,20 @@ impl Shared {
             .body(&job.plugin);
 
         let outcome = match plugin {
-            None => Err(PluginError::Internal(format!(
-                "`{}` non è un bundle montato: il job `{}` non ha un corpo",
-                job.plugin, job.spec.job
-            ))),
-            Some(_) if flag.load(Ordering::Relaxed) => Err(PluginError::Cancelled(format!(
-                "il job `{}` è stato annullato prima di partire",
-                job.spec.job
-            ))),
+            None => Err(PluginError::Internal(
+                format!(
+                    "`{}` non è un bundle montato: il job `{}` non ha un corpo",
+                    job.plugin, job.spec.job
+                )
+                .into(),
+            )),
+            Some(_) if flag.load(Ordering::Relaxed) => Err(PluginError::Cancelled(
+                format!(
+                    "il job `{}` è stato annullato prima di partire",
+                    job.spec.job
+                )
+                .into(),
+            )),
             Some(plugin) => {
                 // Le due cose che il job non sa di sé, e che sa il runner:
                 // quando deve smettere (la bandiera) e come si chiama (l'id,
@@ -233,7 +239,7 @@ impl Shared {
     /// Riconsegna un job **senza eseguirlo**: è stato chiesto, e chi lo ha
     /// chiesto aspetta un `JobDone`.
     fn refuse(&self, job: PendingJob, why: &str) -> PluginError {
-        let refusal = PluginError::Cancelled(format!("il job `{}` {why}", job.spec.job));
+        let refusal = PluginError::Cancelled(format!("il job `{}` {why}", job.spec.job).into());
         self.forget(job.id);
         self.workspace
             .write()

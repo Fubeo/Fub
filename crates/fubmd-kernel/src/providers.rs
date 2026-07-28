@@ -316,14 +316,14 @@ impl ProviderRegistry {
     pub(crate) fn view_owner(&self, view: &str) -> std::result::Result<usize, PluginError> {
         self.views
             .position(|r| r.specs.iter().any(|spec| spec.id == view))
-            .ok_or_else(|| PluginError::UnknownView(view.to_string()))
+            .ok_or_else(|| PluginError::UnknownView(view.to_string().into()))
     }
 
     /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
     pub(crate) fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
         self.commands
             .position(|r| r.specs.iter().any(|spec| spec.id == command))
-            .ok_or_else(|| PluginError::UnknownCommand(command.to_string()))
+            .ok_or_else(|| PluginError::UnknownCommand(command.to_string().into()))
     }
 
     /// I parametri di un'istanza reggono la spec che il provider ha dichiarato?
@@ -336,7 +336,7 @@ impl ProviderRegistry {
             .specs
             .iter()
             .find(|spec| spec.id == instance.view)
-            .ok_or_else(|| PluginError::UnknownView(instance.view.clone()))?;
+            .ok_or_else(|| PluginError::UnknownView(instance.view.clone().into()))?;
         spec.validate_params(&instance.params)
     }
 

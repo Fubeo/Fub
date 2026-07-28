@@ -19,6 +19,7 @@ import { api } from "../host/ipc";
 import { $ } from "../ui/dom";
 import { mountTree } from "../ui/node";
 import { setSanitizedHtml } from "../ui/sanitize";
+import { errorText } from "../host/errors";
 
 const previewEl = $("#preview");
 
@@ -99,7 +100,7 @@ function wireWikilinks(container: HTMLElement): void {
       } catch (err) {
         // Link non risolto e nota non creabile: si segna, non si tace.
         a.classList.add("unresolved");
-        console.error(`FubMD: non riesco ad aprire «${page}»: ${err}`);
+        console.error(`FubMD: non riesco ad aprire «${page}»: ${errorText(err)}`);
       }
     });
   });

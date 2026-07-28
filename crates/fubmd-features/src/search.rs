@@ -272,7 +272,7 @@ impl SearchIndex {
             std::fs::create_dir_all(dir).map_err(|e| io_err(dir, e))?;
             index = Some(
                 Index::create_in_dir(dir, schema.clone())
-                    .map_err(|e| PluginError::Internal(format!("creazione indice: {e}")))?,
+                    .map_err(|e| PluginError::Internal(format!("creazione indice: {e}").into()))?,
             );
         }
         let index = index.expect("appena creato se assente");
@@ -282,10 +282,13 @@ impl SearchIndex {
         // istanza di FubMD ha già questo vault aperto, e la sua copia è viva e
         // corretta. Si rinuncia alla ricerca, non ai dati di qualcun altro.
         let writer: IndexWriter = index.writer(WRITER_HEAP).map_err(|e| {
-            PluginError::Internal(format!(
-                "writer indice ({dir}): {e} — un'altra istanza di FubMD ha \
+            PluginError::Internal(
+                format!(
+                    "writer indice ({dir}): {e} — un'altra istanza di FubMD ha \
                  forse questo vault già aperto"
-            ))
+                )
+                .into(),
+            )
         })?;
         let reader = index
             .reader_builder()
@@ -293,7 +296,7 @@ impl SearchIndex {
             // sospeso): niente thread di watch sul meta.json.
             .reload_policy(ReloadPolicy::Manual)
             .try_into()
-            .map_err(|e| PluginError::Internal(format!("reader indice: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("reader indice: {e}").into()))?;
 
         // L'epoca dell'indice sul disco. Le impronte che le corrispondono
         // arrivano da `activate`, l'unico posto dove c'è un host per leggerle.
@@ -341,7 +344,7 @@ fn wipe(dir: &Utf8Path) -> Result<(), PluginError> {
 }
 
 fn io_err(path: &Utf8Path, e: std::io::Error) -> PluginError {
-    PluginError::Internal(format!("{path}: {e}"))
+    PluginError::Internal(format!("{path}: {e}").into())
 }
 
 impl SearchIndex {
@@ -417,10 +420,10 @@ impl SearchIndex {
         };
         let opstamp = writer
             .commit()
-            .map_err(|e| PluginError::Internal(format!("commit indice: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("commit indice: {e}").into()))?;
         self.reader
             .reload()
-            .map_err(|e| PluginError::Internal(format!("reload indice: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("reload indice: {e}").into()))?;
         self.opstamp.store(opstamp, Ordering::Relaxed);
         self.dirty.store(false, Ordering::Release);
         Ok(())
@@ -475,7 +478,7 @@ impl SearchIndex {
                 .collect(),
         };
         let raw = serde_json::to_vec(&manifest)
-            .map_err(|e| PluginError::Internal(format!("manifest: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("manifest: {e}").into()))?;
         host.data_write(MANIFEST, &raw)?;
         self.manifest_at = Some(opstamp);
         Ok(())
@@ -518,7 +521,7 @@ impl SearchIndex {
 
         let total = searcher
             .search(&*query, &tantivy::collector::Count)
-            .map_err(|e| PluginError::Internal(format!("conteggio: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("conteggio: {e}").into()))?;
         let (offset, limit) = match page {
             // Senza finestra si restituisce tutto ciò che combacia: il tetto è
             // il conteggio, non un numero inventato qui.
@@ -539,7 +542,7 @@ impl SearchIndex {
             .order_by_score();
         let top = searcher
             .search(&*query, &collector)
-            .map_err(|e| PluginError::Internal(format!("ricerca: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("ricerca: {e}").into()))?;
 
         // Gli snippet li generano le sole foglie di **testo**: evidenziare la
         // cartella o il tag per cui una nota è stata selezionata non vuol dire
@@ -555,7 +558,7 @@ impl SearchIndex {
                         .collect::<Vec<_>>(),
                 ));
                 let mut gen = SnippetGenerator::create(&searcher, &*text_query, f.body)
-                    .map_err(|e| PluginError::Internal(format!("snippet: {e}")))?;
+                    .map_err(|e| PluginError::Internal(format!("snippet: {e}").into()))?;
                 gen.set_max_num_chars(SNIPPET_CHARS);
                 Some(gen)
             }
@@ -565,7 +568,7 @@ impl SearchIndex {
         for (score, address) in top {
             let doc: TantivyDocument = searcher
                 .doc(address)
-                .map_err(|e| PluginError::Internal(format!("lettura documento: {e}")))?;
+                .map_err(|e| PluginError::Internal(format!("lettura documento: {e}").into()))?;
             let Some(id) = doc.get_first(f.doc_id).and_then(|v| v.as_str()) else {
                 continue;
             };
@@ -700,9 +703,9 @@ impl SearchIndex {
             }
             // Il routing non manda qui ciò che non è stato dichiarato: se
             // succede è un errore del kernel, non una domanda malposta.
-            other => Err(PluginError::Unserved(format!(
-                "la ricerca non valuta questa foglia: {other:?}"
-            ))),
+            other => Err(PluginError::Unserved(
+                format!("la ricerca non valuta questa foglia: {other:?}").into(),
+            )),
         }
     }
 
@@ -795,7 +798,7 @@ impl SearchIndex {
         let mut analyzer = self
             .index
             .tokenizer_for_field(field)
-            .map_err(|e| PluginError::Internal(format!("tokenizer: {e}")))?;
+            .map_err(|e| PluginError::Internal(format!("tokenizer: {e}").into()))?;
         let mut terms = Vec::new();
         let mut stream = analyzer.token_stream(text);
         while let Some(token) = stream.next() {
@@ -955,7 +958,7 @@ impl IndexProvider for SearchIndex {
         };
         writer
             .wait_merging_threads()
-            .map_err(|e| PluginError::Internal(format!("chiusura indice: {e}")))
+            .map_err(|e| PluginError::Internal(format!("chiusura indice: {e}").into()))
     }
 
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
@@ -975,7 +978,8 @@ impl IndexProvider for SearchIndex {
                     return Err(PluginError::BadArgs(
                         "la ricerca seleziona: ordinare per proprietà e scegliere \
                          le colonne li fa chi ha il frontmatter"
-                            .to_string(),
+                            .to_string()
+                            .into(),
                     ));
                 }
                 Ok(IndexResult::Documents(self.search(&matching, page)?))
@@ -986,10 +990,9 @@ impl IndexProvider for SearchIndex {
             // Prima questo `match` doveva dirlo variante per variante con dei
             // `BadArgs`, perché era così che si scopriva chi servisse cosa;
             // adesso il routing è dichiarato e questo ramo è irraggiungibile.
-            other => Err(PluginError::Unserved(format!(
-                "la ricerca non serve questa famiglia: {:?}",
-                other.kind()
-            ))),
+            other => Err(PluginError::Unserved(
+                format!("la ricerca non serve questa famiglia: {:?}", other.kind()).into(),
+            )),
         }
     }
 }

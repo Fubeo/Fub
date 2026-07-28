@@ -156,8 +156,11 @@ fn un_documento_che_il_vault_non_conosce_e_un_errore_non_un_modello_vuoto() {
     let (_dir, mut ws) = vault();
 
     let esito = chiedendo(&mut ws, |host| host.read_model(&DocId::new("Fantasma.md")));
+    // `NotFound` e non `Internal` (§12.2): la frase qui sotto dice «ciò che non
+    // c'è», e fino alla 0041 il contratto non sapeva dirlo — lo diceva soltanto
+    // la prosa del messaggio, che nessuno può leggere per decidere un ramo.
     assert!(
-        matches!(esito, Err(PluginError::Internal(msg)) if msg.contains("Fantasma.md")),
+        matches!(esito, Err(PluginError::NotFound(msg)) if msg.to_string().contains("Fantasma.md")),
         "una domanda su ciò che non c'è si dice, non si risponde con un modello \
          vuoto che il chiamante scambierebbe per una nota vuota"
     );

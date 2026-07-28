@@ -2151,6 +2151,9 @@ fn plugin_error_case(e: &PluginError) -> Case {
         PluginError::Conflict(s) => case_ty("conflict", wit(s)),
         PluginError::Unserved(s) => case_ty("unserved", wit(s)),
         PluginError::Cancelled(s) => case_ty("cancelled", wit(s)),
+        PluginError::NotFound(s) => case_ty("not-found", wit(s)),
+        PluginError::AlreadyExists(s) => case_ty("already-exists", wit(s)),
+        PluginError::Io(s) => case_ty("io", wit(s)),
     }
 }
 
@@ -2885,15 +2888,18 @@ fn conform(source: &str) -> Result<(), String> {
         "plugin-error",
         ("error.rs", "PluginError"),
         &[
-            plugin_error_case(&PluginError::UnknownCommand(String::new())),
-            plugin_error_case(&PluginError::UnknownView(String::new())),
-            plugin_error_case(&PluginError::UnknownJob(String::new())),
-            plugin_error_case(&PluginError::BadArgs(String::new())),
-            plugin_error_case(&PluginError::PermissionDenied(String::new())),
-            plugin_error_case(&PluginError::Internal(String::new())),
-            plugin_error_case(&PluginError::Conflict(String::new())),
-            plugin_error_case(&PluginError::Unserved(String::new())),
-            plugin_error_case(&PluginError::Cancelled(String::new())),
+            plugin_error_case(&PluginError::UnknownCommand(String::new().into())),
+            plugin_error_case(&PluginError::UnknownView(String::new().into())),
+            plugin_error_case(&PluginError::UnknownJob(String::new().into())),
+            plugin_error_case(&PluginError::BadArgs(String::new().into())),
+            plugin_error_case(&PluginError::PermissionDenied(String::new().into())),
+            plugin_error_case(&PluginError::Internal(String::new().into())),
+            plugin_error_case(&PluginError::Conflict(String::new().into())),
+            plugin_error_case(&PluginError::Unserved(String::new().into())),
+            plugin_error_case(&PluginError::Cancelled(String::new().into())),
+            plugin_error_case(&PluginError::NotFound(String::new().into())),
+            plugin_error_case(&PluginError::AlreadyExists(String::new().into())),
+            plugin_error_case(&PluginError::Io(String::new().into())),
         ],
     );
 

@@ -365,6 +365,27 @@ impl Workspace {
         Strings::new(catalogs, default_locale, &locale).localize(value);
     }
 
+    /// Come [`localize`](Workspace::localize), per ciò che esce **al posto** del
+    /// valore (§12.2).
+    ///
+    /// Un errore è testo che qualcuno legge, e fino a questa seduta era l'unico
+    /// che usciva dal contratto senza passare da qui: le sei vie d'uscita
+    /// risolvevano ciò che restituivano e lasciavano non risolto ciò con cui
+    /// fallivano. Il catalogo giusto è lo stesso — quello di **chi l'ha
+    /// prodotto** — per la stessa ragione per cui lo è quello dell'esito: la
+    /// frase l'ha scritta lui.
+    ///
+    /// Si applica al solo `?` che può portare l'errore *di un provider*. Ciò che
+    /// fallisce prima che un provider sia stato chiamato — la view non esiste, i
+    /// parametri non reggono, il comando gira su sé stesso — è prosa del kernel,
+    /// cioè un [`Text::Literal`](fubmd_abi::text::Text::Literal) che nessun
+    /// catalogo tocca: farlo passare di qui non sarebbe sbagliato, sarebbe
+    /// rumore che suggerisce una traduzione che non avviene.
+    pub(crate) fn localized(&self, plugin: &str, mut e: PluginError) -> PluginError {
+        self.localize(plugin, &mut e);
+        e
+    }
+
     /// Il locale di sistema condiviso: chi monta lo passa alla shell perché ci
     /// scriva ciò che il sistema dice.
     pub fn system_locale(&self) -> Arc<SystemLocale> {
@@ -515,7 +536,7 @@ impl Workspace {
             .plugins
             .provider_of(service)
             .ok_or_else(|| {
-                PluginError::Unserved(format!("nessun plugin offre il servizio `{service}`"))
+                PluginError::Unserved(format!("nessun plugin offre il servizio `{service}`").into())
             })?
             .to_string();
         let at = self
@@ -523,9 +544,10 @@ impl Workspace {
             .services
             .position(|(id, _)| *id == owner)
             .ok_or_else(|| {
-                PluginError::Unserved(format!(
-                    "`{owner}` dichiara `{service}` e non ha registrato chi lo serve"
-                ))
+                PluginError::Unserved(
+                    format!("`{owner}` dichiara `{service}` e non ha registrato chi lo serve")
+                        .into(),
+                )
             })?;
 
         // Il giro. Come per i comandi (decisione 0013), un servizio che rientra
@@ -534,10 +556,13 @@ impl Workspace {
         if self.providers.service_stack.iter().any(|s| s == service) {
             let mut giro = self.providers.service_stack.clone();
             giro.push(service.to_string());
-            return Err(PluginError::BadArgs(format!(
-                "un servizio non può chiamare sé stesso: {}",
-                giro.join(" → ")
-            )));
+            return Err(PluginError::BadArgs(
+                format!(
+                    "un servizio non può chiamare sé stesso: {}",
+                    giro.join(" → ")
+                )
+                .into(),
+            ));
         }
 
         let provider = Arc::clone(&self.providers.services[at].1);
@@ -689,10 +714,13 @@ impl Workspace {
             self.complete_job(
                 job.id,
                 job.spec.job.clone(),
-                Err(PluginError::Internal(format!(
-                    "`{plugin}` è stato disattivato prima che il job `{}` partisse",
-                    job.spec.job
-                ))),
+                Err(PluginError::Internal(
+                    format!(
+                        "`{plugin}` è stato disattivato prima che il job `{}` partisse",
+                        job.spec.job
+                    )
+                    .into(),
+                )),
             );
         }
 
@@ -807,7 +835,7 @@ impl Workspace {
                 // Un `Busy` qui vorrebbe dire che si sta chiudendo il vault da
                 // dentro la chiamata di un provider, cioè che chi chiude è
                 // qualcuno che il vault lo sta usando. Non fa danno e va detto.
-                Err(e) => errors.push(PluginError::Internal(e.to_string())),
+                Err(e) => errors.push(PluginError::Internal(e.to_string().into())),
             }
         }
         errors
@@ -2371,7 +2399,8 @@ impl Workspace {
             &registered.id,
             &format!("disegnando `{}`", instance.view),
             || registered.provider.render_view(instance, &host),
-        )?;
+        )
+        .map_err(|e| self.localized(&registered.id, e))?;
         guard_ui(registered.trust, &tree)?;
         // **Dopo** la validazione del confine di fiducia, non prima: risolvere
         // una chiave non può trasformare un nodo innocuo in uno riservato — i
@@ -2418,10 +2447,11 @@ impl Workspace {
                 )
             },
         );
-        let mut update = updated?;
         // Il proprietario è quello della view: un aggiornamento porta le
-        // stringhe di chi l'ha scritto, come l'albero che sostituisce.
+        // stringhe di chi l'ha scritto, come l'albero che sostituisce — e come
+        // l'errore con cui, invece dell'aggiornamento, può rispondere.
         let owner = self.providers.views[at].id.clone();
+        let mut update = updated.map_err(|e| self.localized(&owner, e))?;
         // **Ogni** albero che l'aggiornamento porta con sé, non solo quello di
         // `Replace`: una `Patch` è un nodo che entra nella webview come gli
         // altri, ed è più piccola solo nella dimensione. Il `match` è esaustivo
@@ -2619,10 +2649,13 @@ impl Workspace {
         if self.providers.command_stack.iter().any(|c| c == command) {
             let mut giro = self.providers.command_stack.clone();
             giro.push(command.to_string());
-            return Err(PluginError::BadArgs(format!(
-                "un comando non può invocare sé stesso: {}",
-                giro.join(" → ")
-            )));
+            return Err(PluginError::BadArgs(
+                format!(
+                    "un comando non può invocare sé stesso: {}",
+                    giro.join(" → ")
+                )
+                .into(),
+            ));
         }
 
         // Il provider **resta** nel registro: si condivide il puntatore (vedi
@@ -2670,7 +2703,7 @@ impl Workspace {
         // invocazione si rifiuterebbe da sé dicendo che sta chiamando sé stesso.
         self.providers.command_stack.pop();
 
-        let mut outcome = outcome?;
+        let mut outcome = outcome.map_err(|e| self.localized(&owner, e))?;
         if let CommandEffect::Plan(plan) = &mut outcome.effect {
             // L'insieme impattato è ciò che l'utente approva: lo completa
             // l'host, invece di fidarsi che chi ha scritto il piano si sia
@@ -2767,10 +2800,13 @@ impl Workspace {
             .iter()
             .position(|(_, p)| p.can_handle(source))
             .ok_or_else(|| {
-                PluginError::BadArgs(format!(
-                    "nessun ImportProvider registrato riconosce `{}`",
-                    source.name
-                ))
+                PluginError::BadArgs(
+                    format!(
+                        "nessun ImportProvider registrato riconosce `{}`",
+                        source.name
+                    )
+                    .into(),
+                )
             })?;
         // La stessa disciplina di tutti gli altri, e non più una quarta copia:
         // vedi `Workspace::lend`.
@@ -2809,10 +2845,9 @@ impl Workspace {
             .iter()
             .find(|(_, p)| p.targets().iter().any(|t| t.id == request.target))
             .ok_or_else(|| {
-                PluginError::BadArgs(format!(
-                    "destinazione di export ignota: `{}`",
-                    request.target
-                ))
+                PluginError::BadArgs(
+                    format!("destinazione di export ignota: `{}`", request.target).into(),
+                )
             })?;
         let host = self.read_host_for(id);
         provider.export(request, &host)
@@ -3370,11 +3405,11 @@ impl Workspace {
         plugin: &str,
         rel: &str,
     ) -> std::result::Result<Utf8PathBuf, PluginError> {
-        let denied = |why: &str| PluginError::PermissionDenied(format!("`{rel}`: {why}"));
+        let denied = |why: &str| PluginError::PermissionDenied(format!("`{rel}`: {why}").into());
         if !is_safe_component(plugin) {
-            return Err(PluginError::PermissionDenied(format!(
-                "id di plugin non utilizzabile come spazio dati: `{plugin}`"
-            )));
+            return Err(PluginError::PermissionDenied(
+                format!("id di plugin non utilizzabile come spazio dati: `{plugin}`").into(),
+            ));
         }
         let mut path = self.plugin_data_root(plugin);
         if rel.is_empty() {
@@ -3426,26 +3461,10 @@ pub fn valid_doc_id(name: &str) -> Result<DocId> {
 /// riceve, i due recinti si comportano allo stesso modo.
 pub(crate) fn fenced_doc_id(id: &DocId) -> std::result::Result<DocId, PluginError> {
     valid_doc_id(id.as_str()).map_err(|_| {
-        PluginError::PermissionDenied(format!(
-            "`{id}`: un documento si nomina con un path relativo dentro il vault"
-        ))
+        PluginError::PermissionDenied(
+            format!("`{id}`: un documento si nomina con un path relativo dentro il vault").into(),
+        )
     })
-}
-
-/// Un errore del kernel come lo vede un provider.
-///
-/// Le due specie della modifica chirurgica non finiscono in `Internal`: un
-/// conflitto è la sola cosa che chi chiama deve **riprovare** (rileggendo e
-/// ricalcolando), un edit malformato la sola che deve **correggere**.
-/// Appiattirli su un errore interno lascerebbe quella distinzione a chi legge il
-/// messaggio, cioè a una stringa italiana — che è il debito del §12.2, non un
-/// posto dove aggiungerne.
-pub(crate) fn plugin_error(e: KernelError) -> PluginError {
-    match e {
-        KernelError::Stale(doc) => PluginError::Conflict(doc),
-        KernelError::BadEdit { doc, why } => PluginError::BadArgs(format!("{doc}: {why}")),
-        other => PluginError::Internal(other.to_string()),
-    }
 }
 
 /// La validazione del confine di fiducia della UI, in un posto solo.

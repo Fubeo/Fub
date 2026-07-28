@@ -24,6 +24,7 @@ import { emit, saveMode, state } from "../state/store";
 import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
 import { clearPreview, setPreviewVisible, updatePreview } from "./preview";
+import { errorText } from "../host/errors";
 
 export interface DocumentDeps {
   /// Click su un `#tag` nella live preview. Iniettato invece che importato:
@@ -283,7 +284,7 @@ export async function publishContext(): Promise<void> {
   } catch (e) {
     // Un vault non ancora aperto non ha un workspace: il contesto non ha dove
     // andare, e non è un errore da mostrare.
-    console.debug(`FubMD: contesto non pubblicato: ${e}`);
+    console.debug(`FubMD: contesto non pubblicato: ${errorText(e)}`);
   }
 }
 

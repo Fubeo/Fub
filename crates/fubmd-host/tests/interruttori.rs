@@ -17,6 +17,7 @@
 use camino::Utf8PathBuf;
 use fubmd_abi::settings::SettingValue;
 use fubmd_abi::traits::{IndexQuery, IndexResult};
+use fubmd_abi::PluginError;
 use fubmd_features::VERSIONING_ID;
 use fubmd_host::{Host, NoWatcher};
 
@@ -170,7 +171,11 @@ fn il_core_non_si_spegne() {
     let errore = host
         .set_plugin_enabled(None, "fubmd.core", false)
         .expect_err("non si spegne");
-    assert!(errore.contains("fubmd.core"), "{errore}");
+    assert!(
+        matches!(errore, PluginError::BadArgs(_)),
+        "chiedere di spegnere il core e' una richiesta da correggere: {errore}"
+    );
+    assert!(errore.to_string().contains("fubmd.core"), "{errore}");
 }
 
 /// I due cancelli si vedono meglio **sullo schema del core**, cioè sulle sole
@@ -215,9 +220,13 @@ fn accendere_un_componente_che_non_esiste_e_un_errore_e_non_un_silenzio() {
         .set_plugin_enabled(None, "com.acme.mai-visto", true)
         .expect_err("non si accende ciò che non c'è");
     assert!(
-        errore.contains("com.acme.mai-visto"),
+        matches!(errore, PluginError::NotFound(_)),
         "«l'ho riacceso» e «ho scritto male l'id» devono essere due risposte \
-         diverse: {errore}"
+         diverse, e adesso lo sono nel `kind`: {errore}"
+    );
+    assert!(
+        errore.to_string().contains("com.acme.mai-visto"),
+        "l'errore deve nominare chi non si e\' trovato: {errore}"
     );
 }
 

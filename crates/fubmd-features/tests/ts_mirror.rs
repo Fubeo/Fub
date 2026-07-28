@@ -1018,6 +1018,20 @@ fn expected() -> Value {
         // effetto nuovo, non deve poter passare inosservato dall'altra parte.
         "CommandSpec": command_spec_samples(),
         "CommandOutcome": command_outcome_samples(),
+        // **L'errore** (§12.2). Attraversa l'IPC su ogni comando fallito, ed è
+        // il tipo che fino alla 0041 non ci arrivava affatto: il confine Tauri
+        // lo stringava, e la shell riceveva una frase italiana.
+        //
+        // I tre campioni sono i tre che la shell deve saper distinguere per
+        // fare la cosa giusta nel ripristino dal cestino — «c'è già» chiede un
+        // altro nome, gli altri due si notificano e basta. Il `kind` è
+        // `snake_case` e il payload sta in `message`: è una forma **adiacente**,
+        // come `UiValue` e `ArgValue`.
+        "PluginError": [
+            to_value(PluginError::AlreadyExists("Progetti/Idee.md".into())),
+            to_value(PluginError::NotFound("Fantasma.md".into())),
+            to_value(PluginError::Io("disco pieno".into())),
+        ],
     })
 }
 

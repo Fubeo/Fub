@@ -81,9 +81,9 @@ impl ViewProvider for OutlineView {
         let headings = match host.query_index(IndexQuery::Outline { doc: active })? {
             IndexResult::Outline(h) => h,
             other => {
-                return Err(PluginError::Internal(format!(
-                    "query outline: risposta fuori tema: {other:?}"
-                )))
+                return Err(PluginError::Internal(
+                    format!("query outline: risposta fuori tema: {other:?}").into(),
+                ))
             }
         };
         Ok(build_outline_view(&headings, caret_of(&context.selection)))
