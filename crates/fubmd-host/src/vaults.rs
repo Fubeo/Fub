@@ -180,10 +180,21 @@ impl VaultRegistry {
     /// Dimentica un vault. **Non lo tocca sul disco**, ed è tutto ciò che questa
     /// funzione fa: un registro che cancellasse i vault sarebbe un elenco di
     /// scorciatoie con il potere di distruggere ciò a cui puntano.
-    pub fn forget(&self, root: &Utf8Path) -> Result<(), PluginError> {
+    ///
+    /// Prende **le forme** di una radice e non una radice, perché chi dimentica
+    /// è l'unico che non può canonicalizzare: [`VaultEntry::root`] è canonica
+    /// per contratto, ma la cartella di un vault dimenticato spesso non esiste
+    /// più — e su un path che non esiste `canonicalize` non risponde. Quindi si
+    /// cancella per **entrambe** le forme, quella data e la canonica se c'è, e
+    /// una sola volta: due `forget` sarebbero due scritture del file per un
+    /// vault solo.
+    ///
+    /// Chi passa una forma sola non paga niente: `retain` guarda una stringa in
+    /// più per voce.
+    pub fn forget(&self, forme: &[Utf8PathBuf]) -> Result<(), PluginError> {
         let mut entries = self.entries.lock().expect("registro dei vault");
         let mut next = entries.clone();
-        next.retain(|e| e.root != root.as_str());
+        next.retain(|e| !forme.iter().any(|f| f.as_str() == e.root));
         self.save(&next)?;
         *entries = next;
         Ok(())
@@ -304,8 +315,22 @@ mod tests {
     fn dimenticare_toglie_dall_elenco_e_basta() {
         let reg = VaultRegistry::in_memory();
         reg.note_opened(Utf8Path::new("/a"), 1).unwrap();
-        reg.forget(Utf8Path::new("/a")).unwrap();
+        reg.forget(&[Utf8PathBuf::from("/a")]).unwrap();
         assert!(reg.list().is_empty());
+    }
+
+    /// Le forme di una radice sono **alternative**, non un elenco di vault: chi
+    /// dimentica ne conosce due della stessa cartella e non sa quale sia
+    /// scritta, e nessuna delle due deve poter mancare il bersaglio.
+    #[test]
+    fn dimenticare_prende_la_radice_in_ogni_forma_in_cui_e_scritta() {
+        let reg = VaultRegistry::in_memory();
+        reg.note_opened(Utf8Path::new("/private/a"), 1).unwrap();
+        reg.note_opened(Utf8Path::new("/b"), 2).unwrap();
+        reg.forget(&[Utf8PathBuf::from("/a"), Utf8PathBuf::from("/private/a")])
+            .unwrap();
+        let restano: Vec<String> = reg.list().into_iter().map(|e| e.root).collect();
+        assert_eq!(restano, vec!["/b".to_string()], "e solo quella radice");
     }
 
     #[test]

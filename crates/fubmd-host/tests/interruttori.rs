@@ -307,8 +307,16 @@ fn aprire_un_vault_lo_fa_entrare_fra_i_conosciuti_e_ci_resta() {
     assert_eq!(conosciuti.len(), 1);
     assert!(conosciuti[0].favorite);
 
-    // Dimenticare toglie dall'elenco **e non tocca il disco**.
-    host.forget_vault(&v.root).expect("dimenticato");
+    // Dimenticare toglie dall'elenco **e non tocca il disco**. Si dimentica per
+    // una forma **non canonica** della stessa radice, che è il caso vero: la
+    // shell manda il path che l'utente ha scelto, e su macOS o Windows quello
+    // non è quasi mai la forma con cui l'apertura ha scritto la voce
+    // (`/var` → `/private/var`, il prefisso UNC). Su Linux le due forme
+    // coincidono, ed è per questo che qui se ne costruisce una a mano: un test
+    // che passasse `v.root` proverebbe la stessa cosa su un solo sistema.
+    let nome = v.root.file_name().expect("il tempdir ha un nome");
+    let storta = v.root.join("..").join(nome);
+    host.forget_vault(&storta).expect("dimenticato");
     assert!(host.known_vaults().is_empty());
     assert!(v.root.join("Nota.md").is_file());
 }

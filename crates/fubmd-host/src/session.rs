@@ -499,8 +499,15 @@ impl Host {
     /// Toglie un vault dall'elenco. **Non lo cancella dal disco**: dimenticare
     /// una scorciatoia non è distruggere ciò a cui punta.
     ///
-    /// Non canonicalizza: si dimentica anche una cartella che non esiste più,
-    /// che è il caso più comune per cui lo si fa.
+    /// Non *pretende* di canonicalizzare: si dimentica anche una cartella che
+    /// non esiste più, che è il caso più comune per cui lo si fa, e su un path
+    /// che non esiste `canonicalize` non risponde. Ma non può nemmeno ignorare
+    /// la forma canonica, perché è **quella** la chiave con cui l'apertura ha
+    /// scritto la voce ([`canonical`]): dimenticare la sola forma data lascerebbe
+    /// in elenco ogni vault nominato in un modo diverso da come è stato aperto —
+    /// e su macOS o Windows, dove la canonica differisce quasi sempre dal path
+    /// che l'utente sceglie (`/var` → `/private/var`, il prefisso UNC), sarebbe
+    /// *ogni* vault. Quindi si dimenticano entrambe le forme.
     ///
     /// **Dimentica anche come lo si stava guardando** (§11.2): senza questa riga
     /// il file dello stato di vista sarebbe l'unico posto del progetto che cresce
@@ -510,12 +517,17 @@ impl Host {
     /// di cache — e lo si dice — invece di uno scroll perso per un vault che è
     /// rimasto in elenco.
     pub fn forget_vault(&self, root: &Utf8Path) -> Result<(), PluginError> {
-        self.vaults.forget(root)?;
+        let forme = forme_della_radice(root);
+        self.vaults.forget(&forme)?;
         // Il sidecar dello stato di vista ha un fallimento solo — scriverlo —
-        // e chi lo riceve non ha altro da fare che riprovare.
-        self.view_states
-            .forget_vault(root.as_str())
-            .map_err(|e| PluginError::Io(e.into()))
+        // e chi lo riceve non ha altro da fare che riprovare. Una forma che non
+        // è là dentro non costa una scrittura: `forget_vault` esce prima.
+        for forma in &forme {
+            self.view_states
+                .forget_vault(forma.as_str())
+                .map_err(|e| PluginError::Io(e.into()))?;
+        }
+        Ok(())
     }
 
     // --- accendere e spegnere un componente (§11.1) -------------------------
@@ -845,6 +857,24 @@ fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
         .map_err(|e| PluginError::Io(format!("non riesco a risolvere {root}: {e}").into()))?;
     Utf8PathBuf::from_path_buf(canonical)
         .map_err(|p| PluginError::Io(format!("path non UTF-8: {}", p.display()).into()))
+}
+
+/// **I nomi di una stessa radice**: quello dato, e la forma canonica se il path
+/// esiste ancora — in quest'ordine, senza ripetizioni.
+///
+/// È [`canonical`] per chi non può fallire. Canonicalizzare è l'operazione che
+/// rende `/vault`, `/vault/` e un link simbolico *la stessa* chiave, ma è anche
+/// una domanda al filesystem, e su una cartella sparita non ha risposta. Chi
+/// apre può quindi pretendere la canonica; chi dimentica no, e deve accettare
+/// che la stessa radice sia nominabile in due modi.
+fn forme_della_radice(root: &Utf8Path) -> Vec<Utf8PathBuf> {
+    let mut forme = vec![root.to_owned()];
+    if let Ok(canonica) = canonical(root) {
+        if canonica != forme[0] {
+            forme.push(canonica);
+        }
+    }
+    forme
 }
 
 /// [`DocId`] da input non fidato: la stessa validazione del kernel
