@@ -174,15 +174,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
 
 /// Le impostazioni del bundle del versioning.
 pub fn versioning_settings() -> Vec<SettingSpec> {
-    vec![SettingSpec::toggle(VERSIONING_ENABLED, Text::key(V_ENABLED), true)
-        .describing(Text::key(V_ENABLED_DESC))
-        .grouped(Text::key(V_GROUP))
-        // Scrivibile da un programma: è reversibile, non riguarda la privacy, e
-        // un profilo di vault («questo vault è un archivio: niente versioning»)
-        // è esattamente il caso che il §11.1 apre. Il permesso resta il primo
-        // cancello — `fubmd:write-settings` non ce l'ha nessun plugin di terzi
-        // finché non se lo dichiara e qualcuno glielo concede.
-        .program_writable()]
+    vec![
+        SettingSpec::toggle(VERSIONING_ENABLED, Text::key(V_ENABLED), true)
+            .describing(Text::key(V_ENABLED_DESC))
+            .grouped(Text::key(V_GROUP))
+            // Scrivibile da un programma: è reversibile, non riguarda la privacy, e
+            // un profilo di vault («questo vault è un archivio: niente versioning»)
+            // è esattamente il caso che il §11.1 apre. Il permesso resta il primo
+            // cancello — `fubmd:write-settings` non ce l'ha nessun plugin di terzi
+            // finché non se lo dichiara e qualcuno glielo concede.
+            .program_writable(),
+    ]
 }
 
 /// Le chiavi dell'interruttore del versioning. Stanno **qui** e non nella

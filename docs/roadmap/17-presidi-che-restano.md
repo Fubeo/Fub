@@ -23,6 +23,20 @@ ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuov
 - [ ] **Benchmark su vault sintetici grandi** (10k/100k note) in CI, con soglie:
       tempo di apertura, ricerca, memoria. Senza numeri, "supporto vault enormi"
       non è verificabile.
+- [ ] **E questo banco ha già un abitante che aspetta**, che è il modo in cui la
+      voce ha smesso di essere teorica: il presidio della §8.4
+      ([0026](../decisions/0026-due-query-insieme.md)) — *due ricerche stanno
+      nell'indice insieme* — è oggi `#[ignore]` in `features/src/search.rs`.
+      Non perché la proprietà sia falsa: perché **ogni colonna misura una
+      trentina di millisecondi**, e a quella scala il tempo se lo prendono lo
+      spawn dei thread e lo scheduling, che non scalano coi core. Su un runner
+      condiviso il rapporto è venuto 0,97 con la suite verde in locale, cioè il
+      presidio ha smesso di misurare la propria proprietà e ha cominciato a
+      misurare il vicino di banco. Serve un carico che domini l'overhead **e**
+      una macchina che non divida i core: sono le due cose che questa voce
+      chiede, ed è la ragione per cui un test di prestazioni non può stare in
+      mezzo agli altri e girare a ogni push. Finché non c'è, si lancia a mano
+      (`cargo test -p fubmd-features --lib due_ricerche -- --ignored`).
 - [ ] **Round-trip import/export**: il primo giro c'è con la [decisione 0006](../decisions/0006-import-export-come-trait.md)
       (`transfer_e2e.rs`: un vault esce in artefatti e rientra identico), ma su
       un vault scritto a mano. Resta da farlo **sul corpus** di qui sopra, dove

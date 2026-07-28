@@ -347,14 +347,17 @@ fn un_host_senza_installazione_ricorda_solo_finche_dura() {
 /// commento.
 #[test]
 fn la_chiave_del_tema_e_la_stessa_di_qua_e_di_la() {
-    let theme_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../frontend/src/theme/theme.ts");
+    let theme_ts =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/theme/theme.ts");
     let sorgente = std::fs::read_to_string(&theme_ts)
         .unwrap_or_else(|e| panic!("la shell non ha più {}: {e}", theme_ts.display()));
 
     let dichiarata = sorgente
         .lines()
-        .find_map(|riga| riga.strip_prefix("export const CHIAVE_TEMA = \"")?.strip_suffix("\";"))
+        .find_map(|riga| {
+            riga.strip_prefix("export const CHIAVE_TEMA = \"")?
+                .strip_suffix("\";")
+        })
         .expect(
             "in `theme/theme.ts` non c'è più una riga `export const CHIAVE_TEMA = \"…\";`: \
              o la chiave si chiama in un altro modo, o questo presidio sta leggendo il vuoto",

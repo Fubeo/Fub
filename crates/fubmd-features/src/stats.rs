@@ -208,13 +208,19 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(VIEW_TITLE, "Statistiche")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
             .with(DOC_COUNTS, "Parole: {words} · Caratteri: {chars}")
-            .with(SELECTION_COUNTS, "Selezione — parole: {words} · caratteri: {chars}")
+            .with(
+                SELECTION_COUNTS,
+                "Selezione — parole: {words} · caratteri: {chars}",
+            )
             .with(READING_TIME, "~{minutes} min di lettura"),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Statistics")
             .with(NO_ACTIVE_DOC, "No note open.")
             .with(DOC_COUNTS, "Words: {words} · Characters: {chars}")
-            .with(SELECTION_COUNTS, "Selection — words: {words} · characters: {chars}")
+            .with(
+                SELECTION_COUNTS,
+                "Selection — words: {words} · characters: {chars}",
+            )
             .with(READING_TIME, "~{minutes} min read"),
     ]
 }

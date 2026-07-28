@@ -42,7 +42,7 @@ impl Vault {
                 .speaking("it", fubmd_features::stats::catalog()),
             fubmd_kernel::Trust::Core,
         )
-            .expect("dichiarato");
+        .expect("dichiarato");
         ws.register_view_provider(STATS_ID, Box::new(StatsView))
             .expect("registrato");
         ws.reindex().expect("reindex");

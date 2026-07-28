@@ -118,7 +118,8 @@ const ESTENSIONE_PREDEFINITA: &str = "md";
 /// cammina sulle spec vere e pretende che ogni chiave che producono abbia una
 /// voce in **tutte** le lingue del catalogo.
 fn comando(id: &str) -> CommandSpec {
-    CommandSpec::new(id, Text::key(format!("{id}.title"))).describing(Text::key(format!("{id}.desc")))
+    CommandSpec::new(id, Text::key(format!("{id}.title")))
+        .describing(Text::key(format!("{id}.desc")))
 }
 
 /// Un parametro, con le chiavi derivate da comando e nome.
@@ -135,10 +136,7 @@ fn uno(key: &str, name: &str, value: &str) -> Text {
 
 /// Un messaggio su due documenti: da chi a chi.
 fn due(key: &str, doc: &str, to: &str) -> Text {
-    Text::message(
-        key,
-        vec![Arg::text(A_DOC, doc), Arg::text(A_TO, to)],
-    )
+    Text::message(key, vec![Arg::text(A_DOC, doc), Arg::text(A_TO, to)])
 }
 
 /// Un messaggio con un conteggio solo.
@@ -148,19 +146,13 @@ fn conto(key: &str, n: usize) -> Text {
 
 /// Un messaggio con due conteggi.
 fn conto2(key: &str, a: &str, na: usize, b: &str, nb: usize) -> Text {
-    Text::message(
-        key,
-        vec![Arg::int(a, na as i64), Arg::int(b, nb as i64)],
-    )
+    Text::message(key, vec![Arg::int(a, na as i64), Arg::int(b, nb as i64)])
 }
 
 /// Il messaggio dell'archiviazione: quante note, in che cartella, e — se ce ne
 /// sono — quelle rimaste indietro.
 fn archivio(key: &str, n: usize, folder: &str, falliti: Option<String>) -> Text {
-    let mut args = vec![
-        Arg::int(A_COUNT, n as i64),
-        Arg::text(A_FOLDER, folder),
-    ];
+    let mut args = vec![Arg::int(A_COUNT, n as i64), Arg::text(A_FOLDER, folder)];
     if let Some(f) = falliti {
         args.push(Arg::text(A_FAILED, f));
     }
@@ -294,7 +286,10 @@ fn catalogo_it() -> StringCatalog {
             "La query, nella stessa sintassi della barra di ricerca \
              (`tags:nome` filtra per tag).",
         )
-        .with("selection.wikilink.title", "Trasforma la selezione in wikilink")
+        .with(
+            "selection.wikilink.title",
+            "Trasforma la selezione in wikilink",
+        )
         .with(
             "selection.wikilink.desc",
             "Avvolge il testo selezionato nel pannello attivo fra doppie \
@@ -310,9 +305,15 @@ fn catalogo_it() -> StringCatalog {
              senza scrivere niente.",
         )
         .with("vault.replace.find.title", "Cerca")
-        .with("vault.replace.find.desc", "Il testo da sostituire. Non può essere vuoto.")
+        .with(
+            "vault.replace.find.desc",
+            "Il testo da sostituire. Non può essere vuoto.",
+        )
         .with("vault.replace.replace.title", "Sostituisci con")
-        .with("vault.replace.replace.desc", "Il testo nuovo. Vuoto cancella le occorrenze.")
+        .with(
+            "vault.replace.replace.desc",
+            "Il testo nuovo. Vuoto cancella le occorrenze.",
+        )
         .with("vault.replace.whole_word.title", "Solo parole intere")
         .with(
             "vault.replace.whole_word.desc",
@@ -360,7 +361,10 @@ fn catalogo_it() -> StringCatalog {
              ma non è distrutta: si recupera con «Ripristina dal cestino».",
         )
         .with("note.trash.doc.title", "Nota")
-        .with("note.trash.doc.desc", "La nota da cestinare. Assente = quella aperta.")
+        .with(
+            "note.trash.doc.desc",
+            "La nota da cestinare. Assente = quella aperta.",
+        )
         .with("trash.restore.title", "Ripristina dal cestino")
         .with(
             "trash.restore.desc",
@@ -369,9 +373,15 @@ fn catalogo_it() -> StringCatalog {
              rifiutato invece di sovrascrivere.",
         )
         .with("trash.restore.entry.title", "Voce del cestino")
-        .with("trash.restore.entry.desc", "L'id della voce nel cestino (`.trash/…`).")
+        .with(
+            "trash.restore.entry.desc",
+            "L'id della voce nel cestino (`.trash/…`).",
+        )
         .with("trash.restore.to.title", "Ripristina come")
-        .with("trash.restore.to.desc", "Path alternativo. Assente = il path d'origine.")
+        .with(
+            "trash.restore.to.desc",
+            "Path alternativo. Assente = il path d'origine.",
+        )
         .with("trash.empty.title", "Svuota il cestino")
         .with(
             "trash.empty.desc",
@@ -388,7 +398,10 @@ fn catalogo_it() -> StringCatalog {
         .with("vault.archive.docs.title", "Note da archiviare")
         .with("vault.archive.docs.desc", "Gli id delle note da spostare.")
         .with("vault.archive.folder.title", "Cartella")
-        .with("vault.archive.folder.desc", "Dove spostarle. Assente = «Archivio».")
+        .with(
+            "vault.archive.folder.desc",
+            "Dove spostarle. Assente = «Archivio».",
+        )
         .with("note.task.toggle.title", "Spunta il task")
         .with(
             "note.task.toggle.desc",
@@ -418,7 +431,10 @@ fn catalogo_it() -> StringCatalog {
              le sta guardando, dal pannello.",
         )
         .with("settings.set.key.title", "Chiave")
-        .with("settings.set.key.desc", "La chiave, es. `versioning.enabled`.")
+        .with(
+            "settings.set.key.desc",
+            "La chiave, es. `versioning.enabled`.",
+        )
         .with("settings.set.value.title", "Valore")
         .with(
             "settings.set.value.desc",
@@ -451,25 +467,43 @@ fn catalogo_it() -> StringCatalog {
              non applicato a metà in silenzio.",
         )
         .with("settings.import.json.title", "Configurazione")
-        .with("settings.import.json.desc", "L'oggetto JSON `{{\"chiave\": valore}}`.")
+        .with(
+            "settings.import.json.desc",
+            "L'oggetto JSON `{{\"chiave\": valore}}`.",
+        )
         .with(E_NO_ACTIVE_PANE, "Nessun pannello attivo.")
         .with(E_NO_OPEN_NOTE, "Nessuna nota aperta nel pannello attivo.")
         .with(E_NOTHING_SELECTED, "Niente di selezionato.")
-        .with(E_EMPTY_SELECTION, "La selezione è vuota: non c'è testo da trasformare.")
+        .with(
+            E_EMPTY_SELECTION,
+            "La selezione è vuota: non c'è testo da trasformare.",
+        )
         .with(
             E_DIRTY_SELECTION,
             "Il buffer ha modifiche non salvate: salva prima di trasformare la selezione.",
         )
-        .with(E_SELECTION_OUTSIDE, "La selezione non sta dentro il documento.")
-        .with(E_SELECTION_HAS_LINK, "La selezione contiene già un riferimento.")
-        .with(E_EMPTY_FIND, "`find` non può essere vuoto: sostituirebbe il nulla ovunque.")
+        .with(
+            E_SELECTION_OUTSIDE,
+            "La selezione non sta dentro il documento.",
+        )
+        .with(
+            E_SELECTION_HAS_LINK,
+            "La selezione contiene già un riferimento.",
+        )
+        .with(
+            E_EMPTY_FIND,
+            "`find` non può essere vuoto: sostituirebbe il nulla ovunque.",
+        )
         .with(E_EMPTY_TO, "`to` non può essere vuoto.")
         .with(
             E_NO_NOTE_GIVEN,
             "Nessuna nota indicata e nessuna nota aperta nel pannello attivo.",
         )
         .with(E_NOT_IN_TRASH, "`{entry}` non è nel cestino.")
-        .with(E_TASK_NO_NOTE, "Nessuna nota: né in `doc`, né nel pannello attivo.")
+        .with(
+            E_TASK_NO_NOTE,
+            "Nessuna nota: né in `doc`, né nel pannello attivo.",
+        )
         .with(
             E_TASK_NO_POSITION,
             "Nessuna posizione in `at`, e nessun pannello attivo da cui prenderla.",
@@ -485,16 +519,28 @@ fn catalogo_it() -> StringCatalog {
             "Il buffer ha modifiche non salvate: salva prima di spuntare, o dì la \
              posizione in `at`.",
         )
-        .with(E_TASK_NOT_FOUND, "Nessuna voce di task alla posizione {at} di {doc}.")
-        .with(E_NOT_A_TOGGLE, "`{value}` non è un interruttore (`true` o `false`).")
+        .with(
+            E_TASK_NOT_FOUND,
+            "Nessuna voce di task alla posizione {at} di {doc}.",
+        )
+        .with(
+            E_NOT_A_TOGGLE,
+            "`{value}` non è un interruttore (`true` o `false`).",
+        )
         .with(E_NOT_A_NUMBER, "`{value}` non è un numero.")
-        .with(E_UNDECLARED_KEY, "Nessuno ha dichiarato l'impostazione `{key}`.")
+        .with(
+            E_UNDECLARED_KEY,
+            "Nessuno ha dichiarato l'impostazione `{key}`.",
+        )
         .with(
             E_NOT_PROGRAM_WRITABLE,
             "`{key}` non è scrivibile da un programma: la cambia l'utente.",
         )
         .with(E_NOT_JSON, "Non è un JSON valido: {reason}")
-        .with(E_NOT_AN_OBJECT, "Atteso un oggetto `{{\"chiave\": valore}}`.")
+        .with(
+            E_NOT_AN_OBJECT,
+            "Atteso un oggetto `{{\"chiave\": valore}}`.",
+        )
         .with(P_WIKILINK, "«{text}» diventa un riferimento in {doc}")
         .with(P_REPLACE, "Sostituzioni: {occurrences} · Note: {notes}")
         .with(P_CREATE, "Crea «{doc}»")
@@ -514,7 +560,10 @@ fn catalogo_it() -> StringCatalog {
             "`{key}` smetterebbe di valere {value} per decisione di qualcuno",
         )
         .with(D_WIKILINK, "Creato il riferimento a «{text}»")
-        .with(D_REPLACE, "Sostituzioni: {occurrences} · Note aggiornate: {notes}")
+        .with(
+            D_REPLACE,
+            "Sostituzioni: {occurrences} · Note aggiornate: {notes}",
+        )
         .with(
             D_REPLACE_PARTIAL,
             "Sostituzioni: {occurrences} · Note aggiornate: {notes} · Non \
@@ -524,7 +573,10 @@ fn catalogo_it() -> StringCatalog {
         .with(D_RENAME, "«{doc}» rinominata in «{to}»")
         .with(D_TRASH, "«{doc}» spostata nel cestino")
         .with(D_RESTORE, "Ripristinata «{doc}»")
-        .with(D_EMPTY_TRASH, "Cestino svuotato · Voci cancellate per sempre: {count}")
+        .with(
+            D_EMPTY_TRASH,
+            "Cestino svuotato · Voci cancellate per sempre: {count}",
+        )
         .with(D_ARCHIVE, "Note archiviate in «{folder}»: {count}")
         .with(
             D_ARCHIVE_PARTIAL,
@@ -581,7 +633,10 @@ fn catalogo_en() -> StringCatalog {
             "The query, in the same syntax as the search bar (`tags:name` \
              filters by tag).",
         )
-        .with("selection.wikilink.title", "Turn the selection into a wikilink")
+        .with(
+            "selection.wikilink.title",
+            "Turn the selection into a wikilink",
+        )
         .with(
             "selection.wikilink.desc",
             "Wraps the text selected in the active pane in double brackets, \
@@ -596,9 +651,15 @@ fn catalogo_en() -> StringCatalog {
              the list of affected notes and the exact changes, writing nothing.",
         )
         .with("vault.replace.find.title", "Find")
-        .with("vault.replace.find.desc", "The text to replace. Cannot be empty.")
+        .with(
+            "vault.replace.find.desc",
+            "The text to replace. Cannot be empty.",
+        )
         .with("vault.replace.replace.title", "Replace with")
-        .with("vault.replace.replace.desc", "The new text. Empty deletes the occurrences.")
+        .with(
+            "vault.replace.replace.desc",
+            "The new text. Empty deletes the occurrences.",
+        )
         .with("vault.replace.whole_word.title", "Whole words only")
         .with(
             "vault.replace.whole_word.desc",
@@ -645,7 +706,10 @@ fn catalogo_en() -> StringCatalog {
              is not destroyed: you get it back with «Restore from trash».",
         )
         .with("note.trash.doc.title", "Note")
-        .with("note.trash.doc.desc", "The note to trash. Absent = the open one.")
+        .with(
+            "note.trash.doc.desc",
+            "The note to trash. Absent = the open one.",
+        )
         .with("trash.restore.title", "Restore from trash")
         .with(
             "trash.restore.desc",
@@ -654,9 +718,15 @@ fn catalogo_en() -> StringCatalog {
              refused instead of overwriting.",
         )
         .with("trash.restore.entry.title", "Trash entry")
-        .with("trash.restore.entry.desc", "The id of the entry in the trash (`.trash/…`).")
+        .with(
+            "trash.restore.entry.desc",
+            "The id of the entry in the trash (`.trash/…`).",
+        )
         .with("trash.restore.to.title", "Restore as")
-        .with("trash.restore.to.desc", "Alternative path. Absent = the original path.")
+        .with(
+            "trash.restore.to.desc",
+            "Alternative path. Absent = the original path.",
+        )
         .with("trash.empty.title", "Empty the trash")
         .with(
             "trash.empty.desc",
@@ -672,7 +742,10 @@ fn catalogo_en() -> StringCatalog {
         .with("vault.archive.docs.title", "Notes to archive")
         .with("vault.archive.docs.desc", "The ids of the notes to move.")
         .with("vault.archive.folder.title", "Folder")
-        .with("vault.archive.folder.desc", "Where to move them. Absent = «Archive».")
+        .with(
+            "vault.archive.folder.desc",
+            "Where to move them. Absent = «Archive».",
+        )
         .with("note.task.toggle.title", "Toggle the task")
         .with(
             "note.task.toggle.desc",
@@ -702,7 +775,10 @@ fn catalogo_en() -> StringCatalog {
              looking at them, from the panel.",
         )
         .with("settings.set.key.title", "Key")
-        .with("settings.set.key.desc", "The key, e.g. `versioning.enabled`.")
+        .with(
+            "settings.set.key.desc",
+            "The key, e.g. `versioning.enabled`.",
+        )
         .with("settings.set.value.title", "Value")
         .with(
             "settings.set.value.desc",
@@ -735,22 +811,43 @@ fn catalogo_en() -> StringCatalog {
              a program — is **counted and told**, not half-applied in silence.",
         )
         .with("settings.import.json.title", "Configuration")
-        .with("settings.import.json.desc", "The JSON object `{{\"key\": value}}`.")
+        .with(
+            "settings.import.json.desc",
+            "The JSON object `{{\"key\": value}}`.",
+        )
         .with(E_NO_ACTIVE_PANE, "No active pane.")
         .with(E_NO_OPEN_NOTE, "No note open in the active pane.")
         .with(E_NOTHING_SELECTED, "Nothing selected.")
-        .with(E_EMPTY_SELECTION, "The selection is empty: there is no text to transform.")
+        .with(
+            E_EMPTY_SELECTION,
+            "The selection is empty: there is no text to transform.",
+        )
         .with(
             E_DIRTY_SELECTION,
             "The buffer has unsaved changes: save before transforming the selection.",
         )
-        .with(E_SELECTION_OUTSIDE, "The selection is not inside the document.")
-        .with(E_SELECTION_HAS_LINK, "The selection already contains a reference.")
-        .with(E_EMPTY_FIND, "`find` cannot be empty: it would replace nothing everywhere.")
+        .with(
+            E_SELECTION_OUTSIDE,
+            "The selection is not inside the document.",
+        )
+        .with(
+            E_SELECTION_HAS_LINK,
+            "The selection already contains a reference.",
+        )
+        .with(
+            E_EMPTY_FIND,
+            "`find` cannot be empty: it would replace nothing everywhere.",
+        )
         .with(E_EMPTY_TO, "`to` cannot be empty.")
-        .with(E_NO_NOTE_GIVEN, "No note given and no note open in the active pane.")
+        .with(
+            E_NO_NOTE_GIVEN,
+            "No note given and no note open in the active pane.",
+        )
         .with(E_NOT_IN_TRASH, "`{entry}` is not in the trash.")
-        .with(E_TASK_NO_NOTE, "No note: neither in `doc`, nor in the active pane.")
+        .with(
+            E_TASK_NO_NOTE,
+            "No note: neither in `doc`, nor in the active pane.",
+        )
         .with(
             E_TASK_NO_POSITION,
             "No position in `at`, and no active pane to take it from.",
@@ -767,7 +864,10 @@ fn catalogo_en() -> StringCatalog {
              position in `at`.",
         )
         .with(E_TASK_NOT_FOUND, "No task item at position {at} of {doc}.")
-        .with(E_NOT_A_TOGGLE, "`{value}` is not a toggle (`true` or `false`).")
+        .with(
+            E_NOT_A_TOGGLE,
+            "`{value}` is not a toggle (`true` or `false`).",
+        )
         .with(E_NOT_A_NUMBER, "`{value}` is not a number.")
         .with(E_UNDECLARED_KEY, "Nobody has declared the setting `{key}`.")
         .with(
@@ -790,9 +890,15 @@ fn catalogo_en() -> StringCatalog {
         .with(P_SETTINGS_RESET, "Reset `{key}`")
         .with(P_SETTINGS_IMPORT, "Settings to apply: {count}")
         .with(Y_SETTINGS_SET, "`{key}` would go from {from} to {value}")
-        .with(Y_SETTINGS_RESET, "`{key}` would stop being {value} by someone's decision")
+        .with(
+            Y_SETTINGS_RESET,
+            "`{key}` would stop being {value} by someone's decision",
+        )
         .with(D_WIKILINK, "Created the reference to «{text}»")
-        .with(D_REPLACE, "Replacements: {occurrences} · Notes updated: {notes}")
+        .with(
+            D_REPLACE,
+            "Replacements: {occurrences} · Notes updated: {notes}",
+        )
         .with(
             D_REPLACE_PARTIAL,
             "Replacements: {occurrences} · Notes updated: {notes} · Not changed: {failed}",
@@ -801,7 +907,10 @@ fn catalogo_en() -> StringCatalog {
         .with(D_RENAME, "«{doc}» renamed to «{to}»")
         .with(D_TRASH, "«{doc}» moved to the trash")
         .with(D_RESTORE, "Restored «{doc}»")
-        .with(D_EMPTY_TRASH, "Trash emptied · Entries deleted for good: {count}")
+        .with(
+            D_EMPTY_TRASH,
+            "Trash emptied · Entries deleted for good: {count}",
+        )
         .with(D_ARCHIVE, "Notes archived in «{folder}»: {count}")
         .with(
             D_ARCHIVE_PARTIAL,
@@ -851,8 +960,7 @@ impl CoreCommands {
             comando(SEARCH_OPEN)
                 .with_keybinding("Mod-Shift-f")
                 .with_param(parametro(SEARCH_OPEN, "query", ParamKind::Text).required()),
-            comando(SELECTION_WIKILINK)
-                .with_scope(CommandScope::writing(CommandReach::Document)),
+            comando(SELECTION_WIKILINK).with_scope(CommandScope::writing(CommandReach::Document)),
             comando(VAULT_REPLACE)
                 .with_param(parametro(VAULT_REPLACE, "find", ParamKind::Text).required())
                 .with_param(parametro(VAULT_REPLACE, "replace", ParamKind::Text).required())
@@ -1308,9 +1416,7 @@ fn note_trash(
     let doc = args
         .document("doc")
         .or_else(|| host.active_context().and_then(|c| c.doc))
-        .ok_or_else(|| {
-            PluginError::BadArgs(Text::key(E_NO_NOTE_GIVEN))
-        })?;
+        .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_NOTE_GIVEN)))?;
 
     if mode.is_dry_run() {
         return Ok(piano(uno(P_TRASH, A_DOC, doc.as_str()), vec![doc]));
@@ -1350,9 +1456,7 @@ fn trash_restore(
             .list_trash()?
             .into_iter()
             .find(|e| e.id == entry)
-            .ok_or_else(|| {
-                PluginError::BadArgs(uno(E_NOT_IN_TRASH, A_ENTRY, entry.as_str()))
-            })?;
+            .ok_or_else(|| PluginError::BadArgs(uno(E_NOT_IN_TRASH, A_ENTRY, entry.as_str())))?;
         let target = to.unwrap_or(voce.original);
         let summary = Text::message(
             P_RESTORE,
@@ -1417,7 +1521,10 @@ fn trash_empty(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcom
     }
 
     let quante = host.empty_trash()?;
-    Ok(CommandOutcome::notify(conto(D_EMPTY_TRASH, quante as usize)))
+    Ok(CommandOutcome::notify(conto(
+        D_EMPTY_TRASH,
+        quante as usize,
+    )))
 }
 
 // ---------------------------------------------------------------------------
@@ -1594,16 +1701,12 @@ fn note_task_toggle(
     };
 
     let model = host.read_model(&doc)?;
-    let marker = task_at(&model, at)
-        .ok_or_else(|| {
-            stato(Text::message(
-                E_TASK_NOT_FOUND,
-                vec![
-                    Arg::int(A_AT, at as i64),
-                    Arg::text(A_DOC, doc.as_str()),
-                ],
-            ))
-        })?;
+    let marker = task_at(&model, at).ok_or_else(|| {
+        stato(Text::message(
+            E_TASK_NOT_FOUND,
+            vec![Arg::int(A_AT, at as i64), Arg::text(A_DOC, doc.as_str())],
+        ))
+    })?;
 
     let (simbolo, fatto) = match marker.symbol {
         None => ("x", true),
@@ -1613,7 +1716,11 @@ fn note_task_toggle(
         host.document_revision(&doc)?,
         vec![TextEdit::replace(marker.span, simbolo)],
     );
-    let summary = uno(if fatto { P_TASK_DONE } else { P_TASK_TODO }, A_DOC, doc.as_str());
+    let summary = uno(
+        if fatto { P_TASK_DONE } else { P_TASK_TODO },
+        A_DOC,
+        doc.as_str(),
+    );
 
     if mode.is_dry_run() {
         return Ok(
@@ -1799,9 +1906,7 @@ fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> 
     declared(host)?
         .into_iter()
         .find(|e| e.spec.key == key)
-        .ok_or_else(|| {
-            PluginError::BadArgs(uno(E_UNDECLARED_KEY, A_KEY, key))
-        })
+        .ok_or_else(|| PluginError::BadArgs(uno(E_UNDECLARED_KEY, A_KEY, key)))
 }
 
 /// Il cancello della chiave, applicato **prima di sapere in che modo si sta
@@ -1871,7 +1976,10 @@ fn settings_reset(
     if mode.is_dry_run() {
         return Ok(CommandOutcome::notify(Text::message(
             Y_SETTINGS_RESET,
-            vec![Arg::text(A_KEY, key), Arg::text(A_VALUE, mostra(&entry.value))],
+            vec![
+                Arg::text(A_KEY, key),
+                Arg::text(A_VALUE, mostra(&entry.value)),
+            ],
         ))
         .with_effect(CommandEffect::Plan(CommandPlan {
             summary: uno(P_SETTINGS_RESET, A_KEY, key),
@@ -1900,11 +2008,14 @@ fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError
         }
     }
     let quante = decise.len();
-    Ok(CommandOutcome::notify(conto(D_SETTINGS_EXPORT, quante))
-    .with_effect(CommandEffect::Custom {
-        ns: SETTINGS_NS.to_string(),
-        payload: serde_json::Value::Object(decise),
-    }))
+    Ok(
+        CommandOutcome::notify(conto(D_SETTINGS_EXPORT, quante)).with_effect(
+            CommandEffect::Custom {
+                ns: SETTINGS_NS.to_string(),
+                payload: serde_json::Value::Object(decise),
+            },
+        ),
+    )
 }
 
 /// Rimette dentro una configurazione esportata, **una chiave alla volta**.

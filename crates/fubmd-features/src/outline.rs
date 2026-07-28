@@ -46,26 +46,28 @@ pub struct OutlineView;
 
 impl ViewProvider for OutlineView {
     fn views(&self) -> Vec<ViewSpec> {
-        vec![
-            ViewSpec::new(OUTLINE_VIEW, Text::key(VIEW_TITLE), ViewSurface::RightSidebar)
-                // Gli heading cambiano quando cambia il documento:
-                // `IndexUpdated` copre ogni scrittura (anche quelle arrivate
-                // dal watcher).
-                .refreshing(EventMask::of([
-                    EventKind::IndexUpdated,
-                    EventKind::BatchEnded,
-                ]))
-                // Del contesto segue il documento (di chi è la struttura) e la
-                // selezione (in quale sezione sta il cursore). Non la modalità:
-                // in lettura la selezione sparisce, e sparisce con lei il segno.
-                .following(ContextMask(vec![
-                    ContextKind::Document,
-                    ContextKind::Selection,
-                ]))
-                .with_icon("struttura")
-                .ordered(1)
-                .open_by_default(),
-        ]
+        vec![ViewSpec::new(
+            OUTLINE_VIEW,
+            Text::key(VIEW_TITLE),
+            ViewSurface::RightSidebar,
+        )
+        // Gli heading cambiano quando cambia il documento:
+        // `IndexUpdated` copre ogni scrittura (anche quelle arrivate
+        // dal watcher).
+        .refreshing(EventMask::of([
+            EventKind::IndexUpdated,
+            EventKind::BatchEnded,
+        ]))
+        // Del contesto segue il documento (di chi è la struttura) e la
+        // selezione (in quale sezione sta il cursore). Non la modalità:
+        // in lettura la selezione sparisce, e sparisce con lei il segno.
+        .following(ContextMask(vec![
+            ContextKind::Document,
+            ContextKind::Selection,
+        ]))
+        .with_icon("struttura")
+        .ordered(1)
+        .open_by_default()]
     }
 
     fn render_view(

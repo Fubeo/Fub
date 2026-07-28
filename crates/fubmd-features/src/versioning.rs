@@ -112,15 +112,27 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(NO_SUCH_VERSION, "La versione del {when} di {doc} non c'è.")
             .with(CONTENT_GONE, "Il contenuto di {path} è sparito.")
             .with(UNREADABLE, "{path} non si legge: {reason}")
-            .with(META_UNWRITABLE, "Non riesco a scrivere i metadati delle versioni: {reason}")
-            .with(INDEX_UNWRITABLE, "Non riesco a scrivere l'indice delle versioni: {reason}"),
+            .with(
+                META_UNWRITABLE,
+                "Non riesco a scrivere i metadati delle versioni: {reason}",
+            )
+            .with(
+                INDEX_UNWRITABLE,
+                "Non riesco a scrivere l'indice delle versioni: {reason}",
+            ),
         StringCatalog::new("en")
             .with(NO_VERSIONS, "No version of {doc}.")
             .with(NO_SUCH_VERSION, "There is no version of {doc} from {when}.")
             .with(CONTENT_GONE, "The content of {path} is gone.")
             .with(UNREADABLE, "{path} cannot be read: {reason}")
-            .with(META_UNWRITABLE, "Cannot write the versions metadata: {reason}")
-            .with(INDEX_UNWRITABLE, "Cannot write the versions index: {reason}"),
+            .with(
+                META_UNWRITABLE,
+                "Cannot write the versions metadata: {reason}",
+            )
+            .with(
+                INDEX_UNWRITABLE,
+                "Cannot write the versions index: {reason}",
+            ),
     ]
 }
 
@@ -360,15 +372,12 @@ impl VersionStore {
     /// Il contenuto di una versione.
     pub fn read(&self, id: &DocId, ts: u64, host: &dyn HostApi) -> Result<String, PluginError> {
         let inner = self.inner.lock().expect("mutex");
-        let doc = inner
-            .docs
-            .get(id.as_str())
-            .ok_or_else(|| {
-                PluginError::BadArgs(Text::message(
-                    NO_VERSIONS,
-                    vec![Arg::text(DOC, id.as_str())],
-                ))
-            })?;
+        let doc = inner.docs.get(id.as_str()).ok_or_else(|| {
+            PluginError::BadArgs(Text::message(
+                NO_VERSIONS,
+                vec![Arg::text(DOC, id.as_str())],
+            ))
+        })?;
         if !doc.versions.iter().any(|v| v.ts == ts) {
             return Err(PluginError::BadArgs(Text::message(
                 NO_SUCH_VERSION,
