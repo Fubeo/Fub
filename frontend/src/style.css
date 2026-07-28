@@ -1020,10 +1020,14 @@ body[data-mode="reading"] #editor {
   font-weight: 600;
 }
 
+/* I due pannelli stanno **affiancati** e non sovrapposti: sono due toggle
+   indipendenti, e chi ne apre uno mentre l'altro è aperto non deve trovarsi un
+   rettangolo sopra l'altro. Il toast tiene l'angolo (`right: 16px`) e per
+   questo non compare mentre gli avvisi sono aperti — sotto ci sarebbe la loro
+   lista. */
 #activity-panel,
 #notify-panel {
   position: fixed;
-  right: 10px;
   bottom: 30px;
   z-index: 70;
   width: 340px;
@@ -1035,6 +1039,14 @@ body[data-mode="reading"] #editor {
   border-radius: 6px;
   box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
   font-size: 13px;
+}
+
+#notify-panel {
+  right: 10px;
+}
+
+#activity-panel {
+  right: 360px;
 }
 
 #activity-list,
