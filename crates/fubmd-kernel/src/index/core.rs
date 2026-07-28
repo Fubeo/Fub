@@ -31,7 +31,9 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Frontmatter, Heading, Link};
+use fubmd_abi::model::{
+    canonical_tag, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
+};
 use fubmd_abi::query::{in_folder, Matches, QueryEvaluator, QueryPredicate};
 use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
@@ -400,6 +402,12 @@ impl IndexProvider for CoreIndex {
             // è l'unico che può rispondere. Prima non poteva rispondere
             // nessuno: la domanda non passava dal canale dati affatto.
             QueryRoute::Query(QueryKind::Organization),
+            // Cosa nomina un riferimento (§13.1): il kernel, perché risolvere è
+            // una funzione del grafo — gli omonimi si dirimono per distanza
+            // dalla radice, e gli alias stanno in un indice che tiene solo lui.
+            // Prima rispondeva solo alla shell, per un comando IPC scritto
+            // apposta.
+            QueryRoute::Query(QueryKind::Resolve),
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
@@ -547,6 +555,25 @@ impl IndexProvider for CoreIndex {
                     .expect("store di configurazione")
                     .entries(plugin.as_deref()),
             )),
+            // Le tre specie di bersaglio hanno tre regole diverse, e il punto di
+            // questa variante è **non** inventarne una quarta che le indovini:
+            // chi chiede dice di che specie è il riferimento, perché lo sa — è
+            // ciò che ha parsato, o ciò che `LinkTarget::classify` gli ha
+            // risposto.
+            IndexQuery::Resolve { target, from } => Ok(IndexResult::Resolved(match &target {
+                LinkTarget::Wiki { page, .. } => self.graph.resolve_wiki(page),
+                // Un path relativo senza un documento che lo ospiti è relativo
+                // alla radice: `DocId("")` non è un documento, è la cartella da
+                // cui `resolve_against` parte, ed è la stessa che userebbe una
+                // nota nella radice.
+                LinkTarget::Path(raw) => self
+                    .graph
+                    .resolve_path(from.as_ref().unwrap_or(&DocId::new("")), raw),
+                // Il mondo esterno non è nel vault, e dirlo è una risposta: chi
+                // passa qui l'esito di `classify` senza filtrarlo prima riceve
+                // `None` invece di un errore.
+                LinkTarget::Url(_) => None,
+            })),
         }
     }
 }

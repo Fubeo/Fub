@@ -294,6 +294,14 @@ pub fn mount(
         eprintln!("impostazioni: {warning}");
     }
 
+    // Cosa non ha potuto seguire una rinomina (§13.2). Vale la pena leggerlo
+    // insieme al montaggio e non altrove: se qui c'è una riga, un plugin ha una
+    // chiave morta e non lo sa — è il difetto che questa voce esiste per non
+    // lasciare più crescere in silenzio.
+    for warning in ws.doc_data_warnings() {
+        eprintln!("stato per-documento: {warning}");
+    }
+
     // Ciò che qualcuno produce e nessuno disegna: il conto che il §3.2 chiedeva
     // di poter fare. Oggi è vuoto; il giorno che non lo è, è un blocco che
     // l'utente legge crudo.

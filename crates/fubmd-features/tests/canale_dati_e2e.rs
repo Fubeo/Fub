@@ -13,7 +13,7 @@
 //! provider (§5.1).
 
 use camino::Utf8PathBuf;
-use fubmd_abi::model::{DocId, PropertyValue};
+use fubmd_abi::model::{DocId, LinkTarget, PropertyValue};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextMode, TextQuery};
 use fubmd_abi::traits::{
     DocumentMatch, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter, PropertySelect,
@@ -623,4 +623,70 @@ fn senza_chiave_di_ordinamento_comanda_la_rilevanza() {
         punteggi.first() > punteggi.last(),
         "e i punteggi sono davvero diversi: {punteggi:?}"
     );
+}
+
+/// **Cosa nomina questo riferimento** (§13.1): le tre specie di bersaglio
+/// passano dal canale dati, e la risposta è la stessa per la shell e per un
+/// provider.
+///
+/// Prima questa domanda usciva solo per `resolve_link`, un comando IPC scritto
+/// apposta: la sola risposta sul vault che la shell sapeva chiedere e un plugin
+/// no. Il presidio guarda proprio quella simmetria — la strada è
+/// `query_index`, che è ciò che una feature ha e nient'altro.
+#[test]
+fn cosa_nomina_un_riferimento_lo_dice_il_canale_dati() {
+    let (_g, ws) = vault();
+    let risolve = |target: LinkTarget, from: Option<&str>| -> Option<String> {
+        match ws
+            .query_index(IndexQuery::Resolve {
+                target,
+                from: from.map(DocId::new),
+            })
+            .expect("il kernel serve `resolve`")
+        {
+            IndexResult::Resolved(id) => id.map(|d| d.0),
+            other => panic!("risposta fuori tema: {}", other.kind_name()),
+        }
+    };
+
+    // Wiki: il nome nudo, regola Obsidian.
+    assert_eq!(
+        risolve(LinkTarget::wiki("Ferrite"), None).as_deref(),
+        Some("Progetti/Ferrite.md")
+    );
+    // E `from` per un wikilink non cambia niente: la regola non guarda da dove
+    // si sta scrivendo.
+    assert_eq!(
+        risolve(LinkTarget::wiki("Ferrite"), Some("Archivio/Vecchio.md")).as_deref(),
+        Some("Progetti/Ferrite.md")
+    );
+
+    // Path: relativo alla cartella di chi lo ospita…
+    assert_eq!(
+        risolve(
+            LinkTarget::Path("Cucina.md".into()),
+            Some("Progetti/Ferrite.md")
+        )
+        .as_deref(),
+        Some("Progetti/Cucina.md")
+    );
+    // …e senza un ospite, relativo alla radice. Sono due risposte **diverse**
+    // per la stessa stringa, ed è la ragione per cui `from` sta nella domanda
+    // invece che essere indovinato.
+    assert_eq!(risolve(LinkTarget::Path("Cucina.md".into()), None), None);
+    assert_eq!(
+        risolve(LinkTarget::Path("Progetti/Cucina.md".into()), None).as_deref(),
+        Some("Progetti/Cucina.md")
+    );
+
+    // Il mondo esterno non è nel vault, e dirlo è una risposta: chi passa qui
+    // l'esito di `classify` senza filtrarlo prima riceve `None`, non un errore.
+    assert_eq!(
+        risolve(LinkTarget::Url("https://example.org".into()), None),
+        None
+    );
+
+    // Un nome che non nomina niente è `None` e non un errore: è il caso da cui
+    // nascono «crea la nota che manca» e il redirect.
+    assert_eq!(risolve(LinkTarget::wiki("Inesistente"), None), None);
 }

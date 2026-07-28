@@ -29,6 +29,9 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.36 | [0010 — Un comando descritto a una macchina](../decisions/0010-comando-descritto-a-una-macchina.md) |
 | §2.21 | [0004 — Il grafo e i link non-wiki](../decisions/0004-il-grafo-e-i-link-non-wiki.md) |
 | §8.4 | [0026 — Due query insieme](../decisions/0026-due-query-insieme.md) |
+| §1.10 · §13.1 | [0043 — Il path è la chiave](../decisions/0043-il-path-e-la-chiave.md) |
+| §2.24 · §13.2 | [0044 — Lo stato per-documento](../decisions/0044-lo-stato-per-documento.md) |
+| §1.17 · §13.3 | [0045 — L'undo ha due pile](../decisions/0045-l-undo-ha-due-pile.md) |
 | §3.11 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §3.13 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §1.2 · §2.1 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
@@ -100,8 +103,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 
 | Vecchio | Nuovo | Voce |
 |---|---|---|
-| §1.10 | **§13.1** | Identità del documento — il path, e l'eventuale seconda chiave |
-| §1.17 | **§13.3** | L'undo non ha un proprietario |
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §2.1 | **§15.1** | Astrazione sullo storage |
 | §2.2 | **§14.1** | Il vault non è solo documenti |
@@ -116,7 +117,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.20 | **§14.2** | Nessun metadato di entry: né mtime, né dimensione, né impronta |
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
-| §2.24 | **§13.2** | Lo stato per-documento: ogni feature se lo migra da sé |
 | §2.29 | **§15.4** | I dati persistiti non hanno né una mappa né una classe |
 | §3.1 | **§1.2** | Smontare il monolite |
 | §3.2 | **§18.2** | Comandi e tastiera |

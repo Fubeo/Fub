@@ -42,7 +42,11 @@ di layout del §1.2.
 riscriverlo tutto, ogni feature che tocca il testo perde cursore, selezione e
 undo, e due di loro non si possono comporre — è il prerequisito silenzioso della
 [decisione 0007](../decisions/0007-contesto-di-sessione.md) (la selezione), della [decisione 0011](../decisions/0011-il-lotto.md) (un lotto è una lista di edit) e del §13.3
-(l'inverso di un edit è un edit).
+(l'inverso di un edit è un edit) — **chiuso** dalla
+[decisione 0045](../decisions/0045-l-undo-ha-due-pile.md), che quella previsione
+l'ha confermata al primo passo: `EditReport::inverse()` è metà dell'undo delle
+operazioni, e l'altra metà — l'inverso di una rinomina, di una cancellazione —
+non è un edit e non è nemmeno un vocabolario nuovo: è un **comando**.
 
 Dal quarto giro se ne aggiungono due dello stesso peso, e vanno sopra tutte le
 altre perché non allargano una capacità: ne rendono una **inesprimibile**.

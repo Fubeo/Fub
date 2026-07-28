@@ -8,6 +8,7 @@ use fubmd_abi::locale::Locale;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::SettingValue;
+use fubmd_abi::text::Text;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexQuery,
     IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TrashEntry, VaultRead,
@@ -345,6 +346,20 @@ impl HostCommands for KernelHost<'_> {
     ) -> Result<CommandOutcome, PluginError> {
         // Il modo è quello dell'host, non della chiamata: vedi `mode`.
         self.ws.invoke_command_nested(command, args, self.mode)
+    }
+
+    fn undo_last(&mut self) -> Result<Option<Text>, PluginError> {
+        // In simulazione non si annulla: `Guard` lo nega già con la politica
+        // `ReadOnly`, e qui c'è la seconda metà della stessa regola per quando
+        // l'host gira senza politiche (il core, i banchi). Un annullamento
+        // dentro un `dry-run` sarebbe la scala per uscire dalla simulazione, e
+        // ci uscirebbe **scrivendo**.
+        if self.mode.is_dry_run() {
+            return Err(PluginError::PermissionDenied(
+                "annullare: una simulazione non scrive".into(),
+            ));
+        }
+        self.ws.undo_last()
     }
 }
 

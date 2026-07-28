@@ -685,6 +685,14 @@ impl HostCommands for MemoryHost {
     ) -> Result<CommandOutcome, PluginError> {
         Err(PluginError::UnknownCommand(command.into()))
     }
+
+    /// E non ha nemmeno la pila delle operazioni, per la stessa ragione: la
+    /// tiene il kernel, che è l'unico che vede passare gli esiti. `None` — cioè
+    /// «niente da annullare» — è la risposta vera per un host che non ha mai
+    /// eseguito niente, e non un finto successo.
+    fn undo_last(&mut self) -> Result<Option<fubmd_abi::Text>, PluginError> {
+        Ok(None)
+    }
 }
 
 impl HostServices for MemoryHost {

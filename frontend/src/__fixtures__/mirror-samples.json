@@ -716,6 +716,34 @@
     },
     {
       "kind": "organization"
+    },
+    {
+      "kind": "resolve",
+      "target": {
+        "kind": "wiki",
+        "value": {
+          "page": "Nota",
+          "heading": "Sezione",
+          "block": null
+        }
+      },
+      "from": null
+    },
+    {
+      "kind": "resolve",
+      "target": {
+        "kind": "path",
+        "value": "../altra.md"
+      },
+      "from": "x/y.md"
+    },
+    {
+      "kind": "resolve",
+      "target": {
+        "kind": "url",
+        "value": "https://example.org"
+      },
+      "from": null
     }
   ],
   "IndexResult": [
@@ -893,6 +921,14 @@
           "note"
         ]
       }
+    },
+    {
+      "kind": "resolved",
+      "value": "note/a.md"
+    },
+    {
+      "kind": "resolved",
+      "value": null
     }
   ],
   "BacklinkRef": [
@@ -1246,14 +1282,16 @@
       "notify": "fatto",
       "effect": {
         "kind": "done"
-      }
+      },
+      "undo": null
     },
     {
       "notify": "fatto",
       "effect": {
         "kind": "navigate",
         "doc": "a.md"
-      }
+      },
+      "undo": null
     },
     {
       "notify": "fatto",
@@ -1264,14 +1302,16 @@
           "start": 3,
           "end": 7
         }
-      }
+      },
+      "undo": null
     },
     {
       "notify": "fatto",
       "effect": {
         "kind": "run_search",
         "query": "q"
-      }
+      },
+      "undo": null
     },
     {
       "notify": "fatto",
@@ -1298,7 +1338,8 @@
             }
           }
         ]
-      }
+      },
+      "undo": null
     },
     {
       "notify": "fatto",
@@ -1306,7 +1347,8 @@
         "kind": "custom",
         "ns": "p",
         "payload": null
-      }
+      },
+      "undo": null
     },
     {
       "notify": "fatto",
@@ -1316,6 +1358,41 @@
         "params": {
           "tag": "rust"
         }
+      },
+      "undo": null
+    },
+    {
+      "notify": "fatto",
+      "effect": {
+        "kind": "done"
+      },
+      "undo": {
+        "label": "la creazione di «a.md»",
+        "steps": [
+          {
+            "kind": "edit",
+            "doc": "a.md",
+            "edit": {
+              "base": "af63f44c86021554",
+              "edits": [
+                {
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "text": "x"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "command",
+            "command": "note.trash",
+            "args": {
+              "doc": "a.md"
+            }
+          }
+        ]
       }
     }
   ],

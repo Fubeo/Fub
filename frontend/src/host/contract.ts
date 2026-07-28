@@ -549,7 +549,33 @@ export interface CommandOutcome {
   // Testo semplice, mai markup: si inserisce come testo (regola di confine).
   notify: string | null;
   effect: CommandEffect;
+  // Come si torna indietro, se si può (§13.3). Assente = non annullabile, ed è
+  // il default onesto.
+  //
+  // Questa shell **non lo esegue** e non deve: la pila la tiene il kernel, e
+  // ciò che si vede da qui è che l'operazione appena fatta era annullabile —
+  // quel tanto che basta per accendere una voce di menu. Chi annulla invoca
+  // `vault.undo`, che è un comando come gli altri.
+  undo: Undo | null;
 }
+
+// Come si torna indietro da un'operazione (rispecchia fubmd_abi::command::Undo).
+//
+// LE DUE PILE NON SI FONDONO, e da questo lato del confine è la cosa da
+// ricordare: `Mod-z` nell'editor annulla il **testo del buffer** e non passa di
+// qui; `vault.undo` annulla l'**operazione** e non tocca il buffer. A decidere
+// quale risponde è il fuoco, non la cronologia — dare a entrambe lo stesso
+// accordo vorrebbe dire che Ctrl-Z fa due cose a seconda di chi vince la corsa.
+export interface Undo {
+  // Cosa si disferebbe, già risolto nella lingua di chi guarda: è la frase da
+  // mettere accanto ad «Annulla», non quella dell'esito.
+  label: string;
+  steps: UndoStep[];
+}
+
+export type UndoStep =
+  | { kind: "edit"; value: PlannedEdit }
+  | { kind: "command"; command: string; args: unknown };
 
 // --- contesto di sessione (rispecchia fubmd_abi::session) -------------------
 //
@@ -677,6 +703,19 @@ export interface Span {
 
 // In che verso si cammina il grafo dei link.
 export type LinkDirection = "outbound" | "inbound" | "both";
+
+// Il bersaglio NON RISOLTO di un link (rispecchia fubmd_abi::model::LinkTarget).
+// Tag ADIACENTE (`kind` + `value`): due varianti su tre portano uno scalare, e
+// col tag interno non attraverserebbero il JSON.
+//
+// Le tre specie sono tre regole di risoluzione diverse, e chi chiede dice quale
+// vuole: non c'è un'euristica che le indovini dalla stringa, perché `a/b.md` è
+// un wikilink per path *e* un link markdown relativo, e le due non risolvono
+// allo stesso posto.
+export type LinkTarget =
+  | { kind: "wiki"; value: { page: string; heading?: string | null; block?: string | null } }
+  | { kind: "url"; value: string }
+  | { kind: "path"; value: string };
 
 // Come si intende la stringa di una `TextQuery`.
 export type TextMode = "terms" | "phrase";
@@ -832,7 +871,13 @@ export type IndexQuery =
   // non del suo contenuto: icone, appuntate, ordinamenti, spazi. Prima era un
   // comando IPC che restituiva il blob intero, cioè una cosa che questa shell
   // sapeva chiedere e un provider no.
-  | { kind: "organization" };
+  | { kind: "organization" }
+  // Cosa nomina questo riferimento, adesso? (§13.1) `from` è il documento
+  // dentro cui il riferimento è scritto: serve ai `path`, che sono relativi
+  // alla cartella di chi li ospita. Prima era `resolve_link`, un comando IPC
+  // scritto apposta — cioè un fatto sul vault che questa shell conosceva e un
+  // provider no.
+  | { kind: "resolve"; target: LinkTarget; from?: string | null };
 
 // La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -849,7 +894,12 @@ export type IndexResult =
   | { kind: "vault_status"; value: VaultStatus }
   | { kind: "jobs"; value: JobStatus[] }
   | { kind: "settings"; value: SettingEntry[] }
-  | { kind: "organization"; value: Organization };
+  | { kind: "organization"; value: Organization }
+  // Il documento che un riferimento nomina, o nessuno. `null` non è un errore
+  // ed è metà del valore di questa risposta: link rotto, URL esterno e nota
+  // rinominata via da sotto danno tutti e tre `null`, e chi ha chiesto sa che
+  // deve proporre qualcos'altro.
+  | { kind: "resolved"; value: string | null };
 
 // --- le impostazioni (§11.1) ------------------------------------------------
 //

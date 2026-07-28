@@ -23,13 +23,13 @@
 
 use fubmd_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    ParamKind, ParamSpec, PlannedEdit,
+    ParamKind, ParamSpec, PlannedEdit, Undo, UndoStep,
 };
 use fubmd_abi::edit::{EditRequest, Revision, TextEdit};
 use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Subject};
 use fubmd_abi::locale::{HourCycle, Locale, Weekday};
-use fubmd_abi::model::{DocId, Span};
+use fubmd_abi::model::{DocId, LinkTarget, Span};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
 use fubmd_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
 use fubmd_abi::settings::{
@@ -519,9 +519,32 @@ fn command_outcome_samples() -> Vec<Value> {
             | CommandEffect::OpenView { .. } => {}
         }
     }
-    all.into_iter()
+    let mut campioni: Vec<Value> = all
+        .into_iter()
         .map(|effect| to_value(CommandOutcome::notify("fatto").with_effect(effect)))
-        .collect()
+        .collect();
+    // Le due specie di passo di un annullamento (§13.3), su un esito che le
+    // porta davvero: senza, il mirror TS non vedrebbe mai il campo `undo` —
+    // che è assente in tutti i campioni di sopra, perché il default è
+    // «non annullabile».
+    let mut passi = vec![UndoStep::Edit(PlannedEdit::new(
+        DocId::new("a.md"),
+        EditRequest::new(Revision::of("y"), vec![TextEdit::insert(0, "x")]),
+    ))];
+    passi.push(UndoStep::Command {
+        command: "note.trash".into(),
+        args: json!({"doc": "a.md"}),
+    });
+    for p in &passi {
+        match p {
+            UndoStep::Edit(_) | UndoStep::Command { .. } => {}
+        }
+    }
+    campioni.push(to_value(CommandOutcome::notify("fatto").undoable(Undo {
+        label: "la creazione di «a.md»".into(),
+        steps: passi,
+    })));
+    campioni
 }
 
 fn to_value<T: serde::Serialize>(v: T) -> Value {
@@ -594,6 +617,25 @@ fn index_query_samples() -> Vec<Value> {
             plugin: Some("fubmd.versioning".into()),
         },
         IndexQuery::Organization,
+        // Le tre specie di bersaglio (§13.1): il mirror deve reggerle tutte e
+        // tre, perché chi chiede dice di che specie è il riferimento e non c'è
+        // un'euristica che le indovini.
+        IndexQuery::Resolve {
+            target: LinkTarget::Wiki {
+                page: "Nota".into(),
+                heading: Some("Sezione".into()),
+                block: None,
+            },
+            from: None,
+        },
+        IndexQuery::Resolve {
+            target: LinkTarget::Path("../altra.md".into()),
+            from: Some(DocId::new("x/y.md")),
+        },
+        IndexQuery::Resolve {
+            target: LinkTarget::Url("https://example.org".into()),
+            from: None,
+        },
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -610,7 +652,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::VaultStatus
             | IndexQuery::Jobs
             | IndexQuery::Settings { .. }
-            | IndexQuery::Organization => {}
+            | IndexQuery::Organization
+            | IndexQuery::Resolve { .. } => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -710,6 +753,12 @@ fn index_result_samples() -> Vec<Value> {
                 .collect(),
             spaces: vec!["note".into()],
         }),
+        // Le due risposte di `resolve` (§13.1). Il `None` è qui perché è metà
+        // del valore della variante — un link rotto, un URL e una nota
+        // rinominata via da sotto danno tutti e tre quello — e perché sul
+        // confine JSON è `null`, che è la forma che il mirror deve reggere.
+        IndexResult::Resolved(Some(DocId::new("note/a.md"))),
+        IndexResult::Resolved(None),
     ];
     for r in &all {
         match r {
@@ -724,7 +773,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::VaultStatus(_)
             | IndexResult::Jobs(_)
             | IndexResult::Settings(_)
-            | IndexResult::Organization(_) => {}
+            | IndexResult::Organization(_)
+            | IndexResult::Resolved(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()

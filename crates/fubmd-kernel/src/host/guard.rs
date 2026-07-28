@@ -15,6 +15,7 @@ use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::options::permission;
 use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::SettingValue;
+use fubmd_abi::text::Text;
 use fubmd_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexQuery,
     IndexResult, JobId, JobSpec, Page, Paged, PluginPermissions, SettingsRead, SettingsWrite,
@@ -585,6 +586,19 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
     ) -> Result<CommandOutcome, PluginError> {
         self.check(Capability::Commands, || format!("invocare `{command}`"))?;
         self.inner.run_command(command, args)
+    }
+
+    fn undo_last(&mut self) -> Result<Option<Text>, PluginError> {
+        // **Due** controlli, e non è pignoleria. Annullare è invocare — i passi
+        // di un annullamento sono per metà comandi — ma è anche, sempre e per
+        // definizione, **scrivere**: e ciò che scrive non passa dal recinto del
+        // chiamante, perché a eseguirlo è il kernel. Senza il secondo controllo
+        // un host di sola lettura avrebbe una scala per riscrivere il vault, e
+        // un plugin senza `write-vault` un modo di disfare il lavoro di
+        // qualcuno.
+        self.check(Capability::Commands, || "annullare".into())?;
+        self.check(Capability::VaultWrite, || "annullare".into())?;
+        self.inner.undo_last()
     }
 }
 
