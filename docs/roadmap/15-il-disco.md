@@ -60,6 +60,21 @@ network share), 2.3 (drive rimovibili).
       (`vault.rs`) — un crash a metà lascia un file troncato. Serve
       temp+rename+fsync sulla directory. (Il test `write_atomicity` presidia
       un'altra cosa: l'ordine parse→scrittura.)
+- [ ] **Due processi sulla stessa cartella di configurazione si cancellano le
+      chiavi a vicenda.** `write_atomic` ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md))
+      è l'atomicità di *un file*, non di un *aggiornamento*: chi la chiama
+      compone il contenuto intero dalla propria copia in memoria, quindi la
+      seconda installazione che salva atterra un file integro **senza** le chiavi
+      che la prima aveva scritto dopo che lei aveva letto. Vale per i tre file
+      della macchina (`settings.json`, `vaults.json`, `view-state.json`); dentro
+      un processo il caso non esiste, perché il livello macchina è uno
+      (`Arc<MachineSettings>`) e il sidecar si scrive per chiave
+      ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)). È la stessa
+      *lost update* che quelle due voci hanno chiuso un piano più in basso, ed è
+      qui perché la risposta è di questo strato: un lock del file, o una
+      rilettura sotto lock prima di ricomporre. Non è P0 — non scade col freeze e
+      non tocca nessuna firma — ma è un dato **autorevole** che si perde in
+      silenzio, che è il criterio della [seduta 20](20-quando-qualcosa-va-storto.md).
 - [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
       sopravvivere a un crash (2.1, 24.2).
 - [ ] **Journal delle mutazioni** (append-only in `.fubmd-data/`): base di

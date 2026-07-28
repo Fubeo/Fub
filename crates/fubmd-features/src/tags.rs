@@ -62,6 +62,15 @@ const TAG: &str = "tag";
 /// valore* — e la separazione è il §2.7.
 const FILTER: &str = "filter";
 const FILTER_FIELD: &str = "filter";
+/// La chiave sotto cui il filtro **resta scritto** nello stato di vista (§11.2).
+///
+/// Vale oggi la stessa stringa del campo, e resta una costante sua: quello è il
+/// nome di un campo dentro un albero `UiNode` — roba di questo disegno, che si
+/// rinomina il giorno che il pannello cambia forma — questa è una chiave che sta
+/// su disco e che qualcuno ha già scritto. Con una costante sola, rinominare il
+/// campo avrebbe cambiato in silenzio la chiave salvata, e il filtro di chiunque
+/// sarebbe sparito senza che nessuno avesse toccato lo stato di vista.
+const FILTER_STATE: &str = "filter";
 
 /// Il pannello tag.
 ///
@@ -125,7 +134,7 @@ impl ViewProvider for TagPanelView {
             FILTER => {
                 let filter = action.text_field(FILTER_FIELD).unwrap_or_default();
                 let value = (!filter.is_empty()).then(|| serde_json::Value::from(filter));
-                host.set_view_state(FILTER_FIELD, value)?;
+                host.set_view_state(FILTER_STATE, value)?;
                 Ok(ViewUpdate::Replace { root: tree(host)? })
             }
             // Un tag: cerca le note che lo portano. La query di ricerca è la
@@ -175,7 +184,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
 /// scritto a mano dentro `filter` non vale un pannello che smette di funzionare.
 fn filter_of(host: &dyn ReadApi) -> Result<String, PluginError> {
     Ok(host
-        .view_state(FILTER_FIELD)?
+        .view_state(FILTER_STATE)?
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_default())
 }
@@ -393,7 +402,7 @@ mod tests {
         let mut view = TagPanelView;
         digita(&mut view, &mut host, "rus");
         assert_eq!(voci(&digita(&mut view, &mut host, "")), ["#rust", "#note"]);
-        assert_eq!(host.view_state(FILTER_FIELD).unwrap(), None);
+        assert_eq!(host.view_state(FILTER_STATE).unwrap(), None);
     }
 
     /// Fuori da un esemplare **non si scrive**: il pannello dice che non ha
@@ -422,7 +431,7 @@ mod tests {
         let mut host = MemoryHost::new()
             .con_tags(&[("rust", 2), ("note", 5)])
             .con_esemplare("uno");
-        host.set_view_state(FILTER_FIELD, Some(serde_json::json!(42)))
+        host.set_view_state(FILTER_STATE, Some(serde_json::json!(42)))
             .unwrap();
         let tree = TagPanelView
             .render_view(&ViewInstance::only(TAGS_VIEW), &host)
