@@ -104,15 +104,17 @@ pub fn doc_of(rel: &str) -> Option<DocId> {
 /// Codifica una stringa perché stia in **un** componente di path, su ogni
 /// filesystem che FubMD tocca.
 ///
-/// Passano nudi le lettere, le cifre, `-`, `.` e `_`, e **tutto il non-ASCII**:
-/// `Diario/2026 città.md` diventa `Diario%2F2026%20città.md`, che a occhio si
-/// legge ancora — e leggersi conta, perché è ciò che qualcuno vedrà aprendo
-/// `.fubmd-data` per capire chi sta occupando spazio.
+/// Passano nudi **tutto il non-ASCII**, le lettere, le cifre e la punteggiatura
+/// che i nomi di nota portano davvero: `- . _`, lo spazio, `( ) [ ]`, la virgola
+/// e l'apostrofo. `Diario/2026 città.md` diventa `Diario%2F2026 città.md`, che a
+/// occhio si legge ancora — e leggersi conta, perché è ciò che qualcuno vedrà
+/// aprendo `.fubmd-data` per capire chi sta occupando spazio.
 ///
 /// Ciò che viene codificato è, oltre allo `/`: il `%` (o la decodifica non
 /// sarebbe reversibile), i cinque caratteri che Windows rifiuta nei nomi di
-/// file (`\ : * ? " < > |`) e i caratteri di controllo. Lo spazio no: è legale
-/// ovunque e toglierlo renderebbe illeggibile la metà dei nomi di nota.
+/// file (`\ : * ? " < > |`) e i caratteri di controllo. Lo spazio no, ed è la
+/// scelta che si nota: è legale ovunque, e codificarlo renderebbe illeggibile
+/// la metà dei nomi di nota per guadagnare niente.
 ///
 /// # Il limite dichiarato
 ///
@@ -210,6 +212,17 @@ mod tests {
         // non un blob suo.
         assert_eq!(doc_of("doc/a.md"), None);
         assert_eq!(doc_of("doc//x"), None);
+    }
+
+    #[test]
+    fn resta_leggibile_a_occhio() {
+        // È l'esempio scritto accanto a `encode`, e sta qui perché un esempio
+        // in un commento è la cosa che invecchia per prima: questa riga esiste
+        // per farlo invecchiare **rumorosamente**. Ciò che promette è che chi
+        // apre `.fubmd-data` per capire chi occupa spazio ci riesca — quindi
+        // lo spazio resta uno spazio e gli accenti restano accenti, e solo lo
+        // `/` se ne va, perché è l'unico che romperebbe il componente.
+        assert_eq!(encode("Diario/2026 città.md"), "Diario%2F2026 città.md");
     }
 
     #[test]

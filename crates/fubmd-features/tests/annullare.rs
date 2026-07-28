@@ -105,9 +105,15 @@ fn annullare_una_rinomina_riporta_anche_i_link_che_erano_stati_riscritti() {
     assert!(testo(&ws, "Chi mi nomina.md").contains("[[Nuova]]"));
 
     let detto = annulla(&mut ws);
-    assert!(
-        detto.contains("Nuova.md") && detto.contains("Vecchia.md"),
-        "l'annullamento dice cosa ha disfatto: «{detto}»"
+    // **Nel verso giusto**, e l'uguaglianza è esatta apposta: un'etichetta che
+    // nomina i due path va bene in entrambi gli ordini, e uno dei due dice la
+    // cosa sbagliata — «la rinomina di «Nuova» in «Vecchia»» è il rimedio, non
+    // il male. Gli argomenti dell'inverso vanno in verso opposto all'etichetta
+    // (vedi `note_rename`), quindi scriverli uguali è il refuso naturale lì, e
+    // un `contains` per parte non lo noterebbe mai.
+    assert_eq!(
+        detto, "Annullato: la rinomina di «Vecchia.md» in «Nuova.md»",
+        "l'annullamento nomina l'operazione disfatta, non quella fatta per disfarla"
     );
     assert!(esiste(&ws, "Vecchia.md") && !esiste(&ws, "Nuova.md"));
     assert!(

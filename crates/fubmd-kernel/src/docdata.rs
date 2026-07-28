@@ -31,9 +31,18 @@
 //! La raccolta è un **sweep** e non un evento, e la differenza è la stessa di
 //! sopra: un evento lo si perde, un giro sul disco no. Gira all'apertura del
 //! vault, quando l'anagrafe è appena stata ricostruita ed è al suo massimo di
-//! verità. Ciò che la rende scrivibile è che
-//! [`doc_of`](fubmd_abi::rules::doc_data::doc_of) è **totale**: di ogni cartella
-//! si sa quale nota nomina, quindi si sa se quella nota non c'è più.
+//! verità. Ciò che la rende scrivibile è che la codifica è **reversibile**: di
+//! ogni cartella si sa quale nota nomina, quindi si sa se quella nota non c'è
+//! più. Con un'impronta al suo posto lo spazio sarebbe più corto e più
+//! uniforme, e questo modulo non esisterebbe.
+//!
+//! Quella reversibilità ha due facce, e qui si usa la seconda:
+//! [`doc_of`](fubmd_abi::rules::doc_data::doc_of) risponde a chi ha in mano un
+//! path *relativo* — ciò che [`data_list`](fubmd_abi::traits::DataRead::data_list)
+//! restituisce a un plugin —, mentre il kernel cammina il disco e si trova in
+//! mano il **componente** già isolato, quindi gli basta
+//! [`decode`](fubmd_abi::rules::doc_data::decode). Sono la stessa garanzia
+//! guardata da due altezze diverse, non due strade.
 //!
 //! # Cosa conta come «non c'è più»
 //!
@@ -98,6 +107,10 @@ pub(crate) fn collect(roots: &[Utf8PathBuf], esiste: &dyn Fn(&DocId) -> bool) ->
                 // toglierlo sarebbe cancellare roba di qualcun altro.
                 continue;
             };
+            // `decode` e non `doc_of`: la voce di `read_dir` **è** già il
+            // componente del documento, mentre `doc_of` parte da un path
+            // relativo e lo isola. Passare di là vorrebbe dire ricomporre un
+            // path per farselo smontare subito dopo.
             let doc = DocId::new(doc_data::decode(&nome));
             if esiste(&doc) {
                 continue;

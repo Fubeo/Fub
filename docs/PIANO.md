@@ -215,12 +215,18 @@ sopra nella [decisione 0016](decisions/0016-cosa-e-una-view.md).
   record (`TextQuery`, `DocumentMatch`) e la stessa scadenza: oggi il contratto
   non sa dire «a meno di un refuso» né, di conseguenza, «esattamente», e gli
   estratti sono ancorati allo snippet e non al documento, quindi cercare *dentro*
-  la nota aperta è inesprimibile. Fuori da quei capitoli restano P0, e per la stessa ragione,
-  l'identità del documento (§13.1: il path è per sempre la chiave?), che nessun
-  contenitore della shell può prendere al posto del contratto — le stringhe e il
-  locale (§12.1) e gli errori tipizzati al confine (§12.2) le hanno prese le
-  decisioni [0040](decisions/0040-chi-localizza.md) e
-  [0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md). Chiudono l'elenco i presidi (l'SDK come superficie di riuso,
+  la nota aperta è inesprimibile. Fuori da quei capitoli i P0 erano tre, e per la
+  stessa ragione — nessun contenitore della shell li può prendere al posto del
+  contratto —, e adesso sono decisi tutti e tre: le stringhe e il locale (§12.1)
+  e gli errori tipizzati al confine (§12.2) con le decisioni
+  [0040](decisions/0040-chi-localizza.md) e
+  [0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md), e l'identità
+  del documento (§13.1: il path è per sempre la chiave?) con la
+  [0043](decisions/0043-il-path-e-la-chiave.md) — che ha risposto **sì**, e non
+  perché una seconda chiave costasse troppo: un id stabile o vive dentro il file,
+  e allora è una *proprietà* che il contratto sa già dire, o vive fuori, e allora
+  non sopravvive alla rinomina fatta ad app chiusa, che è l'unica cosa per cui
+  esisterebbe. Chiudono l'elenco i presidi (l'SDK come superficie di riuso,
   il banco di prova del kernel copiato diciotto volte, le regole scritte due
   volte in due linguaggi, un crate per bundle di feature) e il **debito**
   riportato dal quarto audit, che ha un milestone suo.

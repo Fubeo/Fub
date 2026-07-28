@@ -204,9 +204,19 @@ bisogno di un posto da cui essere montato).
 *ex §4.2 · presidi · **P1** — dopo la 5.4*
 
 - [ ] **Test che presidia la superficie**: l'elenco dei comandi Tauri
-      (25 oggi, sei in meno dopo la [decisione 0013](../decisions/0013-elenco-delle-capacita.md)) è una **allowlist** in un test; aggiungerne
-      uno richiede di dire perché non poteva essere un comando/una view/una
-      query. È il modo meccanico di non tornare al bespoke.
+      (**38** oggi, in `generate_handler!`) è una **allowlist** in un test;
+      aggiungerne uno richiede di dire perché non poteva essere un comando/una
+      view/una query. È il modo meccanico di non tornare al bespoke.
+
+      E questo numero è già l'argomento della voce, perché è **il secondo che ci
+      sta scritto**: qui c'era «25 oggi, sei in meno dopo la
+      [decisione 0013](../decisions/0013-elenco-delle-capacita.md)», e da allora
+      le sedute hanno tolto (l'ultimo è `resolve_link`, con la
+      [0043](../decisions/0043-il-path-e-la-chiave.md)) e aggiunto di più, senza
+      che nessuna si accorgesse di dover tornare a correggere questa riga. Un
+      conto scritto a mano in un documento non è un presidio: è una cosa che
+      diventa falsa in silenzio, ed è esattamente ciò che l'allowlist esiste per
+      non essere. Finché il test non c'è, chi legge questa riga la controlli.
 - [ ] **Migrare i bespoke esistenti** dove il §1 lo rende possibile: versioning
       (3 comandi), ~~cestino (4)~~ e ~~organizzazione (2)~~ — fatti con la [decisione 0013](../decisions/0013-elenco-delle-capacita.md):
       crea, rinomina, cestina, ripristina, svuota e proponi-nome erano **sei**
