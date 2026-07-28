@@ -251,7 +251,7 @@ volta, per passare dallo strato alla seduta; non deve diventare un rito.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i messaggi di commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — quarantacinque, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — quarantasei, uno
   per file. Non stanno qui perché questo è l'elenco di ciò che **resta da fare**, e
   un verbale archiviato nel posto in cui si cerca cosa manca non lo rilegge
   nessuno.
