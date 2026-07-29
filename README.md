@@ -5,11 +5,10 @@ un'architettura pensata fin dall'inizio per i plugin.
 
 ## Idea architetturale
 
-L'asse portante è: **core agnostico rispetto al formato** + un contratto di
-trait definito **una volta sola**, di cui il markdown è solo il *primo*
-provider. Le feature "native" sono implementazioni Rust di quei trait; il
-runtime WASM per i plugin di terzi è un layer separato che arriverà più avanti
-(Milestone 5) e implementerà **gli stessi trait** via proxy — il kernel non
+**Core agnostico rispetto al formato** + un contratto di trait definito **una
+volta sola**, di cui il markdown è solo il *primo* provider. Le feature "native"
+sono implementazioni Rust di quei trait; il runtime WASM per i plugin di terzi
+(Milestone 5) implementerà **gli stessi trait** via proxy — il kernel non
 distingue un provider nativo da uno WASM.
 
 ```
@@ -40,26 +39,20 @@ distingue un provider nativo da uno WASM.
 ```
 
 **Invarianti chiave (verificate in CI/test):** `fubmd-kernel` e `fubmd-abi` non
-dipendono da `comrak`, `tauri` o `wasmtime` — il core non sa cosa sia il
-markdown; e `fubmd-host` non dipende da `tauri`, perché chi monta deve poter
-essere preso da una CLI, da un'API locale o da un e2e headless senza portarsi
-dietro un webview.
+dipendono da `comrak`, `tauri` o `wasmtime`; `fubmd-host` non dipende da
+`tauri`, perché chi monta deve poter essere preso da una CLI, da un'API locale o
+da un e2e headless senza portarsi dietro un webview.
 
 ## Documentazione
 
 Tutta in **[`docs/`](docs/)**, e si entra da
-**[docs/README.md](docs/README.md)**: da lì partono i quattro percorsi — capire
-il progetto, scrivere codice, sapere perché una cosa è così, sapere cosa manca.
-
-Le due scorciatoie usate più spesso: la
-[mappa visuale dell'architettura](docs/architecture/mappa-visuale.md) per il
-colpo d'occhio, e i [verbali delle decisioni](docs/decisions/README.md) per il
-perché.
+**[docs/README.md](docs/README.md)**. Le due scorciatoie usate più spesso: la
+[mappa visuale dell'architettura](docs/architecture/mappa-visuale.md) e i
+[verbali delle decisioni](docs/decisions/README.md).
 
 ## Cosa c'è già
 
-Milestone 1 è chiusa dal 24/07/2026 e M2 è quasi finita. In concreto, oggi
-l'app fa questo:
+Milestone 1 è chiusa dal 24/07/2026 e M2 è quasi finita:
 
 - Vault compatibile Obsidian (`.md` + frontmatter YAML, `[[wikilink]]`, `#tag`,
   callout, embed `![[...]]`).
@@ -105,13 +98,13 @@ cargo clippy --workspace --all-targets
 
 ## Roadmap
 
-- **M2** — ricerca full-text (tantivy), graph view, outline, tag panel, "crea nota"
-  per i link non risolti. La ricerca è **built-in e di classe *omnisearch***
-  ([decisione 0025](docs/decisions/0025-la-ricerca-predefinita.md)): non un
-  plugin da installare ma *la* ricerca dell'app. Ciò che le manca ancora — refusi
-  perdonati, prefisso mentre si digita, ricerca dentro la nota aperta — sta nella
-  [seduta 21](docs/roadmap/21-la-ricerca-predefinita.md), e tre di quelle voci
-  sono **firma**: scadono col freeze di M4.
+- **M2** — ricerca full-text (tantivy), graph view, outline, tag panel, "crea
+  nota" per i link non risolti. La ricerca è **built-in e di classe
+  *omnisearch*** ([decisione 0025](docs/decisions/0025-la-ricerca-predefinita.md)).
+  Ciò che le manca — refusi perdonati, prefisso mentre si digita, ricerca dentro
+  la nota aperta — sta nella
+  [seduta 21](docs/roadmap/21-la-ricerca-predefinita.md), con tre voci di
+  **firma** che scadono col freeze di M4.
 - **M3** — live preview *in-editor* alla Obsidian (decorazioni CodeMirror sugli
   `Span` del modello), command palette, settings via form dichiarativi.
 - **M4** — congelamento della superficie dei trait + contratto WIT (`wit/`),
