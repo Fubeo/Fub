@@ -158,7 +158,10 @@ impl Bundle for CoreBundle {
 /// monta: un id doppio o un provider in conflitto è un errore di montaggio **di
 /// questo repo**, non una condizione che l'utente possa produrre — si dice su
 /// stderr e si tira dritto, che è ciò che faceva prima. Il canale giusto per
-/// dirlo è il §20.2, e non esiste ancora.
+/// dirlo adesso esiste
+/// ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)):
+/// questi punti sono fra i ventisette da convertire, ed è la casella che il
+/// §20.2 lascia dietro di sé.
 pub fn mount(
     root: &Utf8Path,
     machine: Arc<MachineSettings>,

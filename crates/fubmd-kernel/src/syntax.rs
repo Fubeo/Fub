@@ -237,8 +237,18 @@ impl SyntaxRegistry {
     ///
     /// Non restituisce un `Result`: una regola che fallisce **lascia il nodo
     /// com'era**, che è il degrado giusto — un'estensione rotta rende un
-    /// documento meno ricco, non illeggibile. Il canale con cui quel fallimento
-    /// arriva a qualcuno è il §20.2, e non esiste ancora.
+    /// documento meno ricco, non illeggibile.
+    ///
+    /// Il canale con cui quel fallimento arriva a una persona adesso esiste
+    /// ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
+    /// e questo è uno dei punti che **non ci arrivano ancora**: per emettere un
+    /// evento ci vuole il workspace, e qui siamo dentro il parse, che è
+    /// `&self` e non ne ha uno. Farcelo risalire vuol dire dare un esito a
+    /// `DocumentStore::parse` e a tutti i suoi otto chiamanti, cioè un lavoro
+    /// che non è la forma del canale ma la sua adozione: è la casella che il
+    /// §20.2 lascia dietro di sé, non un'altra decisione. Finché non è fatto,
+    /// qui si stampa — e si stampa **dicendolo**, invece di ignorare un
+    /// `Option` che il tipo obbliga a guardare.
     pub fn apply(&self, model: &mut DocumentModel, ctx: &ParseContext, format: &str) {
         if self.rules.is_empty() {
             return;
@@ -256,22 +266,27 @@ impl SyntaxRegistry {
             // chi ha chiesto di scrivere: un panico qui si porterebbe via il
             // vault (§9.3). Si ferma, si racconta, e ciò che perde è la propria
             // trasformazione — le altre regole girano lo stesso.
-            crate::safety::notifying(&r.spec.id, "innestandosi sul documento", || {
-                match &r.spec.trigger {
-                    SyntaxTrigger::Fence { info } => {
-                        let wanted: Vec<String> = info.iter().map(|i| i.to_lowercase()).collect();
-                        apply_to_blocks(&mut model.body, &mut |block| {
-                            fence_rule(block, r, &wanted, ctx)
-                        });
+            if let Some(fault) =
+                crate::safety::reporting(&r.spec.id, "innestandosi sul documento", || {
+                    match &r.spec.trigger {
+                        SyntaxTrigger::Fence { info } => {
+                            let wanted: Vec<String> =
+                                info.iter().map(|i| i.to_lowercase()).collect();
+                            apply_to_blocks(&mut model.body, &mut |block| {
+                                fence_rule(block, r, &wanted, ctx)
+                            });
+                        }
+                        SyntaxTrigger::Inline { open, close } => {
+                            apply_to_blocks(&mut model.body, &mut |block| {
+                                inline_rule(block, r, open, close, ctx);
+                                None
+                            });
+                        }
                     }
-                    SyntaxTrigger::Inline { open, close } => {
-                        apply_to_blocks(&mut model.body, &mut |block| {
-                            inline_rule(block, r, open, close, ctx);
-                            None
-                        });
-                    }
-                }
-            });
+                })
+            {
+                eprintln!("{fault}");
+            }
         }
     }
 }

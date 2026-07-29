@@ -11,7 +11,7 @@
 //!    — cancellazioni ad app chiusa — lo chiude [`IndexProvider::reconcile`].
 //! 2. **Riparte in fretta.** L'indice vive su disco nello spazio dati del
 //!    proprio plugin (`.fubmd/data/plugins/fubmd.search/`). Alla riapertura
-//!    ogni documento ripassa da `on_document_indexed`, ma l'impronta del
+//!    ogni documento ripassa da `on_documents_indexed`, ma l'impronta del
 //!    contenuto (vedi [`fingerprint`]) fa saltare gli immutati: su un vault non
 //!    toccato la riapertura non scrive nulla.
 //! 3. **Non si affeziona ai propri dati.** Qualunque dubbio sulla coerenza fra
@@ -55,8 +55,8 @@ use fubmd_abi::query::{
 };
 use fubmd_abi::text::{Arg, StringCatalog, Text};
 use fubmd_abi::traits::{
-    DocumentMatch, EntryKind, HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged,
-    PredicateKind, QueryRoute, VaultEntry,
+    DocumentMatch, EntryKind, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page,
+    Paged, PredicateKind, QueryRoute, VaultEntry,
 };
 use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
@@ -287,7 +287,7 @@ pub struct SearchIndex {
     /// Ciò che il kernel ha **appena dichiarato** chiedendo cosa è già a posto:
     /// `DocId` → revisione del sorgente che sta per consegnare.
     ///
-    /// Serve perché [`IndexProvider::on_document_indexed`] riceve un *modello*,
+    /// Serve perché [`IndexProvider::on_documents_indexed`] riceve un *modello*,
     /// e da un modello la revisione del sorgente non si ricalcola. L'unico
     /// posto in cui questo indice la vede è la domanda del kernel, e questa
     /// mappa è il tempo che passa fra la domanda e la consegna: si riempie in
@@ -565,7 +565,7 @@ impl SearchIndex {
 
     /// Il documento come lo vuole tantivy.
     ///
-    /// Sta fuori da `on_document_indexed` per una ragione sola: comporlo non ha
+    /// Sta fuori da `on_documents_indexed` per una ragione sola: comporlo non ha
     /// niente a che vedere col writer, e non deve tenerne il lock. Chi scrive lo
     /// prende per due chiamate, non per la costruzione di un record.
     fn tantivy_doc(&self, doc: &DocumentModel) -> TantivyDocument {
@@ -1233,57 +1233,106 @@ impl IndexProvider for SearchIndex {
         current
     }
 
-    fn on_document_indexed(&mut self, doc: &DocumentModel) {
-        let print = fingerprint(doc);
-        // Contenuto identico a quello già indicizzato: non c'è niente da fare
-        // in tantivy. È questo salto — non una scorciatoia all'avvio — a rendere
-        // rapida la riapertura di un vault non toccato. La revisione del
-        // sorgente si aggiorna lo stesso: un file può cambiare senza che il
-        // modello cambi (una riga di frontmatter che nessuno indicizza), e
-        // lasciarci quella vecchia vorrebbe dire farlo rileggere per sempre.
-        if self.fingerprints.get(&doc.id) == Some(&print) {
+    /// **Il posto in cui questo indice sapeva di perdere un documento e non
+    /// aveva come dirlo** (§20.1). Il commento che c'è sotto — «mentire è
+    /// peggio che perdere il documento» — era già qui prima della decisione
+    /// 0051, ed era tutto ciò che si poteva fare: il ripiego (dimenticare
+    /// l'impronta, così il prossimo passaggio riprova) funziona solo alla
+    /// riapertura del vault, perché `reindex` è l'unico percorso che rialimenta
+    /// un documento **immutato**. Per tutta la sessione corrente quella nota non
+    /// era nella ricerca, e «nessun risultato» era indistinguibile da «nessuna
+    /// corrispondenza».
+    ///
+    /// Adesso la stessa riga produce un [`IndexLoss`] che nomina il documento,
+    /// e il ripiego resta: si riprova alla riapertura **e** lo si dice adesso.
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        let mut lost = Vec::new();
+        for doc in docs {
+            let print = fingerprint(doc);
+            // Contenuto identico a quello già indicizzato: non c'è niente da
+            // fare in tantivy. È questo salto — non una scorciatoia all'avvio —
+            // a rendere rapida la riapertura di un vault non toccato. La
+            // revisione del sorgente si aggiorna lo stesso: un file può cambiare
+            // senza che il modello cambi (una riga di frontmatter che nessuno
+            // indicizza), e lasciarci quella vecchia vorrebbe dire farlo
+            // rileggere per sempre.
+            if self.fingerprints.get(&doc.id) == Some(&print) {
+                self.note_source(&doc.id);
+                continue;
+            }
+            // tantivy non aggiorna: si cancella il termine e si riscrive.
+            let term = self.term_for(&doc.id);
+            let td = self.tantivy_doc(doc);
+            {
+                let guard = self.writer.lock().expect("mutex");
+                // Il writer è andato — chiuso (decisione 0028) o rotto — e in
+                // entrambi i casi l'indice non è più affidabile: mentire è
+                // peggio che perdere il documento. Si dimentica l'impronta, così
+                // il prossimo passaggio riproverà.
+                let Some(writer) = guard.as_ref() else {
+                    drop(guard);
+                    self.forget(&doc.id);
+                    lost.push(IndexLoss::new(
+                        doc.id.clone(),
+                        PluginError::Internal(
+                            "l'indice di ricerca non accetta più scritture: questo documento \
+                             non è cercabile finché il vault non viene riaperto"
+                                .into(),
+                        ),
+                    ));
+                    continue;
+                };
+                writer.delete_term(term);
+                if let Err(e) = writer.add_document(td) {
+                    drop(guard);
+                    self.forget(&doc.id);
+                    lost.push(IndexLoss::new(
+                        doc.id.clone(),
+                        PluginError::Internal(
+                            format!("l'indice di ricerca ha rifiutato il documento: {e}").into(),
+                        ),
+                    ));
+                    continue;
+                }
+            }
+            self.fingerprints.insert(doc.id.clone(), print);
             self.note_source(&doc.id);
-            return;
+            self.dirty.store(true, Ordering::Release);
         }
-        // tantivy non aggiorna: si cancella il termine e si riscrive.
-        let term = self.term_for(&doc.id);
-        let td = self.tantivy_doc(doc);
-        {
-            let guard = self.writer.lock().expect("mutex");
-            // Il writer è andato — chiuso (decisione 0028) o rotto — e in
-            // entrambi i casi l'indice non è più affidabile: mentire è peggio
-            // che perdere il documento. Si dimentica l'impronta, così il
-            // prossimo passaggio riproverà.
-            let Some(writer) = guard.as_ref() else {
-                drop(guard);
-                self.forget(&doc.id);
-                return;
-            };
-            writer.delete_term(term);
-            if writer.add_document(td).is_err() {
-                drop(guard);
-                self.forget(&doc.id);
-                return;
+        lost
+    }
+
+    /// La perdita di segno opposto, e la più visibile: senza writer il termine
+    /// **non** si cancella, quindi il documento resta cercabile pur essendo
+    /// sparito dal vault — chi cerca lo trova e lo apre, e trova un file che
+    /// non c'è.
+    fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        let mut lost = Vec::new();
+        for id in ids {
+            self.sources.remove(id);
+            if self.fingerprints.remove(id).is_none() {
+                continue;
+            }
+            let term = self.term_for(id);
+            match self.writer.lock().expect("mutex").as_ref() {
+                Some(writer) => {
+                    writer.delete_term(term);
+                    self.dirty.store(true, Ordering::Release);
+                }
+                None => lost.push(IndexLoss::new(
+                    id.clone(),
+                    PluginError::Internal(
+                        "l'indice di ricerca non accetta più scritture: questo documento resta \
+                         fra i risultati pur non esistendo più"
+                            .into(),
+                    ),
+                )),
             }
         }
-        self.fingerprints.insert(doc.id.clone(), print);
-        self.note_source(&doc.id);
-        self.dirty.store(true, Ordering::Release);
+        lost
     }
 
-    fn on_document_removed(&mut self, id: &DocId) {
-        self.sources.remove(id);
-        if self.fingerprints.remove(id).is_none() {
-            return;
-        }
-        let term = self.term_for(id);
-        if let Some(writer) = self.writer.lock().expect("mutex").as_ref() {
-            writer.delete_term(term);
-        }
-        self.dirty.store(true, Ordering::Release);
-    }
-
-    fn reconcile(&mut self, ids: &[DocId]) {
+    fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         // Fine del giro d'apertura: le consegne che la domanda annunciava sono
         // arrivate tutte, e ciò che resta dichiarato è di un documento che non
         // è arrivato — un parse fallito, un file sparito fra la scansione e la
@@ -1298,18 +1347,41 @@ impl IndexProvider for SearchIndex {
             .cloned()
             .collect();
         if dead.is_empty() {
-            return;
+            return Vec::new();
         }
         let terms: Vec<Term> = dead.iter().map(|id| self.term_for(id)).collect();
-        if let Some(writer) = self.writer.lock().expect("mutex").as_ref() {
-            for term in terms {
-                writer.delete_term(term);
+        // Senza writer i morti restano dentro, e `forget` qui sotto toglierebbe
+        // anche l'unica traccia che permette di riprovare: sono perdite, e sono
+        // esattamente il caso che `reconcile` esiste per chiudere — ciò che è
+        // sparito ad app chiusa.
+        let mut lost = Vec::new();
+        match self.writer.lock().expect("mutex").as_ref() {
+            Some(writer) => {
+                for term in terms {
+                    writer.delete_term(term);
+                }
+                self.dirty.store(true, Ordering::Release);
+            }
+            None => {
+                lost = dead
+                    .iter()
+                    .map(|id| {
+                        IndexLoss::new(
+                            id.clone(),
+                            PluginError::Internal(
+                                "l'indice di ricerca non accetta più scritture: questo documento \
+                                 è stato cancellato ad app chiusa e resta fra i risultati"
+                                    .into(),
+                            ),
+                        )
+                    })
+                    .collect();
             }
         }
         for id in &dead {
             self.forget(id);
         }
-        self.dirty.store(true, Ordering::Release);
+        lost
     }
 
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -1485,8 +1557,12 @@ mod tests {
     fn finds_by_body_and_reports_highlights() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "il gatto dorme sul tappeto"));
-        idx.on_document_indexed(&doc("b.md", "il cane abbaia forte"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "a.md",
+            "il gatto dorme sul tappeto",
+        )));
+        let _ =
+            idx.on_documents_indexed(std::slice::from_ref(&doc("b.md", "il cane abbaia forte")));
 
         let hits = search(&idx, "gatto");
         assert_eq!(hits.len(), 1);
@@ -1502,8 +1578,14 @@ mod tests {
     fn page_name_outranks_body() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("nota/Rust.md", "appunti sparsi di programmazione"));
-        idx.on_document_indexed(&doc("altro.md", "rust rust rust rust rust rust"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "nota/Rust.md",
+            "appunti sparsi di programmazione",
+        )));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "altro.md",
+            "rust rust rust rust rust rust",
+        )));
 
         let hits = search(&idx, "rust");
         assert_eq!(hits.len(), 2);
@@ -1518,8 +1600,8 @@ mod tests {
     fn conjunction_by_default() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "rust asincrono"));
-        idx.on_document_indexed(&doc("b.md", "rust sincrono"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "rust asincrono")));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("b.md", "rust sincrono")));
 
         assert_eq!(search(&idx, "rust asincrono").len(), 1);
     }
@@ -1540,11 +1622,11 @@ mod tests {
     fn finds_by_tag_as_an_exact_term() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&tagged(
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged(
             "a.md",
             "niente di rilevante nel corpo",
             &["progetto/fubmd"],
-        ));
+        )));
 
         let hits = page_of(&idx, tag("progetto/fubmd", false), None).items;
         assert_eq!(hits.len(), 1);
@@ -1561,10 +1643,22 @@ mod tests {
     fn a_tag_is_a_key_not_prose() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&tagged("nested.md", "", &["progetto/rust"]));
-        idx.on_document_indexed(&tagged("plain.md", "", &["rust"]));
-        idx.on_document_indexed(&tagged("adiacenti.md", "", &["area", "lavoro"]));
-        idx.on_document_indexed(&tagged("composto.md", "", &["area/lavoro"]));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged(
+            "nested.md",
+            "",
+            &["progetto/rust"],
+        )));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged("plain.md", "", &["rust"])));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged(
+            "adiacenti.md",
+            "",
+            &["area", "lavoro"],
+        )));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged(
+            "composto.md",
+            "",
+            &["area/lavoro"],
+        )));
 
         // Un tag è un termine esatto: senza `descendants`, quello annidato non
         // c'entra.
@@ -1604,8 +1698,8 @@ mod tests {
     fn tags_are_case_insensitive_but_exact() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&tagged("a.md", "", &["Rust"]));
-        idx.on_document_indexed(&tagged("b.md", "", &["rust"]));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged("a.md", "", &["Rust"])));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged("b.md", "", &["rust"])));
 
         // `#Rust` e `#rust` sono lo stesso tag (chiave canonica), qualunque
         // sia il case della query: il click dal pannello (che mostra la
@@ -1619,10 +1713,10 @@ mod tests {
     fn update_replaces_previous_content() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "vecchio contenuto"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "vecchio contenuto")));
         assert_eq!(search(&idx, "vecchio").len(), 1);
 
-        idx.on_document_indexed(&doc("a.md", "nuovo contenuto"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "nuovo contenuto")));
         assert_eq!(search(&idx, "vecchio").len(), 0, "niente duplicati");
         assert_eq!(search(&idx, "nuovo").len(), 1);
         assert_eq!(idx.len(), 1);
@@ -1632,8 +1726,8 @@ mod tests {
     fn removal_deletes_from_index() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "effimero"));
-        idx.on_document_removed(&DocId::new("a.md"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "effimero")));
+        let _ = idx.on_documents_removed(std::slice::from_ref(&DocId::new("a.md")));
         assert_eq!(search(&idx, "effimero").len(), 0);
         assert!(idx.is_empty());
     }
@@ -1642,10 +1736,10 @@ mod tests {
     fn reconcile_drops_what_the_vault_no_longer_has() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("vivo.md", "presente"));
-        idx.on_document_indexed(&doc("morto.md", "sparito"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("vivo.md", "presente")));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("morto.md", "sparito")));
 
-        idx.reconcile(&[DocId::new("vivo.md")]);
+        let _ = idx.reconcile(&[DocId::new("vivo.md")]);
 
         assert_eq!(search(&idx, "presente").len(), 1);
         assert_eq!(search(&idx, "sparito").len(), 0);
@@ -1658,7 +1752,7 @@ mod tests {
         // avrà anche un provider di terzi. Non da `std::fs`.
         let (_g, path) = tmp();
         let (mut idx, mut host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "contenuto"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto")));
         idx.flush(&mut host).unwrap();
 
         let manifest = manifest_of(&host);
@@ -1676,7 +1770,8 @@ mod tests {
         let mut host = MemoryHost::new();
         {
             let mut idx = open(&path, &mut host);
-            idx.on_document_indexed(&doc("a.md", "contenuto stabile"));
+            let _ =
+                idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto stabile")));
             idx.flush(&mut host).unwrap();
         }
 
@@ -1684,7 +1779,7 @@ mod tests {
         assert_eq!(idx.len(), 1, "le impronte sopravvivono alla riapertura");
         // Ripassare lo stesso contenuto non produce scritture: è ciò che rende
         // rapida la riapertura di un vault non toccato.
-        idx.on_document_indexed(&doc("a.md", "contenuto stabile"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto stabile")));
         assert!(
             !idx.dirty.load(Ordering::Relaxed),
             "un documento immutato non sporca l'indice"
@@ -1702,7 +1797,8 @@ mod tests {
         let mut host = MemoryHost::new();
         {
             let mut idx = open(&path, &mut host);
-            idx.on_document_indexed(&doc("a.md", "contenuto stabile"));
+            let _ =
+                idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto stabile")));
             idx.flush(&mut host).unwrap();
         }
         // Simula il crash fra commit e manifest: l'opstamp non torna.
@@ -1713,7 +1809,7 @@ mod tests {
         let mut idx = open(&path, &mut host);
         assert_eq!(idx.len(), 0, "impronte di un'altra epoca: non ci si fida");
         // Il documento si reindicizza, e non si duplica: delete+add.
-        idx.on_document_indexed(&doc("a.md", "contenuto stabile"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto stabile")));
         assert_eq!(search(&idx, "stabile").len(), 1);
     }
 
@@ -1723,7 +1819,7 @@ mod tests {
         let mut host = MemoryHost::new();
         {
             let mut idx = open(&path, &mut host);
-            idx.on_document_indexed(&doc("a.md", "contenuto"));
+            let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto")));
             idx.flush(&mut host).unwrap();
         }
         let mut m = manifest_of(&host);
@@ -1760,7 +1856,7 @@ mod tests {
             if gia.iter().any(|d| d.as_str() == *id) {
                 continue;
             }
-            idx.on_document_indexed(&doc(id, source));
+            let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(id, source)));
         }
         gia.iter().map(|d| d.to_string()).collect()
     }
@@ -1893,7 +1989,7 @@ mod tests {
             let mut idx = open(&path, &mut host);
             giro(&mut idx, &[("a.md", "il gatto")]);
             // Salvataggio a sessione aperta: nessuna domanda prima.
-            idx.on_document_indexed(&doc("a.md", "il cane"));
+            let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "il cane")));
             idx.close(&mut host).unwrap();
         }
         assert!(
@@ -1912,8 +2008,8 @@ mod tests {
         let mut idx = open(&path, &mut host);
         giro(&mut idx, &[("a.md", "il gatto"), ("b.md", "il cane")]);
 
-        idx.on_document_removed(&DocId::new("a.md"));
-        idx.reconcile(&[DocId::new("b.md")]);
+        let _ = idx.on_documents_removed(std::slice::from_ref(&DocId::new("a.md")));
+        let _ = idx.reconcile(&[DocId::new("b.md")]);
         idx.flush(&mut host).unwrap();
         assert_eq!(
             manifest_of(&host).sources.keys().collect::<Vec<_>>(),
@@ -1933,9 +2029,9 @@ mod tests {
         let mut host = MemoryHost::new();
         let mut idx = open(&path, &mut host);
         idx.up_to_date(&[voce("a.md", Some("prima"))]);
-        idx.on_document_indexed(&doc("a.md", "testo identico"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "testo identico")));
         idx.up_to_date(&[voce("a.md", Some("dopo"))]);
-        idx.on_document_indexed(&doc("a.md", "testo identico"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "testo identico")));
         idx.flush(&mut host).unwrap();
 
         assert_eq!(
@@ -1962,14 +2058,14 @@ mod tests {
         let mut host = MemoryHost::new();
         {
             let mut idx = open(&path, &mut host);
-            idx.on_document_indexed(&doc("a.md", "contenuto"));
+            let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto")));
             idx.flush(&mut host).unwrap();
         }
         std::fs::write(path.join("meta.json"), b"non sono json").unwrap();
 
         let mut idx = open(&path, &mut host);
         assert_eq!(idx.len(), 0);
-        idx.on_document_indexed(&doc("a.md", "contenuto"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto")));
         assert_eq!(search(&idx, "contenuto").len(), 1);
     }
 
@@ -1982,8 +2078,11 @@ mod tests {
     fn what_used_to_be_a_syntax_error_is_now_just_terms() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "qui c'è scritto campo_inesistente:valore"));
-        idx.on_document_indexed(&doc("b.md", "qui no"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "a.md",
+            "qui c'è scritto campo_inesistente:valore",
+        )));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("b.md", "qui no")));
 
         let hits = search(&idx, "campo_inesistente:valore");
         assert_eq!(
@@ -1998,7 +2097,7 @@ mod tests {
     fn empty_query_returns_nothing() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "qualcosa"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "qualcosa")));
         assert!(search(&idx, "   ").is_empty());
     }
 
@@ -2008,10 +2107,11 @@ mod tests {
     fn a_folder_scope_takes_the_descendants_too() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("radice.md", "gatto"));
-        idx.on_document_indexed(&doc("Progetti/alpha.md", "gatto"));
-        idx.on_document_indexed(&doc("Progetti/sub/beta.md", "gatto"));
-        idx.on_document_indexed(&doc("Altro/gamma.md", "gatto"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("radice.md", "gatto")));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("Progetti/alpha.md", "gatto")));
+        let _ =
+            idx.on_documents_indexed(std::slice::from_ref(&doc("Progetti/sub/beta.md", "gatto")));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("Altro/gamma.md", "gatto")));
 
         let in_folder = |folder: &str| {
             let matching = clause(vec![
@@ -2047,9 +2147,10 @@ mod tests {
     fn scoping_by_tag_is_an_and_with_the_query() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&tagged("a.md", "gatto", &["Casa"]));
-        idx.on_document_indexed(&tagged("b.md", "gatto", &["lavoro"]));
-        idx.on_document_indexed(&tagged("c.md", "cane", &["casa"]));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged("a.md", "gatto", &["Casa"])));
+        let _ =
+            idx.on_documents_indexed(std::slice::from_ref(&tagged("b.md", "gatto", &["lavoro"])));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&tagged("c.md", "cane", &["casa"])));
 
         // Grafia diversa dal canonico: il predicato la normalizza come fa il
         // pannello dei tag, o "cerca fra le note #Casa" non troverebbe #casa.
@@ -2070,7 +2171,8 @@ mod tests {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
         for i in 0..5 {
-            idx.on_document_indexed(&doc(&format!("nota{i}.md"), "gatto"));
+            let _ = idx
+                .on_documents_indexed(std::slice::from_ref(&doc(&format!("nota{i}.md"), "gatto")));
         }
 
         let first = page_of(&idx, text("gatto"), Some(Page::new(0, 2)));
@@ -2149,7 +2251,8 @@ mod tests {
                      linguaggio, sistema, memoria, concorrenza e prestazione.\n\n"
                 ));
             }
-            idx.on_document_indexed(&doc(&format!("Nota {i}.md"), &corpo));
+            let _ = idx
+                .on_documents_indexed(std::slice::from_ref(&doc(&format!("Nota {i}.md"), &corpo)));
         }
         // Committato **prima** di misurare: con scritture in sospeso la prima
         // query prenderebbe il lock del writer per davvero, e la corsa
@@ -2264,7 +2367,7 @@ mod tests {
     fn un_indice_chiuso_lascia_la_cartella_a_chi_arriva_dopo() {
         let (_g, path) = tmp();
         let (mut primo, mut host) = fresh(&path);
-        primo.on_document_indexed(&doc("a.md", "ciao"));
+        let _ = primo.on_documents_indexed(std::slice::from_ref(&doc("a.md", "ciao")));
         primo.close(&mut host).expect("chiusura");
 
         let secondo = SearchIndex::open_dir(&path);
@@ -2292,9 +2395,18 @@ mod tests {
     fn lultimo_termine_incompleto_e_un_prefisso_e_gli_altri_no() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "note di architettura del kernel"));
-        idx.on_document_indexed(&doc("b.md", "un archivio di vecchie note"));
-        idx.on_document_indexed(&doc("c.md", "il kernel e le sue parti"));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "a.md",
+            "note di architettura del kernel",
+        )));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "b.md",
+            "un archivio di vecchie note",
+        )));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "c.md",
+            "il kernel e le sue parti",
+        )));
 
         // Senza il prefisso, `arch` non è una parola di nessuno dei tre.
         assert!(
@@ -2347,11 +2459,11 @@ mod tests {
             slug: "concorrenza".into(),
             span: Span::new(0, 14),
         }];
-        idx.on_document_indexed(&con_sezione);
-        idx.on_document_indexed(&doc(
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&con_sezione));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
             "citata.md",
             "un accenno alla concorrenza e poi si passa oltre",
-        ));
+        )));
 
         // Chi le ha dedicato una sezione viene prima: il termine conta due
         // volte, e la seconda con il boost.
@@ -2378,7 +2490,8 @@ mod tests {
     fn chiedere_la_tolleranza_non_rende_tollerante_di_nascosto() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        idx.on_document_indexed(&doc("a.md", "note di architettura"));
+        let _ =
+            idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "note di architettura")));
 
         let con_refuso = clause(vec![lit(QueryPredicate::Text(TextQuery {
             tolerance: TextTolerance::Typos,

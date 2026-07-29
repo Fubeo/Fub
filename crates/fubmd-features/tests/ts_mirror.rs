@@ -27,7 +27,9 @@ use fubmd_abi::command::{
 };
 use fubmd_abi::edit::{EditRequest, Revision, TextEdit};
 use fubmd_abi::error::PluginError;
-use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Subject};
+use fubmd_abi::event::{
+    Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
+};
 use fubmd_abi::locale::{HourCycle, Locale, Weekday};
 use fubmd_abi::model::{DocId, LinkTarget, Span};
 use fubmd_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
@@ -402,6 +404,19 @@ fn event_samples() -> Vec<Value> {
             to: DocId::new("media/foto.png"),
             kind: EntryKind::Asset,
         },
+        // Due campioni e non uno: `severity` è ciò che decide il tono con cui
+        // il centro notifiche mostra il fatto, e `subject` è opzionale — con un
+        // solo campione il mirror TS vedrebbe metà della forma.
+        Event::Trouble {
+            severity: Severity::Warning,
+            subject: Some(DocId::new("a.md")),
+            error: PluginError::Internal("indice non allineato".into()),
+        },
+        Event::Trouble {
+            severity: Severity::Failure,
+            subject: None,
+            error: PluginError::Internal("flush fallito".into()),
+        },
     ];
     for e in &all {
         match e {
@@ -421,7 +436,8 @@ fn event_samples() -> Vec<Value> {
             | Event::SettingChanged { .. }
             | Event::EntryChanged { .. }
             | Event::EntryRemoved { .. }
-            | Event::EntryRenamed { .. } => {}
+            | Event::EntryRenamed { .. }
+            | Event::Trouble { .. } => {}
         }
     }
     all.iter().map(to_value).collect()

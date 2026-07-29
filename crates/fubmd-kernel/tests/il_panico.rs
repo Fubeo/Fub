@@ -29,8 +29,8 @@ use fubmd_abi::format::{
 };
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{
-    CommandProvider, EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, QueryKind,
-    QueryRoute, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    CommandProvider, EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult,
+    QueryKind, QueryRoute, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_kernel::{FormatRegistry, Workspace};
@@ -179,14 +179,18 @@ impl IndexProvider for IndiceMina {
         vec![QueryRoute::Query(QueryKind::Custom("test.mina".into()))]
     }
 
-    fn on_document_indexed(&mut self, _doc: &DocumentModel) {
+    fn on_documents_indexed(&mut self, _docs: &[DocumentModel]) -> Vec<IndexLoss> {
         *self.0.lock().unwrap() += 1;
         panic!("l'indice è esploso indicizzando");
     }
 
-    fn on_document_removed(&mut self, _id: &DocId) {}
+    fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
-    fn reconcile(&mut self, _ids: &[DocId]) {}
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
     fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())

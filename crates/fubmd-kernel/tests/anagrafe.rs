@@ -24,7 +24,8 @@ use fubmd_abi::format::{
 };
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{
-    EntryKind, HostApi, IndexProvider, IndexQuery, IndexResult, Page, QueryRoute, VaultEntry,
+    EntryKind, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page, QueryRoute,
+    VaultEntry,
 };
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Subscription, Workspace};
@@ -130,7 +131,9 @@ impl IndexProvider for RememberingIndex {
         Ok(())
     }
 
-    fn reconcile(&mut self, _ids: &[DocId]) {}
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
     fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
@@ -155,18 +158,24 @@ impl IndexProvider for RememberingIndex {
         current
     }
 
-    fn on_document_indexed(&mut self, doc: &DocumentModel) {
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
         // L'impronta del sorgente qui è quella del testo, perché per questo
         // provider di prova sorgente e testo coincidono: la ricerca vera fa la
         // stessa cosa con un giro in più, perché fra i due c'è un parser.
-        self.sources.insert(
-            doc.id.clone(),
-            fubmd_abi::edit::Revision::of(&doc.text).0.clone(),
-        );
+        for doc in docs {
+            self.sources.insert(
+                doc.id.clone(),
+                fubmd_abi::edit::Revision::of(&doc.text).0.clone(),
+            );
+        }
+        Vec::new()
     }
 
-    fn on_document_removed(&mut self, id: &DocId) {
-        self.sources.remove(id);
+    fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        for id in ids {
+            self.sources.remove(id);
+        }
+        Vec::new()
     }
 
     fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
@@ -373,9 +382,15 @@ fn un_indice_che_non_dice_niente_riceve_tutto() {
         fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
             Ok(())
         }
-        fn on_document_indexed(&mut self, _doc: &DocumentModel) {}
-        fn on_document_removed(&mut self, _id: &DocId) {}
-        fn reconcile(&mut self, _ids: &[DocId]) {}
+        fn on_documents_indexed(&mut self, _docs: &[DocumentModel]) -> Vec<IndexLoss> {
+            Vec::new()
+        }
+        fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+            Vec::new()
+        }
+        fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+            Vec::new()
+        }
         fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
             Ok(())
         }

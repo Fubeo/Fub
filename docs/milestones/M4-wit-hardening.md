@@ -117,6 +117,15 @@ quelle che hanno una **domanda aperta** e una risposta da mettere a verbale prim
 di chiudere. Le prime sono **già chiuse** in corso d'opera (il costo era una riga
 oggi, una migrazione domani); le altre restano al freeze.
 
+**Dalla [0051](../decisions/0051-l-alimentazione-risponde.md) non resta aperta
+nessuna P0.** Non vuol dire che il contratto sia pronto: vuol dire che è finito
+l'elenco di ciò che *qualcuno ha già trovato*. Da qui al freeze il lavoro cambia
+di natura — non più chiudere voci datate, ma cercare le firme che nessuno dei
+giri ha ancora guardato, con le sei domande di [todo.md](../todo.md) e col
+dogfooding. La seduta 20 è il precedente da tenere presente: le sue voci non
+scadevano, quindi nessun criterio di scadenza le aveva mai portate in cima, e una
+delle quattro era invece una P0 rimasta invisibile per sei giri.
+
 **Chiuse prima del freeze:**
 
 - **Semantica di consegna eventi**: gli eventi arrivano *dopo che la chiamata

@@ -756,9 +756,12 @@ un'opinione sul valore di una feature.
    per direzione: ciò che porta *il modello* o *il contenuto* paga in proporzione
    alla nota, ogni volta. E ciò che tocca **ogni** documento — indicizzare,
    parsare, digerire — si paga a ogni documento: su un `reindex` il fattore è il
-   vault intero, che è la ragione per cui la grana della chiamata è una domanda
-   del [§20.1](../roadmap/20-quando-qualcosa-va-storto.md#201-lalimentazione-dellindice-non-ha-un-esito-e-un-indice-che-perde-un-documento-non-ha-modo-di-dirlo)
-   e non un dettaglio di implementazione.
+   vault intero, che è la ragione per cui la grana della chiamata era una domanda
+   della [decisione 0051](../decisions/0051-l-alimentazione-risponde.md) e non un
+   dettaglio di implementazione: l'alimentazione di un indice è passata **a
+   lotti** proprio con questa aritmetica in mano — e con il limite dichiarato,
+   perché il lotto riduce il numero di attraversamenti e non il volume, che
+   attraversa comunque per intero.
 3. **Prima o dopo la scrittura.** Il contratto permette di **osservare** una
    modifica — `EventHandler`, dopo — e non di **interporsi**: non esiste nessun
    punto che preceda `write_document` e possa dire di no. Chi deve decidere

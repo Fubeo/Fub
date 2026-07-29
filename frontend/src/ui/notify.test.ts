@@ -7,7 +7,7 @@
 // quelli lontani (e raccontare una volta ciò che è successo due), e non
 // raggruppare affatto (e riempire lo storico di copie).
 import { describe, expect, it } from "vitest";
-import { MEMORIA, raccogli, rigaDi, type Avviso } from "./notify";
+import { avvisoDiGuasto, MEMORIA, raccogli, rigaDi, type Avviso } from "./notify";
 
 function avviso(testo: string, quando = 0, tono: Avviso["tono"] = "info"): Avviso {
   return { testo, tono, quando, volte: 1 };
@@ -60,5 +60,27 @@ describe("lo storico degli avvisi", () => {
 
   it("una volta sola non mostra il contatore", () => {
     expect(rigaDi(avviso("nota salvata"))).toBe("nota salvata");
+  });
+});
+
+describe("un guasto del kernel (§20.2)", () => {
+  const guasto = (severity: "warning" | "failure", subject: string | null) =>
+    ({ type: "trouble", severity, subject, error: { kind: "internal", message: "disco pieno" } }) as const;
+
+  it("nomina il documento quando l'evento ne nomina uno", () => {
+    expect(avvisoDiGuasto(guasto("warning", "Progetti/Nota.md")).testo).toBe(
+      "Progetti/Nota.md: disco pieno",
+    );
+  });
+
+  it("non nomina nessuno quando il guasto è del vault intero", () => {
+    // Il caso che vale il presidio: `subject` è opzionale, e comporre la frase
+    // con un soggetto assente darebbe «null: disco pieno».
+    expect(avvisoDiGuasto(guasto("warning", null)).testo).toBe("disco pieno");
+  });
+
+  it("un derivato perduto informa, ciò che non si ricostruisce è un guasto", () => {
+    expect(avvisoDiGuasto(guasto("warning", null)).tono).toBe("info");
+    expect(avvisoDiGuasto(guasto("failure", null)).tono).toBe("guasto");
   });
 });

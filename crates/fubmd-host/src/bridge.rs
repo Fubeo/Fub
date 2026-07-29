@@ -235,6 +235,42 @@ mod tests {
         Notice::of(Event::DocumentChanged { id: DocId::new(id) })
     }
 
+    /// **Un guasto non si raggruppa, e non si perde in una raffica** (§20.2).
+    ///
+    /// La raffica coalizza ciò di cui N copie dicono quanto una — un documento
+    /// riscritto cento volte è un documento cambiato — e un guasto non è di
+    /// quella specie: due guasti sono due fatti, e uno solo in mezzo a cento
+    /// eventi rumorosi è precisamente il caso in cui l'utente deve saperlo. È
+    /// l'ultimo anello del percorso: kernel → bus → **ponte** → centro
+    /// notifiche.
+    #[test]
+    fn un_guasto_attraversa_il_ponte_anche_dentro_una_raffica() {
+        let guasto = |m: &str| {
+            Notice::of(Event::Trouble {
+                severity: fubmd_abi::Severity::Warning,
+                subject: Some(DocId::new("Alpha.md")),
+                error: fubmd_abi::PluginError::Internal(m.into()),
+            })
+        };
+        let mut burst: Vec<Notice> = Vec::new();
+        for _ in 0..50 {
+            burst.push(cambiato("Alpha.md"));
+        }
+        burst.push(guasto("indice non allineato"));
+        burst.push(guasto("flush fallito"));
+
+        let out = reduce(burst);
+        let troubles: Vec<&Notice> = out
+            .iter()
+            .filter(|n| matches!(n.event, Event::Trouble { .. }))
+            .collect();
+        assert_eq!(
+            troubles.len(),
+            2,
+            "i due guasti sono due fatti e devono passare tutti e due: {out:?}"
+        );
+    }
+
     #[test]
     fn a_burst_says_once_what_it_said_a_hundred_times() {
         let mut burst: Vec<Notice> = Vec::new();

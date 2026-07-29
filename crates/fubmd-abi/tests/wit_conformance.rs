@@ -66,7 +66,9 @@ use fubmd_abi::custom::{
 };
 use fubmd_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 use fubmd_abi::error::{FormatError, PluginError};
-use fubmd_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Subject};
+use fubmd_abi::event::{
+    Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
+};
 use fubmd_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
     ParseContext, RenderOptions, RenderTarget, SourceKind,
@@ -89,12 +91,12 @@ use fubmd_abi::settings::{
 use fubmd_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, FolderScope,
-    HealthCheck, HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress,
-    JobSpec, JobStatus, LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest,
-    PluginPermissions, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
-    PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef, ServiceProvider,
-    TagCount, TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewProvider,
-    ViewSpec, ViewSurface, ABI_VERSION,
+    HealthCheck, HealthIssue, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, JobId,
+    JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef, Page, Paged, Plugin,
+    PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter,
+    PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef,
+    ServiceProvider, TagCount, TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance,
+    ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -310,6 +312,8 @@ wit_type! {
     TagCount => "tag-count",
     VaultStatus => "vault-status",
     JobProgress => "job-progress",
+    IndexLoss => "index-loss",
+    Severity => "severity",
     JobStatus => "job-status",
     TrashEntry => "trash-entry",
     Page => "page",
@@ -1814,6 +1818,19 @@ fn event_case(e: &Event) -> Case {
             "event-entry-renamed",
             vec![("from", wit(from)), ("to", wit(to)), ("kind", wit(kind))],
         ),
+        Event::Trouble {
+            severity,
+            subject,
+            error,
+        } => case_rec(
+            "trouble",
+            "event-trouble",
+            vec![
+                ("severity", wit(severity)),
+                ("subject", wit(subject)),
+                ("error", wit(error)),
+            ],
+        ),
     }
 }
 
@@ -1877,6 +1894,7 @@ fn event_kind_name(k: EventKind) -> &'static str {
         EventKind::EntryChanged => "entry-changed",
         EventKind::EntryRemoved => "entry-removed",
         EventKind::EntryRenamed => "entry-renamed",
+        EventKind::Trouble => "trouble",
     }
 }
 
@@ -2754,6 +2772,11 @@ fn conform(source: &str) -> Result<(), String> {
                 to: DocId::new("b"),
                 kind: EntryKind::Asset,
             }),
+            event_case(&Event::Trouble {
+                severity: Severity::Warning,
+                subject: Some(DocId::new("a")),
+                error: PluginError::Internal("x".into()),
+            }),
         ],
     );
 
@@ -2972,6 +2995,19 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    // Quanto pesa ciò che è andato storto (§20.2): due gradini, come i due toni
+    // del centro notifiche.
+    contract.enumeration_src(
+        "severity",
+        ("event.rs", "Severity"),
+        [Severity::Warning, Severity::Failure]
+            .map(|s| match s {
+                Severity::Warning => "warning",
+                Severity::Failure => "failure",
+            })
+            .as_slice(),
+    );
+
     contract.enumeration_src(
         "link-direction",
         ("traits.rs", "LinkDirection"),
@@ -3051,6 +3087,7 @@ fn conform(source: &str) -> Result<(), String> {
             EventKind::EntryChanged,
             EventKind::EntryRemoved,
             EventKind::EntryRenamed,
+            EventKind::Trouble,
         ]
         .map(event_kind_name)
         .as_slice(),
@@ -4069,6 +4106,11 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    // L'esito dell'alimentazione (§20.1): cosa un indice non ha preso.
+    let IndexLoss { id, why } =
+        IndexLoss::new(DocId::new("a.md"), PluginError::Internal("x".into()));
+    contract.record("index-loss", &[("id", wit(&id)), ("why", wit(&why))]);
+
     // Il lavoro lungo che si racconta (§10.3): il progresso, e la riga che
     // `index-query.jobs` restituisce.
     let JobProgress { done, total, label } = JobProgress::default();
@@ -4840,22 +4882,23 @@ fn conform(source: &str) -> Result<(), String> {
     );
     contract.method(
         "index",
-        "on-document-indexed",
-        <dyn IndexProvider>::on_document_indexed
-            as fn(&'static mut dyn IndexProvider, &'static DocumentModel),
-        &["doc"],
+        "on-documents-indexed",
+        <dyn IndexProvider>::on_documents_indexed
+            as fn(&'static mut dyn IndexProvider, &'static [DocumentModel]) -> Vec<IndexLoss>,
+        &["docs"],
     );
     contract.method(
         "index",
-        "on-document-removed",
-        <dyn IndexProvider>::on_document_removed
-            as fn(&'static mut dyn IndexProvider, &'static DocId),
-        &["id"],
+        "on-documents-removed",
+        <dyn IndexProvider>::on_documents_removed
+            as fn(&'static mut dyn IndexProvider, &'static [DocId]) -> Vec<IndexLoss>,
+        &["ids"],
     );
     contract.method(
         "index",
         "reconcile",
-        <dyn IndexProvider>::reconcile as fn(&'static mut dyn IndexProvider, &'static [DocId]),
+        <dyn IndexProvider>::reconcile
+            as fn(&'static mut dyn IndexProvider, &'static [DocId]) -> Vec<IndexLoss>,
         &["ids"],
     );
     contract.method(
@@ -5410,8 +5453,8 @@ fn wit_conformance_actually_fails_on_drift() {
         (
             "l'host NON è eliso: riappare come parametro",
             base.replace(
-                "    reconcile: func(ids: list<doc-id>);",
-                "    reconcile: func(host: string, ids: list<doc-id>);",
+                "    reconcile: func(ids: list<doc-id>) -> list<index-loss>;",
+                "    reconcile: func(host: string, ids: list<doc-id>) -> list<index-loss>;",
             ),
             "host",
         ),

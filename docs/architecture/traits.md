@@ -527,9 +527,9 @@ chiamanti (`crates/fubmd-kernel/tests/view_trust.rs`).
 pub trait IndexProvider: Send + Sync {
     fn routes(&self) -> Vec<QueryRoute>;
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
-    fn on_document_indexed(&mut self, doc: &DocumentModel);
-    fn on_document_removed(&mut self, id: &DocId);
-    fn reconcile(&mut self, ids: &[DocId]);
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss>;
+    fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss>;
+    fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss>;
     fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> { Vec::new() }
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
     fn close(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
@@ -622,12 +622,24 @@ dichiarato torna come `PluginError::Unserved`, distinguibile da «chi la serve h
 fallito».
 
 **L'alimentazione non passa dagli eventi.** Il `Workspace` possiede gli
-`IndexProvider` registrati e chiama `on_document_*` *dentro* le stesse operazioni
+`IndexProvider` registrati e chiama `on_documents_*` *dentro* le stesse operazioni
 che aggiornano il grafo. È deliberato e asimmetrico rispetto a `EventHandler`: la
 coda eventi ha un budget e può troncare (`Event::Overflow`), e un indice che
 perde un aggiornamento non smette di rispondere — risponde **sbagliato**, in
-silenzio. In più `on_document_indexed` riceve il `DocumentModel` **già parsato
-dalla passata che lo sta indicizzando**: dalla
+silenzio.
+
+**E adesso può dirlo.** Per un anno l'argomento qui sopra è stato vero a metà:
+il *canale* non tronca, ma il *destinatario* può rifiutare, e i tre metodi
+dell'alimentazione restituivano `()` mentre `activate` e `flush` restituivano un
+`Result`. Dalla [0051](../decisions/0051-l-alimentazione-risponde.md)
+restituiscono `Vec<IndexLoss>` — *su questa identità l'indice adesso mente*, col
+`DocId` che lo nomina — e sono **a lotto**, perché la forma dell'esito e la grana
+della chiamata avevano una risposta sola. Ciò che torna indietro diventa un
+`Event::Trouble` ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)).
+A tagliare il lotto è il kernel, e la fetta non è nel contratto.
+
+In più `on_documents_indexed` riceve i `DocumentModel` **già parsati
+dalla passata che li sta indicizzando**: dalla
 [0018](../decisions/0018-chi-vede-il-modello-parsato.md) un handler *potrebbe*
 chiederlo (`HostApi::read_model`), ma pagherebbe una rilettura e un parse per
 evento.
@@ -658,7 +670,7 @@ WASM non potrebbe persistere *nulla*. L'host arriva dove lo stato attraversa il
 disco, e non altrove: `activate` (una volta sola, alla registrazione, prima di
 qualunque alimentazione — è dove un indice ritrova ciò che ha già visto, e
 `SearchIndex` ci carica il manifest delle impronte), `flush` (l'unico punto in
-cui si **scrive**) e `close`. Non su `on_document_*` e `reconcile`, che sono
+cui si **scrive**) e `close`. Non su `on_documents_*` e `reconcile`, che sono
 mutazioni in memoria e costringerebbero il kernel a prestare `&mut Workspace`
 dentro il ciclo di alimentazione; non su `query`, che prende `&self` ed è servita
 sotto prestito **condiviso**.
@@ -873,8 +885,20 @@ EntryRenamed { from, to, kind } }`,
   buttare non è una politica di chi frena ma una proprietà dell'evento:
   `Event::is_recoverable()` distingue ciò che si riscopre riguardando il vault da
   ciò che porta **l'unica copia di un fatto** (l'esito di un job, il payload di
-  un custom, l'apertura e la chiusura di un vault, l'`Overflow` stesso), e il
-  secondo gruppo passa sempre.
+  un custom, l'apertura e la chiusura di un vault, un guasto, l'`Overflow`
+  stesso).
+
+  **E vale per due delle tre**, non per tre: qui c'era scritto che «il secondo
+  gruppo passa sempre», e il codice lo smentisce. Il tetto del bus (`bus.rs`) e
+  la raffica del ponte guardano `is_recoverable`; il **budget del dispatch** no —
+  `Dispatcher::next_to_deliver` svuota `pending` in blocco e annuncia un
+  `Overflow`. Finché in coda passavano solo `document-changed` e `index-updated`
+  la differenza non si vedeva, perché «riconcilia da zero» li ricostruisce tutti;
+  con `Event::Trouble` ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md))
+  in coda c'è un fatto che nessuna riconciliazione riporta indietro. È il
+  [§20.5](../roadmap/20-quando-qualcosa-va-storto.md#205-il-budget-del-dispatch-tronca-senza-guardare-cosa-sta-troncando),
+  e la riga è rimasta qui a dire il falso finché qualcuno non ha avuto una
+  ragione per verificarla.
 - `Custom { topic, payload }` è il varco per gli eventi dei plugin (topic
   namespaced `ns:nome`, §7.4), ed è il canale con cui i plugin comunicano fra
   loro.
@@ -1064,7 +1088,9 @@ materializza in `crates/fubmd-abi/wit/fubmd/*.wit` + test abi↔WIT.
 | `QueryPredicate`/`PropertySelect`/`QueryKind`/`PredicateKind`/`QueryRoute` | `variant` |
 | `PropertyTest` | `variant` (i casi senza valore — `exists`, `missing` — non portano payload) |
 | `LinkDirection`/`HealthCheck` | `enum` |
-| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`, `batch-ended`) / `enum` / `list<event-kind>` |
+| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`, `batch-ended`, `trouble`) / `enum` / `list<event-kind>` |
+| `Severity` | `enum` (`warning`, `failure`) — la gravità di un guasto ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) |
+| `IndexLoss` | `record { id, why }` — cosa un indice non ha preso ([0051](../decisions/0051-l-alimentazione-risponde.md)) |
 | `Notice`/`Origin` | `record` (interface `events`): è ciò che `event-handler.handle` riceve — l'evento **e** chi lo ha chiesto |
 | `Actor` | `variant { user, watcher, kernel, plugin(actor-plugin) }` — il payload è un record col solo `id` |
 | `BatchId` | `type batch-id = u64` — sul confine JSON è una **stringa** (regola di `fubmd_abi::ipc`), come `job-id` |
@@ -1091,7 +1117,7 @@ confermare a M4.
 ricorsivi: la ricorsione via `list<ui-node>` è una proposta aperta del component
 model, non una feature, e il contratto scritto così non passava nemmeno il
 parser. La contaminazione era transitiva — `DocumentModel.body` rendeva
-inesprimibili `FormatProvider` e `on_document_indexed`.
+inesprimibili `FormatProvider` e `on_documents_indexed`.
 
 Le due strade erano l'**arena** e la **stringa JSON**. Si è scelta l'arena:
 

@@ -442,6 +442,75 @@ pub enum Event {
         to: DocId,
         kind: EntryKind,
     },
+    /// **Qualcosa è andato storto** (§20.2, decisione 0052): la variante che
+    /// la [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md)
+    /// aveva previsto — *ciò che si limita a informare è un evento* — e
+    /// rimandato perché non aveva un cliente.
+    ///
+    /// I clienti sono arrivati tutti insieme, e sono ventisette `eprintln!` nel
+    /// backend più due commenti del kernel che nominavano questo canale per
+    /// nome («M4: notifica»). Ciò che passa di qui non è un log: è un fatto che
+    /// una persona ha diritto di sapere, e in un'app impacchettata `stderr` non
+    /// ha un lettore.
+    ///
+    /// # Perché non è recuperabile
+    ///
+    /// Perché è **l'unica copia di un fatto**: un guasto non si riscopre
+    /// guardando il vault: il vault dopo un flush fallito è identico a com'era
+    /// prima, ed è esattamente questa la ragione per cui il flush fallito va
+    /// detto. Buttarlo via sotto pressione vorrebbe dire perdere in silenzio
+    /// proprio il messaggio che esiste per non perdere niente in silenzio — e
+    /// il canale si riempie quando le cose vanno male, cioè quando serve.
+    ///
+    /// # Il guasto della consegna di un guasto
+    ///
+    /// Non si emette. Un handler che fallisce **ricevendo** un `Trouble`
+    /// produrrebbe un secondo `Trouble` che passa dallo stesso handler, e la
+    /// regola sta nel kernel perché è il kernel a emettere: è l'unico ciclo che
+    /// questa variante rende possibile, e si chiude dove nasce.
+    Trouble {
+        severity: Severity,
+        /// Il documento di cui si parla, se se ne parla di uno. `None` per ciò
+        /// che riguarda il vault intero — un flush fallito, il watcher che
+        /// smette — ed è per questo che chi filtra per soggetto lo lascia
+        /// **passare**: vedi [`Event::names`].
+        subject: Option<DocId>,
+        /// **Cosa** è andato storto, nella forma con cui ogni fallimento arriva
+        /// a chi disegna (decisione 0041): un `Text`, quindi traducibile da chi
+        /// lo mostra invece che una frase già composta.
+        error: PluginError,
+    },
+}
+
+/// Quanto pesa ciò che è andato storto (§20.2, decisione 0052).
+///
+/// Due gradini e non cinque, come i due toni del centro notifiche: una scala
+/// che chi emette non sa dove tagliare finisce con tutto sullo stesso gradino,
+/// e a quel punto non distingue più niente.
+///
+/// Il criterio del taglio è quello della
+/// [decisione 0048](../../../docs/decisions/0048-una-radice-sola.md), ed è
+/// l'unica ragione per cui questo campo lo si può compilare senza indovinare:
+/// **la classe del dato perso dice la severità**. Ciò che è *derivato* si
+/// ricostruisce riaprendo il vault, e la sua perdita è un
+/// [`Warning`](Severity::Warning); ciò che era autorevole non torna, e la sua
+/// perdita è un [`Failure`](Severity::Failure).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Severity {
+    /// Si è perso un **derivato**: un documento che non è entrato in un indice,
+    /// un flush che non ha scritto. Il vault è intatto, la verità si
+    /// ricostruisce, e ciò che l'utente vede nel frattempo è una risposta
+    /// incompleta — che è già abbastanza per doverglielo dire.
+    Warning,
+    /// Si è perso qualcosa che **non si ricostruisce**: una versione non
+    /// salvata, il sidecar di una voce di cestino non scritto (il ripristino
+    /// tornerà nel posto sbagliato), una scrittura che non è andata sul disco.
+    ///
+    /// È anche ciò che il kernel usa quando **non sa**: un handler di terzi che
+    /// fallisce non dice cosa non è successo, e sottostimare un guasto è peggio
+    /// che sovrastimare un avviso.
+    Failure,
 }
 
 impl Event {
@@ -464,6 +533,7 @@ impl Event {
             Event::EntryChanged { .. } => EventKind::EntryChanged,
             Event::EntryRemoved { .. } => EventKind::EntryRemoved,
             Event::EntryRenamed { .. } => EventKind::EntryRenamed,
+            Event::Trouble { .. } => EventKind::Trouble,
         }
     }
 
@@ -535,7 +605,11 @@ impl Event {
             | Event::Overflow { .. }
             | Event::Custom { .. }
             // Vedi il doc della variante: il valore si rilegge, il *cambio* no.
-            | Event::SettingChanged { .. } => false,
+            | Event::SettingChanged { .. }
+            // Un guasto non lo si riscopre riguardando il vault: dopo un flush
+            // fallito il vault è identico a com'era, ed è la ragione per cui
+            // quel fallimento va detto. Vedi il doc della variante.
+            | Event::Trouble { .. } => false,
         }
     }
 
@@ -568,6 +642,16 @@ impl Event {
             // aggiornato vuole sapere anche dell'allegato che ci compare.
             Event::EntryChanged { id, .. } | Event::EntryRemoved { id, .. } => vec![id],
             Event::EntryRenamed { from, to, .. } => vec![from, to],
+            // Un guasto che nomina un documento è di chi guarda quel documento
+            // — la nota che non è entrata nella ricerca riguarda la sua
+            // cartella. Uno che non ne nomina nessuno riguarda il vault
+            // intero, e passa da tutte le maschere: è la regola già scritta
+            // per `overflow` e `vault-closed`, e qui vale con più forza,
+            // perché un avviso filtrato via è la cosa che questa variante
+            // esiste per non far succedere.
+            Event::Trouble {
+                subject: Some(id), ..
+            } => vec![id],
             _ => Vec::new(),
         }
     }
@@ -610,6 +694,11 @@ pub enum EventKind {
     EntryRemoved,
     /// Un file che non è un documento ha cambiato path (§14.1).
     EntryRenamed,
+    /// Qualcosa è andato storto (§20.2). Chi si abbona a questo è chi ha una
+    /// superficie dove dirlo: il centro notifiche della shell è il primo, e
+    /// non sarà l'unico — un pannello di diagnostica e un log su file
+    /// chiedono lo stesso canale.
+    Trouble,
 }
 
 /// **Dove**: il soggetto di un abbonamento (decisione 0033).

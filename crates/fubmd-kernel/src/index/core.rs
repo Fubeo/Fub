@@ -40,9 +40,9 @@ use fubmd_abi::query::{
 };
 use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
-    DocPosition, EntryKind, FolderScope, HostApi, IndexProvider, IndexQuery, IndexResult, JobId,
-    JobProgress, JobStatus, LinkDirection, Paged, PredicateKind, QueryKind, QueryRoute,
-    ResolvedRef, VaultEntry, VaultFolder, VaultStatus,
+    DocPosition, EntryKind, FolderScope, HostApi, IndexLoss, IndexProvider, IndexQuery,
+    IndexResult, JobId, JobProgress, JobStatus, LinkDirection, Paged, PredicateKind, QueryKind,
+    QueryRoute, ResolvedRef, VaultEntry, VaultFolder, VaultStatus,
 };
 use fubmd_abi::PluginError;
 
@@ -451,7 +451,7 @@ impl CoreIndex {
 
     /// Rimette in cache i metadati di un documento **senza riaprirlo** (§14.2):
     /// è la strada che l'anagrafe apre, e l'unica differenza con
-    /// [`on_document_indexed`](IndexProvider::on_document_indexed) è che qui il
+    /// [`on_documents_indexed`](IndexProvider::on_documents_indexed) è che qui il
     /// modello non c'è — non è stato parsato, perché il file non è stato letto.
     ///
     /// Il grafo non si tocca: chi chiama è `reindex`, che lo ricostruisce in
@@ -759,29 +759,42 @@ impl IndexProvider for CoreIndex {
         Ok(())
     }
 
-    fn on_document_indexed(&mut self, doc: &DocumentModel) {
-        self.tags.upsert(&doc.id, &doc.tags);
-        let meta = DocMeta::from(doc);
-        if self.graph_update == GraphUpdate::Incremental {
-            self.graph.upsert(&meta);
+    /// Non perde niente, e la lista vuota che restituisce è un fatto e non una
+    /// scorciatoia: questo indice tiene i propri metadati in memoria, e una
+    /// `BTreeMap` che accetta una chiave non ha un modo di rifiutarla. Il
+    /// giorno che ne avesse uno — un tetto, una quota — sarebbe qui che lo
+    /// direbbe.
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        for doc in docs {
+            self.tags.upsert(&doc.id, &doc.tags);
+            let meta = DocMeta::from(doc);
+            if self.graph_update == GraphUpdate::Incremental {
+                self.graph.upsert(&meta);
+            }
+            self.metas.insert(meta.id.clone(), meta);
         }
-        self.metas.insert(meta.id.clone(), meta);
+        Vec::new()
     }
 
-    fn on_document_removed(&mut self, id: &DocId) {
-        if self.metas.remove(id).is_none() {
-            return;
+    fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        for id in ids {
+            if self.metas.remove(id).is_none() {
+                continue;
+            }
+            self.tags.remove(id);
+            if self.graph_update == GraphUpdate::Incremental {
+                self.graph.remove(id);
+            }
         }
-        self.tags.remove(id);
-        if self.graph_update == GraphUpdate::Incremental {
-            self.graph.remove(id);
-        }
+        Vec::new()
     }
 
     /// L'indice del kernel **è** la verità corrente: non ha niente da
     /// riconciliare con essa. Il rebuild completo, quando è la strategia
     /// scelta, lo chiude il workspace dopo la scansione.
-    fn reconcile(&mut self, _ids: &[DocId]) {}
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
     /// Non persiste niente: ciò che sa lo ricostruisce dal vault, che è la
     /// definizione di stato derivato.

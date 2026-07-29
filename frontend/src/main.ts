@@ -19,7 +19,7 @@ import { emit, loadActiveSpace, loadExpanded, loadMode, state } from "./state/st
 import { loadCommandSpecs, primaNota } from "./state/vault";
 import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
-import { mountNotifications, notify } from "./ui/notify";
+import { ascoltaIGuasti, mountNotifications, notify } from "./ui/notify";
 import { findByBinding, openCommandPalette, startCommand } from "./ui/palette";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
@@ -149,6 +149,11 @@ async function init(): Promise<void> {
       startCommand(spec, paletteHost);
     }
   });
+
+  // Chi ascolta i guasti si iscrive **prima** che il router parta (§20.2): un
+  // vault che va storto mentre si apre è esattamente il caso in cui l'utente
+  // deve saperlo, e un ascoltatore iscritto dopo si perde proprio quello.
+  ascoltaIGuasti();
 
   await startKernelRouter();
 

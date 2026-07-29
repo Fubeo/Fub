@@ -22,7 +22,7 @@ use fubmd_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult};
+use fubmd_abi::traits::{HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{data_root, FormatRegistry, KernelError, Workspace};
 
@@ -75,16 +75,25 @@ impl IndexProvider for SpyIndex {
     fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
-    fn on_document_indexed(&mut self, doc: &DocumentModel) {
-        self.0
-            .lock()
-            .unwrap()
-            .push(Call::Indexed(doc.id.to_string()));
+    /// Una voce **per documento** anche se il lotto è la grana della chiamata:
+    /// qui si assertisce *quali* documenti sono passati, non quanti lotti.
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        let mut calls = self.0.lock().unwrap();
+        for doc in docs {
+            calls.push(Call::Indexed(doc.id.to_string()));
+        }
+        Vec::new()
     }
-    fn on_document_removed(&mut self, id: &DocId) {
-        self.0.lock().unwrap().push(Call::Removed(id.to_string()));
+    fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        let mut calls = self.0.lock().unwrap();
+        for id in ids {
+            calls.push(Call::Removed(id.to_string()));
+        }
+        Vec::new()
     }
-    fn reconcile(&mut self, _ids: &[DocId]) {}
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
     fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }

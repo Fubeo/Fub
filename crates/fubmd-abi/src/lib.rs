@@ -75,7 +75,7 @@ pub use custom::{
 };
 pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 pub use error::{FormatError, PluginError};
-pub use event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Subject};
+pub use event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Severity, Subject};
 pub use format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
     RenderOptions, RenderTarget, SourceKind,
@@ -96,7 +96,7 @@ pub use settings::{
 pub use text::{Arg, ArgValue, Localize, Message, StringCatalog, Strings, Text};
 pub use traits::{
     BacklinkRef, CommandProvider, DataRead, DataWrite, DocumentMatch, EventHandler, HealthCheck,
-    HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
+    HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexLoss,
     IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged, Plugin,
     PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
     PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, SettingsRead,

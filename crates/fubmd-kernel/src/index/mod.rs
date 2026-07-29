@@ -34,7 +34,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fubmd_abi::model::{DocId, DocumentModel};
-use fubmd_abi::traits::{IndexProvider, IndexQuery, IndexResult, VaultEntry};
+use fubmd_abi::traits::{IndexLoss, IndexProvider, IndexQuery, IndexResult, VaultEntry};
 use fubmd_abi::PluginError;
 
 pub(crate) use core::CoreIndex;
@@ -54,6 +54,33 @@ use crate::settings::SharedSettings;
 /// primo ad avere avuto un confine, con la 0019 — ed è tenuto insieme qui
 /// perché le tre parti non hanno senso separate: una tabella di routing senza un core index che si dichiara come
 /// gli altri instraderebbe due varianti su nove.
+/// **La rete contro i panici, per chi alimenta** (§9.3 + §20.1): un indice che
+/// pania mentre riceve un lotto non si porta via la scrittura di chi ha
+/// chiamato, e non sparisce nemmeno in silenzio — il lotto che gli era stato
+/// dato torna indietro come perduto, a suo nome.
+///
+/// `ids` è ciò che va dichiarato perduto **se pania**, e i tre chiamanti lo
+/// passano diverso perché la domanda è diversa: chi alimenta perde ciò che gli
+/// è stato dato, chi riconcilia perde dei morti di cui non si conosce il nome
+/// (vedi [`Indexes::reconcile`]).
+fn feeding<'a>(
+    who: &str,
+    what: &str,
+    ids: impl Iterator<Item = &'a DocId>,
+    f: impl FnOnce() -> Vec<IndexLoss>,
+) -> Vec<IndexLoss> {
+    let mut lost = Vec::new();
+    match crate::safety::reporting(who, what, || lost = f()) {
+        // Ciò che il provider aveva già raccolto prima di paniare **non** si
+        // usa: dopo un panico il suo stato è ignoto, e un elenco parziale
+        // direbbe «solo questi» proprio nel caso in cui non lo si può sapere.
+        Some(fault) => ids
+            .map(|id| IndexLoss::new(id.clone(), fault.clone()))
+            .collect(),
+        None => lost,
+    }
+}
+
 pub(crate) struct Indexes {
     /// L'indice del kernel: metadati, tag, grafo. È `Target::Core` nella
     /// tabella, ed è registrato **per primo** — che è ciò che gli dà la
@@ -151,33 +178,45 @@ impl Indexes {
         removed
     }
 
-    /// Un documento indicizzato va all'indice del kernel e poi a tutti quelli
-    /// registrati.
+    /// Un lotto di documenti va all'indice del kernel e poi a tutti quelli
+    /// registrati, e ciò che nessuno ha preso **torna indietro** (§20.1).
     ///
     /// I registrati passano dalla rete contro i panici (§9.3): questo giro è
     /// dentro **ogni scrittura**, cioè sotto il prestito esclusivo di chi ha
     /// chiamato, e un indice che pania su un documento strano si porterebbe via
-    /// il vault invece che sé stesso. Il kernel non ha come dirglielo — la firma
-    /// non rende niente — quindi il panico si ferma e si racconta, come l'errore
-    /// di un handler. L'indice del kernel **non** è in rete: se pania lui è un
-    /// difetto del kernel, e nasconderlo vorrebbe dire cercarlo poi in un vault
-    /// che risponde a metà.
-    pub(crate) fn on_document_indexed(&mut self, model: &DocumentModel) {
-        self.core.on_document_indexed(model);
+    /// il vault invece che sé stesso. Un panico qui **è** una perdita, e adesso
+    /// si dice come si dice ogni altra: chi pania alimentando non ha preso
+    /// niente di ciò che gli era stato dato, quindi il lotto intero torna
+    /// indietro a suo nome. Prima si fermava e finiva su `stderr`, che è il
+    /// posto dove il §20.2 ha smesso di mandare le cose.
+    ///
+    /// L'indice del kernel **non** è in rete: se pania lui è un difetto del
+    /// kernel, e nasconderlo vorrebbe dire cercarlo poi in un vault che
+    /// risponde a metà.
+    pub(crate) fn on_documents_indexed(&mut self, models: &[DocumentModel]) -> Vec<IndexLoss> {
+        let mut lost = self.core.on_documents_indexed(models);
         for (id, index) in self.providers.iter_mut() {
-            crate::safety::notifying(id, "indicizzando un documento", || {
-                index.on_document_indexed(model)
-            });
+            lost.extend(feeding(
+                id,
+                "indicizzando un lotto di documenti",
+                models.iter().map(|m| &m.id),
+                || index.on_documents_indexed(models),
+            ));
         }
+        lost
     }
 
-    pub(crate) fn on_document_removed(&mut self, id: &DocId) {
-        self.core.on_document_removed(id);
+    pub(crate) fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        let mut lost = self.core.on_documents_removed(ids);
         for (plugin, index) in self.providers.iter_mut() {
-            crate::safety::notifying(plugin, "togliendo un documento", || {
-                index.on_document_removed(id)
-            });
+            lost.extend(feeding(
+                plugin,
+                "togliendo un lotto di documenti",
+                ids.iter(),
+                || index.on_documents_removed(ids),
+            ));
         }
+        lost
     }
 
     /// **Cosa hanno già tutti**, di queste voci (§14.2): l'intersezione delle
@@ -211,11 +250,26 @@ impl Indexes {
         agreed
     }
 
-    pub(crate) fn reconcile(&mut self, ids: &[DocId]) {
-        self.core.reconcile(ids);
-        for (_, index) in self.providers.iter_mut() {
-            index.reconcile(ids);
+    /// Chi non è riuscito ad allinearsi lo dice, e **nomina i morti che si
+    /// tiene**: gli id che tornano di qui non stanno in `ids` — sono ciò che
+    /// l'indice ha in più, cioè quello che avrebbe dovuto dimenticare.
+    ///
+    /// La rete contro i panici c'è come nell'alimentazione, ma ciò che torna
+    /// indietro è **diverso**: chi pania riconciliando non ha lasciato indietro
+    /// i documenti che gli sono stati dati (quelli ci sono), ha lasciato
+    /// indietro dei morti di cui nessuno conosce il nome — nemmeno il kernel,
+    /// che sa solo chi è vivo. La perdita si nomina quindi sul primo id del
+    /// lotto se c'è, e su nessuno se il vault è vuoto: dice *quale indice* e
+    /// *cosa è successo*, che è ciò su cui si può agire (riaprire il vault),
+    /// e non finge di sapere un elenco che non esiste.
+    pub(crate) fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        let mut lost = self.core.reconcile(ids);
+        for (plugin, index) in self.providers.iter_mut() {
+            lost.extend(feeding(plugin, "riconciliando", ids.iter().take(1), || {
+                index.reconcile(ids)
+            }));
         }
+        lost
     }
 
     /// Interroga: il **percorso unico** di dispatch (vedi [`plan`]).

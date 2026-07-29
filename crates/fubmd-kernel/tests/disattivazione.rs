@@ -33,9 +33,9 @@ use fubmd_abi::format::{
 };
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{
-    EventHandler, HostApi, IndexProvider, IndexQuery, IndexResult, JobSpec, PluginManifest,
-    PluginPermissions, QueryKind, QueryRoute, ReadApi, ViewInstance, ViewProvider, ViewSpec,
-    ViewSurface,
+    EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, JobSpec,
+    PluginManifest, PluginPermissions, QueryKind, QueryRoute, ReadApi, ViewInstance, ViewProvider,
+    ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_kernel::{FormatRegistry, RegistryError, Trust, Workspace};
@@ -122,13 +122,23 @@ impl IndexProvider for Spia {
         Ok(())
     }
 
-    fn on_document_indexed(&mut self, doc: &DocumentModel) {
-        self.segna(Vita::Indicizzato(doc.id.to_string()));
+    /// Una voce **per documento** anche se l'alimentazione è a lotti: la spia
+    /// serve a dire *quali* documenti sono arrivati, e contare i lotti non lo
+    /// direbbe.
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        for doc in docs {
+            self.segna(Vita::Indicizzato(doc.id.to_string()));
+        }
+        Vec::new()
     }
 
-    fn on_document_removed(&mut self, _id: &DocId) {}
+    fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
-    fn reconcile(&mut self, _ids: &[DocId]) {}
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
     fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         self.segna(Vita::Flush);
