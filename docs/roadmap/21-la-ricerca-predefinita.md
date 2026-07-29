@@ -30,6 +30,18 @@ cosa lo rende regolabile (21.6), cosa gli darà da mangiare (21.8), e la sola
 misura che dice se la ricerca predefinita è **veloce** — che oggi non si sa
 (21.9).
 
+**La decima è arrivata dopo, e non l'ha portata la ricerca.** La §21.10 non
+nasce dalla [0025](../decisions/0025-la-ricerca-predefinita.md) e non risponde a
+nessuna delle sei domande del piano: l'ha trovata una **verifica**, cioè il
+controllo contro il codice di un'affermazione arrivata da fuori sull'architettura
+della lavagna. Sta qui perché è **la stessa firma della 21.3 vista dall'altro
+lato**: là un risultato non sa dire a che punto del documento sta, qui un
+riferimento non sa dire a che punto del documento punta, e in tutti e due i casi
+manca la stessa cosa — *una posizione dentro un documento, dicibile nel
+contratto*. Deciderle separate vuol dire inventare due modi di dire **dove**, e
+accorgersene quando il primo è già congelato: è la ragione per cui questa seduta
+esiste, applicata a una voce che non è di ricerca.
+
 Un avvertimento che vale per tutta la seduta: nessuna di queste voci è
 «aggiungere il fuzzy». Il fuzzy in sé è una riga di configurazione di un motore.
 Ciò che manca è il modo di **dire** in una query quanto si vuole essere
@@ -255,3 +267,69 @@ che lo ha prodotto.
       mosso di un filo: ~21 ms a ricerca allora, ~21 ms adesso. Il banco è lo
       stesso e si rilancia allo stesso modo, il che vuol dire che questa voce ha
       già il proprio strumento.
+
+### 21.10 Il riferimento a un blocco si parsa, e la risposta non ha dove metterlo
+
+*nata da una **verifica**, non da un giro · contratto · **P0** — `index-result` è già nel WIT, e si congela a M4*
+
+- [ ] **Il campo c'è, ed è nel contratto dalla
+      [0003](../decisions/0003-modello-del-documento.md).**
+      `LinkTarget::Wiki { page, heading, block }` sta in `abi/model.rs`, col
+      commento che ne scrive la forma per esteso — `[[Page#Heading^block]]`.
+      Accanto ci sono `Anchor { id, span, marker }`, un `anchor: Option<String>`
+      su tutti e otto i blocchi con un accessore **totale**, `canonical_anchor` e
+      `valid_anchor` esportati da `rules/` — cioè dove le regole condivise devono
+      stare ([0020](../decisions/0020-le-regole-in-un-posto-solo.md)) — e la
+      capacità `fubmd:anchors` fra quelle di parsing. Il provider markdown le
+      **produce già** (`format-markdown/src/parse.rs`). Di ciò che sembra
+      mancare, non manca niente.
+- [ ] **E nessuno lo legge.** Tutti e cinque i punti in cui il kernel guarda un
+      wikilink lo scartano con `..`: `index/core.rs` due volte, `graph.rs`,
+      `workspace.rs` due volte. La shell rispecchia il campo
+      (`host/contract.ts`) e non lo usa. Oggi `[[Nota#^blocco]]` apre la nota
+      **in cima**, e niente lo dice: è la famiglia della
+      [0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) — una promessa che
+      vale a metà e in silenzio — con una differenza che la peggiora invece di
+      attenuarla. Là il campo non c'era; qui c'è, attraversa il confine, viene
+      rispecchiato in TypeScript, e si perde nell'ultimo centimetro.
+- [ ] **Il motivo per cui si perde è una firma, ed è questa voce.**
+      `IndexResult::Resolved(Option<DocId>)` (`abi/traits.rs`) sa dire **quale
+      documento** e non **dove dentro**. Chi risolve non ha come rispondere,
+      quindi non guarda: scartare `heading` e `block` non è una dimenticanza, è
+      l'unica cosa che quella firma permetta. La
+      [0043](../decisions/0043-il-path-e-la-chiave.md) ha portato `Resolve` nel
+      contratto perché mancava la **domanda**; quello che manca adesso è metà
+      della **risposta**.
+- [ ] **È P0 di forma, e la ragione sta nella tabella dell'additività.**
+      Aggiungere una variante a `IndexResult` è additivo; cambiare il payload di
+      una variante che c'è già non lo è
+      ([wit-congelato.md](../architecture/wit-congelato.md)). Dopo il freeze di
+      M4 questa si corregge con una major, o non si corregge.
+- [ ] **È la [§21.3](#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento)
+      vista dall'altro lato**, e va decisa con lei. Là manca la coordinata di un
+      risultato *dentro* il documento che lo ha prodotto; qui manca la coordinata
+      di un riferimento *dentro* il documento che nomina. La destinazione è la
+      stessa e **esiste già**: `ViewUpdate::Reveal { doc_id, span }`, in repo dal
+      pannello outline, con la shell che sa convertire byte UTF-8 in code unit
+      UTF-16 (`frontend/src/rules/offsets.ts`). Due voci che chiedono la stessa
+      cosa a due firme diverse la otterranno in due forme diverse, e la seconda
+      arriverà quando la prima è congelata.
+- [ ] **I clienti sono tre, e nessuno dei tre è rimandabile.** Il salto
+      all'occorrenza successiva (§21.3, già P0 e già aperta); le citazioni di una
+      lavagna verso un punto di una nota — i nodi verso un blocco di
+      [FEATURES §12.6](../FEATURES.md), che è il caso da cui questa voce è
+      uscita; e la riga di un eventuale database (capitolo 11). La primitiva è
+      una sola per tutti e tre, e il conto di quante volte bussa è già a tre.
+- [ ] **Da decidere insieme: se una posizione porta la propria revisione.** È la
+      domanda che la §21.3 si fa per l'estratto, e la risposta deve essere una
+      sola per non avere due discipline. Il contratto sa già dirlo altrove —
+      `EditRequest` porta la revisione su cui è stato calcolato
+      ([0008](../decisions/0008-modifica-chirurgica.md)). Un'ancora è più stabile
+      di uno span, perché sopravvive alla riscrittura del paragrafo che la
+      ospita; ma non è immortale, e cancellare la riga che porta `^abc` oggi non
+      rende rosso nessun test.
+- [ ] **Cosa *non* chiede questa voce.** Non chiede di risolvere il riferimento —
+      quello è lavoro di kernel, e si fa dopo. Chiede che la risposta abbia il
+      posto dove metterlo, prima che il freeze lo renda una major. La differenza
+      è la stessa che la §21.8 dichiara per gli allegati: dichiarare il cliente
+      non è costruirgli la strada.

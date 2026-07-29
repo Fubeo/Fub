@@ -197,3 +197,23 @@ una parola per dire di no. È la famiglia della
 che vale a metà e in silenzio — vista **prima** di farla: l'unica volta in cui
 costa una variante invece di una migrazione, e l'unica in cui il criterio di
 questa pagina serve a evitare un difetto invece che a ordinarne la riparazione.
+
+**Fuori anche da quelle**, e con lo stesso statuto, ne arriva una terza che non
+l'ha portata nessuna decisione: la **§21.10 (il riferimento a un blocco si parsa
+e la risposta non ha dove metterlo)**. Sta qui per la ragione della
+[0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) — una promessa che vale a
+metà e in silenzio — portata al suo caso limite. Nelle altre della famiglia il
+pezzo mancava; qui c'è tutto: la sintassi si scrive, il parser la riconosce, il
+modello porta l'ancora, `LinkTarget::Wiki` porta il blocco, il mirror TypeScript
+lo rispecchia, e poi `IndexResult::Resolved(Option<DocId>)` non ha dove metterlo
+e tutti e cinque i punti che risolvono un wikilink lo scartano con `..`. Il
+risultato è che `[[Nota#^blocco]]` apre la nota in cima e nessuno lo dice: non è
+una capacità stretta, è una capacità **costruita e poi troncata all'ultimo
+centimetro**, che è il modo peggiore in cui una promessa può essere falsa, perché
+ogni indizio disponibile dice che è vera.
+
+E c'è una seconda lezione, che riguarda questa pagina e non quella voce: la riga
+di [strozzature.md](strozzature.md) che diceva «nessun `^block-id`» era falsa da
+undici verbali, e nessuno l'aveva riletta. Un indice inverso invecchia come tutto
+il resto — con l'aggravante che è il posto dove si va a cercare *se una cosa
+manca*, cioè quello in cui una riga vecchia non allunga il lavoro: lo dirotta.
