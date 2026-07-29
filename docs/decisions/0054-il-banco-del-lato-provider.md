@@ -45,14 +45,15 @@ Un `fubmd-sdk` che avesse dichiarato `fubmd-kernel` sarebbe passato per tutte
 tranne la quarta — e la quarta si sarebbe accontentata che qualcuno disegnasse
 la freccia. L'invariante era nelle intenzioni, non nel test.
 
-È la **quinta specie** della famiglia che il §16.7 ha aperto, e finora quel
-paragrafo ne elencava quattro: non un conteggio invecchiato, non un limite
-dichiarato che non c'è più, ma una **garanzia dichiarata che non è mai
-esistita**. Fa lo stesso danno del limite invecchiato, in direzione opposta: un
-limite falso fa sottovalutare una copertura e dirotta il lavoro; una garanzia
-falsa la fa **sopravvalutare**, e chi ci si appoggia non va a controllare —
-esattamente ciò che è successo qui, dove la frase è arrivata in un cappello di
-seduta e ci è restata finché qualcuno non ha aperto il file.
+È la **sesta specie** della famiglia che il §16.7 tiene — quattro di conteggi
+falsi, la quinta è il *limite dichiarato* che non c'è più, e questa: una
+**garanzia dichiarata che non è mai esistita**. Le prime cinque sono descrizioni
+invecchiate di qualcosa che esiste, e si curano aggiornandole; qui non c'è niente
+da aggiornare, perché non c'è mai stato niente. Fa lo stesso danno del limite
+invecchiato in direzione opposta — un limite falso fa **sotto**valutare una
+copertura, una garanzia falsa la fa **sopra**valutare — e passa più a lungo
+inosservata di tutte, perché il motivo per cui si scrive una garanzia è smettere
+di doverci pensare. Aggiunta al §16.7, che è la voce che quell'elenco lo tiene.
 
 **Deciso**: il presidio si scrive, in questo giro. Sono due test nuovi in
 `dependency_invariant.rs` — `l_sdk_non_vede_il_kernel` e

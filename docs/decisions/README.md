@@ -151,7 +151,7 @@ E ne inaugurano un altro, che è di metodo e non di forma: la 0054 chiude una vo
 **smentendo un presidio che tutti credevano di avere**. Il cappello della seduta
 16 diceva che il kernel dentro l'SDK «violerebbe l'invariante che
 `dependency_invariant.rs` presidia»; quel file non nominava `fubmd-sdk` da
-nessuna parte. È la quinta specie della famiglia che il §16.7 elenca, e la
+nessuna parte. È la **sesta** specie della famiglia che il §16.7 elenca, e la
 peggiore: un conteggio invecchiato fa sopravvalutare una copertura, un *limite*
 invecchiato la fa sottovalutare, ma una **garanzia dichiarata che non è mai
 esistita** fa entrambe le cose insieme — e nessuno va a controllare una garanzia,
