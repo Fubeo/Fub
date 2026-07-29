@@ -61,6 +61,6 @@ scritta due volte: il [§15.3](15-il-disco.md#153-una-versione-di-schema-su-ogni
 [on-disk-layout.md](../architecture/on-disk-layout.md)).
 
 Le due tolte hanno una morale in comune, ed è quella del
-[§16.7](16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione):
+[decisione 0056](../decisions/0056-un-elenco-che-e-la-sorgente.md):
 **un elenco tenuto a mano smette di essere vero senza diventare rosso.** Vale
 per i presidi del repo, e vale per questo file.

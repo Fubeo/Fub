@@ -5,7 +5,7 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 114 voci: novantanove da sette giri sulla stessa domanda, due da una
+Sono uscite 115 voci: novantanove da sette giri sulla stessa domanda, due da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md); e la §20.5, nata
 misurando la [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) contro il
@@ -16,9 +16,11 @@ che ha stabilito che la ricerca di FubMD è built-in e di classe *omnisearch*
 **verifiche**: la §21.10 dal controllo contro il codice di un'affermazione
 arrivata da fuori, e le §22.1–§22.3 dallo stesso controllo su una lettura
 esterna dell'intero [FEATURES.md](FEATURES.md)
-([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)). Ottantaquattro sono
+([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)) — e una da una
+**separazione**, la §16.8, staccata dal §16.7 nel momento in cui lo si chiudeva
+([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)). Ottantasei sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-trenta sono qui, e questo file è il loro **indice**.
+ventinove sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -96,6 +98,14 @@ verificata contro i sorgenti prima di diventare una voce**, perché quella
 sbagliata avrebbe fatto riaprire una firma già a posto e lasciato aperta quella
 che scade.
 
+E una **nona**, che non cerca niente: chiudendo una voce ci si accorge che ne
+teneva due. La §16.8 era la seconda metà del §16.7 — stesso *difetto*, un elenco
+che smette di dire il vero senza diventare rosso, ma non lo stesso *presidio*:
+uno è un insieme che un test estrae dai sorgenti, l'altra è un'affermazione
+scritta in italiano dentro un documento. È il rovescio dell'accorpamento della
+[0053](decisions/0053-il-contratto-ha-una-sorgente.md), e lo stesso criterio: un
+verbale è un ragionamento intero.
+
 ## Le sedute
 
 | # | Seduta | Perché insieme | Voci | P0 |
@@ -115,7 +125,7 @@ che scade.
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | **chiusa**: il path è la chiave per sempre e un id stabile è una proprietà ([0043](decisions/0043-il-path-e-la-chiave.md)), lo stato per-documento ha un posto dichiarato che il kernel migra e raccoglie ([0044](decisions/0044-lo-stato-per-documento.md)), e l'undo ha due pile che non si fondono ([0045](decisions/0045-l-undo-ha-due-pile.md)) | — | — |
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati a coppie, chiusi tutti: l'anagrafe del vault ([0046](decisions/0046-l-anagrafe-del-vault.md)) e la cartella come cittadino con la lista per cartella ([0047](decisions/0047-la-cartella-esiste-nel-kernel.md)); restano **tre** caselle del §14.1 — l'impronta degli allegati, la politica della cartella allegati e le derivate in `.fubmd/data/` | — | — |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra; la §15.4 è chiusa con la [0048](decisions/0048-una-radice-sola.md) — una radice sola dentro il vault, la mappa del disco, e la classe di un dato dichiarata da **dove** si scrive — e ne resta la casella additiva, l'implementazione | 6 | — |
-| **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica; il contratto ha **una** sorgente e due confini che non hanno la stessa forma ([0053](decisions/0053-il-contratto-ha-una-sorgente.md), che chiude §16.4 e §16.5 insieme come la seduta chiedeva); i due banchi di prova sono **due**, e lo stesso cappello che là dichiarava un accorpamento qui dichiarava un confine ([0054](decisions/0054-il-banco-del-lato-provider.md) lato provider, [0055](decisions/0055-il-banco-del-lato-host.md) lato host) | 3 | — |
+| **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica; il contratto ha **una** sorgente e due confini che non hanno la stessa forma ([0053](decisions/0053-il-contratto-ha-una-sorgente.md), che chiude §16.4 e §16.5 insieme come la seduta chiedeva); i due banchi di prova sono **due**, e lo stesso cappello che là dichiarava un accorpamento qui dichiarava un confine ([0054](decisions/0054-il-banco-del-lato-provider.md) lato provider, [0055](decisions/0055-il-banco-del-lato-host.md) lato host); e un elenco scritto a mano è sano se è **la sorgente** di ciò che elenca o se **si confronta** con essa, mai se ci si itera sopra — la stessa tassonomia con due risposte, perché la produzione può leggere l'inventario delle view e non la macro dei comandi Tauri ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md), [0057](decisions/0057-la-dieta-dell-ipc.md)) | 2 | — |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza | 3 | — |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: quattro **rimandi** ai quattro giri di audit, di cui uno chiuso; restano **tre** caselle, e il lavoro sta nelle sedute che le hanno assorbite | — | — |
@@ -125,7 +135,7 @@ che scade.
 
 ## Le voci
 
-Trenta. Il numero è quello con cui le nomina il resto del repo.
+Ventinove. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -137,16 +147,19 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella non è in nessun
 totale.** La colonna *Voci* conta le voci **aperte**, e la sua somma per riga fa
-trenta come deve; il residuo di una voce **chiusa** è un'altra specie e finora
+ventinove come deve; il residuo di una voce **chiusa** è un'altra specie e finora
 non aveva dove essere contato — che è il modo in cui la riga della seduta 14 ha
 detto «due caselle» mentre il suo file ne aveva tre, e la 19 non ha detto niente
-avendone tre. Le caselle residue oggi sono **otto**, e stanno in quattro posti:
+avendone tre. Le caselle residue oggi sono **nove**, e stanno in cinque posti:
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
 (tre: l'impronta degli allegati, la politica della cartella allegati, le
 derivate), [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
 (una: l'implementazione additiva delle due radici),
 [§20.2](roadmap/20-quando-qualcosa-va-storto.md#202-ciò-che-va-storto-ha-un-canale-nel-contratto-e-nessuna-destinazione)
-(una: portare dentro il canale i ventisette punti che scrivono su `stderr`) e la
+(una: portare dentro il canale i ventisette punti che scrivono su `stderr`), il
+[§16.6](roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) (una: i cinque
+bespoke da migrare — ed è la prima casella residua che **non vive in una riga di
+prosa**, perché il suo numero lo asserisce un test) e la
 [seduta 19](roadmap/19-debito-quarto-audit.md) (tre rimandi). Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte.
@@ -180,8 +193,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§15.6** | [La politica di esclusione è una costante di compilazione](roadmap/15-il-disco.md#156-la-politica-di-esclusione-è-una-costante-di-compilazione) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
 | **§15.7** | [L'apertura del vault è tutto-o-niente, sincrona e senza ritorno](roadmap/15-il-disco.md#157-lapertura-del-vault-è-tutto-o-niente-sincrona-e-senza-ritorno) | 15. Il disco: storage, durabilità, politiche | kernel | **P1** |
 | **§16.3** | [Un crate per bundle di feature](roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
-| **§16.6** | [Dieta dell'IPC](roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
-| **§16.7** | [Due presidi sono esaustivi *a memoria*, non per costruzione](roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
+| **§16.8** | [La prosa che conta i sorgenti non ha nessun presidio](roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 | **§17.1** | [Corpus, fuzzing, prestazioni](roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni) | 17. I presidi che restano | presidi | **P2** |
 | **§17.2** | [Test della shell](roadmap/17-presidi-che-restano.md#172-test-della-shell) | 17. I presidi che restano | presidi | **P2** |
 | **§17.3** | [Osservabilità](roadmap/17-presidi-che-restano.md#173-osservabilità) | 17. I presidi che restano | presidi | **P2** |
@@ -209,6 +221,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — cinquantacinque, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — cinquantasette, uno
   per file. Non stanno qui perché questo è l'elenco di ciò che **resta da
   fare**.

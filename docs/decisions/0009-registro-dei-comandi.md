@@ -16,7 +16,8 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
       provider estratto per la durata della chiamata).
 - [x] **Comandi sull'IPC**: `list_commands` / `invoke_command`, gemelli di
       `list_views` / `view_action`. Da qui in poi una feature nuova **non deve
-      poter aggiungere un comando Tauri** (§16.6).
+      poter aggiungere un comando Tauri** (§16.6, deciso con la
+      [0057](0057-la-dieta-dell-ipc.md)).
 - [x] **`CommandOutcome` sufficiente**: `{ notify, effect }` con
       `CommandEffect { Done, Navigate, Reveal, RunSearch, Plan, Custom }`.
 - [x] **Un cliente vero nello stesso giro**: `CoreCommands` (`search.open`,
@@ -55,7 +56,8 @@ comando ufficiale che le avesse ottenute per una via privilegiata avrebbe provat
 che il registro funziona *per chi non è un plugin*, cioè l'unica cosa che non
 c'era bisogno di provare. **La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) le ha decise, e adesso sono migrate**:
 `note.create`, `note.rename`, `note.trash`, `trash.restore`, `trash.empty` sono
-comandi come gli altri, sei comandi Tauri sono spariti, e la regola del §16.6 vale
+comandi come gli altri, sei comandi Tauri sono spariti, e la regola del §16.6 —
+presidiata dalla [0057](0057-la-dieta-dell-ipc.md) — vale
 finalmente anche per le feature che toccano il vault.
 
 *Resta fuori, dichiarato:* ~~i **comandi strutturali**~~ (fatti, [decisione 0013](../decisions/0013-elenco-delle-capacita.md)); i

@@ -66,6 +66,8 @@ cronologico di chiusura.
 | [0053](0053-il-contratto-ha-una-sorgente.md) | Il contratto ha una sorgente, e due confini che non hanno la stessa forma | §16.4 + §16.5 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 | [0054](0054-il-banco-del-lato-provider.md) | Il banco del lato provider: dove si prova un provider contro il contratto | §16.1 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 | [0055](0055-il-banco-del-lato-host.md) | Il banco del lato host: un builder, perché i trentacinque non erano lo stesso vault | §16.2 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
+| [0056](0056-un-elenco-che-e-la-sorgente.md) | Un elenco che è la sorgente, e un insieme che il compilatore chiude | §16.7 — **meno la sua seconda metà**, che diventa la §16.8 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
+| [0057](0057-la-dieta-dell-ipc.md) | La dieta dell'IPC: un elenco che diventa rosso quando qualcosa si aggiunge | §16.6 (**meno una casella**) ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -156,6 +158,27 @@ peggiore: un conteggio invecchiato fa sopravvalutare una copertura, un *limite*
 invecchiato la fa sottovalutare, ma una **garanzia dichiarata che non è mai
 esistita** fa entrambe le cose insieme — e nessuno va a controllare una garanzia,
 perché il motivo per cui la si scrive è smettere di doverci pensare.
+
+La [0056](0056-un-elenco-che-e-la-sorgente.md) e la
+[0057](0057-la-dieta-dell-ipc.md) sono la **quarta coppia decisa in una volta
+sola**, e ripetono di proposito la forma che la 0054/0055 aveva prodotto per
+caso: il cappello ha guardato le due voci insieme, ha trovato che ponevano lo
+stesso difetto in due direzioni opposte — un elenco su cui si *itera* non nota le
+aggiunte, uno con cui si *asserisce un'uguaglianza* non può che notarle — e ha
+concluso che fra loro c'è un **confine**. Il confine è meccanico: *la produzione
+può leggere l'elenco?* Sulle view sì, e l'elenco diventa la sorgente da cui la
+cosa esiste; sui comandi Tauri no, perché una macro non itera, e l'elenco resta
+una copia da confrontare. Stessa tassonomia, due risposte, due verbali.
+
+E la 0056 inaugura un caso che non c'era: chiude una voce **meno la sua seconda
+metà**, e quella metà non è una casella residua — è una **voce nuova**, la §16.8.
+È il rovescio esatto della [0053](0053-il-contratto-ha-una-sorgente.md): là due
+voci erano lo stesso ragionamento e sono diventate un verbale, qui una voce ne
+teneva due e ne è nata una in più. Il criterio per distinguere questo caso da
+quello della [0052](0052-cio-che-va-storto-e-un-evento.md) — la voce chiusa che
+lascia una casella — è sempre lo stesso: **una casella residua è ciò che si può
+fare senza aprire un verbale**. Presidiare la prosa che conta i sorgenti chiede
+di decidere che forma abbia l'annotazione, quindi non lo è.
 
 E c'è una seconda cosa che la [0053](0053-il-contratto-ha-una-sorgente.md)
 inaugura: chiude una voce **smentendone la premessa**. Il §16.4 escludeva i tipi Rust perché «la sorgente autorevole è il

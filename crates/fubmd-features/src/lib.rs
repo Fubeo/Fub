@@ -29,10 +29,15 @@
 //! - [`versioning`] — snapshot per-file del vault come
 //!   [`EventHandler`](fubmd_abi::traits::EventHandler): il dogfooding più
 //!   completo del contratto, perché usa solo ciò che avrà un plugin di terzi.
+//! - [`inventario`] — l'elenco delle feature qui sopra, e non una descrizione di
+//!   esso: è da qui che `fubmd_host::mount` le monta, quindi una feature fuori
+//!   dall'elenco semplicemente non c'è. Le view ne sono un sottoinsieme
+//!   derivato, non una seconda tabella (§16.7).
 
 pub mod backlinks;
 pub mod blocks;
 pub mod commands;
+pub mod inventario;
 pub mod outline;
 pub mod search;
 pub mod stats;
@@ -49,6 +54,7 @@ pub use commands::{
     SEARCH_OPEN, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
     SETTINGS_SET, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
+pub use inventario::{ogni_feature_ufficiale, ogni_view_ufficiale, FeatureUfficiale};
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
 pub use search::{SearchIndex, SEARCH_ID};
 pub use stats::{

@@ -39,6 +39,8 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §4.1 · §16.5 | [0053 — Il contratto ha una sorgente, e due confini che non hanno la stessa forma](../decisions/0053-il-contratto-ha-una-sorgente.md) |
 | §4.6 · §16.1 | [0054 — Il banco del lato provider](../decisions/0054-il-banco-del-lato-provider.md) |
 | §4.12 · §16.2 | [0055 — Il banco del lato host](../decisions/0055-il-banco-del-lato-host.md) |
+| §16.7 | [0056 — Un elenco che è la sorgente, e un insieme che il compilatore chiude](../decisions/0056-un-elenco-che-e-la-sorgente.md) |
+| §4.2 · §16.6 | [0057 — La dieta dell'IPC](../decisions/0057-la-dieta-dell-ipc.md) |
 | §3.11 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §3.13 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §1.2 · §2.1 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
@@ -129,13 +131,12 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §3.8 | **§4.4** | Due parser per la stessa sintassi |
 | §3.10 | **§11.2** | Tre stati diversi, zero contenitori |
 | §3.12 | **§3.3** | La UI di un plugin non ha modo di entrare nella shell |
-| §4.2 | **§16.6** | Dieta dell'IPC |
 | §4.3 | **§17.1** | Corpus, fuzzing, prestazioni |
 | §4.4 | **§17.2** | Test della shell |
 | §4.5 | **§17.3** | Osservabilità |
 | §4.7 | **§16.3** | Un crate per bundle di feature |
 
-**Voci senza un numero vecchio.** Cinque famiglie non compaiono qui sopra
+**Voci senza un numero vecchio.** Sei famiglie non compaiono qui sopra
 perché non traducono niente: sono **nate** con la numerazione per sedute.
 
 - La **§8.4** l'ha trovata una misura, non un giro
@@ -167,6 +168,15 @@ perché non traducono niente: sono **nate** con la numerazione per sedute.
   la ragione per cui vale la pena scriverlo: cercare dove una tesi plausibile
   non regge è un modo di trovare voci, e trova quelle che nessuna delle sei
   domande andava a cercare.
+
+- La **§16.8** non l'ha trovata nessuna delle strade: è nata da una
+  **separazione**, cioè accorgendosi — chiudendo il §16.7 con la
+  [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) — che quella voce ne
+  teneva due. Il difetto era lo stesso (un elenco che smette di dire il vero
+  senza diventare rosso), il presidio no: un insieme che un test estrae dai
+  sorgenti non si presidia come un'affermazione scritta in italiano dentro un
+  documento. È il rovescio dell'accorpamento della
+  [0053](../decisions/0053-il-contratto-ha-una-sorgente.md).
 
 Cercarle in un commit di prima della riorganizzazione non ha senso: prima non
 esistevano.

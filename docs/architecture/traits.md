@@ -245,7 +245,9 @@ rinomina e cestina restavano cablate nella shell perché il contratto non sapeva
 farle; adesso `CoreCommands` le offre come comandi (`note.create`,
 `note.rename`, `note.trash`, `trash.restore`, `trash.empty`) usando **solo**
 queste capacità, e i sei comandi Tauri corrispondenti sono spariti — che è ciò
-che rende vera la regola del §16.6. `vault.archive` è il cliente di
+che rende vera la regola del §16.6, oggi presidiata da un'allowlist
+([0057](../decisions/0057-la-dieta-dell-ipc.md)): i comandi Tauri sono **37**, e
+aggiungerne uno costringe a dichiarare perché non poteva essere altro. `vault.archive` è il cliente di
 `run_command`: sposta N note invocando `note.rename`, e da lì si vede che il
 modo viaggia con l'host, che l'attore non si riazzera e che il lotto non si
 moltiplica. Dettagli in [plugin-boundary.md](plugin-boundary.md), "Operazioni
@@ -1036,7 +1038,7 @@ modello di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **34**, contando le funzioni delle quattordici interfacce `host-*` di `abi.wit`: le **dodici** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) e `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)) |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **34**, contando le funzioni delle quattordici interfacce `host-*` di `abi.wit`: le **dodici** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) e `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore
@@ -1215,7 +1217,7 @@ riordinare il WIT. *(Questa riga diceva il contrario — «limite dichiarato: �
 con quello dell'enum Rust» — ed era falsa da settantacinque commit: `rust_enum_order`
 è arrivata con la [0003](../decisions/0003-modello-del-documento.md), due giorni
 dopo che la frase era stata scritta, e nessuno è tornato a correggerla. È il
-[§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+[§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
 nella sua forma peggiore: non un numero invecchiato, ma un limite dichiarato che
 non esisteva più — cioè un invito a non fidarsi di una garanzia che c'era.)*
 

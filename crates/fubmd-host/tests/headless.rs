@@ -84,6 +84,16 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // `fubmd.core` non registra niente e c'è lo stesso: è il bundle che dà un
     // proprietario alle impostazioni dell'app (§11.1), e «dichiarato con zero
     // registrazioni» è uno stato vero.
+    //
+    // **Questi nove nomi restano scritti a mano di proposito**, e non è una
+    // svista rispetto alla decisione 0056: quella distingue un elenco su cui un
+    // test *itera* — che smette di coprire in silenzio — da uno con cui un test
+    // *asserisce un'uguaglianza*, che diventa rosso. Questo è il secondo. E la
+    // sua indipendenza è il punto: `le_view_ufficiali.rs` confronta ciò che è
+    // montato con `ogni_feature_ufficiale()`, quindi non direbbe niente se
+    // l'inventario stesso fosse sbagliato. Qui i nomi sono battuti a mano, una
+    // volta, e a quella domanda rispondono. Derivarli dall'inventario
+    // renderebbe questo test una tautologia dell'altro.
     let mut plugins: Vec<&str> = info.plugins.iter().map(|p| p.id.as_str()).collect();
     plugins.sort();
     assert_eq!(

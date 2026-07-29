@@ -205,7 +205,7 @@ della webview, e nessuno dei due ha un lettore in un'app impacchettata. (I numer
 sono stati ricontati dalla
 [decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md), che li ha
 trovati scritti a mano in quattro posti con tre valori diversi e nessuno giusto:
-finché il §16.7 non li presidia, si ricontano a ogni giro.) Il canale di
+finché la [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio) non li presidia, si ricontano a ogni giro.) Il canale di
 destinazione adesso c'è per il primo dei due — `Event::Trouble`, con il centro
 notifiche in ascolto — e resta da costruire per il secondo (§20.4).
 

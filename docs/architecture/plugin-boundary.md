@@ -153,10 +153,19 @@ provider registrati per id, e `Plugin::manifest()` non viene mai chiamata perch�
 non c'è niente che installi, abiliti o verifichi. Applicare `write_vault` oggi
 vorrebbe dire inventare il registro che tiene i manifest, cioè il §7.3 e M5. Il
 varco però esiste già ([0010](../decisions/0010-comando-descritto-a-una-macchina.md)):
-un comando in **sola lettura** o **simulato** riceve un host che nega *tutte* e
-sei le strutturali con un errore che dice perché
-(`crates/fubmd-kernel/tests/invoke_command.rs`,
-`every_structural_capability_is_refused_by_the_same_gate`). Il giorno che
+un comando in **sola lettura** o **simulato** riceve un host che nega con un
+errore che dice perché — e nega più delle strutturali: le famiglie che `ReadOnly`
+rifiuta sono **sette** (`VaultWrite`, `VaultStructure`, `DataWrite`,
+`SettingsWrite`, `ViewStateWrite`, `Events`, `Services`), cioè anche la
+configurazione, lo stato di vista, i propri blob, i job e i servizi di terzi, che
+strutturali non sono in nessun senso. Il presidio è
+`crates/fubmd-kernel/tests/invoke_command.rs`,
+`every_structural_capability_is_refused_by_the_same_gate`, e dalla
+[0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) l'insieme atteso lo
+**calcola** da `Capability::ALL` invece di elencarlo — quindi una famiglia negata
+che nessuno prova è rossa. *(Questa riga diceva «tutte e sei le strutturali»: il
+numero era sbagliato — i metodi di `VaultStructure` sono cinque — e la portata lo
+era di più, perché nominava una famiglia sola su sette.)* Il giorno che
 `write_vault` diventerà vincolante non dovrà costruire il rifiuto: dovrà
 aggiungere una seconda ragione per negare.
 
