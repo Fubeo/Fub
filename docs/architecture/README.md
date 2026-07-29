@@ -10,9 +10,21 @@ sapendo che si riscrivono centoventidue riferimenti.
 
 **Il colpo d'occhio**
 
-- [mappa-visuale.md](mappa-visuale.md) — tutta l'architettura in un diagramma:
-  i sette crate, la shell, il disco, e — tratteggiato — ciò che non esiste
-  ancora. Da qui si capisce dove stanno gli altri documenti.
+- [mappa-visuale.md](mappa-visuale.md) — tutta l'architettura in tre disegni:
+  quello disposto a mano (i sette crate, la shell, il disco, e — tratteggiato —
+  ciò che non esiste ancora), il **grafo delle dipendenze**, che un test rilegge
+  e confronta con `cargo metadata`, e **dove gira cosa** mentre l'app è accesa.
+  Da qui si capisce dove stanno gli altri documenti.
+
+Gli altri diagrammi non stanno qui: stanno nel documento che tratta la cosa che
+disegnano — un flusso in mezzo alla prosa che lo spiega invecchia insieme a lei,
+un flusso in un album di diagrammi non lo apre nessuno quando cambia il codice.
+Chi cerca un percorso lo trova dove lo cercherebbe: l'apertura di un vault, il
+ciclo di un job e la rete contro i panici in
+[plugin-boundary.md](plugin-boundary.md); una scrittura esterna che arriva a un
+pannello in [shell.md](shell.md); una query servita da due indici e le due pile
+dell'undo in [traits.md](traits.md); la mappa dei tipi, ad albero e ad arena, in
+[data-model.md](data-model.md).
 
 **Il contratto**
 

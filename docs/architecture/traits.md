@@ -397,6 +397,72 @@ del plugin, e `run_command` che compone) e
 `crates/fubmd-features/tests/commands_e2e.rs` (il ciclo di vita di una nota
 chiesto solo al registro).
 
+#### Tornare indietro: due pile che non si incontrano
+
+`CommandOutcome` porta un campo `undo: Option<Undo>`, e quel campo è il solo modo
+in cui un'operazione diventa annullabile. Ma la pila in cui finisce non è la pila
+dell'editor: sono due, con due soggetti diversi, e non si fondono.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as utente
+    participant E as editor<br/>CodeMirror
+    participant Sh as shell
+    participant W as Workspace
+    participant St as UndoStack<br/>kernel
+
+    rect rgb(60,60,72)
+    Note over U,E: Mod-z — la pila del TESTO, che il kernel non vede
+    U->>E: digita
+    U->>E: Mod-z
+    E-->>U: il buffer torna indietro (nessun IPC)
+    end
+
+    rect rgb(45,55,75)
+    Note over U,St: Mod-Alt-z — la pila delle OPERAZIONI
+    U->>Sh: rinomina una nota
+    Sh->>W: run_command("note.rename", …) in Apply
+    W-->>Sh: CommandOutcome{ undo: Some(Undo) }
+    W->>St: push(undo) — solo a profondità zero
+    Note over W,St: dentro una macro non si spinge:<br/>tre rinomine sono UNA voce, non tre
+    U->>Sh: Mod-Alt-z
+    Sh->>W: run_command("vault.undo")
+    W->>St: pop() — la voce esce PRIMA di girare
+    W->>St: begin_replay()
+    Note over W,St: annullare non è annullabile:<br/>senza la bandiera, due pressioni si rincorrerebbero per sempre
+    W->>W: batch { per ogni UndoStep: apply_edit | invoke_command }
+    W->>St: end_replay()
+    W-->>Sh: un solo BatchEnded, un solo ridisegno
+    end
+```
+
+| Pezzo | Dove | Cosa tiene |
+|---|---|---|
+| la pila del testo | [editor.ts:148](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
+| `UndoStack` | [undo.rs:49](../../crates/fubmd-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
+| `Undo` / `UndoStep` | [command.rs:567](../../crates/fubmd-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
+| dove si spinge | [workspace.rs:3217](../../crates/fubmd-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:3233](../../crates/fubmd-kernel/src/workspace.rs) | pop, replay, un lotto solo |
+| `vault.undo` | [commands.rs:88](../../crates/fubmd-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
+
+Le due pile non si fondono perché non hanno lo stesso soggetto: ordinarle
+insieme vorrebbe dire mettere in fila «ho scritto tre lettere» e «ho rinominato
+quaranta note», e fra i due non c'è un ordine comune — il primo gesto per il
+vault non è ancora successo, il secondo per il buffer non è mai successo. **A
+decidere quale delle due risponde è il fuoco**, non la cronologia.
+
+Si incontrano in un punto solo, e non è una guardia scritta per l'undo:
+annullare mentre l'editor tiene un buffer sporco fa fallire il confronto di
+revisione di `EditRequest::base`, e torna un `PluginError::Conflict`. È la
+[0008](../decisions/0008-modifica-chirurgica.md) che vale anche qui.
+
+Due assenze da non disegnare: **il redo non esiste** (è un'altra pila, e non c'è),
+e la pila non si legge dal canale dati — nessuna `IndexQuery` la nomina. Al
+confine `HostApi::undo_last` costa **due** capacità, `Commands` e `VaultWrite`
+([guard.rs:591](../../crates/fubmd-kernel/src/host/guard.rs)): senza la seconda,
+un host di sola lettura avrebbe una scala per riscrivere il vault.
+
 ### `ViewProvider` — UI dichiarativa (M2: graph/outline/tag panel)
 
 ```rust
@@ -624,6 +690,68 @@ con le combinazioni che stanno nel **contratto** (`QueryEvaluator`) — cosa
 significhino AND, OR e la negazione non deve poter divergere fra il kernel e chi
 implementa un indice. Ciò che il destinatario non saprebbe valutare gli arriva
 già risolto, dentro un `QueryPredicate::Docs`.
+
+Il caso che vale la pena seguire per intero è una domanda le cui foglie
+appartengono a **due indici diversi**: `testo("rust") AND proprietà(tipo=progetto)`.
+Il testo lo sa valutare solo la ricerca, la proprietà solo il kernel, e nessuno
+dei due sa comporre `Documents`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as chi chiede<br/>(comando IPC, view, job)
+    participant W as Workspace
+    participant P as pianificatore<br/>index/plan.rs
+    participant K as CoreIndex<br/>fubmd.core
+    participant S as SearchIndex<br/>ricerca
+    participant R as rules::properties
+
+    C->>W: query_index(Documents{ testo AND proprietà })
+    W->>P: Indexes::query → plan::run
+    P->>P: routes.owner(Documents) → None
+    Note over P: `Documents` è l'unica famiglia senza proprietario:<br/>comporla È il pianificatore, non un ripiego
+    P->>P: sole_evaluator(foglie) → None
+    Note over P: le due foglie hanno valutatori diversi,<br/>quindi niente pushdown: si scende foglia per foglia
+    P->>K: query(proprietà(tipo=progetto)) — senza ordine, colonne, finestra
+    K-->>P: Matches
+    P->>S: query(testo("rust")) — senza ordine, colonne, finestra
+    S-->>P: Matches
+    P->>P: Matches::and — l'AND è del contratto, non di chi risponde
+    P->>R: finish(sort, select, page)
+    R-->>P: IndexResult::Documents
+    P-->>C: risposta
+```
+
+| Riquadro | Dove | Cosa fa qui |
+|---|---|---|
+| `Workspace::query_index` | [workspace.rs:2692](../../crates/fubmd-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
+| `plan::run` | [plan.rs:49](../../crates/fubmd-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
+| `sole_evaluator` | [plan.rs:213](../../crates/fubmd-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
+| `RouteTable` | [routing.rs:57](../../crates/fubmd-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |
+| `CoreIndex` | [core.rs:618](../../crates/fubmd-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
+| `Matches::and` | [query.rs:377](../../crates/fubmd-abi/src/query.rs) | la fusione; `QueryEvaluator` ha una implementazione sola, quella del contratto |
+| `properties::finish` | [properties.rs:232](../../crates/fubmd-abi/src/rules/properties.rs) | ordine, colonne e finestra, in coda e per tutti: rompe la parità per `DocId` o la paginazione ripete righe |
+
+**Le due chiamate sono in fila, non insieme.** Il kernel non parallelizza una
+query per conto proprio, ed è una decisione e non un debito: la concorrenza gliela
+portano i chiamanti — N comandi IPC e N view sulla stessa istanza di indice — e
+ciò che la [0026](../decisions/0026-due-query-insieme.md) ha comprato è che due
+`query` possano essere **in volo insieme** sullo stesso `&self`, non che una si
+spezzi in due. Quel che il pianificatore evita non è il tempo di attesa, è il
+lavoro: chiede a ciascuno la sua foglia e nient'altro.
+
+Il passo che il disegno non mostra sta dentro le frecce 6 e 8: `resolve_for`
+([plan.rs:246](../../crates/fubmd-kernel/src/index/plan.rs)) riscrive ogni
+letterale che il destinatario **non** sa valutare in un `QueryPredicate::Docs`
+già risolto. È il motivo per cui una foglia sola può arrivare a un indice che
+della domanda originale conosceva metà.
+
+E le due risposte negative restano distinte fino in fondo: se nessuno ha
+dichiarato la famiglia il pianificatore produce `PluginError::Unserved`
+([error.rs:106](../../crates/fubmd-abi/src/error.rs)); se il proprietario c'è e
+fallisce, il suo errore **risale così com'è** — `plan::run` non lo riavvolge. La
+differenza fra «non c'è nessuno» e «c'è, e ha sbagliato» è una domanda che si fa
+una volta sola, quando qualcosa non funziona, ed è troppo tardi per aggiungerla.
 
 **`snippet` è testo, mai markup.** L'evidenziazione viaggia separata, in
 `highlights: Vec<Span>` (byte *dentro* `snippet`): un provider di terzi non deve

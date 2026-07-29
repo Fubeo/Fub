@@ -25,7 +25,7 @@ La domanda «perché è fatto così» ha quasi sempre già una risposta scritta:
 i verbali. Aprire una discussione su una scelta già chiusa senza aver letto il
 suo verbale costa a entrambi il tempo di riscoprirla.
 
-## Le quattro invarianti che non si negoziano
+## Le cinque invarianti che non si negoziano
 
 Non sono raccomandazioni: ognuna ha qualcosa che diventa **rosso** se la si
 viola, ed è per questo che sono ancora vere.
@@ -36,12 +36,13 @@ viola, ed è per questo che sono ancora vere.
 | `fubmd-abi` e `crates/fubmd-abi/wit/fubmd/abi.wit` si rispecchiano | il contratto WIT è la stessa superficie detta nella lingua dei componenti: se le due divergono, a M5 diverge il confine | [`crates/fubmd-abi/tests/wit_conformance.rs`](../crates/fubmd-abi/tests/wit_conformance.rs) |
 | il contratto cresce **solo per aggiunta** rispetto a `wit/frozen/` | è la promessa su cui poggia il freeze di M4, e senza presidio decade in silenzio — vedi [architecture/wit-congelato.md](architecture/wit-congelato.md) | [`crates/fubmd-abi/tests/wit_additivity.rs`](../crates/fubmd-abi/tests/wit_additivity.rs) |
 | i link fra documenti non marciscono — e nemmeno quelli che puntano a un file di codice | un secondo posto in cui si racconta la stessa cosa invecchia perché niente lo compila; un documento che cita `traits.rs` deve diventare rosso quando `traits.rs` si sposta | [`.github/scripts/check-doc-links.mjs`](../.github/scripts/check-doc-links.mjs) |
+| il diagramma dei componenti dice le dipendenze che dicono i `Cargo.toml` | un disegno non lo compila nessuno: un arco inventato e — soprattutto — un crate nuovo mai disegnato passerebbero inosservati, e un diagramma incompleto mente più di uno sbagliato | [`il_diagramma_dice_le_dipendenze_vere`](../crates/fubmd-abi/tests/dependency_invariant.rs) |
 
 Rompere deliberatamente la terza è previsto e ha una procedura: si ritaglia la
 linea di base con un commit che tocca `0.1.0.wit` e dice perché. Il test non lo
 impedisce, lo rende **visibile in review**.
 
-La quinta regola — **tutta la prosa sta in `docs/`** — è nella tabella dei
+La sesta regola — **tutta la prosa sta in `docs/`** — è nella tabella dei
 presidi solo a metà, e va detto: nessuno script sa distinguere un documento
 nuovo fuori posto da un `README.md` legittimo. È l'unica delle cinque che si
 regge sulla review, ed è per questo che [README.md](README.md) spiega per esteso

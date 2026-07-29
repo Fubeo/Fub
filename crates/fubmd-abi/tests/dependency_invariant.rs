@@ -6,7 +6,7 @@
 //! feature ufficiali dipendesse dal kernel, "sono scritte come le scriverebbe un
 //! plugin" sarebbe un'affermazione e non una proprietà.
 //!
-//! Tre reti, con maglie diverse:
+//! Quattro reti, con maglie diverse:
 //!
 //! 1. **Denylist transitiva** — nessun crate delle famiglie proibite può
 //!    comparire nel grafo delle dipendenze *normali* di `fubmd-abi` e
@@ -18,12 +18,24 @@
 //!    quindi la sua chiusura si può *elencare per intero*. Una denylist per
 //!    prefisso non vedrebbe un parser markdown con un nome nuovo; un elenco
 //!    chiuso vede tutto ciò che compare, chiamato come vuole.
+//! 4. **Il diagramma dei componenti** — il grafo disegnato in
+//!    `docs/architecture/mappa-visuale.md` deve dire le stesse dipendenze che
+//!    dice `cargo metadata`, nei due versi.
 //!
 //! Le maglie sono diverse di proposito: la seconda intercetta il gesto (`cargo
 //! add`), la prima il contrabbando, la terza l'ignoto. Sul kernel — che ha una
 //! chiusura più larga, con `camino` di mezzo — resta la denylist: un `cargo
 //! update` che rinomina un crate di supporto lontano non deve rompere la build
 //! per niente.
+//!
+//! La quarta è di natura diversa dalle altre tre: non difende il codice da una
+//! dipendenza, difende un **documento** dal codice. Un disegno è il candidato
+//! ideale a diventare il secondo posto che racconta la stessa cosa e invecchia
+//! in silenzio, perché non lo compila nessuno — e la misura del problema il repo
+//! ce l'ha già data al contrario: `mappa-visuale.md` diceva «quattordici
+//! famiglie» mentre un commento di `traits.rs` ne diceva dieci, per ottocento
+//! righe. Il disegno aveva ragione, il codice torto, e nessuno dei due poteva
+//! accorgersene.
 //!
 //! Si guardano solo le dipendenze **normali**: dev e build non finiscono nella
 //! libreria (questo stesso test usa `serde_json` e `wit-parser` come dev-dep).
@@ -220,16 +232,40 @@ impl<'a> Graph<'a> {
         out
     }
 
-    /// Le dipendenze normali **dichiarate** nel `Cargo.toml` di un crate.
-    fn direct(&self, crate_name: &str) -> BTreeSet<&'a str> {
+    /// Le dipendenze **dichiarate** nel `Cargo.toml` di un crate, per genere:
+    /// `None` è la dipendenza normale (in `cargo metadata` il `kind` è assente o
+    /// nullo), `Some("dev")` quella di prova.
+    fn declared(&self, crate_name: &str, kind: Option<&str>) -> BTreeSet<&'a str> {
         let pkg = arr(self.meta, "packages")
             .iter()
             .find(|p| str_of(p, "name") == crate_name)
             .unwrap_or_else(|| panic!("`{crate_name}` non è nel workspace"));
         arr(pkg, "dependencies")
             .iter()
-            .filter(|d| d.get("kind").map(Value::is_null).unwrap_or(true))
+            .filter(|d| match kind {
+                None => d.get("kind").map(Value::is_null).unwrap_or(true),
+                Some(k) => d.get("kind").and_then(Value::as_str) == Some(k),
+            })
             .map(|d| str_of(d, "name"))
+            .collect()
+    }
+
+    /// Le dipendenze normali **dichiarate** nel `Cargo.toml` di un crate.
+    fn direct(&self, crate_name: &str) -> BTreeSet<&'a str> {
+        self.declared(crate_name, None)
+    }
+
+    /// I crate del workspace, per nome.
+    fn members(&self) -> BTreeSet<&'a str> {
+        arr(self.meta, "workspace_members")
+            .iter()
+            .map(|id| {
+                let id = id.as_str().expect("`workspace_members` non è di stringhe");
+                *self
+                    .name_of
+                    .get(id)
+                    .unwrap_or_else(|| panic!("il membro `{id}` non ha un pacchetto"))
+            })
             .collect()
     }
 }
@@ -365,6 +401,231 @@ fn whoever_mounts_does_not_depend_on_whoever_draws() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// La quarta rete: il diagramma dei componenti.
+// ---------------------------------------------------------------------------
+
+/// Il documento che contiene il grafo, relativo alla radice del repo.
+const DIAGRAM_DOC: &str = "docs/architecture/mappa-visuale.md";
+
+/// Il commento Mermaid che marca *quale* blocco è il grafo delle dipendenze.
+/// Serve perché quel documento ne contiene più d'uno, e il primo è disposto a
+/// mano: cercare "il blocco mermaid" prenderebbe il disegno sbagliato e lo
+/// direbbe con un errore incomprensibile.
+const DIAGRAM_MARKER: &str = "@grafo-dipendenze";
+
+/// Ciò che il disegno dichiara: i crate nominati e i due generi di arco.
+#[derive(Default)]
+struct Diagram {
+    crates: BTreeSet<String>,
+    normal: BTreeSet<(String, String)>,
+    dev: BTreeSet<(String, String)>,
+}
+
+/// Legge il blocco marcato e lo traduce in insiemi confrontabili.
+///
+/// Il dialetto ammesso è minuscolo di proposito — dichiarazioni
+/// `id["nome"]:::classe`, archi `a --> b` e `a -.-> b`, commenti `%%`, e le
+/// righe di intestazione `flowchart`/`classDef`. Tutto il resto è un errore e
+/// non un'omissione: un parser che ignora ciò che non capisce trasformerebbe un
+/// arco scritto male in un arco assente, e l'assenza qui è proprio ciò che il
+/// test deve saper vedere.
+fn read_diagram(source: &str) -> Diagram {
+    let mut blocks: Vec<Vec<&str>> = Vec::new();
+    let mut current: Option<Vec<&str>> = None;
+    for line in source.lines() {
+        match (&mut current, line.trim()) {
+            (None, "```mermaid") => current = Some(Vec::new()),
+            (Some(_), "```") => blocks.push(current.take().expect("dentro un blocco")),
+            (Some(body), _) => body.push(line),
+            (None, _) => {}
+        }
+    }
+    assert!(
+        current.is_none(),
+        "in {DIAGRAM_DOC} c'è un blocco ```mermaid che nessuna riga chiude"
+    );
+
+    let mut marked: Vec<Vec<&str>> = blocks
+        .into_iter()
+        .filter(|b| b.iter().any(|l| l.contains(DIAGRAM_MARKER)))
+        .collect();
+    assert_eq!(
+        marked.len(),
+        1,
+        "in {DIAGRAM_DOC} i blocchi mermaid marcati `{DIAGRAM_MARKER}` sono {},\n\
+         e deve essercene esattamente uno: è il grafo che questo test confronta\n\
+         con `cargo metadata`.",
+        marked.len()
+    );
+
+    let mut names: BTreeMap<&str, String> = BTreeMap::new();
+    let mut out = Diagram::default();
+
+    for line in marked.remove(0) {
+        let l = line.trim();
+        if l.is_empty()
+            || l.starts_with("%%")
+            || l.starts_with("flowchart")
+            || l.starts_with("classDef")
+        {
+            continue;
+        }
+
+        // Dichiarazione: `id["nome-crate"]` con `:::classe` facoltativa.
+        if let Some((id, rest)) = l.split_once("[\"") {
+            let (name, tail) = rest.split_once("\"]").unwrap_or_else(|| {
+                panic!("{DIAGRAM_DOC}: dichiarazione senza `\"]` finale:\n  {l}")
+            });
+            let id = id.trim();
+            assert!(
+                tail.is_empty() || tail.starts_with(":::"),
+                "{DIAGRAM_DOC}: dopo la dichiarazione di `{id}` c'è `{tail}`, che non è\n\
+                 né vuoto né una classe `:::`:\n  {l}"
+            );
+            assert!(
+                names.insert(id, name.to_string()).is_none(),
+                "{DIAGRAM_DOC}: il riquadro `{id}` è dichiarato due volte"
+            );
+            out.crates.insert(name.to_string());
+            continue;
+        }
+
+        // Arco: `a --> b` (normale) oppure `a -.-> b` (solo dev).
+        let parts: Vec<&str> = l.split_whitespace().collect();
+        let resolve = |id: &str| -> String {
+            names
+                .get(id)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{DIAGRAM_DOC}: l'arco nomina `{id}`, che non è un riquadro dichiarato\n\
+                         prima nello stesso blocco:\n  {l}"
+                    )
+                })
+                .clone()
+        };
+        match parts.as_slice() {
+            [from, "-->", to] => {
+                out.normal.insert((resolve(from), resolve(to)));
+            }
+            [from, "-.->", to] => {
+                out.dev.insert((resolve(from), resolve(to)));
+            }
+            _ => panic!(
+                "{DIAGRAM_DOC}: riga fuori dal dialetto che questo test sa leggere:\n  {l}\n\
+                 Ammessi: `id[\"nome\"]:::classe`, `a --> b`, `a -.-> b`, commenti `%%`,\n\
+                 `flowchart …` e `classDef …`. Se serve altro, allarga il parser insieme\n\
+                 al disegno — non lasciare che il disegno dica cose che nessuno rilegge."
+            ),
+        }
+    }
+
+    out
+}
+
+/// Il grafo disegnato e il grafo vero devono coincidere, **nei due versi**.
+///
+/// Il verso che si vede subito è «un arco disegnato che non esiste». Quello che
+/// conta è l'altro: una dipendenza reale che il disegno non mostra. Un diagramma
+/// incompleto mente più di uno sbagliato, perché ha l'aria di essere completo —
+/// e chi lo guarda per decidere dove mettere un crate nuovo prende la decisione
+/// sbagliata senza mai dubitarne.
+///
+/// Si confrontano le dipendenze **dichiarate** e non la chiusura transitiva: il
+/// disegno mostra i `Cargo.toml`, e una chiusura fra sette crate sarebbe un
+/// groviglio che nessuno guarderebbe. Gli archi tratteggiati sono le dipendenze
+/// di solo `[dev-dependencies]` — quelle che sono anche normali non si
+/// ridisegnano, o `fubmd-kernel`, che dichiara `fubmd-abi` in entrambe le
+/// sezioni, avrebbe due frecce per una relazione sola.
+#[test]
+fn il_diagramma_dice_le_dipendenze_vere() {
+    let meta = metadata();
+    let graph = Graph::new(&meta);
+    let members = graph.members();
+
+    let doc = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../",
+        "docs/architecture/mappa-visuale.md"
+    );
+    let source =
+        std::fs::read_to_string(doc).unwrap_or_else(|e| panic!("{DIAGRAM_DOC} non si legge: {e}"));
+    let drawn = read_diagram(&source);
+
+    // 1. I riquadri sono i crate del workspace, tutti e soli.
+    let real_crates: BTreeSet<String> = members.iter().map(|n| n.to_string()).collect();
+    let ghosts: Vec<&String> = drawn.crates.difference(&real_crates).collect();
+    assert!(
+        ghosts.is_empty(),
+        "il diagramma in {DIAGRAM_DOC} disegna {ghosts:?}, che non sono crate del\n\
+         workspace. Se sono previsti ma non scritti, vanno nel primo disegno del\n\
+         documento, tratteggiati, non in questo — questo è la fotografia."
+    );
+    let missing: Vec<&String> = real_crates.difference(&drawn.crates).collect();
+    assert!(
+        missing.is_empty(),
+        "il diagramma in {DIAGRAM_DOC} non nomina {missing:?}, che nel workspace ci\n\
+         sono. Un crate nato e mai disegnato è il modo normale in cui una mappa\n\
+         smette di essere una mappa."
+    );
+
+    // 2. Gli archi pieni sono le dipendenze normali fra membri.
+    let mut real_normal = BTreeSet::new();
+    let mut real_dev = BTreeSet::new();
+    for &m in &members {
+        let normal: BTreeSet<&str> = graph
+            .declared(m, None)
+            .intersection(&members)
+            .copied()
+            .collect();
+        for d in &normal {
+            real_normal.insert((m.to_string(), d.to_string()));
+        }
+        for d in graph.declared(m, Some("dev")).intersection(&members) {
+            if !normal.contains(d) {
+                real_dev.insert((m.to_string(), d.to_string()));
+            }
+        }
+    }
+
+    let show = |set: &BTreeSet<(String, String)>| -> Vec<String> {
+        set.iter().map(|(a, b)| format!("{a} -> {b}")).collect()
+    };
+
+    let invented = show(&drawn.normal.difference(&real_normal).cloned().collect());
+    assert!(
+        invented.is_empty(),
+        "il diagramma disegna dipendenze normali che nessun Cargo.toml dichiara:\n  {}",
+        invented.join("\n  ")
+    );
+    let unshown = show(&real_normal.difference(&drawn.normal).cloned().collect());
+    assert!(
+        unshown.is_empty(),
+        "queste dipendenze normali esistono e il diagramma non le mostra:\n  {}\n\
+         Aggiungile con `a --> b` in {DIAGRAM_DOC}.",
+        unshown.join("\n  ")
+    );
+
+    // 3. Gli archi tratteggiati sono le dipendenze di solo `dev`.
+    let invented = show(&drawn.dev.difference(&real_dev).cloned().collect());
+    assert!(
+        invented.is_empty(),
+        "il diagramma dà per dev-only dipendenze che non lo sono (o che non\n\
+         esistono):\n  {}",
+        invented.join("\n  ")
+    );
+    let unshown = show(&real_dev.difference(&drawn.dev).cloned().collect());
+    assert!(
+        unshown.is_empty(),
+        "queste dipendenze di solo `[dev-dependencies]` fra crate del workspace non\n\
+         sono disegnate:\n  {}\n\
+         Aggiungile con `a -.-> b`. Sono il confine del dogfooding: se `fubmd-features`\n\
+         cominciasse a usare il kernel per davvero, la freccia diventerebbe piena e\n\
+         quel cambio va visto.",
+        unshown.join("\n  ")
+    );
+}
+
 /// Il test del test: la rete deve sapersi chiudere.
 #[test]
 fn forbidden_families_match_by_prefix() {
@@ -376,4 +637,50 @@ fn forbidden_families_match_by_prefix() {
     assert!(!forbidden("tauribbon"));
     assert!(!forbidden("serde"));
     assert!(!forbidden("camino"));
+}
+
+/// Il test del parser: deve distinguere i due archi, e deve saltare il blocco
+/// non marcato — che nel documento vero è il disegno disposto a mano.
+#[test]
+fn the_diagram_parser_reads_what_it_claims_to_read() {
+    let source = "\
+prosa\n\
+```mermaid\n\
+flowchart TB\n\
+    Altro[\"un disegno che non c'entra\"]\n\
+```\n\
+altra prosa\n\
+```mermaid\n\
+flowchart TD\n\
+    %% @grafo-dipendenze\n\
+    classDef core fill:#000\n\
+    a[\"fubmd-alfa\"]:::core\n\
+    b[\"fubmd-beta\"]\n\
+\n\
+    a --> b\n\
+    b -.-> a\n\
+```\n";
+    let d = read_diagram(source);
+    assert_eq!(
+        d.crates,
+        BTreeSet::from(["fubmd-alfa".to_string(), "fubmd-beta".to_string()])
+    );
+    assert_eq!(
+        d.normal,
+        BTreeSet::from([("fubmd-alfa".to_string(), "fubmd-beta".to_string())])
+    );
+    assert_eq!(
+        d.dev,
+        BTreeSet::from([("fubmd-beta".to_string(), "fubmd-alfa".to_string())])
+    );
+}
+
+/// E deve fermarsi su ciò che non capisce. Una riga ignorata è un arco che
+/// sparisce, e un arco che sparisce è esattamente il difetto che il test cerca.
+#[test]
+#[should_panic(expected = "fuori dal dialetto")]
+fn the_diagram_parser_refuses_what_it_cannot_read() {
+    read_diagram(
+        "```mermaid\n    %% @grafo-dipendenze\n    a[\"x\"]\n    a ==>|\"parla con\"| a\n```\n",
+    );
 }

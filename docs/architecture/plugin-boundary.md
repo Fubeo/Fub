@@ -481,6 +481,91 @@ Conseguenze:
   servirà davvero (AI, indicizzazioni lunghe) sarà un canale in più *prima* del
   freeze — vedi [../appendix/ai-autocomplete.md](../appendix/ai-autocomplete.md).
 
+### Il giro completo, con un annullamento in mezzo
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Pl as plugin
+    participant H as HostApi<br/>(guardia)
+    participant W as Workspace
+    participant Bl as JobBell
+    participant Wk as worker<br/>fubmd-job-N
+    participant JH as JobHost
+    participant U as utente
+
+    Pl->>H: spawn_job(JobSpec) — capacità Events
+    H->>W: enqueue_job → JobId, PendingJob in coda
+    W->>W: jobs.accepted(id) — la riga compare in IndexQuery::Jobs
+    W-->>Pl: JobId (subito: niente esecuzione dentro al lock)
+    W->>Bl: ring()
+    Note over W,Bl: JobStarted vuol dire «accettato», non «partito»:<br/>che sia davvero cominciato non lo dice nessuno
+    Bl-->>Wk: wait_beyond(ticket) si sblocca
+    Wk->>W: write() → take_pending_jobs() → rilascia
+    Wk->>JH: JobHost::new(ws).for_job(id).cancelled_by(bandiera)
+    Wk->>Pl: safety::calling { run_job(job, payload, host) }
+    loop finché il job lavora
+        Pl->>JH: una capacità
+        JH->>JH: stopped()? poi UN prestito, e lo rilascia
+        Pl->>JH: report_progress(JobProgress)
+        JH->>W: note_job_progress → Event::JobProgress
+    end
+    U->>Wk: cancel_job(id)
+    Wk->>Wk: la bandiera passa a true — nient'altro
+    Pl->>JH: la capacità successiva
+    JH-->>Pl: Err(PluginError::Cancelled)
+    Pl-->>Wk: run_job torna Err
+    Wk->>W: complete_job(id, esito)
+    W->>W: jobs.finished(id) — la riga sparisce
+    W-->>U: Event::JobDone { result } — non recuperabile, passa sempre
+```
+
+Il punto che il disegno rende visibile meglio della prosa è che **annullare non
+interrompe niente**: alza un booleano, e a fermarsi è il job, alla prima cosa che
+prova a fare. Fra l'`Err(Cancelled)` e la bandiera alzata c'è tutto il tempo che
+il job impiega ad arrivare alla capacità successiva — e se non ci arriva mai,
+arriva in fondo.
+
+| Pezzo | Dove | Cosa tiene |
+|---|---|---|
+| la coda | [dispatcher.rs:322](../../crates/fubmd-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
+| il campanello | [dispatcher.rs:401](../../crates/fubmd-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
+| i thread | [runner.rs:307](../../crates/fubmd-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
+| l'host per chiamata | [jobs.rs:89](../../crates/fubmd-host/src/jobs.rs) | tiene l'`Arc<RwLock<Workspace>>` e prende un prestito **per capacità** |
+| la bandiera | [runner.rs:83](../../crates/fubmd-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
+| la riga viva | [core.rs:346](../../crates/fubmd-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
+
+**`JobStatus` è una struct, non un enum**
+([traits.rs:114](../../crates/fubmd-abi/src/traits.rs)): cinque campi — `id`,
+`job`, `plugin`, `since`, `progress` — e nessuno è uno stato. Lo stato di un job
+è **implicito** e vive in due strutture che non si parlano: la riga in
+`JobsState` (kernel) dice che è vivo, la bandiera in `Flags` (host) dice che è
+stato annullato. Perciò un job annullato resta indistinguibile da uno che lavora
+finché non arriva il suo `JobDone` — è una conseguenza del taglio, non una svista.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Accettato: enqueue_job<br/>riga in JobsState.live
+    Accettato --> InCarico: il worker drena la coda<br/>bandiera creata in Flags
+    Accettato --> Concluso: annullato prima di partire<br/>oppure il vault chiude
+    InCarico --> InCarico: report_progress<br/>status.progress = Some(…)
+    InCarico --> Concluso: run_job rende Ok o Err
+    Concluso --> [*]: JobDone, riga tolta da JobsState
+    note right of InCarico
+        «annullato» non è uno stato qui:
+        è un booleano in un'altra struttura,
+        e IndexQuery::Jobs non lo vede
+    end note
+```
+
+Nessuno di questi nomi esiste come variante di un enum: sono i **portatori** dello
+stato, e il diagramma li nomina per non far credere che ci sia un `JobState` da
+cercare. Quel che manca davvero, ed è dichiarato: non c'è transizione osservabile
+«in coda → in esecuzione», non c'è timeout né deadline (a M5 la porta l'host
+WASM), e niente di tutto questo è persistente — un riavvio perde ogni job in
+volo, e nessun evento lo dice.
+
 ## Onestà sul modello di minaccia: nativo = fidato
 
 L'enforcement in `HostApi` confina davvero **solo chi non può aggirarlo**: un
@@ -508,11 +593,42 @@ posto, e quel codice gira già sul ramo dell'errore. Senza la rete, un provider
 che pania sotto il prestito esclusivo avvelenava il `RwLock` del workspace e
 rendeva il vault irraggiungibile fino al riavvio.
 
-Non disattiva niente: il meccanismo esiste (`BundleRegistry::unmount`), e dal
-§11.1 esiste anche il modo di **riaccendere** (`BundleRegistry::enable`, con lo
-stato in `plugins.disabled`); quel che manca perché un panico costi più della
-chiamata è il canale per dare l'avviso (§20.2). L'isolamento vero resta la
-sandbox di M5.
+La rete ha **tre maglie**, e quale si usa dipende da una domanda sola: chi ha
+chiamato ha un modo di ricevere un no?
+
+```mermaid
+flowchart TD
+    P(["un provider pania"]) --> Q{"chi ha chiamato<br/>può ricevere un errore?"}
+
+    Q -->|"sì, e l'errore è di casa sua"| C["safety::caught(wrap)"]
+    Q -->|"sì, errore generico"| K["safety::calling"]
+    Q -->|"no: nessuno aspetta una risposta"| N["safety::notifying"]
+
+    C --> C1["parse di un FormatProvider<br/>→ FormatError::Parse"]
+    C --> C2["disegno di un CustomRenderer<br/>→ FormatError::Render, poi Fallback"]
+    K --> K1["invoke_command · render_view · view_action<br/>call_service · run_job · up_to_date<br/>→ PluginError::Internal, col nome del colpevole"]
+    N --> N1["innesto di una SyntaxRule<br/>consegna a un EventHandler<br/>alimentazione degli indici<br/>→ eprintln! e basta"]
+
+    C1 --> R(["la chiamata è persa.<br/>Il componente resta acceso."])
+    C2 --> R
+    K1 --> R
+    N1 --> R
+```
+
+| Maglia | Dove | Cosa produce |
+|---|---|---|
+| `calling` | [safety.rs:62](../../crates/fubmd-kernel/src/safety.rs) | `PluginError::Internal("«X» è andato in panico …")` |
+| `caught` | [safety.rs:79](../../crates/fubmd-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
+| `notifying` | [safety.rs:102](../../crates/fubmd-kernel/src/safety.rs) | una riga su stderr, perché non c'è nessuno a cui dire di no |
+
+Non disattiva niente, e il riquadro finale del disegno dice esattamente questo:
+il meccanismo per smontare esiste (`BundleRegistry::unmount`), e dal §11.1 esiste
+anche il modo di **riaccendere** (`BundleRegistry::enable`, con lo stato in
+`plugins.disabled`) — ma **nulla collega un panico a quel meccanismo**. Non c'è
+un contatore di panici, non c'è una soglia, non c'è nessun tipo che rappresenti
+una quarantena: il «safe mode» è una voce di roadmap (§20.2), non un pezzo di
+codice, e quel che manca perché un panico costi più della chiamata è il canale
+per dare l'avviso. L'isolamento vero resta la sandbox di M5.
 
 Stesso principio per la UI: un provider non fidato non può emettere
 `UiNode::Html`/`WebView` (iniettano contenuto attivo nella webview privilegiata
@@ -625,6 +741,108 @@ come si costruisce il `Plugin`, non chi lo dichiara.
    né chiamare i propri comandi.
 
 Il **primo plugin nativo** (M4) esercita esattamente questo percorso senza WASM.
+
+### Dove sta questo percorso dentro l'apertura di un vault
+
+I quattro passi qui sopra sono il passo 13 di una catena più lunga, e l'ordine di
+ciò che sta intorno non è arbitrario: il ponte si accende **dopo** la prima
+scansione e **prima** del rilevatore, e il pool dei job parte per ultimo.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as fubmd-app<br/>comando IPC
+    participant H as Host<br/>fubmd-host
+    participant M as mount()
+    participant W as Workspace
+    participant R as BundleRegistry
+    participant Pl as un bundle
+    participant Br as ponte + watcher + runner
+
+    A->>H: open_vault(root)
+    H->>H: canonical(root) — se è già aperto RITORNA senza rimontare
+    H->>M: mount(root, config macchina, stati di vista, locale)
+    M->>W: Workspace::with_machine_settings
+    W->>W: migrate_layout(root) — prima di ogni lettura
+    W->>W: SettingsStore · OrganizationStore · EntryStore
+    M->>R: BundleRegistry::new + remember × 9
+    R->>W: enable(fubmd.core) — per primo, ed è chi dichiara plugins.disabled
+    loop per ogni bundle non spento
+        R->>R: abi_compatible(manifest)
+        R->>W: register_plugin(manifest, fiducia)
+        R->>Pl: activate(host)
+        Pl->>W: register_* — un provider che non entra è un AVVISO, non un errore
+    end
+    H->>W: reindex() — cammina il disco, parsa, riempie gli indici
+    W-->>H: Event::VaultOpened + Event::IndexUpdated (attore: Kernel)
+    H->>Br: bridge::spawn(bus.subscribe(), sink)
+    Note over H,Br: dopo reindex: gli eventi della prima scansione<br/>non escono verso la shell
+    H->>Br: watcher.start(root, workspace, bandiera)
+    H->>Br: JobRunner::start(ws, registry, thread)
+    H-->>A: VaultInfo
+```
+
+| Passo | Dove | Perché è lì e non altrove |
+|---|---|---|
+| `Host::open` | [session.rs:341](../../crates/fubmd-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
+| `mount` | [mount.rs:162](../../crates/fubmd-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fubmd.core` più le otto feature |
+| `migrate_layout` | [vault.rs:79](../../crates/fubmd-kernel/src/vault.rs) | dentro il costruttore, non in `reindex`: nessuno legge un albero prima che sia al suo posto |
+| `BundleRegistry::mount` | [registry.rs:245](../../crates/fubmd-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
+| `reindex` | [workspace.rs:1197](../../crates/fubmd-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto |
+| `bridge::spawn` | [bridge.rs:69](../../crates/fubmd-host/src/bridge.rs) | fra `reindex` e il watcher |
+| `JobRunner::start` | [runner.rs:307](../../crates/fubmd-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
+
+La riga che è facile perdere è la prima: **`fubmd.core` è un bundle come gli
+altri** e si monta per primo, e non registra nulla — esiste per avere un'identità
+nel registro, e perché è la riga che dichiara la chiave `plugins.disabled`, cioè
+quella che decide se le altre otto si montano.
+
+### Come un componente smette, e cosa resta di lui
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "vault non aperto" as VC
+    state "vault aperto" as VO {
+        state "bundle noto, non montato" as BN
+        state "bundle montato" as BM
+        BN --> BM: enable → activate + register
+        BM --> BN: unmount → deactivate + deactivate_plugin
+        BN --> BN: plugins.disabled lo tiene giù
+    }
+    state "workspace chiuso" as WC
+    [*] --> VC
+    VC --> VO: apertura<br/>voce in Sessions.open
+    VO --> WC: close → closed = true, VaultClosed,<br/>poi i bundle in ordine INVERSO
+    WC --> WC: chiudere di nuovo non fa niente
+    WC --> [*]
+```
+
+Anche qui **nessuno di questi stati ha un enum**. Sono l'appartenenza a una mappa
+e un booleano: un vault è aperto se sta in `Sessions.open`
+([session.rs:184](../../crates/fubmd-host/src/session.rs)), un workspace è chiuso
+se `Workspace.closed` è vero ([workspace.rs:234](../../crates/fubmd-kernel/src/workspace.rs)),
+un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
+([registry.rs:218](../../crates/fubmd-host/src/registry.rs)). Le uniche
+transizioni che il **contratto** nomina sono eventi, non stati: `VaultOpened`,
+`VaultClosed`, `IndexUpdated`.
+
+L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
+
+| Regola | Dove | Cosa costerebbe non averla |
+|---|---|---|
+| il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fubmd-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
+| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:356](../../crates/fubmd-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
+| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:366](../../crates/fubmd-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
+| i bundle si spengono in ordine **inverso** | [workspace.rs:870](../../crates/fubmd-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
+
+E un caso che il codice tratta e che vale la pena sapere: se un job in volo tiene
+ancora una copia dell'`Arc<dyn Plugin>`, `deactivate` **non viene chiamato
+affatto**, e al suo posto si produce un errore che lo dice
+([registry.rs:377](../../crates/fubmd-host/src/registry.rs)). Non è un fallimento
+che ferma la chiusura: gli errori dello spegnimento si accumulano e tornano come
+lista, perché fermarsi al primo lascerebbe metà dei componenti accesi dentro un
+vault che l'utente considera chiuso.
 
 ## Rischi
 
