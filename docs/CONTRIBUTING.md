@@ -14,6 +14,7 @@ volte. Se una frase qui dentro ripetesse un documento di architettura, la frase
 | Voglio… | Leggo |
 |---|---|
 | capire l'idea architetturale e le decisioni col perché | [PIANO.md](PIANO.md) |
+| capire una parola che non conosco | [glossario.md](glossario.md) |
 | vedere tutto in un colpo d'occhio | [architecture/mappa-visuale.md](architecture/mappa-visuale.md) |
 | toccare un trait del contratto | [architecture/traits.md](architecture/traits.md) e [architecture/wit.md](architecture/wit.md) |
 | aggiungere un pannello o una vista | [architecture/ui-protocol.md](architecture/ui-protocol.md) e [architecture/shell.md](architecture/shell.md) |
