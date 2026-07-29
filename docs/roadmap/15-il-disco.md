@@ -147,8 +147,8 @@ network share), 2.3 (drive rimovibili).
 - [ ] **Il punto nuovo non è dove stanno: è che `data_*` non dichiara se ciò che
       scrive è derivato o autorevole.** Gli snapshot del versioning non si
       ricostruiscono da niente e vivono sotto `.fubmd-data/`, che il codice
-      descrive come dati derivati (`host/records.rs`: «A differenza di
-      `.fubmd-data` questi dati sono autorevoli»). Oggi non fa danno perché
+      descrive come dati derivati (`abi/organization.rs`: «Un `.fubmd-data/` si
+      può cancellare e si rifà con una scansione; questo no»). Oggi non fa danno perché
       nessuno ha ancora scritto il codice che agisce su quella distinzione;
       domani la stessa distinzione la chiedono, ognuno per conto proprio,
       «ricostruisci i dati derivati» (24.2), «cosa entra nel backup» (18.2),
@@ -185,6 +185,54 @@ network share), 2.3 (drive rimovibili).
       significa averla esclusa. È il gemello del §15.3 (la *versione* di uno
       schema) su un altro asse: quello dice come si legge un dato vecchio, questo
       se il dato si può buttare.
+- [ ] **E prima ancora: le radici sono due, e una basterebbe.** Un vault oggi
+      porta tre cartelle nostre — `<vault>/.fubmd/` (autorevole),
+      `<vault>/.fubmd-data/` (derivato) e `<vault>/.trash/` — e la domanda,
+      posta da fuori guardando un vault e non il codice, è perché mai debbano
+      essere tre. La direzione preferita è **una radice sola**: `.fubmd/` con
+      `.fubmd/data/` dentro. Va decisa **qui** e non come rinomina a parte, per
+      una ragione precisa: oggi la classe di un dato si deduce da una cosa sola,
+      la **radice in cui il file sta**, e spostare le radici senza dire cosa
+      significano è togliere l'unico indizio esistente prima di aver messo
+      quello vero.
+      - *Perché la forma `.fubmd/data/` è compatibile con questa voce e un
+        `.fubmd/` piatto no*: annidare conserva la deduzione per radice — solo
+        un livello più in basso — e resta vera anche quando la classe diventerà
+        esplicita, perché un path che dice già la classe non contraddice un
+        manifest che la dichiara. Fondere tutto in un `.fubmd/` senza
+        sottocartella, invece, la cancella e basta.
+      - *L'argomento contrario, e perché pesa meno di quanto sembri*: due radici
+        distinte rendono banale escludere i derivati da un backup o da un sync
+        con una regola sola. Ma quella promessa **è già falsa**: gli snapshot del
+        versioning non si ricostruiscono e stanno sotto `.fubmd-data/`, che è il
+        difetto scritto due punti più su. Si perde una comodità che non c'era.
+      - *Cosa costa davvero, misurato*: nel codice **una riga** — la costante
+        `DATA_DIR` (`kernel/vault.rs`), da cui passa tutta la produzione — più
+        nove `.join(".fubmd-data")` scritti a mano in sette file di test, che
+        già oggi dovrebbero usare la costante. Il resto è prosa: una quarantina
+        di menzioni fra commenti e documenti. Due presidi vanno toccati insieme:
+        `.gitignore`, che **ignora già entrambe** le cartelle (una conferma che
+        due sono di troppo), e il marcatore con cui `check-doc-links.mjs`
+        riconosce un vault — che diventerebbe `.fubmd/` ed è un **miglioramento**,
+        perché oggi un vault aperto e mai indicizzato non ha un `.fubmd-data/` e
+        quindi non viene riconosciuto.
+      - *Ciò che non si riscrive, e va detto una volta sola*: quattro verbali
+        ([0025](../decisions/0025-la-ricerca-predefinita.md),
+        [0038](../decisions/0038-il-kernel-possiede-il-sidecar.md),
+        [0044](../decisions/0044-lo-stato-per-documento.md),
+        [0046](../decisions/0046-l-anagrafe-del-vault.md)) e la linea di base
+        congelata continueranno a dire `.fubmd-data/`, perché sono fotografie e
+        non si toccano. Serve la stessa cura di [numerazione.md](numerazione.md)
+        per i numeri vecchi: **un punto solo** che traduce, e non una nota
+        ripetuta in venti file.
+      - *E la migrazione non è gratis*: sotto `.fubmd-data/` non c'è solo
+        l'indice. Ci sono gli snapshot del versioning e lo stato per-documento
+        della [0044](../decisions/0044-lo-stato-per-documento.md), che non si
+        rigenerano da niente. Un rename all'apertura, con la regola del rifiuto
+        in avanti già in uso — non «se non c'è, si ricostruisce».
+      - *Resta aperta una terza*: se `.trash/` debba entrare nella radice unica o
+        restare fuori. È l'unica delle tre che l'utente apre di proposito, e un
+        cestino che si trova è metà del suo valore.
 - [ ] **La metà documentale**: `docs/architecture/on-disk-layout.md` come mappa
       unica — chi scrive dove, con quale disciplina, con quale classe, con quale
       versione di schema (§15.3) e con quale scrittura (atomica o no, §15.2). Non
