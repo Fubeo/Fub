@@ -127,16 +127,60 @@ fn set_anchor(block: &mut Block, id: String) {
     }
 }
 
-fn span_of<'a>(node: &'a AstNode<'a>, offsets: &Offsets) -> Span {
+fn span_of<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>) -> Span {
     sourcepos_span(node.data.borrow().sourcepos, offsets)
 }
 
-fn sourcepos_span(sp: comrak::nodes::Sourcepos, offsets: &Offsets) -> Span {
-    Span::new(
-        offsets.byte(sp.start.line, sp.start.column),
-        // la colonna di fine è inclusiva in comrak: +1 per l'estremo esclusivo.
-        offsets.byte(sp.end.line, sp.end.column + 1),
-    )
+/// Lo span di un figlio, ritagliato su quello del padre.
+///
+/// Serve dove il `sourcepos` di una dipendenza fa uscire un nodo dal nodo che lo
+/// contiene: il modello promette che uno span nomini **quel** pezzo di documento,
+/// e un figlio che esce dal padre rende indecidibile quale dei due mente.
+fn ritagliato_su(figlio: Span, padre: Span) -> Span {
+    ritagliato_dopo(figlio, padre, padre.start)
+}
+
+/// Lo span di un figlio, ritagliato sul padre **e dopo il fratello che lo
+/// precede**.
+///
+/// Due fratelli non possono rivendicare gli stessi byte: una patch chirurgica su
+/// span che si intersecano non ha un risultato definito. Quando il `sourcepos` di
+/// comrak lo fa — succede con un `\r` nudo in mezzo a una riga di tabella, che
+/// spezza la riga e lascia due celle sullo stesso `|` — il figlio in eccesso
+/// ricade su uno span a larghezza zero, che non è un valore inventato per
+/// l'occasione: è già come il modello rappresenta una **cella vuota**
+/// (`| a || b |` dà una cella `5..5`).
+fn ritagliato_dopo(figlio: Span, padre: Span, dopo: usize) -> Span {
+    let minimo = dopo.max(padre.start).min(padre.end);
+    let start = figlio.start.clamp(minimo, padre.end);
+    let end = figlio.end.clamp(start, padre.end);
+    Span::new(start, end)
+}
+
+/// Il `sourcepos` di comrak tradotto in uno [`Span`], e **mai invertito**.
+///
+/// L'inversione non è un'ipotesi: `> > ---\na: 1\n---\n\n# Corpo\n` — una
+/// citazione annidata la cui prima riga è un delimitatore di frontmatter — dà a un
+/// blocco una fine *prima* del suo inizio (`start: 4, end: 3`). Il fuzzer del
+/// §17.1 l'ha trovato al caso 1 771 834.
+///
+/// Un `start > end` non è uno span sbagliato, è uno span **impossibile**: nessuna
+/// `&source[a..b]` ci passa, quindi il primo che ritaglia va in panico. Qui
+/// diventa uno span vuoto in `start`, che è la sola forma non ambigua di «di
+/// questo nodo non so dire l'estensione» — e che il presidio della coerenza vede
+/// come span vuoto, cioè non lo nasconde.
+///
+/// Sta qui, insieme all'ancoraggio al confine di carattere di [`Offsets::byte`],
+/// perché queste due righe **non rendono giusto** un numero sbagliato: rendono
+/// impossibile che un numero sbagliato diventi un panico. È la differenza che il
+/// §5.3 chiede al fuzzing del parser.
+///
+/// [`Offsets::byte`]: crate::offsets::Offsets::byte
+fn sourcepos_span(sp: comrak::nodes::Sourcepos, offsets: &Offsets<'_>) -> Span {
+    let start = offsets.byte(sp.start.line, sp.start.column);
+    // la colonna di fine è inclusiva in comrak: +1 per l'estremo esclusivo.
+    let end = offsets.byte(sp.end.line, sp.end.column + 1);
+    Span::new(start, end.max(start))
 }
 
 /// L'ancora trovata in coda a un blocco: l'id canonico e **come era scritta**
@@ -199,7 +243,7 @@ fn strip_marker(inlines: &mut Vec<Inline>, text: &mut String, written: &str) {
 fn convert_block<'a>(
     node: &'a AstNode<'a>,
     source: &str,
-    offsets: &Offsets,
+    offsets: &Offsets<'_>,
     ctx: &ParseContext,
     acc: &mut Acc,
 ) -> Option<Block> {
@@ -275,7 +319,22 @@ fn convert_block<'a>(
                 items.push(ListItem {
                     blocks,
                     task,
-                    span: span_of(item, offsets),
+                    // Ritagliato su quello della lista, e non è una cintura di
+                    // sicurezza messa per prudenza: senza, l'ultima voce di una
+                    // lista seguita da una riga vuota e da un blocco che non sia
+                    // un paragrafo o una tabella — una riga orizzontale, un
+                    // heading, un fence, una citazione — si porta dentro il
+                    // separatore che la lista **non** ha. `- a\n\n***\n` dà lista
+                    // `0..3` e voce `0..4`, cioè una voce che esce dal blocco che
+                    // la contiene: chi cancella quella voce guidato dal suo span
+                    // si mangia la riga vuota e incolla l'heading successivo alla
+                    // lista. Trovato dal corpus del §17.1.
+                    //
+                    // La direzione del ritaglio non è arbitraria: una voce non
+                    // possiede mai il separatore che la stacca dal blocco dopo,
+                    // mentre allargare la lista le farebbe possedere byte che non
+                    // sono suoi.
+                    span: ritagliato_su(span_of(item, offsets), span),
                 });
             }
             Some(Block::List {
@@ -408,7 +467,7 @@ fn convert_table<'a>(
     node: &'a AstNode<'a>,
     alignments: &[TableAlignment],
     source: &str,
-    offsets: &Offsets,
+    offsets: &Offsets<'_>,
     ctx: &ParseContext,
     acc: &mut Acc,
     span: Span,
@@ -424,21 +483,29 @@ fn convert_table<'a>(
         .collect();
     let mut head = None;
     let mut rows = Vec::new();
+    // Scorre attraverso **tutte** le celle della tabella, non si azzera a ogni
+    // riga: due celle non possono rivendicare gli stessi byte nemmeno se stanno
+    // su righe diverse, e i due casi in cui comrak lo fa nascono proprio dove una
+    // riga finisce — una riga di prosa che continua la tabella (in GFM una
+    // tabella si chiude su una riga vuota o su un altro blocco, non su una riga
+    // di testo) e un `\r` nudo che spezza una riga in due. Vedi
+    // [`ritagliato_dopo`].
+    let mut fine = span.start;
     for r in node.children() {
         let is_header = matches!(r.data.borrow().value, NodeValue::TableRow(true));
-        let cells = r
-            .children()
-            .map(|c| {
-                let mut text = String::new();
-                let inlines = convert_inlines(c, source, offsets, ctx, acc, &mut text);
-                acc.text.push_str(text.trim());
-                acc.text.push(' ');
-                TableCell {
-                    inlines,
-                    span: span_of(c, offsets),
-                }
-            })
-            .collect();
+        let mut cells = Vec::new();
+        for c in r.children() {
+            let mut text = String::new();
+            let inlines = convert_inlines(c, source, offsets, ctx, acc, &mut text);
+            acc.text.push_str(text.trim());
+            acc.text.push(' ');
+            let cella = ritagliato_dopo(span_of(c, offsets), span, fine);
+            fine = cella.end;
+            cells.push(TableCell {
+                inlines,
+                span: cella,
+            });
+        }
         let row = TableRow { cells };
         acc.text.push('\n');
         if is_header && head.is_none() {
@@ -459,7 +526,7 @@ fn convert_table<'a>(
 fn convert_block_children<'a>(
     node: &'a AstNode<'a>,
     source: &str,
-    offsets: &Offsets,
+    offsets: &Offsets<'_>,
     ctx: &ParseContext,
     acc: &mut Acc,
 ) -> Vec<Block> {
@@ -495,7 +562,7 @@ fn push_link(
 fn convert_inlines<'a>(
     node: &'a AstNode<'a>,
     source: &str,
-    offsets: &Offsets,
+    offsets: &Offsets<'_>,
     ctx: &ParseContext,
     acc: &mut Acc,
     text_out: &mut String,
