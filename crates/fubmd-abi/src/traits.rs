@@ -327,7 +327,7 @@ impl FolderScope {
 // Erano novantasei corpi di metodo per quattro implementazioni, di cui ventidue
 // non facevano niente se non dire di no.
 //
-// Le famiglie sono dieci e sono scelte su un criterio solo: **cosa vuol dire
+// Le famiglie sono quattordici e sono scelte su un criterio solo: **cosa vuol dire
 // negarne una.** È per questo che la lettura del vault sta separata dalla sua
 // scrittura e dalle operazioni strutturali (i tre gradi che `read_vault` e
 // `write_vault` distinguono, §7.3), che i blob del plugin si dividono nello
@@ -338,7 +338,7 @@ impl FolderScope {
 // **somme**, con una impl generica, e nessuno le implementa a mano. Chi le
 // riceve continua a scrivere `&mut dyn HostApi` come prima.
 //
-// Al confine WIT le dieci famiglie sono dieci `interface`, e lì la scomposizione
+// Al confine WIT le quattordici famiglie sono quattordici `interface`, e lì la scomposizione
 // smette di essere una comodità di tipi: un componente a cui il mondo non
 // importa `host-vault-write` non ha **modo** di chiamarla — il rifiuto non è
 // più una risposta a runtime, è l'assenza della funzione.
