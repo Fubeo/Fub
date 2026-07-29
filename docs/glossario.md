@@ -105,12 +105,25 @@ l'uguaglianza è contratto, come l'host la derivi non è promesso a nessuno.
 Serve a fare in modo che una modifica calcolata su un testo non venga applicata a
 un altro.
 
-### span
-`Span` · [`abi/model.rs:123`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+### sorgente
+`String` · [`abi/model.rs:115`](../crates/fubmd-abi/src/model.rs) · [0058](decisions/0058-un-nome-che-nasce.md)
 
-L'intervallo di sorgente da cui un nodo del modello proviene. È ciò che rende
-possibile la live preview: la decorazione CodeMirror sa a quali byte del file
-attaccarsi perché il modello se li ricorda.
+I **byte del file decodificati, integralmente**: il BOM se c'era, i terminatori
+di riga come stanno sul disco, nessuna normalizzazione. È ciò che `read_document`
+restituisce, ciò su cui la [revisione](#revisione) è calcolata, ciò che
+`write_document` scrive, e il sistema di coordinate di ogni [span](#span). La
+parola ha una voce sua perché l'altra lettura possibile — «un testo già
+normalizzato» — è indistinguibile da questa finché un provider non calcola degli
+offset su una e l'host non li applica sull'altra.
+
+### span
+`Span` · [`abi/model.rs:167`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md), [0058](decisions/0058-un-nome-che-nasce.md)
+
+L'intervallo di [sorgente](#sorgente) da cui un nodo del modello proviene, in
+**byte**. È ciò che rende possibile la live preview: la decorazione CodeMirror sa
+a quali byte del file attaccarsi perché il modello se li ricorda. Che cosa sia
+quella sorgente è la 0058, e non è un dettaglio: gli span di due parti che la
+intendono diversamente cadono in punti diversi dello stesso file.
 
 ### wikilink
 `LinkTarget::Wiki` · [`abi/model.rs:461`](../crates/fubmd-abi/src/model.rs) · [0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)

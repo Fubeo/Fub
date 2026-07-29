@@ -112,6 +112,50 @@ impl std::fmt::Display for DocId {
 /// Ogni nodo porta uno span: è indispensabile per le decorazioni di live
 /// preview in CodeMirror e per le modifiche in-place / round-trip.
 ///
+/// # Che cos'è «la sorgente» (§15.5)
+///
+/// **I byte del file decodificati, integralmente**: il BOM se c'era, i
+/// terminatori di riga come stanno sul disco, nessuna normalizzazione. È la
+/// stessa stringa che
+/// [`VaultRead::read_document`](crate::traits::VaultRead::read_document)
+/// restituisce, quella su cui [`Revision::of`](crate::edit::Revision::of) è
+/// calcolata, e quella che
+/// [`write_document`](crate::traits::VaultWrite::write_document) scrive. Un
+/// `Span { start: 0, end: 0 }` su un file col BOM inserisce **prima** del BOM;
+/// chi vuole la testa del *contenuto* parte da
+/// [`text_policy::bom_len`](crate::rules::text_policy::bom_len).
+///
+/// Detto per esteso perché non era detto da nessuna parte, e le due letture
+/// possibili — i byte del file, oppure un testo già normalizzato — sono
+/// indistinguibili fino al momento in cui un provider calcola gli offset su una
+/// e l'host li applica sull'altra. Allora gli edit atterrano spostati di quanto
+/// misura ciò che è stato normalizzato, e nessun test lo vede: il documento
+/// resta UTF-8 valido, con dei byte in meno da un punto e in più da un altro.
+///
+/// La lettura scartata è «un testo normalizzato», e ha tre problemi che non si
+/// riparano:
+///
+/// 1. **La fedeltà diventa indimostrabile.** Il catalogo (§2.4) promette
+///    «nessuna modifica fuori dallo span dichiarato», che è un'affermazione sul
+///    *file*: se gli span vivono in un altro sistema di coordinate, la promessa
+///    ha bisogno di una traduzione che solo l'host conosce, e verificarla
+///    diventa impossibile per chiunque altro.
+/// 2. **La revisione mentirebbe.** [`Revision::of`](crate::edit::Revision::of) è
+///    l'impronta del sorgente, e due file che differiscono per il solo BOM
+///    darebbero la stessa impronta: un edit calcolato senza BOM verrebbe
+///    accettato su un file che ce l'ha, e cadrebbe tre byte più in là.
+/// 3. **Normalizzare in lettura obbliga a riscrivere.** O si riscrive il file
+///    normalizzato — e il primo salvataggio di una nota CRLF muove ogni riga,
+///    che è il `git diff` pieno di righe che l'utente non ha scritto — o si
+///    tiene da parte ciò che è stato tolto per rimetterlo dopo, cioè la stessa
+///    informazione in un secondo posto, dove si disallinea.
+///
+/// Chi parsa un formato che non tollera il BOM lo **salta senza uscire dalle
+/// coordinate**: si dà al parser
+/// [`text_policy::strip_bom`](crate::rules::text_policy::strip_bom) e si somma
+/// `bom_len` agli offset che torna. È l'unica traslazione del sistema, e sta
+/// scritta in un posto solo.
+///
 /// I campi sono `usize` perché indicizzano `&str` in memoria, e non `u64`:
 /// dover scrivere `as usize` a ogni slice per compiacere il confine sarebbe la
 /// coda che muove il cane. Nel WIT lo span è `record span { start: u64, end: u64 }`

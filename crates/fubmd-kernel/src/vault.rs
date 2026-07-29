@@ -4,6 +4,7 @@
 //! path ⇆ [`DocId`]. Non sa cosa sia il markdown.
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fubmd_abi::rules::text_policy;
 use fubmd_abi::DocId;
 use serde::{Deserialize, Serialize};
 
@@ -293,9 +294,36 @@ impl Vault {
         meta.is_file().then(|| (meta.len(), mtime_millis(&meta)))
     }
 
+    /// Il testo di un documento: i byte del file, decodificati e **niente
+    /// altro**.
+    ///
+    /// Nessun BOM tolto, nessun terminatore di riga convertito: è la sorgente
+    /// nel senso in cui la intende uno [`Span`](fubmd_abi::model::Span), e
+    /// riscriverla identica deve ridare il file identico (§2.4 del catalogo, e il
+    /// presidio è `kernel/tests/fedelta_del_testo.rs`).
+    ///
+    /// Non è `read_to_string` per una ragione sola: quando i byte non sono UTF-8,
+    /// `read_to_string` dice «stream did not contain valid UTF-8» e chi legge
+    /// quell'errore non sa dove guardare. [`text_policy::decode`] dice **a quale
+    /// byte** il file smette di essere testo, che è l'unica informazione con cui
+    /// una persona lo ripara. Non si indovina un encoding: vedi il modulo.
     pub fn read(&self, id: &DocId) -> Result<String> {
-        let path = self.path_for(id);
-        std::fs::read_to_string(&path).map_err(|e| KernelError::Io { path, source: e })
+        let bytes = self.read_bytes(id)?;
+        match text_policy::decode(&bytes) {
+            Ok(text) => Ok(text.to_string()),
+            Err(at) => Err(KernelError::Io {
+                path: self.path_for(id),
+                source: std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "il file non è UTF-8: il primo byte non valido è a {at} \
+                         (0x{:02X}), su {} byte in tutto",
+                        bytes.get(at).copied().unwrap_or(0),
+                        bytes.len()
+                    ),
+                ),
+            }),
+        }
     }
 
     /// I byte grezzi, per i provider che hanno dichiarato

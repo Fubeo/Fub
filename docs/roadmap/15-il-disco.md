@@ -6,8 +6,13 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): il supporto, e le p
 
 ---
 
-Cinque voci sul supporto e due sulle politiche di cosa ci finisce sopra. La 15.4
-era la P0 della seduta ed è **chiusa** con la
+Cinque voci sul supporto e due sulle politiche di cosa ci finisce sopra; delle
+politiche resta **una**, perché la 15.5 è chiusa con la
+[0058](../decisions/0058-un-nome-che-nasce.md) — un nome che nasce e un nome che
+c'è non si giudicano con la stessa regola, la sorgente di uno `Span` sono i byte
+del file, e `text_policy` rileva senza convertire perché il catalogo (§2.4) chiede
+fedeltà e non normalizzazione. La 15.4 era la P0 della seduta ed è **chiusa** con
+la
 [0048](../decisions/0048-una-radice-sola.md): dentro un vault la radice è una
 sola (`.fubmd/`, coi derivati in `.fubmd/data/`), la mappa di chi scrive dove sta
 in [architecture/on-disk-layout.md](../architecture/on-disk-layout.md), e delle
@@ -182,21 +187,9 @@ network share), 2.3 (drive rimovibili).
 repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 (portable mode, config nella cartella vault o fuori).
 
-### 15.5 Politica dei path e del testo, in un modulo solo
-
-*ex §2.6 · kernel · **P2** — porta con sé sei regole nuove: nascano con la fixture della 6.2*
-
-- [ ] **`path_policy`**: normalizzazione NFC (già fatta per i link, va estesa ai
-      nomi), caratteri invalidi per OS, nomi riservati Windows (`CON`, `NUL`…),
-      lunghezza massima, case-sensitivity, symlink, file nascosti. Sono ~15 voci
-      di 2.3 che oggi non hanno un posto dove stare.
-- [ ] **`text_policy`**: rilevamento encoding, BOM, CRLF/LF, enforcement UTF-8 —
-      e un corpus di file ostili come test, sul modello di
-      `docid_page_name_agrees_with_the_frontend_on_hostile_names`.
-
 ### 15.6 La politica di esclusione è una costante di compilazione
 
-*ex §2.16 · kernel · **P2** — il gemello della 15.5 sul lato *quali file* invece che *quali nomi**
+*ex §2.16 · kernel · **P2** — il gemello della [0058](../decisions/0058-un-nome-che-nasce.md) sul lato *quali file* invece che *quali nomi**
 
 - [ ] **`IGNORED_DIRS` (`vault.rs`) è un `&[&str]` nel sorgente**, e la
       regola sta bene in un punto solo (`is_ignored_name`, usata da scansione e
@@ -211,7 +204,23 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
       come un `IgnorePolicy` valutabile e parametrizzato per scopo, o ognuna
       verrà cablata dove capita, e "questa cartella è esclusa" significherà
       cinque cose diverse.
-- [ ] È il gemello del §15.5 sul lato **quali file**, non **quali nomi**.
+- [ ] **I symlink**, che arrivano da qui. Erano nell'elenco del §15.5 e non sono
+      una domanda sul *nome*: «seguire un symlink» è «questa voce di directory
+      partecipa», cioè esattamente la domanda di questa voce. La
+      [0058](../decisions/0058-un-nome-che-nasce.md) li ha consegnati qui invece
+      di lasciarli come casella residua di una voce chiusa, perché un elenco che
+      perde una riga senza darla a nessuno è il difetto del
+      [§16.7](16-crate-sdk-banchi-di-prova.md). Da decidere insieme alle altre
+      cinque: seguirli o no è una politica come le altre, e un `IgnorePolicy` che
+      non li nomina lascerà il comportamento a `std::fs`, che li segue senza
+      chiedere — con un ciclo di symlink la scansione non torna.
+- [ ] **L'altra metà dei file nascosti.** Che una nota nuova non possa chiamarsi
+      `.nota.md` è deciso ([`NameFault::Hidden`](../decisions/0058-un-nome-che-nasce.md));
+      **mostrare** i dotfile che ci sono, su richiesta (3.2), è di qui. È la
+      stessa stringa (`is_ignored_name`) letta per due domande diverse.
+- [ ] È il gemello del §15.5, chiuso dalla
+      [0058](../decisions/0058-un-nome-che-nasce.md), sul lato **quali file** e
+      non **quali nomi**.
 
 ### 15.7 L'apertura del vault è tutto-o-niente, sincrona e senza ritorno
 

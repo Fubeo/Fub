@@ -17,7 +17,7 @@ use fubmd_abi::traits::{
 use fubmd_abi::{Event, PluginError};
 
 use crate::error::KernelError;
-use crate::workspace::{collect_data_files, fenced_doc_id, Workspace};
+use crate::workspace::{collect_data_files, fenced_doc_id, new_doc_id, Workspace};
 
 /// L'[`HostApi`](fubmd_abi::traits::HostApi) del kernel: chiamate dirette,
 /// costo zero.
@@ -133,7 +133,13 @@ impl VaultWrite for KernelHost<'_> {
 
 impl VaultStructure for KernelHost<'_> {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
+        // Due letture dello stesso nome, e sono due domande diverse (§15.5): il
+        // recinto — sta dentro il vault? — e la portabilità, che vale solo perché
+        // qui il nome **nasce**. Un `ImportProvider` che estrae un'entrata di zip
+        // chiamata `aux.md` scriverebbe un file che su Windows non esiste, e lo
+        // scoprirebbe chi sincronizza.
         let id = fenced_doc_id(id)?;
+        let id = new_doc_id(id.as_str()).map_err(PluginError::from)?;
         // Il rifiuto È la capacità: `write_document` sovrascrive, e se questa
         // facesse lo stesso non ci sarebbe motivo di averla.
         if self.ws.is_taken(&id) {

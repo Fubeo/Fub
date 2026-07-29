@@ -347,5 +347,20 @@ fn creating_a_note_over_an_existing_one_is_refused() {
         "trovato {err}"
     );
     let err = ws.create_note(Some("   ")).unwrap_err();
-    assert!(matches!(err, KernelError::BadName(_)), "trovato {err}");
+    assert!(matches!(err, KernelError::BadName { .. }), "trovato {err}");
+
+    // E i nomi che il §15.5 non fa nascere: il messaggio porta la ragione,
+    // perché «nome non valido» non dice quale carattere è il problema.
+    for (nome, atteso) in [
+        ("CON", "device DOS"),
+        ("nota?", "si riserva"),
+        (".nascosta", "comincia con un punto"),
+    ] {
+        let err = ws.create_note(Some(nome)).unwrap_err();
+        let testo = err.to_string();
+        assert!(
+            matches!(err, KernelError::BadName { .. }) && testo.contains(atteso),
+            "`{nome}`: atteso un BadName che dica {atteso:?}, trovato {testo}"
+        );
+    }
 }

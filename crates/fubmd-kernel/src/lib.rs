@@ -92,4 +92,4 @@ pub use settings::{write_atomic, MachineSettings, SettingsStore, SharedSettings}
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{data_root, TrashEntry, Vault, FUBMD_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
-pub use workspace::{valid_doc_id, GraphUpdate, Trust, Workspace, MAIN_PANE};
+pub use workspace::{new_doc_id, valid_doc_id, GraphUpdate, Trust, Workspace, MAIN_PANE};

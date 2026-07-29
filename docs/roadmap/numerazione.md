@@ -35,6 +35,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.2 · §14.1 | [0046 — L'anagrafe del vault](../decisions/0046-l-anagrafe-del-vault.md) |
 | §2.20 · §14.2 | [0046 — L'anagrafe del vault](../decisions/0046-l-anagrafe-del-vault.md) |
 | §2.29 · §15.4 | [0048 — Una radice sola, e la classe di un dato](../decisions/0048-una-radice-sola.md) |
+| §2.6 · §15.5 | [0058 — Un nome che nasce non è un nome che c'è, e la sorgente è il file](../decisions/0058-un-nome-che-nasce.md) |
 | §4.8 · §16.4 | [0053 — Il contratto ha una sorgente, e due confini che non hanno la stessa forma](../decisions/0053-il-contratto-ha-una-sorgente.md) |
 | §4.1 · §16.5 | [0053 — Il contratto ha una sorgente, e due confini che non hanno la stessa forma](../decisions/0053-il-contratto-ha-una-sorgente.md) |
 | §4.6 · §16.1 | [0054 — Il banco del lato provider](../decisions/0054-il-banco-del-lato-provider.md) |
@@ -115,7 +116,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
 | §2.1 | **§15.1** | Astrazione sullo storage |
 | §2.5 | **§15.2** | Durabilità e recovery |
-| §2.6 | **§15.5** | Politica dei path e del testo, in un modulo solo |
 | §2.7 | **§9.6** | Sessioni multiple |
 | §2.9 | **§9.4** | Disattivazione — oggi si può solo *non registrare* |
 | §2.11 | **§14.3** | Le cartelle non esistono nel kernel → [0047](../decisions/0047-la-cartella-esiste-nel-kernel.md) |

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   folderContains,
   maskWants,
+  nameFault,
+  normalizedName,
   pageName,
   resolutionKey,
   taskChecked,
@@ -38,6 +40,11 @@ const fixture = cases as unknown as Record<string, Record<string, unknown>[]>;
 const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   page_name: (c) => pageName(c.id),
   resolution_key: (c) => resolutionKey(c.s),
+  // La politica dei nomi (§15.5). `null` = il nome si può usare; Rust manda
+  // `null` per `Ok(())`, quindi la gemella deve rispondere `null` e non
+  // `undefined`.
+  name_fault: (c) => nameFault(c.path, c.naming),
+  normalized_name: (c) => normalizedName(c.path),
   task_checked: (c) => taskChecked(c.symbol ?? null),
   byte_to_utf16: (c) => byteToCharIndex(c.text, c.byte),
   utf16_to_byte: (c) => charToByteIndex(c.text, c.unit),
@@ -97,6 +104,54 @@ describe("mirror delle regole TS↔Rust", () => {
       fixture.folder_contains.some((c) => String(c.id).startsWith(String(c.folder)) && !c.out),
       "manca la cartella che è prefisso di caratteri e NON contiene",
     ).toBe(true);
+
+    // La politica dei nomi (§15.5). Tre proprietà, e sono le tre cose che una
+    // implementazione plausibile sbaglia.
+    //
+    // La prima è la voce intera: lo stesso nome deve avere due esiti diversi
+    // secondo la domanda che gli si pone. Chi collassasse le due tolleranze in
+    // una passerebbe metà dei casi con entrambe le risposte sbagliate — o
+    // rifiutandosi di aprire un vault che contiene `CON.md`, o creandone uno.
+    const perPath = new Map<string, Set<string>>();
+    for (const c of fixture.name_fault) {
+      const chiave = String(c.path);
+      if (!perPath.has(chiave)) perPath.set(chiave, new Set());
+      perPath.get(chiave)?.add(String(c.out));
+    }
+    expect(
+      [...perPath.values()].some((esiti) => esiti.size > 1),
+      "manca il nome che si può leggere e non si può creare: senza, le due tolleranze non sono distinte",
+    ).toBe(true);
+
+    // La seconda: la lunghezza è in **byte**, e in JavaScript `s.length` conta
+    // code unit. Serve un caso in cui i due numeri stiano ai lati opposti del
+    // limite, o `length` passerebbe il test sbagliando.
+    expect(
+      fixture.name_fault.some(
+        (c) => c.out === "too-long" && String(c.path).length <= 255,
+      ),
+      "manca il nome che sfora in byte ma non in code unit UTF-16",
+    ).toBe(true);
+
+    // La terza: un nome che *comincia* come un device DOS e non lo è. È l'errore
+    // di chi scrive la regola con uno `startsWith`.
+    expect(
+      fixture.name_fault.some(
+        (c) =>
+          c.naming === "new" &&
+          c.out === null &&
+          /^(CON|NUL|AUX|PRN|COM1|LPT1)/i.test(String(c.path)),
+      ),
+      "manca il quasi-device che deve passare",
+    ).toBe(true);
+
+    // E la NFC sui nomi, che è il difetto esatto che la 0020 trovò sulle chiavi:
+    // due scritture della stessa parola devono collassare sulla stessa forma.
+    const forme = fixture.normalized_name.map((c) => c.out);
+    expect(
+      new Set(forme).size,
+      "NFC e NFD dello stesso nome devono dare la stessa forma normalizzata",
+    ).toBeLessThan(forme.length);
 
     // E la maschera: il rename che esce dal soggetto è il caso che una lettura
     // plausibile (guardare il solo path d'arrivo) sbaglierebbe.

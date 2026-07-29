@@ -93,6 +93,20 @@ interface model {
 
     /// Intervallo [start, end) in byte sulla sorgente.
     ///
+    /// **La sorgente sono i byte del file decodificati, integralmente**: il BOM
+    /// se c'era, i terminatori di riga come stanno sul disco, nessuna
+    /// normalizzazione. È la stessa stringa che `read-document` restituisce,
+    /// quella su cui la `revision` è calcolata e quella che `write-document`
+    /// scrive. Un `span { start: 0, end: 0 }` su un file col BOM inserisce
+    /// *prima* del BOM.
+    ///
+    /// Va detto qui perché è la premessa che rende confrontabili un offset
+    /// calcolato da un guest e un offset applicato dall'host: se uno dei due
+    /// intendesse «il testo normalizzato», gli edit atterrerebbero spostati di
+    /// quanto misura ciò che è stato normalizzato, e il documento resterebbe
+    /// valido — quindi nessuno se ne accorgerebbe. Il ragionamento sta accanto a
+    /// `Span` in `src/model.rs` (§15.5).
+    ///
     /// Lato Rust i campi sono `usize` (indicizzano `&str` in memoria); qui sono
     /// `u64` perché il confine deve avere una larghezza fissa. Su wasm32
     /// `usize` è a 32 bit: usize→u64 è sempre lecito, u64→usize passa da una

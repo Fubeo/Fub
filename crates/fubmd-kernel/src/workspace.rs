@@ -79,6 +79,7 @@ use serde::{Deserialize, Serialize};
 use fubmd_abi::rules::media;
 use fubmd_abi::rules::path as rules_path;
 use fubmd_abi::rules::path::{resolution_key, strip_ext};
+use fubmd_abi::rules::path_policy::{self, Naming};
 
 use crate::bus::EventBus;
 use crate::dispatcher::{Dispatcher, JobBell, PendingJob, ToDeliver};
@@ -1778,7 +1779,8 @@ impl Workspace {
     /// Il [`DocId`] di una nota che nasce col nome dato: separatori normalizzati
     /// e, se il nome non porta già un'estensione gestita, quella di default.
     fn new_note_id(&self, name: &str) -> Result<DocId> {
-        let id = valid_doc_id(name)?;
+        // Un nome che nasce: la tolleranza stretta del §15.5.
+        let id = new_doc_id(name)?;
         let ha_estensione = self.docs.has_provider_for(&id);
         if ha_estensione {
             return Ok(id);
@@ -1844,6 +1846,12 @@ impl Workspace {
         // `entry.original` nasce da un basename o dal sidecar scritto dal
         // vault, ed è sano per costruzione; il `to` del chiamante invece
         // arriva dall'IPC e va validato.
+        //
+        // Validato col recinto e **non** con la portabilità (§15.5): ripristinare
+        // non fa nascere un nome, ne rimette uno che c'era. Una nota che si
+        // chiamava `CON.md` prima di finire nel cestino deve poter tornare — e
+        // sarebbe un modo curioso di perdere un file, rifiutarsi di restituirlo
+        // per un nome che il vault conteneva già.
         let original = entry.original.clone();
         let target = match to {
             Some(to) => valid_doc_id(to.as_str())?,
@@ -1910,8 +1918,12 @@ impl Workspace {
 
     fn rename_document_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
         // `to` arriva dall'IPC: senza validazione `../fuori.md` sposterebbe il
-        // file fuori dal vault.
-        let to = &valid_doc_id(to.as_str())?;
+        // file fuori dal vault. E la destinazione di un rename è un nome che
+        // **nasce**, quindi vale la tolleranza stretta del §15.5: rinominare
+        // *verso* `CON.md` è creare un file che su Windows non si apre, mentre
+        // rinominare *via da* `CON.md` è precisamente il modo di sistemarlo — ed
+        // è per questo che qui si valida `to` e non `from`.
+        let to = &new_doc_id(to.as_str())?;
         if from == to {
             return Ok(());
         }
@@ -4226,25 +4238,53 @@ impl Workspace {
     }
 }
 
-/// Valida un nome/path destinato a diventare (o rimpiazzare) un [`DocId`]:
-/// normalizza i separatori `\` → `/`, toglie spazi e slash iniziali, rifiuta
-/// componenti vuote, `.` e `..`. Un path che risale (`../fuori.md`) uscirebbe
-/// dal vault lasciando un `DocId` fantasma in modelli, grafo e indici.
+/// Valida un nome/path che **nomina un documento che esiste** (o che potrebbe
+/// esistere): normalizza i separatori `\` → `/`, toglie spazi e slash iniziali, e
+/// pretende che ciò che resta stia dentro il vault.
 ///
-/// È la regola di `create_note`, estratta perché OGNI percorso che trasforma
-/// input esterno in un `DocId` deve passarci: rename, restore e i costruttori
-/// usati dai comandi IPC (a M4/M5 quella superficie è dei plugin).
+/// Il giudizio è del contratto — [`path_policy::check`] con
+/// [`Naming::Existing`] — e non più di questa funzione: la stessa regola serve a
+/// un indice di terzi e a un guest WASM, che `fubmd-kernel` non lo hanno
+/// (decisione 0020). Qui resta la **tolleranza del varco**: la conversione dei
+/// separatori Windows e il trim, che sono di questo ingresso e non della regola.
+///
+/// È la regola di ogni percorso che trasforma input esterno in un `DocId`:
+/// rename, restore, i comandi IPC e il confine delle capacità
+/// ([`fenced_doc_id`]). Chi invece fa **nascere** un nome passa da
+/// [`new_doc_id`], che è più stretta — e la differenza è il §15.5.
 pub fn valid_doc_id(name: &str) -> Result<DocId> {
     let normalizzato = name.replace('\\', "/");
     let pulito = normalizzato.trim().trim_start_matches('/');
-    if pulito.is_empty()
-        || pulito
-            .split('/')
-            .any(|c| c.is_empty() || c == "." || c == "..")
-    {
-        return Err(KernelError::BadName(name.to_string()));
-    }
+    path_policy::check(pulito, Naming::Existing).map_err(|why| KernelError::BadName {
+        name: name.to_string(),
+        why: why.to_string(),
+    })?;
     Ok(DocId::new(pulito))
+}
+
+/// Il [`DocId`] di un nome che **nasce adesso**: [`valid_doc_id`], più la
+/// portabilità e la forma NFC (§15.5).
+///
+/// La differenza fra le due non è di severità ma di **domanda**. Un vault
+/// contiene ciò che contiene — un `CON.md` scritto su Linux, un nome in NFD
+/// scritto da macOS — e rifiutarsi di nominarlo vorrebbe dire rifiutarsi di
+/// aprire il vault. Ma scriverne uno nuovo così è FubMD che crea un file che, il
+/// giorno in cui il vault attraversa un sistema operativo, non si apre più: il
+/// difetto è nostro, e l'unico momento in cui costa niente è adesso.
+///
+/// Il nome torna **normalizzato** ([`path_policy::normalized`]): NFC e senza
+/// spazi ai bordi dei segmenti. Non è una migrazione di ciò che c'è — è la scelta
+/// di una forma sola per ciò che si scrive, e serve perché due nomi che
+/// differiscono solo per la composizione Unicode sono due file per il filesystem
+/// e **uno** per il grafo.
+pub fn new_doc_id(name: &str) -> Result<DocId> {
+    let id = valid_doc_id(name)?;
+    let normalizzato = path_policy::normalized(id.as_str());
+    path_policy::check(&normalizzato, Naming::New).map_err(|why| KernelError::BadName {
+        name: name.to_string(),
+        why: why.to_string(),
+    })?;
+    Ok(DocId::new(normalizzato))
 }
 
 /// Il [`DocId`] con cui un **plugin** può nominare un documento, o

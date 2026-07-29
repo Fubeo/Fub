@@ -68,6 +68,7 @@ cronologico di chiusura.
 | [0055](0055-il-banco-del-lato-host.md) | Il banco del lato host: un builder, perché i trentacinque non erano lo stesso vault | §16.2 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 | [0056](0056-un-elenco-che-e-la-sorgente.md) | Un elenco che è la sorgente, e un insieme che il compilatore chiude | §16.7 — **meno la sua seconda metà**, che diventa la §16.8 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 | [0057](0057-la-dieta-dell-ipc.md) | La dieta dell'IPC: un elenco che diventa rosso quando qualcosa si aggiunge | §16.6 (**meno una casella**) ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
+| [0058](0058-un-nome-che-nasce.md) | Un nome che nasce non è un nome che c'è, e la sorgente è il file | §15.5 ([seduta 15](../roadmap/15-il-disco.md)) | 2026-07-29 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -189,6 +190,24 @@ controlla. Le decisioni precedenti hanno corretto **numeri** di una voce (la
 corregge un **fatto sull'architettura** su cui la voce poggiava per intero, e la
 conclusione è cambiata di conseguenza: ha ragione il §16.5 sulla direzione, e
 torto sullo strumento.
+
+La [0058](0058-un-nome-che-nasce.md) inaugura un terzo modo di lasciare qualcosa
+dietro, e va distinto dai due che ci sono. Una **casella residua**
+([0052](0052-cio-che-va-storto-e-un-evento.md)) è lavoro che si può fare senza
+aprire un verbale, e resta attaccata alla voce chiusa; una **voce nuova**
+([0056](0056-un-elenco-che-e-la-sorgente.md)) nasce quando quel pezzo chiede una
+decisione sua. Qui invece due righe della voce — i symlink, e i dotfile da
+mostrare su richiesta — non erano né l'una né l'altra: erano **della voce
+sbagliata**. Un symlink non è una domanda su un *nome*, è «questa voce di
+directory partecipa», che è la domanda del §15.6; e sono state spostate là, dentro
+la sua lista di caselle, invece di restare un residuo del §15.5.
+
+Il criterio per riconoscere il caso è la stessa domanda che il §16.7 pone a un
+elenco: *chi lo legge, lo trova?* Una casella residua vive nel paragrafo di
+`todo.md` che le conta, e chi apre la voce che la eredita non la vede. Una riga
+consegnata alla voce che la farà sta dove la cercherà chi la farà — e per questo
+non entra in nessun totale delle caselle residue: non è rimasta indietro, ha
+cambiato indirizzo.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio
