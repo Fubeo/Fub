@@ -28,6 +28,7 @@ frontend/src/
 
   host/          la cucitura con l'esterno, e nient'altro
     contract.ts    i tipi (e i pochi valori) rispecchiati dal Rust (nessun @tauri-apps)
+    enums.generated.ts  le union di stringhe EMESSE dai tipi Rust (decisione 0053)
     ipc.ts         `api` + il canale eventi: i comandi del backend
     query.ts       il canale dati: si costruisce una query, si apre una risposta
     dialog.ts      le superfici di SISTEMA: conferme, selettore di cartella
@@ -76,6 +77,17 @@ frontend/src/
 
   __fixtures__/  le fixture generate da serde (il mirror TS↔Rust)
 ```
+
+Di `host/` un file **non si scrive**: `enums.generated.ts` è emesso dagli `enum`
+senza payload del contratto (`crates/fubmd-abi/tests/ts_enums.rs`,
+[decisione 0053](../decisions/0053-il-contratto-ha-una-sorgente.md)), e
+`contract.ts` lo ri-esporta tenendo accanto la prosa. La riga di taglio è *ciò
+che si deriva senza reimplementare serde*: i casi di un enum nudo sì, la forma di
+un record o di un variant con payload no — quelli restano rispecchiati a mano e
+li presidia la fixture. E la forma delle stringhe è quella di **serde**, non
+quella del WIT: sull'IPC un evento è `{"type": "trouble", …}` piatto, nel WIT è
+un `variant` con il payload in un record a sé, e i due confini non si generano
+l'uno dall'altro.
 
 Un file **non rispetta** la riga che lo ospita: `ui/intents.ts` importa
 `panels/document` e `panels/search`, mentre `ui/` è per il resto senza dominio.

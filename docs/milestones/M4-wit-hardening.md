@@ -64,6 +64,18 @@ divergenza di forma **non compila** — la proprietà che si voleva da `wit-bind
 + `From`/`Into`, senza generare codice. Ha il proprio test del test (quattordici
 mutazioni) e gira in CI.
 
+La [decisione 0053](../decisions/0053-il-contratto-ha-una-sorgente.md) ha
+confermato quella scelta e ne ha tratto la conseguenza che mancava: se l'atteso
+viene da Rust, **la sorgente del contratto è Rust**, e il WIT e il mirror
+TypeScript sono due proiezioni su due confini che **non hanno la stessa forma**
+(sull'IPC un evento è un oggetto piatto con tag interno; nel WIT è un `variant`
+con il payload in un record a sé). Nessuno dei due si genera dall'altro. Ciò che
+si genera è quello che finora li ripeteva: il lettore del sorgente Rust sta in
+`tests/common/`, `ts_enums.rs` emette le union del mirror, e il conteggio dei
+casi di un `enum` è sceso da quattro scritture a due — Rust e WIT. Generare
+l'`abi.wit` stesso resta **scartato**, e il motivo è misurabile: 1683 righe su
+3386 sono prosa italiana del confine, che in Rust non c'è e ha un altro lettore.
+
 Resta a M4, sulla conformità:
 
 - rivalutare se i valori JSON liberi (`attrs`, `args`, storage) restano

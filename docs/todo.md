@@ -16,9 +16,9 @@ che ha stabilito che la ricerca di FubMD è built-in e di classe *omnisearch*
 **verifiche**: la §21.10 dal controllo contro il codice di un'affermazione
 arrivata da fuori, e le §22.1–§22.3 dallo stesso controllo su una lettura
 esterna dell'intero [FEATURES.md](FEATURES.md)
-([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)). Ottanta sono
+([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)). Ottantadue sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-trentaquattro sono qui, e questo file è il loro **indice**.
+trentadue sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -115,7 +115,7 @@ che scade.
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | **chiusa**: il path è la chiave per sempre e un id stabile è una proprietà ([0043](decisions/0043-il-path-e-la-chiave.md)), lo stato per-documento ha un posto dichiarato che il kernel migra e raccoglie ([0044](decisions/0044-lo-stato-per-documento.md)), e l'undo ha due pile che non si fondono ([0045](decisions/0045-l-undo-ha-due-pile.md)) | — | — |
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati a coppie, chiusi tutti: l'anagrafe del vault ([0046](decisions/0046-l-anagrafe-del-vault.md)) e la cartella come cittadino con la lista per cartella ([0047](decisions/0047-la-cartella-esiste-nel-kernel.md)); restano **tre** caselle del §14.1 — l'impronta degli allegati, la politica della cartella allegati e le derivate in `.fubmd/data/` | — | — |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra; la §15.4 è chiusa con la [0048](decisions/0048-una-radice-sola.md) — una radice sola dentro il vault, la mappa del disco, e la classe di un dato dichiarata da **dove** si scrive — e ne resta la casella additiva, l'implementazione | 6 | — |
-| **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 7 | — |
+| **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica; il contratto ha **una** sorgente e due confini che non hanno la stessa forma ([0053](decisions/0053-il-contratto-ha-una-sorgente.md), che chiude §16.4 e §16.5 insieme come la seduta chiedeva) | 5 | — |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza | 3 | — |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: quattro **rimandi** ai quattro giri di audit, di cui uno chiuso; restano **tre** caselle, e il lavoro sta nelle sedute che le hanno assorbite | — | — |
@@ -125,7 +125,7 @@ che scade.
 
 ## Le voci
 
-Trentaquattro. Il numero è quello con cui le nomina il resto del repo.
+Trentadue. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -137,7 +137,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella non è in nessun
 totale.** La colonna *Voci* conta le voci **aperte**, e la sua somma per riga fa
-trentaquattro come deve; il residuo di una voce **chiusa** è un'altra specie e finora
+trentadue come deve; il residuo di una voce **chiusa** è un'altra specie e finora
 non aveva dove essere contato — che è il modo in cui la riga della seduta 14 ha
 detto «due caselle» mentre il suo file ne aveva tre, e la 19 non ha detto niente
 avendone tre. Le caselle residue oggi sono **otto**, e stanno in quattro posti:
@@ -182,8 +182,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§16.1** | [L'SDK come superficie di riuso — oggi è quasi vuoto](roadmap/16-crate-sdk-banchi-di-prova.md#161-lsdk-come-superficie-di-riuso--oggi-è-quasi-vuoto) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 | **§16.2** | [Il banco di prova del kernel è copiato diciotto volte](roadmap/16-crate-sdk-banchi-di-prova.md#162-il-banco-di-prova-del-kernel-è-copiato-diciotto-volte) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 | **§16.3** | [Un crate per bundle di feature](roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
-| **§16.4** | [Il contratto si scrive quattro volte a mano](roadmap/16-crate-sdk-banchi-di-prova.md#164-il-contratto-si-scrive-quattro-volte-a-mano) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
-| **§16.5** | [Mirror TS↔Rust generati, non scritti](roadmap/16-crate-sdk-banchi-di-prova.md#165-mirror-tsrust-generati-non-scritti) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 | **§16.6** | [Dieta dell'IPC](roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 | **§16.7** | [Due presidi sono esaustivi *a memoria*, non per costruzione](roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 | **§17.1** | [Corpus, fuzzing, prestazioni](roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni) | 17. I presidi che restano | presidi | **P2** |
@@ -213,6 +211,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — cinquantadue, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — cinquantatré, uno
   per file. Non stanno qui perché questo è l'elenco di ciò che **resta da
   fare**.

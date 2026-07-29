@@ -51,6 +51,8 @@
 //! dei match qui sotto, non l'ordine — e l'ordine dei casi è il discriminante
 //! ABI: un riordino è rosso da entrambi i lati, non solo da quello WIT.
 
+mod common;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
@@ -152,214 +154,55 @@ macro_rules! wit_type {
     };
 }
 
+/// Il gemello per la stragrande maggioranza dei tipi, il cui nome WIT **è** il
+/// kebab del nome Rust (decisione 0053).
+///
+/// Prima erano 174 voci su 203 che riscrivevano a mano una stringa ricavabile
+/// dall'identificatore, e `fn kebab` stava venti righe più in giù nello stesso
+/// file. Il costo non era la riga: era che quella stringa **poteva essere
+/// sbagliata** — dimenticare un trattino su un nome composto è una divergenza
+/// che il test avrebbe segnalato come «manca dal WIT», cioè additandone il
+/// posto sbagliato.
+///
+/// Qui resta da scrivere il **tipo**, che è l'informazione (dichiarare la sua
+/// forma al confine); il nome non si scrive più. Le sedici che deviano — primitivi,
+/// `json`, le istanze di `Paged<T>`, l'unico aliasing deliberato
+/// (`UiNode => ui-tree`) — restano nel `wit_type!` qui sopra, ed è giusto che si
+/// vedano: sono le eccezioni, e adesso l'elenco delle eccezioni è corto.
+macro_rules! wit_kebab {
+    ($($ty:ty),+ $(,)?) => {
+        $(impl WitType for $ty {
+            fn wit() -> String {
+                // `stringify!` di un path mette gli spazi attorno a `::`.
+                common::kebab(stringify!($ty).rsplit("::").next().unwrap().trim())
+            }
+        })+
+    };
+}
+
+// Le eccezioni: i tipi il cui nome al confine NON è il kebab del nome Rust.
+// Su 203 voci in tutto sono **sedici**, e ognuna è una scelta — un primitivo
+// che si scrive diverso, un JSON opaco, un generico che al confine si sdoppia,
+// un aliasing deliberato — più tredici che al confine non compaiono affatto
+// (il ricevitore e le capacità dell'host). Le altre 174 stanno in `wit_kebab!`
+// qui sotto, dove il nome non si scrive più (decisione 0053).
 wit_type! {
     // Primitivi e stringhe.
-    bool => "bool",
-    u8 => "u8",
-    u16 => "u16",
-    u32 => "u32",
-    u64 => "u64",
     i16 => "s16",
     i32 => "s32",
-    f32 => "f32",
-    f64 => "f64",
-    char => "char",
     str => "string",
-    String => "string",
+
     // L'unità: nel WIT un `result` senza ok si scrive `result<_, e>`, e una
     // funzione che non restituisce niente non ha risultato affatto.
     () => "_",
+
     // Il JSON libero (frontmatter, attrs, args, payload, storage) attraversa il
     // confine come stringa: è la scelta deliberata dell'escape hatch.
     serde_json::Value => "json",
     serde_json::Map<String, serde_json::Value> => "json",
 
-    // Alias del contratto: newtype qui, `type x = ...` là.
-    DocId => "doc-id",
-    Frontmatter => "frontmatter",
-    ActionId => "action-id",
-    JobId => "job-id",
-    BatchId => "batch-id",
-    BlockRef => "block-ref",
-    InlineRef => "inline-ref",
-    UiRef => "ui-ref",
-
-    // Record e variant del modello.
-    Span => "span",
-    arena::Span => "span",
-    Heading => "heading",
-    Tag => "tag",
-    Anchor => "anchor",
-    Link => "link",
-    LinkTarget => "link-target",
-    DocumentModel => "document-model",
-    ColumnAlign => "column-align",
-    PropertyValue => "property-value",
-    PropertyScalar => "property-scalar",
-    PropertyDate => "property-date",
-    PropertyTime => "property-time",
-    arena::Block => "block",
-    arena::Inline => "inline",
-    arena::ListItem => "list-item",
-    arena::TaskMarker => "task-marker",
-    arena::TableRow => "table-row",
-    arena::TableCell => "table-cell",
-    arena::UiNode => "ui-node",
-    arena::UiKind => "ui-kind",
-    arena::DocumentTree => "document-tree",
-    arena::UiTree => "ui-tree",
-
     // UI: al confine un albero intero è la sua arena.
     UiNode => "ui-tree",
-    Axis => "axis",
-    Intent => "intent",
-    UiAction => "ui-action",
-    ActionRef => "action-ref",
-    UiValue => "ui-value",
-    FieldValue => "field-value",
-    UiOption => "ui-option",
-    KeyValueEntry => "key-value-entry",
-    TableColumn => "table-column",
-    Align => "align",
-    ViewUpdate => "view-update",
-
-    // Il resto del contratto.
-    FormatDescriptor => "format-descriptor",
-    FormatCapabilities => "format-capabilities",
-    DocumentFormat => "document-format",
-    ParseContext => "parse-context",
-    RenderOptions => "render-options",
-    RenderTarget => "render-target",
-    SourceKind => "source-kind",
-    DocumentSource => "document-source",
-    FormatError => "format-error",
-
-    // La mappa con namespace: al confine è una lista di coppie, perché WIT non
-    // ha mappe. È lo stesso tipo in tutte e quattro le sedi del §3.5 — e che
-    // sia lo STESSO è metà della risposta.
-    OptionMap => "option-map",
-
-    // I due innesti del §3.1 e del §3.2.
-    SyntaxTrigger => "syntax-trigger",
-    SyntaxRuleSpec => "syntax-rule-spec",
-    SyntaxMatch => "syntax-match",
-    SyntaxProduct => "syntax-product",
-    CustomRendererSpec => "custom-renderer-spec",
-    CustomBlock => "custom-block",
-    CustomRendering => "custom-rendering",
-    PluginError => "plugin-error",
-    Event => "event",
-    EventKind => "event-kind",
-    EventMask => "event-mask",
-    Subject => "subject",
-    Actor => "actor",
-    Origin => "origin",
-    Notice => "notice",
-    JobSpec => "job-spec",
-
-    // I comandi: la dichiarazione (decisione 0010) e l'invocazione (decisione 0009).
-    CommandSpec => "command-spec",
-    CommandOutcome => "command-outcome",
-    Undo => "undo",
-    UndoStep => "undo-step",
-    CommandEffect => "command-effect",
-    CommandPlan => "command-plan",
-    PlannedEdit => "planned-edit",
-    CommandScope => "command-scope",
-    CommandReach => "command-reach",
-    ParamSpec => "param-spec",
-    ParamKind => "param-kind",
-    Choice => "choice",
-    InvokeMode => "invoke-mode",
-    ViewSpec => "view-spec",
-    ViewSurface => "view-surface",
-    ViewInstance => "view-instance",
-
-    // L'edit chirurgico: la coppia (span, testo) e la revisione su cui è stata
-    // calcolata.
-    Revision => "revision",
-    TextEdit => "text-edit",
-    EditRequest => "edit-request",
-    AppliedEdit => "applied-edit",
-    EditReport => "edit-report",
-
-    // Il contesto di sessione: il pannello con il focus e ciò che contiene.
-    PaneId => "pane-id",
-    PaneMode => "pane-mode",
-    Selection => "selection",
-    ViewContext => "view-context",
-    ContextKind => "context-kind",
-    ContextMask => "context-mask",
-
-    // Il locale (§12.3): chi legge, e da dove.
-    Locale => "locale",
-    Weekday => "weekday",
-    HourCycle => "hour-cycle",
-
-    // Il testo che si legge (§12.1).
-    Text => "text",
-    Message => "message",
-    Arg => "arg",
-    ArgValue => "arg-value",
-    StringCatalog => "string-catalog",
-    IndexQuery => "index-query",
-    IndexResult => "index-result",
-    BacklinkRef => "backlink-ref",
-    NeighborRef => "neighbor-ref",
-    DocumentMatch => "document-match",
-    DocPosition => "doc-position",
-    ResolvedRef => "resolved-ref",
-    TagCount => "tag-count",
-    VaultStatus => "vault-status",
-    JobProgress => "job-progress",
-    IndexLoss => "index-loss",
-    Severity => "severity",
-    JobStatus => "job-status",
-    TrashEntry => "trash-entry",
-    Page => "page",
-    LinkDirection => "link-direction",
-    QueryExpr => "query-expr",
-    QueryClause => "query-clause",
-    QueryLiteral => "query-literal",
-    QueryPredicate => "query-predicate",
-    TextQuery => "text-query",
-    TextMode => "text-mode",
-    TextField => "text-field",
-    TextTolerance => "text-tolerance",
-    QueryKind => "query-kind",
-    PredicateKind => "predicate-kind",
-    QueryRoute => "query-route",
-    PropertySelect => "property-select",
-    PropertyTest => "property-test",
-    PropertyFilter => "property-filter",
-    PropertySort => "property-sort",
-    PropertyEntry => "property-entry",
-    PropertyCount => "property-count",
-    HealthCheck => "health-check",
-    HealthIssue => "health-issue",
-    // L'anagrafe (§14.1): che specie di file è, e cosa se ne sa senza aprirlo.
-    EntryKind => "entry-kind",
-    VaultEntry => "vault-entry",
-    // Le cartelle (§14.3): il modello, e il raggio delle domande per cartella.
-    VaultFolder => "vault-folder",
-    FolderScope => "folder-scope",
-
-    // Import ed export: la sorgente arriva a byte e gli artefatti escono a
-    // byte, quindi al confine non compare nessun percorso di filesystem.
-    NoteLevel => "note-level",
-    TransferNote => "transfer-note",
-    ImportSource => "import-source",
-    ImportMode => "import-mode",
-    ConflictPolicy => "conflict-policy",
-    ImportRequest => "import-request",
-    ImportOutcome => "import-outcome",
-    ImportedDocument => "imported-document",
-    ImportReport => "import-report",
-    ExportTarget => "export-target",
-    ExportSelection => "export-selection",
-    ExportRequest => "export-request",
-    ExportArtifact => "export-artifact",
-    ExportReport => "export-report",
 
     // Le finestre: un solo `Paged<T>` in Rust, un record per istanza nel WIT
     // (i generici al confine non esistono). L'impl per ciascuna istanza è ciò
@@ -373,19 +216,6 @@ wit_type! {
     Paged<HealthIssue> => "vault-health-page",
     Paged<VaultEntry> => "entries-page",
     Paged<VaultFolder> => "folders-page",
-    PluginManifest => "plugin-manifest",
-    PluginPermissions => "plugin-permissions",
-
-    // Le impostazioni (§11.1).
-    SettingSpec => "setting-spec",
-    SettingKind => "setting-kind",
-    SettingValue => "setting-value",
-    SettingScope => "setting-scope",
-    SettingSource => "setting-source",
-    SettingEntry => "setting-entry",
-
-    // L'organizzazione del vault (§11.3).
-    Organization => "organization",
 
     // Ciò che NON attraversa il confine: il ricevitore e le capacità dell'host.
     dyn HostApi => HOST,
@@ -401,6 +231,228 @@ wit_type! {
     dyn ExportProvider => SELF,
     dyn SyntaxRule => SELF,
     dyn CustomRenderer => SELF,
+}
+
+// Tutti gli altri: il nome WIT È il kebab del nome Rust, quindi qui si
+// dichiara soltanto che il tipo attraversa il confine. Come si scriva di là
+// non è una decisione di nessuno, ed è la ragione per cui non si scrive più
+// (decisione 0053).
+wit_kebab! {
+    // Primitivi e stringhe.
+    bool,
+    u8,
+    u16,
+    u32,
+    u64,
+    f32,
+    f64,
+    char,
+    String,
+
+    // Alias del contratto: newtype qui, `type x = ...` là.
+    DocId,
+    Frontmatter,
+    ActionId,
+    JobId,
+    BatchId,
+    BlockRef,
+    InlineRef,
+    UiRef,
+
+    // Record e variant del modello.
+    Span,
+    arena::Span,
+    Heading,
+    Tag,
+    Anchor,
+    Link,
+    LinkTarget,
+    DocumentModel,
+    ColumnAlign,
+    PropertyValue,
+    PropertyScalar,
+    PropertyDate,
+    PropertyTime,
+    arena::Block,
+    arena::Inline,
+    arena::ListItem,
+    arena::TaskMarker,
+    arena::TableRow,
+    arena::TableCell,
+    arena::UiNode,
+    arena::UiKind,
+    arena::DocumentTree,
+    arena::UiTree,
+
+    // UI: al confine un albero intero è la sua arena.
+    Axis,
+    Intent,
+    UiAction,
+    ActionRef,
+    UiValue,
+    FieldValue,
+    UiOption,
+    KeyValueEntry,
+    TableColumn,
+    Align,
+    ViewUpdate,
+
+    // Il resto del contratto.
+    FormatDescriptor,
+    FormatCapabilities,
+    DocumentFormat,
+    ParseContext,
+    RenderOptions,
+    RenderTarget,
+    SourceKind,
+    DocumentSource,
+    FormatError,
+
+    // La mappa con namespace: al confine è una lista di coppie, perché WIT non
+    // ha mappe. È lo stesso tipo in tutte e quattro le sedi del §3.5 — e che
+    // sia lo STESSO è metà della risposta.
+    OptionMap,
+
+    // I due innesti del §3.1 e del §3.2.
+    SyntaxTrigger,
+    SyntaxRuleSpec,
+    SyntaxMatch,
+    SyntaxProduct,
+    CustomRendererSpec,
+    CustomBlock,
+    CustomRendering,
+    PluginError,
+    Event,
+    EventKind,
+    EventMask,
+    Subject,
+    Actor,
+    Origin,
+    Notice,
+    JobSpec,
+
+    // I comandi: la dichiarazione (decisione 0010) e l'invocazione (decisione 0009).
+    CommandSpec,
+    CommandOutcome,
+    Undo,
+    UndoStep,
+    CommandEffect,
+    CommandPlan,
+    PlannedEdit,
+    CommandScope,
+    CommandReach,
+    ParamSpec,
+    ParamKind,
+    Choice,
+    InvokeMode,
+    ViewSpec,
+    ViewSurface,
+    ViewInstance,
+
+    // L'edit chirurgico: la coppia (span, testo) e la revisione su cui è stata
+    // calcolata.
+    Revision,
+    TextEdit,
+    EditRequest,
+    AppliedEdit,
+    EditReport,
+
+    // Il contesto di sessione: il pannello con il focus e ciò che contiene.
+    PaneId,
+    PaneMode,
+    Selection,
+    ViewContext,
+    ContextKind,
+    ContextMask,
+
+    // Il locale (§12.3): chi legge, e da dove.
+    Locale,
+    Weekday,
+    HourCycle,
+
+    // Il testo che si legge (§12.1).
+    Text,
+    Message,
+    Arg,
+    ArgValue,
+    StringCatalog,
+    IndexQuery,
+    IndexResult,
+    BacklinkRef,
+    NeighborRef,
+    DocumentMatch,
+    DocPosition,
+    ResolvedRef,
+    TagCount,
+    VaultStatus,
+    JobProgress,
+    IndexLoss,
+    Severity,
+    JobStatus,
+    TrashEntry,
+    Page,
+    LinkDirection,
+    QueryExpr,
+    QueryClause,
+    QueryLiteral,
+    QueryPredicate,
+    TextQuery,
+    TextMode,
+    TextField,
+    TextTolerance,
+    QueryKind,
+    PredicateKind,
+    QueryRoute,
+    PropertySelect,
+    PropertyTest,
+    PropertyFilter,
+    PropertySort,
+    PropertyEntry,
+    PropertyCount,
+    HealthCheck,
+    HealthIssue,
+
+    // L'anagrafe (§14.1): che specie di file è, e cosa se ne sa senza aprirlo.
+    EntryKind,
+    VaultEntry,
+
+    // Le cartelle (§14.3): il modello, e il raggio delle domande per cartella.
+    VaultFolder,
+    FolderScope,
+
+    // Import ed export: la sorgente arriva a byte e gli artefatti escono a
+    // byte, quindi al confine non compare nessun percorso di filesystem.
+    NoteLevel,
+    TransferNote,
+    ImportSource,
+    ImportMode,
+    ConflictPolicy,
+    ImportRequest,
+    ImportOutcome,
+    ImportedDocument,
+    ImportReport,
+    ExportTarget,
+    ExportSelection,
+    ExportRequest,
+    ExportArtifact,
+    ExportReport,
+
+    // Le finestre: un solo `Paged<T>` in Rust, un record per istanza nel WIT
+    // (i generici al confine non esistono). L'impl per ciascuna istanza è ciò
+    // che rende impossibile paginarne una nuova senza dichiararla anche là.
+    PluginManifest,
+    PluginPermissions,
+
+    // Le impostazioni (§11.1).
+    SettingSpec,
+    SettingKind,
+    SettingValue,
+    SettingScope,
+    SettingSource,
+    SettingEntry,
+
+    // L'organizzazione del vault (§11.3).
+    Organization,
 }
 
 impl<T: WitType + ?Sized> WitType for &T {
@@ -850,39 +902,18 @@ fn diff(
 /// l'ordine dei casi è il discriminante ABI. Qui l'ordine atteso si deriva
 /// dall'enum stesso, così riordinare l'enum Rust senza toccare WIT e test è
 /// rosso quanto riordinare il WIT.
+///
+/// Dalla [decisione 0053](../../../docs/decisions/0053-il-contratto-ha-una-sorgente.md)
+/// il lettore del sorgente sta in `tests/common/`, perché non serve più a
+/// questo test soltanto: la stessa dichiarazione Rust proietta di qua il WIT
+/// (`kebab`) e di là le union del mirror TypeScript (`snake`, `ts_enums.rs`).
+/// Una lettura, due confini.
 fn rust_enum_order(file: &str, enum_name: &str) -> Vec<String> {
-    let path = format!("{}/src/{file}", env!("CARGO_MANIFEST_DIR"));
-    let src = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("impossibile leggere {path}: {e}"));
-    let ast: syn::File = syn::parse_file(&src).unwrap_or_else(|e| panic!("{path} non parsa: {e}"));
-    for item in ast.items {
-        if let syn::Item::Enum(e) = item {
-            if e.ident == enum_name {
-                return e
-                    .variants
-                    .iter()
-                    .map(|v| kebab(&v.ident.to_string()))
-                    .collect();
-            }
-        }
-    }
-    panic!("enum `{enum_name}` non trovato fra gli item top-level di {path}");
-}
-
-/// `CodeBlock` → `code-block`: la stessa convenzione di nome del WIT.
-fn kebab(camel: &str) -> String {
-    let mut out = String::new();
-    for (i, c) in camel.chars().enumerate() {
-        if c.is_uppercase() {
-            if i > 0 {
-                out.push('-');
-            }
-            out.extend(c.to_lowercase());
-        } else {
-            out.push(c);
-        }
-    }
-    out
+    common::read_enum(file, enum_name)
+        .variants
+        .iter()
+        .map(|v| common::kebab(v))
+        .collect()
 }
 
 /// Un caso di `variant`, con il tipo del payload e — se il payload è un record
@@ -988,19 +1019,21 @@ impl Wit {
         self.variant(name, cases);
     }
 
-    /// Il gemello di [`variant_src`](Wit::variant_src) per gli `enum` WIT.
-    fn enumeration_src(&mut self, name: &str, src: (&str, &str), cases: &[&str]) {
-        let listed: Vec<String> = cases.iter().map(|c| c.to_string()).collect();
-        let declared = rust_enum_order(src.0, src.1);
-        if listed != declared {
-            self.err(format!(
-                "`{name}`: l'ordine dei casi diverge dalla dichiarazione Rust di \
-                 `{}` ({}) — test/WIT {listed:?}, enum {declared:?} \
-                 (l'ordine dei casi è il discriminante ABI)",
-                src.1, src.0
-            ));
-        }
-        self.enumeration(name, cases);
+    /// Un `enum` del WIT confrontato **direttamente** con la dichiarazione
+    /// Rust (decisione 0053): i casi e il loro ordine si leggono dal sorgente,
+    /// non si riscrivono qui.
+    ///
+    /// Sostituisce l'`enumeration_src` di prima, che chiedeva l'elenco a mano e
+    /// poi lo confrontava con questo stesso `rust_enum_order` — cioè faceva
+    /// scrivere una copia per poterla correggere. Non è un presidio più debole:
+    /// l'altro lato del confronto è il WIT, che resta scritto a mano e parsato.
+    /// È più forte, perché un caso aggiunto in Rust arriva **da solo** fino al
+    /// diff col contratto, invece di aspettare che qualcuno si ricordi di
+    /// questa riga — che è il difetto che il §16.7 nomina.
+    fn enumeration_from(&mut self, name: &str, src: (&str, &str)) {
+        let cases = rust_enum_order(src.0, src.1);
+        let refs: Vec<&str> = cases.iter().map(String::as_str).collect();
+        self.enumeration(name, &refs);
     }
 
     fn variant(&mut self, name: &str, cases: &[Case]) {
@@ -1308,15 +1341,6 @@ fn property_scalar_case(p: &PropertyScalar) -> Case {
         PropertyScalar::Date(d) => case_ty("date", wit(d)),
         PropertyScalar::Link(t) => case_ty("link", wit(t)),
         PropertyScalar::Unknown(v) => case_ty("unknown", wit(v)),
-    }
-}
-
-fn column_align_name(a: ColumnAlign) -> &'static str {
-    match a {
-        ColumnAlign::None => "none",
-        ColumnAlign::Left => "left",
-        ColumnAlign::Center => "center",
-        ColumnAlign::Right => "right",
     }
 }
 
@@ -1875,29 +1899,6 @@ fn setting_value_case(v: &SettingValue) -> Case {
     }
 }
 
-fn event_kind_name(k: EventKind) -> &'static str {
-    match k {
-        EventKind::VaultOpened => "vault-opened",
-        EventKind::DocumentChanged => "document-changed",
-        EventKind::DocumentRemoved => "document-removed",
-        EventKind::DocumentRenamed => "document-renamed",
-        EventKind::IndexUpdated => "index-updated",
-        EventKind::JobDone => "job-done",
-        EventKind::Overflow => "overflow",
-        EventKind::Custom => "custom",
-        EventKind::BatchEnded => "batch-ended",
-        EventKind::ViewInvalidated => "view-invalidated",
-        EventKind::VaultClosed => "vault-closed",
-        EventKind::JobStarted => "job-started",
-        EventKind::JobProgress => "job-progress",
-        EventKind::SettingChanged => "setting-changed",
-        EventKind::EntryChanged => "entry-changed",
-        EventKind::EntryRemoved => "entry-removed",
-        EventKind::EntryRenamed => "entry-renamed",
-        EventKind::Trouble => "trouble",
-    }
-}
-
 fn subject_case(s: &Subject) -> Case {
     match s {
         Subject::Document { id } => case_rec("document", "subject-document", vec![("id", wit(id))]),
@@ -2120,46 +2121,6 @@ fn property_test_case(t: &PropertyTest) -> Case {
     }
 }
 
-fn link_direction_name(d: LinkDirection) -> &'static str {
-    match d {
-        LinkDirection::Outbound => "outbound",
-        LinkDirection::Inbound => "inbound",
-        LinkDirection::Both => "both",
-    }
-}
-
-fn health_check_name(c: HealthCheck) -> &'static str {
-    match c {
-        HealthCheck::BrokenLinks => "broken-links",
-        HealthCheck::OrphanDocuments => "orphan-documents",
-    }
-}
-
-fn entry_kind_name(k: EntryKind) -> &'static str {
-    match k {
-        EntryKind::Document => "document",
-        EntryKind::Asset => "asset",
-        EntryKind::Unknown => "unknown",
-    }
-}
-
-fn command_reach_name(r: CommandReach) -> &'static str {
-    match r {
-        CommandReach::Session => "session",
-        CommandReach::Document => "document",
-        CommandReach::Documents => "documents",
-        CommandReach::Vault => "vault",
-        CommandReach::Settings => "settings",
-    }
-}
-
-fn invoke_mode_name(m: InvokeMode) -> &'static str {
-    match m {
-        InvokeMode::Apply => "apply",
-        InvokeMode::DryRun => "dry-run",
-    }
-}
-
 fn command_effect_case(e: &CommandEffect) -> Case {
     match e {
         CommandEffect::Done => case("done"),
@@ -2195,41 +2156,6 @@ fn undo_step_case(s: &UndoStep) -> Case {
     }
 }
 
-fn pane_mode_name(m: PaneMode) -> &'static str {
-    match m {
-        PaneMode::Source => "source",
-        PaneMode::LivePreview => "live-preview",
-        PaneMode::Reading => "reading",
-    }
-}
-
-fn weekday_name(d: Weekday) -> &'static str {
-    match d {
-        Weekday::Monday => "monday",
-        Weekday::Tuesday => "tuesday",
-        Weekday::Wednesday => "wednesday",
-        Weekday::Thursday => "thursday",
-        Weekday::Friday => "friday",
-        Weekday::Saturday => "saturday",
-        Weekday::Sunday => "sunday",
-    }
-}
-
-fn hour_cycle_name(h: HourCycle) -> &'static str {
-    match h {
-        HourCycle::H23 => "h23",
-        HourCycle::H12 => "h12",
-    }
-}
-
-fn context_kind_name(k: ContextKind) -> &'static str {
-    match k {
-        ContextKind::Document => "document",
-        ContextKind::Selection => "selection",
-        ContextKind::Mode => "mode",
-    }
-}
-
 fn format_error_case(e: &FormatError) -> Case {
     match e {
         FormatError::Parse(s) => case_ty("parse", wit(s)),
@@ -2256,21 +2182,6 @@ fn plugin_error_case(e: &PluginError) -> Case {
     }
 }
 
-fn axis_name(a: Axis) -> &'static str {
-    match a {
-        Axis::Row => "row",
-        Axis::Column => "column",
-    }
-}
-
-fn intent_name(i: Intent) -> &'static str {
-    match i {
-        Intent::Neutral => "neutral",
-        Intent::Primary => "primary",
-        Intent::Danger => "danger",
-    }
-}
-
 /// I campi di una finestra, col tipo di `items` dedotto dall'istanza: è così
 /// che `backlinks-page` e `search-page` non possono finire per attendersi la
 /// stessa lista.
@@ -2285,52 +2196,6 @@ fn paged_fields<T: WitType>(p: &Paged<T>) -> Vec<(&'static str, String)> {
         ("offset", wit(offset)),
         ("total", wit(total)),
     ]
-}
-
-fn align_name(a: Align) -> &'static str {
-    match a {
-        Align::Start => "start",
-        Align::Center => "center",
-        Align::End => "end",
-    }
-}
-
-fn view_surface_name(p: ViewSurface) -> &'static str {
-    match p {
-        ViewSurface::LeftSidebar => "left-sidebar",
-        ViewSurface::RightSidebar => "right-sidebar",
-        ViewSurface::Bottom => "bottom",
-        ViewSurface::Main => "main",
-        ViewSurface::Modal => "modal",
-        ViewSurface::StatusBar => "status-bar",
-        ViewSurface::Ribbon => "ribbon",
-        ViewSurface::Menu => "menu",
-        ViewSurface::ContextMenu => "context-menu",
-        ViewSurface::SettingsTab => "settings-tab",
-    }
-}
-
-fn note_level_name(l: NoteLevel) -> &'static str {
-    match l {
-        NoteLevel::Info => "info",
-        NoteLevel::Warning => "warning",
-        NoteLevel::Error => "error",
-    }
-}
-
-fn import_mode_name(m: ImportMode) -> &'static str {
-    match m {
-        ImportMode::Preview => "preview",
-        ImportMode::Apply => "apply",
-    }
-}
-
-fn conflict_policy_name(p: ConflictPolicy) -> &'static str {
-    match p {
-        ConflictPolicy::Skip => "skip",
-        ConflictPolicy::Replace => "replace",
-        ConflictPolicy::Rename => "rename",
-    }
 }
 
 fn import_outcome_case(o: &ImportOutcome) -> Case {
@@ -2459,18 +2324,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.enumeration_src(
-        "column-align",
-        ("model.rs", "ColumnAlign"),
-        [
-            ColumnAlign::None,
-            ColumnAlign::Left,
-            ColumnAlign::Center,
-            ColumnAlign::Right,
-        ]
-        .map(column_align_name)
-        .as_slice(),
-    );
+    contract.enumeration_from("column-align", ("model.rs", "ColumnAlign"));
 
     contract.variant_src(
         "inline",
@@ -2967,19 +2821,11 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.enumeration_src("text-mode", ("query.rs", "TextMode"), &["terms", "phrase"]);
+    contract.enumeration_from("text-mode", ("query.rs", "TextMode"));
 
-    contract.enumeration_src(
-        "text-field",
-        ("query.rs", "TextField"),
-        &["name", "body", "tags", "heading"],
-    );
+    contract.enumeration_from("text-field", ("query.rs", "TextField"));
 
-    contract.enumeration_src(
-        "text-tolerance",
-        ("query.rs", "TextTolerance"),
-        &["exact", "typos"],
-    );
+    contract.enumeration_from("text-tolerance", ("query.rs", "TextTolerance"));
 
     contract.variant_src(
         "property-test",
@@ -2997,44 +2843,13 @@ fn conform(source: &str) -> Result<(), String> {
 
     // Quanto pesa ciò che è andato storto (§20.2): due gradini, come i due toni
     // del centro notifiche.
-    contract.enumeration_src(
-        "severity",
-        ("event.rs", "Severity"),
-        [Severity::Warning, Severity::Failure]
-            .map(|s| match s {
-                Severity::Warning => "warning",
-                Severity::Failure => "failure",
-            })
-            .as_slice(),
-    );
+    contract.enumeration_from("severity", ("event.rs", "Severity"));
 
-    contract.enumeration_src(
-        "link-direction",
-        ("traits.rs", "LinkDirection"),
-        [
-            LinkDirection::Outbound,
-            LinkDirection::Inbound,
-            LinkDirection::Both,
-        ]
-        .map(link_direction_name)
-        .as_slice(),
-    );
+    contract.enumeration_from("link-direction", ("traits.rs", "LinkDirection"));
 
-    contract.enumeration_src(
-        "health-check",
-        ("traits.rs", "HealthCheck"),
-        [HealthCheck::BrokenLinks, HealthCheck::OrphanDocuments]
-            .map(health_check_name)
-            .as_slice(),
-    );
+    contract.enumeration_from("health-check", ("traits.rs", "HealthCheck"));
 
-    contract.enumeration_src(
-        "entry-kind",
-        ("traits.rs", "EntryKind"),
-        [EntryKind::Document, EntryKind::Asset, EntryKind::Unknown]
-            .map(entry_kind_name)
-            .as_slice(),
-    );
+    contract.enumeration_from("entry-kind", ("traits.rs", "EntryKind"));
 
     contract.variant_src(
         "format-error",
@@ -3066,95 +2881,15 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.enumeration_src(
-        "event-kind",
-        ("event.rs", "EventKind"),
-        [
-            EventKind::VaultOpened,
-            EventKind::DocumentChanged,
-            EventKind::DocumentRemoved,
-            EventKind::DocumentRenamed,
-            EventKind::IndexUpdated,
-            EventKind::JobDone,
-            EventKind::Overflow,
-            EventKind::Custom,
-            EventKind::BatchEnded,
-            EventKind::ViewInvalidated,
-            EventKind::VaultClosed,
-            EventKind::JobStarted,
-            EventKind::JobProgress,
-            EventKind::SettingChanged,
-            EventKind::EntryChanged,
-            EventKind::EntryRemoved,
-            EventKind::EntryRenamed,
-            EventKind::Trouble,
-        ]
-        .map(event_kind_name)
-        .as_slice(),
-    );
-    contract.enumeration_src(
-        "align",
-        ("ui.rs", "Align"),
-        [Align::Start, Align::Center, Align::End]
-            .map(align_name)
-            .as_slice(),
-    );
-    contract.enumeration_src(
-        "axis",
-        ("ui.rs", "Axis"),
-        [Axis::Row, Axis::Column].map(axis_name).as_slice(),
-    );
-    contract.enumeration_src(
-        "intent",
-        ("ui.rs", "Intent"),
-        [Intent::Neutral, Intent::Primary, Intent::Danger]
-            .map(intent_name)
-            .as_slice(),
-    );
-    contract.enumeration_src(
-        "view-surface",
-        ("traits.rs", "ViewSurface"),
-        [
-            ViewSurface::LeftSidebar,
-            ViewSurface::RightSidebar,
-            ViewSurface::Bottom,
-            ViewSurface::Main,
-            ViewSurface::Modal,
-            ViewSurface::StatusBar,
-            ViewSurface::Ribbon,
-            ViewSurface::Menu,
-            ViewSurface::ContextMenu,
-            ViewSurface::SettingsTab,
-        ]
-        .map(view_surface_name)
-        .as_slice(),
-    );
+    contract.enumeration_from("event-kind", ("event.rs", "EventKind"));
+    contract.enumeration_from("align", ("ui.rs", "Align"));
+    contract.enumeration_from("axis", ("ui.rs", "Axis"));
+    contract.enumeration_from("intent", ("ui.rs", "Intent"));
+    contract.enumeration_from("view-surface", ("traits.rs", "ViewSurface"));
 
-    contract.enumeration_src(
-        "note-level",
-        ("transfer.rs", "NoteLevel"),
-        [NoteLevel::Info, NoteLevel::Warning, NoteLevel::Error]
-            .map(note_level_name)
-            .as_slice(),
-    );
-    contract.enumeration_src(
-        "import-mode",
-        ("transfer.rs", "ImportMode"),
-        [ImportMode::Preview, ImportMode::Apply]
-            .map(import_mode_name)
-            .as_slice(),
-    );
-    contract.enumeration_src(
-        "conflict-policy",
-        ("transfer.rs", "ConflictPolicy"),
-        [
-            ConflictPolicy::Skip,
-            ConflictPolicy::Replace,
-            ConflictPolicy::Rename,
-        ]
-        .map(conflict_policy_name)
-        .as_slice(),
-    );
+    contract.enumeration_from("note-level", ("transfer.rs", "NoteLevel"));
+    contract.enumeration_from("import-mode", ("transfer.rs", "ImportMode"));
+    contract.enumeration_from("conflict-policy", ("transfer.rs", "ConflictPolicy"));
     contract.variant_src(
         "import-outcome",
         ("transfer.rs", "ImportOutcome"),
@@ -3382,11 +3117,7 @@ fn conform(source: &str) -> Result<(), String> {
     );
     contract.alias("option-map", "list<option-entry>".to_string());
 
-    contract.enumeration_src(
-        "source-kind",
-        ("format.rs", "SourceKind"),
-        &["text", "bytes"],
-    );
+    contract.enumeration_from("source-kind", ("format.rs", "SourceKind"));
 
     let document_source_case = |s: &DocumentSource| match s {
         DocumentSource::Text(t) => case_ty("text", wit(t)),
@@ -3441,11 +3172,7 @@ fn conform(source: &str) -> Result<(), String> {
         &[("doc-id", wit(&doc_id)), ("options", wit(&options))],
     );
 
-    contract.enumeration_src(
-        "render-target",
-        ("format.rs", "RenderTarget"),
-        &["screen", "print", "pdf", "static-site"],
-    );
+    contract.enumeration_from("render-target", ("format.rs", "RenderTarget"));
 
     let RenderOptions { target, options } = RenderOptions::default();
     contract.record(
@@ -3679,27 +3406,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.enumeration_src(
-        "command-reach",
-        ("command.rs", "CommandReach"),
-        [
-            CommandReach::Session,
-            CommandReach::Document,
-            CommandReach::Documents,
-            CommandReach::Vault,
-            CommandReach::Settings,
-        ]
-        .map(command_reach_name)
-        .as_slice(),
-    );
+    contract.enumeration_from("command-reach", ("command.rs", "CommandReach"));
 
-    contract.enumeration_src(
-        "invoke-mode",
-        ("command.rs", "InvokeMode"),
-        [InvokeMode::Apply, InvokeMode::DryRun]
-            .map(invoke_mode_name)
-            .as_slice(),
-    );
+    contract.enumeration_from("invoke-mode", ("command.rs", "InvokeMode"));
 
     let CommandOutcome {
         notify,
@@ -3871,25 +3580,9 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
-    contract.enumeration_src(
-        "pane-mode",
-        ("session.rs", "PaneMode"),
-        [PaneMode::Source, PaneMode::LivePreview, PaneMode::Reading]
-            .map(pane_mode_name)
-            .as_slice(),
-    );
+    contract.enumeration_from("pane-mode", ("session.rs", "PaneMode"));
 
-    contract.enumeration_src(
-        "context-kind",
-        ("session.rs", "ContextKind"),
-        [
-            ContextKind::Document,
-            ContextKind::Selection,
-            ContextKind::Mode,
-        ]
-        .map(context_kind_name)
-        .as_slice(),
-    );
+    contract.enumeration_from("context-kind", ("session.rs", "ContextKind"));
 
     // --- il locale (§12.3)
 
@@ -3945,29 +3638,9 @@ fn conform(source: &str) -> Result<(), String> {
         &[("locale", wit(&locale)), ("entries", wit(&entries))],
     );
 
-    contract.enumeration_src(
-        "weekday",
-        ("locale.rs", "Weekday"),
-        [
-            Weekday::Monday,
-            Weekday::Tuesday,
-            Weekday::Wednesday,
-            Weekday::Thursday,
-            Weekday::Friday,
-            Weekday::Saturday,
-            Weekday::Sunday,
-        ]
-        .map(weekday_name)
-        .as_slice(),
-    );
+    contract.enumeration_from("weekday", ("locale.rs", "Weekday"));
 
-    contract.enumeration_src(
-        "hour-cycle",
-        ("locale.rs", "HourCycle"),
-        [HourCycle::H23, HourCycle::H12]
-            .map(hour_cycle_name)
-            .as_slice(),
-    );
+    contract.enumeration_from("hour-cycle", ("locale.rs", "HourCycle"));
 
     let TrashEntry {
         id,
@@ -4404,16 +4077,8 @@ fn conform(source: &str) -> Result<(), String> {
 
     // Le impostazioni (§11.1): lo schema che un manifest dichiara, il valore
     // che ne esce, e la riga risolta che il canale dati restituisce.
-    contract.enumeration_src(
-        "setting-scope",
-        ("settings.rs", "SettingScope"),
-        &["vault", "machine"],
-    );
-    contract.enumeration_src(
-        "setting-source",
-        ("settings.rs", "SettingSource"),
-        &["default", "machine", "vault"],
-    );
+    contract.enumeration_from("setting-scope", ("settings.rs", "SettingScope"));
+    contract.enumeration_from("setting-source", ("settings.rs", "SettingSource"));
     contract.variant_src(
         "setting-kind",
         ("settings.rs", "SettingKind"),
@@ -5352,8 +5017,34 @@ fn the_expected_case_order_comes_from_the_rust_declaration() {
             .map(String::as_str),
         Some("replace")
     );
-    assert_eq!(kebab("CodeBlock"), "code-block");
-    assert_eq!(kebab("Url"), "url");
+    assert_eq!(common::kebab("CodeBlock"), "code-block");
+    assert_eq!(common::kebab("Url"), "url");
+}
+
+/// **Una lettura, due confini** (decisione 0053): lo stesso identificatore Rust
+/// si scrive in due modi, e i due non si possono confondere perché non vanno
+/// nello stesso posto.
+///
+/// `kebab` va nel WIT — il confine del component model, M5. `snake` va nel JSON
+/// di serde, cioè nell'IPC che la webview attraversa **oggi**. Che siano due
+/// funzioni e non una è la forma minima del fatto che regge tutta la decisione:
+/// il WIT e il mirror TS non sono due grafie della stessa cosa, e nessuno dei
+/// due si genera dall'altro.
+#[test]
+fn lo_stesso_nome_si_proietta_in_due_modi_diversi() {
+    for (rust, wit, json) in [
+        ("DryRun", "dry-run", "dry_run"),
+        ("LeftSidebar", "left-sidebar", "left_sidebar"),
+        ("StaticSite", "static-site", "static_site"),
+        // Un caso di una parola sola: le due proiezioni coincidono, e va bene —
+        // ciò che non deve coincidere è la REGOLA, non ogni suo risultato.
+        ("Overflow", "overflow", "overflow"),
+        // E uno che non ha maiuscole interne pur avendo due "pezzi".
+        ("H23", "h23", "h23"),
+    ] {
+        assert_eq!(common::kebab(rust), wit, "{rust} verso il WIT");
+        assert_eq!(common::snake(rust), json, "{rust} verso il JSON di serde");
+    }
 }
 
 /// La forma al confine è quella di `arena`, non quella nativa: questo test lo

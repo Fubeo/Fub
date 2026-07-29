@@ -169,6 +169,30 @@ alla domanda «cosa manca» e «cosa non mantiene» va aggiunta **«quante volte
 scritto, e da cosa cresce quel numero»** — perché un moltiplicatore non si vede
 mentre lo si crea, si vede quando è già stato applicato venti volte.
 
+E il settimo giro ha chiuso il terzo membro della famiglia dei
+**moltiplicatori** — quella del §7.1 e del §6.2 qui sopra, le voci che non
+rendono inesprimibile niente ma fanno pagare ogni voce successiva. Era il
+**§16.4** («il contratto si scrive quattro volte a mano»), chiuso insieme al
+§16.5 dalla [decisione 0053](../decisions/0053-il-contratto-ha-una-sorgente.md),
+e vale rileggerne l'esito perché è il caso in cui il criterio di questa pagina si
+è applicato **al numero stesso**.
+
+La voce chiedeva da quale dei quattro posti generare gli altri tre. Il conto vero
+dice che i quattro posti non sono quattro grafie: il WIT e il mirror TS sono
+proiezioni su **due confini con due forme diverse** — un evento è
+`{"type":"trouble",…}` piatto sull'IPC e un `variant` con il payload in un record
+a sé nel WIT — quindi nessuno dei due si genera dall'altro, e l'arena non è una
+scrittura dei tipi ma il codice che implementa la scelta di rappresentazione del
+WIT. Ma soprattutto: contando i **punti di scrittura** invece dei posti, il
+termine più grande non è nessuno dei quattro. Sono i **presidi**, che ripetono
+ciò che i quattro dicono già — dieci punti su ventidue, per una variante
+additiva. È il criterio del sesto giro (*«quante volte è scritto, e da cosa
+cresce quel numero»*) rivolto contro la voce che quel criterio aveva aperto: la
+risposta non stava nel generare uno dei quattro, ma nel togliere di mezzo ciò che
+li ricopiava. Il moltiplicatore, come per il §6.2, non è azzerato ma
+**presidiato** — e per gli `enum` senza payload è sceso da quattro scritture a
+due.
+
 Il settimo giro ne ha aggiunta una sesta, e con essa il terzo caso della
 famiglia della [decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md):
 **«cosa fallisce senza produrre nessun segnale»**. La promessa che vale a metà,

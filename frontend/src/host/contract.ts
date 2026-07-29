@@ -9,6 +9,33 @@
 // Che non divergano dal Rust non è affidato all'attenzione: la fixture generata
 // da serde (`crates/fubmd-features/tests/ts_mirror.rs` e la gemella dell'app)
 // e `mirror.test.ts` rendono rossi entrambi i lati se un lato cambia.
+//
+// E una parte non è più rispecchiata affatto: le union di stringhe degli `enum`
+// SENZA PAYLOAD del contratto stanno in `enums.generated.ts`, emesse dai tipi
+// Rust (decisione 0053). Qui restano la loro PROSA e la loro ri-esportazione —
+// cioè le due cose che non si derivano da niente: perché quel tipo esiste, e
+// che la shell lo usi. I casi no: quelli sono un derivato, e chi ne aggiunge
+// uno in Rust rende rosso il file generato senza doversene ricordare.
+
+import type {
+  Align,
+  Axis,
+  CommandReach,
+  ContextKind,
+  EntryKind,
+  HourCycle,
+  Intent,
+  LinkDirection,
+  PaneMode,
+  SettingScope,
+  SettingSource,
+  Severity,
+  TextField,
+  TextMode,
+  TextTolerance,
+  ViewSurface,
+  Weekday,
+} from "./enums.generated";
 
 export interface VaultInfo {
   root: string;
@@ -148,8 +175,7 @@ export interface ActionRef {
   payload: unknown;
 }
 
-export type Intent = "neutral" | "primary" | "danger";
-export type Align = "start" | "center" | "end";
+export type { Intent, Align, Axis } from "./enums.generated";
 
 // Il valore di un campo di input. Tag ADIACENTE (`type`/`value`), come
 // ParamKind: una variante che porta una sequenza non sta col tag interno.
@@ -183,7 +209,7 @@ export interface TableColumn {
 // La specie di un nodo. La CHIAVE viaggia accanto (vedi `UiNode`), non dentro:
 // è identità del nodo, non un dato della sua specie.
 export type UiKind =
-  | { node: "stack"; dir: "row" | "column"; gap: number; children: UiNode[] }
+  | { node: "stack"; dir: Axis; gap: number; children: UiNode[] }
   | { node: "text"; content: string }
   | { node: "heading"; level: number; content: string }
   | { node: "list"; items: UiNode[] }
@@ -386,7 +412,7 @@ export type KernelEvent =
 // la CLASSE DEL DATO perso (decisione 0048): un derivato si ricostruisce
 // riaprendo il vault ed è un avviso; ciò che era autorevole non torna ed è un
 // guasto.
-export type Severity = "warning" | "failure";
+export type { Severity } from "./enums.generated";
 
 // DOVE: il soggetto di un abbonamento (rispecchia fubmd_abi::event::Subject,
 // §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un
@@ -440,17 +466,7 @@ export interface KernelNotice {
 // cursore.
 // Dove una view si ancora. Dieci superfici, e non è un modello di layout: dice
 // a cosa ci si attacca, non come lo spazio è diviso (§2.2).
-export type ViewSurface =
-  | "left_sidebar"
-  | "right_sidebar"
-  | "bottom"
-  | "main"
-  | "modal"
-  | "status_bar"
-  | "ribbon"
-  | "menu"
-  | "context_menu"
-  | "settings_tab";
+export type { ViewSurface } from "./enums.generated";
 
 export interface ViewSpec {
   id: string;
@@ -510,7 +526,7 @@ export interface ParamSpec {
 }
 
 // Fin dove arriva un comando, in ordine di raggio crescente.
-export type CommandReach = "session" | "document" | "documents" | "vault" | "settings";
+export type { CommandReach } from "./enums.generated";
 
 // Il raggio dichiarato. `writes` lo fa rispettare il kernel (chi si dichiara di
 // sola lettura riceve un host che rifiuta le scritture); gli altri due sono
@@ -533,7 +549,7 @@ export interface CommandSpec {
 }
 
 // Come si invoca: eseguire, o chiedere cosa succederebbe.
-export type InvokeMode = "apply" | "dry_run";
+export type { InvokeMode } from "./enums.generated";
 
 // La modifica chirurgica (rispecchia fubmd_abi::edit): `base` è la revisione
 // OPACA del sorgente su cui gli span sono stati calcolati — si confronta, non
@@ -614,10 +630,10 @@ export type UndoStep =
 // (`mirror.test.ts`) verifica che le chiavi siano esattamente queste.
 
 // Le tre modalità esclusive di un pannello (FEATURES 4.1).
-export type PaneMode = "source" | "live_preview" | "reading";
+export type { PaneMode } from "./enums.generated";
 
 // Le parti del contesto che una view può dichiarare di seguire.
-export type ContextKind = "document" | "selection" | "mode";
+export type { ContextKind } from "./enums.generated";
 
 // Ciò che è selezionato nel pannello — o dove sta il cursore (`text` vuoto).
 //
@@ -646,16 +662,9 @@ export interface ViewContext {
 // il lato Rust, per rispondere alla stessa domanda, avrebbe bisogno di un
 // database dei fusi orari.
 
-export type Weekday =
-  | "monday"
-  | "tuesday"
-  | "wednesday"
-  | "thursday"
-  | "friday"
-  | "saturday"
-  | "sunday";
+export type { Weekday } from "./enums.generated";
 
-export type HourCycle = "h23" | "h12";
+export type { HourCycle } from "./enums.generated";
 
 // `utc_offset_minutes` è l'offset di ADESSO, e vale per adesso: chi fa
 // aritmetica su date passate usa `timezone`, che porta con sé le regole
@@ -731,7 +740,7 @@ export interface Span {
 // i risultati non c'è più nessun parser di terzi.
 
 // In che verso si cammina il grafo dei link.
-export type LinkDirection = "outbound" | "inbound" | "both";
+export type { LinkDirection } from "./enums.generated";
 
 // Il bersaglio NON RISOLTO di un link (rispecchia fubmd_abi::model::LinkTarget).
 // Tag ADIACENTE (`kind` + `value`): due varianti su tre portano uno scalare, e
@@ -747,16 +756,16 @@ export type LinkTarget =
   | { kind: "path"; value: string };
 
 // Come si intende la stringa di una `TextQuery`.
-export type TextMode = "terms" | "phrase";
+export type { TextMode } from "./enums.generated";
 
 // Dove cercare il testo. Vuoto = i campi che il provider indicizza.
 // `heading` pesa a parte: distingue una nota che PARLA di una cosa da una che
 // ci ha dedicato una sezione.
-export type TextField = "name" | "body" | "tags" | "heading";
+export type { TextField } from "./enums.generated";
 
 // Quanto si vuole essere indovinati: un'INTENZIONE, mai una distanza di edit.
 // Chi non sa onorare `typos` risponde come per `exact` — restringe, non allarga.
-export type TextTolerance = "exact" | "typos";
+export type { TextTolerance } from "./enums.generated";
 
 export interface TextQuery {
   text: string;
@@ -1024,7 +1033,7 @@ export type IndexResult =
 // del file dato chi è registrato adesso — un `.canvas` è `unknown` finché
 // nessuno rivendica quell'estensione, e diventa `document` senza che un byte
 // cambi. Per questo non si persiste da nessuna parte.
-export type EntryKind = "document" | "asset" | "unknown";
+export type { EntryKind } from "./enums.generated";
 
 // Una voce del vault: un file, con ciò che si sa di lui SENZA aprirlo.
 export interface VaultEntry {
@@ -1081,12 +1090,12 @@ export interface FolderScope {
 // DOVE un'impostazione ha il diritto di stare. Le chiavi `machine` scritte in un
 // `.fubmd/settings.json` si IGNORANO: un vault arriva da fuori, e non decide
 // della macchina di chi lo apre.
-export type SettingScope = "vault" | "machine";
+export type { SettingScope } from "./enums.generated";
 
 // Da dove viene il valore che si sta leggendo. `default` = nessuno ha deciso, ed
 // è ciò che permette al pannello di dire «questa la stai sovrascrivendo» e al
 // pulsante «azzera» di comparire solo dove serve.
-export type SettingSource = "default" | "machine" | "vault";
+export type { SettingSource } from "./enums.generated";
 
 // Di che specie è un'impostazione, col suo default dentro.
 export type SettingKind =

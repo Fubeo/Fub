@@ -27,6 +27,14 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
       passano). Va messo **prima** del freeze, perché è il freeze a fissare la
       prima riga di base — e va con §16.4, che genererebbe da uno solo dei
       quattro posti ciò che questo test presidia in tutti e quattro.
+      *(Il §16.4 è chiuso dalla
+      [0053](0053-il-contratto-ha-una-sorgente.md), e questa previsione è
+      **sbagliata**: i quattro posti non sono quattro grafie della stessa cosa —
+      il WIT e il mirror TS sono proiezioni su due confini con due forme diverse
+      — quindi non si genera nessuno dei quattro dagli altri. Il presidio di
+      questa voce resta intatto, ed è deliberato: la sua sorgente è l'`abi.wit`
+      scritto a mano, cioè il confronto fra due cose che nessuno ha derivato
+      l'una dall'altra. È l'unico che protegge plugin di terzi già compilati.)*
 
 **Fatto.** `crates/fubmd-abi/wit/frozen/0.1.0.wit` è la prima linea di base e
 `crates/fubmd-abi/tests/wit_additivity.rs` il presidio: parsa il contratto
