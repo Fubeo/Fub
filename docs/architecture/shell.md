@@ -197,6 +197,76 @@ quindi un refresh dal registro partirebbe col path vecchio), e
 `panels/document.ts` reagisce agli eventi sul documento aperto — l'editor non è
 un pannello del registro, è l'area principale.
 
+## Da un file cambiato fuori a un pannello ridisegnato
+
+Il percorso completo di una scrittura che non è passata da noi — qualcuno salva
+una nota da un altro editor, o da un client di sincronizzazione. Attraversa
+quattro processi logici e tre freni, e ognuno dei tre ha un numero diverso.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant D as disco
+    participant N as notify<br/>debouncer 300 ms
+    participant W as Workspace
+    participant Di as Dispatcher
+    participant B as EventBus
+    participant P as ponte<br/>host/bridge.rs
+    participant V as webview
+    participant PH as panel-host
+
+    D->>N: un .md cambia
+    N->>N: raggruppa per 300 ms
+    N->>W: workspace.write() — prestito esclusivo
+    N->>W: sync_path(p) per ciascuno
+    W->>W: as_actor(Actor::Watcher) { refresh_from_disk }
+    W->>Di: emit(DocumentChanged) + emit(IndexUpdated)
+    Di->>Di: Notice::new(event, Origin::by(attore).in_batch(…))
+    Di->>B: emit(notice)
+    Di->>Di: pending.push_back(notice) — per gli EventHandler in-process
+    N->>W: flush_indexes() a fine gruppo
+    B->>P: recv() + try_iter() — la raffica è ciò che c'è già
+    P->>P: coalesce per grana
+    alt raffica oltre 128
+        P->>P: degrade → un solo Overflow, al posto dell'ultimo che sostituisce
+    end
+    P->>V: sink.emit → app.emit("fubmd://event", notice)
+    V->>PH: listen("fubmd://event") → onAnyEvent
+    PH->>PH: maskWants(panel.refresh, evento)
+    PH-->>V: refreshPanel — solo i pannelli che quell'evento invecchia
+```
+
+| Pezzo | Dove | Numero |
+|---|---|---|
+| debounce del rilevatore | [watcher.rs:151](../../crates/fubmd-host/src/watcher.rs) | **300 ms** |
+| tetto della coda di un iscritto | [bus.rs:51](../../crates/fubmd-kernel/src/bus.rs) | **1024** notice |
+| budget di un drenaggio | [dispatcher.rs:44](../../crates/fubmd-kernel/src/dispatcher.rs) | **1024** consegne |
+| tetto della raffica del ponte | [bridge.rs:61](../../crates/fubmd-host/src/bridge.rs) | **128** notice |
+| chi timbra l'origine | [dispatcher.rs:157](../../crates/fubmd-kernel/src/dispatcher.rs) | un punto solo |
+| chi decide cosa è sacrificabile | [event.rs `is_recoverable`](../../crates/fubmd-abi/src/event.rs) | un punto solo, nel contratto |
+| chi decide se un pannello è invecchiato | [panel-host.ts:166](../../frontend/src/ui/panel-host.ts) via [rules/mirrored.ts](../../frontend/src/rules/mirrored.ts) | la gemella di `mask_wants` del kernel |
+
+Tre cose che il disegno dice e che è facile dare per scontate al contrario.
+
+**Il ponte non ha una finestra temporale.** Non aspetta N millisecondi: fa una
+`recv()` bloccante e poi prende con `try_iter()` quello che nel frattempo si è
+accumulato. Il freno è la dimensione della raffica, non il tempo — quindi a
+carico basso la latenza è quella di un evento singolo, e il raggruppamento
+compare solo quando ci sarebbe stato comunque da smaltire.
+
+**Il raggruppamento ha quattro grane e non una** — `IndexUpdated`,
+`DocumentChanged(id)`, `ViewInvalidated(view, esemplare)`, `JobProgress(id)` — e
+di ogni grana si tiene **l'ultima**. Tutto il resto passa uno per uno: un
+`VaultClosed` non si fonde con niente, perché non è recuperabile.
+
+**Questo percorso non apre nessun lotto.** Il gruppo del debouncer e il *lotto*
+della [0011](../decisions/0011-il-lotto.md) sono due cose diverse con lo stesso
+nome comune: il lotto lo apre solo chi chiama `Workspace::batch` — una rinomina,
+un comando, un annullamento — e si chiude con un `Event::BatchEnded`. Il
+debouncer non ne apre uno, quindi da qui non esce nessun `BatchEnded`, e ogni
+`DocumentChanged` viaggia per sé. Un diagramma che mettesse un lotto in mezzo a
+questa catena disegnerebbe un evento che non arriva mai.
+
 ## Cosa resta aperto, e perché
 
 Le due metà del [§1.2](../roadmap/01-forma-della-shell.md) che **non** sono

@@ -148,6 +148,159 @@ flowchart TB
    documenti, non codice: la cartella `plugins/` non esiste ancora, e nascerà con il
    runtime che dovrà caricarli.
 
+## Il grafo delle dipendenze, e il test che lo legge
+
+Il disegno qui sopra è disposto a mano: raggruppa per ruolo, e le frecce dicono
+*chi parla con chi*. Sono due cose che nessuno può verificare — un riquadro
+spostato non rompe niente. Questo secondo diagramma dice una cosa sola, e la
+dice in un modo che si può controllare a macchina: **chi dichiara chi nel
+proprio `Cargo.toml`**. Freccia piena = dipendenza normale, tratteggiata =
+dipendenza di solo `[dev-dependencies]`.
+
+```mermaid
+flowchart TD
+    %% @grafo-dipendenze
+    %% Questo blocco è letto e confrontato con `cargo metadata` da
+    %% crates/fubmd-abi/tests/dependency_invariant.rs. Il dialetto ammesso è
+    %% ristretto apposta: dichiarazioni `id["nome-crate"]:::classe`, archi
+    %% `a --> b` (dipendenza normale) e `a -.-> b` (solo dev). Una riga fuori
+    %% dialetto fa fallire il test invece di essere ignorata in silenzio.
+    classDef contract fill:#4c1d95,stroke:#8b5cf6,stroke-width:2px,color:#fff
+    classDef core     fill:#2d3748,stroke:#718096,stroke-width:2px,color:#fff
+    classDef provider fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    classDef mount    fill:#065f46,stroke:#10b981,stroke-width:2px,color:#fff
+    classDef glue     fill:#7c2d12,stroke:#ea580c,stroke-width:2px,color:#fff
+
+    app["fubmd-app"]:::glue
+    host["fubmd-host"]:::mount
+    features["fubmd-features"]:::provider
+    markdown["fubmd-format-markdown"]:::provider
+    sdk["fubmd-sdk"]:::provider
+    kernel["fubmd-kernel"]:::core
+    abi["fubmd-abi"]:::contract
+
+    app --> abi
+    app --> features
+    app --> host
+    app --> kernel
+    host --> abi
+    host --> features
+    host --> markdown
+    host --> kernel
+    features --> abi
+    markdown --> abi
+    markdown --> sdk
+    kernel --> abi
+    sdk --> abi
+
+    features -.-> kernel
+    features -.-> markdown
+    markdown -.-> kernel
+```
+
+| Riquadro | Manifest | Cosa dichiara |
+|---|---|---|
+| `fubmd-abi` | [Cargo.toml](../../crates/fubmd-abi/Cargo.toml) | il contratto: quattro dipendenze esterne e nessun crate del workspace |
+| `fubmd-kernel` | [Cargo.toml](../../crates/fubmd-kernel/Cargo.toml) | il core: il contratto, più serde, serde_json, camino, thiserror |
+| `fubmd-sdk` | [Cargo.toml](../../crates/fubmd-sdk/Cargo.toml) | il contratto, serde e regex: chi scrive un provider non prende il kernel |
+| `fubmd-format-markdown` | [Cargo.toml](../../crates/fubmd-format-markdown/Cargo.toml) | contratto e SDK; comrak sta qui e da nessun'altra parte |
+| `fubmd-features` | [Cargo.toml](../../crates/fubmd-features/Cargo.toml) | solo il contratto — il kernel è dev-only, ed è l'invariante del dogfooding |
+| `fubmd-host` | [Cargo.toml](../../crates/fubmd-host/Cargo.toml) | i quattro a monte: è il composition root, e monta ciò che gli altri offrono |
+| `fubmd-app` | [Cargo.toml](../../crates/fubmd-app/Cargo.toml) | abi, kernel, host, features; `tauri` entra solo qui |
+
+Le tre frecce tratteggiate sono la parte che vale la pena guardare, perché sono
+un confine e non una comodità: `fubmd-features` e `fubmd-format-markdown` usano
+`fubmd-kernel` **solo nei test**. Le loro librerie girano con ciò che avrà un
+plugin di terzi — il contratto e nient'altro — e quel «nient'altro» è verificato
+da `official_features_do_not_depend_on_the_kernel`
+([dependency_invariant.rs:317](../../crates/fubmd-abi/tests/dependency_invariant.rs)).
+Se una feature prendesse la scorciatoia, il test diventerebbe rosso prima che
+il diagramma diventasse falso.
+
+E il diagramma stesso non può invecchiare in silenzio: `il_diagramma_dice_le_dipendenze_vere`
+lo rilegge da questo file e lo confronta con `cargo metadata` **nei due versi**.
+Un arco disegnato che non esiste è rosso; una dipendenza reale che il disegno
+non mostra è rossa anche lei, ed è quella che conta — un diagramma incompleto
+mente più di uno sbagliato, perché ha l'aria di essere completo. Vale anche per
+un crate nuovo: nasce, e il diagramma che non lo nomina fallisce.
+
+`fubmd-app` non compare in nessun altro riquadro come dipendenza: è una foglia,
+e ci sta apposta. `fubmd-sdk` invece ha un cliente solo, `fubmd-format-markdown`
+— è il crate più piccolo del workspace e il disegno lo dice senza commentarlo.
+
+L'elenco a indentazione in [PIANO.md](../PIANO.md#struttura-dei-crate) sembra un
+grafo ma non lo è: nomina anche `fubmd-testkit` e `fubmd-wasm-host`, che non
+esistono. Quello è l'elenco di destinazione; questo è la fotografia.
+
+## Dove gira cosa
+
+I due disegni sopra dicono com'è fatto il codice. Questo dice come si dispone
+mentre l'app è accesa: **un processo**, un webview, e un gruppo di thread che
+nasce a ogni vault aperto e muore quando quel vault si chiude.
+
+```mermaid
+flowchart TB
+    classDef proc  fill:#7c2d12,stroke:#ea580c,stroke-width:2px,color:#fff
+    classDef ui    fill:#374151,stroke:#9ca3af,stroke-width:2px,color:#fff
+    classDef core  fill:#2d3748,stroke:#718096,stroke-width:2px,color:#fff
+    classDef th    fill:#065f46,stroke:#10b981,stroke-width:2px,color:#fff
+    classDef disk  fill:#276749,stroke:#38a169,stroke-width:2px,color:#fff
+
+    subgraph PROC ["🪟 un processo — fubmd-app, Tauri v2"]
+        direction TB
+        subgraph WV ["webview"]
+            Shell["frontend/<br>Vite + TS + CodeMirror 6"]:::ui
+        end
+        Main["thread principale<br>~40 comandi IPC"]:::proc
+
+        subgraph S1 ["VaultSession — uno per vault aperto"]
+            direction TB
+            WSL["Arc&lt;RwLock&lt;Workspace&gt;&gt;<br>chi legge condivide, chi chiama un provider no"]:::core
+            TB1["thread del ponte<br>recv + try_iter, raffica ≤ 128"]:::th
+            TW["thread del rilevatore<br>notify, debounce 300 ms"]:::th
+            TJ["fubmd-job-0 … fubmd-job-N<br>N = 2 di default"]:::th
+        end
+        S2["…un'altra VaultSession,<br>coi suoi thread e il suo lock"]:::core
+    end
+
+    subgraph DISCO ["💾 disco"]
+        Vault["&lt;vault&gt;/ — i file dell'utente"]:::disk
+        Root["&lt;vault&gt;/.fubmd/ — autorevole<br>e .fubmd/data/ — derivato"]:::disk
+        Trash["&lt;vault&gt;/.trash/<br>condiviso con Obsidian"]:::disk
+        MConf["config della macchina<br>fuori dal vault"]:::disk
+    end
+
+    Shell <==>|"invoke"| Main
+    Main -->|"fubmd://event"| Shell
+    Main --> WSL
+    TB1 -->|"sink"| Main
+    TW --> WSL
+    TJ --> WSL
+    WSL --> Vault
+    WSL --> Root
+    WSL --> Trash
+    Main --> MConf
+    Main --> S2
+```
+
+| Cosa | Quante ce ne sono | Dove |
+|---|---|---|
+| processi | **uno**: non c'è né un demone né un servizio | [fubmd-app/src/lib.rs](../../crates/fubmd-app/src/lib.rs) |
+| webview | uno, e il core lo considera **privilegiato** — è la ragione per cui `UiNode::Html` è negato a chi non è fidato | [ui-protocol.md](ui-protocol.md) |
+| `VaultSession` | una per vault aperto, in una mappa | [session.rs:184](../../crates/fubmd-host/src/session.rs) |
+| thread del ponte | uno per vault; dorme su `recv()` e non consuma niente a vault fermo | [bridge.rs:69](../../crates/fubmd-host/src/bridge.rs) |
+| thread del rilevatore | uno per vault, ed è **facoltativo**: dietro una cargo feature, altrimenti nessuno | [watcher.rs:74](../../crates/fubmd-host/src/watcher.rs) |
+| thread dei job | **due** di default, per vault e non globali | [runner.rs:67](../../crates/fubmd-host/src/runner.rs) |
+| database | **nessuno** | — |
+
+Il lock è per vault, non per app: due vault aperti non si aspettano a vicenda. E
+il pool dei job è per vault per la stessa ragione — un'indicizzazione lunga su un
+archivio non deve rallentare le note di lavoro.
+
+Cosa ciascuno di quei riquadri del disco contiene, con quale classe e quale
+disciplina di scrittura, non si ridisegna qui: è una tabella, ed è in
+[on-disk-layout.md](on-disk-layout.md).
+
 ## Il dettaglio, per riquadro
 
 **📜 `fubmd-abi`** — modello di documento comune e la sua forma al confine

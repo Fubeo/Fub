@@ -92,6 +92,155 @@ file dell'utente. Restano perdite note della proiezione YAML→JSON (commenti,
 anchor): riscrivere il frontmatter va fatto come patch sulla sorgente, non per
 riserializzazione.
 
+### La mappa dei tipi
+
+Chi contiene cosa. Le sette tabelle piatte pendono dalla radice accanto
+all'albero, ed è la doppia rappresentazione appena descritta vista da fuori.
+
+```mermaid
+classDiagram
+    direction TB
+    class DocumentModel {
+        +DocId id
+        +Frontmatter frontmatter
+        +Vec~Block~ body
+        +String text
+    }
+    class Block {
+        <<enum · 8 varianti>>
+        Heading · Paragraph · List
+        CodeBlock · Quote · Table
+        ThematicBreak · Custom
+        +Option~String~ anchor
+        +Span span
+    }
+    class Inline {
+        <<enum · 7 varianti>>
+        Text · Emph · Strong · Code
+        Link · TagRef · Custom
+    }
+    class LinkTarget {
+        <<enum · 3 varianti>>
+        Wiki · Url · Path
+        +classify()
+    }
+    class ListItem {
+        +Option~TaskMarker~ task
+        +Span span
+    }
+    class TableRow
+    class TableCell
+    class Heading {
+        +u8 level
+        +String slug
+    }
+    class Anchor {
+        +String id
+        +Span span
+        +Span marker
+    }
+    class Link {
+        +bool embed
+    }
+    class Tag
+    class Span {
+        +usize start
+        +usize end
+    }
+    class VaultEntry {
+        +DocId id
+        +EntryKind kind
+        +u64 size
+        +u64 mtime
+        +Option~Revision~ fingerprint
+    }
+
+    DocumentModel "1" *-- "*" Block : body
+    DocumentModel "1" *-- "*" Heading : outline
+    DocumentModel "1" *-- "*" Link : links
+    DocumentModel "1" *-- "*" Tag : tags
+    DocumentModel "1" *-- "*" Anchor : anchors
+    Block "1" *-- "*" Inline
+    Block "1" *-- "*" Block : Quote, Custom
+    Block "1" *-- "*" ListItem : List
+    Block "1" *-- "*" TableRow : Table
+    ListItem "1" *-- "*" Block
+    TableRow "1" *-- "*" TableCell
+    TableCell "1" *-- "*" Inline
+    Inline "1" *-- "*" Inline : Emph, Strong
+    Inline ..> LinkTarget : Link
+    Link ..> LinkTarget
+    Block ..> Span
+    Inline ..> Span
+    VaultEntry ..> DocumentModel : stessa chiave, ma copre OGNI file
+```
+
+| Tipo | Dove | Nota che il disegno non può portare |
+|---|---|---|
+| `DocumentModel` | [model.rs:189](../../crates/fubmd-abi/src/model.rs) | otto campi, di cui sette sono la stessa cosa vista in due modi |
+| `Block` | [model.rs:243](../../crates/fubmd-abi/src/model.rs) | ogni variante porta `anchor` e `span`, **anche** `ThematicBreak`, perché `Block::anchor` sia totale |
+| `Inline` | [model.rs:423](../../crates/fubmd-abi/src/model.rs) | `Custom` è l'unico varco: senza, un enum chiuso più il freeze WIT obbligherebbe a prevedere ogni sintassi futura |
+| `LinkTarget` | [model.rs:461](../../crates/fubmd-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
+| `Anchor` | [model.rs:600](../../crates/fubmd-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
+| `Span` | [model.rs:123](../../crates/fubmd-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` |
+| `VaultEntry` | [traits.rs:203](../../crates/fubmd-abi/src/traits.rs) | sta nei trait e non qui, perché è la risposta a `IndexQuery::Entries`; `kind` **non si persiste**, dipende da chi è registrato adesso |
+
+Il disegno mostra la forma **ad albero**. Al confine WIT ce n'è una seconda, e
+non è una variante di comodo: WIT non ammette tipi ricorsivi, quindi `Block` e
+`Inline` esistono anche in `arena.rs`, appiattiti in due `Vec` con riferimenti
+`BlockRef`/`InlineRef` — newtype su `u32`, non alias, così un indice dell'una non
+si può passare per l'altra.
+
+```mermaid
+classDiagram
+    direction LR
+    class BloccoAdAlbero {
+        <<model.rs>>
+        Vec~Block~ figli diretti
+    }
+    class DocumentTree {
+        <<arena.rs>>
+        +Vec~Block~ blocks
+        +Vec~Inline~ inlines
+        +Vec~BlockRef~ roots
+    }
+    class BloccoAdArena {
+        <<arena.rs>>
+        Vec~BlockRef~ blocks
+        Vec~InlineRef~ inlines
+    }
+    class ArenaError {
+        <<enum>>
+        OutOfRange
+        Cycle
+        SpanTooWide
+    }
+    BloccoAdAlbero --> DocumentTree : flatten() — non può fallire
+    DocumentTree --> BloccoAdAlbero : rebuild() — Result
+    DocumentTree *-- BloccoAdArena
+    DocumentTree ..> ArenaError : solo rebuild
+```
+
+I due riquadri dei blocchi si chiamano tutti e due `Block` nel codice: uno sta in
+`model.rs` e l'altro in `arena.rs`, e sono omonimi apposta, perché *sono* la
+stessa cosa vista dal confine. Qui hanno due nomi diversi solo perché un disegno
+non ha i moduli.
+
+L'asimmetria è dichiarata ([arena.rs:76](../../crates/fubmd-abi/src/arena.rs)):
+`flatten` ([arena.rs:486](../../crates/fubmd-abi/src/arena.rs)) non può fallire,
+perché un albero vero si appiattisce sempre; `rebuild`
+([arena.rs:495](../../crates/fubmd-abi/src/arena.rs)) rende un `Result`, perché
+un'arena che **arriva** dal confine può non essere un albero — un indice fuori
+range, o un ciclo. Lo stesso vale per l'albero della UI, `UiTree`. E cambia anche
+lo `Span`: `usize` di qua, `u64` di là, con una conversione controllata che può
+fallire solo su wasm32 sopra i quattro gibibyte.
+
+Parecchi tipi **non** hanno un gemello nell'arena — `LinkTarget`, `ColumnAlign`,
+`DocId`, `Frontmatter` e tutte le tabelle piatte — e la ragione è la stessa che
+ha creato l'arena, al contrario: non sono ricorsivi, quindi WIT li prende così
+come sono. L'arena copre il **corpo** di un documento e l'albero della UI, e
+nient'altro.
+
 ## Proprietà tipizzate
 
 Il JSON del frontmatter è la **verità grezza**, non la risposta che i consumatori

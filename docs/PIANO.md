@@ -100,9 +100,15 @@ fubmd-abi              contratto: modello documento comune + tutti i trait
   │                    non `fubmd-sdk::testing`, che è il banco dei PROVIDER
   └─ fubmd-wasm-host   (M5) host wasmtime per plugin di terzi
 frontend/              Vite + TS + CodeMirror 6 (+ renderer UiNode)
-wit/                   contratto WIT che rispecchia fubmd-abi (vivo da M2, freeze M4)
+crates/fubmd-abi/wit/  contratto WIT che rispecchia fubmd-abi (vivo da M2, freeze M4)
 plugins/               (M5) plugin di esempio (wasm32-wasip2)
 ```
+
+Questo elenco è di **destinazione**: nomina `fubmd-testkit` e `fubmd-wasm-host`,
+che non esistono, e l'indentazione raggruppa per ruolo, non per dipendenza. Chi
+dipende davvero da chi sta in
+[architecture/mappa-visuale.md](architecture/mappa-visuale.md#il-grafo-delle-dipendenze-e-il-test-che-lo-legge),
+dove un test rilegge il disegno e lo confronta con `cargo metadata`.
 
 Il meccanismo «un trait, due backend»: il trait vive in `fubmd-abi`,
 `fubmd-format-markdown` lo implementa nativo, `fubmd-wasm-host` lo implementerà
@@ -131,7 +137,7 @@ Mappa **di dettaglio**, documento per documento. La porta di `docs/` — percors
 di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
 
 **Architettura** (trasversale ai milestone):
-- [architecture/mappa-visuale.md](architecture/mappa-visuale.md) — l'intera architettura in un diagramma: i sette crate, la shell, il disco, e tratteggiato ciò che non esiste ancora.
+- [architecture/mappa-visuale.md](architecture/mappa-visuale.md) — l'intera architettura in tre disegni: quello disposto a mano (i sette crate, la shell, il disco, e tratteggiato ciò che non esiste ancora), il grafo delle dipendenze presidiato da un test, e dove gira cosa mentre l'app è accesa.
 - [architecture/data-model.md](architecture/data-model.md) — `DocumentModel`, `Block`/`Inline`, `Span`, `LinkTarget`, escape hatch `Custom`.
 - [architecture/traits.md](architecture/traits.md) — i trait del contratto, chi li implementa e a quale milestone, la tabella di esprimibilità WIT.
 - [architecture/ui-protocol.md](architecture/ui-protocol.md) — protocollo `UiNode`, mapping sul frontend, regola dell'escape hatch web-view.
