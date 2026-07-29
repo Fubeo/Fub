@@ -116,4 +116,22 @@ cargo clippy --workspace --all-targets
 
 ## Licenza
 
-MIT OR Apache-2.0
+Doppia, a scelta di chi usa: **MIT** ([LICENSE-MIT](LICENSE-MIT)) **oppure**
+**Apache-2.0** ([LICENSE-APACHE](LICENSE-APACHE)). È la convenzione
+dell'ecosistema Rust, ed è dichiarata anche in `Cargo.toml`
+(`license = "MIT OR Apache-2.0"`), che è ciò che
+[`deny.toml`](deny.toml) usa come metro per le licenze delle dipendenze.
+
+Un contributo aperto come pull request si intende rilasciato con la stessa
+doppia licenza, senza condizioni aggiuntive.
+
+## Contribuire, segnalare, versioni
+
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — le invarianti che non si
+  negoziano, il ciclo locale, la forma dei commit.
+- [docs/SECURITY.md](docs/SECURITY.md) — come si segnala una vulnerabilità (in
+  privato, non con una issue) e cos'è dentro il perimetro.
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
+- [docs/versionamento.md](docs/versionamento.md) — i tre numeri di versione e
+  cosa promette ciascuno.
+- [docs/CHANGELOG.md](docs/CHANGELOG.md) — cosa cambia, versione per versione.
