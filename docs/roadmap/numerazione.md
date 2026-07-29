@@ -135,8 +135,8 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §4.8 | **§16.4** | Il contratto si scrive quattro volte a mano |
 | §4.12 | **§16.2** | Il banco di prova del kernel è copiato diciotto volte |
 
-**Voci senza un numero vecchio.** Tre famiglie non compaiono qui sopra perché
-non traducono niente: sono **nate** con la numerazione per sedute.
+**Voci senza un numero vecchio.** Quattro famiglie non compaiono qui sopra
+perché non traducono niente: sono **nate** con la numerazione per sedute.
 
 - La **§8.4** l'ha trovata una misura, non un giro
   ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
@@ -144,6 +144,14 @@ non traducono niente: sono **nate** con la numerazione per sedute.
   [0025](../decisions/0025-la-ricerca-predefinita.md): la ricerca è built-in e
   di classe *omnisearch*, e quelle nove voci sono la sottrazione fra ciò che
   quel comportamento richiede e ciò che il contratto sa dire.
+- Le **§22.1–§22.3** le ha trovate la **seconda verifica**, ed è lo stesso
+  metodo della §21.10 applicato a una lettura esterna dell'intero
+  [FEATURES.md](../FEATURES.md): nove affermazioni, sei vere e già scritte in
+  roadmap, una tesi centrale sbagliata (promuovere §15.1 e §15.2 a P0
+  scambiando la leva per la scadenza) e tre buchi che nessuno aveva nominato.
+  Vale come conferma del metodo: la resa di una verifica non è proporzionale a
+  quanto l'affermazione è giusta — la §21.10 è nata da una sbagliata, queste
+  tre da una tesi sbagliata con dentro tre osservazioni vere.
 - La **§21.10** l'ha trovata una **verifica**: il controllo contro i sorgenti di
   un'affermazione arrivata da fuori sull'architettura della lavagna. Diceva che
   il riferimento a blocco mancava dal contratto — e il contratto ce l'ha dalla

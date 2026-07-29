@@ -81,7 +81,15 @@ network share), 2.3 (drive rimovibili).
 - [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
       sopravvivere a un crash (2.1, 24.2).
 - [ ] **Journal delle mutazioni** (append-only in `.fubmd/data/`): base di
-      rollback dell'import (17.3), undo delle automazioni (16.3), audit (23.3).
+      rollback dell'import (17.3), undo delle automazioni (16.3), audit (23.3) —
+      e della **transazione atomica per operazione batch** che il 22.4 promette
+      al centro di comando LLM, insieme al «rollback completo dell'operazione».
+      Quel capitolo è per il resto un cliente del registro dei comandi
+      ([0009](../decisions/0009-registro-dei-comandi.md) +
+      [0010](../decisions/0010-comando-descritto-a-una-macchina.md)) e sta bene
+      dov'è; quelle due righe però nessun chiamante se le può mantenere da sé. Il
+      lotto ([0011](../decisions/0011-il-lotto.md)) coalizza gli eventi e non è
+      una transazione — il tutto-o-niente è di questo strato.
 - [ ] **Comandi di manutenzione**: `rebuild_index`, `vault_health`,
       `diagnostic_bundle`, `repair` — come `CommandProvider` ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), non come
       comandi Tauri.
