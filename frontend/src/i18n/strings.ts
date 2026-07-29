@@ -108,6 +108,25 @@ const IT = {
   "explorer.move_failed": "Non riesco a spostare {doc} in {folder}: {reason}",
   "explorer.root": "radice",
 
+  // --- i nomi che non si possono usare (§15.5) ----------------------------
+  // Il kernel risponde con un'**etichetta** (`NameFault::tag()`), non con una
+  // frase: la frase è di qui, come ogni altra frase della shell. Otto chiavi e
+  // non una generica, perché «nome non valido» lascia indovinare quale
+  // carattere, e su un titolo lungo non si indovina.
+  //
+  // La regola sta in `rules/mirrored.ts` e la applica la rinomina in posto
+  // *prima* del giro IPC: dire no dopo aver perso il campo di testo vuol dire
+  // far ridigitare il nome.
+  "explorer.bad_name": "«{nome}» non si può usare: {motivo}",
+  "name_fault.empty": "manca il nome",
+  "name_fault.traversal": "«.» e «..» non sono nomi",
+  "name_fault.control": "contiene un carattere di controllo",
+  "name_fault.reserved": "contiene un carattere che un filesystem si riserva (< > : \" | ? * \\)",
+  "name_fault.device": "è un nome che Windows si riserva (CON, NUL, COM1…)",
+  "name_fault.trailing_dot": "non può finire con un punto o uno spazio",
+  "name_fault.hidden": "non può cominciare con un punto: sarebbe una nota che il vault non elenca",
+  "name_fault.too_long": "è troppo lungo (il massimo è 255 byte)",
+
   // --- ciò che è andato storto (§20.2) -----------------------------------
   // Due chiavi e non una: un guasto che nomina un documento e uno che riguarda
   // il vault intero si leggono diversamente, e comporre la seconda dalla prima
@@ -297,6 +316,16 @@ const EN: Record<Chiave, string> = {
   "explorer.rename_failed": "Renaming {doc} to {to} was refused: {reason}",
   "explorer.move_failed": "Cannot move {doc} into {folder}: {reason}",
   "explorer.root": "the root",
+
+  "explorer.bad_name": "“{nome}” cannot be used: {motivo}",
+  "name_fault.empty": "the name is missing",
+  "name_fault.traversal": "“.” and “..” are not names",
+  "name_fault.control": "it contains a control character",
+  "name_fault.reserved": "it contains a character a filesystem reserves (< > : \" | ? * \\)",
+  "name_fault.device": "it is a name Windows reserves (CON, NUL, COM1…)",
+  "name_fault.trailing_dot": "it cannot end with a dot or a space",
+  "name_fault.hidden": "it cannot start with a dot: the vault would not list the note",
+  "name_fault.too_long": "it is too long (255 bytes at most)",
 
   "trouble.about": "{doc}: {reason}",
   "trouble.vault": "{reason}",

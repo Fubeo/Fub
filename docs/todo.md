@@ -18,9 +18,9 @@ arrivata da fuori, e le §22.1–§22.3 dallo stesso controllo su una lettura
 esterna dell'intero [FEATURES.md](FEATURES.md)
 ([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)) — e una da una
 **separazione**, la §16.8, staccata dal §16.7 nel momento in cui lo si chiudeva
-([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)). Ottantasei sono
+([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)). Ottantasette sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-ventinove sono qui, e questo file è il loro **indice**.
+ventotto sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -124,7 +124,7 @@ verbale è un ragionamento intero.
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | **chiusa**: il locale nel contratto ([0039](decisions/0039-il-locale-e-il-caso.md)), chi localizza ([0040](decisions/0040-chi-localizza.md)), l'errore come suo gemello ([0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)) e il catalogo della shell ([0042](decisions/0042-il-catalogo-della-shell.md)) | — | — |
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | **chiusa**: il path è la chiave per sempre e un id stabile è una proprietà ([0043](decisions/0043-il-path-e-la-chiave.md)), lo stato per-documento ha un posto dichiarato che il kernel migra e raccoglie ([0044](decisions/0044-lo-stato-per-documento.md)), e l'undo ha due pile che non si fondono ([0045](decisions/0045-l-undo-ha-due-pile.md)) | — | — |
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati a coppie, chiusi tutti: l'anagrafe del vault ([0046](decisions/0046-l-anagrafe-del-vault.md)) e la cartella come cittadino con la lista per cartella ([0047](decisions/0047-la-cartella-esiste-nel-kernel.md)); restano **tre** caselle del §14.1 — l'impronta degli allegati, la politica della cartella allegati e le derivate in `.fubmd/data/` | — | — |
-| **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra; la §15.4 è chiusa con la [0048](decisions/0048-una-radice-sola.md) — una radice sola dentro il vault, la mappa del disco, e la classe di un dato dichiarata da **dove** si scrive — e ne resta la casella additiva, l'implementazione | 6 | — |
+| **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra; la §15.4 è chiusa con la [0048](decisions/0048-una-radice-sola.md) — una radice sola dentro il vault, la mappa del disco, e la classe di un dato dichiarata da **dove** si scrive — e ne resta la casella additiva, l'implementazione; e la §15.5 con la [0058](decisions/0058-un-nome-che-nasce.md) — due tolleranze per un nome, la sorgente di uno `Span`, e un `text_policy` che rileva senza convertire | 5 | — |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica; il contratto ha **una** sorgente e due confini che non hanno la stessa forma ([0053](decisions/0053-il-contratto-ha-una-sorgente.md), che chiude §16.4 e §16.5 insieme come la seduta chiedeva); i due banchi di prova sono **due**, e lo stesso cappello che là dichiarava un accorpamento qui dichiarava un confine ([0054](decisions/0054-il-banco-del-lato-provider.md) lato provider, [0055](decisions/0055-il-banco-del-lato-host.md) lato host); e un elenco scritto a mano è sano se è **la sorgente** di ciò che elenca o se **si confronta** con essa, mai se ci si itera sopra — la stessa tassonomia con due risposte, perché la produzione può leggere l'inventario delle view e non la macro dei comandi Tauri ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md), [0057](decisions/0057-la-dieta-dell-ipc.md)) | 2 | — |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza | 3 | — |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
@@ -135,7 +135,7 @@ verbale è un ragionamento intero.
 
 ## Le voci
 
-Ventinove. Il numero è quello con cui le nomina il resto del repo.
+Ventotto. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -147,7 +147,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella non è in nessun
 totale.** La colonna *Voci* conta le voci **aperte**, e la sua somma per riga fa
-ventinove come deve; il residuo di una voce **chiusa** è un'altra specie e finora
+ventotto come deve; il residuo di una voce **chiusa** è un'altra specie e finora
 non aveva dove essere contato — che è il modo in cui la riga della seduta 14 ha
 detto «due caselle» mentre il suo file ne aveva tre, e la 19 non ha detto niente
 avendone tre. Le caselle residue oggi sono **nove**, e stanno in cinque posti:
@@ -189,7 +189,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§15.1** | [Astrazione sullo storage](roadmap/15-il-disco.md#151-astrazione-sullo-storage) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
 | **§15.2** | [Durabilità e recovery](roadmap/15-il-disco.md#152-durabilità-e-recovery) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
 | **§15.3** | [Una versione di schema su ogni formato persistito](roadmap/15-il-disco.md#153-una-versione-di-schema-su-ogni-formato-persistito) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
-| **§15.5** | [Politica dei path e del testo, in un modulo solo](roadmap/15-il-disco.md#155-politica-dei-path-e-del-testo-in-un-modulo-solo) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
 | **§15.6** | [La politica di esclusione è una costante di compilazione](roadmap/15-il-disco.md#156-la-politica-di-esclusione-è-una-costante-di-compilazione) | 15. Il disco: storage, durabilità, politiche | kernel | **P2** |
 | **§15.7** | [L'apertura del vault è tutto-o-niente, sincrona e senza ritorno](roadmap/15-il-disco.md#157-lapertura-del-vault-è-tutto-o-niente-sincrona-e-senza-ritorno) | 15. Il disco: storage, durabilità, politiche | kernel | **P1** |
 | **§16.3** | [Un crate per bundle di feature](roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |

@@ -34,6 +34,10 @@
 //!   tipo di contenuto porta (§14.1);
 //! - [`path`] — la chiave di risoluzione (trim, NFC, minuscolo), i link
 //!   markdown relativi, il percent-encoding;
+//! - [`path_policy`] — **quali nomi** un vault può far nascere, che è una
+//!   domanda diversa da quali ne contiene (§15.5);
+//! - [`text_policy`] — **che forma hanno i byte** di un file: BOM, terminatori
+//!   di riga, UTF-8. Rileva e dichiara, non converte (§15.5);
 //! - [`properties`] — filtro, ordinamento e faccette sul frontmatter;
 //! - [`tag`] — la gerarchia dei tag, accanto alla forma canonica del nome;
 //! - [`health`] — cosa conta come link rotto, e cosa no.
@@ -64,7 +68,9 @@ pub mod health;
 pub mod ids;
 pub mod media;
 pub mod path;
+pub mod path_policy;
 pub mod properties;
 pub mod tag;
+pub mod text_policy;
 
 pub use crate::model::{canonical_anchor, canonical_tag, heading_slug, valid_anchor};

@@ -9,6 +9,7 @@ use fubmd_abi::model::{
     TableRow, Tag, TaskMarker,
 };
 use fubmd_abi::options::syntax;
+use fubmd_abi::rules::text_policy;
 use fubmd_abi::FormatError;
 use fubmd_sdk::scan;
 
@@ -51,10 +52,14 @@ struct Acc {
 }
 
 pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
+    // `offsets` sulla sorgente **intera** — è lì che vivono gli `Span` — e a
+    // comrak la vista senza BOM, perché per lui un `U+FEFF` in testa sarebbe
+    // testo del primo blocco. La traslazione fra le due è una, e sta in
+    // `Offsets::new` (§15.5).
     let offsets = Offsets::new(source);
     let arena = Arena::new();
     let options = build_options(ctx);
-    let root = comrak::parse_document(&arena, source, &options);
+    let root = comrak::parse_document(&arena, text_policy::strip_bom(source), &options);
 
     let mut acc = Acc::default();
     let mut frontmatter = Frontmatter::default();

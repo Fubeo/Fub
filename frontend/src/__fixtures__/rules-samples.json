@@ -41,6 +41,430 @@
       "out": "Nota Lunga"
     }
   ],
+  "name_fault": [
+    {
+      "path": "../fuori.md",
+      "naming": "existing",
+      "out": "traversal"
+    },
+    {
+      "path": "../fuori.md",
+      "naming": "new",
+      "out": "traversal"
+    },
+    {
+      "path": "a/../b.md",
+      "naming": "existing",
+      "out": "traversal"
+    },
+    {
+      "path": "a/../b.md",
+      "naming": "new",
+      "out": "traversal"
+    },
+    {
+      "path": "./nota.md",
+      "naming": "existing",
+      "out": "traversal"
+    },
+    {
+      "path": "./nota.md",
+      "naming": "new",
+      "out": "traversal"
+    },
+    {
+      "path": "a//b.md",
+      "naming": "existing",
+      "out": "traversal"
+    },
+    {
+      "path": "a//b.md",
+      "naming": "new",
+      "out": "traversal"
+    },
+    {
+      "path": "/assoluto.md",
+      "naming": "existing",
+      "out": "traversal"
+    },
+    {
+      "path": "/assoluto.md",
+      "naming": "new",
+      "out": "traversal"
+    },
+    {
+      "path": "",
+      "naming": "existing",
+      "out": "empty"
+    },
+    {
+      "path": "",
+      "naming": "new",
+      "out": "empty"
+    },
+    {
+      "path": "   ",
+      "naming": "existing",
+      "out": "empty"
+    },
+    {
+      "path": "   ",
+      "naming": "new",
+      "out": "empty"
+    },
+    {
+      "path": "Progetti/Alpha.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "Progetti/Alpha.md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "nota (1).md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "nota (1).md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "Città è però — «così».md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "Città è però — «così».md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "漢字のノート.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "漢字のノート.md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "nota..md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "nota..md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "CON.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "CON.md",
+      "naming": "new",
+      "out": "device"
+    },
+    {
+      "path": "con",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "con",
+      "naming": "new",
+      "out": "device"
+    },
+    {
+      "path": "NUL.txt.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "NUL.txt.md",
+      "naming": "new",
+      "out": "device"
+    },
+    {
+      "path": "Progetti/COM1.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "Progetti/COM1.md",
+      "naming": "new",
+      "out": "device"
+    },
+    {
+      "path": "LPT9.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "LPT9.md",
+      "naming": "new",
+      "out": "device"
+    },
+    {
+      "path": "nota?.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "nota?.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "a:b.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "a:b.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "a\\b.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "a\\b.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "\"citata\".md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "\"citata\".md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "a*b.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "a*b.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "a|b.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "a|b.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "a<b>.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "a<b>.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "nota\u0000.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "nota\u0000.md",
+      "naming": "new",
+      "out": "control"
+    },
+    {
+      "path": "nota\n.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "nota\n.md",
+      "naming": "new",
+      "out": "control"
+    },
+    {
+      "path": "nota.",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "nota.",
+      "naming": "new",
+      "out": "trailing-dot"
+    },
+    {
+      "path": "cartella./nota.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "cartella./nota.md",
+      "naming": "new",
+      "out": "trailing-dot"
+    },
+    {
+      "path": ".gitignore",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": ".gitignore",
+      "naming": "new",
+      "out": "hidden"
+    },
+    {
+      "path": ".fubmd/roba.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": ".fubmd/roba.md",
+      "naming": "new",
+      "out": "hidden"
+    },
+    {
+      "path": "Progetti/.nascosta.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "Progetti/.nascosta.md",
+      "naming": "new",
+      "out": "hidden"
+    },
+    {
+      "path": "CONtratto.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "CONtratto.md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "Console.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "Console.md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "COM10.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "COM10.md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "NULLO.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "NULLO.md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍🌍",
+      "naming": "new",
+      "out": "too-long"
+    },
+    {
+      "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "naming": "new",
+      "out": "too-long"
+    }
+  ],
+  "normalized_name": [
+    {
+      "path": "Café.md",
+      "out": "Café.md"
+    },
+    {
+      "path": "Café.md",
+      "out": "Café.md"
+    },
+    {
+      "path": "  nota.md  ",
+      "out": "nota.md"
+    },
+    {
+      "path": "cartella / nota.md",
+      "out": "cartella/nota.md"
+    },
+    {
+      "path": "nota. ",
+      "out": "nota."
+    },
+    {
+      "path": "ÅNGSTRÖM.md",
+      "out": "ÅNGSTRÖM.md"
+    },
+    {
+      "path": "Ången.md",
+      "out": "Ången.md"
+    },
+    {
+      "path": "Progetti/Città.md",
+      "out": "Progetti/Città.md"
+    },
+    {
+      "path": "già.md",
+      "out": "già.md"
+    },
+    {
+      "path": "",
+      "out": ""
+    }
+  ],
   "resolution_key": [
     {
       "s": "Café",

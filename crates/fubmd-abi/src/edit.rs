@@ -42,9 +42,28 @@
 //! non nel testo che si sta via via producendo: gli edit sono un insieme, non
 //! una sequenza di passi, e chi li calcola non deve tenere il conto degli
 //! spostamenti. L'host li ordina, ne verifica la disciplina — dentro il
-//! sorgente, su confini di carattere, senza sovrapposizioni e senza due edit
-//! nello stesso punto — e li applica in un colpo solo. Ciò che non rispetta la
-//! disciplina è [`PluginError::BadArgs`], non un edit applicato a metà.
+//! sorgente, su confini di carattere e di terminatore di riga, senza
+//! sovrapposizioni e senza due edit nello stesso punto — e li applica in un
+//! colpo solo. Ciò che non rispetta la disciplina è [`PluginError::BadArgs`],
+//! non un edit applicato a metà.
+//!
+//! Cosa *sia* quel sorgente è scritto accanto a [`Span`]: i byte del file
+//! decodificati, integralmente, BOM e terminatori compresi. Non è un dettaglio
+//! di implementazione dell'host — è la premessa senza la quale un offset
+//! calcolato da un provider e un offset applicato dall'host non sono lo stesso
+//! numero.
+//!
+//! # Il confine di un `\r\n`
+//!
+//! `\r` e `\n` sono due caratteri ASCII, quindi l'offset che sta **fra** loro è
+//! un confine di carattere valido e `is_char_boundary` lo accetta. Un edit che
+//! ci finisce sopra spezza un terminatore di riga in due e lascia un `\r`
+//! orfano: il file resta UTF-8 valido, e una riga che nessuno aveva nominato è
+//! cambiata — che è esattamente ciò che «nessuna modifica fuori dallo span
+//! dichiarato» (§2.4) vieta. Un `\r\n` è un terminatore solo, e i suoi due byte
+//! non si separano più di quanto si separino i due byte di una `à`: la regola è
+//! [`text_policy::splits_newline`](crate::rules::text_policy::splits_newline) e
+//! il rifiuto è `BadArgs` come per il carattere tagliato a metà.
 //!
 //! # Il rapporto è nelle coordinate nuove, e l'inverso di un edit è un edit
 //!
@@ -73,6 +92,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::Span;
+use crate::rules::text_policy;
 
 /// L'identità del sorgente su cui un edit è stato calcolato.
 ///
@@ -231,6 +251,21 @@ impl EditRequest {
                 // non si riapre più.
                 return Err(PluginError::BadArgs(
                     format!("span a metà di un carattere: {}..{}", span.start, span.end).into(),
+                ));
+            }
+            if text_policy::splits_newline(source, span.start)
+                || text_policy::splits_newline(source, span.end)
+            {
+                // L'altro confine, quello che `is_char_boundary` non vede: fra
+                // il `\r` e il `\n` di una coppia. Qui non si perde la validità
+                // del testo, si perde una riga che nessuno aveva nominato — e
+                // in silenzio, perché il file resta perfettamente leggibile.
+                return Err(PluginError::BadArgs(
+                    format!(
+                        "span a metà di un terminatore di riga: {}..{}",
+                        span.start, span.end
+                    )
+                    .into(),
                 ));
             }
             if let Some(prev) = previous {
@@ -457,6 +492,59 @@ mod tests {
             .apply_to(source)
             .unwrap();
         assert_eq!(out, "e vero");
+    }
+
+    #[test]
+    fn a_span_in_the_middle_of_a_line_ending_is_refused() {
+        // Il caso ostile del §15.5: `\r` e `\n` sono due caratteri ASCII, quindi
+        // l'offset fra loro passa `is_char_boundary` e il testo che ne uscirebbe
+        // è UTF-8 valido. Ciò che si perde è una riga che nessuno ha nominato.
+        let source = "prima\r\ndopo\r\n";
+        let fra = source.find('\n').expect("c'è un \\n");
+        assert!(
+            source.is_char_boundary(fra),
+            "per `str` è un confine valido"
+        );
+
+        for span in [Span::new(fra, source.len()), Span::new(0, fra)] {
+            let err = request(source, vec![TextEdit::replace(span, "x")])
+                .apply_to(source)
+                .unwrap_err();
+            assert!(
+                matches!(err, PluginError::BadArgs(_)),
+                "{span:?}: spezzare un `\\r\\n` non è un edit: {err:?}"
+            );
+        }
+
+        // Il terminatore intero, invece, si sostituisce: è un edit che dichiara
+        // di toccare la fine della riga, e la tocca tutta.
+        let (out, _) = request(source, vec![TextEdit::replace(Span::new(5, 7), "\n")])
+            .apply_to(source)
+            .unwrap();
+        assert_eq!(out, "prima\ndopo\r\n");
+    }
+
+    #[test]
+    fn un_edit_su_un_file_crlf_non_ne_normalizza_le_altre_righe() {
+        // La fedeltà del §2.4 vista dalla primitiva: chi modifica una parola in
+        // un file CRLF lascia i terminatori dove sono, tutti.
+        let source = "una\r\ndue\r\ntre\r\n";
+        let inizio = source.find("due").expect("c'è `due`");
+        let (out, report) = request(
+            source,
+            vec![TextEdit::replace(Span::new(inizio, inizio + 3), "seconda")],
+        )
+        .apply_to(source)
+        .unwrap();
+        assert_eq!(out, "una\r\nseconda\r\ntre\r\n");
+        assert_eq!(
+            text_policy::Newline::of(&out),
+            text_policy::Newline::Crlf,
+            "il file era CRLF e resta CRLF: nessuna riga fuori dallo span"
+        );
+        // E l'inverso riporta ai byte esatti di prima, terminatori compresi.
+        let (tornato, _) = report.inverse().apply_to(&out).unwrap();
+        assert_eq!(tornato, source);
     }
 
     #[test]

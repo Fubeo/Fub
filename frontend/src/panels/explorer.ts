@@ -35,7 +35,8 @@ import { refreshOn, registerPanel } from "../ui/panel-host";
 import { focusEditor, flushPendingSave, openDocument } from "./document";
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
-import { onLingua, t } from "../i18n/strings";
+import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
+import { onLingua, t, type Chiave } from "../i18n/strings";
 
 const fileListEl = $("#file-list");
 const filesTitleEl = $("#files-title");
@@ -692,12 +693,45 @@ function startRename(li: HTMLElement, id: string): void {
   input.addEventListener("blur", annulla);
 }
 
+/// La frase per ciascun guasto di un nome: la mappa è un `Record` **esaustivo**,
+/// quindi un'etichetta nuova in `NameFault` non compila finché non ha la sua
+/// chiave di catalogo. Un `` `name_fault.${tag}` `` composto a mano avrebbe
+/// compilato sempre, e la chiave mancante sarebbe comparsa a schermo.
+const MOTIVO: Record<NameFault, Chiave> = {
+  empty: "name_fault.empty",
+  traversal: "name_fault.traversal",
+  control: "name_fault.control",
+  reserved: "name_fault.reserved",
+  device: "name_fault.device",
+  "trailing-dot": "name_fault.trailing_dot",
+  hidden: "name_fault.hidden",
+  "too-long": "name_fault.too_long",
+};
+
 async function renameDoc(from: string, newPageName: string): Promise<void> {
   const slash = from.lastIndexOf("/");
   const dir = slash === -1 ? "" : from.slice(0, slash + 1);
   const dot = from.lastIndexOf(".");
   const ext = dot > slash ? from.slice(dot) : "";
-  const to = `${dir}${newPageName}${ext}`;
+  const to = normalizedName(`${dir}${newPageName}${ext}`);
+
+  // Il no arriva **prima** del giro IPC (§15.5), e con la stessa regola che il
+  // kernel applicherebbe (`rules/mirrored.ts`, legata alla gemella Rust dalla
+  // fixture del §6.2). Non è un doppione per comodità: la destinazione di un
+  // rename è un nome che *nasce*, e chiederlo al kernel vorrebbe dire un giro
+  // IPC, un `PluginError` da leggere e — soprattutto — il campo di testo già
+  // chiuso, cioè il nome da ridigitare.
+  //
+  // `normalizedName` prima di giudicare, perché è la forma che verrebbe scritta
+  // sul disco: NFC, e senza spazi ai bordi dei segmenti.
+  const guasto = nameFault(to, "new");
+  if (guasto !== null) {
+    console.error(
+      `FubMD: ${t("explorer.bad_name", { nome: newPageName, motivo: t(MOTIVO[guasto]) })}`,
+    );
+    renderFileList();
+    return;
+  }
 
   // Il rename riscrive i wikilink entranti, cioè file di terzi — e fra questi
   // può esserci il documento aperto. Il buffer va messo in salvo prima, o la

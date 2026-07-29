@@ -66,6 +66,22 @@ perno delle decorazioni di live-preview in CodeMirror (M3) e delle modifiche
 in-place. Costante `Span::EMPTY` per i test del kernel che non conoscono alcun
 formato.
 
+**E «la sorgente» sono i byte del file decodificati, integralmente**: il BOM se
+c'era, i terminatori di riga come stanno sul disco, nessuna normalizzazione. È la
+stessa stringa che `read_document` restituisce, quella su cui `Revision::of` è
+calcolata e quella che `write_document` scrive — quindi uno `Span { start: 0, end:
+0 }` su un file col BOM inserisce *prima* del BOM, e chi vuole la testa del
+contenuto parte da `text_policy::bom_len`. Il perché sta nella
+[decisione 0058](../decisions/0058-un-nome-che-nasce.md): l'altra lettura
+possibile — «un testo già normalizzato» — è indistinguibile da questa fino al
+momento in cui un provider calcola gli offset su una e l'host li applica
+sull'altra, e allora gli edit atterrano spostati senza che niente diventi rosso.
+
+Chi parsa un formato che non tollera il BOM lo salta **senza uscire dalle
+coordinate**: `text_policy::strip_bom` per il parser, `bom_len` sommato agli
+offset che torna. La traslazione è una sola e sta in
+[`offsets.rs`](../../crates/fubmd-format-markdown/src/offsets.rs).
+
 ## `DocumentModel` — il documento parsato
 
 ```rust
@@ -182,7 +198,7 @@ classDiagram
 | `Inline` | [model.rs:423](../../crates/fubmd-abi/src/model.rs) | `Custom` è l'unico varco: senza, un enum chiuso più il freeze WIT obbligherebbe a prevedere ogni sintassi futura |
 | `LinkTarget` | [model.rs:461](../../crates/fubmd-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
 | `Anchor` | [model.rs:600](../../crates/fubmd-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
-| `Span` | [model.rs:123](../../crates/fubmd-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` |
+| `Span` | [model.rs:123](../../crates/fubmd-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` — e la sorgente sono i byte del file, BOM e terminatori compresi ([0058](../decisions/0058-un-nome-che-nasce.md)) |
 | `VaultEntry` | [traits.rs:203](../../crates/fubmd-abi/src/traits.rs) | sta nei trait e non qui, perché è la risposta a `IndexQuery::Entries`; `kind` **non si persiste**, dipende da chi è registrato adesso |
 
 Il disegno mostra la forma **ad albero**. Al confine WIT ce n'è una seconda, e
@@ -486,6 +502,7 @@ transclusion è in [ui-protocol.md](ui-protocol.md).
 - Nessun tipo del modello nomina il markdown; l'unica dipendenza esterna è `serde`.
 - Ogni tipo è `Serialize + Deserialize` (regola d'oro — attraversa IPC e, a M5,
   il confine WASM).
-- Gli `Span` sono in byte e riferiti alla sorgente **originale** passata a `parse`.
+- Gli `Span` sono in byte e riferiti alla sorgente **originale** passata a `parse` — cioè
+  ai byte del file, non a un testo normalizzato ([0058](../decisions/0058-un-nome-che-nasce.md)).
 - I `LinkTarget::Wiki` restano non risolti nel modello; risolverli è del grafo
   (`crates/fubmd-kernel/src/graph.rs`).

@@ -17,8 +17,15 @@ pub enum KernelError {
     /// nota nuova.
     #[error("nessun formato registrato: non so con quale creare una nota")]
     NoDefaultFormat,
-    #[error("nome non valido per una nota: {0:?}")]
-    BadName(String),
+    /// Il nome non si può usare, e la ragione la dice
+    /// [`NameFault`](fubmd_abi::rules::path_policy::NameFault).
+    ///
+    /// La ragione è nella variante e non solo nel log perché è **l'unica cosa
+    /// utile** che si possa dire a chi ha appena scritto un titolo: «nome non
+    /// valido» lascia indovinare quale carattere, e su un nome lungo non si
+    /// indovina. È il §12.2 applicato al rifiuto di un nome.
+    #[error("nome non valido per una nota ({name:?}): {why}")]
+    BadName { name: String, why: String },
     #[error("documento non trovato: {0}")]
     NotFound(String),
     #[error("esiste già un documento: {0}")]
@@ -113,9 +120,9 @@ impl From<KernelError> for PluginError {
             KernelError::BadEdit { doc, why } => {
                 PluginError::BadArgs(format!("{doc}: {why}").into())
             }
-            KernelError::BadName(name) => {
-                PluginError::BadArgs(format!("nome non valido per una nota: {name:?}").into())
-            }
+            KernelError::BadName { name, why } => PluginError::BadArgs(
+                format!("nome non valido per una nota ({name:?}): {why}").into(),
+            ),
             KernelError::OutsideVault(path) => {
                 PluginError::PermissionDenied(format!("path fuori dal vault: {path}").into())
             }

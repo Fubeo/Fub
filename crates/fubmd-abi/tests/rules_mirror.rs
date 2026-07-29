@@ -40,6 +40,7 @@ use fubmd_abi::event::{BatchId, Event, EventKind, EventMask, Subject};
 use fubmd_abi::model::{DocId, TaskMarker};
 use fubmd_abi::rules::events::{folder_contains, topic_matches};
 use fubmd_abi::rules::path::resolution_key;
+use fubmd_abi::rules::path_policy::{check, normalized, Naming};
 use fubmd_abi::Span;
 use serde_json::{json, Value};
 
@@ -89,6 +90,119 @@ fn resolution_key_cases() -> Vec<Value> {
     ]
     .into_iter()
     .map(|s| json!({"s": s, "out": resolution_key(s)}))
+    .collect()
+}
+
+// ---------------------------------------------------------------------------
+// La politica dei nomi (§15.5)
+// ---------------------------------------------------------------------------
+//
+// È una regola con **due applicatori veri**, come la maschera: il kernel, che
+// rifiuta un nome quando una nota nasce (`workspace::new_doc_id`), e la shell,
+// che deve rifiutarlo *prima* del giro IPC — la rinomina in posto della sidebar
+// scrive dentro un `<input>`, e dire «no» dopo aver perso il campo di testo
+// significa far ridigitare il nome. Le due letture devono coincidere, o la shell
+// manda al kernel nomi che il kernel rifiuta (rumore) oppure ne rifiuta di
+// legittimi (un no che non ha nessuno che lo giustifichi).
+//
+// Ciò che attraversa la fixture è l'**etichetta** del guasto, non il messaggio:
+// la frase che una persona legge è del catalogo della shell (decisione 0042), e
+// legarla qui vorrebbe dire legare l'italiano di due file che devono restare
+// liberi di divergere. Il giudizio è la regola; la sua formulazione no.
+
+/// I nomi ostili, letti con le due tolleranze.
+///
+/// I casi che contano sono tre specie. **La coppia**: lo stesso nome che va bene
+/// come nome che c'è e non come nome che nasce — è tutta la voce, e un lato che
+/// non distinguesse le due domande passerebbe metà dei casi. **La lunghezza in
+/// byte**: 64 emoji sono 64 caratteri, 128 code unit e 256 byte, e in JavaScript
+/// `s.length` risponde 128 — il limite è sui byte, quindi chi non lo sa lascia
+/// creare un file che il filesystem rifiuta. **I quasi-device**: `CONtratto` e
+/// `COM10` cominciano come `CON` e `COM1` e non lo sono, che è l'errore di chi
+/// implementa la regola con uno `startsWith`.
+fn name_fault_cases() -> Vec<Value> {
+    let nomi = [
+        // Il recinto: vale per entrambe le tolleranze.
+        "../fuori.md",
+        "a/../b.md",
+        "./nota.md",
+        "a//b.md",
+        "/assoluto.md",
+        "",
+        "   ",
+        // Legittimi in entrambe.
+        "Progetti/Alpha.md",
+        "nota (1).md",
+        "Città è però — «così».md",
+        "漢字のノート.md",
+        "nota..md",
+        // Portabili no, esistenti sì: la coppia che dà senso alla voce.
+        "CON.md",
+        "con",
+        "NUL.txt.md",
+        "Progetti/COM1.md",
+        "LPT9.md",
+        "nota?.md",
+        "a:b.md",
+        "a\\b.md",
+        "\"citata\".md",
+        "a*b.md",
+        "a|b.md",
+        "a<b>.md",
+        "nota\u{0}.md",
+        "nota\n.md",
+        "nota.",
+        "cartella./nota.md",
+        ".gitignore",
+        ".fubmd/roba.md",
+        "Progetti/.nascosta.md",
+        // I quasi-device: cominciano come un device e non lo sono.
+        "CONtratto.md",
+        "Console.md",
+        "COM10.md",
+        "NULLO.md",
+        // La lunghezza, in byte e non in caratteri né in code unit.
+        &"🌍".repeat(64),
+        &"a".repeat(255),
+        &"a".repeat(256),
+    ];
+    let mut out = Vec::new();
+    for path in nomi {
+        for (etichetta, naming) in [("existing", Naming::Existing), ("new", Naming::New)] {
+            out.push(json!({
+                "path": path,
+                "naming": etichetta,
+                "out": check(path, naming).err().map(|f| f.tag()),
+            }));
+        }
+    }
+    out
+}
+
+/// La forma con cui un nome nuovo si scrive sul disco: NFC, e senza spazi ai
+/// bordi di ogni segmento.
+///
+/// È la stessa NFC di `resolution_key` con un secondo cliente, ed è nella fixture
+/// per la ragione per cui la prima ci è entrata: il lato TypeScript **non faceva
+/// NFC affatto** prima della 0020, e il caso che lo scopre richiede un Mac, un
+/// accento e un occhio. Qui il difetto sarebbe peggiore che allora — non un nome
+/// che non si risolve, ma un file scritto sul disco in una forma che il grafo
+/// considera identica a un altro.
+fn normalized_name_cases() -> Vec<Value> {
+    [
+        "Café.md",            // NFC
+        "Cafe\u{0301}.md",    // NFD, come lo scrive macOS
+        "  nota.md  ",        // il trim
+        "cartella / nota.md", // per segmento, non solo ai due estremi
+        "nota. ",             // lo spazio va, il punto resta
+        "ÅNGSTRÖM.md",
+        "\u{212B}ngen.md", // il segno angstrom, che in NFC diventa Å
+        "Progetti/Città.md",
+        "già.md",
+        "",
+    ]
+    .into_iter()
+    .map(|path| json!({"path": path, "out": normalized(path)}))
     .collect()
 }
 
@@ -326,6 +440,8 @@ fn offset_cases(forward: bool) -> Vec<Value> {
 fn expected() -> Value {
     json!({
         "page_name": page_name_cases(),
+        "name_fault": name_fault_cases(),
+        "normalized_name": normalized_name_cases(),
         "resolution_key": resolution_key_cases(),
         "task_checked": task_checked_cases(),
         "topic_matches": topic_matches_cases(),

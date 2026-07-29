@@ -56,6 +56,102 @@ export function resolutionKey(s: string): string {
   return s.trim().normalize("NFC").toLowerCase();
 }
 
+// --- la politica dei nomi (§15.5) -------------------------------------------
+
+/// Quale domanda si sta ponendo su un nome. Gemella di
+/// `fubmd_abi::rules::path_policy::Naming`.
+///
+/// `existing` = un nome che c'è già (aprirlo, elencarlo, rinominarlo *via*):
+/// passa tutto ciò che un filesystem può contenere. `new` = un nome che nasce:
+/// vale la regola più stretta di tutti i filesystem su cui il vault potrebbe
+/// finire, non quella di chi lo sta scrivendo adesso.
+export type Naming = "existing" | "new";
+
+/// L'etichetta di ciò che non va in un nome. Gemella di `NameFault::tag()`.
+///
+/// È un'etichetta e non un messaggio di proposito: la frase che l'utente legge
+/// sta nel catalogo (`i18n/`), come ogni altra frase della shell.
+export type NameFault =
+  | "empty"
+  | "traversal"
+  | "control"
+  | "reserved"
+  | "device"
+  | "trailing-dot"
+  | "hidden"
+  | "too-long";
+
+/// I caratteri che un filesystem si riserva, uniti fra i tre sistemi.
+const RESERVED_CHARS = new Set(["<", ">", ":", '"', "|", "?", "*", "\\", "/"]);
+
+/// I device DOS, che su Windows non sono nomi di file a nessuna estensione.
+const DOS_DEVICES = new Set([
+  "CON", "PRN", "AUX", "NUL",
+  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+]);
+
+/// Il massimo per **segmento**, in byte. Gemella di `MAX_SEGMENT_BYTES`.
+const MAX_SEGMENT_BYTES = 255;
+
+/// Quanti byte occupa questa stringa in UTF-8.
+///
+/// **Non** `s.length`, che conta code unit UTF-16: 64 emoji sono 128 code unit e
+/// 256 byte, quindi contando `length` si lascerebbe creare un nome che il
+/// filesystem rifiuta. È lo stesso inganno che `offsets.ts` esiste per
+/// disinnescare, applicato ai nomi.
+const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
+
+/// Il nome è un device DOS? Si guarda il pezzo fino al primo punto, senza
+/// distinzione di caso. Non è uno `startsWith`: `CONtratto` e `COM10` cominciano
+/// come un device e non lo sono.
+function isDosDevice(segment: string): boolean {
+  const stem = segment.split(".")[0] ?? segment;
+  return DOS_DEVICES.has(stem.toUpperCase());
+}
+
+/// Perché questo path non si può usare, o `null` se si può.
+///
+/// Gemella di `fubmd_abi::rules::path_policy::check`. **L'ordine dei controlli è
+/// contratto**, non un dettaglio: un nome sbagliato in più modi risponde col
+/// primo dell'elenco, e la fixture confronta *quella* risposta — due ordini
+/// diversi darebbero due guasti diversi sullo stesso nome.
+export function nameFault(path: string, naming: Naming): NameFault | null {
+  if (path.trim() === "") return "empty";
+  for (const segment of path.split("/")) {
+    if (segment === "" || segment === "." || segment === "..") return "traversal";
+    if (naming === "existing") continue;
+    for (const ch of segment) {
+      // `\p{Cc}` è la categoria Unicode dei controlli, la stessa che Rust legge
+      // con `char::is_control`.
+      if (/\p{Cc}/u.test(ch)) return "control";
+    }
+    for (const ch of segment) {
+      if (RESERVED_CHARS.has(ch)) return "reserved";
+    }
+    if (isDosDevice(segment)) return "device";
+    if (segment.endsWith(".") || segment.endsWith(" ")) return "trailing-dot";
+    if (segment.startsWith(".")) return "hidden";
+    if (utf8Bytes(segment) > MAX_SEGMENT_BYTES) return "too-long";
+  }
+  return null;
+}
+
+/// La forma con cui un nome **nuovo** si scrive sul disco: ogni segmento senza
+/// spazi ai bordi, tutto in NFC.
+///
+/// Gemella di `path_policy::normalized`. La NFC non è cosmetica: `resolutionKey`
+/// fa collassare NFC e NFD sulla stessa chiave, quindi per FubMD sono lo stesso
+/// nome, e per il filesystem di Linux sono due file — crearne uno in NFD accanto
+/// a uno in NFC vorrebbe dire un vault con due documenti che il grafo conta come
+/// uno.
+export function normalizedName(path: string): string {
+  return path
+    .split("/")
+    .map((segment) => segment.trim().normalize("NFC"))
+    .join("/");
+}
+
 /// Una casella è spuntata?
 ///
 /// Gemella di `TaskMarker::checked()`: `x`/`X` è fatta, ogni altro simbolo — gli
