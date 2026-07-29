@@ -220,7 +220,7 @@ backlink è un bundle, e a M5 lo sarà un plugin WASM. Esiste perché montare
 doveva avere **una strada sola**, la stessa per chi è nativo e per chi non lo è.
 
 ### capacità
-`HostApi` e le dieci famiglie · [`abi/traits.rs:1157`](../crates/fubmd-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md)
+`HostApi` · [`abi/traits.rs:1157`](../crates/fubmd-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md)
 
 Ciò che un componente può chiedere all'host: leggere il vault, scriverlo,
 cambiarne la struttura, leggere i propri dati, emettere eventi, interrogare
@@ -246,12 +246,13 @@ Mappa in [architecture/traits.md](architecture/traits.md).
 ### famiglia
 `VaultRead`, `VaultWrite`, … · [`abi/traits.rs:351`](../crates/fubmd-abi/src/traits.rs) · [0021](decisions/0021-il-confine.md)
 
-Uno dei dieci gruppi in cui le capacità sono divise, e il criterio è **cosa vuol
-dire negarne una**: leggere il vault è separato dallo scriverlo, e scriverlo dal
-cambiarne la struttura. Chi le implementa tutte lo dichiara una volta sola
-(`HostApi` è una somma con una impl generica); al confine WIT ogni famiglia è
-un'`interface`, e negarne una non è un rifiuto a runtime — è l'**assenza della
-funzione**.
+Uno dei **quattordici** gruppi in cui le capacità sono divise, e il criterio è
+**cosa vuol dire negarne una**: leggere il vault è separato dallo scriverlo, e
+scriverlo dal cambiarne la struttura. Chi le implementa tutte lo dichiara una
+volta sola (`HostApi` è una somma con una impl generica, e `ReadApi` è la somma
+delle sei di sola lettura); al confine WIT ogni famiglia è un'`interface` — sono
+quattordici `host-*` in `abi.wit` — e negarne una non è un rifiuto a runtime, è
+l'**assenza della funzione**.
 
 ### freeze
 — · [milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md) · [0002](decisions/0002-additivita-del-contratto.md)
