@@ -5,14 +5,16 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 109 voci: novantanove da sette giri sulla stessa domanda, una da una
+Sono uscite 110 voci: novantanove da sette giri sulla stessa domanda, una da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md)), nove da una
 **decisione di prodotto** — la [0025](decisions/0025-la-ricerca-predefinita.md),
 che ha stabilito che la ricerca di FubMD è built-in e di classe *omnisearch*
-([seduta 21](roadmap/21-la-ricerca-predefinita.md)). Settantadue sono chiuse e i
-loro verbali stanno in [decisions/](decisions/README.md); le altre trentasette
-sono qui, e questo file è il loro **indice**.
+([seduta 21](roadmap/21-la-ricerca-predefinita.md)) — e una da una **verifica**
+(la §21.10, uscita dal controllo contro il codice di un'affermazione arrivata da
+fuori). Settantadue sono chiuse e i loro verbali stanno in
+[decisions/](decisions/README.md); le altre trentotto sono qui, e questo file è
+il loro **indice**.
 
 ## Come è organizzato
 
@@ -79,6 +81,17 @@ voci cercandole, le ha **create**: deciso cosa l'app deve fare, quello che manca
 al contratto per permetterlo si calcola. Le altre venti sedute descrivono un
 debito, la [21](roadmap/21-la-ricerca-predefinita.md) descrive una promessa.
 
+E un'ottava, che non è nemmeno una strada: **una verifica**. La §21.10 è uscita
+dal controllo, riga per riga contro il codice, di un'affermazione arrivata da
+fuori sull'architettura di una feature nuova. L'affermazione diceva che mancava
+il riferimento a blocco nel contratto; il contratto ce l'ha dalla
+[0003](decisions/0003-modello-del-documento.md), e il buco stava un centimetro
+più in là — nella risposta, che non ha dove metterlo. Vale come metodo e non come
+aneddoto: **un'affermazione plausibile sull'architettura di questo repo va
+verificata contro i sorgenti prima di diventare una voce**, perché quella
+sbagliata avrebbe fatto riaprire una firma già a posto e lasciato aperta quella
+che scade.
+
 ## Le sedute
 
 | # | Seduta | Perché insieme | Voci | P0 |
@@ -103,11 +116,11 @@ debito, la [21](roadmap/21-la-ricerca-predefinita.md) descrive una promessa.
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | le voci ancora aperte dei quattro giri di audit | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 4 | 1 |
-| **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le prime tre sono lo **stesso record** (`TextQuery`, `DocumentMatch`) e la stessa scadenza; il resto è dove quel comportamento si vede | 9 | 3 |
+| **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le prime tre sono lo **stesso record** (`TextQuery`, `DocumentMatch`) e la stessa scadenza; il resto è dove quel comportamento si vede — più la §21.10, che non è di ricerca ma chiede alla §21.3 la stessa cosa: una **posizione dentro un documento** | 10 | 4 |
 
 ## Le voci
 
-Trentasette. Il numero è quello con cui le nomina il resto del repo.
+Trentotto. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -171,6 +184,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§21.7** | [Ricerche recenti, e la nota che la ricerca non ha trovato](roadmap/21-la-ricerca-predefinita.md#217-ricerche-recenti-e-la-nota-che-la-ricerca-non-ha-trovato) | 21. La ricerca predefinita | shell | **P2** |
 | **§21.8** | [Il testo che sta dentro gli allegati](roadmap/21-la-ricerca-predefinita.md#218-il-testo-che-sta-dentro-gli-allegati) | 21. La ricerca predefinita | kernel | **P2** |
 | **§21.9** | [Una query costa 23 ms su duemila note, e nessuno sa perché](roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché) | 21. La ricerca predefinita | kernel | **P1** |
+| **§21.10** | [Il riferimento a un blocco si parsa, e la risposta non ha dove metterlo](roadmap/21-la-ricerca-predefinita.md#2110-il-riferimento-a-un-blocco-si-parsa-e-la-risposta-non-ha-dove-metterlo) | 21. La ricerca predefinita | contratto | **P0** |
 
 ## Gli allegati
 

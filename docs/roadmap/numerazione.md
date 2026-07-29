@@ -135,7 +135,7 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §4.8 | **§16.4** | Il contratto si scrive quattro volte a mano |
 | §4.12 | **§16.2** | Il banco di prova del kernel è copiato diciotto volte |
 
-**Voci senza un numero vecchio.** Due famiglie non compaiono qui sopra perché
+**Voci senza un numero vecchio.** Tre famiglie non compaiono qui sopra perché
 non traducono niente: sono **nate** con la numerazione per sedute.
 
 - La **§8.4** l'ha trovata una misura, non un giro
@@ -144,6 +144,15 @@ non traducono niente: sono **nate** con la numerazione per sedute.
   [0025](../decisions/0025-la-ricerca-predefinita.md): la ricerca è built-in e
   di classe *omnisearch*, e quelle nove voci sono la sottrazione fra ciò che
   quel comportamento richiede e ciò che il contratto sa dire.
+- La **§21.10** l'ha trovata una **verifica**: il controllo contro i sorgenti di
+  un'affermazione arrivata da fuori sull'architettura della lavagna. Diceva che
+  il riferimento a blocco mancava dal contratto — e il contratto ce l'ha dalla
+  [0003](../decisions/0003-modello-del-documento.md). Il buco stava nella
+  risposta di `IndexQuery::Resolve`, che sa dire quale documento e non dove
+  dentro. È l'unica voce del piano nata da un'affermazione **sbagliata**, ed è
+  la ragione per cui vale la pena scriverlo: cercare dove una tesi plausibile
+  non regge è un modo di trovare voci, e trova quelle che nessuna delle sei
+  domande andava a cercare.
 
 Cercarle in un commit di prima della riorganizzazione non ha senso: prima non
 esistevano.
