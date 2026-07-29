@@ -177,7 +177,7 @@
 - [ ] UTF-8 enforcement
 - [ ] Gestione BOM
 - [ ] Gestione line endings
-- [ ] Normalizzazione CRLF/LF
+- [ ] Normalizzazione CRLF/LF solo su richiesta esplicita
 - [ ] Gestione file read-only
 - [ ] Vault su drive rimovibile
 - [ ] Vault su cloud drive
@@ -186,6 +186,57 @@
 - [ ] Vault rename
 - [ ] Prevenzione vault annidati
 - [ ] Vault integrity check
+
+## 2.4 Fedeltà del file
+
+**Un file che FubMD non ha modificato resta identico byte per byte; uno che ha
+modificato differisce solo dove la modifica è avvenuta.** È la condizione perché
+«file locali leggibili» e «nessun lock-in» (1.1) valgano anche per chi tiene il
+vault sotto controllo di versione: un `git diff` che mostra righe che l'utente
+non ha scritto è un difetto di prodotto, non un dettaglio di formattazione. Le
+modifiche programmatiche a un documento esistente si fanno come **patch
+chirurgiche sulla sorgente**, mai rigenerando il file dal modello — che è lossy
+per costruzione: la primitiva, con la revisione su cui si applica, è la
+[decisione 0008](decisions/0008-modifica-chirurgica.md). Ciò che questa sezione
+chiede non è una funzionalità che si accende, ma una proprietà che si perde in
+silenzio: se nessuna riga la nomina, nessuno si accorge del giorno in cui non
+vale più.
+
+### Non scrivere se non ti si chiede
+
+- [ ] Aprire una nota non la riscrive
+- [ ] Chiudere una nota non modificata non tocca il file
+- [ ] Nessuna riscrittura di massa all'apertura del vault
+- [ ] Nessuna migrazione silenziosa del contenuto delle note
+- [ ] L'mtime non cambia se il contenuto non cambia
+- [ ] I derivati non si scrivono mai fra i file dell'utente
+- [ ] Nessuna formattazione implicita al salvataggio
+- [ ] Ogni normalizzazione è esplicita e disattivata di default
+
+### Cosa si preserva quando invece si scrive
+
+- [ ] Ordine delle chiavi del frontmatter preservato
+- [ ] Commenti nel frontmatter preservati
+- [ ] Stile YAML preservato (virgolette, blocchi, rientri)
+- [ ] Line ending preservate per file, non normalizzate d'ufficio
+- [ ] BOM preservato se c'era, mai aggiunto se non c'era
+- [ ] Newline finale né aggiunta né tolta
+- [ ] Trailing whitespace non rimosso d'ufficio
+- [ ] Stile dei marcatori di lista preservato
+- [ ] Stile dell'enfasi preservato
+- [ ] Simbolo dello stato di un task preservato
+- [ ] Un wikilink resta un wikilink, un link Markdown resta tale
+- [ ] Nessuna modifica fuori dallo span dichiarato
+
+### Il diff come superficie di verifica
+
+- [ ] Una modifica produce un diff grande quanto la modifica
+- [ ] Anteprima del diff prima di un'operazione in blocco
+- [ ] Rapporto di ciò che una normalizzazione cambierebbe, prima di applicarla
+- [ ] Apri-e-salva non cambia il file (presidio su corpus)
+- [ ] Round-trip verificato su vault reali
+- [ ] Un vault sotto git non accumula rumore
+- [ ] Segnalazione quando un'operazione tocca più di quanto dichiara
 
 ---
 
