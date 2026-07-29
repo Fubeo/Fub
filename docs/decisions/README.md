@@ -69,6 +69,7 @@ cronologico di chiusura.
 | [0056](0056-un-elenco-che-e-la-sorgente.md) | Un elenco che è la sorgente, e un insieme che il compilatore chiude | §16.7 — **meno la sua seconda metà**, che diventa la §16.8 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 | [0057](0057-la-dieta-dell-ipc.md) | La dieta dell'IPC: un elenco che diventa rosso quando qualcosa si aggiunge | §16.6 (**meno una casella**) ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 | [0058](0058-un-nome-che-nasce.md) | Un nome che nasce non è un nome che c'è, e la sorgente è il file | §15.5 ([seduta 15](../roadmap/15-il-disco.md)) | 2026-07-29 |
+| [0059](0059-la-generazione-non-e-un-round-trip.md) | La generazione non è un round-trip, e la frase che lo diceva adesso è una rete | il doc di `FormatProvider::serialize` — la sesta specie della [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), **non** una voce di [todo.md](../todo.md) | 2026-07-30 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
