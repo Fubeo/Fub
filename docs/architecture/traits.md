@@ -1195,10 +1195,32 @@ Il punto delicato è **da dove vengono i tipi attesi**: non sono scritti a mano.
 confronto col contratto (`f32`) fallirebbe — il caso che un confronto per soli
 nomi non avrebbe visto.
 
+**Questa è la direzione della verità, ed è opposta a quella del parse**: si parsa
+il WIT perché è ciò che si controlla, e l'atteso viene da Rust perché è ciò di cui
+ci si fida. La [decisione 0053](../decisions/0053-il-contratto-ha-una-sorgente.md)
+l'ha resa esplicita e ne ha tratto la conseguenza: la sorgente del contratto è
+Rust, il WIT e il mirror TypeScript sono due **proiezioni** su due confini che non
+hanno la stessa forma, e ciò che finora li ripeteva si deriva. Il lettore del
+sorgente Rust sta in `tests/common/`, e da lì proiettano in due: `kebab` verso il
+WIT, `snake` verso il JSON di serde.
+
 E c'è il test del test: **quattordici** divergenze introdotte ad arte — campo
 rinominato, caso rimosso, funzione sparita, tipo di troppo, alias con la
 larghezza sbagliata, tipo di un campo cambiato, payload di un caso cambiato,
 risultato di una funzione cambiato, parametro rinominato o ritipato, `host`
 riapparso, campi e casi riordinati — devono tutte far diventare rosso il test.
-Limite dichiarato: l'**ordine** dei casi di un variant è confrontato con l'ordine
-in cui il test li elenca, non con quello dell'enum Rust.
+L'**ordine** dei casi è confrontato con quello della dichiarazione Rust, letta
+dal sorgente con `syn`: riordinare l'enum senza toccare WIT e test è rosso quanto
+riordinare il WIT. *(Questa riga diceva il contrario — «limite dichiarato: …non
+con quello dell'enum Rust» — ed era falsa da settantacinque commit: `rust_enum_order`
+è arrivata con la [0003](../decisions/0003-modello-del-documento.md), due giorni
+dopo che la frase era stata scritta, e nessuno è tornato a correggerla. È il
+[§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+nella sua forma peggiore: non un numero invecchiato, ma un limite dichiarato che
+non esisteva più — cioè un invito a non fidarsi di una garanzia che c'era.)*
+
+Dalla [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) l'ordine non si
+elenca nemmeno più per gli `enum`: `enumeration_from(nome, (file, EnumRust))`
+legge i casi dal sorgente invece di farli riscrivere. Per i `variant` l'elenco
+resta, perché i **payload** non si derivano da una dichiarazione: vengono dal
+destrutturare un valore vero, ed è il compilatore a garantirne l'esaustività.

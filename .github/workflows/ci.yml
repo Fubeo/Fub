@@ -41,6 +41,14 @@ jobs:
         run: cargo test -p fubmd-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fubmd-abi --test dependency_invariant
+      # Il terzo confine, e l'unico che si GENERA: le union di stringhe del
+      # mirror TS sono emesse dagli enum senza payload del contratto
+      # (decisione 0053). Sta qui e non solo nel `cargo test --workspace`
+      # perché è un'invariante del contratto come le altre tre: se è rosso,
+      # `frontend/src/host/enums.generated.ts` è stantio e la shell sta
+      # nominando dei casi che in Rust non ci sono più.
+      - name: le union del mirror TS sono derivate dai tipi Rust
+        run: cargo test -p fubmd-abi --test ts_enums
 
   # Licenze, advisory e provenienza delle dipendenze, più l'SBOM. È l'unica
   # parte del piano il cui costo cresce con il numero di dipendenze già entrate:

@@ -58,6 +58,7 @@ import type {
 // Le fixture sono generate dai tipi Rust (serde) — vedi
 // `crates/fubmd-features/tests/ts_mirror.rs` (tipi del contratto) e
 // `crates/fubmd-app/tests/ts_mirror_app.rs` (tipi dell'app).
+import type { EventKind } from "./enums.generated";
 import { asPluginError, errorText, isErrorKind } from "./errors";
 import samples from "../__fixtures__/mirror-samples.json";
 import appSamples from "../__fixtures__/mirror-samples-app.json";
@@ -75,6 +76,19 @@ import appSamples from "../__fixtures__/mirror-samples-app.json";
 //
 // Così un caso aggiunto in Rust e non rispecchiato in TS non può passare in
 // silenzio, che è esattamente il buco che questo confine aveva.
+//
+// # E un terzo anello, senza fixture di mezzo (decisione 0053)
+//
+// `KernelEvent` resta rispecchiato a mano: un enum con payload non si deriva
+// senza riscrivere serde. Il suo DISCRIMINANTE no — `EventKind` è emesso
+// dall'omonimo enum Rust in `enums.generated.ts`. Qui si verifica che i due
+// insiemi siano **lo stesso**, nelle due direzioni: un `Event` nuovo in Rust fa
+// crescere `EventKind` **da solo** (l'elenco degli enum è una regola, non una
+// lista), e da quel momento la riga qui sotto non compila finché `KernelEvent`
+// non porta il caso. È l'esaustività del §16.7 senza nessun elenco scritto a
+// mano, e il presidio è `npx tsc --noEmit`, che gira in CI.
+type Uguali<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+export const _le_specie_di_evento_coincidono: Uguali<KernelEvent["type"], EventKind> = true;
 
 const fixture = samples as unknown as Record<string, unknown[]>;
 const appFixture = appSamples as unknown as Record<string, unknown[]>;

@@ -63,6 +63,7 @@ cronologico di chiusura.
 | [0050](0050-cosa-si-chiede-a-una-ricerca.md) | Cosa si chiede a una ricerca | §21.1 + §21.2 — con la 0049 chiude le quattro P0 della [seduta 21](../roadmap/21-la-ricerca-predefinita.md) | 2026-07-29 |
 | [0051](0051-l-alimentazione-risponde.md) | L'alimentazione risponde, e risponde a lotti | §20.1 — l'**ultima P0** aperta del piano | 2026-07-29 |
 | [0052](0052-cio-che-va-storto-e-un-evento.md) | Ciò che va storto è un evento, e il kernel smette di buttarlo | §20.2 (**meno una casella**) + §20.3 ([seduta 20](../roadmap/20-quando-qualcosa-va-storto.md)) | 2026-07-29 |
+| [0053](0053-il-contratto-ha-una-sorgente.md) | Il contratto ha una sorgente, e due confini che non hanno la stessa forma | §16.4 + §16.5 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -120,6 +121,27 @@ convertiti uno a uno. È il caso opposto alla mezza voce della
 voce è rimasta aperta, qui il ragionamento è intero e ciò che resta è lavoro che
 non decide niente. Il criterio per distinguerli è sempre lo stesso: una casella
 residua è ciò che si può fare **senza aprire un verbale**.
+
+La [0053](0053-il-contratto-ha-una-sorgente.md) chiude due voci in un verbale
+solo per la ragione della [0046](0046-l-anagrafe-del-vault.md) — erano lo stesso
+lavoro visto da due lati — ma con una differenza che vale la pena: **lo diceva la
+seduta, non il verbale**. Il file della [seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)
+portava scritto in testa che «la 16.5 non è una voce autonoma: è la gamba TS della
+domanda che pone la 16.4», e che deciderle separate avrebbe voluto dire decidere
+due volte la stessa cosa, la seconda contro la prima. È il primo caso in cui
+l'accorpamento è **dichiarato in anticipo** invece di essere scoperto scrivendo:
+un cappello di seduta può decidere la forma del verbale che la chiuderà, ed è una
+cosa che i cappelli fanno bene perché li si scrive guardando le voci insieme.
+
+E c'è una seconda cosa che quel verbale inaugura: chiude una voce **smentendone
+la premessa**. Il §16.4 escludeva i tipi Rust perché «la sorgente autorevole è il
+WIT, ed è già il repo a trattarlo così»; controllato contro `wit_conformance.rs`,
+il repo tratta come autorevole esattamente Rust — parsa il WIT perché è ciò che
+controlla. Le decisioni precedenti hanno corretto **numeri** di una voce (la
+[0052](0052-cio-che-va-storto-e-un-evento.md) ne ha corretti quattro); questa
+corregge un **fatto sull'architettura** su cui la voce poggiava per intero, e la
+conclusione è cambiata di conseguenza: ha ragione il §16.5 sulla direzione, e
+torto sullo strumento.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio
