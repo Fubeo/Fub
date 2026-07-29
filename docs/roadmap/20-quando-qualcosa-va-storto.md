@@ -88,6 +88,40 @@ dell'attesa non cresce, è già massimo.
       più piccola e dice meno: non nomina *quale* documento. Chi la sceglie deve
       dire come si nomina il documento perso, perché «l'indice ha perso qualcosa»
       senza un `DocId` non fa agire nessuno.
+- [ ] **Insieme alla forma si congela la *grana*, e nessuno l'ha nominata.**
+      `on_document_indexed(&DocumentModel)` è **per documento**
+      (`abi/traits.rs`), e il kernel la chiama così da tutti e tre i punti in cui
+      alimenta (`kernel/workspace.rs`): `ingest_model` una volta per scrittura,
+      `rename_document` come `remove`+`add`, e `reindex` in un ciclo — `for model
+      in &models` — dove il lotto **esiste già ed è in memoria**, perché quella
+      funzione parsa tutto prima di mutare e i modelli interi vivono lì. Oggi
+      quel `&` non costa niente: i provider sono nativi e il modello passa per
+      riferimento. A M5 ogni attraversamento del confine è una
+      **serializzazione** — è la stessa aritmetica per cui la
+      cartella di tantivy passa da `plugin_data_dir` invece che dal contratto
+      (`workspace.rs`, [plugin-boundary.md](../architecture/plugin-boundary.md)):
+      ciò che tocca **ogni** documento si paga a ogni documento. Un `reindex` da
+      100k note sono 100k attraversamenti, e la firma che li impone è questa.
+- [ ] **E il lotto che il contratto già conosce non copre questo.** La
+      [0011](../decisions/0011-il-lotto.md) ha dato al kernel il modo di dire
+      «queste N scritture sono una cosa sola», ma quel lotto vive sulla **coda
+      eventi**: `batch` apre e chiude il dispatch (`workspace.rs`) e non tocca
+      l'alimentazione, che resta una chiamata per documento anche dentro un
+      lotto. La disciplina è decisa da una parte e assente dall'altra, sullo
+      stesso canale — e si vede nell'esempio con cui quel verbale è nato: una
+      rinomina con 200 backlink è **un** evento terminale e restano **200**
+      alimentazioni, una per nota riscritta.
+- [ ] **Le due domande hanno una risposta sola, ed è la ragione per cui vanno
+      decise nella stessa seduta.** Un esito **per lotto** — la fetta di modelli
+      e un esito che nomina i documenti perduti — risponde alla forma (dice
+      *quale*, che è esattamente ciò che l'esito cumulativo del `flush` non sa
+      dire) e alla grana (un attraversamento per lotto invece che per documento)
+      con lo stesso campo. Deciderle separate significa rinunciare a una delle
+      due: se la firma resta per documento, il costo del confine si corregge con
+      una major; se l'esito resta cumulativo, il documento perso resta senza
+      nome. Chi sceglie il lotto deve dire **chi lo taglia** — il kernel, che è
+      l'unico a sapere quanti modelli ha in mano — e cosa vuol dire un lotto
+      accettato a metà.
 
 *Sblocca:* 9.1 (ricerca, ~74 voci) e 9.2 nel senso stretto che oggi possono
 mentire; e ogni indice futuro — 22.1 (semantico e vettoriale), 10 (indice dei
