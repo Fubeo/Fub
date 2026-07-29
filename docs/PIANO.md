@@ -162,6 +162,15 @@ di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
   che porta con sé anche il **check dei link interni** in CI
   (`.github/scripts/check-doc-links.mjs`).
 
+**Il repo come progetto pubblico** (primo livello di `docs/`, perché la prosa sta
+in un posto solo; i nomi sono in inglese perché GitHub li cerca **per nome** — la
+ragione per esteso è in [README.md](README.md)):
+- [CONTRIBUTING.md](CONTRIBUTING.md) — le quattro invarianti presidiate, il ciclo locale, i sei job della CI, la forma dei commit, come si chiude una decisione.
+- [SECURITY.md](SECURITY.md) — il canale privato per una vulnerabilità, il perimetro (dentro: il contenuto dei file come input non fidato; fuori: il sandbox WASM, che a M5 non esiste ancora), e i presidi già in piedi.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1, traduzione ufficiale italiana, ripreso parola per parola.
+- [versionamento.md](versionamento.md) — i **tre** numeri di versione: i crate (SemVer, un numero solo per il workspace), il contratto (`ABI_VERSION` + `package fubmd:abi@…`, con la regola di caricamento) e i sette `SCHEMA_VERSION` su disco. L'additività del contratto non si ripete lì: rimanda a [architecture/wit-congelato.md](architecture/wit-congelato.md).
+- [CHANGELOG.md](CHANGELOG.md) — cosa cambia per chi usa FubMD, alla grana della milestone finché non esiste un rilascio.
+
 **Appendici**:
 - [appendix/ai-autocomplete.md](appendix/ai-autocomplete.md) — design (non milestone) dell'autocompletamento AI.
 - [appendix/funzionalita-future.md](appendix/funzionalita-future.md) — funzionalità post-M5 (mobile, sync, flashcard, export editoriale…) dalle interviste alle personas; include il principio della **spegnibilità totale**.
