@@ -140,6 +140,29 @@ pub struct TextQuery {
     /// suoi pesi — è il default, ed è ciò che una casella di ricerca manda.
     #[serde(default)]
     pub fields: Vec<TextField>,
+    /// Quanto si vuole essere indovinati: un'**intenzione**, mai una distanza
+    /// di edit (decisione 0050).
+    ///
+    /// Sta qui e non in [`TextMode`] perché modalità e tolleranza sono
+    /// **ortogonali**: una *frase* cercata a meno di un refuso ha senso, e con
+    /// una terza variante dell'enum non si scriverebbe.
+    #[serde(default)]
+    pub tolerance: TextTolerance,
+    /// L'**ultimo** termine è incompleto: `arch` deve trovare *architettura*
+    /// mentre la parola si sta ancora scrivendo.
+    ///
+    /// È una proprietà dell'**invocazione**, non della query: chi **salva** una
+    /// query — una collezione, una vista salvata, un template — la normalizza a
+    /// `false` prima di scriverla, perché l'utente aveva finito di scrivere e
+    /// nessuno era lì a vederlo. Il dovere è scritto qui perché senza sarebbe
+    /// di ogni chiamante, e ognuno ne inventerebbe uno suo.
+    ///
+    /// Non lo aggiunge la casella di ricerca appendendo un `*`: se lo facesse,
+    /// la lingua dell'utente divergerebbe da quella di CLI, API locale,
+    /// automazioni e centro di comando LLM, e la differenza non sarebbe scritta
+    /// da nessuna parte.
+    #[serde(default)]
+    pub partial_last_term: bool,
 }
 
 impl TextQuery {
@@ -150,7 +173,15 @@ impl TextQuery {
             text: text.into(),
             mode: TextMode::Terms,
             fields: Vec::new(),
+            tolerance: TextTolerance::Exact,
+            partial_last_term: false,
         }
+    }
+
+    /// La stessa domanda, ma l'ultimo termine è ancora in corso di scrittura.
+    pub fn while_typing(mut self) -> Self {
+        self.partial_last_term = true;
+        self
     }
 }
 
@@ -167,6 +198,36 @@ pub enum TextMode {
     Phrase,
 }
 
+/// Quanto si vuole essere indovinati da una ricerca.
+///
+/// Due casi e non un numero, ed è il punto della decisione 0050: nel contratto
+/// entra un'**intenzione**, e la traduzione in parametri di motore — quante
+/// sostituzioni, con che prefisso intatto — è del provider, come già lo è la
+/// tokenizzazione. «Due caratteri» in una firma vorrebbe dire che cambiare
+/// motore cambia il significato delle query già salvate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextTolerance {
+    /// I termini come sono stati scritti. È il default, ed è l'unico valore che
+    /// un canale che poi **scrive** può permettersi: `vault.replace` su N note,
+    /// le collezioni, le viste salvate e l'automazione su-modifica passano da
+    /// qui, e un motore che indovina sotto una scrittura è un difetto.
+    ///
+    /// Prima di questa firma l'esattezza era **implicita**, e ciò che è
+    /// implicito non si può pretendere: il giorno in cui un provider fosse
+    /// diventato tollerante, lo sarebbero diventati tutti i suoi chiamanti nello
+    /// stesso istante e senza che nessuno lo avesse chiesto.
+    #[default]
+    Exact,
+    /// A meno di un refuso: chi cerca *architettra* vuole *architettura*.
+    ///
+    /// Un provider che non la sa onorare risponde come per [`Exact`] — che è il
+    /// verso sicuro dello sbaglio: restringe, non allarga.
+    ///
+    /// [`Exact`]: TextTolerance::Exact
+    Typos,
+}
+
 /// Dove cercare il testo. Non è l'elenco dei campi di un motore — è ciò che
 /// **ogni** motore di note deve saper distinguere, o «cerca solo nel titolo»
 /// diventerebbe un pezzo di sintassi da comporre a mano.
@@ -179,6 +240,11 @@ pub enum TextField {
     Body,
     /// I suoi tag, in forma canonica.
     Tags,
+    /// I suoi heading. È il campo che distingue una nota che **parla** di una
+    /// cosa da una che ci ha dedicato una sezione, e per questo pesa a parte:
+    /// il testo di un heading sta anche nel corpo, e trovarlo due volte è
+    /// esattamente il segnale che si vuole.
+    Heading,
 }
 
 impl QueryExpr {

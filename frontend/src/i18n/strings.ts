@@ -84,6 +84,7 @@ const IT = {
   "search.empty": "Nessun risultato",
   "search.count": "Risultati: {count}",
   "search.unavailable": "Ricerca non disponibile",
+  "search.occurrence": "Occorrenza {n}",
 
   // --- l'esplora ---------------------------------------------------------
   "explorer.notes": "Note",
@@ -267,6 +268,7 @@ const EN: Record<Chiave, string> = {
   "search.empty": "No results",
   "search.count": "Results: {count}",
   "search.unavailable": "Search unavailable",
+  "search.occurrence": "Occurrence {n}",
 
   "explorer.notes": "Notes",
   "explorer.notes.hint": "Notes of the vault",

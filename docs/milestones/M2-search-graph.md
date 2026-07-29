@@ -97,17 +97,22 @@ può saltare, e un secondo modale che cerca *dentro* la nota aperta.
 La [0025](../decisions/0025-la-ricerca-predefinita.md) ha deciso che quel
 comportamento è **la ricerca dell'app** e non un plugin installabile — sotto non
 c'è una ricerca "base" da migliorare, e dalla stessa porta passano quick
-switcher, palette, collezioni e `vault.replace`. Il che rende tre pezzi
-**firma**, quindi scadenti col freeze di [M4](M4-wit-hardening.md):
+switcher, palette, collezioni e `vault.replace`. Il che rendeva tre pezzi
+**firma**, quindi scadenti col freeze di [M4](M4-wit-hardening.md) — e tutti e
+tre sono stati chiusi prima di quella scadenza:
 
-- `TextMode` non sa dire «a meno di un refuso» — né, di conseguenza,
-  «esattamente», che è ciò che serve a chi poi **scrive** ([§21.1](../roadmap/21-la-ricerca-predefinita.md#211-la-tolleranza-ai-refusi-non-è-dicibile-nel-contratto));
-- non c'è modo di dire che l'ultimo termine è ancora incompleto, e se lo aggiunge
-  la casella di ricerca allora CLI, automazioni e LLM interrogano lo stesso
-  indice in una lingua diversa ([§21.2](../roadmap/21-la-ricerca-predefinita.md#212-il-prefisso-mentre-si-digita-non-è-uneuristica-della-casella));
-- `DocumentMatch.highlights` sono span dentro `snippet` e non dentro il
+- ~~`TextMode` non sa dire «a meno di un refuso» — né, di conseguenza,
+  «esattamente», che è ciò che serve a chi poi **scrive** (§21.1);~~
+- ~~non c'è modo di dire che l'ultimo termine è ancora incompleto, e se lo
+  aggiunge la casella di ricerca allora CLI, automazioni e LLM interrogano lo
+  stesso indice in una lingua diversa (§21.2);~~ tutte e due chiuse dalla
+  [0050](../decisions/0050-cosa-si-chiede-a-una-ricerca.md): `TextQuery` porta
+  `tolerance` e `partial_last_term`, e `TextField` nomina gli heading;
+- ~~`DocumentMatch.highlights` sono span dentro `snippet` e non dentro il
   documento, quindi `ViewUpdate::Reveal` — che la shell sa già eseguire per
-  l'outline — non ha coordinate da ricevere ([§21.3](../roadmap/21-la-ricerca-predefinita.md#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento)).
+  l'outline — non ha coordinate da ricevere (§21.3).~~ Chiusa dalla
+  [0049](../decisions/0049-una-posizione-dentro-un-documento.md): accanto agli
+  `highlights` c'è `occurrences`, che sono coordinate nel sorgente.
 
 Le altre sei voci (superfici, pesi, allegati, e la misura che non torna) stanno
 nella [seduta 21](../roadmap/21-la-ricerca-predefinita.md). Nessuna di esse

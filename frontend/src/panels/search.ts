@@ -3,9 +3,10 @@ import type { DocumentMatch, Span } from "../host/contract";
 import { testoCercato } from "../host/contract";
 import { documentiCheCombaciano } from "../host/query";
 import { pageName } from "../rules/organizer";
+import { righeDaMostrare } from "../rules/risultati";
 import { $ } from "../ui/dom";
 import { refreshOn, registerPanel } from "../ui/panel-host";
-import { openDocument } from "./document";
+import { openDocument, revealByteOffset } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
 import { errorText } from "../host/errors";
 import { attivabile } from "../ui/a11y";
@@ -76,7 +77,14 @@ async function runSearch(): Promise<void> {
     // Ciò che l'utente digita è **testo cercato**, non una sintassi: la stringa
     // è il campo di una foglia, e non c'è più un parser di terzi che possa
     // rifiutarla a metà parola (§5.3).
-    hits = (await documentiCheCombaciano(testoCercato(query), { offset: 0, limit: 50 })).items;
+    //
+    // E l'ultimo termine è **incompleto**: questa casella cerca mentre si
+    // digita, quindi `arch` deve trovare *architettura* prima che la parola sia
+    // finita (§21.2). Lo dice la query, non un `*` appeso qui: la lingua è una
+    // sola per la casella, la CLI, l'API locale e le automazioni.
+    hits = (
+      await documentiCheCombaciano(testoCercato(query, true), { offset: 0, limit: 50 })
+    ).items;
   } catch (e) {
     // Resta il caso in cui **nessuno** serve la ricerca: un vault aperto senza
     // indice full-text. È una mancanza, non zero risultati, e va detta.
@@ -100,25 +108,43 @@ function showSearchResults(hits: DocumentMatch[], error: string | null): void {
       : t("search.count", { count: hits.length });
 
   searchResultsEl.innerHTML = "";
-  for (const hit of hits) {
+  for (const riga of righeDaMostrare(hits)) {
     const li = document.createElement("li");
-    li.title = hit.doc;
+    li.title = riga.doc;
+    if (riga.occorrenza === undefined) {
+      const title = document.createElement("span");
+      title.className = "hit-title";
+      title.textContent = pageName(riga.doc);
 
-    const title = document.createElement("span");
-    title.className = "hit-title";
-    title.textContent = pageName(hit.doc);
-
-    const snippet = document.createElement("span");
-    snippet.className = "hit-snippet";
-    snippet.appendChild(highlighted(hit.snippet ?? "", hit.highlights ?? []));
-
-    li.append(title, snippet);
-    li.addEventListener("click", () => void openDocument(hit.doc));
-    // Un risultato di ricerca si apre col mouse e adesso anche col tab: era una
-    // `<li>` con un `click` sopra, cioè — per chi non usa il mouse — testo.
-    attivabile(li);
+      const snippet = document.createElement("span");
+      snippet.className = "hit-snippet";
+      snippet.appendChild(highlighted(riga.snippet ?? "", riga.highlights ?? []));
+      li.append(title, snippet);
+    } else {
+      li.className = "hit-occurrence";
+      li.textContent = t("search.occurrence", { n: riga.occorrenza });
+    }
+    apriA(li, riga.doc, riga.byteOffset);
     searchResultsEl.appendChild(li);
   }
+}
+
+/// Cliccare (o attivare da tastiera) apre il documento e, se c'è un punto, ci
+/// porta il cursore.
+///
+/// L'offset è in **byte UTF-8** — la valuta di ogni span del modello — e la
+/// conversione a posizione dell'editor la fa `revealByteOffset`, la stessa che
+/// usano l'outline e `ViewUpdate::Reveal`: la ricerca era l'unico cliente
+/// naturale di quel giro e non aveva le coordinate da passargli.
+function apriA(el: HTMLElement, doc: string, byteOffset?: number): void {
+  el.addEventListener("click", () => {
+    void openDocument(doc).then(() => {
+      if (byteOffset !== undefined) revealByteOffset(byteOffset);
+    });
+  });
+  // Un risultato di ricerca si apre col mouse e adesso anche col tab: era una
+  // `<li>` con un `click` sopra, cioè — per chi non usa il mouse — testo.
+  attivabile(el);
 }
 
 /// Lo snippet con le porzioni evidenziate, come nodi DOM.

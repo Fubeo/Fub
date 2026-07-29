@@ -178,16 +178,18 @@ inesprimibile, non stretto* — ne arrivano due dalla
 [decisione 0025](../decisions/0025-la-ricerca-predefinita.md), che non ha cercato
 voci: le ha **create**, decidendo cosa l'app deve fare.
 
-**§21.3 (gli estratti sono ancorati allo snippet, non al documento)**:
-`DocumentMatch.highlights` sono span *dentro `snippet`*, quindi la ricerca
+**§21.3 (gli estratti sono ancorati allo snippet, non al documento)** — ora
+chiusa con la [decisione 0049](../decisions/0049-una-posizione-dentro-un-documento.md):
+`DocumentMatch.highlights` erano span *dentro `snippet`*, quindi la ricerca
 dentro la nota aperta, il salto all'occorrenza e le occorrenze multiple per nota
-non sono strette — non si possono scrivere. E la destinazione esiste già:
-`ViewUpdate::Reveal` è in repo dal pannello outline e aspetta coordinate che
-nessuno può produrre, che è la forma più netta in cui una capacità può mancare —
-metà del giro c'è, metà è indicibile.
+non erano strette — non si potevano scrivere. E la destinazione esisteva già:
+`ViewUpdate::Reveal` era in repo dal pannello outline e aspettava coordinate che
+nessuno poteva produrre, che è la forma più netta in cui una capacità può
+mancare — metà del giro c'è, metà è indicibile.
 
-**§21.1 (la tolleranza ai refusi non è dicibile)** si legge al contrario di come
-sembra, e per questo sta qui invece che fra le rifiniture. Non è che manchi il
+**§21.1 (la tolleranza ai refusi non è dicibile)** — ora chiusa con la
+[decisione 0050](../decisions/0050-cosa-si-chiede-a-una-ricerca.md) — si legge al
+contrario di come sembra, e per questo stava qui invece che fra le rifiniture. Non è che manchi il
 fuzzy: manca il modo di chiedere l'**esattezza**, perché oggi l'esattezza è
 implicita, e ciò che è implicito non si può pretendere. Il giorno in cui il
 provider comincia a indovinare cominciano a indovinare nello stesso istante
@@ -200,17 +202,20 @@ questa pagina serve a evitare un difetto invece che a ordinarne la riparazione.
 
 **Fuori anche da quelle**, e con lo stesso statuto, ne arriva una terza che non
 l'ha portata nessuna decisione: la **§21.10 (il riferimento a un blocco si parsa
-e la risposta non ha dove metterlo)**. Sta qui per la ragione della
+e la risposta non ha dove metterlo)**, ora chiusa insieme alla §21.3 con la
+[decisione 0049](../decisions/0049-una-posizione-dentro-un-documento.md) —
+perché le due chiedevano la stessa primitiva da due firme diverse. Stava qui per
+la ragione della
 [0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) — una promessa che vale a
 metà e in silenzio — portata al suo caso limite. Nelle altre della famiglia il
 pezzo mancava; qui c'è tutto: la sintassi si scrive, il parser la riconosce, il
 modello porta l'ancora, `LinkTarget::Wiki` porta il blocco, il mirror TypeScript
-lo rispecchia, e poi `IndexResult::Resolved(Option<DocId>)` non ha dove metterlo
-e tutti e cinque i punti che risolvono un wikilink lo scartano con `..`. Il
-risultato è che `[[Nota#^blocco]]` apre la nota in cima e nessuno lo dice: non è
-una capacità stretta, è una capacità **costruita e poi troncata all'ultimo
-centimetro**, che è il modo peggiore in cui una promessa può essere falsa, perché
-ogni indizio disponibile dice che è vera.
+lo rispecchia, e poi `IndexResult::Resolved(Option<DocId>)` non aveva dove
+metterlo e tutti e cinque i punti che risolvono un wikilink lo scartavano con
+`..`. Il risultato era che `[[Nota#^blocco]]` apriva la nota in cima e niente lo
+diceva: non una capacità stretta, ma una capacità **costruita e poi troncata
+all'ultimo centimetro**, che è il modo peggiore in cui una promessa può essere
+falsa, perché ogni indizio disponibile dice che è vera.
 
 E c'è una seconda lezione, che riguarda questa pagina e non quella voce: la riga
 di [strozzature.md](strozzature.md) che diceva «nessun `^block-id`» era falsa da

@@ -26,11 +26,16 @@ const previewEl = $("#preview");
 /// Profondità massima di transclusion: oltre, l'embed resta un link.
 const MAX_EMBED_DEPTH = 5;
 
-let apriPagina: (page: string) => Promise<void> = async () => {};
+let apriPagina: (page: string, heading?: string, block?: string) => Promise<void> = async () => {};
 
 export interface PreviewDeps {
   /// Cliccare un wikilink: risolvere e aprire, o creare la nota che manca.
-  openPage(page: string): Promise<void>;
+  ///
+  /// `heading` e `block` sono il punto che il link nomina, quando lo nomina
+  /// (`[[Nota#Sezione]]`, `[[Nota#^blocco]]`): il parser li legge dalla 0003 e
+  /// fino alla 0049 non c'era una risposta in cui metterli, quindi si
+  /// perdevano qui.
+  openPage(page: string, heading?: string, block?: string): Promise<void>;
 }
 
 export function configurePreview(deps: PreviewDeps): void {
@@ -96,7 +101,7 @@ function wireWikilinks(container: HTMLElement): void {
       const page = a.dataset.wikilinkPage;
       if (!page) return;
       try {
-        await apriPagina(page);
+        await apriPagina(page, a.dataset.wikilinkHeading, a.dataset.wikilinkBlock);
       } catch (err) {
         // Link non risolto e nota non creabile: si segna, non si tace.
         a.classList.add("unresolved");

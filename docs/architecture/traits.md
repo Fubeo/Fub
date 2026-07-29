@@ -568,11 +568,18 @@ Tre varianti che meritano una riga in più:
   (`rules::media::mime_of`), perché è funzione pura del nome; `fingerprint` è la
   stessa `Revision` di `document_revision` e c'è solo dove qualcuno ha già avuto
   i byte in mano.
-- `Resolve { target: LinkTarget, from: Option<DocId> }` → `Resolved(Option<DocId>)`
+- `Resolve { target: LinkTarget, from: Option<DocId> }` →
+  `Resolved(Option<ResolvedRef>)`, dove
+  `ResolvedRef { doc: DocId, at: Option<DocPosition> }`,
   è «cosa nomina questo riferimento, adesso?»
   ([0043](../decisions/0043-il-path-e-la-chiave.md), §13.1). Il bersaglio è un
   `LinkTarget` e non una stringa perché `a/b.md` è due cose — un wikilink per
-  path *e* un link markdown relativo — che non risolvono allo stesso posto.
+  path *e* un link markdown relativo — che non risolvono allo stesso posto. `at`
+  è la metà di risposta arrivata dopo
+  ([0049](../decisions/0049-una-posizione-dentro-un-documento.md)): un
+  `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` porta un punto, e finché la
+  risposta sapeva dire solo *quale documento* tutti e cinque i punti che
+  risolvono un wikilink lo scartavano con un `..`.
 - `VaultStatus` è l'unica variante che non chiede niente **sul contenuto** del
   vault: chiede del vault stesso — *sa quando cambia da fuori?*
   ([0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md)). Passa di qui e
@@ -759,16 +766,25 @@ poter iniettare contenuto attivo nella webview privilegiata passando per i
 risultati di ricerca — stessa regola di `UiNode::Html` in
 [ui-protocol.md](ui-protocol.md).
 
-**Dentro `snippet` e non dentro il documento**, però, ed è una scelta con una
-scadenza: gli span non sono coordinate nel testo della nota, quindi da un
-risultato non si può tornare al punto che lo ha prodotto — mentre la
-destinazione, `ViewUpdate::Reveal { doc_id, span }`, esiste già. Con la
-[0025](../decisions/0025-la-ricerca-predefinita.md) questa forma diventa la
-[§21.3](../roadmap/21-la-ricerca-predefinita.md#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento).
-Vale lo stesso per `TextQuery`: `TextMode` sa dire `Terms` e `Phrase` e non sa
-dire «a meno di un refuso» — né, di conseguenza, «esattamente», che serve a chi
-poi **scrive** sullo stesso canale (§21.1). Tutti e due i record sono già nel
-WIT: si correggono prima del freeze di M4, o con una migrazione di versione.
+**Dentro `snippet` e non dentro il documento**, e accanto c'è l'altra metà:
+`occurrences: Vec<DocPosition>`, che sono coordinate nel **sorgente**
+([0049](../decisions/0049-una-posizione-dentro-un-documento.md)). Le due non si
+fondono perché servono a due cose — `highlights` a **disegnare** una riga,
+`occurrences` a **tornare** al testo con `ViewUpdate::Reveal { doc_id, span }` —
+e la regola di `absorb` segue chi chiede: l'estratto resta uno per documento (la
+riga di una collezione ne disegna una), le occorrenze si sommano (la ricerca ne
+mostra N).
+
+A riempirle non è chi indicizza ma il kernel, e non è una comodità: un motore
+full-text indicizza la **proiezione a testo piano** del documento, e fra quella e
+il sorgente non c'è nessuna mappa. Il sorgente ce l'ha il vault
+(`kernel/occurrences.rs`, chiamato da `Workspace::query_index`).
+
+`TextQuery` porta l'altra metà della stessa seduta
+([0050](../decisions/0050-cosa-si-chiede-a-una-ricerca.md)): `tolerance`
+(`Exact`/`Typos`, un'**intenzione** e mai una distanza di edit) e
+`partial_last_term` (l'ultimo termine è incompleto — proprietà
+dell'**invocazione**, che chi salva una query normalizza a `false`).
 
 `Custom` è il **varco di estensione** (namespaced: `ns` = plugin id): senza, gli
 enum chiusi + il freeze WIT obbligherebbero il contratto a prevedere in anticipo

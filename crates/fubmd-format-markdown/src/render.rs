@@ -255,7 +255,11 @@ fn render_link(
     out: &mut String,
 ) {
     match target {
-        LinkTarget::Wiki { page, heading, .. } => {
+        LinkTarget::Wiki {
+            page,
+            heading,
+            block,
+        } => {
             if embed {
                 // Transclusion: `render_html` è una funzione pura per-documento
                 // e NON può leggere altri documenti (niente HostApi qui). Si
@@ -279,11 +283,21 @@ fn render_link(
                 .as_ref()
                 .map(|h| format!(" data-wikilink-heading=\"{}\"", escape_attr(h)))
                 .unwrap_or_default();
+            // E il **blocco**: il parser lo legge dalla 0003, e fino alla 0049
+            // si fermava qui — il renderer non lo scriveva, quindi
+            // `[[Nota#^blocco]]` arrivava alla shell come un link alla nota e
+            // basta. Adesso c'è una risposta in cui metterlo
+            // (`resolved-ref.at`), e questo è il primo centimetro del giro.
+            let block_attr = block
+                .as_ref()
+                .map(|b| format!(" data-wikilink-block=\"{}\"", escape_attr(b)))
+                .unwrap_or_default();
             // Wikilink come data-attribute: il frontend risolve la navigazione.
             out.push_str(&format!(
-                "<a class=\"wikilink\" data-wikilink-page=\"{}\"{}",
+                "<a class=\"wikilink\" data-wikilink-page=\"{}\"{}{}",
                 escape_attr(page),
-                heading_attr
+                heading_attr,
+                block_attr
             ));
             if opts.enabled(render_option::WIKILINKS_AS_DATA_ATTRS) {
                 out.push_str(" href=\"#\"");

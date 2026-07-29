@@ -1761,6 +1761,89 @@ pub struct PropertyEntry {
     pub value: PropertyValue,
 }
 
+/// **Un punto dentro un documento**, dicibile nel contratto (decisione 0049).
+///
+/// È una primitiva sola per i tre clienti che la chiedevano da tre firme
+/// diverse: il salto all'occorrenza di un risultato di ricerca
+/// ([`DocumentMatch::occurrences`]), il riferimento a un blocco o a un heading
+/// che [`IndexResult::Resolved`] deve poter indicare ([`ResolvedRef`]), e la
+/// citazione di una lavagna verso un punto di una nota. Tre modi di dire
+/// «dove» sarebbero stati tre modi diversi, e il secondo sarebbe arrivato con
+/// il primo già congelato.
+///
+/// # I tre campi sono tre domande diverse
+///
+/// - `span` è in **byte del sorgente** del documento — la stessa valuta di ogni
+///   altro [`Span`] del modello, e quella che
+///   [`ViewUpdate::Reveal`](crate::ui::ViewUpdate::Reveal) sa già portare in
+///   un editor. Non è un intervallo dentro
+///   [`snippet`](DocumentMatch::snippet): quello serve a **disegnare** una riga
+///   e non a tornare al testo, e le due cose non sono la stessa.
+/// - `anchor` è l'ancora del blocco che ospita il punto, quando ce n'è una
+///   (`^abc`, o lo slug di un heading). Sopravvive alla riscrittura del
+///   paragrafo che la contiene, cosa che uno span non fa; ma non è immortale —
+///   cancellare la riga che la porta la fa sparire — e per questo non
+///   **sostituisce** lo span.
+/// - `revision` dice **di quando**: uno span invecchia appena il documento
+///   cambia sotto, e senza questo campo la shell porterebbe il cursore nel
+///   punto sbagliato senza accorgersene. Il contratto sa già dirlo altrove
+///   ([`EditRequest`](crate::edit::EditRequest), decisione 0008), e la risposta
+///   qui è **una** perché la domanda era la stessa da due lati.
+///
+/// Non è opzionale la revisione e non lo è lo span: una posizione che non sa
+/// dire di quando è una posizione che non si può usare senza indovinare, e chi
+/// non sa dirlo non produce una posizione affatto (`None`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocPosition {
+    /// Byte nel **sorgente** del documento, non dentro un estratto.
+    pub span: Span,
+    /// L'ancora del blocco che lo ospita, se ne ha una.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
+    /// Il sorgente su cui `span` è stato calcolato.
+    pub revision: Revision,
+}
+
+impl DocPosition {
+    /// Un punto senza ancora: il caso di chi ha trovato un'occorrenza nel testo
+    /// e non sa (o non ha pagato per sapere) in che blocco cade.
+    pub fn at(span: Span, revision: Revision) -> Self {
+        DocPosition {
+            span,
+            anchor: None,
+            revision,
+        }
+    }
+
+    pub fn with_anchor(mut self, anchor: impl Into<String>) -> Self {
+        self.anchor = Some(anchor.into());
+        self
+    }
+}
+
+/// Cosa nomina un riferimento: **quale** documento e, quando il riferimento lo
+/// dice, **dove dentro** (risposta a [`IndexQuery::Resolve`]).
+///
+/// `at` è presente solo se il riferimento chiedeva un punto — `[[Nota#Sezione]]`
+/// o `[[Nota#^blocco]]` — e quel punto esiste ancora: un `heading` che nessuno
+/// ha più, un `^abc` cancellato e un riferimento che nomina la nota e basta
+/// danno tutti e tre `None`, e chi ha chiesto apre il documento in cima. È lo
+/// stesso degrado del `None` che avvolge questo record, un gradino più in
+/// basso.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResolvedRef {
+    pub doc: DocId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<DocPosition>,
+}
+
+impl ResolvedRef {
+    /// Il documento, senza un punto dentro.
+    pub fn doc(doc: DocId) -> Self {
+        ResolvedRef { doc, at: None }
+    }
+}
+
 /// Un documento che ha combaciato, con ciò che la query gli ha attaccato
 /// addosso: la riga di una collezione (8.4), di un database su file (11) o di
 /// un elenco di risultati di ricerca.
@@ -1798,6 +1881,23 @@ pub struct DocumentMatch {
     /// mostrarne il titolo.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub properties: Vec<PropertyEntry>,
+    /// **Dove**, nel sorgente del documento, sta ciò che ha combaciato — in
+    /// ordine di posizione (decisione 0049).
+    ///
+    /// Non è un doppione di `highlights`, ed è la distinzione che rende
+    /// esprimibili tre cose che prima non lo erano: la ricerca dentro la nota
+    /// aperta (§21.4), il «vai all'occorrenza successiva», e N risultati per
+    /// nota. `highlights` è la forma giusta per **disegnare** una riga —
+    /// intervalli dentro `snippet`, che chi disegna avvolge — e non ha nessuna
+    /// coordinata nel documento; queste sono le coordinate, e non hanno niente
+    /// da disegnare.
+    ///
+    /// Vuoto non vuol dire «nessuna occorrenza»: vuol dire che nessuno le ha
+    /// calcolate. Chi seleziona senza cercare del testo (`tipo: progetto`) non
+    /// ha niente da localizzare, e un provider può rispondere senza pagare la
+    /// lettura del sorgente.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub occurrences: Vec<DocPosition>,
 }
 
 impl DocumentMatch {
@@ -1809,6 +1909,7 @@ impl DocumentMatch {
             snippet: None,
             highlights: Vec::new(),
             properties: Vec::new(),
+            occurrences: Vec::new(),
         }
     }
 
@@ -1826,6 +1927,14 @@ impl DocumentMatch {
     /// gli viene consegnata (il pushdown del pianificatore). L'estratto è il
     /// primo che c'è: due estratti dello stesso documento sono due finestre
     /// sullo stesso testo, e mostrarne due sarebbe rumore.
+    ///
+    /// **Le occorrenze invece si sommano**, e la differenza non è
+    /// un'incoerenza: è la stessa regola resa dipendente da chi chiede
+    /// (decisione 0049). «Un estratto per documento» è vero della riga di una
+    /// collezione, che di righe ne disegna una; è falso della ricerca, che di
+    /// occorrenze ne mostra N e permette di saltare all'una o all'altra. Le due
+    /// cose stanno nello stesso record perché il record è uno, e ognuna segue
+    /// la regola del proprio cliente.
     pub fn absorb(&mut self, other: DocumentMatch) {
         self.score = match (self.score, other.score) {
             (Some(a), Some(b)) => Some(a.max(b)),
@@ -1841,6 +1950,12 @@ impl DocumentMatch {
             }
         }
         self.properties.sort_by(|a, b| a.key.cmp(&b.key));
+        for position in other.occurrences {
+            if !self.occurrences.contains(&position) {
+                self.occurrences.push(position);
+            }
+        }
+        self.occurrences.sort_by_key(|p| (p.span.start, p.span.end));
     }
 }
 
@@ -2526,7 +2641,7 @@ pub enum IndexResult {
     /// Un record e non una lista, perché è **una** cosa e non un elenco: chi la
     /// chiede la disegna intera (la sidebar) o ne guarda un campo.
     Organization(Organization),
-    /// Il documento che un riferimento nomina, o nessuno (risposta a
+    /// Cosa nomina un riferimento, o niente (risposta a
     /// [`IndexQuery::Resolve`]).
     ///
     /// `None` non è un errore ed è metà del valore di questa risposta: un
@@ -2536,7 +2651,17 @@ pub enum IndexResult {
     /// browser. Distinguerli qui vorrebbe dire mettere nella risposta di una
     /// domanda sull'anagrafe le ragioni di chi non c'è, che sono di chi
     /// chiede.
-    Resolved(Option<DocId>),
+    ///
+    /// Il payload è un [`ResolvedRef`] e non un [`DocId`] nudo dalla decisione
+    /// 0049: `[[Nota#Sezione]]` e `[[Nota#^blocco]]` **portano** un punto — il
+    /// modello lo parsa dalla 0003 — e una risposta che sa dire solo *quale
+    /// documento* costringeva chi risolve a scartarlo, che è ciò che tutti e
+    /// cinque i punti del kernel facevano. È un **ritaglio** della linea di
+    /// base, non un'aggiunta: la variante c'era già, e affiancargliene una
+    /// seconda avrebbe lasciato per sempre due casi che rispondono alla stessa
+    /// domanda, con chi legge a doversi ricordare quale guardare
+    /// (`docs/architecture/wit-congelato.md`, tabella dei ritagli).
+    Resolved(Option<ResolvedRef>),
     /// Cosa c'è nel vault (risposta a [`IndexQuery::Entries`]), in ordine di
     /// [`DocId`].
     ///

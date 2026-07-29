@@ -36,10 +36,10 @@ chiamate per nome.
 |---|---|---|---|---|
 | `.fubmd/workspace.json` | `kernel/organization.rs` | autorevole | 1 | atomica, e **non riscrive** un file che non ha potuto leggere |
 | `.fubmd/settings.json` | `kernel/settings.rs` | autorevole | 1 | atomica; le chiavi di scope `machine` scritte qui **si ignorano** |
-| `.fubmd/data/entries.json` | `kernel/entries.rs` | derivato | 1 | atomica |
+| `.fubmd/data/entries.json` | `kernel/entries.rs` | derivato | 2 | atomica |
 | `.fubmd/data/trash/<nome>.json` | `kernel/vault.rs` | **né l'una né l'altra** (sotto) | — | `std::fs::write`, best-effort |
 | `.fubmd/data/plugins/<id>/…` | chiunque abbia `DataWrite` | dichiarata derivata, **in pratica entrambe** (sotto) | per plugin | `std::fs::write` (`host/kernel.rs`), **non** atomica |
-| `.fubmd/data/plugins/fubmd.search/` | `features/search.rs` | derivato | 4 | l'indice tantivy, più un `manifest.json` |
+| `.fubmd/data/plugins/fubmd.search/` | `features/search.rs` | derivato | 5 | l'indice tantivy, più un `manifest.json` |
 | `.fubmd/data/plugins/fubmd.versioning/` | `features/versioning.rs` | **autorevole** (sotto) | 1 | `versions.json` derivato dallo store, gli snapshot no |
 | `.fubmd/data/plugins/<id>/doc/<documento>/…` | chiunque, per regola | quella del plugin | del plugin | lo stato per-documento della [0044](../decisions/0044-lo-stato-per-documento.md): il posto è dichiarato in `abi/rules/doc_data.rs`, e il kernel lo migra al rename |
 | `.trash/` | `kernel/vault.rs` | **contenuto dell'utente** | — | un rename, condiviso con Obsidian |

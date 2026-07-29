@@ -70,6 +70,11 @@ l'asimmetria che il canale dati esiste per non avere
 `IndexQuery::Resolve { target, from }` → `IndexResult::Resolved(Option<DocId>)`.
 Il comando bespoke sparisce (§16.6 di un'unità), e la domanda ha una porta sola.
 
+> La risposta è cambiata dopo: dalla
+> [0049](0049-una-posizione-dentro-un-documento.md) è
+> `Resolved(Option<ResolvedRef>)`, perché mancava metà della risposta —
+> `[[Nota#^blocco]]` porta un punto, e qui non c'era dove metterlo.
+
 ### Il bersaglio è un `LinkTarget`, e non una stringa
 
 Perché `a/b.md` è due cose: un wikilink per path e un link markdown relativo, e

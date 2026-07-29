@@ -12,8 +12,8 @@ e chiusa dalla [0026](decisions/0026-due-query-insieme.md)), nove da una
 che ha stabilito che la ricerca di FubMD è built-in e di classe *omnisearch*
 ([seduta 21](roadmap/21-la-ricerca-predefinita.md)) — e una da una **verifica**
 (la §21.10, uscita dal controllo contro il codice di un'affermazione arrivata da
-fuori). Settantatré sono chiuse e i loro verbali stanno in
-[decisions/](decisions/README.md); le altre trentasette sono qui, e questo file è
+fuori). Settantasette sono chiuse e i loro verbali stanno in
+[decisions/](decisions/README.md); le altre trentatré sono qui, e questo file è
 il loro **indice**.
 
 ## Come è organizzato
@@ -116,7 +116,7 @@ che scade.
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | le voci ancora aperte dei quattro giri di audit | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 4 | 1 |
-| **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le prime tre sono lo **stesso record** (`TextQuery`, `DocumentMatch`) e la stessa scadenza; il resto è dove quel comportamento si vede — più la §21.10, che non è di ricerca ma chiede alla §21.3 la stessa cosa: una **posizione dentro un documento** | 10 | 4 |
+| **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le quattro di firma sono state decise ([0049](decisions/0049-una-posizione-dentro-un-documento.md), [0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)); quel che resta è **dove quel comportamento si vede**, cosa lo rende regolabile, cosa gli darà da mangiare, e la sola misura che dice se è veloce | 6 | — |
 
 ## Le voci
 
@@ -174,16 +174,12 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§20.2** | [Ciò che va storto ha un canale nel contratto e nessuna destinazione](roadmap/20-quando-qualcosa-va-storto.md#202-ciò-che-va-storto-ha-un-canale-nel-contratto-e-nessuna-destinazione) | 20. Quando qualcosa va storto | contratto | **P1** |
 | **§20.3** | [Il kernel butta via gli esiti che ha già in mano](roadmap/20-quando-qualcosa-va-storto.md#203-il-kernel-butta-via-gli-esiti-che-ha-già-in-mano) | 20. Quando qualcosa va storto | kernel | **P1** |
 | **§20.4** | [La shell non ha una superficie dove dire niente, e il salvataggio non ha esito](roadmap/20-quando-qualcosa-va-storto.md#204-la-shell-non-ha-una-superficie-dove-dire-niente-e-il-salvataggio-non-ha-esito) | 20. Quando qualcosa va storto | shell | **P1** |
-| **§21.1** | [La tolleranza ai refusi non è dicibile nel contratto](roadmap/21-la-ricerca-predefinita.md#211-la-tolleranza-ai-refusi-non-è-dicibile-nel-contratto) | 21. La ricerca predefinita | contratto | **P0** |
-| **§21.2** | [Il prefisso mentre si digita non è un'euristica della casella](roadmap/21-la-ricerca-predefinita.md#212-il-prefisso-mentre-si-digita-non-è-uneuristica-della-casella) | 21. La ricerca predefinita | contratto | **P0** |
-| **§21.3** | [Gli estratti sono ancorati allo snippet, non al documento](roadmap/21-la-ricerca-predefinita.md#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento) | 21. La ricerca predefinita | contratto | **P0** |
 | **§21.4** | [La ricerca dentro la nota aperta non esiste](roadmap/21-la-ricerca-predefinita.md#214-la-ricerca-dentro-la-nota-aperta-non-esiste) | 21. La ricerca predefinita | shell | **P1** |
 | **§21.5** | [Quattro superfici cercano, e rischiano di nascere con quattro ranking](roadmap/21-la-ricerca-predefinita.md#215-quattro-superfici-cercano-e-rischiano-di-nascere-con-quattro-ranking) | 21. La ricerca predefinita | shell | **P1** |
 | **§21.6** | [I pesi dei campi sono una costante di compilazione](roadmap/21-la-ricerca-predefinita.md#216-i-pesi-dei-campi-sono-una-costante-di-compilazione) | 21. La ricerca predefinita | kernel | **P2** |
 | **§21.7** | [Ricerche recenti, e la nota che la ricerca non ha trovato](roadmap/21-la-ricerca-predefinita.md#217-ricerche-recenti-e-la-nota-che-la-ricerca-non-ha-trovato) | 21. La ricerca predefinita | shell | **P2** |
 | **§21.8** | [Il testo che sta dentro gli allegati](roadmap/21-la-ricerca-predefinita.md#218-il-testo-che-sta-dentro-gli-allegati) | 21. La ricerca predefinita | kernel | **P2** |
 | **§21.9** | [Una query costa 23 ms su duemila note, e nessuno sa perché](roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché) | 21. La ricerca predefinita | kernel | **P1** |
-| **§21.10** | [Il riferimento a un blocco si parsa, e la risposta non ha dove metterlo](roadmap/21-la-ricerca-predefinita.md#2110-il-riferimento-a-un-blocco-si-parsa-e-la-risposta-non-ha-dove-metterlo) | 21. La ricerca predefinita | contratto | **P0** |
 
 ## Gli allegati
 
@@ -195,6 +191,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — quarantotto, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — cinquanta, uno
   per file. Non stanno qui perché questo è l'elenco di ciò che **resta da
   fare**.

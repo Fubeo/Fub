@@ -80,6 +80,7 @@ use fubmd_abi::options::OptionMap;
 use fubmd_abi::organization::Organization;
 use fubmd_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
+    TextTolerance,
 };
 use fubmd_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
 use fubmd_abi::settings::{
@@ -87,13 +88,13 @@ use fubmd_abi::settings::{
 };
 use fubmd_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fubmd_abi::traits::{
-    BacklinkRef, CommandProvider, DocumentMatch, EntryKind, EventHandler, FolderScope, HealthCheck,
-    HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec,
-    JobStatus, LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
-    PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertySort,
-    PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, TagCount, TrashEntry,
-    VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
-    ABI_VERSION,
+    BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, FolderScope,
+    HealthCheck, HealthIssue, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress,
+    JobSpec, JobStatus, LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest,
+    PluginPermissions, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
+    PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef, ServiceProvider,
+    TagCount, TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewProvider,
+    ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fubmd_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -304,6 +305,8 @@ wit_type! {
     BacklinkRef => "backlink-ref",
     NeighborRef => "neighbor-ref",
     DocumentMatch => "document-match",
+    DocPosition => "doc-position",
+    ResolvedRef => "resolved-ref",
     TagCount => "tag-count",
     VaultStatus => "vault-status",
     JobProgress => "job-progress",
@@ -318,6 +321,7 @@ wit_type! {
     TextQuery => "text-query",
     TextMode => "text-mode",
     TextField => "text-field",
+    TextTolerance => "text-tolerance",
     QueryKind => "query-kind",
     PredicateKind => "predicate-kind",
     QueryRoute => "query-route",
@@ -2945,7 +2949,13 @@ fn conform(source: &str) -> Result<(), String> {
     contract.enumeration_src(
         "text-field",
         ("query.rs", "TextField"),
-        &["name", "body", "tags"],
+        &["name", "body", "tags", "heading"],
+    );
+
+    contract.enumeration_src(
+        "text-tolerance",
+        ("query.rs", "TextTolerance"),
+        &["exact", "typos"],
     );
 
     contract.variant_src(
@@ -4006,6 +4016,7 @@ fn conform(source: &str) -> Result<(), String> {
         snippet,
         highlights,
         properties,
+        occurrences,
     } = DocumentMatch::of(DocId::new("a"));
     contract.record(
         "document-match",
@@ -4017,8 +4028,26 @@ fn conform(source: &str) -> Result<(), String> {
             ("snippet", wit(&snippet)),
             ("highlights", wit(&highlights)),
             ("properties", wit(&properties)),
+            ("occurrences", wit(&occurrences)),
         ],
     );
+
+    let DocPosition {
+        span,
+        anchor,
+        revision,
+    } = DocPosition::at(Span::EMPTY, Revision::default());
+    contract.record(
+        "doc-position",
+        &[
+            ("span", wit(&span)),
+            ("anchor", wit(&anchor)),
+            ("revision", wit(&revision)),
+        ],
+    );
+
+    let ResolvedRef { doc, at } = ResolvedRef::doc(DocId::new("a"));
+    contract.record("resolved-ref", &[("doc", wit(&doc)), ("at", wit(&at))]);
 
     let TagCount { name, count } = TagCount {
         name: String::new(),
@@ -4108,13 +4137,21 @@ fn conform(source: &str) -> Result<(), String> {
         &[("negated", wit(&negated)), ("predicate", wit(&predicate))],
     );
 
-    let TextQuery { text, mode, fields } = TextQuery::terms("");
+    let TextQuery {
+        text,
+        mode,
+        fields,
+        tolerance,
+        partial_last_term,
+    } = TextQuery::terms("");
     contract.record(
         "text-query",
         &[
             ("text", wit(&text)),
             ("mode", wit(&mode)),
             ("fields", wit(&fields)),
+            ("tolerance", wit(&tolerance)),
+            ("partial-last-term", wit(&partial_last_term)),
         ],
     );
 

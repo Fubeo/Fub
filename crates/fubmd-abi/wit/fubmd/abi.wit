@@ -1579,12 +1579,26 @@ interface index {
         phrase,
     }
     /// Dove cercare il testo. Vuoto = i campi che il provider indicizza.
-    enum text-field { name, body, tags }
+    /// `heading` pesa a parte: distingue una nota che PARLA di una cosa da una
+    /// che ci ha dedicato una sezione.
+    enum text-field { name, body, tags, heading }
+    /// Quanto si vuole essere indovinati: un'INTENZIONE, mai una distanza di
+    /// edit — «due caratteri» è un parametro di motore, e in una firma
+    /// vorrebbe dire che cambiare motore cambia il senso delle query salvate.
+    /// Chi non sa onorare `typos` risponde come per `exact`: restringe, non
+    /// allarga.
+    enum text-tolerance { exact, typos }
     /// La foglia di testo: l'UNICA stringa libera del contratto.
+    ///
+    /// `partial-last-term` è una proprietà dell'INVOCAZIONE e non della query:
+    /// chi salva una query (una collezione, una vista, un template) la
+    /// normalizza a false prima di scriverla.
     record text-query {
         text: string,
         mode: text-mode,
         fields: list<text-field>,
+        tolerance: text-tolerance,
+        partial-last-term: bool,
     }
     /// Un tag canonico (senza `#`); con `descendants` prende la sua gerarchia.
     record tag-predicate {
@@ -1992,6 +2006,11 @@ interface index {
     /// `snippet` è testo semplice, mai markup: chi disegna lo inserisce come
     /// testo. L'evidenziazione passa da `highlights`, intervalli in byte DENTRO
     /// `snippet` (nessun varco di injection da un provider di terzi).
+    ///
+    /// `occurrences` è l'altra cosa, e non è un doppione di `highlights`:
+    /// quelli servono a DISEGNARE una riga, queste a TORNARE al testo. Vuoto
+    /// non vuol dire «nessuna occorrenza», vuol dire che nessuno le ha
+    /// calcolate.
     record document-match {
         doc: doc-id,
         /// Presente quando a selezionare è stato (anche) del testo.
@@ -1999,6 +2018,30 @@ interface index {
         snippet: option<string>,
         highlights: list<span>,
         properties: list<property-entry>,
+        occurrences: list<doc-position>,
+    }
+    /// UN PUNTO DENTRO UN DOCUMENTO: la primitiva sola per i tre clienti che la
+    /// chiedevano da tre firme diverse — il salto all'occorrenza di un
+    /// risultato, il riferimento a un blocco o a un heading, la citazione di
+    /// una lavagna verso un punto di una nota.
+    ///
+    /// `span` è in byte del SORGENTE (non dentro `snippet`): è la valuta di
+    /// ogni altro span del modello, ed è ciò che `view-update.reveal` sa già
+    /// portare in un editor. `anchor` sopravvive alla riscrittura del paragrafo
+    /// che la ospita, lo span no; ma un'ancora si può cancellare, quindi non lo
+    /// sostituisce. `revision` dice DI QUANDO: uno span invecchia appena il
+    /// documento cambia sotto, e chi non sa dire di quando non produce una
+    /// posizione affatto.
+    record doc-position {
+        span: span,
+        anchor: option<string>,
+        revision: revision,
+    }
+    /// Cosa nomina un riferimento: QUALE documento e, quando il riferimento lo
+    /// dice e quel punto esiste ancora, DOVE DENTRO.
+    record resolved-ref {
+        doc: doc-id,
+        at: option<doc-position>,
     }
     /// La faccetta di 9.1, gemella di `tag-count` per il frontmatter.
     record property-count {
@@ -2085,13 +2128,18 @@ interface index {
         /// cosa sola e non un elenco — chi la chiede la disegna intera (la
         /// sidebar) o ne guarda un campo.
         organization(organization),
-        /// Il documento che un riferimento nomina, o nessuno. NONE non è un
-        /// errore ed è metà del valore di questa risposta: un link rotto, un
-        /// `url` verso il mondo esterno e una nota rinominata via da sotto
-        /// danno tutti e tre NONE, e chi ha chiesto sa che deve proporre
-        /// qualcos'altro — creare la nota, seguire un redirect, aprire il
-        /// browser.
-        resolved(option<doc-id>),
+        /// Cosa nomina un riferimento, o niente. NONE non è un errore ed è metà
+        /// del valore di questa risposta: un link rotto, un `url` verso il
+        /// mondo esterno e una nota rinominata via da sotto danno tutti e tre
+        /// NONE, e chi ha chiesto sa che deve proporre qualcos'altro — creare
+        /// la nota, seguire un redirect, aprire il browser.
+        ///
+        /// Il payload è un `resolved-ref` e non un `doc-id` nudo: è un RITAGLIO
+        /// della linea di base (decisione 0049, tabella in
+        /// `docs/architecture/wit-congelato.md`). `[[Nota#^blocco]]` porta un
+        /// punto dalla 0003, e una risposta che sapeva dire solo QUALE
+        /// documento costringeva chi risolve a scartarlo.
+        resolved(option<resolved-ref>),
         /// Cosa c'è nel vault, in ordine di `doc-id`. A FINESTRA, e qui più che
         /// altrove: è l'unica risposta che cresce col numero di FILE invece che
         /// col numero di note, e in un vault vero gli allegati sono più delle

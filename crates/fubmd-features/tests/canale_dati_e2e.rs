@@ -506,9 +506,8 @@ fn la_frase_esatta_e_un_modo_non_una_sintassi() {
     let (_g, ws) = vault();
     let frase = |t: &str| {
         clause(vec![lit(QueryPredicate::Text(TextQuery {
-            text: t.to_string(),
             mode: TextMode::Phrase,
-            fields: Vec::new(),
+            ..TextQuery::terms(t)
         }))])
     };
     assert_eq!(ids(&ws, frase("motore in rust")), ["Progetti/Ferrite.md"]);
@@ -644,7 +643,7 @@ fn cosa_nomina_un_riferimento_lo_dice_il_canale_dati() {
             })
             .expect("il kernel serve `resolve`")
         {
-            IndexResult::Resolved(id) => id.map(|d| d.0),
+            IndexResult::Resolved(found) => found.map(|r| r.doc.0),
             other => panic!("risposta fuori tema: {}", other.kind_name()),
         }
     };
@@ -689,4 +688,186 @@ fn cosa_nomina_un_riferimento_lo_dice_il_canale_dati() {
     // Un nome che non nomina niente è `None` e non un errore: è il caso da cui
     // nascono «crea la nota che manca» e il redirect.
     assert_eq!(risolve(LinkTarget::wiki("Inesistente"), None), None);
+}
+
+// ---------------------------------------------------------------------------
+// Le coordinate: dove sta un risultato, dove punta un riferimento (0049)
+// ---------------------------------------------------------------------------
+
+/// Un vault fatto per le **posizioni**: una parola che compare più volte nella
+/// stessa nota, un heading, un'ancora di blocco, e una nota che li nomina.
+fn vault_con_punti() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+    let write = |rel: &str, body: &str| {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    };
+
+    write(
+        "Note/Doppia.md",
+        "# Il gatto\n\nIl gatto dorme sul divano.\n\nPoi il Gatto si sveglia. ^risveglio\n",
+    );
+    write(
+        "Note/Rimando.md",
+        "Vedi [[Doppia#^risveglio]] e [[Doppia#Il gatto]].\n",
+    );
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::new(&root, registry);
+    ws.register_core_feature(SEARCH_ID, SEARCH_ID)
+        .expect("dichiarato");
+    let data = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
+    let index = SearchIndex::open(&data).expect("indice");
+    ws.register_index_provider(SEARCH_ID, Box::new(index))
+        .expect("registrazione e attivazione");
+    ws.reindex().expect("reindex");
+    (dir, ws, root)
+}
+
+/// La §21.3: un risultato sa dire **a che punto** del documento sta, e la
+/// seconda occorrenza ha lo span della seconda.
+///
+/// Prima di questa firma il pannello poteva aprire la nota e basta: gli
+/// `highlights` sono offset dentro l'estratto, e fra l'estratto e il file non
+/// c'è nessuna coordinata. Qui si verifica la cosa che quella distanza rendeva
+/// inesprimibile — non difficile: **inesprimibile**.
+#[test]
+fn un_risultato_sa_dire_a_che_punto_del_documento_sta() {
+    let (_g, ws, root) = vault_con_punti();
+    let source = std::fs::read_to_string(root.join("Note/Doppia.md")).expect("il sorgente");
+
+    let hits = documenti(&ws, clause(vec![lit(testo("gatto"))]));
+    let doppia = hits
+        .iter()
+        .find(|m| m.doc.as_str() == "Note/Doppia.md")
+        .expect("la nota che parla di gatti");
+
+    // Tre occorrenze: l'heading e i due paragrafi. Non è il conto a essere il
+    // punto — è che siano **più di una**, che è la forma che «un estratto per
+    // documento» non poteva portare.
+    assert!(
+        doppia.occurrences.len() >= 3,
+        "una nota può portare N punti a cui saltare, non uno: {:?}",
+        doppia.occurrences
+    );
+    // Gli span sono byte del SORGENTE, non dello snippet: si tagliano sul file
+    // e devono cadere sulla parola cercata, maiuscola compresa.
+    for punto in &doppia.occurrences {
+        let trovato = &source[punto.span.start..punto.span.end];
+        assert_eq!(
+            trovato.to_lowercase(),
+            "gatto",
+            "lo span cade sul termine, nel sorgente"
+        );
+    }
+    // In ordine di posizione, e la seconda è davvero la seconda.
+    let spans: Vec<usize> = doppia.occurrences.iter().map(|p| p.span.start).collect();
+    let mut ordinati = spans.clone();
+    ordinati.sort_unstable();
+    assert_eq!(spans, ordinati, "in ordine di posizione");
+    assert_eq!(
+        doppia.occurrences[1].span.start,
+        source.match_indices("gatto").nth(1).expect("la seconda").0,
+        "il secondo risultato porta alla SECONDA occorrenza"
+    );
+
+    // E ognuna dice **di quando**: uno span invecchia appena il documento
+    // cambia sotto, e la revisione è quella del sorgente su cui è stato
+    // misurato — non una presa altrove.
+    let revisione = fubmd_abi::edit::Revision::of(&source);
+    for punto in &doppia.occurrences {
+        assert_eq!(
+            punto.revision, revisione,
+            "la posizione porta la sua revisione"
+        );
+    }
+}
+
+/// Le occorrenze si calcolano solo per chi ha cercato del **testo**: una
+/// selezione che non ha niente da localizzare non paga nessuna lettura.
+#[test]
+fn una_selezione_senza_testo_non_porta_coordinate() {
+    let (_g, ws, _root) = vault_con_punti();
+    let hits = documenti(
+        &ws,
+        clause(vec![lit(QueryPredicate::Folder {
+            path: "Note".into(),
+            descendants: false,
+        })]),
+    );
+    assert!(!hits.is_empty(), "la cartella c'è");
+    for hit in &hits {
+        assert!(
+            hit.occurrences.is_empty(),
+            "`occurrences` vuoto = nessuno le ha calcolate, ed è il caso di chi \
+             non ha cercato niente da localizzare"
+        );
+    }
+}
+
+/// La §21.10: `[[Nota#^blocco]]` e `[[Nota#Sezione]]` sanno dire **dove
+/// dentro**, e un punto che non c'è più non impedisce di aprire.
+#[test]
+fn un_riferimento_a_un_punto_sa_dire_dove_punta() {
+    let (_g, ws, root) = vault_con_punti();
+    let source = std::fs::read_to_string(root.join("Note/Doppia.md")).expect("il sorgente");
+
+    let risolve = |target: LinkTarget| match ws
+        .query_index(IndexQuery::Resolve { target, from: None })
+        .expect("il kernel serve `resolve`")
+    {
+        IndexResult::Resolved(found) => found,
+        other => panic!("risposta fuori tema: {}", other.kind_name()),
+    };
+
+    // Il blocco: l'ancora è la chiave, e lo span è quello del blocco che la
+    // porta. Il parser la produce dalla 0003 e nessuno la leggeva.
+    let blocco = risolve(LinkTarget::Wiki {
+        page: "Doppia".into(),
+        heading: None,
+        block: Some("risveglio".into()),
+    })
+    .expect("la nota c'è");
+    assert_eq!(blocco.doc.as_str(), "Note/Doppia.md");
+    let punto = blocco.at.expect("e il punto dentro");
+    assert_eq!(punto.anchor.as_deref(), Some("risveglio"));
+    assert!(
+        source[punto.span.start..punto.span.end].contains("si sveglia"),
+        "lo span è quello del blocco ancorato, nel sorgente"
+    );
+
+    // L'heading: altro spazio di nomi, stessa risposta.
+    let sezione = risolve(LinkTarget::Wiki {
+        page: "Doppia".into(),
+        heading: Some("Il gatto".into()),
+        block: None,
+    })
+    .expect("la nota c'è");
+    let punto = sezione.at.expect("e il punto dentro");
+    assert_eq!(
+        punto.anchor.as_deref(),
+        Some("il-gatto"),
+        "lo slug dell'heading"
+    );
+    assert_eq!(punto.span.start, 0, "l'heading apre il documento");
+
+    // Un riferimento che nomina la nota e basta non si inventa un punto.
+    assert_eq!(risolve(LinkTarget::wiki("Doppia")).expect("c'è").at, None);
+
+    // E un punto che non c'è (o non c'è più) lascia la risposta al documento:
+    // si apre in cima, che è più di quel che si faceva prima e meno di una
+    // bugia.
+    let sparito = risolve(LinkTarget::Wiki {
+        page: "Doppia".into(),
+        block: Some("mai-esistito".into()),
+        heading: None,
+    })
+    .expect("la nota c'è lo stesso");
+    assert_eq!(sparito.doc.as_str(), "Note/Doppia.md");
+    assert_eq!(sparito.at, None);
 }
