@@ -14,129 +14,34 @@ stabilito che il comportamento che gli utenti di Obsidian conoscono come
 le voci non sono più opinioni: sono la sottrazione fra ciò che quel
 comportamento richiede e ciò che il contratto sa dire oggi.
 
-Stanno insieme perché **le prime tre sono lo stesso record**. `TextQuery` porta
-il testo, la modalità e i campi; `DocumentMatch` porta l'estratto e gli
-evidenziati. La tolleranza ai refusi (21.1), il prefisso mentre si digita (21.2)
-e le coordinate dell'estratto (21.3) toccano quei due tipi, tutti e due sono già
-nel WIT ([`crates/fubmd-abi/wit/fubmd/abi.wit`](../../crates/fubmd-abi/wit/fubmd/abi.wit)), e tutti e due si
-congelano a **M4**. Deciderle separate significa aprire tre volte la stessa
-firma, e la seconda volta con la prima già congelata — che è esattamente ciò che
-è successo al lotto e all'origine, e per cui la
-[0012](../decisions/0012-origine-degli-eventi.md) ha dichiarato di volersi
-decidere insieme alla [0011](../decisions/0011-il-lotto.md).
+**Le quattro P0 sono state decise, e non sono più qui.** Stavano insieme perché
+erano lo stesso record e la stessa scadenza: `TextQuery` non sapeva dire *«a meno
+di un refuso»* né *«l'ultimo termine è incompleto»*
+([0050](../decisions/0050-cosa-si-chiede-a-una-ricerca.md)), e nessuna delle due
+risposte del canale — l'estratto di un risultato, il documento che un
+riferimento nomina — sapeva dire **a che punto del documento**
+([0049](../decisions/0049-una-posizione-dentro-un-documento.md)). Erano quattro
+voci e due decisioni, perché la §21.3 e la §21.10 chiedevano la stessa primitiva
+da due firme diverse e la §21.1 e la §21.2 toccavano lo stesso record: deciderle
+separate significava aprire due volte la stessa firma, la seconda con la prima
+già congelata — che è esattamente ciò che è successo al lotto e all'origine, e
+per cui la [0012](../decisions/0012-origine-degli-eventi.md) ha dichiarato di
+volersi decidere insieme alla [0011](../decisions/0011-il-lotto.md).
 
-Le altre sei sono la coda: dove il comportamento si vede (21.4, 21.5, 21.7),
-cosa lo rende regolabile (21.6), cosa gli darà da mangiare (21.8), e la sola
+Quello che resta non ha più niente che scada col freeze di M4. **Sono sei voci, e
+sono tutte comportamento**: dove il comportamento si vede (§21.4, §21.5, §21.7),
+cosa lo rende regolabile (§21.6), cosa gli darà da mangiare (§21.8), e la sola
 misura che dice se la ricerca predefinita è **veloce** — che oggi non si sa
-(21.9).
-
-**La decima è arrivata dopo, e non l'ha portata la ricerca.** La §21.10 non
-nasce dalla [0025](../decisions/0025-la-ricerca-predefinita.md) e non risponde a
-nessuna delle sei domande del piano: l'ha trovata una **verifica**, cioè il
-controllo contro il codice di un'affermazione arrivata da fuori sull'architettura
-della lavagna. Sta qui perché è **la stessa firma della 21.3 vista dall'altro
-lato**: là un risultato non sa dire a che punto del documento sta, qui un
-riferimento non sa dire a che punto del documento punta, e in tutti e due i casi
-manca la stessa cosa — *una posizione dentro un documento, dicibile nel
-contratto*. Deciderle separate vuol dire inventare due modi di dire **dove**, e
-accorgersene quando il primo è già congelato: è la ragione per cui questa seduta
-esiste, applicata a una voce che non è di ricerca.
+(§21.9). Tre di queste poggiano su ciò che le P0 hanno appena messo nel
+contratto, e la §21.9 ha adesso un motivo in più per essere fatta: un prefisso
+apre un intervallo nel dizionario dei termini, e quel costo è entrato in repo con
+la [0050](../decisions/0050-cosa-si-chiede-a-una-ricerca.md).
 
 Un avvertimento che vale per tutta la seduta: nessuna di queste voci è
 «aggiungere il fuzzy». Il fuzzy in sé è una riga di configurazione di un motore.
 Ciò che manca è il modo di **dire** in una query quanto si vuole essere
 indovinati, e il modo di **tornare indietro** da un risultato al punto del testo
 che lo ha prodotto.
-
-### 21.1 La tolleranza ai refusi non è dicibile nel contratto
-
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · contratto · **P0** — `text-mode` è già nel WIT, e si congela a M4*
-
-- [ ] **`TextMode` ha due varianti, `Terms` e `Phrase`** (`abi/query.rs`), e
-      nessuna delle due dice *«a meno di un refuso»*. È la voce fondativa della
-      [0025](../decisions/0025-la-ricerca-predefinita.md): senza, la ricerca
-      predefinita può diventare tollerante solo **di nascosto**, cambiando il
-      comportamento del provider senza che il contratto se ne accorga.
-- [ ] **E l'altra metà è quella che conta: oggi non si può chiedere
-      l'esattezza.** L'esattezza è implicita, e ciò che è implicito non si può
-      pretendere. Il giorno in cui `SearchIndex` diventa tollerante, diventano
-      tolleranti **tutti** i suoi chiamanti nello stesso istante: `vault.replace`
-      su N note, le collezioni (8.4), le viste salvate (8.3), i template (16.1) e
-      l'automazione su-modifica (16.2). Un motore che indovina, su un canale che
-      poi scrive, è un difetto — e la variante va aggiunta **prima** del
-      comportamento, non insieme.
-- [ ] **La forma è da decidere, e le due candidate non sono equivalenti.**
-      Una terza variante di `TextMode` è la più economica ma le tratta come
-      esclusive, mentre modalità e tolleranza sono **ortogonali**: una frase
-      cercata a meno di un refuso ha senso, e con l'enum non si scrive. Un campo
-      a sé (`tolerance`, con `Exact` come default esplicito) le tiene
-      indipendenti e costa un campo in più su ogni mirror. Va scelta a verbale:
-      dopo M4 la prima si corregge solo con una major.
-- [ ] **Nel contratto non deve entrare una distanza di edit.** «Due caratteri»
-      è un parametro di un motore, e metterlo in una firma vorrebbe dire che
-      cambiare motore cambia il significato delle query salvate. Ciò che il
-      contratto deve portare è un'**intenzione** — esatto, tollerante — e la
-      traduzione è del provider, come già lo è la tokenizzazione.
-- [ ] **`TextField` non nomina gli heading**, e sono tre varianti su tre
-      (`Name`, `Body`, `Tags`). Omnisearch li pesa a parte, ed è il campo che
-      distingue una nota che *parla* di una cosa da una che ci ha dedicato una
-      sezione. Va con questa voce perché è lo stesso record e la stessa scadenza.
-
-### 21.2 Il prefisso mentre si digita non è un'euristica della casella
-
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · contratto (metà) + shell · **P0** per la firma — va decisa con la [§21.1](#211-la-tolleranza-ai-refusi-non-è-dicibile-nel-contratto)*
-
-- [ ] **Cercare `arch` deve trovare *architettura* prima che la parola sia
-      finita**, ed è metà di ciò che fa sembrare istantanea una ricerca. Oggi
-      nel contratto non c'è modo di dire che **l'ultimo termine è incompleto**.
-- [ ] **Se lo aggiunge la shell, la ricerca dell'utente e quella di tutti gli
-      altri chiamanti divergono.** La casella potrebbe appendere un `*` da sé, e
-      sarebbe la scorciatoia peggiore possibile: la CLI (27.1), l'API locale
-      (27.2), le automazioni (16.2) e il centro di comando LLM (22.4)
-      interrogherebbero lo stesso indice con una lingua diversa da quella
-      dell'utente, e la differenza non sarebbe scritta da nessuna parte. È la
-      stessa ragione per cui la sintassi di ricerca non è più quella di tantivy
-      ([0019](../decisions/0019-il-canale-dati.md)).
-- [ ] **Ma non è una proprietà della query salvata: è una proprietà
-      dell'invocazione.** Una query messa in una collezione o in un template non
-      deve restare «col prefisso» per sempre — l'utente aveva finito di
-      scrivere, e nessuno era lì a vederlo. Questo è il punto che rende la voce
-      contratto e non shell: dove si mette un campo che vale *mentre* qualcuno
-      digita e non dopo. La risposta plausibile è che stia in `TextQuery` e che
-      chi **salva** una query la normalizzi — ma va scritta, o ogni chiamante ne
-      inventerà una sua.
-
-### 21.3 Gli estratti sono ancorati allo snippet, non al documento
-
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · contratto · **P0** — `document-match` è già nel WIT*
-
-- [ ] **`DocumentMatch.highlights` sono span in byte *dentro `snippet`***
-      (`abi/traits.rs`, e la documentazione del campo lo dice a chiare lettere).
-      Per disegnare la riga di un risultato è la forma giusta — chi disegna
-      avvolge gli intervalli e nessun provider può iniettare markup. Per
-      **tornare al testo** non serve a niente: non c'è nessuna coordinata nel
-      documento.
-- [ ] **E la destinazione esiste già.** `ViewUpdate::Reveal { doc_id, span }` è
-      in repo dal pannello outline, e la shell sa portare l'editor su uno span
-      convertendo byte UTF-8 → code unit UTF-16 (`frontend/src/rules/offsets.ts`).
-      La ricerca è l'unico cliente naturale di quel giro e **non ha le coordinate
-      da passargli**: è una capacità che esiste da un lato e non dall'altro.
-- [ ] **`absorb` tiene un estratto solo per documento**, con la ragione scritta:
-      «due estratti dello stesso documento sono due finestre sullo stesso testo,
-      e mostrarne due sarebbe rumore». È vero della riga di una **collezione** ed
-      è falso della **ricerca**: omnisearch mostra N occorrenze per nota e
-      permette di saltare all'una o all'altra. La regola non va rovesciata — va
-      resa dipendente da chi chiede.
-- [ ] **Senza questa voce non esistono tre cose**, e vale la pena elencarle
-      perché sono ciò che rende la §21.3 una P0 e non un affinamento: la ricerca
-      dentro la nota aperta (§21.4), il «vai all'occorrenza successiva», e i
-      risultati multipli per nota. Non sono strette: sono **inesprimibili**.
-- [ ] **Da decidere insieme: un risultato è derivato da una revisione.** Uno
-      span nel documento invecchia appena il documento cambia sotto, e il
-      contratto sa già dirlo altrove — `EditRequest` porta la revisione su cui è
-      stato calcolato ([0008](../decisions/0008-modifica-chirurgica.md)). Se
-      l'estratto porta una coordinata, deve poter dire **di quando**, o la shell
-      porterà il cursore nel punto sbagliato senza accorgersene.
 
 ### 21.4 La ricerca dentro la nota aperta non esiste
 
@@ -300,84 +205,3 @@ che lo ha prodotto.
       mosso di un filo: ~21 ms a ricerca allora, ~21 ms adesso. Il banco è lo
       stesso e si rilancia allo stesso modo, il che vuol dire che questa voce ha
       già il proprio strumento.
-
-### 21.10 Il riferimento a un blocco si parsa, e la risposta non ha dove metterlo
-
-*nata da una **verifica**, non da un giro · contratto · **P0** — `index-result` è già nel WIT, e si congela a M4*
-
-- [ ] **Il campo c'è, ed è nel contratto dalla
-      [0003](../decisions/0003-modello-del-documento.md).**
-      `LinkTarget::Wiki { page, heading, block }` sta in `abi/model.rs`, col
-      commento che ne scrive la forma per esteso — `[[Page#Heading^block]]`.
-      Accanto ci sono `Anchor { id, span, marker }`, un `anchor: Option<String>`
-      su tutti e otto i blocchi con un accessore **totale**, `canonical_anchor` e
-      `valid_anchor` esportati da `rules/` — cioè dove le regole condivise devono
-      stare ([0020](../decisions/0020-le-regole-in-un-posto-solo.md)) — e la
-      capacità `fubmd:anchors` fra quelle di parsing. Il provider markdown le
-      **produce già** (`format-markdown/src/parse.rs`). Di ciò che sembra
-      mancare, non manca niente.
-- [ ] **E nessuno lo legge.** Tutti e cinque i punti in cui il kernel guarda un
-      wikilink lo scartano con `..`: `index/core.rs` due volte, `graph.rs`,
-      `workspace.rs` due volte. La shell rispecchia il campo
-      (`host/contract.ts`) e non lo usa. Oggi `[[Nota#^blocco]]` apre la nota
-      **in cima**, e niente lo dice: è la famiglia della
-      [0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) — una promessa che
-      vale a metà e in silenzio — con una differenza che la peggiora invece di
-      attenuarla. Là il campo non c'era; qui c'è, attraversa il confine, viene
-      rispecchiato in TypeScript, e si perde nell'ultimo centimetro.
-- [ ] **Il motivo per cui si perde è una firma, ed è questa voce.**
-      `IndexResult::Resolved(Option<DocId>)` (`abi/traits.rs`) sa dire **quale
-      documento** e non **dove dentro**. Chi risolve non ha come rispondere,
-      quindi non guarda: scartare `heading` e `block` non è una dimenticanza, è
-      l'unica cosa che quella firma permetta. La
-      [0043](../decisions/0043-il-path-e-la-chiave.md) ha portato `Resolve` nel
-      contratto perché mancava la **domanda**; quello che manca adesso è metà
-      della **risposta**.
-- [ ] **È P0 di forma, e la ragione sta nella tabella dell'additività.**
-      Aggiungere una variante a `IndexResult` è additivo; cambiare il payload di
-      una variante che c'è già non lo è
-      ([wit-congelato.md](../architecture/wit-congelato.md)). Dopo il freeze di
-      M4 questa si corregge con una major, o non si corregge.
-- [ ] **È la [§21.3](#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento)
-      vista dall'altro lato**, e va decisa con lei. Là manca la coordinata di un
-      risultato *dentro* il documento che lo ha prodotto; qui manca la coordinata
-      di un riferimento *dentro* il documento che nomina. La destinazione è la
-      stessa e **esiste già**: `ViewUpdate::Reveal { doc_id, span }`, in repo dal
-      pannello outline, con la shell che sa convertire byte UTF-8 in code unit
-      UTF-16 (`frontend/src/rules/offsets.ts`). Due voci che chiedono la stessa
-      cosa a due firme diverse la otterranno in due forme diverse, e la seconda
-      arriverà quando la prima è congelata.
-- [ ] **I clienti sono tre, e nessuno dei tre è rimandabile.** Il salto
-      all'occorrenza successiva (§21.3, già P0 e già aperta); le citazioni di una
-      lavagna verso un punto di una nota — i nodi verso un blocco di
-      [FEATURES §12.6](../FEATURES.md), che è il caso da cui questa voce è
-      uscita; e la riga di un eventuale database (capitolo 11). La primitiva è
-      una sola per tutti e tre, e il conto di quante volte bussa è già a tre.
-- [ ] **Da decidere insieme: se una posizione porta la propria revisione.** È la
-      domanda che la §21.3 si fa per l'estratto, e la risposta deve essere una
-      sola per non avere due discipline. Il contratto sa già dirlo altrove —
-      `EditRequest` porta la revisione su cui è stato calcolato
-      ([0008](../decisions/0008-modifica-chirurgica.md)). Un'ancora è più stabile
-      di uno span, perché sopravvive alla riscrittura del paragrafo che la
-      ospita; ma non è immortale, e cancellare la riga che porta `^abc` oggi non
-      rende rosso nessun test.
-- [ ] **C'è una metà che non è di questa voce e che va nominata qui, perché
-      questo è l'unico posto dove il riferimento a blocco è ragionato per
-      intero: nessuno *conia* un'ancora.** Il parser le legge, il renderer le
-      stampa (`features/src/blocks.rs`), il kernel le trasporta — e in tutto il
-      repo non esiste un percorso che ne **generi** una nuova. FEATURES la
-      chiede per nome (§5.2 «ID blocco», e i «Link a blocco» di §5.2 e §7.1 la
-      presuppongono): *«copia il link a questo blocco»* deve scrivere `^abc` in
-      coda al paragrafo quando non c'è. Non è una primitiva d'identità nuova e
-      non scade col freeze — coniare è una **scrittura**, quindi passa
-      dall'arbitro che esiste già (`write_document`/`apply_edit`,
-      [0008](../decisions/0008-modifica-chirurgica.md)), e l'unicità dentro il
-      documento la può verificare solo chi ha il modello parsato in mano, cioè
-      il kernel. Vale scritta perché la risposta di questa voce, da sola, rende
-      **risolvibile** un riferimento che l'utente non ha ancora modo di
-      **creare**.
-- [ ] **Cosa *non* chiede questa voce.** Non chiede di risolvere il riferimento —
-      quello è lavoro di kernel, e si fa dopo. Chiede che la risposta abbia il
-      posto dove metterlo, prima che il freeze lo renda una major. La differenza
-      è la stessa che la §21.8 dichiara per gli allegati: dichiarare il cliente
-      non è costruirgli la strada.

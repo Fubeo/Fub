@@ -54,6 +54,15 @@ non lo impedisce: lo rende visibile. Una rottura deliberata si fa ritagliando la
 linea di base — cioè con un commit che **tocca `0.1.0.wit`** e dice perché. In
 review si vede; è tutta la differenza con oggi, dove non si vedrebbe affatto.
 
+C'è un caso in cui il test resta **verde e ha ragione**, ed è quello a cui fare
+più attenzione: ciò che è nato *dopo* che la linea di base è stata tagliata non è
+mai stato pubblicato, quindi cambiarlo non rompe nessuna promessa e lo snapshot
+non si tocca — scriverci dentro un tipo che non c'era falsificherebbe cosa è
+stato pubblicato. La rottura è comunque reale per chi compila contro l'`abi.wit`
+di oggi, e per questo la tabella qui sotto la elenca lo stesso: il presidio
+copre *ciò che è uscito*, non *ciò che è cambiato*, e leggere il suo silenzio
+come «è additivo» è l'errore che questa pagina esiste per evitare.
+
 **I ritagli fatti finora**, in ordine, così che l'elenco delle rotture
 deliberate stia in un posto solo e non solo nei commenti dei singoli punti:
 
@@ -68,6 +77,7 @@ deliberate stia in un posto solo e non solo nei commenti dei singoli punti:
 | [decisione 0019](../decisions/0019-il-canale-dati.md) | il canale dati: `index-query`/`index-result` perdono `full-text`/`properties` in favore di `documents` (erano la stessa domanda in due lingue che non si potevano comporre); via `search-scope`, `search-hit`, `document-properties` e le loro pagine; `index-query-tags`/`-neighbors`/`-property-values` cambiano il primo campo (un'espressione al posto di un documento o di una lista di filtri); `index` guadagna `routes`, senza cui il dispatch resta per tentativi; `host-api.list-documents` prende una finestra |
 | [decisione 0040](../decisions/0040-chi-localizza.md) | **chi localizza le stringhe** (§12.1): ogni campo che una persona legge passa da `string` a `text`, il tipo che porta la propria provenienza — ventidue record di `ui`, `command-spec`/`param-spec`/`choice`/`command-plan`/`command-outcome`, `setting-spec`, `view-spec`. Non è un'aggiunta e non poteva esserlo: una `string` in più accanto a ogni etichetta avrebbe raddoppiato la superficie e lasciato in piedi la domanda «quale delle due vince». `plugin-manifest` guadagna invece `strings` e `default-locale` **in coda**, che è additivo, perché il catalogo è dato nuovo e non un ritipo |
 | [decisione 0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) | **anche un errore è testo che qualcuno legge** (§12.2): i nove payload di `plugin-error` passano da `string` a `text`, per la stessa ragione della 0040 e con lo stesso costo — un errore era l'ultima cosa che arrivava a uno schermo senza poter essere tradotta, e affiancargli una seconda `string` avrebbe riproposto la domanda «quale delle due vince». Le tre varianti nuove — `not-found`, `already-exists`, `io` — sono invece **in coda**, cioè additive: distinguono ciò che prima passava tutto come `internal`, e non spostano il discriminante di nessuna delle nove che c'erano |
+| [decisione 0049](../decisions/0049-una-posizione-dentro-un-documento.md) | `index-result.resolved` passa da `option<doc-id>` a `option<resolved-ref>` (§21.10): un `[[Nota#^blocco]]` porta un punto e la risposta sapeva dire solo *quale documento*, quindi chi risolve lo scartava. Il ripiego additivo — una variante `resolved-at` in coda — è stato scartato a verbale: lascerebbe per sempre due casi che rispondono alla stessa `index-query.resolve`. **Questo ritaglio NON tocca `0.1.0.wit`, e non è una svista**: `resolved` è nata con la [0043](../decisions/0043-il-path-e-la-chiave.md), cioè dopo che la linea di base è stata tagliata — nello snapshot l'`index-result` finisce a `organization`. Ritipare una variante mai pubblicata non rompe nessuna promessa, quindi `wit_additivity` resta verde **con ragione**, e scrivere nel file della linea di base un caso che non c'era falsificherebbe cosa è stato pubblicato. La rottura resta reale per chi compila contro l'`abi.wit` di oggi: è qui perché il presidio, correttamente, non la vede |
 
 **Dopo il freeze** un file già qui non si tocca più. Alla pubblicazione di una
 versione nuova:

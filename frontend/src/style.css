@@ -392,6 +392,13 @@ button:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Le occorrenze dopo la prima: righe della stessa nota, rientrate perché è ciò
+   che dicono — non un altro risultato, un altro punto dello stesso. */
+.hit-occurrence {
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
 .hit-snippet {
   display: block;
   font-size: var(--text-sm);

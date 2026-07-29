@@ -64,7 +64,7 @@ use std::collections::BTreeMap;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fubmd_abi::edit::Revision;
-use fubmd_abi::model::{DocId, Frontmatter, Heading, Link};
+use fubmd_abi::model::{Anchor, DocId, Frontmatter, Heading, Link};
 use serde::{Deserialize, Serialize};
 
 use crate::settings::write_atomic;
@@ -75,7 +75,15 @@ use crate::vault::data_root;
 /// A differenza del sidecar dell'organizzazione, qui **non** si legge un file
 /// senza versione come «versione 0»: questo formato nasce con il campo, quindi
 /// un file che non ce l'ha non è un file di prima — è un file di qualcun altro.
-const SCHEMA_VERSION: u32 = 1;
+///
+/// v2: `stored-meta.anchors` (decisione 0049). Un campo `#[serde(default)]`
+/// avrebbe letto i file di prima senza rompersi, ed è precisamente il motivo
+/// per cui non basta: un vault riaperto da una tabella v1 avrebbe zero ancore e
+/// nessun modo di dirlo, quindi `[[Nota#^blocco]]` sarebbe tornato ad aprire la
+/// nota in cima — la §21.10 riaperta dalla cache dopo essere stata chiusa nella
+/// firma. Un derivato di una versione che non si conosce si rifà, e qui il
+/// costo è una riapertura lenta sola.
+const SCHEMA_VERSION: u32 = 2;
 
 /// Il nome del file dentro [`data_root`].
 const FILE: &str = "entries.json";
@@ -94,6 +102,19 @@ pub(crate) struct StoredMeta {
     pub(crate) outline: Vec<Heading>,
     #[serde(default)]
     pub(crate) links: Vec<Link>,
+    /// Le ancore di blocco (`^abc`), con lo span del blocco che le porta.
+    ///
+    /// Portano uno span come gli [`Heading`] dell'outline, e per la stessa
+    /// ragione è lecito scriverlo: questa tabella si crede solo finché
+    /// dimensione e data dicono che il file non è cambiato, quindi lo span è
+    /// ancora quello del sorgente che c'è. È la differenza con i tag, di cui si
+    /// scrivono i soli nomi.
+    ///
+    /// Ci sono dalla decisione 0049: senza, dopo un'apertura veloce
+    /// `[[Nota#^blocco]]` saprebbe dire *quale* documento e non *dove dentro* —
+    /// cioè il buco della §21.10 riaperto dalla cache invece che dalla firma.
+    #[serde(default)]
+    pub(crate) anchors: Vec<Anchor>,
     /// I tag **come la nota li scrive** (`#Rust`, non `rust`): è ciò che
     /// [`TagCounts`](crate::tag_counts::TagCounts) prende in ingresso, e
     /// riscriverli in forma canonica farebbe sparire la grafia dal pannello dei

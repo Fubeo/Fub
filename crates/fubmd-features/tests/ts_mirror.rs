@@ -36,10 +36,10 @@ use fubmd_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
 use fubmd_abi::traits::{
-    BacklinkRef, DocumentMatch, EntryKind, FolderScope, HealthCheck, IndexQuery, IndexResult,
-    JobId, JobProgress, JobStatus, LinkDirection, NeighborRef, Page, Paged, PropertyEntry,
-    PropertySelect, TagCount, VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewSpec,
-    ViewSurface,
+    BacklinkRef, DocPosition, DocumentMatch, EntryKind, FolderScope, HealthCheck, IndexQuery,
+    IndexResult, JobId, JobProgress, JobStatus, LinkDirection, NeighborRef, Page, Paged,
+    PropertyEntry, PropertySelect, ResolvedRef, TagCount, VaultEntry, VaultFolder, VaultStatus,
+    ViewInstance, ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
@@ -820,7 +820,17 @@ fn index_result_samples() -> Vec<Value> {
         // del valore della variante — un link rotto, un URL e una nota
         // rinominata via da sotto danno tutti e tre quello — e perché sul
         // confine JSON è `null`, che è la forma che il mirror deve reggere.
-        IndexResult::Resolved(Some(DocId::new("note/a.md"))),
+        // E le due forme del `Some`: il documento nudo (un `[[Nota]]`) e il
+        // documento con il punto dentro (un `[[Nota#^blocco]]`, decisione
+        // 0049), che è la metà di risposta che prima non aveva dove stare.
+        IndexResult::Resolved(Some(ResolvedRef::doc(DocId::new("note/a.md")))),
+        IndexResult::Resolved(Some(ResolvedRef {
+            doc: DocId::new("note/a.md"),
+            at: Some(
+                DocPosition::at(Span::new(42, 96), Revision::new("0123456789abcdef"))
+                    .with_anchor("abc123"),
+            ),
+        })),
         IndexResult::Resolved(None),
         // L'anagrafe risponde a pagine, e le tre voci sono le tre specie: un
         // documento con l'impronta (qualcuno ne ha già letto i byte), un
@@ -1005,6 +1015,40 @@ fn expected() -> Value {
                     key: "tipo".into(),
                     value: fubmd_abi::model::PropertyValue::Text("nota".into()),
                 }],
+                // Due occorrenze e non una: è la forma che la §21.3 esisteva
+                // per rendere esprimibile, e quella che dice al mirror TS che
+                // `occurrences` è una lista — una nota può portare N punti a
+                // cui saltare, mentre di estratto ne porta uno.
+                occurrences: vec![
+                    DocPosition::at(Span::new(4, 9), Revision::new("0123456789abcdef")),
+                    DocPosition::at(Span::new(120, 125), Revision::new("0123456789abcdef"))
+                        .with_anchor("abc123"),
+                ],
+            }),
+        ],
+        // Un punto dentro un documento (§21.3, §21.10): senza ancora — chi ha
+        // trovato un'occorrenza nel testo non sa in che blocco cade — e con,
+        // che è la forma di un `[[Nota#^blocco]]` risolto.
+        "DocPosition": [
+            to_value(DocPosition::at(
+                Span::new(4, 9),
+                Revision::new("0123456789abcdef"),
+            )),
+            to_value(
+                DocPosition::at(Span::new(42, 96), Revision::new("0123456789abcdef"))
+                    .with_anchor("abc123"),
+            ),
+        ],
+        // E le due forme della risposta di `resolve`: il documento nudo, e il
+        // documento col punto dentro.
+        "ResolvedRef": [
+            to_value(ResolvedRef::doc(DocId::new("note/a.md"))),
+            to_value(ResolvedRef {
+                doc: DocId::new("note/a.md"),
+                at: Some(
+                    DocPosition::at(Span::new(42, 96), Revision::new("0123456789abcdef"))
+                        .with_anchor("abc123"),
+                ),
             }),
         ],
         "NeighborRef": [to_value(NeighborRef {

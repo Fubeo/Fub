@@ -59,6 +59,8 @@ cronologico di chiusura.
 | [0046](0046-l-anagrafe-del-vault.md) | L'anagrafe del vault: cosa c'è, cosa ne so, e cosa non devo rileggere | §14.1 + §14.2 (**metà** della [seduta 14](../roadmap/14-entry-cartelle-lista.md)) | 2026-07-28 |
 | [0047](0047-la-cartella-esiste-nel-kernel.md) | La cartella esiste nel kernel, e la lista si chiede per cartella | §14.3 + §14.4 ([seduta 14](../roadmap/14-entry-cartelle-lista.md)) | 2026-07-29 |
 | [0048](0048-una-radice-sola.md) | Una radice sola, e la classe di un dato | §15.4 — la P0 della [seduta 15](../roadmap/15-il-disco.md) | 2026-07-29 |
+| [0049](0049-una-posizione-dentro-un-documento.md) | Una posizione dentro un documento | §21.3 + §21.10 ([seduta 21](../roadmap/21-la-ricerca-predefinita.md)) | 2026-07-29 |
+| [0050](0050-cosa-si-chiede-a-una-ricerca.md) | Cosa si chiede a una ricerca | §21.1 + §21.2 — con la 0049 chiude le quattro P0 della [seduta 21](../roadmap/21-la-ricerca-predefinita.md) | 2026-07-29 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -92,6 +94,16 @@ in fila, e ognuna porta in testa il rimando all'altra. Un verbale per *pezzo di
 voce* si scrive quando il pezzo è una decisione intera, non quando il lavoro è
 lungo: il criterio è sempre quello, un ragionamento che fra sei mesi non si
 ricostruisce dal diff.
+
+La [0049](0049-una-posizione-dentro-un-documento.md) e la
+[0050](0050-cosa-si-chiede-a-una-ricerca.md) sono la prima **coppia decisa in una
+volta sola**, e il taglio non è per numero di voci: la 0049 chiude le due che
+chiedevano la stessa primitiva da due firme diverse (dove sta un risultato, dove
+punta un riferimento), la 0050 le due che toccavano lo stesso record
+(`TextQuery`). Deciderle in quattro verbali avrebbe voluto dire aprire due volte
+la stessa firma; deciderle in uno avrebbe messo insieme due ragionamenti che non
+si sostengono a vicenda. Il criterio resta quello della 0031/0032: un verbale è
+un ragionamento intero, non una quota di lavoro.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio

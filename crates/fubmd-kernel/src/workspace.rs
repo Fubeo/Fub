@@ -63,9 +63,10 @@ use fubmd_abi::session::ViewContext;
 use fubmd_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValue};
 use fubmd_abi::text::{Localize, Strings, Text};
 use fubmd_abi::traits::{
-    BacklinkRef, CommandProvider, EntryKind, EventHandler, HostApi, IndexProvider, IndexQuery,
-    IndexResult, JobId, JobProgress, JobSpec, Page, Paged, PluginManifest, QueryRoute, ReadApi,
-    ServiceProvider, VaultEntry, ViewInstance, ViewProvider, ViewSpec,
+    BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, HostApi,
+    IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged,
+    PluginManifest, QueryRoute, ReadApi, ServiceProvider, VaultEntry, ViewInstance, ViewProvider,
+    ViewSpec,
 };
 use fubmd_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -88,6 +89,7 @@ use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
 use crate::index::Indexes;
 use crate::locale::SystemLocale;
+use crate::occurrences;
 use crate::organization::OrganizationStore;
 use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
 use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
@@ -2689,8 +2691,64 @@ impl Workspace {
     ///
     /// Chi compone la risposta quando la domanda ha foglie di proprietari
     /// diversi è il pianificatore (vedi [`crate::index::plan`]).
+    ///
+    /// # E poi la risposta si **localizza**
+    ///
+    /// Un risultato di ricerca che sa dire *quale nota* e non *a che punto*
+    /// rende inesprimibili tre cose (la ricerca dentro la nota aperta, il salto
+    /// all'occorrenza successiva, N risultati per nota): è la §21.3, chiusa
+    /// dalla decisione 0049 con
+    /// [`DocumentMatch::occurrences`](fubmd_abi::traits::DocumentMatch::occurrences).
+    ///
+    /// A riempirle è **qui**, e non chi indicizza, per una ragione di verità e
+    /// non di comodo: le coordinate sono byte del **sorgente**, e chi indicizza
+    /// ha in mano la proiezione a testo piano del documento — vedi
+    /// [`crate::occurrences`]. Il sorgente ce l'ha il vault, cioè questo
+    /// componente, che è anche l'unico punto in cui *ogni* risposta passa,
+    /// compresa quella di un motore di terzi che rivendicasse
+    /// [`QueryKind::Documents`](fubmd_abi::traits::QueryKind::Documents).
+    ///
+    /// Chi ha già riempito `occurrences` non viene toccato: un indice che
+    /// sappia dire *dove* — perché tiene i sorgenti, perché è un motore diverso
+    /// — resta la fonte, e questo passaggio è il ripiego di chi non lo sa dire.
     pub fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        self.indexes.query(query)
+        let needles = occurrences::wanted(&query);
+        let result = self.indexes.query(query)?;
+        match result {
+            IndexResult::Documents(page) if !needles.is_empty() => {
+                Ok(IndexResult::Documents(self.locate(page, &needles)))
+            }
+            other => Ok(other),
+        }
+    }
+
+    /// Apre i sorgenti della pagina e ci trova dentro i testi cercati.
+    ///
+    /// Costa **una lettura per riga**, e il tetto di
+    /// [`occurrences::max_docs`] è ciò che impedisce a una domanda senza
+    /// finestra di aprire il vault intero: oltre quel numero le righe restano
+    /// senza coordinate, che è ciò che `occurrences` vuoto significa da
+    /// contratto. Un documento che non si legge o che è sparito da sotto non è
+    /// un errore della ricerca — la riga resta, senza il punto.
+    fn locate(&self, mut page: Paged<DocumentMatch>, needles: &[String]) -> Paged<DocumentMatch> {
+        for hit in page.items.iter_mut().take(occurrences::max_docs()) {
+            if !hit.occurrences.is_empty() {
+                continue;
+            }
+            let Ok(source) = self.docs.read_source(&hit.doc) else {
+                continue;
+            };
+            // La revisione è quella del testo appena letto, non una presa
+            // altrove: uno span vale sul sorgente su cui è stato misurato, e
+            // dire «di quando» con l'impronta di un'altra lettura sarebbe la
+            // bugia che il campo esiste per impedire.
+            let revision = Revision::of(&source);
+            hit.occurrences = occurrences::locate(&source, needles)
+                .into_iter()
+                .map(|span| DocPosition::at(span, revision.clone()))
+                .collect();
+        }
+        page
     }
 
     /// Chi risponderebbe a questa domanda, e come: il piano.

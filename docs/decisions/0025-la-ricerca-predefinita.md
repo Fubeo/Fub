@@ -123,10 +123,10 @@ riempiendo quella che c'è.
 
 **Non cambia nessun codice, oggi.** Questo verbale non ha un commit di
 implementazione dietro: cambia la documentazione, e mette nove voci in
-`todo.md`, tre delle quali **P0** perché sono firma
-([§21.1](../roadmap/21-la-ricerca-predefinita.md#211-la-tolleranza-ai-refusi-non-è-dicibile-nel-contratto),
-[§21.2](../roadmap/21-la-ricerca-predefinita.md#212-il-prefisso-mentre-si-digita-non-è-uneuristica-della-casella),
-[§21.3](../roadmap/21-la-ricerca-predefinita.md#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento)).
+`todo.md`, tre delle quali **P0** perché sono firma — la §21.1, la §21.2 e la
+§21.3, chiuse poi dalla
+[0050](0050-cosa-si-chiede-a-una-ricerca.md) e dalla
+[0049](0049-una-posizione-dentro-un-documento.md) insieme alla §21.10.
 
 Quello che cambia è il **criterio**: da qui in poi una domanda sulla ricerca non
 si risolve chiedendosi se valga la pena, ma verificando cosa fa omnisearch e

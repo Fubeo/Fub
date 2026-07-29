@@ -32,16 +32,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use fubmd_abi::model::{
-    canonical_tag, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
+    canonical_anchor, canonical_tag, heading_slug, Anchor, DocId, DocumentModel, Frontmatter,
+    Heading, Link, LinkTarget,
 };
 use fubmd_abi::query::{
     in_folder, parent_folder, within_folder, Matches, QueryEvaluator, QueryPredicate,
 };
 use fubmd_abi::rules::properties;
 use fubmd_abi::traits::{
-    EntryKind, FolderScope, HostApi, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress,
-    JobStatus, LinkDirection, Paged, PredicateKind, QueryKind, QueryRoute, VaultEntry, VaultFolder,
-    VaultStatus,
+    DocPosition, EntryKind, FolderScope, HostApi, IndexProvider, IndexQuery, IndexResult, JobId,
+    JobProgress, JobStatus, LinkDirection, Paged, PredicateKind, QueryKind, QueryRoute,
+    ResolvedRef, VaultEntry, VaultFolder, VaultStatus,
 };
 use fubmd_abi::PluginError;
 
@@ -70,6 +71,14 @@ pub(crate) struct DocMeta {
     pub(crate) frontmatter: Frontmatter,
     pub(crate) outline: Vec<Heading>,
     pub(crate) links: Vec<Link>,
+    /// Le ancore di blocco (`^abc`), piatte come le consegna il modello.
+    ///
+    /// Sono qui dalla decisione 0049, e sono l'unica metà del corpo che questa
+    /// cache tiene: senza, `[[Nota#^blocco]]` resta risolvibile solo a *quale
+    /// documento*, che è il buco della §21.10. Costano quanto l'outline — un
+    /// record corto per ancora, non un albero — e sono la stessa specie di dato:
+    /// **dove sta un punto nominabile**, per heading là e per blocco qui.
+    pub(crate) anchors: Vec<Anchor>,
 }
 
 /// I metadati si prendono da un modello **prestato**, perché l'alimentazione è
@@ -84,6 +93,7 @@ impl From<&DocumentModel> for DocMeta {
             frontmatter: model.frontmatter.clone(),
             outline: model.outline.clone(),
             links: model.links.clone(),
+            anchors: model.anchors.clone(),
         }
     }
 }
@@ -457,6 +467,7 @@ impl CoreIndex {
                 frontmatter: meta.frontmatter,
                 outline: meta.outline,
                 links: meta.links,
+                anchors: meta.anchors,
             },
         );
     }
@@ -469,6 +480,7 @@ impl CoreIndex {
             frontmatter: meta.frontmatter.clone(),
             outline: meta.outline.clone(),
             links: meta.links.clone(),
+            anchors: meta.anchors.clone(),
             tags: self.tags.names_of(id),
         })
     }
@@ -551,6 +563,79 @@ impl CoreIndex {
     /// Il frontmatter di un documento, per chi compone una riga di risposta.
     pub(crate) fn frontmatter(&self, id: &DocId) -> Option<&Frontmatter> {
         self.metas.get(id).map(|m| &m.frontmatter)
+    }
+
+    /// Cosa nomina un riferimento: **quale** documento e, quando il riferimento
+    /// porta un punto, **dove dentro** (decisione 0049).
+    ///
+    /// Prima di quella firma la risposta era un `DocId` e basta, e questo è il
+    /// punto in cui si vedeva: `heading` e `block` di un `LinkTarget::Wiki`
+    /// venivano scartati con un `..` — non per dimenticanza, ma perché non
+    /// c'era dove metterli. Il modello li parsa dalla
+    /// [0003](../../../../docs/decisions/0003-modello-del-documento.md), il
+    /// confine li trasporta, la shell li rispecchia, e si perdevano nell'ultimo
+    /// centimetro.
+    ///
+    /// I due spazi di nomi restano due, come li ha separati la 0003: `^blocco`
+    /// si cerca fra le ancore, `#Sezione` fra gli heading dell'outline. Se il
+    /// riferimento nomina un punto che non c'è più, la risposta resta il
+    /// documento con `at: None` — un heading rinominato apre la nota in cima,
+    /// che è più di quel che faceva prima e meno di una bugia.
+    fn resolve(&self, target: &LinkTarget, from: Option<&DocId>) -> Option<ResolvedRef> {
+        let doc = match target {
+            LinkTarget::Wiki { page, .. } => self.graph.resolve_wiki(page)?,
+            // Un path relativo senza un documento che lo ospiti è relativo alla
+            // radice: `DocId("")` non è un documento, è la cartella da cui
+            // `resolve_against` parte, ed è la stessa che userebbe una nota
+            // nella radice.
+            LinkTarget::Path(raw) => self
+                .graph
+                .resolve_path(from.unwrap_or(&DocId::new("")), raw)?,
+            // Il mondo esterno non è nel vault, e dirlo è una risposta: chi
+            // passa qui l'esito di `classify` senza filtrarlo prima riceve
+            // `None` invece di un errore.
+            LinkTarget::Url(_) => return None,
+        };
+        let at = match target {
+            LinkTarget::Wiki { heading, block, .. } => {
+                self.position_in(&doc, heading.as_deref(), block.as_deref())
+            }
+            _ => None,
+        };
+        Some(ResolvedRef { doc, at })
+    }
+
+    /// Il punto che un `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` nomina dentro
+    /// `doc`.
+    ///
+    /// La revisione arriva dall'anagrafe (§14.1) e non da una lettura fatta
+    /// apposta: l'impronta di un documento è già lì, calcolata quando il kernel
+    /// ne ha letto i byte per parsarlo. Senza impronta non si produce una
+    /// posizione — una coordinata che non sa dire *di quando* è una coordinata
+    /// che chi la usa dovrebbe indovinare, e il contratto ha deciso di non
+    /// permetterlo (`DocPosition::revision` non è opzionale).
+    fn position_in(
+        &self,
+        doc: &DocId,
+        heading: Option<&str>,
+        block: Option<&str>,
+    ) -> Option<DocPosition> {
+        let meta = self.metas.get(doc)?;
+        let (span, anchor) = match (block, heading) {
+            (Some(id), _) => {
+                let wanted = canonical_anchor(id);
+                let found = meta.anchors.iter().find(|a| a.id == wanted)?;
+                (found.span, wanted)
+            }
+            (None, Some(text)) => {
+                let wanted = heading_slug(text);
+                let found = meta.outline.iter().find(|h| h.slug == wanted)?;
+                (found.span, wanted)
+            }
+            (None, None) => return None,
+        };
+        let revision = self.entries.get(doc)?.fingerprint.clone()?;
+        Some(DocPosition::at(span, revision).with_anchor(anchor))
     }
 
     /// I documenti in relazione di link con `doc`, secondo il verso chiesto.
@@ -842,20 +927,9 @@ impl IndexProvider for CoreIndex {
             // chi chiede dice di che specie è il riferimento, perché lo sa — è
             // ciò che ha parsato, o ciò che `LinkTarget::classify` gli ha
             // risposto.
-            IndexQuery::Resolve { target, from } => Ok(IndexResult::Resolved(match &target {
-                LinkTarget::Wiki { page, .. } => self.graph.resolve_wiki(page),
-                // Un path relativo senza un documento che lo ospiti è relativo
-                // alla radice: `DocId("")` non è un documento, è la cartella da
-                // cui `resolve_against` parte, ed è la stessa che userebbe una
-                // nota nella radice.
-                LinkTarget::Path(raw) => self
-                    .graph
-                    .resolve_path(from.as_ref().unwrap_or(&DocId::new("")), raw),
-                // Il mondo esterno non è nel vault, e dirlo è una risposta: chi
-                // passa qui l'esito di `classify` senza filtrarlo prima riceve
-                // `None` invece di un errore.
-                LinkTarget::Url(_) => None,
-            })),
+            IndexQuery::Resolve { target, from } => {
+                Ok(IndexResult::Resolved(self.resolve(&target, from.as_ref())))
+            }
         }
     }
 }

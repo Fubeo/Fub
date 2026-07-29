@@ -7,6 +7,7 @@ import type {
   CommandOutcome,
   CommandScope,
   CommandSpec,
+  DocPosition,
   DocumentMatch,
   EmbedContent,
   EventMask,
@@ -17,6 +18,7 @@ import type {
   NeighborRef,
   OpenVaults,
   RenderedDocument,
+  ResolvedRef,
   Actor,
   KernelEvent,
   KernelNotice,
@@ -584,6 +586,25 @@ const PARTIAL_RECORD_KEYS: Record<string, { all: string[]; required: string[] }>
       snippet: true,
       highlights: true,
       properties: true,
+      occurrences: true,
+    }),
+    required: ["doc"],
+  },
+  // Un punto dentro un documento (§21.3, §21.10): `anchor` c'è solo quando il
+  // punto cade in un blocco che ne ha una, `revision` sempre — una coordinata
+  // che non sa dire *di quando* è una coordinata da indovinare.
+  DocPosition: {
+    all: keysOf<Required<DocPosition>>({
+      span: true,
+      anchor: true,
+      revision: true,
+    }),
+    required: ["span", "revision"],
+  },
+  ResolvedRef: {
+    all: keysOf<Required<ResolvedRef>>({
+      doc: true,
+      at: true,
     }),
     required: ["doc"],
   },

@@ -24,6 +24,7 @@ import type {
   Page,
   Paged,
   QueryExpr,
+  ResolvedRef,
   TagCount,
   VaultEntry,
   VaultFolder,
@@ -133,8 +134,8 @@ export async function organizzazione(): Promise<Organization> {
   return open(await api.queryIndex({ kind: "organization" }), "organization");
 }
 
-/// Cosa nomina questo riferimento, adesso (§13.1): il documento del vault, o
-/// `null`.
+/// Cosa nomina questo riferimento, adesso (§13.1): il documento del vault e —
+/// quando il riferimento porta un punto — **dove dentro**; oppure `null`.
 ///
 /// `from` è il documento **dentro cui** il riferimento è scritto, e serve ai
 /// `path`, che sono relativi alla cartella di chi li ospita; per un wikilink
@@ -142,12 +143,17 @@ export async function organizzazione(): Promise<Organization> {
 /// una nota rinominata via da sotto danno tutti e tre `null`, e chi ha chiesto
 /// decide cosa proporre.
 ///
+/// `at` è la metà di risposta che prima non aveva dove stare (§21.10): un
+/// `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` è sempre stato parsato per
+/// intero, ma la risposta sapeva dire solo *quale documento* — quindi chi
+/// risolveva scartava il resto e il link apriva la nota in cima, in silenzio.
+///
 /// Prima era `resolve_link`, un comando IPC scritto apposta — cioè la sola
 /// risposta sul vault che questa shell sapeva chiedere e un provider no.
 export async function riferimentoRisolto(
   target: LinkTarget,
   from?: string,
-): Promise<string | null> {
+): Promise<ResolvedRef | null> {
   return open(
     await api.queryIndex({ kind: "resolve", target, from: from ?? null }),
     "resolved",

@@ -624,7 +624,57 @@
             "value": "nota"
           }
         }
+      ],
+      "occurrences": [
+        {
+          "span": {
+            "start": 4,
+            "end": 9
+          },
+          "revision": "0123456789abcdef"
+        },
+        {
+          "span": {
+            "start": 120,
+            "end": 125
+          },
+          "anchor": "abc123",
+          "revision": "0123456789abcdef"
+        }
       ]
+    }
+  ],
+  "DocPosition": [
+    {
+      "span": {
+        "start": 4,
+        "end": 9
+      },
+      "revision": "0123456789abcdef"
+    },
+    {
+      "span": {
+        "start": 42,
+        "end": 96
+      },
+      "anchor": "abc123",
+      "revision": "0123456789abcdef"
+    }
+  ],
+  "ResolvedRef": [
+    {
+      "doc": "note/a.md"
+    },
+    {
+      "doc": "note/a.md",
+      "at": {
+        "span": {
+          "start": 42,
+          "end": 96
+        },
+        "anchor": "abc123",
+        "revision": "0123456789abcdef"
+      }
     }
   ],
   "NeighborRef": [
@@ -647,7 +697,9 @@
                   "kind": "text",
                   "text": "rust",
                   "mode": "terms",
-                  "fields": []
+                  "fields": [],
+                  "tolerance": "exact",
+                  "partial_last_term": false
                 }
               },
               {
@@ -980,7 +1032,23 @@
     },
     {
       "kind": "resolved",
-      "value": "note/a.md"
+      "value": {
+        "doc": "note/a.md"
+      }
+    },
+    {
+      "kind": "resolved",
+      "value": {
+        "doc": "note/a.md",
+        "at": {
+          "span": {
+            "start": 42,
+            "end": 96
+          },
+          "anchor": "abc123",
+          "revision": "0123456789abcdef"
+        }
+      }
     },
     {
       "kind": "resolved",

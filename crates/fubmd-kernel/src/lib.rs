@@ -56,6 +56,7 @@ mod health;
 pub mod host;
 pub mod index;
 pub mod locale;
+mod occurrences;
 pub mod organization;
 pub mod plugins;
 mod providers;

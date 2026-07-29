@@ -733,12 +733,25 @@ export type LinkTarget =
 export type TextMode = "terms" | "phrase";
 
 // Dove cercare il testo. Vuoto = i campi che il provider indicizza.
-export type TextField = "name" | "body" | "tags";
+// `heading` pesa a parte: distingue una nota che PARLA di una cosa da una che
+// ci ha dedicato una sezione.
+export type TextField = "name" | "body" | "tags" | "heading";
+
+// Quanto si vuole essere indovinati: un'INTENZIONE, mai una distanza di edit.
+// Chi non sa onorare `typos` risponde come per `exact` — restringe, non allarga.
+export type TextTolerance = "exact" | "typos";
 
 export interface TextQuery {
   text: string;
   mode: TextMode;
   fields: TextField[];
+  tolerance: TextTolerance;
+  // L'ultimo termine è ancora in corso di scrittura. È una proprietà
+  // dell'INVOCAZIONE e non della query: chi **salva** una query — una
+  // collezione, una vista, un template — la normalizza a `false` prima di
+  // scriverla, perché l'utente aveva finito di scrivere e nessuno era lì a
+  // vederlo.
+  partial_last_term: boolean;
 }
 
 // Una prova su una proprietà del frontmatter. `test` resta opaco per la shell
@@ -777,9 +790,32 @@ export interface QueryExpr {
 export const OGNI_DOCUMENTO: QueryExpr = { any: [] };
 
 // Il testo che l'utente ha digitato, ovunque il provider guardi.
-export function testoCercato(text: string): QueryExpr {
+//
+// `mentreSiDigita` accende `partial_last_term`: l'ultimo termine è incompleto,
+// e `arch` deve trovare *architettura* prima che la parola sia finita. Lo dice
+// la **query**, non la casella appendendo un `*` da sé: se lo facesse la
+// shell, la ricerca dell'utente e quella di CLI, API locale, automazioni e
+// centro di comando LLM parlerebbero due lingue diverse, e la differenza non
+// sarebbe scritta da nessuna parte.
+export function testoCercato(text: string, mentreSiDigita = false): QueryExpr {
   return {
-    any: [{ all: [{ negated: false, predicate: { kind: "text", text, mode: "terms", fields: [] } }] }],
+    any: [
+      {
+        all: [
+          {
+            negated: false,
+            predicate: {
+              kind: "text",
+              text,
+              mode: "terms",
+              fields: [],
+              tolerance: "exact",
+              partial_last_term: mentreSiDigita,
+            },
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -817,6 +853,31 @@ export interface DocumentMatch {
   snippet?: string;
   highlights?: Span[];
   properties?: { key: string; value: unknown }[];
+  // DOVE, nel sorgente, sta ciò che ha combaciato — in ordine di posizione.
+  // Non è un doppione di `highlights`: quelli servono a **disegnare** una riga
+  // (byte dentro `snippet`), queste a **tornare** al testo (byte del sorgente,
+  // la stessa valuta di `reveal`). Assente = nessuno le ha calcolate, che è
+  // diverso da «nessuna occorrenza».
+  occurrences?: DocPosition[];
+}
+
+// UN PUNTO DENTRO UN DOCUMENTO (rispecchia fubmd_abi::traits::DocPosition).
+// `span` è in byte del SORGENTE; `anchor` è l'ancora del blocco che lo ospita
+// quando ce n'è una; `revision` dice DI QUANDO — uno span invecchia appena il
+// documento cambia sotto, e senza sapere di quale sorgente parla si porterebbe
+// il cursore altrove senza accorgersene.
+export interface DocPosition {
+  span: Span;
+  anchor?: string;
+  revision: string;
+}
+
+// Cosa nomina un riferimento (rispecchia fubmd_abi::traits::ResolvedRef):
+// QUALE documento e, quando il riferimento porta un punto e quel punto esiste
+// ancora, DOVE DENTRO.
+export interface ResolvedRef {
+  doc: string;
+  at?: DocPosition;
 }
 
 // Un vicino nel grafo: `via` è l'anello precedente, ed è ciò che rende la
@@ -938,7 +999,7 @@ export type IndexResult =
   // ed è metà del valore di questa risposta: link rotto, URL esterno e nota
   // rinominata via da sotto danno tutti e tre `null`, e chi ha chiesto sa che
   // deve proporre qualcos'altro.
-  | { kind: "resolved"; value: string | null }
+  | { kind: "resolved"; value: ResolvedRef | null }
   | { kind: "entries"; value: Paged<VaultEntry> }
   | { kind: "folders"; value: Paged<VaultFolder> };
 

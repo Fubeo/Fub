@@ -153,11 +153,30 @@ export function isOpen(id: string): boolean {
 /// Risolve un wikilink e lo apre; se non risolve, crea la nota che manca col
 /// nome scritto nel link (come in Obsidian). Il backlink c'è già prima ancora
 /// che l'utente abbia scritto la prima riga — è il grafo a ricucirlo.
-export async function openWikilink(page: string): Promise<void> {
+///
+/// `heading` e `block` sono il **punto** che il link nomina, quando lo nomina.
+/// Fino alla [0049](../../../docs/decisions/0049-una-posizione-dentro-un-documento.md)
+/// arrivavano fin qui e si fermavano: la risposta di `resolve` sapeva dire
+/// *quale documento* e non *dove dentro*, quindi `[[Nota#^blocco]]` apriva la
+/// nota in cima e niente lo diceva. Adesso la posizione torna dal kernel e la
+/// si porta a schermo con lo stesso `revealByteOffset` dell'outline — byte
+/// UTF-8 → posizione editor, come per ogni altro span del modello.
+export async function openWikilink(
+  page: string,
+  heading?: string,
+  block?: string,
+): Promise<void> {
   if (!page) return; // [[#Sezione]]: link interno alla nota, per ora nulla
-  const target = await riferimentoRisolto({ kind: "wiki", value: { page } });
+  const target = await riferimentoRisolto({
+    kind: "wiki",
+    value: { page, heading: heading ?? null, block: block ?? null },
+  });
   if (target) {
-    await openDocument(target);
+    await openDocument(target.doc);
+    // Il punto può non esserci — un heading rinominato, un `^abc` cancellato —
+    // e allora resta la nota aperta in cima: è il degrado dichiarato di
+    // `ResolvedRef.at`, non un caso da nascondere.
+    if (target.at) revealByteOffset(target.at.span.start);
     return;
   }
   const creata = await createNote(page);

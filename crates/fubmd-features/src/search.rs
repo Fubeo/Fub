@@ -50,7 +50,9 @@ use std::sync::Mutex;
 use camino::Utf8Path;
 use fubmd_abi::edit::Revision;
 use fubmd_abi::model::{canonical_tag, DocId, DocumentModel, Span};
-use fubmd_abi::query::{QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery};
+use fubmd_abi::query::{
+    QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery, TextTolerance,
+};
 use fubmd_abi::text::{Arg, StringCatalog, Text};
 use fubmd_abi::traits::{
     DocumentMatch, EntryKind, HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged,
@@ -58,7 +60,10 @@ use fubmd_abi::traits::{
 };
 use fubmd_abi::PluginError;
 use serde::{Deserialize, Serialize};
-use tantivy::query::{AllQuery, BooleanQuery, BoostQuery, Occur, PhraseQuery, Query, TermQuery};
+use tantivy::query::{
+    AllQuery, BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query, RegexQuery,
+    TermQuery,
+};
 use tantivy::schema::{Field, IndexRecordOption, Schema, Value, STORED, STRING, TEXT};
 use tantivy::snippet::SnippetGenerator;
 use tantivy::tokenizer::TokenStream;
@@ -78,7 +83,8 @@ pub const SEARCH_ID: &str = "fubmd.search";
 /// v4: `folder_exact` e `tag_paths`, cioè le due forme che i predicati del
 /// linguaggio (§5.3) chiedono e che i campi di prima non sapevano distinguere —
 /// «in questa cartella» contro «in questa o sotto», e lo stesso per un tag.
-const SCHEMA_VERSION: u32 = 4;
+/// v5: `headings`, il campo che `TextField::Heading` chiede (decisione 0050).
+const SCHEMA_VERSION: u32 = 5;
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -95,6 +101,12 @@ const SNIPPET_CHARS: usize = 220;
 /// Il `page_name` conta più del corpo: chi cerca "Rust" vuole prima la nota
 /// *intitolata* Rust, poi le mille che la nominano.
 const PAGE_NAME_BOOST: f32 = 4.0;
+
+/// Un heading conta più del corpo e meno del titolo della nota: chi ci ha
+/// dedicato una **sezione** ne parla più di chi la nomina in una riga, e meno
+/// di chi ci ha intitolato la nota intera. Il boost si somma alla copia che il
+/// termine ha già nel corpo, ed è precisamente l'effetto voluto.
+const HEADING_BOOST: f32 = 2.0;
 
 /// Ciò che il manifest deve dire perché ci si possa fidare delle impronte.
 ///
@@ -180,6 +192,14 @@ struct Fields {
     folder: Field,
     /// La sola cartella che contiene il documento.
     folder_exact: Field,
+    /// Il testo degli heading del documento, in fila.
+    ///
+    /// Il testo c'è già dentro `body` — la proiezione a testo piano non toglie
+    /// i titoli — e questa è una **seconda** copia, indicizzata a parte perché
+    /// quello che serve è pesarla di più: una nota che ha dedicato una sezione
+    /// a una cosa non è come una che la nomina di sfuggita, ed è la distinzione
+    /// che `TextField::Heading` esiste per dire.
+    headings: Field,
 }
 
 fn build_schema() -> (Schema, Fields) {
@@ -202,6 +222,10 @@ fn build_schema() -> (Schema, Fields) {
     // STORED perché non torna mai indietro — serve solo a filtrare.
     let folder = b.add_text_field("folder", STRING);
     let folder_exact = b.add_text_field("folder_exact", STRING);
+    // Prosa, come il corpo: un heading è una frase che qualcuno ha scritto, e
+    // si cerca dentro con le stesse regole. Non STORED: da qui non torna
+    // indietro niente — gli estratti li genera il corpo.
+    let headings = b.add_text_field("headings", TEXT);
     (
         b.build(),
         Fields {
@@ -212,6 +236,7 @@ fn build_schema() -> (Schema, Fields) {
             tag_paths,
             folder,
             folder_exact,
+            headings,
         },
     )
 }
@@ -549,6 +574,12 @@ impl SearchIndex {
         td.add_text(f.doc_id, doc.id.as_str());
         td.add_text(f.page_name, doc.id.page_name());
         td.add_text(f.body, &doc.text);
+        // Un valore per heading e non una stringa unita: due titoli attaccati
+        // formerebbero una frase che nessuno ha scritto, e una ricerca per
+        // frase la troverebbe.
+        for heading in &doc.outline {
+            td.add_text(f.headings, &heading.text);
+        }
         // Un valore per tag (non una stringa unita): col tokenizer raw ogni
         // valore È un termine, e il termine è la forma canonica — la stessa
         // chiave con cui il kernel aggrega e il pannello interroga.
@@ -943,7 +974,12 @@ impl SearchIndex {
     fn text_query(&self, text: &TextQuery) -> Result<Option<Box<dyn Query>>, PluginError> {
         let f = self.fields;
         let wanted: Vec<(Field, f32)> = if text.fields.is_empty() {
-            vec![(f.page_name, PAGE_NAME_BOOST), (f.body, 1.0), (f.tags, 1.0)]
+            vec![
+                (f.page_name, PAGE_NAME_BOOST),
+                (f.headings, HEADING_BOOST),
+                (f.body, 1.0),
+                (f.tags, 1.0),
+            ]
         } else {
             text.fields
                 .iter()
@@ -951,11 +987,29 @@ impl SearchIndex {
                     TextField::Name => (f.page_name, PAGE_NAME_BOOST),
                     TextField::Body => (f.body, 1.0),
                     TextField::Tags => (f.tags, 1.0),
+                    TextField::Heading => (f.headings, HEADING_BOOST),
                 })
                 .collect()
         };
         if text.text.trim().is_empty() {
             return Ok(None);
+        }
+        // La **tolleranza è dicibile e non ancora onorata**, ed è così di
+        // proposito (decisione 0050): la forma entra nel contratto prima del
+        // comportamento, perché la forma scade col freeze di M4 e il fuzzy no.
+        // Il `match` è esaustivo apposta — il giorno che `Typos` diventa una
+        // `FuzzyTermQuery`, il compilatore porta chi lo scrive esattamente qui,
+        // invece di lasciare il caso assorbito da un `_`.
+        match text.tolerance {
+            // Ciò che il motore fa oggi, ed è l'unico verso in cui questo
+            // silenzio è innocuo: chi ha chiesto l'esattezza la ottiene.
+            TextTolerance::Exact => {}
+            // Chi ha chiesto di essere indovinato riceve una ricerca esatta —
+            // meno risultati, non risultati sbagliati. Il verso opposto (essere
+            // tolleranti senza che nessuno lo abbia chiesto) è quello che la
+            // §21.1 chiama un difetto, perché su questo canale ci passano anche
+            // le scritture.
+            TextTolerance::Typos => {}
         }
 
         let mut per_field: Vec<(Occur, Box<dyn Query>)> = Vec::new();
@@ -965,18 +1019,26 @@ impl SearchIndex {
             if terms.is_empty() {
                 continue;
             }
+            // L'ultimo termine è quello che si sta ancora scrivendo, e solo
+            // lui: `arch async` cerca `async` per intero e `arch` come
+            // prefisso, cioè quello che ha sotto le dita chi digita.
+            let last = terms.len() - 1;
             match text.mode {
                 // La frase: la sequenza esatta, in un campo alla volta. Con un
                 // termine solo non c'è nessuna sequenza da rispettare, e
                 // `PhraseQuery` va in panico: è un termine.
                 TextMode::Phrase => {
-                    let q: Box<dyn Query> = if terms.len() == 1 {
-                        Box::new(TermQuery::new(
+                    let q: Box<dyn Query> = match (terms.len(), text.partial_last_term) {
+                        (1, false) => Box::new(TermQuery::new(
                             terms[0].clone(),
                             IndexRecordOption::WithFreqs,
-                        ))
-                    } else {
-                        Box::new(PhraseQuery::new(terms))
+                        )),
+                        (1, true) => self.prefix_query(field, &terms[0])?,
+                        // Una frase il cui ultimo termine è incompleto è
+                        // esattamente ciò che `PhrasePrefixQuery` esprime: la
+                        // sequenza, e in coda un prefisso.
+                        (_, true) => Box::new(PhrasePrefixQuery::new(terms)),
+                        (_, false) => Box::new(PhraseQuery::new(terms)),
                     };
                     per_field.push((Occur::Should, boosted(q, boost)));
                 }
@@ -984,8 +1046,11 @@ impl SearchIndex {
                 // ciò che si aspetta chi digita due parole.
                 TextMode::Terms => {
                     for (at, term) in terms.into_iter().enumerate() {
-                        let q: Box<dyn Query> =
-                            Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
+                        let q: Box<dyn Query> = if at == last && text.partial_last_term {
+                            self.prefix_query(field, &term)?
+                        } else {
+                            Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs))
+                        };
                         if per_term.len() <= at {
                             per_term.push(Vec::new());
                         }
@@ -1016,6 +1081,23 @@ impl SearchIndex {
         }
     }
 
+    /// Un termine **incompleto**: tutto ciò che comincia così.
+    ///
+    /// È un automa sul dizionario dei termini — cioè un intervallo aperto nella
+    /// term dictionary, che è il costo vero di una ricerca mentre si digita
+    /// (§21.9 lo dice per iscritto: un prefisso apre un intervallo). Il testo
+    /// arriva già passato dal tokenizer del campo, quindi qui non ci sono
+    /// maiuscole né punteggiatura da normalizzare; l'escape c'è lo stesso,
+    /// perché ciò che entra in un motore di regex viene da chi digita e non da
+    /// noi.
+    fn prefix_query(&self, field: Field, term: &Term) -> Result<Box<dyn Query>, PluginError> {
+        let value = term.value();
+        let pattern = format!("{}.*", escape_regex(value.as_str().unwrap_or_default()));
+        let query = RegexQuery::from_pattern(&pattern, field)
+            .map_err(|e| PluginError::Internal(motivo(TOKENIZER, e)))?;
+        Ok(Box::new(query))
+    }
+
     /// I termini di un testo secondo il tokenizer del campo. Per un campo
     /// `STRING` (i tag) il tokenizer è `raw`, e il termine è la stringa intera —
     /// che è esattamente ciò che serve.
@@ -1038,6 +1120,22 @@ fn term_query(field: Field, value: &str) -> Box<dyn Query> {
         Term::from_field_text(field, value),
         IndexRecordOption::Basic,
     ))
+}
+
+/// I metacaratteri di regex resi letterali.
+///
+/// Non ci sono liste di caratteri «pericolosi» da tenere aggiornate: tutto ciò
+/// che non è alfanumerico si scrive con la fuga davanti, che è sempre lecito e
+/// non richiede di sapere quali metacaratteri conosca il motore di oggi.
+fn escape_regex(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 4);
+    for c in text.chars() {
+        if !c.is_alphanumeric() {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 fn boosted(query: Box<dyn Query>, boost: f32) -> Box<dyn Query> {
@@ -1339,6 +1437,14 @@ mod tests {
 
     fn text(q: &str) -> QueryExpr {
         clause(vec![lit(QueryPredicate::Text(TextQuery::terms(q)))])
+    }
+
+    /// Il testo con l'ultimo termine **incompleto**: la forma che manda una
+    /// casella mentre si digita (§21.2).
+    fn text_parziale(q: &str) -> QueryExpr {
+        clause(vec![lit(QueryPredicate::Text(
+            TextQuery::terms(q).while_typing(),
+        ))])
     }
 
     fn tag(name: &str, descendants: bool) -> QueryExpr {
@@ -2178,5 +2284,110 @@ mod tests {
         let s = head_of("però caffè città perché così", 10);
         assert!(s.ends_with('…'));
         assert!(s.chars().count() <= 12);
+    }
+
+    /// La §21.2: `arch` trova *architettura* prima che la parola sia finita, e
+    /// **solo** l'ultimo termine è un prefisso.
+    #[test]
+    fn lultimo_termine_incompleto_e_un_prefisso_e_gli_altri_no() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        idx.on_document_indexed(&doc("a.md", "note di architettura del kernel"));
+        idx.on_document_indexed(&doc("b.md", "un archivio di vecchie note"));
+        idx.on_document_indexed(&doc("c.md", "il kernel e le sue parti"));
+
+        // Senza il prefisso, `arch` non è una parola di nessuno dei tre.
+        assert!(
+            page_of(&idx, text("arch"), None).items.is_empty(),
+            "l'esattezza resta il default: `arch` da solo non trova niente"
+        );
+        // Con il prefisso, li trova entrambi — ed è la stessa stringa.
+        let mut ids: Vec<String> = page_of(&idx, text_parziale("arch"), None)
+            .items
+            .into_iter()
+            .map(|m| m.doc.0)
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec!["a.md".to_string(), "b.md".to_string()]);
+
+        // Due termini: l'ultimo è il prefisso, il primo no. `kernel arch` deve
+        // trovare la nota che ha kernel E qualcosa che comincia per arch, e non
+        // quella che ha solo kernel.
+        let ids: Vec<String> = page_of(&idx, text_parziale("kernel arch"), None)
+            .items
+            .into_iter()
+            .map(|m| m.doc.0)
+            .collect();
+        assert_eq!(ids, vec!["a.md".to_string()]);
+
+        // E il termine che **non** è l'ultimo resta intero: `arch kernel` non
+        // deve trovare `archivio`, perché lì il prefisso non è più suo.
+        let ids: Vec<String> = page_of(&idx, text_parziale("arch kernel"), None)
+            .items
+            .into_iter()
+            .map(|m| m.doc.0)
+            .collect();
+        assert!(
+            ids.is_empty(),
+            "solo l'ultimo termine è incompleto: {ids:?}"
+        );
+    }
+
+    /// La §21.1: un heading pesa più del corpo, e `TextField::Heading` cerca
+    /// **solo** lì.
+    #[test]
+    fn un_heading_pesa_piu_del_corpo_ed_e_un_campo_a_se() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        // La stessa parola: in un heading di una nota, nel corpo dell'altra.
+        let mut con_sezione = doc("sezione.md", "Concorrenza\n\nqualche riga qui");
+        con_sezione.outline = vec![fubmd_abi::model::Heading {
+            level: 2,
+            text: "Concorrenza".into(),
+            slug: "concorrenza".into(),
+            span: Span::new(0, 14),
+        }];
+        idx.on_document_indexed(&con_sezione);
+        idx.on_document_indexed(&doc(
+            "citata.md",
+            "un accenno alla concorrenza e poi si passa oltre",
+        ));
+
+        // Chi le ha dedicato una sezione viene prima: il termine conta due
+        // volte, e la seconda con il boost.
+        let hits = search(&idx, "concorrenza");
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].doc, DocId::new("sezione.md"));
+
+        // E il campo è a sé: cercando **solo** negli heading resta una sola.
+        let solo_heading = clause(vec![lit(QueryPredicate::Text(TextQuery {
+            fields: vec![TextField::Heading],
+            ..TextQuery::terms("concorrenza")
+        }))]);
+        let ids: Vec<String> = page_of(&idx, solo_heading, None)
+            .items
+            .into_iter()
+            .map(|m| m.doc.0)
+            .collect();
+        assert_eq!(ids, vec!["sezione.md".to_string()]);
+    }
+
+    /// La tolleranza è **dicibile** e non ancora onorata, e il verso del
+    /// silenzio è quello sicuro: chiedere `typos` non allarga niente.
+    #[test]
+    fn chiedere_la_tolleranza_non_rende_tollerante_di_nascosto() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        idx.on_document_indexed(&doc("a.md", "note di architettura"));
+
+        let con_refuso = clause(vec![lit(QueryPredicate::Text(TextQuery {
+            tolerance: TextTolerance::Typos,
+            ..TextQuery::terms("architettra")
+        }))]);
+        assert!(
+            page_of(&idx, con_refuso, None).items.is_empty(),
+            "`typos` è dicibile: chi non lo onora risponde come per `exact`, e \
+             restringere è il verso innocuo dello sbaglio"
+        );
     }
 }
