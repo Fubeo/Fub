@@ -61,6 +61,8 @@ cronologico di chiusura.
 | [0048](0048-una-radice-sola.md) | Una radice sola, e la classe di un dato | §15.4 — la P0 della [seduta 15](../roadmap/15-il-disco.md) | 2026-07-29 |
 | [0049](0049-una-posizione-dentro-un-documento.md) | Una posizione dentro un documento | §21.3 + §21.10 ([seduta 21](../roadmap/21-la-ricerca-predefinita.md)) | 2026-07-29 |
 | [0050](0050-cosa-si-chiede-a-una-ricerca.md) | Cosa si chiede a una ricerca | §21.1 + §21.2 — con la 0049 chiude le quattro P0 della [seduta 21](../roadmap/21-la-ricerca-predefinita.md) | 2026-07-29 |
+| [0051](0051-l-alimentazione-risponde.md) | L'alimentazione risponde, e risponde a lotti | §20.1 — l'**ultima P0** aperta del piano | 2026-07-29 |
+| [0052](0052-cio-che-va-storto-e-un-evento.md) | Ciò che va storto è un evento, e il kernel smette di buttarlo | §20.2 (**meno una casella**) + §20.3 ([seduta 20](../roadmap/20-quando-qualcosa-va-storto.md)) | 2026-07-29 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -104,6 +106,20 @@ punta un riferimento), la 0050 le due che toccavano lo stesso record
 la stessa firma; deciderle in uno avrebbe messo insieme due ragionamenti che non
 si sostengono a vicenda. Il criterio resta quello della 0031/0032: un verbale è
 un ragionamento intero, non una quota di lavoro.
+
+La [0051](0051-l-alimentazione-risponde.md) e la
+[0052](0052-cio-che-va-storto-e-un-evento.md) sono la seconda **coppia decisa in
+una volta sola**, e la spartizione è di nuovo per ragionamento e non per numero
+di voci: la 0051 dà un esito a chi non l'aveva, la 0052 gli dà una destinazione e
+toglie di mezzo chi lo buttava. Ma c'è un precedente nuovo, ed è la 0052: chiude
+**due voci meno una casella**. Il §20.3 si chiude intero; il §20.2 chiude la
+forma — la variante, la severità, il soggetto, il primo consumatore — e lascia
+dietro l'**adozione**, cioè i ventisette punti che scrivono su `stderr` e vanno
+convertiti uno a uno. È il caso opposto alla mezza voce della
+[0031](0031-chi-possiede-i-bundle.md): là mancava metà del *ragionamento* e la
+voce è rimasta aperta, qui il ragionamento è intero e ciò che resta è lavoro che
+non decide niente. Il criterio per distinguerli è sempre lo stesso: una casella
+residua è ciò che si può fare **senza aprire un verbale**.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio

@@ -64,7 +64,7 @@ use fubmd_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValu
 use fubmd_abi::text::{Localize, Strings, Text};
 use fubmd_abi::traits::{
     BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, HostApi,
-    IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged,
+    IndexLoss, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged,
     PluginManifest, QueryRoute, ReadApi, ServiceProvider, VaultEntry, ViewInstance, ViewProvider,
     ViewSpec,
 };
@@ -73,7 +73,7 @@ use fubmd_abi::transfer::{
     ImportRequest, ImportSource,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fubmd_abi::{Actor, Event, Notice, PluginError};
+use fubmd_abi::{Actor, Event, Notice, PluginError, Severity};
 use serde::{Deserialize, Serialize};
 
 use fubmd_abi::rules::media;
@@ -181,6 +181,28 @@ impl Trust {
 /// Nome di una nota nuova a cui nessuno ne ha dato uno (D3). L'utente la
 /// rinomina subito: è il motivo per cui non vale la pena essere più creativi.
 const UNTITLED: &str = "Senza titolo";
+
+/// **Quanti documenti alla volta si alimenta un indice** (§20.1, decisione
+/// 0051).
+///
+/// La firma dell'alimentazione è a lotti, e a tagliarli è il kernel: è l'unico
+/// a sapere quanti modelli ha in mano, ed è l'unico punto in cui il numero
+/// esiste. Sta qui e non nel contratto per la stessa ragione per cui il tetto
+/// della coda eventi sta con chi ritira (decisione 0034): è una politica
+/// dell'host, e un guest che la leggesse dalla firma comincerebbe a dipenderne.
+///
+/// Il valore è un compromesso su un solo asse, e nessuno dei due estremi è
+/// gratis: una fetta grande risparmia attraversamenti e a M5 costringe a
+/// serializzare un buffer prima che l'indice ne veda una riga; una piccola
+/// riporta all'aritmetica che questa voce esiste per togliere. Cinquecentododici
+/// è la misura di un lotto che sta comodamente in memoria e riduce di tre ordini
+/// di grandezza gli attraversamenti di un `reindex` da 100k note.
+///
+/// Non è un'impostazione, e per adesso è giusto così: diventerà una il giorno
+/// che il confine costerà davvero, cioè quando ci sarà un guest da misurare
+/// (M5). Fissarne una adesso vorrebbe dire chiedere a un utente un numero che
+/// nessuno sa ancora se conta.
+const FEED_BATCH: usize = 512;
 
 pub struct Workspace {
     /// *Il disco, e come ciò che ci sta sopra diventa un modello* (§8.1): il
@@ -1081,7 +1103,7 @@ impl Workspace {
     /// La registrazione **è** l'attivazione: l'indice riceve subito un
     /// [`HostApi`] intestato al proprio id e ricarica da `data_*` ciò che ha
     /// già visto. Prima di questo momento non può avere ricordi, e dopo il
-    /// primo `on_document_indexed` sarebbe troppo tardi per averli.
+    /// primo `on_documents_indexed` sarebbe troppo tardi per averli.
     ///
     /// I due esiti sono **diversi**, e li distingue chi chiama: un conflitto di
     /// rotte vuol dire che l'indice non è registrato affatto; un errore di
@@ -1151,7 +1173,7 @@ impl Workspace {
     /// La registrazione **è** l'attivazione: l'indice riceve subito un
     /// [`HostApi`] intestato al proprio id e ricarica da `data_*` ciò che ha già
     /// visto. Prima di questo momento non può avere ricordi, e dopo il primo
-    /// `on_document_indexed` sarebbe troppo tardi per averli.
+    /// `on_documents_indexed` sarebbe troppo tardi per averli.
     fn activate_index(
         &mut self,
         id: String,
@@ -1281,8 +1303,15 @@ impl Workspace {
         for (id, meta) in restored {
             self.indexes.core.restore(&id, meta);
         }
-        for model in &models {
-            self.indexes.on_document_indexed(model);
+        // **Il kernel taglia** (§20.1): l'alimentazione è a lotti, e qui il
+        // lotto è tutto ciò che questa funzione ha in mano — che su un vault
+        // vero sono decine di migliaia di modelli. Si taglia in fette perché
+        // la dimensione di un lotto non è un dettaglio di chi lo riceve: a M5
+        // ogni fetta è una serializzazione, e una sola da 100k note vuol dire
+        // costruirne il buffer intero prima che l'indice ne veda una.
+        for fetta in models.chunks(FEED_BATCH) {
+            let lost = self.indexes.on_documents_indexed(fetta);
+            self.report_losses(lost);
         }
         drop(models);
         // L'apertura ricostruisce il grafo in blocco anche in modalità
@@ -1292,7 +1321,8 @@ impl Workspace {
         self.indexes.core.rebuild_graph();
 
         let ids: Vec<DocId> = self.documents();
-        self.indexes.reconcile(&ids);
+        let lost = self.indexes.reconcile(&ids);
+        self.report_losses(lost);
         // Gli errori di flush non fanno fallire l'apertura del vault: un
         // indice è stato derivato, il vault è la verità (M4: notifica).
         let _ = self.flush_indexes();
@@ -1524,7 +1554,12 @@ impl Workspace {
         // stessa verità, nessun canale che può perdere pezzi per strada. E la
         // vedono ADESSO, sul modello intero: è l'unico momento in cui corpo e
         // testo esistono — la cache tiene i soli metadati.
-        self.indexes.on_document_indexed(&model);
+        // Un lotto di uno: la scrittura singola È il caso normale, e la firma
+        // a lotti non la trasforma in un'eccezione da spiegare.
+        let lost = self
+            .indexes
+            .on_documents_indexed(std::slice::from_ref(&model));
+        self.report_losses(lost);
         if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
             // Il rebuild legge la cache: va aggiornata prima.
             self.indexes.core.rebuild_graph();
@@ -1658,7 +1693,8 @@ impl Workspace {
             // continuare a nominarla alle view (né tenerne una selezione).
             self.session.invalidate(id, ContextChange::Gone);
             self.indexes.core.remove_entry(id);
-            self.indexes.on_document_removed(id);
+            let lost = self.indexes.on_documents_removed(std::slice::from_ref(id));
+            self.report_losses(lost);
             if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
                 self.indexes.core.rebuild_graph();
             }
@@ -2167,8 +2203,14 @@ impl Workspace {
         // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
         // tiene stato *per-documento* invece migra la chiave sull'evento
         // `DocumentRenamed`.)
-        self.indexes.on_document_removed(from);
-        self.indexes.on_document_indexed(&model);
+        let lost = self
+            .indexes
+            .on_documents_removed(std::slice::from_ref(from));
+        self.report_losses(lost);
+        let lost = self
+            .indexes
+            .on_documents_indexed(std::slice::from_ref(&model));
+        self.report_losses(lost);
         if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
             self.indexes.core.rebuild_graph();
         }
@@ -2778,8 +2820,23 @@ impl Workspace {
     /// finito: il kernel non decide da solo *quando* è finito un lotto.
     ///
     /// L'errore di un indice non fa fallire il chiamante — un indice è stato
-    /// *derivato*, la verità è il vault e si ricostruisce. Restituisce gli
-    /// errori perché chi ha un canale di notifica possa mostrarli.
+    /// *derivato*, la verità è il vault e si ricostruisce.
+    ///
+    /// **Li racconta da sé** (§20.3, decisione 0052), e continua a
+    /// restituirli. È la forma della
+    /// [decisione 0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md):
+    /// un `Result` che dipende dall'attenzione di chi lo riceve è un `Result`
+    /// che si perde, e il posto dove metterlo al sicuro è dentro chi lo
+    /// produce. Qui il doc diceva «restituisce gli errori perché chi ha un
+    /// canale di notifica possa mostrarli», e i tre chiamanti in produzione
+    /// erano un `eprintln!`, un `let _ =` e una risalita fino a un altro
+    /// `eprintln!` — il canale era stato costruito e collegato a metà.
+    ///
+    /// Il valore di ritorno resta perché c'è un chiamante che deve **agire** e
+    /// non solo mostrare: la chiusura del vault (decisione 0029) li risale fino
+    /// a chi spegne l'app, e in quel momento l'event bus sta per smettere di
+    /// avere ascoltatori. Chi si limita a guardare adesso non deve più fare
+    /// niente.
     ///
     /// È anche il punto in cui un indice **scrive**: riceve un [`HostApi`]
     /// intestato al proprio id, come gli event handler durante il dispatch.
@@ -2799,6 +2856,13 @@ impl Workspace {
                 errors
             },
         );
+        // Un flush fallito è la perdita di un **derivato**: il vault è intatto,
+        // e ciò che non è stato scritto si ricostruisce alla riapertura. Non
+        // nomina un documento — il flush è per indice, non per nota — ed è
+        // esattamente il caso per cui il soggetto di un guasto è opzionale.
+        for error in errors.iter().cloned() {
+            self.report_trouble(Severity::Warning, None, error);
+        }
         // Ciò che i flush hanno emesso si consegna a chiamate tornate, non
         // dentro il frame di un provider.
         self.dispatch_pending();
@@ -3459,6 +3523,42 @@ impl Workspace {
         self.dispatch.emit(event);
     }
 
+    /// **Qualcosa è andato storto, e adesso c'è dove dirlo** (§20.2, decisione
+    /// 0052).
+    ///
+    /// L'unico punto da cui il kernel emette un guasto. Passa da `emit_event`
+    /// come tutto il resto — quindi porta l'origine e sta dentro il lotto — e
+    /// non fa niente di più: non decide se si vede, non sceglie un tono per
+    /// chi disegna, non scrive su `stderr`. Chi ha una superficie si abbona.
+    pub(crate) fn report_trouble(
+        &mut self,
+        severity: Severity,
+        subject: Option<DocId>,
+        error: PluginError,
+    ) {
+        self.emit_event(Event::Trouble {
+            severity,
+            subject,
+            error,
+        });
+    }
+
+    /// Le perdite dell'alimentazione (§20.1) diventano guasti (§20.2): è la
+    /// giunzione fra le due voci, ed è l'unica ragione per cui vanno decise
+    /// nella stessa seduta — un esito che nomina i documenti perduti e nessun
+    /// posto dove portarlo è un canale senza destinazione.
+    ///
+    /// Sono [`Severity::Warning`] tutte, e per la regola scritta nel contratto:
+    /// un indice è un **derivato**, il vault è la verità, e ciò che si è perso
+    /// torna riaprendo il vault. Non «non è grave» — chi cerca, fino ad allora,
+    /// riceve una risposta incompleta senza sapere che lo è, ed è esattamente
+    /// per questo che lo si dice.
+    pub(crate) fn report_losses(&mut self, lost: Vec<IndexLoss>) {
+        for loss in lost {
+            self.report_trouble(Severity::Warning, Some(loss.id), loss.why);
+        }
+    }
+
     /// Esegue `f` attribuendo a `actor` tutto ciò che ne nasce, e rimette
     /// l'attore di prima quando `f` è tornata.
     ///
@@ -3614,9 +3714,10 @@ impl Workspace {
     /// contabilità privata. L'origine dell'evento che sta *ricevendo* è un'altra
     /// cosa e sta nel [`Notice`], dove il plugin la legge.
     fn deliver_to_handlers(&mut self, notice: &Notice) {
-        self.lend(
+        let troubles = self.lend(
             |ws| &mut ws.providers.handlers,
             |ws, handlers| {
+                let mut troubles: Vec<(String, PluginError)> = Vec::new();
                 for (id, handler) in handlers.iter_mut() {
                     // La maschera per intero (§10.1): la specie, il prefisso di
                     // topic per i custom, il soggetto. La regola sta nel
@@ -3627,20 +3728,64 @@ impl Workspace {
                         continue;
                     }
                     let attore = Actor::Plugin { id: id.clone() };
-                    ws.as_actor(attore, |ws| {
+                    let fault = ws.as_actor(attore, |ws| {
                         let mut host = ws.host_for(id, InvokeMode::Apply);
                         // L'errore di un handler non deve far fallire
-                        // l'operazione che ha emesso l'evento: si ignora
-                        // (M4: log/notifica). E nemmeno il suo **panico**, che
-                        // altrimenti si porterebbe via la scrittura che ha
-                        // emesso l'evento — cioè il vault (§9.3).
-                        crate::safety::notifying(id, "ricevendo un evento", || {
-                            let _ = handler.handle(notice, &mut host);
-                        });
+                        // l'operazione che ha emesso l'evento — quella parte
+                        // del vecchio commento era giusta ed è rimasta — ma
+                        // «non far fallire» non vuol dire «non dirlo» (§20.3):
+                        // qui c'era un `let _ =` e un panico che finiva su
+                        // `stderr`, e la sola feature che esiste per esserci
+                        // quando qualcosa va storto — il versioning, che è un
+                        // `EventHandler` e nient'altro — smetteva di fare
+                        // snapshot in un modo indistinguibile dal funzionare.
+                        let mut fault = None;
+                        if let Some(panico) =
+                            crate::safety::reporting(id, "ricevendo un evento", || {
+                                fault = handler.handle(notice, &mut host).err();
+                            })
+                        {
+                            fault = Some(panico);
+                        }
+                        fault
                     });
+                    troubles.extend(fault.map(|e| (id.clone(), e)));
                 }
+                troubles
             },
         );
+        // **Il guasto della consegna di un guasto non si emette** (decisione
+        // 0052). È l'unico ciclo che questa variante rende possibile — un
+        // handler che fallisce ricevendo un `Trouble` ne produrrebbe un
+        // secondo, che ripasserebbe da lui — e si chiude dove nasce, cioè qui,
+        // perché è il kernel a emettere. Il budget del dispatch lo fermerebbe
+        // comunque: ma quello è una rete di sicurezza, non una semantica, e
+        // ciò che troncherebbe sono gli eventi degli altri.
+        if matches!(notice.event, Event::Trouble { .. }) {
+            return;
+        }
+        // Emesso **fuori** dal prestito: dentro `lend` la tabella degli
+        // handler è in mano a chi consegna, e un evento emesso lì dentro
+        // arriverebbe a una lista vuota. Il soggetto è il documento che
+        // l'evento nominava — chi guarda quella nota è chi ha interesse a
+        // sapere che qualcuno non è riuscito a reagirle.
+        let subject = notice.event.touched().cloned();
+        for (id, error) in troubles {
+            // **Chi** ha fallito lo dice l'origine, non un campo nuovo: il
+            // guasto si emette a nome del plugin (decisione 0012), che è la
+            // stessa meccanica con cui un handler riconosce le proprie
+            // scritture. Un campo `plugin` dentro il record avrebbe duplicato
+            // ciò che il notice porta già.
+            //
+            // `Failure` e non `Warning`: il kernel non sa cosa **non** è
+            // successo. Dietro un `EventHandler` c'è il versioning tanto
+            // quanto un contatore, e sottostimare la perdita di uno snapshot è
+            // peggio che sovrastimare quella di un contatore.
+            let subject = subject.clone();
+            self.as_actor(Actor::Plugin { id }, |ws| {
+                ws.report_trouble(Severity::Failure, subject, error)
+            });
+        }
     }
 
     // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------

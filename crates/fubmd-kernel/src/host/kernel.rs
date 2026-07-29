@@ -313,8 +313,11 @@ impl HostEvents for KernelHost<'_> {
     /// Un topic altrui **non si emette**. Che il rifiuto sia una riga su
     /// stderr e non un errore è il limite di questa firma — `emit` non ha
     /// esito, ed è l'unica capacità del contratto che non ne ha (vedi
-    /// `crate::host`): il posto giusto dove finirà è il canale del §20.2, che
-    /// oggi non c'è.
+    /// `crate::host`): il canale giusto dove mandarlo adesso c'è
+    /// ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
+    /// e questa riga è uno dei ventisette punti che restano da portarci dentro
+    /// — qui in particolare **senza** poterlo dire a chi ha emesso, perché la
+    /// firma non ha esito.
     fn emit(&mut self, event: Event) {
         if let Event::Custom { topic, .. } = &event {
             if let Err(fault) = self.ws.owns_name(self.plugin, topic) {

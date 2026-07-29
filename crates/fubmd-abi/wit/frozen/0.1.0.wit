@@ -1854,6 +1854,13 @@ interface index {
         organization(organization),
     }
 
+    /// SU QUESTA IDENTITÀ, L'INDICE ADESSO MENTE (§20.1, decisione 0051): il
+    /// tipo che il ritaglio qui sotto ha portato con sé.
+    record index-loss {
+        id: doc-id,
+        why: plugin-error,
+    }
+
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel
     /// non può che interpellare tutti in ordine e dedurre da un errore chi era
     /// il destinatario — e due indici che rivendicano la stessa cosa si
@@ -1866,11 +1873,23 @@ interface index {
     /// provider in WASM non potrebbe persistere nulla. `host-api` è importato
     /// dal world: non compare fra i parametri.
     activate: func() -> result<_, plugin-error>;
-    on-document-indexed: func(doc: document-model);
-    on-document-removed: func(id: doc-id);
+    /// RITAGLIO (decisione 0051, §20.1): qui c'erano
+    ///     on-document-indexed: func(doc: document-model);
+    ///     on-document-removed: func(id: doc-id);
+    ///     reconcile: func(ids: list<doc-id>);
+    /// I tre metodi che portano il dato erano PER DOCUMENTO e non
+    /// restituivano niente, mentre `activate` e `flush` restituivano un
+    /// `result`: il ciclo di vita poteva fallire e dirlo, l'alimentazione no.
+    /// Un indice che perdeva un documento non aveva un valore di ritorno con
+    /// cui nominarlo, e a M5 ogni documento era un attraversamento del
+    /// confine. Le due domande hanno una risposta sola — l'esito PER LOTTO — e
+    /// per questo il ritaglio è uno solo. Elenco dei tagli deliberati in
+    /// `docs/architecture/wit-congelato.md`.
+    on-documents-indexed: func(docs: list<document-model>) -> list<index-loss>;
+    on-documents-removed: func(ids: list<doc-id>) -> list<index-loss>;
     /// Verità completa del vault: ciò che l'indice ha in più è morto.
     /// Non è un rebuild — gli immutati non si reindicizzano.
-    reconcile: func(ids: list<doc-id>);
+    reconcile: func(ids: list<doc-id>) -> list<index-loss>;
     /// Punto di consistenza E di persistenza: al ritorno l'accettato è
     /// visibile alle query e durevole (via `host-api.data-*`).
     flush: func() -> result<_, plugin-error>;

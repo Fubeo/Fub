@@ -391,6 +391,24 @@
       "from": "allegati/foto.png",
       "to": "media/foto.png",
       "kind": "asset"
+    },
+    {
+      "type": "trouble",
+      "severity": "warning",
+      "subject": "a.md",
+      "error": {
+        "kind": "internal",
+        "message": "indice non allineato"
+      }
+    },
+    {
+      "type": "trouble",
+      "severity": "failure",
+      "subject": null,
+      "error": {
+        "kind": "internal",
+        "message": "flush fallito"
+      }
     }
   ],
   "KernelNotice": [

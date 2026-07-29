@@ -423,7 +423,7 @@ pub trait VaultRead: Send + Sync {
     /// sorgente.
     ///
     /// È il verso che mancava. Uno c'era, ed è
-    /// [`IndexProvider::on_document_indexed`]: **spinto**, a chi indicizza,
+    /// [`IndexProvider::on_documents_indexed`]: **spinto**, a chi indicizza,
     /// quando lo decide il kernel. Chi sta dentro un indice era quindi già
     /// servito — un indice dei task, le flashcard da blocchi, le citazioni, il
     /// chunking per l'embedding ricevono ogni modello mentre passa. Tagliato
@@ -2722,11 +2722,51 @@ impl IndexResult {
     }
 }
 
+/// **Su questa identità, l'indice adesso mente** (§20.1, decisione 0051).
+///
+/// È ciò che i tre metodi dell'alimentazione restituiscono, ed è un dato e non
+/// un errore: non dice «la chiamata è fallita», dice *quale documento* è rimasto
+/// fuori. La differenza è tutta la voce — un indice che perdeva un documento non
+/// aveva un valore di ritorno con cui dirlo, e «l'indice ha perso qualcosa»
+/// senza un [`DocId`] non fa agire nessuno.
+///
+/// Il significato è uno solo, letto dal verso di ognuno dei tre metodi:
+///
+/// - dopo un [`on_documents_indexed`](IndexProvider::on_documents_indexed):
+///   questo documento **non c'è**, e chi cerca non lo troverà;
+/// - dopo un [`on_documents_removed`](IndexProvider::on_documents_removed):
+///   questo documento **c'è ancora**, e chi cerca lo troverà pur essendo sparito
+///   dal vault;
+/// - dopo un [`reconcile`](IndexProvider::reconcile): questo documento è morto
+///   ad app chiusa e l'indice non è riuscito a dimenticarlo.
+///
+/// In tutti e tre i casi, ciò che l'indice risponde su quell'identità non
+/// corrisponde più al vault, e chi ha un canale per dirlo lo dice (§20.2).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct IndexLoss {
+    /// Il documento su cui l'indice non è più allineato. Nominarlo è l'intero
+    /// scopo di questo tipo: è ciò che un esito cumulativo — «il flush è
+    /// fallito» — non sa dire, e senza cui nessuno può né ritentare né mostrare
+    /// niente di utile.
+    pub id: DocId,
+    /// Perché, nella forma con cui ogni fallimento arriva a chi disegna: un
+    /// [`Text`](crate::text::Text) dentro un [`PluginError`], quindi
+    /// traducibile da chi lo mostra (decisione 0041).
+    pub why: PluginError,
+}
+
+impl IndexLoss {
+    /// La perdita di un documento, con la ragione già composta.
+    pub fn new(id: DocId, why: PluginError) -> Self {
+        IndexLoss { id, why }
+    }
+}
+
 /// Un indice derivato dal contenuto del vault.
 ///
 /// Il kernel lo alimenta **direttamente** (non via event bus): ogni documento
-/// che entra o esce dal `Workspace` passa da `on_document_indexed` /
-/// `on_document_removed` dentro la stessa operazione che aggiorna il grafo.
+/// che entra o esce dal `Workspace` passa da `on_documents_indexed` /
+/// `on_documents_removed` dentro la stessa operazione che aggiorna il grafo.
 /// Un indice non può quindi perdere aggiornamenti per un troncamento della
 /// coda eventi ([`Event::Overflow`](crate::Event::Overflow)) — è la ragione
 /// per cui l'alimentazione non passa da [`EventHandler`].
@@ -2734,6 +2774,28 @@ impl IndexResult {
 /// Resta un solo modo di divergere dal vault: ciò che succede mentre l'indice
 /// **non è vivo** (documenti cancellati ad app chiusa, se l'indice è
 /// persistente). Lo chiude [`IndexProvider::reconcile`].
+///
+/// # L'alimentazione ha un esito, ed è a lotti (§20.1, decisione 0051)
+///
+/// I tre metodi che portano il dato restituivano `()` mentre `activate` e
+/// `flush` restituivano un `Result`: il ciclo di vita poteva fallire e dirlo,
+/// l'alimentazione no. E il canale che il [`PIANO`](../../../docs/PIANO.md)
+/// dichiarava incapace di perdere pezzi — *«un indice che perde un aggiornamento
+/// non tace: risponde sbagliato, in silenzio»* — manteneva la promessa a metà:
+/// il **canale** non tronca, ma il **destinatario** può rifiutare, e la firma
+/// rendeva quel rifiuto indicibile.
+///
+/// Le due domande erano due — *che forma ha l'esito* e *qual è la grana* — e
+/// hanno una risposta sola, che è la ragione per cui sono state decise insieme:
+/// un esito **per lotto** dice *quale* documento (cosa che un esito cumulativo
+/// raccolto dal `flush` non sa fare) e costa **un attraversamento del confine
+/// per lotto** invece che per documento, con lo stesso campo. A M5 ogni
+/// chiamata è una serializzazione, e un `reindex` da 100k note con la firma di
+/// prima erano 100k attraversamenti per indice.
+///
+/// Ciò che il lotto **non** riduce è il volume: quei modelli passano comunque,
+/// e per intero. Riduce il numero di volte in cui si attraversa, che è l'unica
+/// metà del costo su cui una firma possa qualcosa.
 ///
 /// # Dove sta l'`HostApi`, e perché non è su ogni metodo
 ///
@@ -2747,8 +2809,8 @@ impl IndexResult {
 ///
 /// Non sugli altri, e per ragioni, non per risparmio:
 ///
-/// - `on_document_*` e `reconcile` sono **mutazioni in memoria**: fra un
-///   `on_document_*` e il `flush` il provider accumula (è già il contratto di
+/// - `on_documents_*` e `reconcile` sono **mutazioni in memoria**: fra un
+///   `on_documents_*` e il `flush` il provider accumula (è già il contratto di
 ///   `flush`, che esiste perché il kernel scrive un documento alla volta e un
 ///   indice vuole scrivere a lotti). Dare l'host qui costringerebbe il kernel a
 ///   prestare `&mut Workspace` dentro il ciclo di alimentazione, cioè a
@@ -2796,20 +2858,65 @@ pub trait IndexProvider: Send + Sync {
     /// riapertura di un vault non toccato). L'errore non è fatale per il
     /// chiamante: un indice è stato *derivato*, e nel dubbio si ricostruisce.
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError>;
-    fn on_document_indexed(&mut self, doc: &DocumentModel);
-    fn on_document_removed(&mut self, id: &DocId);
+
+    /// **Prendi questi documenti**, e di' quali non hai preso.
+    ///
+    /// I tre metodi dell'alimentazione — questo, `on_documents_removed` e
+    /// `reconcile` — sono a **lotto** e restituiscono un esito; erano per
+    /// documento e restituivano `()`, ed è il ritaglio della
+    /// [decisione 0051](../../../docs/decisions/0051-l-alimentazione-risponde.md).
+    /// Vedi [`IndexLoss`] per cosa vuol dire nominare una perdita, e il doc del
+    /// trait per perché la grana e l'esito sono la stessa domanda.
+    ///
+    /// # Un lotto non è una transazione
+    ///
+    /// È la stessa frase della [decisione 0011](../../../docs/decisions/0011-il-lotto.md),
+    /// e vale nello stesso senso: un lotto **accettato a metà è la norma**, non
+    /// un errore. Ciò che si elenca è perduto, ciò che non si elenca è preso, e
+    /// non c'è niente da annullare — il chiamante non ritenta il lotto e non
+    /// butta via il resto. Un elenco vuoto vuol dire che è andato tutto bene,
+    /// ed è ciò che restituisce chi non ha niente da dire.
+    ///
+    /// Chi fallisce **in blocco** — il writer è andato, l'indice non è più
+    /// affidabile — elenca tutto ciò che gli è stato dato. Costa una riga e
+    /// dice la verità: quel documento, in quell'indice, adesso non c'è.
+    ///
+    /// # Chi taglia il lotto
+    ///
+    /// Il kernel, che è l'unico a sapere quanti modelli ha in mano. Un indice
+    /// non può quindi dedurre niente dalla **dimensione** di ciò che riceve: un
+    /// lotto di uno non vuol dire «una scrittura singola» e un lotto pieno non
+    /// vuol dire «apertura del vault». Ciò che si può dedurre da un lotto è una
+    /// cosa sola, e basta: questi documenti sono arrivati insieme, quindi si
+    /// possono scrivere insieme.
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss>;
+
+    /// **Togli questi documenti**, e di' quali non hai tolto.
+    ///
+    /// Il gemello di [`on_documents_indexed`](IndexProvider::on_documents_indexed),
+    /// e l'esito ha lo stesso significato letto dall'altro verso: un id
+    /// elencato qui è un documento che **c'è ancora** in un indice da cui il
+    /// vault l'ha tolto. È la bugia opposta e la più visibile delle due — chi
+    /// cerca trova una nota che non esiste e la apre.
+    fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss>;
+
     /// Allinea l'indice alla verità completa del vault: `ids` è l'insieme di
     /// **tutti** i documenti esistenti, e ciò che l'indice ha in più è morto e
     /// va cancellato. Il kernel la chiama dopo la scansione del vault.
     ///
     /// Non è un rebuild: i documenti già presenti e immutati non vanno
     /// reindicizzati (è ciò che rende rapida la riapertura di un vault).
-    fn reconcile(&mut self, ids: &[DocId]);
+    ///
+    /// L'esito è l'unico dei tre che nomina identità **che il chiamante non ha
+    /// mandato**: ciò che non si è potuto cancellare è per definizione fuori da
+    /// `ids`. Il significato però è lo stesso di sempre — su questa identità
+    /// l'indice adesso mente — ed è la ragione per cui il tipo è lo stesso.
+    fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss>;
     /// Punto di consistenza **e di persistenza**: al ritorno, tutto ciò che è
     /// stato accettato finora è visibile alle `query` e durevole.
     ///
     /// Esiste perché il kernel scrive **un documento alla volta** ma un
-    /// indice vuole scrivere **a lotti**: fra un `on_document_*` e il `flush`
+    /// indice vuole scrivere **a lotti**: fra un `on_documents_*` e il `flush`
     /// il provider è libero di accumulare. Chi interroga senza aspettare un
     /// flush vede comunque le proprie scritture — è il provider a garantirlo,
     /// non il chiamante.

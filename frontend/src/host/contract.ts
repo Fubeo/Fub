@@ -369,7 +369,24 @@ export type KernelEvent =
   // già i tre eventi di prima.
   | { type: "entry_changed"; id: string; kind: EntryKind }
   | { type: "entry_removed"; id: string; kind: EntryKind }
-  | { type: "entry_renamed"; from: string; to: string; kind: EntryKind };
+  | { type: "entry_renamed"; from: string; to: string; kind: EntryKind }
+  // QUALCOSA È ANDATO STORTO (§20.2, decisione 0052). La variante che la 0013
+  // aveva previsto — «ciò che si limita a informare è un evento» — e rimandato
+  // per mancanza di clienti; il cliente da questa parte è il centro notifiche,
+  // che aveva già la porta (`notify`) e venti chiamanti al posto di una
+  // sorgente.
+  //
+  // `subject` è il documento di cui si parla, `null` per ciò che riguarda il
+  // vault intero (un flush fallito, il watcher che smette). CHI ha causato il
+  // guasto non sta qui: lo dice `origin.actor`.
+  | { type: "trouble"; severity: Severity; subject: string | null; error: PluginError };
+
+// Quanto pesa ciò che è andato storto (rispecchia fubmd_abi::event::Severity).
+// Due gradini, come i due toni del centro notifiche, e il criterio del taglio è
+// la CLASSE DEL DATO perso (decisione 0048): un derivato si ricostruisce
+// riaprendo il vault ed è un avviso; ciò che era autorevole non torna ed è un
+// guasto.
+export type Severity = "warning" | "failure";
 
 // DOVE: il soggetto di un abbonamento (rispecchia fubmd_abi::event::Subject,
 // §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un

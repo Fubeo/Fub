@@ -19,17 +19,22 @@
 // 3. **Il tono.** Un lavoro finito e una perdita di dati non chiedono la stessa
 //    cosa a chi legge, e con un solo colore la seconda si legge come la prima.
 //
-// Ciò che **non** è ancora qui, ed è di un'altra voce: la sorgente non è un
-// evento del contratto. La [decisione 0013] ha stabilito che `notify` sarà una
-// variante di `Event` — *ciò che si limita a informare è un evento* — e il
-// cliente lo porta il §20.2, insieme al tipo dell'errore (§12.2). Da questa
-// parte il canale c'è già: `avvisa` è una funzione sola, e il giorno che quella
-// variante arriva le si attacca il router degli eventi invece di venti
-// chiamanti.
+// **La sorgente adesso c'è**, ed è quella che la [decisione 0013] aveva
+// previsto: *ciò che si limita a informare è un evento*. Il §20.2
+// ([decisione 0052]) ha portato il cliente e la variante — `trouble`, con la
+// severità e il documento di cui parla — e qui sotto `ascoltaIGuasti` le
+// attacca il router degli eventi, che è la riga che questo commento aspettava.
+//
+// Resta il §20.4, e resta distinto: i quattordici `console.warn`/`console.error`
+// della shell sono suoi, e non passano da un evento del kernel — nascono di qua
+// dal confine.
 //
 // [decisione 0013]: ../../../docs/decisions/0013-elenco-delle-capacita.md
+// [decisione 0052]: ../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md
 
 import { onLingua, t } from "../i18n/strings";
+import type { KernelEvent } from "../host/contract";
+import { onEvent } from "../state/kernel";
 
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
@@ -100,6 +105,41 @@ export function notify(message: string, tono: Tono = "info"): void {
   if (!aperto) daLeggere += 1;
   mostra(storico[0]);
   ridisegna();
+}
+
+/// **Il kernel dice che qualcosa è andato storto, e lo si mostra** (§20.2).
+///
+/// L'unico ascoltatore di `trouble`, e la ragione per cui quella variante
+/// esiste: prima di lei ciò che andava storto nel backend finiva su `stderr`,
+/// che in un'app impacchettata non ha un lettore.
+///
+/// La severità sceglie il tono, ed è una traduzione uno a uno perché i due
+/// gradini sono stati scelti guardando questi due toni: un derivato perduto
+/// informa, ciò che non si ricostruisce è un guasto.
+export function ascoltaIGuasti(): void {
+  onEvent("trouble", (e) => {
+    const avviso = avvisoDiGuasto(e);
+    notify(avviso.testo, avviso.tono);
+  });
+}
+
+/// Come un guasto del kernel si legge: il testo e il tono.
+///
+/// È una funzione pura, per la stessa ragione di [`raccogli`]: è la sola parte
+/// di questo collegamento che possa essere sbagliata in un modo che guardando
+/// l'app non si vede — un `subject` assente che diventa la stringa `"null"`, o
+/// una severità che finisce tutta sullo stesso tono.
+export function avvisoDiGuasto(e: Extract<KernelEvent, { type: "trouble" }>): {
+  testo: string;
+  tono: Tono;
+} {
+  const reason = e.error.message;
+  return {
+    testo: e.subject
+      ? t("trouble.about", { doc: e.subject, reason })
+      : t("trouble.vault", { reason }),
+    tono: e.severity === "failure" ? "guasto" : "info",
+  };
 }
 
 /// Ciò che è stato detto, dal più recente. Serve a chi disegna lo storico, e ai

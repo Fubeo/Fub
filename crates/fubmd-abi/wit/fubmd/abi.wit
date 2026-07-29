@@ -1200,6 +1200,34 @@ interface events {
     /// trascrizione o un OCR migra la chiave invece di buttare via un lavoro
     /// ancora buono. (`from` è keyword WIT: `%from`.)
     record event-entry-renamed { %from: doc-id, to: doc-id, kind: entry-kind }
+    /// QUALCOSA È ANDATO STORTO (§20.2, decisione 0052): la variante che la
+    /// 0013 aveva previsto — «ciò che si limita a informare è un evento» — e
+    /// rimandato perché non aveva un cliente. I clienti sono arrivati tutti
+    /// insieme: ventisette `eprintln!` nel backend, e in un'app impacchettata
+    /// stderr non ha un lettore.
+    ///
+    /// `subject` è il documento di cui si parla, se se ne parla di uno; assente
+    /// per ciò che riguarda il vault intero (un flush fallito, il watcher che
+    /// smette), e in quel caso passa da OGNI maschera invece che da nessuna.
+    /// CHI ha causato il guasto non sta qui: lo dice `origin.actor`, che il
+    /// notice porta già dalla 0012. `error` è un `plugin-error`, quindi un
+    /// `text` traducibile da chi lo mostra e non una frase già composta.
+    record event-trouble {
+        severity: severity,
+        subject: option<doc-id>,
+        error: plugin-error,
+    }
+    /// Quanto pesa ciò che è andato storto. Due gradini e non cinque: una
+    /// scala che chi emette non sa dove tagliare finisce con tutto sullo
+    /// stesso gradino. Il criterio del taglio è quello della 0048 — LA CLASSE
+    /// DEL DATO PERSO DICE LA SEVERITÀ: ciò che è derivato si ricostruisce
+    /// riaprendo il vault ed è un `warning`; ciò che era autorevole non torna
+    /// ed è un `failure`. `failure` è anche ciò che si usa QUANDO NON SI SA:
+    /// sottostimare un guasto è peggio che sovrastimare un avviso.
+    enum severity {
+        warning,
+        failure,
+    }
     variant event {
         vault-opened(event-vault-opened),
         document-changed(event-document-changed),
@@ -1218,6 +1246,7 @@ interface events {
         entry-changed(event-entry-changed),
         entry-removed(event-entry-removed),
         entry-renamed(event-entry-renamed),
+        trouble(event-trouble),
     }
 
     enum event-kind {
@@ -1249,6 +1278,10 @@ interface events {
         entry-removed,
         /// Un file che non è un documento ha cambiato path (§14.1).
         entry-renamed,
+        /// Qualcosa è andato storto (§20.2). Chi si abbona a questo è chi ha
+        /// una superficie dove dirlo: il centro notifiche della shell è il
+        /// primo, e non sarà l'unico.
+        trouble,
     }
     /// DOVE: il soggetto di un abbonamento (§10.1, decisione 0033).
     ///
@@ -2151,6 +2184,24 @@ interface index {
         folders(folders-page),
     }
 
+    /// SU QUESTA IDENTITÀ, L'INDICE ADESSO MENTE (§20.1, decisione 0051).
+    ///
+    /// L'esito dei tre metodi dell'alimentazione. È un DATO e non un errore:
+    /// non dice «la chiamata è fallita», dice quale documento è rimasto fuori
+    /// — e «l'indice ha perso qualcosa» senza un `doc-id` non fa agire
+    /// nessuno. Dopo un `on-documents-indexed` vuol dire «questo documento non
+    /// c'è, e chi cerca non lo troverà»; dopo un `on-documents-removed`
+    /// «questo documento c'è ancora, e chi cerca lo troverà pur essendo
+    /// sparito»; dopo un `reconcile` «è morto ad app chiusa e non sono
+    /// riuscito a dimenticarlo».
+    ///
+    /// `why` è un `plugin-error`, quindi porta un `text` traducibile da chi lo
+    /// mostra (decisione 0041) invece di una frase già composta.
+    record index-loss {
+        id: doc-id,
+        why: plugin-error,
+    }
+
     /// COSA SERVE, dichiarato una volta alla registrazione. Senza, il kernel
     /// non può che interpellare tutti in ordine e dedurre da un errore chi era
     /// il destinatario — e due indici che rivendicano la stessa cosa si
@@ -2163,11 +2214,43 @@ interface index {
     /// provider in WASM non potrebbe persistere nulla. `host-api` è importato
     /// dal world: non compare fra i parametri.
     activate: func() -> result<_, plugin-error>;
-    on-document-indexed: func(doc: document-model);
-    on-document-removed: func(id: doc-id);
+    /// PRENDI QUESTI DOCUMENTI, E DI' QUALI NON HAI PRESO (§20.1, decisione
+    /// 0051). RITAGLIO della linea di base: i tre metodi dell'alimentazione
+    /// erano per documento e restituivano `()`, mentre `activate` e `flush`
+    /// restituivano un `result` — il ciclo di vita poteva fallire e dirlo,
+    /// l'alimentazione no. Tabella in `docs/architecture/wit-congelato.md`.
+    ///
+    /// Le due domande — che forma ha l'esito, e qual è la grana — hanno una
+    /// risposta sola: un esito per lotto dice QUALE documento (cosa che un
+    /// esito cumulativo raccolto dal `flush` non sa fare) e costa un
+    /// attraversamento del confine PER LOTTO invece che per documento. Qui
+    /// quell'aritmetica non è teorica: a M5 ogni chiamata è una
+    /// serializzazione, e un reindex da 100k note erano 100k attraversamenti
+    /// per indice. Ciò che il lotto non riduce è il VOLUME: quei modelli
+    /// passano comunque, e per intero.
+    ///
+    /// Un lotto NON è una transazione, nello stesso senso della 0011:
+    /// accettato a metà è la norma. Ciò che si elenca è perduto, ciò che non
+    /// si elenca è preso, non c'è niente da annullare, e una lista vuota vuol
+    /// dire che è andato tutto bene. Chi fallisce in blocco elenca tutto ciò
+    /// che gli è stato dato. A tagliare il lotto è il KERNEL, che è l'unico a
+    /// sapere quanti modelli ha in mano: dalla dimensione di ciò che arriva
+    /// non si deduce niente se non che quei documenti si possono scrivere
+    /// insieme.
+    on-documents-indexed: func(docs: list<document-model>) -> list<index-loss>;
+    /// TOGLI QUESTI DOCUMENTI, E DI' QUALI NON HAI TOLTO. L'esito ha lo stesso
+    /// significato letto dall'altro verso: un id elencato qui è un documento
+    /// che C'È ANCORA in un indice da cui il vault l'ha tolto — la bugia
+    /// opposta, e la più visibile delle due.
+    on-documents-removed: func(ids: list<doc-id>) -> list<index-loss>;
     /// Verità completa del vault: ciò che l'indice ha in più è morto.
     /// Non è un rebuild — gli immutati non si reindicizzano.
-    reconcile: func(ids: list<doc-id>);
+    ///
+    /// È l'unico dei tre il cui esito nomina identità che il chiamante non ha
+    /// mandato: ciò che non si è potuto cancellare è per definizione fuori da
+    /// `ids`. Il significato però è lo stesso, ed è la ragione per cui il tipo
+    /// è lo stesso.
+    reconcile: func(ids: list<doc-id>) -> list<index-loss>;
     /// Punto di consistenza E di persistenza: al ritorno l'accettato è
     /// visibile alle query e durevole (via `host-api.data-*`).
     flush: func() -> result<_, plugin-error>;

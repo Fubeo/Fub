@@ -5,18 +5,20 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 113 voci: novantanove da sette giri sulla stessa domanda, una da una
+Sono uscite 114 voci: novantanove da sette giri sulla stessa domanda, due da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
-e chiusa dalla [0026](decisions/0026-due-query-insieme.md)), nove da una
+e chiusa dalla [0026](decisions/0026-due-query-insieme.md); e la §20.5, nata
+misurando la [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) contro il
+codice), nove da una
 **decisione di prodotto** — la [0025](decisions/0025-la-ricerca-predefinita.md),
 che ha stabilito che la ricerca di FubMD è built-in e di classe *omnisearch*
 ([seduta 21](roadmap/21-la-ricerca-predefinita.md)) — e quattro da due
 **verifiche**: la §21.10 dal controllo contro il codice di un'affermazione
 arrivata da fuori, e le §22.1–§22.3 dallo stesso controllo su una lettura
 esterna dell'intero [FEATURES.md](FEATURES.md)
-([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)). Settantasette sono
+([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)). Ottanta sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-trentasei sono qui, e questo file è il loro **indice**.
+trentaquattro sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -117,13 +119,13 @@ che scade.
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza | 3 | — |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: quattro **rimandi** ai quattro giri di audit, di cui uno chiuso; restano **tre** caselle, e il lavoro sta nelle sedute che le hanno assorbite | — | — |
-| **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 4 | 1 |
+| **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti, e tutti e tre sono chiusi: l'alimentazione ha un esito ([0051](decisions/0051-l-alimentazione-risponde.md)), ciò che va storto è un evento e il kernel non lo butta più ([0052](decisions/0052-cio-che-va-storto-e-un-evento.md)); restano la metà umana e una voce nata misurando | 2 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le quattro di firma sono state decise ([0049](decisions/0049-una-posizione-dentro-un-documento.md), [0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)); quel che resta è **dove quel comportamento si vede**, cosa lo rende regolabile, cosa gli darà da mangiare, e la sola misura che dice se è veloce | 6 | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | tre lati della stessa dichiarazione di interesse — *quando*, *cosa è cambiato*, *per quale esemplare* — e decise separate darebbero tre estensioni della stessa maschera disegnate da tre parti; nate da una **verifica**, e nessuna scade col freeze | 3 | — |
 
 ## Le voci
 
-Trentasei. Il numero è quello con cui le nomina il resto del repo.
+Trentaquattro. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -135,14 +137,16 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella non è in nessun
 totale.** La colonna *Voci* conta le voci **aperte**, e la sua somma per riga fa
-trentasei come deve; il residuo di una voce **chiusa** è un'altra specie e finora
+trentaquattro come deve; il residuo di una voce **chiusa** è un'altra specie e finora
 non aveva dove essere contato — che è il modo in cui la riga della seduta 14 ha
 detto «due caselle» mentre il suo file ne aveva tre, e la 19 non ha detto niente
-avendone tre. Le caselle residue oggi sono **sette**, e stanno in tre posti:
+avendone tre. Le caselle residue oggi sono **otto**, e stanno in quattro posti:
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
 (tre: l'impronta degli allegati, la politica della cartella allegati, le
 derivate), [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
-(una: l'implementazione additiva delle due radici) e la
+(una: l'implementazione additiva delle due radici),
+[§20.2](roadmap/20-quando-qualcosa-va-storto.md#202-ciò-che-va-storto-ha-un-canale-nel-contratto-e-nessuna-destinazione)
+(una: portare dentro il canale i ventisette punti che scrivono su `stderr`) e la
 [seduta 19](roadmap/19-debito-quarto-audit.md) (tre rimandi). Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte.
@@ -187,10 +191,8 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§17.3** | [Osservabilità](roadmap/17-presidi-che-restano.md#173-osservabilità) | 17. I presidi che restano | presidi | **P2** |
 | **§18.1** | [Editor](roadmap/18-editor-e-tastiera.md#181-editor) | 18. L'editor e la tastiera | shell | **P1** |
 | **§18.2** | [Comandi e tastiera](roadmap/18-editor-e-tastiera.md#182-comandi-e-tastiera) | 18. L'editor e la tastiera | shell | **P1** |
-| **§20.1** | [L'alimentazione dell'indice non ha un esito](roadmap/20-quando-qualcosa-va-storto.md#201-lalimentazione-dellindice-non-ha-un-esito-e-un-indice-che-perde-un-documento-non-ha-modo-di-dirlo) | 20. Quando qualcosa va storto | contratto | **P0** |
-| **§20.2** | [Ciò che va storto ha un canale nel contratto e nessuna destinazione](roadmap/20-quando-qualcosa-va-storto.md#202-ciò-che-va-storto-ha-un-canale-nel-contratto-e-nessuna-destinazione) | 20. Quando qualcosa va storto | contratto | **P1** |
-| **§20.3** | [Il kernel butta via gli esiti che ha già in mano](roadmap/20-quando-qualcosa-va-storto.md#203-il-kernel-butta-via-gli-esiti-che-ha-già-in-mano) | 20. Quando qualcosa va storto | kernel | **P1** |
 | **§20.4** | [La shell non ha una superficie dove dire niente, e il salvataggio non ha esito](roadmap/20-quando-qualcosa-va-storto.md#204-la-shell-non-ha-una-superficie-dove-dire-niente-e-il-salvataggio-non-ha-esito) | 20. Quando qualcosa va storto | shell | **P1** |
+| **§20.5** | [Il budget del dispatch tronca senza guardare cosa sta troncando](roadmap/20-quando-qualcosa-va-storto.md#205-il-budget-del-dispatch-tronca-senza-guardare-cosa-sta-troncando) | 20. Quando qualcosa va storto | kernel | **P2** |
 | **§21.4** | [La ricerca dentro la nota aperta non esiste](roadmap/21-la-ricerca-predefinita.md#214-la-ricerca-dentro-la-nota-aperta-non-esiste) | 21. La ricerca predefinita | shell | **P1** |
 | **§21.5** | [Quattro superfici cercano, e rischiano di nascere con quattro ranking](roadmap/21-la-ricerca-predefinita.md#215-quattro-superfici-cercano-e-rischiano-di-nascere-con-quattro-ranking) | 21. La ricerca predefinita | shell | **P1** |
 | **§21.6** | [I pesi dei campi sono una costante di compilazione](roadmap/21-la-ricerca-predefinita.md#216-i-pesi-dei-campi-sono-una-costante-di-compilazione) | 21. La ricerca predefinita | kernel | **P2** |
@@ -211,6 +213,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — cinquanta, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — cinquantadue, uno
   per file. Non stanno qui perché questo è l'elenco di ciò che **resta da
   fare**.

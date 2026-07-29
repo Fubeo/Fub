@@ -108,6 +108,13 @@ const IT = {
   "explorer.move_failed": "Non riesco a spostare {doc} in {folder}: {reason}",
   "explorer.root": "radice",
 
+  // --- ciò che è andato storto (§20.2) -----------------------------------
+  // Due chiavi e non una: un guasto che nomina un documento e uno che riguarda
+  // il vault intero si leggono diversamente, e comporre la seconda dalla prima
+  // con un soggetto vuoto darebbe una frase che non finisce.
+  "trouble.about": "{doc}: {reason}",
+  "trouble.vault": "{reason}",
+
   // --- il cestino --------------------------------------------------------
   "trash.title": "Cestino",
   "trash.hint": "Apri il cestino",
@@ -290,6 +297,9 @@ const EN: Record<Chiave, string> = {
   "explorer.rename_failed": "Renaming {doc} to {to} was refused: {reason}",
   "explorer.move_failed": "Cannot move {doc} into {folder}: {reason}",
   "explorer.root": "the root",
+
+  "trouble.about": "{doc}: {reason}",
+  "trouble.vault": "{reason}",
 
   "trash.title": "Trash",
   "trash.hint": "Open the trash",

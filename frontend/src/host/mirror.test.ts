@@ -30,6 +30,7 @@ import type {
   Span,
   SettingEntry,
   SettingKind,
+  Severity,
   Subject,
   TagCount,
   VaultStatus,
@@ -289,8 +290,27 @@ function touchEvent(e: KernelEvent): void {
       e.from;
       e.to;
       return;
+    // Ciò che è andato storto (§20.2). Si toccano tutti e tre i campi: la
+    // severità perché è ciò che sceglie il tono, il soggetto perché è
+    // `null` per i guasti del vault intero, e l'errore perché è la ragione
+    // per cui questa variante ha aspettato il §12.2.
+    case "trouble":
+      touchSeverity(e.severity);
+      e.subject;
+      e.error.kind;
+      return;
     default:
       assertNever(e);
+  }
+}
+
+function touchSeverity(s: Severity): void {
+  switch (s) {
+    case "warning":
+    case "failure":
+      return;
+    default:
+      assertNever(s);
   }
 }
 

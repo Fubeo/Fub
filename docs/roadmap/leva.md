@@ -86,7 +86,7 @@ modello parsato in mano ai provider — ora chiusa con la
 [decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md))**, ed era
 **scesa** prima di chiudersi: diceva che il
 `DocumentModel` non attraversa il contratto in nessuna direzione, e non è vero —
-`IndexProvider::on_document_indexed` lo spinge a ogni indicizzazione. Chi può
+`IndexProvider::on_documents_indexed` lo spinge a ogni indicizzazione. Chi può
 stare dentro un indice (task, flashcard, citazioni, chunking) è servito, quindi
 la voce non rende inesprimibile niente: rende **stretto** il percorso one-shot,
 chi vuole il modello di una nota adesso e non era in ascolto quando è passata. È
@@ -130,29 +130,35 @@ domanda «cosa manca» va accompagnata da «cosa c'è e non mantiene».
 
 Dal settimo giro se ne aggiunge una sola con lo statuto delle voci del quarto —
 **rende inesprimibile, non stretto** — e una nota che vale come criterio.
-**§20.1 (l'alimentazione dell'indice non ha un esito)**: `on_document_indexed`,
-`on_document_removed` e `reconcile` restituiscono `()`, quindi un indice che
-perde un documento **non ha modo di dirlo** — e non è ipotetico, è già scritto
-nel provider di ricerca, con il commento che spiega perché mentire sarebbe peggio
-e nessun valore di ritorno con cui non mentire. Non allarga una capacità: rende
-inesprimibile «l'indice non ha accettato questa nota», su un canale che il piano
-aveva scelto di alimentare dal kernel **proprio** per non poterla perdere in
-silenzio. E con la [decisione 0019](../decisions/0019-il-canale-dati.md) quella
-firma è **già** diventata la strada di tutto il canale dati, non del solo
-full-text: la voce non è cambiata di forma, è cresciuta di portata.
+~~**§20.1 (l'alimentazione dell'indice non ha un esito)**~~: `on_document_indexed`,
+`on_document_removed` e `reconcile` restituivano `()`, quindi un indice che
+perdeva un documento **non aveva modo di dirlo** — e non era ipotetico, era già
+scritto nel provider di ricerca, con il commento che spiega perché mentire
+sarebbe peggio e nessun valore di ritorno con cui non mentire. Non allargava una
+capacità: rendeva inesprimibile «l'indice non ha accettato questa nota», su un
+canale che il piano aveva scelto di alimentare dal kernel **proprio** per non
+poterla perdere in silenzio. **Chiusa** dalla
+[decisione 0051](../decisions/0051-l-alimentazione-risponde.md), che ha
+confermato lo statuto e ne ha aggiunto un pezzo che la voce non aveva: la stessa
+firma teneva insieme *due* domande — la forma dell'esito e la **grana** della
+chiamata — e avevano una risposta sola, l'esito per lotto. Deciderne una avrebbe
+lasciato l'altra a una major.
 
-Le altre tre voci della [seduta 20](20-quando-qualcosa-va-storto.md) non hanno
-leva alta per il criterio di questa pagina, e vanno lette con un criterio
-diverso che il settimo giro aggiunge: **una voce che non scade non sale mai, e
-per questo il suo costo si paga tutto adesso**. Nessuna delle tre è una firma —
-il kernel che scarta gli esiti che ha in mano (§20.3), la shell che non ha una
-superficie dove dire niente (§20.4), la variante di evento che il verbale della
-[decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha già deciso e
-rimandato per mancanza di clienti (§20.2) — quindi il freeze non le tocca, e
-nessuna passata precedente aveva un motivo per guardarle. Ma il conto non è
-rimandato: sono le voci il cui prezzo si paga in difetti che non lasciano
-traccia, oggi, e un difetto che non lascia traccia non entra in nessuna lista di
-priorità perché nessuno lo ha visto.
+Delle altre tre voci della [seduta 20](20-quando-qualcosa-va-storto.md) ne
+restano **due**, e vanno lette con un criterio diverso che il settimo giro
+aggiunge: **una voce che non scade non sale mai, e per questo il suo costo si
+paga tutto adesso**. Nessuna delle tre era una firma — il kernel che scartava
+gli esiti che aveva in mano (§20.3) e la variante di evento che il verbale della
+[decisione 0013](../decisions/0013-elenco-delle-capacita.md) aveva già deciso e
+rimandato per mancanza di clienti (§20.2), entrambe **chiuse** dalla
+[decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md); e la shell
+che non ha una superficie dove dire niente (§20.4), che resta aperta — quindi il
+freeze non le toccava, e nessuna passata precedente aveva un motivo per
+guardarle. Ma il conto non era rimandato: erano le voci il cui prezzo si paga in
+difetti che non lasciano traccia, e un difetto che non lascia traccia non entra
+in nessuna lista di priorità perché nessuno lo ha visto. Averle prese guardandole
+invece che aspettando che scadessero è il criterio, e ha prodotto una voce nuova
+(§20.5) che nessuno stava cercando.
 
 Il sesto giro ha applicato quel criterio e ha trovato il secondo caso, **§5.1**,
 adesso chiuso con la [decisione 0019](../decisions/0019-il-canale-dati.md).
@@ -170,8 +176,14 @@ stavolta, è quella sul silenzio stesso — *«perdite silenziose non esistono p
 contratto»* è scritto nell'architettura ed è vero della sola coda eventi.
 Cercandola, il presupposto da non dare per buono è che un `Result` restituito sia
 un `Result` letto, e che un messaggio scritto sia un messaggio arrivato: nel repo
-di oggi quattordici messaggi vanno a `stderr` e dodici alla console della webview, e
-nessuno dei due ha un lettore in un'app impacchettata.
+di oggi **ventisette** messaggi vanno a `stderr` e **quattordici** alla console
+della webview, e nessuno dei due ha un lettore in un'app impacchettata. (I numeri
+sono stati ricontati dalla
+[decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md), che li ha
+trovati scritti a mano in quattro posti con tre valori diversi e nessuno giusto:
+finché il §16.7 non li presidia, si ricontano a ogni giro.) Il canale di
+destinazione adesso c'è per il primo dei due — `Event::Trouble`, con il centro
+notifiche in ascolto — e resta da costruire per il secondo (§20.4).
 
 **Fuori dai giri**, e con lo statuto delle voci del quarto scaglione — *rende
 inesprimibile, non stretto* — ne arrivano due dalla

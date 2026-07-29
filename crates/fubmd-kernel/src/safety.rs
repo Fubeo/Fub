@@ -34,8 +34,10 @@
 //! una condizione. Il plugin che lo produce non lo vede mai — lo vede chi lo ha
 //! chiamato, sotto forma di [`PluginError::Internal`] che lo **nomina**. E non è
 //! una disattivazione: dopo un panico lo stato di quel provider è ignoto, ma
-//! spegnerlo da soli senza poterlo dire (§20.2) né riaccendere (§11.1) farebbe
-//! di un difetto passeggero una perdita permanente. Vedi il verbale.
+//! spegnerlo da soli senza poterlo **riaccendere** (§11.1) farebbe di un
+//! difetto passeggero una perdita permanente. Dirlo invece adesso si può, ed è
+//! ciò che [`reporting`] serve a fare: il canale del §20.2 esiste
+//! ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)).
 
 use std::any::Any;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -91,16 +93,29 @@ pub fn caught<R, E>(
     }
 }
 
-/// Chiama codice di un provider che **non ha come dire di no** — un handler di
-/// eventi, un indice che riceve un documento — e a cui quindi non si può
-/// restituire niente.
+/// Chiama codice di un provider a cui **non si può restituire niente** — un
+/// handler di eventi, un innesto sulla resa — e riporta a chi chiama ciò che è
+/// andato storto, invece di stamparlo.
 ///
-/// Il panico si ferma qui e si dice su `stderr`, esattamente come si fa già con
-/// l'errore che un handler restituisce: «l'errore di un handler non deve far
-/// fallire l'operazione che ha emesso l'evento». Il canale giusto per dirlo è il
-/// §20.2, e non esiste ancora.
-pub fn notifying(who: &str, what: &str, f: impl FnOnce()) {
-    if let Err(payload) = catch_unwind(AssertUnwindSafe(f)) {
-        eprintln!("`{who}` è andato in panico {what}: {}", why(payload));
+/// Qui c'era un `eprintln!` e un commento che diceva «il canale giusto per dirlo
+/// è il §20.2, e non esiste ancora». Adesso esiste
+/// ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
+/// e questa funzione ha smesso di decidere da sé dove va a finire un panico:
+/// lo **restituisce**, e chi chiama — che è dentro il kernel e ha l'event bus —
+/// lo emette come `Event::Trouble`.
+///
+/// La forma è quella della [decisione 0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md)
+/// letta al contrario: là l'esito si è messo al sicuro **dentro** chi lo
+/// produce, perché dipendeva dall'attenzione di chi lo riceveva; qui chi
+/// produce non ha un canale (è una funzione libera, senza workspace) e allora
+/// il minimo è che non lo butti via da solo. Un `Option` che si ignora si vede
+/// in review; un `eprintln!` no.
+#[must_use = "un panico che nessuno emette è tornato a essere una perdita silenziosa (§20.2)"]
+pub fn reporting(who: &str, what: &str, f: impl FnOnce()) -> Option<PluginError> {
+    match catch_unwind(AssertUnwindSafe(f)) {
+        Ok(()) => None,
+        Err(payload) => Some(PluginError::Internal(
+            format!("`{who}` è andato in panico {what}: {}", why(payload)).into(),
+        )),
     }
 }

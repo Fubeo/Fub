@@ -27,8 +27,11 @@ full-rebuild di grafo/indice con un aggiornamento **incrementale**.
   nota *intitolata* Rust), `body` (TEXT+STORED, dalla proiezione
   `DocumentModel.text`; STORED perché il generatore di snippet rilegge il
   testo), `tags` (TEXT). Lo schema è versionato: un bump forza il rebuild.
-- **Aggiornamento incrementale:** `on_document_indexed(doc)` fa
-  delete-by-term(`doc_id`) + add; `on_document_removed(id)` fa delete-by-term.
+- **Aggiornamento incrementale:** `on_documents_indexed(docs)` fa,
+  per ogni documento del lotto, delete-by-term(`doc_id`) + add;
+  `on_documents_removed(ids)` fa delete-by-term. Dalla
+  [0051](../decisions/0051-l-alimentazione-risponde.md) i due sono a lotto e
+  restituiscono ciò che non hanno preso.
   Il commit non è per-documento: si accumula e si committa al `flush` (lo
   chiama il watcher debounced, che è chi sa quando un lotto è finito) o alla
   prima query con scritture in sospeso — così chi interroga vede sempre le
@@ -74,7 +77,7 @@ riconciliare, e nessun rebuild completo da pagare.
 Due ragioni indipendenti puntavano nella stessa direzione: (1) un indice che
 perde un aggiornamento non smette di rispondere, risponde *sbagliato*, e
 un'architettura non dovrebbe rendere possibile una bugia silenziosa quando può
-renderla impossibile; (2) `on_document_indexed` riceve il `DocumentModel` già
+renderla impossibile; (2) `on_documents_indexed` riceve i `DocumentModel` già
 parsato — l'`Event` porta il solo `DocId`, e chiederlo (`HostApi::read_model`,
 [decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)) costa una
 rilettura e un parse per evento.
@@ -361,7 +364,7 @@ link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
 | tantivy **incrementale su disco** | Scala a vault grandi e dà avvio rapido; i ganci `on_document_*` esistono già nel trait. |
 | Ricerca **built-in di classe *omnisearch***, non un plugin ([decisione 0025](../decisions/0025-la-ricerca-predefinita.md)) | Sotto non c'è una ricerca "base" da migliorare: due motori sullo stesso vault sarebbero due indici, due ranking e due risposte alla stessa domanda. E la tolleranza ai refusi va nel **contratto** e non dentro il provider, perché deve poter essere **spenta per singola query**: lo stesso `IndexQuery::Documents` serve la casella di ricerca e `vault.replace`. |
 | Indici **posseduti e alimentati dal kernel**, non dagli eventi | Un indice che perde un aggiornamento non tace: risponde sbagliato, in silenzio. La coda eventi ha un budget; questo canale no. Vedi sopra, "Perché l'indice non si alimenta dagli eventi". |
-| `reconcile(ids)` + `flush(host)` **aggiunti al trait** a M2 | Le due giunture che restano: ciò che cambia ad app chiusa, e il fatto che il kernel scriva un documento alla volta mentre un indice vuole scrivere a lotti. Il freeze è a M4: la firma si corregge ora o mai più. |
+| `reconcile(ids)` + `flush(host)` **aggiunti al trait** a M2 | Le due giunture che restano: ciò che cambia ad app chiusa, e il fatto che il kernel scriva un documento alla volta mentre un indice vuole scrivere a lotti. Il freeze è a M4: la firma si corregge ora o mai più — e la correzione è arrivata con la [0051](../decisions/0051-l-alimentazione-risponde.md), che ha dato un esito all'alimentazione e l'ha portata a lotti. |
 | `activate(host)` + `flush(host)` con l'**`HostApi`** nella firma | Senza, un index provider di terzi in WASM non potrebbe persistere nulla: stesso buco che il versioning aveva trovato per `EventHandler`. L'host arriva nei due punti in cui lo stato attraversa il disco, e in nessun altro — vedi [traits.md](../architecture/traits.md), `IndexProvider`. |
 | `snippet` testo + `highlights: Vec<Span>` | Un provider di terzi non deve poter iniettare markup nella webview privilegiata passando per i risultati di ricerca (stessa regola di `UiNode::Html`). |
 | Backlink **serviti dal grafo**, non dall'indice | Il grafo conosce le regole di risoluzione dei wikilink e le ambiguità dell'intero vault: duplicarli creerebbe una seconda verità che può divergere dalla prima. |

@@ -25,8 +25,9 @@ use fubmd_abi::error::PluginError;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::options::permission;
 use fubmd_abi::traits::{
-    HostApi, IndexProvider, IndexQuery, IndexResult, PluginManifest, PluginPermissions, QueryKind,
-    QueryRoute, ReadApi, ServiceProvider, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginManifest, PluginPermissions,
+    QueryKind, QueryRoute, ReadApi, ServiceProvider, ViewInstance, ViewProvider, ViewSpec,
+    ViewSurface,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_kernel::{
@@ -124,11 +125,17 @@ impl IndexProvider for Indice {
         Ok(())
     }
 
-    fn on_document_indexed(&mut self, _doc: &DocumentModel) {}
+    fn on_documents_indexed(&mut self, _docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
-    fn on_document_removed(&mut self, _id: &DocId) {}
+    fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
-    fn reconcile(&mut self, _ids: &[DocId]) {}
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
 
     fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())

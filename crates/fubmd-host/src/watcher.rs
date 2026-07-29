@@ -193,7 +193,10 @@ mod notify_watcher {
                         // cambia da fuori — limite di inotify su un vault
                         // grande, un network share che si stacca — e finché la
                         // risposta era per costruzione l'unica traccia era
-                        // questa riga su stderr, cioè nessuna (§20.2).
+                        // questa riga su stderr, cioè nessuna. Dalla 0052 un
+                        // canale c'è (`Event::Trouble`), e questo è uno dei
+                        // punti che restano da portarci dentro: qui il vault
+                        // c'è, quindi è conversione e non decisione.
                         failed.store(false, Ordering::Relaxed);
                         for e in errors {
                             eprintln!("watch error: {e:?}");

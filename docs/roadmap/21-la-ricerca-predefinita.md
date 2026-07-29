@@ -113,8 +113,10 @@ che lo ha prodotto.
       `Overflow`, e oggi quel segnale arriva al confine e nella shell non lo
       legge nessuno (`frontend/src/` non lo nomina). Senza, l'autocompletamento
       propone un vault vecchio e non lo dice — che è la
-      [§20.1](20-quando-qualcosa-va-storto.md#201-lalimentazione-dellindice-non-ha-un-esito-e-un-indice-che-perde-un-documento-non-ha-modo-di-dirlo)
-      trasportata dall'altra parte del confine.
+      [decisione 0051](../decisions/0051-l-alimentazione-risponde.md)
+      trasportata dall'altra parte del confine: là un indice che perde un
+      documento adesso lo nomina, qui la shell non ha ancora niente di
+      equivalente.
 - [ ] Va con la §1.2 (il modello di layout) per **dove** compare il modale, e
       con la §18.2 per la scorciatoia che lo apre.
 

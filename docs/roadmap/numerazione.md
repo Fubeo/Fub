@@ -135,11 +135,17 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §4.8 | **§16.4** | Il contratto si scrive quattro volte a mano |
 | §4.12 | **§16.2** | Il banco di prova del kernel è copiato diciotto volte |
 
-**Voci senza un numero vecchio.** Quattro famiglie non compaiono qui sopra
+**Voci senza un numero vecchio.** Cinque famiglie non compaiono qui sopra
 perché non traducono niente: sono **nate** con la numerazione per sedute.
 
 - La **§8.4** l'ha trovata una misura, non un giro
   ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+- La **§20.5** l'ha trovata la **stessa cosa applicata a una decisione appena
+  presa**: scrivendo la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)
+  si è verificato dove finisce un evento non recuperabile, e i posti da cui
+  sparisce sono tre mentre i freni che lo rispettano sono due. Non nasce da una
+  domanda del piano: nasce dal misurare la propria decisione contro il codice
+  invece che contro il documento che la descrive.
 - Le **§21.1–§21.9** le ha aperte una decisione di prodotto, la
   [0025](../decisions/0025-la-ricerca-predefinita.md): la ricerca è built-in e
   di classe *omnisearch*, e quelle nove voci sono la sottrazione fra ciò che

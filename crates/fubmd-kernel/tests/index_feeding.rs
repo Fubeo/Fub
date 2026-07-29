@@ -17,8 +17,8 @@ use fubmd_abi::format::{
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fubmd_abi::traits::{
-    DocumentMatch, HostApi, IndexProvider, IndexQuery, IndexResult, Page, Paged, PredicateKind,
-    PropertySelect, QueryRoute,
+    DocumentMatch, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page, Paged,
+    PredicateKind, PropertySelect, QueryRoute,
 };
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{data_root, FormatRegistry, Workspace};
@@ -130,18 +130,28 @@ impl IndexProvider for SpyIndex {
         Ok(())
     }
 
-    fn on_document_indexed(&mut self, doc: &DocumentModel) {
-        self.record(Call::Indexed(doc.id.to_string(), doc.text.clone()));
+    /// Una voce **per documento** anche ora che il lotto è la grana della
+    /// chiamata: ciò che i test asseriscono è *quali* documenti sono arrivati,
+    /// e registrare per lotto lo renderebbe indicibile.
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        for doc in docs {
+            self.record(Call::Indexed(doc.id.to_string(), doc.text.clone()));
+        }
+        Vec::new()
     }
 
-    fn on_document_removed(&mut self, id: &DocId) {
-        self.record(Call::Removed(id.to_string()));
+    fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        for id in ids {
+            self.record(Call::Removed(id.to_string()));
+        }
+        Vec::new()
     }
 
-    fn reconcile(&mut self, ids: &[DocId]) {
+    fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         let mut ids: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
         ids.sort();
         self.record(Call::Reconcile(ids));
+        Vec::new()
     }
 
     fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -490,9 +500,15 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
         fn activate(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
             Ok(())
         }
-        fn on_document_indexed(&mut self, _d: &DocumentModel) {}
-        fn on_document_removed(&mut self, _id: &DocId) {}
-        fn reconcile(&mut self, _ids: &[DocId]) {}
+        fn on_documents_indexed(&mut self, _d: &[DocumentModel]) -> Vec<IndexLoss> {
+            Vec::new()
+        }
+        fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+            Vec::new()
+        }
+        fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+            Vec::new()
+        }
         fn flush(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
             Ok(())
         }
@@ -562,7 +578,7 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
         .expect("registrato");
 
     // L'attivazione è la PRIMA cosa che accade, e accade alla registrazione:
-    // dopo il primo `on_document_indexed` sarebbe già troppo tardi per
+    // dopo il primo `on_documents_indexed` sarebbe già troppo tardi per
     // ricordarsi di ciò che si è già visto.
     assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
 
