@@ -6,15 +6,18 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): il supporto, e le p
 
 ---
 
-Cinque voci sul supporto e due sulle politiche di cosa ci finisce sopra. Della
-15.4 è **P0** la *decisione*, non l'implementazione: un dato persistito si può
-classificare in tre forme — un parametro su `data_write`, un campo di manifest,
-due radici distinte per plugin — e solo la prima è un ritaglio della linea di
-base oggi e una major dopo il freeze. Le altre due sono additive. Ciò che scade
-col freeze è **scegliere fra le tre**, perché dopo non si prendono più tutte. Il
-resto è P2, con un'avvertenza dal piano: la **versione di schema** (15.3) costa
-un campo adesso e un formato da indovinare dopo, quindi conviene anticiparla a
-ogni formato che nasce, invece di aspettare il suo turno.
+Cinque voci sul supporto e due sulle politiche di cosa ci finisce sopra. La 15.4
+era la P0 della seduta ed è **chiusa** con la
+[0048](../decisions/0048-una-radice-sola.md): dentro un vault la radice è una
+sola (`.fubmd/`, coi derivati in `.fubmd/data/`), la mappa di chi scrive dove sta
+in [architecture/on-disk-layout.md](../architecture/on-disk-layout.md), e delle
+tre forme in cui la classe di un dato si può dichiarare è scelta la seconda
+radice per plugin — additiva, quindi implementabile dopo M3. Ciò che scadeva col
+freeze era **scegliere fra le tre**, perché il parametro su `data_write` dopo non
+si sarebbe più preso. Il resto della seduta è P2, con un'avvertenza dal piano: la
+**versione di schema** (15.3) costa un campo adesso e un formato da indovinare
+dopo, quindi conviene anticiparla a ogni formato che nasce, invece di aspettare
+il suo turno.
 
 E un avvertimento di lessico, perché la seduta contiene due assi diversi che si
 chiamano facilmente allo stesso modo: la **durabilità** è fsync e scrittura
@@ -77,7 +80,7 @@ network share), 2.3 (drive rimovibili).
       silenzio, che è il criterio della [seduta 20](20-quando-qualcosa-va-storto.md).
 - [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
       sopravvivere a un crash (2.1, 24.2).
-- [ ] **Journal delle mutazioni** (append-only in `.fubmd-data/`): base di
+- [ ] **Journal delle mutazioni** (append-only in `.fubmd/data/`): base di
       rollback dell'import (17.3), undo delle automazioni (16.3), audit (23.3).
 - [ ] **Comandi di manutenzione**: `rebuild_index`, `vault_health`,
       `diagnostic_bundle`, `repair` — come `CommandProvider` ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), non come
@@ -101,7 +104,7 @@ network share), 2.3 (drive rimovibili).
       quindi il modello adesso ha tre esempi e questa voce ne ha uno solo da
       raggiungere. **Quattro**, da quando esiste l'anagrafe
       ([0046](../decisions/0046-l-anagrafe-del-vault.md)):
-      `.fubmd-data/entries.json` nasce col campo di versione, e non perché serva
+      `.fubmd/data/entries.json` nasce col campo di versione, e non perché serva
       a migrare — un derivato non si migra, si rifà — ma perché senza un numero
       in testa la versione dopo dovrebbe *indovinare* che un file senza campo
       viene da prima. È l'avvertenza di questa seduta applicata: la versione si
@@ -117,128 +120,55 @@ network share), 2.3 (drive rimovibili).
 
 ### 15.4 I dati persistiti non hanno né una mappa né una classe
 
-*ex §2.29 · kernel · **P0** — è P0 la **scelta della forma**, non il parametro; la metà documentale è P2*
+*ex §2.29 · kernel · **P0** — **chiusa** con la [0048](../decisions/0048-una-radice-sola.md); resta una casella, che è additiva*
 
-- [ ] **Quattro posti, quattro discipline diverse, nessun documento che li
-      elenchi**: `<vault>/.fubmd/workspace.json` (autorevole, e dal §11.3
-      scritto dal **kernel** con la disciplina degli altri suoi file),
-      `.fubmd-data/plugins/<id>/` (assegnato dal
-      kernel, recintato dalla firma), `.fubmd-data/index/` (derivato),
-      `<vault>/.trash/`. E ne stavano per arrivare almeno otto: i primi tre sono
-      **arrivati** con la
-      [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) —
-      `<vault>/.fubmd/settings.json` (autorevole, viaggia col vault) e, nella
-      cartella di configurazione della macchina, `settings.json` e `vaults.json`
-      (il registro dei vault). Sono anche i primi che nascono con la disciplina
-      invece che senza: versione di schema in testa al file e scrittura atomica
-      (`fubmd_kernel::settings::write_atomic`). Restano da arrivare temi e
-      snippet (6.2), plugin installati (20.2), journal (§15.2), thumbnail e cache
-      derivate (§14.1), crash buffer (§15.2), backup (18.2), layout salvati
-      (§11.2) — e restano da mettere in fila con i primi quattro, che è la voce.
-      Nel frattempo ne è arrivato un altro, `.fubmd-data/entries.json`
-      ([0046](../decisions/0046-l-anagrafe-del-vault.md)), ed è il caso che mostra
-      **perché** questa voce serve: è **derivato** — illeggibile si butta e si
-      ricostruisce, all'opposto del sidecar dell'organizzazione che si rifiuta di
-      sovrascrivere ciò che non ha potuto leggere — e la classe è scritta **in
-      prosa in testa al modulo**, dedotta dalla radice in cui il file sta.
-      Finché la classe non è dicibile nel contratto, ogni posto nuovo la ripete a
-      parole e chi arriva dopo la deduce per imitazione: che è esattamente ciò
-      che questa voce esiste per togliere.
-- [ ] **Il punto nuovo non è dove stanno: è che `data_*` non dichiara se ciò che
-      scrive è derivato o autorevole.** Gli snapshot del versioning non si
-      ricostruiscono da niente e vivono sotto `.fubmd-data/`, che il codice
-      descrive come dati derivati (`abi/organization.rs`: «Un `.fubmd-data/` si
-      può cancellare e si rifà con una scansione; questo no»). Oggi non fa danno perché
-      nessuno ha ancora scritto il codice che agisce su quella distinzione;
-      domani la stessa distinzione la chiedono, ognuno per conto proprio,
-      «ricostruisci i dati derivati» (24.2), «cosa entra nel backup» (18.2),
-      «cosa si esclude dal sync» (18.1), «cosa si porta dietro un vault che si
-      copia» (2.2) e «cosa si cancella per liberare spazio» (3.1). Cinque
-      risposte indovinate, e la peggiore cancella la cronologia.
-- [ ] **Il nome «durabilità» designa un'altra cosa, e va scartato prima di
+- [x] **Quattro posti, quattro discipline diverse, nessun documento che li
+      elenchi.** Adesso il documento c'è ed è
+      [architecture/on-disk-layout.md](../architecture/on-disk-layout.md): per
+      ogni posto, chi lo scrive, con quale classe, con quale versione di schema
+      (§15.3) e se la scrittura è atomica (§15.2). Ci sono anche le tre righe che
+      contraddicono la regola, chiamate per nome — gli snapshot del versioning
+      sotto la radice dei derivati, il sidecar del cestino che non è di nessuna
+      delle due classi, e tutto ciò che passa da `data_write` senza atomicità.
+      Erano quattro posti e ne stavano arrivando otto; i primi tre sono arrivati
+      con la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) e un
+      quarto con la [0046](../decisions/0046-l-anagrafe-del-vault.md), ognuno con
+      la classe scritta **in prosa in testa al proprio modulo**. È la ripetizione
+      che questa voce esisteva per togliere.
+- [x] **Le radici erano due, e una basta**: `.fubmd/` per l'autorevole e
+      `.fubmd-data/` per il derivato. Adesso è una — `.fubmd/`, coi derivati in
+      `.fubmd/data/` — e la deduzione per radice resta vera un livello più in
+      basso, che è la ragione per cui la forma è annidata e non piatta. Un vault
+      scritto prima si sposta con un rename all'apertura
+      (`kernel/vault.rs::migrate_layout`), e due alberi insieme non si fondono:
+      si rifiutano. `.trash/` **resta fuori**, perché non è roba di FubMD: è il
+      cestino condiviso con Obsidian, e dentro ci sono file dell'utente.
+- [x] **Il nome «durabilità» designa un'altra cosa, e va scartato prima di
       scegliere la forma**: la durabilità è fsync e scrittura atomica, ed è il
       **§15.2**, due voci più su nella stessa seduta. Qui si classifica il dato —
       derivato o autorevole, cioè buttabile o no — che è un asse diverso e
       ortogonale (un dato derivato può volere una scrittura atomica, un dato
-      autorevole può accontentarsi di meno). Un nome solo per due assi dentro la
-      stessa seduta si sbaglia al primo lettore: `DataClass`, `Persistence` o
-      `Recoverability`, non `Durability`.
-- [ ] **E la classe è proprietà del path, non della singola scrittura.** Con
-      `data_write(path, bytes, class)` la stessa chiave si può dichiarare
-      derivata a una scrittura e autorevole a quella dopo — il contratto
-      permetterebbe di contraddirsi — e ogni chiamante ripete a ogni chiamata un
-      tag che non cambia mai. Le forme che la dichiarano **una volta sola** sono
-      due: per **prefisso nel manifest**, o **due radici** distinte per plugin
-      (`data/` autorevole, `cache/` derivata, recintate dalla firma come già
-      succede oggi). La seconda ha il pregio che la classe diventa
-      inconfondibile: sbagliarla vuol dire scrivere nel posto sbagliato, non
-      passare l'enum sbagliato.
-- [ ] **Quindi è P0 la scelta, e le tre forme non costano lo stesso.** Il
-      parametro su `data_write` (`abi/traits.rs`) è oggi un ritaglio della linea
-      di base e dopo il freeze una major — quello sì scade. Il campo di manifest
-      e la seconda radice sono **additivi**: `HostApi` la implementa l'host, non
-      il guest, quindi una coppia `cache_read`/`cache_write` in più non rompe
-      nessun plugin, e un campo di manifest nemmeno. Il che vuol dire che *se* la
-      risposta è una delle ultime due, l'implementazione può seguire M3 senza
-      costare niente; ma **decidere** resta P0, perché una delle tre dopo il
-      freeze non si prende più, e sceglierla implicitamente non-scegliendo
-      significa averla esclusa. È il gemello del §15.3 (la *versione* di uno
-      schema) su un altro asse: quello dice come si legge un dato vecchio, questo
-      se il dato si può buttare.
-- [ ] **E prima ancora: le radici sono due, e una basterebbe.** Un vault oggi
-      porta tre cartelle nostre — `<vault>/.fubmd/` (autorevole),
-      `<vault>/.fubmd-data/` (derivato) e `<vault>/.trash/` — e la domanda,
-      posta da fuori guardando un vault e non il codice, è perché mai debbano
-      essere tre. La direzione preferita è **una radice sola**: `.fubmd/` con
-      `.fubmd/data/` dentro. Va decisa **qui** e non come rinomina a parte, per
-      una ragione precisa: oggi la classe di un dato si deduce da una cosa sola,
-      la **radice in cui il file sta**, e spostare le radici senza dire cosa
-      significano è togliere l'unico indizio esistente prima di aver messo
-      quello vero.
-      - *Perché la forma `.fubmd/data/` è compatibile con questa voce e un
-        `.fubmd/` piatto no*: annidare conserva la deduzione per radice — solo
-        un livello più in basso — e resta vera anche quando la classe diventerà
-        esplicita, perché un path che dice già la classe non contraddice un
-        manifest che la dichiara. Fondere tutto in un `.fubmd/` senza
-        sottocartella, invece, la cancella e basta.
-      - *L'argomento contrario, e perché pesa meno di quanto sembri*: due radici
-        distinte rendono banale escludere i derivati da un backup o da un sync
-        con una regola sola. Ma quella promessa **è già falsa**: gli snapshot del
-        versioning non si ricostruiscono e stanno sotto `.fubmd-data/`, che è il
-        difetto scritto due punti più su. Si perde una comodità che non c'era.
-      - *Cosa costa davvero, misurato*: nel codice **una riga** — la costante
-        `DATA_DIR` (`kernel/vault.rs`), da cui passa tutta la produzione — più
-        nove `.join(".fubmd-data")` scritti a mano in sette file di test, che
-        già oggi dovrebbero usare la costante. Il resto è prosa: una quarantina
-        di menzioni fra commenti e documenti. Due presidi vanno toccati insieme:
-        `.gitignore`, che **ignora già entrambe** le cartelle (una conferma che
-        due sono di troppo), e il marcatore con cui `check-doc-links.mjs`
-        riconosce un vault — che diventerebbe `.fubmd/` ed è un **miglioramento**,
-        perché oggi un vault aperto e mai indicizzato non ha un `.fubmd-data/` e
-        quindi non viene riconosciuto.
-      - *Ciò che non si riscrive, e va detto una volta sola*: quattro verbali
-        ([0025](../decisions/0025-la-ricerca-predefinita.md),
-        [0038](../decisions/0038-il-kernel-possiede-il-sidecar.md),
-        [0044](../decisions/0044-lo-stato-per-documento.md),
-        [0046](../decisions/0046-l-anagrafe-del-vault.md)) e la linea di base
-        congelata continueranno a dire `.fubmd-data/`, perché sono fotografie e
-        non si toccano. Serve la stessa cura di [numerazione.md](numerazione.md)
-        per i numeri vecchi: **un punto solo** che traduce, e non una nota
-        ripetuta in venti file.
-      - *E la migrazione non è gratis*: sotto `.fubmd-data/` non c'è solo
-        l'indice. Ci sono gli snapshot del versioning e lo stato per-documento
-        della [0044](../decisions/0044-lo-stato-per-documento.md), che non si
-        rigenerano da niente. Un rename all'apertura, con la regola del rifiuto
-        in avanti già in uso — non «se non c'è, si ricostruisce».
-      - *Resta aperta una terza*: se `.trash/` debba entrare nella radice unica o
-        restare fuori. È l'unica delle tre che l'utente apre di proposito, e un
-        cestino che si trova è metà del suo valore.
-- [ ] **La metà documentale**: `docs/architecture/on-disk-layout.md` come mappa
-      unica — chi scrive dove, con quale disciplina, con quale classe, con quale
-      versione di schema (§15.3) e con quale scrittura (atomica o no, §15.2). Non
-      è burocrazia: oggi la risposta si ricostruisce leggendo quattro crate, e
-      la prossima feature che deve scrivere qualcosa sceglierà il posto per
-      imitazione dell'ultima che ha guardato.
+      autorevole può accontentarsi di meno).
+- [x] **La classe è proprietà del path, non della singola scrittura**, e delle
+      tre forme è scelta la **seconda radice per plugin**: `data_*` resta la
+      famiglia dell'autorevole e una `cache_*` porta il derivato. Con
+      `data_write(path, bytes, class)` la stessa chiave si sarebbe potuta
+      dichiarare derivata a una scrittura e autorevole a quella dopo, e ogni
+      chiamante avrebbe ripetuto a ogni chiamata un tag che non cambia mai; col
+      campo di manifest la dichiarazione sta lontano dalla scrittura e un
+      prefisso sbagliato non fa rumore. Con due radici sbagliare la classe vuol
+      dire scrivere nel posto sbagliato, non passare l'enum sbagliato — ed è la
+      stessa regola che il layout applica un livello più in su.
+- [ ] **Implementarla.** Due capacità in più su `HostApi` (`cache_read`,
+      `cache_write`, più le compagne di `data_list`/`data_remove` se servono) e
+      lo spazio autorevole di un plugin che sale di un livello, da
+      `.fubmd/data/plugins/<id>/` a `.fubmd/plugins/<id>/`, con la stessa
+      disciplina di rename della 0048. È **additiva** — `HostApi` la implementa
+      l'host, non il guest — quindi non scade col freeze e può seguire M3; e va
+      fatta **prima di M5**, perché finché i plugin sono i nostri otto gli
+      inquilini di quello spazio si contano su una mano. I due che si muovono
+      sono noti: gli snapshot del versioning salgono, l'indice di ricerca scende
+      in `cache_*` e al peggio si ricostruisce.
 
 *Sblocca:* 18.1-18.2 (cosa si sincronizza e cosa si salva), 24.2 (rebuild,
 repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28

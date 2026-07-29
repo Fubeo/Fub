@@ -179,7 +179,7 @@ nessuno dei due è una *seconda copia viva* del documento:
   watcher, ed è ciò che impedisce a una nota cestinata di restare cercabile. Il
   ripristino è un `write_document` normale, quindi passa da grafo, indici ed
   eventi come ogni altra scrittura.
-- **Le versioni** (`.fubmd-data/versions/`). Sono *copie morte*: snapshot
+- **Le versioni** (`.fubmd/data/plugins/fubmd.versioning/`). Sono *copie morte*: snapshot
   timestampati, mai riletti dal kernel, mai in concorrenza con la sorgente.
   Ripristinarne una è di nuovo una scrittura normale, ed è il motivo per cui
   genera a sua volta una versione — cioè è annullabile.

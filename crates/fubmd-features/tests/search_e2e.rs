@@ -13,7 +13,7 @@ use fubmd_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fubmd_abi::traits::{DocumentMatch, IndexQuery, IndexResult, Page, PropertySelect};
 use fubmd_features::{SearchIndex, SEARCH_ID};
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_kernel::{data_root, FormatRegistry, Workspace};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -335,8 +335,7 @@ fn incremental_index_matches_one_built_from_scratch() {
 /// `DataWrite::data_write`: leggerlo da qui col filesystem è lecito perché questo
 /// è un test che guarda *il risultato*, non un percorso di produzione.
 fn opstamp(vault_root: &Utf8PathBuf) -> u64 {
-    let path = vault_root
-        .join(".fubmd-data")
+    let path = data_root(vault_root)
         .join("plugins")
         .join(SEARCH_ID)
         .join("manifest.json");

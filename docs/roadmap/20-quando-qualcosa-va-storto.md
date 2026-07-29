@@ -171,7 +171,7 @@ visibile), 20.2 (log plugin).
 - [ ] **La rete di sicurezza si spegne nella forma esatta del funzionare.** Il
       versioning è un `EventHandler` e nient'altro; il suo `handle` propaga
       l'errore di `store.snapshot(...)` (`features/src/versioning.rs`).
-      Disco pieno, `.fubmd-data/` in sola lettura, vault su una cartella cloud
+      Disco pieno, `.fubmd/data/` in sola lettura, vault su una cartella cloud
       che rifiuta la scrittura: gli snapshot **smettono**, il pannello
       cronologia resta al suo posto ed elenca le versioni vecchie, nessuna riga
       cambia colore. La sola feature che esiste per esserci quando qualcosa va

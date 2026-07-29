@@ -54,7 +54,7 @@ const SCHEMI_ESTERNI = ["http:", "https:", "mailto:"];
  * traccia almeno un `.md`, e tutte le loro antenate fino alla radice.
  *
  * Serve a una cosa sola, ed è la distinzione che il solo marcatore non sa fare:
- * `docs/` e un vault dell'utente hanno entrambi un `.fubmd-data/` dentro, ma il
+ * `docs/` e un vault dell'utente hanno entrambi un `.fubmd/` dentro, ma il
  * primo è testo che questo repo mantiene e il secondo sono note di qualcuno.
  * Git lo sa già — `docs/` è tracciata, `VaultProva/` è ignorata — e non c'è
  * ragione di indovinarlo con un'euristica peggiore.
@@ -101,12 +101,17 @@ function raccogliMarkdown(radice, tracciate, saltate) {
 
     // Un vault non è documentazione del repo: sono note dell'utente, e i loro
     // link vanno risolti dalle regole del vault (wikilink, alias, cestino), non
-    // da questo script. Il marcatore è la cartella dati che il core ci scrive
-    // dentro — ma una cartella può essere tutte e due le cose, ed è il caso di
-    // `docs/` dal giorno in cui il progetto ha cominciato a mangiare il proprio
-    // cibo. Se git ci tiene dei `.md`, è documentazione: il marcatore non basta
-    // a mandarla via.
-    if (voci.some((v) => v.isDirectory() && v.name === ".fubmd-data")) {
+    // da questo script. Il marcatore è la **radice unica** che il core ci scrive
+    // dentro (decisione 0048) — ma una cartella può essere tutte e due le cose,
+    // ed è il caso di `docs/` dal giorno in cui il progetto ha cominciato a
+    // mangiare il proprio cibo. Se git ci tiene dei `.md`, è documentazione: il
+    // marcatore non basta a mandarla via.
+    //
+    // Prima della 0048 il marcatore era `.fubmd-data/`, cioè la cartella dei
+    // *derivati*: un vault aperto e mai indicizzato non ce l'aveva, e questo
+    // script gli camminava dentro. `.fubmd/` compare alla prima cosa che FubMD
+    // scrive su quel vault, che è prima.
+    if (voci.some((v) => v.isDirectory() && v.name === ".fubmd")) {
       if (tracciate === null || !tracciate.has(path.resolve(cartella))) {
         saltate.push(cartella);
         return;
@@ -116,7 +121,7 @@ function raccogliMarkdown(radice, tracciate, saltate) {
     for (const voce of voci) {
       const percorso = path.join(cartella, voce.name);
       if (voce.isDirectory()) {
-        // Le cartelle nascoste (`.git`, `.vite`, `.trash`, `.fubmd-data`…)
+        // Le cartelle nascoste (`.git`, `.vite`, `.trash`, `.fubmd`…)
         // contengono stato, non testo da mantenere.
         if (SALTA_CARTELLE.has(voce.name) || voce.name.startsWith(".")) continue;
         visita(percorso);
@@ -308,7 +313,7 @@ function main() {
 
   for (const cartella of saltate) {
     const dove = path.relative(radice, cartella) || ".";
-    console.log(`saltato l'albero ${dove}/ — è un vault (.fubmd-data)`);
+    console.log(`saltato l'albero ${dove}/ — è un vault (.fubmd/)`);
   }
   if (tracciate === null && saltate.length > 0) {
     console.log(

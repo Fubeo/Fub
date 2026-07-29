@@ -4,13 +4,13 @@
 //! versioning aveva trovato: un `EventHandler` scritto come lo scriverebbe un
 //! plugin non poteva tenere uno store su disco. Chiudendolo si è aperto un
 //! confine di sicurezza — un plugin nomina blob, e i blob devono restare dentro
-//! `.fubmd-data/plugins/<id>/`. Qui si verifica proprio quello: che ci restino,
+//! `.fubmd/data/plugins/<id>/`. Qui si verifica proprio quello: che ci restino,
 //! che ogni plugin veda solo i propri, e che ogni tentativo di uscirne sia un
 //! `PermissionDenied` e non un file scritto altrove.
 
 use camino::Utf8PathBuf;
 use fubmd_abi::error::PluginError;
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_kernel::{data_root, FormatRegistry, Workspace};
 
 fn vault() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -36,7 +36,7 @@ fn a_blob_written_by_a_plugin_lands_in_its_own_corner_of_the_vault() {
 
     assert_eq!(
         std::fs::read(
-            root.join(".fubmd-data")
+            data_root(&root)
                 .join("plugins")
                 .join("prova.plugin")
                 .join("cartella")
@@ -44,7 +44,7 @@ fn a_blob_written_by_a_plugin_lands_in_its_own_corner_of_the_vault() {
         )
         .unwrap(),
         b"contenuto",
-        "lo spazio dati di un plugin è `.fubmd-data/plugins/<id>/`, \
+        "lo spazio dati di un plugin è `.fubmd/data/plugins/<id>/`, \
          e le directory intermedie le crea l'host"
     );
 }
@@ -146,7 +146,7 @@ fn nothing_a_plugin_can_name_escapes_its_own_space() {
     });
 
     assert!(!root.join("fuori.txt").exists());
-    assert!(!root.join(".fubmd-data").join("fuori.txt").exists());
+    assert!(!data_root(&root).join("fuori.txt").exists());
 }
 
 // Lo `storage_*` volatile è stato TOLTO dal contratto con la decisione 0013 (linea di base

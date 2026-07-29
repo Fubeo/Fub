@@ -24,7 +24,7 @@ use fubmd_abi::format::{
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{HostApi, IndexProvider, IndexQuery, IndexResult};
 use fubmd_abi::FormatProvider;
-use fubmd_kernel::{FormatRegistry, KernelError, Workspace};
+use fubmd_kernel::{data_root, FormatRegistry, KernelError, Workspace};
 
 /// Provider minimo: il documento è il suo testo.
 struct PlainProvider;
@@ -265,14 +265,14 @@ fn emptying_the_trash_sweeps_the_sidecars_too() {
     ws.delete_document(&DocId::new("progetti/Nota.txt"))
         .unwrap();
     assert!(
-        fx.root.join(".fubmd-data/trash").exists(),
+        data_root(&fx.root).join("trash").exists(),
         "il sidecar è stato scritto"
     );
 
     ws.empty_trash().unwrap();
 
     assert!(
-        !fx.root.join(".fubmd-data/trash").exists(),
+        !data_root(&fx.root).join("trash").exists(),
         "cestino vuoto = nessun sidecar da ricordare"
     );
 }

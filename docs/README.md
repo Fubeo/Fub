@@ -110,7 +110,9 @@ verifica ogni link relativo del repo e fallisce se ne trova uno rotto. Conta
 anche gli alberi che salta e i file che controlla: se un giorno ne controllasse
 nove invece di un centinaio, lo direbbe invece di stampare «0 rotti».
 
-**Quello che non è documentazione.** `docs/.fubmd-data/` è l'indice di ricerca e
-gli snapshot del versioning che FubMD scrive quando si apre `docs/` come vault.
-È ignorato da git e non va modificato a mano: quegli snapshot sono la memoria di
-com'erano i file.
+**Quello che non è documentazione.** `docs/.fubmd/` è ciò che FubMD scrive
+quando si apre `docs/` come vault: l'organizzazione della sidebar in cima, e
+sotto `data/` l'indice di ricerca e gli snapshot del versioning. È ignorato da
+git e non va modificato a mano: quegli snapshot sono la memoria di com'erano i
+file. Dov'è ciascuna cosa e con quale disciplina lo dice
+[architecture/on-disk-layout.md](architecture/on-disk-layout.md).

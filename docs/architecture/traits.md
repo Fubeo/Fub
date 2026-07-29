@@ -252,7 +252,7 @@ Le altre le ha chieste il **dogfooding**, un cliente vero alla volta — è cos�
 un buco nel contratto si scopre prima del freeze, invece che a M5:
 
 - `data_*` — storage persistente per-plugin. Il plugin nomina **blob** con path
-  relativi; lo spazio (`.fubmd-data/plugins/<id>/`) lo assegna l'host, che
+  relativi; lo spazio (`.fubmd/data/plugins/<id>/`) lo assegna l'host, che
   rifiuta path assoluti, `..` e separatori di sistema con `PermissionDenied`.
 - `now_unix_millis` — l'orologio dell'host. WASI può negarlo a un componente, e
   un tempo che passa dal confine è un tempo che i test possono fermare.

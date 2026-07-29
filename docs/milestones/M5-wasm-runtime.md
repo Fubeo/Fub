@@ -45,7 +45,7 @@ sono esposti al componente come **host function** wasmtime:
 - Memoria isolata dal component model; nessun accesso diretto a filesystem/rete.
 - Rete negata salvo `network = true`; FS solo via `HostApi` (soggetto a
   booleani + `vault_scope`).
-- Storage per-plugin namespaced e persistente (`.fubmd-data/plugins/<id>/`).
+- Storage per-plugin namespaced e persistente (`.fubmd/data/plugins/<id>/`).
 - **Disponibilità:** i trait sono sincroni e brevi → **epoch interruption**
   wasmtime con deadline severa per chiamata e limiti di memoria/fuel; un plugin
   lento o ostile viene interrotto (`PluginError::Internal`), mai lasciato

@@ -19,7 +19,7 @@ use fubmd_abi::format::{
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::rules::doc_data;
 use fubmd_abi::FormatProvider;
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_kernel::{data_root, FormatRegistry, Workspace};
 
 /// Un provider che non legge niente: qui i documenti servono a esistere, non a
 /// dire qualcosa.
@@ -74,23 +74,13 @@ fn vault() -> (tempfile::TempDir, Utf8PathBuf, Workspace) {
 /// Scrive un blob nello spazio dati di un plugin **senza passare dal kernel**:
 /// è il plugin spento, che non ha un host e non ne avrà uno.
 fn scrivi_dato(root: &Utf8PathBuf, plugin: &str, rel: &str, contenuto: &[u8]) {
-    let path = root
-        .join(".fubmd-data")
-        .join("plugins")
-        .join(plugin)
-        .join(rel);
+    let path = data_root(root).join("plugins").join(plugin).join(rel);
     std::fs::create_dir_all(path.parent().expect("ha un genitore")).expect("cartelle");
     std::fs::write(path, contenuto).expect("scrittura");
 }
 
 fn leggi_dato(root: &Utf8PathBuf, plugin: &str, rel: &str) -> Option<Vec<u8>> {
-    std::fs::read(
-        root.join(".fubmd-data")
-            .join("plugins")
-            .join(plugin)
-            .join(rel),
-    )
-    .ok()
+    std::fs::read(data_root(root).join("plugins").join(plugin).join(rel)).ok()
 }
 
 fn nota(ws: &mut Workspace, id: &str, testo: &str) -> DocId {

@@ -17,7 +17,7 @@ full-rebuild di grafo/indice con un aggiornamento **incrementale**.
 **tantivy** (`crates/fubmd-features/src/search.rs`).
 
 - **Persistenza:** indice su disco nello spazio dati del proprio plugin,
-  `.fubmd-data/plugins/fubmd.search/` (già ignorato dal walk del vault, vedi
+  `.fubmd/data/plugins/fubmd.search/` (già ignorato dal walk del vault, vedi
   `crates/fubmd-kernel/src/vault.rs`). Avvio rapido: niente reindicizzazione
   completa ad ogni apertura. Le impronte passano da `HostApi::data_*` — è ciò che
   un index provider di terzi avrà — e la cartella mmap di tantivy dal varco

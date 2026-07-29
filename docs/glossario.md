@@ -1,7 +1,7 @@
 # Glossario
 
 Il lessico di FubMD è preciso e **non è standard**: lotto, porta, ponte, anagrafe,
-sidecar, superficie, seduta, strozzatura. Ogni parola è stata scelta per dire una
+sidecar, superficie, seduta, strozzatura, derivato, autorevole. Ogni parola è stata scelta per dire una
 cosa sola, quasi sempre in un verbale, e da lì è finita nei nomi dei tipi, nei
 commenti e nei messaggi di commit. Chi arriva la incontra prima di incontrare la
 sua definizione, e finora la definizione stava sparsa nel documento che l'aveva
@@ -132,6 +132,15 @@ frontmatter, outline, e quanto basta a decidere se il file su disco è ancora
 quello di prima. Salta la rilettura con `mtime` + `size`, che bastano a saltare
 ma non a fidarsi — è il caso *racily clean* di git.
 
+### autorevole
+`FUBMD_DIR` · [`kernel/vault.rs:25`](../crates/fubmd-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
+
+Un dato che, perso, **non si ricostruisce da niente**: l'organizzazione della
+sidebar, le impostazioni del vault, gli snapshot del versioning. Chi lo tiene, se
+non riesce a leggerlo, **non lo sovrascrive**. Oggi la classe non è dicibile nel
+contratto e si legge dal path — direttamente sotto `.fubmd/` — che è il §15.4
+ancora aperto per metà. Il suo opposto è [derivato](#derivato).
+
 ### cestino
 `TrashEntry` · [`abi/traits.rs:144`](../crates/fubmd-abi/src/traits.rs) · [0003](decisions/0003-modello-del-documento.md)
 
@@ -139,6 +148,17 @@ Dove finisce ciò che si cancella dall'app, con il path originale per rimetterlo
 dov'era. Vive in `.trash/` dentro il vault. Insieme al versioning è la rete di
 sicurezza dell'utente, ed è per questo che [SECURITY.md](SECURITY.md) tratta un
 percorso che la aggira come un problema di sicurezza e non come un bug.
+
+### derivato
+`data_root` · [`kernel/vault.rs:50`](../crates/fubmd-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
+
+Un dato che si può **buttare e rifare** dal vault: l'indice di ricerca,
+l'anagrafe, le cache. Chi lo tiene, se non riesce a leggerlo, non avvisa nessuno:
+lo rifà. Vive sotto `.fubmd/data/`, ed è l'unico posto in cui la sua classe è
+scritta. Non dice «senza valore» ma «ricostruibile»: che sotto quella radice ci
+sia anche roba che nessuno saprebbe rifare — gli snapshot del versioning — è il
+difetto che il §15.4 esiste per togliere. Il suo opposto è
+[autorevole](#autorevole).
 
 ### entry
 `VaultEntry` · [`abi/traits.rs:203`](../crates/fubmd-abi/src/traits.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
@@ -163,11 +183,13 @@ spazi. Non è nel vault come contenuto, sta nel *sidecar*, e dalla 0038 è il
 kernel a possederlo — con la migrazione al rename inclusa.
 
 ### sidecar
-`.fubmd/` · [`kernel/organization.rs:74`](../crates/fubmd-kernel/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
+`.fubmd/workspace.json` · [`kernel/organization.rs:74`](../crates/fubmd-kernel/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
 
 Il file accanto al vault che tiene ciò che riguarda il vault ma non è contenuto
-di nessuna nota. Sta in `<vault>/.fubmd/`, viaggia col vault se lo si copia, e
-porta un numero di schema (vedi [versionamento.md](versionamento.md)).
+di nessuna nota. Sta in `<vault>/.fubmd/`, cioè direttamente nella radice unica e
+non sotto `data/`, perché è [autorevole](#autorevole); viaggia col vault se lo si
+copia, e porta un numero di schema (vedi
+[versionamento.md](versionamento.md)).
 
 ### spazio
 — · [`frontend/src/panels/explorer.ts`](../frontend/src/panels/explorer.ts) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
@@ -179,25 +201,32 @@ ordine propri. Sta nell'organizzazione, quindi nel sidecar.
 `DataRead` / `DataWrite` · [`abi/traits.rs:626`](../crates/fubmd-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La cartella privata di un componente, dove tiene ciò che non è una nota: un
-indice, una cache, un manifest. Ci si accede per path relativo, e le due metà —
-leggere e scrivere — sono capacità distinte perché negarle vuol dire due cose
-diverse.
+indice, una cache, un manifest. È `.fubmd/data/plugins/<id>/`, l'host la assegna
+e la impone, e ci si accede per path relativo; le due metà — leggere e scrivere —
+sono capacità distinte perché negarle vuol dire due cose diverse. Che oggi sia
+una sola e valga per entrambe le classi è il §15.4: la
+[0048](decisions/0048-una-radice-sola.md) ha scelto la forma — una seconda
+famiglia per il derivato — e non l'ha ancora scritta.
 
 ### vault
 `Vault` · [`kernel/vault.rs`](../crates/fubmd-kernel/src/vault.rs) · —
 
 Una cartella di file markdown, aperta come spazio di lavoro. È il termine di
 Obsidian e vuol dire la stessa cosa: **nessun formato proprietario, nessun
-database**, i file restano file. Il vault contiene tre alberi che non sono
-contenuto — `.fubmd/` (il sidecar), `.fubmd-data/` (indici e snapshot) e
-`.trash/` (il cestino).
+database**, i file restano file. Il vault contiene due alberi che non sono
+contenuto: `.fubmd/`, la **radice unica** di ciò che FubMD scrive
+([0048](decisions/0048-una-radice-sola.md)) — in cima l'autorevole, sotto `data/`
+il derivato — e `.trash/`, che sta fuori perché è il cestino **condiviso con
+Obsidian**. La mappa è
+[architecture/on-disk-layout.md](architecture/on-disk-layout.md).
 
 ### versioning
 `SCHEMA_VERSION` · [`features/versioning.rs:139`](../crates/fubmd-features/src/versioning.rs) · —
 
 Gli snapshot che FubMD tiene di ogni nota mentre la si modifica: la memoria di
-com'era il file prima. Vive in `.fubmd-data/`, che è ignorato da git — anche in
-questo repo, dove `docs/` è aperta come vault di prova.
+com'era il file prima. Vive in `.fubmd/data/`, che è ignorato da git — anche in
+questo repo, dove `docs/` è aperta come vault di prova. Sta sotto la radice del
+[derivato](#derivato) e non lo è: è il caso che il §15.4 porta come prova.
 
 ---
 

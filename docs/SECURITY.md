@@ -62,7 +62,7 @@ server che riceve dati.
   dove non dovrebbero, un rename o un ripristino dal cestino che scrive fuori
   dalla radice.
 - **La perdita silenziosa di dati dell'utente.** Il cestino e gli snapshot del
-  versioning in `.fubmd-data/` sono la rete di sicurezza: un percorso che li
+  versioning in `.fubmd/data/` sono la rete di sicurezza: un percorso che li
   aggira, li corrompe o li rende irrecuperabili è un problema di sicurezza, non
   solo un bug.
 - **L'anteprima nella webview.** Contenuto di una nota che diventa script

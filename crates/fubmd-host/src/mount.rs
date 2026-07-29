@@ -294,6 +294,15 @@ pub fn mount(
         eprintln!("impostazioni: {warning}");
     }
 
+    // Cosa la radice unica ha avuto da dire (0048): un vecchio `.fubmd-data/`
+    // che non si è potuto spostare, o due alberi insieme. Nessuna delle due cose
+    // impedisce di aprire — l'albero dei derivati non è il vault — e nessuna
+    // delle due deve passare in silenzio: sotto ci sono anche gli snapshot del
+    // versioning.
+    if let Some(warning) = ws.layout_warning() {
+        eprintln!("layout del vault: {warning}");
+    }
+
     // Cosa non ha potuto seguire una rinomina (§13.2). Vale la pena leggerlo
     // insieme al montaggio e non altrove: se qui c'è una riga, un plugin ha una
     // chiave morta e non lo sa — è il difetto che questa voce esiste per non
@@ -322,7 +331,7 @@ pub fn mount(
 /// non si apre, il vault si apre lo stesso senza ricerca: la verità è il vault,
 /// l'indice è stato derivato e non deve mai impedire di leggere le note.
 ///
-/// Vive nel proprio spazio dati (`.fubmd-data/plugins/fubmd.search/`), che è il
+/// Vive nel proprio spazio dati (`.fubmd/data/plugins/fubmd.search/`), che è il
 /// kernel ad assegnargli: la registrazione lo attiva, e l'attivazione è il
 /// momento in cui ritrova da `data_*` le impronte di ciò che ha già visto.
 fn register_search(ws: &mut Workspace) -> Vec<String> {
