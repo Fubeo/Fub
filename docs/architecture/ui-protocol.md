@@ -14,11 +14,11 @@ Torna a [../PIANO.md](../PIANO.md) · vedi [traits.md](traits.md).
 ## Un nodo è una chiave e una specie
 
 `UiNode` è il record `{ key, kind }`. La **chiave** è l'identità del nodo
-attraverso due ridisegni: deve essere stabile e unica **fra i fratelli** (l'id di
-un documento, non l'indice nella lista), ed è ciò su cui il riconciliatore
-lavora. Senza, l'identità di un nodo è la sua posizione — e una lista che si
-riordina si porta dietro il focus e la selezione di qualcun altro. Chi non ha
-liste che si riordinano può ometterla.
+attraverso due ridisegni: stabile e unica **fra i fratelli** (l'id di un
+documento, non l'indice nella lista), ed è ciò su cui il riconciliatore lavora.
+Senza, l'identità di un nodo è la sua posizione — e una lista che si riordina si
+porta dietro il focus e la selezione di qualcun altro. Chi non ha liste che si
+riordinano può ometterla.
 
 ## Ogni etichetta è un `Text`, non una `String`
 
@@ -29,11 +29,10 @@ persona legge** — `content`, `title`, `label`, `subtitle`, `placeholder`,
 tag, un path) o un `Message` (una chiave del catalogo di chi l'ha scritta, coi
 suoi argomenti). A risolverlo è il **kernel**, sulla via d'uscita dal contratto.
 
-Per chi disegna nella shell non cambia niente, ed è deliberato: quando l'albero
-arriva alla webview ogni `Text` è già un `Literal`, e un `Literal` sul filo è una
-stringa nuda. Per chi scrive un provider cambia una cosa sola: i builder prendono
-`impl Into<Text>`, quindi `UiNode::text("ciao")` continua a funzionare e si legge
-in chiaro — è il degrado garbato, non un residuo.
+Per chi disegna nella shell non cambia niente: quando l'albero arriva alla
+webview ogni `Text` è già un `Literal`, e un `Literal` sul filo è una stringa
+nuda. Per chi scrive un provider cambia una cosa sola: i builder prendono
+`impl Into<Text>`, quindi `UiNode::text("ciao")` continua a funzionare.
 
 **Non** sono `Text`, e non lo diventeranno: `Icon.name` (un id del repertorio
 della shell), `Custom.ns`, `Html.html`, `WebView.url`, i `field` e i `value` dei
@@ -79,10 +78,10 @@ protocollo resta senza stato lato shell — e un'`action` opzionale che scatta
 quando il valore si assesta.
 
 `TextInput`, `TextArea`, `Number`, `Checkbox`, `Select`, `Radio`, `Slider`,
-`DatePicker` (data civile ISO-8601: una stringa, non un istante — il tempo
-civile è nel locale, [decisione 0039](../decisions/0039-il-locale-e-il-caso.md)),
-e `Form { children, submit_label, submit }`, che inviando
-manda **tutti** i campi contenuti.
+`DatePicker` (data civile ISO-8601: una stringa, non un istante — il tempo civile
+è nel locale, [decisione 0039](../decisions/0039-il-locale-e-il-caso.md)), e
+`Form { children, submit_label, submit }`, che inviando manda **tutti** i campi
+contenuti.
 
 **Il varco, e i due stati**
 
@@ -103,7 +102,7 @@ Tipi di supporto: `Axis { Row, Column }`, `Intent { Neutral, Primary, Danger }`
 
 ## Chi mette cosa in un'azione
 
-Un'azione ha **due metà con due proprietari**, e nessuno dei due fonde l'oggetto
+Un'azione ha **due metà con due proprietari**, e nessuno dei due tocca l'oggetto
 dell'altro:
 
 - il **provider** attacca al nodo un `ActionRef`: l'id e il `payload` che gli
@@ -114,9 +113,8 @@ dell'altro:
   valore.
 
 L'`ActionId` è quindi **opaco**: non è un canale dati. La convenzione privata di
-prima — i dati concatenati dentro l'id (`open:a/Uno.md`, `tag:rust`,
-`reveal:10:15`) — era una convenzione che stava diventando contratto de facto, e
-il prossimo provider avrebbe fatto string-concat perché era ciò che vedeva fare.
+prima — i dati concatenati dentro l'id (`open:a/Uno.md`, `tag:rust`) — stava
+diventando contratto de facto.
 
 ## Ciclo azione → aggiornamento
 
@@ -133,42 +131,39 @@ il prossimo provider avrebbe fatto string-concat perché era ciò che vedeva far
    - `None` — nessun cambiamento;
    - `Navigate { doc_id }` — chiede al core di aprire un documento;
    - `Reveal { doc_id, span }` — apri (se serve) e porta la vista su un
-     intervallo del documento; `span` è in byte UTF-8, il frontend lo mappa
-     sull'editor col ponte in `frontend/src/rules/offsets.ts`;
+     intervallo; `span` è in byte UTF-8, il frontend lo mappa sull'editor con
+     `frontend/src/rules/offsets.ts`;
    - `RunSearch { query }` — esegui una ricerca e mostrane i risultati;
    - `Custom { ns, payload }` — intento che questa shell non prevede: chi non
      riconosce `ns` non fa nulla.
 
 Il giro è servito dai comandi `render_view`/`view_action`/`set_active_context` e
 montato in `frontend/src/ui/views.ts`. Lo esercitano i backlink (`open` col
-`DocId` nel payload → `Navigate`), l'outline (`reveal` con lo span nel payload →
-`Reveal`), il pannello tag (`search` col tag nel payload → `RunSearch`, più il
-campo `filter` che è il collaudo dello stato) e le statistiche.
+`DocId` nel payload → `Navigate`), l'outline (`reveal` con lo span → `Reveal`),
+il pannello tag (`search` col tag → `RunSearch`, più il campo `filter` che è il
+collaudo dello stato) e le statistiche.
 
 ## Le istanze: quale esemplare sta disegnando
 
-`render_view` e `on_action` ricevono una `ViewInstance { view, instance,
-params }`. `views()` resta un elenco **statico** di specie; un esemplare è
-un'altra cosa, e serve a dire *questa view, con questo parametro* — le viste
-multiple di un database, le viste salvate, le query embed parametriche, i task
-per tag / per cartella / per data.
+`render_view` e `on_action` ricevono una `ViewInstance { view, instance, params }`.
+`views()` resta un elenco **statico** di specie; un esemplare serve a dire
+*questa view, con questo parametro* — le viste multiple di un database, le viste
+salvate, le query embed parametriche, i task per tag / per cartella / per data.
 
 I `params` sono dichiarati in `ViewSpec::params` con gli **stessi `ParamSpec` dei
 comandi**, e la convalida è la stessa funzione (`command::validate_params`): chi
 apre una view da un comando e chi la apre a mano ricevono la stessa risposta
-sullo stesso argomento sbagliato. Il punto di applicazione è uno, il kernel, e il
-provider riceve parametri già buoni.
+sullo stesso argomento sbagliato. Il punto di applicazione è uno, il kernel.
 
-Chi apre un'istanza è un comando (`CommandEffect::OpenView { view, params }`).
-La shell monta da sé l'**esemplare unico** di ogni view dichiarata: si chiama
-come la sua specie e non ha parametri.
+Chi apre un'istanza è un comando (`CommandEffect::OpenView { view, params }`). La
+shell monta da sé l'**esemplare unico** di ogni view dichiarata: si chiama come
+la sua specie e non ha parametri.
 
 ## Le superfici: dove una view si ancora
 
-`ViewSurface` ne nomina dieci: `LeftSidebar`, `RightSidebar`, `Bottom`, `Main`
-(l'area principale), `Modal`, `StatusBar`, `Ribbon`, `Menu`, `ContextMenu`,
-`SettingsTab`. Non è un modello di layout: dice **a cosa ci si attacca**, non
-come lo spazio è diviso.
+`ViewSurface` ne nomina dieci: `LeftSidebar`, `RightSidebar`, `Bottom`, `Main`,
+`Modal`, `StatusBar`, `Ribbon`, `Menu`, `ContextMenu`, `SettingsTab`. Non è un
+modello di layout: dice **a cosa ci si attacca**, non come lo spazio è diviso.
 
 Questa shell ne ospita **sette**: le sei di prima più la scheda di impostazioni,
 che dal §11.1 ([decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md))
@@ -180,12 +175,11 @@ nomina** invece di sparire in silenzio.
 La scheda di impostazioni è ospitata con un limite dichiarato: le view che la
 chiedono si montano **tutte nella stessa area**, sotto il form generato dallo
 schema, e non ognuna in una scheda sua — una scheda per view vuole il modello di
-layout come tutto il resto. La superficie però esiste, e una view che la dichiara
-si vede.
+layout come tutto il resto.
 
 `ViewSpec` porta anche come si presenta: `icon`, `order` (crescente, i pari
-merito nell'ordine di registrazione), `open_by_default`, `preferred_size`
-(vale alla prima apertura) e `closable`.
+merito nell'ordine di registrazione), `open_by_default`, `preferred_size` (vale
+alla prima apertura) e `closable`.
 
 ## Quando una view invecchia: due maschere e un invito
 
@@ -197,26 +191,21 @@ del vault: farlo passare dall'event bus significherebbe consegnare ogni battuta
 di tasto a ogni handler registrato.
 
 `refresh` non è una lista di specie: è la maschera per intero
-([decisione 0033](../decisions/0033-la-grana-di-un-abbonamento.md)) — le specie,
-i prefissi di topic dei custom e il **soggetto** (un documento, una cartella) —
-e ad applicarla è la shell, con la stessa regola del kernel (`maskWants` in
-`frontend/src/rules/mirrored.ts`, gemella di
-`fubmd_abi::rules::events::mask_wants` e legata a lei dalla fixture generata).
-Finché la shell filtrava sulle sole specie, una view poteva restringere quanto
-voleva e lei la ridisegnava lo stesso: la promessa del contratto sarebbe stata
-vera nel kernel e falsa in finestra. Per la stessa ragione i pannelli **nativi**
-di questa shell dichiarano una maschera e non una lista (`refreshOn(...)` in
-`ui/panel-host.ts`): due forme vorrebbero dire due strade per montare un
-pannello.
+([decisione 0033](../decisions/0033-la-grana-di-un-abbonamento.md)) — specie,
+prefissi di topic dei custom e **soggetto** — e ad applicarla è la shell, con la
+stessa regola del kernel (`maskWants` in `frontend/src/rules/mirrored.ts`,
+gemella di `fubmd_abi::rules::events::mask_wants` e legata a lei dalla fixture
+generata). Filtrando sulle sole specie, una view poteva restringere quanto voleva
+e la shell la ridisegnava lo stesso: la promessa del contratto sarebbe stata vera
+nel kernel e falsa in finestra. Per la stessa ragione i pannelli **nativi**
+dichiarano una maschera e non una lista (`refreshOn(...)` in `ui/panel-host.ts`).
 
 La shell pubblica il contesto con `set_active_context` e riceve **gli id delle
 view da ridisegnare**: il conto lo fa il kernel, che conosce le `follows`. Senza
-questa metà del protocollo l'unica strada sarebbe ridisegnarle tutte a ogni
-movimento del cursore — cioè una `query_index` per battuta di tasto sul pannello
-tag e sulla vista a grafo.
+questa metà, l'unica strada sarebbe ridisegnarle tutte a ogni movimento del
+cursore — cioè una `query_index` per battuta di tasto.
 
-La terza strada è l'**invito**: un provider che finisce un lavoro lungo — un
-job, una risposta dalla rete, un calcolo — emette
+La terza strada è l'**invito**: un provider che finisce un lavoro lungo emette
 `Event::ViewInvalidated { view, instance }`. È un evento e non una capacità
 `invalidate_view` per la regola della
 [decisione 0013](../decisions/0013-elenco-delle-capacita.md): *una capacità è ciò
@@ -225,29 +214,29 @@ informare è un evento*. `instance` assente = tutte le istanze. Il **freno** è 
 chi disegna: venti inviti in un giro sono un ridisegno, e la finestra è un
 microtask.
 
-Cosa dichiarano le quattro view ufficiali: i backlink solo `Document` (i
-backlink di una nota sono gli stessi da ogni punto di essa), l'outline
+Cosa dichiarano le quattro view ufficiali: i backlink solo `Document` (i backlink
+di una nota sono gli stessi da ogni punto di essa), l'outline
 `Document + Selection` (segna la sezione in cui sta il cursore), le statistiche
 tutto (contano la selezione e cambiano faccia in lettura), il pannello tag
 **niente** — la distribuzione dei tag del vault è la stessa da qualunque nota la
-si guardi, ed è il caso che la maschera esiste per servire.
+si guardi.
 
 ## La regola dell'escape hatch — e il confine di fiducia
 
 `Html` e `WebView` sono escape hatch, da **usare con parsimonia**:
 
 - **`Html`** — un frammento già renderizzato dal core (es. l'anteprima HTML di un
-  backlink prodotta dal `FormatProvider`). Non è codice del plugin, è output del
-  core reinserito nell'albero. Passa **comunque** dal punto unico di
-  sanitizzazione (`ui/sanitize.ts`, §3.6): i due presidi rispondono a due domande
-  diverse — il kernel dice *chi* può mandare markup, il sanitizer *quale* markup
-  entra nella webview — e il codice fidato non è codice infallibile.
+  backlink). Non è codice del plugin, è output del core reinserito nell'albero.
+  Passa **comunque** dal punto unico di sanitizzazione (`ui/sanitize.ts`, §3.6):
+  i due presidi rispondono a due domande diverse — il kernel dice *chi* può
+  mandare markup, il sanitizer *quale* markup entra nella webview — e il codice
+  fidato non è codice infallibile.
 - **`WebView`** — iframe isolato (`sandbox="allow-scripts"`). È l'unico punto in
-  cui gira codice arbitrario del plugin. Regola: **si usa solo quando la resa
-  dichiarativa non basta davvero** e il contenuto richiede un canvas/DOM proprio.
+  cui gira codice arbitrario del plugin. Si usa solo quando la resa dichiarativa
+  non basta davvero e il contenuto richiede un canvas/DOM proprio.
 
-**Confine di fiducia (deciso).** `Html` e `WebView` iniettano contenuto attivo
-nella webview principale, che parla con l'IPC Tauri a pieni privilegi: un plugin
+**Confine di fiducia.** `Html` e `WebView` iniettano contenuto attivo nella
+webview principale, che parla con l'IPC Tauri a pieni privilegi: un plugin
 sandboxato che potesse emetterle scavalcherebbe l'intera sandbox *via UI* —
 memoria isolata ma `<script>` iniettato nel core. Quindi:
 
@@ -255,18 +244,16 @@ memoria isolata ma `<script>` iniettato nel core. Quindi:
 - l'host che riceve un albero da un provider **non fidato** lo rifiuta con
   `UiNode::validate_untrusted()` (in `fubmd-abi`, con test): `PermissionDenied`
   se `Html`/`WebView` compaiono ovunque nell'albero. Il punto di enforcement è
-  **uno** ed esiste già: `Workspace::render_view` e `Workspace::view_action`,
-  dove i provider si registrano con il proprio grado di fiducia
+  **uno**: `Workspace::render_view` e `Workspace::view_action`, dove i provider
+  si registrano col proprio grado di fiducia
   (`register_view_provider(id, Trust, provider)`). Vale anche per l'albero che
-  torna dentro un `ViewUpdate::Replace`, cioè in risposta a un click e non al
-  rendering — un controllo fatto solo su `render_view` sarebbe aggirabile in un
-  gesto. Oggi nessun provider non fidato esiste e la validazione è un no-op: il
-  varco esiste *prima* del primo, perché aggiungerlo dopo vorrebbe dire cercarlo
-  fra N chiamanti (stesso principio del "un solo punto" di `HostApi`; test in
-  `crates/fubmd-kernel/tests/view_trust.rs`);
+  torna dentro un `ViewUpdate::Replace`, cioè in risposta a un click — un
+  controllo fatto solo su `render_view` sarebbe aggirabile in un gesto. Oggi
+  nessun provider non fidato esiste e la validazione è un no-op: il varco esiste
+  *prima* del primo (test in `crates/fubmd-kernel/tests/view_trust.rs`);
 - `WebView` tornerà disponibile ai plugin solo quando esisteranno una **asset
-  story** (da dove viene `url`? asset del plugin serviti dall'host, non URL
-  arbitrari) e una **CSP** dedicate — da progettare a M5, non prima.
+  story** (asset del plugin serviti dall'host, non URL arbitrari) e una **CSP**
+  dedicate — da progettare a M5.
 
 ## L'HTML entra da un punto solo
 
@@ -274,16 +261,16 @@ Ogni frammento di HTML che finisce nella webview passa da
 `frontend/src/ui/sanitize.ts` (§3.6): `UiNode::Html`, l'anteprima del documento,
 il contenuto di un embed. Prima erano tre punti e nessuno sapeva degli altri.
 
-Il sanitizer restituisce un `DocumentFragment` e non una stringa **di
-proposito**: una stringa ripulita che il chiamante rimetta in `innerHTML` viene
-parsata due volte, e la doppia parsatura è la classe di difetti che i sanitizer
-pagano più cara. La **politica** — quale tag, quale attributo, quale URL — è un
-pugno di funzioni pure sotto test; il cammino sul DOM no, perché questa shell non
-ha un ambiente DOM nei test (§17.2).
+Il sanitizer restituisce un `DocumentFragment` e non una stringa **di proposito**:
+una stringa ripulita che il chiamante rimetta in `innerHTML` viene parsata due
+volte, e la doppia parsatura è la classe di difetti che i sanitizer pagano più
+cara. La **politica** — quale tag, quale attributo, quale URL — è un pugno di
+funzioni pure sotto test; il cammino sul DOM no, perché questa shell non ha un
+ambiente DOM nei test (§17.2).
 
-Due regole che vale la pena ricordare, perché non sono simmetriche:
+Due regole che non sono simmetriche:
 
-- un **link** è navigazione e un `https://` esterno passa: è l'utente a decidere
+- un **link** è navigazione, e un `https://` esterno passa: è l'utente a decidere
   se seguirlo (e riceve `rel="noopener noreferrer"`);
 - una **risorsa** (`src`) è caricamento: parte da sola e dice a chi la serve che
   quella nota è aperta, quindi il remoto è bloccato di default (5.3, 23.2).
@@ -295,7 +282,7 @@ DOM, la CSP *cosa può fare* una volta entrato.
 
 `FormatProvider::render_html` è una funzione **pura per-documento**: non ha
 `HostApi` e non può leggere altri documenti. Un embed `![[Page#Heading]]` quindi
-**non viene risolto dal provider**: viene emesso come placeholder
+non viene risolto dal provider: esce come placeholder
 
 ```html
 <div class="embed" data-embed-page="Page" data-embed-heading="Heading">…</div>
@@ -310,68 +297,56 @@ e la composizione avviene fuori:
    l'HTML, ricorsivamente; tiene la catena dei documenti aperti per spezzare i
    **cicli** (`![[A]]` dentro A) e applica la **profondità massima** (5).
 
-Così il provider resta puro (regola d'oro intatta), il kernel resta l'unico che
-conosce la topologia del vault, e il frontend — che già risolve la navigazione
-dei wikilink via data-attribute — fa lo stesso per il contenuto.
+Così il provider resta puro, il kernel resta l'unico che conosce la topologia del
+vault, e il frontend fa per il contenuto quel che già fa per la navigazione dei
+wikilink.
 
 Caso guida per M2: la **graph view** ad alte prestazioni (force-directed su
-Canvas/WebGL) **non** passa da `UiNode`. Il `ViewProvider` del grafo espone i dati
-(nodi/archi) e il frontend possiede un componente canvas dedicato; l'escape hatch
-`WebView` resta per plugin di terzi che vogliano una propria superficie di disegno.
-Vedi la sezione "Graph view" in [M2](../milestones/M2-search-graph.md).
+Canvas/WebGL) **non** passa da `UiNode`. Il `ViewProvider` del grafo espone i
+dati (nodi/archi) e il frontend possiede un componente canvas dedicato. Vedi la
+sezione "Graph view" in [M2](../milestones/M2-search-graph.md).
 
 **Asterisco di onestà sul dogfooding.** La graph view è quindi una superficie
-*privilegiata*: componente frontend + canale IPC dedicato, non percorribile da
-un plugin di terzi finché la `WebView` non ha asset story e CSP (M5). Il
-principio "se il protocollo basta alle feature ufficiali, basta ai plugin" vale
-per le superfici **dichiarative** (liste, pannelli, form); per i canvas ad alte
-prestazioni il claim "le feature native sono di fatto plugin" va letto con
-questo limite dichiarato — finché `WebView` non apre ai terzi, un plugin non
-può costruire una graph view alternativa.
+*privilegiata*: componente frontend + canale IPC dedicato, non percorribile da un
+plugin di terzi finché la `WebView` non ha asset story e CSP (M5). Il principio
+«se il protocollo basta alle feature ufficiali, basta ai plugin» vale per le
+superfici **dichiarative**.
 
 ## Dogfooding: le quattro view ufficiali
 
-Sono la strada che percorrerà un plugin di terzi: se il protocollo è
-insufficiente per le feature ufficiali, lo è anche per i plugin — per questo lo
-si tiene "affamato" e lo si estende solo su necessità reale. Ognuna esercita una
-parte diversa, ed è così che si è scoperto se regge:
+Sono la strada che percorrerà un plugin di terzi, e per questo il protocollo si
+tiene "affamato". Ognuna esercita una parte diversa:
 
 - **backlink** (`backlinks.rs`) — il payload al posto della concatenazione
   nell'id, e la **chiave** su ogni riga (il `DocId` sorgente);
 - **outline** (`outline.rs`) — un `Tree` vero. Prima la gerarchia degli heading
   si vedeva rientrando il titolo con uno spazio EM: la struttura di un documento
   attraversava il confine come *spaziatura*. E «figlio» è *di livello maggiore*,
-  non *di livello esattamente uno in più* — una nota che salta un livello non
-  deve perdere heading;
+  non *di livello esattamente uno in più*;
 - **tag** (`tags.rs`) — un **filtro**: un campo di testo il cui contenuto
   sopravvive fra due render, cioè il collaudo dello stato su `on_action` e del
   riconciliatore insieme;
-- **statistiche** (`stats.rs`) — il primo cliente di una superficie nuova, la
-  barra di stato.
+- **statistiche** (`stats.rs`) — il primo cliente della barra di stato.
 
 ## Evoluzione prevista
 
-- **M2** — nuove view (`ViewProvider`): outline panel, tag panel; nuovi `UiNode`
-  solo se una di queste li richiede (candidati: input di ricerca, tree-node).
-- **Fatto (decisione 0016)** — i nodi di input, le superfici, le istanze, lo
-  stato su `on_action`, il «non ancora», i metadati della `ViewSpec`, il payload
-  delle azioni e la chiave col riconciliatore. Il vincolo che questa sezione
-  dichiarava — «un albero con input non può perdere lo stato locale a ogni
-  update» — è mantenuto così: la chiave sta **sul nodo** (non un `id` a parte),
-  `mountTree` riconcilia invece di ricostruire, e un campo che ha il focus non
-  si sovrascrive col valore del provider.
-- **Fatto (decisione 0017)** — il protocollo dichiarativo **arriva ai blocchi
-  custom** e non solo alle view: `render_preview` restituisce un
-  `RenderedDocument { html, parts }`, l'HTML porta un buco `data-ui-slot="N"` e la
-  shell ci monta la parte con lo stesso `mountTree`. È così che il blocco di un
-  plugin arriva a schermo **senza una riga in questo bundle**, ed è la terza delle
-  tre opzioni del §3.3 (l'iframe sandboxato col protocollo di messaggi resta la
-  strada del widget vero, e va a M5 con l'asset story di `WebView`).
+- **Fatto ([0016](../decisions/0016-cosa-e-una-view.md))** — i nodi di input, le
+  superfici, le istanze, lo stato su `on_action`, il «non ancora», i metadati
+  della `ViewSpec`, il payload delle azioni e la chiave col riconciliatore. Il
+  vincolo dichiarato — «un albero con input non può perdere lo stato locale a
+  ogni update» — è mantenuto così: la chiave sta **sul nodo**, `mountTree`
+  riconcilia invece di ricostruire, e un campo che ha il focus non si sovrascrive
+  col valore del provider.
+- **Fatto ([0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md))**
+  — il protocollo dichiarativo **arriva ai blocchi custom** e non solo alle view:
+  `render_preview` restituisce un `RenderedDocument { html, parts }`, l'HTML
+  porta un buco `data-ui-slot="N"` e la shell ci monta la parte con lo stesso
+  `mountTree`. Così il blocco di un plugin arriva a schermo **senza una riga in
+  questo bundle** (l'iframe sandboxato resta la strada del widget vero, a M5).
 - **Resta aperto** — la virtualizzazione delle liste lunghe
   ([§2.9](../roadmap/02-cosa-e-una-view.md)) e il ramo «la shell conosce `ns`» di
   `Custom`. Il primo cliente è arrivato — il diagramma, `ns: "fubmd:diagram"` — e
   ha mostrato che quel ramo **ancora non serve**: il `fallback` dichiarativo è la
-  resa giusta finché non c'è un motore da invocare, e costruire il registro adesso
-  sarebbe costruirlo per un cliente che non lo usa.
-- Ogni nuovo `UiNode` deve restare esprimibile in WIT (vedi la tabella in
+  resa giusta finché non c'è un motore da invocare.
+- Ogni nuovo `UiNode` deve restare esprimibile in WIT (tabella in
   [traits.md](traits.md)).
