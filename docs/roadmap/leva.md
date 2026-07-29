@@ -222,3 +222,68 @@ di [strozzature.md](strozzature.md) che diceva «nessun `^block-id`» era falsa 
 undici verbali, e nessuno l'aveva riletta. Un indice inverso invecchia come tutto
 il resto — con l'aggravante che è il posto dove si va a cercare *se una cosa
 manca*, cioè quello in cui una riga vecchia non allunga il lavoro: lo dirotta.
+
+## Due voci che stanno qui e restano P2
+
+La **seconda verifica** — quella che ha aperto la
+[seduta 22](22-cosa-sa-dire-un-abbonamento.md) — ha confermato la lezione qui
+sopra su scala più grande: altre **tre** righe di
+[strozzature.md](strozzature.md) erano morte da tempo (le view istanziabili dalla
+[0016](../decisions/0016-cosa-e-una-view.md), l'origine degli eventi scritta due
+volte e barrata una sola, la grana dell'abbonamento dalla
+[0033](../decisions/0033-la-grana-di-un-abbonamento.md)), e a trovarle è stato
+qualcuno che quelle righe non le aveva mai lette. Un indice inverso non lo
+rilegge chi lo ha scritto.
+
+Ma la parte che appartiene a **questa** pagina è un'altra, ed è il modo in cui
+quella lettura si è sbagliata: chiedeva di promuovere la
+[§15.1](15-il-disco.md#151-astrazione-sullo-storage) e la
+[§15.2](15-il-disco.md#152-durabilità-e-recovery) a P0 perché «sono il pavimento
+su cui poggia un capitolo intero e mezzo». La premessa è giusta; la conclusione
+confonde i due assi che questa pagina esiste per tenere separati. **La leva non è
+la scadenza.** P0 vuol dire *scade col freeze*, e nessuna delle due scade: la
+§15.1 è un `trait VaultStorage` interno al kernel e la §15.2 è temp+rename+fsync,
+nessuna delle due è una firma del contratto. Che la disciplina avesse già
+funzionato lo dimostra la seduta 15 stessa: la sua **unica metà di firma** era la
+§15.4 — dove si dichiara la classe di un dato persistito — ed era P0, ed è stata
+chiusa dalla [0048](../decisions/0048-una-radice-sola.md) **prima** del freeze,
+lasciando indietro solo l'implementazione.
+
+Detto questo, la premessa merita di stare scritta, ed è questo il posto:
+
+**§15.1 (astrazione sullo storage)** rende **inesprimibile**, non stretta, la
+cifratura at-rest — che è il capitolo 23.1 quasi per intero: per-note, per-folder,
+encrypted fields, encrypted cache, encrypted thumbnails, indice di ricerca
+cifrato. Il motivo per cui non può essere un plugin non è che manchi un hook sul
+VFS: è che la stratificazione funziona solo se la cifratura sta **sotto**
+`data_*` e `vault_*`, dove nessun cliente la vede. Un `VaultStorage` che cifra
+non chiede una riga a nessuno; un plugin di cifratura farebbe attraversare il
+confine a ogni byte del vault due volte, e l'indice di ricerca — che persiste
+attraverso lo spazio dati come chiunque altro — resterebbe in chiaro comunque.
+Accanto le stanno 18.1 (sync), 26.3 (PWA su OPFS), 3.1 (vault read-only e su
+share di rete) e 2.3 (drive rimovibili): sono cinque famiglie che chiedono
+**cinque supporti diversi** allo stesso identico posto.
+
+E c'è un dettaglio che vale come criterio: **il «secure delete» del 23.1 è core
+per costruzione del modello di permessi di questo progetto**. Cancellare davvero
+una nota vuol dire epurarla dal cestino, dagli snapshot del versioning,
+dall'indice e dalle thumbnail — e lo spazio dati di ogni componente è privato e
+assegnato dall'host ([0021](../decisions/0021-il-confine.md)), con i tombstone
+del versioning che stanno **fuori** da `doc/` per regola scritta
+([0044](../decisions/0044-lo-stato-per-documento.md)), cioè apposta perché
+sopravvivano al documento. Un plugin «secure delete» non può raggiungere quegli
+snapshot nemmeno volendo. O lo fa il core, o è una promessa con sopra una UI.
+
+**§15.2 (durabilità e recovery)** rende inesprimibile una promessa diversa:
+l'atomicità di scritture che non si eseguono. Il 24.2 chiede atomic writes,
+journaling, crash recovery, autosave e corruption detection, e nessuna delle
+cinque può essere un componente perché la correttezza di **tutti gli altri**
+poggia sopra. Il caso più netto non sta nemmeno nel 24: è il 22.4, che promette
+al centro di comando LLM la «transazione atomica per operazione batch» e il
+«rollback completo». Quel capitolo è per il resto un cliente del registro dei
+comandi e sta benissimo come plugin — ma quelle due righe le può mantenere solo
+il journal, perché il lotto della [0011](../decisions/0011-il-lotto.md) coalizza
+gli eventi e **non** è una transazione, e sta scritto nel suo stesso verbale.
+
+Entrambe restano **P2**, e le due cose non sono in contraddizione: è esattamente
+la frase con cui questa pagina si apre.

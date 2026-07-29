@@ -1,6 +1,6 @@
 # roadmap/
 
-Una **seduta** per file, numerate da `01` a `21`. Una seduta è un insieme di
+Una **seduta** per file, numerate da `01` a `22`. Una seduta è un insieme di
 voci che conviene decidere in una volta sola, perché sono la stessa domanda
 vista da lati diversi e deciderle separate significa deciderle male: ogni file
 ha in testa la ragione per cui quelle voci stanno insieme.

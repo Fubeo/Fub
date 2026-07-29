@@ -5,16 +5,18 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 110 voci: novantanove da sette giri sulla stessa domanda, una da una
+Sono uscite 113 voci: novantanove da sette giri sulla stessa domanda, una da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md)), nove da una
 **decisione di prodotto** — la [0025](decisions/0025-la-ricerca-predefinita.md),
 che ha stabilito che la ricerca di FubMD è built-in e di classe *omnisearch*
-([seduta 21](roadmap/21-la-ricerca-predefinita.md)) — e una da una **verifica**
-(la §21.10, uscita dal controllo contro il codice di un'affermazione arrivata da
-fuori). Settantasette sono chiuse e i loro verbali stanno in
-[decisions/](decisions/README.md); le altre trentatré sono qui, e questo file è
-il loro **indice**.
+([seduta 21](roadmap/21-la-ricerca-predefinita.md)) — e quattro da due
+**verifiche**: la §21.10 dal controllo contro il codice di un'affermazione
+arrivata da fuori, e le §22.1–§22.3 dallo stesso controllo su una lettura
+esterna dell'intero [FEATURES.md](FEATURES.md)
+([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)). Settantasette sono
+chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
+trentasei sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -117,10 +119,11 @@ che scade.
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | le voci ancora aperte dei quattro giri di audit | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 4 | 1 |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le quattro di firma sono state decise ([0049](decisions/0049-una-posizione-dentro-un-documento.md), [0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)); quel che resta è **dove quel comportamento si vede**, cosa lo rende regolabile, cosa gli darà da mangiare, e la sola misura che dice se è veloce | 6 | — |
+| **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | tre lati della stessa dichiarazione di interesse — *quando*, *cosa è cambiato*, *per quale esemplare* — e decise separate darebbero tre estensioni della stessa maschera disegnate da tre parti; nate da una **verifica**, e nessuna scade col freeze | 3 | — |
 
 ## Le voci
 
-Trentasette. Il numero è quello con cui le nomina il resto del repo.
+Trentasei. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -180,6 +183,9 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§21.7** | [Ricerche recenti, e la nota che la ricerca non ha trovato](roadmap/21-la-ricerca-predefinita.md#217-ricerche-recenti-e-la-nota-che-la-ricerca-non-ha-trovato) | 21. La ricerca predefinita | shell | **P2** |
 | **§21.8** | [Il testo che sta dentro gli allegati](roadmap/21-la-ricerca-predefinita.md#218-il-testo-che-sta-dentro-gli-allegati) | 21. La ricerca predefinita | kernel | **P2** |
 | **§21.9** | [Una query costa 23 ms su duemila note, e nessuno sa perché](roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché) | 21. La ricerca predefinita | kernel | **P1** |
+| **§22.1** | [Un abbonamento non sa dire quando](roadmap/22-cosa-sa-dire-un-abbonamento.md#221-un-abbonamento-non-sa-dire-quando) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
+| **§22.2** | [Un evento dice quale documento, non cosa è cambiato](roadmap/22-cosa-sa-dire-un-abbonamento.md#222-un-evento-dice-quale-documento-non-cosa-è-cambiato) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
+| **§22.3** | [La maschera di ridisegno è della view, non dell'esemplare](roadmap/22-cosa-sa-dire-un-abbonamento.md#223-la-maschera-di-ridisegno-è-della-view-non-dellesemplare) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
 
 ## Gli allegati
 
