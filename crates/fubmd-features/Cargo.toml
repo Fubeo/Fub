@@ -21,5 +21,12 @@ tantivy = "0.26"
 # Il kernel serve ai soli test end-to-end, che è la loro ragione d'essere:
 # provano le feature contro il kernel VERO, non contro un doppio.
 fubmd-kernel = { workspace = true }
+# `MemoryHost` — il doppio dell'host — stava qui dentro, privato e `#[cfg(test)]`.
+# Adesso è `fubmd_sdk::testing`, dov'è raggiungibile da chiunque scriva un
+# provider (§16.1, decisione 0054). Resta una dev-dependency: la libreria non lo
+# usa, lo usano i suoi test.
+fubmd-sdk = { workspace = true }
+# Il banco del lato host, per i test end-to-end che montano il kernel (§16.2).
+fubmd-testkit = { workspace = true }
 fubmd-format-markdown.workspace = true
 tempfile = "3.27.0"

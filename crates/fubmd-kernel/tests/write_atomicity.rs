@@ -3,14 +3,13 @@
 //! il disco avanti rispetto a modelli/grafo/indici — né un file nuovo, né una
 //! sovrascrittura, con il chiamante che riceve `Err` pur avendo scritto.
 
-use camino::Utf8PathBuf;
 use fubmd_abi::error::FormatError;
 use fubmd_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::FormatProvider;
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_testkit::{Banco, Montato};
 
 /// Un provider che rifiuta i sorgenti contenenti `BOOM`: il markdown vero non
 /// fallisce mai il parse, ma il contratto lo permette — e l'atomicità di
@@ -53,22 +52,16 @@ impl FormatProvider for FallibleProvider {
     }
 }
 
-fn vault() -> (tempfile::TempDir, Workspace) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let mut registry = FormatRegistry::new();
-    registry
-        .register(Box::new(FallibleProvider))
-        .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
-    ws.reindex().expect("reindex vault vuoto");
-    (dir, ws)
+fn vault() -> Montato {
+    Banco::nuovo()
+        .con_formato(Box::new(FallibleProvider))
+        .monta()
 }
 
 #[test]
 fn a_failed_parse_writes_nothing_to_disk() {
-    let (dir, mut ws) = vault();
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
 
     let err = ws.write_document(&DocId::new("nuova.fal"), "BOOM");
     assert!(
@@ -85,7 +78,7 @@ fn a_failed_parse_writes_nothing_to_disk() {
 
 #[test]
 fn a_failed_overwrite_leaves_the_old_content_everywhere() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     ws.write_document(&DocId::new("nota.fal"), "prima versione")
         .unwrap();
 

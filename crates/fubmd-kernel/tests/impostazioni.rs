@@ -16,12 +16,7 @@ use fubmd_abi::settings::{SettingKind, SettingSource, SettingSpec, SettingValue}
 use fubmd_abi::traits::{IndexQuery, IndexResult, PluginManifest};
 use fubmd_abi::{Event, PluginError};
 use fubmd_kernel::{FormatRegistry, Trust, Workspace};
-
-fn vault() -> (tempfile::TempDir, Workspace) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    (dir, Workspace::new(&root, FormatRegistry::new()))
-}
+use fubmd_testkit::Banco;
 
 /// Un manifest di core che dichiara delle impostazioni.
 fn con_impostazioni(id: &str, settings: Vec<SettingSpec>) -> PluginManifest {
@@ -43,7 +38,7 @@ fn intoccabile() -> SettingSpec {
 
 #[test]
 fn una_chiave_esiste_perche_un_manifest_la_dichiara() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     assert!(
         ws.setting("versioning.enabled").is_err(),
         "prima della dichiarazione la chiave non esiste"
@@ -66,7 +61,7 @@ fn una_chiave_esiste_perche_un_manifest_la_dichiara() {
 /// per modo di dire: chi le dichiara deve poterle nominare.
 #[test]
 fn una_chiave_fuori_dal_proprio_namespace_non_si_dichiara() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     let manifest = PluginManifest::new("com.acme.tasks", "Tasks")
         .configuring(vec![SettingSpec::toggle("versioning.enabled", "V", false)]);
 
@@ -86,7 +81,7 @@ fn una_chiave_fuori_dal_proprio_namespace_non_si_dichiara() {
 
 #[test]
 fn un_plugin_legge_le_impostazioni_dall_host_come_leggerebbe_il_resto() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         con_impostazioni("fubmd.versioning", vec![interruttore()]),
         Trust::Core,
@@ -110,7 +105,7 @@ fn un_plugin_legge_le_impostazioni_dall_host_come_leggerebbe_il_resto() {
 /// programma**. Due cancelli, e nessuno dei due basta da solo.
 #[test]
 fn un_programma_scrive_solo_le_chiavi_che_si_sono_dichiarate_scrivibili() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         con_impostazioni("fubmd.versioning", vec![interruttore(), intoccabile()]),
         Trust::Core,
@@ -143,7 +138,7 @@ fn un_programma_scrive_solo_le_chiavi_che_si_sono_dichiarate_scrivibili() {
 /// L'altro cancello: il permesso del manifest (§7.3).
 #[test]
 fn senza_il_permesso_non_si_scrive_nemmeno_una_chiave_scrivibile() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     // Un plugin di terzi che dichiara la chiave nel proprio namespace, e che
     // **non** dichiara `fubmd:write-settings`.
     let manifest =
@@ -174,7 +169,7 @@ fn senza_il_permesso_non_si_scrive_nemmeno_una_chiave_scrivibile() {
 
 #[test]
 fn il_canale_dati_risponde_con_schema_valore_e_provenienza() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         con_impostazioni("fubmd.versioning", vec![interruttore()]),
         Trust::Core,
@@ -246,7 +241,7 @@ fn il_canale_dati_risponde_con_schema_valore_e_provenienza() {
 
 #[test]
 fn cambiare_un_impostazione_e_un_fatto_che_si_annuncia() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         con_impostazioni("fubmd.versioning", vec![interruttore()]),
         Trust::Core,
@@ -273,7 +268,7 @@ fn cambiare_un_impostazione_e_un_fatto_che_si_annuncia() {
 
 #[test]
 fn un_plugin_che_smette_si_porta_via_lo_schema_e_non_il_valore() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         con_impostazioni("fubmd.versioning", vec![interruttore()]),
         Trust::Core,

@@ -20,7 +20,6 @@
 
 use std::sync::{Arc, Mutex};
 
-use camino::Utf8PathBuf;
 use fubmd_abi::error::PluginError;
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::options::permission;
@@ -30,16 +29,8 @@ use fubmd_abi::traits::{
     ViewSurface,
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fubmd_kernel::{
-    FormatRegistry, PluginRegistry, RegistrationKind, RegistryError, Trust, Workspace,
-};
-
-fn vault() -> (tempfile::TempDir, Workspace) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let ws = Workspace::new(&root, FormatRegistry::new());
-    (dir, ws)
-}
+use fubmd_kernel::{PluginRegistry, RegistrationKind, RegistryError, Trust, Workspace};
+use fubmd_testkit::Banco;
 
 /// Una view che non fa niente: serve a **nominare** qualcosa.
 struct Vista(&'static str);
@@ -156,7 +147,7 @@ impl IndexProvider for Indice {
 
 #[test]
 fn a_plugin_without_write_vault_cannot_write_even_though_the_host_could() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     // Legge e basta: è ciò che il manifest dichiara, ed è la prima volta che
     // dichiararlo cambia qualcosa.
     ws.register_plugin(
@@ -193,7 +184,7 @@ fn a_plugin_without_write_vault_cannot_write_even_though_the_host_could() {
 
 #[test]
 fn a_revoked_plugin_gets_nothing_at_all_not_even_reading() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     // Permessi pieni **e** revocato: `Trust::Revoked` non è un grado di fiducia
     // più basso, è l'assenza del permesso di essere eseguiti.
     ws.register_plugin(
@@ -215,7 +206,7 @@ fn a_revoked_plugin_gets_nothing_at_all_not_even_reading() {
 
 #[test]
 fn an_undeclared_id_is_refused_and_not_granted_in_blank() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     // Nessuna dichiarazione. Prima questo id avrebbe ricevuto l'host intero:
     // `KernelHost` portava una stringa e nient'altro, quindi non aveva modo di
     // negare niente a nessuno.
@@ -235,7 +226,7 @@ fn the_two_policies_compose_and_the_first_reason_is_the_one_read() {
     // La combinatoria del §7.3, senza un tipo per combinazione: un comando
     // simulato di un plugin senza permessi ha **due** ragioni per essere
     // negato, e chi legge ne vede una — quella che si applica per prima.
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         PluginManifest::new("terzi.muto", "Muto").granting(PluginPermissions::default()),
         Trust::Community,
@@ -252,7 +243,7 @@ fn the_two_policies_compose_and_the_first_reason_is_the_one_read() {
 
 #[test]
 fn the_capabilities_that_cannot_say_no_give_the_null_answer() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     // Serve una politica che neghi **tutto**, perché l'orologio e il contesto
     // non hanno un permesso che li governi: sono ciò che l'host sa e il guest
     // no, non una risorsa del vault. Chi li perde è chi non gira affatto.
@@ -281,7 +272,7 @@ fn the_capabilities_that_cannot_say_no_give_the_null_answer() {
 
 #[test]
 fn a_view_id_already_taken_is_refused_and_the_loser_does_not_register() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_core_feature("fubmd.uno", "Uno").expect("uno");
     ws.register_core_feature("fubmd.due", "Due").expect("due");
 
@@ -313,7 +304,7 @@ fn a_view_id_already_taken_is_refused_and_the_loser_does_not_register() {
 
 #[test]
 fn a_third_party_cannot_name_bare_and_the_message_says_what_to_write() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         PluginManifest::new("com.acme.tasks", "Tasks").granting(PluginPermissions::core()),
         Trust::Community,
@@ -336,7 +327,7 @@ fn a_third_party_cannot_name_bare_and_the_message_says_what_to_write() {
 
 #[test]
 fn replacing_is_asked_for_by_name_and_leaves_one_owner() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_core_feature("fubmd.uno", "Uno").expect("uno");
     ws.register_core_feature("fubmd.due", "Due").expect("due");
     ws.register_view_provider("fubmd.uno", Box::new(Vista("pannello")))
@@ -363,7 +354,7 @@ fn replacing_is_asked_for_by_name_and_leaves_one_owner() {
 
 #[test]
 fn a_refused_replacement_does_not_take_away_the_one_who_was_there() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_core_feature("fubmd.backlinks", "Backlinks")
         .expect("il core");
     ws.register_view_provider("fubmd.backlinks", Box::new(Vista("backlinks")))
@@ -415,7 +406,7 @@ fn a_refused_replacement_does_not_take_away_the_one_who_was_there() {
 
 #[test]
 fn a_refused_index_replacement_does_not_leave_the_route_without_an_owner() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_core_feature("fubmd.tasks", "Tasks")
         .expect("il core");
     ws.register_index_provider("fubmd.tasks", Box::new(Indice("fubmd:tasks")))
@@ -450,7 +441,7 @@ fn a_refused_index_replacement_does_not_leave_the_route_without_an_owner() {
 
 #[test]
 fn changing_ones_mind_does_not_get_around_the_rule_of_names() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_core_feature("fubmd.uno", "Uno").expect("uno");
     ws.register_view_provider("fubmd.uno", Box::new(Vista("pannello")))
         .expect("il core");
@@ -499,7 +490,7 @@ fn changing_ones_mind_does_not_get_around_the_rule_of_names() {
 
 #[test]
 fn the_inventory_follows_a_provider_that_changes_its_mind() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_core_feature("fubmd.uno", "Uno").expect("uno");
     let provider = VistaMutevole::che_offre(&["prima"]);
     ws.register_view_provider("fubmd.uno", Box::new(provider.clone()))
@@ -569,7 +560,7 @@ impl ServiceProvider for Contatore {
 
 #[test]
 fn a_plugin_calls_another_and_gets_an_answer_back() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         PluginManifest::core("com.acme.db", "DB").providing(&["com.acme.db"]),
         Trust::Core,
@@ -603,7 +594,7 @@ fn a_plugin_calls_another_and_gets_an_answer_back() {
 
 #[test]
 fn a_service_nobody_offers_is_unserved_not_an_internal_error() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_core_feature("fubmd.solo", "Solo")
         .expect("solo");
 
@@ -620,7 +611,7 @@ fn a_service_nobody_offers_is_unserved_not_an_internal_error() {
 
 #[test]
 fn a_plugin_whose_requirement_is_missing_is_not_declared_at_all() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     let err = ws
         .register_plugin(
             PluginManifest::core("com.acme.charts", "Charts").requiring(&["com.acme.db"]),
@@ -640,7 +631,7 @@ fn a_plugin_whose_requirement_is_missing_is_not_declared_at_all() {
 
 #[test]
 fn a_service_cannot_be_offered_twice_nor_named_by_someone_else() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         PluginManifest::core("com.acme.db", "DB").providing(&["com.acme.db"]),
         Trust::Core,
@@ -684,7 +675,7 @@ fn a_service_that_calls_itself_is_refused_by_name() {
         }
     }
 
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_plugin(
         PluginManifest::core("com.acme.giro", "Giro").providing(&["com.acme.giro"]),
         Trust::Core,
@@ -710,7 +701,7 @@ fn a_service_that_calls_itself_is_refused_by_name() {
 
 #[test]
 fn the_inventory_says_who_is_active_with_what_and_what_they_registered() {
-    let (_dir, mut ws) = vault();
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
     ws.register_core_feature("fubmd.pannelli", "Pannelli")
         .expect("core");
     ws.register_view_provider("fubmd.pannelli", Box::new(Vista("pannello")))

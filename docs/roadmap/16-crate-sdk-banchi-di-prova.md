@@ -6,13 +6,27 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): i banchi e i confin
 
 ---
 
-Precedenza dura dal sesto giro: **16.2 prima di 16.3**, o i venti bundle di
-21.2 si portano dietro venti copie del banco di prova. E 16.1 e 16.2 sono due
-banchi **diversi** — l'SDK è il lato *provider* (provare un provider contro il
-contratto), il testkit è il lato *host* (costruire un vault, registrare un
-provider minimo, asserire su cosa è stato emesso) — che non possono stare nello
-stesso crate: `fubmd-kernel` nel grafo dell'SDK violerebbe l'invariante che
-`dependency_invariant.rs` presidia.
+La precedenza dura del sesto giro — **16.2 prima di 16.3**, o i venti bundle di
+21.2 si portano dietro venti copie del banco di prova — è **soddisfatta**: la
+16.2 è chiusa dalla [decisione 0055](../decisions/0055-il-banco-del-lato-host.md),
+e la 16.3 non ha più precondizioni.
+
+Il cappello diceva anche che 16.1 e 16.2 erano due banchi **diversi**, e che non
+potevano stare nello stesso crate perché «`fubmd-kernel` nel grafo dell'SDK
+violerebbe l'invariante che `dependency_invariant.rs` presidia». La conclusione
+regge — le due voci sono chiuse da due verbali, la
+[0054](../decisions/0054-il-banco-del-lato-provider.md) e la
+[0055](../decisions/0055-il-banco-del-lato-host.md) — ma **la ragione era
+falsa**: quel file non nominava `fubmd-sdk` da nessuna parte. L'invariante c'era
+nelle intenzioni e non nel test, e adesso c'è in tutti e due. La ragione vera è
+più stretta di quella che il cappello dava: `fubmd-sdk` è dipendenza **normale**
+di `fubmd-format-markdown` **oggi**, quindi il kernel là dentro non finirebbe nel
+grafo di un futuro guest — finirebbe nella libreria di un provider che esiste.
+
+Ed è il primo caso in cui un cappello di seduta ha dichiarato in anticipo una
+**separazione** invece di un accorpamento: la 0053 aveva inaugurato la forma, e
+queste due mostrano che la stessa forma può concludere all'opposto. Il criterio
+sta nel [README delle decisioni](../decisions/README.md).
 
 La 16.6 va **dopo** la 5.4, o l'allowlist si trova a dire di no a feature che non
 hanno altra strada.
@@ -31,100 +45,16 @@ ci gira dentro: quello che si scrive quattro volte non è il contratto, sono i
 Il settimo giro ha aggiunto la 16.7, che sta qui e non fra i presidi della
 [seduta 17](17-presidi-che-restano.md) perché ciò che le manca è esattamente il
 banco della 16.2: un elenco dei provider ufficiali da cui un test possa
-**iterare** invece di ricopiarlo.
-
-### 16.1 L'SDK come superficie di riuso — oggi è quasi vuoto
-
-*ex §4.6 · presidi · **P1** — il lato **provider***
-
-- [ ] **`fubmd-sdk` contiene un re-export e `scan`**, e il pezzo che conta sta
-      altrove: il `MemoryHost` — l'unico modo di provare un provider **contro il
-      contratto** invece che contro il kernel — è `#[cfg(test)] mod testing`
-      dentro `fubmd-features` (`features/src/lib.rs`). Nessun autore di
-      plugin, e nemmeno un futuro modulo FubSuite in un crate a parte, può
-      usarlo.
-- [ ] **Promuoverlo a `fubmd-sdk::testing`** insieme a ciò che ogni provider
-      riscriverebbe: costruttori di `UiNode`, parsing degli `ActionId`, e una
-      **conformance suite** che verifichi le proprietà che il contratto promette
-      (un `IndexProvider` che non perde documenti fra `on_document_*` e `flush`;
-      un `ViewProvider` che non muta durante `render_view`). È la differenza fra
-      "il contratto è documentato" e "il contratto è verificabile da chi lo
-      implementa".
-- [ ] **Questo è il banco del lato *provider*; il lato *host* è un'altra cosa e
-      sta nel §16.2** — costruire un vault, registrare un provider minimo, far
-      girare un giro di eventi. Non può stare qui: l'SDK è ciò che un guest WASM
-      importa, e `fubmd-kernel` nel suo grafo violerebbe l'invariante che
-      `dependency_invariant.rs` presidia. Sono due crate, non due moduli.
-- [ ] La duplicazione non è ipotetica: **le feature ufficiali costruiscono già
-      lo stesso albero tre volte** — una lista di voci con azione, e un
-      segnaposto per il vuoto (`features/src/backlinks.rs`, `outline.rs`,
-      `tags.rs`). Su tre provider è una convenzione; su venti moduli Suite è un
-      dialetto per modulo. Una delle tre copie è già stata tolta di mezzo dal
-      contratto e non dall'SDK: la codifica dei dati dentro l'`ActionId` — che
-      ognuna aveva reinventato — non esiste più, perché ora l'azione porta un
-      payload ([decisione 0016](../decisions/0016-cosa-e-una-view.md)). È un
-      esempio della regola di questa voce letta al contrario: ciò che il
-      contratto **non** offre viene riscritto da tutti, ed è più economico
-      offrirlo che raccogliere le copie.
-
-*Sblocca:* 27.3 (unit/e2e test utilities, template progetto plugin, type
-definitions, plugin linting), 21.1 (moduli Suite con API condivise).
-
-### 16.2 Il banco di prova del kernel è copiato diciotto volte
-
-*ex §4.12 · presidi · **P1** — il lato **host** — va **prima** della 16.3*
-
-- [ ] **35 helper `vault()`/`workspace()`** negli integration test e **25
-      `impl FormatProvider` giocattolo**, di cui **nove** chiamati letteralmente
-      `PlainProvider` in nove file diversi (`trash.rs`, `invoke_command.rs`,
-      `structural_host.rs`, `provider_reentrancy.rs`, `index_feeding.rs`,
-      `transfer_dispatch.rs`, `disattivazione.rs`, `la_maschera.rs`,
-      `quando_qualcosa_va_storto.rs`). Ogni test che tocca il kernel si
-      costruisce da capo vault temporaneo, registry, provider minimo e
-      asserzioni sugli eventi.
-- [ ] **I numeri di questa voce sono stati ricontati due volte, e le due volte
-      si sono mossi nella direzione che la peggiora.** Al primo giro erano «18
-      helper, 14 provider giocattolo, di cui **tre** `PlainProvider`»; al secondo
-      «16, 15, sei»; oggi sono **35, 25 e nove**. Gli helper sono **raddoppiati**
-      da quando la voce è stata aperta, e i `PlainProvider` **triplicati** — la
-      duplicazione più letterale è, ogni volta, quella cresciuta di più. Il
-      nono è arrivato ieri, con
-      `kernel/tests/quando_qualcosa_va_storto.rs` della
-      [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md): il conteggio
-      è stato falso per **un giorno**, che è il tempo che ci mette adesso. Il
-      titolo dice ancora «diciotto» e resta com'è di proposito: l'ancora è citata
-      dall'[indice](../todo.md) e altrove, e i rimandi ciechi costano più di un
-      numero vecchio in un titolo. È il [§16.7](#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
-      applicato a questo file — **un conteggio tenuto a mano smette di essere
-      vero senza diventare rosso** — e la dimostrazione è che l'unico modo per
-      cui questo se n'è accorto, due volte su due, è che qualcuno l'ha rifatto a
-      mano. Fra il primo ricalcolo e il secondo il conteggio è stato falso per
-      l'intera vita della voce, e in quel tempo la voce è rimasta **P1**: se il
-      moltiplicatore è il criterio (la domanda 4 dell'[indice](../todo.md)), un
-      moltiplicatore raddoppiato in silenzio è una priorità decisa su un numero
-      che non c'è più.
-- [ ] **Il §16.1 promuove `MemoryHost` e la conformance suite: è il lato
-      *provider*.** Manca il lato *host* — costruire un vault, registrare un
-      provider minimo, far girare un giro di eventi e asserire su cosa è stato
-      emesso. Sono due banchi diversi e il §16.1 ne nomina uno solo.
-- [ ] **E non può stare in `fubmd-sdk`**: l'SDK è ciò che un guest WASM importa,
-      e metterci `fubmd-kernel` — foss'anche dietro una cargo feature — mette il
-      kernel nel grafo delle dipendenze di chi per definizione non deve averlo
-      (`dependency_invariant.rs` presidia proprio quello). Serve un crate a sé,
-      `crates/fubmd-testkit`, che dipende da abi **e** kernel ed è
-      dev-dependency di tutti.
-- [ ] **Il moltiplicatore è il §16.3**: un crate per bundle di feature significa
-      che ognuno dei venti moduli di 21.2 si porta dietro la propria copia del
-      banco. Va fatto **prima** di quella divisione, non dopo.
-
-*Sblocca:* 27.3 (unit ed e2e test utilities, template di progetto plugin), 27.4
-(stress test su vault grandi, crash recovery test, upgrade migration test — che
-oggi nessuno scrive perché ognuno costerebbe un banco nuovo), 4.3 (il corpus ha
-bisogno di un posto da cui essere montato).
+**iterare** invece di ricopiarlo. Quel banco adesso **c'è**
+(`crates/fubmd-testkit`), e la [0055](../decisions/0055-il-banco-del-lato-host.md)
+ha scelto dove andrebbe l'inventario senza costruirlo — costruirlo vuol dire
+mettere `fubmd-features` fra le dipendenze del banco, che è una decisione della
+16.7 e non sua. Quindi la 16.7 non è più bloccata: le manca il lavoro, non la
+precondizione.
 
 ### 16.3 Un crate per bundle di feature
 
-*ex §4.7 · presidi · **P1** — dopo la 16.2 · **in due tempi**, e il primo è piccolo*
+*ex §4.7 · presidi · **P1** — la precondizione (la 16.2) è **soddisfatta** · **in due tempi**, e il primo è piccolo*
 
 - [ ] **`fubmd-features` è un crate solo**: tantivy è dipendenza dell'intero
       crate, quindi compilare il pannello outline compila un motore di ricerca.
@@ -250,15 +180,16 @@ bisogno di un posto da cui essere montato).
       una riga in uscita, e **zero file controllati esce rosso** invece di
       stampare «0 rotti». Senza git — fuori da un checkout — si torna alla
       regola di prima e lo si dice in una riga, invece di saltare in silenzio.
-      Oggi: **125 file, 2231 link**, e `VaultProva/` nominata mentre viene
-      saltata. Questa riga diceva «81 file, 1105 link» e poi «122 file, 2155
-      link», ed è la quinta volta in questa sola voce che un numero scritto a
-      mano si è ritrovato falso — stavolta **dopo un giorno**, perché un numero
-      che conta i documenti cambia ogni volta che si scrive un verbale. Il
-      presidio funziona, la **frase che lo descrive** no; e che la si sia dovuta
-      correggere di nuovo scrivendo la
-      [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) è la misura di
-      quanto in fretta invecchia.
+      Oggi: **127 file, 2284 link**, e `VaultProva/` nominata mentre viene
+      saltata. Questa riga diceva «81 file, 1105 link», poi «122 file, 2155
+      link», poi «125 file, 2231 link», ed è la **sesta** volta in questa sola
+      voce che un numero scritto a mano si è ritrovato falso — le ultime due a
+      **un giorno** di distanza l'una dall'altra, perché un numero che conta i
+      documenti cambia ogni volta che si scrive un verbale. Il presidio funziona,
+      la **frase che lo descrive** no; e che la si sia dovuta correggere due giri
+      di fila — con la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) e
+      di nuovo con la [0055](../decisions/0055-il-banco-del-lato-host.md) — è la
+      misura di quanto in fretta invecchia.
 - [x] **Due prove sono arrivate dalla [0053](../decisions/0053-il-contratto-ha-una-sorgente.md), in un posto che era un elenco.**
       Chiudendo il §16.4 si è scoperto che il presidio del contratto era la
       famiglia più grande di elenchi scritti a mano di tutto il repo: 174 voci su
@@ -274,10 +205,15 @@ bisogno di un posto da cui essere montato).
       costruzione dove prima c'erano due elenchi. **Non chiudono questa voce**:
       quelli che la voce nomina — le view ufficiali, le capacità del
       `TriesEverything` — passano dal banco del §16.2 e restano.
-- [ ] **Il minimo, e sta nel banco di prova del §16.2**: un inventario dei
+- [ ] **Il minimo, e sta nel banco di prova del §16.2**, che adesso **esiste**
+      (`crates/fubmd-testkit`, [decisione 0055](../decisions/0055-il-banco-del-lato-host.md)):
+      un inventario dei
       provider ufficiali da cui i test iterino invece di elencarli (un
       `ogni_view_ufficiale()` nel testkit, che chi aggiunge una view aggiorna
-      perché è anche il posto da cui la registra), e per le capacità la stessa
+      perché è anche il posto da cui la registra — la 0055 gli ha scelto il posto
+      e **non** l'ha costruito, perché costruirlo vuol dire mettere
+      `fubmd-features` fra le dipendenze del banco, che è una decisione di questa
+      voce e non di quella), e per le capacità la stessa
       cosa che i tipi hanno già — un `match` esaustivo, o il `Policy` della
       [decisione 0021](../decisions/0021-il-confine.md)
       che rende il rifiuto la posizione di riposo. Il criterio da portare avanti,

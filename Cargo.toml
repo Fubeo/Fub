@@ -8,6 +8,7 @@ members = [
     "crates/fubmd-abi",
     "crates/fubmd-kernel",
     "crates/fubmd-sdk",
+    "crates/fubmd-testkit",
     "crates/fubmd-format-markdown",
     "crates/fubmd-features",
     "crates/fubmd-host",
@@ -40,6 +41,10 @@ camino = { version = "1", features = ["serde1"] }
 fubmd-abi = { path = "crates/fubmd-abi", version = "0.1.0" }
 fubmd-kernel = { path = "crates/fubmd-kernel", version = "0.1.0" }
 fubmd-sdk = { path = "crates/fubmd-sdk", version = "0.1.0" }
+# Il banco del lato host (§16.2). Va **solo** nei `[dev-dependencies]`: ha il
+# kernel fra le mani, e chi lo prendesse come dipendenza normale se lo
+# porterebbe dentro la libreria.
+fubmd-testkit = { path = "crates/fubmd-testkit", version = "0.1.0" }
 fubmd-format-markdown = { path = "crates/fubmd-format-markdown", version = "0.1.0" }
 fubmd-features = { path = "crates/fubmd-features", version = "0.1.0" }
 fubmd-host = { path = "crates/fubmd-host", version = "0.1.0" }

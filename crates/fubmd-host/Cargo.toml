@@ -29,4 +29,6 @@ default = ["notify-watcher"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 
 [dev-dependencies]
+# Il banco del lato host (§16.2).
+fubmd-testkit = { workspace = true }
 tempfile = "3.27.0"

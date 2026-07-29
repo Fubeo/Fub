@@ -2138,12 +2138,12 @@ fn mostra(value: &SettingValue) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::MemoryHost;
     use fubmd_abi::model::{DocId, ListItem};
     use fubmd_abi::session::{Selection, ViewContext};
     use fubmd_abi::settings::SettingSpec;
     use fubmd_abi::text::Strings;
     use fubmd_abi::traits::VaultRead;
+    use fubmd_sdk::testing::MemoryHost;
     use serde_json::json;
 
     fn invoke(

@@ -16,47 +16,12 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
-use fubmd_abi::error::{FormatError, PluginError};
+use fubmd_abi::error::PluginError;
 use fubmd_abi::event::Event;
-use fubmd_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
-};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult};
-use fubmd_abi::FormatProvider;
 use fubmd_kernel::{data_root, FormatRegistry, KernelError, Workspace};
-
-/// Provider minimo: il documento è il suo testo.
-struct PlainProvider;
-
-impl FormatProvider for PlainProvider {
-    fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text("plain", "Testo semplice (test)", &["txt"])
-    }
-
-    fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities::default()
-    }
-
-    fn parse(
-        &self,
-        source: &DocumentSource,
-        ctx: &ParseContext,
-    ) -> Result<DocumentModel, FormatError> {
-        let source = source.text().unwrap_or_default();
-        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
-        model.text = source.to_string();
-        Ok(model)
-    }
-
-    fn render_html(&self, m: &DocumentModel, _o: &RenderOptions) -> Result<String, FormatError> {
-        Ok(m.text.clone())
-    }
-
-    fn serialize(&self, m: &DocumentModel) -> Result<String, FormatError> {
-        Ok(m.text.clone())
-    }
-}
+use fubmd_testkit::TestoDiProva;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Call {
@@ -144,7 +109,7 @@ impl Fixture {
     fn workspace(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
-            .register(Box::new(PlainProvider))
+            .register(TestoDiProva::per_estensione("txt").boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
         // I plugin di prova si dichiarano prima di registrare (§7.3): il

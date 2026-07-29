@@ -110,55 +110,20 @@ fn format_uuid(b: &[u8; 16]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::MemoryHost;
     use std::collections::HashSet;
-    use std::sync::atomic::{AtomicU64, Ordering};
 
-    /// Un host minimo: byte che avanzano, orologio che si può muovere. Non è
-    /// `MemoryHost` perché quello sta in `fubmd-features`, che dipende da questo
-    /// crate — e l'SDK non può dipendere da chi lo usa.
-    struct Banco {
-        seq: AtomicU64,
-        now: AtomicU64,
-        muto: bool,
-    }
-
-    impl Banco {
-        fn new() -> Self {
-            Banco {
-                seq: AtomicU64::new(0),
-                now: AtomicU64::new(1_700_000_000_000),
-                muto: false,
-            }
-        }
-    }
-
-    impl fubmd_abi::HostEnv for Banco {
-        fn now_unix_millis(&self) -> u64 {
-            self.now.load(Ordering::Relaxed)
-        }
-        fn user_locale(&self) -> fubmd_abi::Locale {
-            fubmd_abi::Locale::default()
-        }
-        fn random_bytes(&self, n: u32) -> Vec<u8> {
-            if self.muto {
-                return Vec::new();
-            }
-            // Il contatore in little-endian nei primi otto byte, l'indice negli
-            // altri: deterministico e mai ripetuto, che è ciò che serve per
-            // provare che gli id non collidono.
-            let base = self.seq.fetch_add(1, Ordering::Relaxed).to_le_bytes();
-            (0..n as usize)
-                .map(|i| base.get(i).copied().unwrap_or(i as u8))
-                .collect()
-        }
-        fn active_context(&self) -> Option<fubmd_abi::ViewContext> {
-            None
-        }
-    }
+    // Il doppio è `MemoryHost`, che sta in questo crate dalla
+    // [decisione 0054](../../../docs/decisions/0054-il-banco-del-lato-provider.md).
+    // Qui ce n'era una copia scritta a mano, e il commento che la accompagnava
+    // dava la ragione: «non è `MemoryHost` perché quello sta in
+    // `fubmd-features`, che dipende da questo crate». La ragione è evaporata col
+    // trasloco, e con lei quaranta righe — fra cui un `random_bytes` identico
+    // riga per riga a quello del doppio vero.
 
     #[test]
     fn a_v4_has_the_shape_the_rfc_asks_for() {
-        let id = uuid_v4(&Banco::new()).unwrap();
+        let id = uuid_v4(&MemoryHost::new()).unwrap();
         assert_eq!(id.len(), 36);
         let parti: Vec<&str> = id.split('-').collect();
         assert_eq!(
@@ -174,7 +139,7 @@ mod tests {
 
     #[test]
     fn a_v7_carries_its_own_timestamp() {
-        let banco = Banco::new();
+        let banco = MemoryHost::new();
         let id = uuid_v7(&banco).unwrap();
         let ms = u64::from_str_radix(&id.replace('-', "")[..12], 16).unwrap();
         assert_eq!(ms, 1_700_000_000_000);
@@ -185,16 +150,16 @@ mod tests {
     /// ordine, anche come stringhe.
     #[test]
     fn v7_sorts_the_way_time_does() {
-        let banco = Banco::new();
+        let banco = MemoryHost::new();
         let primo = uuid_v7(&banco).unwrap();
-        banco.now.fetch_add(1, Ordering::Relaxed);
+        banco.avanza(1);
         let secondo = uuid_v7(&banco).unwrap();
         assert!(primo < secondo, "{primo} non precede {secondo}");
     }
 
     #[test]
     fn short_ids_stay_in_the_readable_alphabet() {
-        let banco = Banco::new();
+        let banco = MemoryHost::new();
         for _ in 0..200 {
             let id = short_id(&banco, 6).unwrap();
             assert_eq!(id.len(), 6);
@@ -208,7 +173,7 @@ mod tests {
 
     #[test]
     fn a_thousand_ids_do_not_collide() {
-        let banco = Banco::new();
+        let banco = MemoryHost::new();
         let visti: HashSet<String> = (0..1000).map(|_| uuid_v4(&banco).unwrap()).collect();
         assert_eq!(visti.len(), 1000);
     }
@@ -216,10 +181,7 @@ mod tests {
     /// Un host che nega l'entropia non produce un id di zeri: non produce un id.
     #[test]
     fn a_denied_capability_gives_no_id_instead_of_a_colliding_one() {
-        let muto = Banco {
-            muto: true,
-            ..Banco::new()
-        };
+        let muto = MemoryHost::new().senza_entropia();
         assert_eq!(uuid_v4(&muto), None);
         assert_eq!(uuid_v7(&muto), None);
         assert_eq!(short_id(&muto, 6), None);

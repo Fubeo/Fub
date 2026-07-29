@@ -1,7 +1,9 @@
 # FubMD
 
-Un'app di note in markdown in stile Obsidian, scritta in Rust (Tauri v2), con
-un'architettura pensata fin dall'inizio per i plugin.
+Un'app di note in markdown su file locali, scritta in Rust (Tauri v2), con
+un'architettura pensata fin dall'inizio per i plugin. Apre vault nel formato di
+Obsidian senza conversione — ma il markdown non è il formato dell'app: è il
+primo provider di un contratto che non lo nomina.
 
 ## Idea architetturale
 
@@ -28,6 +30,10 @@ distingue un provider nativo da uno WASM.
 │ fubmd-features│    │  fubmd-host  │        │ fubmd-wasm-host (M5)      │
 │ backlink/…    │    │  (chi monta) │        │ plugin di terzi via WASM  │
 └───────────────┘    └──────┬───────┘        └──────────────────────────┘
+                            │
+       fubmd-testkit ┈┈┈┈┈┈┈┤  il banco di prova del lato host: dipende dal
+       (solo dev)           │  kernel, e per questo non è MAI dipendenza
+                            │  normale di nessuno
                             │
                      ┌──────┴───────┐
                      │  fubmd-app   │  colla Tauri: comandi, finestre
@@ -135,3 +141,11 @@ doppia licenza, senza condizioni aggiuntive.
 - [docs/versionamento.md](docs/versionamento.md) — i tre numeri di versione e
   cosa promette ciascuno.
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — cosa cambia, versione per versione.
+
+## Marchi
+
+Obsidian è un marchio del suo titolare. **FubMD non è affiliato a Obsidian, non
+ne è approvato, e non è un clone né un rimpiazzo**: è un programma diverso, con
+un'architettura diversa, che legge e scrive lo stesso formato su disco. Dove il
+nome compare — nel codice, nei test, nei documenti — è per dire con quale
+programma FubMD va d'accordo e quale regola sta rispettando. Nient'altro.

@@ -5,8 +5,8 @@ invarianti, struttura dei crate, e i rimandi ai documenti di dettaglio.
 
 ## Contesto
 
-- Obiettivo: un'app di note markdown **stile Obsidian, in Rust**, da usare
-  davvero (non un prototipo).
+- Obiettivo: un'app di note markdown **in Rust**, su vault di file locali
+  compatibili con quelli di Obsidian, da usare davvero (non un prototipo).
 - Requisito distintivo: un **sistema di plugin** in cui i plugin siano veloci
   quanto le feature native.
 - Conseguenza: molte feature native *sono* plugin, nel senso che implementano
@@ -65,9 +65,13 @@ alla conformità abi↔WIT.
   terzi il kernel non ce l'ha. Il kernel sta nei `[dev-dependencies]`, per i
   soli test end-to-end.
 - Conseguenza: **il banco di prova del kernel non può stare in `fubmd-sdk`**.
-  L'SDK è ciò che un guest WASM importa; metterci il kernel, anche dietro una
-  feature, lo metterebbe nel grafo di chi per definizione non lo ha. Sono due
-  crate ([todo.md](todo.md) §16.2).
+  L'SDK è ciò che un guest WASM importerà; ma la ragione stringente è già qui
+  oggi, ed è che `fubmd-sdk` è dipendenza **normale** di
+  `fubmd-format-markdown` — il kernel là dentro finirebbe nella libreria di un
+  provider che esiste, e una cargo feature non lo eviterebbe (l'unificazione la
+  accende per tutti). Sono due crate, e adesso lo presidiano due test
+  ([0054](decisions/0054-il-banco-del-lato-provider.md),
+  [0055](decisions/0055-il-banco-del-lato-host.md)).
 
 ## Regola d'oro
 
@@ -95,17 +99,17 @@ fubmd-abi              contratto: modello documento comune + tutti i trait
   ├─ fubmd-host        chi MONTA: tabella delle feature, sessione, watcher
   │                    dietro un trait, ponte eventi. NON dipende da tauri
   ├─ fubmd-app         colla Tauri v2: IPC comandi/eventi, finestre, dialoghi
-  ├─ fubmd-testkit     (§16.2) banco di prova del KERNEL: vault temporaneo,
-  │                    provider minimo, asserzioni sugli eventi. Crate a sé e
-  │                    non `fubmd-sdk::testing`, che è il banco dei PROVIDER
+  ├─ fubmd-testkit     banco di prova del KERNEL: `Banco`, un builder sui cinque
+  │                    assi che i test variano davvero. Crate a sé e non
+  │                    `fubmd-sdk::testing`, che è il banco dei PROVIDER (0055)
   └─ fubmd-wasm-host   (M5) host wasmtime per plugin di terzi
 frontend/              Vite + TS + CodeMirror 6 (+ renderer UiNode)
 crates/fubmd-abi/wit/  contratto WIT che rispecchia fubmd-abi (vivo da M2, freeze M4)
 plugins/               (M5) plugin di esempio (wasm32-wasip2)
 ```
 
-Questo elenco è di **destinazione**: nomina `fubmd-testkit` e `fubmd-wasm-host`,
-che non esistono, e l'indentazione raggruppa per ruolo, non per dipendenza. Chi
+Questo elenco è di **destinazione**: nomina `fubmd-wasm-host`, che non esiste, e
+l'indentazione raggruppa per ruolo, non per dipendenza. Chi
 dipende davvero da chi sta in
 [architecture/mappa-visuale.md](architecture/mappa-visuale.md#il-grafo-delle-dipendenze-e-il-test-che-lo-legge),
 dove un test rilegge il disegno e lo confronta con `cargo metadata`.
@@ -123,8 +127,9 @@ Stato delle due divisioni dichiarate dal piano:
   stanno il **registry dei bundle** ([0031](decisions/0031-chi-possiede-i-bundle.md))
   e il **runner dei job** ([0032](decisions/0032-il-runner-dei-job.md), §9.3).
 - **Da fare** — **un crate per bundle di feature** (§16.3): oggi compilare il
-  pannello outline compila un motore di ricerca. Va dopo il §16.2, o i venti
-  bundle di 21.2 si portano dietro venti copie del banco di prova.
+  pannello outline compila un motore di ricerca. La sua precondizione — il §16.2,
+  cioè il banco condiviso — è **soddisfatta** dalla
+  [0055](decisions/0055-il-banco-del-lato-host.md).
 
 `frontend/` è un albero, non un elenco di file: la mappa sta in
 [architecture/shell.md](architecture/shell.md), il perché nella
@@ -137,7 +142,7 @@ Mappa **di dettaglio**, documento per documento. La porta di `docs/` — percors
 di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
 
 **Architettura** (trasversale ai milestone):
-- [architecture/mappa-visuale.md](architecture/mappa-visuale.md) — l'intera architettura in tre disegni: quello disposto a mano (i sette crate, la shell, il disco, e tratteggiato ciò che non esiste ancora), il grafo delle dipendenze presidiato da un test, e dove gira cosa mentre l'app è accesa.
+- [architecture/mappa-visuale.md](architecture/mappa-visuale.md) — l'intera architettura in tre disegni: quello disposto a mano (gli otto crate, la shell, il disco, e tratteggiato ciò che non esiste ancora), il grafo delle dipendenze presidiato da un test, e dove gira cosa mentre l'app è accesa.
 - [architecture/data-model.md](architecture/data-model.md) — `DocumentModel`, `Block`/`Inline`, `Span`, `LinkTarget`, escape hatch `Custom`.
 - [architecture/traits.md](architecture/traits.md) — i trait del contratto, chi li implementa e a quale milestone, la tabella di esprimibilità WIT.
 - [architecture/ui-protocol.md](architecture/ui-protocol.md) — protocollo `UiNode`, mapping sul frontend, regola dell'escape hatch web-view.

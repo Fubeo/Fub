@@ -1175,6 +1175,8 @@ dependencies = [
  "fubmd-abi",
  "fubmd-format-markdown",
  "fubmd-kernel",
+ "fubmd-sdk",
+ "fubmd-testkit",
  "serde",
  "serde_json",
  "tantivy",
@@ -1205,6 +1207,7 @@ dependencies = [
  "fubmd-features",
  "fubmd-format-markdown",
  "fubmd-kernel",
+ "fubmd-testkit",
  "notify",
  "notify-debouncer-full",
  "serde",
@@ -1218,6 +1221,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "fubmd-abi",
+ "fubmd-testkit",
  "serde",
  "serde_json",
  "tempfile",
@@ -1232,6 +1236,17 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fubmd-testkit"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "fubmd-abi",
+ "fubmd-kernel",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

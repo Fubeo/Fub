@@ -21,5 +21,8 @@ thiserror = { workspace = true }
 # Espliciti per gli integration test in `tests/` (niente proptest: il generatore
 # di sequenze è un xorshift deterministico dentro il test).
 fubmd-abi = { workspace = true }
+# Il banco del lato host (§16.2). Il ciclo `kernel → testkit → kernel` è
+# legittimo perché è di sola prova: cargo lo risolve, e la libreria non lo vede.
+fubmd-testkit = { workspace = true }
 serde_json = { workspace = true }
 tempfile = "3.27.0"

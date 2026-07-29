@@ -8,14 +8,14 @@ documento esiste.
 
 | Numero | Dove sta | A chi promette | Cosa succede se si sbaglia |
 |---|---|---|---|
-| **versione dei crate** | [`Cargo.toml:19`](../Cargo.toml), ereditata dai sette crate; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila FubMD, o ci compila contro | la build rossa, subito |
+| **versione dei crate** | [`Cargo.toml:19`](../Cargo.toml), ereditata dagli otto crate; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila FubMD, o ci compila contro | la build rossa, subito |
 | **versione del contratto** | [`ABI_VERSION`](../crates/fubmd-abi/src/traits.rs) (`traits.rs:2912`) e `package fubmd:abi@0.1.0` in [`crates/fubmd-abi/wit/fubmd/abi.wit`](../crates/fubmd-abi/wit/fubmd/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
 | **versione degli schemi su disco** | sette `SCHEMA_VERSION` indipendenti nei crate (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
 
 ## 1. La versione dei crate
 
 **Un numero solo per l'intero workspace.** `version = "0.1.0"` sta in
-[`Cargo.toml:19`](../Cargo.toml) sotto `[workspace.package]`, e tutti e sette i
+[`Cargo.toml:19`](../Cargo.toml) sotto `[workspace.package]`, e tutti e otto i
 crate lo ereditano con `version.workspace = true`. La shell porta lo stesso
 numero in `package.json`.
 

@@ -11,24 +11,22 @@
 use camino::Utf8PathBuf;
 use fubmd_abi::error::PluginError;
 use fubmd_kernel::{data_root, FormatRegistry, Workspace};
+use fubmd_testkit::{Banco, Montato};
 
-fn vault() -> (tempfile::TempDir, Workspace) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let mut ws = Workspace::new(&root, FormatRegistry::new());
+fn vault() -> Montato {
     // I plugin di prova si dichiarano prima di usare un host (§7.3): un id che
     // nessuno ha dichiarato riceve un host che nega tutto.
-    for plugin in ["prova.plugin", "uno", "due"] {
-        ws.register_core_feature(plugin, plugin)
-            .expect("dichiarato");
-    }
-    (dir, ws)
+    Banco::nuovo()
+        .senza_formato()
+        .senza_scansione()
+        .con_plugins(["prova.plugin", "uno", "due"])
+        .monta()
 }
 
 #[test]
 fn a_blob_written_by_a_plugin_lands_in_its_own_corner_of_the_vault() {
-    let (dir, mut ws) = vault();
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
 
     ws.with_host("prova.plugin", |host| {
         host.data_write("cartella/dato.bin", b"contenuto").unwrap();
@@ -51,7 +49,7 @@ fn a_blob_written_by_a_plugin_lands_in_its_own_corner_of_the_vault() {
 
 #[test]
 fn what_a_plugin_writes_it_can_read_back_list_and_remove() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
 
     ws.with_host("prova.plugin", |host| {
         assert_eq!(
@@ -88,7 +86,7 @@ fn what_a_plugin_writes_it_can_read_back_list_and_remove() {
 
 #[test]
 fn two_plugins_do_not_see_each_others_data() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
 
     ws.with_host("uno", |host| {
         host.data_write("stato.json", b"di uno").unwrap()
@@ -112,8 +110,8 @@ fn two_plugins_do_not_see_each_others_data() {
 
 #[test]
 fn nothing_a_plugin_can_name_escapes_its_own_space() {
-    let (dir, mut ws) = vault();
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
 
     // Ognuno di questi, senza recinto, scriverebbe fuori dallo spazio del
     // plugin — nel vault dell'utente, o oltre.
@@ -157,7 +155,7 @@ fn nothing_a_plugin_can_name_escapes_its_own_space() {
 
 #[test]
 fn the_clock_is_a_capability_too() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
 
     let t = ws.with_host("prova.plugin", |host| host.now_unix_millis());
 

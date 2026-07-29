@@ -1,7 +1,7 @@
 ---
 progetto: FubMD — App di scrittura e knowledge management open source
 data: 24 luglio 2026
-intervistato: Lorenzo Marchetti
+intervistato: Lorenzo
 ruolo: Scrittore freelance / copywriter — utente target
 tipo_intervista: Esplorativa — raccolta requisiti da user persona
 stato: bozza

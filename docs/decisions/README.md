@@ -64,6 +64,8 @@ cronologico di chiusura.
 | [0051](0051-l-alimentazione-risponde.md) | L'alimentazione risponde, e risponde a lotti | §20.1 — l'**ultima P0** aperta del piano | 2026-07-29 |
 | [0052](0052-cio-che-va-storto-e-un-evento.md) | Ciò che va storto è un evento, e il kernel smette di buttarlo | §20.2 (**meno una casella**) + §20.3 ([seduta 20](../roadmap/20-quando-qualcosa-va-storto.md)) | 2026-07-29 |
 | [0053](0053-il-contratto-ha-una-sorgente.md) | Il contratto ha una sorgente, e due confini che non hanno la stessa forma | §16.4 + §16.5 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
+| [0054](0054-il-banco-del-lato-provider.md) | Il banco del lato provider: dove si prova un provider contro il contratto | §16.1 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
+| [0055](0055-il-banco-del-lato-host.md) | Il banco del lato host: un builder, perché i trentacinque non erano lo stesso vault | §16.2 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -133,8 +135,30 @@ l'accorpamento è **dichiarato in anticipo** invece di essere scoperto scrivendo
 un cappello di seduta può decidere la forma del verbale che la chiuderà, ed è una
 cosa che i cappelli fanno bene perché li si scrive guardando le voci insieme.
 
-E c'è una seconda cosa che quel verbale inaugura: chiude una voce **smentendone
-la premessa**. Il §16.4 escludeva i tipi Rust perché «la sorgente autorevole è il
+La [0054](0054-il-banco-del-lato-provider.md) e la
+[0055](0055-il-banco-del-lato-host.md) sono la **terza coppia decisa in una volta
+sola**, e portano il caso **opposto** a quello della 0053. Là il cappello della
+seduta dichiarava in anticipo che due voci andavano chiuse **insieme**; qui lo
+stesso cappello, con la stessa forma — una frase in testa che parla di entrambe
+le voci —, dichiarava fra loro un **confine**: *«sono due banchi diversi… che non
+possono stare nello stesso crate»*. E un confine fra due cose è precisamente ciò
+che le rende due. Da tenere, perché altrimenti il precedente della 0053 si legge
+storto: **un cappello va letto per cosa afferma, non per quante voci nomina** —
+«sono la stessa domanda vista da due lati» chiede un verbale, «fra loro c'è un
+confine» ne chiede due.
+
+E ne inaugurano un altro, che è di metodo e non di forma: la 0054 chiude una voce
+**smentendo un presidio che tutti credevano di avere**. Il cappello della seduta
+16 diceva che il kernel dentro l'SDK «violerebbe l'invariante che
+`dependency_invariant.rs` presidia»; quel file non nominava `fubmd-sdk` da
+nessuna parte. È la quinta specie della famiglia che il §16.7 elenca, e la
+peggiore: un conteggio invecchiato fa sopravvalutare una copertura, un *limite*
+invecchiato la fa sottovalutare, ma una **garanzia dichiarata che non è mai
+esistita** fa entrambe le cose insieme — e nessuno va a controllare una garanzia,
+perché il motivo per cui la si scrive è smettere di doverci pensare.
+
+E c'è una seconda cosa che la [0053](0053-il-contratto-ha-una-sorgente.md)
+inaugura: chiude una voce **smentendone la premessa**. Il §16.4 escludeva i tipi Rust perché «la sorgente autorevole è il
 WIT, ed è già il repo a trattarlo così»; controllato contro `wit_conformance.rs`,
 il repo tratta come autorevole esattamente Rust — parsa il WIT perché è ciò che
 controlla. Le decisioni precedenti hanno corretto **numeri** di una voce (la

@@ -49,7 +49,7 @@ si apre segnalando cosa non ha letto.
       **seconda impl** che tiene onesto il trait (un'astrazione con un solo
       cliente non è un'astrazione) e per i test *unitari* di chi ci sta sopra;
       i test di durabilità restano su `FsStorage`, e il banco condiviso è un
-      altro problema — è il [§16.2](16-crate-sdk-banchi-di-prova.md#162-il-banco-di-prova-del-kernel-è-copiato-diciotto-volte).
+      altro problema — è il [§16.2](../decisions/0055-il-banco-del-lato-host.md).
 
 *Sblocca, in un colpo solo:* 23.1 (cifratura at-rest = uno storage che cifra),
 18.1 (vault remoti/sync), 26.3 (PWA su OPFS), 3.1 (vault read-only, vault su

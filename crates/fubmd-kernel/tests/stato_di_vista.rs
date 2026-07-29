@@ -11,7 +11,6 @@
 
 use std::sync::{Arc, Mutex};
 
-use camino::Utf8PathBuf;
 use fubmd_abi::command::{CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode};
 use fubmd_abi::event::Actor;
 use fubmd_abi::traits::{
@@ -19,17 +18,17 @@ use fubmd_abi::traits::{
 };
 use fubmd_abi::ui::{UiAction, UiKind, UiNode, ViewUpdate};
 use fubmd_abi::PluginError;
-use fubmd_kernel::{FormatRegistry, ViewStates, Workspace};
+use fubmd_kernel::{ViewStates, Workspace};
+use fubmd_testkit::{Banco, Montato};
 
-fn vault() -> (tempfile::TempDir, Workspace) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let mut ws = Workspace::new(&root, FormatRegistry::new());
+fn vault() -> Montato {
     // I plugin di prova si dichiarano prima di registrare (§7.3): il kernel non
-    // presta capacità a una stringa.
-    ws.register_core_feature("prova", "prova")
-        .expect("dichiarato");
-    (dir, ws)
+    // presta capacità a una stringa — `con_plugin` è quella dichiarazione.
+    Banco::nuovo()
+        .senza_formato()
+        .senza_scansione()
+        .con_plugin("prova")
+        .monta()
 }
 
 const VIEW: &str = "prova.pannello";
@@ -101,7 +100,7 @@ fn con_pannello(ws: &mut Workspace) {
 /// ritrova ciò che ha ricordato, **senza tenere un campo suo**.
 #[test]
 fn un_pannello_ritrova_cio_che_ha_ricordato() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     con_pannello(&mut ws);
 
     assert_eq!(
@@ -118,7 +117,7 @@ fn un_pannello_ritrova_cio_che_ha_ricordato() {
 /// §11.2 chiedeva. Togli l'esemplare dalla chiave e questa prova cade.
 #[test]
 fn due_esemplari_dello_stesso_pannello_non_si_mescolano() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     con_pannello(&mut ws);
 
     ricorda(&mut ws, "uno", "riga 40").expect("ricorda");
@@ -176,7 +175,7 @@ impl CommandProvider for Comando {
 
 #[test]
 fn chi_non_sta_disegnando_una_view_non_ha_uno_stato_di_vista() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     let esiti = Arc::new(Mutex::new(Vec::new()));
     ws.register_command_provider(
         "prova",
@@ -207,7 +206,7 @@ fn chi_non_sta_disegnando_una_view_non_ha_uno_stato_di_vista() {
 /// si vedono, perché l'id di chi scrive non è un parametro ma lo timbra l'host.
 #[test]
 fn due_provider_con_la_stessa_chiave_non_si_vedono() {
-    let (_dir, ws) = vault();
+    let ws = vault();
     ws.set_view_state("uno", "i", "scroll", Some(serde_json::json!(1)))
         .expect("scrive");
     assert_eq!(
@@ -221,12 +220,12 @@ fn due_provider_con_la_stessa_chiave_non_si_vedono() {
 /// nel file della macchina, e lo stesso esemplare in due vault ha due stati.
 #[test]
 fn lo_stesso_pannello_in_due_vault_ricorda_due_cose() {
-    let (_a, mut uno) = vault();
-    let (_b, mut due) = vault();
+    let mut uno = vault();
+    let mut due = vault();
     // Un file solo, condiviso: è come li apre l'host vero.
     let states = ViewStates::in_memory();
-    uno = uno.with_view_states(Arc::clone(&states));
-    due = due.with_view_states(states);
+    uno = uno.adatta(|ws| ws.with_view_states(Arc::clone(&states)));
+    due = due.adatta(|ws| ws.with_view_states(states));
     con_pannello(&mut uno);
     con_pannello(&mut due);
 
