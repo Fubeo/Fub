@@ -19,6 +19,11 @@ decisioni col perché, la struttura dei crate. Poi
 [architecture/mappa-visuale.md](architecture/mappa-visuale.md), lo stesso
 disegno in un colpo d'occhio.
 
+**Non capisco una parola.** [glossario.md](glossario.md) — lotto, porta, ponte,
+anagrafe, sidecar, superficie, seduta, strozzatura: il lessico di questo repo è
+preciso e non è standard. Una voce per termine, con il tipo Rust da cercare, il
+file in cui vive e il verbale che l'ha deciso.
+
 **Devo scrivere codice.** [architecture/](architecture/) — il contratto, il
 modello dei dati, il protocollo di UI, il confine dei plugin, la forma della
 shell: com'è fatto **adesso**.
@@ -51,11 +56,12 @@ ciclo locale, la forma dei commit. Per una vulnerabilità il canale è privato e
 | [personas/](personas/) | le sei personas e le interviste da cui vengono | nessuno: materiale di ricerca, datato e congelato |
 | [appendix/](appendix/) | ciò che è progettato ma fuori dai milestone numerati | chi ci aggiunge un progetto rimandato |
 
-Più i documenti di primo livello. Tre raccontano il progetto:
+Più i documenti di primo livello. Quattro raccontano il progetto:
 [PIANO.md](PIANO.md) (il piano, con la mappa dettagliata di tutti i documenti),
-[FEATURES.md](FEATURES.md) (il catalogo) e [todo.md](todo.md) (l'indice del
-lavoro aperto). Cinque riguardano il repo come progetto pubblico, e stanno qui e
-non in radice per la stessa regola di tutto il resto:
+[FEATURES.md](FEATURES.md) (il catalogo), [todo.md](todo.md) (l'indice del
+lavoro aperto) e [glossario.md](glossario.md) (il lessico: una voce per termine,
+col tipo, il file e il verbale). Cinque riguardano il repo come progetto
+pubblico, e stanno qui e non in radice per la stessa regola di tutto il resto:
 
 | Documento | Cosa dice | Chi lo mantiene aggiornato |
 |---|---|---|

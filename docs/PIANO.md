@@ -162,6 +162,9 @@ di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
   che porta con sé anche il **check dei link interni** in CI
   (`.github/scripts/check-doc-links.mjs`).
 
+**Il lessico**:
+- [glossario.md](glossario.md) — le parole di questo repo che non sono standard, sette famiglie, una voce per termine: cos'è in due righe, il tipo Rust da cercare, il file in cui vive (link vero, quindi presidiato) e il verbale che l'ha deciso. Non spiega l'architettura: rimanda a chi la spiega.
+
 **Il repo come progetto pubblico** (primo livello di `docs/`, perché la prosa sta
 in un posto solo; i nomi sono in inglese perché GitHub li cerca **per nome** — la
 ragione per esteso è in [README.md](README.md)):
