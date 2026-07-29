@@ -237,9 +237,9 @@ un'asserzione di **tipo** che verifica `KernelEvent["type"] ≡ EventKind` nelle
 due direzioni. Un `Event` nuovo in Rust fa crescere `EventKind` da solo — perché
 l'elenco degli enum è una **regola** e non una lista — e da quel momento
 `npx tsc --noEmit`, che gira in CI, non compila finché `KernelEvent` non porta il
-caso. È l'esaustività chiesta dal
-[§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
-ottenuta senza nessun elenco scritto a mano.
+caso. È l'esaustività chiesta dal §16.7 — poi deciso con la
+[decisione 0056](0056-un-elenco-che-e-la-sorgente.md) — ottenuta senza nessun
+elenco scritto a mano.
 
 ### L'elenco dei tipi generati è una regola, non un elenco
 
@@ -323,8 +323,8 @@ volta.
 - **La prosa dell'`abi.wit`** è il vincolo che tiene aperto il verso «genera il
   WIT». Se un giorno la si vorrà derivare, la domanda da porre prima è *dove vive
   la documentazione del confine*, non *quale strumento genera*.
-- Il [§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
-  resta aperto e questa decisione gli porta due prove: la scoperta per regola
+- Il §16.7 — chiuso dopo, con la [decisione 0056](0056-un-elenco-che-e-la-sorgente.md) —
+  riceve da questa decisione due prove: la scoperta per regola
   (`fieldless_enums`) e l'asserzione di tipo su `EventKind` sono due presidi
   **esaustivi per costruzione** in un posto che prima era un elenco. Ciò che il
   §16.7 chiede ancora — l'inventario dei provider ufficiali, le capacità del

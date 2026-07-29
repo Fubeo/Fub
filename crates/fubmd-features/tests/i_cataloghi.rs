@@ -31,13 +31,20 @@
 //! Le copre la domanda 1 dal lato del catalogo (se una lingua ne ha una e
 //! l'altra no, è rosso) e i test dei comandi dall'altro, che le risolvono
 //! davvero invece di stamparne il `Display`.
+//!
+//! # Su quali componenti, e come lo sa
+//!
+//! Gli otto erano elencati a mano qui sotto, ed era il difetto del
+//! [§16.7](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+//! nella sua forma più larga: non solo la quinta view sarebbe entrata muta, ma
+//! la **nona feature** — una che non registra nessuna view — sarebbe entrata
+//! senza che nessuno guardasse il suo catalogo. Adesso l'elenco viene da
+//! [`fubmd_features::ogni_feature_ufficiale`], che è la stessa fetta da cui
+//! `fubmd_host::mount` monta i bundle: un componente che esiste nell'app passa
+//! di qui.
 use fubmd_abi::settings::SettingKind;
 use fubmd_abi::text::{StringCatalog, Text};
 use fubmd_abi::traits::{CommandProvider, ViewProvider};
-use fubmd_features::{
-    BacklinksView, CoreCommands, OutlineView, StatsView, TagPanelView, BACKLINKS_ID, BLOCKS_ID,
-    COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID, VERSIONING_ID,
-};
 
 /// Le chiavi che un `Text` dichiarato porta con sé, e il grido quando invece è
 /// prosa cablata.
@@ -59,78 +66,78 @@ struct Componente {
     cablate: Vec<String>,
 }
 
-fn componenti() -> Vec<Componente> {
-    let mut out = Vec::new();
-
-    let mut viste = |id: &'static str, cataloghi: Vec<StringCatalog>, p: &dyn ViewProvider| {
-        let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
-        for spec in p.views() {
-            chiave(
-                &spec.title,
-                &format!("{id}: titolo della view «{}»", spec.id),
-                &mut chiavi,
-                &mut cablate,
-            );
-        }
-        out.push(Componente {
-            id,
-            cataloghi,
-            chiavi,
-            cablate,
-        });
-    };
-    viste(
-        BACKLINKS_ID,
-        fubmd_features::backlinks::catalog(),
-        &BacklinksView,
-    );
-    viste(OUTLINE_ID, fubmd_features::outline::catalog(), &OutlineView);
-    viste(TAGS_ID, fubmd_features::tags::catalog(), &TagPanelView);
-    viste(STATS_ID, fubmd_features::stats::catalog(), &StatsView);
-
-    // I comandi: titolo, descrizione, e le due di ogni parametro.
-    let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
-    for spec in CoreCommands.commands() {
+/// Le chiavi che una view dichiara: oggi il titolo, e non serve altro perché è
+/// l'unico `Text` che una `ViewSpec` porta.
+fn di_una_view(
+    id: &str,
+    p: &dyn ViewProvider,
+    chiavi: &mut Vec<String>,
+    cablate: &mut Vec<String>,
+) {
+    for spec in p.views() {
         chiave(
             &spec.title,
-            &format!("{COMMANDS_ID}: titolo di «{}»", spec.id),
-            &mut chiavi,
-            &mut cablate,
+            &format!("{id}: titolo della view «{}»", spec.id),
+            chiavi,
+            cablate,
+        );
+    }
+}
+
+/// Le chiavi che un `CommandProvider` dichiara: titolo, descrizione, e le due di
+/// ogni parametro.
+fn di_un_comando(
+    id: &str,
+    p: &dyn CommandProvider,
+    chiavi: &mut Vec<String>,
+    cablate: &mut Vec<String>,
+) {
+    for spec in p.commands() {
+        chiave(
+            &spec.title,
+            &format!("{id}: titolo di «{}»", spec.id),
+            chiavi,
+            cablate,
         );
         chiave(
             &spec.description,
-            &format!("{COMMANDS_ID}: descrizione di «{}»", spec.id),
-            &mut chiavi,
-            &mut cablate,
+            &format!("{id}: descrizione di «{}»", spec.id),
+            chiavi,
+            cablate,
         );
-        for p in &spec.params {
-            let dove = format!("{COMMANDS_ID}: «{}» / `{}`", spec.id, p.name);
-            chiave(&p.title, &dove, &mut chiavi, &mut cablate);
-            chiave(&p.description, &dove, &mut chiavi, &mut cablate);
+        for par in &spec.params {
+            let dove = format!("{id}: «{}» / `{}`", spec.id, par.name);
+            chiave(&par.title, &dove, chiavi, cablate);
+            chiave(&par.description, &dove, chiavi, cablate);
         }
     }
-    out.push(Componente {
-        id: COMMANDS_ID,
-        cataloghi: fubmd_features::commands::catalog(),
-        chiavi,
-        cablate,
-    });
+}
 
-    // I due che non dichiarano spec ma parlano lo stesso: quando qualcosa va
-    // storto (la ricerca) e quando un rendering non c'è (i blocchi).
-    for (id, cataloghi) in [
-        (SEARCH_ID, fubmd_features::search::catalog()),
-        (BLOCKS_ID, fubmd_features::blocks::catalog()),
-        (VERSIONING_ID, fubmd_features::versioning::catalog()),
-    ] {
-        out.push(Componente {
-            id,
-            cataloghi,
-            chiavi: Vec::new(),
-            cablate: Vec::new(),
-        });
-    }
-    out
+fn componenti() -> Vec<Componente> {
+    fubmd_features::ogni_feature_ufficiale()
+        .iter()
+        .map(|f| {
+            let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
+            // Chi non dichiara né view né comandi non porta chiavi camminabili
+            // da fuori — la ricerca parla quando qualcosa va storto, i blocchi
+            // quando un rendering non c'è, il versioning quando racconta uno
+            // snapshot — e resta comunque un componente: il suo catalogo passa
+            // dalle domande 1 e 3 come tutti gli altri, ed è lì che si vede una
+            // lingua tradotta a metà.
+            if let Some(costruisci) = f.view {
+                di_una_view(f.id, costruisci().as_ref(), &mut chiavi, &mut cablate);
+            }
+            if let Some(costruisci) = f.commands {
+                di_un_comando(f.id, costruisci().as_ref(), &mut chiavi, &mut cablate);
+            }
+            Componente {
+                id: f.id,
+                cataloghi: (f.catalog)(),
+                chiavi,
+                cablate,
+            }
+        })
+        .collect()
 }
 
 #[test]

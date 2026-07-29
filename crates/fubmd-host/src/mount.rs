@@ -34,9 +34,8 @@ use fubmd_abi::settings::SettingSpec;
 use fubmd_abi::text::StringCatalog;
 use fubmd_abi::traits::{Plugin, PluginManifest};
 use fubmd_features::{
-    BacklinksView, CoreCommands, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer,
-    MathRule, OutlineView, SearchIndex, StatsView, TagPanelView, VersionStore, VersioningHandler,
-    BACKLINKS_ID, BLOCKS_ID, COMMANDS_ID, OUTLINE_ID, SEARCH_ID, STATS_ID, TAGS_ID, VERSIONING_ID,
+    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, SearchIndex, VersionStore,
+    VersioningHandler, BLOCKS_ID, SEARCH_ID, VERSIONING_ID,
 };
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_kernel::{
@@ -69,12 +68,16 @@ pub struct Mounted {
 
 /// Una riga della tabella: una feature ufficiale di questo repo.
 ///
-/// Le otto righe hanno in comune tutto tranne cosa registrano — manifest di
+/// Le nove righe hanno in comune tutto tranne cosa registrano — manifest di
 /// core (`PluginManifest::core`), [`Trust::Core`], e nessuna risorsa propria da
-/// attivare — quindi sono **valori** e non otto implementazioni del trait. Il
+/// attivare — quindi sono **valori** e non nove implementazioni del trait. Il
 /// trait resta quello generale: un bundle che a M5 arriva da un file porterà un
 /// manifest letto, un grado di fiducia deciso dall'host e un plugin che è un
 /// componente istanziato.
+///
+/// Otto di quelle nove non sono più scritte qui: le enumera
+/// [`fubmd_features::ogni_feature_ufficiale`], e questo tipo è ciò in cui una
+/// riga dell'inventario si trasforma. La nona è il core, che è dell'host.
 struct CoreBundle {
     id: &'static str,
     name: &'static str,
@@ -136,7 +139,7 @@ impl Bundle for CoreBundle {
         Trust::Core
     }
 
-    /// Nessuna delle otto possiede qualcosa che il kernel non sappia già
+    /// Nessuna delle nove possiede qualcosa che il kernel non sappia già
     /// chiudere: ciò che tengono sono provider, e un provider il kernel lo
     /// attiva, lo interroga e lo chiude da sé (decisione 0028).
     fn plugin(&self) -> Box<dyn Plugin> {
@@ -185,7 +188,23 @@ pub fn mount(
     // composizione delle due metà, e il contenitore è il modo in cui chi monta
     // la riceve senza che il kernel debba sapere che il versioning esiste.
     let store: Arc<Mutex<Option<VersionStore>>> = Arc::default();
-    let bundles: Vec<Arc<dyn Bundle>> = vec![
+    // **Il core, e poi l'inventario.** Chi siano le feature ufficiali e in che
+    // ordine si montino non è più scritto qui: è
+    // [`fubmd_features::ogni_feature_ufficiale`], e la differenza è tutto il
+    // §16.7. Finché le otto righe stavano in questo file, l'inventario delle
+    // feature ufficiali *era* questo file, e ogni presidio che volesse iterarle
+    // ne teneva una copia che nessuno confrontava con l'originale — quattro
+    // copie per le view, una per i cataloghi. Adesso l'elenco sta nel crate che
+    // possiede quei tipi e questa è la sua unica lettura in produzione: una
+    // feature che non è nell'elenco non viene montata, il che è la sola forma di
+    // «esaustivo» che non dipenda da chi si ricorda di aggiornare cosa.
+    //
+    // Ciò che resta di questo file è **cosa** registra ognuna, e resta perché è
+    // davvero irregolare: l'indice può non aprirsi, il versioning ha bisogno
+    // dello `store` che vive qui e di un interruttore che è dell'host, i blocchi
+    // registrano cinque cose in due famiglie. Id, nome e catalogo vengono
+    // dall'inventario anche per loro.
+    let mut bundles: Vec<Arc<dyn Bundle>> = vec![
         // Per **primo**, e non per gusto dell'ordine: è lui a dichiarare
         // `plugins.disabled`, cioè la chiave che dice quali degli altri non
         // vanno montati. Un bundle che non registra niente e che esiste per
@@ -204,58 +223,58 @@ pub fn mount(
                     [core_catalog(), fubmd_kernel::locale::catalog()].concat(),
                 ),
         ),
-        Arc::new(
-            CoreBundle::new(SEARCH_ID, "Ricerca", register_search)
-                .speaking("it", fubmd_features::search::catalog()),
-        ),
-        Arc::new(
-            CoreBundle::new(VERSIONING_ID, "Versioning", {
-                let store = store.clone();
-                move |ws: &mut Workspace| register_versioning(ws, &store)
+    ];
+    for feature in fubmd_features::ogni_feature_ufficiale() {
+        let bundle = if let Some(costruisci) = feature.view {
+            // Le view sono tutte uguali, ed è questa uniformità che permette
+            // all'inventario di **essere** la registrazione invece di
+            // raccontarla: una riga in più là dentro è un pannello in più
+            // nell'app, senza toccare questo file.
+            CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
+                register_view(ws, feature.id, costruisci())
             })
+            .speaking("it", (feature.catalog)())
+        } else if let Some(costruisci) = feature.commands {
+            CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
+                register_commands(ws, feature.id, costruisci())
+            })
+            .speaking("it", (feature.catalog)())
+        } else if feature.id == SEARCH_ID {
+            CoreBundle::new(feature.id, feature.nome, register_search)
+                .speaking("it", (feature.catalog)())
+        } else if feature.id == VERSIONING_ID {
+            let store = store.clone();
+            CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
+                register_versioning(ws, &store)
+            })
+            // L'interruttore è **dell'host** e non della feature (§11.1): il
+            // versioning non sa di poter essere spento, e le sue chiavi stanno
+            // qui accanto allo schema che le descrive. Da qui i due cataloghi
+            // che si sommano, come per il core.
             .configuring(versioning_settings())
             .speaking(
                 "it",
-                [
-                    versioning_settings_catalog(),
-                    fubmd_features::versioning::catalog(),
-                ]
-                .concat(),
-            ),
-        ),
-        Arc::new(
-            CoreBundle::new(BACKLINKS_ID, "Backlink", |ws| {
-                register_view(ws, BACKLINKS_ID, Box::new(BacklinksView))
-            })
-            .speaking("it", fubmd_features::backlinks::catalog()),
-        ),
-        Arc::new(
-            CoreBundle::new(OUTLINE_ID, "Struttura", |ws| {
-                register_view(ws, OUTLINE_ID, Box::new(OutlineView))
-            })
-            .speaking("it", fubmd_features::outline::catalog()),
-        ),
-        Arc::new(
-            CoreBundle::new(TAGS_ID, "Tag", |ws| {
-                register_view(ws, TAGS_ID, Box::new(TagPanelView))
-            })
-            .speaking("it", fubmd_features::tags::catalog()),
-        ),
-        Arc::new(
-            CoreBundle::new(STATS_ID, "Statistiche", |ws| {
-                register_view(ws, STATS_ID, Box::new(StatsView))
-            })
-            .speaking("it", fubmd_features::stats::catalog()),
-        ),
-        Arc::new(
-            CoreBundle::new(COMMANDS_ID, "Comandi", register_commands)
-                .speaking("it", fubmd_features::commands::catalog()),
-        ),
-        Arc::new(
-            CoreBundle::new(BLOCKS_ID, "Blocchi", register_blocks)
-                .speaking("it", fubmd_features::blocks::catalog()),
-        ),
-    ];
+                [versioning_settings_catalog(), (feature.catalog)()].concat(),
+            )
+        } else if feature.id == BLOCKS_ID {
+            CoreBundle::new(feature.id, feature.nome, register_blocks)
+                .speaking("it", (feature.catalog)())
+        } else {
+            // Una feature nell'inventario che qui nessuno sa registrare. Non è
+            // uno stato che l'utente possa produrre: è qualcuno che ha aggiunto
+            // una riga all'elenco e non ha detto cosa registra, e il momento
+            // giusto per accorgersene è il primo montaggio — cioè ogni test di
+            // questo repo — e non il giorno in cui si nota che un pannello non
+            // c'è. Le view e i comandi non passano mai di qui: per loro
+            // l'inventario dice già tutto.
+            return Err(format!(
+                "la feature «{}» è nell'inventario e la tabella di montaggio non \
+                 sa cosa registri",
+                feature.id
+            ));
+        };
+        bundles.push(Arc::new(bundle));
+    }
 
     // **Due passi, e in questo ordine.** Prima si dichiara al registry cosa
     // esiste — anche ciò che resterà spento, o «spento» diventerebbe
@@ -391,7 +410,10 @@ fn register_versioning(ws: &mut Workspace, store: &Mutex<Option<VersionStore>>) 
 /// gli fa da tramite — il giro render/azione passa dai comandi generici della
 /// shell.
 ///
-/// Sono quattro: backlink (riferimenti dall'`HostApi`), struttura (la prima a
+/// Quali siano non lo decide questo file: le enumera
+/// [`fubmd_features::ogni_view_ufficiale`], e la firma di questa funzione lo
+/// rispecchia — prende un id e un provider già costruito invece di sapere quale
+/// tipo istanziare. Oggi sono quattro: backlink (riferimenti dall'`HostApi`), struttura (la prima a
 /// usare il canale metadata, `IndexQuery::Outline`), tag (aggrega via
 /// `IndexQuery::Tags`, click → ricerca) e statistiche (la prima a leggere il
 /// **contesto di sessione** per intero — selezione e modalità, non solo quale
@@ -410,8 +432,16 @@ fn register_view(
 /// I comandi ufficiali: la prima feature sul giro del **registro** (decisione
 /// 0009). Da qui in poi un'azione nuova non è un comando Tauri in più — è una
 /// riga in un `CommandProvider`, e la palette la trova da sola.
-fn register_commands(ws: &mut Workspace) -> Vec<String> {
-    match ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands)) {
+///
+/// Come [`register_view`], prende un provider già costruito: quale sia lo dice
+/// l'inventario, e oggi ce n'è uno solo — che è appunto la premessa che il §16.7
+/// dice di non voler più cablare da nessuna parte.
+fn register_commands(
+    ws: &mut Workspace,
+    id: &str,
+    provider: Box<dyn fubmd_abi::traits::CommandProvider>,
+) -> Vec<String> {
+    match ws.register_command_provider(id, provider) {
         Ok(()) => Vec::new(),
         Err(e) => vec![format!("comandi non registrati: {e}")],
     }

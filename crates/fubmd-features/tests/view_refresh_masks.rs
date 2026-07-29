@@ -11,18 +11,20 @@
 //! condizione su ogni view ufficiale, e la stessa
 //! [`EventMask::misses_batches`] che un plugin può chiamare sulla propria — non
 //! una seconda idea della regola scritta in un test.
+//!
+//! «Ogni view ufficiale» era la parte che non teneva: le quattro erano costruite
+//! per nome qui dentro, quindi la quinta sarebbe entrata restando tutto verde —
+//! una rete con un buco silenzioso davanti a un difetto silenzioso (§16.7).
+//! Adesso l'elenco viene da [`fubmd_features::ogni_view_ufficiale`], che è la
+//! stessa fetta da cui `fubmd_host::mount` le registra: se una view esiste
+//! nell'app, questa condizione la guarda.
 
-use fubmd_abi::traits::{ViewProvider, ViewSpec};
-use fubmd_features::{BacklinksView, OutlineView, StatsView, TagPanelView};
+use fubmd_abi::traits::ViewSpec;
 
 fn ogni_view() -> Vec<ViewSpec> {
-    let providers: Vec<Box<dyn ViewProvider>> = vec![
-        Box::new(BacklinksView),
-        Box::new(OutlineView),
-        Box::new(TagPanelView),
-        Box::new(StatsView),
-    ];
-    providers.iter().flat_map(|p| p.views()).collect()
+    fubmd_features::ogni_view_ufficiale()
+        .flat_map(|f| (f.view.expect("è una riga con view"))().views())
+        .collect()
 }
 
 #[test]

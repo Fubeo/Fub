@@ -31,8 +31,8 @@ non è più un comando IPC e `VaultInfo` non porta più l'elenco del vault.
 Della seduta restano **tre** caselle aperte del §14.1 — l'impronta degli
 allegati, la politica della cartella allegati e le derivate in `.fubmd/data/` —
 che hanno una milestone propria. Erano contate come due qui e nell'[indice](../todo.md)
-finché qualcuno non le ha ricontate: è il [§16.7](16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
-applicato al piano invece che ai presidi.
+finché qualcuno non le ha ricontate: è la [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
+applicata al piano invece che ai sorgenti.
 
 ### 14.1 Il vault non è solo documenti
 

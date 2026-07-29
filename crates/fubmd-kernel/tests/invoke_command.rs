@@ -12,6 +12,7 @@
 //!    rifiuta le scritture. I comandi di questo file ci provano *apposta*: se un
 //!    giorno la garanzia sparisse, il vault cambierebbe e il test lo direbbe.
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
@@ -24,8 +25,8 @@ use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Actor, EventMask, Notice};
 use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::settings::SettingValue;
-use fubmd_abi::traits::{CommandProvider, EventHandler, HostApi};
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_abi::traits::{CommandProvider, EventHandler, HostApi, JobSpec};
+use fubmd_kernel::{Capability, FormatRegistry, Policy, ReadOnly, Workspace};
 use fubmd_testkit::TestoDiProva;
 
 fn vault() -> (tempfile::TempDir, Workspace) {
@@ -113,13 +114,34 @@ impl CommandProvider for AlwaysWrites {
     }
 }
 
-/// Un comando che prova **ogni capacità strutturale** della decisione 0013 e annota cosa
-/// gli ha risposto l'host. Serve a una cosa sola: che il varco della decisione 0010 copra
-/// anche le capacità nuove, e che non ne resti una scoperta il giorno che
-/// qualcuno ne aggiunge un'altra senza pensarci.
+/// Un comando che prova **ogni famiglia che una politica di sola lettura nega**
+/// e annota cosa gli ha risposto l'host.
+///
+/// Ogni tentativo porta due nomi e non uno. La [`Capability`] è quello su cui il
+/// test ragiona — è la grana a cui il `Guard` decide, e l'unica su cui si possa
+/// calcolare un insieme atteso invece di elencarlo. L'etichetta è quella che
+/// finisce nel messaggio d'errore: un rifiuto che dice soltanto
+/// «`VaultStructure`» lascia chi legge a cercare *quale* dei cinque metodi sia
+/// passato, e cercarlo è esattamente il lavoro che un presidio deve risparmiare.
+///
+/// Perché ci siano più metodi per la stessa famiglia — cinque per
+/// `VaultStructure` — vedi il doc-comment del test: la copertura che questo
+/// provider garantisce è per famiglia, i metodi in più sono cortesia.
 struct TriesEverything {
-    rifiuti: Arc<Mutex<Vec<(&'static str, String)>>>,
+    /// Cosa ha provato, nell'ordine.
+    tentativi: Arc<Mutex<Vec<Tentativo>>>,
 }
+
+/// Una chiamata provata: la famiglia esercitata, l'etichetta leggibile del
+/// metodo, e l'errore ricevuto.
+///
+/// L'errore è un `Option` e non un `Vec` di soli rifiuti perché i due modi di
+/// non essere rifiutati sono **diversi**: `None` dice «l'ha provato ed è
+/// passato» — un buco nel cancello — e l'assenza della riga dice «non l'ha
+/// provato affatto» — un buco nel presidio. Un elenco dei soli rifiuti li
+/// confonderebbe, e il messaggio d'errore direbbe la cosa sbagliata proprio nel
+/// momento in cui qualcuno la legge per rimediare.
+type Tentativo = (Capability, &'static str, Option<String>);
 
 impl CommandProvider for TriesEverything {
     fn commands(&self) -> Vec<CommandSpec> {
@@ -136,25 +158,57 @@ impl CommandProvider for TriesEverything {
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         let doc = DocId::new("nota.md");
-        let annota = |quale: &'static str, esito: Result<(), PluginError>| {
-            if let Err(e) = esito {
-                self.rifiuti.lock().unwrap().push((quale, e.to_string()));
-            }
+        let annota = |cap: Capability, quale: &'static str, esito: Result<(), PluginError>| {
+            self.tentativi
+                .lock()
+                .unwrap()
+                .push((cap, quale, esito.err().map(|e| e.to_string())));
         };
-        annota("create", host.create_document(&DocId::new("nuova.md"), "x"));
         annota(
+            Capability::VaultWrite,
+            "write",
+            host.write_document(&doc, "scritto dal comando"),
+        );
+        annota(
+            Capability::VaultStructure,
+            "create",
+            host.create_document(&DocId::new("nuova.md"), "x"),
+        );
+        annota(
+            Capability::VaultStructure,
             "rename",
             host.rename_document(&doc, &DocId::new("altra.md")),
         );
-        annota("trash", host.trash_document(&doc).map(|_| ()));
-        annota("restore", host.restore_document(&doc, None).map(|_| ()));
-        annota("empty", host.empty_trash().map(|_| ()));
+        annota(
+            Capability::VaultStructure,
+            "trash",
+            host.trash_document(&doc).map(|_| ()),
+        );
+        annota(
+            Capability::VaultStructure,
+            "restore",
+            host.restore_document(&doc, None).map(|_| ()),
+        );
+        annota(
+            Capability::VaultStructure,
+            "empty",
+            host.empty_trash().map(|_| ()),
+        );
+        // Il proprio recinto persistente: non ha un permesso dichiarabile —
+        // i blob sono già solo i propri — ma sopravvive alla sessione, e questo
+        // basta a metterlo fra ciò che una simulazione non deve poter toccare.
+        annota(
+            Capability::DataWrite,
+            "data-write",
+            host.data_write("prova.bin", b"x"),
+        );
         // La configurazione sta in questo elenco perché è l'effetto **meno
         // ritirabile** di tutti: sopravvive alla sessione, e una simulazione che
         // spegnesse il versioning lo lascerebbe spento. Il guard risponde prima
         // di guardare se la chiave esista, che è il verso giusto: un rifiuto per
         // «stai simulando» non deve dipendere da cosa si stava per scrivere.
         annota(
+            Capability::SettingsWrite,
             "setting",
             host.set_setting("test.chiave", SettingValue::Toggle(true)),
         );
@@ -165,8 +219,35 @@ impl CommandProvider for TriesEverything {
         // di guardare se ci sia un esemplare: un rifiuto per «stai simulando»
         // non deve dipendere da chi stava scrivendo.
         annota(
+            Capability::ViewStateWrite,
             "view-state",
             host.set_view_state("scroll", Some(serde_json::json!(10))),
+        );
+        // `Events` si prova con `spawn_job` e **non** con `emit`, e non è un
+        // dettaglio di comodo: `emit` non restituisce un `Result`: è una delle
+        // cinque capacità che non sanno dire di no (`host/guard.rs`), e il suo
+        // rifiuto è il silenzio. Un tentativo che non può fallire non prova
+        // niente; un job invece rientra quando la simulazione è finita da un
+        // pezzo, e il suo rifiuto ha un canale per dirsi.
+        annota(
+            Capability::Events,
+            "spawn-job",
+            host.spawn_job(JobSpec {
+                job: "prova".into(),
+                payload: serde_json::Value::Null,
+            })
+            .map(|_| ()),
+        );
+        // Un servizio di un altro plugin girerebbe con le capacità di **chi lo
+        // offre**: se passasse, una simulazione avrebbe una scala per uscire da
+        // sé stessa. Che nessuno serva `test.altro` non c'entra — il cancello
+        // risponde prima di cercare chi lo serve, e un `Unserved` qui sarebbe
+        // già la prova che il controllo è arrivato dopo.
+        annota(
+            Capability::Services,
+            "call-service",
+            host.call_service("test.altro", "qualcosa", serde_json::Value::Null)
+                .map(|_| ()),
         );
         Ok(
             CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
@@ -417,17 +498,58 @@ fn declaring_yourself_read_only_is_binding() {
     assert!(messaggio.contains("sola lettura"), "{messaggio}");
 }
 
+/// Il varco della decisione 0010 copre **ogni** famiglia che una politica di
+/// sola lettura nega — e l'elenco delle famiglie non è scritto qui dentro: si
+/// calcola.
+///
+/// # Perché non un elenco
+///
+/// Fino alla riscrittura di questo test l'asserzione era
+/// `quali == vec!["create", "rename", "trash", "restore", "empty", "setting",
+/// "view-state"]`: sette nomi scritti a mano, giusti nel momento in cui furono
+/// scritti e ciechi a tutto ciò che sarebbe venuto dopo. Il presidio notava se
+/// una delle sette **smetteva** di essere rifiutata; non notava l'ottava. La
+/// [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md) gli
+/// attribuiva invece la proprietà di accorgersi «di quella che un giorno
+/// qualcuno aggiungesse senza pensarci», e quella proprietà non ce l'aveva: le
+/// due che sono entrate — `setting` con la 0036, `view-state` con la 0037 —
+/// sono state aggiunte a mano da chi scriveva quelle decisioni, cioè per
+/// attenzione, che è precisamente ciò che un presidio serve a non dover
+/// spendere.
+///
+/// Adesso l'insieme atteso lo dà [`Capability::ALL`] filtrato da
+/// [`ReadOnly`]: le famiglie negate sono quelle che dice la politica, oggi e
+/// il giorno che ne nascerà un'altra. E l'asserzione è nelle **due** direzioni,
+/// perché i due modi di sbagliare sono diversi e vanno detti diversi:
+///
+/// - una famiglia negata che nessuno qui esercita è **scoperta** — il buco è
+///   nel presidio, e si chiude aggiungendo una chiamata a [`TriesEverything`];
+/// - una famiglia esercitata che **passa** è un buco nel cancello, e quello si
+///   chiude in `host/guard.rs`.
+///
+/// # Cosa questo presidio non garantisce
+///
+/// Garantisce la copertura alla grana della **famiglia**, che è la grana a cui
+/// il `Guard` decide: una politica risponde su `Capability`, non su
+/// `create_document`. Non garantisce che un **metodo nuovo dentro una famiglia
+/// già coperta** abbia il suo `check(...)`. Quel controllo è scritto a mano,
+/// riga per riga, dentro `host/guard.rs`, e il compilatore obbliga soltanto a
+/// *implementare* il metodo — non a metterci dentro la guardia. Un sesto metodo
+/// di `VaultStructure` che delegasse all'host sottostante senza chiedere niente
+/// alla politica passerebbe di qui **verde**, perché `VaultStructure` risulta
+/// coperta dagli altri cinque. È un limite vero e va nominato accanto al
+/// presidio invece che scoperto dopo.
 #[test]
 fn every_structural_capability_is_refused_by_the_same_gate() {
     let (_dir, mut ws) = vault();
     let doc = DocId::new("nota.md");
     ws.write_document(&doc, "originale").expect("scrive");
 
-    let rifiuti = Arc::new(Mutex::new(Vec::new()));
+    let tentativi = Arc::new(Mutex::new(Vec::new()));
     ws.register_command_provider(
         "test",
         Box::new(TriesEverything {
-            rifiuti: rifiuti.clone(),
+            tentativi: tentativi.clone(),
         }),
     )
     .expect("registrato");
@@ -440,26 +562,57 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
     )
     .expect("la simulazione riesce");
 
-    let visti = rifiuti.lock().unwrap().clone();
-    let quali: Vec<&str> = visti.iter().map(|(q, _)| *q).collect();
-    assert_eq!(
-        quali,
-        vec![
-            "create",
-            "rename",
-            "trash",
-            "restore",
-            "empty",
-            "setting",
-            "view-state"
-        ],
-        "ogni capacità strutturale è stata rifiutata: se una passasse, \
-         mancherebbe da questo elenco"
+    // L'insieme atteso, calcolato. La `why` non conta — `ReadOnly` nega per
+    // famiglia e la ragione è solo il testo che finisce nel messaggio — ma è la
+    // stessa frase che il kernel monta simulando, così l'asserzione sul
+    // messaggio qui sotto e quella sull'insieme parlano della stessa politica.
+    let politica = ReadOnly {
+        why: "una simulazione non scrive",
+    };
+    let negate: BTreeSet<Capability> = Capability::ALL
+        .into_iter()
+        .filter(|&cap| politica.denies(cap).is_some())
+        .collect();
+
+    let visti = tentativi.lock().unwrap().clone();
+    let esercitate: BTreeSet<Capability> = visti.iter().map(|(cap, _, _)| *cap).collect();
+    // Basta **un** tentativo passato perché la famiglia non si possa dire
+    // rifiutata: cinque `check` su sei metodi sono un cancello con un buco, non
+    // un cancello.
+    let passate: BTreeSet<Capability> = visti
+        .iter()
+        .filter(|(_, _, esito)| esito.is_none())
+        .map(|(cap, _, _)| *cap)
+        .collect();
+
+    let scoperte: Vec<Capability> = negate.difference(&esercitate).copied().collect();
+    assert!(
+        scoperte.is_empty(),
+        "{scoperte:?}: `ReadOnly` le nega e nessuno qui le prova, quindi il \
+         giorno che il cancello le lasciasse passare questo test resterebbe \
+         verde. Aggiungi a `TriesEverything` una chiamata per ognuna — un \
+         metodo che restituisca `Result`, non uno delle cinque capacità che non \
+         sanno dire di no — annotandola con la sua `Capability`."
     );
-    for (quale, messaggio) in &visti {
+
+    let bucate: Vec<Capability> = negate.intersection(&passate).copied().collect();
+    assert!(
+        bucate.is_empty(),
+        "{bucate:?}: la politica le nega e l'host le ha servite lo stesso. Il \
+         buco è nel cancello, non qui: in `host/guard.rs` c'è un metodo di \
+         quella famiglia che delega senza chiamare `check`. Tentativi: {visti:?}"
+    );
+
+    // E ogni rifiuto dice **perché**: un `permission-denied` muto costringe chi
+    // scrive un comando a indovinare se abbia sbagliato permessi o se stia solo
+    // simulando, e sono due rimedi opposti.
+    for (cap, quale, messaggio) in visti
+        .iter()
+        .filter_map(|(c, q, e)| Some((c, q, e.as_ref()?)))
+    {
         assert!(
             messaggio.contains("permesso negato") && messaggio.contains("simulazione"),
-            "{quale}: il rifiuto dice perché — {messaggio}"
+            "{cap:?}/{quale}: il rifiuto dice perché — {messaggio}"
         );
     }
 

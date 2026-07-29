@@ -68,6 +68,13 @@ impl Capability {
     /// [`CapabilitySet`] senza scrivere l'elenco una seconda volta: se una
     /// famiglia nascesse e non finisse qui, nascerebbe negata a tutti — che è
     /// il modo giusto di sbagliare, ma va visto.
+    ///
+    /// «Va visto» è stato per molto tempo una raccomandazione e basta: adesso lo
+    /// vede `tests::i_discriminanti_coprono_ogni_famiglia`, perché tutto ciò che
+    /// itera le capacità sta a valle di questo elenco — i permessi concessi da
+    /// [`Granted::new`] e il presidio delle capacità simulate in
+    /// `kernel/tests/invoke_command.rs` — e una famiglia che non ci finisse
+    /// sparirebbe da entrambi restando verde.
     pub const ALL: [Capability; 14] = [
         Capability::VaultRead,
         Capability::VaultWrite,
@@ -123,8 +130,8 @@ impl Capability {
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a dieci nomi e non sa
-/// niente di documenti, di blob o di comandi. È ciò che permette di comporne
+/// Una politica è **piccola per costruzione**: risponde a quattordici nomi e non
+/// sa niente di documenti, di blob o di comandi. È ciò che permette di comporne
 /// due senza chiedersi cosa significhi comporre venticinque metodi.
 pub trait Policy: Send + Sync {
     /// La ragione per cui questa famiglia è negata, o `None` se è concessa.
@@ -229,9 +236,10 @@ pub struct Granted {
 
 /// Le famiglie concesse, come insieme.
 ///
-/// Dieci bit in un `u16`: è la forma che rende [`Granted`] clonabile senza
+/// Quattordici bit in un `u16`: è la forma che rende [`Granted`] clonabile senza
 /// allocare, ed è anche il motivo per cui [`Capability`] è un enum piccolo e
-/// chiuso invece di una stringa.
+/// chiuso invece di una stringa — e per cui i suoi discriminanti devono restare
+/// contigui, che è ciò che presidia `i_discriminanti_coprono_ogni_famiglia`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CapabilitySet(u16);
 
@@ -305,8 +313,8 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le dieci famiglie sono
-/// implementate una volta sola e valgono per **ogni** politica presente e
+/// Delega ciò che la politica concede e nega il resto. Le quattordici famiglie
+/// sono implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.
 ///
@@ -613,5 +621,47 @@ impl<H: HostServices, P: Policy> HostServices for Guard<H, P> {
             format!("chiamare `{service}.{method}`")
         })?;
         self.inner.call_service(service, method, args)
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `ALL` è l'unico elenco scritto a mano rimasto in questo modulo, e tutto
+    /// il resto gli sta a valle: `Granted::new` ci folda sopra per calcolare i
+    /// permessi, e il presidio delle capacità simulate
+    /// (`kernel/tests/invoke_command.rs`) ci ricava l'insieme che pretende di
+    /// aver provato. Una famiglia che non finisse qui sparirebbe da entrambi
+    /// **restando verde** — e il commento sopra `ALL` diceva che «nascerebbe
+    /// negata a tutti, che è il modo giusto di sbagliare, ma va visto»: la prima
+    /// metà è vera per costruzione, la seconda non lo era da nessuna parte.
+    ///
+    /// La lunghezza dichiarata (`[Capability; 14]`) obbliga a **toccare**
+    /// l'elenco quando l'enum cresce, ma non a metterci dentro la variante
+    /// giusta: chi ha fretta soddisfa il compilatore duplicando una riga già
+    /// presente, e la famiglia nuova non viene iterata mai.
+    ///
+    /// Questo lo chiude senza una proc-macro, sfruttando ciò su cui
+    /// [`CapabilitySet`] fa già affidamento (`1 << cap as u16`): i discriminanti
+    /// sono contigui da zero, quindi pretendere che quelli di `ALL` siano
+    /// esattamente `0..len` vieta insieme i duplicati e i buchi. Duplicare una
+    /// riga è rosso; dimenticare la variante nuova è rosso.
+    #[test]
+    fn i_discriminanti_coprono_ogni_famiglia() {
+        let mut visti: Vec<u16> = Capability::ALL.iter().map(|&c| c as u16).collect();
+        visti.sort_unstable();
+        let attesi: Vec<u16> = (0..Capability::ALL.len() as u16).collect();
+        assert_eq!(
+            visti, attesi,
+            "`Capability::ALL` non copre una volta sola ogni famiglia dell'enum: \
+             o una riga è duplicata, o la famiglia nuova non è stata aggiunta e \
+             la lunghezza è stata fatta tornare con un doppione. Chi non è in \
+             `ALL` non viene concesso da `Granted::new` e non viene preteso dal \
+             presidio delle capacità simulate: sparisce da tutti e due restando \
+             verde."
+        );
     }
 }

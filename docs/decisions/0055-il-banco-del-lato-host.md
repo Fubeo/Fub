@@ -130,7 +130,7 @@ Vale la pena scriverlo perché la [seduta 16](../roadmap/16-crate-sdk-banchi-di-
 faceva del conteggio degli helper il proprio argomento («sono **raddoppiati** da
 quando la voce è stata aperta»), e la priorità della voce era decisa su quel
 moltiplicatore. Il moltiplicatore era reale, il numero che lo rappresentava no.
-È la famiglia del [§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+È la famiglia della [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
 con un difetto in più: là un numero scritto a mano diventava **falso** in
 silenzio; qui il numero era **esatto ogni volta** — ricontato tre volte, tre
 volte giusto — e misurava la cosa sbagliata. Un conteggio verificabile non è un
@@ -236,12 +236,18 @@ confine» ne chiede due.
   una casella residua nel senso della [0052](0052-cio-che-va-storto-e-un-evento.md),
   non una voce. La forma è decisa e provata; applicarla agli helper rimasti si fa
   senza aprire un verbale.
-- **`ogni_view_ufficiale()`, che il [§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
-  chiede, ha adesso un posto naturale e non è stato costruito.** Sarebbe nel
-  testkit, e costruirlo vorrebbe dire mettere `fubmd-features` fra le dipendenze
-  di questo crate — che è una decisione della seduta 16 e non di questo verbale.
-  Il posto è nominato nel sorgente perché chi aprirà quella voce lo trovi già
-  scelto.
+- **`ogni_view_ufficiale()` ha adesso un posto naturale e non è stato
+  costruito.** Sarebbe nel testkit, e costruirlo vorrebbe dire mettere
+  `fubmd-features` fra le dipendenze di questo crate — che è una decisione della
+  seduta 16 e non di questo verbale. Il posto è nominato nel sorgente perché chi
+  aprirà quella voce lo trovi già scelto.
+  *(Aggiornamento: la [decisione 0056](0056-un-elenco-che-e-la-sorgente.md) ha aperto quella
+  voce e ha scartato questo posto. Non per il costo, che pure ci sarebbe stato,
+  ma perché `il_banco_di_prova_non_entra_in_nessuna_libreria` — un test scritto
+  dalla [0054](0054-il-banco-del-lato-provider.md) due ore prima — vieta a
+  `fubmd-host` di dichiarare il testkit fra le dipendenze normali: `mount.rs`,
+  che è l'elenco da cui le view **esistono**, non avrebbe potuto leggerlo mai.
+  L'inventario sta in `fubmd-features`.)*
 - **Il §16.3** resta la voce che questa sbloccava, e la sua precondizione è
   soddisfatta. Il suo *primo tempo* — la cargo feature per bundle — non è stato
   preso qui e resta scorporabile come la voce dichiara.

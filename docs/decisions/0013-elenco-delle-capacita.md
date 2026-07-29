@@ -121,11 +121,20 @@ funziona) o si concede tutto a tutti (e il controllo è codice morto — la stes
 diagnosi che alla [decisione 0009](../decisions/0009-registro-dei-comandi.md) ha tenuto fuori un campo `trust` dai comandi).
 
 Ciò che invece **è stato fatto adesso** è la metà che non richiede il registro:
-il varco della [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md) copre tutte e sei le strutturali. Un comando simulato, o che
+il varco della [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md) copre tutte e cinque le strutturali. Un comando simulato, o che
 si è dichiarato di sola lettura, riceve un host che nega `create`, `rename`,
 `trash`, `restore` e `empty_trash` con un errore che dice perché, e c'è un test
 che le prova **tutte** in fila proprio per accorgersi di quella che un giorno
-qualcuno aggiungesse senza pensarci. Il giorno del §7.3, il rifiuto non va
+qualcuno aggiungesse senza pensarci.
+
+*(Questa riga diceva «tutte e **sei**» e poi ne elencava cinque, che è il numero
+dei metodi di `VaultStructure`. E la proprietà che si attribuisce al test — quella
+di accorgersi di un'aggiunta — il test non ce l'ha avuta fino alla
+[0056](0056-un-elenco-che-e-la-sorgente.md), che l'ha resa vera calcolando
+l'atteso da `Capability::ALL` invece di elencarlo: prima le due entrate dopo,
+`setting` e `view-state`, erano state aggiunte a mano da chi scriveva le
+decisioni [0036](0036-le-impostazioni-e-i-tre-stati.md) e
+[0037](0037-lo-stato-di-vista.md).)* Il giorno del §7.3, il rifiuto non va
 costruito: va solo dato un secondo motivo.
 
 *`storage_*` non sopravvive al freeze.* È l'unica rottura del giro e la linea di

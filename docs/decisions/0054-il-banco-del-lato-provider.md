@@ -237,7 +237,8 @@ magro — ed è il primo di questo verso.
   [0055](0055-il-banco-del-lato-host.md)). La funzione restituisce `false`
   quando non c'era niente da verificare, apposta perché chi la chiama non creda
   di essere stato promosso.
-- **Il `TriesEverything` del [§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)**
-  non è toccato: le sue capacità restano un elenco scritto a mano. La suite di
+- **Il `TriesEverything` del §16.7** non è toccato: le sue capacità restano un
+  elenco scritto a mano — fino alla [decisione 0056](0056-un-elenco-che-e-la-sorgente.md),
+  che le ha smesse di elencare calcolandole da `Capability::ALL`. La suite di
   conformità non è il posto — quelle sono capacità dell'**host**, non proprietà
   di un provider.

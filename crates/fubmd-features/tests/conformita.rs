@@ -14,24 +14,48 @@
 //! primo plugin di terzi, che non ha modo di distinguere «ho sbagliato io» da
 //! «la suite pretende troppo».
 //!
-//! # Cosa questo file non fa
+//! # Su quali view, e come lo sa
 //!
-//! Non itera su un inventario: le quattro view sono elencate a mano, come in
-//! `view_refresh_masks.rs`. È esattamente il difetto che il
+//! Le quattro view erano elencate a mano qui dentro, come in
+//! `view_refresh_masks.rs`: una suite di conformità che copre le implementazioni
+//! che qualcuno si è ricordato di scriverci dentro è esattamente il difetto che
+//! il
 //! [§16.7](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
-//! accusa, e resta aperto di proposito: l'inventario è la sua voce, non questa.
+//! accusa — e qui morde due volte, perché una view non provata non è solo una
+//! view non presidiata: è **un dogfooding in meno**, cioè una prova in meno che
+//! le asserzioni della suite siano giuste.
+//!
+//! Adesso l'elenco viene da [`fubmd_features::ogni_view_ufficiale`], che è la
+//! stessa fetta da cui `fubmd_host::mount` registra i pannelli. Una view che
+//! esiste nell'app passa di qui; una che non passa di qui non esiste nell'app, e
+//! `fubmd-host/tests/le_view_ufficiali.rs` è ciò che tiene vera la seconda metà.
 
-use fubmd_features::{BacklinksView, OutlineView, StatsView, TagPanelView};
+use fubmd_abi::traits::ViewProvider;
 use fubmd_sdk::testing::{conformita, MemoryHost};
+
+/// Ogni view ufficiale, costruita quando tocca a lei: la conformità è una
+/// proprietà del singolo provider, e un `Vec` preparato prima terrebbe in vita
+/// tutti i pannelli mentre se ne prova uno.
+///
+/// Il conto in coda non è una cerimonia: una suite che gira su zero
+/// implementazioni non è una suite, è un test che passa — ed è lo stato in cui
+/// questo file finirebbe se un giorno l'inventario cambiasse forma sotto di lui.
+fn per_ogni_view(mut prova: impl FnMut(&dyn ViewProvider)) {
+    let mut viste = 0;
+    for f in fubmd_features::ogni_view_ufficiale() {
+        prova((f.view.expect("è una riga con view"))().as_ref());
+        viste += 1;
+    }
+    assert!(viste > 0, "l'inventario non ha nessuna view");
+}
 
 #[test]
 fn le_view_ufficiali_rispettano_il_contratto() {
     let host = MemoryHost::new();
 
-    conformita::una_view_rispetta_il_contratto(&BacklinksView, &host);
-    conformita::una_view_rispetta_il_contratto(&OutlineView, &host);
-    conformita::una_view_rispetta_il_contratto(&TagPanelView, &host);
-    conformita::una_view_rispetta_il_contratto(&StatsView, &host);
+    per_ogni_view(|provider| {
+        conformita::una_view_rispetta_il_contratto(provider, &host);
+    });
 }
 
 #[test]
@@ -44,8 +68,7 @@ fn le_view_ufficiali_si_disegnano_anche_con_un_documento_aperto() {
         .con_tags(&[("tag", 1)]);
     host.set_active(Some("nota.md"));
 
-    conformita::una_view_rispetta_il_contratto(&BacklinksView, &host);
-    conformita::una_view_rispetta_il_contratto(&OutlineView, &host);
-    conformita::una_view_rispetta_il_contratto(&TagPanelView, &host);
-    conformita::una_view_rispetta_il_contratto(&StatsView, &host);
+    per_ogni_view(|provider| {
+        conformita::una_view_rispetta_il_contratto(provider, &host);
+    });
 }
