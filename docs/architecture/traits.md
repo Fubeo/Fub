@@ -206,8 +206,10 @@ esito **anche quando "non può fallire"** — non potendo fallire, non può nemm
 essere negata.
 
 **L'elenco è chiuso** ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).
-Ventitré metodi: da qui in avanti aggiungerne uno è una minor, toglierne uno una
-major. Quel giro ha **tolto** `storage_get/set` — l'unica rottura, con la linea
+Chiuso **alla sottrazione**, non alla crescita: da quel giro in avanti aggiungere
+un metodo è una minor, toglierne uno una major. La 0013 ne contava ventidue;
+oggi, contando le funzioni delle quattordici interfacce `host-*` di
+`abi.wit`, sono **trentaquattro**. Quel giro ha **tolto** `storage_get/set` — l'unica rottura, con la linea
 di base ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit` — e ha deciso a
 verbale anche le capacità che restano fuori: allegati (§14.1; il modello ora c'è
 con la [0046](../decisions/0046-l-anagrafe-del-vault.md), e la capacità di
@@ -215,7 +217,8 @@ scrittura sarà **additiva** quando qualcuno la chiederà), rete (§9.1 + §7.3)
 tempo differito (§8.3), `create_folder` (§14.3), `notify`/`progress`/`log`
 (informano senza aspettare risposta: sono eventi, non capacità).
 
-Il ventitreesimo metodo, `report_progress`, **non riapre quella regola**: è la
+`report_progress` **non riapre quella regola**, ed è il caso su cui vale la pena
+fermarsi perché sembra il contrario: è la
 *porta* di un evento (`Event::JobProgress`), come `emit` lo è di ogni altro, e
 c'è perché un job non conosce il proprio `JobId`. Siccome l'id non è un
 parametro, nessuno può raccontare il progresso di un altro; fuori da un job la
@@ -1009,7 +1012,7 @@ modello di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **32**, contando le quattordici famiglie: le otto arrivate dopo la chiusura sono `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)) e `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **34**, contando le funzioni delle quattordici interfacce `host-*` di `abi.wit`: le **dodici** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) e `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.7](../roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore

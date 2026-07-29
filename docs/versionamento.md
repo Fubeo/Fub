@@ -97,10 +97,10 @@ momenti diversi e legarli vorrebbe dire migrare sei file per una modifica a uno.
 | registro dei vault | [`crates/fubmd-host/src/vaults.rs:39`](../crates/fubmd-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
 | organizzazione | [`crates/fubmd-kernel/src/organization.rs:74`](../crates/fubmd-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
 | stato di vista | [`crates/fubmd-kernel/src/viewstate.rs:56`](../crates/fubmd-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
-| anagrafe | [`crates/fubmd-kernel/src/entries.rs:78`](../crates/fubmd-kernel/src/entries.rs) | 1 | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
+| anagrafe | [`crates/fubmd-kernel/src/entries.rs:86`](../crates/fubmd-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
 | impostazioni | [`crates/fubmd-kernel/src/settings.rs:51`](../crates/fubmd-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
-| versioning | [`crates/fubmd-features/src/versioning.rs:139`](../crates/fubmd-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
-| indice di ricerca | [`crates/fubmd-features/src/search.rs:81`](../crates/fubmd-features/src/search.rs) | **4** | i campi, le opzioni e il tokenizer di tantivy |
+| versioning | [`crates/fubmd-features/src/versioning.rs:147`](../crates/fubmd-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
+| indice di ricerca | [`crates/fubmd-features/src/search.rs:87`](../crates/fubmd-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
 
 **La regola comune è il rifiuto in avanti.** Un file la cui `version` è
 **maggiore** di quella che questa copia di FubMD conosce non si legge e non si
@@ -108,19 +108,22 @@ riscrive: si rifiuta, dicendolo. Interpretare a metà un file scritto da una
 versione più nuova è il modo più diretto per cancellare un campo che non si
 capisce.
 
-**Il numero 4 non è un'anomalia, è l'altra famiglia.** L'indice di ricerca è
-l'unico schema **rigenerabile**: un manifest con versione diversa fa buttare via
-l'indice e ricostruirlo dal vault, che è la sorgente di verità. Uno schema che si
-rigenera può cambiare numero quattro volte senza costare niente a nessuno — ed è
-successo quattro volte. Gli altri sei contengono cose che il vault non sa
-riprodurre (dove si era rimasti, come si era ordinata la sidebar, cosa c'era nel
-file prima), e lì un numero che sale è una **migrazione da scrivere**, o un
-rifiuto.
+**I due numeri che non sono 1 non sono un'anomalia, sono l'altra famiglia.** La
+riga che divide questa tabella non è il numero, è **chi sa rifare il file**.
+L'indice di ricerca e l'anagrafe sono **derivati**: un manifest con versione
+diversa fa buttare via il file e ricostruirlo dal vault, che è la sorgente di
+verità. Uno schema che si rigenera può cambiare numero senza costare niente a
+nessuno — l'indice di ricerca l'ha fatto **cinque** volte, l'anagrafe una (la
+`v2` sono le ancore della [decisione 0049](decisions/0049-una-posizione-dentro-un-documento.md),
+e il costo è stata una riapertura lenta). Gli altri cinque contengono cose che il
+vault non sa riprodurre (dove si era rimasti, come si era ordinata la sidebar,
+cosa c'era nel file prima), e lì un numero che sale è una **migrazione da
+scrivere**, o un rifiuto.
 
 Il dettaglio conta anche nel verso opposto: l'anagrafe non legge un file **senza**
 campo `version` come «versione 0», perché quel formato è nato con il campo — un
 file che non ce l'ha non è vecchio, è di qualcun altro
-(`entries.rs:73-78`). Il sidecar dell'organizzazione, che è nato prima, sì.
+(`entries.rs:72-86`). Il sidecar dell'organizzazione, che è nato prima, sì.
 
 **SemVer non copre niente di tutto questo.** La versione dei crate può passare da
 `0.1.0` a `0.2.0` senza che un solo schema si muova, e uno schema può salire in
