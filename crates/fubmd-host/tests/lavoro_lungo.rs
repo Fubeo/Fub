@@ -13,9 +13,8 @@
 //! 3. se il vault cambia mentre il job calcola, la guardia che se ne accorge è
 //!    quella di tutti: la `base` della decisione 0008, e `Conflict`.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier, RwLock};
-use std::time::{Duration, Instant};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::thread::JoinHandle;
 
 use camino::Utf8PathBuf;
 use fubmd_abi::edit::{EditRequest, TextEdit};
@@ -23,7 +22,6 @@ use fubmd_abi::model::{DocId, Span};
 use fubmd_abi::traits::{HostApi, Plugin, PluginManifest, VaultRead, VaultWrite};
 use fubmd_abi::PluginError;
 use fubmd_host::{Host, JobHost, NoWatcher};
-use fubmd_kernel::Workspace;
 
 const INVENTARIO: &str = "fubmd.inventario";
 
@@ -166,57 +164,63 @@ fn un_job_che_non_tocca_lhost_resta_un_calcolo_puro() {
     ));
 }
 
-/// **Dove era arrivata la camminata** quando un salvataggio che l'ha trovata in
-/// corso è finalmente entrato — e, per chi legge il messaggio di un fallimento,
-/// quanto ha aspettato l'orologio.
+/// **Una camminata che si ferma dopo ogni nota**, e che riparte solo quando
+/// glielo si dice.
 ///
-/// È la misura del §8.3, riusata qui perché la domanda è la stessa vista da
-/// un'altra parte: là si chiedeva se una lettura facesse aspettare chi salva,
-/// qui se lo faccia un lavoro lungo.
+/// È il banco delle due colonne, ed è ciò che toglie di mezzo la corsa. Finché
+/// chi cammina correva libero, la domanda «chi salva è entrato durante?» aveva
+/// **due** incognite: dove fosse arrivata la camminata, e se chi salva avesse
+/// fatto in tempo a mettersi in coda prima che finisse. La seconda non la decide
+/// questo repo — la decide lo scheduler — ed è quella che rendeva il test rosso
+/// una volta su dieci con il codice giusto sotto.
 ///
-/// Un salvataggio solo, e non un ciclo: il ciclo misurerebbe anche la contesa
-/// dei salvataggi fra loro, che non è ciò di cui si discute qui, e costerebbe al
-/// banco un indice ricommittato mille volte. La `camminata` riceve la barriera e
-/// la sblocca **quando è partita** — è quel momento a definire l'intervallo, e
-/// una `sleep` al suo posto misurerebbe la macchina invece della proprietà.
-///
-/// Il contatore lo incrementa chi cammina, **dopo** ogni lettura; chi salva lo
-/// legge quando ha ottenuto il prestito esclusivo, cioè quando l'altro è per
-/// forza fermo. Che possa sbagliare di un documento — l'incremento sta appena
-/// fuori dalla lettura — non tocca nessuna delle due asserzioni, che distinguono
-/// «durante» da «alla fine».
-struct Ingresso {
-    /// Quante note la camminata aveva letto quando chi salva è entrato.
-    letti: usize,
-    /// Quanto ha aspettato. Non ci si asserisce sopra — vedi
-    /// [`mentre_un_job_cammina_il_vault_chi_salva_non_aspetta`] — ma è ciò che
-    /// rende leggibile un fallimento.
-    atteso: Duration,
+/// Col rendez-vous la seconda incognita **non esiste**. Quando `fatto` consegna
+/// un numero, chi cammina è tornato a `via.recv()`: non ha in mano nessun
+/// prestito e non ne può prendere uno finché non gli si dà il via. Quello che
+/// resta da chiedere è una domanda sola, e non ha dentro nessun arbitro.
+struct Camminata {
+    /// «Ho letto la n-esima nota, e adesso sono fermo.»
+    fatto: Receiver<usize>,
+    /// «Vai avanti.» Chiuderlo fa finire la camminata.
+    prosegui: SyncSender<()>,
+    thread: JoinHandle<()>,
 }
 
-fn ingresso_di_chi_salva(
-    ws: &Arc<RwLock<Workspace>>,
-    camminata: impl FnOnce(&Barrier, &AtomicUsize),
-) -> Ingresso {
-    let via = Arc::new(Barrier::new(2));
-    let letti = Arc::new(AtomicUsize::new(0));
-    let salvatore = {
-        let (ws, via, letti) = (ws.clone(), via.clone(), letti.clone());
-        std::thread::spawn(move || {
-            via.wait();
-            let t = Instant::now();
-            let mut w = ws.write().unwrap();
-            let ingresso = Ingresso {
-                letti: letti.load(Ordering::SeqCst),
-                atteso: t.elapsed(),
-            };
-            w.write_document(&DocId::new("Nota 0.md"), "# Nota 0\n\nsalvata\n")
-                .expect("il salvataggio riesce");
-            ingresso
-        })
-    };
-    camminata(&via, &letti);
-    salvatore.join().expect("il thread di chi salva non pania")
+impl Camminata {
+    /// Fa leggere **una** nota e torna quante ne ha lette in tutto. Al ritorno
+    /// chi cammina è fermo, di sicuro: è la proprietà su cui poggia tutto il
+    /// test. `None` quando la camminata è finita.
+    fn passo(&self) -> Option<usize> {
+        self.prosegui.send(()).ok()?;
+        self.fatto.recv().ok()
+    }
+
+    fn finisci(self) {
+        drop(self.prosegui);
+        drop(self.fatto);
+        self.thread
+            .join()
+            .expect("il thread della camminata non pania");
+    }
+}
+
+/// Avvia una camminata passo-passo. Il corpo riceve i due capi del rendez-vous e
+/// deve rispettarne il protocollo: `via.recv()` prima di ogni lettura,
+/// `fatto.send(n)` dopo.
+fn passo_passo(
+    corpo: impl FnOnce(&Receiver<()>, &SyncSender<usize>) + Send + 'static,
+) -> Camminata {
+    // Capacità **zero** in tutti e due i versi: una `send` che tornasse senza che
+    // l'altro l'abbia presa rimetterebbe dentro l'incertezza che questo banco
+    // esiste per togliere.
+    let (prosegui, via) = sync_channel::<()>(0);
+    let (fine_passo, fatto) = sync_channel::<usize>(0);
+    let thread = std::thread::spawn(move || corpo(&via, &fine_passo));
+    Camminata {
+        fatto,
+        prosegui,
+        thread,
+    }
 }
 
 /// **La contropartita, ed è la ragione vera della voce.**
@@ -228,28 +232,39 @@ fn ingresso_di_chi_salva(
 /// camminata, che è la forma esatta di ciò che il §9.1 chiamava «fare lì, in
 /// esclusiva sul workspace, il lavoro che il job doveva togliere da lì».
 ///
-/// Ciò che si asserisce è **dove chi salva riesce a entrare**: durante la
-/// camminata da una parte, solo alla sua fine dall'altra. E non quanto aspetta.
+/// Ciò che si asserisce è **se chi salva può entrare mentre l'altro cammina**:
+/// da una parte sì, a metà camminata come al primo passo; dall'altra no, fino
+/// alla fine. E non quanto aspetta.
 ///
-/// La differenza non è cosmetica, ed è costata una CI rossa. La prima stesura
-/// chiedeva un **rapporto** fra i due tempi — dieci a uno — ragionando che una
-/// macchina lenta allunga entrambe le colonne e lascia intatta la distanza. È
-/// vero della velocità della macchina e falso di ciò che decide davvero questa
-/// attesa, che è **come il sistema operativo arbitra un `RwLock`**. Su Linux chi
-/// salva entra in poche centinaia di nanosecondi: il futex mette in coda chi
-/// scrive e i lettori che arrivano dopo non lo scavalcano, e il rapporto misurato
-/// è nell'ordine delle diecimila volte. Su macOS chi legge può rientrare mentre
-/// chi scrive è in coda, e la stessa riga ha misurato 3,46 ms su 10,5 ms di
-/// camminata: rapporto tre, e rosso — con il codice giusto sotto.
+/// La differenza non è cosmetica, ed è costata una CI rossa **due volte**.
 ///
-/// Un test che cade per una proprietà del lock di sistema non sta guardando ciò
-/// per cui esiste. Quello che il `JobHost` decide è **quando il prestito viene
-/// rilasciato**: per chiamata, o una volta sola per tutto il job. Chi salva
-/// entrerà nel primo spiraglio che quella scelta apre — al primo se il sistema
-/// accoda chi scrive, dopo cinquanta se lo lascia affamare — ma *uno spiraglio
-/// esiste*, e con il prestito unico non ne esiste nessuno fino alla fine. Quello
-/// è il confine netto, vale su ogni sistema e a ogni velocità, e cade
-/// esattamente sul difetto che questa voce esisteva per togliere.
+/// La prima stesura chiedeva un **rapporto** fra i due tempi — dieci a uno —
+/// ragionando che una macchina lenta allunga entrambe le colonne e lascia
+/// intatta la distanza. È vero della velocità della macchina e falso di ciò che
+/// decide davvero quell'attesa, che è **come il sistema operativo arbitra un
+/// `RwLock`**. Su Linux chi salva entra in poche centinaia di nanosecondi: il
+/// futex mette in coda chi scrive e i lettori che arrivano dopo non lo
+/// scavalcano. Su macOS chi legge può rientrare mentre chi scrive è in coda, e
+/// la stessa riga ha misurato 3,46 ms su 10,5 ms di camminata: rapporto tre, e
+/// rosso — con il codice giusto sotto.
+///
+/// La seconda ha tolto l'orologio e ha chiesto **dove** fosse arrivata la
+/// camminata quando chi salva è entrato, con due thread lanciati insieme da una
+/// barriera. Meglio, e ancora una corsa: la barriera dice che chi cammina è
+/// *partito*, non che chi salva sia riuscito a **mettersi in coda** prima che i
+/// centocinquanta parse finissero. Se lo scheduler non gli dà la CPU in tempo,
+/// chi salva arriva a lock libero e a camminata finita, e la riga è rossa senza
+/// che niente sia rotto. Misurato su questo repo: **2 fallimenti su 20 corse**,
+/// anche eseguendo il solo binario.
+///
+/// Questa stesura toglie l'ultima incognita invece di allargarne la tolleranza.
+/// La camminata si ferma dopo ogni nota ([`Camminata`]), quindi *dove* si trova
+/// l'altro non è più una domanda; e ciò che resta si chiede con `try_write`, che
+/// non ha dentro nessun arbitro — è «il prestito è libero **adesso**?» invece di
+/// «quanto devo aspettare?». Ed è esattamente la domanda della voce: quello che
+/// il `JobHost` decide è **quando il prestito viene rilasciato** — per chiamata,
+/// o una volta sola per tutto il job — non chi vince la coda. Un test che cade
+/// per una proprietà del lock di sistema non sta guardando ciò per cui esiste.
 #[test]
 fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
     const NOTE: usize = 150;
@@ -257,51 +272,105 @@ fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
     let host = aperto(&v);
     let ws = host.workspace(None).unwrap();
 
-    let con_job = {
+    // --- la colonna del job: il prestito è **per chiamata** -----------------
+    let job = {
         let ws_job = ws.clone();
-        ingresso_di_chi_salva(&ws, |via, letti| {
+        passo_passo(move |via, fatto| {
             let job_host = JobHost::new(ws_job, INVENTARIO);
             let documenti = job_host.list_documents(None).unwrap().items;
-            via.wait();
-            for id in &documenti {
+            for (letti, id) in documenti.iter().enumerate() {
+                if via.recv().is_err() {
+                    return;
+                }
                 let _ = job_host.read_model(id);
-                letti.fetch_add(1, Ordering::SeqCst);
+                if fatto.send(letti + 1).is_err() {
+                    return;
+                }
             }
         })
     };
 
-    let nel_giro_sincrono = {
+    assert_eq!(job.passo(), Some(1), "la camminata ha letto la prima nota");
+    // E chi salva entra **qui**, con centoquarantanove note ancora da leggere.
+    // Non «prova a entrare»: entra, e scrive davvero.
+    let mut chi_salva = ws.try_write().expect(
+        "chi salva ha trovato il vault occupato dopo una sola nota su 150: il \
+         `JobHost` tiene il prestito per la durata del job invece che per quella \
+         di una chiamata, ed è il difetto che la voce esisteva per togliere",
+    );
+    chi_salva
+        .write_document(&DocId::new("Nota 0.md"), "# Nota 0\n\nsalvata\n")
+        .expect("il salvataggio riesce");
+    drop(chi_salva);
+
+    // Non era lo spiraglio del primo passo: ogni passo ne apre uno.
+    for _ in 1..NOTE / 2 {
+        job.passo().expect("la camminata prosegue");
+    }
+    assert!(
+        ws.try_write().is_ok(),
+        "il primo spiraglio c'era e a metà camminata no: il prestito non si \
+         rilascia a ogni chiamata"
+    );
+
+    let mut ultimo = 0;
+    while let Some(n) = job.passo() {
+        ultimo = n;
+    }
+    assert_eq!(
+        ultimo, NOTE,
+        "la camminata non è arrivata in fondo: chi salva le è passato in mezzo, \
+         non addosso"
+    );
+    job.finisci();
+
+    // --- la colonna di controllo: un prestito solo, per tutta la camminata --
+    // È la strada di prima, ed era l'unica che avesse il chiamante di un job.
+    let sincrono = {
         let ws_prestito = ws.clone();
-        ingresso_di_chi_salva(&ws, |via, letti| {
-            // Un prestito solo, tenuto per tutta la camminata: è la strada di
-            // prima, ed era l'unica che avesse il chiamante di un job.
+        passo_passo(move |via, fatto| {
             let w = ws_prestito.read().unwrap();
             let documenti = w.documents();
-            via.wait();
-            for id in &documenti {
+            for (letti, id) in documenti.iter().enumerate() {
+                if via.recv().is_err() {
+                    return;
+                }
                 let _ = w.read_model(id);
-                letti.fetch_add(1, Ordering::SeqCst);
+                if fatto.send(letti + 1).is_err() {
+                    return;
+                }
             }
         })
     };
 
-    assert!(
-        con_job.letti < NOTE,
-        "chi salva è entrato dopo {} note su {NOTE} — cioè a camminata finita, \
-         avendo aspettato {:?}: il `JobHost` tiene il prestito per la durata del \
-         job invece che per quella di una chiamata, ed è il difetto che la voce \
-         esisteva per togliere",
-        con_job.letti,
-        con_job.atteso
-    );
+    // Le stesse due domande della colonna sopra, nello stesso ordine e agli
+    // stessi due punti: dopo la prima nota, e a metà camminata.
     assert_eq!(
-        nel_giro_sincrono.letti, NOTE,
-        "la colonna di controllo non sta più controllando niente: con un prestito \
-         solo, tenuto per tutta la camminata, chi salva non può entrare prima \
-         della fine — se ci è entrato dopo {} note su {NOTE} (attesa {:?}), è \
-         cambiato il senso della riga qui sopra, non il risultato",
-        nel_giro_sincrono.letti, nel_giro_sincrono.atteso
+        sincrono.passo(),
+        Some(1),
+        "anche di qua la camminata ha letto la prima nota"
     );
+    assert!(
+        ws.try_write().is_err(),
+        "la colonna di controllo non sta più controllando niente: con un \
+         prestito solo, tenuto per tutta la camminata, chi salva non può entrare \
+         — e dopo una nota su {NOTE} è entrato. È cambiato il senso delle righe \
+         qui sopra, non il loro risultato"
+    );
+
+    for _ in 1..NOTE / 2 {
+        sincrono
+            .passo()
+            .expect("la camminata di controllo prosegue");
+    }
+    assert!(
+        ws.try_write().is_err(),
+        "e a metà camminata nemmeno: dove il prestito per chiamata apriva uno \
+         spiraglio, il prestito unico non ne apre nessuno. Se questa riga è rossa \
+         non lo tiene più per tutta la camminata, e le due colonne non si stanno \
+         più confrontando"
+    );
+    sincrono.finisci();
 }
 
 /// **Cosa succede se il vault cambia mentre il job calcola**, che era la seconda
