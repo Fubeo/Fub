@@ -13,6 +13,7 @@ flowchart TB
     classDef provider fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff
     classDef mount    fill:#065f46,stroke:#10b981,stroke-width:2px,color:#fff
     classDef glue     fill:#7c2d12,stroke:#ea580c,stroke-width:2px,color:#fff
+    classDef banco    fill:#4a044e,stroke:#c026d3,stroke-width:2px,color:#fff
     classDef ui       fill:#374151,stroke:#9ca3af,stroke-width:2px,color:#fff
     classDef storage  fill:#276749,stroke:#38a169,stroke-width:2px,color:#fff
     classDef future   fill:#3f3f46,stroke:#a1a1aa,stroke-width:2px,color:#d4d4d8,stroke-dasharray: 6 4
@@ -176,12 +177,14 @@ flowchart TD
     classDef provider fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff
     classDef mount    fill:#065f46,stroke:#10b981,stroke-width:2px,color:#fff
     classDef glue     fill:#7c2d12,stroke:#ea580c,stroke-width:2px,color:#fff
+    classDef banco    fill:#4a044e,stroke:#c026d3,stroke-width:2px,color:#fff
 
     app["fubmd-app"]:::glue
     host["fubmd-host"]:::mount
     features["fubmd-features"]:::provider
     markdown["fubmd-format-markdown"]:::provider
     sdk["fubmd-sdk"]:::provider
+    testkit["fubmd-testkit"]:::banco
     kernel["fubmd-kernel"]:::core
     abi["fubmd-abi"]:::contract
 
@@ -198,10 +201,16 @@ flowchart TD
     markdown --> sdk
     kernel --> abi
     sdk --> abi
+    testkit --> abi
+    testkit --> kernel
 
     features -.-> kernel
     features -.-> markdown
+    features -.-> sdk
+    features -.-> testkit
     markdown -.-> kernel
+    kernel -.-> testkit
+    host -.-> testkit
 ```
 
 | Riquadro | Manifest | Cosa dichiara |
@@ -213,9 +222,10 @@ flowchart TD
 | `fubmd-features` | [Cargo.toml](../../crates/fubmd-features/Cargo.toml) | solo il contratto — il kernel è dev-only, ed è l'invariante del dogfooding |
 | `fubmd-host` | [Cargo.toml](../../crates/fubmd-host/Cargo.toml) | i quattro a monte: è il composition root, e monta ciò che gli altri offrono |
 | `fubmd-app` | [Cargo.toml](../../crates/fubmd-app/Cargo.toml) | abi, kernel, host, features; `tauri` entra solo qui |
+| `fubmd-testkit` | [Cargo.toml](../../crates/fubmd-testkit/Cargo.toml) | contratto e **kernel**: è il banco di prova del lato host, e per questo non è mai dipendenza normale di nessuno |
 
-Le tre frecce tratteggiate sono la parte che vale la pena guardare, perché sono
-un confine e non una comodità: `fubmd-features` e `fubmd-format-markdown` usano
+Le frecce tratteggiate sono la parte che vale la pena guardare, perché sono un
+confine e non una comodità: `fubmd-features` e `fubmd-format-markdown` usano
 `fubmd-kernel` **solo nei test**. Le loro librerie girano con ciò che avrà un
 plugin di terzi — il contratto e nient'altro — e quel «nient'altro» è verificato
 da `official_features_do_not_depend_on_the_kernel`
@@ -231,12 +241,21 @@ mente più di uno sbagliato, perché ha l'aria di essere completo. Vale anche pe
 un crate nuovo: nasce, e il diagramma che non lo nomina fallisce.
 
 `fubmd-app` non compare in nessun altro riquadro come dipendenza: è una foglia,
-e ci sta apposta. `fubmd-sdk` invece ha un cliente solo, `fubmd-format-markdown`
-— è il crate più piccolo del workspace e il disegno lo dice senza commentarlo.
+e ci sta apposta. `fubmd-testkit` è la foglia opposta — **nessuna** freccia piena
+esce verso di lui, e ci sta apposta anche quello: un banco di prova che entrasse
+in una libreria si porterebbe dietro il kernel, ed è ciò che
+`il_banco_di_prova_non_entra_in_nessuna_libreria` impedisce guardando *tutti* i
+membri invece di un elenco.
+
+`fubmd-sdk` ha un cliente solo fra le dipendenze piene, `fubmd-format-markdown`,
+ed è il fatto da cui dipende un intero ragionamento: è quella freccia — non il
+guest WASM di M5 — a rendere impossibile mettere il kernel nell'SDK
+([0054](../decisions/0054-il-banco-del-lato-provider.md)). Fra le tratteggiate ha
+anche `fubmd-features`, che da lì prende `MemoryHost`.
 
 L'elenco a indentazione in [PIANO.md](../PIANO.md#struttura-dei-crate) sembra un
-grafo ma non lo è: nomina anche `fubmd-testkit` e `fubmd-wasm-host`, che non
-esistono. Quello è l'elenco di destinazione; questo è la fotografia.
+grafo ma non lo è: nomina anche `fubmd-wasm-host`, che non esiste. Quello è
+l'elenco di destinazione; questo è la fotografia.
 
 ## Dove gira cosa
 

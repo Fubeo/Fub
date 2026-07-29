@@ -228,10 +228,10 @@ pub fn catalog() -> Vec<StringCatalog> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::MemoryHost;
     use fubmd_abi::locale::Locale;
     use fubmd_abi::text::Strings;
     use fubmd_abi::ui::UiKind;
+    use fubmd_sdk::testing::MemoryHost;
 
     /// Le righe del pannello **come le legge chi guarda**: risolte col catalogo
     /// di questo componente, invece che stampate col `Display` del `Text`.

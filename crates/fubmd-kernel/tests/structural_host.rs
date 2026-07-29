@@ -31,44 +31,9 @@ use fubmd_abi::options::syntax;
 use fubmd_abi::traits::{CommandProvider, HostApi};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_testkit::TestoDiProva;
 
-/// Provider di formato minimo, per i casi che non guardano i link.
-struct PlainProvider;
-
-impl FormatProvider for PlainProvider {
-    fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text("plain", "Testo piatto (test)", &["md"])
-    }
-
-    fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities::default()
-    }
-
-    fn parse(
-        &self,
-        source: &DocumentSource,
-        ctx: &ParseContext,
-    ) -> Result<DocumentModel, FormatError> {
-        let source = source.text().unwrap_or_default();
-        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
-        model.text = source.to_string();
-        Ok(model)
-    }
-
-    fn render_html(
-        &self,
-        model: &DocumentModel,
-        _opts: &RenderOptions,
-    ) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-
-    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-}
-
-/// Come [`PlainProvider`], ma ogni riga non vuota è un wikilink: basta a far
+/// Come [`TestoDiProva`], ma ogni riga non vuota è un wikilink: basta a far
 /// esistere dei backlink da riscrivere, e non tira dentro il provider markdown
 /// (il kernel non dipende da nessun formato — è l'invariante che
 /// `dependency_invariant.rs` presidia).
@@ -122,7 +87,7 @@ impl FormatProvider for LinkLineProvider {
 }
 
 fn vault_plain() -> (tempfile::TempDir, Workspace) {
-    vault(Box::new(PlainProvider))
+    vault(TestoDiProva::per_estensione("md").boxed())
 }
 
 /// Il vault dove i link esistono: serve dove il test guarda la riscrittura.

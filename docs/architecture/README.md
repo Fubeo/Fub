@@ -11,7 +11,7 @@ sapendo che si riscrivono centoventidue riferimenti.
 **Il colpo d'occhio**
 
 - [mappa-visuale.md](mappa-visuale.md) — tutta l'architettura in tre disegni:
-  quello disposto a mano (i sette crate, la shell, il disco, e — tratteggiato —
+  quello disposto a mano (gli otto crate, la shell, il disco, e — tratteggiato —
   ciò che non esiste ancora), il **grafo delle dipendenze**, che un test rilegge
   e confronta con `cargo metadata`, e **dove gira cosa** mentre l'app è accesa.
   Da qui si capisce dove stanno gli altri documenti.

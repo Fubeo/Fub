@@ -27,10 +27,7 @@ use fubmd_abi::custom::{
 };
 use fubmd_abi::error::{FormatError, PluginError};
 use fubmd_abi::event::{Event, EventKind, EventMask, Notice};
-use fubmd_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
-    RenderOptions,
-};
+use fubmd_abi::format::{ParseContext, RenderOptions};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{
     EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, JobSpec,
@@ -39,42 +36,9 @@ use fubmd_abi::traits::{
 };
 use fubmd_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fubmd_kernel::{FormatRegistry, RegistryError, Trust, Workspace};
+use fubmd_testkit::TestoDiProva;
 
 // --- il minimo indispensabile per avere un vault ----------------------------
-
-struct PlainProvider;
-
-impl FormatProvider for PlainProvider {
-    fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text("plain", "Testo semplice (test)", &["txt"])
-    }
-
-    fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities::default()
-    }
-
-    fn parse(
-        &self,
-        source: &DocumentSource,
-        ctx: &ParseContext,
-    ) -> Result<DocumentModel, FormatError> {
-        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
-        model.text = source.text().unwrap_or_default().to_string();
-        Ok(model)
-    }
-
-    fn render_html(
-        &self,
-        model: &DocumentModel,
-        _opts: &RenderOptions,
-    ) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-
-    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-}
 
 // --- una spia che registra la propria vita ----------------------------------
 
@@ -265,7 +229,9 @@ impl Banco {
 
     fn workspace(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
-        registry.register(Box::new(PlainProvider)).expect("formato");
+        registry
+            .register(TestoDiProva::per_estensione("txt").con_id("plain").boxed())
+            .expect("formato");
         let mut ws = Workspace::new(&self.root, registry);
         for id in ["prova.uno", "prova.due"] {
             dichiara(&mut ws, id);

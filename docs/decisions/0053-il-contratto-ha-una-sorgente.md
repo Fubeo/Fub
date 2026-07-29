@@ -329,4 +329,4 @@ volta.
   **esaustivi per costruzione** in un posto che prima era un elenco. Ciò che il
   §16.7 chiede ancora — l'inventario dei provider ufficiali, le capacità del
   `TriesEverything` — non è toccato, e continua a passare per il banco del
-  [§16.2](../roadmap/16-crate-sdk-banchi-di-prova.md#162-il-banco-di-prova-del-kernel-è-copiato-diciotto-volte).
+  [§16.2](0055-il-banco-del-lato-host.md).

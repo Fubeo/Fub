@@ -366,6 +366,78 @@ fn official_features_do_not_depend_on_the_kernel() {
     );
 }
 
+/// Il confine sdk↔kernel: **l'SDK è ciò che un guest importa**, e il kernel non
+/// ci può stare (§16.1).
+///
+/// Questa rete è nata da una premessa trovata falsa. La [seduta
+/// 16](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md) dava per scontato
+/// che mettere `fubmd-kernel` in `fubmd-sdk` «violerebbe l'invariante che
+/// `dependency_invariant.rs` presidia» — e questo file, letto riga per riga, non
+/// nominava `fubmd-sdk` da nessuna parte: l'allowlist copre `fubmd-abi` e
+/// `fubmd-kernel`, i due confini coprono `fubmd-features` e `fubmd-host`.
+/// L'invariante c'era nelle intenzioni e non nel test, che è il caso peggiore
+/// dei due — una garanzia che si crede di avere non la si va a verificare.
+///
+/// La conseguenza è concreta e non teorica: `fubmd-sdk` è **dipendenza normale**
+/// di `fubmd-format-markdown`. Il kernel dentro l'SDK finirebbe nella libreria
+/// di un provider di formato, cioè esattamente dove il progetto ha deciso che
+/// non stia — e ci finirebbe anche dietro una cargo feature, perché
+/// l'unificazione delle feature nel workspace la accende per tutti appena
+/// qualcuno la chiede.
+#[test]
+fn l_sdk_non_vede_il_kernel() {
+    let meta = metadata();
+    let graph = Graph::new(&meta);
+
+    assert!(
+        !graph.direct("fubmd-sdk").contains("fubmd-kernel"),
+        "`fubmd-sdk` dichiara `fubmd-kernel` fra le dipendenze normali.\n\
+         L'SDK è ciò che un guest WASM importa a M5, ed è dipendenza normale di\n\
+         `fubmd-format-markdown`: il kernel qui finisce nella libreria di un\n\
+         provider. Il banco che ha bisogno del kernel è `fubmd-testkit`.\n\
+         Vedi docs/decisions/0054-il-banco-del-lato-provider.md."
+    );
+    assert!(
+        !graph.closure("fubmd-sdk").contains("fubmd-kernel"),
+        "`fubmd-sdk` raggiunge `fubmd-kernel` fra le dipendenze normali, passando\n\
+         per qualcun altro. Vale la stessa ragione: chi importa l'SDK non deve\n\
+         trovarsi il kernel nel grafo."
+    );
+}
+
+/// Il banco del lato host non è mai una **dipendenza normale** di nessuno
+/// (§16.2).
+///
+/// `fubmd-testkit` ha il kernel fra le mani per costruzione — è la sua ragione
+/// d'essere — quindi l'unico modo di renderlo innocuo è che nessuna libreria lo
+/// dichiari. Sta nei `[dev-dependencies]`, e il ciclo che ne nasce
+/// (`fubmd-kernel` → `fubmd-testkit` → `fubmd-kernel`) è legittimo proprio
+/// perché è di sola prova: cargo lo risolve, e la libreria del kernel non vede
+/// niente.
+///
+/// La rete guarda **tutti** i membri, presenti e futuri: è la forma che non
+/// invecchia quando nasce l'ennesimo crate.
+#[test]
+fn il_banco_di_prova_non_entra_in_nessuna_libreria() {
+    let meta = metadata();
+    let graph = Graph::new(&meta);
+
+    let colpevoli: Vec<&str> = graph
+        .members()
+        .into_iter()
+        .filter(|m| *m != "fubmd-testkit")
+        .filter(|m| graph.direct(m).contains("fubmd-testkit"))
+        .collect();
+
+    assert!(
+        colpevoli.is_empty(),
+        "{colpevoli:?} dichiarano `fubmd-testkit` fra le dipendenze **normali**.\n\
+         È il banco di prova del lato host: ha il kernel dentro, e va nei\n\
+         [dev-dependencies] di chi lo usa. Vedi\n\
+         docs/decisions/0055-il-banco-del-lato-host.md."
+    );
+}
+
 /// Il confine host↔app: **chi monta** non deve dipendere da chi disegna (§8.2).
 ///
 /// `fubmd-host` esiste perché il composition root aveva cinque clienti previsti

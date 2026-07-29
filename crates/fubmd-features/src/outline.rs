@@ -247,8 +247,8 @@ fn subtree(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::MemoryHost;
     use fubmd_abi::model::Span;
+    use fubmd_sdk::testing::MemoryHost;
 
     fn h(level: u8, text: &str, start: usize, end: usize) -> Heading {
         Heading {

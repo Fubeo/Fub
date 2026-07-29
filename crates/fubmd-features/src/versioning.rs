@@ -921,7 +921,7 @@ impl EventHandler for VersioningHandler {
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::MemoryHost;
+    use fubmd_sdk::testing::MemoryHost;
 
     use super::*;
     use fubmd_abi::traits::{DataWrite, HostEnv, VaultWrite};

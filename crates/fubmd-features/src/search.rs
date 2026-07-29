@@ -1450,7 +1450,7 @@ impl IndexProvider for SearchIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::MemoryHost;
+    use fubmd_sdk::testing::MemoryHost;
     // Le famiglie che il doppio serve a questi test: dal §7.1 un host è la
     // somma di dieci trait, e i metodi di un trait si vedono se il trait è in
     // scope — anche quando l'oggetto li ha tutti.

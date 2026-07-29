@@ -16,27 +16,21 @@
 
 use std::sync::{Arc, Mutex};
 
-use camino::Utf8PathBuf;
 use fubmd_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fubmd_abi::event::{Event, EventKind, EventMask, Notice};
 use fubmd_abi::traits::{CommandProvider, EventHandler, HostApi, Plugin, PluginManifest};
 use fubmd_abi::PluginError;
 use fubmd_format_markdown::MarkdownProvider;
 use fubmd_host::registry::{Bundle, BundleError, BundleRegistry};
-use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_kernel::{Trust, Workspace};
+use fubmd_testkit::{Banco, Montato};
 
 // --- il banco ---------------------------------------------------------------
 
-fn vault() -> (tempfile::TempDir, Workspace) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let mut formats = FormatRegistry::new();
-    formats
-        .register(MarkdownProvider::boxed())
-        .expect("nessun conflitto");
-    let mut ws = Workspace::new(&root, formats);
-    ws.reindex().expect("scansione");
-    (dir, ws)
+fn vault() -> Montato {
+    Banco::nuovo()
+        .con_formato(MarkdownProvider::boxed())
+        .monta()
 }
 
 type Diario = Arc<Mutex<Vec<String>>>;
@@ -205,7 +199,7 @@ impl Bundle for BundleSpia {
 /// solo il test che la definisce.
 #[test]
 fn un_bundle_che_parla_un_altro_contratto_non_si_monta() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     let diario: Diario = Arc::default();
     let mut registry = BundleRegistry::new();
 
@@ -237,7 +231,7 @@ fn un_bundle_che_parla_un_altro_contratto_non_si_monta() {
 /// una traccia nel kernel, e per questo è l'unica che deve disfarla.
 #[test]
 fn un_activate_che_fallisce_non_lascia_un_plugin_dichiarato() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     let diario: Diario = Arc::default();
     let mut registry = BundleRegistry::new();
 
@@ -273,7 +267,7 @@ fn un_activate_che_fallisce_non_lascia_un_plugin_dichiarato() {
 /// cioè il `host` nella firma di `deactivate` non servirebbe a niente.
 #[test]
 fn chi_smette_ha_ancora_lhost_e_i_propri_provider() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     let diario: Diario = Arc::default();
     let mut registry = BundleRegistry::new();
 
@@ -316,7 +310,7 @@ fn chi_smette_ha_ancora_lhost_e_i_propri_provider() {
 /// l'annuncio e **prima** che il kernel gli tolga tutto.
 #[test]
 fn chiudere_ferma_i_bundle_a_rovescio_e_mentre_sono_ancora_interi() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     let diario: Diario = Arc::default();
     let mut registry = BundleRegistry::new();
 

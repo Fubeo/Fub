@@ -1,4 +1,10 @@
-//! Un host in memoria per i test delle feature.
+//! Il **banco del lato provider**: un host in memoria, e una suite di
+//! conformità con cui provare un provider contro il **contratto**.
+//!
+//! Stava in `fubmd-features`, privato e `#[cfg(test)]` — cioè raggiungibile
+//! nemmeno dagli integration test del suo stesso crate, solo dai suoi unit test.
+//! Ora è qui ([decisione
+//! 0054](../../../../docs/decisions/0054-il-banco-del-lato-provider.md)).
 //!
 //! Serve a provare le feature **contro il contratto** e non contro il kernel:
 //! una feature scritta come la scriverebbe un plugin non deve avere altro modo
@@ -13,6 +19,8 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+
+pub mod conformita;
 
 use fubmd_abi::command::CommandOutcome;
 use fubmd_abi::edit::{EditReport, EditRequest, Revision};
@@ -85,6 +93,11 @@ pub struct MemoryHost {
     locale: Mutex<Locale>,
     /// Contatore da cui [`HostEnv::random_bytes`] deriva byte deterministici.
     entropy: AtomicU64,
+    /// Un host che **non concede entropia**: `random_bytes` risponde vuoto.
+    /// Non è un capriccio del doppio, è una condizione che il contratto
+    /// ammette — e l'unico modo di provare che chi costruisce un id se ne
+    /// accorga invece di produrne uno tutto a zeri.
+    senza_entropia: std::sync::atomic::AtomicBool,
 }
 
 impl MemoryHost {
@@ -98,6 +111,13 @@ impl MemoryHost {
     /// che ordina lo dichiara, invece di scoprire il default.
     pub fn con_locale(self, locale: Locale) -> Self {
         *self.locale.lock().unwrap() = locale;
+        self
+    }
+
+    /// Un host che non concede entropia: `random_bytes` risponde vuoto, e chi
+    /// costruisce un'identità deve accorgersene.
+    pub fn senza_entropia(self) -> Self {
+        self.senza_entropia.store(true, Ordering::Relaxed);
         self
     }
 
@@ -582,6 +602,9 @@ impl HostEnv for MemoryHost {
         // altri. Due chiamate non danno mai lo stesso blocco — che è la sola
         // promessa della capacità vera — e ogni chiamata è prevedibile, che è la
         // sola cosa che rende asseribile un test.
+        if self.senza_entropia.load(Ordering::Relaxed) {
+            return Vec::new();
+        }
         let base = self.entropy.fetch_add(1, Ordering::Relaxed).to_le_bytes();
         (0..n as usize)
             .map(|i| base.get(i).copied().unwrap_or(i as u8))

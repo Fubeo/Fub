@@ -192,9 +192,9 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::MemoryHost;
     use fubmd_abi::model::DocId;
     use fubmd_abi::ui::UiKind;
+    use fubmd_sdk::testing::MemoryHost;
 
     fn istanza() -> ViewInstance {
         ViewInstance::only(BACKLINKS_VIEW)

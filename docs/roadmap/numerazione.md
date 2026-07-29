@@ -37,6 +37,8 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §2.29 · §15.4 | [0048 — Una radice sola, e la classe di un dato](../decisions/0048-una-radice-sola.md) |
 | §4.8 · §16.4 | [0053 — Il contratto ha una sorgente, e due confini che non hanno la stessa forma](../decisions/0053-il-contratto-ha-una-sorgente.md) |
 | §4.1 · §16.5 | [0053 — Il contratto ha una sorgente, e due confini che non hanno la stessa forma](../decisions/0053-il-contratto-ha-una-sorgente.md) |
+| §4.6 · §16.1 | [0054 — Il banco del lato provider](../decisions/0054-il-banco-del-lato-provider.md) |
+| §4.12 · §16.2 | [0055 — Il banco del lato host](../decisions/0055-il-banco-del-lato-host.md) |
 | §3.11 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §3.13 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §1.2 · §2.1 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
@@ -131,9 +133,7 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §4.3 | **§17.1** | Corpus, fuzzing, prestazioni |
 | §4.4 | **§17.2** | Test della shell |
 | §4.5 | **§17.3** | Osservabilità |
-| §4.6 | **§16.1** | L'SDK come superficie di riuso — oggi è quasi vuoto |
 | §4.7 | **§16.3** | Un crate per bundle di feature |
-| §4.12 | **§16.2** | Il banco di prova del kernel è copiato diciotto volte |
 
 **Voci senza un numero vecchio.** Cinque famiglie non compaiono qui sopra
 perché non traducono niente: sono **nate** con la numerazione per sedute.

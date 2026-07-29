@@ -267,8 +267,8 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::MemoryHost;
     use fubmd_abi::traits::{ViewStateRead, ViewStateWrite};
+    use fubmd_sdk::testing::MemoryHost;
 
     fn tag(name: &str, count: u32) -> TagCount {
         TagCount {

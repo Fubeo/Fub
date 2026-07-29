@@ -14,47 +14,14 @@
 //! «nessuno lo ha saputo».
 
 use camino::Utf8PathBuf;
-use fubmd_abi::error::{FormatError, PluginError};
+use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Event, EventMask, Notice, Severity};
-use fubmd_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
-};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{
     EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute,
 };
-use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Workspace};
-
-struct PlainProvider;
-
-impl FormatProvider for PlainProvider {
-    fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text("plain", "Testo semplice (test)", &["txt"])
-    }
-    fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities::default()
-    }
-    fn parse(
-        &self,
-        source: &DocumentSource,
-        ctx: &ParseContext,
-    ) -> Result<DocumentModel, FormatError> {
-        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
-        model.text = source.text().unwrap_or_default().to_string();
-        Ok(model)
-    }
-    fn render_html(
-        &self,
-        model: &DocumentModel,
-        _opts: &RenderOptions,
-    ) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-}
+use fubmd_testkit::TestoDiProva;
 
 /// Un indice che rifiuta ciò che gli si dà, e **lo dice**: è il
 /// `SearchIndex` col writer andato, ridotto all'osso.
@@ -129,7 +96,9 @@ impl Fixture {
 
     fn workspace(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
-        registry.register(Box::new(PlainProvider)).expect("plain");
+        registry
+            .register(TestoDiProva::per_estensione("txt").boxed())
+            .expect("plain");
         let mut ws = Workspace::new(&self.root, registry);
         for plugin in ["test.rifiuta", "test.fallisce"] {
             ws.register_core_feature(plugin, plugin)

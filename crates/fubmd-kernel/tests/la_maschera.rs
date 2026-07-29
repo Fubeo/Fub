@@ -21,52 +21,14 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
-use fubmd_abi::error::{FormatError, PluginError};
+use fubmd_abi::error::PluginError;
 use fubmd_abi::event::{Event, EventKind, EventMask, Notice, Subject};
-use fubmd_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
-};
-use fubmd_abi::model::{DocId, DocumentModel};
+use fubmd_abi::model::DocId;
 use fubmd_abi::traits::{EventHandler, HostApi, PluginManifest, PluginPermissions};
-use fubmd_abi::FormatProvider;
 use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_testkit::TestoDiProva;
 
 type Log = Arc<Mutex<Vec<String>>>;
-
-/// Il formato giocattolo degli altri test del kernel: una nota è il suo testo.
-struct PlainProvider;
-
-impl FormatProvider for PlainProvider {
-    fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text("plain", "Testo semplice (test)", &["txt"])
-    }
-
-    fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities::default()
-    }
-
-    fn parse(
-        &self,
-        source: &DocumentSource,
-        ctx: &ParseContext,
-    ) -> Result<DocumentModel, FormatError> {
-        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
-        model.text = source.text().unwrap_or_default().to_string();
-        Ok(model)
-    }
-
-    fn render_html(
-        &self,
-        model: &DocumentModel,
-        _opts: &RenderOptions,
-    ) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-
-    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-}
 
 /// Un handler che scrive ciò che riceve, con la maschera che gli si dà.
 struct Spia {
@@ -106,7 +68,9 @@ fn vault(mask: EventMask) -> (tempfile::TempDir, Workspace, Log) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     let mut registry = FormatRegistry::new();
-    registry.register(Box::new(PlainProvider)).expect("formato");
+    registry
+        .register(TestoDiProva::per_estensione("txt").boxed())
+        .expect("formato");
     let mut ws = Workspace::new(&root, registry);
     ws.register_core_feature(SPIA, SPIA).expect("dichiarato");
     for plugin in [ACME, ALTRO] {

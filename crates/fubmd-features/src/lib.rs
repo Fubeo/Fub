@@ -39,12 +39,6 @@ pub mod stats;
 pub mod tags;
 pub mod versioning;
 
-/// Doppio dell'host per i test unitari delle feature (in memoria, orologio
-/// pilotabile): una feature scritta come la scriverebbe un plugin si prova
-/// contro il **contratto**, non contro il kernel.
-#[cfg(test)]
-mod testing;
-
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 pub use blocks::{
     DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID, DIAGRAMS_RULE,

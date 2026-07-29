@@ -9,56 +9,16 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
-use fubmd_abi::error::{FormatError, PluginError};
+use fubmd_abi::error::PluginError;
 use fubmd_abi::event::Notice;
-use fubmd_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
-};
 use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fubmd_abi::traits::{
     DocumentMatch, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page, Paged,
     PredicateKind, PropertySelect, QueryRoute,
 };
-use fubmd_abi::FormatProvider;
 use fubmd_kernel::{data_root, FormatRegistry, Workspace};
-
-/// Provider minimo: il documento è il suo testo, niente link né struttura.
-/// All'indice serve solo che `DocumentModel.text` arrivi popolato.
-struct PlainProvider;
-
-impl FormatProvider for PlainProvider {
-    fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text("plain", "Testo semplice (test)", &["txt"])
-    }
-
-    fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities::default()
-    }
-
-    fn parse(
-        &self,
-        source: &DocumentSource,
-        ctx: &ParseContext,
-    ) -> Result<DocumentModel, FormatError> {
-        let source = source.text().unwrap_or_default();
-        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
-        model.text = source.to_string();
-        Ok(model)
-    }
-
-    fn render_html(
-        &self,
-        model: &DocumentModel,
-        _opts: &RenderOptions,
-    ) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-
-    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
-        Ok(model.text.clone())
-    }
-}
+use fubmd_testkit::TestoDiProva;
 
 /// Una chiamata ricevuta dalla spia.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -199,7 +159,7 @@ impl Fixture {
     fn workspace(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
-            .register(Box::new(PlainProvider))
+            .register(TestoDiProva::per_estensione("txt").boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry);
         for plugin in [

@@ -9,7 +9,6 @@
 //! documento (anche quando a spostarla è stato qualcun altro), e che la si
 //! chiede dal canale dati come qualunque altro dato.
 
-use camino::Utf8PathBuf;
 use fubmd_abi::error::FormatError;
 use fubmd_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -18,6 +17,7 @@ use fubmd_abi::model::{DocId, DocumentModel};
 use fubmd_abi::traits::{IndexQuery, IndexResult};
 use fubmd_abi::FormatProvider;
 use fubmd_kernel::{organization_path, FormatRegistry, Workspace};
+use fubmd_testkit::{Banco, Montato};
 
 /// Il minimo per avere documenti da rinominare: qui non si prova il parsing.
 struct Note;
@@ -58,10 +58,11 @@ fn registro() -> FormatRegistry {
     registry
 }
 
-fn vault() -> (tempfile::TempDir, Workspace) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    (dir, Workspace::new(&root, registro()))
+fn vault() -> Montato {
+    Banco::nuovo()
+        .con_formato(Box::new(Note))
+        .senza_scansione()
+        .monta()
 }
 
 fn organizzazione(ws: &Workspace) -> fubmd_abi::organization::Organization {
@@ -76,7 +77,7 @@ fn organizzazione(ws: &Workspace) -> fubmd_abi::organization::Organization {
 /// che sapeva chiedere la shell e nessun altro.
 #[test]
 fn si_chiede_dal_canale_dati() {
-    let (_dir, ws) = vault();
+    let ws = vault();
     assert_eq!(organizzazione(&ws), Default::default());
 
     ws.set_icon("Nota.md", Some("📌".into())).expect("scrive");
@@ -90,7 +91,7 @@ fn si_chiede_dal_canale_dati() {
 /// questa prova cade: l'icona resta attaccata a un path che non esiste più.
 #[test]
 fn una_rinomina_porta_con_se_lorganizzazione() {
-    let (_dir, mut ws) = vault();
+    let mut ws = vault();
     ws.write_document(&DocId::new("Nota.md"), "corpo")
         .expect("scrive");
     ws.set_icon("Nota.md", Some("📌".into())).expect("scrive");
@@ -112,8 +113,8 @@ fn una_rinomina_porta_con_se_lorganizzazione() {
 /// un budget e può troncare (decisione 0034).
 #[test]
 fn anche_una_rinomina_fatta_da_unaltra_app_la_porta_con_se() {
-    let (dir, mut ws) = vault();
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
     ws.write_document(&DocId::new("Nota.md"), "corpo")
         .expect("scrive");
     ws.set_icon("Nota.md", Some("📌".into())).expect("scrive");
@@ -135,8 +136,8 @@ fn anche_una_rinomina_fatta_da_unaltra_app_la_porta_con_se() {
 /// della macchina.
 #[test]
 fn il_file_sta_nel_vault_e_ci_resta() {
-    let (dir, ws) = vault();
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let ws = vault();
+    let root = ws.root().to_path_buf();
     ws.set_icon("Nota.md", Some("📌".into())).expect("scrive");
 
     let path = organization_path(&root);
@@ -154,8 +155,8 @@ fn il_file_sta_nel_vault_e_ci_resta() {
 /// di mille note no.
 #[test]
 fn un_sidecar_illeggibile_non_si_sovrascrive() {
-    let (dir, _ws) = vault();
-    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let banco = vault();
+    let root = banco.root().to_path_buf();
     let path = organization_path(&root);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let rotto = "{ \"icons\": {,} }";
