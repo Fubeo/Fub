@@ -22,6 +22,7 @@ use fubmd_abi::traits::{IndexQuery, IndexResult, Page, PropertySelect, VaultStat
 use fubmd_abi::Notice;
 use fubmd_features::BACKLINKS_VIEW;
 use fubmd_host::{EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
+use fubmd_kernel::data_root;
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -399,8 +400,7 @@ fn chiudere_un_vault_e_lultimo_giro_in_cui_e_ancora_aperto() {
 /// Il manifest delle impronte dell'indice di ricerca, com'è sul disco (vuoto se
 /// non c'è ancora).
 fn manifest_dell_indice(root: &Utf8Path) -> String {
-    let path = root
-        .join(".fubmd-data")
+    let path = data_root(root)
         .join("plugins")
         .join("fubmd.search")
         .join("manifest.json");

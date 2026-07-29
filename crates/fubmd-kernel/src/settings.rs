@@ -301,7 +301,7 @@ impl SettingsStore {
     /// Apre lo store di un vault: carica il livello del vault e si aggancia a
     /// quello della macchina.
     pub fn open(root: &Utf8Path, machine: Arc<MachineSettings>) -> Self {
-        let vault_path = root.join(".fubmd").join("settings.json");
+        let vault_path = root.join(crate::vault::FUBMD_DIR).join("settings.json");
         let (vault, warnings) = match load(&vault_path) {
             Ok(values) => (values, Vec::new()),
             // Come per la macchina: un file rotto non impedisce di aprire il

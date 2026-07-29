@@ -275,7 +275,7 @@ bisogno di un posto da cui essere montato).
 - [x] **E ce n'è un terzo che si spegne da solo, trovato facendolo girare.**
       `.github/scripts/check-doc-links.mjs` — il presidio che la [decisione 0014](../decisions/0014-i-verbali-fuori-da-todo.md) ha aggiunto
       perché «una promessa senza presidio meccanico decade» — salta ogni cartella
-      che contenga un `.fubmd-data/`, per non trattare un vault come
+      che contenga un `.fubmd/`, per non trattare un vault come
       documentazione. La regola è giusta e la conseguenza no: basta aprire una
       volta `docs/` come vault (cioè fare dogfooding, che è la cosa che questo
       progetto chiede di fare) perché il controllo passi da **68 file e 718 link

@@ -44,7 +44,7 @@ per far attraversare il confine alla selezione, ed è già spuntata nel
 che l'indice, due schermate più in là, dichiara chiuso: la contraddizione era
 **dentro il documento**, non fra il documento e il codice.
 
-L'**orfana `.fubmd-data/index/`** era marcata «cosmetico», e non era una voce di
+L'**orfana `index/` sotto la radice dei derivati** era marcata «cosmetico», e non era una voce di
 questa roadmap: il criterio in testa a [todo.md](../todo.md) è *quali pezzi di
 infrastruttura mancano perché FEATURES.md si possa costruire*, e una cartella da
 cancellare a mano su un vault di sviluppo non regge nessuna voce di FEATURES. Se
@@ -52,7 +52,9 @@ un giorno la migrazione dei dati derivati conterà davvero, la risposta è già
 scritta due volte: il [§15.3](15-il-disco.md#153-una-versione-di-schema-su-ogni-formato-persistito)
 (versione di schema → *butto e ricostruisco*) e il
 [§15.4](15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
-(la mappa di chi scrive dove, e con quale classe).
+(la mappa di chi scrive dove, e con quale classe — che dalla
+[0048](../decisions/0048-una-radice-sola.md) è un documento vero,
+[on-disk-layout.md](../architecture/on-disk-layout.md)).
 
 Le due tolte hanno una morale in comune, ed è quella del
 [§16.7](16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione):

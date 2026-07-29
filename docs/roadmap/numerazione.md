@@ -34,6 +34,7 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.17 · §13.3 | [0045 — L'undo ha due pile](../decisions/0045-l-undo-ha-due-pile.md) |
 | §2.2 · §14.1 | [0046 — L'anagrafe del vault](../decisions/0046-l-anagrafe-del-vault.md) |
 | §2.20 · §14.2 | [0046 — L'anagrafe del vault](../decisions/0046-l-anagrafe-del-vault.md) |
+| §2.29 · §15.4 | [0048 — Una radice sola, e la classe di un dato](../decisions/0048-una-radice-sola.md) |
 | §3.11 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §3.13 | [0015 — La forma della shell](../decisions/0015-la-forma-della-shell.md) |
 | §1.2 · §2.1 | [0016 — Cosa è una view](../decisions/0016-cosa-e-una-view.md) |
@@ -117,7 +118,6 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
-| §2.29 | **§15.4** | I dati persistiti non hanno né una mappa né una classe |
 | §3.1 | **§1.2** | Smontare il monolite |
 | §3.2 | **§18.2** | Comandi e tastiera |
 | §3.6 | **§2.9** | Prestazioni della UI |

@@ -17,7 +17,7 @@ use fubmd_abi::traits::{
     HostApi, PluginManifest, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 use fubmd_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
-use fubmd_kernel::{FormatRegistry, Trust, Workspace};
+use fubmd_kernel::{data_root, FormatRegistry, Trust, Workspace};
 
 /// Un provider che restituisce ciò che gli si dice di restituire, e che scrive
 /// nel proprio storage per far vedere di che id è intestato l'host che riceve.
@@ -293,9 +293,7 @@ fn an_action_reaches_the_provider_with_its_own_data_space() {
     )
     .unwrap();
 
-    let scritto = fx
-        .root
-        .join(".fubmd-data")
+    let scritto = data_root(&fx.root)
         .join("plugins")
         .join("terzi.diario")
         .join("ultima-azione.txt");

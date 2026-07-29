@@ -39,3 +39,11 @@ sapendo che si riscrivono centoventidue riferimenti.
   due bus. È il verbale operativo della
   [decisione 0015](../decisions/0015-la-forma-della-shell.md): lì c'è il perché,
   qui la mappa da consultare quando si scrive un file nuovo.
+
+**Il disco**
+
+- [on-disk-layout.md](on-disk-layout.md) — chi scrive dove dentro un vault e
+  fuori: con quale classe (derivato o autorevole), quale versione di schema e
+  quale disciplina di scrittura. Da consultare **prima** di far nascere un
+  formato nuovo, che è l'unica alternativa a sceglierne il posto per imitazione
+  dell'ultimo che si è guardato.

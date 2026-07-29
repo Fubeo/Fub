@@ -21,7 +21,7 @@ use fubmd_abi::traits::{
     PropertySelect, QueryRoute,
 };
 use fubmd_abi::FormatProvider;
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_kernel::{data_root, FormatRegistry, Workspace};
 
 /// Provider minimo: il documento è il suo testo, niente link né struttura.
 /// All'indice serve solo che `DocumentModel.text` arrivi popolato.
@@ -568,9 +568,7 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
 
     // E ciò che l'indice scrive finisce nel *suo* recinto, che gli assegna
     // l'host: il provider ha nominato un blob, non un path.
-    let memoria = fx
-        .root
-        .join(".fubmd-data")
+    let memoria = data_root(&fx.root)
         .join("plugins")
         .join("test.spia")
         .join(MEMORIA);

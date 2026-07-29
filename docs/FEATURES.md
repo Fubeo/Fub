@@ -1640,7 +1640,7 @@ ricerca peggiore.
 - [ ] Snap alla griglia per le forme
 - [ ] Spessore indipendente dallo zoom
 - [ ] Inchiostro salvato come SVG nel vault
-- [ ] Inchiostro come dato utente, mai in `.fubmd-data/`
+- [ ] Inchiostro come dato utente, mai in `.fubmd/data/`
 - [ ] Inchiostro versionabile come qualsiasi file del vault
 - [ ] Compressione dei tratti
 - [ ] Campo di versione nel formato dell'inchiostro dal primo giorno

@@ -22,7 +22,7 @@
 //! # La forma
 //!
 //! ```text
-//! .fubmd-data/plugins/<plugin>/doc/<documento codificato>/<nome>
+//! .fubmd/data/plugins/<plugin>/doc/<documento codificato>/<nome>
 //! ```
 //!
 //! - Il documento è **un componente solo**, codificato con [`encode`]: un
@@ -108,7 +108,7 @@ pub fn doc_of(rel: &str) -> Option<DocId> {
 /// che i nomi di nota portano davvero: `- . _`, lo spazio, `( ) [ ]`, la virgola
 /// e l'apostrofo. `Diario/2026 città.md` diventa `Diario%2F2026 città.md`, che a
 /// occhio si legge ancora — e leggersi conta, perché è ciò che qualcuno vedrà
-/// aprendo `.fubmd-data` per capire chi sta occupando spazio.
+/// aprendo `.fubmd/data` per capire chi sta occupando spazio.
 ///
 /// Ciò che viene codificato è, oltre allo `/`: il `%` (o la decodifica non
 /// sarebbe reversibile), i cinque caratteri che Windows rifiuta nei nomi di
@@ -219,7 +219,7 @@ mod tests {
         // È l'esempio scritto accanto a `encode`, e sta qui perché un esempio
         // in un commento è la cosa che invecchia per prima: questa riga esiste
         // per farlo invecchiare **rumorosamente**. Ciò che promette è che chi
-        // apre `.fubmd-data` per capire chi occupa spazio ci riesca — quindi
+        // apre `.fubmd/data` per capire chi occupa spazio ci riesca — quindi
         // lo spazio resta uno spazio e gli accenti restano accenti, e solo lo
         // `/` se ne va, perché è l'unico che romperebbe il componente.
         assert_eq!(encode("Diario/2026 città.md"), "Diario%2F2026 città.md");

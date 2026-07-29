@@ -33,7 +33,7 @@ job Linux; Windows/macOS usano i toolchain nativi.
 
 - **[M2](../milestones/M2-search-graph.md):** i test di proprietà (incrementale vs
   rebuild) girano nella matrice; attenzione ai path dell'indice tantivy
-  (`.fubmd-data/`) su Windows (separatori, lock file).
+  (`.fubmd/data/`) su Windows (separatori, lock file).
 - **[M5](../milestones/M5-wasm-runtime.md):** job aggiuntivo che compila il plugin di
   esempio con `cargo component` (target `wasm32-wasip2`) e lo carica in un test
   d'integrazione dell'host.

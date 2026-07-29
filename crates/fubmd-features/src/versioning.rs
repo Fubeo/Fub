@@ -8,7 +8,8 @@
 //!
 //! # Cosa ha trovato il dogfooding
 //!
-//! Nella sua prima versione lo store scriveva `.fubmd-data/versions/` con
+//! Nella sua prima versione lo store si scriveva una `versions/` propria sotto
+//! la radice dei derivati con
 //! `std::fs` e leggeva l'ora da `fubmd_kernel::time`: funzionava benissimo *da
 //! nativo*, e un plugin WASM con l'`HostApi` di allora non avrebbe potuto
 //! scriverlo (lo `storage_get/set` è volatile e a chiave→valore, non uno store
@@ -47,13 +48,20 @@
 //! # Lo store, e chi comanda fra store e indice
 //!
 //! Path relativi allo spazio dati che l'host assegna al plugin
-//! (`.fubmd-data/plugins/fubmd.versioning/`):
+//! (`.fubmd/data/plugins/fubmd.versioning/`):
 //!
 //! ```text
 //! versions.json                    indice: doc_id → versioni + tombstone
 //! <dir>/meta.json                  { doc_id, deleted_at }
 //! <dir>/<ts>.md                    il contenuto di una versione
 //! ```
+//!
+//! Quello spazio sta sotto la radice dei **derivati**, e gli snapshot non lo
+//! sono: buttarli non costa una ricostruzione, costa la memoria di com'erano i
+//! file. È il difetto che la
+//! [0048](../../../docs/decisions/0048-una-radice-sola.md) nomina e non chiude —
+//! la seconda radice per plugin è additiva e arriva dopo M3 —, e questo store è
+//! il primo che ci si sposterà.
 //!
 //! `versions.json` è **derivato**: se manca, non si legge o non torna, si
 //! ricostruisce leggendo lo store (ogni cartella dice di chi è, ogni file dice

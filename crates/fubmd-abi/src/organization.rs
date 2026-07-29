@@ -12,7 +12,7 @@
 //! passa un vault a un collega gli passa un vault organizzato.
 //!
 //! Sono **autorevoli e non derivati**, che è la riga da cui discende tutto il
-//! resto: persi, non si ricostruiscono da niente. Un `.fubmd-data/` si può
+//! resto: persi, non si ricostruiscono da niente. Un `.fubmd/data/` si può
 //! cancellare e si rifà con una scansione; questo no. Per questo il file ha la
 //! stessa disciplina della configurazione ([decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)):
 //! versione di schema, scrittura atomica, e un file che non si è potuto leggere

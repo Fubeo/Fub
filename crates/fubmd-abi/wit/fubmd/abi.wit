@@ -1012,7 +1012,7 @@ interface settings {
 /// vault a un collega gliene passa uno organizzato.
 ///
 /// È un dato AUTOREVOLE e non derivato, che è la riga da cui discende il resto:
-/// perso, non si ricostruisce da niente. Un `.fubmd-data/` si cancella e si rifà
+/// perso, non si ricostruisce da niente. Un `.fubmd/data/` si cancella e si rifà
 /// con una scansione; questo no. Per questo il file ha la disciplina della
 /// decisione 0036: versione di schema, scrittura atomica, e un file che non si è
 /// potuto leggere NON SI RISCRIVE.
@@ -2664,7 +2664,7 @@ interface host-vault-structure {
 
 // --- storage persistente per-plugin -----------------------------------------
 //
-// Namespace `.fubmd-data/plugins/<plugin-id>/`, creato e imposto dall'host:
+// Namespace `.fubmd/data/plugins/<plugin-id>/`, creato e imposto dall'host:
 // il plugin nomina blob con path relativi, non tocca mai il filesystem né
 // conosce la radice del vault. Percorsi assoluti, `..` e separatori di
 // sistema → `permission-denied`. È la capacità che rende scrivibile uno

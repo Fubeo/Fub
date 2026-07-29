@@ -88,7 +88,7 @@ struct OrganizationFile {
 /// già, quindi l'organizzazione non è un documento del vault che si vede nella
 /// lista dei file.
 pub fn organization_path(root: &Utf8Path) -> Utf8PathBuf {
-    root.join(".fubmd").join("workspace.json")
+    root.join(crate::vault::FUBMD_DIR).join("workspace.json")
 }
 
 /// L'organizzazione di **questo** vault.

@@ -89,6 +89,6 @@ pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererReg
 pub use session::Session;
 pub use settings::{write_atomic, MachineSettings, SettingsStore, SharedSettings};
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
-pub use vault::{TrashEntry, Vault, TRASH_DIR};
+pub use vault::{data_root, TrashEntry, Vault, FUBMD_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
 pub use workspace::{valid_doc_id, GraphUpdate, Trust, Workspace, MAIN_PANE};

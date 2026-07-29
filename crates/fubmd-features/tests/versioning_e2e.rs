@@ -11,7 +11,7 @@ use fubmd_abi::event::Notice;
 use fubmd_abi::model::DocId;
 use fubmd_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fubmd_format_markdown::MarkdownProvider;
-use fubmd_kernel::{FormatRegistry, Workspace};
+use fubmd_kernel::{data_root, FormatRegistry, Workspace};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -247,7 +247,7 @@ fn with_versioning_off_the_vault_has_no_trace_of_it() {
 
     // Spento = non esiste (D7): nessun handler, e quindi nemmeno la cartella.
     assert!(
-        !v.root.join(".fubmd-data").join("plugins").exists(),
+        !data_root(&v.root).join("plugins").exists(),
         "il versioning spento non deve scrivere nulla"
     );
 }

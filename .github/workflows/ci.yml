@@ -4,7 +4,7 @@
 # documenti dichiarano "verificata dai test" vale solo sulla macchina di chi si
 # ricorda di lanciarli. Linux è la piattaforma primaria di sviluppo; Windows e
 # macOS sono supportati, e una regressione cross-OS deve emergere subito —
-# soprattutto sui path (`camino`/`Utf8Path`) e sui lock file di `.fubmd-data/`.
+# soprattutto sui path (`camino`/`Utf8Path`) e sui lock file di `.fubmd/data/`.
 
 name: CI
 

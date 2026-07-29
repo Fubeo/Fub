@@ -69,7 +69,7 @@ cargo deny check
 
 La CI non fa niente di più di questo elenco: se passa in locale, passa lì —
 salvo il fatto che i test girano anche su Windows e macOS, dove a rompersi sono
-quasi sempre i path e i lock file di `.fubmd-data/`.
+quasi sempre i path e i lock file di `.fubmd/data/`.
 
 ## Cosa presidia la CI
 

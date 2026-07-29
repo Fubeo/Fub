@@ -611,7 +611,7 @@ pub trait VaultStructure: VaultRead {
 // --- storage persistente per-plugin -----------------------------------------
 //
 // Blob nominati con path relativi dentro uno spazio che l'host assegna e
-// impone (`.fubmd-data/plugins/<id>/`): il plugin non conosce la radice del
+// impone (`.fubmd/data/plugins/<id>/`): il plugin non conosce la radice del
 // vault, non compone path assoluti e non può uscire dal proprio recinto.
 // È l'alternativa a un'API filesystem scoped, ed è stata scelta perché il
 // recinto qui è una proprietà della firma, non una convenzione da

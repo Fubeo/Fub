@@ -1,4 +1,4 @@
-//! **L'anagrafe resa durevole**: `.fubmd-data/entries.json`, cioè ciò che il
+//! **L'anagrafe resa durevole**: `.fubmd/data/entries.json`, cioè ciò che il
 //! kernel sapeva del vault l'ultima volta che l'ha guardato (§14.1, §14.2).
 //!
 //! # Cosa ci sta dentro, e perché
@@ -13,7 +13,7 @@
 //!
 //! # È un dato DERIVATO, e qui è tutto
 //!
-//! Sta sotto [`DATA_DIR`], che è la radice di ciò che si può buttare, e la
+//! Sta sotto [`data_root`], che è la radice di ciò che si può buttare, e la
 //! disciplina segue da lì:
 //!
 //! - **illeggibile o di una versione che non si conosce → si butta e si
@@ -68,7 +68,7 @@ use fubmd_abi::model::{DocId, Frontmatter, Heading, Link};
 use serde::{Deserialize, Serialize};
 
 use crate::settings::write_atomic;
-use crate::vault::DATA_DIR;
+use crate::vault::data_root;
 
 /// La versione di schema del file (§15.3).
 ///
@@ -77,7 +77,7 @@ use crate::vault::DATA_DIR;
 /// un file che non ce l'ha non è un file di prima — è un file di qualcun altro.
 const SCHEMA_VERSION: u32 = 1;
 
-/// Il nome del file dentro [`DATA_DIR`].
+/// Il nome del file dentro [`data_root`].
 const FILE: &str = "entries.json";
 
 /// I metadati di un documento che l'anagrafe si ricorda: ciò che il kernel
@@ -158,7 +158,7 @@ impl EntryStore {
     /// non c'è, e ciò che non c'è si ricostruisce leggendo il vault — che è la
     /// definizione di dato derivato.
     pub(crate) fn open(root: &Utf8Path) -> Self {
-        let path = root.join(DATA_DIR).join(FILE);
+        let path = data_root(root).join(FILE);
         EntryStore {
             known: load(&path).unwrap_or_default(),
             path,
@@ -253,7 +253,7 @@ mod tests {
         // È la differenza con l'organizzazione (§11.3), che un file rotto lo
         // protegge: quello è autorevole, questo si rifà camminando il vault.
         let (_tmp, root) = tempdir();
-        let path = root.join(DATA_DIR).join(FILE);
+        let path = data_root(&root).join(FILE);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{ non json").unwrap();
 
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn una_versione_che_non_si_conosce_si_butta() {
         let (_tmp, root) = tempdir();
-        let path = root.join(DATA_DIR).join(FILE);
+        let path = data_root(&root).join(FILE);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(
             &path,

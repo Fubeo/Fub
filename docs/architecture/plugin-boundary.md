@@ -39,7 +39,7 @@ errore, e un host intestato a un id sconosciuto nega tutto dicendo perché.
 Un plugin ricorda in un modo solo: `data_read/write/remove/list`, path → blob di
 byte, persistente.
 
-Lo spazio è `.fubmd-data/plugins/<id>/`, **dentro al vault**: i dati derivati da
+Lo spazio è `.fubmd/data/plugins/<id>/`, **dentro al vault**: i dati derivati da
 un vault appartengono a quel vault, e copiarlo o metterlo in sync se li porta
 dietro. L'identità `<id>` la assegna chi registra il plugin
 (`Workspace::register_event_handler(id, handler)`), mai il plugin: uno che si
@@ -581,7 +581,7 @@ rifiuti al frontend/all'IPC.
   plugin da `data_*`. **Import ed export non fanno eccezione**, ed è una
   proprietà della firma: una sorgente arriva già letta (`ImportSource.bytes`) e
   un export esce come `ExportArtifact.bytes`.
-- **Storage per-plugin:** `data_*` a blob dentro `.fubmd-data/plugins/<id>/`, e
+- **Storage per-plugin:** `data_*` a blob dentro `.fubmd/data/plugins/<id>/`, e
   nient'altro (vedi "Storage").
 - **Operazioni strutturali:** `create_document`, `rename_document`,
   `trash_document`, `list_trash`, `restore_document`, `empty_trash` — sono ciò

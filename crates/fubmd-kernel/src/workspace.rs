@@ -279,6 +279,11 @@ pub struct Workspace {
     /// prestito esclusivo del workspace. Un lucchetto in più non renderebbe
     /// visibile niente a nessuno che non lo veda già.
     doc_data_warnings: Vec<String>,
+    /// Cosa la migrazione di layout ha avuto da dire aprendo questo vault
+    /// ([0048](../../../docs/decisions/0048-una-radice-sola.md)). `None` è il
+    /// caso normale — un vault nuovo, o uno già nella radice unica: la
+    /// migrazione che non ha niente da fare non parla.
+    layout_warning: Option<String>,
 }
 
 impl Workspace {
@@ -309,6 +314,13 @@ impl Workspace {
         // `CoreIndex::registry`).
         let registry = Arc::new(registry);
         let root = root.as_ref();
+        // **Prima di qualunque lettura**, e non è un dettaglio d'ordine: le tre
+        // righe qui sotto aprono file che stanno sotto la radice dei derivati, e
+        // un vault scritto prima della 0048 li ha ancora sotto il vecchio nome.
+        // Aprire prima di spostare vorrebbe dire non trovare niente, ricostruire
+        // da zero, e spostare un albero che nel frattempo qualcuno ha già
+        // riscritto.
+        let layout_warning = crate::vault::migrate_layout(root);
         let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(root, machine)));
         // L'organizzazione è **del vault**, quindi si apre col root e non si
         // riceve da chi monta: è la differenza con il livello macchina e con lo
@@ -333,6 +345,7 @@ impl Workspace {
             // root e non si riceve da chi monta.
             entry_store: EntryStore::open(root),
             doc_data_warnings: Vec::new(),
+            layout_warning,
         }
     }
 
@@ -930,7 +943,7 @@ impl Workspace {
     /// Registra un [`EventHandler`] per conto di un plugin dichiarato.
     ///
     /// `plugin` è l'identità di chi lo offre: determina lo spazio dello storage
-    /// persistente che l'`HostApi` gli concede (`.fubmd-data/plugins/<id>/`) e
+    /// persistente che l'`HostApi` gli concede (`.fubmd/data/plugins/<id>/`) e
     /// **i permessi con cui girerà**. Un handler non nomina niente di suo, e
     /// quindi non ha id da far collidere: l'unico nome in gioco è quello del
     /// plugin.
@@ -1074,7 +1087,7 @@ impl Workspace {
     /// reindicizzerà tutto, che è lento, non sbagliato.
     ///
     /// `id` è un nome semplice, senza separatori di path: determina lo spazio
-    /// dati (`.fubmd-data/plugins/<id>/`), come per gli event handler.
+    /// dati (`.fubmd/data/plugins/<id>/`), come per gli event handler.
     ///
     /// [`reindex`]: Workspace::reindex
     pub fn register_index_provider(
@@ -3256,7 +3269,7 @@ impl Workspace {
     /// [`import`](Workspace::import).
     ///
     /// Come per gli altri provider, `id` è un nome semplice e determina lo
-    /// spazio dati (`.fubmd-data/plugins/<id>/`).
+    /// spazio dati (`.fubmd/data/plugins/<id>/`).
     pub fn register_import_provider(
         &mut self,
         plugin: impl Into<String>,
@@ -3870,6 +3883,13 @@ impl Workspace {
     /// Chi monta le mostra, e svuotandole se ne fa carico.
     pub fn doc_data_warnings(&mut self) -> Vec<String> {
         std::mem::take(&mut self.doc_data_warnings)
+    }
+
+    /// Cosa la migrazione alla radice unica ha avuto da dire aprendo questo
+    /// vault (0048). Come le altre due liste: chi monta la mostra, e prendendola
+    /// se ne fa carico.
+    pub fn layout_warning(&mut self) -> Option<String> {
+        self.layout_warning.take()
     }
 
     /// Porta dietro a una rinomina lo stato per-documento di **ogni** plugin

@@ -36,10 +36,10 @@ use crate::error::{KernelError, Result};
 use crate::registry::FormatRegistry;
 use crate::renderer::RendererRegistry;
 use crate::syntax::SyntaxRegistry;
-use crate::vault::{TrashEntry, Vault, DATA_DIR};
+use crate::vault::{data_root, TrashEntry, Vault};
 
 /// Radice dello storage persistente dei plugin, dentro il vault: ogni plugin
-/// ha `<vault>/.fubmd-data/plugins/<id>/` e non vede nient'altro.
+/// ha `<vault>/.fubmd/data/plugins/<id>/` e non vede nient'altro.
 ///
 /// Sta nel vault e non nella cartella di configurazione dell'utente perché i
 /// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
@@ -199,9 +199,7 @@ impl DocumentStore {
 
     /// La radice dello spazio dati di un plugin.
     pub(crate) fn plugin_data_root(&self, plugin: &str) -> Utf8PathBuf {
-        self.vault
-            .root()
-            .join(DATA_DIR)
+        data_root(self.vault.root())
             .join(PLUGIN_DATA_DIR)
             .join(plugin)
     }
@@ -214,7 +212,7 @@ impl DocumentStore {
     /// non può accorgersi di niente, ed è esattamente chi ha più bisogno che
     /// qualcun altro se ne accorga per lui.
     pub(crate) fn plugin_data_roots(&self) -> Vec<Utf8PathBuf> {
-        let plugins = self.vault.root().join(DATA_DIR).join(PLUGIN_DATA_DIR);
+        let plugins = data_root(self.vault.root()).join(PLUGIN_DATA_DIR);
         let Ok(entries) = std::fs::read_dir(&plugins) else {
             return Vec::new();
         };

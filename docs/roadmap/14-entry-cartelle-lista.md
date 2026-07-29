@@ -55,7 +55,7 @@ la politica della cartella allegati), che hanno una milestone propria.
       **riferimenti aggiornati su rinomina/spostamento** invece ci sono già:
       spostare `foto.png` in `allegati/` riscrive sia i `![[foto.png]]` sia i
       `![alt](../foto.png)` di chi la mostra.
-- [ ] **Thumbnail/cache derivate** in `.fubmd-data/` (mai autorevoli): aspettano
+- [ ] **Thumbnail/cache derivate** in `.fubmd/data/` (mai autorevoli): aspettano
       chi le disegna.
 
 ### 14.2 Nessun metadato di entry: né mtime, né dimensione, né impronta
@@ -71,7 +71,7 @@ la politica della cartella allegati), che hanno una milestone propria.
       il kernel, che paga comunque lettura + parse di tutto prima ancora di
       chiedere all'indice se gli interessa.
       → La domanda che mancava è `IndexProvider::up_to_date`, e l'anagrafe è
-      durevole in `.fubmd-data/entries.json` (derivata: illeggibile si butta).
+      durevole in `.fubmd/data/entries.json` (derivata: illeggibile si butta).
       `mtime + size` basta a **saltare** e non a **credere**, con la regola
       *racily clean* di git; l'impronta è ciò che riconosce mille file che un
       `git checkout` ha ritimbrato senza cambiarne uno.

@@ -38,7 +38,7 @@ feature come plugin core:
   UI: è assenza dal sistema.
 - i **dati** di una feature spenta non inquinano: o sono `.md` puri nel vault
   (leggibili comunque, è il patto di FubMD) o vivono in
-  `.fubmd-data/plugins/<id>/` e semplicemente non vengono letti. Riattivare
+  `.fubmd/data/plugins/<id>/` e semplicemente non vengono letti. Riattivare
   ripristina tutto; disattivare non cancella mai nulla.
 - **unica eccezione ammessa**: la pagina "Funzionalità" dei settings, dove le
   feature spente compaiono col loro interruttore — altrimenti non si potrebbero

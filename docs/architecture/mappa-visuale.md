@@ -77,8 +77,8 @@ flowchart TB
     %% ============================== DISCO ==============================
     subgraph DISCO ["💾 Disco — local-first, e nessun database"]
         Notes["file dell'utente<br>.md, frontmatter, wikilink, tag, allegati"]:::storage
-        Conf[".fubmd/<br>settings.json, workspace.json"]:::storage
-        Derived[".fubmd-data/ — derivato e buttabile<br>anagrafe, doc/, plugins/id/"]:::storage
+        Conf[".fubmd/ — autorevole<br>settings.json, workspace.json"]:::storage
+        Derived[".fubmd/data/ — derivato e buttabile<br>anagrafe, doc/, plugins/id/"]:::storage
         Trash[".trash/ + sidecar<br>da dove veniva ogni file"]:::storage
         MConf["config della macchina<br>settings.json, vaults.json, view-state.json"]:::storage
     end
@@ -138,7 +138,7 @@ flowchart TB
    e2e headless, mobile, PWA — e finché stava dentro un `#[tauri::command]`
    nessuno di loro poteva riusarlo.
 3. **Non c'è un database.** L'indice di ricerca è tantivy dentro
-   `.fubmd-data/plugins/`, e tutto ciò che sta lì è derivato: cancellarlo costa
+   `.fubmd/data/plugins/`, e tutto ciò che sta lì è derivato: cancellarlo costa
    una ricostruzione, mai un dato dell'utente. La verità è nei file.
 4. **Le feature ufficiali sono già plugin.** Backlink, struttura, tag,
    statistiche, ricerca, comandi, versioning e blocchi implementano gli stessi
@@ -191,11 +191,14 @@ Tauri, sta nel posto sbagliato.
 view dichiarata dal backend e un pannello nativo, da lì in giù, non si
 distinguono.
 
-**💾 Il disco** — dentro il vault: i file dell'utente, `.fubmd/` per ciò che si
-sincronizza (impostazioni del vault, organizzazione), `.fubmd-data/` per ciò che
-si può buttare (anagrafe delle entry, stato per-documento sotto `doc/`, spazio
-dei plugin con l'indice tantivy e gli snapshot del versioning), `.trash/` col
-sidecar che ricorda la provenienza. Fuori dal vault, la config della macchina:
+**💾 Il disco** — dentro il vault: i file dell'utente e **una** radice nostra,
+`.fubmd/` ([0048](../decisions/0048-una-radice-sola.md)): in cima ciò che si
+sincronizza (impostazioni del vault, organizzazione), sotto `data/` ciò che si
+può buttare (anagrafe delle entry, stato per-documento sotto `doc/`, spazio dei
+plugin con l'indice tantivy e gli snapshot del versioning). Fuori resta
+`.trash/`, che è il cestino condiviso con Obsidian, col sidecar che ricorda la
+provenienza. La mappa per esteso è
+[on-disk-layout.md](on-disk-layout.md). Fuori dal vault, la config della macchina:
 un solo bootstrap via `FUBMD_CONFIG_DIR`, o il modo portable accanto
 all'eseguibile.
 
