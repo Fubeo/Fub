@@ -248,6 +248,22 @@ precondizione.
       non fidarsi di una garanzia che c'è — o a ricostruirla altrove. È lo stesso
       difetto delle righe morte di [strozzature.md](strozzature.md), che non
       allungano il lavoro: lo **dirottano**.
+- [ ] **E una sesta, che le batte tutte: la *garanzia dichiarata* che non è mai
+      esistita.** Trovata chiudendo il §16.1: il cappello di questa seduta
+      diceva che il kernel dentro l'SDK «violerebbe l'invariante che
+      `dependency_invariant.rs` presidia», e quel file non nominava `fubmd-sdk`
+      da nessuna parte — l'invariante stava nelle intenzioni e non nel test
+      ([0054](../decisions/0054-il-banco-del-lato-provider.md), che l'ha scritto).
+      Le prime quattro specie sono numeri sbagliati, la quinta è un limite che
+      non c'è più: tutte e cinque riguardano una **descrizione** invecchiata di
+      qualcosa che esiste. Questa no — non c'è niente da aggiornare, perché non
+      c'è mai stato niente. E nessuno se ne accorge, perché **il motivo per cui
+      si scrive una garanzia è smettere di doverci pensare**: un conteggio
+      qualcuno prima o poi lo ricontrolla, una rete che si crede tesa non la
+      guarda nessuno. Il presidio possibile è lo stesso della riga qui sotto,
+      letto al contrario: non «rifai il conto», ma **una frase che dice *questo è
+      presidiato da X* deve nominare un X che esiste** — e `X` è un nome di test,
+      cioè una cosa che si può cercare meccanicamente.
 - [ ] **Il presidio è a portata, e il repo ne ha già uno dello stesso genere.**
       `check-doc-links.mjs` esiste perché «una promessa senza presidio meccanico
       decade», e presidia i **link**; i **conteggi** sono la stessa promessa
