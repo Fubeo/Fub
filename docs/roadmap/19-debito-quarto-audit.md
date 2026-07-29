@@ -8,9 +8,13 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): le voci ancora aper
 
 Voci ancora aperte, con il loro milestone.
 
-**Cosa è rimasto, e cosa vuol dire.** Nessuna di queste quattro ha più un
-contenuto proprio: sono quattro **rimandi**, e il lavoro sta nella seduta che le
-ha assorbite. Questa seduta esiste perché i quattro giri di audit sono citati
+**Cosa è rimasto, e cosa vuol dire.** Delle quattro, una è **chiusa** e **tre**
+restano aperte; nessuna ha più un contenuto proprio, perché sono quattro
+**rimandi** e il lavoro sta nella seduta che le ha assorbite. Per questo la
+seduta non ha nessuna voce nell'[indice](../todo.md) e la sua colonna *Voci* è
+vuota: le tre caselle si contano lì fra le **residue**, che è il posto che prima
+non c'era — e finché non c'era, tre caselle non spuntate non entravano in nessun
+totale da nessuna parte. Questa seduta esiste perché i quattro giri di audit sono citati
 per nome altrove nel repo e vale la pena poter rispondere «dove è finito quel
 punto?»; il giorno in cui le sedute che le assorbono si chiudono, questa si
 chiude con loro e non lascia niente indietro.

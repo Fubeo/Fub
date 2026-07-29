@@ -80,7 +80,7 @@ nuove, e vanno fatte in quest'ordine:
 E una settima strada, che non è una domanda: **una decisione di prodotto presa a
 verbale**. La [0025](decisions/0025-la-ricerca-predefinita.md) non ha trovato
 voci cercandole, le ha **create**: deciso cosa l'app deve fare, quello che manca
-al contratto per permetterlo si calcola. Le altre venti sedute descrivono un
+al contratto per permetterlo si calcola. Le altre ventuno sedute descrivono un
 debito, la [21](roadmap/21-la-ricerca-predefinita.md) descrive una promessa.
 
 E un'ottava, che non è nemmeno una strada: **una verifica**. La §21.10 è uscita
@@ -111,12 +111,12 @@ che scade.
 | **11** | [Le impostazioni, e i tre stati](roadmap/11-impostazioni-e-i-tre-stati.md) | tre stati che, decisi separati, nascono con tre meccanismi che non si parlano: la [0036](decisions/0036-le-impostazioni-e-i-tre-stati.md) ha chiuso le impostazioni, la [0037](decisions/0037-lo-stato-di-vista.md) lo stato di vista, la [0038](decisions/0038-il-kernel-possiede-il-sidecar.md) il sidecar dell'organizzazione; del §11.2 resta il **layout** | 1 | — |
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | **chiusa**: il locale nel contratto ([0039](decisions/0039-il-locale-e-il-caso.md)), chi localizza ([0040](decisions/0040-chi-localizza.md)), l'errore come suo gemello ([0041](decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)) e il catalogo della shell ([0042](decisions/0042-il-catalogo-della-shell.md)) | — | — |
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | **chiusa**: il path è la chiave per sempre e un id stabile è una proprietà ([0043](decisions/0043-il-path-e-la-chiave.md)), lo stato per-documento ha un posto dichiarato che il kernel migra e raccoglie ([0044](decisions/0044-lo-stato-per-documento.md)), e l'undo ha due pile che non si fondono ([0045](decisions/0045-l-undo-ha-due-pile.md)) | — | — |
-| **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati a coppie, chiusi tutti: l'anagrafe del vault ([0046](decisions/0046-l-anagrafe-del-vault.md)) e la cartella come cittadino con la lista per cartella ([0047](decisions/0047-la-cartella-esiste-nel-kernel.md)); restano due caselle del §14.1 — l'impronta degli allegati e la politica della cartella allegati | 0 | — |
+| **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati a coppie, chiusi tutti: l'anagrafe del vault ([0046](decisions/0046-l-anagrafe-del-vault.md)) e la cartella come cittadino con la lista per cartella ([0047](decisions/0047-la-cartella-esiste-nel-kernel.md)); restano **tre** caselle del §14.1 — l'impronta degli allegati, la politica della cartella allegati e le derivate in `.fubmd/data/` | — | — |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra; la §15.4 è chiusa con la [0048](decisions/0048-una-radice-sola.md) — una radice sola dentro il vault, la mappa del disco, e la classe di un dato dichiarata da **dove** si scrive — e ne resta la casella additiva, l'implementazione | 6 | — |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 7 | — |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza | 3 | — |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
-| **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | le voci ancora aperte dei quattro giri di audit | — | — |
+| **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: quattro **rimandi** ai quattro giri di audit, di cui uno chiuso; restano **tre** caselle, e il lavoro sta nelle sedute che le hanno assorbite | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 4 | 1 |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le quattro di firma sono state decise ([0049](decisions/0049-una-posizione-dentro-un-documento.md), [0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)); quel che resta è **dove quel comportamento si vede**, cosa lo rende regolabile, cosa gli darà da mangiare, e la sola misura che dice se è veloce | 6 | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | tre lati della stessa dichiarazione di interesse — *quando*, *cosa è cambiato*, *per quale esemplare* — e decise separate darebbero tre estensioni della stessa maschera disegnate da tre parti; nate da una **verifica**, e nessuna scade col freeze | 3 | — |
@@ -132,6 +132,20 @@ dal file della seduta — e il suo verbale va in
 una casella spuntata resta una promessa scritta da qualcuno, una riga che non
 c'è più è stata tolta da chi ha spostato il verbale. Dentro il file di una
 seduta le caselle ci sono, e dicono a che punto è la singola voce.
+
+**Ma una voce chiusa può lasciare una casella, e quella casella non è in nessun
+totale.** La colonna *Voci* conta le voci **aperte**, e la sua somma per riga fa
+trentasei come deve; il residuo di una voce **chiusa** è un'altra specie e finora
+non aveva dove essere contato — che è il modo in cui la riga della seduta 14 ha
+detto «due caselle» mentre il suo file ne aveva tre, e la 19 non ha detto niente
+avendone tre. Le caselle residue oggi sono **sette**, e stanno in tre posti:
+[§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
+(tre: l'impronta degli allegati, la politica della cartella allegati, le
+derivate), [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
+(una: l'implementazione additiva delle due radici) e la
+[seduta 19](roadmap/19-debito-quarto-audit.md) (tre rimandi). Non diventano voci
+— non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
+sparire senza essere state fatte.
 
 **Una seduta chiusa non tiene le proprie code.** Le prime quattro sedute hanno
 il verbale, ma qualcuna aveva lasciato dietro dei punti di **esecuzione**: sono

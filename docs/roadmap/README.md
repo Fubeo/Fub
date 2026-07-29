@@ -11,7 +11,12 @@ uno stato scritto in due posti è uno stato sbagliato in uno dei due, e non si s
 quale.
 
 Quando una voce si chiude, il ragionamento diventa un verbale in
-[../decisions/](../decisions/README.md) e la voce si spunta in `todo.md`. Il
+[../decisions/](../decisions/README.md) e la voce **sparisce** da `todo.md` —
+dalla tabella, dal conteggio della sua seduta e dall'elenco delle voci. Non si
+spunta: in `todo.md` non ci sono spunte da leggere, e l'assenza è il segnale,
+perché una casella spuntata resta una promessa scritta da qualcuno mentre una
+riga che non c'è più è stata tolta da chi ha spostato il verbale. Le spunte
+stanno **qui**, nel file della seduta, e dicono a che punto è la singola voce. Il
 file della seduta resta: è il posto dove la domanda è stata posta bene la prima
 volta.
 

@@ -317,8 +317,11 @@ impl FolderScope {
 // Le capacità, per famiglia
 // ---------------------------------------------------------------------------
 //
-// Le ventidue capacità della decisione 0013 — ventiquattro, contando le due che
-// la 0018 ha aggiunto, venticinque col `call_service` della 0021 — non stanno
+// Le capacità — ventidue quando la decisione 0013 ha chiuso l'elenco,
+// **trentaquattro** oggi, tutte per aggiunta (il conto si rifà contando le
+// `func` delle quattordici interfacce `host-*` in `wit/fubmd/abi.wit`, ed è
+// l'unico modo per cui questo numero è vero: scritto e basta, invecchia — §16.7)
+// — non stanno
 // in un trait solo, e la ragione è il §7.1: un trait solo si implementa **per
 // intero o per niente**, e chi ne può fare solo una metà (il percorso di
 // render, che ha il workspace in prestito condiviso; un comando che si è

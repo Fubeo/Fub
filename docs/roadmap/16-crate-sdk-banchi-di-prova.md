@@ -70,24 +70,30 @@ definitions, plugin linting), 21.1 (moduli Suite con API condivise).
 
 *ex §4.12 · presidi · **P1** — il lato **host** — va **prima** della 16.3*
 
-- [ ] **16 helper `vault()`/`workspace()`** negli integration test e **15
-      `impl FormatProvider` giocattolo**, di cui **sei** chiamati letteralmente
-      `PlainProvider` in sei file diversi (`trash.rs`, `invoke_command.rs`,
-      `structural_host.rs`, `provider_reentrancy.rs`,
-      `index_feeding.rs`, `transfer_dispatch.rs`). Ogni test che tocca il
-      kernel si costruisce da capo vault temporaneo, registry, provider minimo e
-      asserzioni sugli eventi.
-- [ ] **I numeri di questa voce sono stati ricontati, e si sono mossi nella
-      direzione che la peggiora.** Erano scritti «18 helper, 14 provider
-      giocattolo, di cui **tre** `PlainProvider` in tre file»: gli helper sono
-      calati di due, i provider saliti di uno, e i `PlainProvider` **raddoppiati**
-      — la duplicazione più letterale è quella cresciuta di più. Il titolo dice
-      ancora «diciotto» e resta com'è di proposito: l'ancora è citata
+- [ ] **34 helper `vault()`/`workspace()`** negli integration test e **24
+      `impl FormatProvider` giocattolo**, di cui **otto** chiamati letteralmente
+      `PlainProvider` in otto file diversi (`trash.rs`, `invoke_command.rs`,
+      `structural_host.rs`, `provider_reentrancy.rs`, `index_feeding.rs`,
+      `transfer_dispatch.rs`, `disattivazione.rs`, `la_maschera.rs`). Ogni test
+      che tocca il kernel si costruisce da capo vault temporaneo, registry,
+      provider minimo e asserzioni sugli eventi.
+- [ ] **I numeri di questa voce sono stati ricontati due volte, e le due volte
+      si sono mossi nella direzione che la peggiora.** Al primo giro erano «18
+      helper, 14 provider giocattolo, di cui **tre** `PlainProvider`»; al secondo
+      «16, 15, sei»; oggi sono **34, 24 e otto**. Gli helper sono **raddoppiati**
+      da quando la voce è stata aperta, e i `PlainProvider` quasi triplicati — la
+      duplicazione più letterale è, ogni volta, quella cresciuta di più. Il
+      titolo dice ancora «diciotto» e resta com'è di proposito: l'ancora è citata
       dall'[indice](../todo.md) e altrove, e i rimandi ciechi costano più di un
       numero vecchio in un titolo. È il [§16.7](#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
-      applicato a questo file: **un conteggio tenuto a mano smette di essere vero
-      senza diventare rosso**, e l'unico modo per cui questo se n'è accorto è che
-      qualcuno l'ha rifatto a mano.
+      applicato a questo file — **un conteggio tenuto a mano smette di essere
+      vero senza diventare rosso** — e la dimostrazione è che l'unico modo per
+      cui questo se n'è accorto, due volte su due, è che qualcuno l'ha rifatto a
+      mano. Fra il primo ricalcolo e il secondo il conteggio è stato falso per
+      l'intera vita della voce, e in quel tempo la voce è rimasta **P1**: se il
+      moltiplicatore è il criterio (la domanda 4 dell'[indice](../todo.md)), un
+      moltiplicatore raddoppiato in silenzio è una priorità decisa su un numero
+      che non c'è più.
 - [ ] **Il §16.1 promuove `MemoryHost` e la conformance suite: è il lato
       *provider*.** Manca il lato *host* — costruire un vault, registrare un
       provider minimo, far girare un giro di eventi e asserire su cosa è stato
@@ -251,15 +257,24 @@ bisogno di un posto da cui essere montato).
       fermare è, alla lettera, *«un pannello che smette di aggiornarsi soltanto
       dopo una rinomina con backlink»* — cioè un difetto silenzioso protetto da
       una rete con un buco silenzioso.
-- [ ] **`TriesEverything` prova cinque capacità, per nome.** Il test
+- [ ] **`TriesEverything` prova sette capacità, per nome — ed erano cinque
+      quando questa voce è stata scritta.** Il test
       `every_structural_capability_is_refused_by_the_same_gate`
       (`kernel/tests/invoke_command.rs`) asserisce
-      `quali == vec!["create", "rename", "trash", "restore", "empty"]`, e il
-      provider che le chiama le elenca a mano (stesso file). La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) gli
+      `quali == vec!["create", "rename", "trash", "restore", "empty", "setting",
+      "view-state"]`, e il provider che le chiama le elenca a mano (stesso file).
+      La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) gli
       attribuisce un'altra proprietà: *«un test che le prova tutte in fila
       proprio per accorgersi di quella che un giorno qualcuno aggiungesse senza
-      pensarci»*. Quella proprietà il test non ce l'ha: nota se una delle cinque
-      **smette** di essere rifiutata, non se ne compare una sesta.
+      pensarci»*. Quella proprietà il test non ce l'ha: nota se una delle sette
+      **smette** di essere rifiutata, non se ne compare un'ottava. **Le due che
+      sono entrate lo dimostrano**: `setting` è arrivata con la
+      [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) e `view-state`
+      con la [0037](../decisions/0037-lo-stato-di-vista.md), e sono state
+      aggiunte a mano da chi scriveva quelle decisioni — cioè per attenzione, che
+      è precisamente ciò che questa voce dice di non voler più dover spendere.
+      Nel frattempo questa riga ha continuato a dire «cinque»: il presidio non è
+      diventato rosso, e **nemmeno la voce che lo accusa di non diventarlo**.
 - [ ] **Il posto in cui la sesta sbaglierebbe era `ReadOnlyHost`, e non c'è
       più.** Era scritto metodo per metodo — dodici metodi delegavano a
       `ReadHost`, dieci negavano e due facevano da sé — e aggiungerne una copiando la riga sbagliata
@@ -293,7 +308,10 @@ bisogno di un posto da cui essere montato).
       una riga in uscita, e **zero file controllati esce rosso** invece di
       stampare «0 rotti». Senza git — fuori da un checkout — si torna alla
       regola di prima e lo si dice in una riga, invece di saltare in silenzio.
-      Oggi: 81 file, 1105 link, e `VaultProva/` nominata mentre viene saltata.
+      Oggi: **122 file, 2155 link**, e `VaultProva/` nominata mentre viene
+      saltata. Questa riga diceva «81 file, 1105 link», ed è la quarta volta in
+      questa sola voce che un numero scritto a mano si è ritrovato falso: il
+      presidio funziona, la **frase che lo descrive** no.
 - [ ] **Il minimo, e sta nel banco di prova del §16.2**: un inventario dei
       provider ufficiali da cui i test iterino invece di elencarli (un
       `ogni_view_ufficiale()` nel testkit, che chi aggiunge una view aggiorna
@@ -304,6 +322,50 @@ bisogno di un posto da cui essere montato).
       che vale per ogni presidio futuro: **un presidio la cui copertura è un
       elenco scritto a mano smette di coprire senza diventare rosso**, e va detto
       accanto al presidio, o si crederà che copra.
+- [ ] **La famiglia più grande non sono i presidi: è la prosa che conta i
+      sorgenti**, e va presidiata qui perché è lo stesso difetto. Un giro
+      dedicato ha ricontato i numeri dei documenti contro il codice, e in
+      **quattro famiglie** su quante ne ha aperte li ha trovati falsi — tutti
+      silenziosi: `HostApi` dichiarata di
+      «ventitré metodi» in [PIANO.md](../PIANO.md) e in
+      [traits.md](../architecture/traits.md) e di «trentadue» **duecento righe
+      più in là nello stesso file**, mentre `abi.wit` ne ha trentaquattro; due
+      `SCHEMA_VERSION` su disco dichiarati in
+      [versionamento.md](../versionamento.md) con una versione più bassa di
+      quella nel codice (l'anagrafe a 1 invece di 2, l'indice di ricerca a 4
+      invece di 5), cioè **il numero il cui errore non si annulla**, perché è la
+      promessa fatta ai file dell'utente; i conteggi del §16.2 raddoppiati; le
+      cinque capacità del `TriesEverything` diventate sette. Nessuno di questi
+      ha rotto un test, e ognuno è dello stesso tipo: un'**affermazione sui
+      sorgenti scritta in italiano**, che nessun compilatore legge.
+- [ ] **Il presidio è a portata, e il repo ne ha già uno dello stesso genere.**
+      `check-doc-links.mjs` esiste perché «una promessa senza presidio meccanico
+      decade», e presidia i **link**; i **conteggi** sono la stessa promessa
+      nella stessa prosa. La forma non è un linter di prosa — impossibile — ma
+      un'**annotazione**: un numero che afferma qualcosa sui sorgenti si scrive
+      accanto a come lo si ricava, e il presidio rifà il conto. Il conto
+      meccanico esiste già per tutti e cinque i casi qui sopra: le funzioni
+      delle interfacce `host-*` in `abi.wit`, i `const SCHEMA_VERSION` nei
+      crate, i `fn vault(`/`fn workspace(` sotto `crates/*/tests/`, gli
+      `annota(` del `TriesEverything`. **Ciò che manca non è il conto: è il
+      posto in cui scriverlo una volta e leggerlo da due parti** — che è la
+      stessa forma del `rules_mirror.rs` → `rules-samples.json` della
+      [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md), applicata
+      alla prosa invece che alle regole.
+- [ ] **E c'è una seconda metà che i conteggi non coprono: gli elenchi che
+      rimandano.** [strozzature.md](strozzature.md) è l'indice inverso — si entra
+      da un capitolo di FEATURES per sapere *cosa manca* — e una sua riga
+      invecchia quando qualcosa si chiude **altrove**, cioè in un file che chi
+      chiude non sta guardando. Lo stesso giro ne ha trovate **diciassette** che
+      il codice smentiva — su ottantasette, cioè una riga su cinque: le barrate
+      del file sono passate da ventinove a quarantasei in un pomeriggio, senza
+      che si chiudesse niente. Non è nuovo: la [leva](leva.md) racconta già la riga
+      «nessun `^block-id`» falsa da undici verbali, e un'altra ha detto «`views()`
+      è un elenco statico» per trentaquattro. Qui il presidio meccanico è più
+      difficile — la riga è un giudizio, non un conteggio — ma il **collegamento**
+      no: una riga di strozzature che nomina un `§X.Y` chiuso, o un simbolo che
+      non esiste più nei sorgenti, è verificabile esattamente come un link rotto.
+      Che è precisamente ciò che questo presidio già fa, un livello più in giù.
 
 *Sblocca:* 27.4 (plugin sandbox test, security test, upgrade migration test),
 27.3 (plugin linting, test utilities), 20.3 (permission revocation, crash

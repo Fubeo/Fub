@@ -28,12 +28,15 @@ perché il disco ce l'ha — vuota compresa — si chiede con `IndexQuery::Folde
 un livello per volta, e `IndexQuery::Entries` prende una cartella. `list_documents`
 non è più un comando IPC e `VaultInfo` non porta più l'elenco del vault.
 
-Della seduta restano le due caselle aperte del §14.1 (l'impronta degli allegati,
-la politica della cartella allegati), che hanno una milestone propria.
+Della seduta restano **tre** caselle aperte del §14.1 — l'impronta degli
+allegati, la politica della cartella allegati e le derivate in `.fubmd/data/` —
+che hanno una milestone propria. Erano contate come due qui e nell'[indice](../todo.md)
+finché qualcuno non le ha ricontate: è il [§16.7](16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+applicato al piano invece che ai presidi.
 
 ### 14.1 Il vault non è solo documenti
 
-*ex §2.2 · kernel · **P2** — **decisa** con la [0046](../decisions/0046-l-anagrafe-del-vault.md), restano due caselle*
+*ex §2.2 · kernel · **P2** — **decisa** con la [0046](../decisions/0046-l-anagrafe-del-vault.md), restano tre caselle*
 
 - [x] **`VaultEntry { id, kind: Document | Asset | Unknown, size, mtime }`** e
       una scansione che vede **tutti** i file, non solo le estensioni dei
