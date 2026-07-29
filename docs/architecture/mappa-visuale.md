@@ -144,9 +144,15 @@ flowchart TB
    statistiche, ricerca, comandi, versioning e blocchi implementano gli stessi
    trait che useranno i plugin di terzi, senza sandbox e senza serializzazione:
    il dogfooding è il modo in cui il contratto si scopre sbagliato prima di M5.
-5. **Il tratteggio è onesto.** Il runtime WASM e l'intera FubSuite sono
-   documenti, non codice: la cartella `plugins/` non esiste ancora, e nascerà con il
-   runtime che dovrà caricarli.
+5. **Il tratteggio è onesto; la freccia «ospiterà» no.** Il runtime WASM e
+   l'intera FubSuite sono documenti, non codice: la cartella `plugins/` non
+   esiste ancora, e nascerà con il runtime che dovrà caricarli. Ma quella freccia
+   dice **tutta** la Suite, e almeno un riquadro non ci sta: un sync deve
+   decidere il merge *prima* che il file atterri, e il contratto permette di
+   osservare dopo (`EventHandler`), non di interporsi. Il metro per gli altri —
+   posizione rispetto al prestito, frequenza × payload, prima o dopo la
+   scrittura — sta in
+   [plugin-boundary.md](plugin-boundary.md#cosa-non-può-essere-solo-un-guest-e-il-metro-per-deciderlo).
 
 ## Il grafo delle dipendenze, e il test che lo legge
 

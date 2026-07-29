@@ -671,9 +671,15 @@ ragione per cui i tre booleani sono diventati una mappa.
 - **Rete e filesystem esterno:** `fubmd:network` con l'allowlist di host,
   `fubmd:external-fs` con quella dei path (20.3).
 - **Enforcement in un solo punto:** i controlli vivono nell'implementazione di
-  `HostApi`, così valgono identici per plugin nativi e WASM. **Quel punto non
-  esiste ancora**, ed è il §7.3: la 0017 ha fissato la forma, che è la metà che
-  scade col freeze.
+  `HostApi`, così valgono identici per plugin nativi e WASM. **Quel punto adesso
+  c'è**: è `Guard<H, P: Policy>` (`kernel/host/guard.rs`), un wrapper generico e
+  non una impl gemella, davanti a ogni host — col registro dei plugin in cui chi
+  si registra si dichiara con manifest, permessi e fiducia (`kernel/plugins.rs`).
+  È il §7.3, chiuso dalla [decisione 0021](../decisions/0021-il-confine.md).
+  Quello che **non** c'è è il filtro per **path**: la politica legge la presenza
+  della chiave e non il suo parametro, quindi un plugin con `read-vault`
+  ristretto a `Progetti/` legge tutto. È additivo dentro `Granted` e aspetta il
+  §15.5 — due idee di cosa sia un prefisso sarebbero peggio di nessuna.
 
 ```rust
 PluginPermissions::of(&[permission::READ_VAULT])          // tutto il vault, in lettura
@@ -691,7 +697,25 @@ rifiuti al frontend/all'IPC.
   [M5](../milestones/M5-wasm-runtime.md)).
 - **Isolamento di memoria:** dato dal component model; il plugin non vede la
   memoria del core, solo i dati che passano dalle host function.
-- **Rete:** negata di default; concessa solo se `network = true`.
+- **Rete:** negata di default — e la riga è più corta della realtà, perché
+  nomina con una parola sola due cose diverse. `fubmd:network` è un **permesso**
+  con la sua allowlist di host; la **capacità** che lo userebbe non esiste, e
+  `http_fetch` non fu rifiutato genericamente ma con due bloccanti nominati
+  ([0013](../decisions/0013-elenco-delle-capacita.md)): *«§9.1 (un lavoro lungo
+  che vede il vault) perché sia utile e §7.3 (`network` letto da qualcuno)
+  perché sia sicura. Due bloccanti, entrambi nominati; dopo, additiva»*.
+  **Entrambi sono caduti** — il §9.1 con la
+  [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), il §7.3 con la
+  [0021](../decisions/0021-il-confine.md), che ha perfino scritto dove atterra:
+  *«il giorno che `http_fetch` entrerà, `Capability::permission()` è la riga che
+  le dà un permesso»*. La condizione che la 0013 aveva posto è quindi
+  soddisfatta, e nessuno lo ha registrato: la voce è **additiva**, quindi non
+  scade, ed è per questo che non sale da sé — il criterio della
+  [seduta 20](../roadmap/20-quando-qualcosa-va-storto.md). Finché non entra, un
+  guest non ha nessuna strada verso la rete **che passi da questo contratto**; e
+  una che gli venisse da WASI invece che dall'`HostApi` sarebbe una seconda
+  porta con una seconda politica, cioè ciò che l'«enforcement in un solo punto»
+  esiste per non far succedere.
 - **Filesystem:** nessun accesso diretto; i documenti passano da
   `read_document`/`read_model`/`write_document`/`list_documents`, i dati del
   plugin da `data_*`. **Import ed export non fanno eccezione**, ed è una
@@ -713,6 +737,74 @@ rifiuti al frontend/all'IPC.
   separata con una deadline propria, più lasca.
 - **UI:** il proxy applica `UiNode::validate_untrusted()` a ogni albero
   restituito da `render_view` (vedi [ui-protocol.md](ui-protocol.md)).
+
+### Cosa non può essere **solo** un guest, e il metro per deciderlo
+
+I "Rischi" in fondo dicono una riga sola — *«costo di serializzazione al confine
+WASM: accettato solo per i plugin di terzi; le feature ufficiali restano
+native»* — e la [mappa](mappa-visuale.md) disegna l'**intera** FubSuite sotto
+`fubmd-wasm-host`, sync compreso. Le due cose non possono essere vere insieme.
+Qui si dice quale cede, e in base a cosa: il metro ha tre voci, e nessuna è
+un'opinione sul valore di una feature.
+
+1. **Posizione rispetto al prestito.** I trait sono sincroni e girano dentro
+   `Workspace::lend`: la latenza di un guest non è un costo suo, è **tempo in cui
+   tiene in mano il vault**. L'*epoch interruption* qui sopra limita chi è ostile
+   o rotto — non chi è lento e legittimo, che è il caso più comune.
+2. **Frequenza × payload.** Gli alberi al confine sono un'**arena** — lista
+   piatta più indici `u32`, conversione in `fubmd_abi::arena` — quindi una copia
+   per direzione: ciò che porta *il modello* o *il contenuto* paga in proporzione
+   alla nota, ogni volta. E ciò che tocca **ogni** documento — indicizzare,
+   parsare, digerire — si paga a ogni documento: su un `reindex` il fattore è il
+   vault intero, che è la ragione per cui la grana della chiamata è una domanda
+   del [§20.1](../roadmap/20-quando-qualcosa-va-storto.md#201-lalimentazione-dellindice-non-ha-un-esito-e-un-indice-che-perde-un-documento-non-ha-modo-di-dirlo)
+   e non un dettaglio di implementazione.
+3. **Prima o dopo la scrittura.** Il contratto permette di **osservare** una
+   modifica — `EventHandler`, dopo — e non di **interporsi**: non esiste nessun
+   punto che preceda `write_document` e possa dire di no. Chi deve decidere
+   *prima* che il file atterri non è un plugin stretto, è un plugin
+   **impossibile**.
+
+Chi inciampa in **una sola** delle tre non può essere *solo* un guest. Fuori da
+qui l'arena è un pedaggio che non si vede, e la regola non deve mangiarsi tutto.
+
+**Il caso che la mappa sbaglia è il sync**, e non per la rete — quella è una voce
+additiva le cui condizioni sono cadute (sopra). È il punto 3, e poi il 2. Un sync
+deve decidere il merge **prima** che il file atterri, e da `EventHandler` arriva
+dopo, su una coda che per contratto può troncare: il versioning si compra la
+perdita riconciliando su `Event::Overflow` (`features/src/versioning.rs`) perché
+perdere un evento gli costa **una versione in ritardo**, mentre a un sync costa
+una **divergenza su un altro device**, e non c'è riconciliazione che la renda
+gratis. E un ciclo di sync è hashing del vault intero: nativo è leggere e
+digerire in-process, da guest è copiare il vault attraverso l'arena a ogni giro.
+Il paragone con Obsidian — dove il sync è un plugin — non regge *qui*: là i
+plugin sono JS non sandboxato con accesso pieno all'app, cioè il modello che
+"Onestà sul modello di minaccia" rifiuta per intero. Il sync è un **servizio del
+core**, estendibile semmai nei backend di trasporto.
+
+**Due che restano nativi per costruzione**, e la ragione è già scritta altrove.
+Il **motore di ricerca** predefinito: tantivy vive di segmenti mmappati e il
+varco esiste apposta (`plugin_data_dir`), la §21.2 vuole un ranking *per
+battuta*, e i 6,8× della [0026](../decisions/0026-due-query-insieme.md) vengono
+da thread che un guest non condivide. La **firma** resta da provider — un motore
+alternativo di terzi deve poter esistere, ed è la
+[0025](../decisions/0025-la-ricerca-predefinita.md) — ma quello **acceso di
+default** è nativo. E il **`FormatProvider` di casa**, per il punto 2 e **non**
+per il punto 1: la live preview non chiama il provider a ogni battuta, perché la
+[0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha deciso che il modello
+verso il webview non ci va e il buffer lo decora Lezer nella shell (§4.4). Ma
+ogni salvataggio e ogni `reindex` passano di lì, e un vault da 100k note sono
+100k parse oltre il confine. Un formato di terzi paga quel pedaggio perché lo
+sceglie; quello che apre le note di tutti no.
+
+**Il rovescio, che è la parte che tiene onesta la regola.** Il **versioning** è
+la prova vivente che il modello regge: per-evento, throughput e non latenza,
+perdita riconciliabile. I **job** — import, export, OCR, pubblicazione — sono
+lavoro lungo con una deadline propria su un'istanza separata, ed è la strada che
+questo documento ha costruito apposta. Ciò che sopra un canale dati sano è una
+**view sottile più dei comandi** sta di là senza asterischi. E dove il lavoro
+vero costa 50–500 ms — un'inferenza, una conversione — il pedaggio dell'arena è
+rumore di fondo: il numeratore conta solo quando il denominatore è piccolo.
 
 ## Percorso di attivazione
 

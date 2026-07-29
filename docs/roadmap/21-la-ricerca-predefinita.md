@@ -159,7 +159,7 @@ che lo ha prodotto.
       superficie nella shell — più le coordinate della §21.3, senza cui il
       risultato non è cliccabile.
 
-### 21.5 Tre superfici cercano, e rischiano di nascere con tre ranking
+### 21.5 Quattro superfici cercano, e rischiano di nascere con quattro ranking
 
 *nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · shell · **P1***
 
@@ -177,6 +177,39 @@ che lo ha prodotto.
       (`TextField::Name`, che esiste per questo); la casella di ricerca è la
       stessa senza vincoli sui campi. Una porta, due configurazioni — non due
       porte.
+- [ ] **Le superfici sono quattro, e la quarta è già scritta.**
+      L'autocompletamento dei wikilink esiste
+      (`frontend/src/editor/completions.ts`) e la sua sorgente chiede al canale
+      dati **l'elenco intero del vault** a ogni apertura di `[[`
+      (`frontend/src/panels/document.ts`), col commento che lo dichiara
+      provvisorio — *«l'autocompletamento vuole i nomi di tutte le note, quindi
+      qui la lista resta intera: cambia la porta, non la domanda»*. È la regola
+      di questa voce vista dalla superficie che la viola per prima: accetta del
+      testo e propone delle note, e non passa da `IndexQuery::Documents`.
+- [ ] **E su questa la regola non basta, perché il budget non è per
+      invocazione: è per battuta.** Le altre tre pagano un giro quando si
+      aprono; questa lo pagherebbe a ogni tasto, e su un vault da 50k note
+      l'elenco intero non è una risposta — né come costo di trasporto né come
+      cosa da ordinare nella shell. Le uscite sono due, e sono una decisione di
+      progetto e non un dettaglio di implementazione: la **query con prefisso**
+      (che è la [§21.2](#212-il-prefisso-mentre-si-digita-non-è-uneuristica-della-casella),
+      già P0 e già la lingua giusta — un giro per battuta, ma piccolo), oppure
+      la **lista dei candidati spinta nella shell** e tenuta aggiornata dagli
+      eventi (nessun giro, ma uno stato da mantenere consistente).
+- [ ] **La seconda uscita ha un vincolo che il progetto ha già scritto per gli
+      indici, ed è ciò che la rende decidibile.** Una lista di candidati
+      mantenuta dagli eventi **è** un indice alimentato dagli eventi: la cosa
+      che [PIANO.md](../PIANO.md) rifiuta con l'argomento *«un indice che perde
+      un aggiornamento non tace: risponde sbagliato, in silenzio»*. E il ponte
+      verso la shell perde per progetto — freno e raggruppamento dalla
+      [0034](../decisions/0034-il-freno-e-il-raggruppamento.md), col tetto della
+      raffica che emette `Event::Overflow` al posto di ciò che ha scartato
+      (`host/bridge.rs`). Spingere si può, ma **solo** con la rigenerazione su
+      `Overflow`, e oggi quel segnale arriva al confine e nella shell non lo
+      legge nessuno (`frontend/src/` non lo nomina). Senza, l'autocompletamento
+      propone un vault vecchio e non lo dice — che è la
+      [§20.1](20-quando-qualcosa-va-storto.md#201-lalimentazione-dellindice-non-ha-un-esito-e-un-indice-che-perde-un-documento-non-ha-modo-di-dirlo)
+      trasportata dall'altra parte del confine.
 - [ ] Va con la §1.2 (il modello di layout) per **dove** compare il modale, e
       con la §18.2 per la scorciatoia che lo apre.
 
@@ -328,6 +361,21 @@ che lo ha prodotto.
       di uno span, perché sopravvive alla riscrittura del paragrafo che la
       ospita; ma non è immortale, e cancellare la riga che porta `^abc` oggi non
       rende rosso nessun test.
+- [ ] **C'è una metà che non è di questa voce e che va nominata qui, perché
+      questo è l'unico posto dove il riferimento a blocco è ragionato per
+      intero: nessuno *conia* un'ancora.** Il parser le legge, il renderer le
+      stampa (`features/src/blocks.rs`), il kernel le trasporta — e in tutto il
+      repo non esiste un percorso che ne **generi** una nuova. FEATURES la
+      chiede per nome (§5.2 «ID blocco», e i «Link a blocco» di §5.2 e §7.1 la
+      presuppongono): *«copia il link a questo blocco»* deve scrivere `^abc` in
+      coda al paragrafo quando non c'è. Non è una primitiva d'identità nuova e
+      non scade col freeze — coniare è una **scrittura**, quindi passa
+      dall'arbitro che esiste già (`write_document`/`apply_edit`,
+      [0008](../decisions/0008-modifica-chirurgica.md)), e l'unicità dentro il
+      documento la può verificare solo chi ha il modello parsato in mano, cioè
+      il kernel. Vale scritta perché la risposta di questa voce, da sola, rende
+      **risolvibile** un riferimento che l'utente non ha ancora modo di
+      **creare**.
 - [ ] **Cosa *non* chiede questa voce.** Non chiede di risolvere il riferimento —
       quello è lavoro di kernel, e si fa dopo. Chiede che la risposta abbia il
       posto dove metterlo, prima che il freeze lo renda una major. La differenza
