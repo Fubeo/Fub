@@ -280,24 +280,39 @@ la forma dell'annotazione, la seconda contro la prima.
       in entrambi i casi. **Fatto**, e con la causa invece del solo sintomo: la
       regola del vault resta ma non si applica a una cartella in cui **git tiene
       dei `.md`**; ogni albero saltato è una riga in uscita; **zero file
-      controllati esce rosso**. Oggi: **132 file, 2475 link**. Questa riga ha
-      detto «81 file, 1105 link», poi «122 file, 2155», poi «125 file, 2231»,
-      poi «127 file, 2284», poi «129 file, 2336» — ed è la **nona** volta che il
-      numero si è ritrovato falso. Le ultime tre meritano di essere raccontate
-      insieme, perché dicono tre cose diverse. La settima era falsa **nel commit
-      stesso che la scriveva**: la riga diceva 2284 e il controllo ne contava già
-      2285, cioè il numero è invecchiato fra il momento in cui è stato misurato e
-      quello in cui è stato scritto. L'ottava aveva una causa esterna alla riga —
-      due verbali nuovi e i loro rimandi hanno portato 2285 a 2336 in un
-      pomeriggio. La nona, questa, le mette insieme: la mezza voce del §17.1 ha
-      aggiunto un verbale, e la riga qui sopra che ne racconta i due conteggi
-      falsi ha aggiunto dei link **a questa voce**, cioè il documento che contiene
-      il numero è cresciuto nel gesto stesso di correggerlo. Il presidio funziona,
-      la **frase che lo descrive** no — e non perché nessuno la guardi, ma perché
-      un numero che conta i documenti di un repo che documenta sé stesso non ha un
-      valore fermo abbastanza a lungo da poter essere scritto a mano. È
-      l'argomento più corto a favore di questa voce, ed è stato prodotto
-      scrivendola — tre volte su nove.
+      controllati esce rosso**. Oggi: **133 file, 2500 link**.
+      Questa riga ha detto, in fila: «81 file, 1105 link», «122 file, 2155»,
+      «125 file, 2231», «127 file, 2284», «129 file, 2336», «132 file, 2464»,
+      «132 file, 2475». La correzione di oggi è l'**ottava**, e stavolta il numero
+      si ricostruisce: sono i valori che `git log -- questo file` restituisce, uno
+      per riscrittura. L'ordinale che c'era prima diceva «nona» e poi «decima» e non
+      si ricostruiva da niente — con cinque valori elencati e nove falsificazioni
+      dichiarate, mancava un elenco all'appello, ed era il sesto: «132 file, 2464
+      link». Che il presidio della prosa non presidiasse **il conteggio delle volte
+      in cui questa prosa è stata falsa** è la cosa più circolare che questa voce
+      abbia prodotto, ed è scritta qui perché non torni.
+      Delle ultime quattro, tre cause diverse e una che si ripete. La quinta era
+      falsa **nel commit stesso che la scriveva**: la riga diceva 2284 e il
+      controllo ne contava già 2285, cioè il numero è invecchiato fra il momento in
+      cui è stato misurato e quello in cui è stato scritto. La sesta e la settima
+      hanno una causa esterna alla riga — dei verbali nuovi e i loro rimandi, che in
+      un pomeriggio hanno portato 2285 a 2336 e poi a 2475. L'ottava, questa, ne
+      aggiunge una specie nuova e peggiore: **la riga era già falsa senza che
+      nessuno l'avesse toccata.** A HEAD dichiarava 2475 e il controllo ne contava
+      **2468**: il rename di `21c3562` e la ripulitura di `0d85342` hanno tolto
+      sette link, e nessuno dei due commit è passato da qui. Un numero che
+      invecchia quando lo si scrive è un fastidio; uno che invecchia mentre nessuno
+      lo guarda è la voce.
+      E c'è una coda che vale la pena: il conteggio dei **file** dipende anche da
+      cosa c'è nell'albero di lavoro. Lo script cammina il disco e non
+      `git ls-files`, quindi un `.md` di appunti non tracciato in radice fa 134
+      invece di 133. Il valore scritto qui è quello che vede un clone pulito, che è
+      l'unico che possa valere qualcosa.
+      Il presidio funziona, la **frase che lo descrive** no — e non perché nessuno
+      la guardi, ma perché un numero che conta i documenti di un repo che documenta
+      sé stesso non ha un valore fermo abbastanza a lungo da poter essere scritto a
+      mano. È l'argomento più corto a favore di questa voce, ed è stato prodotto
+      scrivendola — quattro volte su otto.
 
 *Sblocca:* 27.4 (plugin sandbox test, security test, upgrade migration test),
 27.3 (plugin linting, test utilities), 20.3 (permission revocation, crash

@@ -994,7 +994,29 @@ albero di file), `ExportRequest { selection, target, options }` con
 `Workspace::import` sceglie il **primo** provider il cui `can_handle` dice sì (la
 domanda è esplicita e non dedotta da un `BadArgs`: provare vorrebbe dire
 scrivere); `Workspace::export` risolve la destinazione sul suo proprietario.
-Prove: `tests/transfer_e2e.rs` nel crate markdown e
+
+**I due versi non hanno la stessa forma**, ed è la cosa da sapere prima di
+scriverci sopra un plugin. Quello predefinito copia i byte e **non li prende dal
+modello**: un vault esce in artefatti e rientra identico byte per byte, comprese le
+divergenze fra il modello e il file che il corpus dichiara — perché una divergenza
+del modello non è una perdita del trasferimento.
+
+L'unica opzione dell'export markdown, `{"frontmatter": false}`, dal modello ci
+passa: taglia il sorgente sullo span del primo blocco (`transfer.rs`,
+`strip_frontmatter`), esteso indietro attraverso l'indentazione, che lo span lascia
+fuori e che per un code block indentato è sintassi. Là la pretesa non è l'identità —
+sarebbe esclusa per definizione — ma che **la struttura non cambi**, ed è presidiata
+caso per caso sul corpus. Due limiti dichiarati, con una prova ciascuno: **l'export
+senza metadati non è idempotente** (due frontmatter in fila si tolgono in due giri e
+non in uno, perché il primo taglio scopre il secondo), e **non può promettere niente
+sui byte il cui significato dipende dalla posizione** — un BOM che era in mezzo al
+documento, tolto il frontmatter, si ritrova in testa e smette di essere testo.
+
+Prove: `tests/transfer_e2e.rs` nel crate markdown, sul vault scritto a mano **e sul
+corpus** della [0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md) — che
+arriva da `tests/corpus/mod.rs`, un modulo condiviso con `il_corpus.rs` — più due
+fuzzer, uno sull'export e uno sui nomi delle sorgenti
+([0061](../decisions/0061-un-giro-che-non-passa-dal-modello.md)); e
 `fub-kernel/tests/transfer_dispatch.rs` per il protocollo.
 
 Resta fuori, dichiarato: **rollback e resume** (l'inverso di un lotto, sopra il

@@ -72,6 +72,27 @@ La CI non fa niente di più di questo elenco: se passa in locale, passa lì —
 salvo il fatto che i test girano anche su Windows e macOS, dove a rompersi sono
 quasi sempre i path e i lock file di `.fub/data/`.
 
+I fuzzer del §17.1 girano **dentro** `cargo test --workspace`, con un seme e un
+conteggio fissi: la stessa corsa a ogni push, su tre sistemi operativi, senza un
+rosso che dipende da quando lo si è lanciato. Alzare il conteggio è **cercare** e
+non presidiare, e si fa a mano:
+
+```bash
+# FUB_FUZZ_SEME sceglie il seme; ogni porta ha il suo conteggio.
+FUB_FUZZ_CASI=5000000 cargo test --release -p fub-format-markdown \
+  --test il_corpus -- nessuna_mutazione
+FUB_FUZZ_TRASFERIMENTO=1000000 cargo test --release -p fub-format-markdown \
+  --test transfer_e2e -- no_mutation_of
+FUB_FUZZ_NOMI=100000 cargo test --release -p fub-format-markdown \
+  --test transfer_e2e -- no_mutated_name
+```
+
+Non stanno in nessun elenco di variabili d'ambiente, e non è una dimenticanza: non
+configurano Fub. Vivono solo dentro `#[test]`, e l'unico posto dove serve
+conoscerle è questo — cioè dove si lancia il comando. Delle variabili che
+l'applicazione legge parla la
+[decisione 0036](decisions/0036-le-impostazioni-e-i-tre-stati.md).
+
 ## Cosa presidia la CI
 
 Sei job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):

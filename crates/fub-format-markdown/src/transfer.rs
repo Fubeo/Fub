@@ -249,13 +249,26 @@ impl ExportProvider for MarkdownExport {
     }
 }
 
-/// La sorgente senza il frontmatter, tagliata sullo **span del primo blocco**.
+/// La sorgente senza il frontmatter, tagliata sullo **span del primo blocco**,
+/// esteso all'indentazione che quello span lascia fuori.
 ///
 /// È il modo dichiarato di modificare un documento in questo progetto — una
 /// patch guidata dagli span del modello — e non una seconda lettura dei
 /// delimitatori `---`, che sarebbe un secondo parser YAML in miniatura. Un
 /// documento che non parsa o che è solo frontmatter esce vuoto: qui il
 /// frontmatter *è* tutto il documento.
+///
+/// # Perché lo span del primo blocco non basta
+///
+/// Perché per un **code block indentato** comincia dopo i quattro spazi: lo span
+/// dice dov'è il contenuto, e l'indentazione è sintassi. Tagliando lì l'export
+/// produceva un documento in cui quel blocco non era più un code block — cioè
+/// cambiava il significato dei byte che teneva, che è più di quanto «togli i
+/// metadati» autorizzi a fare. Il taglio si estende quindi indietro fino
+/// all'inizio della riga, **ma solo attraverso spazi e tabulazioni**: fermarsi al
+/// primo carattere che non è indentazione è ciò che tiene il gesto una patch e
+/// non una seconda lettura del file. Trovato dal round-trip sul corpus della
+/// [0061](../../../docs/decisions/0061-un-giro-che-non-passa-dal-modello.md).
 fn strip_frontmatter(source: &str, doc_id: &str) -> String {
     let Ok(model) = crate::parse::parse_markdown(source, &ParseContext::obsidian(doc_id)) else {
         return source.to_string();
@@ -264,7 +277,22 @@ fn strip_frontmatter(source: &str, doc_id: &str) -> String {
         return source.to_string();
     }
     match model.body.first() {
-        Some(first) => source[first.span().start..].to_string(),
+        Some(first) => {
+            let contenuto = first.span().start;
+            let riga = source[..contenuto]
+                .rfind(['\n', '\r'])
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            let taglio = if source[riga..contenuto]
+                .chars()
+                .all(|c| c == ' ' || c == '\t')
+            {
+                riga
+            } else {
+                contenuto
+            };
+            source[taglio..].to_string()
+        }
         None => String::new(),
     }
 }

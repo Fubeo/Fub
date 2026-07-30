@@ -13,16 +13,21 @@ piano ha già applicato alla supply chain
 ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuova
 è un caso in più da scrivere a posteriori); per gli e2e e per il tracing no.
 
-E quel criterio ha **tagliato in due la prima voce**, che è la cosa più utile che
-un criterio di seduta possa fare: dentro la §17.1 il corpus e il fuzzing sono la
-metà il cui costo cresceva, il banco delle prestazioni è la metà che aspetta una
-macchina e non una decisione. La prima è chiusa dalla
-[decisione 0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md), la
-seconda tiene aperta la voce.
+E quel criterio ha **tagliato la prima voce**, che è la cosa più utile che un
+criterio di seduta possa fare: dentro la §17.1 il corpus e il fuzzing sono la
+parte il cui costo cresceva, il banco delle prestazioni quella che aspetta una
+macchina e non una decisione.
+
+Il criterio però ordina ciò che vede, e una riga della voce non stava né di qua né
+di là: il round-trip rifatto sul corpus non aveva un costo che cresceva e non
+aspettava una macchina — aspettava **il corpus**, che è dentro la voce stessa. Un
+taglio fatto guardando le voci dall'esterno non poteva vederla, ed è la ragione per
+cui la §17.1 si è chiusa a pezzi invece che a metà. Lo stato dei pezzi sta nella
+riga in corsivo qui sotto, e non qui.
 
 ### 17.1 Corpus, fuzzing, prestazioni
 
-*ex §4.3 · presidi · **P2** — **mezza voce**: il corpus e il fuzzing sono chiusi dalla [decisione 0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md) · il round-trip import/export ha già il primo giro (decisione 0006)*
+*ex §4.3 · presidi · **P2** — **chiusa in tre parti** meno il banco delle prestazioni: il corpus e il fuzzing con la [decisione 0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md), il round-trip sul corpus con la [0061](../decisions/0061-un-giro-che-non-passa-dal-modello.md); restano le due caselle del banco, che aspetta una macchina e non una decisione*
 
 - [x] **Fuzzing del parser** markdown: 5.3 lo chiede esplicitamente, e un parser
       che pania è un vault che non si apre. **Fatto** con la
@@ -68,15 +73,24 @@ seconda tiene aperta la voce.
       chiede, ed è la ragione per cui un test di prestazioni non può stare in
       mezzo agli altri e girare a ogni push. Finché non c'è, si lancia a mano
       (`cargo test -p fub-features --lib due_ricerche -- --ignored`).
-- [ ] **Round-trip import/export**: il primo giro c'è con la [decisione 0006](../decisions/0006-import-export-come-trait.md)
+- [x] **Round-trip import/export**: il primo giro c'era con la
+      [decisione 0006](../decisions/0006-import-export-come-trait.md)
       (`transfer_e2e.rs`: un vault esce in artefatti e rientra identico), ma su
-      un vault scritto a mano. Resta da farlo **sul corpus** di qui sopra, dove
-      la proprietà smette di essere un esempio e diventa una misura — e adesso
-      quel corpus c'è ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)),
-      quindi questa riga non aspetta più niente: è lavoro. Chi la prende tenga
-      conto che sessantadue di quei casi sono *sorgenti*, non vault, e che le
-      tredici divergenze dichiarate sono l'elenco di ciò che un round-trip non
-      può pretendere finché non sono riparate.
+      un vault scritto a mano. **Fatto sul corpus** con la
+      [0061](../decisions/0061-un-giro-che-non-passa-dal-modello.md), che ha
+      trovato la ragione per cui la riga valeva la pena: i due versi del
+      trasferimento non sono uno solo. Quello che copia i byte non prende i suoi
+      byte dal modello, e infatti le settantacinque sorgenti — i sessantadue casi
+      curati *e* le tredici divergenze dichiarate, che stanno nel vault apposta —
+      escono e rientrano identiche byte per byte. Quello che toglie il frontmatter
+      dal modello ci passa, perché taglia il file sullo span del primo blocco: là
+      la pretesa non è l'identità ma che **la struttura non cambi**, e su quella
+      pretesa il corpus ha trovato un difetto vero — il taglio si mangiava
+      l'indentazione di un code block, e il documento esportato non era più un code
+      block. Il timore che questa riga dichiarava — «le divergenze sono l'elenco di
+      ciò che un round-trip non può pretendere» — era invece mal riposto: una
+      divergenza fra il modello e il file non tocca un giro che dal modello non
+      passa.
 
 ### 17.2 Test della shell
 
