@@ -12,6 +12,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }
 thiserror = { workspace = true }
+# Solo la facciata: il collettore è `crate::log`, e non ha dipendenze.
+tracing = { workspace = true }
 
 # INVARIANTE: niente comrak/pulldown, wasmtime, tauri qui dentro. Il core non
 # sa cosa sia il markdown.

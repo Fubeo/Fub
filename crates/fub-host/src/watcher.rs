@@ -104,6 +104,8 @@ mod notify_watcher {
     use std::time::Duration;
 
     use camino::{Utf8Path, Utf8PathBuf};
+    use fub_abi::event::Event;
+    use fub_abi::{PluginError, Severity};
     use fub_kernel::Workspace;
     use notify::event::{EventKind, ModifyKind, RenameMode};
     use notify::RecursiveMode;
@@ -182,8 +184,27 @@ mod notify_watcher {
                         // Fine del lotto debounced: è il punto tranquillo in cui
                         // rendere durevoli gli indici. Il kernel non sa quando finisce
                         // un lotto — lo sa il watcher, che il lotto lo ha formato.
-                        for e in ws.flush_indexes() {
-                            eprintln!("flush indice: {e}");
+                        // Un flush che non scrive perde un **derivato** (0052:
+                        // `Warning`), ed è una perdita che l'utente ha il diritto
+                        // di sapere: chi cerca, fino alla prossima apertura,
+                        // riceve una risposta incompleta. Pavimento e porta
+                        // insieme (0062): una riga nel log, una nel canale.
+                        let flush_errors = ws.flush_indexes();
+                        if !flush_errors.is_empty() {
+                            for e in &flush_errors {
+                                tracing::warn!(target: "fub.host", "flush indice: {e}");
+                            }
+                            ws.with_host("fub.host", |host| {
+                                for e in flush_errors {
+                                    host.emit(Event::Trouble {
+                                        severity: Severity::Warning,
+                                        subject: None,
+                                        error: PluginError::Internal(
+                                            format!("flush indice: {e}").into(),
+                                        ),
+                                    });
+                                }
+                            });
                         }
                     }
                     Err(errors) => {
@@ -191,16 +212,29 @@ mod notify_watcher {
                         // (§9.7). Un errore del debouncer non è un evento
                         // perso: è che questo vault ha smesso di sapere quando
                         // cambia da fuori — limite di inotify su un vault
-                        // grande, un network share che si stacca — e finché la
-                        // risposta era per costruzione l'unica traccia era
-                        // questa riga su stderr, cioè nessuna. Dalla 0052 un
-                        // canale c'è (`Event::Trouble`), e questo è uno dei
-                        // punti che restano da portarci dentro: qui il vault
-                        // c'è, quindi è conversione e non decisione.
+                        // grande, un network share che si stacca. Non è la
+                        // perdita di un dato ma la perdita di un meccanismo: da
+                        // qui in poi l'indice drifta in silenzio, e non sapere
+                        // che il rilevamento è morto è esattamente il caso in
+                        // cui il canale serve. `Failure` perché ciò che si perde
+                        // non si ricostruisce riaprendo il vault — il rilevamento
+                        // va riallacciato a mano.
                         failed.store(false, Ordering::Relaxed);
-                        for e in errors {
-                            eprintln!("watch error: {e:?}");
+                        let mut ws = workspace.write().unwrap();
+                        for e in &errors {
+                            tracing::error!(target: "fub.host", "watch error: {e:?}");
                         }
+                        ws.with_host("fub.host", |host| {
+                            for e in errors {
+                                host.emit(Event::Trouble {
+                                    severity: Severity::Failure,
+                                    subject: None,
+                                    error: PluginError::Internal(
+                                        format!("watch error: {e:?}").into(),
+                                    ),
+                                });
+                            }
+                        });
                     }
                 },
             )

@@ -12,6 +12,10 @@ fub-abi = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tantivy = "0.26"
+# La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
+# questo crate il kernel non lo vede per invariante — che è esattamente il
+# motivo per cui `tracing` è diviso in due crate.
+tracing = { workspace = true }
 
 # INVARIANTE: la libreria NON dipende da `fub-kernel`. Le feature ufficiali
 # sono impl dei trait del contratto, cioè esattamente ciò che scriverà un plugin

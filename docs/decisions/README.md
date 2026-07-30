@@ -72,6 +72,7 @@ cronologico di chiusura.
 | [0059](0059-la-generazione-non-e-un-round-trip.md) | La generazione non è un round-trip, e la frase che lo diceva adesso è una rete | il doc di `FormatProvider::serialize` — la sesta specie della [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), **non** una voce di [todo.md](../todo.md) | 2026-07-30 |
 | [0060](0060-il-modello-dice-il-vero-sui-byte.md) | Il modello dice il vero sui byte del file, e un corpus che nessuno confronta non cresce | §17.1 (**prima metà**: il corpus e il fuzzing) — resta il banco delle prestazioni ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 | [0061](0061-un-giro-che-non-passa-dal-modello.md) | Un giro che non prende i byte dal modello, e uno che ci passa | §17.1 (**una casella su cinque**: il round-trip sul corpus) — resta il banco delle prestazioni ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
+| [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) | Il log è il pavimento, l'evento è la porta — `tracing` al posto di `eprintln!`, con log su file, livelli e log per-plugin | §17.3 — chiude la voce **e** la casella residua della §20.2: i ventisette punti di `stderr` hanno due destinazioni, non una ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -259,6 +260,22 @@ dov'era e ci è stata spuntata. Ciò che vale la pena tenere è che classificare
 residuo è **prevedere**, e la previsione si fa guardando la riga — che può mentire.
 La conseguenza è mite, ed è la ragione per cui il criterio resta com'è: sbagliarla
 costa un verbale in più, cioè costa che una decisione venga scritta invece che no.
+
+La [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) inaugura un quarto
+modo di lasciare qualcosa dietro, ed è il primo in cui a chiudersi è una **casella
+residua di un'altra voce** — non per averla fatta a mano, ma per averne dato il
+criterio. La [0052](0052-cio-che-va-storto-e-un-evento.md) aveva lasciato come
+casella residua «portare dentro il canale i ventisette punti che scrivono su
+`stderr`», e la classificava *casella residua* perché era lavoro senza decisione.
+Facendola, si è visto che la domanda nascosta era un'altra: i ventisette non
+avevano una destinazione sola, ne avevano **due** — il log per chi sviluppa, il
+canale degli eventi per chi legge — e scegliere chi va dove era la decisione
+intera della 0062. Fatta quella, la casella è scesa a zero da sé: il mestiere lo
+ha svolto una voce che non era nata per lei. Vale la pena distinguerlo dalla riga
+consegnata altrove della [0058](0058-un-nome-che-nasce.md): là una riga cambiava
+indirizzo perché apparteneva a un'altra domanda; qui una casella si **chiude**
+perché la decisione che la risolve è la stessa di un'altra voce. Le caselle residue
+di `todo.md` scendono da nove a otto.
 
 E una cosa di metodo, che vale la pena scrivere qui perché
 [CONTRIBUTING.md](../CONTRIBUTING.md) dice che **i verbali sono immutabili**: la

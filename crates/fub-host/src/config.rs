@@ -84,6 +84,42 @@ pub fn view_states_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
     config_dir.join("view-state.json")
 }
 
+/// Il file di log della macchina (§17.3). Sta accanto alla configurazione e
+/// non nel vault: è uno strumento di chi guarda Fub, non un dato che viaggia
+/// con le note. In una sottocartella `logs/` perché non è un'impostazione e non
+/// va confuso con i tre file della macchina.
+pub fn log_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
+    config_dir.join("logs").join("fub.log")
+}
+
+/// **Installa il collettore del log per tutto il processo** (§17.3) e torna i
+/// livelli condivisi.
+///
+/// È la prima cosa che fa `fub_app::run`, prima di qualunque vault: ogni riga
+/// di `tracing` da lì in poi — comprese quelle di `Host::installed`, che apre i
+/// file della macchina — ha un posto dove andare. Senza un `config_dir`
+/// (`Host::new`, ambienti senza `HOME`) il sink è `stderr`, ed è l'unico
+/// `stderr` che resta in Fub: là non c'è nessun altro canale.
+///
+/// Il file non apre? `FileSink::open` torna un avviso, e in quel caso il sink
+/// degrada a `stderr`: un log che non si apre non deve impedire all'app di
+/// partire — la stessa regola di `MachineSettings::open`.
+pub fn install_logging() -> std::sync::Arc<fub_kernel::log::Levels> {
+    use std::sync::Arc;
+    let levels = Arc::new(fub_kernel::log::Levels::default());
+    let sink: Arc<dyn fub_kernel::log::Sink> = match config_dir() {
+        Some(dir) => {
+            let (sink, _warning) = fub_kernel::log::FileSink::open(&log_path(&dir));
+            Arc::new(sink)
+        }
+        None => Arc::new(fub_kernel::log::StderrSink),
+    };
+    // In `run` siamo i primi; il `Err` si vede solo se qualcuno ha già
+    // installato, e in un test non si passa di qui.
+    let _ = fub_kernel::log::install(Arc::clone(&levels), sink);
+    levels
+}
+
 fn env_path(key: &str) -> Option<Utf8PathBuf> {
     std::env::var(key)
         .ok()

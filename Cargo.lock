@@ -1165,6 +1165,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tracing",
 ]
 
 [[package]]
@@ -1181,6 +1182,7 @@ dependencies = [
  "serde_json",
  "tantivy",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -1213,6 +1215,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -1226,6 +1229,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.19",
+ "tracing",
 ]
 
 [[package]]
