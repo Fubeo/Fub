@@ -35,6 +35,16 @@
 //! da lì in poi il costo lo paga chi aggiunge la sintassi, nel giro in cui la
 //! aggiunge.
 //!
+//! # Le sorgenti stanno altrove, e il perché conta
+//!
+//! I byte del corpus stanno in [`crate::corpus`], un modulo condiviso, da quando
+//! i clienti sono due: questo file chiede **cosa il modello dice** di quelle
+//! sorgenti, `transfer_e2e.rs` chiede **cosa il trasferimento ne fa** — gli
+//! stessi byte che escono da un vault e rientrano in un altro. Un modulo sotto
+//! `tests/` viene compilato dentro ciascun binario che lo dichiara, quindi le due
+//! suite vedono per costruzione lo stesso elenco: non c'è il modo di fallimento
+//! in cui uno dei due corpus cresce e l'altro no.
+//!
 //! # Le divergenze sono dichiarate, non scoperte
 //!
 //! Un corpus serve anche — soprattutto — a dire **dove il modello e il file non
@@ -71,6 +81,10 @@ use fub_abi::options::syntax;
 use fub_format_markdown::MarkdownProvider;
 use fub_sdk::testing::conformita;
 
+mod corpus;
+
+use crate::corpus::{corpus, divergenti, muta, quanti_casi, seme, Caso64};
+
 /// Il sorgente del contratto, da cui si estraggono le tre sorgenti di verità del
 /// confronto.
 ///
@@ -92,137 +106,6 @@ fn parse(source: &str) -> DocumentModel {
     provider()
         .parse(&source.into(), &ctx())
         .expect("il corpus è markdown, e il markdown parsa")
-}
-
-// ---------------------------------------------------------------------------
-// Il corpus
-// ---------------------------------------------------------------------------
-
-/// Una voce del corpus: un nome per leggere il fallimento, e i byte esatti.
-///
-/// I byte stanno scritti qui come stringhe Rust e non come file committati, per
-/// la ragione della [0058](../../../docs/decisions/0058-un-nome-che-nasce.md):
-/// un file con un BOM o con CRLF dentro un repo è alla mercé di
-/// `.gitattributes`, degli editor e dei checkout su Windows.
-struct Caso {
-    nome: &'static str,
-    source: &'static str,
-}
-
-const fn caso(nome: &'static str, source: &'static str) -> Caso {
-    Caso { nome, source }
-}
-
-/// Ogni costrutto che il provider markdown sa produrre, una volta.
-///
-/// L'ordine è quello del contratto: prima le varianti di `Block`, poi quelle di
-/// `Inline`, poi i `custom_kind`, poi le forme ostili del testo. Non è un elenco
-/// da cui si itera per **dedurre** la copertura: la copertura si misura
-/// **parsando** queste sorgenti e guardando cosa ne esce.
-fn corpus() -> Vec<Caso> {
-    vec![
-        // --- Block ---
-        caso("heading atx", "# Titolo\n"),
-        caso("heading setext", "Titolo\n===\n"),
-        caso("heading di ogni livello", "# a\n\n## b\n\n### c\n\n#### d\n\n##### e\n\n###### f\n"),
-        caso("paragrafo", "Un paragrafo qualunque.\n"),
-        caso("lista non ordinata", "- a\n- b\n"),
-        caso("lista ordinata", "1. a\n2. b\n"),
-        caso("lista annidata", "- a\n  - b\n    - c\n"),
-        caso("code block recintato", "```\nx\n```\n"),
-        caso("code block con linguaggio", "```rust\nfn main() {}\n```\n"),
-        caso("code block indentato", "    quattro spazi\n"),
-        caso("code block non chiuso", "```rs\nsenza chiusura\n"),
-        caso("citazione", "> citata\n"),
-        caso("citazione annidata", "> > due volte\n"),
-        caso("riga orizzontale", "***\n"),
-        caso("tabella con sola intestazione", "| a |\n| - |\n"),
-        caso(
-            "tabella con allineamenti",
-            "| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n",
-        ),
-        caso("tabella con inline nelle celle", "| a | b |\n| - | - |\n| [[N]] | `c` |\n"),
-        // --- ListItem / TaskMarker ---
-        caso("task vuota", "- [ ] da fare\n"),
-        caso("task fatta", "- [x] fatta\n"),
-        caso("task a stato personalizzato", "- [/] in corso\n"),
-        // --- Inline ---
-        caso("enfasi", "*enfasi*\n"),
-        caso("forte", "**forte**\n"),
-        caso("codice inline", "`codice`\n"),
-        caso("enfasi dentro forte", "**forte con *enfasi* dentro**\n"),
-        caso("link markdown a un path", "[etichetta](nota.md)\n"),
-        caso("link markdown a un url", "[etichetta](https://esempio.invalid/a)\n"),
-        caso("wikilink", "[[Nota]]\n"),
-        caso("wikilink completo", "[[Nota#Sezione^blocco|Alias]]\n"),
-        caso("wikilink al solo heading", "[[#Sezione]]\n"),
-        caso("embed di wikilink", "![[Nota]]\n"),
-        caso("embed di immagine", "![alt](figura.png)\n"),
-        caso("tag", "#tag\n"),
-        caso("tag annidato", "#genitore/figlio\n"),
-        caso("softbreak", "una riga\nun'altra\n"),
-        caso("linebreak", "una riga  \nun'altra\n"),
-        caso("link di riferimento", "[a][rif]\n\n[rif]: nota.md\n"),
-        // --- custom_kind ---
-        caso("callout senza titolo", "> [!note]\n> corpo\n"),
-        caso("callout con titolo", "> [!warning] Attenzione\n> corpo\n"),
-        caso("callout di ogni tipo", "> [!note]\n> a\n\n> [!tip]\n> b\n\n> [!important]\n> c\n\n> [!warning]\n> d\n\n> [!caution]\n> e\n"),
-        caso("footnote", "una nota[^n]\n\n[^n]: il corpo\n"),
-        caso("definition list", "Termine\n\n: la definizione\n"),
-        caso("html a blocco", "<div>blocco</div>\n"),
-        caso("commento html", "<!-- un commento -->\n"),
-        // --- frontmatter ---
-        caso("frontmatter", "---\ntitolo: X\n---\n\n# Corpo\n"),
-        caso(
-            "frontmatter con ogni specie di proprietà",
-            "---\ntesto: X\nnumero: 4\nvero: true\nvuota:\ndata: 2026-07-30\nquando: 2026-07-30T10:30:00+02:00\nelenco: [a, b]\nrelazione: \"[[Nota]]\"\nannidata:\n  a: 1\n---\n\nx\n",
-        ),
-        // --- ancore ---
-        caso("ancora di paragrafo", "Un paragrafo ^abc123\n"),
-        caso("ancora su riga propria", "Un paragrafo\n\n^abc123\n"),
-        caso("ancora che non è un'ancora", "2^10 = 1024\n"),
-        // --- le forme ostili del testo (§15.5) ---
-        caso("crlf", "# Titolo\r\n\r\nUn paragrafo con [[Link]].\r\n"),
-        caso("cr solo", "# Titolo\rUn paragrafo.\r"),
-        // Il `\r` nudo su **più blocchi**, che è il caso in cui la tabella
-        // riga→byte sballa e non si vede: `byte()` è robusto ai valori fuori
-        // range, quindi una riga che non esiste torna la fine del file, e gli
-        // span sono vuoti invece che sbagliati. Sta qui per il difetto che ha
-        // scoperto, non per completezza.
-        caso(
-            "cr solo su più blocchi",
-            "# Titolo\r\rUn paragrafo con [[Nota]] e #tag.\r\r## Sezione\r\r- [x] fatta\r",
-        ),
-        caso("un cr nudo in mezzo a un file a lf", "# Ti\rtolo\n\nvedi [[Nota]]\n\n## Poi\n"),
-        caso("terminatori misti", "# Titolo\r\n\nuna\r\n\naltra\n\nvedi [[Nota]]\r\n"),
-        caso("bom", "\u{feff}# Titolo\n\nUn paragrafo.\n"),
-        caso("bom e frontmatter", "\u{feff}---\na: 1\n---\n\n# Corpo\n"),
-        caso("senza newline finale", "Una riga sola senza a capo"),
-        caso("solo un bom", "\u{feff}"),
-        caso("vuoto", ""),
-        caso("solo spazi", "   \n\n  \t\n"),
-        caso("fuori dal bmp", "# 🎉 Titolo\n\nvedi [[Nota 🎉]] e #tag🎉\n"),
-        caso("nfd nel contenuto", "# Cafe\u{301}\n\nvedi [[Cafe\u{301}]]\n"),
-        // --- un documento che ha tutto insieme, che è il caso vero ---
-        caso(
-            "un documento intero",
-            "---\ntitolo: Tutto\ntag: [a, b]\n---\n\n\
-             # Titolo ^testa\n\n\
-             Un paragrafo con *enfasi*, **forte**, `codice`, [[Nota]], \
-             ![[Altra]], [md](x.md), ![img](f.png) e #tag.\n\n\
-             ## Sezione\n\n\
-             - [ ] una task con [[Link]]\n\
-             - [x] fatta\n\
-               - annidata\n\n\
-             > [!tip] Suggerimento\n> con dentro un [[Wikilink]]\n\n\
-             | a | b |\n| :-- | --: |\n| 1 | [[N]] |\n\n\
-             ```rust\nfn main() {}\n```\n\n\
-             > citazione con - [x] task [[A]] #t\n\n\
-             una nota[^f]\n\n[^f]: il corpo della nota\n\n\
-             ***\n\n\
-             Termine\n\n: definizione\n",
-        ),
-    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -254,9 +137,10 @@ fn ogni_voce_del_corpus_produce_un_modello_che_dice_il_vero() {
         verificati += 1;
     }
     assert!(
-        verificati > 50,
-        "il corpus ha verificato {verificati} casi: sono troppo pochi perché sia\n\
-         il corpus di questo file, e un corpus che si svuota passa sempre."
+        verificati >= 62,
+        "il corpus ha verificato {verificati} casi su sessantadue: un corpus che si\n\
+         svuota passa sempre, quindi la soglia è il conteggio di oggi — cresce con\n\
+         lui, e scende solo in un commit che dice perché."
     );
 }
 
@@ -655,19 +539,37 @@ enum Perche {
 /// smettere una divergenza di essere silenziosa senza fermare il lavoro per
 /// ripararla adesso — e la ragione per cui questa forma è quella giusta invece di
 /// una riga di prosa in un documento è la §16.8: una prosa non diventa rossa.
+///
+/// Le **sorgenti** non stanno qui ma in [`crate::corpus::divergenti`], perché le
+/// vuole anche `transfer_e2e.rs`: là entrano in un vault come note qualunque, e
+/// provano la tesi su cui poggia il round-trip — una divergenza fra il modello e
+/// il file non è una perdita nel trasferimento, perché i byte che il
+/// trasferimento copia non vengono dal modello. Il nome è la chiave che lega le
+/// due metà, e [`le_divergenze_sono_quelle_dichiarate`] confronta i due elenchi
+/// **nei due versi**: un nome senza predicato o un predicato senza nome è rosso.
+///
+/// # Perché il predicato riceve anche la sorgente
+///
+/// Perché separare il nome dai byte ha aperto un modo di fallire che prima non
+/// c'era: finché stavano nella stessa tupla, un predicato non poteva finire
+/// accoppiato a una sorgente diversa dalla sua. Adesso il legame è una stringa, e
+/// un predicato **negativo** o **generico** — `!d.text.contains("didascalia")`,
+/// `d.frontmatter.is_empty()` — resterebbe verde su una sorgente qualunque, cioè
+/// la divergenza tornerebbe silenziosa senza che nulla diventi rosso.
+///
+/// La sorgente nel predicato è ciò che rende la divergenza esprimibile per quello
+/// che è: non «il modello dice X» ma **«il file dice X e il modello dice Y»**. E
+/// [`nessuna_divergenza_e_vera_su_un_documento_qualunque`] chiude il cerchio
+/// pretendendo che ogni predicato sia **falso** su dei documenti di controllo: un
+/// predicato che passa su `""` non sta descrivendo una divergenza, sta descrivendo
+/// il vuoto.
 #[allow(clippy::type_complexity)]
-fn divergenze_dichiarate() -> Vec<(
-    &'static str,
-    &'static str,
-    Perche,
-    fn(&DocumentModel) -> bool,
-)> {
+fn divergenze_dichiarate() -> Vec<(&'static str, Perche, fn(&DocumentModel, &str) -> bool)> {
     vec![
         (
             "un link a un heading di questa nota inventa un tag",
-            "[[#Sezione]]\n",
             Perche::InventataDalParser,
-            |d| {
+            |d, _| {
                 d.tags.iter().any(|t| t.name == "Sezione")
                     && d.links.first().is_some_and(|l| {
                         matches!(&l.target, LinkTarget::Wiki { heading, .. }
@@ -685,54 +587,52 @@ fn divergenze_dichiarate() -> Vec<(
         ),
         (
             "il barrato non arriva nel modello",
-            "~~barrato~~\n",
             Perche::AccesaEnonMappata,
-            |d| testo_piatto(d) == "barrato" && !nomi_dei_kind(d).contains("strikethrough"),
+            |d, _| testo_piatto(d) == "barrato" && !nomi_dei_kind(d).contains("strikethrough"),
         ),
         (
             "l'apice non arriva nel modello",
-            "testo ^apice^ qui\n",
             Perche::AccesaEnonMappata,
-            |d| testo_piatto(d) == "testo apice qui" && nomi_dei_kind(d).is_empty(),
+            |d, _| testo_piatto(d) == "testo apice qui" && nomi_dei_kind(d).is_empty(),
         ),
         (
             "l'html inline sparisce, mentre quello a blocco resta",
-            "un <b>grassetto</b> inline\n",
             Perche::AccesaEnonMappata,
-            |d| testo_piatto(d) == "un grassetto inline" && nomi_dei_kind(d).is_empty(),
+            |d, _| testo_piatto(d) == "un grassetto inline" && nomi_dei_kind(d).is_empty(),
         ),
         (
             "un frontmatter che non si parsa non lascia traccia",
-            "---\n--- non una chiave\nb: 2\n---\n\nx\n",
             Perche::AccesaEnonMappata,
-            |d| d.frontmatter.is_empty(),
+            // `frontmatter.is_empty()` da solo è vero su qualunque documento senza
+            // frontmatter, cioè sulla maggior parte: la divergenza è che il **file**
+            // apre con i delimitatori e il modello non ne sa niente.
+            |d, src| src.starts_with("---\n") && d.frontmatter.is_empty(),
         ),
         (
             "l'ancora esplicita di un heading non è raggiungibile dall'albero",
-            "## Titolo ^xyz\n",
             Perche::RappresentataEnonRaggiungibile,
-            |d| {
+            |d, _| {
                 d.anchors.iter().any(|a| a.id == "xyz")
                     && d.body.first().map(Block::anchor) == Some(Some("titolo"))
             },
         ),
         (
             "uno slug vuoto è un'ancora che il contratto rifiuterebbe",
-            "#\n",
             Perche::RappresentataEnonRaggiungibile,
-            |d| d.body.first().map(Block::anchor) == Some(Some("")),
+            |d, _| d.body.first().map(Block::anchor) == Some(Some("")),
         ),
         (
             "l'alt di un'immagine non entra nel testo indicizzato",
-            "![una didascalia](f.png)\n",
             Perche::RappresentataEnonRaggiungibile,
-            |d| !d.text.contains("didascalia"),
+            // La negazione da sola è vera su ogni documento che non dice
+            // «didascalia», cioè su tutti tranne uno: la divergenza è che la parola
+            // **c'è nel file** e non nel testo che si indicizza.
+            |d, src| src.contains("didascalia") && !d.text.contains("didascalia"),
         ),
         (
             "la sintassi grezza di un embed entra nel testo indicizzato",
-            "![[Nota]]\n",
             Perche::RappresentataEnonRaggiungibile,
-            |d| d.text.contains("![["),
+            |d, _| d.text.contains("![["),
         ),
         (
             // Non è markdown ostile: è la forma «stretta» della definition list,
@@ -744,9 +644,8 @@ fn divergenze_dichiarate() -> Vec<(
             // `conformita::Pretesa`: la coerenza non si può pretendere su
             // qualunque ingresso finché questo non è riparato.
             "il termine di una definition list stretta ha uno span di un byte",
-            "Termine\n: la definizione\n",
             Perche::DipendeDaiByte,
-            |d| {
+            |d, _| {
                 fn primo_termine(b: &[Block]) -> Option<Span> {
                     b.iter().find_map(|b| match b {
                         Block::Custom {
@@ -768,9 +667,8 @@ fn divergenze_dichiarate() -> Vec<(
             // La forma **larga** invece è giusta, e sta accanto alla stretta
             // perché è ciò che rende la stretta un difetto e non una scelta.
             "e la forma larga della stessa definition list ce l'ha giusto",
-            "Termine\n\n: la definizione\n",
             Perche::DipendeDaiByte,
-            |d| {
+            |d, _| {
                 d.body.first().is_some_and(|b| {
                     matches!(b, Block::Custom { custom_kind, .. } if custom_kind == "definition-list")
                 })
@@ -786,20 +684,24 @@ fn divergenze_dichiarate() -> Vec<(
             // la riga in più resta, ed è di qui che si vede che il ritaglio è una
             // rete e non una riparazione.
             "un cr nudo dentro una riga di tabella la spezza in due righe",
-            "| a | b |\n| - | - |\n| 1 | 2 \r| 3 |\n",
             Perche::DipendeDaiByte,
-            |d| {
-                d.body.iter().any(|b| match b {
-                    Block::Table { rows, .. } => rows.len() > 1,
-                    _ => false,
-                })
+            // La divergenza è un **confronto fra il file e il modello**, e va scritta
+            // così: il file ha tre righe terminate da `\n` — intestazione,
+            // separatore, una riga di dati — e la tabella nel modello ne ha due. Un
+            // `rows.len() > 1` da solo sarebbe vero su qualunque tabella a due righe
+            // scritta bene, cioè avrebbe smesso di parlare del `\r`.
+            |d, src| {
+                src.matches('\n').count() == 3
+                    && d.body.iter().any(|b| match b {
+                        Block::Table { rows, .. } => rows.len() == 2,
+                        _ => false,
+                    })
             },
         ),
         (
             "lo slug di un heading dipende dalla normalizzazione unicode",
-            "# Cafe\u{301}\n",
             Perche::DipendeDaiByte,
-            |d| {
+            |d, _| {
                 d.outline.first().map(|h| h.slug.as_str()) == Some("cafe")
                     && parse("# Caf\u{e9}\n")
                         .outline
@@ -814,17 +716,61 @@ fn divergenze_dichiarate() -> Vec<(
 #[test]
 fn le_divergenze_sono_quelle_dichiarate() {
     let dichiarate = divergenze_dichiarate();
+    let sorgenti = divergenti();
     assert!(
-        dichiarate.len() >= 10,
-        "l'elenco delle divergenze si è svuotato: {} righe. Se sono state\n\
-         riparate è una bella notizia e va scritta nel verbale; se è l'elenco che\n\
-         si è rotto, questo file ha smesso di presidiare la cosa per cui esiste.",
+        dichiarate.len() >= 13,
+        "l'elenco delle divergenze si è svuotato: {} righe su tredici. Se sono\n\
+         state riparate è una bella notizia e va scritta nel verbale — e allora si\n\
+         abbassa questo numero **nello stesso commit**, che è ciò che lo tiene una\n\
+         soglia e non un desiderio; se è l'elenco che si è rotto, questo file ha\n\
+         smesso di presidiare la cosa per cui esiste.",
         dichiarate.len()
     );
-    for (nome, source, perche, ancora_vero) in dichiarate {
+
+    // Le due metà si tengono per il nome, quindi il nome dev'essere una chiave:
+    // due righe omonime si accoppierebbero con la stessa sorgente, e una delle
+    // due divergenze smetterebbe di essere verificata senza diventare rossa.
+    let con_predicato: BTreeSet<&str> = dichiarate.iter().map(|(n, _, _)| *n).collect();
+    let con_sorgente: BTreeSet<&str> = sorgenti.iter().map(|c| c.nome).collect();
+    assert_eq!(
+        con_predicato.len(),
+        dichiarate.len(),
+        "due divergenze dichiarate portano lo stesso nome"
+    );
+    assert_eq!(
+        con_sorgente.len(),
+        sorgenti.len(),
+        "due sorgenti divergenti portano lo stesso nome"
+    );
+
+    let senza_sorgente: Vec<&&str> = con_predicato.difference(&con_sorgente).collect();
+    assert!(
+        senza_sorgente.is_empty(),
+        "queste divergenze hanno un predicato e nessuna sorgente in\n\
+         `corpus::divergenti()`: {senza_sorgente:?}.\n\
+         Il nome è la chiave fra le due metà: senza la sorgente il predicato non\n\
+         viene mai valutato, e una divergenza che nessuno valuta è tornata a\n\
+         essere silenziosa."
+    );
+    let senza_predicato: Vec<&&str> = con_sorgente.difference(&con_predicato).collect();
+    assert!(
+        senza_predicato.is_empty(),
+        "queste sorgenti stanno in `corpus::divergenti()` e nessuno dice **in che\n\
+         modo** divergono: {senza_predicato:?}.\n\
+         Se la divergenza è stata riparata la sorgente va spostata nel corpus\n\
+         curato, dove le proprietà la pretendono tutta; se non lo è, le manca la\n\
+         riga che dice cosa succede."
+    );
+
+    for (nome, perche, ancora_vero) in dichiarate {
+        let source = sorgenti
+            .iter()
+            .find(|c| c.nome == nome)
+            .expect("il confronto nei due versi qui sopra lo garantisce")
+            .source;
         let doc = parse(source);
         assert!(
-            ancora_vero(&doc),
+            ancora_vero(&doc, source),
             "la divergenza dichiarata «{nome}» ({perche:?}) non si presenta più su\n\
              {source:?}.\n\
              \n\
@@ -835,6 +781,48 @@ fn le_divergenze_sono_quelle_dichiarate() {
              \n\
              Il modello, adesso: {doc:#?}"
         );
+    }
+}
+
+/// I documenti di controllo: markdown senza niente di strano, più i due casi
+/// degeneri.
+///
+/// Servono a una cosa sola, e la vale: un predicato di divergenza che passa su
+/// uno di questi non sta descrivendo una divergenza. `!d.text.contains("x")` è
+/// vero su un documento vuoto; `d.frontmatter.is_empty()` è vero su quasi tutti.
+/// Sono i due modi in cui una riga dell'elenco può diventare verde per sempre
+/// **senza** che nessuno l'abbia riparata — ed è precisamente il fallimento che
+/// l'elenco esiste per impedire.
+const CONTROLLI: [&str; 5] = [
+    "",
+    "# Titolo\n\nUn paragrafo con [[Nota]], #tag e `codice`.\n",
+    "- [ ] una task\n- [x] un'altra\n",
+    "| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n",
+    "---\ntitolo: X\n---\n\n# Corpo ^abc\n",
+];
+
+#[test]
+fn nessuna_divergenza_e_vera_su_un_documento_qualunque() {
+    for (nome, perche, ancora_vero) in divergenze_dichiarate() {
+        for controllo in CONTROLLI {
+            let doc = parse(controllo);
+            assert!(
+                !ancora_vero(&doc, controllo),
+                "il predicato della divergenza «{nome}» ({perche:?}) è vero anche su\n\
+                 un documento di controllo: {controllo:?}.\n\
+                 \n\
+                 Vuol dire che non descrive **quella** divergenza ma una proprietà\n\
+                 che quasi ogni documento ha — tipicamente una negazione\n\
+                 (`!d.text.contains(…)`) o un campo vuoto (`frontmatter.is_empty()`).\n\
+                 Da quando le sorgenti stanno in `corpus::divergenti()` e il legame è\n\
+                 il nome, un predicato così resta verde anche accoppiato alla\n\
+                 sorgente sbagliata: la divergenza smette di essere verificata senza\n\
+                 che nulla diventi rosso.\n\
+                 \n\
+                 Il predicato riceve anche la sorgente: la forma che funziona è\n\
+                 «il file dice X **e** il modello dice Y», non «il modello dice Y»."
+            );
+        }
     }
 }
 
@@ -909,129 +897,14 @@ fn nomi_dei_kind(d: &DocumentModel) -> BTreeSet<String> {
 //   quindicina di secondi — oppure è il lavoro di libFuzzer, che sta con la
 //   macchina della seconda metà del §17.1.
 
-/// Un xorshift64*, dodici righe e nessuna dipendenza.
-struct Caso64(u64);
-
-impl Caso64 {
-    fn nuovo(seme: u64) -> Self {
-        // Lo zero è il punto fisso di xorshift: un seme nullo darebbe sempre 0.
-        Caso64(if seme == 0 { 0x9E3779B97F4A7C15 } else { seme })
-    }
-
-    fn prossimo(&mut self) -> u64 {
-        self.0 ^= self.0 >> 12;
-        self.0 ^= self.0 << 25;
-        self.0 ^= self.0 >> 27;
-        self.0.wrapping_mul(0x2545F4914F6CDD1D)
-    }
-
-    fn fino_a(&mut self, n: usize) -> usize {
-        if n == 0 {
-            0
-        } else {
-            (self.prossimo() % n as u64) as usize
-        }
-    }
-
-    /// Un confine di carattere di `s`, scelto a caso. Serve perché una mutazione
-    /// deve produrre UTF-8 valido: tagliare a metà di un carattere non prova il
-    /// parser, prova `String::from_utf8`.
-    fn confine(&mut self, s: &str) -> usize {
-        let mut i = self.fino_a(s.len() + 1);
-        while !s.is_char_boundary(i) {
-            i -= 1;
-        }
-        i
-    }
-}
-
-/// I byte ostili che si infilano dentro una sorgente. Sono quelli che nei vault
-/// veri ci sono e che nessuno scrive di proposito.
-const OSTILI: [&str; 10] = [
-    "\u{feff}", // un BOM in mezzo, non in testa
-    "\r",       // un ritorno a capo nudo
-    "\0",       // un NUL, che è UTF-8 valido e non se lo aspetta nessuno
-    "\u{301}",  // un accento combinante senza la lettera davanti
-    "🎉",       // fuori dal BMP: quattro byte, un carattere
-    "^",        // il marcatore d'ancora, fuori posto
-    "]]",       // una chiusura senza apertura
-    "![[",      // un'apertura senza chiusura
-    "|",        // il separatore di tabella e di alias
-    "\t",       // una tabulazione, che in markdown conta come indentazione
-];
-
-/// Le mutazioni, **con un nome**: un fallimento deve dire cosa è stato fatto
-/// alla sorgente, non solo che è successo.
-fn muta(rng: &mut Caso64, semi: &[&'static str]) -> (&'static str, String) {
-    let base = semi[rng.fino_a(semi.len())];
-    match rng.fino_a(7) {
-        0 => {
-            let i = rng.confine(base);
-            ("troncato", base[..i].to_string())
-        }
-        1 => ("duplicato", format!("{base}{base}")),
-        2 => {
-            let altro = semi[rng.fino_a(semi.len())];
-            let i = rng.confine(base);
-            let j = rng.confine(altro);
-            ("intrecciato", format!("{}{}", &base[..i], &altro[j..]))
-        }
-        3 => {
-            let i = rng.confine(base);
-            let ostile = OSTILI[rng.fino_a(OSTILI.len())];
-            (
-                "con un byte ostile in mezzo",
-                format!("{}{}{}", &base[..i], ostile, &base[i..]),
-            )
-        }
-        4 => {
-            let i = rng.confine(base);
-            let j = rng.confine(base);
-            let (a, b) = if i <= j { (i, j) } else { (j, i) };
-            (
-                "con un pezzo tolto",
-                format!("{}{}", &base[..a], &base[b..]),
-            )
-        }
-        5 => {
-            let ostile = OSTILI[rng.fino_a(OSTILI.len())];
-            (
-                "annidato profondo",
-                format!("{}{base}", ostile.repeat(1 + rng.fino_a(64))),
-            )
-        }
-        _ => {
-            let i = rng.confine(base);
-            (
-                "con una riga lunghissima",
-                format!("{}{}\n{}", &base[..i], "a".repeat(4096), &base[i..]),
-            )
-        }
-    }
-}
-
-/// Quanti casi, e da quale seme. I due valori sono **fissi**, ed è il punto: la
-/// stessa corsa a ogni push, su tre sistemi operativi, senza un rosso che
-/// dipende da quando lo si è lanciato.
-///
-/// Si alzano dall'ambiente per la corsa lunga a mano
-/// (`FUB_FUZZ_CASI=2000000 cargo test -p fub-format-markdown --test il_corpus`),
-/// che è ciò che si fa quando si vuole **cercare** invece di presidiare.
-fn quanti_casi() -> (usize, u64) {
-    let casi = std::env::var("FUB_FUZZ_CASI")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(20_000);
-    let seme = std::env::var("FUB_FUZZ_SEME")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0x4675_6D4D_4420_3031);
-    (casi, seme)
-}
-
+/// Il mutatore — `Caso64`, `OSTILI`, `muta` — sta in [`crate::corpus`] insieme
+/// alle sorgenti che semina, perché da oggi lo usa anche `transfer_e2e.rs`: là le
+/// mutazioni diventano note di un vault e il bersaglio è l'export, qui restano
+/// testo e il bersaglio è il parser. Il seme è lo stesso
+/// (`FUB_FUZZ_SEME`), il conteggio no: le due porte non costano uguale.
 #[test]
 fn nessuna_mutazione_del_corpus_rompe_una_proprieta() {
-    let (casi, seme) = quanti_casi();
+    let (casi, seme) = (quanti_casi("FUB_FUZZ_CASI", 20_000), seme());
     let p = provider();
     let semi: Vec<&'static str> = corpus().iter().map(|c| c.source).collect();
     let mut rng = Caso64::nuovo(seme);

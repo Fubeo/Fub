@@ -508,13 +508,25 @@ transclusion è in [ui-protocol.md](ui-protocol.md).
   nessuno cade in mezzo a un carattere — `&source[span.start..span.end]` non va in
   panico. Vale su **qualunque** ingresso, e su ingresso generato la tiene il fuzzer
   del [§17.1](../roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni).
+  Non è un invariante cosmetico e ha un cliente in produzione: `MarkdownExport` con
+  `{"frontmatter": false}` affetta il sorgente su `first.span().start`
+  (`format-markdown/src/transfer.rs`, `strip_frontmatter`), quindi uno span fuori
+  range o in mezzo a un carattere non è un modello sbagliato — è un panico dentro
+  l'export, cioè un vault che non esce. Ci sono **due** fuzzer, uno per lato: quello
+  sul parser è della [0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md),
+  quello su quel taglio della
+  [0061](../decisions/0061-un-giro-che-non-passa-dal-modello.md), e seminano lo
+  stesso corpus con lo stesso seme.
   Che uno span stia anche **dentro** quello del nodo che lo contiene e non si
   sovrapponga a quello del fratello è preteso sul corpus curato e non su ogni
   ingresso: le divergenze che restano sono dichiarate una per riga in
   `format-markdown/tests/il_corpus.rs`
-  ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)). L'**ordine** dei
-  fratelli invece non è un invariante: `body` è in ordine di resa, non di sorgente,
-  e le note a piè di pagina lo mostrano.
+  ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)), con le loro
+  sorgenti accanto in `format-markdown/tests/corpus/mod.rs` — un modulo condiviso,
+  perché le stesse sorgenti le guarda anche il round-trip, e il nome lega le due
+  metà ([0061](../decisions/0061-un-giro-che-non-passa-dal-modello.md)).
+  L'**ordine** dei fratelli invece non è un invariante: `body` è in ordine di resa,
+  non di sorgente, e le note a piè di pagina lo mostrano.
 - **`outline`, `links` e `tags` sono una proiezione dell'albero**, non una seconda
   lettura del file: stesso numero, stesso ordine, stessi span di ciò che si trova
   camminando `body`. Se divergessero, il pannello outline e chi rinomina

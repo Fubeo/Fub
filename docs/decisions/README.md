@@ -71,6 +71,7 @@ cronologico di chiusura.
 | [0058](0058-un-nome-che-nasce.md) | Un nome che nasce non è un nome che c'è, e la sorgente è il file | §15.5 ([seduta 15](../roadmap/15-il-disco.md)) | 2026-07-29 |
 | [0059](0059-la-generazione-non-e-un-round-trip.md) | La generazione non è un round-trip, e la frase che lo diceva adesso è una rete | il doc di `FormatProvider::serialize` — la sesta specie della [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), **non** una voce di [todo.md](../todo.md) | 2026-07-30 |
 | [0060](0060-il-modello-dice-il-vero-sui-byte.md) | Il modello dice il vero sui byte del file, e un corpus che nessuno confronta non cresce | §17.1 (**prima metà**: il corpus e il fuzzing) — resta il banco delle prestazioni ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
+| [0061](0061-un-giro-che-non-passa-dal-modello.md) | Un giro che non prende i byte dal modello, e uno che ci passa | §17.1 (**una casella su cinque**: il round-trip sul corpus) — resta il banco delle prestazioni ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -227,10 +228,37 @@ quindi la voce resta aperta.
 E il taglio non l'ha scelto il verbale: l'ha scelto **il cappello della seduta**.
 Quel cappello giudica le sue voci su *se il costo cresce con l'attesa* — un
 criterio scritto per ordinare tre voci fra loro — e applicato **dentro** una l'ha
-divisa in due: il corpus cresce, il banco delle prestazioni no. È la terza cosa
+tagliata in tre: il corpus, il cui costo cresceva; il banco delle prestazioni, che
+aspetta una macchina; e una riga che non stava né di qua né di là. È la terza cosa
 che un cappello di seduta si scopre capace di fare, dopo l'accorpamento dichiarato
 della [0053](0053-il-contratto-ha-una-sorgente.md) e il confine dichiarato della
 [0054](0054-il-banco-del-lato-provider.md)/[0055](0055-il-banco-del-lato-host.md).
+
+Le tre parti però si sono viste in due tempi, e per una ragione che vale un
+criterio: **un cappello di seduta ordina ciò che vede da fuori.** La 0060 aveva già
+scritto che delle cinque caselle del §17.1 «due sono chiuse, due aspettano la
+macchina, e la quinta […] non aspetta nessuna delle due cose» — quella quinta
+aspettava il corpus, cioè un pezzo della voce stessa, che un criterio scritto per
+mettere in fila delle voci non ha modo di vedere. L'ha chiusa la
+[0061](0061-un-giro-che-non-passa-dal-modello.md). Da tenere: **un taglio si
+dichiara per quante parti ha**, e quel numero è un'affermazione su oggi — si
+corregge dov'è scritto, come un conteggio e non come un ragionamento.
+
+La [0061](0061-un-giro-che-non-passa-dal-modello.md) porta poi un caso che i tre
+modi di lasciare qualcosa dietro non coprono, perché non è un modo di lasciare
+qualcosa dietro: è un modo di **sbagliare la classificazione** di ciò che si lascia.
+La 0060 aveva chiamato quella quinta casella «lavoro», che per il criterio di questa
+cartella vuol dire *casella residua*: ciò che si fa senza aprire un verbale. E un
+verbale è stato aperto. Il criterio non si emenda — **la previsione era sbagliata**:
+la riga sembrava lavoro perché il round-trip sembrava uno, e facendola si è visto che
+i versi del trasferimento sono due e non pretendono la stessa cosa, che è una
+decisione intera e non una quota di lavoro. Non è quindi una casella residua, né una
+voce nuova come nella [0056](0056-un-elenco-che-e-la-sorgente.md), né una riga
+consegnata altrove come nella [0058](0058-un-nome-che-nasce.md): la riga è rimasta
+dov'era e ci è stata spuntata. Ciò che vale la pena tenere è che classificare un
+residuo è **prevedere**, e la previsione si fa guardando la riga — che può mentire.
+La conseguenza è mite, ed è la ragione per cui il criterio resta com'è: sbagliarla
+costa un verbale in più, cioè costa che una decisione venga scritta invece che no.
 
 E una cosa di metodo, che vale la pena scrivere qui perché
 [CONTRIBUTING.md](../CONTRIBUTING.md) dice che **i verbali sono immutabili**: la

@@ -1115,11 +1115,18 @@ fn bom_negli_inline(i: &Inline, controlla: &impl Fn(&str, &str)) {
 /// che cosa nomina?» è la stessa per ogni formato, ed è quella con cui il grafo
 /// del kernel si alimenta.
 ///
-/// **Non ha un cliente**, e lo dice la
+/// Il cliente è arrivato con la
+/// [0061](../../../../docs/decisions/0061-un-giro-che-non-passa-dal-modello.md),
+/// alla condizione che la
 /// [0060](../../../../docs/decisions/0060-il-modello-dice-il-vero-sui-byte.md)
-/// invece di lasciarlo scoprire: il primo corpus che verifica *cosa un documento
-/// nomina* le dà una ragione di esistere, o va tolta. Non è una proprietà, quindi
-/// non può passare per verde senza essere stata provata.
+/// aveva scritto qui invece di lasciarla scoprire — *il primo corpus che verifica
+/// cosa un documento nomina le dà una ragione di esistere, o va tolta*. È il
+/// round-trip senza metadati di `fub-format-markdown/tests/transfer_e2e.rs`:
+/// togliere il frontmatter a un documento non deve cambiare ciò che quel
+/// documento nomina, e il confronto è fra questo insieme prima e dopo. Non è una
+/// proprietà, quindi non può passare per verde senza essere stata provata: chi la
+/// chiama confronta due suoi valori, e uno dei due viene da un file che il taglio
+/// non ha toccato.
 pub fn bersagli(model: &DocumentModel) -> BTreeSet<String> {
     model
         .links
