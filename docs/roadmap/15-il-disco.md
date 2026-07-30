@@ -148,14 +148,15 @@ network share), 2.3 (drive rimovibili).
       quarto con la [0046](../decisions/0046-l-anagrafe-del-vault.md), ognuno con
       la classe scritta **in prosa in testa al proprio modulo**. È la ripetizione
       che questa voce esisteva per togliere.
-- [x] **Le radici erano due, e una basta**: `.fub/` per l'autorevole e
-      `.fub-data/` per il derivato. Adesso è una — `.fub/`, coi derivati in
-      `.fub/data/` — e la deduzione per radice resta vera un livello più in
-      basso, che è la ragione per cui la forma è annidata e non piatta. Un vault
-      scritto prima si sposta con un rename all'apertura
-      (`kernel/vault.rs::migrate_layout`), e due alberi insieme non si fondono:
-      si rifiutano. `.trash/` **resta fuori**, perché non è roba di Fub: è il
-      cestino condiviso con Obsidian, e dentro ci sono file dell'utente.
+- [x] **Le radici erano due, e una basta**: una per l'autorevole e una, separata,
+      per il derivato. Adesso è una — `.fub/`, coi derivati in `.fub/data/` — e
+      la deduzione per radice resta vera un livello più in basso, che è la
+      ragione per cui la forma è annidata e non piatta. Il rename all'apertura
+      che portava avanti un vault scritto prima è vissuto fino al rename del
+      progetto, e se n'è andato col nome che traduceva: fuori da questa macchina
+      un vault di quella forma non è mai esistito. `.trash/` **resta fuori**,
+      perché non è roba di Fub: è il cestino condiviso con Obsidian, e dentro ci
+      sono file dell'utente.
 - [x] **Il nome «durabilità» designa un'altra cosa, e va scartato prima di
       scegliere la forma**: la durabilità è fsync e scrittura atomica, ed è il
       **§15.2**, due voci più su nella stessa seduta. Qui si classifica il dato —
