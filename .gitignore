@@ -19,10 +19,8 @@ dist/
 
 # Ciò che FubMD scrive dentro QUALUNQUE cartella aperta come vault: indici,
 # snapshot del versioning, sidecar dell'organizzazione. Dalla decisione 0048 la
-# radice è **una** (`.fubmd/`, coi derivati in `.fubmd/data/`), e la riga col
-# vecchio nome resta finché in giro ci sono checkout che non l'hanno ancora
-# migrata. `docs/` è un vault col dogfooding, e quella roba non è
-# documentazione del repo.
+# radice è **una**: `.fubmd/`, coi derivati in `.fubmd/data/`. `docs/` è un
+# vault col dogfooding, e quella roba non è documentazione del repo.
 #
 # Non è solo igiene: `.github/scripts/check-doc-links.mjs` salta ogni cartella
 # che contiene `.fubmd/`, perché è il marcatore con cui distingue un vault dai
@@ -30,7 +28,6 @@ dist/
 # `docs/` — un centinaio di file controllati che diventano 9 — senza rendere
 # rosso niente, che è esattamente il modo in cui un presidio muore.
 .fubmd/
-.fubmd-data/
 
 # vault di prova locale (note usa-e-getta + indici tantivy)
 /VaultProva

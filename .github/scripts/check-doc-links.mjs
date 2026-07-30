@@ -107,10 +107,9 @@ function raccogliMarkdown(radice, tracciate, saltate) {
     // mangiare il proprio cibo. Se git ci tiene dei `.md`, è documentazione: il
     // marcatore non basta a mandarla via.
     //
-    // Prima della 0048 il marcatore era `.fubmd-data/`, cioè la cartella dei
-    // *derivati*: un vault aperto e mai indicizzato non ce l'aveva, e questo
-    // script gli camminava dentro. `.fubmd/` compare alla prima cosa che FubMD
-    // scrive su quel vault, che è prima.
+    // Il marcatore è `.fubmd/` e non la cartella dei *derivati*: quella compare
+    // alla prima indicizzazione, mentre `.fubmd/` compare alla prima cosa che
+    // FubMD scrive su quel vault, che è prima.
     if (voci.some((v) => v.isDirectory() && v.name === ".fubmd")) {
       if (tracciate === null || !tracciate.has(path.resolve(cartella))) {
         saltate.push(cartella);

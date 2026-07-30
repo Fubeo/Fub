@@ -316,15 +316,6 @@ pub fn mount(
         eprintln!("impostazioni: {warning}");
     }
 
-    // Cosa la radice unica ha avuto da dire (0048): un vecchio `.fubmd-data/`
-    // che non si è potuto spostare, o due alberi insieme. Nessuna delle due cose
-    // impedisce di aprire — l'albero dei derivati non è il vault — e nessuna
-    // delle due deve passare in silenzio: sotto ci sono anche gli snapshot del
-    // versioning.
-    if let Some(warning) = ws.layout_warning() {
-        eprintln!("layout del vault: {warning}");
-    }
-
     // Cosa non ha potuto seguire una rinomina (§13.2). Vale la pena leggerlo
     // insieme al montaggio e non altrove: se qui c'è una riga, un plugin ha una
     // chiave morta e non lo sa — è il difetto che questa voce esiste per non

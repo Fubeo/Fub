@@ -31,11 +31,6 @@ pub const FUBMD_DIR: &str = ".fubmd";
 /// scritto **una volta sola** e non c'è un secondo modo di comporlo.
 const DATA_SUBDIR: &str = "data";
 
-/// Il nome che la cartella dei derivati aveva **prima** della 0048, quando le
-/// radici erano due. Serve solo a [`migrate_layout`]: da nessun'altra parte si
-/// legge o si scrive sotto questo nome.
-const LEGACY_DATA_DIR: &str = ".fubmd-data";
-
 /// Directory ignorate durante la scansione del vault.
 const IGNORED_DIRS: &[&str] = &[".obsidian", ".git", FUBMD_DIR, ".trash", "node_modules"];
 
@@ -50,57 +45,6 @@ const IGNORED_DIRS: &[&str] = &[".obsidian", ".git", FUBMD_DIR, ".trash", "node_
 /// difetto che il §15.4 esiste per togliere, non la definizione.
 pub fn data_root(root: &Utf8Path) -> Utf8PathBuf {
     root.join(FUBMD_DIR).join(DATA_SUBDIR)
-}
-
-/// Porta un vault scritto prima della 0048 nella radice unica: `.fubmd-data/`
-/// diventa `.fubmd/data/`. Torna l'avviso se c'è qualcosa da dire.
-///
-/// È la **prima migrazione di layout** del repo, e non assomiglia alle altre
-/// tre (`organization::migrate`, `docdata::migrate`, `migrate_identity`), che
-/// seguono la rinomina di un *documento*. Qui si sposta un albero, quindi la
-/// disciplina è la sua:
-///
-/// - **è un rename, non una ricostruzione.** Sotto `.fubmd-data/` non c'è solo
-///   l'indice: ci sono gli snapshot del versioning e lo stato per-documento
-///   (0044), che non si rigenerano da niente. «Se non c'è, si ricostruisce»
-///   qui vuol dire cancellare la memoria di com'erano i file;
-/// - **è un rename e basta.** Un albero intero cambia posto con una chiamata
-///   sola dentro lo stesso filesystem: non c'è una copia a metà da finire, e
-///   un'interruzione lascia o il vecchio nome o il nuovo, mai due mezzi;
-/// - **due nomi insieme si rifiutano**, ed è il [rifiuto in
-///   avanti](../../../docs/versionamento.md) applicato a un layout invece che a
-///   un numero di schema. Se esistono sia `.fubmd-data/` sia `.fubmd/data/`,
-///   questa copia sta guardando un vault che qualcun altro ha già mosso: non
-///   fonde, non cancella, lo dice e lavora sul nuovo. Fondere due alberi
-///   significherebbe decidere quale delle due versioni di uno snapshot è
-///   quella buona, e non c'è nessun dato che lo sappia;
-/// - **non impedisce di aprire.** Se il rename fallisce — permessi, un handle
-///   aperto altrove — il vault si apre lo stesso, derivati vuoti e avviso in
-///   chiaro. Il vault è la verità; questo albero no.
-pub fn migrate_layout(root: &Utf8Path) -> Option<String> {
-    let legacy = root.join(LEGACY_DATA_DIR);
-    if !legacy.is_dir() {
-        return None;
-    }
-    let new = data_root(root);
-    if new.exists() {
-        return Some(format!(
-            "{LEGACY_DATA_DIR}/ e {FUBMD_DIR}/{DATA_SUBDIR}/ esistono entrambe in {root}: \
-             il vecchio albero resta dov'è e non si legge. Fonderli non si può senza \
-             indovinare, e la scelta è di chi guarda i due."
-        ));
-    }
-    if let Err(e) = std::fs::create_dir_all(root.join(FUBMD_DIR)) {
-        return Some(format!("{FUBMD_DIR}/ non si crea in {root}: {e}"));
-    }
-    match std::fs::rename(&legacy, &new) {
-        Ok(()) => None,
-        Err(e) => Some(format!(
-            "{legacy} non si è potuta spostare in {new}: {e}. I dati di prima — \
-             indice, anagrafe, snapshot del versioning — restano dove sono e \
-             questa sessione riparte da zero."
-        )),
-    }
 }
 
 /// Nome della cartella cestino dentro il vault.
