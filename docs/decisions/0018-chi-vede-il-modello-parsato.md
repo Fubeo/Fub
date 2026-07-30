@@ -104,7 +104,7 @@ dichiarative della [decisione 0017](0017-chi-disegna-cio-che-il-core-non-conosce
   estensioni che la [decisione 0017](0017-chi-disegna-cio-che-il-core-non-conosce.md)
   ha rifiutato: chi accende una sintassi non deve sapere da dove viene, e chi
   chiede cosa è acceso nemmeno. Sulla chiave condivisa vince il **provider**: se
-  sa fare `fubmd:math` per conto suo, il suo dettaglio è più informativo del
+  sa fare `fub:math` per conto suo, il suo dettaglio è più informativo del
   semplice «acceso» che una regola può dichiarare.
 - **§4.1 — il modello *non* arriva al webview, e non è un rinvio.** Tre ragioni,
   in ordine di forza. (a) Il modello è quello del **file**, il webview lavora sul
@@ -138,7 +138,7 @@ dichiarative della [decisione 0017](0017-chi-disegna-cio-che-il-core-non-conosce
 ## Il dogfooding, che è dove si è scoperto se regge
 
 **`note.task.toggle`** — il comando che spunta il task che sta sotto una
-posizione ([`commands.rs`](../../crates/fubmd-features/src/commands.rs)). È il
+posizione ([`commands.rs`](../../crates/fub-features/src/commands.rs)). È il
 gesto quotidiano del capitolo 10, ed è il primo cliente one-shot: chiede il
 modello di *una* nota, legge lo `span` del marcatore e scrive **un carattere**.
 Non fa nessuna delle due cose storte di prima — non riparsa e non tiene uno
@@ -213,11 +213,11 @@ abi↔WIT con i due metodi e il record nuovi, l'additività (questa seduta non
 rompe niente: due funzioni in coda a `host-api` e un `record` nuovo sono
 additivi, e la baseline congelata non è stata toccata), i cinque test
 end-to-end del canale su markdown vero
-([`parsed_model_e2e.rs`](../../crates/fubmd-format-markdown/tests/parsed_model_e2e.rs))
+([`parsed_model_e2e.rs`](../../crates/fub-format-markdown/tests/parsed_model_e2e.rs))
 e i nove del comando. `npx tsc` pulito, **160 test vitest**.
 
 Il test che conta di più è
-[`dal_canale_esce_il_corpo_che_la_cache_non_ha`](../../crates/fubmd-format-markdown/tests/parsed_model_e2e.rs):
+[`dal_canale_esce_il_corpo_che_la_cache_non_ha`](../../crates/fub-format-markdown/tests/parsed_model_e2e.rs):
 senza di lui gli altri proverebbero che il kernel restituisce ciò che gli è
 stato dato. Il **corpo** è la ragione per cui questo canale esiste — outline,
 frontmatter e link li serviva già `IndexQuery` dalla cache calda — e quel test è

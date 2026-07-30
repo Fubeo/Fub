@@ -28,16 +28,16 @@ Le due voci sono chiuse.
 **Le regole stanno nel contratto, e ciò che resta scritto due volte è legato da
 una fixture generata.**
 
-- **§6.1** — [`fubmd_abi::rules`](../../crates/fubmd-abi/src/rules/mod.rs):
-  [`path`](../../crates/fubmd-abi/src/rules/path.rs) (la chiave di risoluzione,
+- **§6.1** — [`fub_abi::rules`](../../crates/fub-abi/src/rules/mod.rs):
+  [`path`](../../crates/fub-abi/src/rules/path.rs) (la chiave di risoluzione,
   i link markdown relativi, il percent-encoding),
-  [`properties`](../../crates/fubmd-abi/src/rules/properties.rs) (filtro,
+  [`properties`](../../crates/fub-abi/src/rules/properties.rs) (filtro,
   ordinamento, faccette, e la coda di una risposta a `Documents`),
-  [`tag`](../../crates/fubmd-abi/src/rules/tag.rs) (la gerarchia),
-  [`health`](../../crates/fubmd-abi/src/rules/health.rs) (cosa è un link rotto).
+  [`tag`](../../crates/fub-abi/src/rules/tag.rs) (la gerarchia),
+  [`health`](../../crates/fub-abi/src/rules/health.rs) (cosa è un link rotto).
   Il kernel le usa da lì come chiunque altro; i quattro `mod` privati non ci sono
   più.
-- **§6.2** — [`tests/rules_mirror.rs`](../../crates/fubmd-abi/tests/rules_mirror.rs)
+- **§6.2** — [`tests/rules_mirror.rs`](../../crates/fub-abi/tests/rules_mirror.rs)
   genera `frontend/src/__fixtures__/rules-samples.json` — coppie input→output
   con la risposta **di Rust** — e il gemello vitest
   [`rules-mirror.test.ts`](../../frontend/src/rules/rules-mirror.test.ts) passa
@@ -46,7 +46,7 @@ una fixture generata.**
 
 ## Le decisioni prese, da NON ridiscutere senza motivo
 
-- **`fubmd-abi`, non l'SDK.** Erano le due strade che la seduta poneva, e la
+- **`fub-abi`, non l'SDK.** Erano le due strade che la seduta poneva, e la
   differenza non è di comodità: l'SDK è **facoltativo**, e una regola facoltativa
   non è una regola. Chi vuole essere d'accordo col kernel — un indice di terzi, un
   guest WASM a M5 — non deve dover adottare anche un toolkit per esserlo. È lo
@@ -106,7 +106,7 @@ una fixture generata.**
   che li legasse nascerebbe rossa e resterebbe rossa. Il kernel **non** esporrà
   un ordine di presentazione; chi vuole quello dell'umano lo applica dopo aver
   ricevuto la pagina, perché è l'unico che sa chi è l'umano. Sta scritto in testa
-  a `fubmd_abi::rules`, accanto alle regole, che è dove lo cercherà chi si porrà
+  a `fub_abi::rules`, accanto alle regole, che è dove lo cercherà chi si porrà
   di nuovo la domanda.
 - **Il test scritto a mano è stato ritirato.**
   `docid_page_name_agrees_with_the_frontend_on_hostile_names` elencava nove nomi
@@ -135,7 +135,7 @@ accanto all'altra è ciò che una fixture generata costringe a fare.
 
 ## Cosa NON è stato fatto, e perché
 
-- **La fine corsa resta aperta.** `fubmd-abi` compilato a wasm32 dentro
+- **La fine corsa resta aperta.** `fub-abi` compilato a wasm32 dentro
   `frontend/src/rules/` toglierebbe la duplicazione invece di presidiarla, ed è
   praticabile proprio perché l'invariante del crate è stata tenuta. Non si fa
   adesso: vuol dire una catena di build (`wasm-pack` o equivalente) nel giro del
@@ -154,7 +154,7 @@ accanto all'altra è ciò che una fixture generata costringe a fare.
   uno `Span` è in byte perché è così che Rust indicizza le stringhe. Quello che
   serviva era un **oracolo**, e nella fixture c'è — è `str`, cioè la definizione
   di «byte» e di «code unit», non una libreria che potremmo scrivere male.
-- **`fubmd-kernel` esporta ancora `health` come modulo privato.** La camminata
+- **`fub-kernel` esporta ancora `health` come modulo privato.** La camminata
   sul vault (quali documenti, in che ordine) è rimasta lì: è orchestrazione,
   chiede alla cache dei metadati, e non è una regola. Solo il giudizio è salito.
 
@@ -179,4 +179,4 @@ chiave del kernel invece che col minuscolo. Su un vault senza accenti non
 dovrebbe cambiare nulla; è proprio il caso in cui cambia — un nome accentato — a
 non essere riproducibile su questa macchina.
 
-[`LinkResolver`]: ../../crates/fubmd-abi/src/rules/health.rs
+[`LinkResolver`]: ../../crates/fub-abi/src/rules/health.rs

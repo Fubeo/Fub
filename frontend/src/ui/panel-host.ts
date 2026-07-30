@@ -137,7 +137,7 @@ export async function refreshPanel(id: string, notice?: KernelNotice): Promise<v
   try {
     await panel.render(notice);
   } catch (e) {
-    console.error(`FubMD: ${t("panel.render_failed", { panel: id, reason: errorText(e) })}`);
+    console.error(`Fub: ${t("panel.render_failed", { panel: id, reason: errorText(e) })}`);
   }
 }
 
@@ -160,7 +160,7 @@ export function mountPanelHost(): void {
     if (n.event.type === "overflow") return;
     for (const panel of registro.values()) {
       // La regola è quella del contratto (`rules/mirrored.ts`, gemella di
-      // `fubmd_abi::rules::events::mask_wants`), non un `includes` scritto qui:
+      // `fub_abi::rules::events::mask_wants`), non un `includes` scritto qui:
       // due letture della stessa maschera sarebbero un pannello che si ridisegna
       // quando il provider aveva chiesto di no, e non lo direbbe nessun test.
       if (maskWants(panel.refresh, n.event)) void refreshPanel(panel.id, n);

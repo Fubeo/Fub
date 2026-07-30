@@ -79,7 +79,7 @@ frontend/src/
 ```
 
 Di `host/` un file **non si scrive**: `enums.generated.ts` è emesso dagli `enum`
-senza payload del contratto (`crates/fubmd-abi/tests/ts_enums.rs`,
+senza payload del contratto (`crates/fub-abi/tests/ts_enums.rs`,
 [decisione 0053](../decisions/0053-il-contratto-ha-una-sorgente.md)), e
 `contract.ts` lo ri-esporta tenendo accanto la prosa. La riga di taglio è *ciò
 che si deriva senza reimplementare serde*: i casi di un enum nudo sì, la forma di
@@ -242,20 +242,20 @@ sequenceDiagram
     alt raffica oltre 128
         P->>P: degrade → un solo Overflow, al posto dell'ultimo che sostituisce
     end
-    P->>V: sink.emit → app.emit("fubmd://event", notice)
-    V->>PH: listen("fubmd://event") → onAnyEvent
+    P->>V: sink.emit → app.emit("fub://event", notice)
+    V->>PH: listen("fub://event") → onAnyEvent
     PH->>PH: maskWants(panel.refresh, evento)
     PH-->>V: refreshPanel — solo i pannelli che quell'evento invecchia
 ```
 
 | Pezzo | Dove | Numero |
 |---|---|---|
-| debounce del rilevatore | [watcher.rs:151](../../crates/fubmd-host/src/watcher.rs) | **300 ms** |
-| tetto della coda di un iscritto | [bus.rs:51](../../crates/fubmd-kernel/src/bus.rs) | **1024** notice |
-| budget di un drenaggio | [dispatcher.rs:44](../../crates/fubmd-kernel/src/dispatcher.rs) | **1024** consegne |
-| tetto della raffica del ponte | [bridge.rs:61](../../crates/fubmd-host/src/bridge.rs) | **128** notice |
-| chi timbra l'origine | [dispatcher.rs:157](../../crates/fubmd-kernel/src/dispatcher.rs) | un punto solo |
-| chi decide cosa è sacrificabile | [event.rs `is_recoverable`](../../crates/fubmd-abi/src/event.rs) | un punto solo, nel contratto |
+| debounce del rilevatore | [watcher.rs:151](../../crates/fub-host/src/watcher.rs) | **300 ms** |
+| tetto della coda di un iscritto | [bus.rs:51](../../crates/fub-kernel/src/bus.rs) | **1024** notice |
+| budget di un drenaggio | [dispatcher.rs:44](../../crates/fub-kernel/src/dispatcher.rs) | **1024** consegne |
+| tetto della raffica del ponte | [bridge.rs:61](../../crates/fub-host/src/bridge.rs) | **128** notice |
+| chi timbra l'origine | [dispatcher.rs:157](../../crates/fub-kernel/src/dispatcher.rs) | un punto solo |
+| chi decide cosa è sacrificabile | [event.rs `is_recoverable`](../../crates/fub-abi/src/event.rs) | un punto solo, nel contratto |
 | chi decide se un pannello è invecchiato | [panel-host.ts:166](../../frontend/src/ui/panel-host.ts) via [rules/mirrored.ts](../../frontend/src/rules/mirrored.ts) | la gemella di `mask_wants` del kernel |
 
 Tre cose che il disegno dice e che è facile dare per scontate al contrario.

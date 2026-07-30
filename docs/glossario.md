@@ -1,6 +1,6 @@
 # Glossario
 
-Il lessico di FubMD è preciso e **non è standard**: lotto, porta, ponte, anagrafe,
+Il lessico di Fub è preciso e **non è standard**: lotto, porta, ponte, anagrafe,
 sidecar, superficie, seduta, strozzatura, derivato, autorevole. Ogni parola è stata scelta per dire una
 cosa sola, quasi sempre in un verbale, e da lì è finita nei nomi dei tipi, nei
 commenti e nei messaggi di commit. Chi arriva la incontra prima di incontrare la
@@ -17,7 +17,7 @@ gli altri documenti senza fermarsi.
 Ogni voce ha la stessa forma:
 
 > ### il termine
-> `TipoRust` · [`file.rs:riga`](../crates/fubmd-abi/src/lib.rs) · [verbale](decisions/README.md)
+> `TipoRust` · [`file.rs:riga`](../crates/fub-abi/src/lib.rs) · [verbale](decisions/README.md)
 >
 > Cos'è, in due o tre righe.
 
@@ -42,7 +42,7 @@ alfabetico.
 |---|---|
 | [Il documento](#il-documento) | ciò che sta dentro una nota, una volta parsata |
 | [Il vault](#il-vault) | ciò che sta sul disco, e ciò che il kernel se ne ricorda |
-| [Il contratto e il confine](#il-contratto-e-il-confine) | come si estende FubMD, e cosa si può negare a chi la estende |
+| [Il contratto e il confine](#il-contratto-e-il-confine) | come si estende Fub, e cosa si può negare a chi la estende |
 | [Il canale dati](#il-canale-dati) | come si fa una domanda al kernel e chi risponde |
 | [Gli eventi e il lavoro lungo](#gli-eventi-e-il-lavoro-lungo) | come si racconta che qualcosa è cambiato, o sta ancora succedendo |
 | [L'interfaccia](#linterfaccia) | come il core descrive una vista e la shell la disegna |
@@ -53,7 +53,7 @@ alfabetico.
 ## Il documento
 
 ### ancora
-`Anchor` · [`abi/model.rs:600`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Anchor` · [`abi/model.rs:600`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'identificatore che un blocco si porta dentro il testo — la forma `^id` in coda
 a un paragrafo — perché un link possa puntare a *quel* punto e non alla nota
@@ -62,7 +62,7 @@ regole di forma (`canonical_anchor`, `valid_anchor`) stanno in `rules/`, dove
 vanno le regole condivise con la shell.
 
 ### blocco
-`Block` · [`abi/model.rs:243`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Block` · [`abi/model.rs:243`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'unità di primo livello del documento: paragrafo, titolo, lista, tabella,
 citazione, blocco di codice, riga orizzontale, e l'escape hatch `Custom`. È un
@@ -70,20 +70,20 @@ enum chiuso di proposito — ciò che nessun formato conosce passa da `Custom`
 invece di allargare l'enum a ogni formato nuovo.
 
 ### frontmatter
-`Frontmatter` · [`abi/model.rs:146`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Frontmatter` · [`abi/model.rs:146`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Il blocco YAML in testa a una nota, proiettato su JSON. L'ordine delle chiavi si
 conserva (`serde_json` con `preserve_order`), perché riscrivere un file
 dell'utente non deve riordinargli le proprietà: è fedeltà, non estetica.
 
 ### inline
-`Inline` · [`abi/model.rs:423`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Inline` · [`abi/model.rs:423`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Ciò che sta *dentro* un blocco: testo, enfasi, codice, link, immagine, tag,
 interruzione. Stessa logica del blocco, incluso il `Custom`.
 
 ### modello del documento
-`DocumentModel` · [`abi/model.rs:189`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`DocumentModel` · [`abi/model.rs:189`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Il documento parsato in una forma che **nessun formato possiede**: né markdown né
 altro. È il centro dell'idea architetturale — il kernel lavora su questo, e il
@@ -91,14 +91,14 @@ markdown è solo il primo provider che sa produrlo. Dettaglio in
 [architecture/data-model.md](architecture/data-model.md).
 
 ### proprietà
-`PropertyValue` · [`abi/model.rs:737`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`PropertyValue` · [`abi/model.rs:737`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Un valore del frontmatter letto con un tipo invece che come JSON nudo: scalare,
 data, ora, lista. Serve a chi interroga (ordinare per data, filtrare per stato)
 senza costringere ogni consumatore a indovinare che forma abbia una chiave.
 
 ### revisione
-`Revision` · [`abi/edit.rs:84`](../crates/fubmd-abi/src/edit.rs) · [0008](decisions/0008-modifica-chirurgica.md)
+`Revision` · [`abi/edit.rs:84`](../crates/fub-abi/src/edit.rs) · [0008](decisions/0008-modifica-chirurgica.md)
 
 L'identità del testo su cui si sta per calcolare una modifica. È **opaca**: solo
 l'uguaglianza è contratto, come l'host la derivi non è promesso a nessuno.
@@ -106,7 +106,7 @@ Serve a fare in modo che una modifica calcolata su un testo non venga applicata 
 un altro.
 
 ### sorgente
-`String` · [`abi/model.rs:115`](../crates/fubmd-abi/src/model.rs) · [0058](decisions/0058-un-nome-che-nasce.md)
+`String` · [`abi/model.rs:115`](../crates/fub-abi/src/model.rs) · [0058](decisions/0058-un-nome-che-nasce.md)
 
 I **byte del file decodificati, integralmente**: il BOM se c'era, i terminatori
 di riga come stanno sul disco, nessuna normalizzazione. È ciò che `read_document`
@@ -117,7 +117,7 @@ normalizzato» — è indistinguibile da questa finché un provider non calcola 
 offset su una e l'host non li applica sull'altra.
 
 ### span
-`Span` · [`abi/model.rs:167`](../crates/fubmd-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md), [0058](decisions/0058-un-nome-che-nasce.md)
+`Span` · [`abi/model.rs:167`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md), [0058](decisions/0058-un-nome-che-nasce.md)
 
 L'intervallo di [sorgente](#sorgente) da cui un nodo del modello proviene, in
 **byte**. È ciò che rende possibile la live preview: la decorazione CodeMirror sa
@@ -126,7 +126,7 @@ quella sorgente è la 0058, e non è un dettaglio: gli span di due parti che la
 intendono diversamente cadono in punti diversi dello stesso file.
 
 ### wikilink
-`LinkTarget::Wiki` · [`abi/model.rs:461`](../crates/fubmd-abi/src/model.rs) · [0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)
+`LinkTarget::Wiki` · [`abi/model.rs:461`](../crates/fub-abi/src/model.rs) · [0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)
 
 Il link in stile Obsidian `[[Pagina#Titolo^blocco]]`, con i tre pezzi separati
 nel contratto. La risoluzione segue le regole di Obsidian — nome, alias, path, e
@@ -138,7 +138,7 @@ shortest-path fra omonimi — ed è l'unica specie di link che il grafo conosce
 ## Il vault
 
 ### anagrafe
-`VaultEntry` / `entries.json` · [`kernel/entries.rs:78`](../crates/fubmd-kernel/src/entries.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
+`VaultEntry` / `entries.json` · [`kernel/entries.rs:78`](../crates/fub-kernel/src/entries.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
 
 Ciò che il kernel si ricorda di ogni file per **non doverlo rileggere**:
 frontmatter, outline, e quanto basta a decidere se il file su disco è ancora
@@ -146,16 +146,16 @@ quello di prima. Salta la rilettura con `mtime` + `size`, che bastano a saltare
 ma non a fidarsi — è il caso *racily clean* di git.
 
 ### autorevole
-`FUBMD_DIR` · [`kernel/vault.rs:25`](../crates/fubmd-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
+`FUB_DIR` · [`kernel/vault.rs:25`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 
 Un dato che, perso, **non si ricostruisce da niente**: l'organizzazione della
 sidebar, le impostazioni del vault, gli snapshot del versioning. Chi lo tiene, se
 non riesce a leggerlo, **non lo sovrascrive**. Oggi la classe non è dicibile nel
-contratto e si legge dal path — direttamente sotto `.fubmd/` — che è il §15.4
+contratto e si legge dal path — direttamente sotto `.fub/` — che è il §15.4
 ancora aperto per metà. Il suo opposto è [derivato](#derivato).
 
 ### cestino
-`TrashEntry` · [`abi/traits.rs:144`](../crates/fubmd-abi/src/traits.rs) · [0003](decisions/0003-modello-del-documento.md)
+`TrashEntry` · [`abi/traits.rs:144`](../crates/fub-abi/src/traits.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Dove finisce ciò che si cancella dall'app, con il path originale per rimetterlo
 dov'era. Vive in `.trash/` dentro il vault. Insieme al versioning è la rete di
@@ -163,18 +163,18 @@ sicurezza dell'utente, ed è per questo che [SECURITY.md](SECURITY.md) tratta un
 percorso che la aggira come un problema di sicurezza e non come un bug.
 
 ### derivato
-`data_root` · [`kernel/vault.rs:50`](../crates/fubmd-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
+`data_root` · [`kernel/vault.rs:50`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 
 Un dato che si può **buttare e rifare** dal vault: l'indice di ricerca,
 l'anagrafe, le cache. Chi lo tiene, se non riesce a leggerlo, non avvisa nessuno:
-lo rifà. Vive sotto `.fubmd/data/`, ed è l'unico posto in cui la sua classe è
+lo rifà. Vive sotto `.fub/data/`, ed è l'unico posto in cui la sua classe è
 scritta. Non dice «senza valore» ma «ricostruibile»: che sotto quella radice ci
 sia anche roba che nessuno saprebbe rifare — gli snapshot del versioning — è il
 difetto che il §15.4 esiste per togliere. Il suo opposto è
 [autorevole](#autorevole).
 
 ### entry
-`VaultEntry` · [`abi/traits.rs:203`](../crates/fubmd-abi/src/traits.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
+`VaultEntry` · [`abi/traits.rs:203`](../crates/fub-abi/src/traits.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
 
 **Ogni file del vault**, non solo le note: un PNG, un PDF e un `.md` sono tutti
 entry. La distinzione fra loro è la *specie*, e la specie non si persiste —
@@ -189,17 +189,17 @@ presa da make.md, e una delle regole che stanno in `rules/` perché il Rust e la
 shell devono applicarla nello stesso modo.
 
 ### organizzazione
-`Organization` · [`abi/organization.rs:61`](../crates/fubmd-abi/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
+`Organization` · [`abi/organization.rs:61`](../crates/fub-abi/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
 
 Come l'utente ha disposto la sidebar: icone, note appuntate, ordine manuale,
 spazi. Non è nel vault come contenuto, sta nel *sidecar*, e dalla 0038 è il
 kernel a possederlo — con la migrazione al rename inclusa.
 
 ### sidecar
-`.fubmd/workspace.json` · [`kernel/organization.rs:74`](../crates/fubmd-kernel/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
+`.fub/workspace.json` · [`kernel/organization.rs:74`](../crates/fub-kernel/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
 
 Il file accanto al vault che tiene ciò che riguarda il vault ma non è contenuto
-di nessuna nota. Sta in `<vault>/.fubmd/`, cioè direttamente nella radice unica e
+di nessuna nota. Sta in `<vault>/.fub/`, cioè direttamente nella radice unica e
 non sotto `data/`, perché è [autorevole](#autorevole); viaggia col vault se lo si
 copia, e porta un numero di schema (vedi
 [versionamento.md](versionamento.md)).
@@ -211,10 +211,10 @@ Una vista salvata della sidebar: un sottoinsieme del vault con una radice e un
 ordine propri. Sta nell'organizzazione, quindi nel sidecar.
 
 ### spazio dati
-`DataRead` / `DataWrite` · [`abi/traits.rs:626`](../crates/fubmd-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`DataRead` / `DataWrite` · [`abi/traits.rs:626`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La cartella privata di un componente, dove tiene ciò che non è una nota: un
-indice, una cache, un manifest. È `.fubmd/data/plugins/<id>/`, l'host la assegna
+indice, una cache, un manifest. È `.fub/data/plugins/<id>/`, l'host la assegna
 e la impone, e ci si accede per path relativo; le due metà — leggere e scrivere —
 sono capacità distinte perché negarle vuol dire due cose diverse. Che oggi sia
 una sola e valga per entrambe le classi è il §15.4: la
@@ -222,22 +222,22 @@ una sola e valga per entrambe le classi è il §15.4: la
 famiglia per il derivato — e non l'ha ancora scritta.
 
 ### vault
-`Vault` · [`kernel/vault.rs`](../crates/fubmd-kernel/src/vault.rs) · —
+`Vault` · [`kernel/vault.rs`](../crates/fub-kernel/src/vault.rs) · —
 
 Una cartella di file markdown, aperta come spazio di lavoro. È il termine di
 Obsidian e vuol dire la stessa cosa: **nessun formato proprietario, nessun
 database**, i file restano file. Il vault contiene due alberi che non sono
-contenuto: `.fubmd/`, la **radice unica** di ciò che FubMD scrive
+contenuto: `.fub/`, la **radice unica** di ciò che Fub scrive
 ([0048](decisions/0048-una-radice-sola.md)) — in cima l'autorevole, sotto `data/`
 il derivato — e `.trash/`, che sta fuori perché è il cestino **condiviso con
 Obsidian**. La mappa è
 [architecture/on-disk-layout.md](architecture/on-disk-layout.md).
 
 ### versioning
-`SCHEMA_VERSION` · [`features/versioning.rs:139`](../crates/fubmd-features/src/versioning.rs) · —
+`SCHEMA_VERSION` · [`features/versioning.rs:139`](../crates/fub-features/src/versioning.rs) · —
 
-Gli snapshot che FubMD tiene di ogni nota mentre la si modifica: la memoria di
-com'era il file prima. Vive in `.fubmd/data/`, che è ignorato da git — anche in
+Gli snapshot che Fub tiene di ogni nota mentre la si modifica: la memoria di
+com'era il file prima. Vive in `.fub/data/`, che è ignorato da git — anche in
 questo repo, dove `docs/` è aperta come vault di prova. Sta sotto la radice del
 [derivato](#derivato) e non lo è: è il caso che il §15.4 porta come prova.
 
@@ -246,7 +246,7 @@ questo repo, dove `docs/` è aperta come vault di prova. Sta sotto la radice del
 ## Il contratto e il confine
 
 ### additività
-— · [`abi/tests/wit_additivity.rs`](../crates/fubmd-abi/tests/wit_additivity.rs) · [0002](decisions/0002-additivita-del-contratto.md)
+— · [`abi/tests/wit_additivity.rs`](../crates/fub-abi/tests/wit_additivity.rs) · [0002](decisions/0002-additivita-del-contratto.md)
 
 La promessa che dopo il freeze il contratto **cresca solo per aggiunta**: un
 campo in fondo a un record, un caso in fondo a un variant, una funzione nuova.
@@ -255,14 +255,14 @@ Cosa conta esattamente come aggiunta sta in
 ogni push contro la linea di base congelata.
 
 ### bundle
-`Bundle` · [`host/registry.rs:53`](../crates/fubmd-host/src/registry.rs) · [0031](decisions/0031-chi-possiede-i-bundle.md)
+`Bundle` · [`host/registry.rs:53`](../crates/fub-host/src/registry.rs) · [0031](decisions/0031-chi-possiede-i-bundle.md)
 
 Un pacchetto di provider che si monta e si smonta insieme: la feature nativa dei
 backlink è un bundle, e a M5 lo sarà un plugin WASM. Esiste perché montare
 doveva avere **una strada sola**, la stessa per chi è nativo e per chi non lo è.
 
 ### capacità
-`HostApi` · [`abi/traits.rs:1157`](../crates/fubmd-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md)
+`HostApi` · [`abi/traits.rs:1157`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md)
 
 Ciò che un componente può chiedere all'host: leggere il vault, scriverlo,
 cambiarne la struttura, leggere i propri dati, emettere eventi, interrogare
@@ -278,15 +278,15 @@ di un componente WASM, e la 0021 esiste per fare in modo che le due cose abbiano
 la **stessa firma**, non due discipline scritte due volte.
 
 ### contratto
-`fubmd-abi` · [`abi/src/lib.rs`](../crates/fubmd-abi/src/lib.rs) · —
+`fub-abi` · [`abi/src/lib.rs`](../crates/fub-abi/src/lib.rs) · —
 
-L'insieme dei tipi e dei trait definiti **una volta sola** in `fubmd-abi`, di cui
+L'insieme dei tipi e dei trait definiti **una volta sola** in `fub-abi`, di cui
 il markdown è solo il primo provider e il WASM sarà solo l'ultimo consumatore.
 Non conosce `comrak`, né `tauri`, né `wasmtime`, ed è un'invariante verificata.
 Mappa in [architecture/traits.md](architecture/traits.md).
 
 ### famiglia
-`VaultRead`, `VaultWrite`, … · [`abi/traits.rs:351`](../crates/fubmd-abi/src/traits.rs) · [0021](decisions/0021-il-confine.md)
+`VaultRead`, `VaultWrite`, … · [`abi/traits.rs:351`](../crates/fub-abi/src/traits.rs) · [0021](decisions/0021-il-confine.md)
 
 Uno dei **quattordici** gruppi in cui le capacità sono divise, e il criterio è
 **cosa vuol dire negarne una**: leggere il vault è separato dallo scriverlo, e
@@ -304,7 +304,7 @@ forma. È la scadenza che rende una voce di roadmap **P0**: prima costa un campo
 dopo costa una migrazione di versione.
 
 ### linea di base
-`wit/frozen/0.1.0.wit` · [`crates/fubmd-abi/wit/frozen/`](../crates/fubmd-abi/wit/frozen/README.md) · [0002](decisions/0002-additivita-del-contratto.md)
+`wit/frozen/0.1.0.wit` · [`crates/fub-abi/wit/frozen/`](../crates/fub-abi/wit/frozen/README.md) · [0002](decisions/0002-additivita-del-contratto.md)
 
 La copia del contratto **com'era** quando una versione è stata pubblicata: non
 un archivio, ma il termine di paragone contro cui l'additività si verifica. Una
@@ -312,7 +312,7 @@ rottura deliberata prima del freeze si fa *ritagliandola*, con un commit che la
 tocca e dice perché — così si vede in review.
 
 ### manifest
-`PluginManifest` · [`abi/traits.rs:2918`](../crates/fubmd-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`PluginManifest` · [`abi/traits.rs:2918`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e i
 permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria: se
@@ -320,22 +320,22 @@ si dichiarasse solo chi non esiste ancora, il punto di applicazione non sarebbe
 provato da nessuno.
 
 ### permesso
-`permission::*` · [`abi/options.rs:237`](../crates/fubmd-abi/src/options.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`permission::*` · [`abi/options.rs:237`](../crates/fub-abi/src/options.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
-La stringa con cui un manifest chiede una capacità: `fubmd:read-vault`,
-`fubmd:write-vault`, `fubmd:network`, `fubmd:clipboard`, `fubmd:run-command`… È
+La stringa con cui un manifest chiede una capacità: `fub:read-vault`,
+`fub:write-vault`, `fub:network`, `fub:clipboard`, `fub:run-command`… È
 il lato dichiarativo di ciò che la *famiglia* è dal lato dei tipi.
 
 ### provider
-`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1510`](../crates/fubmd-abi/src/traits.rs) · —
+`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1510`](../crates/fub-abi/src/traits.rs) · —
 
-Chi implementa un trait del contratto e si registra: è **il** modo in cui FubMD
+Chi implementa un trait del contratto e si registra: è **il** modo in cui Fub
 si estende. Il criterio di tutta la roadmap è che la stragrande maggioranza delle
 voci di [FEATURES.md](FEATURES.md) sia un provider — ciò che non può esserlo
 diventa un comando cablato e un `if` nel kernel.
 
 ### rete al confine
-`safety::calling` · [`kernel/safety.rs`](../crates/fubmd-kernel/src/safety.rs) · [0032](decisions/0032-il-runner-dei-job.md)
+`safety::calling` · [`kernel/safety.rs`](../crates/fub-kernel/src/safety.rs) · [0032](decisions/0032-il-runner-dei-job.md)
 
 Il `catch_unwind` attorno alla chiamata di un provider, e a niente di più: un
 panico costa **la chiamata, non il vault**. Non è un `Result` in più nel
@@ -351,7 +351,7 @@ forme non cambieranno. Da non confondere con *superficie di vista*, che sta
 nell'altra famiglia.
 
 ### WIT
-`fubmd:abi@0.1.0` · [`crates/fubmd-abi/wit/`](../crates/fubmd-abi/wit/README.md) · —
+`fub:abi@0.1.0` · [`crates/fub-abi/wit/`](../crates/fub-abi/wit/README.md) · —
 
 Lo stesso contratto detto nella lingua del component model di WebAssembly. Vive
 accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
@@ -363,7 +363,7 @@ accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
 ## Il canale dati
 
 ### canale dati
-`IndexQuery` / `IndexResult` · [`abi/traits.rs:1894`](../crates/fubmd-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
+`IndexQuery` / `IndexResult` · [`abi/traits.rs:1894`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
 
 L'unico modo in cui chi disegna chiede dati al kernel: si costruisce una query,
 si ottiene un risultato. Esiste perché una view non deve poter chiamare il
@@ -371,28 +371,28 @@ kernel a modo suo — e perché la stessa domanda posta da un plugin WASM deve
 attraversare lo stesso tubo.
 
 ### canale metadata
-`HostQuery::query_index` · [`abi/traits.rs:949`](../crates/fubmd-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md)
+`HostQuery::query_index` · [`abi/traits.rs:949`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md)
 
 Il canale dati visto dal lato di chi lo usa per i **metadati** — backlink,
 outline, tag, statistiche — invece che per il testo. È il canale che ha reso i
 pannelli nativi dei `ViewProvider` veri invece che rami privilegiati del kernel.
 
 ### finestra
-`Page` / `Paged<T>` · [`abi/traits.rs:1587`](../crates/fubmd-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`Page` / `Paged<T>` · [`abi/traits.rs:1587`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Il modo di chiedere *venti* invece di tutto, con il totale nella risposta.
 `None` resta «tutto», perché chi ha davvero bisogno dell'insieme intero non deve
 inventarsi un tetto; ma senza finestra ogni giro clona il vault.
 
 ### indice
-`IndexProvider` · [`abi/traits.rs:2637`](../crates/fubmd-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`IndexProvider` · [`abi/traits.rs:2637`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Chi sa rispondere a una parte delle query. Ce n'è più di uno — il grafo e
 l'anagrafe stanno nel kernel, la ricerca full-text è un provider su tantivy — e
 il canale dati esiste anche per non far sapere a chi chiede quale sia quale.
 
 ### instradamento
-`QueryRoute` · [`abi/traits.rs:2411`](../crates/fubmd-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`QueryRoute` · [`abi/traits.rs:2411`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Come il kernel decide **a chi** mandare una query. Si dichiara alla
 registrazione, non si scopre per tentativi: la tabella delle rotte
@@ -400,24 +400,24 @@ registrazione, non si scopre per tentativi: la tabella delle rotte
 sceglierne uno a caso.
 
 ### pianificatore
-`QueryPlan` · [`kernel/index/plan.rs:312`](../crates/fubmd-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
+`QueryPlan` · [`kernel/index/plan.rs:312`](../crates/fub-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
 
 Chi decide come eseguire una query che tocca più di un indice. Dalla 0026 può
 mandarne due **insieme**: non è una dichiarazione nel contratto, è una misura —
 la ricerca è passata da 1,0× a 6,8× su otto thread.
 
 ### risultato
-`DocumentMatch` · [`abi/traits.rs:1777`](../crates/fubmd-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`DocumentMatch` · [`abi/traits.rs:1777`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Un documento che risponde a una query, con quello che serve per mostrarlo: il
 punteggio, lo snippet, ciò che ha fatto scattare la corrispondenza. È il tipo su
 cui pesano tre delle voci P0 della [seduta 21](roadmap/21-la-ricerca-predefinita.md).
 
 ### query di testo
-`TextQuery` · [`abi/query.rs:132`](../crates/fubmd-abi/src/query.rs) · [0025](decisions/0025-la-ricerca-predefinita.md)
+`TextQuery` · [`abi/query.rs:132`](../crates/fub-abi/src/query.rs) · [0025](decisions/0025-la-ricerca-predefinita.md)
 
 Come si chiede una ricerca full-text: il testo, il modo, i campi. La 0025 ha
-stabilito che la ricerca di FubMD è **built-in e di classe *omnisearch***, e da
+stabilito che la ricerca di Fub è **built-in e di classe *omnisearch***, e da
 lì viene tutto ciò che a questo record ancora manca — tolleranza ai refusi,
 prefisso mentre si digita, ricerca dentro la nota aperta.
 
@@ -426,7 +426,7 @@ prefisso mentre si digita, ricerca dentro la nota aperta.
 ## Gli eventi e il lavoro lungo
 
 ### attore
-`Actor` · [`abi/event.rs:171`](../crates/fubmd-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
+`Actor` · [`abi/event.rs:171`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
 
 Chi ha **chiesto** l'operazione da cui un evento nasce — non chi l'ha eseguita:
 l'utente, il watcher (cioè il filesystem), il kernel, un plugin. È un enum
@@ -434,21 +434,21 @@ chiuso, perché un campo su cui ognuno inventa la propria convenzione non serve 
 decidere. La domanda per cui esiste è una sola: «questa l'ho scritta io?».
 
 ### bus
-`EventBus` · [`kernel/bus.rs:180`](../crates/fubmd-kernel/src/bus.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
+`EventBus` · [`kernel/bus.rs:180`](../crates/fub-kernel/src/bus.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
 
 Dove gli eventi del kernel passano, e da dove chi si è abbonato li ritira.
 L'abbonamento ha una grana: un *topic*, un *soggetto*, e prefissi che non sono
 `starts_with`.
 
 ### evento
-`Event` · [`abi/event.rs:253`](../crates/fubmd-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
+`Event` · [`abi/event.rs:253`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
 
 Il fatto che qualcosa nel vault è cambiato, con l'*origine* attaccata. Ogni
 evento porta anche un `EventKind` e un `Subject`, che sono ciò su cui una
 maschera filtra.
 
 ### freno
-— · [`host/bridge.rs`](../crates/fubmd-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
+— · [`host/bridge.rs`](../crates/fub-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
 
 Il tetto che il *ponte* mette a quanti messaggi consegna. Sta **con chi ritira**,
 non con chi emette, e la finestra non è temporale: il ciclo aspetta il primo
@@ -457,7 +457,7 @@ la latenza è zero; se il kernel corre più del webview, la raffica è grande
 esattamente quanto il ritardo. Nessuna costante da indovinare.
 
 ### job
-`JobSpec` / `JobId` · [`abi/traits.rs:48`](../crates/fubmd-abi/src/traits.rs) · [0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), [0032](decisions/0032-il-runner-dei-job.md)
+`JobSpec` / `JobId` · [`abi/traits.rs:48`](../crates/fub-abi/src/traits.rs) · [0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), [0032](decisions/0032-il-runner-dei-job.md)
 
 Il lavoro lungo: import, export, reindicizzazione, backup, OCR. Gira **fuori** dal
 giro sincrono del kernel, riceve l'`HostApi` per chiamata — non uno snapshot,
@@ -465,7 +465,7 @@ perché camminare il vault era esattamente ciò che non poteva fare — e si fer
 bandiera. Il runner tiene un pool per vault.
 
 ### lotto
-`BatchId` · [`abi/event.rs:145`](../crates/fubmd-abi/src/event.rs) · [0011](decisions/0011-il-lotto.md)
+`BatchId` · [`abi/event.rs:145`](../crates/fub-abi/src/event.rs) · [0011](decisions/0011-il-lotto.md)
 
 Il raggruppamento di più scritture in **una** operazione dal punto di vista di
 chi guarda: una rinomina che tocca duecento backlink è un lotto, e chi disegna
@@ -474,34 +474,34 @@ confrontarlo con `<` assume un ordine che un host con più sessioni non deve a
 nessuno.
 
 ### maschera
-`EventMask` · [`abi/event.rs:678`](../crates/fubmd-abi/src/event.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
+`EventMask` · [`abi/event.rs:678`](../crates/fub-abi/src/event.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
 
 Cosa un abbonato vuole ricevere. Dalla 0033 dice anche **dove**: non solo la
 specie dell'evento ma il suo soggetto, così un pannello che guarda una cartella
 non si sveglia per il resto del vault.
 
 ### origine
-`Origin` · [`abi/event.rs:200`](../crates/fubmd-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
+`Origin` · [`abi/event.rs:200`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
 
 L'*attore* più il *lotto*: da dove viene un evento. `batch: None` non vuol dire
 «non importante», vuol dire che quella scrittura sta da sola.
 
 ### ponte
-— · [`host/bridge.rs`](../crates/fubmd-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
+— · [`host/bridge.rs`](../crates/fub-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
 
 Il pezzo che porta gli eventi dal bus del kernel a chi guarda: il webview, ma
 anche una CLI o un flusso SSE. Ha un *freno* e un *raggruppamento*, e sta
 nell'host proprio perché chi guarda non è per forza un webview.
 
 ### progresso
-`JobProgress` · [`abi/traits.rs:89`](../crates/fubmd-abi/src/traits.rs) · [0035](decisions/0035-il-lavoro-lungo-si-racconta.md)
+`JobProgress` · [`abi/traits.rs:89`](../crates/fub-abi/src/traits.rs) · [0035](decisions/0035-il-lavoro-lungo-si-racconta.md)
 
 Come un job racconta a che punto è. È un evento come gli altri, e l'id glielo
 **timbra la porta**: non lo dichiara chi lo emette, così un componente non può
 raccontare i progressi di un altro.
 
 ### raggruppamento
-— · [`host/bridge.rs`](../crates/fubmd-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
+— · [`host/bridge.rs`](../crates/fub-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
 
 La prima delle due riduzioni del ponte: dentro una raffica, ciò che dice due
 volte la stessa cosa la dice una — e si tiene l'**ultima** occorrenza, non la
@@ -512,14 +512,14 @@ prima.
 ## L'interfaccia
 
 ### azione
-`UiAction` / `ActionId` · [`abi/ui.rs:789`](../crates/fubmd-abi/src/ui.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`UiAction` / `ActionId` · [`abi/ui.rs:789`](../crates/fub-abi/src/ui.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 Ciò che l'utente può fare dentro una view, dichiarato dal core e non cablato
 nella shell. Il giro si chiude con un `ViewUpdate`: la view riceve l'azione,
 risponde con cosa deve cambiare.
 
 ### comando
-`CommandSpec` · [`abi/command.rs:103`](../crates/fubmd-abi/src/command.rs) · [0009](decisions/0009-registro-dei-comandi.md), [0010](decisions/0010-comando-descritto-a-una-macchina.md)
+`CommandSpec` · [`abi/command.rs:103`](../crates/fub-abi/src/command.rs) · [0009](decisions/0009-registro-dei-comandi.md), [0010](decisions/0010-comando-descritto-a-una-macchina.md)
 
 L'unità di azione dell'app, registrata e non cablata: la palette la mostra, una
 scorciatoia la invoca, un'automazione la chiamerà. La 0013 ha trasformato in
@@ -534,7 +534,7 @@ la regola si aggira con una parola — e un test lo verifica leggendo i sorgenti
 Non è stile: è il prerequisito del PWA, del mobile e degli e2e headless.
 
 ### esemplare
-`ViewInstance` · [`abi/traits.rs:1283`](../crates/fubmd-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
+`ViewInstance` · [`abi/traits.rs:1283`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
 
 Una particolare apparizione di una view: la stessa specie di pannello può essere
 aperta due volte, e le due hanno stato diverso. La chiave dello stato la compone
@@ -549,7 +549,7 @@ Ciò che la shell sa eseguire quando qualcosa glielo chiede: `Navigate`,
 rimpiazzo) e un `CommandEffect` di un comando — perché sono gli stessi intenti:
 sono **della shell**, non del chiamante.
 
-Da non confondere con `Intent` di [`abi/ui.rs:98`](../crates/fubmd-abi/src/ui.rs),
+Da non confondere con `Intent` di [`abi/ui.rs:98`](../crates/fub-abi/src/ui.rs),
 che è tutt'altro: il **tono** di un nodo di interfaccia (`Neutral`, `Primary`,
 `Danger`). Stessa parola, due famiglie diverse.
 
@@ -562,7 +562,7 @@ eventi: se il passaggio è uno solo, è l'unico posto in cui si può mettere un
 controllo che nessuno aggira.
 
 ### protocollo di UI
-`UiNode` / `UiKind` · [`abi/ui.rs:238`](../crates/fubmd-abi/src/ui.rs) · [0017](decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+`UiNode` / `UiKind` · [`abi/ui.rs:238`](../crates/fub-abi/src/ui.rs) · [0017](decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
 
 Il modo in cui il core **descrive** un'interfaccia e la shell la disegna, senza
 che il core conosca il DOM. Ha un escape hatch (`WebView`, un iframe isolato) e
@@ -577,7 +577,7 @@ Il frontend: Vite, TypeScript, CodeMirror 6. Ha un albero dichiarato — `host/`
 quando si scrive un file nuovo è [architecture/shell.md](architecture/shell.md).
 
 ### stato di vista
-`ViewStateRead` · [`abi/traits.rs:728`](../crates/fubmd-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
+`ViewStateRead` · [`abi/traits.rs:728`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
 
 Dove si era rimasti: lo scroll, la selezione, il pannello aperto. Sta sul file
 della **macchina** e non nel vault, perché non è una proprietà del contenuto —
@@ -585,7 +585,7 @@ copiare un vault su un altro computer non deve portarsi dietro dove si era
 arrivati a leggere.
 
 ### superficie di vista
-`ViewSurface` · [`abi/traits.rs:1237`](../crates/fubmd-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewSurface` · [`abi/traits.rs:1237`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 **Dove** una view può apparire: sidebar sinistra o destra, fondo, area
 principale, modale, barra di stato, ribbon, menu. Il contratto deve poter
@@ -594,7 +594,7 @@ shell di oggi abbia un documento aperto e nessun modello di tab non è
 un'obiezione.
 
 ### undo a due pile
-`Undo` / `UndoStep` · [`abi/command.rs:567`](../crates/fubmd-abi/src/command.rs) · [0045](decisions/0045-l-undo-ha-due-pile.md)
+`Undo` / `UndoStep` · [`abi/command.rs:567`](../crates/fub-abi/src/command.rs) · [0045](decisions/0045-l-undo-ha-due-pile.md)
 
 Le due pile che **non si fondono**: quella dell'editor (il testo) e quella
 strutturale (rinomina, spostamento, cestino). L'inverso di un'operazione
@@ -602,7 +602,7 @@ strutturale è un comando, non una voce di vocabolario, e `vault.undo` sta su
 `Mod-Alt-z` perché `Mod-z` è dell'editor.
 
 ### view
-`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1510`](../crates/fubmd-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1510`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 Un pannello dichiarato dal core: cosa mostra, dove sta, cosa si può fare
 dentro. Backlink, outline, tag e statistiche sono view vere — non rami del

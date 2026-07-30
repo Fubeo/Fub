@@ -10,7 +10,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la se
 
 ---
 
-Il file watcher è **l'unico** meccanismo con cui FubMD viene a sapere che
+Il file watcher è **l'unico** meccanismo con cui Fub viene a sapere che
 qualcun altro ha toccato il vault. Non ce n'è un secondo: `reindex` gira solo
 all'apertura, non esiste una riconciliazione periodica, e niente confronta mai
 la cache col disco. Da lì venivano tre silenzi, ed erano lo stesso silenzio:
@@ -53,7 +53,7 @@ proprio `Result`.**
   chiuso. La forma è quella del §7.6 (l'inventario di ciò che è attivo,
   [0021](0021-il-confine.md)): si chiede, non si riceve.
 - **Tre campi e non un booleano**, ed è la parte da non semplificare dopo.
-  `watching` è «FubMD **saprebbe**», `sync_failures` è «è **già** successo
+  `watching` è «Fub **saprebbe**», `sync_failures` è «è **già** successo
   qualcosa che non ho saputo leggere», `last_sync_error` è «cosa». Un booleano
   solo avrebbe confuso un vault senza rilevamento — rischio noto e permanente,
   che si mitiga riaprendo — con un vault che il rilevamento ce l'ha e ha appena
@@ -89,14 +89,14 @@ proprio `Result`.**
   si legge entra. Un contatore che avesse messo il vault in sola lettura avrebbe
   trasformato un file con un encoding strano in un'app che non salva.
 
-### Cosa promette FubMD dove il rilevamento non c'è
+### Cosa promette Fub dove il rilevamento non c'è
 
 È la domanda che il §9.7 poneva come la decisione vera, perché «oggi promette la
 stessa cosa e ne mantiene un'altra». La risposta:
 
-**FubMD promette che la verità è il vault sul disco, e che le proprie risposte
+**Fub promette che la verità è il vault sul disco, e che le proprie risposte
 ne sono un riflesso aggiornato *soltanto quando `watching` è vero*. Dove non lo
-è, la promessa è più piccola, ed è questa: ciò che passa da FubMD è coerente;
+è, la promessa è più piccola, ed è questa: ciò che passa da Fub è coerente;
 ciò che passa da fuori si vede alla riapertura.**
 
 Due conseguenze che vanno con la frase, o la frase non vale niente:
@@ -168,14 +168,14 @@ Due conseguenze che vanno con la frase, o la frase non vale niente:
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning; anche
-  `-p fubmd-host --no-default-features`.
+  `-p fub-host --no-default-features`.
 - `cargo clippy --workspace --all-targets` — pulita.
 - `cargo test --workspace` — **58 suite, 0 fallimenti**. Sono le 57 della
   [0029](0029-chiudere-un-vault-e-chiuderli-tutti.md) più
-  `fubmd-kernel/tests/rilevamento.rs`, che ha quattro prove: un vault senza
+  `fub-kernel/tests/rilevamento.rs`, che ha quattro prove: un vault senza
   rilevatore che lo dice, la bandiera che è una sola, un esito scartato dal
   chiamante che resta scritto (e un conto che non si azzera da solo), e il
-  rename che conta una volta sola. In `fubmd-host/tests/headless.rs` c'è la
+  rename che conta una volta sola. In `fub-host/tests/headless.rs` c'è la
   quinta, che è quella che lega i due lati: `Host::is_watching` e
   `IndexQuery::VaultStatus` rispondono dallo stesso bit, e chiudere il vault lo
   abbassa.

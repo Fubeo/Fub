@@ -35,7 +35,7 @@ contratto, col catalogo di chi l'ha scritto.**
 runtime i18n, il proprio catalogo e la propria scala di ripiego. Vorrebbe dire
 che `render_view` — che la [0016](0016-cosa-e-una-view.md) ha reso *puro,
 sincrono e senza stato* apposta — diventa dipendente da uno stato da invalidare a
-ogni cambio di lingua. Vorrebbe dire che la qualità della traduzione di FubMD è
+ogni cambio di lingua. Vorrebbe dire che la qualità della traduzione di Fub è
 la peggiore fra quelle dei plugin installati. E soprattutto vorrebbe dire quello
 che il §12.2 dice in una frase e che vale identico qui: **un messaggio già
 composto non si traduce.** Chi lo riceve ha una stringa, e non sa più da cosa
@@ -183,7 +183,7 @@ albero del contratto.
 ## Cosa questo ha rotto, deliberatamente
 
 Il presidio dell'additività (`wit_additivity.rs`) è diventato rosso, ed è stato
-**ritagliato**: `crates/fubmd-abi/wit/frozen/0.1.0.wit` è stato riscritto, con la riga in tabella
+**ritagliato**: `crates/fub-abi/wit/frozen/0.1.0.wit` è stato riscritto, con la riga in tabella
 che dice perché. Pre-freeze è la procedura prevista — una rottura si fa vedendola
 in review, che è tutta la differenza con non vederla affatto.
 

@@ -77,7 +77,7 @@ Il registro, la palette e il dry-run sono stati fatti a M2 insieme alla [decisio
 motivo è che `CommandSpec` e `invoke` sono **firme**, e le firme costano un campo
 prima del freeze e una migrazione dopo. Cosa è già lì:
 `register_command_provider`/`commands`/`invoke_command` nel kernel,
-`list_commands`/`invoke_command` sull'IPC, `CoreCommands` in `fubmd-features`, la
+`list_commands`/`invoke_command` sull'IPC, `CoreCommands` in `fub-features`, la
 palette in `frontend/src/ui/palette.ts` (filtro, form dai `ParamSpec`, anteprima del
 piano prima di applicare, scorciatoie **dichiarate** dai comandi).
 

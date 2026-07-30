@@ -9,6 +9,6 @@
 /// è la stessa disciplina che il §20 chiede al backend.
 export function $<T extends HTMLElement>(sel: string): T {
   const el = document.querySelector(sel);
-  if (!el) throw new Error(`FubMD: l'elemento «${sel}» non esiste in index.html`);
+  if (!el) throw new Error(`Fub: l'elemento «${sel}» non esiste in index.html`);
   return el as T;
 }

@@ -164,7 +164,7 @@ Le altre tre si dividono per la stessa domanda di sempre: `Abi` → `unserved`
 risposte diverse — è la ragione per cui quella variante esiste, e sopravvive alla
 traduzione solo restando distinta qui), `Declaration` → `internal`.
 
-### `fubmd-host` parla `PluginError`, e la conversione **non** sta al confine Tauri
+### `fub-host` parla `PluginError`, e la conversione **non** sta al confine Tauri
 
 Questa era la scelta aperta, e la risposta è quella scomoda.
 
@@ -217,7 +217,7 @@ rotto ogni messaggio d'errore della shell.
 ## Cosa questo ha rotto, deliberatamente
 
 `wit_additivity.rs` è diventato rosso e la linea di base è stata **ritagliata**
-(`crates/fubmd-abi/wit/frozen/0.1.0.wit`, con la riga in tabella che dice perché). Pre-freeze è la
+(`crates/fub-abi/wit/frozen/0.1.0.wit`, con la riga in tabella che dice perché). Pre-freeze è la
 procedura prevista.
 
 Ciò che ha rotto: **i nove payload di `plugin-error` passano da `string` a

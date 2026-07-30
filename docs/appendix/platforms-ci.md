@@ -33,18 +33,18 @@ job Linux; Windows/macOS usano i toolchain nativi.
 
 - **[M2](../milestones/M2-search-graph.md):** i test di proprietà (incrementale vs
   rebuild) girano nella matrice; attenzione ai path dell'indice tantivy
-  (`.fubmd/data/`) su Windows (separatori, lock file).
+  (`.fub/data/`) su Windows (separatori, lock file).
 - **[M5](../milestones/M5-wasm-runtime.md):** job aggiuntivo che compila il plugin di
   esempio con `cargo component` (target `wasm32-wasip2`) e lo carica in un test
   d'integrazione dell'host.
 
 ## Invarianti verificati in CI
 
-- **Dipendenze del core:** un check (`cargo tree`/deny) che `fubmd-abi` e
-  `fubmd-kernel` non tirino dentro `comrak`, `tauri`, `wasmtime` — l'invariante non
+- **Dipendenze del core:** un check (`cargo tree`/deny) che `fub-abi` e
+  `fub-kernel` non tirino dentro `comrak`, `tauri`, `wasmtime` — l'invariante non
   negoziabile del [PIANO](../PIANO.md).
 - **Conformità abi↔WIT** (da [M2](../milestones/M2-search-graph.md), obbligatoria da
-  [M4](../milestones/M4-wit-hardening.md)): il test rompe se `fubmd-abi` e `wit/`
+  [M4](../milestones/M4-wit-hardening.md)): il test rompe se `fub-abi` e `wit/`
   divergono.
 
 ## Rischi / note

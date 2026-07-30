@@ -35,8 +35,8 @@ quattro e danno quattro numeri diversi:
 | nomi dentro `generate_handler!` | **37** |
 
 Le sei occorrenze di troppo sono **prosa**: due nel doc-comment di modulo di
-`lib.rs` che spiegano cosa il file è, e quattro in `fubmd-host` e
-`fubmd-abi/tests/` che raccontano dove una cosa *stava prima*. Un presidio che
+`lib.rs` che spiegano cosa il file è, e quattro in `fub-host` e
+`fub-abi/tests/` che raccontano dove una cosa *stava prima*. Un presidio che
 contasse la prosa nascerebbe con un numero che nessuno può far tornare, e
 morirebbe alla prima volta che qualcuno scrive `#[tauri::command]` dentro un
 commento — cioè scrivendo documentazione, che è la cosa che questo repo fa.
@@ -49,7 +49,7 @@ di cui ci si può fidare senza guardare.
 
 ## Deciso: tre insiemi, due confronti
 
-Il test legge `crates/fubmd-app/src/lib.rs` ed estrae **due insiemi
+Il test legge `crates/fub-app/src/lib.rs` ed estrae **due insiemi
 indipendenti** — i comandi *definiti* (un vero `#[tauri::command]`) e i comandi
 *registrati* (dentro `generate_handler!`) — e li confronta con l'allowlist
 dichiarata nel test. Due asserzioni, entrambe nelle due direzioni:
@@ -90,7 +90,7 @@ che non erano previste sono la parte che valeva la pena scoprire:
 
 **`CapacitaDelContratto` porta il nome della capacità** (`VaultRead::list_trash`
 e simili), e un test verifica che quel metodo esista **dentro quel trait**
-leggendo `fubmd-abi/src/traits.rs`. È la sesta specie del §16.7 — *la garanzia
+leggendo `fub-abi/src/traits.rs`. È la sesta specie del §16.7 — *la garanzia
 dichiarata che non è mai esistita* — presa dal verso presidiabile: una frase che
 rimanda a qualcosa di meccanico deve nominare un `X` che una macchina sa cercare.
 Spostare `list_trash` da un trait all'altro diventa rosso.
@@ -159,7 +159,7 @@ che nessuno rilegge, ma in un test che gira in CI.
 ## Il grafo era già migrato, e la voce non lo sapeva
 
 Il §16.6 elencava «Grafo (1)» fra i bespoke da migrare. Non esiste: `graph_data`
-è sparito con la [0019](0019-il-canale-dati.md), e `crates/fubmd-app/src/lib.rs`
+è sparito con la [0019](0019-il-canale-dati.md), e `crates/fub-app/src/lib.rs`
 lo racconta nel doc-comment di `query_index` («erano quattro comandi — `search`,
 `list_tags`, `graph_data` e `backlinks`»). La riga era falsa, ed è la stessa
 specie del «38»: una voce che descrive il proprio debito e non torna a

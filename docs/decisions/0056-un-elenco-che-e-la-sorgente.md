@@ -68,10 +68,10 @@ Il §16.7 ne nomina uno (`view_refresh_masks.rs`). Contati:
 
 | posto | crate | natura | forma |
 |---|---|---|---|
-| `host/src/mount.rs` | `fubmd-host` | **produzione** | quattro `CoreBundle` su nove, che *registrano* |
-| `features/tests/view_refresh_masks.rs` | `fubmd-features` | prova | `fn ogni_view()` |
-| `features/tests/i_cataloghi.rs` | `fubmd-features` | prova | quattro chiamate a `viste(…)` |
-| `features/tests/conformita.rs` | `fubmd-features` | prova | quattro chiamate, **per due volte** |
+| `host/src/mount.rs` | `fub-host` | **produzione** | quattro `CoreBundle` su nove, che *registrano* |
+| `features/tests/view_refresh_masks.rs` | `fub-features` | prova | `fn ogni_view()` |
+| `features/tests/i_cataloghi.rs` | `fub-features` | prova | quattro chiamate a `viste(…)` |
+| `features/tests/conformita.rs` | `fub-features` | prova | quattro chiamate, **per due volte** |
 
 Il quarto è arrivato con la [0054](0054-il-banco-del-lato-provider.md), che lo ha
 scritto dichiarando nel proprio doc-comment di star aggiungendo una copia al
@@ -87,21 +87,21 @@ i test dimenticano — non è una view ufficiale.
 ## Il posto che la 0055 aveva scelto non può funzionare, e il repo lo dimostra
 
 La [0055](0055-il-banco-del-lato-host.md) ha nominato il posto di
-`ogni_view_ufficiale()` — `crates/fubmd-testkit/src/lib.rs` — e non l'ha
-costruito, lasciando a questa voce il costo: `fubmd-features` fra le dipendenze
+`ogni_view_ufficiale()` — `crates/fub-testkit/src/lib.rs` — e non l'ha
+costruito, lasciando a questa voce il costo: `fub-features` fra le dipendenze
 del banco.
 
 Il costo è quello, ma non è il problema. Il problema è che **`mount.rs` non
 potrebbe leggerlo mai**, e lo dice un test che esiste già:
 
 ```rust
-// crates/fubmd-abi/tests/dependency_invariant.rs
+// crates/fub-abi/tests/dependency_invariant.rs
 fn il_banco_di_prova_non_entra_in_nessuna_libreria() { … }
 ```
 
-Nessun crate del workspace può dichiarare `fubmd-testkit` fra le dipendenze
+Nessun crate del workspace può dichiarare `fub-testkit` fra le dipendenze
 **normali** — ha il kernel dentro, e chi lo prendesse se lo porterebbe in
-libreria. `mount.rs` è codice di libreria di `fubmd-host`. Un inventario nel
+libreria. `mount.rs` è codice di libreria di `fub-host`. Un inventario nel
 testkit servirebbe i tre test e non il quarto elenco, cioè resterebbe una
 **sorgente di iterazione** per tre copie e non toccherebbe quella che le
 costituisce: la prima delle tre forme fallita, la seconda irraggiungibile per
@@ -109,16 +109,16 @@ costruzione. Sarebbe una **quinta copia**, e la peggiore — quella che fa crede
 che il problema sia risolto.
 
 La 0055 aveva anche guardato la direzione giusta (il banco è già dev-dependency
-di `fubmd-features`, quindi il ciclo sarebbe legittimo come quello del kernel).
+di `fub-features`, quindi il ciclo sarebbe legittimo come quello del kernel).
 Il ciclo infatti non era l'ostacolo. L'ostacolo era un invariante che quella
 decisione non aveva riletto — e che è ironicamente lo stesso file che la
 [0054](0054-il-banco-del-lato-provider.md) aveva appena finito di scrivere.
 
 ## Deciso: l'inventario appartiene a chi possiede le cose
 
-`crates/fubmd-features/src/inventario.rs`. È il crate che possiede
+`crates/fub-features/src/inventario.rs`. È il crate che possiede
 `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` e i loro cataloghi,
-ed è già dipendenza **normale** di `fubmd-host` — quindi `mount.rs` lo legge
+ed è già dipendenza **normale** di `fub-host` — quindi `mount.rs` lo legge
 senza che nessun confine si sposti di un centimetro. Nessuna dipendenza nuova nel
 grafo, in nessuna direzione.
 
@@ -135,11 +135,11 @@ quattro view più ricerca, blocchi, versioning e comandi. È lo stesso difetto u
 giro più largo: una quinta view entrerebbe muta, ma anche una **nona feature**
 entrerebbe senza che nessuno presidi il suo catalogo.
 
-Quindi l'inventario è delle **feature ufficiali di `fubmd-features`** — otto
+Quindi l'inventario è delle **feature ufficiali di `fub-features`** — otto
 righe con id, nome, catalogo, e i puntatori ai provider che si possono costruire
 da soli (la view, il `CommandProvider`) — e le view ne sono un sottoinsieme
 *derivato* con un `filter`, non un secondo elenco parallelo. `CORE_ID` resta
-fuori ed è giusto: vive in `fubmd-host` col proprio catalogo, e non è una
+fuori ed è giusto: vive in `fub-host` col proprio catalogo, e non è una
 feature.
 
 Ciò che **non** sale nell'inventario è la registrazione delle **tre** feature
@@ -160,7 +160,7 @@ qualcosa che l'inventario non ha**.)*
 ### E un presidio che chiude il bypass
 
 L'inventario impedisce di dimenticare una view; non impedisce di registrarne una
-scavalcandolo. Il presidio nuovo — `crates/fubmd-host/tests/le_view_ufficiali.rs`
+scavalcandolo. Il presidio nuovo — `crates/fub-host/tests/le_view_ufficiali.rs`
 — monta un workspace vero e pretende che l'insieme montato sia **esattamente**
 quello dell'inventario, nelle due direzioni. È qui che la seconda forma si
 appoggia alla terza: la sorgente è la sorgente perché un'asserzione di
@@ -169,7 +169,7 @@ uguaglianza lo verifica.
 ### Il quinto elenco, che va lasciato dov'è
 
 Riscrivendo i tre presidi ne è saltato fuori un altro che nessuna voce nomina:
-`fubmd-host/tests/headless.rs` asserisce l'uguaglianza con **nove** id di bundle
+`fub-host/tests/headless.rs` asserisce l'uguaglianza con **nove** id di bundle
 battuti a mano. È della specie buona — la terza forma, non la seconda — e infatti
 è diventato rosso da solo durante le prove.
 
@@ -234,7 +234,7 @@ descrive.
 
 **L'inventario nel testkit**, che la 0055 aveva nominato: irraggiungibile da
 `mount.rs` per un invariante presidiato, come sopra. Non è stato scartato per il
-costo (`fubmd-features` fra le dipendenze del banco), che pure ci sarebbe stato:
+costo (`fub-features` fra le dipendenze del banco), che pure ci sarebbe stato:
 è stato scartato perché non avrebbe fatto la cosa.
 
 **Una macro che generi `mount.rs` dall'inventario.** Toglierebbe anche il ciclo,

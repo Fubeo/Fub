@@ -58,8 +58,8 @@ comunque, perché è ciò che non si può perdere.**
   nessuno, e `wit_additivity` lo ha detto con la frase che ha scritto per questo
   caso — *le due uscite oneste sono renderlo additivo, oppure, solo finché il
   freeze di M4 non è avvenuto, ritagliare la linea di base con un commit che
-  tocca `crates/fubmd-abi/wit/frozen/` e lo dice*. È la seconda, ed è visibile: nello stesso
-  commit c'è la riga in `crates/fubmd-abi/wit/frozen/0.1.0.wit`, col perché accanto. Dopo M4 la
+  tocca `crates/fub-abi/wit/frozen/` e lo dice*. È la seconda, ed è visibile: nello stesso
+  commit c'è la riga in `crates/fub-abi/wit/frozen/0.1.0.wit`, col perché accanto. Dopo M4 la
   stessa mossa vorrà una versione nuova **accanto** a quella, non una riga
   cambiata dentro.
 
@@ -109,7 +109,7 @@ comunque, perché è ciò che non si può perdere.**
 
 ### Dove sta la regola
 
-- **In `fubmd_abi::rules::events`, e non accanto al tipo.** È la regola con
+- **In `fub_abi::rules::events`, e non accanto al tipo.** È la regola con
   **due applicatori veri**: il kernel, che consegna a un `EventHandler`, e la
   **shell**, che decide da sé quando ridisegnare una view dichiarata
   (`ViewSpec.refresh` è una `EventMask`, e la shell la legge). Finché la shell
@@ -181,10 +181,10 @@ comunque, perché è ciò che non si può perdere.**
 ## Verifica
 
 - `cargo build --workspace` e `cargo clippy --workspace --all-targets` — pulite,
-  zero warning; anche `-p fubmd-host --no-default-features`.
+  zero warning; anche `-p fub-host --no-default-features`.
 - `cargo test --workspace` — **64 suite, 0 fallimenti**, due delle quali nuove e
   condivise con la [0034](0034-il-freno-e-il-raggruppamento.md):
-  - `fubmd-kernel/tests/la_maschera.rs` — cinque prove **in coppia**: ognuna
+  - `fub-kernel/tests/la_maschera.rs` — cinque prove **in coppia**: ognuna
     mostra la maschera stretta che non riceve *e* la stessa storia con la
     maschera larga che riceve. Una prova che mostrasse il solo silenzio non
     distinguerebbe un filtro che funziona da un handler mai chiamato;
@@ -205,7 +205,7 @@ comunque, perché è ciò che non si può perdere.**
     `rules-mirror.test.ts` diventa rosso sul caso `com.acmecorp`. Le due
     implementazioni non possono divergere in silenzio.
 - **Contratto:** `event-mask` da alias a record è una **rottura dichiarata**
-  pre-freeze; `crates/fubmd-abi/wit/frozen/0.1.0.wit` è ritagliato nello stesso commit e dice
+  pre-freeze; `crates/fub-abi/wit/frozen/0.1.0.wit` è ritagliato nello stesso commit e dice
   perché. `wit_conformance` (che verifica anche l'ordine dei casi del `subject`
   contro la dichiarazione Rust) e `wit_additivity` sono verdi.
 - **Mirror TS rigenerato** (`UPDATE_MIRROR=1` su `ts_mirror` e `rules_mirror`),

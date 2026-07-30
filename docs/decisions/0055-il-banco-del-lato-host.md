@@ -69,7 +69,7 @@ esattamente il modo in cui si arriva a trentacinque copie**: ogni volta che il
 banco comune non copre il caso, se ne scrive uno accanto — e nessuno lo toglie,
 perché toglierlo vorrebbe dire allargare quello comune.
 
-## Deciso: `crates/fubmd-testkit`, e dentro un **builder**
+## Deciso: `crates/fub-testkit`, e dentro un **builder**
 
 ```rust
 let mut banco = Banco::nuovo()
@@ -100,7 +100,7 @@ che il test guarda. Chi vuole anche quello ha `senza_scansione()`.
 
 ## La misura, che è l'unica prova che la voce sia chiusa
 
-`crates/fubmd-kernel/tests/il_banco_regge.rs`, scritto dopo il banco e non
+`crates/fub-kernel/tests/il_banco_regge.rs`, scritto dopo il banco e non
 prima:
 
 | | righe di impalcatura prima della prima asserzione |
@@ -138,7 +138,7 @@ conteggio pertinente, e ricontarlo non lo rende tale.
 
 Un banco che nessuno ha ancora usato per scrivere qualcosa di nuovo è una
 promessa, non un guadagno: per questo il file nuovo prova anche il banco stesso.
-Se `fubmd-testkit` mentisse, mentirebbero in blocco tutti i test che ci si
+Se `fub-testkit` mentisse, mentirebbero in blocco tutti i test che ci si
 appoggiano, e lo farebbero **passando**. Un banco condiviso è codice di
 produzione dei test, e va provato come tale — la prima asserzione del file è che
 `con_estensione("txt")` instradi davvero su `txt`, che è la cosa che se fosse
@@ -164,8 +164,8 @@ migrato e i suoi cinque test passano.
 
 ## Il ciclo di dipendenze, verificato invece che supposto
 
-`fubmd-testkit` dipende da `fubmd-kernel`, e `fubmd-kernel` dev-dipende da
-`fubmd-testkit`. Cargo lo risolve — verificato, il workspace compila — perché
+`fub-testkit` dipende da `fub-kernel`, e `fub-kernel` dev-dipende da
+`fub-testkit`. Cargo lo risolve — verificato, il workspace compila — perché
 le dev-dependency non entrano nel grafo della libreria: la `lib` del kernel non
 vede il testkit, solo i suoi `tests/` lo vedono.
 
@@ -177,7 +177,7 @@ crate. L'altro — `l_sdk_non_vede_il_kernel` — è raccontato nella
 
 ## Cosa il banco **non** assorbe, e va detto
 
-I cinque helper di `fubmd-features/tests/` e `fubmd-format-markdown/tests/`
+I cinque helper di `fub-features/tests/` e `fub-format-markdown/tests/`
 seminano un corpus con un frontmatter e dei wikilink precisi, e **quel corpus è
 il soggetto del test**. Portarlo nel testkit vorrebbe dire che il crate spedisce
 i dati di prova di quattro test che non si parlano.
@@ -219,14 +219,14 @@ confine» ne chiede due.
   punto di rottura.
 - **Un `PlainProvider` unico, non parametrico.** Avrebbe fatto scendere il
   conteggio a uno e la copertura con lui, in silenzio, su sei test.
-- **Il banco dentro `fubmd-kernel`, sotto una cargo feature.** Toglie un crate ma
+- **Il banco dentro `fub-kernel`, sotto una cargo feature.** Toglie un crate ma
   mette il banco nella libreria del kernel, e l'unificazione delle feature lo
   accende per chiunque. È la stessa ragione per cui non sta nell'SDK
   ([0054](0054-il-banco-del-lato-provider.md)), applicata dall'altro lato.
 - **Assorbire anche `tests/common/mod.rs`** (arrivato con la
   [0053](0053-il-contratto-ha-una-sorgente.md)). Non si toccano: quel modulo
-  legge i sorgenti Rust per i presidi del contratto, serve solo `fubmd-abi`, e
-  vive dentro `fubmd-abi/tests/`. Metterlo nel testkit metterebbe il **kernel**
+  legge i sorgenti Rust per i presidi del contratto, serve solo `fub-abi`, e
+  vive dentro `fub-abi/tests/`. Metterlo nel testkit metterebbe il **kernel**
   nel grafo di chi vuole solo leggere un file `.rs`. I due non si sovrappongono e
   la linea fra loro è la stessa di sempre: cosa serve avere fra le mani.
 
@@ -238,16 +238,16 @@ confine» ne chiede due.
   senza aprire un verbale.
 - **`ogni_view_ufficiale()` ha adesso un posto naturale e non è stato
   costruito.** Sarebbe nel testkit, e costruirlo vorrebbe dire mettere
-  `fubmd-features` fra le dipendenze di questo crate — che è una decisione della
+  `fub-features` fra le dipendenze di questo crate — che è una decisione della
   seduta 16 e non di questo verbale. Il posto è nominato nel sorgente perché chi
   aprirà quella voce lo trovi già scelto.
   *(Aggiornamento: la [decisione 0056](0056-un-elenco-che-e-la-sorgente.md) ha aperto quella
   voce e ha scartato questo posto. Non per il costo, che pure ci sarebbe stato,
   ma perché `il_banco_di_prova_non_entra_in_nessuna_libreria` — un test scritto
   dalla [0054](0054-il-banco-del-lato-provider.md) due ore prima — vieta a
-  `fubmd-host` di dichiarare il testkit fra le dipendenze normali: `mount.rs`,
+  `fub-host` di dichiarare il testkit fra le dipendenze normali: `mount.rs`,
   che è l'elenco da cui le view **esistono**, non avrebbe potuto leggerlo mai.
-  L'inventario sta in `fubmd-features`.)*
+  L'inventario sta in `fub-features`.)*
 - **Il §16.3** resta la voce che questa sbloccava, e la sua precondizione è
   soddisfatta. Il suo *primo tempo* — la cargo feature per bundle — non è stato
   preso qui e resta scorporabile come la voce dichiara.

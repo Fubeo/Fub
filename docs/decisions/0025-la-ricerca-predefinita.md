@@ -58,7 +58,7 @@ peggiore.
   comportarsi, per sempre.
 - **Le parti che contano scadono col freeze di M4.** `TextQuery`, `TextMode`,
   `TextField` e `DocumentMatch` sono già nel contratto e già nel WIT
-  ([`crates/fubmd-abi/wit/fubmd/abi.wit`](../../crates/fubmd-abi/wit/fubmd/abi.wit)). Una variante aggiunta oggi
+  ([`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit)). Una variante aggiunta oggi
   costa una variante; dopo il freeze costa una minor, e toglierla una major. La
   decisione non poteva aspettare che qualcuno avesse voglia di scrivere il
   motore: doveva arrivare prima che la firma si chiudesse.
@@ -111,8 +111,8 @@ riempiendo quella che c'è.
   ricerca: è la **27.2**, l'API locale, e ci arriverà come ci arriva ogni altra
   query — dal montaggio riusabile della [0023](0023-chi-monta-il-kernel.md),
   senza portarsi dietro un webview.
-- **Un id di plugin `fubmd.omnisearch`.** Il provider resta `fubmd.search`
-  (`SEARCH_ID`), e il suo spazio dati resta `.fubmd-data/plugins/fubmd.search/`.
+- **Un id di plugin `fub.omnisearch`.** Il provider resta `fub.search`
+  (`SEARCH_ID`), e il suo spazio dati resta `.fub-data/plugins/fub.search/`.
   Rinominarlo per un nome di prodotto vorrebbe dire buttare gli indici di
   chiunque abbia già aperto un vault, in cambio di niente: **omnisearch qui è un
   comportamento atteso, non un marchio da appiccicare**. È la ragione per cui il

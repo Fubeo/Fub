@@ -22,26 +22,26 @@ fondo alla [0055](0055-il-banco-del-lato-host.md#il-cappello-di-una-seduta-può-
 
 Il cappello della seduta 16 dichiarava in anticipo che i due banchi sono
 **due**: *«l'SDK è il lato provider, il testkit è il lato host, e non possono
-stare nello stesso crate: `fubmd-kernel` nel grafo dell'SDK violerebbe
+stare nello stesso crate: `fub-kernel` nel grafo dell'SDK violerebbe
 l'invariante che `dependency_invariant.rs` presidia»*.
 
 La conclusione regge. La ragione no, ed è il punto da cui parte tutto il resto.
 
 ## L'invariante che la seduta invoca non era presidiata
 
-`crates/fubmd-abi/tests/dependency_invariant.rs`, letto riga per riga, **non
-nomina `fubmd-sdk` da nessuna parte**. Le sue reti sono:
+`crates/fub-abi/tests/dependency_invariant.rs`, letto riga per riga, **non
+nomina `fub-sdk` da nessuna parte**. Le sue reti sono:
 
 | rete | su chi |
 |---|---|
-| denylist transitiva | `fubmd-abi`, `fubmd-kernel` |
-| allowlist delle dipendenze dirette | `fubmd-abi`, `fubmd-kernel` |
-| allowlist transitiva | `fubmd-abi` |
+| denylist transitiva | `fub-abi`, `fub-kernel` |
+| allowlist delle dipendenze dirette | `fub-abi`, `fub-kernel` |
+| allowlist transitiva | `fub-abi` |
 | il diagramma di `mappa-visuale.md` | tutti i membri |
-| confine feature↔kernel | `fubmd-features` |
-| confine host↔app | `fubmd-host` |
+| confine feature↔kernel | `fub-features` |
+| confine host↔app | `fub-host` |
 
-Un `fubmd-sdk` che avesse dichiarato `fubmd-kernel` sarebbe passato per tutte
+Un `fub-sdk` che avesse dichiarato `fub-kernel` sarebbe passato per tutte
 tranne la quarta — e la quarta si sarebbe accontentata che qualcuno disegnasse
 la freccia. L'invariante era nelle intenzioni, non nel test.
 
@@ -62,10 +62,10 @@ seduta è vera perché c'è un test che la tiene, non perché è scritta.
 
 ## E la ragione vera è più forte di quella che la seduta dava
 
-`fubmd-sdk` è **dipendenza normale** di `fubmd-format-markdown`
-(`crates/fubmd-format-markdown/Cargo.toml`, `fubmd-sdk = { workspace = true }`).
+`fub-sdk` è **dipendenza normale** di `fub-format-markdown`
+(`crates/fub-format-markdown/Cargo.toml`, `fub-sdk = { workspace = true }`).
 Non è una relazione ipotetica di M5: è nel `Cargo.toml` oggi, perché il parser
-markdown usa `fubmd_sdk::scan`.
+markdown usa `fub_sdk::scan`.
 
 Quindi il kernel dentro l'SDK non finirebbe «nel grafo di un futuro guest»:
 finirebbe **nella libreria di un provider di formato che esiste**, subito. E
@@ -76,10 +76,10 @@ il modo in cui un confine dietro una feature smette di essere un confine.
 ## Cosa c'era, e dove stava davvero
 
 Il §16.1 diceva: *«il `MemoryHost` è `#[cfg(test)] mod testing` dentro
-`fubmd-features` (`features/src/lib.rs`). Nessun autore di plugin, e nemmeno un
+`fub-features` (`features/src/lib.rs`). Nessun autore di plugin, e nemmeno un
 futuro modulo FubSuite in un crate a parte, può usarlo.»*
 
-Il file era sbagliato — stava in `crates/fubmd-features/src/testing.rs`,
+Il file era sbagliato — stava in `crates/fub-features/src/testing.rs`,
 dichiarato da `lib.rs` — ma il fatto vero è **più forte** di quello che la voce
 diceva. La riga era:
 
@@ -89,7 +89,7 @@ mod testing;
 ```
 
 `#[cfg(test)]` **e privato**. Non «nessun autore di plugin»: nessuno tranne
-`features/src/*`. Nemmeno gli integration test di `fubmd-features` stesso — che
+`features/src/*`. Nemmeno gli integration test di `fub-features` stesso — che
 stanno in `tests/`, compilano come crate separato e non vedono né un `mod`
 privato né ciò che `cfg(test)` accende. Settecentonovantadue righe di doppio
 dell'host, con l'orologio pilotabile che è il guadagno di aver messo il tempo
@@ -97,18 +97,18 @@ nel contratto, raggiungibili da quattro file.
 
 ## Deciso
 
-**`fubmd_sdk::testing` è il banco del lato provider**, e contiene tre cose.
+**`fub_sdk::testing` è il banco del lato provider**, e contiene tre cose.
 
 **1. `MemoryHost`**, spostato lì intero e reso pubblico. Dipendeva solo da
-`fubmd_abi`, quindi il trasloco è un `git mv` più un `use`: il fatto che sia
+`fub_abi`, quindi il trasloco è un `git mv` più un `use`: il fatto che sia
 costato zero è la misura di quanto fosse fuori posto.
 
-**2. La suite di conformità**, `fubmd_sdk::testing::conformita`, che è la parte
+**2. La suite di conformità**, `fub_sdk::testing::conformita`, che è la parte
 che scade davvero — è ciò con cui un autore di plugin dirà «il mio provider
 rispetta il contratto». Ogni funzione corrisponde a una frase del doc-comment
 di un trait, e la porta nel messaggio d'errore.
 
-**3. `fubmd_sdk::ui`** — e non `testing`, come il §16.1 proponeva. Un
+**3. `fub_sdk::ui`** — e non `testing`, come il §16.1 proponeva. Un
 costruttore di albero di view **non è codice di prova**: sotto `testing` sarebbe
 stato a disposizione di un provider solo nei suoi test, cioè nel posto in cui
 non serve.
@@ -175,7 +175,7 @@ presidi finiscono per non essere d'accordo.
 
 ## La suite ha un cliente vero, ed è un requisito
 
-`crates/fubmd-features/tests/conformita.rs` fa passare la suite alle quattro
+`crates/fub-features/tests/conformita.rs` fa passare la suite alle quattro
 view ufficiali, a host vuoto e a host con un documento aperto. Non è una
 dimostrazione: **una suite di conformità che nessuna implementazione vera passa
 non è una suite, è un'opinione.** Se un'asserzione è troppo stretta lo si scopre
@@ -185,10 +185,10 @@ troppo».
 
 ## Una copia che esisteva solo per via del posto sbagliato
 
-Trovata spostando: `crates/fubmd-sdk/src/ids.rs` aveva un doppio dell'host
+Trovata spostando: `crates/fub-sdk/src/ids.rs` aveva un doppio dell'host
 scritto a mano nei propri unit test, e il commento accanto ne dava la ragione:
 
-> Non è `MemoryHost` perché quello sta in `fubmd-features`, che dipende da questo
+> Non è `MemoryHost` perché quello sta in `fub-features`, che dipende da questo
 > crate — e l'SDK non può dipendere da chi lo usa.
 
 Il ragionamento era giusto, e la premessa è quella che questo verbale ha appena
@@ -219,7 +219,7 @@ di **due righe** — `fn placeholder(key) { UiNode::empty_state(Text::key(key)) 
 verbatim in `backlinks.rs` e `outline.rs`, inline in `tags.rs` — più la
 convenzione con cui una riga porta il proprio dato nel payload dell'azione.
 
-Sono due funzioni in `fubmd_sdk::ui`, e il modulo è piccolo perché la
+Sono due funzioni in `fub_sdk::ui`, e il modulo è piccolo perché la
 duplicazione lo era: raccogliere le tre copie di un albero che non esiste
 avrebbe voluto dire inventarne uno che nessuno dei tre voleva. È la stessa
 disciplina che la [0053](0053-il-contratto-ha-una-sorgente.md) ha imposto ai
@@ -230,10 +230,10 @@ magro — ed è il primo di questo verso.
 
 - **Lasciare `MemoryHost` dov'era e renderlo `pub`.** Toglie il `cfg(test)` ma
   non il problema: chi vuole provare un provider dovrebbe dipendere da
-  `fubmd-features`, cioè da tantivy e dalle quattro view ufficiali, per avere un
+  `fub-features`, cioè da tantivy e dalle quattro view ufficiali, per avere un
   doppio dell'host. Il banco del contratto non può stare dentro un cliente del
   contratto.
-- **Un crate `fubmd-conformance` a sé.** Un terzo crate per una suite che ha
+- **Un crate `fub-conformance` a sé.** Un terzo crate per una suite che ha
   esattamente le stesse dipendenze dell'SDK — la frase qui contava le funzioni, e
   il numero non le serviva
   ([0060](0060-il-modello-dice-il-vero-sui-byte.md)). La linea che divide i crate

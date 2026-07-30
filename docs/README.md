@@ -1,9 +1,9 @@
-# La documentazione di FubMD
+# La documentazione di Fub
 
 Tutta la prosa del repo sta qui dentro. Fuori da `docs/` restano solo il
-[README della radice](../README.md) — cos'è FubMD e come si avvia — e tre
-cartelli di poche righe in `frontend/`, `crates/fubmd-abi/wit/` e
-`crates/fubmd-abi/wit/frozen/`, che dicono soltanto quale documento di qui
+[README della radice](../README.md) — cos'è Fub e come si avvia — e tre
+cartelli di poche righe in `frontend/`, `crates/fub-abi/wit/` e
+`crates/fub-abi/wit/frozen/`, che dicono soltanto quale documento di qui
 riguarda quella cartella. Più [LICENSE-MIT](../LICENSE-MIT) e
 [LICENSE-APACHE](../LICENSE-APACHE), che stanno in radice perché è lì che li
 cercano gli strumenti che rilevano una licenza, e che non sono prosa di questo
@@ -36,7 +36,7 @@ scoperto.
 organizzato in sedute; una seduta per file in [roadmap/](roadmap/).
 
 **Devo sapere cosa dovrà saper fare l'app.** [FEATURES.md](FEATURES.md) — il
-catalogo di FubMD e della futura FubSuite. È un elenco di destinazione, non di
+catalogo di Fub e della futura FubSuite. È un elenco di destinazione, non di
 stato.
 
 **Devo contribuire, o segnalare qualcosa.**
@@ -69,7 +69,7 @@ pubblico, e stanno qui e non in radice per la stessa regola di tutto il resto:
 | [SECURITY.md](SECURITY.md) | dove si segnala una vulnerabilità, cos'è dentro il perimetro, cosa è già presidiato | chi sposta il perimetro — a M5 lo sposta il sandbox WASM |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1, traduzione ufficiale, ripreso e non riscritto | nessuno: è testo importato |
 | [versionamento.md](versionamento.md) | i tre numeri di versione — crate, contratto, schemi su disco — e cosa promette ciascuno | chi alza uno `SCHEMA_VERSION` o tocca `ABI_VERSION` |
-| [CHANGELOG.md](CHANGELOG.md) | cosa cambia per chi usa FubMD, versione per versione | chi rilascia |
+| [CHANGELOG.md](CHANGELOG.md) | cosa cambia per chi usa Fub, versione per versione | chi rilascia |
 
 ## Le convenzioni
 
@@ -110,7 +110,7 @@ verifica ogni link relativo del repo e fallisce se ne trova uno rotto. Conta
 anche gli alberi che salta e i file che controlla: se un giorno ne controllasse
 nove invece di un centinaio, lo direbbe invece di stampare «0 rotti».
 
-**Quello che non è documentazione.** `docs/.fubmd/` è ciò che FubMD scrive
+**Quello che non è documentazione.** `docs/.fub/` è ciò che Fub scrive
 quando si apre `docs/` come vault: l'organizzazione della sidebar in cima, e
 sotto `data/` l'indice di ricerca e gli snapshot del versioning. È ignorato da
 git e non va modificato a mano: quegli snapshot sono la memoria di com'erano i

@@ -24,11 +24,11 @@ La voce è chiusa. L'8.2 e l'8.3 restano aperte, e adesso hanno su cosa poggiare
 
 | Componente | File | Cosa possiede |
 |---|---|---|
-| [`DocumentStore`](../../crates/fubmd-kernel/src/documents.rs) | `documents.rs` | il disco, e come ciò che ci sta sopra diventa un modello: vault, registro dei formati, sintassi innestate (§3.1), renderer dei blocchi custom (§3.2) |
-| [`Indexes`](../../crates/fubmd-kernel/src/index/mod.rs) | `index/` | il canale dati: metadati, grafo, tag, gli indici registrati e il routing (§5.1, §5.2) |
-| [`ProviderRegistry`](../../crates/fubmd-kernel/src/providers.rs) | `providers.rs` | chi è registrato, cosa ha dichiarato, chi possiede quale nome: le sei tabelle, il registro dei plugin (0021), le due catene di chiamate in corso |
-| [`Dispatcher`](../../crates/fubmd-kernel/src/dispatcher.rs) | `dispatcher.rs` | quando un evento parte, con che nome e per quanto: bus, coda, lotto (0011), origine (0012), budget, coda dei job |
-| [`Session`](../../crates/fubmd-kernel/src/session.rs) | `session.rs` | cosa sta guardando l'utente adesso: il contesto del pannello con il focus (0007) |
+| [`DocumentStore`](../../crates/fub-kernel/src/documents.rs) | `documents.rs` | il disco, e come ciò che ci sta sopra diventa un modello: vault, registro dei formati, sintassi innestate (§3.1), renderer dei blocchi custom (§3.2) |
+| [`Indexes`](../../crates/fub-kernel/src/index/mod.rs) | `index/` | il canale dati: metadati, grafo, tag, gli indici registrati e il routing (§5.1, §5.2) |
+| [`ProviderRegistry`](../../crates/fub-kernel/src/providers.rs) | `providers.rs` | chi è registrato, cosa ha dichiarato, chi possiede quale nome: le sei tabelle, il registro dei plugin (0021), le due catene di chiamate in corso |
+| [`Dispatcher`](../../crates/fub-kernel/src/dispatcher.rs) | `dispatcher.rs` | quando un evento parte, con che nome e per quanto: bus, coda, lotto (0011), origine (0012), budget, coda dei job |
+| [`Session`](../../crates/fub-kernel/src/session.rs) | `session.rs` | cosa sta guardando l'utente adesso: il contesto del pannello con il focus (0007) |
 
 Da **ventiquattro** campi piatti a **cinque** proprietari. Nessun cambiamento di
 comportamento: le 51 suite di test passano identiche, prima e dopo.
@@ -119,5 +119,5 @@ comportamento: le 51 suite di test passano identiche, prima e dopo.
   presa prima di toccare il file. È la prova che conta per un refactor che non
   deve cambiare comportamento: nessun test è stato aggiunto, tolto o adattato.
 - `cargo fmt` — i file toccati sono a posto. (`syntax.rs` e
-  `fubmd-features/tests/custom_blocks_e2e.rs` hanno diff di formato
+  `fub-features/tests/custom_blocks_e2e.rs` hanno diff di formato
   **preesistenti**, non introdotti qui e non sistemati qui.)

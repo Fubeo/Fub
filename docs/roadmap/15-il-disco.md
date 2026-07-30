@@ -14,7 +14,7 @@ del file, e `text_policy` rileva senza convertire perché il catalogo (§2.4) ch
 fedeltà e non normalizzazione. La 15.4 era la P0 della seduta ed è **chiusa** con
 la
 [0048](../decisions/0048-una-radice-sola.md): dentro un vault la radice è una
-sola (`.fubmd/`, coi derivati in `.fubmd/data/`), la mappa di chi scrive dove sta
+sola (`.fub/`, coi derivati in `.fub/data/`), la mappa di chi scrive dove sta
 in [architecture/on-disk-layout.md](../architecture/on-disk-layout.md), e delle
 tre forme in cui la classe di un dato si può dichiarare è scelta la seconda
 radice per plugin — additiva, quindi implementabile dopo M3. Ciò che scadeva col
@@ -85,7 +85,7 @@ network share), 2.3 (drive rimovibili).
       silenzio, che è il criterio della [seduta 20](20-quando-qualcosa-va-storto.md).
 - [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
       sopravvivere a un crash (2.1, 24.2).
-- [ ] **Journal delle mutazioni** (append-only in `.fubmd/data/`): base di
+- [ ] **Journal delle mutazioni** (append-only in `.fub/data/`): base di
       rollback dell'import (17.3), undo delle automazioni (16.3), audit (23.3) —
       e della **transazione atomica per operazione batch** che il 22.4 promette
       al centro di comando LLM, insieme al «rollback completo dell'operazione».
@@ -111,13 +111,13 @@ network share), 2.3 (drive rimovibili).
       in repo, applicata al caso difficile. Non è un buco: è il modello.
 - [ ] **Non ce l'ha chi scrive JSON nudo**: il sidecar del cestino
       (`vault.rs`, un `serde_json::to_string` senza campo di versione). Erano
-      due: `.fubmd/workspace.json` ce l'ha dal §11.3
+      due: `.fub/workspace.json` ce l'ha dal §11.3
       ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)), insieme alla
       scrittura atomica e al rifiuto di sovrascrivere ciò che non si è letto —
       quindi il modello adesso ha tre esempi e questa voce ne ha uno solo da
       raggiungere. **Quattro**, da quando esiste l'anagrafe
       ([0046](../decisions/0046-l-anagrafe-del-vault.md)):
-      `.fubmd/data/entries.json` nasce col campo di versione, e non perché serva
+      `.fub/data/entries.json` nasce col campo di versione, e non perché serva
       a migrare — un derivato non si migra, si rifà — ma perché senza un numero
       in testa la versione dopo dovrebbe *indovinare* che un file senza campo
       viene da prima. È l'avvertenza di questa seduta applicata: la versione si
@@ -148,13 +148,13 @@ network share), 2.3 (drive rimovibili).
       quarto con la [0046](../decisions/0046-l-anagrafe-del-vault.md), ognuno con
       la classe scritta **in prosa in testa al proprio modulo**. È la ripetizione
       che questa voce esisteva per togliere.
-- [x] **Le radici erano due, e una basta**: `.fubmd/` per l'autorevole e
-      `.fubmd-data/` per il derivato. Adesso è una — `.fubmd/`, coi derivati in
-      `.fubmd/data/` — e la deduzione per radice resta vera un livello più in
+- [x] **Le radici erano due, e una basta**: `.fub/` per l'autorevole e
+      `.fub-data/` per il derivato. Adesso è una — `.fub/`, coi derivati in
+      `.fub/data/` — e la deduzione per radice resta vera un livello più in
       basso, che è la ragione per cui la forma è annidata e non piatta. Un vault
       scritto prima si sposta con un rename all'apertura
       (`kernel/vault.rs::migrate_layout`), e due alberi insieme non si fondono:
-      si rifiutano. `.trash/` **resta fuori**, perché non è roba di FubMD: è il
+      si rifiutano. `.trash/` **resta fuori**, perché non è roba di Fub: è il
       cestino condiviso con Obsidian, e dentro ci sono file dell'utente.
 - [x] **Il nome «durabilità» designa un'altra cosa, e va scartato prima di
       scegliere la forma**: la durabilità è fsync e scrittura atomica, ed è il
@@ -175,7 +175,7 @@ network share), 2.3 (drive rimovibili).
 - [ ] **Implementarla.** Due capacità in più su `HostApi` (`cache_read`,
       `cache_write`, più le compagne di `data_list`/`data_remove` se servono) e
       lo spazio autorevole di un plugin che sale di un livello, da
-      `.fubmd/data/plugins/<id>/` a `.fubmd/plugins/<id>/`, con la stessa
+      `.fub/data/plugins/<id>/` a `.fub/plugins/<id>/`, con la stessa
       disciplina di rename della 0048. È **additiva** — `HostApi` la implementa
       l'host, non il guest — quindi non scade col freeze e può seguire M3; e va
       fatta **prima di M5**, perché finché i plugin sono i nostri otto gli

@@ -7,7 +7,7 @@
 // sola, ma il contratto lo legge tutta la shell.
 //
 // Che non divergano dal Rust non è affidato all'attenzione: la fixture generata
-// da serde (`crates/fubmd-features/tests/ts_mirror.rs` e la gemella dell'app)
+// da serde (`crates/fub-features/tests/ts_mirror.rs` e la gemella dell'app)
 // e `mirror.test.ts` rendono rossi entrambi i lati se un lato cambia.
 //
 // E una parte non è più rispecchiata affatto: le union di stringhe degli `enum`
@@ -67,11 +67,11 @@ export interface OpenVaults {
 }
 
 // Quanto l'host si fida di chi ha prodotto qualcosa (rispecchia
-// fubmd_kernel::Trust). Dal più fidato al meno; `revoked` non gira affatto.
+// fub_kernel::Trust). Dal più fidato al meno; `revoked` non gira affatto.
 export type Trust = "core" | "verified" | "community" | "development" | "revoked";
 
 // Che specie di cosa un plugin ha registrato
-// (rispecchia fubmd_kernel::RegistrationKind).
+// (rispecchia fub_kernel::RegistrationKind).
 export type RegistrationKind =
   | "view"
   | "command"
@@ -82,7 +82,7 @@ export type RegistrationKind =
   | "syntax"
   | "renderer";
 
-// Una cosa che un plugin ha registrato (rispecchia fubmd_kernel::Registration).
+// Una cosa che un plugin ha registrato (rispecchia fub_kernel::Registration).
 export interface Registration {
   kind: RegistrationKind;
   // L'id registrato. Per handler e importer — che non nominano niente di
@@ -91,7 +91,7 @@ export interface Registration {
 }
 
 // Una riga dell'inventario di ciò che è attivo (rispecchia
-// fubmd_kernel::PluginInfo).
+// fub_kernel::PluginInfo).
 export interface PluginInfo {
   id: string;
   name: string;
@@ -114,7 +114,7 @@ export function hasPlugin(info: VaultInfo, id: string): boolean {
   return info.plugins.some((p) => p.id === id && p.trust !== "revoked");
 }
 
-// Una versione salvata (rispecchia fubmd_features::versioning::VersionRef).
+// Una versione salvata (rispecchia fub_features::versioning::VersionRef).
 export interface VersionRef {
   // Istante dello snapshot in millisecondi UNIX: è anche la sua identità.
   // Resta un number: i millisecondi non arrivano a 2^53 e qui ci si fa
@@ -122,7 +122,7 @@ export interface VersionRef {
   ts: number;
   // Impronta u64 PIENA: attraversa l'IPC come stringa, perché `JSON.parse`
   // perde i bit oltre 2^53 in silenzio. È la regola di confine per gli u64
-  // identità/impronta (vedi `fubmd_abi::ipc`); si confronta con ===, mai
+  // identità/impronta (vedi `fub_abi::ipc`); si confronta con ===, mai
   // con l'aritmetica.
   hash: string;
   size: number;
@@ -133,7 +133,7 @@ export interface BacklinkRef {
   context: string | null;
 }
 
-// --- l'errore (rispecchia fubmd_abi::error::PluginError, §12.2) -------------
+// --- l'errore (rispecchia fub_abi::error::PluginError, §12.2) -------------
 
 // Il `kind` di un fallimento: le dodici specie che il contratto sa distinguere.
 //
@@ -165,7 +165,7 @@ export interface PluginError {
   message: string;
 }
 
-// --- UI dichiarativa (rispecchia fubmd_abi::ui) -----------------------------
+// --- UI dichiarativa (rispecchia fub_abi::ui) -----------------------------
 
 // L'azione attaccata a un nodo: l'id e il payload che il PROVIDER si porta
 // dietro. Il payload torna a lui intatto: la shell non lo legge e non lo
@@ -327,7 +327,7 @@ export interface UiAction {
 }
 
 // Aggiornamento restituito da un ViewProvider dopo un'azione
-// (rispecchia fubmd_abi::ui::ViewUpdate). Il frontend lo interpreta: `replace`
+// (rispecchia fub_abi::ui::ViewUpdate). Il frontend lo interpreta: `replace`
 // ridisegna la view, `navigate` apre un documento, `none` non fa nulla.
 export type ViewUpdate =
   | { kind: "replace"; root: UiNode }
@@ -342,7 +342,7 @@ export type ViewUpdate =
   // un errore: è una view cambiata sotto, che si ridisegnerà intera.
   | { kind: "patch"; key: string; node: UiNode };
 
-// Evento del kernel (rispecchia fubmd_abi::event::Event).
+// Evento del kernel (rispecchia fub_abi::event::Event).
 export type KernelEvent =
   | { type: "vault_opened"; root: string }
   | { type: "document_changed"; id: string }
@@ -350,7 +350,7 @@ export type KernelEvent =
   | { type: "document_renamed"; from: string; to: string }
   // NB: dentro un lotto questo NON arriva — arriva `batch_ended`. Chi reagisce
   // a `index_updated` deve reagire anche a quello, o dopo una rinomina con
-  // backlink non si ridisegna più (fubmd_abi::event, decisione 0011).
+  // backlink non si ridisegna più (fub_abi::event, decisione 0011).
   | { type: "index_updated" }
   // Esito di un job in background (HostApi::spawn_job). `id` è un u64
   // identità: attraversa l'IPC come stringa (vedi VersionRef.hash).
@@ -407,27 +407,27 @@ export type KernelEvent =
   // guasto non sta qui: lo dice `origin.actor`.
   | { type: "trouble"; severity: Severity; subject: string | null; error: PluginError };
 
-// Quanto pesa ciò che è andato storto (rispecchia fubmd_abi::event::Severity).
+// Quanto pesa ciò che è andato storto (rispecchia fub_abi::event::Severity).
 // Due gradini, come i due toni del centro notifiche, e il criterio del taglio è
 // la CLASSE DEL DATO perso (decisione 0048): un derivato si ricostruisce
 // riaprendo il vault ed è un avviso; ciò che era autorevole non torna ed è un
 // guasto.
 export type { Severity } from "./enums.generated";
 
-// DOVE: il soggetto di un abbonamento (rispecchia fubmd_abi::event::Subject,
+// DOVE: il soggetto di un abbonamento (rispecchia fub_abi::event::Subject,
 // §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un
 // cittadino del kernel; la stringa vuota è la radice.
 export type Subject =
   | { kind: "document"; id: string }
   | { kind: "folder"; path: string };
 
-// A COSA si è abbonati (rispecchia fubmd_abi::event::EventMask, §10.1): le
+// A COSA si è abbonati (rispecchia fub_abi::event::EventMask, §10.1): le
 // specie, i prefissi di topic dei custom, il soggetto. I tre sono in AND, e
 // ognuno vuoto vuol dire *non filtro*.
 //
 // Applicarla non è affare di questo file: la regola è **una sola** e sta in
 // `rules/mirrored.ts` (`maskWants`), gemella di
-// `fubmd_abi::rules::events::mask_wants` e legata a lei dalla fixture generata.
+// `fub_abi::rules::events::mask_wants` e legata a lei dalla fixture generata.
 export interface EventMask {
   kinds: KernelEvent["type"][];
   topics: string[];
@@ -435,7 +435,7 @@ export interface EventMask {
 }
 
 // Chi ha CHIESTO l'operazione da cui un evento nasce (rispecchia
-// fubmd_abi::event::Actor). Non chi l'ha eseguita: un comando invocato da
+// fub_abi::event::Actor). Non chi l'ha eseguita: un comando invocato da
 // un'automazione porta l'origine dell'automazione.
 export type Actor =
   | { kind: "user" }
@@ -443,7 +443,7 @@ export type Actor =
   | { kind: "kernel" }
   | { kind: "plugin"; id: string };
 
-// Da dove viene un evento (fubmd_abi::event::Origin). `batch` è `null` fuori da
+// Da dove viene un evento (fub_abi::event::Origin). `batch` è `null` fuori da
 // un lotto.
 export interface Origin {
   actor: Actor;
@@ -451,14 +451,14 @@ export interface Origin {
 }
 
 // Ciò che il ponte Tauri consegna davvero: l'evento E la sua origine
-// (fubmd_abi::event::Notice, decisione 0012).
+// (fub_abi::event::Notice, decisione 0012).
 export interface KernelNotice {
   event: KernelEvent;
   origin: Origin;
 }
 
 // La dichiarazione di una view offerta da un provider (rispecchia
-// fubmd_abi::traits::ViewSpec). `placement` dice DOVE montarla; `refresh` e
+// fub_abi::traits::ViewSpec). `placement` dice DOVE montarla; `refresh` e
 // `follows` dicono QUANDO ridisegnarla: gli eventi del kernel al cui arrivo
 // serve un nuovo `render_view`, e le parti del contesto di sessione al cui
 // cambio la view invecchia. Chi non dichiara `follows` non si ridisegna per il
@@ -492,7 +492,7 @@ export interface ViewInstance {
   params: unknown;
 }
 
-// --- comandi (rispecchia fubmd_abi::command) --------------------------------
+// --- comandi (rispecchia fub_abi::command) --------------------------------
 //
 // Il registro: la shell non cabla nessun comando — legge le spec, chiede i
 // parametri che dichiarano e decide dal raggio dichiarato se mostrare prima il
@@ -551,7 +551,7 @@ export interface CommandSpec {
 // Come si invoca: eseguire, o chiedere cosa succederebbe.
 export type { InvokeMode } from "./enums.generated";
 
-// La modifica chirurgica (rispecchia fubmd_abi::edit): `base` è la revisione
+// La modifica chirurgica (rispecchia fub_abi::edit): `base` è la revisione
 // OPACA del sorgente su cui gli span sono stati calcolati — si confronta, non
 // si interpreta.
 export interface TextEdit {
@@ -604,7 +604,7 @@ export interface CommandOutcome {
   undo: Undo | null;
 }
 
-// Come si torna indietro da un'operazione (rispecchia fubmd_abi::command::Undo).
+// Come si torna indietro da un'operazione (rispecchia fub_abi::command::Undo).
 //
 // LE DUE PILE NON SI FONDONO, e da questo lato del confine è la cosa da
 // ricordare: `Mod-z` nell'editor annulla il **testo del buffer** e non passa di
@@ -622,7 +622,7 @@ export type UndoStep =
   | { kind: "edit"; value: PlannedEdit }
   | { kind: "command"; command: string; args: unknown };
 
-// --- contesto di sessione (rispecchia fubmd_abi::session) -------------------
+// --- contesto di sessione (rispecchia fub_abi::session) -------------------
 //
 // L'unico tipo che viaggia nel verso opposto agli altri: lo COSTRUISCE la
 // shell e lo consuma il kernel (`setActiveContext`). Ogni campo è obbligatorio
@@ -654,7 +654,7 @@ export interface ViewContext {
   mode: PaneMode;
 }
 
-// --- il locale (rispecchia fubmd_abi::locale) ------------------------------
+// --- il locale (rispecchia fub_abi::locale) ------------------------------
 //
 // Il secondo tipo che viaggia dalla shell al kernel, e per la stessa ragione
 // del contesto: lo sa la shell e non il kernel. Qui `Intl` porta un ICU intero
@@ -694,7 +694,7 @@ export interface Locale {
 export const MAIN_PANE = "main";
 
 // Un documento **reso**: l'HTML, e le parti dichiarative che la shell monta da
-// sé (rispecchia `fubmd_kernel::RenderedDocument`).
+// sé (rispecchia `fub_kernel::RenderedDocument`).
 //
 // Non è una stringa sola perché un blocco custom può uscire come albero `UiNode`
 // invece che come markup (§3.2): l'HTML porta un buco `data-ui-slot="N"` e la
@@ -719,7 +719,7 @@ export interface EmbedContent extends RenderedDocument {
   doc_id: string;
 }
 
-// Intervallo in byte (rispecchia fubmd_abi::model::Span).
+// Intervallo in byte (rispecchia fub_abi::model::Span).
 export interface Span {
   start: number;
   end: number;
@@ -730,8 +730,8 @@ export interface Span {
 // ---------------------------------------------------------------------------
 //
 // La shell non ha più `search`, `list_tags` e `graph_data`: ha `query_index`,
-// come un plugin. Questi tipi rispecchiano `fubmd_abi::query` e la parte index
-// di `fubmd_abi::traits`, e il presidio è la fixture generata da Rust
+// come un plugin. Questi tipi rispecchiano `fub_abi::query` e la parte index
+// di `fub_abi::traits`, e il presidio è la fixture generata da Rust
 // (`mirror.test.ts`): una variante aggiunta là non può restare non gestita qui.
 //
 // La stringa che l'utente digita non è più una sintassi: è il campo `text` di
@@ -742,7 +742,7 @@ export interface Span {
 // In che verso si cammina il grafo dei link.
 export type { LinkDirection } from "./enums.generated";
 
-// Il bersaglio NON RISOLTO di un link (rispecchia fubmd_abi::model::LinkTarget).
+// Il bersaglio NON RISOLTO di un link (rispecchia fub_abi::model::LinkTarget).
 // Tag ADIACENTE (`kind` + `value`): due varianti su tre portano uno scalare, e
 // col tag interno non attraverserebbero il JSON.
 //
@@ -787,7 +787,7 @@ export interface PropertyFilter {
   test: unknown;
 }
 
-// Le foglie del linguaggio (rispecchia fubmd_abi::query::QueryPredicate).
+// Le foglie del linguaggio (rispecchia fub_abi::query::QueryPredicate).
 export type QueryPredicate =
   | ({ kind: "text" } & TextQuery)
   | { kind: "property"; filter: PropertyFilter }
@@ -868,7 +868,7 @@ export interface Paged<T> {
   total: number;
 }
 
-// Un documento che ha combaciato (rispecchia fubmd_abi::traits::DocumentMatch).
+// Un documento che ha combaciato (rispecchia fub_abi::traits::DocumentMatch).
 // `snippet` è testo semplice, MAI markup: si inserisce come testo. Le porzioni
 // da evidenziare sono `highlights`, intervalli in byte dentro `snippet`.
 // I campi opzionali sono **omessi** quando non ci sono: una selezione senza
@@ -887,7 +887,7 @@ export interface DocumentMatch {
   occurrences?: DocPosition[];
 }
 
-// UN PUNTO DENTRO UN DOCUMENTO (rispecchia fubmd_abi::traits::DocPosition).
+// UN PUNTO DENTRO UN DOCUMENTO (rispecchia fub_abi::traits::DocPosition).
 // `span` è in byte del SORGENTE; `anchor` è l'ancora del blocco che lo ospita
 // quando ce n'è una; `revision` dice DI QUANDO — uno span invecchia appena il
 // documento cambia sotto, e senza sapere di quale sorgente parla si porterebbe
@@ -898,7 +898,7 @@ export interface DocPosition {
   revision: string;
 }
 
-// Cosa nomina un riferimento (rispecchia fubmd_abi::traits::ResolvedRef):
+// Cosa nomina un riferimento (rispecchia fub_abi::traits::ResolvedRef):
 // QUALE documento e, quando il riferimento porta un punto e quel punto esiste
 // ancora, DOVE DENTRO.
 export interface ResolvedRef {
@@ -936,7 +936,7 @@ export interface Heading {
   span: Span;
 }
 
-// Una interrogazione (rispecchia fubmd_abi::traits::IndexQuery).
+// Una interrogazione (rispecchia fub_abi::traits::IndexQuery).
 export type IndexQuery =
   | {
       kind: "documents";
@@ -1005,7 +1005,7 @@ export type IndexQuery =
   // assente = ogni cartella del vault, a ogni profondità.
   | { kind: "folders"; under?: FolderScope | null; page?: Page | null };
 
-// La risposta (rispecchia fubmd_abi::traits::IndexResult). Tag ADIACENTE
+// La risposta (rispecchia fub_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
 // il JSON col tag interno.
 export type IndexResult =
@@ -1080,7 +1080,7 @@ export interface FolderScope {
 
 // --- le impostazioni (§11.1) ------------------------------------------------
 //
-// Rispecchiano `fubmd_abi::settings`. Il pezzo che si vede da qui e da nessun
+// Rispecchiano `fub_abi::settings`. Il pezzo che si vede da qui e da nessun
 // altro lato: **il form lo genera questa shell**, dallo schema. Un provider
 // dichiara cosa si può configurare e legge i valori dall'`HostApi`; disegnare i
 // campi è della shell, e per questo questi tipi vivono nel contratto e non in un
@@ -1088,7 +1088,7 @@ export interface FolderScope {
 // da cui ogni pannello (questo, quello di un plugin, una CLI) sa costruirla.
 
 // DOVE un'impostazione ha il diritto di stare. Le chiavi `machine` scritte in un
-// `.fubmd/settings.json` si IGNORANO: un vault arriva da fuori, e non decide
+// `.fub/settings.json` si IGNORANO: un vault arriva da fuori, e non decide
 // della macchina di chi lo apre.
 export type { SettingScope } from "./enums.generated";
 
@@ -1132,7 +1132,7 @@ export interface SettingEntry {
 }
 
 // Un componente che questo host sa montare, e se è acceso (rispecchia
-// `fubmd_host::BundleInfo`, §11.1).
+// `fub_host::BundleInfo`, §11.1).
 //
 // Non è `PluginInfo`: quello elenca chi è DICHIARATO NEL KERNEL, e un componente
 // spento non lo è affatto. La differenza è il punto — «spento» e «non c'è» sono
@@ -1143,13 +1143,13 @@ export interface BundleInfo {
   mounted: boolean;
 }
 
-// Un vault che questa macchina conosce (rispecchia `fubmd_host::VaultEntry`,
+// Un vault che questa macchina conosce (rispecchia `fub_host::VaultEntry`,
 // §11.1): la memoria fra un avvio e l'altro, che è un'altra cosa da `OpenVaults`
 // — quello dice cosa è aperto ADESSO e muore col processo.
 //
 // Si chiama `KnownVault` e non `VaultEntry` come il tipo Rust perché in Rust i
 // due `VaultEntry` — questo e quello dell'anagrafe
-// (`fubmd_abi::traits::VaultEntry`, sopra) — stanno in crate diversi, e in
+// (`fub_abi::traits::VaultEntry`, sopra) — stanno in crate diversi, e in
 // TypeScript no: due `interface` omonime **si fondono in silenzio**, e il
 // risultato sarebbe un tipo con dieci campi che nessuna delle due parti
 // riconosce. Il nome che cede è questo, perché l'altro è nel contratto
@@ -1166,7 +1166,7 @@ export interface KnownVault {
 }
 
 // Che rapporto ha questo vault con il disco (rispecchia
-// fubmd_abi::traits::VaultStatus, §9.7). Tre domande diverse e non una: FubMD
+// fub_abi::traits::VaultStatus, §9.7). Tre domande diverse e non una: Fub
 // SAPREBBE che il vault è cambiato; è GIÀ successo qualcosa che non ha saputo
 // leggere; e cosa.
 export interface VaultStatus {
@@ -1180,7 +1180,7 @@ export interface VaultStatus {
   last_sync_error: string | null;
 }
 
-// A CHE PUNTO è un lavoro lungo (rispecchia fubmd_abi::traits::JobProgress,
+// A CHE PUNTO è un lavoro lungo (rispecchia fub_abi::traits::JobProgress,
 // §10.3). Un record solo per tutti e due i modi di saperlo: l'evento
 // `job_progress`, che lo dice quando cambia, e `JobStatus`, che lo dice a chi
 // arriva dopo e chiede.
@@ -1192,7 +1192,7 @@ export interface JobProgress {
   label: string | null;
 }
 
-// Un lavoro lungo VIVO (rispecchia fubmd_abi::traits::JobStatus, §10.3): da
+// Un lavoro lungo VIVO (rispecchia fub_abi::traits::JobStatus, §10.3): da
 // `job_started` a `job_done`, quindi anche quelli che aspettano un thread
 // libero — uno in coda si annulla come uno in volo, e chi guarda deve poterlo
 // vedere per poterlo fermare.
@@ -1208,13 +1208,13 @@ export interface JobStatus {
 }
 
 // Un tag del vault con quante note lo portano (rispecchia
-// fubmd_abi::traits::TagCount). `name` è senza `#`, gerarchia intatta (`a/b`).
+// fub_abi::traits::TagCount). `name` è senza `#`, gerarchia intatta (`a/b`).
 export interface TagCount {
   name: string;
   count: number;
 }
 
-// Una voce del cestino (rispecchia fubmd_kernel::vault::TrashEntry).
+// Una voce del cestino (rispecchia fub_kernel::vault::TrashEntry).
 export interface TrashEntry {
   // Dove il file si trova ora, dentro `.trash/`.
   id: string;
@@ -1225,9 +1225,9 @@ export interface TrashEntry {
   size: number;
 }
 
-// L'organizzazione del vault (rispecchia fubmd_abi::organization::Organization):
+// L'organizzazione del vault (rispecchia fub_abi::organization::Organization):
 // icone, note appuntate, ordinamenti per-cartella, spazi. Vive nel sidecar
-// `.fubmd/workspace.json` dentro il vault, e dal §11.3 lo possiede il KERNEL —
+// `.fub/workspace.json` dentro il vault, e dal §11.3 lo possiede il KERNEL —
 // prima erano due funzioni dell'host con `std::fs` nudo, e questo tipo si
 // chiamava `WorkspaceMeta` perché era dell'app. Le chiavi sono path relativi al
 // vault: DocId per le note, path senza slash finale per le cartelle ("" è la

@@ -1,0 +1,37 @@
+[package]
+name = "fub-abi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Contratto Fub: modello documento comune + trait di estensione, definiti una volta sola. Nessuna dipendenza da markdown, tauri o wasm."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# NFC nell'unico punto di normalizzazione delle chiavi di risoluzione
+# (rules::path::resolution_key): macOS scrive i nomi file in NFD, i link
+# digitati sono NFC. Era del kernel finché la regola era del kernel; è salita
+# con lei, perché una chiave di risoluzione che il contratto promette e che solo
+# il kernel sa calcolare è la definizione del problema che `rules` chiude.
+unicode-normalization = "0.1"
+
+# INVARIANTE ARCHITETTURALE: questo crate NON deve mai dipendere da
+# comrak/pulldown, tauri, wasmtime, tokio, notify. È il firewall anti-lock-in.
+# Le dipendenze sono tabelle e macro, niente I/O e niente runtime: è la
+# condizione perché il crate resti compilabile a wasm32 per la shell (§6.2).
+
+[dev-dependencies]
+# Solo per i test (es. wit_conformance): gli integration test non vedono le
+# dipendenze normali del crate. Nessun impatto sull'invariante — che riguarda
+# le dipendenze NORMALI ed è verificata da tests/dependency_invariant.rs.
+serde_json = { workspace = true }
+# Il test di conformità PARSA wit/fub/abi.wit invece di cercarci dentro delle
+# sottostringhe: un contratto invalido deve essere un test rosso.
+wit-parser = { version = "0.254", default-features = false, features = ["std"] }
+# L'ordine dei casi di un variant È il discriminante ABI, ma il compilatore
+# garantisce solo l'esaustività, non l'ordine: il test parsa i sorgenti degli
+# enum e deriva l'ordine atteso dalla dichiarazione Rust — un riordino è rosso
+# da entrambi i lati.
+syn = { version = "2", default-features = false, features = ["full", "parsing"] }

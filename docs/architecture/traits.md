@@ -1,6 +1,6 @@
 # Superficie dei trait di estensione
 
-Tutti i trait di estensione sono definiti **una volta sola** in `fubmd-abi`
+Tutti i trait di estensione sono definiti **una volta sola** in `fub-abi`
 (`src/format.rs` e `src/traits.rs`). Le feature ufficiali li implementano in modo
 nativo; i plugin di terzi (M5) li implementeranno via proxy WASM. **Il kernel vede
 sempre `dyn Trait`** e non sa quale backend c'è dietro.
@@ -11,7 +11,7 @@ Torna a [../PIANO.md](../PIANO.md) · vedi [data-model.md](data-model.md),
 ## Regola d'oro
 
 Ogni argomento e ogni valore di ritorno di ogni trait è:
-- un tipo di `fubmd-abi`, `Serialize + Deserialize`;
+- un tipo di `fub-abi`, `Serialize + Deserialize`;
 - esprimibile come **record/variant/resource WIT**;
 - senza reference con lifetime nella memoria del kernel, senza trait object nelle
   firme dei dati, senza closure.
@@ -25,19 +25,19 @@ pesante, il vault camminato per intero) passa dai **job** —
 giro sincrono del kernel e con le capacità in mano, prese una chiamata alla volta
 ([decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)).
 
-Da **M2** un `crates/fubmd-abi/wit/fubmd/*.wit` vivente rende la regola
+Da **M2** un `crates/fub-abi/wit/fub/*.wit` vivente rende la regola
 verificabile a ogni commit (vedi [M4](../milestones/M4-wit-hardening.md) per il
 congelamento formale).
 
 ## I nove trait
 
-Le firme qui sotto sono la copia fedele del contratto (`fubmd-abi`). Se il codice
+Le firme qui sotto sono la copia fedele del contratto (`fub-abi`). Se il codice
 diverge, il codice ha ragione: aggiornare questo documento.
 
 ### `FormatProvider` — `src/format.rs`
 
 L'astrazione su "come si comporta un formato". Markdown è il primo provider
-(nativo, `fubmd-format-markdown`).
+(nativo, `fub-format-markdown`).
 
 ```rust
 pub trait FormatProvider: Send + Sync {
@@ -57,7 +57,7 @@ Tipi di supporto: `FormatDescriptor { id, name, extensions, source }`,
 **La mappa con namespace** ([decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)).
 `OptionMap` è `ns:nome` → parametro: **presente = acceso**, il valore è il
 dettaglio, un `false` esplicito spegne. Il namespace è di chi definisce la voce
-(`fubmd` per il core, l'id del plugin per gli altri); le chiavi del core stanno
+(`fub` per il core, l'id del plugin per gli altri); le chiavi del core stanno
 in `options::{syntax, render_option, permission}`. Prima erano N booleani, e con
 quella forma ogni sintassi del capitolo 5.2 costava un campo del contratto.
 
@@ -210,7 +210,7 @@ Chiuso **alla sottrazione**, non alla crescita: da quel giro in avanti aggiunger
 un metodo è una minor, toglierne uno una major. La 0013 ne contava ventidue;
 oggi, contando le funzioni delle quattordici interfacce `host-*` di
 `abi.wit`, sono **trentaquattro**. Quel giro ha **tolto** `storage_get/set` — l'unica rottura, con la linea
-di base ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit` — e ha deciso a
+di base ritagliata in `crates/fub-abi/wit/frozen/0.1.0.wit` — e ha deciso a
 verbale anche le capacità che restano fuori: allegati (§14.1; il modello ora c'è
 con la [0046](../decisions/0046-l-anagrafe-del-vault.md), e la capacità di
 scrittura sarà **additiva** quando qualcuno la chiederà), rete (§9.1 + §7.3),
@@ -257,20 +257,20 @@ Le altre le ha chieste il **dogfooding**, un cliente vero alla volta — è cos�
 un buco nel contratto si scopre prima del freeze, invece che a M5:
 
 - `data_*` — storage persistente per-plugin. Il plugin nomina **blob** con path
-  relativi; lo spazio (`.fubmd/data/plugins/<id>/`) lo assegna l'host, che
+  relativi; lo spazio (`.fub/data/plugins/<id>/`) lo assegna l'host, che
   rifiuta path assoluti, `..` e separatori di sistema con `PermissionDenied`.
 - `now_unix_millis` — l'orologio dell'host. WASI può negarlo a un componente, e
   un tempo che passa dal confine è un tempo che i test possono fermare.
 - `list_documents` — **a finestra**. Senza, `read_document` serve solo per gli id
   che arrivano dagli eventi: nessun plugin potrebbe guardarsi intorno su
   `VaultOpened`. *(Queste tre le ha chieste il versioning, che nella prima
-  stesura usava `std::fs` e `fubmd_kernel::time`: funzionava da nativo, e un
+  stesura usava `std::fs` e `fub_kernel::time`: funzionava da nativo, e un
   plugin WASM no.)*
 - `query_index` — la porta di `Workspace::query_index` aperta ai provider, stesso
   dispatch. `&self`: una query non muta, e così una view la serve sotto prestito
   condiviso.
 - `active_context` — pannello, documento, selezione, modalità (`ViewContext`, in
-  `fubmd_abi::session`). La view lo **chiede**; a scriverlo è solo la shell
+  `fub_abi::session`). La view lo **chiede**; a scriverlo è solo la shell
   (`Workspace::set_active_context`). Scartati l'evento (`render_view(&self)` è
   immutabile) e l'argomento di `render_view` (obbligo per ogni view a portarsi un
   contesto che non usa). Era `active_document() -> Option<DocId>`, che non regge
@@ -308,7 +308,7 @@ un buco nel contratto si scopre prima del freeze, invece che a M5:
 
 **Il recinto del vault vale anche qui.** `read_document`/`write_document`
 validano il `DocId` con la stessa regola dei comandi IPC
-(`fubmd_kernel::valid_doc_id`) e rispondono `PermissionDenied` a una risalita —
+(`fub_kernel::valid_doc_id`) e rispondono `PermissionDenied` a una risalita —
 lo stesso errore di `data_*`. Serve perché un importer nomina i documenti a
 partire dal **nome di una sorgente**, cioè da una stringa che l'utente non ha
 scritto.
@@ -379,7 +379,7 @@ fallisce con `Conflict` invece di sovrascrivere. `docs` è l'insieme impattato
 completo — ci sta anche ciò che un `EditRequest` non esprime — e **lo completa
 l'host** con i documenti degli edit: quell'elenco è ciò che l'utente approva.
 
-**I provider veri: `CoreCommands`** (`fubmd-features/src/commands.rs`), nove
+**I provider veri: `CoreCommands`** (`fub-features/src/commands.rs`), nove
 comandi — `search.open`, `selection.wikilink` (contesto di sessione
 [0007](../decisions/0007-contesto-di-sessione.md) + modifica chirurgica
 [0008](../decisions/0008-modifica-chirurgica.md)), `vault.replace` (N note,
@@ -395,11 +395,11 @@ effetto, non dati). Due dettagli decisi lì: `note.rename` dichiara
 note che linkavano — e il suo piano le **nomina**, chiedendole all'indice;
 `note.trash` è `reversible` perché `trash.restore` sta nello stesso registro.
 
-Prove: `crates/fubmd-kernel/tests/invoke_command.rs` (le due garanzie, con
+Prove: `crates/fub-kernel/tests/invoke_command.rs` (le due garanzie, con
 comandi che provano *apposta* a violarle),
-`crates/fubmd-kernel/tests/structural_host.rs` (le capacità nuove viste dal lato
+`crates/fub-kernel/tests/structural_host.rs` (le capacità nuove viste dal lato
 del plugin, e `run_command` che compone) e
-`crates/fubmd-features/tests/commands_e2e.rs` (il ciclo di vita di una nota
+`crates/fub-features/tests/commands_e2e.rs` (il ciclo di vita di una nota
 chiesto solo al registro).
 
 #### Tornare indietro: due pile che non si incontrano
@@ -445,11 +445,11 @@ sequenceDiagram
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
 | la pila del testo | [editor.ts:148](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
-| `UndoStack` | [undo.rs:49](../../crates/fubmd-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
-| `Undo` / `UndoStep` | [command.rs:567](../../crates/fubmd-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:3217](../../crates/fubmd-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:3233](../../crates/fubmd-kernel/src/workspace.rs) | pop, replay, un lotto solo |
-| `vault.undo` | [commands.rs:88](../../crates/fubmd-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
+| `UndoStack` | [undo.rs:49](../../crates/fub-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
+| `Undo` / `UndoStep` | [command.rs:567](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
+| dove si spinge | [workspace.rs:3217](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:3233](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo |
+| `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
 
 Le due pile non si fondono perché non hanno lo stesso soggetto: ordinarle
 insieme vorrebbe dire mettere in fila «ho scritto tre lettere» e «ho rinominato
@@ -465,7 +465,7 @@ revisione di `EditRequest::base`, e torna un `PluginError::Conflict`. È la
 Due assenze da non disegnare: **il redo non esiste** (è un'altra pila, e non c'è),
 e la pila non si legge dal canale dati — nessuna `IndexQuery` la nomina. Al
 confine `HostApi::undo_last` costa **due** capacità, `Commands` e `VaultWrite`
-([guard.rs:591](../../crates/fubmd-kernel/src/host/guard.rs)): senza la seconda,
+([guard.rs:591](../../crates/fub-kernel/src/host/guard.rs)): senza la seconda,
 un host di sola lettura avrebbe una scala per riscrivere il vault.
 
 ### `ViewProvider` — UI dichiarativa (M2: graph/outline/tag panel)
@@ -487,10 +487,10 @@ vault, `follows` per le parti del contesto di sessione. Chi dichiara
 ([0011](../decisions/0011-il-lotto.md)) il primo non arriva, e il secondo è ciò
 che fa fare **un** ridisegno dove prima ne faceva N — la regola è
 `EventMask::misses_batches()`, verificata su ogni view ufficiale in
-`fubmd-features/tests/view_refresh_masks.rs`.
+`fub-features/tests/view_refresh_masks.rs`.
 `UiNode`/`UiAction`/`ViewUpdate` sono in [ui-protocol.md](ui-protocol.md).
 
-**I quattro provider veri** (`fubmd-features`), ognuno cliente di una parte
+**I quattro provider veri** (`fub-features`), ognuno cliente di una parte
 diversa del contratto:
 
 - **backlink** — è ciò che ha esercitato il trait per intero e fatto emergere
@@ -509,7 +509,7 @@ diversa del contratto:
   span.
 
 Prove end-to-end col kernel vero:
-`crates/fubmd-features/tests/{backlinks,outline,tags,stats}_view_e2e.rs`.
+`crates/fub-features/tests/{backlinks,outline,tags,stats}_view_e2e.rs`.
 
 **Il varco unico degli alberi di UI.** I provider si registrano con
 `Workspace::register_view_provider(id, trust, provider)`, dove
@@ -521,7 +521,7 @@ ufficiale e inaccettabile da un plugin sandboxato). Ogni albero entra da
 fidato, a qualunque profondità e anche quando arriva come `ViewUpdate::Replace`.
 Oggi nessun provider non fidato esiste e la validazione è un no-op: il punto
 esiste **prima** del primo, perché aggiungerlo dopo vorrebbe dire cercarlo fra N
-chiamanti (`crates/fubmd-kernel/tests/view_trust.rs`).
+chiamanti (`crates/fub-kernel/tests/view_trust.rs`).
 
 ### `IndexProvider` — ricerca (M2: tantivy)
 
@@ -682,7 +682,7 @@ dovrebbe essere `'static`, e l'host del kernel *è* un prestito `&mut Workspace`
 
 L'identità la assegna chi registra — `Workspace::register_index_provider(id,
 index)`, che registra **e attiva** — e determina lo spazio dati concesso.
-`SearchIndex` è registrato con `SEARCH_ID = "fubmd.search"`.
+`SearchIndex` è registrato con `SEARCH_ID = "fub.search"`.
 
 **Il caso di tantivy.** Il manifest passa da `data_*`; la cartella dei segmenti
 no, e non potrebbe: un motore di ricerca mmappa i propri file e li rilegge quando
@@ -726,7 +726,7 @@ sequenceDiagram
     participant C as chi chiede<br/>(comando IPC, view, job)
     participant W as Workspace
     participant P as pianificatore<br/>index/plan.rs
-    participant K as CoreIndex<br/>fubmd.core
+    participant K as CoreIndex<br/>fub.core
     participant S as SearchIndex<br/>ricerca
     participant R as rules::properties
 
@@ -748,13 +748,13 @@ sequenceDiagram
 
 | Riquadro | Dove | Cosa fa qui |
 |---|---|---|
-| `Workspace::query_index` | [workspace.rs:2692](../../crates/fubmd-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
-| `plan::run` | [plan.rs:49](../../crates/fubmd-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
-| `sole_evaluator` | [plan.rs:213](../../crates/fubmd-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
-| `RouteTable` | [routing.rs:57](../../crates/fubmd-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |
-| `CoreIndex` | [core.rs:618](../../crates/fubmd-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
-| `Matches::and` | [query.rs:377](../../crates/fubmd-abi/src/query.rs) | la fusione; `QueryEvaluator` ha una implementazione sola, quella del contratto |
-| `properties::finish` | [properties.rs:232](../../crates/fubmd-abi/src/rules/properties.rs) | ordine, colonne e finestra, in coda e per tutti: rompe la parità per `DocId` o la paginazione ripete righe |
+| `Workspace::query_index` | [workspace.rs:2692](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
+| `plan::run` | [plan.rs:49](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
+| `sole_evaluator` | [plan.rs:213](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
+| `RouteTable` | [routing.rs:57](../../crates/fub-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |
+| `CoreIndex` | [core.rs:618](../../crates/fub-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
+| `Matches::and` | [query.rs:377](../../crates/fub-abi/src/query.rs) | la fusione; `QueryEvaluator` ha una implementazione sola, quella del contratto |
+| `properties::finish` | [properties.rs:232](../../crates/fub-abi/src/rules/properties.rs) | ordine, colonne e finestra, in coda e per tutti: rompe la parità per `DocId` o la paginazione ripete righe |
 
 **Le due chiamate sono in fila, non insieme.** Il kernel non parallelizza una
 query per conto proprio, ed è una decisione e non un debito: la concorrenza gliela
@@ -765,14 +765,14 @@ spezzi in due. Quel che il pianificatore evita non è il tempo di attesa, è il
 lavoro: chiede a ciascuno la sua foglia e nient'altro.
 
 Il passo che il disegno non mostra sta dentro le frecce 6 e 8: `resolve_for`
-([plan.rs:246](../../crates/fubmd-kernel/src/index/plan.rs)) riscrive ogni
+([plan.rs:246](../../crates/fub-kernel/src/index/plan.rs)) riscrive ogni
 letterale che il destinatario **non** sa valutare in un `QueryPredicate::Docs`
 già risolto. È il motivo per cui una foglia sola può arrivare a un indice che
 della domanda originale conosceva metà.
 
 E le due risposte negative restano distinte fino in fondo: se nessuno ha
 dichiarato la famiglia il pianificatore produce `PluginError::Unserved`
-([error.rs:106](../../crates/fubmd-abi/src/error.rs)); se il proprietario c'è e
+([error.rs:106](../../crates/fub-abi/src/error.rs)); se il proprietario c'è e
 fallisce, il suo errore **risale così com'è** — `plan::run` non lo riavvolge. La
 differenza fra «non c'è nessuno» e «c'è, e ha sbagliato» è una domanda che si fa
 una volta sola, quando qualcosa non funziona, ed è troppo tardi per aggiungerla.
@@ -914,10 +914,10 @@ EntryRenamed { from, to, kind } }`,
   `com.acmecorp:x`. Il filtro di soggetto vale per i soli eventi che un documento
   lo **nominano** (`Event::names`): un rename ne nomina due, e `Overflow`,
   `VaultClosed` e `JobDone` non ne nominano nessuno e passano comunque. La regola
-  sta in `fubmd_abi::rules::events` perché la applicano in due: il kernel per
+  sta in `fub_abi::rules::events` perché la applicano in due: il kernel per
   consegnare, la shell per decidere quando ridisegnare.
 
-**Dispatch (implementato in `fubmd-kernel`).** Gli handler girano dentro al
+**Dispatch (implementato in `fub-kernel`).** Gli handler girano dentro al
 kernel **a coda, mai ricorsivamente**: ogni operazione mutante del `Workspace`
 accoda i propri eventi e li drena alla fine, e un handler che durante `handle`
 emette eventi o scrive documenti accoda invece di rientrare. Un budget di
@@ -935,7 +935,7 @@ rimandato dentro la chiamata a un provider: a metà di un'operazione il vault è
 uno stato che non è mai esistito per nessuno. Conseguenza: un handler non può più
 creare un conflitto di `base` scrivendo *dentro* una rinomina, perché quando gira
 la rinomina è finita. La guardia della base resta per chi scrive fuori dal giro.
-Prove: `fubmd-kernel/tests/batch_and_origin.rs`.
+Prove: `fub-kernel/tests/batch_and_origin.rs`.
 
 ### `ImportProvider` / `ExportProvider` — import ed export (`src/transfer.rs`)
 
@@ -989,13 +989,13 @@ albero di file), `ExportRequest { selection, target, options }` con
 «cosa c'è in questa cartella» deve avere una risposta sola.
 
 **I provider veri: `MarkdownImport` e `MarkdownExport`**
-(`fubmd-format-markdown`), registrati con
+(`fub-format-markdown`), registrati con
 `Workspace::register_import_provider(id, p)` / `register_export_provider(id, p)`.
 `Workspace::import` sceglie il **primo** provider il cui `can_handle` dice sì (la
 domanda è esplicita e non dedotta da un `BadArgs`: provare vorrebbe dire
 scrivere); `Workspace::export` risolve la destinazione sul suo proprietario.
 Prove: `tests/transfer_e2e.rs` nel crate markdown e
-`fubmd-kernel/tests/transfer_dispatch.rs` per il protocollo.
+`fub-kernel/tests/transfer_dispatch.rs` per il protocollo.
 
 Resta fuori, dichiarato: **rollback e resume** (l'inverso di un lotto, sopra il
 journal del §15.2), il **lavoro lungo** che vede il vault (§9.1: oggi un import
@@ -1048,7 +1048,7 @@ del crate-contratto), ma cablata progressivamente.
 
 Ogni tipo che attraversa una firma di trait mappa su un costrutto WIT. Questa
 tabella è il checklist di conformità di M4; il `wit/` vivente di M2 la
-materializza in `crates/fubmd-abi/wit/fubmd/*.wit` + test abi↔WIT.
+materializza in `crates/fub-abi/wit/fub/*.wit` + test abi↔WIT.
 
 | Tipo abi | Costrutto WIT |
 |---|---|
@@ -1095,7 +1095,7 @@ materializza in `crates/fubmd-abi/wit/fubmd/*.wit` + test abi↔WIT.
 | `IndexLoss` | `record { id, why }` — cosa un indice non ha preso ([0051](../decisions/0051-l-alimentazione-risponde.md)) |
 | `Notice`/`Origin` | `record` (interface `events`): è ciò che `event-handler.handle` riceve — l'evento **e** chi lo ha chiesto |
 | `Actor` | `variant { user, watcher, kernel, plugin(actor-plugin) }` — il payload è un record col solo `id` |
-| `BatchId` | `type batch-id = u64` — sul confine JSON è una **stringa** (regola di `fubmd_abi::ipc`), come `job-id` |
+| `BatchId` | `type batch-id = u64` — sul confine JSON è una **stringa** (regola di `fub_abi::ipc`), come `job-id` |
 | `TransferNote`/`NoteLevel` | `record` / `enum` (interface `transfer`: due interfacce le condividono, quindi il tipo sta in una terza) |
 | `ImportSource`/`ImportRequest`/`ImportedDocument`/`ImportReport` | `record` (interface `importer`); `bytes: list<u8>` — nessun campo porta un percorso |
 | `ImportMode`/`ConflictPolicy` | `enum` |
@@ -1139,7 +1139,7 @@ In pratica: `Vec<Inline>` diventa `list<inline-ref>` (`inline-ref = u32`),
 `record document-tree { blocks, inlines, roots }` (per l'UI,
 `record ui-tree { nodes, root }`). **I tipi Rust nativi non si toccano.**
 
-**La conversione esiste già, e non nel proxy: è `fubmd_abi::arena`.** Il modulo
+**La conversione esiste già, e non nel proxy: è `fub_abi::arena`.** Il modulo
 contiene i mirror piatti (`arena::Block`/`Inline`/`UiNode`, con gli indici come
 **newtype**), `DocumentTree`/`UiTree` con `flatten`/`rebuild`, e `arena::Span`
 con le due conversioni di larghezza. Le proprietà sotto test:
@@ -1172,9 +1172,9 @@ in `model::Block` non compila finché non entra anche nell'arena.
 
 ### Come la conformità è verificata
 
-`crates/fubmd-abi/tests/wit_conformance.rs` **parsa**
-`crates/fubmd-abi/wit/fubmd/abi.wit` con `wit-parser` (dev-dependency:
-l'invariante di `fubmd-abi` riguarda le dipendenze normali) e confronta **nomi e
+`crates/fub-abi/tests/wit_conformance.rs` **parsa**
+`crates/fub-abi/wit/fub/abi.wit` con `wit-parser` (dev-dependency:
+l'invariante di `fub-abi` riguarda le dipendenze normali) e confronta **nomi e
 tipi dichiarati**, non sottostringhe del sorgente. Quattro pressioni:
 
 1. un WIT che non parsa è rosso;

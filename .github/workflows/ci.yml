@@ -4,7 +4,7 @@
 # documenti dichiarano "verificata dai test" vale solo sulla macchina di chi si
 # ricorda di lanciarli. Linux è la piattaforma primaria di sviluppo; Windows e
 # macOS sono supportati, e una regressione cross-OS deve emergere subito —
-# soprattutto sui path (`camino`/`Utf8Path`) e sui lock file di `.fubmd/data/`.
+# soprattutto sui path (`camino`/`Utf8Path`) e sui lock file di `.fub/data/`.
 
 name: CI
 
@@ -31,16 +31,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
-      - name: Conformità abi ↔ crates/fubmd-abi/wit/fubmd/abi.wit
-        run: cargo test -p fubmd-abi --test wit_conformance
+      - name: Conformità abi ↔ crates/fub-abi/wit/fub/abi.wit
+        run: cargo test -p fub-abi --test wit_conformance
       # La conformità confronta abi e WIT fra di loro, OGGI. Questa confronta il
-      # contratto con crates/fubmd-abi/wit/frozen/, cioè con com'era quando è stato pubblicato:
+      # contratto con crates/fub-abi/wit/frozen/, cioè con com'era quando è stato pubblicato:
       # è la promessa del freeze di M4 ("si cresce solo per aggiunta") resa
-      # meccanica. Vedi crates/fubmd-abi/wit/frozen/README.md.
-      - name: Additività del contratto (crates/fubmd-abi/wit/frozen/)
-        run: cargo test -p fubmd-abi --test wit_additivity
+      # meccanica. Vedi crates/fub-abi/wit/frozen/README.md.
+      - name: Additività del contratto (crates/fub-abi/wit/frozen/)
+        run: cargo test -p fub-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
-        run: cargo test -p fubmd-abi --test dependency_invariant
+        run: cargo test -p fub-abi --test dependency_invariant
       # Il terzo confine, e l'unico che si GENERA: le union di stringhe del
       # mirror TS sono emesse dagli enum senza payload del contratto
       # (decisione 0053). Sta qui e non solo nel `cargo test --workspace`
@@ -48,7 +48,7 @@ jobs:
       # `frontend/src/host/enums.generated.ts` è stantio e la shell sta
       # nominando dei casi che in Rust non ci sono più.
       - name: le union del mirror TS sono derivate dai tipi Rust
-        run: cargo test -p fubmd-abi --test ts_enums
+        run: cargo test -p fub-abi --test ts_enums
 
   # Licenze, advisory e provenienza delle dipendenze, più l'SBOM. È l'unica
   # parte del piano il cui costo cresce con il numero di dipendenze già entrate:
@@ -71,11 +71,11 @@ jobs:
       # alla domanda "cosa c'è dentro questa build", che a valle si fa una volta
       # sola e sempre troppo tardi.
       - name: Genera l'SBOM
-        run: cargo sbom --output-format spdx_json_2_3 > fubmd-sbom.spdx.json
+        run: cargo sbom --output-format spdx_json_2_3 > fub-sbom.spdx.json
       - uses: actions/upload-artifact@v4
         with:
           name: sbom-spdx
-          path: fubmd-sbom.spdx.json
+          path: fub-sbom.spdx.json
 
   fmt:
     name: fmt + clippy

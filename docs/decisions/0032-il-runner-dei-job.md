@@ -234,11 +234,11 @@ provider venga — costa la chiamata, non il vault.**
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning; anche
-  `-p fubmd-host --no-default-features`.
+  `-p fub-host --no-default-features`.
 - `cargo clippy --workspace --all-targets` — pulita.
 - `cargo test --workspace` — **61 suite, 0 fallimenti**. Sono le 59 della
   [0031](0031-chi-possiede-i-bundle.md) più due:
-  - `fubmd-host/tests/il_runner.rs` — cinque prove: un job accodato che parte da
+  - `fub-host/tests/il_runner.rs` — cinque prove: un job accodato che parte da
     solo e scrive nel vault, un job annullato che riceve rifiuti alla chiamata
     successiva (e la prima scrittura che resta fatta, perché annullare non è
     disfare), il job puro che arriva in fondo comunque, il job che pania senza
@@ -246,7 +246,7 @@ provider venga — costa la chiamata, non il vault.**
     nessun job sparisca in silenzio. Le prove non dormono: usano una barriera a
     due tempi, perché un test che aspetta un tempo fisso prova la macchina su cui
     gira;
-  - `fubmd-kernel/tests/il_panico.rs` — cinque prove, una per specie: un comando
+  - `fub-kernel/tests/il_panico.rs` — cinque prove, una per specie: un comando
     (e la seconda metà che conta, che si può **richiamare**), una view che pania
     *agendo* senza svuotare la tabella prestata, un handler che non ferma la
     scrittura che lo ha svegliato, un indice che continua a essere interpellato
@@ -269,7 +269,7 @@ provider venga — costa la chiamata, non il vault.**
 - **Contratto:** `PluginError::Cancelled` / `cancelled(string)` è **in coda** al
   variant, quindi additiva; `wit_conformance` (che verifica anche l'ordine dei
   casi contro la dichiarazione Rust) e `wit_additivity` (contro
-  `crates/fubmd-abi/wit/frozen/0.1.0.wit`) sono verdi.
+  `crates/fub-abi/wit/frozen/0.1.0.wit`) sono verdi.
 - **Mirror TS invariato**: `UPDATE_MIRROR=1` su `ts_mirror_app` e `ts_mirror` non
   produce nessuna differenza — `PluginError` non attraversa l'IPC come tipo.
   `cd frontend && npx vitest run` (11 file, 173 test) e `npx tsc --noEmit`:

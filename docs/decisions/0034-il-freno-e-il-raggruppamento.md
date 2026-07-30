@@ -58,7 +58,7 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
   — la scansione di un vault grande, una sincronizzazione che tocca mille note —
   è tutto dall'altra parte.
 - **La classificazione sta nel contratto, non nei due freni.**
-  `Event::is_recoverable()` è in `fubmd-abi` accanto agli eventi: i freni sono
+  `Event::is_recoverable()` è in `fub-abi` accanto agli eventi: i freni sono
   **due** (il tetto del bus e il tetto della raffica), e una seconda idea di cosa
   sia sacrificabile sarebbe un evento perso in silenzio da uno dei due. Ogni
   variante nuova del contratto deve rispondere a quella domanda, e il `match`
@@ -120,7 +120,7 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
 - **Due inviti a riconciliare di fila sono uno.** Se nella raffica c'era già un
   `Overflow` — dal tetto del bus, o dal budget del dispatch — il suo conto si
   **somma** invece di aggiungere un secondo invito.
-- **Il ponte è un modulo suo** (`fubmd-host/src/bridge.rs`), e la riga che decide
+- **Il ponte è un modulo suo** (`fub-host/src/bridge.rs`), e la riga che decide
   *quando* accenderlo è rimasta in `Host::open`: quel momento — dopo la
   scansione, prima che il rilevatore possa emettere — lo conosce solo chi apre, e
   non è una politica del ponte. Il `EventSink` non è cambiato: resta un notice
@@ -188,17 +188,17 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
 ## Verifica
 
 - `cargo build --workspace` e `cargo clippy --workspace --all-targets` — pulite,
-  zero warning; anche `-p fubmd-host --no-default-features`.
+  zero warning; anche `-p fub-host --no-default-features`.
 - `cargo test --workspace` — **64 suite, 0 fallimenti**. Le nuove di questa metà:
-  - `fubmd-kernel/src/bus.rs` — quattro prove: la consegna con l'origine (c'era),
+  - `fub-kernel/src/bus.rs` — quattro prove: la consegna con l'origine (c'era),
     il subscriber che non ritira mai e **smette di crescere** col conto dei persi
     che quadra col totale, l'esito di un job che passa il tetto comunque, e chi
     si rimette in pari che torna a ricevere tutto;
-  - `fubmd-host/src/bridge.rs` — sei prove sulla politica pura: cento copie che
+  - `fub-host/src/bridge.rs` — sei prove sulla politica pura: cento copie che
     diventano una, l'ultima occorrenza che vince, l'assorbenza delle istanze, i
     fatti distinti che non si fondono, il degrado col conto e la posizione
     giuste, e la raffica sotto il tetto che non perde niente;
-  - `fubmd-host/tests/il_ponte.rs` — quattro prove sul ponte vero, con la
+  - `fub-host/tests/il_ponte.rs` — quattro prove sul ponte vero, con la
     barriera: mille `index-updated` che attraversano una volta sola, l'esito di
     un job e un custom che attraversano interi e al proprio posto, il tetto che
     dice «riconcilia» col conto esatto, e il vault fermo in cui ogni fatto arriva

@@ -17,7 +17,7 @@ comandi — e sono **una sola domanda vista da cinque lati**: *dove sta ciò che
 l'utente decide, e chi lo può cambiare?*
 
 Prima di questa decisione la risposta era: da nessuna parte, e chiunque. Il
-versioning si spegneva con `FUBMD_VERSIONING`, cioè con una variabile d'ambiente
+versioning si spegneva con `FUB_VERSIONING`, cioè con una variabile d'ambiente
 che l'app non può scrivere e l'utente non può trovare. Il livello **globale non
 esisteva affatto** — nessun posto dove tenere i vault recenti, i preferiti, il
 tema, le scorciatoie — e la conseguenza si vedeva a due sedute di distanza: la
@@ -72,9 +72,9 @@ Ne seguono due proprietà che valgono da sole il campo:
 ### Due livelli, e il terzo non è un livello
 
 Il §11.1 ne nominava tre: globale → vault → profilo/portable. I livelli sono
-**due** — il vault (`.fubmd/settings.json`, che viaggia) e la macchina — e il
+**due** — il vault (`.fub/settings.json`, che viaggia) e la macchina — e il
 terzo non è un posto in cui cercare un valore: è **dove sta** il livello
-macchina, e lo decide chi monta (`fubmd_host::config_dir`). Un terzo strato di
+macchina, e lo decide chi monta (`fub_host::config_dir`). Un terzo strato di
 merge sarebbe stato un terzo posto in cui la stessa chiave vale un'altra cosa,
 senza che nessuno dei tre sappia dire chi ha vinto.
 
@@ -94,7 +94,7 @@ e hanno due firme.
 sicurezza**. Un vault è dato che arriva da fuori — si scarica, si sincronizza, lo
 passa un collega — e un vault che potesse decidere impostazioni della macchina
 sarebbe un file che cambia il comportamento di chi lo apre. Le chiavi
-`SettingScope::Machine` scritte dentro un `.fubmd/settings.json` **si ignorano**,
+`SettingScope::Machine` scritte dentro un `.fub/settings.json` **si ignorano**,
 e non in silenzio: chi le legge raccoglie un avviso che nomina la chiave.
 
 È anche la ragione per cui il livello macchina è **condiviso** fra tutti i vault
@@ -109,7 +109,7 @@ sappia.
 Un programma che scrive un'impostazione passa da **due** cancelli, e nessuno dei
 due basta da solo:
 
-1. il permesso `fubmd:write-settings` nel manifest — dice **chi**;
+1. il permesso `fub:write-settings` nel manifest — dice **chi**;
 2. `SettingSpec.program_writable` sulla chiave — dice **cosa**.
 
 Il secondo è la risposta alla domanda che la
@@ -187,7 +187,7 @@ lo controlla.
 ### Un file che non si è letto non si riscrive
 
 Vale per tutti e tre i file di questa voce, ed è la seconda metà di una regola
-che da sola non basta. Un `.fubmd/settings.json` malformato non impedisce di
+che da sola non basta. Un `.fub/settings.json` malformato non impedisce di
 aprire il vault: si riparte da vuoto e si raccoglie un avviso che nomina il file.
 Fatto solo così, però, la configurazione dell'utente sopravvive per il tempo di
 **una** scrittura — perché scrivere una chiave riscrive il file intero, e lo
@@ -294,12 +294,12 @@ saperlo anche quando la coda è piena.
   non contiene segreti per la riga qui sopra. Un plugin di tema che non potesse
   leggere `editor.font-size` perché non è sua sarebbe un plugin di tema inutile.
   Ciò che è recintato è la scrittura.
-- **`FUBMD_CONFIG_DIR` come variabile d'ambiente.** Sopravvive di proposito,
+- **`FUB_CONFIG_DIR` come variabile d'ambiente.** Sopravvive di proposito,
   mentre questa voce toglie le altre: è il **bootstrap**. Dove stanno le
   impostazioni è l'unica cosa che non può essere un'impostazione, e una variabile
-  che dice *dove cercare* è diversa da una che dice *cosa fare*. `FUBMD_VAULT`
+  che dice *dove cercare* è diversa da una che dice *cosa fare*. `FUB_VAULT`
   resta per la stessa specie di ragione: non è una preferenza che dura, è un
-  argomento di avvio — il gemello del `fubmd <path>` che la CLI del 27.1 avrà.
+  argomento di avvio — il gemello del `fub <path>` che la CLI del 27.1 avrà.
 - **Una dipendenza per la cartella di configurazione** (`dirs`, `directories`).
   Sono venti righe di variabili d'ambiente documentate da vent'anni, contro un
   albero di crate in un progetto che ne dichiara l'SBOM
@@ -321,10 +321,10 @@ saperlo anche quando la coda è piena.
   chiave di configurazione ma una mappa indicizzata da `PaneId`; il **layout** ha
   più configurazioni per lo stesso utente, quindi non è un valore ma un insieme
   nominato. Nessuno dei due entra in questo store, e la ragione sta scritta in
-  `fubmd_abi::settings` (dove la leggerà chi fosse tentato di infilarceli).
-- **Il §11.3** — il sidecar `.fubmd/workspace.json` da assorbire — resta aperto.
+  `fub_abi::settings` (dove la leggerà chi fosse tentato di infilarceli).
+- **Il §11.3** — il sidecar `.fub/workspace.json` da assorbire — resta aperto.
   Questa voce gli ha però costruito ciò che serviva: la stessa cartella
-  (`.fubmd/`), la scrittura atomica e la versione di schema che quel file non ha.
+  (`.fub/`), la scrittura atomica e la versione di schema che quel file non ha.
 - **La migrazione della chiave sul rename** (§11.3) e la **primitiva generale di
   scrittura atomica** (§15.3): `write_atomic` è `pub` nel kernel con un cliente
   solo fuori (il registro dei vault), e il §15.3 la sposterà senza riscriverla.
@@ -353,7 +353,7 @@ saperlo anche quando la coda è piena.
   perché il pannello glielo chiede, non perché ci sia un evento che lo dica. Un
   secondo osservatore — un'altra finestra, una CLI — non lo saprebbe. Il canale
   giusto è quello del §20.2 e delle view invalidate, non una chiamata in più.
-- **Il canale per gli avvisi di lettura.** Un `.fubmd/settings.json` malformato,
+- **Il canale per gli avvisi di lettura.** Un `.fub/settings.json` malformato,
   una chiave di macchina scritta in un vault, un valore fuori specie: sono
   avvisi, e oggi finiscono su `stderr` come tutto il resto (§20.2). Il pannello
   ha dove metterli il giorno che ci sarà un canale.

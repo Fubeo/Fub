@@ -60,7 +60,7 @@ dopo una rinomina con backlink o una sostituzione in blocco. L'alternativa
 cioè il costo che la voce esiste per togliere. Perciò la regola è una sola —
 *chi dichiara `index-updated` dichiara anche `batch-ended`* — e non è una nota
 nella prosa: è `EventMask::misses_batches()` nel contratto e un test su ogni view
-ufficiale (`fubmd-features/tests/view_refresh_masks.rs`), con la stessa funzione
+ufficiale (`fub-features/tests/view_refresh_masks.rs`), con la stessa funzione
 che un plugin chiama sulla propria maschera.
 
 *Un lotto non è una transazione, e non si chiama come una.* Niente `tx`, niente

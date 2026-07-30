@@ -21,15 +21,15 @@ con la 16.5 come la seduta chiedeva). E la 16.6 dopo la 5.4 era già soddisfatta
 quando è stata presa.
 
 Il cappello diceva anche che 16.1 e 16.2 erano due banchi **diversi**, e che non
-potevano stare nello stesso crate perché «`fubmd-kernel` nel grafo dell'SDK
+potevano stare nello stesso crate perché «`fub-kernel` nel grafo dell'SDK
 violerebbe l'invariante che `dependency_invariant.rs` presidia». La conclusione
 regge — le due voci sono chiuse da due verbali, la
 [0054](../decisions/0054-il-banco-del-lato-provider.md) e la
 [0055](../decisions/0055-il-banco-del-lato-host.md) — ma **la ragione era
-falsa**: quel file non nominava `fubmd-sdk` da nessuna parte. L'invariante c'era
+falsa**: quel file non nominava `fub-sdk` da nessuna parte. L'invariante c'era
 nelle intenzioni e non nel test, e adesso c'è in tutti e due. La ragione vera è
-più stretta di quella che il cappello dava: `fubmd-sdk` è dipendenza **normale**
-di `fubmd-format-markdown` **oggi**, quindi il kernel là dentro non finirebbe nel
+più stretta di quella che il cappello dava: `fub-sdk` è dipendenza **normale**
+di `fub-format-markdown` **oggi**, quindi il kernel là dentro non finirebbe nel
 grafo di un futuro guest — finirebbe nella libreria di un provider che esiste.
 
 Ed è il primo caso in cui un cappello di seduta ha dichiarato in anticipo una
@@ -67,7 +67,7 @@ dichiarata guardando le voci insieme, come la seduta chiede.
 
 *ex §4.7 · presidi · **P1** — la precondizione (la 16.2) è **soddisfatta** · **in due tempi**, e il primo è piccolo*
 
-- [ ] **`fubmd-features` è un crate solo**: tantivy è dipendenza dell'intero
+- [ ] **`fub-features` è un crate solo**: tantivy è dipendenza dell'intero
       crate, quindi compilare il pannello outline compila un motore di ricerca.
       Con i moduli di 21.2 (FubTasks, FubDB, FubCanvas, FubCalendar, FubAI,
       FubMaps…) diventa un monolite con il grafo di dipendenze di venti feature,
@@ -98,7 +98,7 @@ dichiarata guardando le voci insieme, come la seduta chiede.
 
 *ex §4.2 · presidi · **chiusa** con la [0057](../decisions/0057-la-dieta-dell-ipc.md); resta una casella, ed è un numero che un test presidia*
 
-- [x] **Test che presidia la superficie.** C'è: `crates/fubmd-app/tests/dieta_ipc.rs`
+- [x] **Test che presidia la superficie.** C'è: `crates/fub-app/tests/dieta_ipc.rs`
       estrae dal sorgente due insiemi indipendenti — i comandi *definiti* e i
       comandi *registrati* — e li confronta con un'allowlist in cui ogni riga
       porta **la ragione** per cui quel comando non poteva essere un comando del
@@ -178,7 +178,7 @@ la forma dell'annotazione, la seconda contro la prima.
       dicono una cosa che le otto di sopra non dicevano. La prima è nella
       [0054](../decisions/0054-il-banco-del-lato-provider.md): «un terzo crate per
       **otto** funzioni», e una tabella che ne elencava otto, dove
-      `grep -c "^pub fn " crates/fubmd-sdk/src/testing/conformita.rs` oggi ne
+      `grep -c "^pub fn " crates/fub-sdk/src/testing/conformita.rs` oggi ne
       conta **ventitré** — ma il punto non è lo scarto, è che ne contava
       **quattordici già nel commit che scriveva «otto»**. Non un numero
       invecchiato: un numero che **nessuno ha mai ricavato dalla sua sorgente**, e
@@ -195,7 +195,7 @@ la forma dell'annotazione, la seconda contro la prima.
 - [ ] **E un giro di verifica fatto chiudendo quella mezza voce ne ha trovate
       altre cinque, più un bersaglio nuovo.** Non sono riparate lì — sono il
       lavoro di questa voce — e stanno scritte col comando accanto perché chi la
-      prende le trovi. `crates/fubmd-abi/wit/fubmd/abi.wit` è **3400 righe di cui
+      prende le trovi. `crates/fub-abi/wit/fub/abi.wit` è **3400 righe di cui
       1697 di commento** dove la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md)
       e [M4](../milestones/M4-wit-hardening.md) dicono 3386 e 1683 (`wc -l`,
       `grep -cE '^\s*//'`) — e lo stesso criterio dà i numeri vecchi *esatti* al
@@ -231,7 +231,7 @@ la forma dell'annotazione, la seconda contro la prima.
       ricostruirla altrove. La **sesta**, che le batte tutte: la *garanzia
       dichiarata* che non è mai esistita — il cappello di questa seduta diceva
       che il kernel dentro l'SDK «violerebbe l'invariante che
-      `dependency_invariant.rs` presidia», e quel file non nominava `fubmd-sdk`
+      `dependency_invariant.rs` presidia», e quel file non nominava `fub-sdk`
       da nessuna parte ([0054](../decisions/0054-il-banco-del-lato-provider.md),
       che l'ha scritto). Le prime cinque riguardano una **descrizione**
       invecchiata di qualcosa che esiste; questa no — non c'è niente da
@@ -275,7 +275,7 @@ la forma dell'annotazione, la seconda contro la prima.
       Che è precisamente ciò che questo presidio già fa, un livello più in giù.
 - [x] **Il terzo presidio che si spegneva da solo è già chiuso.**
       `.github/scripts/check-doc-links.mjs` saltava ogni cartella con un
-      `.fubmd/` dentro, e bastava aprire `docs/` come vault perché il controllo
+      `.fub/` dentro, e bastava aprire `docs/` come vault perché il controllo
       passasse da **68 file e 718 link a 9 file e 17 link** stampando «0 rotti»
       in entrambi i casi. **Fatto**, e con la causa invece del solo sintomo: la
       regola del vault resta ma non si applica a una cartella in cui **git tiene

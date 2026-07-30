@@ -22,7 +22,7 @@ ha deciso la sola cosa che col contratto scadeva: **dove non vanno**. Lo stato d
 vista è per-macchina *e per-pannello*, quindi non è una chiave di configurazione
 ma una mappa indicizzata da `PaneId`; il layout ha più configurazioni per lo
 stesso utente, quindi non è un valore ma un insieme nominato. Nessuno dei due
-entra in quello store, e la ragione sta scritta in `fubmd_abi::settings` — dove
+entra in quello store, e la ragione sta scritta in `fub_abi::settings` — dove
 la leggerà chi fosse tentato di infilarceli.
 
 Poi la [0037](../decisions/0037-lo-stato-di-vista.md) ha eseguito **metà** del
@@ -81,7 +81,7 @@ scrive.
       chiavi di configurazione**. Lo stato di vista è per-macchina *e
       per-pannello* — una mappa indicizzata da `PaneId`, non un valore per
       chiave — e il layout ha più configurazioni per lo stesso utente, quindi è
-      un insieme nominato. La ragione sta in `fubmd_abi::settings`, dove la
+      un insieme nominato. La ragione sta in `fub_abi::settings`, dove la
       legge chi fosse tentato di infilarceli.
 - [ ] **Resta il layout** — l'altro contenitore. Il primo è fatto: lo stato di
       vista della shell non sta più in `localStorage` (modalità, cartelle aperte,

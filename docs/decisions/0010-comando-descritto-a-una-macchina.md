@@ -51,7 +51,7 @@ letto il codice.
       invoca lo dichiara (`invoke_command(…, by: Actor)`) e ogni evento che
       l'invocazione genera porta `Origin { actor, batch }` — con un lettore vero
       e provato, l'automazione che salta le proprie scritture
-      (`fubmd-kernel/tests/batch_and_origin.rs`) e la shell che distingue
+      (`fub-kernel/tests/batch_and_origin.rs`) e la shell che distingue
       un'altra applicazione da sé. Non fatto: **quale** comando, con quale
       modello e quale prompt. E ciò che manca lì non è un campo, è un **posto**:
       l'origine vive quanto il giro sincrono, e «cosa ha cambiato l'AI ieri»
@@ -85,7 +85,7 @@ interpreta — cioè fuori dalla convalida dell'host.
 
 *Il modo sta nella firma, e rompe `invoke`.* Era la scelta che il M4 chiamava
 "della famiglia di `RenderOptions`: da fare per prima o mai", e va fatta adesso
-(linea di base ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`). La ragione non è
+(linea di base ritagliata in `crates/fub-abi/wit/frozen/0.1.0.wit`). La ragione non è
 l'eleganza: con il modo nella firma, il non-scrivere lo può garantire l'**host**,
 prestando un `HostApi` in sola lettura. Un `CommandOutcome::Plan` da solo avrebbe
 lasciato il dry-run alla buona volontà di chi implementa, cioè a una convenzione

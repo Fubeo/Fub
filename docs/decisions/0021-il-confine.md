@@ -25,20 +25,20 @@ Le sei voci sono chiuse.
 registro di chi c'è, e una regola per i nomi.**
 
 - **§7.1** — l'`HostApi` è la **somma** di dieci trait
-  ([`fubmd_abi::traits`](../../crates/fubmd-abi/src/traits.rs)), e al confine WIT
+  ([`fub_abi::traits`](../../crates/fub-abi/src/traits.rs)), e al confine WIT
   dieci `interface` che il `plugin-world` importa una per una. Il rifiuto è un
-  wrapper generico ([`Guard<H, P: Policy>`](../../crates/fubmd-kernel/src/host/guard.rs)),
+  wrapper generico ([`Guard<H, P: Policy>`](../../crates/fub-kernel/src/host/guard.rs)),
   non una impl gemella.
 - **§7.2** — la disciplina di consegna (`take` → chiamata → ripristino con in
   coda chi si è registrato nel frattempo) è
-  [`Workspace::lend`](../../crates/fubmd-kernel/src/workspace.rs), scritta una
+  [`Workspace::lend`](../../crates/fub-kernel/src/workspace.rs), scritta una
   volta; i registri sono
-  [`ProviderTable`](../../crates/fubmd-kernel/src/providers.rs).
-- **§7.3** — c'è un [registro dei plugin](../../crates/fubmd-kernel/src/plugins.rs):
+  [`ProviderTable`](../../crates/fub-kernel/src/providers.rs).
+- **§7.3** — c'è un [registro dei plugin](../../crates/fub-kernel/src/plugins.rs):
   chi registra si **dichiara** (manifest, permessi, fiducia), e ogni host nasce
   con davanti la politica del suo plugin.
 - **§7.4** — un id ha un proprietario, e la regola è una sola per tutti e otto
-  gli spazi di nomi: [`fubmd_abi::rules::ids`](../../crates/fubmd-abi/src/rules/ids.rs).
+  gli spazi di nomi: [`fub_abi::rules::ids`](../../crates/fub-abi/src/rules/ids.rs).
 - **§7.5** — i plugin si chiamano: `provides`/`requires` nel manifest,
   `HostServices::call_service`, e un `ServiceProvider` che risponde.
 - **§7.6** — c'è un inventario: `Workspace::plugins()`, e `VaultInfo.versioning:
@@ -116,8 +116,8 @@ registro di chi c'è, e una regola per i nomi.**
   precisamente ciò che un wrapper generico compra.
 - **La regola dei nomi: il core nomina anche nudo, gli altri solo dentro il
   proprio id.** `backlinks` e `note.create` restano quello che sono — sono i
-  nomi che l'utente vede nella palette e nelle hotkey — e `fubmd:diagrams` è del
-  core perché `fubmd` è il suo namespace. Un terzo scrive `com.acme.tasks:board`
+  nomi che l'utente vede nella palette e nelle hotkey — e `fub:diagrams` è del
+  core perché `fub` è il suo namespace. Un terzo scrive `com.acme.tasks:board`
   e nessun altro ci può entrare: ne segue la proprietà che serviva, **due plugin
   non possono collidere**, e il solo spazio conteso resta quello del core con sé
   stesso, dove una collisione è un errore di questo repo che un test vede.
@@ -222,7 +222,7 @@ passano da `admit` come tutte, con un proprietario.
   parti, perché `SyntaxRuleSpec::produces` non è guardato da niente e
   `CustomRendererSpec::kinds` ha una contesa a chi arriva primo
   (`RendererConflict::Claimed`) ma nessun **proprietario**, così un terzo che
-  rivendica `fubmd:callout` e si registra per primo chiude fuori il core; e
+  rivendica `fub:callout` e si registra per primo chiude fuori il core; e
   `JobSpec::job`, che un proprietario non ce l'ha affatto — `enqueue_job` accoda
   `(JobId, JobSpec)` senza registrare **chi** l'ha chiesto. Per i primi due il
   posto è quello di `emit` (l'host, al passaggio) ed è additivo, perché
@@ -238,7 +238,7 @@ passano da `admit` come tutte, con un proprietario.
 ## Verifica
 
 `cargo test --workspace`: **543 verdi** (erano 523), di cui 15 nuovi in
-[`tests/il_confine.rs`](../../crates/fubmd-kernel/tests/il_confine.rs) — il
+[`tests/il_confine.rs`](../../crates/fub-kernel/tests/il_confine.rs) — il
 plugin senza `write_vault` che legge e non scrive, il revocato che non fa
 niente, l'id non dichiarato che non riceve niente in bianco, le risposte nulle
 delle capacità senza esito, l'id di view conteso, l'id nudo di un terzo (col
@@ -250,13 +250,13 @@ rivendicato due volte, il giro nominato, e l'inventario.
 pulito, **172 test vitest**, `vite build` ok.
 
 Linea di base del WIT **ritagliata** (pre-freeze) con la ragione dentro
-`crates/fubmd-abi/wit/frozen/0.1.0.wit` e la riga in `docs/architecture/wit-congelato.md`: è la rottura più
+`crates/fub-abi/wit/frozen/0.1.0.wit` e la riga in `docs/architecture/wit-congelato.md`: è la rottura più
 larga fatta finora — ventiquattro funzioni cambiano nome qualificato e un record
 si sposta — ed è l'ultima che riguarda l'`host-api`.
 
 **Non verificato visivamente nell'app Tauri.** Due cose meriterebbero un occhio
 quando qualcuno la aprirà: che il pannello cronologia compaia (adesso dipende da
-`hasPlugin(info, "fubmd.versioning")` invece che da un booleano del backend), e
+`hasPlugin(info, "fub.versioning")` invece che da un booleano del backend), e
 che nessuna delle sette feature ufficiali stampi «feature non dichiarata» o
 «view non registrata» all'apertura del vault — che sarebbe il segno di un id
 sbagliato in `open_vault`.

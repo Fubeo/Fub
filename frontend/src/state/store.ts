@@ -73,7 +73,7 @@ export function emit<K extends keyof Signals>(signal: K, ...args: Signals[K]): v
     try {
       (listener as (...a: Signals[K]) => void)(...args);
     } catch (e) {
-      console.error(`FubMD: un ascoltatore di «${signal}» ha lanciato: ${errorText(e)}`);
+      console.error(`Fub: un ascoltatore di «${signal}» ha lanciato: ${errorText(e)}`);
     }
   }
 }
@@ -100,7 +100,7 @@ export interface ShellState {
   /// il pannello della cronologia non esiste, e non si interroga.
   versioningOn: boolean;
   /// L'organizzazione del vault (icone, appuntate, ordinamenti, spazi): il
-  /// sidecar `.fubmd/workspace.json`. Autorevole, non derivato — e dal §11.3 la
+  /// sidecar `.fub/workspace.json`. Autorevole, non derivato — e dal §11.3 la
   /// possiede il **kernel**, quindi questo è uno specchio e non la verità.
   ///
   /// Non c'è più un `metaBroken`: il congelamento di un sidecar illeggibile lo
@@ -219,6 +219,6 @@ async function leggi<T>(key: string): Promise<T | null> {
 /// riscrive da sé.
 function scrivi(key: string, value: unknown): void {
   void api.setViewState(key, value).catch((e) => {
-    console.warn(`FubMD: non ho potuto ricordare \`${key}\``, e);
+    console.warn(`Fub: non ho potuto ricordare \`${key}\``, e);
   });
 }

@@ -434,7 +434,7 @@ function disegnaVaultRiga(vault: KnownVault): HTMLElement {
       try {
         // La strada è **quella di `main.ts`** e non un `openVault` seguito da
         // un reload: ricaricare rimette la shell nello stato iniziale, e lo
-        // stato iniziale si ricostruisce da `FUBMD_VAULT` — che quasi sempre
+        // stato iniziale si ricostruisce da `FUB_VAULT` — che quasi sempre
         // non c'è. Il backend avrebbe il vault aperto e la finestra sarebbe
         // vuota, senza nemmeno un modo di dirlo.
         await ganci.apriVault(vault.root);

@@ -9,7 +9,7 @@
 // # Dove sta il consenso
 //
 // Non c'è una capacità «chiedi conferma» nell'host, e non è una dimenticanza
-// (vedi `crates/fubmd-abi/src/command.rs`): il consenso è il giro
+// (vedi `crates/fub-abi/src/command.rs`): il consenso è il giro
 // dry-run → piano → approvazione → apply, e a decidere QUANDO chiederlo è chi
 // invoca — qui, con `needsPlan`, sulla base del raggio che il comando ha
 // dichiarato. Un «sei sicuro?» mostra ciò che il comando sceglie di dire; un

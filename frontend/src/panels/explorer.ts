@@ -727,7 +727,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   const guasto = nameFault(to, "new");
   if (guasto !== null) {
     console.error(
-      `FubMD: ${t("explorer.bad_name", { nome: newPageName, motivo: t(MOTIVO[guasto]) })}`,
+      `Fub: ${t("explorer.bad_name", { nome: newPageName, motivo: t(MOTIVO[guasto]) })}`,
     );
     renderFileList();
     return;
@@ -740,7 +740,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   try {
     await renameNote(from, to);
   } catch (e) {
-    console.error(`FubMD: ${t("explorer.rename_failed", { doc: from, to, reason: errorText(e) })}`);
+    console.error(`Fub: ${t("explorer.rename_failed", { doc: from, to, reason: errorText(e) })}`);
     renderFileList();
   }
   // `currentDoc` lo aggiorna l'evento `document_renamed`: l'identità è il path,
@@ -761,7 +761,7 @@ async function convertToFolder(id: string): Promise<void> {
   try {
     await renameNote(id, `${folderPath}/${childName(id)}`);
   } catch (e) {
-    console.error(`FubMD: ${t("explorer.to_folder_failed", { doc: id, reason: errorText(e) })}`);
+    console.error(`Fub: ${t("explorer.to_folder_failed", { doc: id, reason: errorText(e) })}`);
     return;
   }
   state.expanded.add(folderPath);
@@ -858,7 +858,7 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
     await renameNote(id, to);
   } catch (e) {
     console.error(
-      `FubMD: ${t("explorer.move_failed", {
+      `Fub: ${t("explorer.move_failed", {
         doc: id,
         folder: folderPath || t("explorer.root"),
         reason: errorText(e),

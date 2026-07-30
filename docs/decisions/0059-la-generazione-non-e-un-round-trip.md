@@ -26,7 +26,7 @@ guarda nessuno».
 
 ## Il danno, e chi lo avrebbe causato
 
-[`edit.rs`](../../crates/fubmd-abi/src/edit.rs) elenca fra i clienti di
+[`edit.rs`](../../crates/fub-abi/src/edit.rs) elenca fra i clienti di
 `apply_edit` «scrivere una proprietà (8.2)», «spuntare un task (10.1)»,
 «correggere un link rotto (7.2)». Nessuno dei tre è implementato. Il giorno che
 qualcuno li implementa, la strada comoda è `read_model` → muta il `frontmatter` →
@@ -43,14 +43,14 @@ Non è un'ipotesi: quella funzione è stata scritta davvero, e sta qui sotto.
 ## Fatto
 
 - [x] **Il presidio**:
-      [`crates/fubmd-abi/tests/serialize_non_riscrive.rs`](../../crates/fubmd-abi/tests/serialize_non_riscrive.rs).
+      [`crates/fub-abi/tests/serialize_non_riscrive.rs`](../../crates/fub-abi/tests/serialize_non_riscrive.rs).
       Un'**allowlist chiusa dei punti di chiamata** — `(file, forma, quante
       volte, perché)` — confrontata nei due versi con ciò che l'estrattore trova
       nei sorgenti di produzione. Tre righe, due ragioni, e nessuna delle due è
       «sto modificando un documento».
 - [x] **Nasce verde**, che è il momento giusto per tenderla: l'unico punto di
       produzione che nomina `serialize` come chiamata di metodo è il provider che
-      lo implementa (`fubmd-format-markdown/src/lib.rs`, che delega alla funzione
+      lo implementa (`fub-format-markdown/src/lib.rs`, che delega alla funzione
       libera del proprio modulo), più i due `u64_string::serialize` di serde, che
       con i documenti non c'entrano.
 - [x] **La frase presidiata è ancorata al contratto.** `format.rs` arriva per
@@ -76,7 +76,7 @@ pub fn scrivi_una_proprieta(&mut self, id: &DocId, chiave: &str) -> Result<()> {
 }
 ```
 
-`cargo build -p fubmd-kernel`: **compila al primo colpo**, in un secondo e
+`cargo build -p fub-kernel`: **compila al primo colpo**, in un secondo e
 mezzo, senza una firma nuova e senza toccare niente. È la misura del problema,
 non un dettaglio del metodo.
 
@@ -85,7 +85,7 @@ Col presidio addosso:
 ```
 questi punti del codice di produzione nominano `serialize`, e l'allowlist
 non li conosce:
-  crates/fubmd-kernel/src/workspace.rs — `.serialize`
+  crates/fub-kernel/src/workspace.rs — `.serialize`
 ```
 
 Poi la funzione è stata tolta (`git diff` vuoto su `workspace.rs`) e il test è
@@ -95,7 +95,7 @@ niente:
 
 | verso | come | cosa ha detto |
 |---|---|---|
-| ne compare uno | la funzione qui sopra | `crates/fubmd-kernel/src/workspace.rs — .serialize` |
+| ne compare uno | la funzione qui sopra | `crates/fub-kernel/src/workspace.rs — .serialize` |
 | ne sparisce uno | una riga finta nell'allowlist | `l'allowlist dichiara punti di chiamata che nel codice non ci sono più` |
 | il conteggio | `1` → `2` su una riga vera | `la forma serialize::serialize compare 1 volte e l'allowlist ne dichiara 2` |
 
@@ -118,7 +118,7 @@ pensando a questa regola — e contro il distratto una riga rossa e un elenco da
 modificare bastano. Contro chi vuole davvero aggirarla non basterebbe nemmeno la
 barriera, perché chi vuole aggirarla cambia la firma.
 
-*Non in `fubmd_sdk::testing::conformita`.* Era la terza forma possibile, ed è il
+*Non in `fub_sdk::testing::conformita`.* Era la terza forma possibile, ed è il
 posto sbagliato per una ragione di **soggetto**, non di comodità: quel modulo —
 nato con la [0054](0054-il-banco-del-lato-provider.md) — presidia ciò che fa un
 *provider*, e questa garanzia riguarda ciò che fa l'*host*. Un provider può
@@ -189,8 +189,8 @@ estrattore ingenuo lascia passare: l'occorrenza conta se è preceduta da `::` o 
 Preferirla lo stesso a una maglia più stretta non è una svista, è la
 sottovalutazione del §16.7 presa dal verso opposto: **una rete a maglie larghe
 messa dove il pesce passa vale più di una rete stretta messa altrove.** Il gesto
-vero — `provider.serialize(&model)` scritto nel kernel, in `fubmd-host`, in
-`fubmd-app` o in una feature ufficiale — non passa, e quel gesto è comodo proprio
+vero — `provider.serialize(&model)` scritto nel kernel, in `fub-host`, in
+`fub-app` o in una feature ufficiale — non passa, e quel gesto è comodo proprio
 perché non ci si mette ingegno. Chi si mette a comporre un alias per aggirare un
 test ha già letto il test, e a quel punto il presidio ha fatto il suo lavoro:
 non impedire, ma **rendere visibile in review**, che è la stessa logica con cui
@@ -203,7 +203,7 @@ solo se la stragrande maggioranza di quelle voci è un provider*. Le sue voci so
 pezzi di infrastruttura che mancano perché una feature possa essere un provider —
 non «ogni test che vale la pena scrivere». Qui non manca un pezzo: manca una
 rete sotto una cosa che c'è già ed è già giusta. Il precedente esatto è
-[`dependency_invariant.rs`](../../crates/fubmd-abi/tests/dependency_invariant.rs),
+[`dependency_invariant.rs`](../../crates/fub-abi/tests/dependency_invariant.rs),
 che esiste per un verbale e non per una voce; e un verbale che non viene da un
 `§` ha il suo, la [0025](0025-la-ricerca-predefinita.md).
 

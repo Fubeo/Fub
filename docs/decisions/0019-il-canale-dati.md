@@ -25,15 +25,15 @@ Le cinque voci sono chiuse.
 **La query è un albero del contratto, chi la serve è dichiarato, e le risposte
 del kernel sono un indice come gli altri.**
 
-- **§5.3** — [`fubmd_abi::query`](../../crates/fubmd-abi/src/query.rs): una
+- **§5.3** — [`fub_abi::query`](../../crates/fub-abi/src/query.rs): una
   `QueryExpr` è un OR di clausole, una clausola un AND di letterali, un
   letterale un predicato eventualmente negato. La stringa libera vive dentro
   **una** foglia (`Text`), e non è più una sintassi.
-- **§5.2** — [`QueryRoute`](../../crates/fubmd-abi/src/traits.rs): un indice
+- **§5.2** — [`QueryRoute`](../../crates/fub-abi/src/traits.rs): un indice
   dichiara alla registrazione le **famiglie** che serve e le **foglie** che sa
   valutare. Un conflitto si vede al montaggio; chi non ha dichiarato niente non
   viene interpellato; ciò che nessuno serve torna come `PluginError::Unserved`.
-- **§5.1** — [`CoreIndex`](../../crates/fubmd-kernel/src/index/core.rs): grafo,
+- **§5.1** — [`CoreIndex`](../../crates/fub-kernel/src/index/core.rs): grafo,
   metadati e conteggi dei tag sono un `IndexProvider` registrato per primo. Non
   un ramo prima del ciclo — un provider, sostituibile chiedendolo per nome.
 - **§5.4** — un `query_index` generico sull'IPC, gemello di
@@ -83,7 +83,7 @@ del kernel sono un indice come gli altri.**
   l'indice del **kernel** si scavalca: `Backlinks`, `Tags` e gli altri non sono
   più un ramo privilegiato, sono rotte come le altre.
 - **Il pianificatore è del kernel, e la struttura è del contratto.** Chi decide a
-  chi va una foglia è [`index::plan`](../../crates/fubmd-kernel/src/index/plan.rs);
+  chi va una foglia è [`index::plan`](../../crates/fub-kernel/src/index/plan.rs);
   cosa significhino OR, AND e la negazione è scritto **una volta**, in
   `QueryEvaluator`, e lo usano il pianificatore, l'indice del kernel e chiunque
   implementi un indice senza voler tradurre l'albero nel proprio motore. Due
@@ -164,13 +164,13 @@ mirror TS↔Rust). Adesso il tag è adiacente (`kind` + `value`).
 
 ## Il dogfooding, che è dove si è scoperto se regge
 
-[`canale_dati_e2e.rs`](../../crates/fubmd-features/tests/canale_dati_e2e.rs):
+[`canale_dati_e2e.rs`](../../crates/fub-features/tests/canale_dati_e2e.rs):
 due indici veri — quello del kernel e tantivy — su un vault in cui testo e
 frontmatter dicono cose **diverse**, che è l'unico modo perché un join possa
 sbagliare in modo visibile.
 
 Il test che conta di più è
-[`le_note_di_un_tipo_che_parlano_di_qualcosa`](../../crates/fubmd-features/tests/canale_dati_e2e.rs):
+[`le_note_di_un_tipo_che_parlano_di_qualcosa`](../../crates/fub-features/tests/canale_dati_e2e.rs):
 senza di lui gli altri provano due canali che funzionano ognuno per conto suo,
 che è esattamente ciò che c'era prima. La domanda ha due foglie di due
 proprietari, nessuno dei due può rispondere da solo, e la risposta non è né
@@ -199,7 +199,7 @@ Tre cose sono venute fuori solo scrivendolo:
 
 Il presidio dell'additività ha nominato le rotture, ed è il suo mestiere: sono
 deliberate, sono pre-freeze, e la baseline è stata ritagliata con la ragione
-scritta dentro `crates/fubmd-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella dei ritagli del
+scritta dentro `crates/fub-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella dei ritagli del
 suo README).
 
 | cosa | perché |

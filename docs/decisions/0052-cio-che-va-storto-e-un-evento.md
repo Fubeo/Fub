@@ -40,7 +40,7 @@ Una variante **in coda** a `Event` — additiva, quindi non tocca la linea di ba
 — e un kernel che la emette dai punti in cui prima scartava.
 
 ```rust
-// crates/fubmd-abi/src/event.rs
+// crates/fub-abi/src/event.rs
 Event::Trouble {
     severity: Severity,        // NUOVO
     subject: Option<DocId>,

@@ -10,10 +10,10 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la se
 
 ---
 
-`.fubmd/workspace.json` tiene le icone, le note appuntate, gli ordinamenti
+`.fub/workspace.json` tiene le icone, le note appuntate, gli ordinamenti
 scelti a mano e gli spazi: **come questo vault si presenta**. Sono dati
 autorevoli e non derivati — persi, non si ricostruiscono da niente, a differenza
-di `.fubmd-data/` che si cancella e si rifà con una scansione — ed erano tenuti
+di `.fub-data/` che si cancella e si rifà con una scansione — ed erano tenuti
 peggio dei derivati:
 
 - li leggevano e scrivevano **due funzioni dell'host** con `std::fs` nudo
@@ -26,7 +26,7 @@ peggio dei derivati:
 - la **migrazione sui rename era in TypeScript** (`migrateOrganization`),
   appesa all'evento `document_renamed` che la shell riceve. Un evento che i freni
   del canale possono troncare ([0034](0034-il-freno-e-il-raggruppamento.md)), e
-  che a FubMD chiuso non arriva affatto;
+  che a Fub chiuso non arriva affatto;
 - e **leggerli era un comando IPC**, cioè una cosa che sapeva chiedere la shell e
   nessun altro.
 
@@ -55,7 +55,7 @@ qui sono path che l'utente crea rinominando le proprie note; un'impostazione ha
 un valore per chiave, questa ha una mappa che cresce col vault.
 
 Ciò che andava assorbito era **la disciplina**, non il file. Il file resta
-`<root>/.fubmd/workspace.json` perché l'organizzazione *viaggia col vault*: chi
+`<root>/.fub/workspace.json` perché l'organizzazione *viaggia col vault*: chi
 sincronizza le sue note si porta dietro il modo in cui le ha messe in ordine, e
 chi passa un vault a un collega gliene passa uno organizzato. È esattamente il
 confine opposto a quello dello stato di vista ([0037](0037-lo-stato-di-vista.md)),
@@ -66,7 +66,7 @@ delle tre cose, e perché non nello stesso posto*.
 ### Il tipo sale nel contratto, e cambia nome
 
 `WorkspaceMeta` era un tipo dell'host, rispecchiato nel mirror TS dell'app.
-Adesso è `fubmd_abi::organization::Organization`, perché attraversa il contratto:
+Adesso è `fub_abi::organization::Organization`, perché attraversa il contratto:
 lo restituisce `IndexResult::Organization`.
 
 Il nome cambia per una ragione che si vede solo dal kernel: là dentro
@@ -113,7 +113,7 @@ budget e può troncare ([0034](0034-il-freno-e-il-raggruppamento.md)); un dato
 derivato che si perde un evento si ricostruisce, un dato **autorevole** no.
 
 Il guadagno si vede subito, ed è più grande della sola robustezza: passando di
-lì migra anche la rinomina fatta da **un'altra app mentre FubMD è aperto**,
+lì migra anche la rinomina fatta da **un'altra app mentre Fub è aperto**,
 perché `sync_renamed_path` — la strada del rilevatore — arriva allo stesso punto.
 Con la migrazione nella shell, quel caso era scoperto: la nota si spostava e
 l'icona restava attaccata al path vecchio.
@@ -165,7 +165,7 @@ dimenticarsene.
 
 ## Cosa si è scartato, e perché
 
-**Tenere il sidecar dentro `.fubmd-data/`.** È la cartella dei dati derivati, e
+**Tenere il sidecar dentro `.fub-data/`.** È la cartella dei dati derivati, e
 questi non lo sono: una cartella che si può cancellare per liberare spazio non è
 il posto di un dato che, perso, non torna.
 
@@ -186,7 +186,7 @@ scoperte, non risolto a metà.
 
 ## Cosa resta scoperto (e dove è scritto)
 
-- **La rinomina fatta a FubMD chiuso.** Nessuno la vede, e al riavvio non c'è
+- **La rinomina fatta a Fub chiuso.** Nessuno la vede, e al riavvio non c'è
   modo di sapere che `b.md` era `a.md`: l'icona resta orfana. Non è questa voce —
   è il **§13.1** (P0, aperto), *il path è l'identità*, e si chiude dando ai
   documenti un'identità che il path non è. Questa voce ha chiuso ciò che si può

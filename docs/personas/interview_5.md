@@ -1,5 +1,5 @@
 ---
-progetto: FubMD
+progetto: Fub
 data: 2026-07-24
 intervistato: Dott.ssa Elena — Ricercatrice post-doc in Neuroscienze Cognitive
 ruolo: User persona accademica, livello tecnico medio-alto
@@ -43,7 +43,7 @@ stato: bozza
 - La gestione di 1.200+ paper richiede performance e organizzazione robuste.
 
 ### Motivazione del progetto
-- Rendere FubMD uno strumento open source adatto al workflow accademico.
+- Rendere Fub uno strumento open source adatto al workflow accademico.
 - Integrare Zotero, note Markdown, citazioni, grafo concettuale e export LaTeX in modo più fluido.
 - Supportare scrittura scientifica, review article, letteratura e mappe concettuali.
 - Mantenere il vault come mappa mentale della letteratura, ma con strumenti più automatizzati.
@@ -79,7 +79,7 @@ stato: bozza
 - Offrire collaborazione real-time identica a Google Docs.
 - Gestire submission a riviste, peer review o editorial workflow.
 - Diventare un sistema di analisi statistica o neuroimaging.
-- Obbligare i co-autori a installare FubMD.
+- Obbligare i co-autori a installare Fub.
 - Gestire dataset sperimentali grezzi pesanti come un repository di ricerca.
 
 ## 3. Utenti e casi d’uso
@@ -153,7 +153,7 @@ stato: bozza
 - Ricerca avanzata su paper, concetti e note.
 
 ### Desiderabile ma non prioritario
-- Annotazione PDF nativa dentro FubMD.
+- Annotazione PDF nativa dentro Fub.
 - Vista kanban per sezioni del manoscritto.
 - Commenti inline per co-autori.
 - Track changes o revision mode.
@@ -322,10 +322,10 @@ stato: bozza
 ## 8. Vincoli e ipotesi
 
 ### Vincoli di business
-- FubMD deve essere open source.
+- Fub deve essere open source.
 - Deve essere utile per utenti accademici senza lock-in proprietario.
 - Deve supportare formati aperti e esportabili.
-- Non deve obbligare co-autori a usare FubMD.
+- Non deve obbligare co-autori a usare Fub.
 - Deve rispettare la libertà di usare Zotero e strumenti esistenti.
 
 ### Vincoli tecnici
@@ -511,4 +511,4 @@ stato: bozza
 - Il dolore principale è il passaggio manuale Zotero → note → manoscritto.
 - Le formule LaTeX devono renderizzare correttamente.
 - La collaborazione con co-autori su Google Docs è un punto critico.
-- FubMD deve essere open source ma con workflow accademico fluido, non solo un editor Markdown tecnico.
+- Fub deve essere open source ma con workflow accademico fluido, non solo un editor Markdown tecnico.

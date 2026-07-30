@@ -114,7 +114,7 @@ visibile).
       (§18.1); questa voce è ciò che serve **prima** e comunque, perché lo stesso
       buco copre altri undici avvisi che un dialogo di conflitto non riguarda.
 - [ ] **Un'organizzazione congelata è una sessione di lavoro buttata.**
-      Se `.fubmd/workspace.json` non si legge, non lo si sovrascrive: la
+      Se `.fub/workspace.json` non si legge, non lo si sovrascrive: la
       decisione è giusta, ed è la stessa della configurazione. Ciò che manca è
       **dirlo a chi sta lavorando**. Dal §11.3
       ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)) il rifiuto

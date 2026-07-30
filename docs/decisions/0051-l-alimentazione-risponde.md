@@ -23,7 +23,7 @@ ciclo di vita — potevano fallire e dirlo, l'alimentazione no.
 I tre metodi diventano **a lotto** e restituiscono **cosa non hanno preso**.
 
 ```rust
-// crates/fubmd-abi/src/traits.rs
+// crates/fub-abi/src/traits.rs
 pub struct IndexLoss { pub id: DocId, pub why: PluginError }   // NUOVO
 
 fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss>;  // era per documento, -> ()
@@ -33,7 +33,7 @@ fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss>;                      /
 
 È un **ritaglio** della linea di base, dichiarato in
 [wit-congelato.md](../architecture/wit-congelato.md) e visibile in
-`wit/frozen/0.1.0.wit`: `cargo test -p fubmd-abi --test wit_additivity` è
+`wit/frozen/0.1.0.wit`: `cargo test -p fub-abi --test wit_additivity` è
 diventato rosso su tutte e tre le firme prima di tornare verde.
 
 ## Le decisioni prese, da NON ridiscutere senza motivo

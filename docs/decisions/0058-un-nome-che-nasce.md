@@ -31,16 +31,16 @@ filesystem non accetterebbe — un `CON.md` scritto su Linux, un nome in NFD scr
 da macOS, un `nota?.md` arrivato da un import. Le due letture possibili della
 §2.3 portano a due difetti opposti:
 
-- se la politica vale in lettura, FubMD **si rifiuta di aprire** un vault per un
+- se la politica vale in lettura, Fub **si rifiuta di aprire** un vault per un
   file che c'è. Ma «il vault è la verità», e la verità non si rifiuta di aprire —
   è la stessa frase con cui il [§15.7](../roadmap/15-il-disco.md#157-lapertura-del-vault-è-tutto-o-niente-sincrona-e-senza-ritorno) esiste;
-- se non vale affatto, FubMD **crea** un file che il giorno in cui il vault
+- se non vale affatto, Fub **crea** un file che il giorno in cui il vault
   attraversa un sistema operativo non si apre più. E lì il difetto è nostro,
   scoperto da chi sincronizza, quando il file c'è già e rinominarlo è un rename
   che riscrive i wikilink di tutti.
 
 ```rust
-// crates/fubmd-abi/src/rules/path_policy.rs
+// crates/fub-abi/src/rules/path_policy.rs
 pub enum Naming { Existing, New }
 pub fn check(path: &str, naming: Naming) -> Result<(), NameFault>;
 pub fn normalized(path: &str) -> String;   // trim per segmento + NFC
@@ -72,7 +72,7 @@ Le tre asimmetrie sono deliberate e sono il contenuto della decisione:
   scritti macOS, ed è il disco a dire come si chiama un file; uniformarli sarebbe
   una migrazione silenziosa di ciò che l'utente vede. Sceglierne una sola forma
   quando la si *scrive* serve invece perché
-  [`resolution_key`](../../crates/fubmd-abi/src/rules/path.rs) fa collassare NFC e
+  [`resolution_key`](../../crates/fub-abi/src/rules/path.rs) fa collassare NFC e
   NFD: due file che per il filesystem di Linux sono due sono **uno** per il grafo,
   la ricerca e la sidebar, e quell'ambiguità il modello non ha modo di
   rappresentarla.
@@ -90,9 +90,9 @@ quella che `write_document` scrive. Un `Span { start: 0, end: 0 }` su un file co
 BOM inserisce **prima** del BOM.
 
 Sta accanto alla definizione di `Span`
-([`model.rs`](../../crates/fubmd-abi/src/model.rs)), in `edit.rs`, e nel **WIT** —
+([`model.rs`](../../crates/fub-abi/src/model.rs)), in `edit.rs`, e nel **WIT** —
 perché il WIT è la versione che legge un guest, e un commento non tocca
-l'additività ([`wit_additivity`](../../crates/fubmd-abi/tests/wit_additivity.rs)
+l'additività ([`wit_additivity`](../../crates/fub-abi/tests/wit_additivity.rs)
 resta verde).
 
 **Perché non «un testo normalizzato».** È l'altra lettura possibile, ed è
@@ -130,7 +130,7 @@ default», e ha cambiato la riga 180 da `Normalizzazione CRLF/LF` a
 in quel modulo che restituisca un `String` diverso da quello che le è stato dato.
 
 ```rust
-// crates/fubmd-abi/src/rules/text_policy.rs
+// crates/fub-abi/src/rules/text_policy.rs
 pub const BOM: char = '\u{feff}';
 pub fn bom_len(source: &str) -> usize;          // 3 o 0
 pub fn strip_bom(source: &str) -> &str;         // una VISTA
@@ -148,7 +148,7 @@ pub fn decode(bytes: &[u8]) -> Result<&str, usize>;
 - **«Rilevamento encoding» ha due letture, e si è scelta la seconda.** Annusare i
   byte e scommettere su un charset è ciò che fa un browser, e sbagliando corrompe
   in silenzio — un UTF-8 letto come Latin-1 *riesce*, e produce mojibake che poi si
-  riscrive sul disco. FubMD dice invece con certezza se i byte sono UTF-8 e **a
+  riscrive sul disco. Fub dice invece con certezza se i byte sono UTF-8 e **a
   quale byte** smettono di esserlo, perché quella è l'informazione con cui una
   persona ripara il file. La conversione, se servirà, è un `ImportProvider`: una
   cosa che l'utente chiede, che produce un file nuovo e non riscrive quello vecchio.
@@ -224,7 +224,7 @@ un rifiuto su cui si indovina — cioè il §12.2 applicato ai nomi.
 ### La regola era già nel kernel, e nel kernel non serve a chi la userà
 
 `valid_doc_id` faceva già metà del lavoro (separatori, trim, `.`, `..`) ed era una
-funzione di `fubmd-kernel`. È esattamente il caso della
+funzione di `fub-kernel`. È esattamente il caso della
 [0020](0020-le-regole-in-un-posto-solo.md): un indice di terzi non ha il kernel fra
 le mani, e un guest WASM a M5 nemmeno. Il giudizio è salito nel contratto; nel
 varco è rimasta la **tolleranza sua** — la conversione dei separatori Windows e il
@@ -235,7 +235,7 @@ trim — che è di quell'ingresso e non della regola.
 Il piano di lavoro diceva che comrak tollera il BOM «solo davanti al frontmatter»,
 e che «un BOM a inizio file finisce dentro il contenuto del primo blocco».
 **Controllato: non è così** — i sette test di
-[`span_e_terminatori.rs`](../../crates/fubmd-format-markdown/tests/span_e_terminatori.rs)
+[`span_e_terminatori.rs`](../../crates/fub-format-markdown/tests/span_e_terminatori.rs)
 passano anche con il parser intatto, e passare richiede che lo span dell'heading
 cominci al byte 3. comrak 0.54 salta già il BOM di suo.
 
@@ -254,7 +254,7 @@ cambia comportamento, quindi il diff sembra rumore. Non lo è — la riga che ca
 
 ## Il corpus, e la prova di romperlo
 
-[`kernel/tests/fedelta_del_testo.rs`](../../crates/fubmd-kernel/tests/fedelta_del_testo.rs):
+[`kernel/tests/fedelta_del_testo.rs`](../../crates/fub-kernel/tests/fedelta_del_testo.rs):
 quindici forme di file — LF, CRLF, CR, misti, con e senza BOM, BOM + frontmatter,
 senza newline finale, con due, spazi in coda, NFD nel contenuto, fuori dal BMP, un
 file vuoto e uno che è **solo** un BOM — e per ognuna `Vault::read` → `Vault::write`
@@ -295,7 +295,7 @@ identici, che è precisamente il difetto che senza fixture nessuno vedrebbe.
   nascosto. Nascerebbe come una seconda politica che decide le stesse cose in modo
   diverso, e va deciso col suo cliente vero (17.x).
 - **Il limite del path assoluto.** Windows tronca a 260 caratteri il path *intero*,
-  che dipende da dove sta il vault: non è una proprietà del nome, e `fubmd-abi` non
+  che dipende da dove sta il vault: non è una proprietà del nome, e `fub-abi` non
   sa dove sia la radice né deve saperlo. Quello che è del nome è il limite del
   segmento; l'altro è di chi conosce il filesystem, cioè il
   [§15.1](../roadmap/15-il-disco.md#151-astrazione-sullo-storage).

@@ -176,7 +176,7 @@ del contratto sia frenabile come tutti gli altri.**
 - **`cancel_job` diventa un comando IPC**, che è l'unica cosa che mancava:
   l'`Host` sapeva già annullare e nessuno gliela chiedeva se non i presidi.
 - **L'id attraversa il confine come stringa**, per la regola di
-  `fubmd_abi::ipc`: è un u64 pieno, e `JSON.parse` perde i bit oltre 2⁵³ in
+  `fub_abi::ipc`: è un u64 pieno, e `JSON.parse` perde i bit oltre 2⁵³ in
   silenzio. Un job che ogni tanto non si annulla somiglierebbe a un job lento.
 - **Non c'è un «job sconosciuto»**: è la [0032](0032-il-runner-dei-job.md), e qui
   se ne vede il motivo — un pulsante premuto un istante dopo che il lavoro è
@@ -247,18 +247,18 @@ del contratto sia frenabile come tutti gli altri.**
 ## Verifica
 
 - `cargo build --workspace --all-targets`, `cargo clippy --workspace
-  --all-targets` e `cargo clippy -p fubmd-host --no-default-features` — pulite,
+  --all-targets` e `cargo clippy -p fub-host --no-default-features` — pulite,
   zero warning; `cargo fmt --all` pulita.
 - `cargo test --workspace` — **64 suite, 0 fallimenti**; `npx tsc --noEmit`,
   `npm run build` e `npx vitest run` (**196 prove**) verdi.
 - Le prove nuove:
-  - `fubmd-host/tests/il_runner.rs` — il giro intero visto da chi guarda: la riga
+  - `fub-host/tests/il_runner.rs` — il giro intero visto da chi guarda: la riga
     compare all'accettazione, i tre passi si vedono **chiedendo** l'elenco mentre
     il job è fermo alla barriera, e a esito arrivato l'elenco è vuoto; più il caso
     del progresso fuori da un job, che non fa comparire niente;
-  - `fubmd-host/src/bridge.rs` — mille passi di due job che diventano due
+  - `fub-host/src/bridge.rs` — mille passi di due job che diventano due
     consegne, con l'ultimo di ciascuno e senza che i due si mescolino;
-  - `fubmd-abi/src/event.rs` — i due eventi nuovi dentro `EventMask::all` e dalla
+  - `fub-abi/src/event.rs` — i due eventi nuovi dentro `EventMask::all` e dalla
     parte giusta di `is_recoverable`;
   - `frontend/src/panels/activity.test.ts` — le otto regole dell'elenco, fra cui
     le due che si vedono solo sotto carico: il progresso orfano e l'`overflow`

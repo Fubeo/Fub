@@ -1,7 +1,7 @@
-# Modello dati comune (`fubmd-abi`)
+# Modello dati comune (`fub-abi`)
 
 Il modello di documento **comune e agnostico rispetto al formato**, in
-`crates/fubmd-abi/src/model.rs`. È abbastanza ricco da rappresentare markdown in
+`crates/fub-abi/src/model.rs`. È abbastanza ricco da rappresentare markdown in
 modo fedele, ma **non nomina nulla di specifico del markdown**: i concetti
 trasversali (link, tag, heading, frontmatter) sono estratti in tabelle piatte, e
 ciò che è peculiare di un formato (callout, math, embed, tabelle) finisce
@@ -80,7 +80,7 @@ sull'altra, e allora gli edit atterrano spostati senza che niente diventi rosso.
 Chi parsa un formato che non tollera il BOM lo salta **senza uscire dalle
 coordinate**: `text_policy::strip_bom` per il parser, `bom_len` sommato agli
 offset che torna. La traslazione è una sola e sta in
-[`offsets.rs`](../../crates/fubmd-format-markdown/src/offsets.rs).
+[`offsets.rs`](../../crates/fub-format-markdown/src/offsets.rs).
 
 ## `DocumentModel` — il documento parsato
 
@@ -193,13 +193,13 @@ classDiagram
 
 | Tipo | Dove | Nota che il disegno non può portare |
 |---|---|---|
-| `DocumentModel` | [model.rs:233](../../crates/fubmd-abi/src/model.rs) | otto campi, di cui sette sono la stessa cosa vista in due modi |
-| `Block` | [model.rs:287](../../crates/fubmd-abi/src/model.rs) | ogni variante porta `anchor` e `span`, **anche** `ThematicBreak`, perché `Block::anchor` sia totale |
-| `Inline` | [model.rs:467](../../crates/fubmd-abi/src/model.rs) | `Custom` è l'unico varco: senza, un enum chiuso più il freeze WIT obbligherebbe a prevedere ogni sintassi futura |
-| `LinkTarget` | [model.rs:505](../../crates/fubmd-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
-| `Anchor` | [model.rs:644](../../crates/fubmd-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
-| `Span` | [model.rs:167](../../crates/fubmd-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` — e la sorgente sono i byte del file, BOM e terminatori compresi ([0058](../decisions/0058-un-nome-che-nasce.md)) |
-| `VaultEntry` | [traits.rs:203](../../crates/fubmd-abi/src/traits.rs) | sta nei trait e non qui, perché è la risposta a `IndexQuery::Entries`; `kind` **non si persiste**, dipende da chi è registrato adesso |
+| `DocumentModel` | [model.rs:233](../../crates/fub-abi/src/model.rs) | otto campi, di cui sette sono la stessa cosa vista in due modi |
+| `Block` | [model.rs:287](../../crates/fub-abi/src/model.rs) | ogni variante porta `anchor` e `span`, **anche** `ThematicBreak`, perché `Block::anchor` sia totale |
+| `Inline` | [model.rs:467](../../crates/fub-abi/src/model.rs) | `Custom` è l'unico varco: senza, un enum chiuso più il freeze WIT obbligherebbe a prevedere ogni sintassi futura |
+| `LinkTarget` | [model.rs:505](../../crates/fub-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
+| `Anchor` | [model.rs:644](../../crates/fub-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
+| `Span` | [model.rs:167](../../crates/fub-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` — e la sorgente sono i byte del file, BOM e terminatori compresi ([0058](../decisions/0058-un-nome-che-nasce.md)) |
+| `VaultEntry` | [traits.rs:203](../../crates/fub-abi/src/traits.rs) | sta nei trait e non qui, perché è la risposta a `IndexQuery::Entries`; `kind` **non si persiste**, dipende da chi è registrato adesso |
 
 Il disegno mostra la forma **ad albero**. Al confine WIT ce n'è una seconda, e
 non è una variante di comodo: WIT non ammette tipi ricorsivi, quindi `Block` e
@@ -242,10 +242,10 @@ I due riquadri dei blocchi si chiamano tutti e due `Block` nel codice: uno sta i
 stessa cosa vista dal confine. Qui hanno due nomi diversi solo perché un disegno
 non ha i moduli.
 
-L'asimmetria è dichiarata ([arena.rs:76](../../crates/fubmd-abi/src/arena.rs)):
-`flatten` ([arena.rs:486](../../crates/fubmd-abi/src/arena.rs)) non può fallire,
+L'asimmetria è dichiarata ([arena.rs:76](../../crates/fub-abi/src/arena.rs)):
+`flatten` ([arena.rs:486](../../crates/fub-abi/src/arena.rs)) non può fallire,
 perché un albero vero si appiattisce sempre; `rebuild`
-([arena.rs:495](../../crates/fubmd-abi/src/arena.rs)) rende un `Result`, perché
+([arena.rs:495](../../crates/fub-abi/src/arena.rs)) rende un `Result`, perché
 un'arena che **arriva** dal confine può non essere un albero — un indice fuori
 range, o un ciclo. Lo stesso vale per l'albero della UI, `UiTree`. E cambia anche
 lo `Span`: `usize` di qua, `u64` di là, con una conversione controllata che può
@@ -344,7 +344,7 @@ nessuno dei due è una *seconda copia viva* del documento:
   watcher, ed è ciò che impedisce a una nota cestinata di restare cercabile. Il
   ripristino è un `write_document` normale, quindi passa da grafo, indici ed
   eventi come ogni altra scrittura.
-- **Le versioni** (`.fubmd/data/plugins/fubmd.versioning/`). Sono *copie morte*: snapshot
+- **Le versioni** (`.fub/data/plugins/fub.versioning/`). Sono *copie morte*: snapshot
   timestampati, mai riletti dal kernel, mai in concorrenza con la sorgente.
   Ripristinarne una è di nuovo una scrittura normale, ed è il motivo per cui
   genera a sua volta una versione — cioè è annullabile.
@@ -432,7 +432,7 @@ disegnarla; (b) la forma di `Custom` non regge il contenuto.
 
 `custom_kind` è una stringa: senza un registro condiviso due provider possono
 emettere `attrs` diversi per lo stesso kind e l'agnosticità diventa illusoria. Le
-costanti stanno in `fubmd_abi::model::custom_kind`; questa tabella è la loro
+costanti stanno in `fub_abi::model::custom_kind`; questa tabella è la loro
 forma. Un nuovo kind interpretato dal frontend o da più provider va aggiunto in
 tutti e due i posti prima di usarlo:
 
@@ -444,7 +444,7 @@ tutti e due i posti prima di usarlo:
 | `definition-list` | — | figli: `definition-term` e `definition-description` alternati |
 | `definition-term` / `definition-description` | — | corpo in `blocks` |
 | `html` | `{ "html": string }` | HTML grezzo della sorgente: resta **dato**, non torna markup (5.3) |
-| `math` | `{ "source": string, "display": bool }` | prodotto dalla regola `fubmd:math` (recinto `math`/`latex`/`tex`), reso da `MathRenderer` |
+| `math` | `{ "source": string, "display": bool }` | prodotto dalla regola `fub:math` (recinto `math`/`latex`/`tex`), reso da `MathRenderer` |
 | `diagram` | `{ "engine": string, "source": string }` | mermaid, PlantUML, Graphviz, D2. Il motore sta negli `attrs` perché il kind è la **famiglia**: chi li disegna vuole un innesto solo |
 | `highlight` | `{ "text": string }` | **inline**, `==…==` |
 | `block` | — | ciò che il provider non sa nominare |
@@ -475,7 +475,7 @@ pub enum LinkTarget {
 
 Il provider dichiara l'**intento** ("questo è un wikilink a `Page#Heading^block`");
 la **risoluzione a `DocId` è del kernel** (regola Obsidian dello shortest unique
-path, e `fubmd_abi::rules::path` per i path). Questo confine è ciò che tiene il
+path, e `fub_abi::rules::path` per i path). Questo confine è ciò che tiene il
 provider markdown ignaro della topologia del vault.
 
 **Chi decide la specie è il contratto.** `LinkTarget::classify(raw)` è la regola
@@ -522,8 +522,8 @@ transclusion è in [ui-protocol.md](ui-protocol.md).
 - **`parse` è deterministico**: due chiamate sulla stessa sorgente danno lo stesso
   modello. L'host riparsa quando vuole e non tiene da parte il modello di prima
   per confrontarlo.
-- Le tre di qui sopra sono presidiate da `fubmd_sdk::testing::conformita`, che un
+- Le tre di qui sopra sono presidiate da `fub_sdk::testing::conformita`, che un
   provider nuovo eredita: `gli_span_affettano_la_sorgente`,
   `le_tabelle_piatte_sono_la_proiezione_dell_albero`, `parse_e_deterministico`.
 - I `LinkTarget::Wiki` restano non risolti nel modello; risolverli è del grafo
-  (`crates/fubmd-kernel/src/graph.rs`).
+  (`crates/fub-kernel/src/graph.rs`).

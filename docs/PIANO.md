@@ -1,4 +1,4 @@
-# FubMD — Piano di creazione
+# Fub — Piano di creazione
 
 Documento di piano e architettura. È l'**indice**: contesto, decisioni,
 invarianti, struttura dei crate, e i rimandi ai documenti di dettaglio.
@@ -18,7 +18,7 @@ invarianti, struttura dei crate, e i rimandi ai documenti di dettaglio.
 |---|---|---|
 | Shell/UI | **Tauri v2** (core Rust + webview) | Fedeltà a Obsidian, editor maturi (CodeMirror 6). |
 | Architettura core | **Core agnostico rispetto al formato** | Il kernel conosce documenti, link, tag e heading astratti, non il markdown. L'agnosticismo è **sintattico**: la semantica dei link (risoluzione Obsidian, alias) è vocabolario del kernel e ogni provider vi si mappa — [data-model.md](architecture/data-model.md). |
-| Estensibilità | **Trait definiti una volta sola** in `fubmd-abi` | Un solo contratto: impl native e proxy WASM (M5) condividono la firma. |
+| Estensibilità | **Trait definiti una volta sola** in `fub-abi` | Un solo contratto: impl native e proxy WASM (M5) condividono la firma. |
 | Formato | **`trait FormatProvider`**, markdown = primo provider | Domani org-mode o AsciiDoc sono altri provider, zero modifiche al kernel. |
 | Feature ufficiali | **Impl native dei trait**, non WASM | Veloci quanto native perché *sono* native: nessuna serializzazione. |
 | Plugin di terzi | **WASM (wasmtime), solo al confine di fiducia → M5** | Sandbox e velocità quasi nativa, senza pagarla dove non serve. |
@@ -28,11 +28,11 @@ invarianti, struttura dei crate, e i rimandi ai documenti di dettaglio.
 | Verità del documento **aperto** | **Il buffer dell'editor finché è sporco** | Il disco vale per i documenti chiusi. L'app flusha prima di cambiare documento, riallinea il buffer pulito sui cambi esterni e non lo sovrascrive mai da sporco (merge esplicito a M3) — [data-model.md](architecture/data-model.md), «Le tre copie». |
 | Rename | **Operazione di prima classe**: `DocumentRenamed` + riscrittura chirurgica dei link | L'identità è il path: remove+add perderebbe backlink e stato per-documento. |
 | Delete | **Cestino `.trash/` dentro il vault** (D1/D2) | È la cartella di Obsidian: un vault condiviso ha un solo cestino. Cancellare è spostare; sulle collisioni il nome prende l'istante della cancellazione. Cestino piatto, ripristino = `write_document` normale. |
-| Versioning | **Snapshot per-file + tombstone** in `.fubmd/data/plugins/fubmd.versioning/`, come `EventHandler` (D4/D5/D8) | Cronologia per-nota e «vault al tempo T» con un meccanismo solo, senza git. È dogfooding: usa solo ciò che avrà un plugin di terzi. Il ripristino è una scrittura, quindi annullabile. |
+| Versioning | **Snapshot per-file + tombstone** in `.fub/data/plugins/fub.versioning/`, come `EventHandler` (D4/D5/D8) | Cronologia per-nota e «vault al tempo T» con un meccanismo solo, senza git. È dogfooding: usa solo ciò che avrà un plugin di terzi. Il ripristino è una scrittura, quindi annullabile. |
 | Versioning vs `Overflow` | L'handler è abbonato anche a `EventKind::Overflow` e **riconcilia** | Perdere un `DocumentChanged` costa una versione in ritardo; perdere un `DocumentRenamed` spezzerebbe la storia in due chiavi, e un `DocumentRemoved` lascerebbe «vault al tempo T» a mentire. La riconciliazione riparte da `list_documents`: tombstone per chi non c'è più, rifotografia per il resto (il dedup rende gratis gli immutati). |
 | Spegnibilità | **Il versioning si spegne del tutto** (D7), anche **a runtime** con `Workspace::deactivate_plugin` ([0028](decisions/0028-come-un-componente-smette.md)) | Principio non negoziabile ([funzionalita-future.md](appendix/funzionalita-future.md)): spento = l'handler non si registra, la UI non esiste, nel vault non compare nulla. |
 | Ciclo di vita del vault | **`open` → `close`**, e la chiusura è tre momenti in ordine: `Event::VaultClosed`, flush di **tutti** gli indici, poi ogni plugin che smette in ordine inverso ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)) | Prima `flush_indexes` aveva un solo chiamante in produzione — il file watcher —, quindi la durabilità di un indice dipendeva da un componente opzionale. Il flush finale è il punto di consistenza che *non* è il watcher; `VaultClosed` arriva prima di spegnere chiunque perché è l'unico modo che ha un `EventHandler` di rendere durevole ciò che teneva in memoria. |
-| Modifiche esterne | **Il rilevamento si chiede**: `IndexQuery::VaultStatus` → `VaultStatus { watching, sync_failures, last_sync_error }` ([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)) | Il watcher è l'unico meccanismo con cui FubMD sa che qualcun altro ha toccato il vault. La promessa è esplicita: le risposte riflettono il disco **solo quando `watching` è vero**; dove non lo è (network share, cloud, CLI, PWA, mobile) ciò che passa da fuori si vede alla riapertura. |
+| Modifiche esterne | **Il rilevamento si chiede**: `IndexQuery::VaultStatus` → `VaultStatus { watching, sync_failures, last_sync_error }` ([0030](decisions/0030-il-rilevamento-si-puo-chiedere.md)) | Il watcher è l'unico meccanismo con cui Fub sa che qualcun altro ha toccato il vault. La promessa è esplicita: le risposte riflettono il disco **solo quando `watching` è vero**; dove non lo è (network share, cloud, CLI, PWA, mobile) ciò che passa da fuori si vede alla riapertura. |
 | Vault aperti | **Una mappa, non uno slot**: `Host` tiene `root canonico → VaultSession`, ogni comando IPC accetta un `vault` opzionale ([0029](decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)) | Prima aprire un vault chiudeva quello aperto. La chiave è canonica perché due nomi dello stesso vault sarebbero due sessioni, e la seconda si bloccherebbe senza errore sul lock dell'indice. La metà shell (finestre, tab, layout) è il §1.2. |
 | Case dei path | `DocId` **byte-exact**, risoluzione wikilink **case-insensitive**, rename case-only supportato | Stessa semantica osservabile su FS case-sensitive e non — [data-model.md](architecture/data-model.md). |
 | Lavoro lungo dei plugin | **Job fuori dal giro sincrono**: `HostApi::spawn_job` → `Plugin::run_job` → `Event::JobDone` | I trait restano sincroni e brevi. Il job vede il vault ([0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md)) senza snapshot: fra due chiamate il vault può cambiare, e la guardia è la `base` della [0008](decisions/0008-modifica-chirurgica.md). Vedi [plugin-boundary.md](architecture/plugin-boundary.md). |
@@ -54,20 +54,20 @@ invarianti, struttura dei crate, e i rimandi ai documenti di dettaglio.
 Girano in CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)), insieme
 alla conformità abi↔WIT.
 
-- **`fubmd-kernel` e `fubmd-abi` non dipendono da `comrak`, `tauri`, `wasmtime`
-  o `tantivy`.** `crates/fubmd-abi/tests/dependency_invariant.rs` interroga
+- **`fub-kernel` e `fub-abi` non dipendono da `comrak`, `tauri`, `wasmtime`
+  o `tantivy`.** `crates/fub-abi/tests/dependency_invariant.rs` interroga
   `cargo metadata` e fallisce se una di quelle famiglie compare fra le
-  dipendenze normali, transitive incluse. Su `fubmd-abi` la chiusura transitiva
+  dipendenze normali, transitive incluse. Su `fub-abi` la chiusura transitiva
   è **elencata per intero**: una denylist per prefisso non vedrebbe un parser
   markdown con un nome nuovo.
-- **`fubmd-features` non dipende da `fubmd-kernel`.** Le feature ufficiali sono
+- **`fub-features` non dipende da `fub-kernel`.** Le feature ufficiali sono
   impl dei trait, cioè quel che scriverà un plugin di terzi — e un plugin di
   terzi il kernel non ce l'ha. Il kernel sta nei `[dev-dependencies]`, per i
   soli test end-to-end.
-- Conseguenza: **il banco di prova del kernel non può stare in `fubmd-sdk`**.
+- Conseguenza: **il banco di prova del kernel non può stare in `fub-sdk`**.
   L'SDK è ciò che un guest WASM importerà; ma la ragione stringente è già qui
-  oggi, ed è che `fubmd-sdk` è dipendenza **normale** di
-  `fubmd-format-markdown` — il kernel là dentro finirebbe nella libreria di un
+  oggi, ed è che `fub-sdk` è dipendenza **normale** di
+  `fub-format-markdown` — il kernel là dentro finirebbe nella libreria di un
   provider che esiste, e una cargo feature non lo eviterebbe (l'unificazione la
   accende per tutti). Sono due crate, e adesso lo presidiano due test
   ([0054](decisions/0054-il-banco-del-lato-provider.md),
@@ -75,7 +75,7 @@ alla conformità abi↔WIT.
 
 ## Regola d'oro
 
-Ogni argomento e ogni valore di ritorno dei trait è un tipo di `fubmd-abi`,
+Ogni argomento e ogni valore di ritorno dei trait è un tipo di `fub-abi`,
 `Serialize + Deserialize`, esprimibile come record WIT — niente reference con
 lifetime, trait object o closure nelle firme. Così l'impl nativa è veloce e il
 proxy WASM (M5) è meccanico.
@@ -83,44 +83,44 @@ proxy WASM (M5) è meccanico.
 La verifica non si ferma ai nomi: il test di conformità confronta **tipi e firme
 complete** dedotti dai tipi Rust, e le tre conversioni del confine
 (albero↔arena, `usize`↔`u64`, elisione di `host`) sono codice con dei test —
-`fubmd_abi::arena` e `tests/wit_conformance.rs`. Dettaglio in
+`fub_abi::arena` e `tests/wit_conformance.rs`. Dettaglio in
 [architecture/traits.md](architecture/traits.md).
 
 ## Struttura dei crate
 
 ```
-fubmd-abi              contratto: modello documento comune + tutti i trait
+fub-abi              contratto: modello documento comune + tutti i trait
   │                    (+ `arena`: la forma dei tipi AL CONFINE e le conversioni)
-  ├─ fubmd-kernel      core agnostico: vault, grafo link, registry, event bus
-  ├─ fubmd-sdk         helper per scrivere provider (scan #tag / [[wikilink]])
-  ├─ fubmd-format-markdown   1° FormatProvider nativo (comrak)
-  ├─ fubmd-features    feature ufficiali (backlink, ricerca full-text, versioning)
+  ├─ fub-kernel      core agnostico: vault, grafo link, registry, event bus
+  ├─ fub-sdk         helper per scrivere provider (scan #tag / [[wikilink]])
+  ├─ fub-format-markdown   1° FormatProvider nativo (comrak)
+  ├─ fub-features    feature ufficiali (backlink, ricerca full-text, versioning)
   │                    NON dipende dal kernel: solo dal contratto, come un plugin
-  ├─ fubmd-host        chi MONTA: tabella delle feature, sessione, watcher
+  ├─ fub-host        chi MONTA: tabella delle feature, sessione, watcher
   │                    dietro un trait, ponte eventi. NON dipende da tauri
-  ├─ fubmd-app         colla Tauri v2: IPC comandi/eventi, finestre, dialoghi
-  ├─ fubmd-testkit     banco di prova del KERNEL: `Banco`, un builder sui cinque
+  ├─ fub-app         colla Tauri v2: IPC comandi/eventi, finestre, dialoghi
+  ├─ fub-testkit     banco di prova del KERNEL: `Banco`, un builder sui cinque
   │                    assi che i test variano davvero. Crate a sé e non
-  │                    `fubmd-sdk::testing`, che è il banco dei PROVIDER (0055)
-  └─ fubmd-wasm-host   (M5) host wasmtime per plugin di terzi
+  │                    `fub-sdk::testing`, che è il banco dei PROVIDER (0055)
+  └─ fub-wasm-host   (M5) host wasmtime per plugin di terzi
 frontend/              Vite + TS + CodeMirror 6 (+ renderer UiNode)
-crates/fubmd-abi/wit/  contratto WIT che rispecchia fubmd-abi (vivo da M2, freeze M4)
+crates/fub-abi/wit/  contratto WIT che rispecchia fub-abi (vivo da M2, freeze M4)
 plugins/               (M5) plugin di esempio (wasm32-wasip2)
 ```
 
-Questo elenco è di **destinazione**: nomina `fubmd-wasm-host`, che non esiste, e
+Questo elenco è di **destinazione**: nomina `fub-wasm-host`, che non esiste, e
 l'indentazione raggruppa per ruolo, non per dipendenza. Chi
 dipende davvero da chi sta in
 [architecture/mappa-visuale.md](architecture/mappa-visuale.md#il-grafo-delle-dipendenze-e-il-test-che-lo-legge),
 dove un test rilegge il disegno e lo confronta con `cargo metadata`.
 
-Il meccanismo «un trait, due backend»: il trait vive in `fubmd-abi`,
-`fubmd-format-markdown` lo implementa nativo, `fubmd-wasm-host` lo implementerà
+Il meccanismo «un trait, due backend»: il trait vive in `fub-abi`,
+`fub-format-markdown` lo implementa nativo, `fub-wasm-host` lo implementerà
 come proxy. Il kernel vede solo `dyn Trait`.
 
 Stato delle due divisioni dichiarate dal piano:
 
-- **Fatta** — `fubmd-host` esiste e `fubmd-app` è ridotto a colla Tauri
+- **Fatta** — `fub-host` esiste e `fub-app` è ridotto a colla Tauri
   ([0023](decisions/0023-chi-monta-il-kernel.md)): quel montaggio ha cinque
   clienti previsti (CLI, API locale, e2e headless, mobile, PWA) e nessuno poteva
   riusare un composition root dentro un `#[tauri::command]`. Nello stesso crate
@@ -155,7 +155,7 @@ di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
 - [milestones/M2-search-graph.md](milestones/M2-search-graph.md) — ricerca (tantivy), grafo/indice incrementali, graph view, outline/tag panel, "crea nota".
 - [milestones/M3-editor-fidelity.md](milestones/M3-editor-fidelity.md) — live-preview in-editor, command palette, settings dichiarativi, rendering callout/embed/math.
 - [milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md) — freeze del contratto, WIT, conformità abi↔WIT, primo plugin nativo.
-- [milestones/M5-wasm-runtime.md](milestones/M5-wasm-runtime.md) — `fubmd-wasm-host`, proxy WASM, applicazione delle capability, plugin di esempio.
+- [milestones/M5-wasm-runtime.md](milestones/M5-wasm-runtime.md) — `fub-wasm-host`, proxy WASM, applicazione delle capability, plugin di esempio.
 
 **Piani di lavoro**:
 - [todo.md](todo.md) — la **roadmap infrastrutturale**: quali pezzi mancano
@@ -182,8 +182,8 @@ ragione per esteso è in [README.md](README.md)):
 - [CONTRIBUTING.md](CONTRIBUTING.md) — le quattro invarianti presidiate, il ciclo locale, i sei job della CI, la forma dei commit, come si chiude una decisione.
 - [SECURITY.md](SECURITY.md) — il canale privato per una vulnerabilità, il perimetro (dentro: il contenuto dei file come input non fidato; fuori: il sandbox WASM, che a M5 non esiste ancora), e i presidi già in piedi.
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1, traduzione ufficiale italiana, ripreso parola per parola.
-- [versionamento.md](versionamento.md) — i **tre** numeri di versione: i crate (SemVer, un numero solo per il workspace), il contratto (`ABI_VERSION` + `package fubmd:abi@…`, con la regola di caricamento) e i sette `SCHEMA_VERSION` su disco. L'additività del contratto non si ripete lì: rimanda a [architecture/wit-congelato.md](architecture/wit-congelato.md).
-- [CHANGELOG.md](CHANGELOG.md) — cosa cambia per chi usa FubMD, alla grana della milestone finché non esiste un rilascio.
+- [versionamento.md](versionamento.md) — i **tre** numeri di versione: i crate (SemVer, un numero solo per il workspace), il contratto (`ABI_VERSION` + `package fub:abi@…`, con la regola di caricamento) e i sette `SCHEMA_VERSION` su disco. L'additività del contratto non si ripete lì: rimanda a [architecture/wit-congelato.md](architecture/wit-congelato.md).
+- [CHANGELOG.md](CHANGELOG.md) — cosa cambia per chi usa Fub, alla grana della milestone finché non esiste un rilascio.
 
 **Appendici**:
 - [appendix/ai-autocomplete.md](appendix/ai-autocomplete.md) — design (non milestone) dell'autocompletamento AI.
@@ -193,7 +193,7 @@ ragione per esteso è in [README.md](README.md)):
 Nota storica: `ORGANIZZAZIONE_VAULT.md` è stato **cancellato** con la
 [0003](decisions/0003-modello-del-documento.md) (commit `0a4ee40`). La feature
 c'è ed è spedita (sidebar ad albero, icone, folder notes, spazi, appuntate,
-ordinamento drag & drop, cartella come radice, sidecar `.fubmd/workspace.json`);
+ordinamento drag & drop, cartella come radice, sidecar `.fub/workspace.json`);
 il design vive nel codice (`frontend/src/rules/organizer.ts`,
 `panels/explorer.ts`), e il sidecar è rientrato nella disciplina col §11.3
 ([0038](decisions/0038-il-kernel-possiede-il-sidecar.md)). Il testo si recupera
@@ -231,12 +231,12 @@ con `git show 0a4ee40^:docs/ORGANIZZAZIONE_VAULT.md`.
   dichiarativi, rendering callout/embed/math. La command palette è già a M2.
 - **M4 — Hardening del contratto + WIT** →
   [dettaglio](milestones/M4-wit-hardening.md). Freeze della superficie dei
-  trait; `crates/fubmd-abi/wit/fubmd/*.wit` (vivo da M2) rispecchia
-  `fubmd-abi`; test di conformità; primo plugin nativo. La **checklist del
+  trait; `crates/fub-abi/wit/fub/*.wit` (vivo da M2) rispecchia
+  `fub-abi`; test di conformità; primo plugin nativo. La **checklist del
   freeze** vive lì e rimanda alle voci **P0** di [todo.md](todo.md), che è
   l'elenco autorevole.
 - **M5 — Runtime WASM** → [dettaglio](milestones/M5-wasm-runtime.md).
-  `fubmd-wasm-host` (wasmtime, component model), proxy per ogni trait, host
+  `fub-wasm-host` (wasmtime, component model), proxy per ogni trait, host
   function per `HostApi`, plugin di esempio in `wasm32-wasip2`.
 - **Futuro** — autocompletamento AI come plugin core
   ([appendice](appendix/ai-autocomplete.md)); centro di comando LLM
@@ -250,8 +250,8 @@ con `git show 0a4ee40^:docs/ORGANIZZAZIONE_VAULT.md`.
 - Automatica: `cargo test --workspace` (parser markdown, grafo agnostico, e2e
   sul vault di esempio: risoluzione wikilink nome/alias/path, backlink,
   anteprima, modifica→aggiornamento grafo) + `cargo clippy`.
-- Manuale: `cargo tauri dev` (da `crates/fubmd-app`) o il binario release con
-  `FUBMD_VAULT` puntato a un vault: aprire note, editare, navigare
+- Manuale: `cargo tauri dev` (da `crates/fub-app`) o il binario release con
+  `FUB_VAULT` puntato a un vault: aprire note, editare, navigare
   `[[wikilink]]`, vedere i backlink.
 
 I criteri di accettazione e i piani di test di M2–M5 stanno nei rispettivi
@@ -262,7 +262,7 @@ documenti milestone.
 | Rischio | Stato | Come |
 |---|---|---|
 | Mantenere il core agnostico | presidiato | invariante di dipendenze in CI |
-| Confine WASM (M5) | de-rischiato | regola d'oro + `wit/` vivente da M2 + confronto sui **tipi** + conversioni già testate in `fubmd_abi::arena`: il proxy di M5 le chiamerà, non le inventerà |
+| Confine WASM (M5) | de-rischiato | regola d'oro + `wit/` vivente da M2 + confronto sui **tipi** + conversioni già testate in `fub_abi::arena`: il proxy di M5 le chiamerà, non le inventerà |
 | Live-preview in-editor (M3) | de-rischiato | anteprima HTML fin da M1 e `Span` nel modello. Dalla [0007](decisions/0007-contesto-di-sessione.md) l'anteprima non è un pannello sempre acceso ma **la modalità Lettura** (`PaneMode::Reading`): due superfici sullo stesso documento erano due verità da allineare |
 | Edge case markdown Obsidian | mitigato | corpus di fixture + snapshot test |
 | Rientranza del dispatch eventi | risolto per costruzione | coda + budget nel `Workspace`; l'esaurimento emette `Event::Overflow` — [traits.md](architecture/traits.md), «Dispatch» |
@@ -273,5 +273,5 @@ documenti milestone.
 | Concorrenza | mitigato | da `Mutex` a `RwLock` con la [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md), e due query che girano insieme con la [0026](decisions/0026-due-query-insieme.md) |
 | Il canale dati era servito dal kernel, non instradato | **risolto** | [0019](decisions/0019-il-canale-dati.md): le risposte del kernel sono un `IndexProvider` registrato per primo, chi serve cosa è dichiarato alla registrazione, e la query è un albero del contratto invece di una stringa nella sintassi di una dipendenza |
 | Il costo di una capacità non è la firma, è il numero di host | **mitigato** | [0021](decisions/0021-il-confine.md): il rifiuto è un wrapper generico (`Guard<H, P: Policy>`) e `HostApi` è una **somma di famiglie** — dieci quando la 0021 ha tagliato, quattordici oggi — così «sola lettura» è un tipo che non ha le scritture invece di un tipo che ne rifiuta dodici |
-| Le stesse regole scritte due volte | **mitigato** | [0020](decisions/0020-le-regole-in-un-posto-solo.md): le regole del contratto stanno in `fubmd_abi::rules`, e ciò che resta duplicato in TS è legato da una fixture generata (`rules_mirror.rs` → `rules-samples.json` → `rules-mirror.test.ts`). Fine corsa possibile: `fubmd-abi` compilato a `wasm32-unknown-unknown` |
+| Le stesse regole scritte due volte | **mitigato** | [0020](decisions/0020-le-regole-in-un-posto-solo.md): le regole del contratto stanno in `fub_abi::rules`, e ciò che resta duplicato in TS è legato da una fixture generata (`rules_mirror.rs` → `rules-samples.json` → `rules-mirror.test.ts`). Fine corsa possibile: `fub-abi` compilato a `wasm32-unknown-unknown` |
 | Il freeze arriva prima delle firme che FEATURES richiede | presidiato | è ciò che le voci **P0** di [todo.md](todo.md) esistono per chiudere: è P0 tutto ciò che ha una forma di **contratto**, in qualunque capitolo. Con la [0051](decisions/0051-l-alimentazione-risponde.md) **non ne resta nessuna aperta**, il che sposta il rischio dove è sempre stato davvero: non nel chiudere quelle trovate, ma nel trovare quelle che nessun giro ha ancora visto. Le decisioni con una domanda aperta sono nella checklist di [M4](milestones/M4-wit-hardening.md); il dogfooding resta lo strumento che le scopre |

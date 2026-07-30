@@ -456,7 +456,7 @@
       "origin": {
         "actor": {
           "kind": "plugin",
-          "id": "fubmd.versioning"
+          "id": "fub.versioning"
         },
         "batch": "18446744073709551615"
       }
@@ -549,7 +549,7 @@
       "kind": {
         "kind": "list",
         "default": [
-          "fubmd.stats"
+          "fub.stats"
         ]
       },
       "program_writable": false
@@ -608,7 +608,7 @@
         "program_writable": false
       },
       "value": [
-        "fubmd.stats"
+        "fub.stats"
       ],
       "source": "vault"
     }
@@ -798,7 +798,7 @@
     },
     {
       "kind": "settings",
-      "plugin": "fubmd.versioning"
+      "plugin": "fub.versioning"
     },
     {
       "kind": "organization"
@@ -965,7 +965,7 @@
         {
           "id": "1",
           "job": "export",
-          "plugin": "fubmd.transfer",
+          "plugin": "fub.transfer",
           "since": 1700000000000,
           "progress": {
             "done": 12,
@@ -976,7 +976,7 @@
         {
           "id": "2",
           "job": "reindex",
-          "plugin": "fubmd.search",
+          "plugin": "fub.search",
           "since": 1700000000500,
           "progress": null
         }
@@ -1176,7 +1176,7 @@
     {
       "id": "1",
       "job": "export",
-      "plugin": "fubmd.transfer",
+      "plugin": "fub.transfer",
       "since": 1700000000000,
       "progress": {
         "done": 12,
@@ -1187,7 +1187,7 @@
     {
       "id": "2",
       "job": "reindex",
-      "plugin": "fubmd.search",
+      "plugin": "fub.search",
       "since": 1700000000500,
       "progress": null
     }

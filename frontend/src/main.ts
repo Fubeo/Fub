@@ -186,7 +186,7 @@ async function openVaultPath(dir: string): Promise<void> {
     info.extensions.length > 0 ? info.extensions : state.handledExtensions;
   // §7.6: non un booleano che il backend calcola per noi, ma una domanda
   // all'inventario di ciò che è attivo.
-  state.versioningOn = hasPlugin(info, "fubmd.versioning");
+  state.versioningOn = hasPlugin(info, "fub.versioning");
 
   await loadOrganization();
   // Lo stato di vista di **questo** vault (§11.2): come lo si stava guardando.
@@ -224,7 +224,7 @@ async function openVaultPath(dir: string): Promise<void> {
 
 /// Se questo vault non ha il rilevamento delle modifiche esterne, dirlo (§9.7).
 ///
-/// È la promessa che FubMD non manteneva in silenzio: senza watcher nessuno
+/// È la promessa che Fub non manteneva in silenzio: senza watcher nessuno
 /// vede le scritture altrui — network share, cloud drive, vault sincronizzati
 /// con strumenti esterni — e il salvataggio successivo copre ciò che non è
 /// stato visto. Un avviso all'apertura non è l'indicatore permanente che il
@@ -248,6 +248,6 @@ async function avvisaSeNessunoGuarda(): Promise<void> {
 // apre. La barra del vault è il posto più visibile che la shell ha — e il §20.4
 // chiede una superficie vera, che oggi non c'è.
 init().catch((e) => {
-  console.error("FubMD: avvio fallito", e);
+  console.error("Fub: avvio fallito", e);
   vaultPathEl.textContent = t("app.start_failed", { reason: errorText(e) });
 });

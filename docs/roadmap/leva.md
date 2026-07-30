@@ -116,7 +116,7 @@ da ventiquattro metodi. La seconda è **chiusa** con la
 §6.1: il moltiplicatore resta (le regole condivise sono ancora scritte due
 volte) ma non moltiplica più il **rischio**, perché una fixture generata tiene
 uguali le due copie e ogni regola nuova nasce con la sua invece che con un
-commento. Toglierlo davvero è la fine corsa del §6.2 — `fubmd-abi` compilato a
+commento. Toglierlo davvero è la fine corsa del §6.2 — `fub-abi` compilato a
 wasm32 — e non è urgente proprio perché il presidio c'è.
 
 Un'ultima nota, che vale come criterio più che come voce: **[decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md)** (i link

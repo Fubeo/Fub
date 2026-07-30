@@ -33,8 +33,8 @@ condiviso, e chi scrive smette di essere scavalcato.**
 | `query_index` testo, 8 thread | 43 op/s | 43 op/s (**1,0×** — vedi §8.4) |
 | attesa di un salvataggio, 8 lettori | **6,4 s** mediana, 2 riusciti | **0,12 ms** mediana, 0,24 ms peggiore, 328 riusciti |
 
-Il banco è [`crates/fubmd-host/examples/contesa.rs`](../../crates/fubmd-host/examples/contesa.rs),
-e si rilancia: `cargo run --release -p fubmd-host --example contesa`.
+Il banco è [`crates/fub-host/examples/contesa.rs`](../../crates/fub-host/examples/contesa.rs),
+e si rilancia: `cargo run --release -p fub-host --example contesa`.
 
 ## Le decisioni prese, da NON ridiscutere senza motivo
 
@@ -44,7 +44,7 @@ e si rilancia: `cargo run --release -p fubmd-host --example contesa`.
   stessa corsa e il «prima» resta verificabile fra un anno, invece di essere un
   numero citato in questo file di cui nessuno può più rifare il conto. È la
   stessa idea del presidio di
-  [`dependency_invariant.rs`](../../crates/fubmd-abi/tests/dependency_invariant.rs)
+  [`dependency_invariant.rs`](../../crates/fub-abi/tests/dependency_invariant.rs)
   applicata a una misura invece che a un confine.
 - **Il cambio di tipo non ha voluto niente perché era già stato pagato, due
   volte.** Un `Mutex<Workspace>` condiviso chiede `Workspace: Send`; un
@@ -72,7 +72,7 @@ e si rilancia: `cargo run --release -p fubmd-host --example contesa`.
   di `RwLock` dichiara la politica di priorità dipendente dal sistema operativo
   e **non** promette che chi aspetta di scrivere blocchi i lettori nuovi. Su
   Linux (futex) lo fa. Il presidio
-  [`chi_scrive_non_aspetta_i_lettori_piu_di_un_battito`](../../crates/fubmd-host/tests/concorrenza.rs)
+  [`chi_scrive_non_aspetta_i_lettori_piu_di_un_battito`](../../crates/fub-host/tests/concorrenza.rs)
   misura l'attesa peggiore e la vuole sotto 50 ms: il giorno che diventasse
   rosso su una piattaforma, non sarebbe una fiacchezza del test — sarebbe quella
   piattaforma che dice di non avere la proprietà, e a quel punto la coda equa va
@@ -163,12 +163,12 @@ e si rilancia: `cargo run --release -p fubmd-host --example contesa`.
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning. Anche
-  `-p fubmd-host --no-default-features`.
+  `-p fub-host --no-default-features`.
 - `cargo clippy --workspace --all-targets` — pulita, nelle due configurazioni di
   feature.
 - `cargo test --workspace` — **55 suite, 0 fallimenti**. Erano 54 alla
   [0023](0023-chi-monta-il-kernel.md): la nuova è
-  `crates/fubmd-host/tests/concorrenza.rs`. **Nessun test preesistente è stato
+  `crates/fub-host/tests/concorrenza.rs`. **Nessun test preesistente è stato
   aggiunto o tolto**; `tests/headless.rs` è stato *adattato* in cinque righe —
   `.lock()` → `.read()`/`.write()` — perché il tipo che quel file prende in mano
   è cambiato, e non c'era modo di cambiarlo lasciandolo intatto.

@@ -128,7 +128,7 @@ export async function mountDeclaredViews(): Promise<void> {
     const host = surfaceContainer(spec.surface);
     if (!host) {
       console.warn(
-        `FubMD: la view «${spec.id}» chiede la superficie «${spec.surface}», che questa shell non ospita: ${
+        `Fub: la view «${spec.id}» chiede la superficie «${spec.surface}», che questa shell non ospita: ${
           NON_OSPITATE[spec.surface] ?? "superficie sconosciuta"
         }.`,
       );

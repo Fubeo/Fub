@@ -1,6 +1,6 @@
 // Ciò che il sistema è, riportato al kernel (§12.3).
 //
-// Questa shell è l'unica parte di FubMD che sappia davvero in che lingua legge
+// Questa shell è l'unica parte di Fub che sappia davvero in che lingua legge
 // l'utente e in che fuso vive: la webview porta un ICU intero, e il lato Rust
 // — per rispondere alla stessa domanda — avrebbe bisogno di un database dei
 // fusi orari, cioè di una dipendenza che il kernel non porta, per dare una

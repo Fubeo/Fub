@@ -29,7 +29,7 @@ un livello per volta, e `IndexQuery::Entries` prende una cartella. `list_documen
 non è più un comando IPC e `VaultInfo` non porta più l'elenco del vault.
 
 Della seduta restano **tre** caselle aperte del §14.1 — l'impronta degli
-allegati, la politica della cartella allegati e le derivate in `.fubmd/data/` —
+allegati, la politica della cartella allegati e le derivate in `.fub/data/` —
 che hanno una milestone propria. Erano contate come due qui e nell'[indice](../todo.md)
 finché qualcuno non le ha ricontate: è la [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
 applicata al piano invece che ai sorgenti.
@@ -58,7 +58,7 @@ applicata al piano invece che ai sorgenti.
       **riferimenti aggiornati su rinomina/spostamento** invece ci sono già:
       spostare `foto.png` in `allegati/` riscrive sia i `![[foto.png]]` sia i
       `![alt](../foto.png)` di chi la mostra.
-- [ ] **Thumbnail/cache derivate** in `.fubmd/data/` (mai autorevoli): aspettano
+- [ ] **Thumbnail/cache derivate** in `.fub/data/` (mai autorevoli): aspettano
       chi le disegna.
 
 ### 14.2 Nessun metadato di entry: né mtime, né dimensione, né impronta
@@ -74,7 +74,7 @@ applicata al piano invece che ai sorgenti.
       il kernel, che paga comunque lettura + parse di tutto prima ancora di
       chiedere all'indice se gli interessa.
       → La domanda che mancava è `IndexProvider::up_to_date`, e l'anagrafe è
-      durevole in `.fubmd/data/entries.json` (derivata: illeggibile si butta).
+      durevole in `.fub/data/entries.json` (derivata: illeggibile si butta).
       `mtime + size` basta a **saltare** e non a **credere**, con la regola
       *racily clean* di git; l'impronta è ciò che riconosce mille file che un
       `git checkout` ha ritimbrato senza cambiarne uno.

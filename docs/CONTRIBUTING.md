@@ -1,4 +1,4 @@
-# Contribuire a FubMD
+# Contribuire a Fub
 
 Il progetto ha **un manutentore**, e questo documento dice cosa cambia per chi
 arriva da fuori: dove si guarda prima di scrivere, quali regole non sono
@@ -32,11 +32,11 @@ viola, ed è per questo che sono ancora vere.
 
 | Invariante | Perché | Chi la fa fallire |
 |---|---|---|
-| `fubmd-abi` e `fubmd-kernel` non conoscono `comrak`, `tauri`, `wasmtime`; `fubmd-host` non conosce `tauri` | il core è agnostico rispetto al formato e chi monta dev'essere avviabile da una CLI o da un e2e headless, senza webview | [`crates/fubmd-abi/tests/dependency_invariant.rs`](../crates/fubmd-abi/tests/dependency_invariant.rs) |
-| `fubmd-abi` e `crates/fubmd-abi/wit/fubmd/abi.wit` si rispecchiano | il contratto WIT è la stessa superficie detta nella lingua dei componenti: se le due divergono, a M5 diverge il confine | [`crates/fubmd-abi/tests/wit_conformance.rs`](../crates/fubmd-abi/tests/wit_conformance.rs) |
-| il contratto cresce **solo per aggiunta** rispetto a `wit/frozen/` | è la promessa su cui poggia il freeze di M4, e senza presidio decade in silenzio — vedi [architecture/wit-congelato.md](architecture/wit-congelato.md) | [`crates/fubmd-abi/tests/wit_additivity.rs`](../crates/fubmd-abi/tests/wit_additivity.rs) |
+| `fub-abi` e `fub-kernel` non conoscono `comrak`, `tauri`, `wasmtime`; `fub-host` non conosce `tauri` | il core è agnostico rispetto al formato e chi monta dev'essere avviabile da una CLI o da un e2e headless, senza webview | [`crates/fub-abi/tests/dependency_invariant.rs`](../crates/fub-abi/tests/dependency_invariant.rs) |
+| `fub-abi` e `crates/fub-abi/wit/fub/abi.wit` si rispecchiano | il contratto WIT è la stessa superficie detta nella lingua dei componenti: se le due divergono, a M5 diverge il confine | [`crates/fub-abi/tests/wit_conformance.rs`](../crates/fub-abi/tests/wit_conformance.rs) |
+| il contratto cresce **solo per aggiunta** rispetto a `wit/frozen/` | è la promessa su cui poggia il freeze di M4, e senza presidio decade in silenzio — vedi [architecture/wit-congelato.md](architecture/wit-congelato.md) | [`crates/fub-abi/tests/wit_additivity.rs`](../crates/fub-abi/tests/wit_additivity.rs) |
 | i link fra documenti non marciscono — e nemmeno quelli che puntano a un file di codice | un secondo posto in cui si racconta la stessa cosa invecchia perché niente lo compila; un documento che cita `traits.rs` deve diventare rosso quando `traits.rs` si sposta | [`.github/scripts/check-doc-links.mjs`](../.github/scripts/check-doc-links.mjs) |
-| il diagramma dei componenti dice le dipendenze che dicono i `Cargo.toml` | un disegno non lo compila nessuno: un arco inventato e — soprattutto — un crate nuovo mai disegnato passerebbero inosservati, e un diagramma incompleto mente più di uno sbagliato | [`il_diagramma_dice_le_dipendenze_vere`](../crates/fubmd-abi/tests/dependency_invariant.rs) |
+| il diagramma dei componenti dice le dipendenze che dicono i `Cargo.toml` | un disegno non lo compila nessuno: un arco inventato e — soprattutto — un crate nuovo mai disegnato passerebbero inosservati, e un diagramma incompleto mente più di uno sbagliato | [`il_diagramma_dice_le_dipendenze_vere`](../crates/fub-abi/tests/dependency_invariant.rs) |
 
 Rompere deliberatamente la terza è previsto e ha una procedura: si ritaglia la
 linea di base con un commit che tocca `0.1.0.wit` e dice perché. Il test non lo
@@ -70,7 +70,7 @@ cargo deny check
 
 La CI non fa niente di più di questo elenco: se passa in locale, passa lì —
 salvo il fatto che i test girano anche su Windows e macOS, dove a rompersi sono
-quasi sempre i path e i lock file di `.fubmd/data/`.
+quasi sempre i path e i lock file di `.fub/data/`.
 
 ## Cosa presidia la CI
 
@@ -103,7 +103,7 @@ entrambi.
 Forma del messaggio: `tipo(scope,scope): frase`.
 
 - **tipo** — `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `style`.
-- **scope** — il crate senza il prefisso `fubmd-` (`abi`, `kernel`, `host`,
+- **scope** — il crate senza il prefisso `fub-` (`abi`, `kernel`, `host`,
   `features`, `sdk`, `app`), più `wit`, `frontend`, `docs`, `ci`. Si elencano
   tutti quelli toccati.
 - **frase** — in italiano, minuscola, senza punto finale, e dice **cosa cambia

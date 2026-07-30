@@ -20,7 +20,7 @@ Quell'argomento, però, non era stato applicato fino in fondo. Restavano fuori t
 cose, e il §12.3 le aveva elencate senza deciderle:
 
 - **Il caso.** Sotto WASI l'entropia non c'è più dell'orologio, ed è
-  letteralmente lo stesso buco un metodo più in là. Ogni identità che FubMD
+  letteralmente lo stesso buco un metodo più in là. Ogni identità che Fub
   genererà lo chiede: UUID per nota (FEATURES 2.2), id Zettelkasten (8.3), id di
   blocco (5.2, e la [0003](0003-modello-del-documento.md)), id di annotazione
   (13.3).
@@ -58,7 +58,7 @@ divergono non è ipotetico — l'offset cambia da solo l'ultima domenica di otto
 in mezzo a un job che dura.
 
 È lo stesso argomento di
-[`SettingEntry`](../../crates/fubmd-abi/src/settings.rs), che tiene insieme
+[`SettingEntry`](../../crates/fub-abi/src/settings.rs), che tiene insieme
 schema, valore e provenienza per non farli riconciliare a chi disegna.
 
 ### Lo pubblica la shell, e non lo deriva il kernel
@@ -159,7 +159,7 @@ moltiplicatore che non si paga aggiungendo la voce, si paga a ogni voce
 successiva.
 
 Il taglio è: **la capacità è l'entropia**, che solo l'host ha; **la forma è
-codice di libreria**, e sta in [`fubmd_sdk::ids`](../../crates/fubmd-sdk/src/ids.rs)
+codice di libreria**, e sta in [`fub_sdk::ids`](../../crates/fub-sdk/src/ids.rs)
 — UUID v4, UUID v7, id corti in base32 leggibile. Nell'SDK e non nel kernel
 perché a M5 chi ne ha bisogno è il *guest*: un plugin WASM linka quel crate e
 chiama `random_bytes` attraverso il confine come lo chiama un provider nativo.
@@ -184,7 +184,7 @@ promettesse il contrario avrebbe messo in casa una promessa più grande dell'uso
 
 Quando servirà un generatore crittografico sarà una capacità sua, con una firma
 sua — come il portachiavi di sistema per i segreti, che
-[`fubmd_abi::settings`](../../crates/fubmd-abi/src/settings.rs) già nomina.
+[`fub_abi::settings`](../../crates/fub-abi/src/settings.rs) già nomina.
 
 ### Un tetto, e chi lo supera riceve il tetto
 
@@ -204,7 +204,7 @@ altre due della famiglia. Negate:
 - `user_locale()` rende `Locale::default()`, che è già la risposta del contratto
   per «nessuno me l'ha detto»: chi non ha la capacità riceve ciò che riceverebbe
   un host senza shell, non un locale plausibile e falso;
-- `random_bytes()` rende **il vuoto**, e da lì `fubmd_sdk::ids` rende `None`. Dei
+- `random_bytes()` rende **il vuoto**, e da lì `fub_sdk::ids` rende `None`. Dei
   byte fissi sarebbero identità che collidono, e chi le genera non se ne
   accorgerebbe finché due note non hanno lo stesso id. *Un id che non si è potuto
   generare non è un id di zeri.*
@@ -245,7 +245,7 @@ o si ridisegnerebbe a ogni alt-tab.
   `Text`, `Choice`, `Toggle`, `Number`, `List`, e nessuno di questi è «un
   oggetto».
 - **`Locale` dentro le impostazioni come valore.** È il divieto che la 0036 ha
-  già scritto in `fubmd_abi::settings` per lo stato di vista e per il layout, e
+  già scritto in `fub_abi::settings` per lo stato di vista e per il layout, e
   vale qui per la stessa forma: un'impostazione ha *un valore*, e questo è un
   record. Le impostazioni ci sono lo stesso — quattro chiavi scalari — ma
   descrivono uno **scarto** dal sistema, non il locale.

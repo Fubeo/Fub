@@ -22,7 +22,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
       (`ImportOutcome`) e politica dei duplicati (`ConflictPolicy`) stanno qui e
       non nel primo importer. Rollback e resume no: sono la [decisione 0011](../decisions/0011-il-lotto.md) + §15.2.
 - [x] Primo cliente vero: `MarkdownImport`/`MarkdownExport` in
-      `fubmd-format-markdown`, registrati nel `Workspace`
+      `fub-format-markdown`, registrati nel `Workspace`
       (`register_import_provider` / `register_export_provider`) e provati
       end-to-end contro il kernel — preview che non scrive, tre politiche di
       conflitto, selezione per cartella e per query, export con e senza

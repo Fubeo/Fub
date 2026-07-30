@@ -1,7 +1,7 @@
 // FILE GENERATO — non modificare a mano.
 //
 // Le union di stringhe del contratto, emesse dagli `enum` senza payload di
-// `fubmd-abi` (crates/fubmd-abi/tests/ts_enums.rs, decisione 0053). I casi e il
+// `fub-abi` (crates/fub-abi/tests/ts_enums.rs, decisione 0053). I casi e il
 // loro ORDINE vengono dalla dichiarazione Rust; la forma delle stringhe è
 // quella di serde (`rename_all = "snake_case"`), cioè quella che attraversa
 // davvero l'IPC — non quella del WIT, che è un altro confine.
@@ -9,7 +9,7 @@
 // La prosa di ognuna sta accanto alla sua ri-esportazione in `contract.ts`: qui
 // non ci sono commenti perché qui non c'è niente che qualcuno abbia deciso.
 //
-// Rigenera con: UPDATE_MIRROR=1 cargo test -p fubmd-abi --test ts_enums
+// Rigenera con: UPDATE_MIRROR=1 cargo test -p fub-abi --test ts_enums
 
 export type Align = "start" | "center" | "end";
 

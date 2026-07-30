@@ -26,12 +26,12 @@ Quindi qui si chiude **mezza voce**, ed è la metà il cui costo cresceva.
 ## Cosa si prova, e cosa non si prova
 
 Un corpus di conformità markdown sembra chiedere una cosa che non è quella
-giusta: *comrak è conforme a CommonMark?* Non è una proprietà di FubMD — è una
+giusta: *comrak è conforme a CommonMark?* Non è una proprietà di Fub — è una
 proprietà di una dipendenza, e asserirla renderebbe questa suite rossa il giorno
 in cui comrak **corregge** un bug, cioè trasformerebbe un presidio in un ostacolo
 all'aggiornamento.
 
-La proprietà di FubMD è l'altra, e finora nessuno la chiedeva:
+La proprietà di Fub è l'altra, e finora nessuno la chiedeva:
 
 > **Ciò che il modello dice del documento è vero rispetto ai byte del file.**
 
@@ -48,7 +48,7 @@ riscrive senza usarle.
 
 ## La sezione che c'era aveva due proprietà e nessun cliente
 
-`fubmd_sdk::testing::conformita` nasce con la [0054](0054-il-banco-del-lato-provider.md),
+`fub_sdk::testing::conformita` nasce con la [0054](0054-il-banco-del-lato-provider.md),
 e la sua sezione `FormatProvider` era tre funzioni: un aggregatore e due
 proprietà — un provider testuale rifiuta i byte grezzi, un descrittore dichiara
 almeno un'estensione. **Nessuna delle due guardava un documento parsato.**
@@ -58,8 +58,8 @@ compariva in un posto solo, **la tabella della 0054 che la elencava**; l'altra �
 `il_descrittore_dichiara_almeno_una_estensione` — da nessuna parte fuori dal
 proprio file, tabella compresa, e la sua riga in quella tabella l'ha aggiunta
 questo lavoro. Il cliente vero della suite c'era, ed era
-`fubmd-features/tests/conformita.rs`, ma passa le view — non un formato, perché
-in `fubmd-features` non ce n'è nessuno.
+`fub-features/tests/conformita.rs`, ma passa le view — non un formato, perché
+in `fub-features` non ce n'è nessuno.
 
 Cioè la sezione `FormatProvider` del banco era esattamente ciò che la 0054
 dichiara vietato, nel suo stesso verbale, una trentina di righe dopo averle
@@ -70,15 +70,15 @@ scritte:
 
 Non era un'omissione da niente. Il markdown è **l'unico provider di formato di
 produzione che esiste**, e il crate che lo implementa dipende dall'SDK già oggi
-(`fubmd-sdk = { workspace = true }`): il cliente non mancava per un confine fra
+(`fub-sdk = { workspace = true }`): il cliente non mancava per un confine fra
 crate, mancava perché nessuno lo aveva scritto. Un secondo candidato c'era e non
-è un test — `TestoDiProva` in `fubmd-testkit/src/formato.rs`, che è codice di
+è un test — `TestoDiProva` in `fub-testkit/src/formato.rs`, che è codice di
 libreria — e non chiamava la suite nemmeno lui.
 
 ## Fatto
 
 - [x] **Sei proprietà nuove e due aggregatori**, in
-      [`crates/fubmd-sdk/src/testing/conformita.rs`](../../crates/fubmd-sdk/src/testing/conformita.rs):
+      [`crates/fub-sdk/src/testing/conformita.rs`](../../crates/fub-sdk/src/testing/conformita.rs):
       l'id che il modello dichiara è quello che gli è stato dato; **gli span
       affettano la sorgente**, stanno dentro il padre e non si sovrappongono al
       fratello; le tabelle piatte sono la proiezione dell'albero; lo slug di un
@@ -87,7 +87,7 @@ libreria — e non chiamava la suite nemmeno lui.
       di un `FormatProvider` **qualunque** — un secondo provider (org-mode,
       AsciiDoc, il canvas di 21.2) le eredita senza riscriverle.
 - [x] **Il corpus**, in
-      [`crates/fubmd-format-markdown/tests/il_corpus.rs`](../../crates/fubmd-format-markdown/tests/il_corpus.rs):
+      [`crates/fub-format-markdown/tests/il_corpus.rs`](../../crates/fub-format-markdown/tests/il_corpus.rs):
       sessantadue casi, ognuno con un nome che si legge nel fallimento. Ogni
       variante di `Block` e di `Inline`, ogni `custom_kind` che il provider
       emette, le due forme di ancora più il caso che non è un'ancora
@@ -167,7 +167,7 @@ messaggio. L'esplorazione guidata dalla copertura resta **dichiarata fuori**, e 
 con la macchina della seconda metà.
 
 *Ventimila casi a ogni push.* Costa 2,5 secondi dei 2,6 che il file intero prende
-in debug. La corsa lunga si chiede a mano (`FUBMD_FUZZ_CASI`), e cinque milioni di
+in debug. La corsa lunga si chiede a mano (`FUB_FUZZ_CASI`), e cinque milioni di
 casi in release stanno in un minuto e mezzo: il numero di default è quello che
 tiene un presidio dentro un `cargo test --workspace` senza che nessuno abbia
 ragione di volerlo saltare.
@@ -302,10 +302,10 @@ disciplina della [0052](0052-cio-che-va-storto-e-un-evento.md).
 
 | dove | diceva | è |
 |---|---|---|
-| [0054](0054-il-banco-del-lato-provider.md), «un terzo crate per **otto** funzioni» e la tabella che le elenca | 8 | **23** — `grep -c "^pub fn " crates/fubmd-sdk/src/testing/conformita.rs`; erano **14** già nel commit che scriveva «otto» |
+| [0054](0054-il-banco-del-lato-provider.md), «un terzo crate per **otto** funzioni» e la tabella che le elenca | 8 | **23** — `grep -c "^pub fn " crates/fub-sdk/src/testing/conformita.rs`; erano **14** già nel commit che scriveva «otto» |
 | [todo.md](../todo.md), «i verbali delle decisioni chiuse — **cinquantasette**» | 57 | **60** con questo — `ls docs/decisions/0*.md \| wc -l` |
 | [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), «oggi: **129** file, **2336** link» | 129 / 2336 | vedi la [Verifica](#verifica) — ed è la **nona** volta che quel numero si ritrova falso |
-| [0057](0057-la-dieta-dell-ipc.md) e il §16.6, «`i_debiti_dichiarati_sono_cinque` asserisce il conteggio» | un nome che non esiste | il test si chiama **`il_debito_dichiarato_e_un_numero_presidiato`** (`crates/fubmd-app/tests/dieta_ipc.rs`) — l'asserzione a cinque c'è, il nome no |
+| [0057](0057-la-dieta-dell-ipc.md) e il §16.6, «`i_debiti_dichiarati_sono_cinque` asserisce il conteggio» | un nome che non esiste | il test si chiama **`il_debito_dichiarato_e_un_numero_presidiato`** (`crates/fub-app/tests/dieta_ipc.rs`) — l'asserzione a cinque c'è, il nome no |
 
 Il primo è il caso interessante, e non per la dimensione dello scarto: era
 **falso il giorno in cui è stato scritto.** La 0054 elencava otto proprietà in una
@@ -356,7 +356,7 @@ crederà che copra ([0056](0056-un-elenco-che-e-la-sorgente.md)).
   non decodificabili non sono un buco: il provider li rifiuta per contratto, e la
   proprietà che lo dice è `un_provider_testuale_rifiuta_i_byte`.
 - **Il seme è fisso**, quindi questa è una rete di regressione e non
-  un'esplorazione. Cercare davvero è alzare `FUBMD_FUZZ_CASI` a mano, oppure è il
+  un'esplorazione. Cercare davvero è alzare `FUB_FUZZ_CASI` a mano, oppure è il
   lavoro di libFuzzer, che sta con la macchina della seconda metà.
 - **L'estrattore delle varianti legge i sorgenti come testo.** Un `enum` generato
   da una macro, o una variante scritta sulla stessa riga della graffa, non li
@@ -472,7 +472,7 @@ le due proprietà del descrittore che finalmente qualcuno chiama, le tre direzio
 di copertura, l'estrattore col suo presidio, le divergenze e il fuzzer.
 
 Il fuzzer con l'ingresso lungo, che è il modo di sapere quanto tiene la rete:
-`FUBMD_FUZZ_CASI=5000000 cargo test --release -p fubmd-format-markdown --test
+`FUB_FUZZ_CASI=5000000 cargo test --release -p fub-format-markdown --test
 il_corpus -- nessuna_mutazione` → **verde**, cinque milioni di mutazioni in
 **84,11 s** e in **88,17 s** su una seconda corsa: la differenza è della macchina,
 e il numero da tenere è l'ordine di grandezza — un minuto e mezzo. Ai ventimila

@@ -38,8 +38,8 @@ scadenza, e l'unico indice che aveva il difetto non ce l'ha più.**
 | carico misto (le sei letture) | **1,0×** | **6,8×** (e 9,1× a 16 thread) |
 
 Il banco è lo stesso di allora e non è stato toccato — è
-[`crates/fubmd-host/examples/contesa.rs`](../../crates/fubmd-host/examples/contesa.rs),
-e si rilancia con `cargo run --release -p fubmd-host --example contesa`. La
+[`crates/fub-host/examples/contesa.rs`](../../crates/fub-host/examples/contesa.rs),
+e si rilancia con `cargo run --release -p fub-host --example contesa`. La
 seconda riga è la frase che la 0024 aveva dovuto lasciare aperta: «finché la
 §8.4 è aperta, una schermata con la ricerca aperta non vede il guadagno». Adesso
 lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costava il
@@ -74,8 +74,8 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
   senza aver consumato nulla del budget del freeze, ed è il verso in cui una P0
   condizionale deve risolversi quando può.
 - **La prosa si scrive lo stesso, perché è l'unica cosa che sarebbe servita.**
-  Il trait ([`IndexProvider::query`](../../crates/fubmd-abi/src/traits.rs)) e il
-  WIT ([`index.query`](../../crates/fubmd-abi/wit/fubmd/abi.wit)) adesso dicono per esteso ciò che
+  Il trait ([`IndexProvider::query`](../../crates/fub-abi/src/traits.rs)) e il
+  WIT ([`index.query`](../../crates/fub-abi/wit/fub/abi.wit)) adesso dicono per esteso ciò che
   era implicito: due `query` possono essere in volo insieme, serializzare è
   **permesso e sconsigliato**, e chi vuole sapere se il proprio indice scala lo
   misura. Non è una garanzia e non finge di esserlo: è la differenza fra un
@@ -158,12 +158,12 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning; anche
-  `-p fubmd-host --no-default-features`.
+  `-p fub-host --no-default-features`.
 - `cargo clippy --workspace --all-targets` — pulita nelle due configurazioni.
 - `cargo test --workspace` — **55 suite, 0 fallimenti**. Sono le stesse 55 della
   [0024](0024-chi-legge-non-aspetta-chi-legge.md), e il numero non sale apposta:
   il presidio nuovo (`due_ricerche_stanno_nell_indice_insieme`) sta **dentro**
-  la suite di `fubmd-features`, che passa da 93 a 94 test, perché è una qualità
+  la suite di `fub-features`, che passa da 93 a 94 test, perché è una qualità
   di quell'indice e non una proprietà del kernel da provare a parte. Nessun test
   preesistente è stato tolto; uno è stato *adattato* di una riga
   (`inner.get_mut().dirty` → `dirty.load(…)`, perché il campo che leggeva ha

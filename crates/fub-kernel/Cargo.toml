@@ -1,0 +1,28 @@
+[package]
+name = "fub-kernel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Core agnostico di Fub: vault, grafo dei link, registry dei provider, event bus. NON dipende da markdown, wasm o tauri."
+
+[dependencies]
+fub-abi = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+camino = { workspace = true }
+thiserror = { workspace = true }
+
+# INVARIANTE: niente comrak/pulldown, wasmtime, tauri qui dentro. Il core non
+# sa cosa sia il markdown.
+
+[dev-dependencies]
+# i test del grafo costruiscono DocumentModel a mano: zero markdown.
+# Espliciti per gli integration test in `tests/` (niente proptest: il generatore
+# di sequenze è un xorshift deterministico dentro il test).
+fub-abi = { workspace = true }
+# Il banco del lato host (§16.2). Il ciclo `kernel → testkit → kernel` è
+# legittimo perché è di sola prova: cargo lo risolve, e la libreria non lo vede.
+fub-testkit = { workspace = true }
+serde_json = { workspace = true }
+tempfile = "3.27.0"

@@ -192,5 +192,5 @@ export const api = {
 /// `@tauri-apps` per dichiararlo — e la regola del §1.3 vale anche per i tipi,
 /// o il presidio diventa una formalità che si aggira con `import type`.
 export function onKernelEvent(handler: (n: KernelNotice) => void): Promise<() => void> {
-  return listen<KernelNotice>("fubmd://event", (evt) => handler(evt.payload));
+  return listen<KernelNotice>("fub://event", (evt) => handler(evt.payload));
 }

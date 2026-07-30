@@ -4,7 +4,7 @@ Le modifiche degne di nota, versione per versione. Il formato è
 [Keep a Changelog](https://keepachangelog.com/it-IT/1.1.0/) e la numerazione
 segue [versionamento.md](versionamento.md).
 
-**Cosa ci va e cosa no.** Qui sta ciò che cambia per **chi usa FubMD o ci scrive
+**Cosa ci va e cosa no.** Qui sta ciò che cambia per **chi usa Fub o ci scrive
 sopra**: una funzionalità che compare, un comportamento che cambia, una firma
 del contratto che si muove. Non ci va il lavoro interno — quello sta nel `git
 log`, e il *perché* di ogni scelta sta nei [verbali](decisions/README.md), che
