@@ -70,6 +70,7 @@ cronologico di chiusura.
 | [0057](0057-la-dieta-dell-ipc.md) | La dieta dell'IPC: un elenco che diventa rosso quando qualcosa si aggiunge | §16.6 (**meno una casella**) ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-07-29 |
 | [0058](0058-un-nome-che-nasce.md) | Un nome che nasce non è un nome che c'è, e la sorgente è il file | §15.5 ([seduta 15](../roadmap/15-il-disco.md)) | 2026-07-29 |
 | [0059](0059-la-generazione-non-e-un-round-trip.md) | La generazione non è un round-trip, e la frase che lo diceva adesso è una rete | il doc di `FormatProvider::serialize` — la sesta specie della [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), **non** una voce di [todo.md](../todo.md) | 2026-07-30 |
+| [0060](0060-il-modello-dice-il-vero-sui-byte.md) | Il modello dice il vero sui byte del file, e un corpus che nessuno confronta non cresce | §17.1 (**prima metà**: il corpus e il fuzzing) — resta il banco delle prestazioni ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -209,6 +210,39 @@ elenco: *chi lo legge, lo trova?* Una casella residua vive nel paragrafo di
 consegnata alla voce che la farà sta dove la cercherà chi la farà — e per questo
 non entra in nessun totale delle caselle residue: non è rimasta indietro, ha
 cambiato indirizzo.
+
+La [0060](0060-il-modello-dice-il-vero-sui-byte.md) è il **terzo** caso di mezza
+voce, e porta una ragione che i due precedenti non avevano. Nella
+[0031](0031-chi-possiede-i-bundle.md) mancava metà del *ragionamento*; nella
+[0037](0037-lo-stato-di-vista.md) mancava il modello su cui la seconda metà
+poggia. Qui il ragionamento è intero e la metà che resta non aspetta una
+decisione: aspetta **un posto dove girare** — un carico che domini l'overhead e
+una macchina che non divida i core, che è ciò che la §8.4 ha già scoperto
+misurando ([0026](0026-due-query-insieme.md)). Da tenere perché precisa il
+confine con la casella residua della [0052](0052-cio-che-va-storto-e-un-evento.md):
+una casella è ciò che si può fare **senza aprire un verbale**, e qui la seconda
+metà lo sarebbe se ciò che le manca si comprasse scrivendo codice. Non si compra,
+quindi la voce resta aperta.
+
+E il taglio non l'ha scelto il verbale: l'ha scelto **il cappello della seduta**.
+Quel cappello giudica le sue voci su *se il costo cresce con l'attesa* — un
+criterio scritto per ordinare tre voci fra loro — e applicato **dentro** una l'ha
+divisa in due: il corpus cresce, il banco delle prestazioni no. È la terza cosa
+che un cappello di seduta si scopre capace di fare, dopo l'accorpamento dichiarato
+della [0053](0053-il-contratto-ha-una-sorgente.md) e il confine dichiarato della
+[0054](0054-il-banco-del-lato-provider.md)/[0055](0055-il-banco-del-lato-host.md).
+
+E una cosa di metodo, che vale la pena scrivere qui perché
+[CONTRIBUTING.md](../CONTRIBUTING.md) dice che **i verbali sono immutabili**: la
+0060 corregge un numero dentro la [0054](0054-il-banco-del-lato-provider.md), che
+è già stata toccata una volta dopo la chiusura — quando il §16.7 ha mostrato che
+la specie che rivendicava era la sesta e non la quinta. Le due cose non sono in
+contrasto, perché ciò che non si riscrive è il **ragionamento**: cosa si è deciso,
+cosa si è scartato, perché. Un **conteggio dei sorgenti** dentro un verbale non è
+un ragionamento — è un'affermazione su oggi che invecchia da sola, e in quel caso
+invecchiava già nel commit che la scriveva. Si corregge dov'è, e il caso si
+consegna alla [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), che è la voce
+che tiene quell'elenco.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio

@@ -13,13 +13,44 @@ piano ha già applicato alla supply chain
 ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuova
 è un caso in più da scrivere a posteriori); per gli e2e e per il tracing no.
 
+E quel criterio ha **tagliato in due la prima voce**, che è la cosa più utile che
+un criterio di seduta possa fare: dentro la §17.1 il corpus e il fuzzing sono la
+metà il cui costo cresceva, il banco delle prestazioni è la metà che aspetta una
+macchina e non una decisione. La prima è chiusa dalla
+[decisione 0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md), la
+seconda tiene aperta la voce.
+
 ### 17.1 Corpus, fuzzing, prestazioni
 
-*ex §4.3 · presidi · **P2** — il round-trip import/export ha già il primo giro (decisione 0006)*
+*ex §4.3 · presidi · **P2** — **mezza voce**: il corpus e il fuzzing sono chiusi dalla [decisione 0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md) · il round-trip import/export ha già il primo giro (decisione 0006)*
 
-- [ ] **Fuzzing del parser** markdown (e dell'HTML in ingresso): 5.3 lo chiede
-      esplicitamente, e un parser che pania è un vault che non si apre.
-- [ ] **Corpus di conformità** CommonMark/GFM + snapshot Obsidian-flavored.
+- [x] **Fuzzing del parser** markdown: 5.3 lo chiede esplicitamente, e un parser
+      che pania è un vault che non si apre. **Fatto** con la
+      [0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md), e non con
+      `cargo-fuzz`: una **rete di regressione deterministica** — xorshift scritto
+      a mano, seme e conteggio fissi, ventimila mutazioni del corpus a ogni push
+      in 2,5 secondi, cinque milioni in ottantaquattro quando si vuole cercare
+      invece di presidiare. libFuzzer vuole nightly, un crate fuori dal workspace
+      e una macchina che lo esegua a lungo: sarebbe diventato il secondo presidio
+      di questa voce che non gira, e sta con la macchina di qui sotto.
+      **L'HTML in ingresso resta fuori e non ha soggetto**: nel repo non c'è
+      nessun parser HTML, l'HTML è solo in uscita dalla resa. Il giorno che
+      l'import da HTML esiste, le proprietà dell'SDK sono già le sue.
+- [x] **Corpus di conformità** CommonMark/GFM + snapshot Obsidian-flavored.
+      **Fatto** con la [0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md),
+      e con due differenze rispetto a come la riga lo chiedeva. La prima: non
+      sono **snapshot** — sessantadue casi contro sei **proprietà**, perché uno
+      snapshot dice che un modello è diverso e una proprietà dice *perché* è
+      sbagliato. La seconda: ciò che si prova non è «comrak è conforme a
+      CommonMark» (è una proprietà di una dipendenza, e asserirla renderebbe la
+      suite rossa il giorno in cui comrak *corregge* un bug) ma **ciò che il
+      modello dice del documento è vero rispetto ai byte del file** — che è la
+      proprietà di FubMD, ed è quella su cui poggia ogni patch chirurgica. Il
+      costo ha smesso di crescere con l'attesa perché il corpus **si confronta**
+      in tre direzioni con sorgenti che non sono lui (le varianti del contratto,
+      i `custom_kind` del registro, le sintassi di `capabilities()`): un costrutto
+      nuovo che nessun caso esercita è rosso subito. Cinque difetti di produzione
+      trovati, tredici divergenze fra modello e file **dichiarate** una per riga.
 - [ ] **Benchmark su vault sintetici grandi** (10k/100k note) in CI, con soglie:
       tempo di apertura, ricerca, memoria. Senza numeri, "supporto vault enormi"
       non è verificabile.
@@ -40,7 +71,12 @@ ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuov
 - [ ] **Round-trip import/export**: il primo giro c'è con la [decisione 0006](../decisions/0006-import-export-come-trait.md)
       (`transfer_e2e.rs`: un vault esce in artefatti e rientra identico), ma su
       un vault scritto a mano. Resta da farlo **sul corpus** di qui sopra, dove
-      la proprietà smette di essere un esempio e diventa una misura.
+      la proprietà smette di essere un esempio e diventa una misura — e adesso
+      quel corpus c'è ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)),
+      quindi questa riga non aspetta più niente: è lavoro. Chi la prende tenga
+      conto che sessantadue di quei casi sono *sorgenti*, non vault, e che le
+      tredici divergenze dichiarate sono l'elenco di ciò che un round-trip non
+      può pretendere finché non sono riparate.
 
 ### 17.2 Test della shell
 

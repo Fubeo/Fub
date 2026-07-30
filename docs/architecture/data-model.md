@@ -504,5 +504,26 @@ transclusion è in [ui-protocol.md](ui-protocol.md).
   il confine WASM).
 - Gli `Span` sono in byte e riferiti alla sorgente **originale** passata a `parse` — cioè
   ai byte del file, non a un testo normalizzato ([0058](../decisions/0058-un-nome-che-nasce.md)).
+- **Uno `Span` affetta la sorgente**: nessun offset esce dai byte del file, e
+  nessuno cade in mezzo a un carattere — `&source[span.start..span.end]` non va in
+  panico. Vale su **qualunque** ingresso, e su ingresso generato la tiene il fuzzer
+  del [§17.1](../roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni).
+  Che uno span stia anche **dentro** quello del nodo che lo contiene e non si
+  sovrapponga a quello del fratello è preteso sul corpus curato e non su ogni
+  ingresso: le divergenze che restano sono dichiarate una per riga in
+  `format-markdown/tests/il_corpus.rs`
+  ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)). L'**ordine** dei
+  fratelli invece non è un invariante: `body` è in ordine di resa, non di sorgente,
+  e le note a piè di pagina lo mostrano.
+- **`outline`, `links` e `tags` sono una proiezione dell'albero**, non una seconda
+  lettura del file: stesso numero, stesso ordine, stessi span di ciò che si trova
+  camminando `body`. Se divergessero, il pannello outline e chi rinomina
+  leggerebbero due documenti diversi e avrebbero ragione entrambi.
+- **`parse` è deterministico**: due chiamate sulla stessa sorgente danno lo stesso
+  modello. L'host riparsa quando vuole e non tiene da parte il modello di prima
+  per confrontarlo.
+- Le tre di qui sopra sono presidiate da `fubmd_sdk::testing::conformita`, che un
+  provider nuovo eredita: `gli_span_affettano_la_sorgente`,
+  `le_tabelle_piatte_sono_la_proiezione_dell_albero`, `parse_e_deterministico`.
 - I `LinkTarget::Wiki` restano non risolti nel modello; risolverli è del grafo
   (`crates/fubmd-kernel/src/graph.rs`).
