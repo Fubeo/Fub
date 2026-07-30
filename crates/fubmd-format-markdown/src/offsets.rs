@@ -93,7 +93,7 @@ impl<'a> Offsets<'a> {
     /// non è un difetto di resa, è un **panico**: `&source[a..b]` su un confine
     /// interno va in panico, e lo fa nel primo pezzo di codice che ritaglia quel
     /// pezzo di documento — cioè all'apertura di una nota, addosso all'utente. È
-    /// la forma esatta in cui il §5.3 chiede il fuzzing del parser: *«un parser
+    /// la forma esatta in cui il §17.1 chiede il fuzzing del parser: *«un parser
     /// che pania è un vault che non si apre»*.
     ///
     /// Il caso vero, trovato dal fuzzer del §17.1 al caso 925 396 su una sorgente

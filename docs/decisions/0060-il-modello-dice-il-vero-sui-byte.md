@@ -10,8 +10,9 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la se
 
 ---
 
-Il §17.1 chiede quattro cose: il fuzzing del parser, un corpus di conformità, i
-benchmark su vault sintetici grandi, e il round-trip import/export rifatto sul
+Il §17.1 chiede cinque cose: il fuzzing del parser, un corpus di conformità, i
+benchmark su vault sintetici grandi con delle soglie, il presidio della §8.4 che
+aspetta una macchina per poter girare, e il round-trip import/export rifatto sul
 corpus. **Il criterio della seduta 17 le divide in due**, e non è una divisione
 che questo verbale ha inventato per comodità: il cappello di quella seduta
 giudica le sue voci su *se il costo cresce con l'attesa*, e dentro il §17.1 la
@@ -49,25 +50,30 @@ riscrive senza usarle.
 
 `fubmd_sdk::testing::conformita` nasce con la [0054](0054-il-banco-del-lato-provider.md),
 e la sua sezione `FormatProvider` era tre funzioni: un aggregatore e due
-proprietà, entrambe **sul descrittore** — rifiuta i byte, dichiara almeno
-un'estensione. Nessuna guardava un documento parsato.
+proprietà — un provider testuale rifiuta i byte grezzi, un descrittore dichiara
+almeno un'estensione. **Nessuna delle due guardava un documento parsato.**
 
-E nessuno le chiamava. Cercate in tutto il repo al commit precedente, le due
-proprietà comparivano in un posto solo: **la tabella della 0054 che le
-elencava.** Il cliente vero della suite c'era, ed era
+E nessuno le chiamava. Cercate in tutto il repo al commit precedente: una
+compariva in un posto solo, **la tabella della 0054 che la elencava**; l'altra —
+`il_descrittore_dichiara_almeno_una_estensione` — da nessuna parte fuori dal
+proprio file, tabella compresa, e la sua riga in quella tabella l'ha aggiunta
+questo lavoro. Il cliente vero della suite c'era, ed era
 `fubmd-features/tests/conformita.rs`, ma passa le view — non un formato, perché
 in `fubmd-features` non ce n'è nessuno.
 
 Cioè la sezione `FormatProvider` del banco era esattamente ciò che la 0054
-dichiara vietato, nel suo stesso verbale, cinque paragrafi dopo averle scritte:
+dichiara vietato, nel suo stesso verbale, una trentina di righe dopo averle
+scritte:
 
-> Una suite di conformità che nessuna implementazione vera passa non è una
+> …una suite di conformità che nessuna implementazione vera passa non è una
 > suite, è un'opinione.
 
-Non era un'omissione da niente. Il markdown è **il primo e unico provider di
-formato che esiste**, e il crate che lo implementa dipende dall'SDK già oggi
+Non era un'omissione da niente. Il markdown è **l'unico provider di formato di
+produzione che esiste**, e il crate che lo implementa dipende dall'SDK già oggi
 (`fubmd-sdk = { workspace = true }`): il cliente non mancava per un confine fra
-crate, mancava perché nessuno lo aveva scritto.
+crate, mancava perché nessuno lo aveva scritto. Un secondo candidato c'era e non
+è un test — `TestoDiProva` in `fubmd-testkit/src/formato.rs`, che è codice di
+libreria — e non chiamava la suite nemmeno lui.
 
 ## Fatto
 
@@ -84,7 +90,8 @@ crate, mancava perché nessuno lo aveva scritto.
       [`crates/fubmd-format-markdown/tests/il_corpus.rs`](../../crates/fubmd-format-markdown/tests/il_corpus.rs):
       sessantadue casi, ognuno con un nome che si legge nel fallimento. Ogni
       variante di `Block` e di `Inline`, ogni `custom_kind` che il provider
-      emette, le tre forme di ancora, il frontmatter con ogni specie di
+      emette, le due forme di ancora più il caso che non è un'ancora
+      (`2^10 = 1024`), il frontmatter con ogni specie di
       proprietà, le forme ostili del testo della [0058](0058-un-nome-che-nasce.md)
       (CRLF, `\r` nudo, terminatori misti, BOM, NFD, fuori dal BMP, vuoto), e un
       documento che ha tutto insieme.
@@ -166,27 +173,30 @@ tiene un presidio dentro un `cargo test --workspace` senza che nessuno abbia
 ragione di volerlo saltare.
 
 *L'ancoraggio al confine di carattere sta in `Offsets::byte`, non nei chiamanti.*
-Quella funzione è l'imbuto: ogni `Span` che il provider produce passa da lì.
-Metterlo nei chiamanti vorrebbe dire scrivere la stessa riga in dodici punti e
-dimenticarla nel tredicesimo.
+Quella funzione è l'imbuto: ogni `Span` che il provider produce passa da lì —
+oggi per i due soli usi che `sourcepos_span` ne fa, l'inizio e la fine. Metterlo
+là vorrebbe dire scriverlo due volte adesso e ricordarselo al terzo uso, che è la
+forma di regola che si dimentica; nell'imbuto vale anche per il chiamante che non
+c'è ancora.
 
 ## La prova che diventa rossa quando deve
 
 Un presidio che non si è mai visto fallire è un presidio di cui non si sa niente,
 e su una suite di **proprietà** la regola vale doppio: una proprietà troppo debole
-passa su tutto e non lo dice. Ognuna è stata vista rossa, e le righe qui sotto
-sono ciò che ha stampato.
+passa su tutto e non lo dice. Ognuna è stata vista rossa, e la terza colonna dice
+**l'osso** del messaggio che ha stampato — non il messaggio alla lettera, che è
+lungo cinque righe e porta il perché.
 
 | asserzione | come | cosa ha detto |
 |---|---|---|
-| lo span affetta | il fuzzer, caso 925 396, su `\| a \|\n\| - \|\n e #tag🎉\n` | `lo span di una cella è Span{12,22}, e non affetta la sorgente (24 byte)` |
+| lo span affetta | il fuzzer, caso 925 396, su `\| a \|\n\| - \|\n e #tag🎉\n` | lo span di una cella è `12..22` e non affetta la sorgente, che è di 24 byte |
 | non è invertito | il fuzzer, caso 1 771 834, su `> > ---\na: 1\n---\n\n# Corpo\n` | `Span { start: 4, end: 3 }` |
-| sta dentro il padre | il corpus, `- a\n\n***\n` | `una voce di lista … esce da quello di la sua lista` |
-| i fratelli sono disgiunti | il fuzzer, caso 348, su `\| 1 \| 2 \r\| 3 \|` | `due celle si sovrappongono: Span{47,48} e Span{47,48}` |
-| lo span non è vuoto | il fuzzer a un milione e mezzo, su `1. a\n2. ---\ntitolo: X\n---\n\n# Corpo\n` | `un blocco ha span vuoto (Span{8,8})` |
-| la proiezione dell'albero | il corpus, `[[#Sezione]]` | `la tabella tags non è la proiezione dell'albero` |
+| sta dentro il padre | il corpus, `- a\n\n***\n` | una voce di lista esce dallo span della sua lista |
+| i fratelli sono disgiunti | il fuzzer, caso 348, su una mutazione di «tabella con allineamenti» che le infila un `\r` dentro la riga di dati | due celle si sovrappongono, e rivendicano lo stesso byte `47..48` |
+| lo span non è vuoto | il fuzzer a un milione e mezzo, su `1. a\n2. ---\ntitolo: X\n---\n\n# Corpo\n` | un blocco ha span vuoto, `8..8` |
+| la proiezione dell'albero | il corpus, `[[#Sezione]]` | la tabella `tags` non è la proiezione dell'albero |
 | lo slug è del contratto | rotta: il provider si riscrive la regola | rossa sul caso fuori dal BMP |
-| il BOM | rotta: togliendo `strip_bom` da `parse_markdown` | `due blocchi fratelli si sovrappongono` sul caso `bom` |
+| il BOM | il fuzzer, un `U+FEFF` in mezzo a un titolo — e la prima stesura della proprietà pretendeva troppo (sotto) | la proprietà rossa su un documento in cui il BOM **è** contenuto |
 | l'id | rotta: il basename invece dell'id | `un provider che ne mette un altro non sbaglia il parse…` |
 | il determinismo | rotta: un contatore che entra in un `Text` | `due parse della stessa sorgente hanno dato due modelli diversi` |
 | la copertura, «manca» | rotta: `"Table"` → `"Tabella"` | `il corpus non esercita le varianti di Block: ["Table"]` |
@@ -195,7 +205,16 @@ sono ciò che ha stampato.
 | l'estrattore a vuoto | rotta: `pub enumm` | `l'elenco atteso di le varianti di Block è **vuoto**` |
 | le divergenze dichiarate | **due volte per davvero**, mentre si scriveva il predicato della tabella col `\r` | `la divergenza dichiarata «…» non si presenta più su …` |
 
-Due righe di questa tabella meritano il commento che non stava nella colonna.
+Tre righe di questa tabella meritano il commento che non stava nella colonna.
+
+Sulla riga del BOM c'è un secondo esperimento, e il suo esito è più interessante
+di quello che cercava: togliendo `strip_bom` da `parse_markdown` la suite diventa
+rossa lo stesso, ma **su un'altra proprietà** — due blocchi fratelli che si
+sovrappongono, sul caso `bom` del corpus. Vale la pena scriverlo perché misura
+quanto è larga la proprietà degli span: un BOM che cola dentro il contenuto
+sposta gli offset di tre byte, e chi se ne accorge non è il presidio del BOM, è
+la disgiunzione dei fratelli. Due reti che pescano lo stesso difetto da due lati
+sono la ragione per cui vale la pena tenerle entrambe.
 
 La sesta ha trovato un buco **nel presidio stesso**: la prima stesura del
 camminatore dell'albero non scendeva dentro l'etichetta di un link, e su
@@ -236,8 +255,9 @@ un file così, riscrive i byte di un'altra riga.
 impossibile che un numero sbagliato diventi un panico.** L'ancoraggio al confine
 di carattere di `Offsets::byte` e il `max(start)` di `sourcepos_span` non sanno
 dov'era lo span giusto e non provano a indovinarlo — garantiscono che nessuno vada
-in panico ritagliando. È esattamente la distinzione che il §5.3 chiede al
-fuzzing del parser: *«un parser che pania è un vault che non si apre»*. Un offset
+in panico ritagliando. È esattamente la distinzione con cui il §17.1 chiede il
+fuzzing del parser — *«un parser che pania è un vault che non si apre»*, e la
+casella che lo chiede è il capitolo 5.3 di [FEATURES.md](../FEATURES.md). Un offset
 sbagliato è un difetto; `&source[a..b]` che pania all'apertura di una nota è un
 vault che non si apre, e sono due gravità diverse anche quando la causa è la
 stessa.
@@ -275,7 +295,7 @@ con una franchigia.
 Le prime due le ha smentite il corpus curato, la terza il fuzzer. È l'argomento
 più corto in favore di avere **due** sorgenti d'ingresso invece di una.
 
-## I numeri che erano sbagliati
+## I numeri e i nomi che erano sbagliati
 
 Contati oggi, col criterio dichiarato perché il prossimo possa ricontarli — è la
 disciplina della [0052](0052-cio-che-va-storto-e-un-evento.md).
@@ -285,6 +305,7 @@ disciplina della [0052](0052-cio-che-va-storto-e-un-evento.md).
 | [0054](0054-il-banco-del-lato-provider.md), «un terzo crate per **otto** funzioni» e la tabella che le elenca | 8 | **23** — `grep -c "^pub fn " crates/fubmd-sdk/src/testing/conformita.rs`; erano **14** già nel commit che scriveva «otto» |
 | [todo.md](../todo.md), «i verbali delle decisioni chiuse — **cinquantasette**» | 57 | **60** con questo — `ls docs/decisions/0*.md \| wc -l` |
 | [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), «oggi: **129** file, **2336** link» | 129 / 2336 | vedi la [Verifica](#verifica) — ed è la **nona** volta che quel numero si ritrova falso |
+| [0057](0057-la-dieta-dell-ipc.md) e il §16.6, «`i_debiti_dichiarati_sono_cinque` asserisce il conteggio» | un nome che non esiste | il test si chiama **`il_debito_dichiarato_e_un_numero_presidiato`** (`crates/fubmd-app/tests/dieta_ipc.rs`) — l'asserzione a cinque c'è, il nome no |
 
 Il primo è il caso interessante, e non per la dimensione dello scarto: era
 **falso il giorno in cui è stato scritto.** La 0054 elencava otto proprietà in una
@@ -307,6 +328,25 @@ cercherà chi la farà, e per questo **non entra fra le caselle residue** di
 dichiara che i numeri che cambiano possono stare, e lì un numero sbagliato si
 corregge senza cambiare indirizzo.
 
+L'ultima riga è di un'altra specie e non è un numero: è la **sesta** — una frase
+che dice «presidiato da X» con un X che non esiste. Il fatto sotto è vero (il test
+c'è, e asserisce cinque), quindi non è una garanzia mai esistita come quella della
+[0054](0054-il-banco-del-lato-provider.md): è il suo caso mite, dove la rete è
+tesa e il nome col quale la si cerca è sbagliato. Vale la pena distinguerlo perché
+il presidio è lo stesso e costa meno di tutti gli altri: **un nome di test è una
+cosa che si cerca a macchina**, ed è ciò che la §16.8 chiede al penultimo capoverso.
+Corretta in due punti, `0057` e la §16.6.
+
+E c'è un giro che è nato da qui e non finisce qui. Avendo in mano il criterio —
+*ogni numero scritto in un documento si ricontrolla col comando che lo produce* —
+sono stati ricontati anche i numeri che questo lavoro non toccava, e ne sono
+usciti altri cinque falsi più una **famiglia nuova di bersagli**: i numeri di riga
+dentro i link `[file.rs:N]`, che `check-doc-links.mjs` non guarda mentre apre il
+file che li porta. Non sono riparati qui, perché ripararli è il lavoro della
+§16.8: sono consegnati là, col comando accanto, che è l'unico posto in cui chi li
+prenderà li cercherà. I sei di [data-model.md](../architecture/data-model.md) sono
+l'eccezione, e per una ragione minuscola: quel file era già aperto in questo giro.
+
 ## Le maglie che lasciano passare
 
 Se una copertura ha un limite, il limite va detto accanto alla copertura o si
@@ -328,7 +368,7 @@ crederà che copra ([0056](0056-un-elenco-che-e-la-sorgente.md)).
   discutibile senza produrre un panico.
 - **`ogni_voce_del_corpus_produce_un_modello_che_dice_il_vero` conta**, e il
   conteggio è un presidio suo: un corpus che si svuotasse passerebbe sempre,
-  quindi il test rifiuta di essere verde con meno di cinquanta casi verificati.
+  quindi il test rifiuta di essere verde con meno di cinquantuno casi verificati.
   Lo stesso vale per il fuzzer, che pretende che più di metà delle mutazioni
   produca un modello — un generatore che producesse solo sorgenti rifiutate
   starebbe verificando `Err`, non le proprietà.
@@ -348,8 +388,16 @@ falsa, ma perché «ogni colonna misura una trentina di millisecondi» e a quell
 scala il tempo se lo prendono lo spawn dei thread e lo scheduling. Servono un
 carico che domini l'overhead **e** una macchina che non divida i core. Nessuna
 delle due è una firma, nessuna scade col freeze, e nessuna si compra scrivendo
-codice: è la sola metà di questa voce il cui costo **non** cresce con l'attesa, e
-per questo è quella che aspetta.
+codice: è la parte di questa voce il cui costo **non** cresce con l'attesa, e per
+questo è quella che aspetta.
+
+«Due metà» è una semplificazione, e va detta: delle cinque caselle, due sono
+chiuse, due aspettano la macchina, e la quinta — il round-trip sul corpus — non
+aspetta nessuna delle due cose. La sua precondizione era **il corpus**, e adesso
+c'è: è lavoro, e la voce lo dice così. Il taglio di questo verbale è fra ciò il
+cui costo cresceva e ciò che aspetta un posto dove girare; una casella che non sta
+né di qua né di là si dichiara, invece di essere fatta rientrare nella metà
+sbagliata per far tornare la simmetria.
 
 ## Cosa si è scartato
 
@@ -362,8 +410,9 @@ per questo è quella che aspetta.
   cambiano insieme ogni volta che comrak aggiusta un `sourcepos`, e una review in
   cui nessuno distingue la riga che conta dalle altre sessantuno. Una proprietà
   dice **perché** un modello è sbagliato; uno snapshot dice solo che è diverso.
-  Il round-trip sul corpus che il §17.1 chiede è l'altra faccia di questo, e resta
-  con la seconda metà.
+  Il round-trip sul corpus che il §17.1 chiede è l'altra faccia di questo — «esce
+  e rientra identico» invece di «il modello dice il vero» — e non è stato fatto
+  qui: sotto, fra ciò che resta.
 - **Pretendere la conformità a CommonMark.** È una proprietà di comrak, e
   asserirla legherebbe la suite ai suoi bug.
 - **Togliere dal corpus i casi che non passano.** È il gesto che trasforma un
@@ -387,11 +436,27 @@ per questo è quella che aspetta.
   markdown. Non ha soggetto: nel repo non c'è nessun parser HTML — l'HTML è solo
   in **uscita**, dalla resa. Il giorno che l'import da HTML esiste, il fuzzer di
   quel provider si scrive come questo, e le proprietà dell'SDK sono già le sue.
-- **Il banco delle prestazioni, il round-trip sul corpus e l'inquilino della
-  §8.4**: la seconda metà, sopra.
+- **Il banco delle prestazioni e l'inquilino della §8.4**: la seconda metà,
+  sopra, ed è ciò che aspetta la macchina.
+- **Il round-trip import/export sul corpus**, che invece non aspetta niente: la
+  sua precondizione era il corpus, e adesso c'è. Non è nella metà che aspetta la
+  macchina — è **lavoro**, e la riga della voce lo dice così. Chi la prende tenga
+  conto che i sessantadue casi sono *sorgenti* e non vault, e che le tredici
+  divergenze dichiarate sono l'elenco di ciò che un round-trip non può pretendere
+  finché non sono riparate.
+- **`bersagli` non ha un cliente**, e va detto qui invece di lasciarlo scoprire:
+  è la nona `pub fn` che questo lavoro aggiunge all'SDK — l'insieme dei bersagli
+  di link che un modello dichiara, nella forma in cui un corpus li confronta con
+  ciò che si aspetta — e il corpus di questo giro non la chiama. È lo stesso
+  difetto che questo verbale imputa alla 0054 tre paragrafi più su, in miniatura e
+  dichiarato: o il primo corpus che verifica *cosa un documento nomina* le dà un
+  cliente, o va tolta. Non è una proprietà, quindi non può passare per verde
+  senza essere provata; resta una comodità offerta a chi scriverà il secondo
+  corpus.
 - **Le divergenze non sono state riparate.** Sono tredici, e stanno scritte.
-- **La riga di [FEATURES.md](../FEATURES.md) §5.3 «Markdown parser fuzzing» resta
-  senza spunta**, come tutte le altre: in quel file non ce n'è nessuna spuntata,
+- **La casella «Markdown parser fuzzing» del capitolo 5.3 di
+  [FEATURES.md](../FEATURES.md) resta senza spunta**, come tutte le altre: in quel
+  file non ce n'è nessuna spuntata,
   perché è il catalogo di cosa l'app farà e non un tracciato di avanzamento. Lo
   stato di cosa è aperto sta in `todo.md`, ed è l'unico posto in cui si aggiorna.
 - **Il presidio non gira nel job `invarianti` della CI**, che chiama quattro test
@@ -401,18 +466,19 @@ per questo è quella che aspetta.
 
 `cargo fmt --all --check`: pulito. `cargo clippy --workspace --all-targets -- -D
 warnings`: pulito. `cargo test --workspace`: **934 test verdi in 90 binari, 0
-falliti** — erano 926 in 89 alla [0059](0059-la-generazione-non-e-un-round-trip.md),
+falliti, 3 ignorati** — erano 926 in 89 alla [0059](0059-la-generazione-non-e-un-round-trip.md),
 e gli otto nuovi sono il binario di `il_corpus.rs`: il corpus contro le proprietà,
 le due proprietà del descrittore che finalmente qualcuno chiama, le tre direzioni
 di copertura, l'estrattore col suo presidio, le divergenze e il fuzzer.
 
 Il fuzzer con l'ingresso lungo, che è il modo di sapere quanto tiene la rete:
 `FUBMD_FUZZ_CASI=5000000 cargo test --release -p fubmd-format-markdown --test
-il_corpus -- nessuna_mutazione` → **verde in 84,11 s**, cinque milioni di
-mutazioni. Ai ventimila del default il file intero gira in **2,6 s** in debug, di
-cui 2,5 sono il fuzzer.
+il_corpus -- nessuna_mutazione` → **verde**, cinque milioni di mutazioni in
+**84,11 s** e in **88,17 s** su una seconda corsa: la differenza è della macchina,
+e il numero da tenere è l'ordine di grandezza — un minuto e mezzo. Ai ventimila
+del default il file intero gira in **2,6 s** in debug, di cui 2,5 sono il fuzzer.
 
-`node .github/scripts/check-doc-links.mjs`: **132 file, 2464 link, 0 rotti** —
+`node .github/scripts/check-doc-links.mjs`: **132 file, 2475 link, 0 rotti** —
 erano 131 e 2402 prima di questo giro di documenti.
 
 `wit_additivity` resta verde e non poteva non restarlo: non si è toccato il
