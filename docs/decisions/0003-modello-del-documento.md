@@ -95,7 +95,7 @@ parser vero misurano span e simboli sulla sorgente. `wit_additivity` è diventat
 rosso — come deve, perché questo commit **cambia la forma di cose già
 pubblicate** (l'ancora dentro ogni record di blocco, `items` della lista,
 `thematic-break` da payload nudo a record, `embed` fuori da `link-target-wiki`)
-— e la linea di base `crates/fubmd-abi/wit/frozen/0.1.0.wit` è ritagliata qui dentro, che
+— e la linea di base `crates/fub-abi/wit/frozen/0.1.0.wit` è ritagliata qui dentro, che
 pre-freeze è la procedura dichiarata: la rottura si vede in review invece di non
 vedersi affatto. Dopo M4 questa stessa voce sarebbe stata una major.
 

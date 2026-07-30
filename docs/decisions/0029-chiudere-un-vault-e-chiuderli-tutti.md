@@ -192,17 +192,17 @@ soltanto chi risponde a chi non ne nomina uno.**
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning; anche
-  `-p fubmd-host --no-default-features`.
+  `-p fub-host --no-default-features`.
 - `cargo clippy --workspace --all-targets` — pulita.
 - `cargo test --workspace` — **57 suite, 0 fallimenti**, le stesse della
   [0028](0028-come-un-componente-smette.md): questa voce non aggiunge file di
   test, aggiunge prove dentro due suite che esistevano.
-  - `fubmd-kernel/tests/disattivazione.rs` +2:
+  - `fub-kernel/tests/disattivazione.rs` +2:
     `chiudere_e_lultimo_giro_poi_il_flush_poi_chi_smette` (l'handler scrive
     ricevendo `VaultClosed`, e le tre posizioni nel log di vita dell'indice —
     ultima indicizzazione, flush, chiusura — sono in quest'ordine) e
     `chiudere_due_volte_non_chiude_due_volte`.
-  - `fubmd-host/tests/headless.rs` +2, e la terza riscritta:
+  - `fub-host/tests/headless.rs` +2, e la terza riscritta:
     `due_vault_stanno_aperti_insieme_e_il_corrente_e_una_comodita`,
     `riaprire_lo_stesso_vault_non_lo_rimonta`, e
     `chiudere_un_vault_e_lultimo_giro_in_cui_e_ancora_aperto` — che è l'unica a
@@ -221,9 +221,9 @@ soltanto chi risponde a chi non ne nomina uno.**
     fallisce con `Nessun vault aperto su /tmp/…/../…`, cioè lo stesso vault
     diventa due chiavi.
 - **Contratto:** `Event::VaultClosed { root }` e `EventKind::VaultClosed` sono
-  **additivi e in coda** al variant e all'enum (`crates/fubmd-abi/wit/fubmd/abi.wit`), presidiati
+  **additivi e in coda** al variant e all'enum (`crates/fub-abi/wit/fub/abi.wit`), presidiati
   da `wit_conformance`; `EventMask::all()` li include. Il mirror TS è
-  rigenerato (`UPDATE_MIRROR=1` su `fubmd-features` e `fubmd-app`), con il
+  rigenerato (`UPDATE_MIRROR=1` su `fub-features` e `fub-app`), con il
   record nuovo `OpenVaults` fra i campioni dell'app.
 - `cd frontend && npx vitest run` — 11 file, 173 test verdi; `npx tsc --noEmit`
   pulita.

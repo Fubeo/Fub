@@ -1,5 +1,5 @@
 // L'organizzazione del vault: icone, note appuntate, ordinamenti per-cartella e
-// spazi (`.fubmd/workspace.json`, decisioni O1–O9 e §11.3).
+// spazi (`.fub/workspace.json`, decisioni O1–O9 e §11.3).
 //
 // È **autorevole, non derivato**: persa, non si ricostruisce. Dal §11.3 il file
 // lo possiede il **kernel** — versione di schema, scrittura atomica, e un file
@@ -18,9 +18,9 @@
 // - la **migrazione sui rename non è più qui**. C'era una `migrateOrganization`
 //   che spostava icona, pin e posto quando la shell vedeva un `document_renamed`,
 //   e dipendeva da un evento che può essere troncato (decisione 0034) e che a
-//   FubMD chiuso non arriva affatto. Adesso la fa il kernel dentro l'operazione
+//   Fub chiuso non arriva affatto. Adesso la fa il kernel dentro l'operazione
 //   che sposta l'identità, quindi vale anche per le rinomine fatte da un'altra
-//   app mentre FubMD è aperto.
+//   app mentre Fub è aperto.
 //
 // Resta in `state/` e non in `panels/explorer.ts` perché è **dato del vault**:
 // l'explorer ne è oggi l'unico lettore, ma il primo comando che appunterà una
@@ -38,7 +38,7 @@ export async function loadOrganization(): Promise<void> {
   try {
     state.meta = await organizzazione();
   } catch (e) {
-    console.error(`FubMD: organizzazione del vault illeggibile: ${errorText(e)}`);
+    console.error(`Fub: organizzazione del vault illeggibile: ${errorText(e)}`);
     state.meta = metaVuota();
   }
 }
@@ -94,7 +94,7 @@ async function scrivi(
   try {
     await scrittura();
   } catch (e) {
-    console.error(`FubMD: organizzazione non salvata: ${errorText(e)}`);
+    console.error(`Fub: organizzazione non salvata: ${errorText(e)}`);
     return;
   }
   applica(state.meta);

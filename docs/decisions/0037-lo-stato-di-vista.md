@@ -91,7 +91,7 @@ due pannelli aperti sullo stesso vault potrebbero sovrascriversi a vicenda
 credendo di ricordare.
 
 Ne segue che **non è un permesso dichiarabile**: `ViewStateRead` e
-`ViewStateWrite` non hanno un `fubmd:*` nel manifest, come non ce l'hanno i blob,
+`ViewStateWrite` non hanno un `fub:*` nel manifest, come non ce l'hanno i blob,
 perché ciò che si legge e si scrive è già solo il proprio. Un permesso che non
 può negare niente è una casella da spuntare che insegna a spuntare caselle.
 
@@ -133,7 +133,7 @@ cartelle aperte com'erano, che non è ciò che «dimenticare» promette.
 Modalità, cartelle aperte e spazio selezionato sono usciti da `localStorage`. La
 shell non è un plugin — non ha un manifest e non le si concedono capacità —
 quindi passa dall'API del `Workspace`, e sono i due comandi IPC a timbrare
-proprietario (`fubmd.shell`) ed esemplare: se arrivassero da JS, una pagina
+proprietario (`fub.shell`) ed esemplare: se arrivassero da JS, una pagina
 qualunque potrebbe rileggere e riscrivere lo stato di un provider.
 
 Un cambiamento visibile, e va detto perché non è un effetto collaterale: la

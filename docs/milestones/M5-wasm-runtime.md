@@ -10,19 +10,19 @@ contratto. Il kernel non deve distinguere un provider nativo da uno WASM.
 
 ## Design
 
-### `fubmd-wasm-host` (crate da abilitare)
+### `fub-wasm-host` (crate da abilitare)
 
 Oggi commentato nel workspace (`Cargo.toml`) e assente da `crates/`. M5 lo crea:
 - **Runtime:** wasmtime con **component model**; carica componenti `wasm32-wasip2`
   (compilati a parte con `cargo component`).
-- **Bindings:** generati dal `crates/fubmd-abi/wit/fubmd/*.wit` congelato a [M4](M4-wit-hardening.md).
-- **Invariante:** `fubmd-wasm-host` dipende da wasmtime; `fubmd-kernel`/`fubmd-abi`
+- **Bindings:** generati dal `crates/fub-abi/wit/fub/*.wit` congelato a [M4](M4-wit-hardening.md).
+- **Invariante:** `fub-wasm-host` dipende da wasmtime; `fub-kernel`/`fub-abi`
   **no** (l'host vive al confine, il kernel resta agnostico — vedi
   [../PIANO.md](../PIANO.md)).
 
 ### Proxy dei trait (il "secondo backend")
 
-Per ogni trait del contratto, un tipo proxy in `fubmd-wasm-host` che implementa il
+Per ogni trait del contratto, un tipo proxy in `fub-wasm-host` che implementa il
 trait Rust e **reinoltra** ogni chiamata al componente WASM attraverso i bindings:
 
 - `MarkdownProvider` nativo : `FormatProvider` :: `WasmFormatProvider` : `FormatProvider`.
@@ -45,7 +45,7 @@ sono esposti al componente come **host function** wasmtime:
 - Memoria isolata dal component model; nessun accesso diretto a filesystem/rete.
 - Rete negata salvo `network = true`; FS solo via `HostApi` (soggetto a
   booleani + `vault_scope`).
-- Storage per-plugin namespaced e persistente (`.fubmd/data/plugins/<id>/`).
+- Storage per-plugin namespaced e persistente (`.fub/data/plugins/<id>/`).
 - **Disponibilità:** i trait sono sincroni e brevi → **epoch interruption**
   wasmtime con deadline severa per chiamata e limiti di memoria/fuel; un plugin
   lento o ostile viene interrotto (`PluginError::Internal`), mai lasciato
@@ -73,7 +73,7 @@ backend a parità di logica.
 
 - Tutti i trait del contratto, ora anche in versione **proxy WASM**.
 - `HostApi` come set di host function.
-- Nuovo crate `fubmd-wasm-host`; `fubmd-host` che monta il runtime e carica i
+- Nuovo crate `fub-wasm-host`; `fub-host` che monta il runtime e carica i
   plugin (la tabella di montaggio è `host/mount.rs`, decisione 0023).
 
 ## Decisioni (con il perché)

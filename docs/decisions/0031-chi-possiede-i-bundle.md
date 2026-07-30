@@ -18,7 +18,7 @@ Qui c'è la prima: **chi possiede i bundle**. La voce resta aperta fino alla
 [0032](0032-il-runner-dei-job.md), che è il runner con la cancellazione e
 l'isolamento.
 
-`mount` (in `fubmd-host`) era una tabella **cablata**: otto
+`mount` (in `fub-host`) era una tabella **cablata**: otto
 `register_core_feature`, e poi diciotto registrazioni scritte a mano una per
 una. La [0023](0023-chi-monta-il-kernel.md) l'aveva tolta da dentro un
 `#[tauri::command]` e messa in un posto solo — che era la precondizione di
@@ -144,7 +144,7 @@ smettendo mentre è ancora intero.**
   store si apriva dentro `mount` e usciva per un campo di ritorno; adesso lo apre
   la riga del suo bundle, e chi monta riceve ciò che quella riga ha aperto.
   Nessuna scorciatoia è cambiata: lo store si apre con l'`HostApi` intestato a
-  `fubmd.versioning`, non con `std::fs`, perché chi monta non ha un canale
+  `fub.versioning`, non con `std::fs`, perché chi monta non ha un canale
   privilegiato che un plugin non avrebbe.
 - **La regola «dichiarati prima di registrare» ha smesso di essere un ordine da
   rispettare.** Era un commento in testa a `mount` («le feature vanno dichiarate
@@ -193,11 +193,11 @@ smettendo mentre è ancora intero.**
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning; anche
-  `-p fubmd-host --no-default-features`.
+  `-p fub-host --no-default-features`.
 - `cargo clippy --workspace --all-targets` — pulita.
 - `cargo test --workspace` — **59 suite, 0 fallimenti**. Sono le 58 della
   [0030](0030-il-rilevamento-si-puo-chiedere.md) più
-  `fubmd-host/tests/montaggio.rs`, che ha quattro prove: un bundle che parla un
+  `fub-host/tests/montaggio.rs`, che ha quattro prove: un bundle che parla un
   altro contratto e non si monta, un `activate` fallito che non lascia un plugin
   dichiarato, chi smette che ha ancora l'host e i propri provider, e la chiusura
   che ferma i bundle a rovescio dopo aver annunciato a tutti. La spia è un
@@ -219,11 +219,11 @@ smettendo mentre è ancora intero.**
     `Workspace::close_with`, la chiusura produce le stesse due righe con
     `host=false, provider=false`. È la prova che l'ordine della 0029 e questo
     passo nuovo non sono indipendenti.
-  Il presidio dell'ordine della 0029 in `fubmd-kernel/tests/disattivazione.rs`
+  Il presidio dell'ordine della 0029 in `fub-kernel/tests/disattivazione.rs`
   non è stato toccato e resta verde: `close()` è `close_with` con la funzione
   vuota.
 - **Contratto: non toccato.** Nessun tipo attraversa l'IPC in modo diverso —
-  `Bundle`, `BundleRegistry` e `BundleError` vivono in `fubmd-host` e non
+  `Bundle`, `BundleRegistry` e `BundleError` vivono in `fub-host` e non
   compaiono in nessun record — quindi niente mirror TS da rigenerare e niente da
   rifare nel frontend.
 - `cargo fmt --all` — pulita.

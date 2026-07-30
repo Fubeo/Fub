@@ -30,7 +30,7 @@ riferimento a un blocco o a un heading, e (quando arriverà) la citazione di una
 lavagna verso un punto di una nota.
 
 ```rust
-// crates/fubmd-abi/src/traits.rs
+// crates/fub-abi/src/traits.rs
 pub struct DocPosition {
     pub span: Span,              // byte del SORGENTE, non dentro `snippet`
     pub anchor: Option<String>,  // l'ancora del blocco che lo ospita, se c'è
@@ -97,7 +97,7 @@ guardare. Si è ritagliato il payload, e la riga sta nella tabella dei ritagli d
 
 **E qui c'è un fatto che vale scritto, perché contraddice il modo in cui il
 ritaglio era stato immaginato.** Ci si aspettava che
-`cargo test -p fubmd-abi --test wit_additivity` diventasse rosso, e che a
+`cargo test -p fub-abi --test wit_additivity` diventasse rosso, e che a
 rimetterlo verde fosse un `frozen/0.1.0.wit` toccato nello stesso commit — è la
 procedura delle [0040](0040-chi-localizza.md) e
 [0041](0041-un-errore-e-testo-che-qualcuno-legge.md). **Non è successo, e il
@@ -133,7 +133,7 @@ un dizionario di corrispondenze per nota.
 Il sorgente ce l'ha il vault, cioè il kernel. Quindi la coordinata la produce chi
 ha la coordinata: `Workspace::query_index` apre i sorgenti della **pagina** che
 sta per restituire e ci trova dentro i testi cercati
-(`crates/fubmd-kernel/src/occurrences.rs`). Sta lì e non nel pianificatore per
+(`crates/fub-kernel/src/occurrences.rs`). Sta lì e non nel pianificatore per
 una ragione in più: è l'unico punto in cui passa **ogni** risposta, compresa
 quella di un motore di terzi che rivendicasse `QueryKind::Documents`. E chi ha
 già riempito `occurrences` non viene toccato — un indice che sappia dire *dove*

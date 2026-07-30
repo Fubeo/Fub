@@ -1,7 +1,7 @@
-# FubMD — Master Feature Document
+# Fub — Master Feature Document
 
 **Versione:** 1.0 consolidata  
-**Scope:** unire in un unico documento ordinato tutte le feature fondamentali di **FubMD** e della futura **FubSuite**, includendo sia la lista iniziale sia le feature aggiuntive emerse dopo.
+**Scope:** unire in un unico documento ordinato tutte le feature fondamentali di **Fub** e della futura **FubSuite**, includendo sia la lista iniziale sia le feature aggiuntive emerse dopo.
 
 ---
 
@@ -189,7 +189,7 @@
 
 ## 2.4 Fedeltà del file
 
-**Un file che FubMD non ha modificato resta identico byte per byte; uno che ha
+**Un file che Fub non ha modificato resta identico byte per byte; uno che ha
 modificato differisce solo dove la modifica è avvenuta.** È la condizione perché
 «file locali leggibili» e «nessun lock-in» (1.1) valgano anche per chi tiene il
 vault sotto controllo di versione: un `git diff` che mostra righe che l'utente
@@ -1029,7 +1029,7 @@ vale più.
 comportamento che gli utenti di Obsidian conoscono da quell'estensione — refusi
 perdonati, prefisso mentre si digita, estratti ordinati per rilevanza con i
 termini evidenziati, un modale per il vault e uno per la nota aperta — **è** la
-ricerca di FubMD, non un plugin da installare: sotto non c'è una ricerca "base"
+ricerca di Fub, non un plugin da installare: sotto non c'è una ricerca "base"
 da migliorare, e dalla stessa porta passano il quick switcher (8.1), la command
 palette, le collezioni (8.4) e le viste salvate (8.3). Il verbale, con ciò che
 resta fuori e perché, è la
@@ -1691,7 +1691,7 @@ ricerca peggiore.
 - [ ] Snap alla griglia per le forme
 - [ ] Spessore indipendente dallo zoom
 - [ ] Inchiostro salvato come SVG nel vault
-- [ ] Inchiostro come dato utente, mai in `.fubmd/data/`
+- [ ] Inchiostro come dato utente, mai in `.fub/data/`
 - [ ] Inchiostro versionabile come qualsiasi file del vault
 - [ ] Compressione dei tratti
 - [ ] Campo di versione nel formato dell'inchiostro dal primo giorno
@@ -1702,7 +1702,7 @@ ricerca peggiore.
 - [ ] La lavagna è un tipo di documento, non una modalità dell'app
 - [ ] Formato aperto, superset dichiarato di JSON Canvas
 - [ ] Estensioni al formato documentate una per una
-- [ ] Degrado leggibile: una lavagna FubMD si apre in Obsidian
+- [ ] Degrado leggibile: una lavagna Fub si apre in Obsidian
 - [ ] Pagina a dimensione fissa
 - [ ] Pagina infinita
 - [ ] Sezioni e raccoglitori
@@ -3572,8 +3572,8 @@ ricerca peggiore.
 ## 26.4 Integrazioni OS
 
 - [ ] File handler Markdown
-- [ ] Apri con FubMD
-- [ ] URI scheme `fubmd://`
+- [ ] Apri con Fub
+- [ ] URI scheme `fub://`
 - [ ] Deep linking
 - [ ] Notifiche OS
 - [ ] Menu tray

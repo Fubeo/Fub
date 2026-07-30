@@ -2,8 +2,8 @@
 // uguali.
 //
 // Ogni funzione di questo file ha una gemella in Rust dentro
-// `crates/fubmd-abi/src/rules/` (o nel modello, per quelle che ci stavano da
-// prima), e il legame non è un commento: `crates/fubmd-abi/tests/rules_mirror.rs`
+// `crates/fub-abi/src/rules/` (o nel modello, per quelle che ci stavano da
+// prima), e il legame non è un commento: `crates/fub-abi/tests/rules_mirror.rs`
 // genera `__fixtures__/rules-samples.json` con la risposta di Rust caso per
 // caso, e `rules-mirror.test.ts` pretende che qui esca la stessa. Cambiare la
 // regola da un lato solo è rosso.
@@ -12,7 +12,7 @@
 // un giro IPC — che nome scrivere sotto un'icona mentre l'albero si disegna, se
 // barrare una riga mentre si digita, se due nomi sono lo stesso nome per trovare
 // la folder note di una cartella. Il traguardo dichiarato dal §6.2 è che questo
-// file sparisca, compilando `fubmd-abi` a wasm32; fino ad allora la duplicazione
+// file sparisca, compilando `fub-abi` a wasm32; fino ad allora la duplicazione
 // resta, ma sotto lo stesso presidio dei tipi.
 //
 // **Non aggiungere qui una regola senza la sua gemella Rust e i suoi casi nella
@@ -45,7 +45,7 @@ export function pageName(id: string): string {
 
 /// La chiave con cui due nomi si scoprono lo stesso nome: trim, NFC, minuscolo.
 ///
-/// Gemella di `fubmd_abi::rules::path::resolution_key`, ed è **l'unico** modo in
+/// Gemella di `fub_abi::rules::path::resolution_key`, ed è **l'unico** modo in
 /// cui questa parte del codice ha il diritto di confrontare due nomi di
 /// documento. Il `toLowerCase()` da solo non basta: un vault sincronizzato con
 /// macOS ha i nomi file in NFD (`e` + accento combinante) mentre il link
@@ -59,7 +59,7 @@ export function resolutionKey(s: string): string {
 // --- la politica dei nomi (§15.5) -------------------------------------------
 
 /// Quale domanda si sta ponendo su un nome. Gemella di
-/// `fubmd_abi::rules::path_policy::Naming`.
+/// `fub_abi::rules::path_policy::Naming`.
 ///
 /// `existing` = un nome che c'è già (aprirlo, elencarlo, rinominarlo *via*):
 /// passa tutto ciò che un filesystem può contenere. `new` = un nome che nasce:
@@ -112,7 +112,7 @@ function isDosDevice(segment: string): boolean {
 
 /// Perché questo path non si può usare, o `null` se si può.
 ///
-/// Gemella di `fubmd_abi::rules::path_policy::check`. **L'ordine dei controlli è
+/// Gemella di `fub_abi::rules::path_policy::check`. **L'ordine dei controlli è
 /// contratto**, non un dettaglio: un nome sbagliato in più modi risponde col
 /// primo dell'elenco, e la fixture confronta *quella* risposta — due ordini
 /// diversi darebbero due guasti diversi sullo stesso nome.
@@ -141,7 +141,7 @@ export function nameFault(path: string, naming: Naming): NameFault | null {
 /// spazi ai bordi, tutto in NFC.
 ///
 /// Gemella di `path_policy::normalized`. La NFC non è cosmetica: `resolutionKey`
-/// fa collassare NFC e NFD sulla stessa chiave, quindi per FubMD sono lo stesso
+/// fa collassare NFC e NFD sulla stessa chiave, quindi per Fub sono lo stesso
 /// nome, e per il filesystem di Linux sono due file — crearne uno in NFD accanto
 /// a uno in NFC vorrebbe dire un vault con due documenti che il grafo conta come
 /// uno.
@@ -163,7 +163,7 @@ export function taskChecked(symbol: string | null): boolean {
 
 /// Questo topic sta sotto questo prefisso?
 ///
-/// Gemella di `fubmd_abi::rules::events::topic_matches` (§10.1). I separatori
+/// Gemella di `fub_abi::rules::events::topic_matches` (§10.1). I separatori
 /// sono i due della regola dei nomi (§7.4): `:` fra namespace e nome, `.` dentro
 /// l'uno e dentro l'altro. Non è `startsWith` per una ragione sola: `com.acme`
 /// è un prefisso di caratteri di `com.acmecorp:x`, e un filtro che lo accettasse
@@ -178,7 +178,7 @@ export function topicMatches(prefix: string, topic: string): boolean {
 
 /// Questo documento sta dentro questa cartella, a qualunque profondità?
 ///
-/// Gemella di `fubmd_abi::rules::events::folder_contains`. La cartella è un
+/// Gemella di `fub_abi::rules::events::folder_contains`. La cartella è un
 /// prefisso di path perché nel kernel una cartella non esiste ancora (§14.3);
 /// la stringa vuota è la radice, e un `/` in coda non cambia niente.
 export function folderContains(folder: string, id: string): boolean {
@@ -208,10 +208,10 @@ export function eventNames(event: KernelEvent): string[] {
 
 /// Questo evento va consegnato a chi ha dichiarato questa maschera?
 ///
-/// Gemella di `fubmd_abi::rules::events::mask_wants` (§10.1), ed è la regola che
+/// Gemella di `fub_abi::rules::events::mask_wants` (§10.1), ed è la regola che
 /// la shell applica per decidere quando ridisegnare un pannello. Che sia la
 /// stessa del kernel non è un commento: è la fixture generata di
-/// `crates/fubmd-abi/tests/rules_mirror.rs`.
+/// `crates/fub-abi/tests/rules_mirror.rs`.
 ///
 /// I tre filtri sono in and, e ognuno vuoto vuol dire *non filtro*. Il soggetto
 /// vale per i soli eventi che un documento lo nominano: `overflow`,

@@ -17,7 +17,7 @@ Dalla [decisione 0021](../decisions/0021-il-confine.md) l'`HostApi` è la **somm
 di famiglie** — quattordici dal §11.2, al confine WIT altrettante `interface`
 importate una per una dal `plugin-world` — e il punto di applicazione esiste
 davvero: il kernel tiene un
-[registro dei plugin](../../crates/fubmd-kernel/src/plugins.rs) con manifest,
+[registro dei plugin](../../crates/fub-kernel/src/plugins.rs) con manifest,
 permessi e grado di fiducia, e ogni host nasce dentro un `Guard<H, P: Policy>`
 che nega ciò che la politica del suo plugin non concede. Prima
 `PluginPermissions` esisteva nel contratto e non lo leggeva nessuno.
@@ -27,7 +27,7 @@ Ne segue la regola di montaggio: **chi registra qualcosa si dichiara prima**
 errore, e un host intestato a un id sconosciuto nega tutto dicendo perché.
 
 - **Nativo (M4):** `HostApi` è un oggetto in-process che chiama direttamente il
-  `Workspace` (`KernelHost` in `fubmd-kernel/src/host/kernel.rs`, usato dal
+  `Workspace` (`KernelHost` in `fub-kernel/src/host/kernel.rs`, usato dal
   dispatch degli eventi). Costo ≈ zero.
 - **WASM (M5):** il plugin riceve un *proxy*; ogni metodo è una **host function**
   wasmtime che serializza gli argomenti, attraversa il confine, esegue nel core e
@@ -39,16 +39,16 @@ errore, e un host intestato a un id sconosciuto nega tutto dicendo perché.
 Un plugin ricorda in un modo solo: `data_read/write/remove/list`, path → blob di
 byte, persistente.
 
-Lo spazio è `.fubmd/data/plugins/<id>/`, **dentro al vault**: i dati derivati da
+Lo spazio è `.fub/data/plugins/<id>/`, **dentro al vault**: i dati derivati da
 un vault appartengono a quel vault, e copiarlo o metterlo in sync se li porta
 dietro. L'identità `<id>` la assegna chi registra il plugin
 (`Workspace::register_event_handler(id, handler)`), mai il plugin: uno che si
 sceglie il proprio recinto non è dentro a un recinto. Verifica in
-`crates/fubmd-kernel/tests/plugin_data.rs`.
+`crates/fub-kernel/tests/plugin_data.rs`.
 
 `storage_get/set` — chiave → JSON, volatile — **è stato tolto** dal contratto con
 la [decisione 0013](../decisions/0013-elenco-delle-capacita.md), ritagliando la
-linea di base (`crates/fubmd-abi/wit/frozen/0.1.0.wit`): è la sola rottura di
+linea di base (`crates/fub-abi/wit/frozen/0.1.0.wit`): è la sola rottura di
 quel giro. Con `data_*` da una parte e le impostazioni del §11.1 dall'altra non
 gli restava un caso d'uso, e «ricordare qualcosa per la durata della sessione» il
 chiamante lo aveva già risolto senza saperlo — un provider è un **oggetto vivo**
@@ -57,7 +57,7 @@ nel workspace, e a M5 un componente WASM ha la propria memoria lineare.
 **Lo stato per-documento ha un posto dichiarato**
 ([decisione 0044](../decisions/0044-lo-stato-per-documento.md)):
 `doc/<documento codificato>/<nome>`, con la convenzione e il suo inverso in
-[`fubmd_abi::rules::doc_data`](../../crates/fubmd-abi/src/rules/doc_data.rs). Non
+[`fub_abi::rules::doc_data`](../../crates/fub-abi/src/rules/doc_data.rs). Non
 è una capacità in più: è `data_*` con un prefisso che il **kernel riconosce**, e
 riconoscendolo lo migra al rename e lo raccoglie quando la nota non è più né nel
 vault né nel cestino. Chi ci mette qualcosa smette di doversi migrare la chiave
@@ -73,7 +73,7 @@ plugin), il file è leggibile a mano, e ciò che il file contiene senza che ness
 lo dichiari resta lì senza essere letto.
 
 **I due cancelli della scrittura**, ed è la parte che riguarda il confine: il
-permesso `fubmd:write-settings` dice *chi* può scrivere,
+permesso `fub:write-settings` dice *chi* può scrivere,
 `SettingSpec.program_writable` dice *cosa* si può scrivere — con `false` come
 default, per la stessa regola di `Trust::default`. La seconda esiste perché il
 divieto che conta (privacy e AI non si spostano da sole) non dipende da chi
@@ -147,7 +147,7 @@ provider **condivisi** (`Arc`) invece che estratti dal workspace per la durata
 della chiamata: un comando che invoca deve trovare gli altri comandi, compresi
 quelli del proprio provider.
 
-**Dove sta il permesso.** `PluginPermissions` porta `fubmd:write-vault` e **non
+**Dove sta il permesso.** `PluginPermissions` porta `fub:write-vault` e **non
 lo legge nessuno** — non per dimenticanza: questo kernel non ha plugin, ha
 provider registrati per id, e `Plugin::manifest()` non viene mai chiamata perché
 non c'è niente che installi, abiliti o verifichi. Applicare `write_vault` oggi
@@ -159,7 +159,7 @@ rifiuta sono **sette** (`VaultWrite`, `VaultStructure`, `DataWrite`,
 `SettingsWrite`, `ViewStateWrite`, `Events`, `Services`), cioè anche la
 configurazione, lo stato di vista, i propri blob, i job e i servizi di terzi, che
 strutturali non sono in nessun senso. Il presidio è
-`crates/fubmd-kernel/tests/invoke_command.rs`,
+`crates/fub-kernel/tests/invoke_command.rs`,
 `every_structural_capability_is_refused_by_the_same_gate`, e dalla
 [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) l'insieme atteso lo
 **calcola** da `Capability::ALL` invece di elencarlo — quindi una famiglia negata
@@ -230,7 +230,7 @@ Il giro completo di una view passa tutto dal contratto: la shell pubblica il
 contesto → chiama `render_view` sulle view che il kernel le indica → il provider
 chiede contesto e dati all'host → un click torna come `on_action` e il provider
 risponde con un `ViewUpdate`, che la shell esegue. Prove end-to-end:
-`crates/fubmd-features/tests/backlinks_view_e2e.rs` (il giro base),
+`crates/fub-features/tests/backlinks_view_e2e.rs` (il giro base),
 `outline_view_e2e.rs` (il cursore che arriva alla view) e `stats_view_e2e.rs` (il
 testo selezionato che vale anche a buffer sporco).
 
@@ -278,9 +278,9 @@ backlink). Cosa succede dentro un lotto — `IndexUpdated` coalizzato in un
   tutto-o-niente vuole il journal del §15.2, e prometterlo con un nome
   (`transaction`, `rollback`) lo farebbe credere a chi legge solo la firma.
 
-Prove: `crates/fubmd-kernel/tests/batch_and_origin.rs` (incluso il confronto fra
+Prove: `crates/fub-kernel/tests/batch_and_origin.rs` (incluso il confronto fra
 un'automazione che si difende con l'origine e la stessa che non lo fa),
-`crates/fubmd-features/tests/{commands_e2e,view_refresh_masks}.rs`.
+`crates/fub-features/tests/{commands_e2e,view_refresh_masks}.rs`.
 
 ## Scrivere un pezzo: l'edit porta la revisione
 
@@ -374,7 +374,7 @@ sarebbe una policy nascosta in un'implementazione, e le policy hanno un posto
 
 `PluginPermissions` (§7.3) risponde a «questo componente *può*, in generale?».
 22.4 chiede un'altra cosa: «l'utente approva **questa** esecuzione, su **queste**
-40 note?». La risposta di FubMD è il giro **dry-run → piano → approvazione →
+40 note?». La risposta di Fub è il giro **dry-run → piano → approvazione →
 apply**, e non una capacità `HostApi::confirm`. Due ragioni:
 
 1. **Un host non può fermarsi a chiedere.** Il kernel è chiamato *dalla* shell e
@@ -428,7 +428,7 @@ il `DocId` con la stessa regola dei comandi IPC (`valid_doc_id`) e rispondono
 `PermissionDenied` a una risalita. Il controllo sta sul confine delle capacità e
 non dentro i provider: `ImportSource::stem()` serve a non finirci contro per
 distrazione, il recinto serve perché non ci si possa andare apposta
-(`fubmd-kernel/tests/transfer_dispatch.rs`).
+(`fub-kernel/tests/transfer_dispatch.rs`).
 
 ## Lavoro lungo: i job
 
@@ -442,7 +442,7 @@ Il contratto quindi dà al lavoro lungo (rete, calcolo pesante) una strada propr
    kernel accoda soltanto: niente esecuzione dentro al lock
    (`Workspace::take_pending_jobs`).
 2. **Esecuzione (fuori dal kernel).** Chi possiede i thread — il `JobRunner` di
-   `fubmd-host` ([0032](../decisions/0032-il-runner-dei-job.md)), l'host WASM a
+   `fub-host` ([0032](../decisions/0032-il-runner-dei-job.md)), l'host WASM a
    M5 — drena la coda ed esegue `Plugin::run_job(job, payload, host)` **senza
    tenere in mano nessun prestito del workspace**. Il job ha le stesse capacità
    che il plugin ha altrove ([0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md)),
@@ -499,7 +499,7 @@ sequenceDiagram
     participant H as HostApi<br/>(guardia)
     participant W as Workspace
     participant Bl as JobBell
-    participant Wk as worker<br/>fubmd-job-N
+    participant Wk as worker<br/>fub-job-N
     participant JH as JobHost
     participant U as utente
 
@@ -537,15 +537,15 @@ arriva in fondo.
 
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
-| la coda | [dispatcher.rs:322](../../crates/fubmd-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
-| il campanello | [dispatcher.rs:401](../../crates/fubmd-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
-| i thread | [runner.rs:307](../../crates/fubmd-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
-| l'host per chiamata | [jobs.rs:89](../../crates/fubmd-host/src/jobs.rs) | tiene l'`Arc<RwLock<Workspace>>` e prende un prestito **per capacità** |
-| la bandiera | [runner.rs:83](../../crates/fubmd-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
-| la riga viva | [core.rs:346](../../crates/fubmd-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
+| la coda | [dispatcher.rs:322](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
+| il campanello | [dispatcher.rs:401](../../crates/fub-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
+| i thread | [runner.rs:307](../../crates/fub-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
+| l'host per chiamata | [jobs.rs:89](../../crates/fub-host/src/jobs.rs) | tiene l'`Arc<RwLock<Workspace>>` e prende un prestito **per capacità** |
+| la bandiera | [runner.rs:83](../../crates/fub-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
+| la riga viva | [core.rs:346](../../crates/fub-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
 
 **`JobStatus` è una struct, non un enum**
-([traits.rs:114](../../crates/fubmd-abi/src/traits.rs)): cinque campi — `id`,
+([traits.rs:114](../../crates/fub-abi/src/traits.rs)): cinque campi — `id`,
 `job`, `plugin`, `since`, `progress` — e nessuno è uno stato. Lo stato di un job
 è **implicito** e vive in due strutture che non si parlano: la riga in
 `JobsState` (kernel) dice che è vivo, la bandiera in `Flags` (host) dice che è
@@ -595,7 +595,7 @@ porta da cui si entra in codice di un provider — `invoke_command`, `view_actio
 `render_view`, `call_service`, la consegna a un `EventHandler`, l'alimentazione
 degli indici, il `parse` di un `FormatProvider`, l'innesto di una `SyntaxRule`,
 il disegno di un `CustomRenderer` — gira dentro una rete
-(`fubmd-kernel/src/safety.rs`) che cattura il panico e lo traduce nell'errore di
+(`fub-kernel/src/safety.rs`) che cattura il panico e lo traduce nell'errore di
 casa, nominando il colpevole. La rete sta **attorno alla chiamata del provider e
 a niente di più**: dentro quella chiamata il kernel ha invarianti da rimettere a
 posto, e quel codice gira già sul ramo dell'errore. Senza la rete, un provider
@@ -626,9 +626,9 @@ flowchart TD
 
 | Maglia | Dove | Cosa produce |
 |---|---|---|
-| `calling` | [safety.rs:62](../../crates/fubmd-kernel/src/safety.rs) | `PluginError::Internal("«X» è andato in panico …")` |
-| `caught` | [safety.rs:79](../../crates/fubmd-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
-| `notifying` | [safety.rs:102](../../crates/fubmd-kernel/src/safety.rs) | una riga su stderr, perché non c'è nessuno a cui dire di no |
+| `calling` | [safety.rs:62](../../crates/fub-kernel/src/safety.rs) | `PluginError::Internal("«X» è andato in panico …")` |
+| `caught` | [safety.rs:79](../../crates/fub-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
+| `notifying` | [safety.rs:102](../../crates/fub-kernel/src/safety.rs) | una riga su stderr, perché non c'è nessuno a cui dire di no |
 
 Non disattiva niente, e il riquadro finale del disegno dice esattamente questo:
 il meccanismo per smontare esiste (`BundleRegistry::unmount`), e dal §11.1 esiste
@@ -671,14 +671,14 @@ ragione per cui i tre booleani sono diventati una mappa.
 
 - **Concessione all'installazione:** le voci di `granted` sono mostrate e
   accettate quando il plugin viene installato/attivato.
-- **Scope del vault:** `fubmd:read-vault` / `fubmd:write-vault` con un elenco di
+- **Scope del vault:** `fub:read-vault` / `fub:write-vault` con un elenco di
   prefissi (es. `["Templates/", "Daily/"]`); `read_document` / `write_document`
   lo applicano e negano (`PermissionDenied`) tutto ciò che sta fuori. Senza
   parametro, la voce vale sull'intero vault. Sotto `read-vault` ci va anche
   `read_model`, che è una lettura come l'altra e dà **di più** di una sorgente;
   `format_of` no, perché non legge niente.
-- **Rete e filesystem esterno:** `fubmd:network` con l'allowlist di host,
-  `fubmd:external-fs` con quella dei path (20.3).
+- **Rete e filesystem esterno:** `fub:network` con l'allowlist di host,
+  `fub:external-fs` con quella dei path (20.3).
 - **Enforcement in un solo punto:** i controlli vivono nell'implementazione di
   `HostApi`, così valgono identici per plugin nativi e WASM. **Quel punto adesso
   c'è**: è `Guard<H, P: Policy>` (`kernel/host/guard.rs`), un wrapper generico e
@@ -707,7 +707,7 @@ rifiuti al frontend/all'IPC.
 - **Isolamento di memoria:** dato dal component model; il plugin non vede la
   memoria del core, solo i dati che passano dalle host function.
 - **Rete:** negata di default — e la riga è più corta della realtà, perché
-  nomina con una parola sola due cose diverse. `fubmd:network` è un **permesso**
+  nomina con una parola sola due cose diverse. `fub:network` è un **permesso**
   con la sua allowlist di host; la **capacità** che lo userebbe non esiste, e
   `http_fetch` non fu rifiutato genericamente ma con due bloccanti nominati
   ([0013](../decisions/0013-elenco-delle-capacita.md)): *«§9.1 (un lavoro lungo
@@ -730,7 +730,7 @@ rifiuti al frontend/all'IPC.
   plugin da `data_*`. **Import ed export non fanno eccezione**, ed è una
   proprietà della firma: una sorgente arriva già letta (`ImportSource.bytes`) e
   un export esce come `ExportArtifact.bytes`.
-- **Storage per-plugin:** `data_*` a blob dentro `.fubmd/data/plugins/<id>/`, e
+- **Storage per-plugin:** `data_*` a blob dentro `.fub/data/plugins/<id>/`, e
   nient'altro (vedi "Storage").
 - **Operazioni strutturali:** `create_document`, `rename_document`,
   `trash_document`, `list_trash`, `restore_document`, `empty_trash` — sono ciò
@@ -752,7 +752,7 @@ rifiuti al frontend/all'IPC.
 I "Rischi" in fondo dicono una riga sola — *«costo di serializzazione al confine
 WASM: accettato solo per i plugin di terzi; le feature ufficiali restano
 native»* — e la [mappa](mappa-visuale.md) disegna l'**intera** FubSuite sotto
-`fubmd-wasm-host`, sync compreso. Le due cose non possono essere vere insieme.
+`fub-wasm-host`, sync compreso. Le due cose non possono essere vere insieme.
 Qui si dice quale cede, e in base a cosa: il metro ha tre voci, e nessuna è
 un'opinione sul valore di una feature.
 
@@ -761,7 +761,7 @@ un'opinione sul valore di una feature.
    tiene in mano il vault**. L'*epoch interruption* qui sopra limita chi è ostile
    o rotto — non chi è lento e legittimo, che è il caso più comune.
 2. **Frequenza × payload.** Gli alberi al confine sono un'**arena** — lista
-   piatta più indici `u32`, conversione in `fubmd_abi::arena` — quindi una copia
+   piatta più indici `u32`, conversione in `fub_abi::arena` — quindi una copia
    per direzione: ciò che porta *il modello* o *il contenuto* paga in proporzione
    alla nota, ogni volta. E ciò che tocca **ogni** documento — indicizzare,
    parsare, digerire — si paga a ogni documento: su un `reindex` il fattore è il
@@ -820,7 +820,7 @@ rumore di fondo: il numeratore conta solo quando il denominatore è piccolo.
 
 ## Percorso di attivazione
 
-Chi lo percorre è il **`BundleRegistry`** di `fubmd-host`
+Chi lo percorre è il **`BundleRegistry`** di `fub-host`
 ([decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)), e sta dalla parte
 dell'host per una ragione sola: l'`HostApi` non ha capacità di registrazione
 ([0013](../decisions/0013-elenco-delle-capacita.md)), quindi **un plugin non può
@@ -855,8 +855,8 @@ scansione e **prima** del rilevatore, e il pool dei job parte per ultimo.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant A as fubmd-app<br/>comando IPC
-    participant H as Host<br/>fubmd-host
+    participant A as fub-app<br/>comando IPC
+    participant H as Host<br/>fub-host
     participant M as mount()
     participant W as Workspace
     participant R as BundleRegistry
@@ -870,7 +870,7 @@ sequenceDiagram
     W->>W: migrate_layout(root) — prima di ogni lettura
     W->>W: SettingsStore · OrganizationStore · EntryStore
     M->>R: BundleRegistry::new + remember × 9
-    R->>W: enable(fubmd.core) — per primo, ed è chi dichiara plugins.disabled
+    R->>W: enable(fub.core) — per primo, ed è chi dichiara plugins.disabled
     loop per ogni bundle non spento
         R->>R: abi_compatible(manifest)
         R->>W: register_plugin(manifest, fiducia)
@@ -888,15 +888,15 @@ sequenceDiagram
 
 | Passo | Dove | Perché è lì e non altrove |
 |---|---|---|
-| `Host::open` | [session.rs:341](../../crates/fubmd-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
-| `mount` | [mount.rs:162](../../crates/fubmd-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fubmd.core` più le otto feature |
-| `migrate_layout` | [vault.rs:79](../../crates/fubmd-kernel/src/vault.rs) | dentro il costruttore, non in `reindex`: nessuno legge un albero prima che sia al suo posto |
-| `BundleRegistry::mount` | [registry.rs:245](../../crates/fubmd-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
-| `reindex` | [workspace.rs:1197](../../crates/fubmd-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto |
-| `bridge::spawn` | [bridge.rs:69](../../crates/fubmd-host/src/bridge.rs) | fra `reindex` e il watcher |
-| `JobRunner::start` | [runner.rs:307](../../crates/fubmd-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
+| `Host::open` | [session.rs:341](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
+| `mount` | [mount.rs:162](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
+| `migrate_layout` | [vault.rs:79](../../crates/fub-kernel/src/vault.rs) | dentro il costruttore, non in `reindex`: nessuno legge un albero prima che sia al suo posto |
+| `BundleRegistry::mount` | [registry.rs:245](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
+| `reindex` | [workspace.rs:1197](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto |
+| `bridge::spawn` | [bridge.rs:69](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
+| `JobRunner::start` | [runner.rs:307](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
-La riga che è facile perdere è la prima: **`fubmd.core` è un bundle come gli
+La riga che è facile perdere è la prima: **`fub.core` è un bundle come gli
 altri** e si monta per primo, e non registra nulla — esiste per avere un'identità
 nel registro, e perché è la riga che dichiara la chiave `plugins.disabled`, cioè
 quella che decide se le altre otto si montano.
@@ -924,10 +924,10 @@ stateDiagram-v2
 
 Anche qui **nessuno di questi stati ha un enum**. Sono l'appartenenza a una mappa
 e un booleano: un vault è aperto se sta in `Sessions.open`
-([session.rs:184](../../crates/fubmd-host/src/session.rs)), un workspace è chiuso
-se `Workspace.closed` è vero ([workspace.rs:234](../../crates/fubmd-kernel/src/workspace.rs)),
+([session.rs:184](../../crates/fub-host/src/session.rs)), un workspace è chiuso
+se `Workspace.closed` è vero ([workspace.rs:234](../../crates/fub-kernel/src/workspace.rs)),
 un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
-([registry.rs:218](../../crates/fubmd-host/src/registry.rs)). Le uniche
+([registry.rs:218](../../crates/fub-host/src/registry.rs)). Le uniche
 transizioni che il **contratto** nomina sono eventi, non stati: `VaultOpened`,
 `VaultClosed`, `IndexUpdated`.
 
@@ -935,15 +935,15 @@ L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 
 | Regola | Dove | Cosa costerebbe non averla |
 |---|---|---|
-| il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fubmd-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
-| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:356](../../crates/fubmd-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
-| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:366](../../crates/fubmd-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
-| i bundle si spengono in ordine **inverso** | [workspace.rs:870](../../crates/fubmd-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
+| il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fub-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
+| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:356](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
+| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:366](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
+| i bundle si spengono in ordine **inverso** | [workspace.rs:870](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
 
 E un caso che il codice tratta e che vale la pena sapere: se un job in volo tiene
 ancora una copia dell'`Arc<dyn Plugin>`, `deactivate` **non viene chiamato
 affatto**, e al suo posto si produce un errore che lo dice
-([registry.rs:377](../../crates/fubmd-host/src/registry.rs)). Non è un fallimento
+([registry.rs:377](../../crates/fub-host/src/registry.rs)). Non è un fallimento
 che ferma la chiusura: gli errori dello spegnimento si accumulano e tornano come
 lista, perché fermarsi al primo lascerebbe metà dei componenti accesi dentro un
 vault che l'utente considera chiuso.

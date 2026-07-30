@@ -1,5 +1,5 @@
 ---
-progetto: FubMD — App di note-taking open source con grafo conoscitivo
+progetto: Fub — App di note-taking open source con grafo conoscitivo
 data: 24/07/2026
 intervistato: Marta (22 anni, studentessa Medicina 4° anno, Bologna)
 ruolo: Utente finale / Studentessa universitaria
@@ -179,7 +179,7 @@ stato: bozza
 - Open source: il codice deve essere pubblico e ispezionabile. Nessun componente con licenza incompatibile.
 
 ### Ipotesi attuali
-- Che esista già una community o un team che sviluppa FubMD. Che il formato .md sia sufficiente per le mie esigenze (no tabelle complesse, no formule LaTeX avanzate — anche se un minimo di LaTeX per le formule di fisiologia sarebbe utile).
+- Che esista già una community o un team che sviluppa Fub. Che il formato .md sia sufficiente per le mie esigenze (no tabelle complesse, no formule LaTeX avanzate — anche se un minimo di LaTeX per le formule di fisiologia sarebbe utile).
 
 ### Regole di business
 - I dati dell'utente sono dell'utente. Punto. Nessuna clausola di "miglioramento del servizio" che legga i miei appunti.

@@ -10,7 +10,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la se
 
 ---
 
-La [0025](0025-la-ricerca-predefinita.md) ha deciso che la ricerca di FubMD è
+La [0025](0025-la-ricerca-predefinita.md) ha deciso che la ricerca di Fub è
 built-in e di classe *omnisearch*. Da lì le voci non sono più opinioni: sono la
 sottrazione fra ciò che quel comportamento richiede e ciò che il contratto sa
 dire. Due delle quattro P0 toccano lo stesso record.
@@ -24,7 +24,7 @@ dire. Due delle quattro P0 toccano lo stesso record.
 Tutto su `TextQuery`, tutto **in fondo**, tutto additivo.
 
 ```rust
-// crates/fubmd-abi/src/query.rs
+// crates/fub-abi/src/query.rs
 pub struct TextQuery {
     pub text: String,
     pub mode: TextMode,

@@ -12,7 +12,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la se
 
 Il §12.4 era una voce con quattro punti che sembravano quattro lavori diversi —
 token e temi, una passata di accessibilità, il suo presidio, il catalogo delle
-stringhe — e sono lo stesso: **chi guarda FubMD non lo guarda come chi lo
+stringhe — e sono lo stesso: **chi guarda Fub non lo guarda come chi lo
 scrive.** In una luce diversa, con la tastiera invece del mouse, senza vedere lo
 schermo, in un'altra lingua. Ognuno dei quattro punti è uno di quei modi, e ogni
 volta la domanda è la stessa: *questa cosa è dichiarata in un posto solo, o è
@@ -54,11 +54,11 @@ soluzioni diverse, ed è la parte più interessante di questo verbale.
 
 `outline`, `stats`, `blocks`, `search`, `versioning`, `commands` hanno adesso il
 loro catalogo di manifest, come `tags` e `backlinks` già avevano; il core ne ha
-due (`fubmd-host/src/settings.rs` e `fubmd-kernel/src/locale.rs`), e
+due (`fub-host/src/settings.rs` e `fub-kernel/src/locale.rs`), e
 `mount.rs` li lega con `.speaking(…)`.
 
-I due presidi nuovi (`fubmd-features/tests/i_cataloghi.rs`,
-`fubmd-host/tests/i_cataloghi.rs`) camminano sui cataloghi e verificano tre
+I due presidi nuovi (`fub-features/tests/i_cataloghi.rs`,
+`fub-host/tests/i_cataloghi.rs`) camminano sui cataloghi e verificano tre
 cose: che le lingue siano simmetriche, che ogni chiave dichiarata abbia una
 voce, e che **nessuna spec porti prosa cablata**. Il terzo è quello che vale: è
 il modo in cui una feature nuova non può nascere con l'italiano dentro.
@@ -271,7 +271,7 @@ quelli di domani.
 ## Cosa si è trovato e **non** si è toccato
 
 **`SettingKind::rejects()` porta italiano cablato dentro l'ABI**
-(`crates/fubmd-abi/src/settings.rs`): «`{n}` è fuori dall'intervallo ammesso
+(`crates/fub-abi/src/settings.rs`): «`{n}` è fuori dall'intervallo ammesso
 (…)», «`{v}` non è fra le scelte ammesse (…)».
 
 Non è stato corretto, e la ragione è che **non è un fix meccanico**: nessun

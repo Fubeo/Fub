@@ -1,4 +1,4 @@
-# 0023 — Chi monta il kernel: un crate `fubmd-host`, e l'app ridotta a colla
+# 0023 — Chi monta il kernel: un crate `fub-host`, e l'app ridotta a colla
 
 |  |  |
 |---|---|
@@ -20,26 +20,26 @@ La voce è chiusa. Nella seduta 8 resta l'**8.3**, che è P2 e la cui prima riga
 
 ## La risposta, in una frase
 
-**Il montaggio è un crate, `fubmd-host`, e non dipende da tauri; `fubmd-app` è
+**Il montaggio è un crate, `fub-host`, e non dipende da tauri; `fub-app` è
 ciò che resta togliendolo.**
 
-`crates/fubmd-app/src/lib.rs` passa da **809** righe a **419**, e quelle che
+`crates/fub-app/src/lib.rs` passa da **809** righe a **419**, e quelle che
 restano non si possono spiegare senza nominare Tauri: le firme
-`#[tauri::command]`, il ponte verso `fubmd://event`, e `run()`.
+`#[tauri::command]`, il ponte verso `fub://event`, e `run()`.
 
 | Modulo | Cosa possiede |
 |---|---|
-| [`mount`](../../crates/fubmd-host/src/mount.rs) | la tabella di montaggio: registro dei formati, le otto feature dichiarate, indice, versioning, view, comandi, sintassi, renderer |
-| [`session`](../../crates/fubmd-host/src/session.rs) | `Host` e `VaultSession`: chi apre, chi chiude, chi tiene il vault, e la composizione delle due metà del versioning |
-| [`watcher`](../../crates/fubmd-host/src/watcher.rs) | `VaultWatcher`/`WatcherFactory`, con `NotifyWatcher` e `NoWatcher` |
-| [`records`](../../crates/fubmd-host/src/records.rs) | `VaultInfo`, `EmbedContent`, `WorkspaceMeta` e il sidecar `.fubmd/workspace.json` |
-| [`settings`](../../crates/fubmd-host/src/settings.rs) | i due interruttori a variabile d'ambiente, finché il §11.1 non li assorbe |
+| [`mount`](../../crates/fub-host/src/mount.rs) | la tabella di montaggio: registro dei formati, le otto feature dichiarate, indice, versioning, view, comandi, sintassi, renderer |
+| [`session`](../../crates/fub-host/src/session.rs) | `Host` e `VaultSession`: chi apre, chi chiude, chi tiene il vault, e la composizione delle due metà del versioning |
+| [`watcher`](../../crates/fub-host/src/watcher.rs) | `VaultWatcher`/`WatcherFactory`, con `NotifyWatcher` e `NoWatcher` |
+| [`records`](../../crates/fub-host/src/records.rs) | `VaultInfo`, `EmbedContent`, `WorkspaceMeta` e il sidecar `.fub/workspace.json` |
+| [`settings`](../../crates/fub-host/src/settings.rs) | i due interruttori a variabile d'ambiente, finché il §11.1 non li assorbe |
 
 ## Le decisioni prese, da NON ridiscutere senza motivo
 
 - **Il confine è «tauri», non «UI».** Ciò che resta nell'app non è "la parte
   grafica": è la parte che *non esiste senza un webview*. Il criterio è scritto
-  in testa a `fubmd-app/src/lib.rs` — «se una riga di questo file può essere
+  in testa a `fub-app/src/lib.rs` — «se una riga di questo file può essere
   spiegata senza nominare Tauri, sta nel posto sbagliato» — ed è per questo che
   sono passati all'host anche pezzi che sembravano dell'app: il sidecar
   dell'organizzazione (è stato del **vault**, non del webview), i due
@@ -48,8 +48,8 @@ restano non si possono spiegare senza nominare Tauri: le firme
   argomenti, l'API locale riceve path).
 - **Il confine è un test, non una frase.**
   `whoever_mounts_does_not_depend_on_whoever_draws` in
-  `crates/fubmd-abi/tests/dependency_invariant.rs` pretende che la chiusura
-  delle dipendenze normali di `fubmd-host` non contenga `tauri`, `wry` né
+  `crates/fub-abi/tests/dependency_invariant.rs` pretende che la chiusura
+  delle dipendenze normali di `fub-host` non contenga `tauri`, `wry` né
   `webkit2gtk`. È la stessa maglia con cui il repo tiene onesto il dogfooding
   delle feature: senza di lei, «l'app è ridotta a colla Tauri» sarebbe vero solo
   nella frase che lo dice, e la prima dipendenza di comodo la smentirebbe in
@@ -58,8 +58,8 @@ restano non si possono spiegare senza nominare Tauri: le firme
 - **Tre porte verso l'host concreto, e non una.** Ciò che di un'app vera non può
   stare nel crate non è il montaggio: sono i tre punti in cui il montaggio tocca
   il mondo. Il rilevatore delle scritture altrui
-  ([`WatcherFactory`](../../crates/fubmd-host/src/watcher.rs)), la destinazione
-  degli eventi ([`EventSink`](../../crates/fubmd-host/src/session.rs)) e il
+  ([`WatcherFactory`](../../crates/fub-host/src/watcher.rs)), la destinazione
+  degli eventi ([`EventSink`](../../crates/fub-host/src/session.rs)) e il
   momento in cui si apre (`Host::open`, che nessuno chiama da sé). Un client che
   non ha nessuna delle tre — un e2e headless — passa `NoWatcher`, nessun sink, e
   ottiene lo stesso vault.
@@ -100,7 +100,7 @@ restano non si possono spiegare senza nominare Tauri: le firme
   l'outline o il versioning — mai *l'insieme montato*: che tutte e otto le
   feature si dichiarino, che nessuna si contenda un nome con un'altra, che il
   giro delle view e quello dei comandi rispondano sullo stesso vault. Adesso c'è
-  `crates/fubmd-host/tests/headless.rs`, sei test, e non poteva esistere prima:
+  `crates/fub-host/tests/headless.rs`, sei test, e non poteva esistere prima:
   l'unico modo di esercitare quella tabella era avviare l'app.
 - **`VaultInfo.extensions` non è `["md"]`.** È `["markdown", "md"]` — il
   provider dichiara due estensioni, e il primo test scritto contro il montaggio
@@ -108,7 +108,7 @@ restano non si possono spiegare senza nominare Tauri: le firme
   guardato.
 - **Il debouncer era un `Box<dyn Any + Send>`.** Dietro il trait diventa un tipo
   con un metodo, `is_watching`, che oggi risponde per costruzione. Non è la
-  §9.7 — là la domanda è *cosa promette FubMD dove il rilevamento non c'è* — ma
+  §9.7 — là la domanda è *cosa promette Fub dove il rilevamento non c'è* — ma
   è il posto dove quella risposta andrà a stare, e prima non c'era.
 
 ## Cosa NON è stato fatto, e perché
@@ -134,24 +134,24 @@ restano non si possono spiegare senza nominare Tauri: le firme
   nessun `close` sugli indici. È il §9.5, ed è aperto. Il metodo esiste perché
   quando quel lavoro si farà il posto è questo, e perché finora non c'era
   nemmeno un posto.
-- **`fubmd-features` non è stato spostato dietro la nuova porta.** Le sue suite
-  e2e continuano ad aprirsi il workspace da sé. Farle passare da `fubmd-host`
+- **`fub-features` non è stato spostato dietro la nuova porta.** Le sue suite
+  e2e continuano ad aprirsi il workspace da sé. Farle passare da `fub-host`
   sarebbe il §16.2 (il banco di prova condiviso), che è un'altra voce e ha un
   altro criterio.
 
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning. Anche
-  `-p fubmd-host --no-default-features`, cioè il ramo senza `notify`.
+  `-p fub-host --no-default-features`, cioè il ramo senza `notify`.
 - `cargo clippy --workspace --all-targets` — pulita, nelle due configurazioni di
   feature.
 - `cargo test --workspace` — **54 suite, 0 fallimenti**. Erano 51 alla 0022: le
-  tre nuove sono la lib di `fubmd-host`, i suoi doc-test e
+  tre nuove sono la lib di `fub-host`, i suoi doc-test e
   `tests/headless.rs`. **Nessun test preesistente è stato aggiunto, tolto o
   adattato** — compreso `ts_mirror_app.rs`, che continua a importare
-  `VaultInfo`, `EmbedContent` e `WorkspaceMeta` da `fubmd_app_lib`: i tre tipi
+  `VaultInfo`, `EmbedContent` e `WorkspaceMeta` da `fub_app_lib`: i tre tipi
   vivono nell'host e l'app li ri-esporta, perché il mirror sta dal lato che li
   serializza.
 - Il presidio nuovo, provato al contrario: con `tauri` fra le dipendenze normali
-  di `fubmd-host`, `whoever_mounts_does_not_depend_on_whoever_draws` fallisce.
+  di `fub-host`, `whoever_mounts_does_not_depend_on_whoever_draws` fallisce.
 - `cargo fmt --all` — pulita.

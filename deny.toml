@@ -80,9 +80,9 @@ multiple-versions = "warn"
 wildcards = "deny"
 allow-wildcard-paths = true
 deny = [
-    # L'invariante architetturale di `fubmd-abi` (niente markdown, tauri, wasm,
+    # L'invariante architetturale di `fub-abi` (niente markdown, tauri, wasm,
     # tokio, notify fra le dipendenze normali) è presidiata da
-    # crates/fubmd-abi/tests/dependency_invariant.rs, che è il posto giusto:
+    # crates/fub-abi/tests/dependency_invariant.rs, che è il posto giusto:
     # guarda il grafo per crate, non per workspace. Qui non si duplica.
 ]
 

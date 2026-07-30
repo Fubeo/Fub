@@ -19,7 +19,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
       `DISPATCH_BUDGET` che tronca. `Actor::is_plugin(id)` risponde alla domanda
       «questa l'ho scritta io?», ed è provata su un'automazione che senza di essa
       si richiama da sola fino al troncamento
-      (`fubmd-kernel/tests/batch_and_origin.rs`).
+      (`fub-kernel/tests/batch_and_origin.rs`).
 - [x] **Un campo `origin`**: `Origin { actor: Actor, batch: Option<BatchId> }`,
       con `Actor { User, Watcher, Kernel, Plugin { id } }` — l'elenco che questa
       voce chiedeva — e l'id di lotto della [decisione 0011](../decisions/0011-il-lotto.md) sullo stesso record.
@@ -68,7 +68,7 @@ sull'`HostApi` — non una firma da riaprire.
 
 *La linea di base è stata ritagliata, e si vede in review.* `event-handler.handle`
 prendeva un `event` nudo e adesso prende un `notice`: è l'unica rottura del giro,
-sta in `crates/fubmd-abi/wit/frozen/0.1.0.wit` con la ragione accanto, e il test di additività la
+sta in `crates/fub-abi/wit/frozen/0.1.0.wit` con la ragione accanto, e il test di additività la
 tratta come tale. Aggiungerla dopo il freeze sarebbe costata una major, o una
 seconda funzione accanto alla prima con la stessa semantica e un argomento in
 più. Tutto il resto è additivo: `batch-ended` in coda a `event` e a `event-kind`,

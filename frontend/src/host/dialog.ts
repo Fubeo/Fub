@@ -1,5 +1,5 @@
 // Le superfici che l'app chiede al **sistema operativo**, non al kernel: una
-// conferma modale, il selettore di cartella. Non passano dall'IPC di FubMD —
+// conferma modale, il selettore di cartella. Non passano dall'IPC di Fub —
 // le disegna la piattaforma — e sono l'altra metà della cucitura.
 //
 // Prima questa metà non esisteva: `main.ts` importava `@tauri-apps/plugin-dialog`

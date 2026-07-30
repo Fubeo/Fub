@@ -69,7 +69,7 @@ function chiama(fn: () => void): void {
   try {
     fn();
   } catch (e) {
-    console.error(`FubMD: un ascoltatore di eventi del kernel ha lanciato: ${errorText(e)}`);
+    console.error(`Fub: un ascoltatore di eventi del kernel ha lanciato: ${errorText(e)}`);
   }
 }
 

@@ -1,6 +1,6 @@
 # Il versionamento
 
-In FubMD i numeri di versione sono **tre**, e non sono lo stesso numero scritto
+In Fub i numeri di versione sono **tre**, e non sono lo stesso numero scritto
 in tre posti: sono tre promesse, fatte a tre persone diverse, che si rompono in
 tre modi diversi. Oggi due di loro valgono `0.1.0` e sembrano uno solo — è una
 coincidenza di questo momento, non una regola, ed è la ragione per cui il
@@ -8,8 +8,8 @@ documento esiste.
 
 | Numero | Dove sta | A chi promette | Cosa succede se si sbaglia |
 |---|---|---|---|
-| **versione dei crate** | [`Cargo.toml:19`](../Cargo.toml), ereditata dagli otto crate; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila FubMD, o ci compila contro | la build rossa, subito |
-| **versione del contratto** | [`ABI_VERSION`](../crates/fubmd-abi/src/traits.rs) (`traits.rs:2912`) e `package fubmd:abi@0.1.0` in [`crates/fubmd-abi/wit/fubmd/abi.wit`](../crates/fubmd-abi/wit/fubmd/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
+| **versione dei crate** | [`Cargo.toml:19`](../Cargo.toml), ereditata dagli otto crate; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila Fub, o ci compila contro | la build rossa, subito |
+| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:2912`) e `package fub:abi@0.1.0` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
 | **versione degli schemi su disco** | sette `SCHEMA_VERSION` indipendenti nei crate (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
 
 ## 1. La versione dei crate
@@ -21,8 +21,8 @@ numero in `package.json`.
 
 Un numero solo è sostenibile finché è vero che **nessun crate è pubblicato
 separatamente**: oggi non ce n'è nessuno su crates.io, il prodotto è il binario
-`fubmd`, e non esiste un consumatore che possa aggiornare `fubmd-kernel` senza
-aggiornare `fubmd-abi`. Il giorno in cui `fubmd-abi` verrà pubblicato da solo —
+`fub`, e non esiste un consumatore che possa aggiornare `fub-kernel` senza
+aggiornare `fub-abi`. Il giorno in cui `fub-abi` verrà pubblicato da solo —
 perché chi scrive un plugin ci deve compilare contro — quel giorno il numero si
 dovrà spezzare, e questa sezione andrà riscritta invece che aggirata.
 
@@ -42,11 +42,11 @@ non perché è comparso un warning.
 
 ## 2. La versione del contratto
 
-`fubmd-abi` è la superficie che i plugin vedono, e
-[`crates/fubmd-abi/wit/fubmd/abi.wit`](../crates/fubmd-abi/wit/fubmd/abi.wit) è
+`fub-abi` è la superficie che i plugin vedono, e
+[`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) è
 la stessa superficie detta nella lingua dei componenti WASM. Le due si
 rispecchiano, e che si rispecchino è verificato
-([`wit_conformance.rs`](../crates/fubmd-abi/tests/wit_conformance.rs)).
+([`wit_conformance.rs`](../crates/fub-abi/tests/wit_conformance.rs)).
 
 Quel numero non promette la stessa cosa della versione dei crate. La versione
 dei crate parla a chi **ricompila**; questa parla a un componente WASM
@@ -54,7 +54,7 @@ dei crate parla a chi **ricompila**; questa parla a un componente WASM
 accettare o rifiutare da solo, guardando la stringa che il plugin dichiara.
 
 **La regola di caricamento** è
-[`abi_compatible`](../crates/fubmd-abi/src/traits.rs) (`traits.rs:3080`), e sta
+[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:3080`), e sta
 in quattro righe:
 
 | Caso | Esito | Perché |
@@ -76,7 +76,7 @@ di funzionare.
 linea di base, e come si ritaglia quando prima del freeze si rompe qualcosa di
 proposito — sta in
 [architecture/wit-congelato.md](architecture/wit-congelato.md), e non si ripete
-qui. Il presidio è [`wit_additivity.rs`](../crates/fubmd-abi/tests/wit_additivity.rs),
+qui. Il presidio è [`wit_additivity.rs`](../crates/fub-abi/tests/wit_additivity.rs),
 che gira a ogni push.
 
 **Prima del freeze (adesso)** la superficie è ancora libera di cambiare, e il
@@ -88,22 +88,22 @@ implementazione.
 ## 3. Le versioni degli schemi su disco
 
 È il numero che si dimentica, ed è l'unico i cui errori non si annullano: un
-file dell'utente scritto male resta scritto male. Ogni file che FubMD scrive
+file dell'utente scritto male resta scritto male. Ogni file che Fub scrive
 porta il **suo** numero, indipendente dagli altri, perché gli schemi cambiano in
 momenti diversi e legarli vorrebbe dire migrare sei file per una modifica a uno.
 
 | Schema | Dove | Oggi | Cosa contiene |
 |---|---|---|---|
-| registro dei vault | [`crates/fubmd-host/src/vaults.rs:39`](../crates/fubmd-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
-| organizzazione | [`crates/fubmd-kernel/src/organization.rs:74`](../crates/fubmd-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
-| stato di vista | [`crates/fubmd-kernel/src/viewstate.rs:56`](../crates/fubmd-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
-| anagrafe | [`crates/fubmd-kernel/src/entries.rs:86`](../crates/fubmd-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
-| impostazioni | [`crates/fubmd-kernel/src/settings.rs:51`](../crates/fubmd-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
-| versioning | [`crates/fubmd-features/src/versioning.rs:147`](../crates/fubmd-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
-| indice di ricerca | [`crates/fubmd-features/src/search.rs:87`](../crates/fubmd-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
+| registro dei vault | [`crates/fub-host/src/vaults.rs:39`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
+| organizzazione | [`crates/fub-kernel/src/organization.rs:74`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
+| stato di vista | [`crates/fub-kernel/src/viewstate.rs:56`](../crates/fub-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
+| anagrafe | [`crates/fub-kernel/src/entries.rs:86`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
+| impostazioni | [`crates/fub-kernel/src/settings.rs:51`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
+| versioning | [`crates/fub-features/src/versioning.rs:147`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
+| indice di ricerca | [`crates/fub-features/src/search.rs:87`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
 
 **La regola comune è il rifiuto in avanti.** Un file la cui `version` è
-**maggiore** di quella che questa copia di FubMD conosce non si legge e non si
+**maggiore** di quella che questa copia di Fub conosce non si legge e non si
 riscrive: si rifiuta, dicendolo. Interpretare a metà un file scritto da una
 versione più nuova è il modo più diretto per cancellare un campo che non si
 capisce.
@@ -133,18 +133,18 @@ che alza uno schema deve portare con sé la migrazione.
 ## Cosa non è versionato, e di proposito
 
 - **I file dell'utente.** Un vault è markdown con frontmatter YAML, compatibile
-  Obsidian. Non è un formato di FubMD e non prende un numero da FubMD: è il
+  Obsidian. Non è un formato di Fub e non prende un numero da Fub: è il
   motivo per cui si può smettere di usare questo programma senza perdere niente.
 - **Le API interne dei crate.** Finché nessun crate è pubblicato, `pub` dentro
-  `fubmd-kernel` non è una promessa verso l'esterno. L'unica superficie promessa
-  è `fubmd-abi`, ed è il numero 2 di questo documento.
+  `fub-kernel` non è una promessa verso l'esterno. L'unica superficie promessa
+  è `fub-abi`, ed è il numero 2 di questo documento.
 - **I moduli TypeScript della shell.** `frontend/` è un'applicazione, non una
   libreria: il numero in `package.json` esiste per accompagnare quello dei
   crate, non per essere consumato da qualcuno.
 - **Il layout su disco.** *Dove* stanno i file non ha un numero, e non può
   averlo: il numero abita dentro un file, e chi deve sapere se una cartella si è
   spostata non l'ha ancora aperto. Si riconosce dai **nomi**, ed è ciò che fa la
-  prima e finora unica migrazione di layout — `.fubmd-data/` → `.fubmd/data/`,
+  prima e finora unica migrazione di layout — `.fub-data/` → `.fub/data/`,
   [decisione 0048](decisions/0048-una-radice-sola.md). La regola del rifiuto in
   avanti vale anche lì, tradotta: due nomi presenti insieme non si fondono. La
   mappa di cosa sta dove è

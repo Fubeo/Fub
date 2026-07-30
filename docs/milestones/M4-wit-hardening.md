@@ -5,20 +5,20 @@ Torna a [../PIANO.md](../PIANO.md) · segue [M3](M3-editor-fidelity.md) · prece
 
 ## Obiettivo
 
-**Congelare** la superficie dei trait di `fubmd-abi` e certificarla esprimibile in
+**Congelare** la superficie dei trait di `fub-abi` e certificarla esprimibile in
 WIT, così che il runtime WASM di [M5](M5-wasm-runtime.md) sia un lavoro *meccanico*
 e non una rincorsa a firme non serializzabili. Provare l'intero confine con un
 **primo plugin nativo** che usa `Plugin`/`HostApi`.
 
 ## Contesto: il `wit/` è già vivo da M2
 
-Decisione presa: `crates/fubmd-abi/wit/fubmd/*.wit` **non** nasce a M4 — è mantenuto vivo fin da M2,
+Decisione presa: `crates/fub-abi/wit/fub/*.wit` **non** nasce a M4 — è mantenuto vivo fin da M2,
 con un test di conformità abi↔WIT che gira ad ogni commit. Così la "regola d'oro"
 (vedi [../architecture/traits.md](../architecture/traits.md)) è verificata in
 continuazione, non asserita. M4 è il punto in cui quel WIT viene **congelato** e
 promosso a contratto stabile.
 
-Stato repo: la cartella `crates/fubmd-abi/wit/fubmd/` esiste già (vuota); i plugin
+Stato repo: la cartella `crates/fub-abi/wit/fub/` esiste già (vuota); i plugin
 di esempio saranno componenti `wasm32-wasip2` compilati con `cargo component`, e
 la cartella `plugins/` nascerà con loro a [M5](M5-wasm-runtime.md).
 
@@ -33,14 +33,14 @@ la cartella `plugins/` nascerà con loro a [M5](M5-wasm-runtime.md).
 - Consolidare le estensioni introdotte in corso d'opera: lo **scope del vault**
   nei permessi — che dalla [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
   non è più un campo da aggiungere ma il *parametro* della voce
-  `fubmd:read-vault` / `fubmd:write-vault` (vedi
+  `fub:read-vault` / `fub:write-vault` (vedi
   [../architecture/plugin-boundary.md](../architecture/plugin-boundary.md)), i
   nodi input di `UiNode` aggiunti a [M3](M3-editor-fidelity.md), e il modello dei
   **job** (`JobSpec`/`JobId`, `spawn_job`/`run_job`, `Event::JobDone`/`Overflow`)
   già nel contratto e nel `wit/` da M2. Prima del freeze va deciso se ai job
   serve un canale di **progresso** (streaming) o se `JobDone` basta.
 
-### `crates/fubmd-abi/wit/fubmd/*.wit` che rispecchia `fubmd-abi`
+### `crates/fub-abi/wit/fub/*.wit` che rispecchia `fub-abi`
 
 - File WIT organizzati per area: `model`, `format`, `ui`, `index`, `events`,
   `command`, `plugin`, `host-api`.
@@ -82,7 +82,7 @@ Resta a M4, sulla conformità:
   `type json = string` al freeze (vedi "Punto di attenzione noto" in
   [traits.md](../architecture/traits.md));
 - il tooling continua a vivere al confine, **mai** fra le dipendenze normali di
-  `fubmd-abi`/`fubmd-kernel` (`wit-parser` è una dev-dependency, che l'invariante
+  `fub-abi`/`fub-kernel` (`wit-parser` è una dev-dependency, che l'invariante
   non tocca).
 
 ### Primo plugin nativo (`Plugin`/`HostApi`)
@@ -94,14 +94,14 @@ Resta a M4, sulla conformità:
 - Esercita: manifest, permessi (booleani + eventuale `vault_scope`), `activate`/
   `deactivate`, registrazione presso il registry, uso di `HostApi`.
 - Il registry **c'è** ([decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)):
-  è `BundleRegistry` in `fubmd-host`, monta un bundle in quattro passi sempre
+  è `BundleRegistry` in `fub-host`, monta un bundle in quattro passi sempre
   uguali (versione del contratto, dichiarazione, `Plugin::activate`, provider) e
   possiede il `Box<dyn Plugin>` finché è vivo. Le otto feature ufficiali passano
   già di lì, quindi il plugin nativo di M4 non inaugura una strada: ne prende una
   battuta.
 - Con il registry c'è anche il **runner dei job**
   ([decisione 0032](../decisions/0032-il-runner-dei-job.md)): `JobRunner` in
-  `fubmd-host` è un pool di thread per vault che aspetta un campanello del
+  `fub-host` è un pool di thread per vault che aspetta un campanello del
   kernel, drena `Workspace::take_pending_jobs`, esegue `Plugin::run_job`
   **senza tenere in mano nessun prestito** del workspace — il job ne prende uno
   per chiamata, con il `JobHost` della
@@ -155,7 +155,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
   per `placement`, dichiarazione di interesse `ViewSpec.refresh: EventMask`
   esercitata dalle tre feature ufficiali.
 - **u64 sull'IPC JSON**: gli u64 identità/impronta attraversano il terzo
-  confine come **stringhe** (`fubmd_abi::ipc`); presidiato dalle fixture dei
+  confine come **stringhe** (`fub_abi::ipc`); presidiato dalle fixture dei
   mirror TS (contratto e app).
 - **Il ciclo di vita di un indice**: `IndexProvider::close(host)` **senza corpo
   di default** ([decisione 0028](../decisions/0028-come-un-componente-smette.md)).
@@ -189,7 +189,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
   domanda: un comando IPC nuovo sarebbe stato visibile alla shell e non a una
   feature — che di comandi non ne ha nessuno — cioè un fatto che il core conosce
   e i plugin no, la stessa asimmetria che il canale dati esiste per non avere. E
-  tre campi invece di un booleano, perché «FubMD saprebbe», «è già successo
+  tre campi invece di un booleano, perché «Fub saprebbe», «è già successo
   qualcosa che non ho saputo leggere» e «cosa» sono tre domande, e un vault
   senza rilevamento non è un vault che ha appena mancato un file.
 - **Le impostazioni, che erano l'unica parte del contratto senza un contenitore**
@@ -216,7 +216,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
   famiglie sono separate per la stessa ragione per cui `read-api` esiste: uno
   schema è pubblico per costruzione e questo store non contiene segreti — ciò
   che è recintato è la scrittura, e la recinta un cancello per chiave
-  (`program-writable`) sopra il permesso `fubmd:write-settings`.
+  (`program-writable`) sopra il permesso `fub:write-settings`.
 - **Lo stato di vista, il secondo dei tre stati senza contenitore**
   ([decisione 0037](../decisions/0037-lo-stato-di-vista.md)). Additiva anche
   questa, e piccola: due `interface` nuove — `host-view-state-read` (in
@@ -298,7 +298,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
       template di cancellare una nota), `list_trash` sta accanto a
       `list_documents` e non in `IndexQuery` (il cestino non è indicizzato), e
       `run_command` non prende né modo né attore né lotto — li eredita tutti e
-      tre. `crates/fubmd-abi/wit/frozen/0.1.0.wit` **ritagliato** (`storage-*` era pubblicata).
+      tre. `crates/fub-abi/wit/frozen/0.1.0.wit` **ritagliato** (`storage-*` era pubblicata).
       Verbale capacità per capacità, incluse quelle che restano fuori, in
       [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
 - [x] **`create_note` in una cartella** — deciso col punto sopra:
@@ -330,7 +330,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
       solo quando le sue coordinate valgono anche per il sorgente del kernel.
       `ViewSpec` guadagna `follows: ContextMask`, o "ridisegna al cambio di nota
       attiva" diventerebbe "ridisegna a ogni battuta di tasto". Verbale in
-      [decisione 0007](../decisions/0007-contesto-di-sessione.md); `crates/fubmd-abi/wit/frozen/0.1.0.wit` **ritagliato** (la
+      [decisione 0007](../decisions/0007-contesto-di-sessione.md); `crates/fub-abi/wit/frozen/0.1.0.wit` **ritagliato** (la
       firma di `active-document` era pubblicata).
 - [ ] **Identità del documento: il path è per sempre la chiave?**
       ([todo.md §13.1](../todo.md)) FEATURES chiede uuid opzionale (2.2), stable
@@ -374,7 +374,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
 - [x] **L'origine degli eventi** — fatta con la [decisione 0012](../decisions/0012-origine-degli-eventi.md), ed è **l'unica rottura di una
       firma già pubblicata** di questo giro: `event-handler.handle` prendeva un
       `event` nudo e adesso prende un `notice` (evento + origine). Linea di base
-      ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`, con la ragione accanto: senza
+      ritagliata in `crates/fub-abi/wit/frozen/0.1.0.wit`, con la ragione accanto: senza
       l'origine sul parametro, un'automazione su-modifica che scrive non
       riconosce le proprie scritture e si richiama da sé finché il
       `DISPATCH_BUDGET` non tronca — cioè una rete di sicurezza al posto di una
@@ -419,7 +419,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
          un chiamante non umano sceglie a caso.
       2. **Dove vive il dry-run** → un argomento `mode: InvokeMode` su `invoke`,
          cioè la **rottura di firma fatta adesso** (linea di base ritagliata in
-         `crates/fubmd-abi/wit/frozen/0.1.0.wit`, come per la [decisione 0007](../decisions/0007-contesto-di-sessione.md)). La variante
+         `crates/fub-abi/wit/frozen/0.1.0.wit`, come per la [decisione 0007](../decisions/0007-contesto-di-sessione.md)). La variante
          `CommandOutcome::Plan` da sola sarebbe stata una convenzione fra
          chiamante e comando; con il modo nella firma, l'host può *far
          rispettare* la simulazione — presta un `HostApi` in sola lettura, e un
@@ -444,7 +444,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
       (fatte, [decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md):
       il vocabolario era `CommandReach::Settings` e adesso lo schema c'è —
       `SettingSpec.program_writable`, **per chiave** e con default `false`, più il
-      permesso `fubmd:write-settings` che dice *chi*; nessuno dei due basta da
+      permesso `fub:write-settings` che dice *chi*; nessuno dei due basta da
       solo, e la persona davanti allo schermo passa da un'altra porta),
       ~~i **comandi strutturali**~~ (fatti, [decisione 0013](../decisions/0013-elenco-delle-capacita.md): cinque comandi, sei comandi
       Tauri in meno) e i **comandi della shell** (toggle dei pannelli: il registro vive nel kernel e
@@ -453,7 +453,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
 - [ ] **La forma di una ricerca tollerante** ([todo.md](../todo.md) §21.1–§21.3,
       dalla [decisione 0025](../decisions/0025-la-ricerca-predefinita.md)):
       `text-mode`, `text-field`, `text-query` e `document-match` sono già nel WIT,
-      e la 0025 ha stabilito che la ricerca predefinita di FubMD è di classe
+      e la 0025 ha stabilito che la ricerca predefinita di Fub è di classe
       *omnisearch*. Le tre domande da chiudere qui:
       1. **Dove sta la tolleranza ai refusi** → una terza variante di `TextMode`
          è la più economica ma tratta modalità e tolleranza come esclusive,
@@ -495,7 +495,7 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
 
 ## Criteri di accettazione
 
-- `crates/fubmd-abi/wit/fubmd/*.wit` copre l'intera superficie dei trait; il test di conformità
+- `crates/fub-abi/wit/fub/*.wit` copre l'intera superficie dei trait; il test di conformità
   abi↔WIT è verde e **rompe** su una divergenza introdotta ad arte.
 - Il primo plugin nativo si attiva, registra i suoi provider, funziona end-to-end e
   rispetta i permessi (un accesso fuori `vault_scope` è negato con

@@ -16,14 +16,14 @@ La voce aveva due metà, e la ragione per cui vanno insieme è tutta qui:
 > file sta.** Spostare le radici senza dire cosa significano toglie l'unico
 > indizio esistente prima di aver messo quello vero.
 
-Un vault portava tre cartelle nostre: `.fubmd/` (autorevole), `.fubmd-data/`
+Un vault portava tre cartelle nostre: `.fub/` (autorevole), `.fub-data/`
 (derivato) e `.trash/`. E `data_write` non ha mai chiesto se ciò che scrive si
 può buttare: la classe stava in prosa, in testa a ogni modulo che ne apriva uno
 nuovo, dedotta dalla radice e ripetuta a parole.
 
 ## La decisione
 
-**Dentro un vault la radice è una: `.fubmd/`, coi derivati in `.fubmd/data/`.**
+**Dentro un vault la radice è una: `.fub/`, coi derivati in `.fub/data/`.**
 La profondità dice la classe — in cima l'autorevole, sotto `data/` il buttabile —
 e la mappa di chi scrive dove, con quale versione di schema e con quale
 disciplina di scrittura, è [on-disk-layout.md](../architecture/on-disk-layout.md).
@@ -34,8 +34,8 @@ scrittura: delle tre forme possibili è scelta la **seconda radice per plugin** 
 additiva, quindi non scade col freeze e l'implementazione segue M3.
 
 ```rust
-pub const FUBMD_DIR: &str = ".fubmd";              // kernel/vault.rs
-pub fn data_root(root: &Utf8Path) -> Utf8PathBuf;  // <root>/.fubmd/data
+pub const FUB_DIR: &str = ".fub";              // kernel/vault.rs
+pub fn data_root(root: &Utf8Path) -> Utf8PathBuf;  // <root>/.fub/data
 pub fn migrate_layout(root: &Utf8Path) -> Option<String>;
 ```
 
@@ -43,12 +43,12 @@ pub fn migrate_layout(root: &Utf8Path) -> Option<String>;
 
 ### Annidata, non piatta
 
-Un `.fubmd/` senza sottocartella avrebbe fuso le due radici e **cancellato**
+Un `.fub/` senza sottocartella avrebbe fuso le due radici e **cancellato**
 l'unico posto in cui la classe è scritta. Annidare la conserva — un livello più
 in basso — e resta vera anche quando la classe diventerà esplicita: un path che
 dice già la classe non contraddice una capacità che la dichiara. È anche la
 ragione per cui la seconda metà si scrive nella stessa forma: `data_*` salirà a
-`.fubmd/plugins/<id>/` e `cache_*` resterà in `.fubmd/data/plugins/<id>/`, cioè
+`.fub/plugins/<id>/` e `cache_*` resterà in `.fub/data/plugins/<id>/`, cioè
 la stessa regola applicata un livello più in giù.
 
 ### L'argomento contrario pesava meno di quanto sembrasse
@@ -56,7 +56,7 @@ la stessa regola applicata un livello più in giù.
 Due radici distinte rendono banale escludere i derivati da un backup o da un
 sync con una regola sola. Ma quella promessa **era già falsa**: gli snapshot del
 versioning stanno sotto la radice dei derivati e non si ricostruiscono da niente,
-e con loro il sidecar del cestino (`.fubmd/data/trash/`), che ricorda da quale
+e con loro il sidecar del cestino (`.fub/data/trash/`), che ricorda da quale
 cartella veniva un file cancellato. Si è persa una comodità che non c'era, e la
 si ricompra davvero solo con la seconda metà — quando `cache_*` conterrà **solo**
 roba rifabbricabile.
@@ -66,12 +66,12 @@ roba rifabbricabile.
 È l'unica delle tre che non è roba nostra. Il nome è quello che usa Obsidian per
 "Move to Obsidian trash", ed è deliberato dal primo giorno (`kernel/vault.rs`,
 `TRASH_DIR`): un vault condiviso fra le due app ha **un solo** cestino.
-Spostarlo in `.fubmd/trash/` avrebbe rotto quella compatibilità in cambio di una
+Spostarlo in `.fub/trash/` avrebbe rotto quella compatibilità in cambio di una
 cartella nascosta in meno.
 
 E c'è una ragione che vale anche senza Obsidian: là dentro ci sono **file
-dell'utente**, non metadati di FubMD. Una nota cancellata è ancora una nota. La
-radice unica raccoglie ciò che FubMD scrive *a proposito* del vault; il cestino
+dell'utente**, non metadati di Fub. Una nota cancellata è ancora una nota. La
+radice unica raccoglie ciò che Fub scrive *a proposito* del vault; il cestino
 non lo è, e un cestino che si trova è metà del suo valore.
 
 Il suo *sidecar*, invece, sta sotto i derivati: quello sì è nostro, Obsidian non
@@ -134,10 +134,10 @@ funzionare.
 ### Il marcatore del checker migliora, non trasloca
 
 `check-doc-links.mjs` riconosce un vault dalla cartella che il core ci scrive
-dentro, per saltarlo. Era `.fubmd-data/`, cioè la cartella dei **derivati**: un
+dentro, per saltarlo. Era `.fub-data/`, cioè la cartella dei **derivati**: un
 vault aperto e mai indicizzato non ce l'ha, e lo script gli camminava dentro
-trattando le note di qualcuno come documentazione del repo. `.fubmd/` compare
-alla prima cosa che FubMD scrive su quel vault, che è prima.
+trattando le note di qualcuno come documentazione del repo. `.fub/` compare
+alla prima cosa che Fub scrive su quel vault, che è prima.
 
 La verifica è il numero che quello script stampa. Prima: **117 file, 1864 link,
 0 rotti**; col marcatore nuovo e i due documenti che questo commit aggiunge:
@@ -151,7 +151,7 @@ Quattro verbali ([0025](0025-la-ricerca-predefinita.md),
 [0038](0038-il-kernel-possiede-il-sidecar.md),
 [0044](0044-lo-stato-per-documento.md),
 [0046](0046-l-anagrafe-del-vault.md)) e la linea di base congelata continueranno
-a dire `.fubmd-data/`, ed è corretto: sono fotografie. La traduzione sta in **un
+a dire `.fub-data/`, ed è corretto: sono fotografie. La traduzione sta in **un
 punto solo** — la sezione «Il nome di prima» di
 [on-disk-layout.md](../architecture/on-disk-layout.md) — sul modello di
 [numerazione.md](../roadmap/numerazione.md) per i numeri delle voci, e non come
@@ -164,22 +164,22 @@ che serve alla sola migrazione.
 
 | Cosa | Quanto |
 |---|---|
-| Costanti di produzione | **una**, `DATA_DIR`, diventata `FUBMD_DIR` + `data_root()` |
+| Costanti di produzione | **una**, `DATA_DIR`, diventata `FUB_DIR` + `data_root()` |
 | Menzioni di `DATA_DIR` nel kernel | 14 righe, 6 delle quali componevano un path |
 | Path composti a mano nei test | 11 in 8 file — già un difetto prima: adesso passano da `data_root` |
 | Prosa (commenti, documenti, WIT vivo) | una quarantina di menzioni |
 | Presidi | `.gitignore` (ignorava già entrambe), il marcatore del checker, un commento di CI |
-| Scansione del vault | **niente**: ogni dot-dir è già ignorata (`is_ignored_name`), quindi `.fubmd/data/` lo è per la regola generale |
+| Scansione del vault | **niente**: ogni dot-dir è già ignorata (`is_ignored_name`), quindi `.fub/data/` lo è per la regola generale |
 
 `DATA_DIR` non è stata rinominata in una stringa con dentro uno slash: è
 diventata una **funzione**, così i sei posti che componevano un path non
-compilavano finché non passavano da lì. Una costante `".fubmd/data"` avrebbe
+compilavano finché non passavano da lì. Una costante `".fub/data"` avrebbe
 lasciato compilare chiunque avesse continuato a comporlo a mano — e il nome della
 costante non dice quanti livelli ha dentro.
 
 ## Cosa si è scartato, e perché
 
-- **Un `.fubmd/` piatto.** Cancella l'unico posto in cui la classe è scritta,
+- **Un `.fub/` piatto.** Cancella l'unico posto in cui la classe è scritta,
   che è la metà di ciò che questa voce doveva sistemare.
 - **Tenere due radici per poter escludere i derivati con una regola sola.** La
   promessa era già falsa: sotto i derivati stanno gli snapshot del versioning e
@@ -215,7 +215,7 @@ costante non dice quanti livelli ha dentro.
   (`host/kernel.rs`: `std::fs::write`), snapshot compresi. È il
   [§15.2](../roadmap/15-il-disco.md#152-durabilità-e-recovery), non questa voce.
 - **La migrazione non ha un test su un vault vero.** I quattro casi —
-  spostamento, rifiuto, vault nuovo, `.fubmd-data` che non è una cartella — sono
+  spostamento, rifiuto, vault nuovo, `.fub-data` che non è una cartella — sono
   su directory temporanee (`kernel/tests/radice_unica.rs`). Il primo vault vero a
   passarci è `docs/` di questo repo, alla prima apertura dopo questo commit.
 - **Nessun comando la ripete.** Non esiste un `rebuild_index` né un

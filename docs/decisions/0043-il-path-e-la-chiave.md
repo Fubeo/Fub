@@ -34,7 +34,7 @@ differenza fra loro è tutta in *dove* quella cosa starebbe.
 
 **Fuori dal file**, in una tabella `path → id` tenuta dal kernel. È la forma che
 sembra più pulita — nessun file dell'utente sporcato — ed è quella che non
-regge il caso per cui l'id stabile esiste: **la rinomina fatta mentre FubMD è
+regge il caso per cui l'id stabile esiste: **la rinomina fatta mentre Fub è
 chiuso**. Il Finder sposta `Nota.md` in `Archivio/Nota.md`, l'app riapre, e la
 tabella nomina un path che non c'è più mentre il path nuovo non ha un id. Cioè:
 esattamente lo stesso buco del path, con un file in più da tenere in sincronia.

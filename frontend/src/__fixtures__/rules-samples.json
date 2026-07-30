@@ -333,12 +333,12 @@
       "out": "hidden"
     },
     {
-      "path": ".fubmd/roba.md",
+      "path": ".fub/roba.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": ".fubmd/roba.md",
+      "path": ".fub/roba.md",
       "naming": "new",
       "out": "hidden"
     },
@@ -570,18 +570,18 @@
       "out": true
     },
     {
-      "prefix": "fubmd",
-      "topic": "fubmd:index.rebuilt",
+      "prefix": "fub",
+      "topic": "fub:index.rebuilt",
       "out": true
     },
     {
-      "prefix": "fubmd:index",
-      "topic": "fubmd:index.rebuilt",
+      "prefix": "fub:index",
+      "topic": "fub:index.rebuilt",
       "out": true
     },
     {
-      "prefix": "fubmd:index",
-      "topic": "fubmd:indexer.done",
+      "prefix": "fub:index",
+      "topic": "fub:indexer.done",
       "out": false
     }
   ],

@@ -1,5 +1,5 @@
 ---
-progetto: FubMD
+progetto: Fub
 data: 2026-07-24
 intervistato: Giulia — UX Designer / PKM enthusiast
 ruolo: User persona PKM & life management, livello tecnico medio
@@ -43,7 +43,7 @@ stato: bozza
 - L’estetica personalizzata può rompersi dopo aggiornamenti o cambiamenti dei plugin.
 
 ### Motivazione del progetto
-- Creare in FubMD un’esperienza PKM open source, bella, personalizzabile ma più stabile e sostenibile.
+- Creare in Fub un’esperienza PKM open source, bella, personalizzabile ma più stabile e sostenibile.
 - Ridurre la frizione tra cattura, organizzazione, revisione e utilizzo reale.
 - Offrire dashboard, template, query e integrazioni senza obbligare l’utente a configurazioni continue.
 - Aiutare l’utente a “potare” il vault con strumenti di pulizia, revisione e salute del knowledge base.
@@ -79,7 +79,7 @@ stato: bozza
 - Sostituire completamente Todoist con project management avanzato, team task, dipendenze complesse o automazioni enterprise.
 - Diventare un servizio cloud proprietario obbligatorio.
 - Obbligare l’utente a usare plugin fragili o configurazioni avanzate.
-- Trasformare FubMD in un tool di collaborazione real-time.
+- Trasformare Fub in un tool di collaborazione real-time.
 - Creare un sistema di automazione opaco che modifica note senza controllo utente.
 - Gestire nativamente flussi editoriali complessi o CRM personali avanzati.
 
@@ -235,7 +235,7 @@ stato: bozza
 ### Dispositivi e piattaforme
 - Priorità: MacBook Pro macOS.
 - Secondario: iPhone iOS.
-- Terziario: Kindle come fonte di highlight, non come dispositivo FubMD nativo.
+- Terziario: Kindle come fonte di highlight, non come dispositivo Fub nativo.
 - Possibile supporto futuro iPad.
 - Interfaccia coerente tra desktop e mobile.
 
@@ -328,7 +328,7 @@ stato: bozza
 ## 8. Vincoli e ipotesi
 
 ### Vincoli di business
-- FubMD deve essere open source.
+- Fub deve essere open source.
 - Deve essere attraente per utenti PKM e designer.
 - Deve ridurre la dipendenza da plugin fragili.
 - Non deve obbligare a servizi cloud proprietari.
@@ -431,7 +431,7 @@ stato: bozza
 ## 10. Criteri di successo
 
 ### Successo del progetto
-- Giulia riesce a usare FubMD come life OS personale senza tornare a Notion, Todoist, Day One o Readwise per le attività principali.
+- Giulia riesce a usare Fub come life OS personale senza tornare a Notion, Todoist, Day One o Readwise per le attività principali.
 - La domenica mattina apre la dashboard settimanale e completa la review in poco tempo.
 - Importa highlight Kindle e li collega a note tematiche senza passaggi manuali eccessivi.
 - Passa meno tempo a configurare e più tempo a usare il sistema.
@@ -477,7 +477,7 @@ stato: bozza
 - Aspettative alte su sostituzione di Notion, Todoist, Day One e Readwise.
 
 ### Domande aperte
-- La sync deve usare iCloud, WebDAV, Syncthing o un servizio FubMD self-hostable?
+- La sync deve usare iCloud, WebDAV, Syncthing o un servizio Fub self-hostable?
 - Come gestire conflitti in modo comprensibile per utente non tecnico?
 - Il query language deve essere compatibile con Dataview o solo ispirato?
 - I template devono supportare script avanzati o solo variabili sicure?
@@ -525,4 +525,4 @@ stato: bozza
 - La sync iPhone-Mac deve essere robusta e non creare conflitti fastidiosi.
 - Ha bisogno di strumenti per capire cosa c’è nel vault e mantenerlo sano.
 - Scenario chiave: domenica mattina, dashboard settimanale, libri finiti, abitudini, note create, prompt journaling, import highlight e collegamento a `[[Design_System]]`.
-- FubMD deve essere bello, aperto, personalizzabile, ma anche stabile, semplice da mantenere e orientato all’uso reale.
+- Fub deve essere bello, aperto, personalizzabile, ma anche stabile, semplice da mantenere e orientato all’uso reale.

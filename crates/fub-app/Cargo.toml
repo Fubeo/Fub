@@ -1,0 +1,32 @@
+[package]
+name = "fub-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Colla Tauri v2 di Fub: comandi/eventi IPC, finestre, dialoghi. Chi monta è `fub-host`."
+
+[lib]
+name = "fub_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "fub"
+path = "src/main.rs"
+
+[dependencies]
+fub-abi = { workspace = true }
+fub-kernel = { workspace = true }
+# Chi monta: registro, feature, sessione, watcher, ponte eventi (§8.2).
+fub-host = { workspace = true }
+# Solo per `VersionRef`, che è un tipo che attraversa l'IPC.
+fub-features = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+camino = { workspace = true }
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-dialog = "2.7.2"
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+# tauri-build aggiunto con `cargo add` (versione corrente)

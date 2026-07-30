@@ -37,7 +37,7 @@ contratto ha già dalla [0008](0008-modifica-chirurgica.md).**
 
 Le due colonne sono lo stesso lavoro sullo stesso vault nella stessa corsa, e
 stanno in un presidio, non in un banco: `mentre_un_job_cammina_il_vault_chi_salva_non_aspetta`
-in [`crates/fubmd-host/tests/lavoro_lungo.rs`](../../crates/fubmd-host/tests/lavoro_lungo.rs).
+in [`crates/fub-host/tests/lavoro_lungo.rs`](../../crates/fub-host/tests/lavoro_lungo.rs).
 Il confronto è un **rapporto** e non una soglia in millisecondi, perché una
 macchina lenta allunga tutte e due le colonne e non la distanza fra loro: chi
 salva aspetta *una* lettura da una parte e *tutte* dall'altra.
@@ -90,7 +90,7 @@ salva aspetta *una* lettura da una parte e *tutte* dall'altra.
   esistente** non lo è, nemmeno con un corpo di default — chi implementa smette
   di compilare. Oggi costa un parametro perché gli implementatori di `Plugin`
   sono zero; dopo il freeze sarebbe stata una major.
-- **Il ponte sta in `fubmd-host` e non nel kernel, perché il kernel non sa che
+- **Il ponte sta in `fub-host` e non nel kernel, perché il kernel non sa che
   esiste un lock.** Il `Workspace` è un oggetto normale, ed è chi lo monta a
   metterlo dietro un `RwLock` ([0024](0024-chi-legge-non-aspetta-chi-legge.md)):
   un host che prende il prestito per chiamata può nascere solo dove il lock è di
@@ -166,10 +166,10 @@ salva aspetta *una* lettura da una parte e *tutte* dall'altra.
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning; anche
-  `-p fubmd-host --no-default-features`.
+  `-p fub-host --no-default-features`.
 - `cargo clippy --workspace --all-targets` — pulita nelle due configurazioni.
 - `cargo test --workspace` — **56 suite, 0 fallimenti**. Sono le 55 della
-  [0026](0026-due-query-insieme.md) più `fubmd-host/tests/lavoro_lungo.rs`, che è
+  [0026](0026-due-query-insieme.md) più `fub-host/tests/lavoro_lungo.rs`, che è
   una suite nuova e non un test aggiunto a una che c'era: le sue quattro prove
   vogliono un vault aperto e un thread, cioè le due cose che il kernel non ha.
   Nessun test preesistente è stato tolto né adattato — la firma nuova ha un

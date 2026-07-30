@@ -33,7 +33,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
       cosa, con o senza estensione, case), archi nel grafo, e riscrittura al
       rename con la stessa disciplina chirurgica già scritta per i wikilink.
 
-**Fatta la metà kernel.** `fubmd_abi::rules::path` (`abi/rules/path.rs`, dove
+**Fatta la metà kernel.** `fub_abi::rules::path` (`abi/rules/path.rs`, dove
 la [decisione 0020](0020-le-regole-in-un-posto-solo.md) le ha portate) è il posto — e
 l'unico — dove sta scritto cosa significa un path dentro un documento: relativo
 alla **cartella** del sorgente (con lo slash iniziale, alla radice del vault),

@@ -36,8 +36,8 @@ artefatto: 510 pacchetti con identificatore SPDX e `purl`.
 Un difetto latente emerso strada facendo, e chiuso: le dipendenze interne erano
 `{ path = … }` **senza versione**, cioè dipendenze `*` — build non riproducibile
 per chi non ha questo albero, e nessuno dei crate pubblicabile. Il che avrebbe
-reso irraggiungibile proprio ciò che deve esserlo da fuori (`fubmd-abi` e
-`fubmd-sdk`, §16.1). Ora portano `version = "0.1.0"` accanto al path: la
+reso irraggiungibile proprio ciò che deve esserlo da fuori (`fub-abi` e
+`fub-sdk`, §16.1). Ora portano `version = "0.1.0"` accanto al path: la
 risoluzione locale non cambia (il path vince sempre).
 
 *Sblocca:* 23.3 per intero, 20.3 (SBOM plugin, dependency audit, advisory), e

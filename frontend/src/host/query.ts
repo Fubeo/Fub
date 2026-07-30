@@ -222,7 +222,7 @@ export async function contenutoDiCartella(
   return { folders: folders.items, notes: notes.items.map((e) => e.id) };
 }
 
-/// Che rapporto ha questo vault con il disco (§9.7): FubMD saprebbe che è
+/// Che rapporto ha questo vault con il disco (§9.7): Fub saprebbe che è
 /// cambiato da fuori, e cosa non è già riuscito a leggere.
 ///
 /// Passa dal canale dati e non da un comando suo perché la stessa risposta

@@ -153,11 +153,11 @@ dichiarazione dall'inventario.**
 ## Verifica
 
 - `cargo build --workspace` — pulita, zero warning; anche
-  `-p fubmd-host --no-default-features`.
+  `-p fub-host --no-default-features`.
 - `cargo clippy --workspace --all-targets` — pulita.
 - `cargo test --workspace` — **57 suite, 0 fallimenti**. Sono le 56 della
   [0027](0027-il-lavoro-lungo-vede-il-vault.md) più
-  `fubmd-kernel/tests/disattivazione.rs`, che è una suite nuova con cinque prove:
+  `fub-kernel/tests/disattivazione.rs`, che è una suite nuova con cinque prove:
   l'ordine `flush` → `close` e il silenzio che segue, le rotte che non si
   ereditano, la rimozione di tutte le famiglie con i nomi che tornano liberi, i
   job in coda che ricevono un esito, e il rifiuto su un id mai dichiarato.

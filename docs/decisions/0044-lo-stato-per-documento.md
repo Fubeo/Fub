@@ -37,10 +37,10 @@ convenzione privata di ognuno, il kernel non può migrarla perché non sa dove
 guardare.
 
 Quindi: una **regola del contratto**, non una firma.
-[`fubmd_abi::rules::doc_data`](../../crates/fubmd-abi/src/rules/doc_data.rs).
+[`fub_abi::rules::doc_data`](../../crates/fub-abi/src/rules/doc_data.rs).
 
 ```text
-.fubmd-data/plugins/<plugin>/doc/<documento codificato>/<nome>
+.fub-data/plugins/<plugin>/doc/<documento codificato>/<nome>
 ```
 
 Tutto ciò che sta sotto `doc/` è per-documento, e il kernel lo migra e lo
@@ -101,7 +101,7 @@ cui la regola si vede meglio.
 
 ### Il kernel cammina il disco, non il registro dei montati
 
-La migrazione e la raccolta guardano `.fubmd-data/plugins/*` sul filesystem,
+La migrazione e la raccolta guardano `.fub-data/plugins/*` sul filesystem,
 **anche per i plugin spenti**. Non è generosità: è che un plugin spento oggi non
 deve riaccendersi domani con le chiavi di ieri, ed è esattamente chi non può
 accorgersene da solo. Il presidio di questa voce è scritto su un plugin che non è

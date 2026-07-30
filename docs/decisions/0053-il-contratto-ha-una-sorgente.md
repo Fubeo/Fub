@@ -46,7 +46,7 @@ escludeva.
 La conseguenza è che il **§16.5 aveva ragione sulla direzione** — generare dai
 tipi Rust — e torto sullo strumento, per un motivo che nessuna delle due voci
 nomina: `ts-rs` e `schemars` funzionano per `derive`, cioè sarebbero
-**dipendenze normali del crate del contratto**. `fubmd-abi` ha un'allowlist
+**dipendenze normali del crate del contratto**. `fub-abi` ha un'allowlist
 *chiusa ed enumerata* — quattro dipendenze — presidiata da
 `dependency_invariant.rs`, ed è il firewall anti-lock-in del progetto. Erano gli
 strumenti sbagliati per questo crate, non per questa direzione.
@@ -80,12 +80,12 @@ E il mirror è anche **più largo** del contratto: dei 99 tipi esportati da
 `frontend/src/host/contract.ts`, **dodici** non hanno nessuna controparte WIT
 (`VaultInfo`, `OpenVaults`, `Trust`, `Registration`, `RegistrationKind`,
 `PluginInfo`, `VersionRef`, `RenderedDocument`, `RenderedPart`, `EmbedContent`,
-`BundleInfo`, `KnownVault`) perché rispecchiano `fubmd-kernel` e `fubmd-app`,
+`BundleInfo`, `KnownVault`) perché rispecchiano `fub-kernel` e `fub-app`,
 che nel contratto non ci sono **per scelta**.
 
 ### Il WIT non è generabile come file, e il numero è metà
 
-`crates/fubmd-abi/wit/fubmd/abi.wit` è **3386 righe, di cui 1683 di commento**:
+`crates/fub-abi/wit/fub/abi.wit` è **3386 righe, di cui 1683 di commento**:
 il 49,7%. E non è una copia dei doc-comment Rust — è prosa di un altro registro,
 per un altro lettore. Il `record span` del WIT spiega perché al confine gli
 estremi sono `u64` e non `usize` e cosa succede su wasm32; il `Span` di Rust non
@@ -189,11 +189,11 @@ di attraversare il confine senza più dichiarare *come si scrivono di là*.
 ### Gli enum **con** payload restano a mano, e non è un rinvio
 
 La loro forma JSON dipende da `tag`/`content`/`rename_all`, dai campi, dai tipi
-annidati e dalla regola degli `u64` come stringa (`fubmd_abi::ipc`): derivarla
+annidati e dalla regola degli `u64` come stringa (`fub_abi::ipc`): derivarla
 vuol dire **riscrivere serde**, cioè avere una seconda implementazione della
 serializzazione che può divergere da quella vera. Per quelli la risposta giusta
 è quella che c'era già ed è un derivato anche lei: la fixture generata da serde
-(`fubmd-features/tests/ts_mirror.rs`), che non descrive il formato — lo
+(`fub-features/tests/ts_mirror.rs`), che non descrive il formato — lo
 *esegue*.
 
 La riga di taglio, quindi, non è «enum sì, record no»: è **ciò che si deriva
@@ -243,7 +243,7 @@ elenco scritto a mano.
 
 ### L'elenco dei tipi generati è una regola, non un elenco
 
-`fieldless_enums()` scandisce `fubmd-abi/src/*.rs` e prende **tutti** gli `enum`
+`fieldless_enums()` scandisce `fub-abi/src/*.rs` e prende **tutti** gli `enum`
 pubblici senza payload. Non c'è una lista da aggiornare: è il §16.7 applicato al
 generatore stesso, che altrimenti sarebbe nato con il difetto che il §16.5
 esisteva per curare. E se un enum senza payload non dichiara
@@ -258,7 +258,7 @@ stessa promessa che il §16.4 rimprovera al §16.5. Il posto generato è il
 **mirror TS** per la sua parte derivabile, e la controprova è stata fatta
 aggiungendo un caso finto a `EventKind` e guardando il rosso spostarsi:
 
-1. la sola dichiarazione Rust rende rosso `cargo test -p fubmd-abi --test
+1. la sola dichiarazione Rust rende rosso `cargo test -p fub-abi --test
    ts_enums`, che **nomina il caso** (`+ "scatola_finta"`) — e nessuno aveva
    registrato niente da nessuna parte;
 2. rigenerando (`UPDATE_MIRROR=1`) il rosso passa di là: `npx tsc --noEmit`
@@ -303,7 +303,7 @@ volta.
   un contratto con del comportamento dentro, generici persi, e la scelta già
   presa e scritta a M4.
 - **`ts-rs`/`schemars`** (la proposta del §16.5). Direzione giusta, strumento
-  sbagliato: `derive` = dipendenza normale di `fubmd-abi`, contro
+  sbagliato: `derive` = dipendenza normale di `fub-abi`, contro
   `dependency_invariant.rs`. E nessuno dei due emette WIT, cioè lasciavano
   scoperto il posto che il §16.4 aveva aggiunto alla domanda.
 - **Un quinto posto** (uno schema neutro da cui generare tutti e quattro). Il

@@ -11,7 +11,7 @@ import { searchFor } from "../panels/search";
 import { notify } from "./notify";
 
 /// Il namespace con cui `settings.export` consegna ciò che ha esportato
-/// (`fubmd_features::SETTINGS_NS`). Il comando non scrive un file e non può:
+/// (`fub_features::SETTINGS_NS`). Il comando non scrive un file e non può:
 /// nessuna capacità dell'`HostApi` tocca il filesystem fuori dal vault
 /// (decisione 0013), e dove salvare lo sa **chi ha il dialogo di sistema**.
 export const SETTINGS_EXPORT_NS = "settings.export";
@@ -46,7 +46,7 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       // Intento con namespace che questa shell non prevede: da contratto
       // non fa nulla (degrado garbato) — chi lo emette conta su una shell
       // che lo capisce, non su questa.
-      console.info(`FubMD: intento custom ignorato (ns: ${intent.ns}).`);
+      console.info(`Fub: intento custom ignorato (ns: ${intent.ns}).`);
       break;
     case "plan":
       // Un piano arrivato fuori dal giro dell'anteprima: non si applica da

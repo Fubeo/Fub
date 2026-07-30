@@ -1,10 +1,10 @@
-# `crates/fubmd-abi/wit/frozen/` — il contratto com'era
+# `crates/fub-abi/wit/frozen/` — il contratto com'era
 
 Una copia del contratto per ogni versione **pubblicata**, col nome del file
-uguale alla versione (`0.1.0.wit` ↔ `package fubmd:abi@0.1.0`).
+uguale alla versione (`0.1.0.wit` ↔ `package fub:abi@0.1.0`).
 
 Non è un archivio: è la linea di base contro cui
-[`crates/fubmd-abi/tests/wit_additivity.rs`](../../crates/fubmd-abi/tests/wit_additivity.rs)
+[`crates/fub-abi/tests/wit_additivity.rs`](../../crates/fub-abi/tests/wit_additivity.rs)
 verifica la promessa su cui poggia il freeze di M4 — **post-freeze il contratto
 cresce solo per aggiunta**.
 
@@ -12,8 +12,8 @@ cresce solo per aggiunta**.
 
 Due presidi esistevano già, e nessuno dei due copre questa promessa:
 
-- [`wit_conformance.rs`](../../crates/fubmd-abi/tests/wit_conformance.rs)
-  confronta `fubmd-abi` e `crates/fubmd-abi/wit/fubmd/abi.wit` — **oggi**, fra di loro. Si può
+- [`wit_conformance.rs`](../../crates/fub-abi/tests/wit_conformance.rs)
+  confronta `fub-abi` e `crates/fub-abi/wit/fub/abi.wit` — **oggi**, fra di loro. Si può
   rinominare un campo in tutti e due, restare conformi, e aver rotto ogni plugin
   già compilato.
 - `abi_compatible` applica la regola a runtime (major diversa → rifiuto, minor
@@ -85,7 +85,7 @@ deliberate stia in un posto solo e non solo nei commenti dei singoli punti:
 versione nuova:
 
 ```sh
-cp crates/fubmd-abi/wit/fubmd/abi.wit crates/fubmd-abi/wit/frozen/<nuova-versione>.wit
+cp crates/fub-abi/wit/fub/abi.wit crates/fub-abi/wit/frozen/<nuova-versione>.wit
 ```
 
 e si lascia il precedente a fare da presidio. Gli snapshot con una major diversa

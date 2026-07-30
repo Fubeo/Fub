@@ -9,7 +9,7 @@ falsa del documento.
 
 **Non aprire una issue pubblica.** Il canale è privato:
 
-1. **GitHub Security Advisories** — [apri una segnalazione privata](https://github.com/Fubeo/FubMD/security/advisories/new).
+1. **GitHub Security Advisories** — [apri una segnalazione privata](https://github.com/Fubeo/Fub/security/advisories/new).
    È il canale primario: tiene insieme la discussione, la CVE se serve e la
    patch, senza che nulla sia visibile prima del tempo.
 2. In alternativa, **fabio99marchetti@gmail.com**. È l'indirizzo che sta già in
@@ -48,7 +48,7 @@ ricevono correzioni.
 
 ## Il perimetro
 
-FubMD è un'applicazione desktop che gira **sulla macchina di chi la usa**, sui
+Fub è un'applicazione desktop che gira **sulla macchina di chi la usa**, sui
 file di quella macchina. Non c'è un servizio, non c'è un account, non c'è un
 server che riceve dati.
 
@@ -62,12 +62,12 @@ server che riceve dati.
   dove non dovrebbero, un rename o un ripristino dal cestino che scrive fuori
   dalla radice.
 - **La perdita silenziosa di dati dell'utente.** Il cestino e gli snapshot del
-  versioning in `.fubmd/data/` sono la rete di sicurezza: un percorso che li
+  versioning in `.fub/data/` sono la rete di sicurezza: un percorso che li
   aggira, li corrompe o li rende irrecuperabili è un problema di sicurezza, non
   solo un bug.
 - **L'anteprima nella webview.** Contenuto di una nota che diventa script
   eseguito, o che aggira la Content-Security-Policy dichiarata in
-  [`crates/fubmd-app/tauri.conf.json`](../crates/fubmd-app/tauri.conf.json)
+  [`crates/fub-app/tauri.conf.json`](../crates/fub-app/tauri.conf.json)
   (`default-src 'self'`, `frame-src 'none'`, `object-src 'none'`).
 - **Il confine IPC.** Un comando Tauri che fa più di quello che il suo nome
   promette, o che accetta argomenti che il core non valida.
@@ -76,7 +76,7 @@ server che riceve dati.
 
 **Fuori dal perimetro**, oggi:
 
-- **Il sandbox WASM dei plugin di terzi non esiste.** `fubmd-wasm-host` è una
+- **Il sandbox WASM dei plugin di terzi non esiste.** `fub-wasm-host` è una
   riga commentata fra i membri del workspace ([`Cargo.toml:15`](../Cargo.toml)):
   arriva a M5. Ogni provider che gira oggi è codice Rust nativo compilato dentro
   il binario, e il [modello a capacità](architecture/plugin-boundary.md) è per
@@ -96,8 +96,8 @@ server che riceve dati.
 |---|---|---|
 | Advisory delle dipendenze, crate yanked, licenze a elenco chiuso | [`deny.toml`](../deny.toml) + job `supply chain` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | dipendenze vulnerabili o ritirate; girato anche una volta a settimana da solo, senza aspettare un push |
 | SBOM SPDX 2.3 come artefatto di build | stesso job | la domanda «cosa c'è dentro questa build», che a valle si fa una volta sola e sempre troppo tardi |
-| Content-Security-Policy della webview | [`crates/fubmd-app/tauri.conf.json`](../crates/fubmd-app/tauri.conf.json) | script remoti, iframe, oggetti e form: nessuno dei quattro è permesso |
-| Nessun client HTTP nell'albero del workspace | i `Cargo.toml` degli otto crate | l'app non parla con la rete: la capacità `fubmd:network` esiste nel modello dei permessi ([`crates/fubmd-abi/src/options.rs:241`](../crates/fubmd-abi/src/options.rs)) ma nessun provider oggi la chiede |
+| Content-Security-Policy della webview | [`crates/fub-app/tauri.conf.json`](../crates/fub-app/tauri.conf.json) | script remoti, iframe, oggetti e form: nessuno dei quattro è permesso |
+| Nessun client HTTP nell'albero del workspace | i `Cargo.toml` degli otto crate | l'app non parla con la rete: la capacità `fub:network` esiste nel modello dei permessi ([`crates/fub-abi/src/options.rs:241`](../crates/fub-abi/src/options.rs)) ma nessun provider oggi la chiede |
 | Elenco chiuso delle capacità, diviso in famiglie negabili | [decisione 0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md), [architecture/plugin-boundary.md](architecture/plugin-boundary.md) | la forma che avrà l'applicazione a M5: al confine WIT una famiglia negata non è un rifiuto a runtime, è l'assenza della funzione |
 | Contratto congelato e additivo | [architecture/wit-congelato.md](architecture/wit-congelato.md) | un host più nuovo non rompe un plugin più vecchio, e la rottura deliberata si vede in review |
 

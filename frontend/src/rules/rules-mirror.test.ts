@@ -11,11 +11,11 @@ import {
 } from "./mirrored";
 import { byteToCharIndex, charToByteIndex } from "./offsets";
 // La fixture è generata dalle regole Rust — vedi
-// `crates/fubmd-abi/tests/rules_mirror.rs`.
+// `crates/fub-abi/tests/rules_mirror.rs`.
 import cases from "../__fixtures__/rules-samples.json";
 
 // L'altra metà del presidio delle **regole** (la prima è
-// `crates/fubmd-abi/tests/rules_mirror.rs`). I tipi al confine avevano
+// `crates/fub-abi/tests/rules_mirror.rs`). I tipi al confine avevano
 // `mirror.test.ts`; le regole non avevano niente, e sono già scritte due volte
 // — perché ogni cosa che la UI deve sapere *prima* di un giro IPC nasce in due
 // copie. Qui la duplicazione resta ma smette di essere silenziosa: la fixture

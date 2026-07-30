@@ -11,7 +11,7 @@ le sei interviste: [1 Marta, studio](../personas/interview_1.md) ·
 ## Metodo (come leggere questo documento)
 
 Le personas e le interviste sono **una fonte di idee, non una votazione**. Il
-criterio non è "quanti la chiedono" ma "è interessante? sta bene in FubMD?":
+criterio non è "quanti la chiedono" ma "è interessante? sta bene in Fub?":
 la decisione finale è del maintainer (Fabio), che può promuovere una feature
 chiesta da una sola persona o ignorarne una chiesta da tutte. Ogni voce qui ha
 un **verdetto** (`da decidere` finché Fabio non si esprime); questo documento è
@@ -37,8 +37,8 @@ feature come plugin core:
   l'`EventHandler` non c'è la feature non reagisce a nulla. Non è un `if` nella
   UI: è assenza dal sistema.
 - i **dati** di una feature spenta non inquinano: o sono `.md` puri nel vault
-  (leggibili comunque, è il patto di FubMD) o vivono in
-  `.fubmd/data/plugins/<id>/` e semplicemente non vengono letti. Riattivare
+  (leggibili comunque, è il patto di Fub) o vivono in
+  `.fub/data/plugins/<id>/` e semplicemente non vengono letti. Riattivare
   ripristina tutto; disattivare non cancella mai nulla.
 - **unica eccezione ammessa**: la pagina "Funzionalità" dei settings, dove le
   feature spente compaiono col loro interruttore — altrimenti non si potrebbero
@@ -55,7 +55,7 @@ Le interviste validano il principio senza saperlo: Giulia chiede una "safe
 mode" senza plugin/temi e pretende che automazioni e personalizzazioni siano
 "visibili, annullabili e disattivabili"; Marta esclude l'AI dal suo scope;
 Davide non deve mai vedere ciò che è "da programmatori". La spegnibilità
-totale è la risposta unica a tutte e tre: FubMD può avere flashcard, AI,
+totale è la risposta unica a tutte e tre: Fub può avere flashcard, AI,
 dashboard e CLI *e allo stesso tempo* essere l'app minimale che ognuno di loro
 vuole — perché ciò che è spento non esiste.
 
@@ -69,8 +69,8 @@ Legenda fonti: 🎓 Marta · ✍️ Lorenzo · 💻 Priya · 📊 Davide · 🔬
 |---|---|---|---|
 | **App companion Android** | 🎓 💻 | Il caso d'uso reale non è "Obsidian su telefono": è **consultare** (Marta in ospedale senza rete, Priya sul Pixel) — lettura, ricerca, backlink, cattura rapida, ripasso flashcard. Un companion read-mostly è un ordine di grandezza più semplice di un editor completo e copre l'80% del bisogno. Il kernel Rust è riusabile (il core non dipende da Tauri: l'invariante paga qui); UI da decidere (Tauri mobile è giovane). Offline-first obbligatorio. | da decidere |
 | **App companion iOS/iPadOS** | ✍️ 🔬 📊 🌱 | Lorenzo esplicito: *"non devo scrivere capitoli; rileggere, annotare, controllare un dettaglio"*; Elena legge e annota su iPad; Davide consulta; Giulia cattura al volo (+ widget iOS). Il pattern è unanime: **consultazione + cattura rapida**, non editing completo. | da decidere |
-| **CLI di prima classe** | 💻 | `fubmd new/search/open/sync` senza aprire la GUI. Il kernel è già una libreria headless: la CLI è un binario sottile su `fubmd-kernel`, e le query passano da `IndexProvider` come per la UI. Per Priya "non è un accessorio". | da decidere |
-| **Protocollo URI / integrazione editor esterni** | 💻 | `fubmd://open?note=…` da browser/terminale; il vault resta modificabile da Vim/VS Code (già vero: il watcher riconcilia). | da decidere |
+| **CLI di prima classe** | 💻 | `fub new/search/open/sync` senza aprire la GUI. Il kernel è già una libreria headless: la CLI è un binario sottile su `fub-kernel`, e le query passano da `IndexProvider` come per la UI. Per Priya "non è un accessorio". | da decidere |
+| **Protocollo URI / integrazione editor esterni** | 💻 | `fub://open?note=…` da browser/terminale; il vault resta modificabile da Vim/VS Code (già vero: il watcher riconcilia). | da decidere |
 
 ### Semplicità (la sfida di Davide)
 
@@ -88,7 +88,7 @@ dell'editor.
 | **Entità guidate: persone / progetti / riunioni** | 📊 | "Collega a Marco" senza sapere cosa sia un wikilink. Architettonicamente è zucchero su ciò che esiste: entità = note (`Persone/Marco Rossi.md`), collegamento = wikilink con autocomplete (c'è già), "vista persona/progetto" = pannello backlink filtrato. Un plugin core di convenzioni + template + viste, non un modello dati nuovo. | da decidere |
 | **Vista attività (checkbox aggregate, proprietario, scadenza)** | 📊 | "Tutte le checkbox aperte di `[[Progetto X]]`, di chi sono, per quando": query sull'indice (`IndexQuery::Custom`) + una sintassi leggera nelle note (es. `- [ ] cosa @marco 2026-08-01`) che resta testo leggibile. I promemoria (notifiche OS) sono il pezzo platform-specific. | da decidere |
 | **Integrazione calendario** | 📊 | Outlook/Google → nota riunione precompilata (titolo, ora, partecipanti). Comodissima ma è la prima feature dell'elenco che parla con un servizio esterno aziendale: permesso `network`, e da valutare per ultima. | da decidere |
-| **Condivisione read-only di una nota** | 📊 | Export HTML/PDF di cortesia più che sharing infrastructure; niente server FubMD. | da decidere |
+| **Condivisione read-only di una nota** | 📊 | Export HTML/PDF di cortesia più che sharing infrastructure; niente server Fub. | da decidere |
 | **Dettatura / scrittura a mano (tablet)** | 📊 🔬 | Input vocale e Apple Pencil. Dipende dal companion tablet; la penna che produce testo ricercabile è una domanda aperta di Elena. Lontano. | da decidere |
 
 ### Sync (il tema più trasversale)
@@ -130,7 +130,7 @@ politica buffer↔disco già decisa in [data-model.md](../architecture/data-mode
 | **Mermaid** | 💻 | `custom_kind: "mermaid"` nel registro dei kind (stessa strada di callout/math a M3); rendering lazy nel frontend. | da decidere |
 | **Tabelle complesse (sort/resize)** | 💻 | `custom_kind: "table"` è già riservato a M3; qui si parla dell'interazione ricca sopra. | da decidere |
 | **Daily/weekly notes + journaling + habit** | 💻 🌱 📊 | Template + comando + vista calendario: plugin core piccolo, alto valore percepito. Per Giulia il rituale è la **review settimanale** (domenica, < 20 min): daily/weekly note, prompt di journaling, habit tracker leggero come testo nella nota (mai database nascosto). Un'eventuale "revisione guidata" è UI sopra le stesse query. | da decidere |
-| **Linting/validazione note in CI** | 💻 | Più docs/ricette che feature: la CLI rende possibile `fubmd check` in una pipeline. | da decidere |
+| **Linting/validazione note in CI** | 💻 | Più docs/ricette che feature: la CLI rende possibile `fub check` in una pipeline. | da decidere |
 
 ### Accademico
 
@@ -138,7 +138,7 @@ politica buffer↔disco già decisa in [data-model.md](../architecture/data-mode
 |---|---|---|---|
 | **Citazioni / integrazione Zotero** | 🔬 | L'intervista 5 la mette a fuoco: import via Better BibTeX o API Zotero (metadata, citation key **stabile**, abstract, tag, collezioni, annotazioni PDF), template "paper note", bibliografia BibTeX/CSL in export. Il dolore reale di Elena non è il PDF: è il flusso manuale Zotero→nota→manoscritto. Non si sostituisce Zotero: ci si integra. Import batch = **job**. | da decidere |
 | **Export LaTeX + BibTeX** | 🔬 | Requisito critico di Elena ("compilabile al primo colpo > 95%"): si aggancia all'infrastruttura di export editoriale (stesso meccanismo, preset diverso), con citazioni e formule preservate. Pandoc come motore accettato per il DOCX accademico. | da decidere |
-| **Collaborazione asincrona con co-autori** | 🔬 | I co-autori usano Google Docs/Word e **non installeranno FubMD** (vincolo esplicito): la risposta non è real-time collab (anti-goal) ma un giro di andata e ritorno — export DOCX commentabile, eventuale track-changes leggero al rientro. Da progettare piccolo. | da decidere |
+| **Collaborazione asincrona con co-autori** | 🔬 | I co-autori usano Google Docs/Word e **non installeranno Fub** (vincolo esplicito): la risposta non è real-time collab (anti-goal) ma un giro di andata e ritorno — export DOCX commentabile, eventuale track-changes leggero al rientro. Da progettare piccolo. | da decidere |
 | **Import/annotazione PDF** | 🎓 🔬 | La voce più costosa dell'intero documento (rendering PDF, annotazioni, stylus). L'intervista 5 conferma la cautela: per Elena l'annotazione nativa è esplicitamente "fase successiva" — ciò che serve prima è l'**import degli highlight** (via Zotero). Valutare sempre l'alternativa umile: link a PDF esterni + highlight importati. | da decidere |
 
 ### Cattura e PKM
@@ -166,7 +166,7 @@ propongano di nuove — vale la pena dirlo:
   Note"* (Marta), *"file di testo in cartelle"* (Lorenzo); anche Davide — il
   meno tecnico — pretende note "recuperabili anche fuori dall'app", ed Elena e
   Giulia vogliono query, dashboard e metadata **come file leggibili** →
-  source-as-truth, niente formati proprietari: **è già l'invariante di FubMD**.
+  source-as-truth, niente formati proprietari: **è già l'invariante di Fub**.
 - Plugin stabili che non si rompono a ogni release (Priya; Giulia sulla
   fragilità di Dataview/Templater/temi) → è esattamente il freeze del
   contratto + WIT di M4.

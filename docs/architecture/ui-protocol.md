@@ -5,7 +5,7 @@ Un plugin (o una feature ufficiale) **descrive** la propria UI come albero
 **disegna** con i suoi componenti nativi. Risultato: temi coerenti, niente JS nei
 plugin, stessa strada per feature native e plugin di terzi.
 
-Definizione: `crates/fubmd-abi/src/ui.rs`. Renderer e riconciliatore:
+Definizione: `crates/fub-abi/src/ui.rs`. Renderer e riconciliatore:
 `frontend/src/ui/node.ts`. Cosa è una view, e perché:
 [decisione 0016](../decisions/0016-cosa-e-una-view.md).
 
@@ -25,7 +25,7 @@ riordinano può ometterla.
 Dalla [decisione 0040](../decisions/0040-chi-localizza.md), **ogni campo che una
 persona legge** — `content`, `title`, `label`, `subtitle`, `placeholder`,
 `submit_label`, `message` — è un
-[`Text`](../../crates/fubmd-abi/src/text.rs): o un `Literal` (un dato: un nome di
+[`Text`](../../crates/fub-abi/src/text.rs): o un `Literal` (un dato: un nome di
 tag, un path) o un `Message` (una chiave del catalogo di chi l'ha scritta, coi
 suoi argomenti). A risolverlo è il **kernel**, sulla via d'uscita dal contratto.
 
@@ -194,7 +194,7 @@ di tasto a ogni handler registrato.
 ([decisione 0033](../decisions/0033-la-grana-di-un-abbonamento.md)) — specie,
 prefissi di topic dei custom e **soggetto** — e ad applicarla è la shell, con la
 stessa regola del kernel (`maskWants` in `frontend/src/rules/mirrored.ts`,
-gemella di `fubmd_abi::rules::events::mask_wants` e legata a lei dalla fixture
+gemella di `fub_abi::rules::events::mask_wants` e legata a lei dalla fixture
 generata). Filtrando sulle sole specie, una view poteva restringere quanto voleva
 e la shell la ridisegnava lo stesso: la promessa del contratto sarebbe stata vera
 nel kernel e falsa in finestra. Per la stessa ragione i pannelli **nativi**
@@ -242,7 +242,7 @@ memoria isolata ma `<script>` iniettato nel core. Quindi:
 
 - le due varianti sono **riservate al codice fidato** (core e feature ufficiali);
 - l'host che riceve un albero da un provider **non fidato** lo rifiuta con
-  `UiNode::validate_untrusted()` (in `fubmd-abi`, con test): `PermissionDenied`
+  `UiNode::validate_untrusted()` (in `fub-abi`, con test): `PermissionDenied`
   se `Html`/`WebView` compaiono ovunque nell'albero. Il punto di enforcement è
   **uno**: `Workspace::render_view` e `Workspace::view_action`, dove i provider
   si registrano col proprio grado di fiducia
@@ -250,7 +250,7 @@ memoria isolata ma `<script>` iniettato nel core. Quindi:
   torna dentro un `ViewUpdate::Replace`, cioè in risposta a un click — un
   controllo fatto solo su `render_view` sarebbe aggirabile in un gesto. Oggi
   nessun provider non fidato esiste e la validazione è un no-op: il varco esiste
-  *prima* del primo (test in `crates/fubmd-kernel/tests/view_trust.rs`);
+  *prima* del primo (test in `crates/fub-kernel/tests/view_trust.rs`);
 - `WebView` tornerà disponibile ai plugin solo quando esisteranno una **asset
   story** (asset del plugin serviti dall'host, non URL arbitrari) e una **CSP**
   dedicate — da progettare a M5.
@@ -345,7 +345,7 @@ tiene "affamato". Ognuna esercita una parte diversa:
   questo bundle** (l'iframe sandboxato resta la strada del widget vero, a M5).
 - **Resta aperto** — la virtualizzazione delle liste lunghe
   ([§2.9](../roadmap/02-cosa-e-una-view.md)) e il ramo «la shell conosce `ns`» di
-  `Custom`. Il primo cliente è arrivato — il diagramma, `ns: "fubmd:diagram"` — e
+  `Custom`. Il primo cliente è arrivato — il diagramma, `ns: "fub:diagram"` — e
   ha mostrato che quel ramo **ancora non serve**: il `fallback` dichiarativo è la
   resa giusta finché non c'è un motore da invocare.
 - Ogni nuovo `UiNode` deve restare esprimibile in WIT (tabella in

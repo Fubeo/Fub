@@ -25,8 +25,8 @@ scritta qui sotto.
 ## La risposta, in una frase
 
 **Il perno è il `custom_kind`.** Un nome con namespace lo produce
-([`SyntaxRule`](../../crates/fubmd-abi/src/custom.rs), §3.1), lo stesso nome lo
-disegna ([`CustomRenderer`](../../crates/fubmd-abi/src/custom.rs), §3.2), e lo
+([`SyntaxRule`](../../crates/fub-abi/src/custom.rs), §3.1), lo stesso nome lo
+disegna ([`CustomRenderer`](../../crates/fub-abi/src/custom.rs), §3.2), e lo
 stesso nome arriva alla shell dentro `UiKind::Custom { ns }` (§3.3). Chi ne
 registra uno solo ha scritto mezzo plugin — e adesso il registro **glielo può
 dire**, perché prima non c'era nemmeno un posto dove accorgersene.
@@ -112,7 +112,7 @@ Le decisioni prese, da NON ridiscutere senza motivo:
   scoperta che il §3.4 e il §3.5 nascondevano ognuno per metà: «cosa so fare» e
   «cosa devi accendere» sono la stessa domanda vista da due lati, e tenuti
   separati la terza sintassi li avrebbe fatti divergere. Le chiavi del core
-  stanno in [`options::syntax`](../../crates/fubmd-abi/src/options.rs), un elenco
+  stanno in [`options::syntax`](../../crates/fub-abi/src/options.rs), un elenco
   solo.
 - **`RenderTarget` è un `enum` e non una voce della mappa.** I bersagli — schermo,
   stampa, PDF (6.3), pubblicazione statica (19.4) — sono **esclusivi**: si rende
@@ -157,21 +157,21 @@ Le decisioni prese, da NON ridiscutere senza motivo:
 ## Il dogfooding, che è dove si è scoperto se regge
 
 Tre regole e due renderer ufficiali, in
-[`fubmd-features/src/blocks.rs`](../../crates/fubmd-features/src/blocks.rs).
+[`fub-features/src/blocks.rs`](../../crates/fub-features/src/blocks.rs).
 Nessuna delle tre tocca il provider markdown e nessuno dei due renderer sta
 dentro di lui: un plugin di terzi scriverebbe **esattamente quel codice**, con un
 altro namespace. Ognuno ha esercitato una parte diversa:
 
-- **`fubmd:diagrams`** (recinto `mermaid`, `plantuml`, `graphviz`, `dot`, `d2`)
+- **`fub:diagrams`** (recinto `mermaid`, `plantuml`, `graphviz`, `dot`, `d2`)
   col suo renderer — è la catena intera, e l'unica che arriva fino alla shell. Il
   motore sta negli `attrs` e non nel `custom_kind` perché il kind è la
   **famiglia**: chi disegna i diagrammi vuole un punto d'innesto solo, e chi
   aggiunge un dialetto non deve registrarne un altro.
-- **`fubmd:math`** (recinto `math`, `latex`, `tex`) — la via HTML. Senza un motore
+- **`fub:math`** (recinto `math`, `latex`, `tex`) — la via HTML. Senza un motore
   TeX nel bundle, ciò che si può fare onestamente è dare alla formula un blocco
   suo e conservare il sorgente in un `data-tex`: non è un segnaposto che finge, è
   la formula, non composta.
-- **`fubmd:highlight`** (`==…==`) — l'unico trigger inline, ed è qui per provarlo:
+- **`fub:highlight`** (`==…==`) — l'unico trigger inline, ed è qui per provarlo:
   un delimitatore che comrak **non conosce affatto** diventa un nodo del modello
   senza toccare il provider. Ha anche trovato un difetto vero: il degrado generico
   degli inline non emetteva **niente**, quindi un `Inline::Custom` sconosciuto
@@ -179,7 +179,7 @@ altro namespace. Ognuno ha esercitato una parte diversa:
   §3.2 nomina sui blocchi, con l'aggravante che non restava nemmeno il contenuto.
 
 Il test che conta di più è
-[`una_sintassi_di_terzi_percorre_tutti_e_tre_i_lati`](../../crates/fubmd-features/tests/custom_blocks_e2e.rs):
+[`una_sintassi_di_terzi_percorre_tutti_e_tre_i_lati`](../../crates/fub-features/tests/custom_blocks_e2e.rs):
 senza di lui gli altri provano tre metà di plugin. Un `ganttino` immaginario
 innesta la sua sintassi su un provider che non la conosce, registra il renderer
 del kind che produce, e arriva alla shell come albero — e il suo gemello ostile
@@ -190,7 +190,7 @@ stesso `UiNode::validate_untrusted` e lo stesso punto unico delle view.
 
 Il presidio dell'additività ha nominato **cinque** rotture, ed è il suo mestiere:
 sono deliberate, sono pre-freeze, e la baseline è stata ritagliata con la ragione
-scritta dentro `crates/fubmd-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella dei ritagli del
+scritta dentro `crates/fub-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella dei ritagli del
 suo README).
 
 | cosa | perché |

@@ -1,5 +1,5 @@
 ---
-progetto: FubMD
+progetto: Fub
 data: 2026-07-24
 intervistato: Priya — Software Engineer / Backend Developer
 ruolo: User persona tecnica avanzata
@@ -42,7 +42,7 @@ stato: bozza
 - Possibile lock-in indiretto legato a plugin, formati di metadata o workflow non portabili.
 
 ### Motivazione del progetto
-- Creare FubMD come alternativa open source, local-first e transparentemente estendibile.
+- Creare Fub come alternativa open source, local-first e transparentemente estendibile.
 - Garantire che le note restino sempre file Markdown leggibili e versionabili.
 - Permettere a utenti tecnici di integrare il vault con Git, CLI, script e strumenti da terminale.
 - Ridurre la fragilità dell’ecosistema plugin tramite API stabili e versionate.
@@ -61,7 +61,7 @@ stato: bozza
 - Facilitare l’uso del vault come strumento di onboarding tecnico e runbook personale/team.
 
 ### Risultati attesi
-- Priya può sostituire il suo attuale setup Obsidian con FubMD senza perdere velocità di ricerca.
+- Priya può sostituire il suo attuale setup Obsidian con Fub senza perdere velocità di ricerca.
 - Il vault resta completamente portabile: cartella locale, file Markdown, Git.
 - La ricerca tra migliaia di note tecniche è istantanea.
 - La sincronizzazione self-hosted funziona senza servizi proprietari.
@@ -158,7 +158,7 @@ stato: bozza
 
 ### Esplicitamente escluso
 - Cloud proprietario obbligatorio.
-- Account FubMD centralizzato necessario per usare l’app.
+- Account Fub centralizzato necessario per usare l’app.
 - Formato note binario o proprietario.
 - Editing real-time collaborativo complesso in stile Google Docs.
 - Gestione enterprise di utenti, ruoli e permessi.
@@ -237,7 +237,7 @@ stato: bozza
 - Command palette rapida.
 - Shortcut personalizzabili.
 - Gestione conflitti Git comprensibile, non distruttiva.
-- Possibilità di usare FubMD senza configurazioni complesse, ma estendibile per power user.
+- Possibilità di usare Fub senza configurazioni complesse, ma estendibile per power user.
 
 ### Scalabilità
 - Supporto vault fino a 50.000 note senza degrado grave.
@@ -396,7 +396,7 @@ stato: bozza
 ## 10. Criteri di successo
 
 ### Successo del progetto
-- Priya riesce a usare FubMD quotidianamente per almeno due settimane senza tornare al tool precedente.
+- Priya riesce a usare Fub quotidianamente per almeno due settimane senza tornare al tool precedente.
 - Durante un incidente, Priya trova un runbook salvato mesi prima in meno di pochi secondi.
 - Il vault resta completamente versionabile in Git e leggibile fuori dall’app.
 - I plugin essenziali non si rompono a ogni aggiornamento.
@@ -488,4 +488,4 @@ stato: bozza
 - Vorrebbe un sistema di plugin più stabile, con versioni API chiare e test.
 - La CLI è fondamentale: creare note, cercare, sincronizzare senza uscire dal terminale.
 - Il vault è anche uno strumento di onboarding: deve essere navigabile, linkato e ricercabile.
-- FubMD deve sembrare uno strumento per persone tecniche, non un notes generico mascherato da developer tool.
+- Fub deve sembrare uno strumento per persone tecniche, non un notes generico mascherato da developer tool.

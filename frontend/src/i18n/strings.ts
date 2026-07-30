@@ -28,7 +28,7 @@
 // `Chiave` è l'unione delle chiavi del catalogo italiano, e i cataloghi delle
 // altre lingue sono `Record<Chiave, string>`: **una chiave dimenticata in
 // inglese non compila**. In Rust la stessa promessa costa un test che cammina
-// sui cataloghi (`fubmd-features/tests/i_cataloghi.rs`), perché lì un catalogo è
+// sui cataloghi (`fub-features/tests/i_cataloghi.rs`), perché lì un catalogo è
 // dato di manifest e le chiavi sono `&str`. Qui il compilatore la regala, e
 // vale la pena prendersela: è il tipo di errore che altrimenti si scopre da una
 // segnalazione.
@@ -437,8 +437,8 @@ const RIPIEGO = "it";
 const CATALOGHI: Record<string, Record<string, string>> = { it: IT, en: EN };
 
 /// La chiave dell'impostazione della lingua. La stessa stringa sta in
-/// `fubmd-kernel/src/locale.rs`, come `CHIAVE_TEMA` sta in
-/// `fubmd-host/src/settings.rs` — e per la stessa ragione: una shell in
+/// `fub-kernel/src/locale.rs`, come `CHIAVE_TEMA` sta in
+/// `fub-host/src/settings.rs` — e per la stessa ragione: una shell in
 /// TypeScript non importa una costante Rust.
 export const CHIAVE_LINGUA = "locale.language";
 
@@ -449,7 +449,7 @@ export const CHIAVE_LINGUA = "locale.language";
 /// primo fotogramma non c'è niente da leggere. Ricordare la *scelta* e non la
 /// lingua risolta è ciò che fa ripartire chi ha lasciato «come il sistema»
 /// seguendo il sistema di **oggi**.
-const CACHE = "fubmd.locale.language";
+const CACHE = "fub.locale.language";
 
 /// La scelta corrente, così com'è scritta nell'impostazione.
 let scelta = "";

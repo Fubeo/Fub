@@ -14,8 +14,8 @@ avrebbe mai potuto essere a grana fine. Le tre sono chiuse, in quest'ordine:
   `Workspace` non ha più ventiquattro campi piatti ma cinque proprietari —
   `DocumentStore`, `Indexes`, `ProviderRegistry`, `Dispatcher`, `Session`;
 - l'**8.2** con la [decisione 0023](../decisions/0023-chi-monta-il-kernel.md):
-  il composition root è il crate `fubmd-host`, che non dipende da tauri, e
-  `fubmd-app` è ciò che resta togliendolo — comandi IPC, ponte eventi, finestre;
+  il composition root è il crate `fub-host`, che non dipende da tauri, e
+  `fub-app` è ciò che resta togliendolo — comandi IPC, ponte eventi, finestre;
 - l'**8.3** con la [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md):
   il workspace sta dietro un `RwLock`, le letture prendono il prestito
   condiviso, e la precedenza si è vista tutta — il cambio di tipo non ha voluto
@@ -59,7 +59,7 @@ ha già in mano.)
 E resta ciò che le quattro decisioni hanno **spostato senza risolvere**, che è il
 modo in cui questa seduta consegna alle altre: il registry dei bundle (~~§9.3~~),
 lo spegnimento (~~§9.5~~), le sessioni multiple (~~§9.6~~) e gli errori tipizzati
-(§12.2) hanno adesso un posto solo dove atterrare — `fubmd-host` — invece di
+(§12.2) hanno adesso un posto solo dove atterrare — `fub-host` — invece di
 ventidue comandi Tauri, e le prime tre sono **atterrate lì davvero**
 ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md): la
 mappa delle sessioni e la chiusura stanno in `host/session.rs`, e l'app ci mette

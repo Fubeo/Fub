@@ -13,7 +13,7 @@ una feature possa essere scritta come provider invece che come codice dell'app.
 - [M4-wit-hardening.md](M4-wit-hardening.md) — il **freeze del contratto**: WIT,
   conformità abi↔WIT, primo plugin nativo. È lo spartiacque, perché da lì in poi
   il contratto cresce solo per aggiunta.
-- [M5-wasm-runtime.md](M5-wasm-runtime.md) — `fubmd-wasm-host`, il proxy WASM,
+- [M5-wasm-runtime.md](M5-wasm-runtime.md) — `fub-wasm-host`, il proxy WASM,
   l'applicazione delle capacità, i plugin di esempio.
 
 **M1 non ha un file qui**, e non è una dimenticanza: è chiusa dal 24/07/2026 —

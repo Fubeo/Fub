@@ -1,0 +1,32 @@
+[package]
+name = "fub-features"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Feature ufficiali come impl native dei trait di estensione: backlink, ricerca, graph, orchestrazione preview."
+
+[dependencies]
+camino.workspace = true
+fub-abi = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tantivy = "0.26"
+
+# INVARIANTE: la libreria NON dipende da `fub-kernel`. Le feature ufficiali
+# sono impl dei trait del contratto, cioè esattamente ciò che scriverà un plugin
+# di terzi — e un plugin di terzi non ha il kernel fra le mani. È presidiata da
+# crates/fub-abi/tests/dependency_invariant.rs.
+[dev-dependencies]
+# Il kernel serve ai soli test end-to-end, che è la loro ragione d'essere:
+# provano le feature contro il kernel VERO, non contro un doppio.
+fub-kernel = { workspace = true }
+# `MemoryHost` — il doppio dell'host — stava qui dentro, privato e `#[cfg(test)]`.
+# Adesso è `fub_sdk::testing`, dov'è raggiungibile da chiunque scriva un
+# provider (§16.1, decisione 0054). Resta una dev-dependency: la libreria non lo
+# usa, lo usano i suoi test.
+fub-sdk = { workspace = true }
+# Il banco del lato host, per i test end-to-end che montano il kernel (§16.2).
+fub-testkit = { workspace = true }
+fub-format-markdown.workspace = true
+tempfile = "3.27.0"

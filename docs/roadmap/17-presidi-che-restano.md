@@ -45,7 +45,7 @@ seconda tiene aperta la voce.
       CommonMark» (è una proprietà di una dipendenza, e asserirla renderebbe la
       suite rossa il giorno in cui comrak *corregge* un bug) ma **ciò che il
       modello dice del documento è vero rispetto ai byte del file** — che è la
-      proprietà di FubMD, ed è quella su cui poggia ogni patch chirurgica. Il
+      proprietà di Fub, ed è quella su cui poggia ogni patch chirurgica. Il
       costo ha smesso di crescere con l'attesa perché il corpus **si confronta**
       in tre direzioni con sorgenti che non sono lui (le varianti del contratto,
       i `custom_kind` del registro, le sintassi di `capabilities()`): un costrutto
@@ -67,7 +67,7 @@ seconda tiene aperta la voce.
       una macchina che non divida i core: sono le due cose che questa voce
       chiede, ed è la ragione per cui un test di prestazioni non può stare in
       mezzo agli altri e girare a ogni push. Finché non c'è, si lancia a mano
-      (`cargo test -p fubmd-features --lib due_ricerche -- --ignored`).
+      (`cargo test -p fub-features --lib due_ricerche -- --ignored`).
 - [ ] **Round-trip import/export**: il primo giro c'è con la [decisione 0006](../decisions/0006-import-export-come-trait.md)
       (`transfer_e2e.rs`: un vault esce in artefatti e rientra identico), ma su
       un vault scritto a mano. Resta da farlo **sul corpus** di qui sopra, dove

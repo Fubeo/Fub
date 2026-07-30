@@ -7,22 +7,22 @@
       ],
       "plugins": [
         {
-          "id": "fubmd.versioning",
+          "id": "fub.versioning",
           "name": "Versioning",
           "version": "0.1.0",
           "abi_version": "0.1.0",
           "trust": "core",
           "permissions": {
-            "fubmd:call-service": true,
-            "fubmd:read-vault": true,
-            "fubmd:run-command": true,
-            "fubmd:write-settings": true,
-            "fubmd:write-vault": true
+            "fub:call-service": true,
+            "fub:read-vault": true,
+            "fub:run-command": true,
+            "fub:write-settings": true,
+            "fub:write-vault": true
           },
           "registrations": [
             {
               "kind": "event_handler",
-              "id": "fubmd.versioning"
+              "id": "fub.versioning"
             }
           ]
         }
@@ -37,10 +37,10 @@
       "abi_version": "0.1.0",
       "trust": "community",
       "permissions": {
-        "fubmd:network": [
+        "fub:network": [
           "api.acme.com"
         ],
-        "fubmd:read-vault": true
+        "fub:read-vault": true
       },
       "registrations": [
         {
@@ -63,11 +63,11 @@
   ],
   "RenderedDocument": [
     {
-      "html": "<p>a</p><div class=\"ui-slot\" data-ui-slot=\"0\" data-custom-kind=\"fubmd:diagram\"></div>",
+      "html": "<p>a</p><div class=\"ui-slot\" data-ui-slot=\"0\" data-custom-kind=\"fub:diagram\"></div>",
       "parts": [
         {
           "slot": 0,
-          "kind": "fubmd:diagram",
+          "kind": "fub:diagram",
           "node": {
             "node": "text",
             "content": "graph TD;"
@@ -87,12 +87,12 @@
   ],
   "BundleInfo": [
     {
-      "id": "fubmd.versioning",
+      "id": "fub.versioning",
       "name": "Versioning",
       "mounted": true
     },
     {
-      "id": "fubmd.stats",
+      "id": "fub.stats",
       "name": "Statistiche",
       "mounted": false
     }

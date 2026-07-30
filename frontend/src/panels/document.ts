@@ -90,7 +90,7 @@ export function mountDocument(deps: DocumentDeps): void {
     // no: l'editor resterebbe su un contenuto fantasma che il primo autosave
     // resusciterebbe alle spalle dell'utente.
     if (state.dirty) {
-      console.warn(`FubMD: ${e.id} cancellato su disco col buffer sporco: il buffer vince.`);
+      console.warn(`Fub: ${e.id} cancellato su disco col buffer sporco: il buffer vince.`);
       return;
     }
     closeDocument();
@@ -240,7 +240,7 @@ async function saveCurrent(): Promise<void> {
 async function reloadIfClean(id: string, daFuori = false): Promise<void> {
   if (state.dirty) {
     console.warn(
-      `FubMD: ${daFuori ? t("document.overwritten", { doc: id }) : t("document.changed_on_disk", { doc: id })}`,
+      `Fub: ${daFuori ? t("document.overwritten", { doc: id }) : t("document.changed_on_disk", { doc: id })}`,
     );
     return;
   }
@@ -308,7 +308,7 @@ export async function publishContext(): Promise<void> {
   } catch (e) {
     // Un vault non ancora aperto non ha un workspace: il contesto non ha dove
     // andare, e non è un errore da mostrare.
-    console.debug(`FubMD: contesto non pubblicato: ${errorText(e)}`);
+    console.debug(`Fub: contesto non pubblicato: ${errorText(e)}`);
   }
 }
 

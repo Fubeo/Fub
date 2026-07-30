@@ -1,5 +1,5 @@
 ---
-progetto: FubMD — App di scrittura e knowledge management open source
+progetto: Fub — App di scrittura e knowledge management open source
 data: 24 luglio 2026
 intervistato: Lorenzo
 ruolo: Scrittore freelance / copywriter — utente target
@@ -29,7 +29,7 @@ stato: bozza
 - Sincronizzazione cloud proprietaria: paura concreta di perdere capitoli se il servizio chiude o ha un bug
 
 ### Motivazione del progetto
-- Voglio un'app che tratti i miei file come **file di testo in cartelle**, non come database proprietario. Se domani FubMD sparisce, apro la cartella con qualsiasi editor e ho tutto. Open source significa anche che la community può mantenerla viva.
+- Voglio un'app che tratti i miei file come **file di testo in cartelle**, non come database proprietario. Se domani Fub sparisce, apro la cartella con qualsiasi editor e ho tutto. Open source significa anche che la community può mantenerla viva.
 
 ## 2. Obiettivi
 
@@ -259,11 +259,11 @@ stato: bozza
 ## 10. Criteri di successo
 
 ### Successo del progetto
-- Lorenzo (e utenti simili) completa un intero romanzo (80.000+ parole, 30+ note collegate) usando solo FubMD, dalla prima bozza all'export finale per l'editore.
+- Lorenzo (e utenti simili) completa un intero romanzo (80.000+ parole, 30+ note collegate) usando solo Fub, dalla prima bozza all'export finale per l'editore.
 - La community open source contribuisce con almeno 5 PR significative nei primi 6 mesi.
 
 ### Criteri di accettazione generali
-- Un utente che migra da Obsidian apre il suo vault esistente in FubMD in < 5 minuti senza modificare i file
+- Un utente che migra da Obsidian apre il suo vault esistente in Fub in < 5 minuti senza modificare i file
 - L'export DOCX si apre in Word/LibreOffice senza errori di formattazione
 - La modalità Focus si attiva in < 1 secondo e non mostra **nessun** elemento UI non testuale
 
@@ -295,7 +295,7 @@ stato: bozza
 ### Decisioni da prendere
 - Licenza: GPL-3.0 (copyleft forte) vs. MIT (permissiva)? Impatto sulla community e su eventuali fork commerciali
 - Architettura sync: solo iCloud Drive in v1, o investire subito su un protocollo proprio / Syncthing?
-- Nome e branding: "FubMD" è definitivo? (suona tecnico, poco "scrittore")
+- Nome e branding: "Fub" è definitivo? (suona tecnico, poco "scrittore")
 - Lingua UI: solo inglese, o anche italiano da subito?
 
 ## 12. Note grezze
@@ -304,7 +304,7 @@ stato: bozza
 - Al bar alle 7 di mattina non voglio pensare a YAML, a Pandoc, a conflitti di merge. Voglio aprire, scrivere, linkare `[[Elena_Vivaldi]]`, e sapere che i suoi occhi sono verdi. Punto.
 - Scrivener ha 200 opzioni nel menu. Non ne voglio 200. Ne voglio 15, fatte bene.
 - Il grafo dei link è bello da guardare, ma quello che uso davvero è il pannello backlink: "dove altro compare Elena?" — quello è il killer feature per la coerenza narrativa.
-- Se FubMD mi fa risparmiare anche solo 20 minuti al giorno di "caccia al dettaglio", in un mese ho guadagnato 10 ore di scrittura. È quello che conta.
+- Se Fub mi fa risparmiare anche solo 20 minuti al giorno di "caccia al dettaglio", in un mese ho guadagnato 10 ore di scrittura. È quello che conta.
 - Open source non è solo una licenza: è la garanzia che tra 5 anni, se il maintainer molla, qualcuno può forkare e continuare. I miei romanzi devono sopravvivere all'app.
 - Per l'iPhone: non devo scrivere capitoli. Devo rileggere, annotare, controllare un dettaglio. Un reader con ricerca e backlink basta. Non serve l'editor completo.
 - Il DOCX in uscita deve avere: pagina titolo, indice, capitoli con "Capitolo 1" come Heading 1, corpo testo in Times New Roman 12pt, interlinea 1.5, margini 2.5 cm. È lo standard che chiedono le agenzie italiane. Se non esce così, devo comunque riaprire Word e sistemare — e allora tanto valeva usare Word dall'inizio.

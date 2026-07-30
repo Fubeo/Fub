@@ -56,15 +56,15 @@ import type {
   PluginErrorKind,
 } from "./contract";
 // Le fixture sono generate dai tipi Rust (serde) — vedi
-// `crates/fubmd-features/tests/ts_mirror.rs` (tipi del contratto) e
-// `crates/fubmd-app/tests/ts_mirror_app.rs` (tipi dell'app).
+// `crates/fub-features/tests/ts_mirror.rs` (tipi del contratto) e
+// `crates/fub-app/tests/ts_mirror_app.rs` (tipi dell'app).
 import type { EventKind } from "./enums.generated";
 import { asPluginError, errorText, isErrorKind } from "./errors";
 import samples from "../__fixtures__/mirror-samples.json";
 import appSamples from "../__fixtures__/mirror-samples-app.json";
 
-// L'altra metà del presidio dei mirror (la prima è `crates/fubmd-abi`… ehm,
-// `crates/fubmd-features/tests/ts_mirror.rs`): la fixture è generata dai tipi
+// L'altra metà del presidio dei mirror (la prima è `crates/fub-abi`… ehm,
+// `crates/fub-features/tests/ts_mirror.rs`): la fixture è generata dai tipi
 // Rust con serde; qui si verifica che il **mirror TS gestisca ogni
 // discriminante** che Rust produce. Il meccanismo è doppio:
 //
@@ -664,7 +664,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
   OpenVaults: keysOf<OpenVaults>({ roots: true, current: true }),
   BundleInfo: keysOf<BundleInfo>({ id: true, name: true, mounted: true }),
-  // La chiave resta il nome del tipo RUST (`fubmd_host::VaultEntry`), che è
+  // La chiave resta il nome del tipo RUST (`fub_host::VaultEntry`), che è
   // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché
   // l'anagrafe del §14.1 porta lo stesso nome dal contratto (vedi
   // `contract.ts`).
@@ -725,7 +725,7 @@ describe("mirror TS↔Rust", () => {
     //
     // La catena è: costante TS → fixture → costante Rust. Regge perché la
     // fixture è generata da `ViewContext::new(MAIN_PANE)` e non da una stringa
-    // scritta a mano (crates/fubmd-features/tests/ts_mirror.rs); se là tornasse
+    // scritta a mano (crates/fub-features/tests/ts_mirror.rs); se là tornasse
     // un letterale, questo test resterebbe verde per il motivo sbagliato.
     const contesti = fixture.ViewContext as ViewContext[];
     expect(contesti.length, "nessun campione di ViewContext").toBeGreaterThan(0);
@@ -958,7 +958,7 @@ describe("mirror TS↔Rust", () => {
   });
 
   it("gli u64 identità/impronta attraversano l'IPC come stringhe", () => {
-    // La regola di confine (fubmd_abi::ipc): oltre 2^53 un number JS perde
+    // La regola di confine (fub_abi::ipc): oltre 2^53 un number JS perde
     // bit in silenzio. Il campione Rust usa u64::MAX apposta.
     for (const sample of fixture.VersionRef as VersionRef[]) {
       expect(typeof sample.hash).toBe("string");

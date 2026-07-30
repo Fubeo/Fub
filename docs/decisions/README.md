@@ -33,7 +33,7 @@ cronologico di chiusura.
 | [0020](0020-le-regole-in-un-posto-solo.md) | Le regole in un posto solo | §6.1–§6.2 | 2026-07-27 |
 | [0021](0021-il-confine.md) | Il confine: quante volte si scrive la disciplina | §7.1–§7.6 | 2026-07-27 |
 | [0022](0022-il-kernel-a-pezzi.md) | Il kernel a pezzi: cinque proprietari invece di ventiquattro campi | §8.1 | 2026-07-27 |
-| [0023](0023-chi-monta-il-kernel.md) | Chi monta il kernel: un crate `fubmd-host`, e l'app ridotta a colla | §8.2 | 2026-07-27 |
+| [0023](0023-chi-monta-il-kernel.md) | Chi monta il kernel: un crate `fub-host`, e l'app ridotta a colla | §8.2 | 2026-07-27 |
 | [0024](0024-chi-legge-non-aspetta-chi-legge.md) | Il lock: chi legge non aspetta chi legge, e chi salva non aspetta per sempre | §8.3 | 2026-07-27 |
 | [0025](0025-la-ricerca-predefinita.md) | La ricerca predefinita: di classe *omnisearch*, e built-in | [FEATURES](../FEATURES.md) §9.1 → **apre** la [seduta 21](../roadmap/21-la-ricerca-predefinita.md) | 2026-07-27 |
 | [0026](0026-due-query-insieme.md) | Due query insieme: nessuna dichiarazione, una misura | §8.4 | 2026-07-27 |
@@ -155,7 +155,7 @@ confine» ne chiede due.
 E ne inaugurano un altro, che è di metodo e non di forma: la 0054 chiude una voce
 **smentendo un presidio che tutti credevano di avere**. Il cappello della seduta
 16 diceva che il kernel dentro l'SDK «violerebbe l'invariante che
-`dependency_invariant.rs` presidia»; quel file non nominava `fubmd-sdk` da
+`dependency_invariant.rs` presidia»; quel file non nominava `fub-sdk` da
 nessuna parte. È la **sesta** specie della famiglia che il §16.7 elenca, e la
 peggiore: un conteggio invecchiato fa sopravvalutare una copertura, un *limite*
 invecchiato la fa sottovalutare, ma una **garanzia dichiarata che non è mai

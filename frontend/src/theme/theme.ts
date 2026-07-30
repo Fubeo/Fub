@@ -1,7 +1,7 @@
-// In che luce si guarda FubMD: risolvere la scelta, applicarla, seguirla.
+// In che luce si guarda Fub: risolvere la scelta, applicarla, seguirla.
 //
 // La scelta è un'impostazione — `appearance.theme`, di **macchina**
-// (`fubmd-host/src/settings.rs`) — e vale tre cose: `light`, `dark`, o la
+// (`fub-host/src/settings.rs`) — e vale tre cose: `light`, `dark`, o la
 // stringa vuota, che nella convenzione delle impostazioni che delegano al
 // sistema (le `locale.*`) vuol dire *chiedilo a chi sta sotto*.
 //
@@ -45,13 +45,13 @@ import { on } from "../state/store";
 export type Tema = "light" | "dark";
 
 /// La chiave dell'impostazione. La stessa stringa sta in
-/// `fubmd-host/src/settings.rs`, che è dove la chiave **esiste**: una shell in
+/// `fub-host/src/settings.rs`, che è dove la chiave **esiste**: una shell in
 /// TypeScript non ha modo di importare una costante Rust.
 ///
 /// Divergere costerebbe caro e in silenzio — l'impostazione resterebbe nel
 /// pannello, la si potrebbe cambiare, e non succederebbe niente — quindi le
 /// tiene insieme un presidio che gira dal lato Rust
-/// (`fubmd-host/tests/interruttori.rs`): legge **questo file** e verifica che
+/// (`fub-host/tests/interruttori.rs`): legge **questo file** e verifica che
 /// la chiave che ci trova sia una di quelle che il core dichiara davvero.
 export const CHIAVE_TEMA = "appearance.theme";
 
@@ -60,7 +60,7 @@ export const CHIAVE_TEMA = "appearance.theme";
 /// La differenza conta: ricordando la scelta, chi ha lasciato «come il sistema»
 /// riparte seguendo il sistema di *oggi*; ricordando il tema risolto,
 /// ripartirebbe seguendo quello di ieri sera.
-const CACHE = "fubmd.appearance.theme";
+const CACHE = "fub.appearance.theme";
 
 /// La query che il browser risponde per la luce del sistema.
 const QUERY_SCURO = "(prefers-color-scheme: dark)";
@@ -86,7 +86,7 @@ export function temaEffettivo(scelta: unknown, sistemaScuro: boolean): Tema {
 
 /// Cosa dice il sistema **adesso**.
 ///
-/// Il ripiego è lo scuro, che è la luce in cui FubMD è sempre stato: un motore
+/// Il ripiego è lo scuro, che è la luce in cui Fub è sempre stato: un motore
 /// senza `matchMedia` non deve inaugurare un aspetto che nessuno ha scelto.
 function sistemaScuro(): boolean {
   return window.matchMedia?.(QUERY_SCURO).matches ?? true;
@@ -112,7 +112,7 @@ function applica(): void {
 /// Rilegge la scelta dall'impostazione, se c'è un vault che possa rispondere.
 async function rileggi(): Promise<void> {
   try {
-    // Senza filtro per componente: l'id del bundle di core (`fubmd.core`) è una
+    // Senza filtro per componente: l'id del bundle di core (`fub.core`) è una
     // costante di Rust, e ricopiarla qui creerebbe la seconda metà di una
     // coppia che nessun presidio tiene insieme. La chiave basta a trovarla, e
     // l'elenco intero è la stessa query che il pannello delle impostazioni fa

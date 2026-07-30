@@ -4,7 +4,7 @@ Torna a [../PIANO.md](../PIANO.md) · precede [M3](M3-editor-fidelity.md).
 
 ## Obiettivo
 
-Portare FubMD da "editor di note collegate" a "strumento di navigazione della
+Portare Fub da "editor di note collegate" a "strumento di navigazione della
 conoscenza": ricerca full-text, grafo navigabile, pannelli outline/tag, e la
 chiusura del ciclo dei link non risolti ("crea nota"). In parallelo, sostituire il
 full-rebuild di grafo/indice con un aggiornamento **incrementale**.
@@ -13,12 +13,12 @@ full-rebuild di grafo/indice con un aggiornamento **incrementale**.
 
 ### Indicizzazione full-text (tantivy, incrementale su disco) — **fatto**
 
-`fubmd_features::SearchIndex`, il primo `IndexProvider` nativo, avvolge
-**tantivy** (`crates/fubmd-features/src/search.rs`).
+`fub_features::SearchIndex`, il primo `IndexProvider` nativo, avvolge
+**tantivy** (`crates/fub-features/src/search.rs`).
 
 - **Persistenza:** indice su disco nello spazio dati del proprio plugin,
-  `.fubmd/data/plugins/fubmd.search/` (già ignorato dal walk del vault, vedi
-  `crates/fubmd-kernel/src/vault.rs`). Avvio rapido: niente reindicizzazione
+  `.fub/data/plugins/fub.search/` (già ignorato dal walk del vault, vedi
+  `crates/fub-kernel/src/vault.rs`). Avvio rapido: niente reindicizzazione
   completa ad ogni apertura. Le impronte passano da `HostApi::data_*` — è ciò che
   un index provider di terzi avrà — e la cartella mmap di tantivy dal varco
   nativo `Workspace::plugin_data_dir`.
@@ -127,7 +127,7 @@ esattamente ciò su cui quel comportamento si appoggia.
 
 `Workspace::rebuild_graph` ricostruiva `LinkGraph` da zero ad ogni modifica.
 Ora `LinkGraph::upsert`/`LinkGraph::remove` applicano un delta per-documento
-(`crates/fubmd-kernel/src/graph.rs`); `Workspace` li usa su
+(`crates/fub-kernel/src/graph.rs`); `Workspace` li usa su
 `write_document`/`refresh_from_disk`/`remove_document`.
 
 Il problema vero non è aggiungere gli archi del documento toccato, ma sapere
@@ -169,7 +169,7 @@ l'oracolo full-rebuild appena costruito verifica che nulla cambi.
 
 Il pannello backlink era una funzione libera (`build_backlinks_view`) che l'app
 riempiva di dati già calcolati: UI dichiarativa sì, ma non un provider. Ora è
-`fubmd_features::BacklinksView`, il **primo `ViewProvider` vero**, e il primo a
+`fub_features::BacklinksView`, il **primo `ViewProvider` vero**, e il primo a
 percorrere il protocollo per intero — non solo il rendering ma anche il giro
 azione→`ViewUpdate`.
 
@@ -197,7 +197,7 @@ da fare (graph-data, outline, tag) nascono su questo stesso giro.
 
 ### Outline panel e tag panel — **fatti**
 
-- **Outline:** `fubmd_features::OutlineView`, secondo `ViewProvider` vero. Non
+- **Outline:** `fub_features::OutlineView`, secondo `ViewProvider` vero. Non
   legge `DocumentModel.outline` direttamente (una view non ha il modello): lo
   chiede al kernel con **`IndexQuery::Outline`**, il *canale metadata* aperto
   proprio da qui — senza, un plugin non potrebbe ricavare la struttura di un
@@ -206,15 +206,15 @@ da fare (graph-data, outline, tag) nascono su questo stesso giro.
   sull'intervallo convertendo byte UTF-8 → code unit UTF-16
   (`frontend/src/rules/offsets.ts`, verificato su testo accentato+emoji). La gerarchia
   si vede col rientro nel titolo (spazio EM) in attesa di un eventuale `UiNode`
-  ad albero. E2e: `crates/fubmd-features/tests/outline_view_e2e.rs`.
-- **Tag panel:** `fubmd_features::TagPanelView`, terzo `ViewProvider`. Aggrega i
+  ad albero. E2e: `crates/fub-features/tests/outline_view_e2e.rs`.
+- **Tag panel:** `fub_features::TagPanelView`, terzo `ViewProvider`. Aggrega i
   tag dell'intero vault con **`IndexQuery::Tags`** (canale metadata; il kernel
   conta per **nota**, non per occorrenza, dai `DocumentModel`). Il click su un
   tag è un **`ViewUpdate::RunSearch { query }`** — la shell riusa il pannello di
   ricerca esistente con `tags:<nome>` (i tag sono un campo indicizzato). Oggi è
   una `List` piatta `#a/b` con il conteggio; l'albero di tag e un `UiNode`
   tree-node restano un affinamento. E2e:
-  `crates/fubmd-features/tests/tags_view_e2e.rs`.
+  `crates/fub-features/tests/tags_view_e2e.rs`.
 
 ### Flusso "crea nota" (link non risolti) — **fatto**
 
@@ -249,7 +249,7 @@ campo per ogni parametro dichiarato, mostra il piano quando il raggio lo merita.
 sono la stessa firma vista da due lati, e le firme costano un campo prima del
 freeze e una migrazione dopo: `CommandSpec` porta ora descrizione, parametri
 tipati e raggio dichiarato, e `invoke` prende un `InvokeMode` — la rottura di
-firma fatta adesso, con la linea di base ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`.
+firma fatta adesso, con la linea di base ritagliata in `crates/fub-abi/wit/frozen/0.1.0.wit`.
 
 Le due cose che l'host **fa rispettare**, e che sono la differenza fra un
 registro leggibile e uno eseguibile da terzi: gli argomenti sono convalidati
@@ -261,8 +261,8 @@ decisioni, con ciò che resta fuori, è nella [decisione 0009](../decisions/0009
 Clienti veri nello stesso giro: `CoreCommands` (`search.open`,
 `selection.wikilink` — che compone contesto di sessione [decisione 0007](../decisions/0007-contesto-di-sessione.md) ed edit chirurgico
 [decisione 0008](../decisions/0008-modifica-chirurgica.md) —, `vault.replace` con anteprima del piano su N note) e la palette.
-E2e: `crates/fubmd-kernel/tests/invoke_command.rs`,
-`crates/fubmd-features/tests/commands_e2e.rs`.
+E2e: `crates/fub-kernel/tests/invoke_command.rs`,
+`crates/fub-features/tests/commands_e2e.rs`.
 
 ### Il lotto e l'origine degli eventi ([decisione 0011](../decisions/0011-il-lotto.md) + [decisione 0012](../decisions/0012-origine-degli-eventi.md)) — **fatto**
 
@@ -291,7 +291,7 @@ L'attore è **chi ha chiesto**, non chi ha eseguito: è l'unica lettura per cui 
 campo esiste, e senza di essa l'automazione su-modifica di 16.2 si richiama da
 sola finché il `DISPATCH_BUDGET` non tronca. È la seconda rottura di firma del
 giro — `event-handler.handle` prendeva un `event` nudo — con la linea di base
-ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`; e `invoke_command` ha guadagnato un
+ritagliata in `crates/fub-abi/wit/frozen/0.1.0.wit`; e `invoke_command` ha guadagnato un
 `by: Actor`, perché un'invocazione attribuita a un default è l'errore che 16.2
 esiste per non fare.
 
@@ -301,8 +301,8 @@ Clienti veri nello stesso giro: `rename_document` (che *è* un lotto: 201
 ridisegni → 1), ogni `invoke_command(…, Apply)` — quindi `vault.replace` su N
 note, con l'origine di chi ha invocato — e la shell, che ridisegna una volta e
 distingue «un'altra applicazione ha scritto questo file» da «lo abbiamo riscritto
-noi». E2e: `crates/fubmd-kernel/tests/batch_and_origin.rs`,
-`crates/fubmd-features/tests/{commands_e2e,view_refresh_masks}.rs`.
+noi». E2e: `crates/fub-kernel/tests/batch_and_origin.rs`,
+`crates/fub-features/tests/{commands_e2e,view_refresh_masks}.rs`.
 
 ### Le capacità dell'`HostApi`, chiuse ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)) — **fatto**, prima del freeze
 
@@ -316,7 +316,7 @@ sei mesi, da una scartata apposta.
 Dentro: le **operazioni strutturali** (`create_document`, `rename_document`,
 `trash_document`, `list_trash`, `restore_document`, `empty_trash`) e
 `run_command`. Fuori: `storage_get`/`storage_set`, **tolte** — la sola rottura
-del giro, con la linea di base ritagliata in `crates/fubmd-abi/wit/frozen/0.1.0.wit`.
+del giro, con la linea di base ritagliata in `crates/fub-abi/wit/frozen/0.1.0.wit`.
 
 Le decisioni che il freeze avrebbe reso definitive, in breve: `create_document`
 **rifiuta** un path occupato (è l'unica differenza con `write_document`, ed è
@@ -338,9 +338,9 @@ a `CoreCommands` (`note.create`, `note.rename`, `note.trash`, `trash.restore`,
 `trash.empty`), con **sei comandi Tauri spariti** — ed è quella sparizione a
 rendere vera la regola del §16.6 anche per le feature che toccano il vault — più
 `vault.archive`, che sposta N note invocando `note.rename` e non nomina un solo
-link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
-`crates/fubmd-kernel/tests/invoke_command.rs`,
-`crates/fubmd-features/tests/commands_e2e.rs`.
+link. E2e: `crates/fub-kernel/tests/structural_host.rs`,
+`crates/fub-kernel/tests/invoke_command.rs`,
+`crates/fub-features/tests/commands_e2e.rs`.
 
 ## Trait/API coinvolti
 
@@ -350,10 +350,10 @@ link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
 - `ViewProvider` (backlink ✅, outline ✅, tag ✅; graph-data da fare) — dati via [ui-protocol.md](../architecture/ui-protocol.md).
 - `HostApi::query_index` (col canale metadata `IndexQuery::Outline`/`Tags`) + `HostApi::active_context` — le capacità che rendono una view un provider vero.
 - `HostApi` **chiusa** ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)): strutturali + `run_command` dentro, `storage_*` fuori — 22 metodi, poi 24 con `read_model` e `format_of` ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)).
-- `Workspace` in `fubmd-kernel`: nuovi percorsi incrementali per grafo+indice.
+- `Workspace` in `fub-kernel`: nuovi percorsi incrementali per grafo+indice.
 - `CommandProvider` per "crea nota" — fatto: `note.create`, e con esso gli altri
   quattro strutturali ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).
-- Comandi IPC in `fubmd-app`: search, graph-data, outline, tags — e **sei in
+- Comandi IPC in `fub-app`: search, graph-data, outline, tags — e **sei in
   meno**, perché crea/rinomina/cestina/ripristina/svuota/proponi-nome sono
   diventati comandi del registro.
 
@@ -398,13 +398,13 @@ link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
 
 ## Piano di test
 
-- **Unit dell'indice** (`crates/fubmd-features/src/search.rs`, in-module): match
+- **Unit dell'indice** (`crates/fub-features/src/search.rs`, in-module): match
   su corpo/titolo/tag, boost del titolo, congiunzione di default, delete-by-term
   senza duplicati, `reconcile`, query malformata → `BadArgs`. E i tre casi che
   contano davvero, perché falliscono in silenzio: riapertura che salta gli
   immutati, manifest di un'altra epoca (crash simulato fra commit e manifest) e
   indice corrotto — che si ricostruisce invece di farsi diagnosticare.
-- **Alimentazione degli indici** (`crates/fubmd-kernel/tests/index_feeding.rs`):
+- **Alimentazione degli indici** (`crates/fub-kernel/tests/index_feeding.rs`):
   una spia al posto di tantivy, così il test parla del contratto e non
   dell'implementazione. Verifica che write/remove/rename arrivino, che
   `reconcile` arrivi *dopo* l'alimentazione e prima del `flush`, che i backlink
@@ -413,27 +413,27 @@ link. E2e: `crates/fubmd-kernel/tests/structural_host.rs`,
   coda eventi trabocca**.
 - **Proprietà:** su una sequenza casuale di write/remove, `grafo_incrementale ==
   LinkGraph::build(tutti)` e `indice_incrementale == indice_da_zero` (oracolo =
-  full-rebuild attuale). Per il grafo: `crates/fubmd-kernel/tests/graph_incremental.rs`
+  full-rebuild attuale). Per il grafo: `crates/fub-kernel/tests/graph_incremental.rs`
   (universo ostile: omonimi a profondità diverse, alias che collidono con i nomi,
   path che collidono a meno dell'estensione; generatore xorshift deterministico,
   niente `proptest`) e `tests/workspace_incremental.rs` per lo stesso confronto
   passando da disco/provider/eventi. Per l'indice:
-  `crates/fubmd-features/tests/search_e2e.rs`, che ricostruisce lo stato finale
+  `crates/fub-features/tests/search_e2e.rs`, che ricostruisce lo stato finale
   in un vault vergine e confronta le risposte.
-- **E2e** (`crates/fubmd-features/tests/search_e2e.rs`): vault vero, markdown
+- **E2e** (`crates/fub-features/tests/search_e2e.rs`): vault vero, markdown
   vero, tantivy vero. Modifica/cancellazione/rename riflessi nella ricerca
   (nessun fantasma dopo un rename), riapertura che non scrive nulla su un vault
   immutato, riapertura che recupera cancellazioni/modifiche/creazioni avvenute
   ad app chiusa, highlight allineati su testo accentato.
 - **Ancora da fare a M2:** creazione nota da link non risolto → il backlink
-  compare (`crates/fubmd-format-markdown/tests/vault_e2e.rs`).
+  compare (`crates/fub-format-markdown/tests/vault_e2e.rs`).
 - **Bench:** ignorati nel giro normale, si eseguono a mano in release.
-  `crates/fubmd-kernel/tests/graph_incremental.rs` per grafo incrementale vs
-  rebuild; `crates/fubmd-features/tests/search_e2e.rs` per la latenza di query
+  `crates/fub-kernel/tests/graph_incremental.rs` per grafo incrementale vs
+  rebuild; `crates/fub-features/tests/search_e2e.rs` per la latenza di query
   e la riapertura a freddo su 2000 note (i numeri nei criteri qui sotto).
 - **Nota emersa dal bench:** un secondo `SearchIndex` sulla stessa cartella
   trova il lock del writer di tantivy occupato. È il caso di due istanze di
-  FubMD sullo stesso vault: si rinuncia alla ricerca nella seconda, **non** si
+  Fub sullo stesso vault: si rinuncia alla ricerca nella seconda, **non** si
   butta l'indice della prima (che è vivo e corretto). Se il multi-istanza
   diventerà un requisito, servirà un vero coordinamento — oggi non lo è.
 - `cargo test --workspace` + `cargo clippy` verdi su tutti gli OS (vedi

@@ -29,7 +29,7 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO
       Senza, "la shell ridisegna al cambio di nota attiva" diventa "ridisegna a
       ogni battuta di tasto" appena il contesto porta la selezione.
 - [x] Clienti veri nello stesso giro: l'**outline** segna la sezione in cui sta
-      il cursore, il pannello **statistiche** (`fubmd-features/src/stats.rs`,
+      il cursore, il pannello **statistiche** (`fub-features/src/stats.rs`,
       quarto `ViewProvider` ufficiale) conta le parole della selezione e cambia
       faccia in lettura. La shell pubblica il contesto vero: tre modalità
       (Sorgente / Live / Lettura) commutabili dalla barra.

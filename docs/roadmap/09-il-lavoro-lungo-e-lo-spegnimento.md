@@ -48,7 +48,7 @@ La chiude la [decisione 0030](../decisions/0030-il-rilevamento-si-puo-chiedere.m
 `IndexQuery::VaultStatus` è la domanda, la bandiera del rilevamento è **una
 sola** e la tiene chi guarda, e ogni sincronizzazione per-path che fallisce resta
 scritta nel vault anche quando il chiamante butta via il proprio `Result`. Con
-lei è a verbale anche **cosa promette FubMD dove il rilevamento non c'è**, che
+lei è a verbale anche **cosa promette Fub dove il rilevamento non c'è**, che
 era la decisione vera della voce. Ne è rimasto fuori un residuo, nominato: la
 `base` che manca a `write_document`, che è il conflitto buffer↔disco del
 [§18.1](18-editor-e-tastiera.md).

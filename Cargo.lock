@@ -1140,7 +1140,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fubmd-abi"
+name = "fub-abi"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -1152,14 +1152,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "fubmd-app"
+name = "fub-app"
 version = "0.1.0"
 dependencies = [
  "camino",
- "fubmd-abi",
- "fubmd-features",
- "fubmd-host",
- "fubmd-kernel",
+ "fub-abi",
+ "fub-features",
+ "fub-host",
+ "fub-kernel",
  "serde",
  "serde_json",
  "tauri",
@@ -1168,15 +1168,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "fubmd-features"
+name = "fub-features"
 version = "0.1.0"
 dependencies = [
  "camino",
- "fubmd-abi",
- "fubmd-format-markdown",
- "fubmd-kernel",
- "fubmd-sdk",
- "fubmd-testkit",
+ "fub-abi",
+ "fub-format-markdown",
+ "fub-kernel",
+ "fub-sdk",
+ "fub-testkit",
  "serde",
  "serde_json",
  "tantivy",
@@ -1184,14 +1184,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "fubmd-format-markdown"
+name = "fub-format-markdown"
 version = "0.1.0"
 dependencies = [
  "camino",
  "comrak",
- "fubmd-abi",
- "fubmd-kernel",
- "fubmd-sdk",
+ "fub-abi",
+ "fub-kernel",
+ "fub-sdk",
  "serde",
  "serde_json",
  "serde_yaml_ng",
@@ -1199,15 +1199,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "fubmd-host"
+name = "fub-host"
 version = "0.1.0"
 dependencies = [
  "camino",
- "fubmd-abi",
- "fubmd-features",
- "fubmd-format-markdown",
- "fubmd-kernel",
- "fubmd-testkit",
+ "fub-abi",
+ "fub-features",
+ "fub-format-markdown",
+ "fub-kernel",
+ "fub-testkit",
  "notify",
  "notify-debouncer-full",
  "serde",
@@ -1216,12 +1216,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "fubmd-kernel"
+name = "fub-kernel"
 version = "0.1.0"
 dependencies = [
  "camino",
- "fubmd-abi",
- "fubmd-testkit",
+ "fub-abi",
+ "fub-testkit",
  "serde",
  "serde_json",
  "tempfile",
@@ -1229,22 +1229,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "fubmd-sdk"
+name = "fub-sdk"
 version = "0.1.0"
 dependencies = [
- "fubmd-abi",
+ "fub-abi",
  "regex",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "fubmd-testkit"
+name = "fub-testkit"
 version = "0.1.0"
 dependencies = [
  "camino",
- "fubmd-abi",
- "fubmd-kernel",
+ "fub-abi",
+ "fub-kernel",
  "serde_json",
  "tempfile",
 ]

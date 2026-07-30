@@ -65,7 +65,7 @@ il comportamento di prima: chi non la implementa non si accorge che esiste.
 quell'estensione, senza che un byte sia cambiato. Una specie scritta su disco
 sopravviverebbe alla registrazione del provider e direbbe la cosa sbagliata per
 sempre; ricalcolarla costa il confronto di un'estensione, e la regola sta in
-[`rules::media::kind_of`](../../crates/fubmd-abi/src/rules/media.rs) perché chi
+[`rules::media::kind_of`](../../crates/fub-abi/src/rules/media.rs) perché chi
 indicizza, chi disegna e a M5 un guest WASM devono dividere allo stesso modo.
 
 `Unknown` non è un errore ed è **metà del valore** dell'anagrafe: un file che
@@ -115,7 +115,7 @@ lungo ([0032](0032-il-runner-dei-job.md)).
 
 `None` non vuol dire «file vuoto» e non vuol dire «mai letto»: vuol dire che
 nessuno ha ancora pagato la lettura dei suoi byte. Ed è la stessa
-[`Revision`](../../crates/fubmd-abi/src/edit.rs) di `document_revision`: un
+[`Revision`](../../crates/fub-abi/src/edit.rs) di `document_revision`: un
 secondo tipo opaco accanto a quello sarebbe stato due nomi per la stessa idea.
 
 Il guadagno vero non è saltare i file con la data uguale — quello lo sapeva fare
@@ -138,11 +138,11 @@ toccato.
 
 ### La tabella è un dato **derivato**, e la disciplina segue da lì
 
-Vive in `.fubmd-data/entries.json`, che è la radice di ciò che si può buttare:
+Vive in `.fub-data/entries.json`, che è la radice di ciò che si può buttare:
 versione di schema dal primo giorno (§15.3), scrittura atomica, e **illeggibile
 → si butta e si ricostruisce**, senza un avviso e senza bloccare niente.
 
-È l'opposto di [`organization`](../../crates/fubmd-kernel/src/organization.rs),
+È l'opposto di [`organization`](../../crates/fub-kernel/src/organization.rs),
 che davanti a un file che non ha potuto leggere si **rifiuta di sovrascriverlo**:
 quello è autorevole — perso, non si ricostruisce da niente — e questo no.
 Buttare questa tabella costa una riapertura lenta, cioè esattamente il
@@ -239,8 +239,8 @@ Tutte e tre vanno nella stessa direzione: sbagliare verso la rilettura.
 - **La politica della cartella allegati e le thumbnail** (§14.1, due caselle su
   quattro) restano: la prima è una chiave di impostazione da dichiarare
   ([0036](0036-le-impostazioni-e-i-tre-stati.md)), la seconda un derivato in
-  `.fubmd-data/` da far nascere quando ci sarà chi lo disegna.
-- **`.fubmd-data/entries.json` è il secondo file derivato che si scrive la
+  `.fub-data/` da far nascere quando ci sarà chi lo disegna.
+- **`.fub-data/entries.json` è il secondo file derivato che si scrive la
   propria disciplina a mano** (dopo il manifest della ricerca). Il §15.3 e il
   §15.4 sono esattamente questo, e questa voce li **nomina** senza chiuderli:
   la versione di schema c'è, la classe è scritta in prosa in testa al modulo, e
@@ -251,7 +251,7 @@ Tutte e tre vanno nella stessa direzione: sbagliare verso la rilettura.
   metadati. Si paga quando qualcuno sposta un allegato: quanto costa già un
   rename di nota con molti backlink.
 - **Il mirror TS ha dovuto rinominare un tipo.** In Rust i due `VaultEntry` —
-  questo e quello del registro dei vault (`fubmd_host`) — stanno in crate
+  questo e quello del registro dei vault (`fub_host`) — stanno in crate
   diversi; in TypeScript no, e due `interface` omonime **si fondono in
   silenzio**. Il secondo è ora `KnownVault` di là dal confine. È il §16.5 (mirror
   generati, non scritti) che si fa vedere: un generatore avrebbe dovuto decidere

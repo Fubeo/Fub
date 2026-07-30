@@ -1,5 +1,5 @@
 ---
-progetto: FubMD
+progetto: Fub
 data: 2026-07-24
 intervistato: Davide — Head of Operations / Project Manager
 ruolo: User persona manageriale, knowledge worker non tecnico
@@ -41,7 +41,7 @@ stato: bozza
 - Manca un flusso immediato: riunione → nota → action item → follow-up.
 
 ### Motivazione del progetto
-- Creare in FubMD una modalità semplice e guidata per knowledge worker non tecnici.
+- Creare in Fub una modalità semplice e guidata per knowledge worker non tecnici.
 - Permettere cattura rapida, collegamento tra note e ricerca immediata senza configurazioni.
 - Rendere i collegamenti tra persone, progetti e riunioni comprensibili anche a chi non conosce Markdown.
 - Offrire un’alternativa open source che sia anche realmente usabile da utenti aziendali non tecnici.
@@ -295,7 +295,7 @@ stato: bozza
 ## 8. Vincoli e ipotesi
 
 ### Vincoli di business
-- FubMD deve essere open source.
+- Fub deve essere open source.
 - Deve essere usabile anche da utenti non tecnici.
 - Non deve richiedere servizi cloud proprietari obbligatori.
 - Deve poter essere adottato in PMI senza infrastrutture complesse.
@@ -394,7 +394,7 @@ stato: bozza
 - Gli action item non vengono più persi.
 - Venerdì ritrova in 10 secondi una scadenza concordata con Marco.
 - Non deve pensare a tag, cartelle o sintassi.
-- Usa FubMD con continuità senza tornare alle app precedenti.
+- Usa Fub con continuità senza tornare alle app precedenti.
 
 ### Criteri di accettazione generali
 - Il template riunione si crea automaticamente con la data corretta.
@@ -475,4 +475,4 @@ stato: bozza
 - Venerdì cerca `[[Marco_Rossi]]` per ricordargli una scadenza.
 - Deve poter ritrovare “quella cosa che aveva detto Marco a marzo” in 10 secondi.
 - Il valore principale non è scrivere note, ma ritrovare decisioni e action item.
-- FubMD deve sembrare un assistente operativo, non un editor per sviluppatori.
+- Fub deve sembrare un assistente operativo, non un editor per sviluppatori.

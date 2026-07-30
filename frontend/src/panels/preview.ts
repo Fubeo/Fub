@@ -105,7 +105,7 @@ function wireWikilinks(container: HTMLElement): void {
       } catch (err) {
         // Link non risolto e nota non creabile: si segna, non si tace.
         a.classList.add("unresolved");
-        console.error(`FubMD: non riesco ad aprire «${page}»: ${errorText(err)}`);
+        console.error(`Fub: non riesco ad aprire «${page}»: ${errorText(err)}`);
       }
     });
   });

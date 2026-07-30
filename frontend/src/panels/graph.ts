@@ -148,7 +148,7 @@ export async function openGraph(): Promise<void> {
   // Vengono dai token (§12.4) e non più da tre esadecimali scritti qui. I tre
   // di prima — `#888`, `#7aa2f7`, `#9ece6a` — erano di una **terza** tavolozza,
   // che non era né quella della shell né quella del documento: il grafo era
-  // l'unica superficie di FubMD colorata da nessun tema, e un tema chiaro
+  // l'unica superficie di Fub colorata da nessun tema, e un tema chiaro
   // l'avrebbe lasciata indietro senza che niente diventasse rosso.
   const stile = getComputedStyle(overlay);
   const ink = stile.color;

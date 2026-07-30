@@ -1,19 +1,19 @@
-# `wit/` — contratto WIT di FubMD
+# `wit/` — contratto WIT di Fub
 
-L'albero che contiene il contratto **WIT** rispecchiante `fubmd-abi`. Serve a
+L'albero che contiene il contratto **WIT** rispecchiante `fub-abi`. Serve a
 rendere **verificabile** la regola d'oro: ogni tipo che attraversa la firma di un
 trait è esprimibile come record/variant/enum WIT, così che il runtime WASM di
 [M5](../milestones/M5-wasm-runtime.md) sia meccanico e non una rincorsa a firme
 non serializzabili.
 
-- Contratto: [`fubmd/abi.wit`](../../crates/fubmd-abi/wit/fubmd/abi.wit) — package `fubmd:abi@0.1.0`.
+- Contratto: [`fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit) — package `fub:abi@0.1.0`.
 - Contratto **com'era**, versione per versione: [`frozen/`](wit-congelato.md).
 - Mapping tipo-abi → costrutto WIT: [traits.md](traits.md).
 - Modello dati: [data-model.md](data-model.md).
 
 ## Ciclo di vita ("vivo da M2, freeze a M4")
 
-- **Da M2 (ora):** il WIT è mantenuto **vivo** insieme a `fubmd-abi`. Un test di
+- **Da M2 (ora):** il WIT è mantenuto **vivo** insieme a `fub-abi`. Un test di
   conformità gira a ogni `cargo test` e rompe se i due divergono. La superficie è
   ancora libera di evolvere.
 - **A [M4](../milestones/M4-wit-hardening.md):** la superficie viene
@@ -22,12 +22,12 @@ non serializzabili.
 
 ## Conformità
 
-Test: [`crates/fubmd-abi/tests/wit_conformance.rs`](../../crates/fubmd-abi/tests/wit_conformance.rs).
+Test: [`crates/fub-abi/tests/wit_conformance.rs`](../../crates/fub-abi/tests/wit_conformance.rs).
 
 Parsa `abi.wit` con `wit-parser` e confronta nomi **e tipi** *dichiarati*, non
 sottostringhe del sorgente. `wit-parser` è una **dev-dependency**: l'invariante
-di `fubmd-abi` riguarda le dipendenze normali, presidiate da
-[`dependency_invariant.rs`](../../crates/fubmd-abi/tests/dependency_invariant.rs).
+di `fub-abi` riguarda le dipendenze normali, presidiate da
+[`dependency_invariant.rs`](../../crates/fub-abi/tests/dependency_invariant.rs).
 
 Le quattro direzioni di pressione, i tipi attesi dedotti invece che scritti a
 mano e il test-del-test (quattordici divergenze introdotte ad arte) sono
@@ -35,7 +35,7 @@ descritti in [traits.md](traits.md), "Come la conformità è verificata".
 
 ## Additività: l'altra promessa, l'altro test
 
-Test: [`crates/fubmd-abi/tests/wit_additivity.rs`](../../crates/fubmd-abi/tests/wit_additivity.rs).
+Test: [`crates/fub-abi/tests/wit_additivity.rs`](../../crates/fub-abi/tests/wit_additivity.rs).
 
 La conformità dice che abi e WIT concordano **oggi, fra di loro**. Non dice
 niente su ieri: si può rinominare un campo in tutti e due, restare conformi, e
@@ -63,7 +63,7 @@ la linea di base, in [`frozen/README.md`](wit-congelato.md).
 - Gli **alberi ricorsivi** (`block`, `inline`, `ui-node`) al confine sono
   un'**arena**: lista piatta di nodi + indici `u32` (`block-ref`, `inline-ref`,
   `ui-ref`), perché WIT non ammette tipi ricorsivi. I tipi Rust nativi restano
-  alberi; la conversione è `fubmd_abi::arena`, e il proxy WASM di M5 la chiamerà
+  alberi; la conversione è `fub_abi::arena`, e il proxy WASM di M5 la chiamerà
   invece di riscriverla. Il perché — e perché non una stringa JSON — è in
   [traits.md](traits.md), "Alberi ricorsivi al confine".
 - `list`, `result` e `from` sono **keyword WIT**: dove sono nomi di variante o di

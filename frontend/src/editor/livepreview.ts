@@ -17,7 +17,7 @@
 // testabile: `computeDecorations` è una funzione pura (stato → lista di
 // intervalli), verificabile in node senza DOM; il `ViewPlugin` che la applica
 // è un guscio sottile e non ha test. Il tema vive qui dentro come `baseTheme`
-// (classi `cm-fubmd-*`): nessun CSS globale da tenere allineato.
+// (classi `cm-fub-*`): nessun CSS globale da tenere allineato.
 //
 // NB: barrato (`~~`) e nodi GFM esistono solo se l'editor monta
 // `markdown({ base: markdownLanguage })`; con il default commonmark quelle
@@ -55,7 +55,7 @@ export type LiveDecoKind =
   // widget: linea resa al posto di `---`, checkbox reale al posto di `[ ]`
   | "hr"
   | "checkbox"
-  // mark di stile sul testo (classi cm-fubmd-*)
+  // mark di stile sul testo (classi cm-fub-*)
   | "h1"
   | "h2"
   | "h3"
@@ -369,7 +369,7 @@ class RighelloWidget extends WidgetType {
   }
   toDOM() {
     const el = document.createElement("span");
-    el.className = "cm-fubmd-hr";
+    el.className = "cm-fub-hr";
     return el;
   }
 }
@@ -388,7 +388,7 @@ class CheckboxWidget extends WidgetType {
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = this.spuntata;
-    box.className = "cm-fubmd-checkbox";
+    box.className = "cm-fub-checkbox";
     box.tabIndex = -1; // il focus resta all'editor
     return box;
   }
@@ -403,11 +403,11 @@ const nascosto = Decoration.replace({});
 const righello = Decoration.replace({ widget: new RighelloWidget() });
 const boxVuota = Decoration.replace({ widget: new CheckboxWidget(false) });
 const boxSpuntata = Decoration.replace({ widget: new CheckboxWidget(true) });
-const lineaCodice = Decoration.line({ class: "cm-fubmd-codeblock" });
-const lineaCitazione = Decoration.line({ class: "cm-fubmd-quote" });
+const lineaCodice = Decoration.line({ class: "cm-fub-codeblock" });
+const lineaCitazione = Decoration.line({ class: "cm-fub-quote" });
 const marchi: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "code", "link", "highlight", "done", "quote-mark"] as const).map(
-    (kind) => [kind, Decoration.mark({ class: `cm-fubmd-${kind}` })],
+    (kind) => [kind, Decoration.mark({ class: `cm-fub-${kind}` })],
   ),
 );
 
@@ -427,13 +427,13 @@ function inDecorazione(d: LiveDeco): Decoration {
     // lo rilegge da lì, senza mappe posizione→dato da tenere sincronizzate.
     case "wikilink":
       return Decoration.mark({
-        class: "cm-fubmd-wikilink",
-        attributes: { "data-fubmd-page": d.data ?? "" },
+        class: "cm-fub-wikilink",
+        attributes: { "data-fub-page": d.data ?? "" },
       });
     case "tag":
       return Decoration.mark({
-        class: "cm-fubmd-tag",
-        attributes: { "data-fubmd-tag": d.data ?? "" },
+        class: "cm-fub-tag",
+        attributes: { "data-fub-tag": d.data ?? "" },
       });
     default:
       return marchi[d.kind]!;
@@ -447,7 +447,7 @@ function gestisciClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks
 
   // Checkbox: si modifica il testo, non il widget — la decorazione nuova
   // arriva da sola col docChanged.
-  if (bersaglio instanceof HTMLInputElement && bersaglio.classList.contains("cm-fubmd-checkbox")) {
+  if (bersaglio instanceof HTMLInputElement && bersaglio.classList.contains("cm-fub-checkbox")) {
     const pos = view.posAtDOM(bersaglio);
     const tre = view.state.doc.sliceString(pos, pos + 3);
     if (/^\[[ xX]\]$/.test(tre)) {
@@ -460,75 +460,75 @@ function gestisciClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks
     return false;
   }
 
-  const wikilink = bersaglio.closest<HTMLElement>(".cm-fubmd-wikilink");
+  const wikilink = bersaglio.closest<HTMLElement>(".cm-fub-wikilink");
   if (wikilink && (e.ctrlKey || e.metaKey)) {
-    cb.openWikilink(wikilink.dataset.fubmdPage ?? "");
+    cb.openWikilink(wikilink.dataset.fubPage ?? "");
     e.preventDefault();
     return true;
   }
 
-  const tag = bersaglio.closest<HTMLElement>(".cm-fubmd-tag");
+  const tag = bersaglio.closest<HTMLElement>(".cm-fub-tag");
   if (tag && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-    cb.searchTag(tag.dataset.fubmdTag ?? "");
+    cb.searchTag(tag.dataset.fubTag ?? "");
     e.preventDefault();
     return true;
   }
   return false;
 }
 
-// Il tema del modulo: solo classi cm-fubmd-*, dentro l'estensione. I **valori**
+// Il tema del modulo: solo classi cm-fub-*, dentro l'estensione. I **valori**
 // dei colori vengono però dalle variabili della superficie del documento
 // (`--doc-*` in `style.css`): sono gli stessi che usa la modalità Lettura, e
 // tenerne due copie significherebbe che passare da Live a Lettura cambia i
 // colori della stessa nota. Le variabili hanno un fallback, così l'estensione
 // resta montabile anche senza il CSS della shell.
 const tema = EditorView.baseTheme({
-  ".cm-fubmd-h1": { fontSize: "1.7em", fontWeight: "700" },
-  ".cm-fubmd-h2": { fontSize: "1.5em", fontWeight: "700" },
-  ".cm-fubmd-h3": { fontSize: "1.3em", fontWeight: "700" },
-  ".cm-fubmd-h4": { fontSize: "1.15em", fontWeight: "700" },
-  ".cm-fubmd-h5": { fontSize: "1em", fontWeight: "700" },
-  ".cm-fubmd-h6": { fontSize: "0.9em", fontWeight: "700", opacity: "0.8" },
-  ".cm-fubmd-strong": { fontWeight: "700" },
-  ".cm-fubmd-em": { fontStyle: "italic" },
-  ".cm-fubmd-strike": { textDecoration: "line-through" },
-  ".cm-fubmd-code": {
+  ".cm-fub-h1": { fontSize: "1.7em", fontWeight: "700" },
+  ".cm-fub-h2": { fontSize: "1.5em", fontWeight: "700" },
+  ".cm-fub-h3": { fontSize: "1.3em", fontWeight: "700" },
+  ".cm-fub-h4": { fontSize: "1.15em", fontWeight: "700" },
+  ".cm-fub-h5": { fontSize: "1em", fontWeight: "700" },
+  ".cm-fub-h6": { fontSize: "0.9em", fontWeight: "700", opacity: "0.8" },
+  ".cm-fub-strong": { fontWeight: "700" },
+  ".cm-fub-em": { fontStyle: "italic" },
+  ".cm-fub-strike": { textDecoration: "line-through" },
+  ".cm-fub-code": {
     background: "var(--doc-fill, rgba(135, 135, 135, 0.16))",
     borderRadius: "3px",
     padding: "0 0.15em",
   },
-  ".cm-fubmd-codeblock": { background: "var(--doc-fill-soft, rgba(135, 135, 135, 0.10))" },
-  ".cm-fubmd-quote": {
+  ".cm-fub-codeblock": { background: "var(--doc-fill-soft, rgba(135, 135, 135, 0.10))" },
+  ".cm-fub-quote": {
     borderLeft: "3px solid var(--doc-rule, rgba(135, 135, 135, 0.45))",
     paddingLeft: "0.6em",
   },
-  ".cm-fubmd-quote-mark": { color: "rgba(135, 135, 135, 0.8)" },
-  ".cm-fubmd-hr": {
+  ".cm-fub-quote-mark": { color: "rgba(135, 135, 135, 0.8)" },
+  ".cm-fub-hr": {
     display: "inline-block",
     width: "100%",
     verticalAlign: "middle",
     borderTop: "1px solid var(--doc-rule, rgba(135, 135, 135, 0.55))",
   },
-  ".cm-fubmd-link, .cm-fubmd-wikilink": {
+  ".cm-fub-link, .cm-fub-wikilink": {
     cursor: "pointer",
     textDecoration: "underline",
     textUnderlineOffset: "2px",
   },
-  "&light .cm-fubmd-link, &light .cm-fubmd-wikilink": { color: "var(--doc-link, #2f6bd8)" },
-  "&dark .cm-fubmd-link, &dark .cm-fubmd-wikilink": { color: "var(--doc-link, #82aaff)" },
-  ".cm-fubmd-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.35))" },
-  "&dark .cm-fubmd-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.28))" },
-  ".cm-fubmd-tag": {
+  "&light .cm-fub-link, &light .cm-fub-wikilink": { color: "var(--doc-link, #2f6bd8)" },
+  "&dark .cm-fub-link, &dark .cm-fub-wikilink": { color: "var(--doc-link, #82aaff)" },
+  ".cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.35))" },
+  "&dark .cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.28))" },
+  ".cm-fub-tag": {
     background: "var(--doc-fill, rgba(135, 135, 135, 0.18))",
     borderRadius: "1em",
     padding: "0 0.45em",
     fontSize: "0.95em",
     cursor: "pointer",
   },
-  "&light .cm-fubmd-tag": { color: "var(--doc-link, #2f6bd8)" },
-  "&dark .cm-fubmd-tag": { color: "var(--doc-link, #82aaff)" },
-  ".cm-fubmd-done": { textDecoration: "line-through", opacity: "0.55" },
-  ".cm-fubmd-checkbox": {
+  "&light .cm-fub-tag": { color: "var(--doc-link, #2f6bd8)" },
+  "&dark .cm-fub-tag": { color: "var(--doc-link, #82aaff)" },
+  ".cm-fub-done": { textDecoration: "line-through", opacity: "0.55" },
+  ".cm-fub-checkbox": {
     cursor: "pointer",
     verticalAlign: "middle",
     margin: "0 0.4em 0 0",

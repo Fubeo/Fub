@@ -1,4 +1,4 @@
-# FubMD
+# Fub
 
 Un'app di note in markdown su file locali, scritta in Rust (Tauri v2), con
 un'architettura pensata fin dall'inizio per i plugin. Apre vault nel formato di
@@ -15,28 +15,28 @@ distingue un provider nativo da uno WASM.
 
 ```
 ┌──────────────┐  contratto unico: modello documento comune + tutti i trait
-│  fubmd-abi   │  di estensione. NIENTE markdown / tauri / wasm qui dentro.
+│  fub-abi   │  di estensione. NIENTE markdown / tauri / wasm qui dentro.
 └──────┬───────┘
        │
    ┌───┴───────────────┬──────────────────────┐
    ▼                   ▼                        ▼
 ┌────────────┐  ┌────────────┐          ┌────────────────────┐
-│fubmd-kernel│  │ fubmd-sdk  │          │ fubmd-format-       │
+│fub-kernel│  │ fub-sdk  │          │ fub-format-       │
 │  (core)    │  │ (helper)   │          │   markdown (comrak) │  ← 1° provider
 └─────┬──────┘  └────────────┘          └────────────────────┘
       │ vault, grafo link, registry, event bus (agnostico)
       ▼
 ┌───────────────┐    ┌──────────────┐        ┌──────────────────────────┐
-│ fubmd-features│    │  fubmd-host  │        │ fubmd-wasm-host (M5)      │
+│ fub-features│    │  fub-host  │        │ fub-wasm-host (M5)      │
 │ backlink/…    │    │  (chi monta) │        │ plugin di terzi via WASM  │
 └───────────────┘    └──────┬───────┘        └──────────────────────────┘
                             │
-       fubmd-testkit ┈┈┈┈┈┈┈┤  il banco di prova del lato host: dipende dal
+       fub-testkit ┈┈┈┈┈┈┈┤  il banco di prova del lato host: dipende dal
        (solo dev)           │  kernel, e per questo non è MAI dipendenza
                             │  normale di nessuno
                             │
                      ┌──────┴───────┐
-                     │  fubmd-app   │  colla Tauri: comandi, finestre
+                     │  fub-app   │  colla Tauri: comandi, finestre
                      │  (Tauri v2)  │
                      └──────┬───────┘
                             │ IPC (comandi/eventi)
@@ -44,8 +44,8 @@ distingue un provider nativo da uno WASM.
                     frontend/ (Vite + TS + CodeMirror 6)
 ```
 
-**Invarianti chiave (verificate in CI/test):** `fubmd-kernel` e `fubmd-abi` non
-dipendono da `comrak`, `tauri` o `wasmtime`; `fubmd-host` non dipende da
+**Invarianti chiave (verificate in CI/test):** `fub-kernel` e `fub-abi` non
+dipendono da `comrak`, `tauri` o `wasmtime`; `fub-host` non dipende da
 `tauri`, perché chi monta deve poter essere preso da una CLI, da un'API locale o
 da un e2e headless senza portarsi dietro un webview.
 
@@ -86,13 +86,13 @@ Prerequisiti: Rust ≥ 1.88, Node ≥ 20, e le dipendenze Tauri v2 per Linux
 cd frontend && npm install && cd ..
 
 # 2. sviluppo (avvia Vite + finestra Tauri con hot-reload)
-cargo tauri dev --config crates/fubmd-app/tauri.conf.json
+cargo tauri dev --config crates/fub-app/tauri.conf.json
 
 # 3. build release (binario self-contained, frontend incluso)
-cargo build --release -p fubmd-app   # → target/release/fubmd
+cargo build --release -p fub-app   # → target/release/fub
 
 # comodità: aprire un vault all'avvio senza dialog
-FUBMD_VAULT="$PWD/tests/fixtures/sample-vault" target/release/fubmd
+FUB_VAULT="$PWD/tests/fixtures/sample-vault" target/release/fub
 ```
 
 Test e lint:
@@ -144,8 +144,8 @@ doppia licenza, senza condizioni aggiuntive.
 
 ## Marchi
 
-Obsidian è un marchio del suo titolare. **FubMD non è affiliato a Obsidian, non
+Obsidian è un marchio del suo titolare. **Fub non è affiliato a Obsidian, non
 ne è approvato, e non è un clone né un rimpiazzo**: è un programma diverso, con
 un'architettura diversa, che legge e scrive lo stesso formato su disco. Dove il
 nome compare — nel codice, nei test, nei documenti — è per dire con quale
-programma FubMD va d'accordo e quale regola sta rispettando. Nient'altro.
+programma Fub va d'accordo e quale regola sta rispettando. Nient'altro.
