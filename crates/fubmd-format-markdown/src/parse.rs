@@ -173,7 +173,7 @@ fn ritagliato_dopo(figlio: Span, padre: Span, dopo: usize) -> Span {
 /// Sta qui, insieme all'ancoraggio al confine di carattere di [`Offsets::byte`],
 /// perché queste due righe **non rendono giusto** un numero sbagliato: rendono
 /// impossibile che un numero sbagliato diventi un panico. È la differenza che il
-/// §5.3 chiede al fuzzing del parser.
+/// §17.1 chiede al fuzzing del parser.
 ///
 /// [`Offsets::byte`]: crate::offsets::Offsets::byte
 fn sourcepos_span(sp: comrak::nodes::Sourcepos, offsets: &Offsets<'_>) -> Span {

@@ -193,12 +193,12 @@ classDiagram
 
 | Tipo | Dove | Nota che il disegno non può portare |
 |---|---|---|
-| `DocumentModel` | [model.rs:189](../../crates/fubmd-abi/src/model.rs) | otto campi, di cui sette sono la stessa cosa vista in due modi |
-| `Block` | [model.rs:243](../../crates/fubmd-abi/src/model.rs) | ogni variante porta `anchor` e `span`, **anche** `ThematicBreak`, perché `Block::anchor` sia totale |
-| `Inline` | [model.rs:423](../../crates/fubmd-abi/src/model.rs) | `Custom` è l'unico varco: senza, un enum chiuso più il freeze WIT obbligherebbe a prevedere ogni sintassi futura |
-| `LinkTarget` | [model.rs:461](../../crates/fubmd-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
-| `Anchor` | [model.rs:600](../../crates/fubmd-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
-| `Span` | [model.rs:123](../../crates/fubmd-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` — e la sorgente sono i byte del file, BOM e terminatori compresi ([0058](../decisions/0058-un-nome-che-nasce.md)) |
+| `DocumentModel` | [model.rs:233](../../crates/fubmd-abi/src/model.rs) | otto campi, di cui sette sono la stessa cosa vista in due modi |
+| `Block` | [model.rs:287](../../crates/fubmd-abi/src/model.rs) | ogni variante porta `anchor` e `span`, **anche** `ThematicBreak`, perché `Block::anchor` sia totale |
+| `Inline` | [model.rs:467](../../crates/fubmd-abi/src/model.rs) | `Custom` è l'unico varco: senza, un enum chiuso più il freeze WIT obbligherebbe a prevedere ogni sintassi futura |
+| `LinkTarget` | [model.rs:505](../../crates/fubmd-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
+| `Anchor` | [model.rs:644](../../crates/fubmd-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
+| `Span` | [model.rs:167](../../crates/fubmd-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` — e la sorgente sono i byte del file, BOM e terminatori compresi ([0058](../decisions/0058-un-nome-che-nasce.md)) |
 | `VaultEntry` | [traits.rs:203](../../crates/fubmd-abi/src/traits.rs) | sta nei trait e non qui, perché è la risposta a `IndexQuery::Entries`; `kind` **non si persiste**, dipende da chi è registrato adesso |
 
 Il disegno mostra la forma **ad albero**. Al confine WIT ce n'è una seconda, e

@@ -149,7 +149,7 @@ plugin di comunità può chiamare è una domanda di firma che va posta lì, non 
 
 ### Il debito diventa un numero, non una riga di prosa
 
-`i_debiti_dichiarati_sono_cinque` asserisce il conteggio e nomina le righe. È la
+`il_debito_dichiarato_e_un_numero_presidiato` asserisce il conteggio e nomina le righe. È la
 parte che risponde all'accusa che il §16.6 muove a sé stesso: *«un conto scritto a
 mano in un documento non è un presidio: è una cosa che diventa falsa in
 silenzio»*. Migrarne uno costringe a toccare il numero; chiudere l'ultimo

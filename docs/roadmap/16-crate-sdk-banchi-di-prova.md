@@ -131,7 +131,7 @@ dichiarata guardando le voci insieme, come la seduta chiede.
       non si poteva porre — rendere passa dal confine di fiducia, e portarne
       l'HTML su un canale che anche un plugin di comunità può chiamare va deciso
       lì. **Il residuo non vive più in questa riga**: è
-      `i_debiti_dichiarati_sono_cinque`, e migrarne uno costringe a toccare il
+      `il_debito_dichiarato_e_un_numero_presidiato`, e migrarne uno costringe a toccare il
       numero.
 
 ### 16.8 La prosa che conta i sorgenti non ha nessun presidio
@@ -192,6 +192,35 @@ la forma dell'annotazione, la seconda contro la prima.
       un'annotazione che rifà il conto solo *dopo*, in CI, arriverebbe comunque
       prima di chi legge — nessuno di questi due numeri è stato letto da qualcuno
       prima che il presidio lo ricontasse a mano.
+- [ ] **E un giro di verifica fatto chiudendo quella mezza voce ne ha trovate
+      altre cinque, più un bersaglio nuovo.** Non sono riparate lì — sono il
+      lavoro di questa voce — e stanno scritte col comando accanto perché chi la
+      prende le trovi. `crates/fubmd-abi/wit/fubmd/abi.wit` è **3400 righe di cui
+      1697 di commento** dove la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md)
+      e [M4](../milestones/M4-wit-hardening.md) dicono 3386 e 1683 (`wc -l`,
+      `grep -cE '^\s*//'`) — e lo stesso criterio dà i numeri vecchi *esatti* al
+      commit della 0053, quindi il conto era giusto e la prosa è invecchiata di
+      quattordici righe di commento; il contratto in Rust è **18 058** righe e la
+      0053 dice 17 150; i `console.warn`/`console.error` della shell sono
+      **quindici** e non quattordici ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md),
+      [leva](leva.md)), col criterio che la 0052 stessa dichiara; e
+      [plugin-boundary.md](../architecture/plugin-boundary.md) nomina
+      `safety::notifying` come se esistesse, descrivendolo come «una riga su
+      stderr» — si chiama **`reporting`** e *restituisce* il panico invece di
+      stamparlo, che è precisamente ciò che la 0052 ha cambiato: **sesta specie**,
+      smentita da un verbale a due file di distanza.
+- [ ] **Il bersaglio nuovo è meccanico, ed è a portata di un presidio che c'è
+      già**: **quindici** link della forma `[file.rs:N](…)` portano un numero di
+      riga stantio — sei in [data-model.md](../architecture/data-model.md)
+      (sfalsati tutti di **+44**, cioè `model.rs` è cresciuto sopra quel punto),
+      cinque in [traits.md](../architecture/traits.md), quattro in
+      plugin-boundary.md. `check-doc-links.mjs` valida **il file** e non il `:N`,
+      quindi questa è la prima famiglia di questa voce che non chiede
+      un'annotazione nuova: chiede di leggere due caratteri in più in un link che
+      il presidio già apre. I sei di `data-model.md` sono corretti nel giro della
+      mezza voce del §17.1, perché quel file era già aperto; gli altri nove no, e
+      sono qui. Da tenere per il disegno: un numero di riga è la sola specie di
+      questo elenco che **non** ha bisogno che qualcuno dichiari come si ricava.
 - [ ] **E ci sono due specie peggiori dei numeri.** La **quinta**: il *limite
       dichiarato* che non esiste più — [traits.md](../architecture/traits.md)
       scriveva «limite dichiarato: l'**ordine** dei casi di un variant è
@@ -251,7 +280,7 @@ la forma dell'annotazione, la seconda contro la prima.
       in entrambi i casi. **Fatto**, e con la causa invece del solo sintomo: la
       regola del vault resta ma non si applica a una cartella in cui **git tiene
       dei `.md`**; ogni albero saltato è una riga in uscita; **zero file
-      controllati esce rosso**. Oggi: **132 file, 2464 link**. Questa riga ha
+      controllati esce rosso**. Oggi: **132 file, 2475 link**. Questa riga ha
       detto «81 file, 1105 link», poi «122 file, 2155», poi «125 file, 2231»,
       poi «127 file, 2284», poi «129 file, 2336» — ed è la **nona** volta che il
       numero si è ritrovato falso. Le ultime tre meritano di essere raccontate

@@ -386,7 +386,7 @@ pub fn il_descrittore_dichiara_almeno_una_estensione<F: FormatProvider + ?Sized>
 /// avrebbe un effetto solo: il fuzzer resta rosso, e chi lo trova rosso lo
 /// disattiva.
 ///
-/// Ciò che si pretende **sempre**, e che è quello che il §5.3 chiede al fuzzing
+/// Ciò che si pretende **sempre**, e che è quello che il §17.1 chiede al fuzzing
 /// («un parser che pania è un vault che non si apre»), è l'altra metà: che nessuno
 /// span faccia panicare chi lo usa, che il parse sia deterministico, e che il
 /// modello non porti dentro il BOM.
@@ -1114,6 +1114,12 @@ fn bom_negli_inline(i: &Inline, controlla: &impl Fn(&str, &str)) {
 /// Sta qui e non nel corpus di un provider perché la domanda «questo documento
 /// che cosa nomina?» è la stessa per ogni formato, ed è quella con cui il grafo
 /// del kernel si alimenta.
+///
+/// **Non ha un cliente**, e lo dice la
+/// [0060](../../../../docs/decisions/0060-il-modello-dice-il-vero-sui-byte.md)
+/// invece di lasciarlo scoprire: il primo corpus che verifica *cosa un documento
+/// nomina* le dà una ragione di esistere, o va tolta. Non è una proprietà, quindi
+/// non può passare per verde senza essere stata provata.
 pub fn bersagli(model: &DocumentModel) -> BTreeSet<String> {
     model
         .links

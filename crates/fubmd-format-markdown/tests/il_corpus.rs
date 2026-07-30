@@ -55,8 +55,9 @@
 //! Sul corpus curato si chiede tutto ([`conformita::Pretesa::ELaCoerenza`]); sulle
 //! mutazioni generate si chiede solo ciò la cui violazione fa **panicare o
 //! scrivere alla cieca** ([`conformita::Pretesa::CheAffettino`]), che è
-//! esattamente ciò che il §5.3 chiede al fuzzing — *«un parser che pania è un
-//! vault che non si apre»*. La ragione della differenza sta nel doc di
+//! esattamente ciò che il §17.1 chiede al fuzzing — *«un parser che pania è un
+//! vault che non si apre»*, dove la casella che lo chiede è il capitolo 5.3 di
+//! `FEATURES.md`. La ragione della differenza sta nel doc di
 //! [`conformita::Pretesa`], e il caso che l'ha imposta è nella lista delle
 //! divergenze: il termine di una definition list «stretta» ha uno span di **un
 //! byte**, su markdown perfettamente normale, e finché non è deciso *cosa sia*
@@ -893,7 +894,7 @@ fn nomi_dei_kind(d: &DocumentModel) -> BTreeSet<String> {
 // eredita da comrak delle incoerenze di `sourcepos` che sono difetti veri e la
 // cui riparazione è una decisione (vedi le divergenze dichiarate qui sopra).
 // Pretenderle risolte da qui avrebbe un effetto solo — un fuzzer rosso, che
-// qualcuno disattiva — e ne perderebbe quello per cui il §5.3 lo chiede: che
+// qualcuno disattiva — e ne perderebbe quello per cui il §17.1 lo chiede: che
 // nessun documento, per quanto storto, faccia panicare chi lo apre.
 //
 // Due limiti, dichiarati:
