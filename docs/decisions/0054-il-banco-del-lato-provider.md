@@ -140,6 +140,23 @@ Le proprietà, ricavate da `abi/src/traits.rs`:
 | `chi_si_ridisegna_su_index_updated_dichiara_anche_batch_ended` | la [0011](0011-il-lotto.md), dal lato di chi scrive la view |
 | `render_view_non_ha_memoria` | *«un `ViewProvider` che non muta durante `render_view`»* |
 | `un_provider_testuale_rifiuta_i_byte` | *«risponde `Unsupported` invece di indovinare l'encoding»* |
+| `gli_id_delle_view_sono_distinti` | due `ViewSpec` con lo stesso id sono due view che il kernel non sa distinguere |
+| `ogni_view_dichiarata_si_disegna` | `views()` è una promessa: una `ViewSpec` che `render_view` non serve è una voce di menu che si apre su un errore |
+| `il_descrittore_dichiara_almeno_una_estensione` | il registro instrada per estensione, e un formato che non ne dichiara nessuna non riceverà mai un file |
+
+Più tre **aggregatori** — `un_indice_rispetta_il_contratto`,
+`una_view_rispetta_il_contratto`, `un_formato_rispetta_il_contratto` — che non
+sono proprietà: chiamano in fila quelle del loro trait, ed esistono perché chi
+scrive un provider abbia una riga sola da scrivere.
+
+> **Correzione.** Le ultime tre righe e questo paragrafo sono stati aggiunti dalla
+> [decisione 0060](0060-il-modello-dice-il-vero-sui-byte.md): la tabella ne
+> elencava otto quando il file che questo verbale creava ne aveva già quattordici.
+> Un conteggio dei sorgenti scritto a mano in un documento invecchia da sé, e
+> questo era falso il giorno in cui è stato scritto — il caso è consegnato alla
+> [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), che è la voce che tiene
+> quell'elenco. La stessa decisione ha riscritto la sezione `FormatProvider`, che
+> qui nasce con due proprietà e **nessun cliente**.
 
 Due meritano una riga.
 
@@ -216,8 +233,10 @@ magro — ed è il primo di questo verso.
   `fubmd-features`, cioè da tantivy e dalle quattro view ufficiali, per avere un
   doppio dell'host. Il banco del contratto non può stare dentro un cliente del
   contratto.
-- **Un crate `fubmd-conformance` a sé.** Un terzo crate per otto funzioni che
-  hanno esattamente le stesse dipendenze dell'SDK. La linea che divide i crate
+- **Un crate `fubmd-conformance` a sé.** Un terzo crate per una suite che ha
+  esattamente le stesse dipendenze dell'SDK — la frase qui contava le funzioni, e
+  il numero non le serviva
+  ([0060](0060-il-modello-dice-il-vero-sui-byte.md)). La linea che divide i crate
   qui è il **grafo delle dipendenze**, non l'argomento: `testing` e `conformita`
   stanno con `scan` e `ids` perché vedono le stesse cose, e il testkit sta fuori
   perché vede il kernel.

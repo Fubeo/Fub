@@ -173,6 +173,25 @@ la forma dell'annotazione, la seconda contro la prima.
       per disegnare il presidio: la prima sta nello **stesso file** del codice che
       descrive, quindi la distanza fra la frase e la cosa non è la ragione per cui
       invecchia — e un'annotazione che vale solo per i `.md` ne mancherebbe metà.
+- [ ] **E la mezza voce del §17.1 ne ha trovate altre due**
+      ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)), che insieme
+      dicono una cosa che le otto di sopra non dicevano. La prima è nella
+      [0054](../decisions/0054-il-banco-del-lato-provider.md): «un terzo crate per
+      **otto** funzioni», e una tabella che ne elencava otto, dove
+      `grep -c "^pub fn " crates/fubmd-sdk/src/testing/conformita.rs` oggi ne
+      conta **ventitré** — ma il punto non è lo scarto, è che ne contava
+      **quattordici già nel commit che scriveva «otto»**. Non un numero
+      invecchiato: un numero che **nessuno ha mai ricavato dalla sua sorgente**, e
+      la differenza decide la riparazione, perché uno invecchiato si aggiorna e
+      uno senza sorgente si aggiorna e torna falso al giro dopo. La seconda è il
+      numero della riga in fondo a questa voce, per la **nona** volta — e le due
+      insieme mostrano che il caso «falso il giorno in cui è stato scritto», che
+      la settima occorrenza di quel numero aveva inaugurato, non era un incidente:
+      è ciò che succede **ogni volta** che un conteggio si scrive a mano nello
+      stesso commit che cambia ciò che conta. Da tenere per disegnare il presidio:
+      un'annotazione che rifà il conto solo *dopo*, in CI, arriverebbe comunque
+      prima di chi legge — nessuno di questi due numeri è stato letto da qualcuno
+      prima che il presidio lo ricontasse a mano.
 - [ ] **E ci sono due specie peggiori dei numeri.** La **quinta**: il *limite
       dichiarato* che non esiste più — [traits.md](../architecture/traits.md)
       scriveva «limite dichiarato: l'**ordine** dei casi di un variant è
@@ -232,20 +251,24 @@ la forma dell'annotazione, la seconda contro la prima.
       in entrambi i casi. **Fatto**, e con la causa invece del solo sintomo: la
       regola del vault resta ma non si applica a una cartella in cui **git tiene
       dei `.md`**; ogni albero saltato è una riga in uscita; **zero file
-      controllati esce rosso**. Oggi: **129 file, 2336 link**. Questa riga ha
+      controllati esce rosso**. Oggi: **132 file, 2464 link**. Questa riga ha
       detto «81 file, 1105 link», poi «122 file, 2155», poi «125 file, 2231»,
-      poi «127 file, 2284» — ed è l'**ottava** volta che il numero si è ritrovato
-      falso. Le ultime due meritano di essere raccontate insieme, perché dicono
-      due cose diverse. La settima era falsa **nel commit stesso che la
-      scriveva**: la riga diceva 2284 e il controllo ne contava già 2285, cioè il
-      numero è invecchiato fra il momento in cui è stato misurato e quello in cui
-      è stato scritto. L'ottava è questa, e la causa è la seduta che stai
-      leggendo: due verbali nuovi e i loro rimandi hanno portato 2285 a 2336 in
-      un pomeriggio. Il presidio funziona, la **frase che lo descrive** no — e
-      non perché nessuno la guardi, ma perché un numero che conta i documenti di
-      un repo che documenta sé stesso non ha un valore fermo abbastanza a lungo
-      da poter essere scritto a mano. È l'argomento più corto a favore di questa
-      voce, ed è stato prodotto scrivendola.
+      poi «127 file, 2284», poi «129 file, 2336» — ed è la **nona** volta che il
+      numero si è ritrovato falso. Le ultime tre meritano di essere raccontate
+      insieme, perché dicono tre cose diverse. La settima era falsa **nel commit
+      stesso che la scriveva**: la riga diceva 2284 e il controllo ne contava già
+      2285, cioè il numero è invecchiato fra il momento in cui è stato misurato e
+      quello in cui è stato scritto. L'ottava aveva una causa esterna alla riga —
+      due verbali nuovi e i loro rimandi hanno portato 2285 a 2336 in un
+      pomeriggio. La nona, questa, le mette insieme: la mezza voce del §17.1 ha
+      aggiunto un verbale, e la riga qui sopra che ne racconta i due conteggi
+      falsi ha aggiunto dei link **a questa voce**, cioè il documento che contiene
+      il numero è cresciuto nel gesto stesso di correggerlo. Il presidio funziona,
+      la **frase che lo descrive** no — e non perché nessuno la guardi, ma perché
+      un numero che conta i documenti di un repo che documenta sé stesso non ha un
+      valore fermo abbastanza a lungo da poter essere scritto a mano. È
+      l'argomento più corto a favore di questa voce, ed è stato prodotto
+      scrivendola — tre volte su nove.
 
 *Sblocca:* 27.4 (plugin sandbox test, security test, upgrade migration test),
 27.3 (plugin linting, test utilities), 20.3 (permission revocation, crash
