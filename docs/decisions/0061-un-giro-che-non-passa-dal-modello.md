@@ -337,9 +337,20 @@ gli altri, che è il modo in cui un corpus e un esempio convivono.
   contenuto NFD invece c'è, ed è provato.
 - **Il fuzzer dei nomi non distingue un rifiuto atteso da un guasto.** Un nome che
   non è markdown è un `BadArgs`, e un nome che il filesystem rifiuta è un
-  `ImportOutcome::Failed`: la prova li scarta entrambi, e pretende soltanto che
-  almeno un quarto dei casi diventi un documento. Che un `Failed` non lasci niente
-  dietro non è verificato.
+  `ImportOutcome::Failed`: la prova scarta i primi, e che un `Failed` non lasci
+  niente dietro non è verificato.
+
+  *Corretto un commit dopo, e la correzione è questa voce che si presenta il conto.*
+  La riga diceva anche che la prova «pretende che almeno un quarto dei casi diventi
+  un documento», ed era vero — ma quella soglia misurava **la tolleranza del
+  filesystem ai nomi**, non il recinto. La CI su Windows l'ha fatta rossa: dei
+  duemila nomi mutati ne diventano un documento **310**, dove Linux ne fa 980,
+  perché Windows rifiuta `<`, `>`, `|`, `?`, `:` e i nomi riservati, di cui le
+  mutazioni sono piene. La soglia adesso conta **quante volte il recinto ha deciso**
+  — 1645 su entrambi i sistemi, perché è una decisione su una stringa — e il
+  controllo del path si fa su ogni esito e non solo su chi è nato, che è anche mezza
+  riparazione della maglia qui sopra. Il criterio che ne resta: *una soglia deve
+  contare la cosa che il presidio prova, non una che le sta accanto.*
 - **Settantacinque sorgenti non sono un vault.** Un vault vero ha allegati, `.fub/`,
   un cestino, cartelle con nomi propri. Il round-trip di un vault con degli allegati
   non c'è — non ce l'ha nemmeno la 0006 — e non lo copre questa casella.

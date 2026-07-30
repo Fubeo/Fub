@@ -1303,6 +1303,7 @@ fn no_mutated_name_walks_out_of_the_vault() {
 
     let (_g, mut ws) = vault_con(&[]);
     let radice = Utf8PathBuf::from_path_buf(_g.path().to_path_buf()).expect("utf8");
+    let mut decisi = 0usize;
     let mut nati = 0usize;
     let mut rifiutati = 0usize;
     for n in 0..casi {
@@ -1331,36 +1332,55 @@ fn no_mutated_name_walks_out_of_the_vault() {
             rifiutati += 1;
             continue;
         };
+        // Il controllo del path si fa su **ogni** esito, non solo su chi è nato.
+        // Un `Failed` è una scrittura che il filesystem ha rifiutato *dopo* che il
+        // recinto aveva già deciso dove andava il documento: il recinto l'ha
+        // esercitato, e `d.doc` è la sua risposta. Guardare solo i nati vorrebbe
+        // dire non guardare la maggioranza dei casi su Windows, che rifiuta i nomi
+        // con `<`, `>`, `|`, `?`, `:` — e le mutazioni ne sono piene.
         for d in &report.documents {
-            if !matches!(d.outcome, ImportOutcome::Created | ImportOutcome::Replaced) {
-                continue;
+            decisi += 1;
+            if matches!(d.outcome, ImportOutcome::Created | ImportOutcome::Replaced) {
+                nati += 1;
             }
-            nati += 1;
             let path = d.doc.as_str();
             let resto = path.strip_prefix("in/").unwrap_or_else(|| {
                 panic!(
                     "caso {n} — mutazione «{mutazione}» — il nome {nome:?} è \
-                     diventato `{path}`, che è fuori dalla cartella chiesta"
+                     diventato `{path}`, che è fuori dalla cartella chiesta \
+                     (esito: {:?})",
+                    d.outcome
                 )
             });
             assert!(
                 !resto.contains('/'),
                 "caso {n} — mutazione «{mutazione}» — il nome {nome:?} è diventato \
                  `{path}`: ha guadagnato dei componenti di path che nella sorgente \
-                 erano solo caratteri"
+                 erano solo caratteri (esito: {:?})",
+                d.outcome
             );
         }
     }
 
-    // Che la prova abbia provato qualcosa: se ogni nome finisse rifiutato prima di
-    // arrivare al recinto, il ciclo qui sopra non avrebbe asserito niente e
-    // sarebbe verde. È la stessa guardia del fuzzer del parser, che rifiuta di
-    // passare se le mutazioni non producono modelli.
+    // Che la prova abbia provato qualcosa. La quantità da guardare è **quante volte
+    // il recinto ha deciso**, non quanti file sono nati: la prima è una decisione su
+    // una stringa e vale uguale su ogni sistema, la seconda dipende da quali nomi il
+    // filesystem accetta e su Windows è un terzo di quella di Linux. La prima
+    // versione di questa riga contava i nati, ed è finita rossa in CI su Windows con
+    // 310 su 2000 dove Linux ne fa 980: la soglia misurava la tolleranza del
+    // filesystem e diceva di misurare il recinto.
     assert!(
-        nati * 4 > casi,
-        "su {casi} nomi mutati solo {nati} sono diventati un documento e {rifiutati} \
-         sono stati rifiutati prima: questa prova sta verificando `Err`, non il \
-         recinto."
+        decisi * 4 > casi,
+        "su {casi} nomi mutati il recinto ha deciso solo {decisi} volte, e {rifiutati} \
+         sorgenti sono state rifiutate prima di arrivarci: questa prova sta \
+         verificando `Err`, non il recinto."
+    );
+    assert!(
+        nati > 100,
+        "su {decisi} decisioni del recinto solo {nati} hanno prodotto un documento: \
+         senza documenti la camminata del disco qui sotto non ha niente da guardare. \
+         Quanti siano dipende dal sistema — su Windows sono circa un terzo che su \
+         Linux — quindi la soglia è bassa di proposito."
     );
 
     assert!(
