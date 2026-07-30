@@ -304,11 +304,6 @@ pub struct Workspace {
     /// prestito esclusivo del workspace. Un lucchetto in più non renderebbe
     /// visibile niente a nessuno che non lo veda già.
     doc_data_warnings: Vec<String>,
-    /// Cosa la migrazione di layout ha avuto da dire aprendo questo vault
-    /// ([0048](../../../docs/decisions/0048-una-radice-sola.md)). `None` è il
-    /// caso normale — un vault nuovo, o uno già nella radice unica: la
-    /// migrazione che non ha niente da fare non parla.
-    layout_warning: Option<String>,
 }
 
 impl Workspace {
@@ -339,13 +334,6 @@ impl Workspace {
         // `CoreIndex::registry`).
         let registry = Arc::new(registry);
         let root = root.as_ref();
-        // **Prima di qualunque lettura**, e non è un dettaglio d'ordine: le tre
-        // righe qui sotto aprono file che stanno sotto la radice dei derivati, e
-        // un vault scritto prima della 0048 li ha ancora sotto il vecchio nome.
-        // Aprire prima di spostare vorrebbe dire non trovare niente, ricostruire
-        // da zero, e spostare un albero che nel frattempo qualcuno ha già
-        // riscritto.
-        let layout_warning = crate::vault::migrate_layout(root);
         let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(root, machine)));
         // L'organizzazione è **del vault**, quindi si apre col root e non si
         // riceve da chi monta: è la differenza con il livello macchina e con lo
@@ -370,7 +358,6 @@ impl Workspace {
             // root e non si riceve da chi monta.
             entry_store: EntryStore::open(root),
             doc_data_warnings: Vec::new(),
-            layout_warning,
         }
     }
 
@@ -4098,13 +4085,6 @@ impl Workspace {
     /// Chi monta le mostra, e svuotandole se ne fa carico.
     pub fn doc_data_warnings(&mut self) -> Vec<String> {
         std::mem::take(&mut self.doc_data_warnings)
-    }
-
-    /// Cosa la migrazione alla radice unica ha avuto da dire aprendo questo
-    /// vault (0048). Come le altre due liste: chi monta la mostra, e prendendola
-    /// se ne fa carico.
-    pub fn layout_warning(&mut self) -> Option<String> {
-        self.layout_warning.take()
     }
 
     /// Porta dietro a una rinomina lo stato per-documento di **ogni** plugin
