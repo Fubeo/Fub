@@ -143,11 +143,12 @@ che alza uno schema deve portare con sé la migrazione.
   crate, non per essere consumato da qualcuno.
 - **Il layout su disco.** *Dove* stanno i file non ha un numero, e non può
   averlo: il numero abita dentro un file, e chi deve sapere se una cartella si è
-  spostata non l'ha ancora aperto. Si riconosce dai **nomi**, ed è ciò che fa la
-  prima e finora unica migrazione di layout — `.fub-data/` → `.fub/data/`,
-  [decisione 0048](decisions/0048-una-radice-sola.md). La regola del rifiuto in
-  avanti vale anche lì, tradotta: due nomi presenti insieme non si fondono. La
-  mappa di cosa sta dove è
+  spostata non l'ha ancora aperto. Si riconosce dai **nomi**, ed è ciò che ha
+  fatto la prima e finora unica migrazione di layout, quella della [decisione
+  0048](decisions/0048-una-radice-sola.md): due radici dentro il vault diventate
+  una. Quel codice è stato tolto al rename del progetto — prima del rilascio a
+  spostare le cartelle è chi ha scritto il codice — e la regola che resta è che
+  dopo il rilascio non sarà più facoltativo. La mappa di cosa sta dove è
   [architecture/on-disk-layout.md](architecture/on-disk-layout.md).
 
 ## Quando arriva `1.0`

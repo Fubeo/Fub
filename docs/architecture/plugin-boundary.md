@@ -867,7 +867,6 @@ sequenceDiagram
     H->>H: canonical(root) — se è già aperto RITORNA senza rimontare
     H->>M: mount(root, config macchina, stati di vista, locale)
     M->>W: Workspace::with_machine_settings
-    W->>W: migrate_layout(root) — prima di ogni lettura
     W->>W: SettingsStore · OrganizationStore · EntryStore
     M->>R: BundleRegistry::new + remember × 9
     R->>W: enable(fub.core) — per primo, ed è chi dichiara plugins.disabled
@@ -890,7 +889,6 @@ sequenceDiagram
 |---|---|---|
 | `Host::open` | [session.rs:341](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
 | `mount` | [mount.rs:162](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
-| `migrate_layout` | [vault.rs:79](../../crates/fub-kernel/src/vault.rs) | dentro il costruttore, non in `reindex`: nessuno legge un albero prima che sia al suo posto |
 | `BundleRegistry::mount` | [registry.rs:245](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
 | `reindex` | [workspace.rs:1197](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto |
 | `bridge::spawn` | [bridge.rs:69](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |

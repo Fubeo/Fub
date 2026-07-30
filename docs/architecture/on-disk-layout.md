@@ -85,33 +85,22 @@ deve sistemare.
 ## Il nome di prima
 
 Fino alla [0048](../decisions/0048-una-radice-sola.md) le radici dentro il vault
-erano **due**: `.fub/` per l'autorevole e `.fub-data/` per il derivato.
-**Questo è l'unico posto del repo che traduce**, sul modello di
-[roadmap/numerazione.md](../roadmap/numerazione.md) per i numeri delle voci:
+erano **due**: una per l'autorevole e una, separata, per il derivato. Dalla 0048
+è **una**, ed è quella descritta qui sopra.
 
-| Nome di prima | Nome di adesso |
-|---|---|
-| `.fub-data/` | `.fub/data/` |
-| `.fub-data/plugins/<id>/` | `.fub/data/plugins/<id>/` |
-| `.fub-data/entries.json` | `.fub/data/entries.json` |
-| `.fub-data/trash/` | `.fub/data/trash/` |
+Non c'è niente da tradurre, e non è sempre stato vero: fino al rename del
+progetto il kernel portava avanti da sé un vault scritto prima, con un rename
+all'apertura, e questa sezione era la tabella che diceva quale nome diventava
+quale. Quel codice non c'è più — è stato tolto insieme al nome, perché un vault
+con la vecchia forma non è mai esistito fuori da questa macchina e tenersi una
+migrazione per zero vault significa tenersi per sempre un nome che non si può
+più leggere da nessuna parte.
 
-Il nome vecchio resta scritto in due posti, e in tutti e due è **giusto** che
-resti: nei verbali
-[0025](../decisions/0025-la-ricerca-predefinita.md),
-[0038](../decisions/0038-il-kernel-possiede-il-sidecar.md),
-[0044](../decisions/0044-lo-stato-per-documento.md) e
-[0046](../decisions/0046-l-anagrafe-del-vault.md), che sono immutabili, e nella
-[linea di base congelata](wit-congelato.md) del contratto
-(`wit/frozen/0.1.0.wit`), che è una fotografia di com'era una firma e non si
-aggiorna per cosmesi. In tutti e quattro i verbali e in tutte e due le righe del
-WIT congelato si tratta di **commenti**: nessuna firma nomina una cartella.
-
-Il codice non lo scrive più da nessuna parte tranne una: `LEGACY_DATA_DIR` in
-`kernel/vault.rs`, che serve solo a `migrate_layout` — il rename all'apertura che
-porta avanti un vault scritto prima. Un vault che ha entrambe le cartelle **non
-si fonde**: la migrazione lo dice e lavora sulla nuova, perché scegliere fra due
-versioni dello stesso snapshot non è una cosa che un programma sappia fare.
+Ne segue la regola per il prossimo cambio di layout, che è l'unica cosa di
+questa sezione che vale per il futuro: **finché il progetto non è pubblicato una
+migrazione di layout è facoltativa, e dopo non lo è più.** La differenza non è
+di disciplina, è di chi paga: prima del rilascio a spostare le cartelle è chi ha
+scritto il codice, dopo è qualcuno che non sa che esistono.
 
 ## Cosa non c'è ancora
 
