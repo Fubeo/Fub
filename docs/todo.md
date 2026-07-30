@@ -20,7 +20,7 @@ esterna dell'intero [FEATURES.md](FEATURES.md)
 **separazione**, la §16.8, staccata dal §16.7 nel momento in cui lo si chiudeva
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)). Ottantasette sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-ventotto sono qui, e questo file è il loro **indice**.
+ventisette sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -126,7 +126,7 @@ verbale è un ragionamento intero.
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | quattro lati a coppie, chiusi tutti: l'anagrafe del vault ([0046](decisions/0046-l-anagrafe-del-vault.md)) e la cartella come cittadino con la lista per cartella ([0047](decisions/0047-la-cartella-esiste-nel-kernel.md)); restano **tre** caselle del §14.1 — l'impronta degli allegati, la politica della cartella allegati e le derivate in `.fub/data/` | — | — |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra; la §15.4 è chiusa con la [0048](decisions/0048-una-radice-sola.md) — una radice sola dentro il vault, la mappa del disco, e la classe di un dato dichiarata da **dove** si scrive — e ne resta la casella additiva, l'implementazione; e la §15.5 con la [0058](decisions/0058-un-nome-che-nasce.md) — due tolleranze per un nome, la sorgente di uno `Span`, e un `text_policy` che rileva senza convertire | 5 | — |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica; il contratto ha **una** sorgente e due confini che non hanno la stessa forma ([0053](decisions/0053-il-contratto-ha-una-sorgente.md), che chiude §16.4 e §16.5 insieme come la seduta chiedeva); i due banchi di prova sono **due**, e lo stesso cappello che là dichiarava un accorpamento qui dichiarava un confine ([0054](decisions/0054-il-banco-del-lato-provider.md) lato provider, [0055](decisions/0055-il-banco-del-lato-host.md) lato host); e un elenco scritto a mano è sano se è **la sorgente** di ciò che elenca o se **si confronta** con essa, mai se ci si itera sopra — la stessa tassonomia con due risposte, perché la produzione può leggere l'inventario delle view e non la macro dei comandi Tauri ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md), [0057](decisions/0057-la-dieta-dell-ipc.md)) | 2 | — |
-| **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza — e il criterio della seduta ha tagliato la §17.1 in **tre**, non in due: il corpus e il fuzzing sono chiusi dalla [0060](decisions/0060-il-modello-dice-il-vero-sui-byte.md) (il costo cresceva con l'attesa), il round-trip sul corpus dalla [0061](decisions/0061-un-giro-che-non-passa-dal-modello.md) (non aspettava una macchina: aspettava il corpus), resta il **banco delle prestazioni**, che aspetta una macchina e non una decisione | 3 | — |
+| **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza — e il criterio della seduta ha tagliato la §17.1 in **tre**, non in due: il corpus e il fuzzing sono chiusi dalla [0060](decisions/0060-il-modello-dice-il-vero-sui-byte.md) (il costo cresceva con l'attesa), il round-trip sul corpus dalla [0061](decisions/0061-un-giro-che-non-passa-dal-modello.md) (non aspettava una macchina: aspettava il corpus); la §17.3 dall'[0062](decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) — e la seduta aveva ragione a non dedicarle un turno di *quanto*: il costo del tracing non cresce con l'attesa, ma il canale della [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) aveva due destinazioni e non una; resta il **banco delle prestazioni**, che aspetta una macchina e non una decisione | 2 | — |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell — comprese le quattro code delle sedute 1–4, chiuse | 6 | — |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: quattro **rimandi** ai quattro giri di audit, di cui uno chiuso; restano **tre** caselle, e il lavoro sta nelle sedute che le hanno assorbite | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti, e tutti e tre sono chiusi: l'alimentazione ha un esito ([0051](decisions/0051-l-alimentazione-risponde.md)), ciò che va storto è un evento e il kernel non lo butta più ([0052](decisions/0052-cio-che-va-storto-e-un-evento.md)); restano la metà umana e una voce nata misurando | 2 | — |
@@ -135,7 +135,7 @@ verbale è un ragionamento intero.
 
 ## Le voci
 
-Ventotto. Il numero è quello con cui le nomina il resto del repo.
+Ventisette. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -147,22 +147,23 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella non è in nessun
 totale.** La colonna *Voci* conta le voci **aperte**, e la sua somma per riga fa
-ventotto come deve; il residuo di una voce **chiusa** è un'altra specie e finora
+ventisette come deve; il residuo di una voce **chiusa** è un'altra specie e finora
 non aveva dove essere contato — che è il modo in cui la riga della seduta 14 ha
 detto «due caselle» mentre il suo file ne aveva tre, e la 19 non ha detto niente
-avendone tre. Le caselle residue oggi sono **nove**, e stanno in cinque posti:
+avendone tre. Le caselle residue oggi sono **otto**, e stanno in quattro posti:
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
 (tre: l'impronta degli allegati, la politica della cartella allegati, le
 derivate), [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
-(una: l'implementazione additiva delle due radici),
-[§20.2](roadmap/20-quando-qualcosa-va-storto.md#202-ciò-che-va-storto-ha-un-canale-nel-contratto-e-nessuna-destinazione)
-(una: portare dentro il canale i ventisette punti che scrivono su `stderr`), il
+(una: l'implementazione additiva delle due radici), il
 [§16.6](roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) (una: i cinque
 bespoke da migrare — ed è la prima casella residua che **non vive in una riga di
 prosa**, perché il suo numero lo asserisce un test) e la
 [seduta 19](roadmap/19-debito-quarto-audit.md) (tre rimandi). Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
-sparire senza essere state fatte.
+sparire senza essere state fatte. La casella della §20.2 — i ventisette punti
+che scrivono su `stderr` — non è più fra queste: la
+[0062](decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) l'ha chiusa
+dando loro due destinazioni invece di una.
 
 **Una seduta chiusa non tiene le proprie code.** Le prime quattro sedute hanno
 il verbale, ma qualcuna aveva lasciato dietro dei punti di **esecuzione**: sono
@@ -195,7 +196,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§16.8** | [La prosa che conta i sorgenti non ha nessun presidio](roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 | **§17.1** | [Corpus, fuzzing, prestazioni](roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni) | 17. I presidi che restano | presidi | **P2** |
 | **§17.2** | [Test della shell](roadmap/17-presidi-che-restano.md#172-test-della-shell) | 17. I presidi che restano | presidi | **P2** |
-| **§17.3** | [Osservabilità](roadmap/17-presidi-che-restano.md#173-osservabilità) | 17. I presidi che restano | presidi | **P2** |
 | **§18.1** | [Editor](roadmap/18-editor-e-tastiera.md#181-editor) | 18. L'editor e la tastiera | shell | **P1** |
 | **§18.2** | [Comandi e tastiera](roadmap/18-editor-e-tastiera.md#182-comandi-e-tastiera) | 18. L'editor e la tastiera | shell | **P1** |
 | **§20.4** | [La shell non ha una superficie dove dire niente, e il salvataggio non ha esito](roadmap/20-quando-qualcosa-va-storto.md#204-la-shell-non-ha-una-superficie-dove-dire-niente-e-il-salvataggio-non-ha-esito) | 20. Quando qualcosa va storto | shell | **P1** |
@@ -220,7 +220,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **sessantuno**, uno
+- [I verbali delle decisioni chiuse](decisions/README.md) — **sessantadue**, uno
   per file (`ls docs/decisions/0*.md | wc -l`; diceva «cinquantasette», ed erano
   cinquantanove). Non stanno qui perché questo è l'elenco di ciò che **resta da
   fare**.

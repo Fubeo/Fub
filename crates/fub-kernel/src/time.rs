@@ -62,6 +62,30 @@ pub fn now_stamp() -> String {
     stamp_from_unix(now_unix())
 }
 
+/// L'istante in `YYYY-MM-DDTHH:MM:SS.mmmZ`, UTC — la forma che si **legge**.
+///
+/// È la gemella di [`stamp_from_unix`] e la differenza è un carattere: qui i
+/// `:` ci sono. Non è una svista da unificare: quella scrive dentro un **nome
+/// di file** e Windows i `:` non li accetta, questa scrive dentro una **riga di
+/// log** (§17.3) che una persona legge e un `grep` filtra, e là l'ISO vero vale
+/// più della portabilità di un nome che non esiste. Due mestieri, due forme.
+///
+/// I millisecondi ci sono perché ciò che si guarda in un log è spesso
+/// l'**ordine** di due righe vicine, e due righe nello stesso secondo sono la
+/// norma quando qualcosa va storto in cascata.
+pub fn stamp_iso_millis(millis: u64) -> String {
+    let secs = millis / 1_000;
+    let (y, m, d) = civil_from_days((secs / 86_400) as i64);
+    let rem = secs % 86_400;
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z",
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60,
+        millis % 1_000
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +132,20 @@ mod tests {
                 y += 1;
             }
         }
+    }
+
+    /// La forma che si legge porta i `:` che quella dei nomi di file non può
+    /// portare, e i millisecondi che quella non ha.
+    #[test]
+    fn the_readable_stamp_is_the_other_one_with_colons_and_millis() {
+        assert_eq!(stamp_iso_millis(0), "1970-01-01T00:00:00.000Z");
+        assert_eq!(
+            stamp_iso_millis(1_700_000_000_123),
+            "2023-11-14T22:13:20.123Z"
+        );
+        // Lo stesso istante, nelle due forme: cambiano solo i separatori e la
+        // coda dei millesimi.
+        assert_eq!(stamp_from_unix(1_700_000_000), "2023-11-14T22-13-20");
     }
 
     #[test]

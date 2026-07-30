@@ -447,11 +447,19 @@ pub enum Event {
     /// aveva previsto — *ciò che si limita a informare è un evento* — e
     /// rimandato perché non aveva un cliente.
     ///
-    /// I clienti sono arrivati tutti insieme, e sono ventisette `eprintln!` nel
-    /// backend più due commenti del kernel che nominavano questo canale per
+    /// I clienti sono arrivati tutti insieme: **erano** ventisette `eprintln!`
+    /// nel backend più due commenti del kernel che nominavano questo canale per
     /// nome («M4: notifica»). Ciò che passa di qui non è un log: è un fatto che
-    /// una persona ha diritto di sapere, e in un'app impacchettata `stderr` non
-    /// ha un lettore.
+    /// una persona ha diritto di sapere, e in un'app impacchettata `stderr`
+    /// non ha un lettore.
+    ///
+    /// Che cosa, di quei ventisette, passi di qui è deciso dalla
+    /// [0062](../../../docs/decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md),
+    /// ed è la sola parte di questa prosa che non è più storia: il criterio è
+    /// *il log è il pavimento, l'evento è la porta*, e apre la porta solo ciò
+    /// che racconta una **perdita**. Le diagnosi per chi sviluppa restano nel
+    /// pavimento del log, e `stderr` di produzione è sceso a zero: l'unico
+    /// che resta è il sink del log quando non c'è un posto dove scrivere.
     ///
     /// # Perché non è recuperabile
     ///

@@ -25,6 +25,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }
 tauri = { version = "2.11.5", features = [] }
+tracing = { workspace = true }
 tauri-plugin-dialog = "2.7.2"
 
 [build-dependencies]

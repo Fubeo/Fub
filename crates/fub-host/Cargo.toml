@@ -14,6 +14,7 @@ fub-format-markdown = { workspace = true }
 fub-kernel = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tracing = { workspace = true }
 
 # Il watcher di default, e l'unico che oggi esiste. Sta dietro una cargo feature
 # perché il trait `VaultWatcher` esiste proprio per i posti dove `notify` non

@@ -170,6 +170,7 @@ pub fn mount(
     machine: Arc<MachineSettings>,
     view_states: Arc<ViewStates>,
     system_locale: Arc<SystemLocale>,
+    levels: &fub_kernel::log::Levels,
 ) -> Result<Mounted, String> {
     let mut formats = FormatRegistry::new();
     // Il primo registrato è anche quello che dà l'estensione alle note nuove
@@ -291,6 +292,12 @@ pub fn mount(
     if let Err(e) = registry.enable(&mut ws, CORE_ID) {
         return Err(format!("il bundle di core non si monta: {e}"));
     }
+    // **Il livello del log si applica qui** (§17.3), ed è il primo momento in
+    // cui si può: è il bundle di core a dichiarare `log.level` e `log.verbose`,
+    // e prima di lui quei nomi non sono nemmeno impostazioni. Da qui in poi ogni
+    // riga di `tracing` rispetta ciò che la tendina dice — comprese quelle dei
+    // bundle che si montano subito dopo.
+    crate::settings::apply_log_levels(&ws, levels);
     let disabled = disabled_plugins(&ws);
     for bundle in &bundles {
         let id = bundle.manifest().id;
@@ -303,8 +310,10 @@ pub fn mount(
             continue;
         }
         match registry.enable(&mut ws, &id) {
-            Ok(warnings) => warnings.iter().for_each(|w| eprintln!("{w}")),
-            Err(e) => eprintln!("bundle non montato: {e}"),
+            Ok(warnings) => warnings
+                .iter()
+                .for_each(|w| tracing::warn!(target: "fub.host", "{w}")),
+            Err(e) => tracing::error!(target: "fub.host", "bundle non montato: {e}"),
         }
     }
 
@@ -313,7 +322,7 @@ pub fn mount(
     // specie dichiarata. Vanno lette dopo il montaggio, perché è il montaggio a
     // dichiarare gli schemi contro cui quei valori si misurano.
     for warning in ws.settings_warnings() {
-        eprintln!("impostazioni: {warning}");
+        tracing::warn!(target: "fub.host", "impostazioni: {warning}");
     }
 
     // Cosa non ha potuto seguire una rinomina (§13.2). Vale la pena leggerlo
@@ -321,14 +330,14 @@ pub fn mount(
     // chiave morta e non lo sa — è il difetto che questa voce esiste per non
     // lasciare più crescere in silenzio.
     for warning in ws.doc_data_warnings() {
-        eprintln!("stato per-documento: {warning}");
+        tracing::warn!(target: "fub.host", "stato per-documento: {warning}");
     }
 
     // Ciò che qualcuno produce e nessuno disegna: il conto che il §3.2 chiedeva
     // di poter fare. Oggi è vuoto; il giorno che non lo è, è un blocco che
     // l'utente legge crudo.
     for kind in ws.undrawn_kinds() {
-        eprintln!("`{kind}` non ha un renderer: degraderà alla resa generica");
+        tracing::warn!(target: "fub.host", "`{kind}` non ha un renderer: degraderà alla resa generica");
     }
 
     let versions = store.lock().expect("store delle versioni").clone();

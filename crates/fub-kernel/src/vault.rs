@@ -328,7 +328,7 @@ impl Vault {
     /// Sulle collisioni non si sovrascrive e non si fallisce: il nome prende un
     /// suffisso con l'istante della cancellazione (D2), e — se anche quello è
     /// occupato, cioè due cancellazioni nello stesso secondo — un contatore.
-    pub fn trash(&self, id: &DocId) -> Result<DocId> {
+    pub fn trash(&self, id: &DocId) -> Result<(DocId, Option<KernelError>)> {
         let from = self.path_for(id);
         let dir = self.root.join(TRASH_DIR);
         std::fs::create_dir_all(&dir).map_err(|e| KernelError::Io {
@@ -354,11 +354,14 @@ impl Vault {
         })?;
         // Il sidecar col path d'origine è best-effort: se non si scrive, la
         // voce degrada al comportamento senza sidecar (ripristino in radice),
-        // ma la cancellazione È riuscita e va detto con un Ok.
-        if let Err(e) = self.write_trash_sidecar(&target, id) {
-            eprintln!("cestino: sidecar di {target} non scritto: {e}");
-        }
-        Ok(target)
+        // ma la cancellazione È riuscita e va detta con un Ok. Il sidecar
+        // mancante non è però silenzioso: chi ripristina tornerebbe nel posto
+        // sbagliato, ed è un guasto che l'utente ha il diritto di sapere
+        // (decisione 0052). Lo si restituisce invece di scriverlo su stderr, e
+        // `delete_document` — che ha il workspace fra le mani — lo porta nel
+        // canale e nel log (decisione 0062).
+        let sidecar_fault = self.write_trash_sidecar(&target, id).err();
+        Ok((target, sidecar_fault))
     }
 
     /// La cartella dei sidecar del cestino.

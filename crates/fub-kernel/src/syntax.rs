@@ -285,7 +285,19 @@ impl SyntaxRegistry {
                     }
                 })
             {
-                eprintln!("{fault}");
+                // Una regola sintattica che pania è un difetto di chi l'ha
+                // scritta, e il posto giusto è il log — non il canale degli
+                // eventi. La ragione è il criterio della decisione 0062:
+                // l'evento è la porta per le **perdita**, e qui non se ne perde
+                // nessuna. Il documento si è comunque aperto (il panico è
+                // catturato), la trasformazione della regola è ciò che manca,
+                // e l'utente non ha perso una riga che aveva scritto — ha al
+                // più una resa degradata, che è esattamente il caso di chi
+                // sviluppa e non di chi legge. È la conseguenza che la decisione
+                // 0052 lasciava in sospeso («dare un esito a `parse` e ai suoi
+                // otto chiamanti»): non serve, perché il criterio dice che
+                // questa riga non è una porta.
+                tracing::warn!(target: "fub.kernel", "regola sintattica `{rule}` in panico: {fault}", rule = r.spec.id);
             }
         }
     }

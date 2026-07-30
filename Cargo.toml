@@ -31,6 +31,20 @@ serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
 regex = "1"
 camino = { version = "1", features = ["serde1"] }
+# Il vocabolario del log (§17.3, decisione 0062). **Era già nell'albero** —
+# 0.1.44, tirato da tauri — e prenderlo come dipendenza diretta non aggiunge un
+# crate: aggiunge un nome che descrive una cosa che c'era. Il collettore invece
+# è scritto in casa (`fub_kernel::log`): `tracing-subscriber` costerebbe quattro
+# crate nuovi per un formattatore che riscriveremmo e un `env-filter` che la
+# decisione 0036 ha deciso di non volere.
+#
+# `default-features = false` non è prudenza generica: le feature di default di
+# `tracing` sono `std` + `attributes`, e la seconda tira `tracing-attributes`,
+# che è il proc-macro di `#[instrument]`. Misurato: con i default, `cargo` dice
+# «Adding tracing-attributes v0.1.31» — cioè un crate nuovo davvero, e la frase
+# qui sopra sarebbe stata falsa. Span non ne apriamo (vedi `fub_kernel::log`),
+# quindi `#[instrument]` non serve, e senza di lui il conto torna: zero.
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 
 # Dipendenze interne. La `version` accanto al `path` non cambia la risoluzione
 # locale (il path vince sempre): serve perché un `path` nudo è una dipendenza

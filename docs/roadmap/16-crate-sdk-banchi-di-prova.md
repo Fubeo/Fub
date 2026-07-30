@@ -280,7 +280,7 @@ la forma dell'annotazione, la seconda contro la prima.
       in entrambi i casi. **Fatto**, e con la causa invece del solo sintomo: la
       regola del vault resta ma non si applica a una cartella in cui **git tiene
       dei `.md`**; ogni albero saltato è una riga in uscita; **zero file
-      controllati esce rosso**. Oggi: **133 file, 2500 link**.
+      controllati esce rosso**. Oggi: **134 file, 2553 link**.
       Questa riga ha detto, in fila: «81 file, 1105 link», «122 file, 2155»,
       «125 file, 2231», «127 file, 2284», «129 file, 2336», «132 file, 2464»,
       «132 file, 2475». La correzione di oggi è l'**ottava**, e stavolta il numero

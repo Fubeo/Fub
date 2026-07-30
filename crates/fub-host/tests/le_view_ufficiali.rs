@@ -65,6 +65,7 @@ fn monta(root: &Utf8PathBuf) -> fub_host::Mounted {
         MachineSettings::in_memory(),
         ViewStates::in_memory(),
         Arc::new(SystemLocale::default()),
+        &fub_kernel::log::Levels::default(),
     )
     .expect("il montaggio riesce")
 }

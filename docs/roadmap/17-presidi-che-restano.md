@@ -120,7 +120,22 @@ riga in corsivo qui sotto, e non qui.
 
 ### 17.3 Osservabilità
 
-*ex §4.5 · presidi · **P2** — raccolto dal diagnostic bundle della 15.2*
+*ex §4.5 · presidi · **P2** — **chiusa** con la [decisione 0062](../decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md): `tracing` al posto di `eprintln!`, collettore scritto in casa, log su file con rotazione, livelli e log per-plugin come impostazioni di macchina*
 
-- [ ] **`tracing` al posto di `eprintln!`** con log su file, livelli
-      configurabili e log per-plugin; il diagnostic bundle (§15.2) lo raccoglie.
+- [x] **`tracing` al posto di `eprintln!`** con log su file, livelli
+      configurabili e log per-plugin. **Fatto** con la
+      [0062](../decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md),
+      che ha voltato la frase di partenza: una cosa sola erano **due**, perché
+      un guasto ha due lettori e due destinazioni —
+      *il log è il pavimento, l'evento è la porta*. Ogni guasto lascia una riga
+      di `tracing` per chi sviluppa; solo quelli che raccontano una **perdita**
+      aprono anche l'`Event::Trouble` della [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)
+      per chi legge le note. I ventisette `eprintln!` di produzione che la 0052
+      aveva contato sono scesi a zero, sette aprono la porta e il resto resta
+      nel pavimento; e con loro si chiude la casella residua della §20.2. Il
+      collettore è in casa (`fub-kernel/src/log.rs`, sessanta righe) e non
+      `tracing-subscriber`: la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)
+      ha tolto la configurazione dalle variabili d'ambiente, e `RUST_LOG` non
+      rientra dalla finestra. Il diagnostic bundle (§15.2) lo raccoglie —
+      quando il bundle esiste; il file di log c'è già, ruota a dieci mega e sta
+      accanto alla configurazione e non nel vault.

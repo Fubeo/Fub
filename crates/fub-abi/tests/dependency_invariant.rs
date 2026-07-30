@@ -82,10 +82,21 @@ const ALLOWED_DIRECT: &[(&str, &[&str])] = &[
         "fub-abi",
         &["serde", "serde_json", "thiserror", "unicode-normalization"],
     ),
-    // Il core: il contratto, serializzazione, path UTF-8.
+    // Il core: il contratto, serializzazione, path UTF-8. `tracing` è solo la
+    // facciata del log (§17.3): il collettore è scritto in casa in `crate::log`,
+    // e `tracing` è già nell'albero per via di tauri — prenderlo diretto non
+    // aggiunge un crate, e l'assenza di `tracing-attributes` è presidiata dal
+    // `default-features = false` nel workspace.
     (
         "fub-kernel",
-        &["fub-abi", "serde", "serde_json", "camino", "thiserror"],
+        &[
+            "fub-abi",
+            "serde",
+            "serde_json",
+            "camino",
+            "thiserror",
+            "tracing",
+        ],
     ),
 ];
 

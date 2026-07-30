@@ -215,6 +215,13 @@ pub struct Host {
     /// idee di che ore sono. Non si apre da un file: non è uno stato che dura,
     /// è ciò che il sistema **è adesso**, e chi lo sa lo ridice a ogni avvio.
     system_locale: Arc<SystemLocale>,
+    /// **I livelli del log** (§17.3), condivisi come il livello macchina e per
+    /// la stessa ragione: il log è uno per installazione, e N vault aperti
+    /// sono N letture della stessa tendina. Il collettore vero — il
+    /// `Subscriber` globale — lo installa chi fa partire il processo
+    /// (`fub_app::run`), e questo `Arc` è il filo che lega quel collettore al
+    /// montaggio, dove le impostazioni gli dicono quanto raccontare.
+    levels: Arc<fub_kernel::log::Levels>,
 }
 
 impl Default for Host {
@@ -249,6 +256,7 @@ impl Host {
             vaults: VaultRegistry::in_memory(),
             job_threads: DEFAULT_JOB_THREADS,
             system_locale: Arc::new(SystemLocale::default()),
+            levels: Arc::new(fub_kernel::log::Levels::default()),
         }
     }
 
@@ -285,19 +293,28 @@ impl Host {
     pub fn with_config_dir(mut self, dir: &Utf8Path) -> Self {
         let (machine, warning) = MachineSettings::open(&machine_settings_path(dir));
         if let Some(warning) = warning {
-            eprintln!("impostazioni della macchina: {warning}");
+            tracing::warn!(target: "fub.host", "impostazioni della macchina: {warning}");
         }
         let (vaults, warning) = VaultRegistry::open(&vault_registry_path(dir));
         if let Some(warning) = warning {
-            eprintln!("registro dei vault: {warning}");
+            tracing::warn!(target: "fub.host", "registro dei vault: {warning}");
         }
         let (view_states, warning) = ViewStates::open(&view_states_path(dir));
         if let Some(warning) = warning {
-            eprintln!("stato di vista: {warning}");
+            tracing::warn!(target: "fub.host", "stato di vista: {warning}");
         }
         self.machine = machine;
         self.vaults = vaults;
         self.view_states = view_states;
+        self
+    }
+
+    /// Sostituisce i livelli del log. Lo chiama chi ha installato il collettore
+    /// — `fub_app::run` — per dare all'host lo stesso `Arc` su cui il
+    /// collettore legge, così che il montaggio possa cambiare il livello mentre
+    /// l'app gira.
+    pub fn with_levels(mut self, levels: Arc<fub_kernel::log::Levels>) -> Self {
+        self.levels = levels;
         self
     }
 
@@ -367,6 +384,7 @@ impl Host {
             Arc::clone(&self.machine),
             Arc::clone(&self.view_states),
             Arc::clone(&self.system_locale),
+            &self.levels,
         )
         // Le due cose che fanno fallire il montaggio sono un provider di formato
         // in conflitto con sé stesso e il bundle di core che non si monta: è
@@ -464,7 +482,10 @@ impl Host {
             .vaults
             .note_opened(&root, fub_kernel::time::now_unix_millis())
         {
-            eprintln!("registro dei vault: {e}");
+            // Solo log: il registro dei recenti è una comodità, non il vault,
+            // e non scriversi non perde un dato dell'utente — perde al più un
+            // path nell'elenco di chi è stato aperto. Pavimento e basta (0062).
+            tracing::warn!(target: "fub.host", "registro dei vault: {e}");
         }
         Ok(info)
     }

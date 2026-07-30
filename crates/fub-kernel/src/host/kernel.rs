@@ -14,7 +14,7 @@ use fub_abi::traits::{
     IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TrashEntry, VaultRead,
     VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
-use fub_abi::{Event, PluginError};
+use fub_abi::{Event, PluginError, Severity};
 
 use crate::error::KernelError;
 use crate::workspace::{collect_data_files, fenced_doc_id, new_doc_id, Workspace};
@@ -316,18 +316,27 @@ impl HostEvents for KernelHost<'_> {
     /// e nessuno che la imponesse, quindi un plugin poteva emettere sotto il
     /// nome di un altro e far reagire i suoi handler.
     ///
-    /// Un topic altrui **non si emette**. Che il rifiuto sia una riga su
-    /// stderr e non un errore è il limite di questa firma — `emit` non ha
-    /// esito, ed è l'unica capacità del contratto che non ne ha (vedi
-    /// `crate::host`): il canale giusto dove mandarlo adesso c'è
-    /// ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
-    /// e questa riga è uno dei ventisette punti che restano da portarci dentro
-    /// — qui in particolare **senza** poterlo dire a chi ha emesso, perché la
-    /// firma non ha esito.
+    /// Un topic altrui **non si emette**. Che il rifiuto sia un guasto e non un
+    /// errore è il limite di questa firma — `emit` non ha esito, ed è l'unica
+    /// capacità del contratto che non ne ha (vedi `crate::host`). Il canale giusto
+    /// dove mandarlo c'è ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
+    /// e adesso ci va: un plugin che ruba il topic di un altro è una cosa che
+    /// l'utente ha il diritto di sapere — ma **senza** poterla dire a chi ha
+    /// emesso, perché la firma non ha esito. Il guasto esce a nome dell'attore
+    /// (`self.plugin`, decisione 0012), e il pavimento del log lo raccoglie
+    /// comunque ([decisione 0062](../../../docs/decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)):
+    /// ogni guasto lascia una riga, e questo racconta una perdita — un evento
+    /// che qualcuno si aspettava di ricevere non è arrivato — quindi apre anche
+    /// la porta.
     fn emit(&mut self, event: Event) {
         if let Event::Custom { topic, .. } = &event {
             if let Err(fault) = self.ws.owns_name(self.plugin, topic) {
-                eprintln!("evento non emesso: {fault}");
+                tracing::warn!(target: "fub.kernel", "evento non emesso: {fault}");
+                self.ws.report_trouble(
+                    Severity::Warning,
+                    None,
+                    PluginError::Internal(format!("evento non emesso: {fault}").into()),
+                );
                 return;
             }
         }

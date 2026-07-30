@@ -1401,7 +1401,7 @@ impl Workspace {
             })
             .collect();
         if let Err(e) = self.entry_store.store(table) {
-            eprintln!("anagrafe: {e}");
+            tracing::warn!(target: "fub.kernel", "anagrafe: {e}");
         }
     }
 
@@ -1800,8 +1800,27 @@ impl Workspace {
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
-        let trashed = self.docs.vault.trash(id)?;
+        let (trashed, sidecar_fault) = self.docs.vault.trash(id)?;
         self.remove_document(id);
+        // Il sidecar del cestino non si è scritto: la cancellazione è riuscita
+        // ma chi ripristina questa voce tornerà nel posto sbagliato. È la
+        // perdita di un dato autorevole (0052 la conta come `Failure`), e
+        // `delete_document` è il primo chiamante con il workspace in mano —
+        // quindi è qui che il guasto esce sia nel log che nel canale (0062).
+        if let Some(fault) = sidecar_fault {
+            tracing::warn!(target: "fub.kernel", "cestino: sidecar di {trashed} non scritto: {fault}");
+            // Stringa letterale e non chiave di catalogo: è il precedente dei
+            // guasti del kernel (`report_losses` passa i messaggi di panico di
+            // `safety::reporting`), e il giorno che il centro notifiche vorrà
+            // tradurli tutti, li raccoglie insieme.
+            self.report_trouble(
+                Severity::Failure,
+                Some(trashed.clone()),
+                PluginError::Internal(
+                    format!("cestino: sidecar di {trashed} non scritto: {fault}").into(),
+                ),
+            );
+        }
         Ok(trashed)
     }
 

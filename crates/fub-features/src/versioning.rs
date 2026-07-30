@@ -73,7 +73,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use fub_abi::event::{Event, EventKind, EventMask, Notice};
+use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::DocId;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{EventHandler, HostApi};
@@ -90,15 +90,26 @@ pub const VERSIONING_ID: &str = "fub.versioning";
 /// messaggi d'errore, ed è la conseguenza diretta della
 /// [decisione 0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md):
 /// un componente senza pannelli non ha prosa da mostrare finché non va storto
-/// qualcosa, e allora ne ha soltanto quella. Le righe che restano in italiano
-/// cablato — gli `eprintln!` di questo file — non sono qui apposta: sono log, e
-/// il log è la forma per chi sviluppa, non per chi legge (0041, `Display`).
+/// qualcosa, e allora ne ha soltanto quella. I punti in cui qualcosa va storto
+/// durante il lavoro del versioning non stanno più su `stderr`: ognuno lascia
+/// una riga di `tracing`, e quelli che raccontano una perdita di una versione
+/// aprono anche il canale degli eventi (`Event::Trouble`, decisione 0062) —
+/// perché una versione persa è una cosa che chi scrive ha il diritto di sapere,
+/// e non una diagnosi per chi sviluppa.
 const NO_VERSIONS: &str = "no_versions";
 const NO_SUCH_VERSION: &str = "no_such_version";
 const CONTENT_GONE: &str = "content_gone";
 const UNREADABLE: &str = "unreadable";
 const META_UNWRITABLE: &str = "meta_unwritable";
 const INDEX_UNWRITABLE: &str = "index_unwritable";
+/// Una versione attesa non è stata salvata: il versioning non ha potuto
+/// fotografare il documento. È un guasto `Failure` (0052): una versione è la
+/// rete di sicurezza di chi scrive, e perderla vuol dire perdere la possibilità
+/// di tornare a quel punto.
+const VERSION_UNSAVED: &str = "version_unsaved";
+/// Il tombstone di un documento non è stato scritto: la sua storia resta viva
+/// quando dovrebbe essere chiusa. `Failure` (0052).
+const TOMBSTONE_UNWRITABLE: &str = "tombstone_unwritable";
 /// I nomi degli argomenti.
 const DOC: &str = "doc";
 const WHEN: &str = "when";
@@ -127,6 +138,11 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 INDEX_UNWRITABLE,
                 "Non riesco a scrivere l'indice delle versioni: {reason}",
+            )
+            .with(VERSION_UNSAVED, "Versione di {doc} non salvata: {reason}")
+            .with(
+                TOMBSTONE_UNWRITABLE,
+                "Tombstone di {doc} non scritto: {reason}",
             ),
         StringCatalog::new("en")
             .with(NO_VERSIONS, "No version of {doc}.")
@@ -140,6 +156,11 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 INDEX_UNWRITABLE,
                 "Cannot write the versions index: {reason}",
+            )
+            .with(VERSION_UNSAVED, "Version of {doc} not saved: {reason}")
+            .with(
+                TOMBSTONE_UNWRITABLE,
+                "Tombstone of {doc} not written: {reason}",
             ),
     ]
 }
@@ -227,8 +248,9 @@ impl VersionStore {
             None => {
                 let ricostruito = rebuild_from_store(host)?;
                 if !ricostruito.is_empty() {
-                    eprintln!(
-                        "versioning: indice assente o illeggibile, ricostruito dallo store \
+                    tracing::info!(
+                        target: "fub.versioning",
+                        "indice assente o illeggibile, ricostruito dallo store \
                          ({} document{})",
                         ricostruito.len(),
                         if ricostruito.len() == 1 { "o" } else { "i" }
@@ -329,7 +351,7 @@ impl VersionStore {
         // non vale la pena di far fallire un rename già andato a buon fine.
         for path in trasloco.da_ripulire {
             if let Err(e) = host.data_remove(&path) {
-                eprintln!("versioning: {path} è rimasto indietro e non se ne va: {e}");
+                tracing::warn!(target: "fub.versioning", "{path} è rimasto indietro e non se ne va: {e}");
             }
         }
         Ok(())
@@ -528,11 +550,12 @@ impl Inner {
         for v in &da_buttare {
             let path = blob(&dir, &snapshot_name(v.ts, id.as_str()));
             if let Err(e) = host.data_remove(&path) {
-                eprintln!("versioning: non riesco a potare {path}: {e}");
+                tracing::warn!(target: "fub.versioning", "non riesco a potare {path}: {e}");
             }
         }
-        eprintln!(
-            "versioning: {} version{} di {id} potate dalle fasce di ritenzione",
+        tracing::info!(
+            target: "fub.versioning",
+            "{} version{} di {id} potate dalle fasce di ritenzione",
             da_buttare.len(),
             if da_buttare.len() == 1 { "e" } else { "i" }
         );
@@ -650,8 +673,9 @@ fn trasloca(
             let Some(bytes) = host.data_read(&origine)? else {
                 // L'indice nominava un contenuto che non c'è più: non lo si
                 // porta dietro, o continuerebbe a mentire sotto la chiave nuova.
-                eprintln!(
-                    "versioning: {origine} non c'è più, la versione {} esce dalla storia di {to}",
+                tracing::warn!(
+                    target: "fub.versioning",
+                    "{origine} non c'è più, la versione {} esce dalla storia di {to}",
                     v.ts
                 );
                 continue;
@@ -740,7 +764,7 @@ fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions
     let mut docs = BTreeMap::new();
     for (dir, names) in per_dir {
         let Some(meta) = read_meta(dir, host)? else {
-            eprintln!("versioning: {dir} non dice di chi è, la salto");
+            tracing::warn!(target: "fub.versioning", "{dir} non dice di chi è, la salto");
             continue;
         };
         let mut versions = Vec::new();
@@ -811,10 +835,26 @@ impl VersioningHandler {
             match host.read_document(&id) {
                 Ok(source) => {
                     if let Err(e) = self.store.snapshot(&id, &source, host) {
-                        eprintln!("versioning: versione di {id} non salvata: {e}");
+                        tracing::warn!(target: "fub.versioning", "versione di {id} non salvata: {e}");
+                        // Una versione attesa non salvata è una perdita
+                        // autorevole (0052: `Failure`): l'errore è già un
+                        // `PluginError` catalogato, e lo si porta nel canale tale
+                        // e quale invece di ricomporlo (0062).
+                        host.emit(Event::Trouble {
+                            severity: Severity::Failure,
+                            subject: Some(id.clone()),
+                            error: e,
+                        });
                     }
                 }
-                Err(e) => eprintln!("versioning: {id} non si legge: {e}"),
+                Err(e) => {
+                    tracing::warn!(target: "fub.versioning", "{id} non si legge: {e}");
+                    host.emit(Event::Trouble {
+                        severity: Severity::Failure,
+                        subject: Some(id.clone()),
+                        error: e,
+                    });
+                }
             }
         }
         Ok(())
@@ -864,12 +904,20 @@ impl VersioningHandler {
             }
             match self.store.tombstone(&id, host) {
                 Ok(()) => sepolti += 1,
-                Err(e) => eprintln!("versioning: tombstone di {id} non scritto: {e}"),
+                Err(e) => {
+                    tracing::warn!(target: "fub.versioning", "tombstone di {id} non scritto: {e}");
+                    host.emit(Event::Trouble {
+                        severity: Severity::Failure,
+                        subject: Some(id.clone()),
+                        error: e,
+                    });
+                }
             }
         }
         if sepolti > 0 {
-            eprintln!(
-                "versioning: riconciliazione dopo un overflow, {sepolti} document{} \
+            tracing::info!(
+                target: "fub.versioning",
+                "riconciliazione dopo un overflow, {sepolti} document{} \
                  risultat{} cancellat{}",
                 if sepolti == 1 { "o" } else { "i" },
                 if sepolti == 1 { "o" } else { "i" },

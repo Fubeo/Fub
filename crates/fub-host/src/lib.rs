@@ -89,7 +89,7 @@ pub mod settings;
 pub mod vaults;
 pub mod watcher;
 
-pub use config::config_dir;
+pub use config::{config_dir, install_logging, log_path};
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, VaultInfo};

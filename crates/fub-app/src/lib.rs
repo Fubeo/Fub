@@ -686,6 +686,12 @@ fn forget_vault(host: State<Host>, path: String) -> Result<(), PluginError> {
 }
 
 pub fn run() {
+    // Il collettore del log si installa **prima** di tutto: le righe che
+    // `Host::installed` scrive aprendo i file della macchina devono avere un
+    // posto dove andare (§17.3, decisione 0062). L'`Arc` torna qui e passa
+    // all'host, perché è lo stesso su cui il montaggio cambierà il livello
+    // leggendo le impostazioni.
+    let levels = fub_host::install_logging();
     // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
     // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
     // `WebviewEvents`).
@@ -698,7 +704,7 @@ pub fn run() {
         // con una cartella di configurazione, un livello macchina e un registro
         // dei vault. Un test o un e2e headless costruiscono `Host::new()`, che
         // lavora in memoria e non tocca la configurazione di chi lo esegue.
-        .manage(Host::installed().with_sink(sink))
+        .manage(Host::installed().with_levels(levels).with_sink(sink))
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
             Ok(())
@@ -757,7 +763,13 @@ pub fn run() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 for e in app.state::<Host>().close() {
-                    eprintln!("chiusura del vault: {e}");
+                    // L'app sta uscendo: il ponte verso la shell sta morendo e
+                    // non c'è nessuno che disegna un evento. Resta il log, che è
+                    // ciò che il bundle diagnostico (§15.2) raccoglierà — e il
+                    // fatto che un indice non si sia chiuso pulito è una
+                    // diagnosi per chi sviluppa, non una cosa che l'utente può
+                    // ancora riparare a schermo spento (0062).
+                    tracing::warn!(target: "fub.app", "chiusura del vault: {e}");
                 }
             }
         });
