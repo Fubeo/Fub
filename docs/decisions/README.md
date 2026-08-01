@@ -75,6 +75,7 @@ cronologico di chiusura.
 | [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) | Il log è il pavimento, l'evento è la porta — `tracing` al posto di `eprintln!`, con log su file, livelli e log per-plugin | §17.3 — chiude la voce **e** la casella residua della §20.2: i ventisette punti di `stderr` hanno due destinazioni, non una ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 | [0063](0063-la-maschera-e-dell-esemplare.md) | La maschera è dell'esemplare, e la risposta stava già nell'elenco | §22.3 — chiude la voce **meno una casella**: la query incorporata in una nota, che non è un esemplare di `ViewSpec` ([seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)) | 2026-08-01 |
 | [0064](0064-il-supporto-sta-sotto.md) | Il supporto sta sotto, e la specie di una voce non segue il link | §15.1 — chiude la voce **meno una casella**: le tre righe di `.fub/` che scrivono con `write_atomic` e aspettano il §15.2 ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
+| [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) | Una scrittura o c'è o non c'è, e i due casi in cui il file non è nostro | §15.2 (**metà voce**: la scrittura) **più** la casella residua della [0064](0064-il-supporto-sta-sotto.md) — resta il recovery ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -311,6 +312,33 @@ cui risposta è M5 — quindi non è una casella e non entra in nessun totale; m
 scritto nel verbale perché chi implementerà quel supporto deve **trovarlo** prima
 di scoprirlo. La differenza con una casella è che una casella si spunta, un buco
 dichiarato si legge.
+
+La [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) chiude la casella che la
+[0064](0064-il-supporto-sta-sotto.md) aveva aperto **già indirizzata**, ed è il
+secondo caso in cui una casella residua si chiude dentro un'altra voce dopo
+quello della [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md). La
+differenza fra i due è tutta nella previsione: la 0052 aveva lasciato i
+ventisette punti di `stderr` senza sapere chi li avrebbe presi, e a prenderli è
+stata una voce che non era nata per loro; la 0064 aveva scritto **quale voce**, e
+quella voce ha fatto esattamente ciò che c'era scritto. Vale la pena tenerlo
+perché di indirizzi scritti su una casella ce n'era uno solo, e adesso si sa che
+non era un auspicio: le caselle residue di [todo.md](../todo.md) scendono da
+dieci a nove, e i posti da sei a cinque.
+
+Ed è la **quarta mezza voce**, dopo la [0031](0031-chi-possiede-i-bundle.md), la
+[0037](0037-lo-stato-di-vista.md) e la
+[0060](0060-il-modello-dice-il-vero-sui-byte.md), con una ragione che nessuna
+delle tre aveva. Nella 0031 mancava metà del ragionamento; nella 0037 il modello
+su cui la seconda metà poggia; nella 0060 una macchina su cui girare. Qui la metà
+che resta è **un'altra domanda**: la 0065 dice cosa promette una scrittura, e ciò
+che resta — il buffer di crash, il journal, i comandi di manutenzione — non è la
+scrittura ma il **recovery**, cioè cosa si fa dopo che è andata storta. Il titolo
+della voce le nominava entrambe («durabilità *e* recovery») e le teneva insieme
+perché sembravano lo stesso argomento; farne una ha mostrato che il taglio era
+già scritto nel titolo. Con una sola eccezione, e sta nella prima metà per una
+ragione tecnica e non concettuale: la *lost update* è durabilità, non recovery, e
+resta aperta perché la primitiva che la chiude — `std::fs::File::lock` — chiede
+di alzare l'MSRV, che è una decisione sua.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio

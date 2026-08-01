@@ -82,7 +82,7 @@ struct TrashSidecar {
 /// ([`Vault::scan`]) sia il percorso del watcher
 /// ([`Vault::is_ignored`]). Finché viveva solo dentro la scansione, ogni file
 /// spostato nel cestino tornava dentro dalla porta di servizio del watcher.
-fn is_ignored_name(name: &str) -> bool {
+pub(crate) fn is_ignored_name(name: &str) -> bool {
     name.starts_with('.') || IGNORED_DIRS.contains(&name)
 }
 

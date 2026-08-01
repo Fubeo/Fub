@@ -334,16 +334,26 @@ impl Workspace {
         // `CoreIndex::registry`).
         let registry = Arc::new(registry);
         let root = root.as_ref();
-        let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(root, machine)));
+        // **Un** supporto per workspace, non uno per proprietario: il vault, il
+        // sidecar dell'organizzazione, la configurazione del vault e l'anagrafe
+        // scrivono tutti nella stessa cartella, e due supporti per la stessa
+        // cartella sarebbero due idee di cosa c'è dentro — il giorno in cui uno
+        // dei due cifra, un dato su due resta in chiaro (§15.1, 0065).
+        let storage: Arc<dyn crate::storage::VaultStorage> = Arc::new(crate::storage::FsStorage);
+        let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(
+            root,
+            Arc::clone(&storage),
+            machine,
+        )));
         // L'organizzazione è **del vault**, quindi si apre col root e non si
         // riceve da chi monta: è la differenza con il livello macchina e con lo
         // stato di vista, che sono della macchina e valgono per N vault.
-        let (organization, warning) = OrganizationStore::open(root);
+        let (organization, warning) = OrganizationStore::open(root, Arc::clone(&storage));
         if let Some(warning) = warning {
             organization.warn(warning);
         }
         Workspace {
-            docs: DocumentStore::new(root, Arc::clone(&registry)),
+            docs: DocumentStore::new(root, Arc::clone(&registry), Arc::clone(&storage)),
             indexes: Indexes::new(registry, Arc::clone(&settings), Arc::clone(&organization)),
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
@@ -356,7 +366,7 @@ impl Workspace {
             undo: UndoStack::default(),
             // L'anagrafe è **del vault**, come l'organizzazione: si apre col
             // root e non si riceve da chi monta.
-            entry_store: EntryStore::open(root),
+            entry_store: EntryStore::open(root, storage),
             doc_data_warnings: Vec::new(),
         }
     }

@@ -27,7 +27,9 @@
 //!   migrare — un derivato non si migra, si rifà — ma perché senza un numero in
 //!   testa la versione dopo dovrebbe *indovinare* che un file senza campo viene
 //!   da prima;
-//! - la scrittura è **atomica** ([`write_atomic`]): un file mezzo scritto è un
+//! - la scrittura è **atomica**, e lo è perché passa dal supporto (§15.1), che
+//!   dalla [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+//!   la dà a tutti: un file mezzo scritto è un
 //!   file illeggibile, e un file illeggibile qui vuol dire una riapertura lenta
 //!   — ma solo se non ci si è convinti di averlo letto.
 //!
@@ -61,13 +63,14 @@
 //! della scansione.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::Revision;
 use fub_abi::model::{Anchor, DocId, Frontmatter, Heading, Link};
 use serde::{Deserialize, Serialize};
 
-use crate::settings::write_atomic;
+use crate::storage::VaultStorage;
 use crate::vault::data_root;
 
 /// La versione di schema del file (§15.3).
@@ -171,6 +174,10 @@ pub(crate) struct EntryStore {
     /// prima del §14.2, e chi lo vuole ottiene lo stesso effetto cancellando il
     /// file.
     path: Utf8PathBuf,
+    /// Il supporto del vault (§15.1): la tabella sta sotto `.fub/data/`, cioè
+    /// dentro il vault, e ci passa sopra come i documenti
+    /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
+    storage: Arc<dyn VaultStorage>,
     known: BTreeMap<DocId, StoredEntry>,
 }
 
@@ -178,11 +185,12 @@ impl EntryStore {
     /// Apre la tabella di un vault. **Non fallisce mai**: ciò che non si legge
     /// non c'è, e ciò che non c'è si ricostruisce leggendo il vault — che è la
     /// definizione di dato derivato.
-    pub(crate) fn open(root: &Utf8Path) -> Self {
+    pub(crate) fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> Self {
         let path = data_root(root).join(FILE);
         EntryStore {
-            known: load(&path).unwrap_or_default(),
+            known: load(&path, storage.as_ref()).unwrap_or_default(),
             path,
+            storage,
         }
     }
 
@@ -207,11 +215,12 @@ impl EntryStore {
             // strutture diverse sarebbero due idee di cosa si sa.
             entries: self.known.clone(),
         };
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("{dir}: {e}"))?;
-        }
         let json = serde_json::to_vec(&file).map_err(|e| e.to_string())?;
-        write_atomic(&self.path, &json)
+        // Le cartelle mancanti le crea il supporto, che è dove quella riga sta
+        // scritta una volta sola (§15.1).
+        self.storage
+            .write(&self.path, &json)
+            .map_err(|e| format!("non riesco a scrivere {}: {e}", self.path))
     }
 }
 
@@ -220,8 +229,8 @@ impl EntryStore {
 /// `None` per tutto ciò che non è «un file nostro, di questa versione, leggibile
 /// per intero»: un errore di I/O, un JSON rotto, una versione che non si
 /// conosce. Nessuno dei tre è un avviso — sono tutti «ricomincia dal vault».
-fn load(path: &Utf8Path) -> Option<BTreeMap<DocId, StoredEntry>> {
-    let raw = std::fs::read(path).ok()?;
+fn load(path: &Utf8Path, storage: &dyn VaultStorage) -> Option<BTreeMap<DocId, StoredEntry>> {
+    let raw = storage.read(path).ok()?;
     let file: EntriesFile = serde_json::from_slice(&raw).ok()?;
     if file.version != SCHEMA_VERSION {
         return None;
@@ -256,13 +265,13 @@ mod tests {
     #[test]
     fn sopravvive_a_un_giro_su_disco() {
         let (_tmp, root) = tempdir();
-        let mut store = EntryStore::open(&root);
+        let mut store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(store.known(&DocId::new("a.md")).is_none());
         store
             .store(BTreeMap::from([(DocId::new("a.md"), voce(3, 1_000))]))
             .expect("scrive");
 
-        let riletta = EntryStore::open(&root);
+        let riletta = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
         let voce = riletta.known(&DocId::new("a.md")).expect("la ritrova");
         assert!(voce.describes(3, 1_000));
         assert!(!voce.describes(3, 1_001), "la data fa parte del criterio");
@@ -278,12 +287,43 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{ non json").unwrap();
 
-        let mut store = EntryStore::open(&root);
+        let mut store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(store.known(&DocId::new("a.md")).is_none());
         store
             .store(BTreeMap::from([(DocId::new("a.md"), voce(1, 10))]))
             .expect("e la prima scrittura lo sostituisce senza chiedere permesso");
-        assert!(EntryStore::open(&root).known(&DocId::new("a.md")).is_some());
+        assert!(EntryStore::open(&root, Arc::new(crate::storage::FsStorage))
+            .known(&DocId::new("a.md"))
+            .is_some());
+    }
+
+    /// L'anagrafe passa dal supporto, e ci passa **davvero**: su un supporto in
+    /// memoria non deve restare niente sul disco. È la casella residua della
+    /// 0064 vista da qui — un `std::fs` rimasto dentro questo modulo non fa
+    /// fallire nessun test di conformità del trait, fa fallire questo.
+    #[test]
+    fn passa_dal_supporto_e_non_dal_disco() {
+        let storage = Arc::new(crate::storage::MemStorage::new());
+        let root = Utf8Path::new("/vault-anagrafe");
+        let mut store = EntryStore::open(root, Arc::clone(&storage) as Arc<dyn VaultStorage>);
+        store
+            .store(BTreeMap::from([(DocId::new("a.md"), voce(3, 1_000))]))
+            .expect("scrive");
+
+        assert!(
+            storage.exists(&data_root(root).join(FILE)),
+            "la tabella è finita sul supporto"
+        );
+        assert!(
+            !std::path::Path::new("/vault-anagrafe").exists(),
+            "e non sul filesystem vero"
+        );
+        assert!(
+            EntryStore::open(root, storage as Arc<dyn VaultStorage>)
+                .known(&DocId::new("a.md"))
+                .is_some(),
+            "e si rilegge da lì"
+        );
     }
 
     #[test]
@@ -297,7 +337,9 @@ mod tests {
         )
         .unwrap();
         assert!(
-            EntryStore::open(&root).known(&DocId::new("a.md")).is_none(),
+            EntryStore::open(&root, Arc::new(crate::storage::FsStorage))
+                .known(&DocId::new("a.md"))
+                .is_none(),
             "un derivato di una versione ignota non si indovina: si rifà"
         );
     }
@@ -308,7 +350,7 @@ mod tests {
         // la tabella si scriveva porterebbe una data che combacia e un
         // contenuto che non combacia più.
         let (_tmp, root) = tempdir();
-        let mut store = EntryStore::open(&root);
+        let mut store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
         let futuro = crate::time::now_unix_millis() + 60_000;
         store
             .store(BTreeMap::from([
@@ -317,7 +359,7 @@ mod tests {
             ]))
             .expect("scrive");
 
-        let riletta = EntryStore::open(&root);
+        let riletta = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(riletta.known(&DocId::new("vecchia.md")).is_some());
         assert!(
             riletta.known(&DocId::new("appena-scritta.md")).is_none(),
