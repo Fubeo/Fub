@@ -54,6 +54,29 @@ export interface VaultInfo {
   // modifica al record, a questo mirror e alla fixture. La shell adesso non
   // chiede «il versioning è acceso?»: chiede chi c'è (`hasPlugin`).
   plugins: PluginInfo[];
+  // COSA NON SI È LETTO (§15.7). Vuoto è il caso normale e vuol dire che il
+  // vault si è aperto intero.
+  //
+  // Ogni voce esce ANCHE come evento `trouble` con quel documento per soggetto,
+  // ed è da lì che il centro notifiche la mostra oggi. Sta pure qui perché la
+  // coda eventi ha un budget e sotto carico può troncare (§20.5) — e aprire un
+  // vault È il carico: «si è aperto intero» è una proprietà dell'operazione, e
+  // chi la chiama la legge dall'esito invece di ricostruirla da una sequenza di
+  // incidenti che potrebbe non aver ricevuto tutta.
+  //
+  // NESSUNO LO DISEGNA ANCORA: la superficie dove dire «questo vault si è
+  // aperto a metà» è il §20.4 e non c'è.
+  unread: UnreadDoc[];
+}
+
+// Un documento che l'apertura non ha potuto guardare (§15.7): la scansione lo
+// ha trovato — sta nell'albero, ha dimensione e data — ma il contenuto non si è
+// letto, o nessun parser lo ha accettato. Quindi non è arrivato a nessun
+// indice: non lo trova la ricerca e non ha archi nel grafo.
+export interface UnreadDoc {
+  doc_id: string;
+  // Cosa ha risposto il disco, o il parser.
+  why: PluginError;
 }
 
 // I vault aperti e quale è il corrente (rispecchia `OpenVaults` dell'app, §9.6).

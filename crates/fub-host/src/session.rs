@@ -48,7 +48,7 @@ use fub_kernel::{MachineSettings, SystemLocale, ViewStates, Workspace};
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::mount::mount;
-use crate::records::VaultInfo;
+use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{BundleInfo, BundleRegistry};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
@@ -97,6 +97,14 @@ pub struct VaultSession {
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
     /// chiude deve poterci passare mentre un export cammina il vault.
     registry: Arc<Mutex<BundleRegistry>>,
+    /// **Cosa questa apertura non ha letto** (§15.7): l'esito che `reindex` ha
+    /// restituito, tenuto per la vita della sessione.
+    ///
+    /// Sta qui e non lo si ricalcola perché è un fatto **di questa apertura**:
+    /// riaprire lo stesso vault non lo rimonta, quindi chi chiede l'informazione
+    /// dopo deve ricevere quella di quando il vault è stato scandito, non un
+    /// silenzio che sembrerebbe dire «adesso è tutto a posto».
+    unread: Vec<UnreadDoc>,
     /// **Chi esegue il lavoro lungo** (§9.3): il pool che drena la coda dei job.
     /// Va fermato **prima** di chiudere, ed è il gemello del watcher — quello
     /// smette di guardare, questo smette di lavorare.
@@ -392,7 +400,18 @@ impl Host {
         .map_err(|e| PluginError::Internal(e.into()))?;
         let registry = Arc::new(Mutex::new(registry));
 
-        ws.reindex().map_err(PluginError::from)?;
+        // Il `?` che resta riguarda il vault intero — la scansione — e non i
+        // suoi documenti: quelli che non si sono letti tornano dentro
+        // l'`Apertura` e viaggiano fino a `VaultInfo` (§15.7).
+        let apertura = ws.reindex().map_err(PluginError::from)?;
+        let unread: Vec<UnreadDoc> = apertura
+            .scartati
+            .into_iter()
+            .map(|scarto| UnreadDoc {
+                doc_id: scarto.id.to_string(),
+                why: scarto.why,
+            })
+            .collect();
 
         // Ponte eventi kernel → sink (thread dedicato che vive quanto il bus).
         //
@@ -429,6 +448,7 @@ impl Host {
             root: root.clone(),
             workspace,
             registry,
+            unread,
             runner,
             versions,
             watcher,
@@ -450,8 +470,9 @@ impl Host {
         // disponibile»). Chiudere la perdente rilascia quel lock, ma non lo
         // ridà alla vincente. Toglierlo davvero vuol dire non far montare due
         // volte, cioè una porta d'ingresso che serializza le aperture sulla
-        // stessa radice, ed è una decisione che va a verbale (§15.7 —
-        // l'apertura è tutto-o-niente, sincrona e senza ritorno).
+        // stessa radice, ed è una decisione che va a verbale — la metà del
+        // §15.7 che resta aperta, cioè la **forma** dell'apertura: la 0068 le
+        // ha tolto il tutto-o-niente, non la sincronia.
         let (info, perdente) = {
             let mut sessions = self.sessions.lock().unwrap();
             let perdente = if sessions.open.contains_key(&root) {
@@ -861,6 +882,7 @@ fn info_of(session: &VaultSession) -> VaultInfo {
         root: ws.root().to_string(),
         extensions: ws.extensions(),
         plugins: ws.plugins(),
+        unread: session.unread.clone(),
     }
 }
 

@@ -111,6 +111,72 @@ use crate::viewstate::ViewStates;
 /// di tutto ciò che segue il contesto.
 pub const MAIN_PANE: &str = "main";
 
+/// Un documento che l'apertura **non ha potuto guardare**, e perché (§15.7).
+///
+/// Il file c'è: è la scansione ad averlo trovato, e la sua voce resta
+/// nell'anagrafe con dimensione e data. Ciò che manca è il suo *contenuto* —
+/// non si è letto, o si è letto e nessun parser lo ha accettato — quindi il
+/// documento non è arrivato a nessun indice: non lo trova la ricerca, non ha
+/// archi nel grafo, non ha proprietà.
+///
+/// Non è un [`IndexLoss`](fub_abi::traits::IndexLoss), e i due non si fondono:
+/// là un **derivato** non ha preso un documento che il kernel aveva in mano —
+/// il vault sa ancora tutto e ricostruire è gratis — qui il kernel non ce l'ha
+/// affatto. È la stessa distinzione con cui la
+/// [decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)
+/// sceglie la severità, ed è la ragione per cui uno esce come
+/// [`Severity::Warning`] e l'altro come [`Severity::Failure`].
+#[derive(Clone, Debug)]
+pub struct Scarto {
+    /// Quale documento.
+    pub id: DocId,
+    /// Cosa ha risposto il disco, o il parser.
+    pub why: PluginError,
+}
+
+/// L'esito di un'apertura: cosa **non** ha letto (§15.7).
+///
+/// È la forma della [`Lettura`](crate::Lettura) del registro
+/// ([decisione 0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md))
+/// applicata un piano più in su, e per lo stesso principio: un esito che porta
+/// ciò che ha scartato invece di un `Result` che si rifiuta. Là il conto
+/// bastava perché una riga di journal rotta non ha un nome; qui ciò che si
+/// scarta ha un [`DocId`], e il §15.7 chiede di aprire *segnalando cosa* non si
+/// è letto — quindi la stessa forma porta i nomi invece del numero.
+///
+/// Vuota vuol dire che il vault si è aperto intero, ed è il caso normale.
+#[derive(Clone, Debug, Default)]
+pub struct Apertura {
+    /// I documenti rimasti fuori, in ordine di scansione.
+    pub scartati: Vec<Scarto>,
+    /// Gli stessi id, per cercarli senza scorrere la lista.
+    ///
+    /// Il caso normale è zero scarti, dove non servirebbe; serve nel caso che
+    /// questa voce esiste per reggere — una cartella di file binari con
+    /// l'estensione sbagliata — dove cercare in una lista dentro il giro su
+    /// tutti i documenti sarebbe quadratico proprio dove il vault è peggio.
+    indice: BTreeSet<DocId>,
+}
+
+impl Apertura {
+    /// Il vault si è aperto per intero: niente da segnalare.
+    pub fn intera(&self) -> bool {
+        self.scartati.is_empty()
+    }
+
+    fn scarta(&mut self, id: DocId, why: impl Into<PluginError>) {
+        self.indice.insert(id.clone());
+        self.scartati.push(Scarto {
+            id,
+            why: why.into(),
+        });
+    }
+
+    fn ha_scartato(&self, id: &DocId) -> bool {
+        self.indice.contains(id)
+    }
+}
+
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
 ///
 /// L'incrementale è il percorso normale; il rebuild completo resta disponibile
@@ -1229,7 +1295,18 @@ impl Workspace {
     /// ha chiesto (o non ha detto niente, che vuol dire la stessa cosa), e
     /// [`IndexProvider::reconcile`] dice a tutti qual è l'insieme completo, così
     /// ognuno cancella ciò che è sparito ad app chiusa.
-    pub fn reindex(&mut self) -> Result<()> {
+    ///
+    /// # Cosa può fallire, e cosa no (§15.7)
+    ///
+    /// **Un documento che non si legge o non si parsa non fa fallire
+    /// l'apertura**: finisce fra gli [`Scarto`] dell'[`Apertura`] che questa
+    /// funzione restituisce, e la sua voce resta nell'anagrafe — il file c'è, è
+    /// il suo contenuto che non si è potuto vedere. Il `Result` che resta porta
+    /// **solo** ciò che riguarda il vault intero, cioè la scansione: il confine
+    /// non è lettura-contro-parse, è se il vault sappia ancora dire *quali*
+    /// documenti esistono. Il perché sta nella
+    /// [decisione 0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md).
+    pub fn reindex(&mut self) -> Result<Apertura> {
         let scanned = self.docs.vault.scan()?;
         let doc_extensions = self.docs.registry.all_extensions();
 
@@ -1258,13 +1335,21 @@ impl Workspace {
         // (l'anagrafe, e chi risponde alla domanda del punto 4) li riconosce
         // tutti e mille.
         let mut sources: BTreeMap<DocId, String> = BTreeMap::new();
+        // Ciò che non si è potuto leggere o parsare: si raccoglie qui e non si
+        // solleva. Gli scarti si emettono come guasti a giro finito, perché
+        // `report_trouble` vuole `&mut self` e qui il prestito è già preso.
+        let mut apertura = Apertura::default();
         for entry in entries.iter_mut() {
             if entry.kind != EntryKind::Document || entry.fingerprint.is_some() {
                 continue;
             }
-            let source = self.docs.vault.read(&entry.id)?;
-            entry.fingerprint = Some(Revision::of(&source));
-            sources.insert(entry.id.clone(), source);
+            match self.docs.vault.read(&entry.id) {
+                Ok(source) => {
+                    entry.fingerprint = Some(Revision::of(&source));
+                    sources.insert(entry.id.clone(), source);
+                }
+                Err(why) => apertura.scarta(entry.id.clone(), why),
+            }
         }
 
         let documents: Vec<VaultEntry> = entries
@@ -1274,12 +1359,18 @@ impl Workspace {
             .collect();
         let already = self.indexes.up_to_date(&documents);
 
-        // Prima si parsa TUTTO, poi si muta: un parse fallito a metà lascia il
-        // workspace com'era. I modelli interi vivono solo qui, il tempo di
-        // alimentare indici e conteggi: in cache restano i metadati.
+        // Prima si parsa TUTTO, poi si muta: quando il parse era fatale questa
+        // riga teneva il tutto-o-niente, e adesso che non lo è più tiene
+        // un'altra cosa che vale uguale — gli indici si svuotano una volta
+        // sola, a giro di lettura finito, invece di restare vuoti per tutto il
+        // tempo in cui si cammina il disco. I modelli interi vivono solo qui,
+        // il tempo di alimentare indici e conteggi: in cache restano i metadati.
         let mut models = Vec::new();
         let mut restored = Vec::new();
         for entry in &documents {
+            if apertura.ha_scartato(&entry.id) {
+                continue;
+            }
             let remembered = self
                 .entry_store
                 .known(&entry.id)
@@ -1292,9 +1383,18 @@ impl Workspace {
                 _ => {
                     let source = match sources.remove(&entry.id) {
                         Some(source) => source,
-                        None => self.docs.vault.read(&entry.id)?,
+                        None => match self.docs.vault.read(&entry.id) {
+                            Ok(source) => source,
+                            Err(why) => {
+                                apertura.scarta(entry.id.clone(), why);
+                                continue;
+                            }
+                        },
                     };
-                    models.push(self.docs.parse(&entry.id, &source)?);
+                    match self.docs.parse(&entry.id, &source) {
+                        Ok(model) => models.push(model),
+                        Err(why) => apertura.scarta(entry.id.clone(), why),
+                    }
                 }
             }
         }
@@ -1331,7 +1431,19 @@ impl Workspace {
         // dichiarato dall'ultima nota vale anche per la prima).
         self.indexes.core.rebuild_graph();
 
-        let ids: Vec<DocId> = self.documents();
+        // **Gli scarti entrano nell'insieme completo**, e non è un dettaglio.
+        // `reconcile` dice agli indici *quali documenti esistono*, così ognuno
+        // cancella ciò che è sparito ad app chiusa; un documento che non si è
+        // potuto leggere **non è sparito** — il file c'è, è la vista sul suo
+        // contenuto che manca. Ometterlo direbbe agli indici una cosa falsa, e
+        // alla prima apertura con un permesso storto la nota uscirebbe dalla
+        // ricerca in silenzio. È lo stesso principio per cui una scansione che
+        // fallisce non apre affatto: un insieme incompleto non si dichiara
+        // completo.
+        let mut ids: Vec<DocId> = self.documents();
+        ids.extend(apertura.scartati.iter().map(|s| s.id.clone()));
+        ids.sort();
+        ids.dedup();
         let lost = self.indexes.reconcile(&ids);
         self.report_losses(lost);
         // Gli errori di flush non fanno fallire l'apertura del vault: un
@@ -1349,13 +1461,24 @@ impl Workspace {
         // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
         // dichiara di esistere (decisione 0012).
         self.as_actor(Actor::Kernel, |ws| {
+            // I guasti prima di `VaultOpened`, e nello stesso lotto: chi si
+            // abbona per disegnare il vault appena aperto ha già in mano ciò
+            // che di quel vault non si è letto, invece di vederselo arrivare
+            // dopo aver disegnato un albero che si crede intero.
+            for scarto in &apertura.scartati {
+                ws.report_trouble(
+                    Severity::Failure,
+                    Some(scarto.id.clone()),
+                    scarto.why.clone(),
+                );
+            }
             ws.emit_event(Event::VaultOpened {
                 root: ws.docs.vault.root().to_string(),
             });
             ws.emit_event(Event::IndexUpdated);
             ws.dispatch_pending();
         });
-        Ok(())
+        Ok(apertura)
     }
 
     /// Rimette in anagrafe un file che è appena cambiato, chiedendo al disco

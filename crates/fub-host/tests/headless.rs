@@ -521,3 +521,38 @@ fn a_path_that_is_not_a_directory_is_refused_before_anything_is_mounted() {
     assert!(host.open(&v.root.join("Nota.md")).is_err());
     assert!(host.workspace(None).is_err());
 }
+
+/// **Chi apre distingue un vault intero da uno aperto in parte** (§15.7,
+/// decisione 0068).
+///
+/// Il markdown vero non rifiuta quasi niente, quindi la leva portatile è la
+/// lettura: dei byte che non sono UTF-8 sono ciò che resta di una nota dopo un
+/// crash a metà scrittura. Prima di questa voce il vault non si apriva affatto,
+/// e le altre due note erano irraggiungibili per colpa della terza.
+#[test]
+fn un_vault_con_una_nota_illeggibile_si_apre_e_dice_cosa_non_ha_letto() {
+    let v = Vault::new();
+    v.put("Rust.md", "# Rust\n");
+    v.put("Cucina.md", "# Cucina\n");
+    std::fs::write(v.root.join("Rotta.md"), [0xffu8, 0xfe, 0x00, 0x9f]).unwrap();
+
+    let host = headless();
+    let info = host.open(&v.root).expect("il vault si apre lo stesso");
+
+    let non_lette: Vec<&str> = info.unread.iter().map(|u| u.doc_id.as_str()).collect();
+    assert_eq!(
+        non_lette,
+        ["Rotta.md"],
+        "l'esito dell'apertura arriva fino a chi ha chiamato `open`"
+    );
+
+    // Ed è un fatto **della sessione**: riaprire lo stesso vault non lo rimonta
+    // (§9.6), quindi la seconda risposta non può essere un silenzio che
+    // sembrerebbe dire «adesso è tutto a posto».
+    let ancora = host.open(&v.root).expect("riapre");
+    assert_eq!(
+        ancora.unread.len(),
+        1,
+        "riaprire un vault già aperto non cancella ciò che quella apertura non ha letto"
+    );
+}

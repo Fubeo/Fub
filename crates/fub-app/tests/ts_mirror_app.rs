@@ -13,10 +13,11 @@
 //! in `frontend/src/host/mirror.test.ts`. Rigenerazione: `UPDATE_MIRROR=1 cargo
 //! test -p fub-app --test ts_mirror_app`.
 
+use fub_abi::error::PluginError;
 use fub_abi::options::permission;
 use fub_abi::traits::PluginPermissions;
 use fub_abi::ui::UiNode;
-use fub_app_lib::{BundleInfo, EmbedContent, OpenVaults, VaultEntry, VaultInfo};
+use fub_app_lib::{BundleInfo, EmbedContent, OpenVaults, UnreadDoc, VaultEntry, VaultInfo};
 use fub_kernel::{
     PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
 };
@@ -48,6 +49,13 @@ fn expected() -> Value {
                     id: "fub.versioning".into(),
                 }],
             }],
+            // Il campione porta uno scarto, e non una lista vuota: `unread`
+            // vuoto è il caso normale ma non prova **niente** della forma di
+            // ciò che la shell dovrà saper leggere il giorno del §20.4.
+            unread: vec![UnreadDoc {
+                doc_id: "rotta.md".into(),
+                why: PluginError::Io("permission denied".into()),
+            }],
         })],
         // L'inventario del §7.6 ha un campione **suo** e non solo quello
         // annidato in `VaultInfo`: il lato TS pretende che ogni tipo della
@@ -74,6 +82,14 @@ fn expected() -> Value {
                     id: "com.acme.tasks:archive".into(),
                 },
             ],
+        })],
+        // `UnreadDoc` ha un campione **suo** per la stessa ragione di
+        // `PluginInfo`: vive solo dentro `VaultInfo`, e un tipo annidato che
+        // non compare nella tabella dei mirror non viene controllato campo per
+        // campo.
+        "UnreadDoc": [to_value(UnreadDoc {
+            doc_id: "rotta.md".into(),
+            why: PluginError::Io("permission denied".into()),
         })],
         "EmbedContent": [to_value(EmbedContent {
             doc_id: "a.md".into(),

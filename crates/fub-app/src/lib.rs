@@ -45,7 +45,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // risponderebbe con gli stessi — e l'app li ri-esporta, perché è lei a farli
 // attraversare il confine: il mirror TS e la sua fixture
 // (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
-pub use fub_host::{BundleInfo, EmbedContent, VaultEntry, VaultInfo};
+pub use fub_host::{BundleInfo, EmbedContent, UnreadDoc, VaultEntry, VaultInfo};
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
 /// `frontend/src/host/contract.ts`.

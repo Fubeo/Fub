@@ -92,7 +92,7 @@ pub mod watcher;
 pub use config::{config_dir, install_logging, log_path};
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
-pub use records::{EmbedContent, VaultInfo};
+pub use records::{EmbedContent, UnreadDoc, VaultInfo};
 pub use registry::{Bundle, BundleError, BundleInfo, BundleRegistry, OnlyProviders};
 pub use runner::{JobRunner, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, EventSink, Host, VaultSession};

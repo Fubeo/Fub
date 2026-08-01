@@ -46,6 +46,7 @@ import type {
   EntryKind,
   VaultEntry,
   VaultInfo,
+  UnreadDoc,
   VersionRef,
   ViewContext,
   ViewSpec,
@@ -650,6 +651,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     root: true,
     extensions: true,
     plugins: true,
+    unread: true,
   }),
   PluginInfo: keysOf<PluginInfo>({
     id: true,
@@ -660,6 +662,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     permissions: true,
     registrations: true,
   }),
+  UnreadDoc: keysOf<UnreadDoc>({ doc_id: true, why: true }),
   EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true, parts: true }),
   RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
   OpenVaults: keysOf<OpenVaults>({ roots: true, current: true }),

@@ -880,12 +880,14 @@ sequenceDiagram
         Pl->>W: register_* — un provider che non entra è un AVVISO, non un errore
     end
     H->>W: reindex() — cammina il disco, parsa, riempie gli indici
+    W-->>H: Event::Trouble per ogni documento non letto (Failure, PRIMA di VaultOpened)
     W-->>H: Event::VaultOpened + Event::IndexUpdated (attore: Kernel)
+    W-->>H: Apertura — cosa non si è letto
     H->>Br: bridge::spawn(bus.subscribe(), sink)
     Note over H,Br: dopo reindex: gli eventi della prima scansione<br/>non escono verso la shell
     H->>Br: watcher.start(root, workspace, bandiera)
     H->>Br: JobRunner::start(ws, registry, thread)
-    H-->>A: VaultInfo
+    H-->>A: VaultInfo — con `unread`: chi apre distingue un vault intero da uno a metà
 ```
 
 | Passo | Dove | Perché è lì e non altrove |
@@ -893,7 +895,7 @@ sequenceDiagram
 | `Host::open` | [session.rs:341](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
 | `mount` | [mount.rs:162](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
 | `BundleRegistry::mount` | [registry.rs:245](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
-| `reindex` | [workspace.rs:1197](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto |
+| `reindex` | [workspace.rs:1301](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
 | `bridge::spawn` | [bridge.rs:69](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
 | `JobRunner::start` | [runner.rs:307](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 

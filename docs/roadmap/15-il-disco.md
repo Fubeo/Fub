@@ -68,7 +68,20 @@ recovery come questa, e la seconda è un **cliente** del registro appena nato.
 
 La 15.7 sta qui e non fra i presidi perché è la stessa domanda della durabilità
 vista all'apertura invece che alla scrittura: la verità non si rifiuta di aprire,
-si apre segnalando cosa non ha letto.
+si apre segnalando cosa non ha letto. La sua **prima metà** è chiusa dalla
+[0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md) — un
+documento che non si legge o che il parser rifiuta non fa più fallire
+l'apertura: finisce fra gli scarti di un'`Apertura`, che è la
+[`Lettura`](../decisions/0067-il-registro-di-cio-che-e-successo.md) del registro
+un piano più in su, coi nomi al posto del conto perché un documento ha un id e
+una riga di journal rotta no. Resta la **forma** dell'apertura, e le due metà non
+erano scambiabili: quella fatta è il prerequisito dell'altra.
+
+E la seduta si chiude su un fatto di cui vale la pena tenere il conto: **è la
+quarta voce di fila che si chiude per pezzi**, e il criterio non è cambiato
+nemmeno stavolta — anzi ne ha guadagnato un terzo, il taglio fra un
+prerequisito e ciò che lo richiede, che sta in coda a
+[decisions/README.md](../decisions/README.md).
 
 ### 15.2 Durabilità e recovery
 
@@ -272,18 +285,31 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 
 ### 15.7 L'apertura del vault è tutto-o-niente, sincrona e senza ritorno
 
-*ex §2.23 · kernel · **P1** — il lavoro deve poter **fallire in parte***
+*ex §2.23 · kernel · **P1** — il **fallire in parte** è chiuso dalla [0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md); resta la **forma** dell'apertura*
 
-- [ ] **`reindex` fallisce l'intera apertura per un solo documento**: legge e
-      parsa tutto con `?` su ogni passo (`kernel/workspace.rs`). Una
-      nota illeggibile per i permessi, un file troncato da un crash, un
-      documento che il parser rifiuta — e **il vault non si apre**. Il precedente
-      giusto è nella stessa funzione, dieci righe sotto: il flush degli indici è
-      già tollerato con un `let _ =`, perché «un indice è derivato, il vault è la
-      verità». Read e parse sono i due passi rimasti fatali. È l'opposto
-      di ciò che chiedono 2.1 (corruption detection), 24.2 (vault repair, health
-      check) e del principio per cui il vault è la verità: la verità non si
-      rifiuta di aprire, si apre segnalando cosa non ha letto.
+- [x] **`reindex` fallisce l'intera apertura per un solo documento** — chiusa
+      dalla [0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md):
+      i due `?` di read e parse sono diventati due scarti, e `reindex`
+      restituisce un'`Apertura` che porta i documenti di cui non si è potuto
+      vedere il contenuto, ognuno col proprio errore. Il precedente che questa
+      riga indicava — il flush tollerato dieci righe sotto — era quello giusto, e
+      la ragione per cui la tolleranza si fermava un passo prima non era scritta
+      da nessuna parte: non c'era.
+      Il confine che la voce non nominava, e che è la parte che vale: **non è
+      lettura-contro-parse, è se il vault sappia ancora dire *quali* documenti
+      esistono.** Perciò la **scansione resta fatale** — di un sottoalbero che
+      non si lista non si sa niente, e `reconcile` dichiarerebbe completo un
+      insieme bucato, cioè direbbe a ogni indice di dimenticare quella cartella.
+      Per la stessa ragione gli scarti **entrano** nell'insieme di `reconcile`:
+      un documento illeggibile non è sparito, e ometterlo l'avrebbe fatto uscire
+      dalla ricerca in silenzio (è il difetto che il presidio ha trovato invece
+      di confermare). Ne segue una proprietà nuova del kernel: **anagrafe e
+      documenti indicizzati adesso divergono**, e uno scarto è il caso in cui
+      divergono — prima non potevano. Ogni scarto esce anche come
+      `Event::Trouble` con severità `Failure`
+      ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) e non
+      `Warning`: non si è perso un derivato, si è persa la vista sul contenuto di
+      una nota — ed è la ragione per cui uno scarto non è un `IndexLoss`.
 - [ ] **E succede in una chiamata sola** (`Host::open`, `host/session.rs`, che
       l'IPC si limita a inoltrare): scansione, parse di ogni documento, grafo,
       riconciliazione e flush in una chiamata sincrona che ritorna un

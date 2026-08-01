@@ -7,6 +7,7 @@
 //! `crates/fub-app/tests/ts_mirror_app.rs`: il mirror sta dal lato dell'app
 //! perché è l'app a farli attraversare l'IPC, e `fub-app` li ri-esporta.
 
+use fub_abi::error::PluginError;
 use fub_kernel::{PluginInfo, RenderedDocument};
 use serde::Serialize;
 
@@ -36,6 +37,37 @@ pub struct VaultInfo {
     /// plugin (20.1), il developer mode (20.2) e la diagnostica (24.2) faranno,
     /// e nessuno dei tre avrà bisogno di un campo suo.
     pub plugins: Vec<PluginInfo>,
+    /// **Cosa non si è letto** (§15.7): i documenti che la scansione ha trovato
+    /// e di cui non si è potuto vedere il contenuto. Vuoto è il caso normale, e
+    /// vuol dire che il vault si è aperto intero.
+    ///
+    /// Sta qui **oltre** che nella coda eventi, e non al posto suo. Ogni scarto
+    /// esce anche come [`Event::Trouble`](fub_abi::event::Event::Trouble) con
+    /// il documento per soggetto, che è il canale con cui lo si racconta a chi
+    /// ha una superficie; ma quel canale ha un budget e sotto carico può
+    /// troncare (§20.5) — e un'apertura di vault *è* il carico. «Questo vault si
+    /// è aperto intero» è una proprietà dell'**operazione**, e chi la chiama la
+    /// deve poter leggere dal suo esito, non ricostruire da una sequenza di
+    /// incidenti che potrebbe non aver ricevuto tutta.
+    ///
+    /// **Nessuno lo disegna ancora**: la superficie dove la shell direbbe
+    /// «questo vault si è aperto a metà» è il §20.4 e non c'è. Il mirror TS ce
+    /// l'ha perché la fixture pretende che i due lati combacino, non perché la
+    /// UI lo usi.
+    pub unread: Vec<UnreadDoc>,
+}
+
+/// Un documento che l'apertura non ha potuto guardare, sulla via dell'IPC.
+///
+/// È [`fub_kernel::Scarto`] con il `DocId` già in stringa, come ogni altro id
+/// che attraversa questo confine. Rispecchiato da `UnreadDoc` in
+/// `frontend/src/host/contract.ts`.
+#[derive(Clone, Serialize)]
+pub struct UnreadDoc {
+    pub doc_id: String,
+    /// Cosa ha risposto il disco, o il parser: lo stesso errore che viaggia
+    /// dentro `Event::Trouble`, quindi il lato TS ha già il tipo per leggerlo.
+    pub why: PluginError,
 }
 
 /// Rispecchiato da `EmbedContent` in `frontend/src/host/contract.ts` (fixture di
