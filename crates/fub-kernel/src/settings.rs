@@ -43,7 +43,7 @@ use fub_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingSpec, 
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{write_atomic, VaultStorage};
+use crate::storage::{update_atomic, VaultStorage};
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
 /// giorno**, perché il file che non ce l'ha è quello che poi non si sa da che
@@ -114,9 +114,36 @@ fn encode(values: &BTreeMap<String, SettingValue>) -> Result<Vec<u8>, String> {
     serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())
 }
 
-/// Scrive il livello della macchina.
-fn store(path: &Utf8Path, values: &BTreeMap<String, SettingValue>) -> Result<(), String> {
-    write_atomic(path, &encode(values)?)
+/// Scrive **una chiave** del livello della macchina, fondendola con ciò che sul
+/// disco c'è adesso.
+///
+/// Non prende la mappa del chiamante e non è un dettaglio: la sua copia è
+/// vecchia dall'apertura, e ricomporre il file da lì cancella le chiavi che
+/// un'altra installazione ha scritto nel frattempo. Ciò che si scrive è la
+/// **chiave toccata**, applicata al file riletto sotto lock
+/// ([`update_atomic`], [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)),
+/// e la mappa che torna è quella fusa — che il chiamante adotta al posto della
+/// propria.
+fn store(
+    path: &Utf8Path,
+    key: &str,
+    value: Option<SettingValue>,
+) -> Result<BTreeMap<String, SettingValue>, String> {
+    update_atomic(
+        path,
+        || load(path),
+        |disco| {
+            match value {
+                Some(v) => {
+                    disco.insert(key.to_string(), v);
+                }
+                None => {
+                    disco.remove(key);
+                }
+            }
+            encode(disco)
+        },
+    )
 }
 
 /// Il rifiuto di sovrascrivere un file che all'apertura non si è potuto leggere.
@@ -199,24 +226,28 @@ impl MachineSettings {
     /// sparita) lascerebbe il valore nuovo in memoria e quello vecchio nel file,
     /// con l'evento *non* emesso perché il chiamante ha ricevuto un errore —
     /// cioè tre verità per una chiave, e la terza torna al riavvio.
+    ///
+    /// E ciò che finisce in memoria è il file **fuso**, non la mappa di prima
+    /// con la chiave nuova sopra: se un'altra installazione ha scritto altre
+    /// chiavi dopo la nostra apertura, quelle sono nel file e da questo momento
+    /// sono anche qui.
     fn write(&self, key: &str, value: Option<SettingValue>) -> Result<(), String> {
         let mut values = self.values.write().expect("livello macchina");
-        let mut next = values.clone();
-        match value {
-            Some(v) => {
-                next.insert(key.to_string(), v);
+        let Some(path) = &self.path else {
+            match value {
+                Some(v) => {
+                    values.insert(key.to_string(), v);
+                }
+                None => {
+                    values.remove(key);
+                }
             }
-            None => {
-                next.remove(key);
-            }
+            return Ok(());
+        };
+        if !self.readable {
+            return Err(non_lo_sovrascrivo(path));
         }
-        if let Some(path) = &self.path {
-            if !self.readable {
-                return Err(non_lo_sovrascrivo(path));
-            }
-            store(path, &next)?;
-        }
-        *values = next;
+        *values = store(path, key, value)?;
         Ok(())
     }
 }
@@ -507,6 +538,7 @@ pub type SharedSettings = Arc<RwLock<SettingsStore>>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::write_atomic;
     use fub_abi::settings::SettingKind;
 
     fn store_su(dir: &Utf8Path) -> SettingsStore {

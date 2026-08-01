@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.88
+      - uses: dtolnay/rust-toolchain@1.89
       - uses: Swatinem/rust-cache@v2
       - name: Conformità abi ↔ crates/fub-abi/wit/fub/abi.wit
         run: cargo test -p fub-abi --test wit_conformance
@@ -62,7 +62,7 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-      - uses: dtolnay/rust-toolchain@1.88
+      - uses: dtolnay/rust-toolchain@1.89
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-sbom
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.88
+      - uses: dtolnay/rust-toolchain@1.89
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -104,9 +104,9 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-      # Toolchain pinnata all'MSRV del workspace (rust-version = "1.88"): la CI
+      # Toolchain pinnata all'MSRV del workspace (rust-version = "1.89"): la CI
       # verifica anche che la promessa dell'MSRV sia vera.
-      - uses: dtolnay/rust-toolchain@1.88
+      - uses: dtolnay/rust-toolchain@1.89
       - uses: Swatinem/rust-cache@v2
       - name: Dipendenze di sistema di Tauri
         if: matrix.os == 'ubuntu-latest'

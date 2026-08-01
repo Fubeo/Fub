@@ -67,9 +67,19 @@ note.
 
 | Posto | Chi lo scrive | Classe | Schema | Scrittura |
 |---|---|---|---|---|
-| `settings.json` | `kernel/settings.rs` | autorevole | 1 | atomica |
-| `vaults.json` | `host/vaults.rs` | autorevole | 1 | atomica — il registro dei vault conosciuti ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)) |
-| `view-state.json` | `kernel/viewstate.rs` | autorevole | 1 | atomica — dove si era rimasti, per esemplare di vista ([0037](../decisions/0037-lo-stato-di-vista.md)) |
+| `settings.json` | `kernel/settings.rs` | autorevole | 1 | atomica, e **aggiornata** rileggendo sotto lock |
+| `vaults.json` | `host/vaults.rs` | autorevole | 1 | come sopra — il registro dei vault conosciuti ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)) |
+| `view-state.json` | `kernel/viewstate.rs` | autorevole | 1 | come sopra — dove si era rimasti, per esemplare di vista ([0037](../decisions/0037-lo-stato-di-vista.md)) |
+| `.<nome>.lock` | `kernel/storage.rs` | né l'una né l'altra | — | il compagno di lock di ognuno dei tre. Non contiene niente: esiste per essere aperto ([0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md)) |
+
+I tre non si **scrivono** e basta: si **aggiornano**. Due installazioni di Fub
+sulla stessa cartella hanno ognuna la propria copia in memoria, e ricomporre il
+file da lì cancella ciò che l'altra ha scritto nel frattempo — una scrittura
+atomica non lo impedisce, perché il file che atterra è integro. Chi li tocca
+passa quindi da `update_atomic` (`kernel/storage.rs`), che rilegge sotto lock,
+fonde e restituisce lo stato fuso a chi lo deve adottare. Il lock sta su un file
+**accanto** e non sul file stesso, perché la scrittura atomica sostituisce
+l'inode: un lock preso su ciò che si sta per rimpiazzare non esclude nessuno.
 
 ## Le tre righe che contraddicono la regola
 

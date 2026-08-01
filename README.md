@@ -78,7 +78,7 @@ Lo stato preciso — cosa è aperto, con che priorità — sta in
 
 ## Come si avvia
 
-Prerequisiti: Rust ≥ 1.88, Node ≥ 20, e le dipendenze Tauri v2 per Linux
+Prerequisiti: Rust ≥ 1.89, Node ≥ 20, e le dipendenze Tauri v2 per Linux
 (`webkit2gtk-4.1`).
 
 ```bash

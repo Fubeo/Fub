@@ -98,27 +98,9 @@ impl VaultRegistry {
     /// non impedisce di aprire un vault: si riparte da vuoto e si dice cosa è
     /// successo — un elenco di scorciatoie non vale un'app che non parte.
     pub fn open(path: &Utf8Path) -> (Self, Option<String>) {
-        let (entries, warning) = match std::fs::read_to_string(path) {
-            Ok(json) => match serde_json::from_str::<RegistryFile>(&json) {
-                Ok(file) if file.version <= SCHEMA_VERSION => (file.vaults, None),
-                Ok(file) => (
-                    Vec::new(),
-                    Some(format!(
-                        "{path} è scritto nella versione {} di questo formato, e questa \
-                         copia di Fub legge fino alla {SCHEMA_VERSION}",
-                        file.version
-                    )),
-                ),
-                Err(e) => (
-                    Vec::new(),
-                    Some(format!("{path} non è un vaults.json valido: {e}")),
-                ),
-            },
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Vec::new(), None),
-            Err(e) => (
-                Vec::new(),
-                Some(format!("non riesco a leggere {path}: {e}")),
-            ),
+        let (entries, warning) = match load(path) {
+            Ok(entries) => (entries, None),
+            Err(e) => (Vec::new(), Some(e)),
         };
         (
             VaultRegistry {
@@ -192,12 +174,7 @@ impl VaultRegistry {
     /// Chi passa una forma sola non paga niente: `retain` guarda una stringa in
     /// più per voce.
     pub fn forget(&self, forme: &[Utf8PathBuf]) -> Result<(), PluginError> {
-        let mut entries = self.entries.lock().expect("registro dei vault");
-        let mut next = entries.clone();
-        next.retain(|e| !forme.iter().any(|f| f.as_str() == e.root));
-        self.save(&next)?;
-        *entries = next;
-        Ok(())
+        self.muta(|next| next.retain(|e| !forme.iter().any(|f| f.as_str() == e.root)))
     }
 
     /// Come per lo store di configurazione: **su disco prima, in memoria dopo**.
@@ -205,51 +182,85 @@ impl VaultRegistry {
     /// diverso da quello sul disco, e il chiamante che ha ricevuto l'errore non
     /// avrebbe modo di saperlo.
     fn update(&self, root: &Utf8Path, f: impl FnOnce(&mut VaultEntry)) -> Result<(), PluginError> {
-        let mut entries = self.entries.lock().expect("registro dei vault");
-        let mut next = entries.clone();
         let root = root.as_str();
-        match next.iter_mut().find(|e| e.root == root) {
-            Some(entry) => f(entry),
-            None => {
-                let mut entry = VaultEntry {
-                    root: root.to_string(),
-                    name: String::new(),
-                    icon: None,
-                    favorite: false,
-                    last_opened: 0,
-                };
-                f(&mut entry);
-                next.push(entry);
+        self.muta(|next| {
+            match next.iter_mut().find(|e| e.root == root) {
+                Some(entry) => f(entry),
+                None => {
+                    let mut entry = VaultEntry {
+                        root: root.to_string(),
+                        name: String::new(),
+                        icon: None,
+                        favorite: false,
+                        last_opened: 0,
+                    };
+                    f(&mut entry);
+                    next.push(entry);
+                }
             }
-        }
-        // Il tetto si applica **dopo** l'aggiornamento e ai soli non preferiti,
-        // così l'ultimo aperto non può mai essere quello che esce.
-        let mut recenti: Vec<usize> = next
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| !e.favorite)
-            .map(|(i, _)| i)
-            .collect();
-        if recenti.len() > RECENTI {
-            recenti.sort_by_key(|&i| std::cmp::Reverse(next[i].last_opened));
-            let da_togliere: std::collections::BTreeSet<usize> =
-                recenti.into_iter().skip(RECENTI).collect();
-            let mut i = 0;
-            next.retain(|_| {
-                let tenere = !da_togliere.contains(&i);
-                i += 1;
-                tenere
-            });
-        }
-        self.save(&next)?;
-        *entries = next;
+            // Il tetto si applica **dopo** l'aggiornamento e ai soli non
+            // preferiti, così l'ultimo aperto non può mai essere quello che
+            // esce.
+            let mut recenti: Vec<usize> = next
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| !e.favorite)
+                .map(|(i, _)| i)
+                .collect();
+            if recenti.len() > RECENTI {
+                recenti.sort_by_key(|&i| std::cmp::Reverse(next[i].last_opened));
+                let da_togliere: std::collections::BTreeSet<usize> =
+                    recenti.into_iter().skip(RECENTI).collect();
+                let mut i = 0;
+                next.retain(|_| {
+                    let tenere = !da_togliere.contains(&i);
+                    i += 1;
+                    tenere
+                });
+            }
+        })
+    }
+
+    /// Una mutazione del registro, applicata a **ciò che il file dice adesso**.
+    ///
+    /// Il tetto dei recenti rende la cosa più visibile che altrove: due
+    /// installazioni che ricompongono l'elenco dalla propria copia non si
+    /// cancellano solo l'ultimo vault aperto dall'altra — si cancellano i
+    /// **preferiti**, che sono una scelta e non una traccia. Quindi la
+    /// mutazione si applica all'elenco riletto sotto lock
+    /// ([`fub_kernel::update_atomic`],
+    /// [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)),
+    /// e il tetto si applica dopo la fusione: se l'altra installazione ha
+    /// aperto dei vault, quelli sono nell'elenco e il tetto li conta.
+    fn muta(&self, f: impl FnOnce(&mut Vec<VaultEntry>)) -> Result<(), PluginError> {
+        let mut entries = self.entries.lock().expect("registro dei vault");
+        let Some(path) = &self.path else {
+            f(&mut entries);
+            return Ok(());
+        };
+        self.rifiuto(path)?;
+        // L'aggiornamento parla una lingua sola (`String`) e qui gli esiti sono
+        // due: il mondo — un disco pieno, un file che non si rilegge — e un
+        // difetto nostro, cioè una struttura che non si serializza. La seconda
+        // si riconosce da dove nasce, e resta un `Internal` come prima.
+        let mut difetto = None;
+        *entries = fub_kernel::update_atomic(
+            path,
+            || load(path),
+            |disco| {
+                f(disco);
+                encode(disco).inspect_err(|e| difetto = Some(e.clone()))
+            },
+        )
+        .map_err(|e| match difetto {
+            Some(d) => PluginError::Internal(d.into()),
+            None => PluginError::Io(e.into()),
+        })?;
         Ok(())
     }
 
-    fn save(&self, entries: &[VaultEntry]) -> Result<(), PluginError> {
-        let Some(path) = &self.path else {
-            return Ok(());
-        };
+    /// Il rifiuto di riscrivere un file che all'apertura non si è letto.
+    fn rifiuto(&self, path: &Utf8Path) -> Result<(), PluginError> {
         if !self.readable {
             // `Io` e non `PermissionDenied`: nessuno ha negato un permesso, è un
             // file che non si può usare — e il verbo che chi legge deve leggere
@@ -263,16 +274,34 @@ impl VaultRegistry {
                 .into(),
             ));
         }
-        let file = RegistryFile {
-            version: SCHEMA_VERSION,
-            vaults: entries.to_vec(),
-        };
-        // Serializzare una struttura nostra che non serializza è un difetto di
-        // chi l'ha scritta, non il mondo: qui `Internal` è la verità.
-        let json = serde_json::to_string_pretty(&file)
-            .map_err(|e| PluginError::Internal(e.to_string().into()))?;
-        fub_kernel::write_atomic(path, json.as_bytes()).map_err(|e| PluginError::Io(e.into()))
+        Ok(())
     }
+}
+
+/// L'elenco com'è sul disco. **Assente = nessun vault conosciuto**, che è ciò
+/// che ha una installazione nuova e non un errore.
+fn load(path: &Utf8Path) -> Result<Vec<VaultEntry>, String> {
+    match std::fs::read_to_string(path) {
+        Ok(json) => match serde_json::from_str::<RegistryFile>(&json) {
+            Ok(file) if file.version <= SCHEMA_VERSION => Ok(file.vaults),
+            Ok(file) => Err(format!(
+                "{path} è scritto nella versione {} di questo formato, e questa \
+                 copia di Fub legge fino alla {SCHEMA_VERSION}",
+                file.version
+            )),
+            Err(e) => Err(format!("{path} non è un vaults.json valido: {e}")),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
+    }
+}
+
+fn encode(entries: &[VaultEntry]) -> Result<Vec<u8>, String> {
+    let file = RegistryFile {
+        version: SCHEMA_VERSION,
+        vaults: entries.to_vec(),
+    };
+    serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -354,6 +383,37 @@ mod tests {
         assert_eq!(list[0].icon.as_deref(), Some("📓"));
         assert_eq!(list[0].name, "Diario");
         assert_eq!(list[0].last_opened, 42);
+    }
+
+    /// Due installazioni sulla stessa cartella di configurazione, e nessuna
+    /// delle due cancella i vault dell'altra.
+    ///
+    /// Qui la perdita non sarebbe una traccia ma una **scelta**: la seconda
+    /// finestra che apre un vault ricomponeva l'elenco dalla propria copia, e
+    /// con lui se ne andavano i preferiti che l'altra aveva appuntato dopo la
+    /// sua apertura. Due registri sullo stesso file **sono** il caso: ognuno ha
+    /// letto una volta e da lì tiene la sua copia
+    /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+    #[test]
+    fn due_installazioni_non_si_cancellano_i_vault() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
+
+        let (prima, _) = VaultRegistry::open(&path);
+        let (seconda, _) = VaultRegistry::open(&path);
+
+        prima.note_opened(Utf8Path::new("/diario"), 1).unwrap();
+        prima.set_favorite(Utf8Path::new("/diario"), true).unwrap();
+        seconda.note_opened(Utf8Path::new("/lavoro"), 2).unwrap();
+
+        let (terza, avviso) = VaultRegistry::open(&path);
+        assert!(avviso.is_none(), "{avviso:?}");
+        let roots: Vec<String> = terza.list().into_iter().map(|e| e.root).collect();
+        assert_eq!(roots, vec!["/diario".to_string(), "/lavoro".to_string()]);
+        assert!(
+            terza.list()[0].favorite,
+            "e il preferito della prima è ancora un preferito"
+        );
     }
 
     #[test]

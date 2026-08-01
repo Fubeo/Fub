@@ -76,6 +76,7 @@ cronologico di chiusura.
 | [0063](0063-la-maschera-e-dell-esemplare.md) | La maschera è dell'esemplare, e la risposta stava già nell'elenco | §22.3 — chiude la voce **meno una casella**: la query incorporata in una nota, che non è un esemplare di `ViewSpec` ([seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)) | 2026-08-01 |
 | [0064](0064-il-supporto-sta-sotto.md) | Il supporto sta sotto, e la specie di una voce non segue il link | §15.1 — chiude la voce **meno una casella**: le tre righe di `.fub/` che scrivono con `write_atomic` e aspettano il §15.2 ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) | Una scrittura o c'è o non c'è, e i due casi in cui il file non è nostro | §15.2 (**metà voce**: la scrittura) **più** la casella residua della [0064](0064-il-supporto-sta-sotto.md) — resta il recovery ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
+| [0066](0066-un-aggiornamento-non-e-una-scrittura.md) | Un aggiornamento non è una scrittura, e il lock costa una promessa | §15.2 (la *lost update*, che la [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) aveva rimandata) — resta il recovery ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -339,6 +340,33 @@ già scritto nel titolo. Con una sola eccezione, e sta nella prima metà per una
 ragione tecnica e non concettuale: la *lost update* è durabilità, non recovery, e
 resta aperta perché la primitiva che la chiude — `std::fs::File::lock` — chiede
 di alzare l'MSRV, che è una decisione sua.
+
+La [0066](0066-un-aggiornamento-non-e-una-scrittura.md) chiude quell'eccezione, e
+porta due cose che vale la pena tenere.
+
+La prima è una **previsione confermata**, ed è il rovescio esatto del caso che la
+[0061](0061-un-giro-che-non-passa-dal-modello.md) aveva inaugurato. Là la 0060
+aveva classificato «lavoro» una riga che si è rivelata una decisione intera, e il
+criterio non si era emendato perché a sbagliare era stata la previsione. Qui la
+0065 aveva classificato **decisione** una riga che poteva sembrare lavoro — un
+lock è quattro righe di codice — e aveva ragione: la riga che è costata non è il
+lock, è l'**MSRV**. Le due insieme dicono cosa vale davvero il criterio di questa
+cartella: *una casella residua è ciò che si può fare senza aprire un verbale* si
+applica guardando la riga, e la riga si può leggere in entrambi i versi. Costa un
+verbale in più quando si sbaglia per difetto, e una decisione presa di straforo
+dentro un verbale su un altro argomento quando si sbaglia per eccesso — che è il
+verso caro.
+
+La seconda è che è il primo verbale il cui costo non è codice ma una **promessa
+verso l'esterno**. Le decisioni di questa cartella si pagano quasi sempre in
+lavoro nostro; questa si paga in `rust-version`, cioè in una riga che
+[versionamento.md](../versionamento.md) chiama parte del contratto e che qualcun
+altro legge per sapere se può compilare. La forma che ne segue è quella che il
+verbale ha: le due strade — alzare l'MSRV, o prendere una dipendenza — si sono
+guardate come **due promesse a due platee diverse**, non come due implementazioni,
+e ha deciso quale delle due platee può fare qualcosa in risposta. Chi ricompila
+oggi aggiorna la toolchain; chi installa una dipendenza in più se la tiene per
+sempre.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio

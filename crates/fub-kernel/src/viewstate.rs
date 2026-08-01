@@ -50,7 +50,7 @@ use std::sync::{Arc, RwLock};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 
-use crate::storage::write_atomic;
+use crate::storage::update_atomic;
 
 /// La versione di schema del file (§15.3).
 const SCHEMA_VERSION: u32 = 1;
@@ -143,9 +143,7 @@ impl ViewStates {
         key: &str,
         value: Option<serde_json::Value>,
     ) -> Result<(), String> {
-        let mut vaults = self.vaults.write().expect("stato di vista");
-        let mut next = vaults.clone();
-        match value {
+        self.muta(|next| match value {
             Some(v) => {
                 next.entry(vault.to_string())
                     .or_default()
@@ -166,12 +164,9 @@ impl ViewStates {
                 {
                     keys.remove(key);
                 }
-                prune(&mut next, vault, owner, instance);
+                prune(next, vault, owner, instance);
             }
-        }
-        self.store(&next)?;
-        *vaults = next;
-        Ok(())
+        })
     }
 
     /// Dimentica tutto di un vault: lo chiama chi lo toglie dal registro.
@@ -180,19 +175,35 @@ impl ViewStates {
     /// è anche la cosa giusta da fare: chi dimentica un vault non si aspetta che
     /// riaprendolo fra un anno le cartelle siano ancora aperte com'erano.
     pub fn forget_vault(&self, vault: &str) -> Result<(), String> {
-        let mut vaults = self.vaults.write().expect("stato di vista");
-        if !vaults.contains_key(vault) {
+        if !self
+            .vaults
+            .read()
+            .expect("stato di vista")
+            .contains_key(vault)
+        {
             return Ok(());
         }
-        let mut next = vaults.clone();
-        next.remove(vault);
-        self.store(&next)?;
-        *vaults = next;
-        Ok(())
+        self.muta(|next| {
+            next.remove(vault);
+        })
     }
 
-    fn store(&self, vaults: &BTreeMap<String, Owners>) -> Result<(), String> {
+    /// Una mutazione dello stato di vista: si applica a ciò che **sul disco c'è
+    /// adesso**, non alla copia in memoria di chi la chiede.
+    ///
+    /// È la forma che il §15.2 chiede a chi ricompone un file della macchina
+    /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)):
+    /// due finestre di Fub aperte insieme depositano scroll di esemplari
+    /// diversi, e ricomporre il file dalla propria copia vuol dire cancellare
+    /// quelli dell'altra. Ciò che le due si scambiano non è mai la stessa
+    /// chiave, quindi la fusione le tiene entrambe.
+    ///
+    /// La mutazione si scrive **una volta sola** e vale per i due casi: in
+    /// memoria si applica alla mappa che c'è, su disco a quella riletta.
+    fn muta(&self, f: impl FnOnce(&mut BTreeMap<String, Owners>)) -> Result<(), String> {
+        let mut vaults = self.vaults.write().expect("stato di vista");
         let Some(path) = &self.path else {
+            f(&mut vaults);
             return Ok(());
         };
         if !self.readable {
@@ -202,13 +213,24 @@ impl ViewStates {
                  Correggilo o spostalo, e riapri."
             ));
         }
-        let file = ViewStateFile {
-            version: SCHEMA_VERSION,
-            vaults: vaults.clone(),
-        };
-        let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
-        write_atomic(path, json.as_bytes())
+        *vaults = update_atomic(
+            path,
+            || load(path),
+            |disco| {
+                f(disco);
+                encode(disco)
+            },
+        )?;
+        Ok(())
     }
+}
+
+fn encode(vaults: &BTreeMap<String, Owners>) -> Result<Vec<u8>, String> {
+    let file = ViewStateFile {
+        version: SCHEMA_VERSION,
+        vaults: vaults.clone(),
+    };
+    serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())
 }
 
 /// Toglie i contenitori rimasti vuoti dopo un `set(.., None)`.

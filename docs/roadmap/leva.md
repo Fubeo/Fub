@@ -321,7 +321,10 @@ journaling, crash recovery, autosave e corruption detection, e nessuna delle
 cinque può essere un componente perché la correttezza di **tutti gli altri**
 poggia sopra. Delle cinque la prima è **fatta** — la
 [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) l'ha messa dentro il
-supporto che la 0064 aveva appena costruito — e le altre quattro sono lì. Il caso più netto non sta nemmeno nel 24: è il 22.4, che promette
+supporto che la 0064 aveva appena costruito, e con la
+[0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md) l'atomicità
+vale anche per un **aggiornamento** e non solo per una scrittura — e le altre
+quattro sono lì. Il caso più netto non sta nemmeno nel 24: è il 22.4, che promette
 al centro di comando LLM la «transazione atomica per operazione batch» e il
 «rollback completo». Quel capitolo è per il resto un cliente del registro dei
 comandi e sta benissimo come plugin — ma quelle due righe le può mantenere solo
@@ -338,3 +341,11 @@ criterio: **a scegliere è stata anche la voce già fatta**. La 0064 aveva lasci
 scritto cosa sarebbe sceso dentro quella funzione, e una voce che ne aspetta
 un'altra scritta nero su bianco costa meno se la si prende subito — dopo, il
 posto preparato per lei bisogna ricostruirsi il perché era preparato.
+
+E la terza volta è la riga che restava di quella metà, chiusa dalla
+[0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md), che aggiunge
+al criterio una cosa che le prime due non avevano: **la leva di una voce non si
+misura dal codice che chiede**. Il lock è quattro righe; il suo prezzo è un MSRV
+alzato, cioè una promessa verso chi compila. Una voce che costa poco a scrivere e
+molto a decidere sta in questa pagina come una che costa il contrario, e chi
+ordina il lavoro guardando la dimensione del diff le vede tutte e due sbagliate.
