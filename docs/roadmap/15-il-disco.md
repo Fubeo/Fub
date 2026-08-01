@@ -55,13 +55,24 @@ lock — sono quattro righe — ma l'**MSRV**, salito a 1.89 perché
 compila invece che in lavoro, ed è la ragione per cui la 0065 l'aveva chiamata
 decisione e non casella.
 
+Del **recovery** — l'altra metà, quella che resta — la prima delle tre caselle è
+chiusa dalla
+[0067](../decisions/0067-il-registro-di-cio-che-e-successo.md): il registro delle
+mutazioni esiste, sta in `.fub/` perché la profondità dichiara la classe e un
+registro non si rifà da niente, e non conserva il contenuto di prima ma
+l'**inverso** — che è la [0045](../decisions/0045-l-undo-ha-due-pile.md) letta dal
+disco. Il taglio della voce è quello che il suo titolo diceva già, ed è la terza
+volta di fila che questa voce si chiude per pezzi senza che il criterio cambi: le
+due restanti — il buffer di crash dell'editor e i comandi di manutenzione — sono
+recovery come questa, e la seconda è un **cliente** del registro appena nato.
+
 La 15.7 sta qui e non fra i presidi perché è la stessa domanda della durabilità
 vista all'apertura invece che alla scrittura: la verità non si rifiuta di aprire,
 si apre segnalando cosa non ha letto.
 
 ### 15.2 Durabilità e recovery
 
-*ex §2.5 · kernel · **P2** — la **durabilità** è chiusa: la scrittura con la [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), l'aggiornamento con la [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md); resta il **recovery**, e il journal è il meccanismo di 13.3 e dell'audit trail di 0010*
+*ex §2.5 · kernel · **P2** — la **durabilità** è chiusa: la scrittura con la [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), l'aggiornamento con la [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md); del **recovery** è chiuso il journal con la [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md), e restano **due** caselle: il buffer di crash e i comandi di manutenzione*
 
 - [x] **Scrittura atomica vera**, chiusa dalla
       [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md): la promessa sta
@@ -105,16 +116,29 @@ si apre segnalando cosa non ha letto.
       traccia ma i **preferiti**.
 - [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
       sopravvivere a un crash (2.1, 24.2).
-- [ ] **Journal delle mutazioni** (append-only in `.fub/data/`): base di
-      rollback dell'import (17.3), undo delle automazioni (16.3), audit (23.3) —
-      e della **transazione atomica per operazione batch** che il 22.4 promette
-      al centro di comando LLM, insieme al «rollback completo dell'operazione».
-      Quel capitolo è per il resto un cliente del registro dei comandi
-      ([0009](../decisions/0009-registro-dei-comandi.md) +
-      [0010](../decisions/0010-comando-descritto-a-una-macchina.md)) e sta bene
-      dov'è; quelle due righe però nessun chiamante se le può mantenere da sé. Il
-      lotto ([0011](../decisions/0011-il-lotto.md)) coalizza gli eventi e non è
-      una transazione — il tutto-o-niente è di questo strato.
+- [x] **Journal delle mutazioni**, chiuso dalla
+      [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md): una riga
+      per mutazione del kernel in `.fub/journal.jsonl`, con la versione di schema
+      **su ogni riga** e non in testa al file — un derivato di una versione ignota
+      si butta, questo no, quindi sopravvive agli aggiornamenti e la versione dopo
+      ci appende le proprie righe sotto. Il registro **non conserva il contenuto
+      di prima, conserva l'inverso**: quello di una modifica chirurgica è nella
+      riga ([0008](../decisions/0008-modifica-chirurgica.md)), quello delle quattro
+      mutazioni strutturali si deduce, e la sola variante senza inverso — la
+      riscrittura integrale, cioè il salvataggio dell'editor — è la riga che la
+      [0045](../decisions/0045-l-undo-ha-due-pile.md) aveva già tenuto fuori dalla
+      pila, e adesso lo **dichiara**. La riga di questa voce diceva
+      `.fub/data/` ed era la classe sbagliata: la profondità la dichiara
+      ([0048](../decisions/0048-una-radice-sola.md)), e un registro non si rifà da
+      niente. È costato l'**ottava operazione** sul supporto (`append`), argomentata
+      contro la frase in testa a `storage.rs` invece che scavalcandola, e la
+      politica di potatura è **dichiarata**: diecimila record, si pota
+      all'apertura, il taglio rispetta il confine di un lotto. Il rollback vero —
+      import (17.3), automazioni (16.3), audit (23.3) e la **transazione atomica
+      per operazione batch** del 22.4 — non è scritto, ed è di chi lo userà:
+      quello che questa casella doveva rendere possibile è che sia **scrivibile**,
+      e il lotto ([0011](../decisions/0011-il-lotto.md)) resta ciò che ne segna i
+      confini senza esserne la transazione.
 - [ ] **Comandi di manutenzione**: `rebuild_index`, `vault_health`,
       `diagnostic_bundle`, `repair` — come `CommandProvider` ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), non come
       comandi Tauri.

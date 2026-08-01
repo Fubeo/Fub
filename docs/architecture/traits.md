@@ -844,7 +844,11 @@ EntryRenamed { from, to, kind } }`,
   l'ho scritta io?» — e senza di essa un'automazione su-modifica si richiama da
   sola finché il budget non tronca. `Watcher` è l'unico attore che dice «il vault
   è cambiato senza passare da noi». Quale *comando* abbia chiesto l'operazione
-  non c'è: è l'audit trail di 22.4, e vuole un posto che lo conservi (§15.2).
+  non c'è: è l'audit trail di 22.4. Il posto che lo conserverebbe adesso esiste —
+  `.fub/journal.jsonl`, che di ogni mutazione scrive l'`Origin` intera
+  ([0067](../decisions/0067-il-registro-di-cio-che-e-successo.md)) — quindi ciò che
+  manca non è più un posto: è che l'`Actor` sappia dire *quale comando*, e nessun
+  cliente l'ha ancora chiesto.
 - `BatchEnded { batch, changed }` chiude un **lotto**
   ([0011](../decisions/0011-il-lotto.md)). Dentro un lotto `IndexUpdated` **non
   viene emesso** — è l'unico evento senza payload, quindi l'unico di cui N copie

@@ -89,6 +89,7 @@ use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
 use crate::index::Indexes;
+use crate::journal::{Journal, JournalOp, Lettura};
 use crate::locale::SystemLocale;
 use crate::occurrences;
 use crate::organization::OrganizationStore;
@@ -297,6 +298,14 @@ pub struct Workspace {
     /// l'unico stato di questa lista che si può buttare senza perdere niente —
     /// è derivato, e il vault resta la verità.
     entry_store: EntryStore,
+    /// **Ciò che è successo al vault** (§15.2): il registro append-only delle
+    /// mutazioni che il kernel ha eseguito.
+    ///
+    /// Non è un sesto proprietario per la ragione dell'anagrafe — è la memoria
+    /// di ciò che i cinque hanno fatto — ed è il suo esatto contrario per
+    /// classe: l'anagrafe è l'unico stato di questa lista che si può buttare
+    /// senza perdere niente, il registro è quello che non si rifà da niente.
+    journal: Journal,
     /// Quali spazi per-documento non hanno potuto seguire una rinomina (§13.2).
     ///
     /// Un `Vec` nudo e non un `Arc<RwLock<…>>` come le altre due liste di
@@ -366,7 +375,11 @@ impl Workspace {
             undo: UndoStack::default(),
             // L'anagrafe è **del vault**, come l'organizzazione: si apre col
             // root e non si riceve da chi monta.
-            entry_store: EntryStore::open(root, storage),
+            entry_store: EntryStore::open(root, Arc::clone(&storage)),
+            // Il registro è **del vault** come l'anagrafe, e come lei si apre
+            // col root: ciò che è successo a queste note viaggia con queste
+            // note.
+            journal: Journal::open(root, storage),
             doc_data_warnings: Vec::new(),
         }
     }
@@ -1467,15 +1480,90 @@ impl Workspace {
     /// Scrive la sorgente, riparsa il documento, aggiorna il grafo ed emette
     /// gli eventi. Il grafo si aggiorna per-documento ([`GraphUpdate`]).
     pub fn write_document(&mut self, id: &DocId, source: &str) -> Result<()> {
+        // Cosa si sapeva **prima**: l'impronta che l'anagrafe teneva, e se il
+        // documento esistesse affatto. Si prendono da ciò che è già in memoria e
+        // non rileggendo il file — una riga di registro non vale una lettura in
+        // più a ogni salvataggio (§15.2).
+        let esisteva = self.indexes.core.metas.contains_key(id);
+        let from = self
+            .indexes
+            .core
+            .entries
+            .get(id)
+            .and_then(|e| e.fingerprint.clone());
+        let to = self.write_source(id, source)?;
+        self.record(if esisteva {
+            JournalOp::Written {
+                doc: id.clone(),
+                from,
+                to,
+            }
+        } else {
+            JournalOp::Created {
+                doc: id.clone(),
+                to,
+            }
+        });
+        Ok(())
+    }
+
+    /// Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
+    /// coda di ogni scrittura, eventi. Rende la revisione prodotta.
+    ///
+    /// Esiste perché i tre chiamanti raccontano tre cose diverse al registro —
+    /// un salvataggio, una modifica chirurgica, un ripristino dal cestino — e
+    /// senza questa separazione ognuno ne avrebbe scritte **due**: la propria e
+    /// quella di `write_document`, cioè una mutazione contata due volte in una
+    /// lista che esiste per essere ripercorsa.
+    fn write_source(&mut self, id: &DocId, source: &str) -> Result<Revision> {
         // Il parse è puro: farlo PRIMA di scrivere tiene la mutazione atomica.
         // Nell'ordine inverso un parse fallito lascerebbe il disco avanti
         // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
         // pur avendo scritto.
         let model = self.docs.parse(id, source)?;
         self.docs.vault.write(id, source)?;
-        self.ingest_model(id, model, Revision::of(source));
+        let revision = Revision::of(source);
+        self.ingest_model(id, model, revision.clone());
         self.dispatch_pending();
-        Ok(())
+        Ok(revision)
+    }
+
+    /// Scrive una riga nel registro delle mutazioni (§15.2).
+    ///
+    /// Si chiama **dopo** che la mutazione è riuscita, e l'ordine è la decisione
+    /// ([0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md)):
+    /// un crash può far perdere la coda del registro — le ultime operazioni non
+    /// si potranno annullare — e mai il contrario, una riga che racconta
+    /// qualcosa che non è successo.
+    ///
+    /// L'esito non risale, come per l'anagrafe e per il sidecar del cestino: una
+    /// scrittura riuscita non deve fallire perché il suo registro non si è
+    /// scritto. A differenza dell'anagrafe però qui si **perde qualcosa** — un
+    /// pezzo di ciò che è successo, che non si ricostruisce da niente — quindi
+    /// non è un `warn` e basta: è un guasto che esce anche dal canale (0052,
+    /// 0062), perché chi importa cinquecento note ha il diritto di sapere che
+    /// quella riga non sarà annullabile.
+    fn record(&mut self, op: JournalOp) {
+        let origin = self.dispatch.origin();
+        if let Err(e) = self.journal.append(origin, op) {
+            tracing::warn!(target: "fub.kernel", "registro: {e}");
+            self.report_trouble(
+                Severity::Failure,
+                None,
+                PluginError::Internal(format!("registro: {e}").into()),
+            );
+        }
+    }
+
+    /// Ciò che è successo a questo vault, e **cosa non si è potuto leggere**
+    /// (§15.2).
+    ///
+    /// È la lettura del registro come sta sul disco, non una cache in memoria:
+    /// sullo stesso file scrivono anche le altre installazioni aperte sulla
+    /// stessa cartella, e una copia in memoria mostrerebbe solo le proprie
+    /// righe.
+    pub fn journal(&self) -> Lettura {
+        self.journal.read()
     }
 
     /// La revisione del sorgente di un documento: l'identità del testo su cui
@@ -1514,7 +1602,17 @@ impl Workspace {
         if report.is_empty() {
             return Ok(report);
         }
-        self.write_document(id, &next)?;
+        let from = request.base.clone();
+        let to = self.write_source(id, &next)?;
+        // L'inverso si calcola qui e si scrive nel registro: è l'unico posto in
+        // cui esiste — dopo, per riaverlo servirebbe il testo di prima, che è
+        // ciò che il registro non tiene (0067).
+        self.record(JournalOp::Edited {
+            doc: id.clone(),
+            from,
+            to,
+            inverse: report.inverse(),
+        });
         Ok(report)
     }
 
@@ -1812,6 +1910,10 @@ impl Workspace {
         }
         let (trashed, sidecar_fault) = self.docs.vault.trash(id)?;
         self.remove_document(id);
+        self.record(JournalOp::Trashed {
+            doc: id.clone(),
+            trash: trashed.clone(),
+        });
         // Il sidecar del cestino non si è scritto: la cancellazione è riuscita
         // ma chi ripristina questa voce tornerà nel posto sbagliato. È la
         // perdita di un dato autorevole (0052 la conta come `Failure`), e
@@ -1882,7 +1984,14 @@ impl Workspace {
         }
 
         let source = self.docs.vault.read(trash_id)?;
-        self.write_document(&target, &source)?;
+        // `write_source` e non `write_document`: al registro questa non è una
+        // nota che nasce, è una che torna — e l'inverso di un ritorno è un
+        // ritorno nel cestino, non la cancellazione di qualcosa che non c'era.
+        self.write_source(&target, &source)?;
+        self.record(JournalOp::Restored {
+            trash: trash_id.clone(),
+            doc: target.clone(),
+        });
         // Se il ripristino approda su un path diverso dall'origine (il path
         // era di nuovo occupato e l'utente ha scelto un altro nome), lo stato
         // per-documento — storia del versioning, meta del frontend — vive
@@ -1975,6 +2084,14 @@ impl Workspace {
         let source = self.docs.vault.read(to)?;
         let model = self.docs.parse(to, &source)?;
         self.migrate_identity(from, to, model, Revision::of(&source));
+        // La riga del rename va **prima** di quelle delle sorgenti riscritte:
+        // sono tutte dentro lo stesso lotto, e chi le ripercorre all'indietro le
+        // trova nell'ordine in cui `UndoStep` le vuole (0045: i passi sono in
+        // ordine di esecuzione, e chi esegue non riordina).
+        self.record(JournalOp::Renamed {
+            from: from.clone(),
+            to: to.clone(),
+        });
 
         // Il piano si applica TUTTO, anche se una sorgente fallisce: abortire
         // a metà lascerebbe link misti vecchio/nuovo senza possibilità di
@@ -1999,8 +2116,9 @@ impl Workspace {
         // Il lotto non annulla: le sorgenti riscritte restano riscritte anche
         // se una è fallita, ed è la scelta giusta *per il rename* — abortire a
         // metà lascerebbe link misti senza possibilità di retry. Chi vuole il
-        // contrario (import, migrazioni) vuole il journal del §15.2, non un
-        // campo in più qui.
+        // contrario (import, migrazioni) vuole il registro delle mutazioni, che
+        // adesso c'è (0067) e di questo lotto tiene i confini — non un campo in
+        // più qui.
         if !falliti.is_empty() {
             return Err(KernelError::LinkRewrite(falliti.join("; ")));
         }
@@ -2058,6 +2176,13 @@ impl Workspace {
             ));
         }
         self.migrate_doc_data(from, to);
+        // Un allegato spostato è una mutazione del vault come le altre: il
+        // registro non conosce la differenza fra un documento e un file di cui
+        // nessuno sa il formato, e non deve — l'inverso è lo stesso.
+        self.record(JournalOp::Renamed {
+            from: from.clone(),
+            to: to.clone(),
+        });
 
         let mut falliti: Vec<String> = Vec::new();
         for (src, request) in plan {
@@ -3642,7 +3767,8 @@ impl Workspace {
     ///
     /// **Non è una transazione.** Se una delle scritture dentro `f` fallisce, le
     /// altre restano fatte: il lotto non annulla niente e non lo promette (il
-    /// tutto-o-niente vuole il journal del §15.2). Ciò che è andato storto lo
+    /// tutto-o-niente vuole il registro delle mutazioni, che dalla 0067 c'è e di
+    /// ogni lotto tiene i confini: manca chi lo ripercorre). Ciò che è andato storto lo
     /// riporta `f` col proprio valore di ritorno, che questa funzione passa
     /// intatto.
     ///

@@ -275,8 +275,11 @@ backlink). Cosa succede dentro un lotto — `IndexUpdated` coalizzato in un
   sua **invocazione di comando**, che l'host apre e chiude per lui.
 - **Un lotto non è una transazione.** Se una scrittura fallisce, le altre restano
   fatte, e chi lo ha aperto lo scopre dal proprio valore di ritorno. Il
-  tutto-o-niente vuole il journal del §15.2, e prometterlo con un nome
-  (`transaction`, `rollback`) lo farebbe credere a chi legge solo la firma.
+  tutto-o-niente vuole il journal del §15.2 — che dalla
+  [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md) **c'è**, e tiene
+  di ogni operazione i confini e l'inverso: a mancare adesso è chi lo ripercorre,
+  non l'informazione. Prometterlo qui con un nome (`transaction`, `rollback`) lo
+  farebbe comunque credere a chi legge solo la firma.
 
 Prove: `crates/fub-kernel/tests/batch_and_origin.rs` (incluso il confronto fra
 un'automazione che si difende con l'origine e la stessa che non lo fa),

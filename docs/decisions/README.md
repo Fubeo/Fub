@@ -77,6 +77,7 @@ cronologico di chiusura.
 | [0064](0064-il-supporto-sta-sotto.md) | Il supporto sta sotto, e la specie di una voce non segue il link | §15.1 — chiude la voce **meno una casella**: le tre righe di `.fub/` che scrivono con `write_atomic` e aspettano il §15.2 ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) | Una scrittura o c'è o non c'è, e i due casi in cui il file non è nostro | §15.2 (**metà voce**: la scrittura) **più** la casella residua della [0064](0064-il-supporto-sta-sotto.md) — resta il recovery ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0066](0066-un-aggiornamento-non-e-una-scrittura.md) | Un aggiornamento non è una scrittura, e il lock costa una promessa | §15.2 (la *lost update*, che la [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) aveva rimandata) — resta il recovery ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
+| [0067](0067-il-registro-di-cio-che-e-successo.md) | Il registro di ciò che è successo, e l'inverso al posto del contenuto | §15.2 (**una casella su tre** del recovery: il journal delle mutazioni) — restano il buffer di crash e i comandi di manutenzione ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -367,6 +368,38 @@ guardate come **due promesse a due platee diverse**, non come due implementazion
 e ha deciso quale delle due platee può fare qualcosa in risposta. Chi ricompila
 oggi aggiorna la toolchain; chi installa una dipendenza in più se la tiene per
 sempre.
+
+La [0067](0067-il-registro-di-cio-che-e-successo.md) porta due precedenti, e
+nessuno dei due riguarda cosa ha deciso.
+
+Il primo è la terza specie di **premessa sbagliata** che una voce può contenere, e
+va distinta dalle due che ci sono. La [0053](0053-il-contratto-ha-una-sorgente.md)
+ha chiuso una voce smentendone un **fatto sull'architettura**; la
+[0052](0052-cio-che-va-storto-e-un-evento.md) ne ha corretti dei **numeri**. Qui
+la riga sbagliata era una **classificazione**: «append-only in `.fub/data/`», cioè
+un dato autorevole scritto sotto la radice di ciò che si butta e si rifà. Non è
+un fatto verificabile contro i sorgenti come quello della 0053 — nel momento in cui
+la riga è stata scritta il file non esisteva — ed è più insidioso di un numero,
+perché una classe sbagliata non diventa falsa col tempo: nasce falsa e ha l'aria di
+un'istruzione. La regola che la smentisce è la [0048](0048-una-radice-sola.md), che
+era già scritta e che nessuno aveva riletto scrivendo la riga. Da tenere come
+criterio: **una riga di `todo.md` che dice *dove* va un dato è una previsione, e si
+verifica contro la regola prima di eseguirla** — è il gemello, sull'asse della
+classe, di ciò che la §21.10 ha insegnato sull'asse delle affermazioni esterne.
+
+Il secondo è di metodo, e riguarda le frasi che stanno in testa ai moduli. Quella
+di `storage.rs` diceva «sette operazioni, e chi ne aggiunge un'ottava sta chiedendo
+al supporto di sapere qualcosa sul contenuto», e l'ottava è arrivata. Non l'ha
+aggiunta chi non l'aveva letta: l'ha aggiunta il verbale che ci ha argomentato
+contro, e la frase è rimasta nel modulo — riscritta come **metro** e non come
+divieto — perché è quella che ha costretto a trovare il criterio vero, che stava
+poche righe sotto (*ciò che si compone dalle altre ha un default e non è una
+capacità in più*). È il rovescio della **garanzia dichiarata che non esisteva**
+della [0054](0054-il-banco-del-lato-provider.md): là una frase in prosa aveva fatto
+credere a una copertura che nessuno aveva, qui una frase in prosa ha impedito
+un'aggiunta finché non c'era la ragione per farla. Le due insieme dicono cosa vale
+una frase scritta in testa a un modulo: **non presidia niente e orienta tutto**, e
+si tocca scrivendo perché, non cancellandola.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio
