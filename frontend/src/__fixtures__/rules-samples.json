@@ -661,11 +661,13 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md"
+        "id": "Progetti/Alpha.md",
+        "changes": null
       },
       "out": true
     },
@@ -692,11 +694,13 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Altro/Beta.md"
+        "id": "Altro/Beta.md",
+        "changes": null
       },
       "out": false
     },
@@ -723,11 +727,13 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Diario/oggi.md"
+        "id": "Diario/oggi.md",
+        "changes": null
       },
       "out": true
     },
@@ -754,7 +760,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "document_renamed",
@@ -786,7 +793,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "document_renamed",
@@ -818,7 +826,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "batch_ended",
@@ -853,7 +862,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "batch_ended",
@@ -887,7 +897,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "batch_ended",
@@ -919,7 +930,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "custom",
@@ -951,7 +963,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "custom",
@@ -983,7 +996,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "overflow",
@@ -1014,7 +1028,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "vault_closed",
@@ -1045,7 +1060,8 @@
             "kind": "folder",
             "path": "Progetti"
           }
-        ]
+        ],
+        "changes": []
       },
       "event": {
         "type": "index_updated"
@@ -1053,18 +1069,125 @@
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "stretta",
       "mask": {
         "kinds": [
           "document_changed",
-          "custom"
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
         ],
-        "topics": [],
-        "subjects": []
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ],
+        "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md"
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [
+            "tags",
+            "body"
+          ],
+          "properties": [],
+          "tags_added": [
+            "urgente"
+          ],
+          "tags_removed": []
+        }
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ],
+        "changes": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [
+            "frontmatter"
+          ],
+          "properties": [
+            "scadenza"
+          ],
+          "tags_added": [],
+          "tags_removed": []
+        }
+      },
+      "out": true
+    },
+    {
+      "mask_name": "stretta",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "document_renamed",
+          "batch_ended",
+          "custom",
+          "overflow",
+          "vault_closed"
+        ],
+        "topics": [
+          "com.acme.tasks"
+        ],
+        "subjects": [
+          {
+            "kind": "document",
+            "id": "Diario/oggi.md"
+          },
+          {
+            "kind": "folder",
+            "path": "Progetti"
+          }
+        ],
+        "changes": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [],
+          "properties": [],
+          "tags_added": [],
+          "tags_removed": []
+        }
       },
       "out": true
     },
@@ -1076,11 +1199,13 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Altro/Beta.md"
+        "id": "Progetti/Alpha.md",
+        "changes": null
       },
       "out": true
     },
@@ -1092,11 +1217,13 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Diario/oggi.md"
+        "id": "Altro/Beta.md",
+        "changes": null
       },
       "out": true
     },
@@ -1108,7 +1235,26 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Diario/oggi.md",
+        "changes": null
+      },
+      "out": true
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "document_renamed",
@@ -1125,7 +1271,8 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "document_renamed",
@@ -1142,7 +1289,8 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "batch_ended",
@@ -1162,7 +1310,8 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "batch_ended",
@@ -1181,7 +1330,8 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "batch_ended",
@@ -1198,7 +1348,8 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "custom",
@@ -1215,7 +1366,8 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "custom",
@@ -1232,7 +1384,8 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "overflow",
@@ -1248,7 +1401,8 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "vault_closed",
@@ -1264,10 +1418,434 @@
           "custom"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "event": {
         "type": "index_updated"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [
+            "tags",
+            "body"
+          ],
+          "properties": [],
+          "tags_added": [
+            "urgente"
+          ],
+          "tags_removed": []
+        }
+      },
+      "out": true
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [
+            "frontmatter"
+          ],
+          "properties": [
+            "scadenza"
+          ],
+          "tags_added": [],
+          "tags_removed": []
+        }
+      },
+      "out": true
+    },
+    {
+      "mask_name": "larga",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "custom"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": []
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [],
+          "properties": [],
+          "tags_added": [],
+          "tags_removed": []
+        }
+      },
+      "out": true
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": null
+      },
+      "out": true
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Altro/Beta.md",
+        "changes": null
+      },
+      "out": true
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Diario/oggi.md",
+        "changes": null
+      },
+      "out": true
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "document_renamed",
+        "from": "Progetti/Alpha.md",
+        "to": "Altro/Alpha.md"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "document_renamed",
+        "from": "Altro/Alpha.md",
+        "to": "Altro/Gamma.md"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "1",
+        "changed": [
+          "Altro/a.md",
+          "Progetti/b.md"
+        ]
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "2",
+        "changed": [
+          "Altro/a.md"
+        ]
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "batch_ended",
+        "batch": "3",
+        "changed": []
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "custom",
+        "topic": "com.acme.tasks:done",
+        "payload": {}
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "custom",
+        "topic": "com.altro.note:done",
+        "payload": {}
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "overflow",
+        "dropped": 7
+      },
+      "out": true
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "vault_closed",
+        "root": "/vault"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "index_updated"
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [
+            "tags",
+            "body"
+          ],
+          "properties": [],
+          "tags_added": [
+            "urgente"
+          ],
+          "tags_removed": []
+        }
+      },
+      "out": true
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [
+            "frontmatter"
+          ],
+          "properties": [
+            "scadenza"
+          ],
+          "tags_added": [],
+          "tags_removed": []
+        }
+      },
+      "out": false
+    },
+    {
+      "mask_name": "sui_tag",
+      "mask": {
+        "kinds": [
+          "document_changed",
+          "overflow"
+        ],
+        "topics": [],
+        "subjects": [],
+        "changes": [
+          "tags"
+        ]
+      },
+      "event": {
+        "type": "document_changed",
+        "id": "Progetti/Alpha.md",
+        "changes": {
+          "aspects": [],
+          "properties": [],
+          "tags_added": [],
+          "tags_removed": []
+        }
       },
       "out": false
     }

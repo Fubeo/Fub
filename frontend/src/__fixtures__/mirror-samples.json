@@ -309,7 +309,8 @@
     },
     {
       "type": "document_changed",
-      "id": "a"
+      "id": "a",
+      "changes": null
     },
     {
       "type": "document_removed",
@@ -409,13 +410,19 @@
         "kind": "internal",
         "message": "flush fallito"
       }
+    },
+    {
+      "type": "timer_fired",
+      "owner": "com.acme.tasks",
+      "timer": "sync"
     }
   ],
   "KernelNotice": [
     {
       "event": {
         "type": "document_changed",
-        "id": "a"
+        "id": "a",
+        "changes": null
       },
       "origin": {
         "actor": {
@@ -427,7 +434,8 @@
     {
       "event": {
         "type": "document_changed",
-        "id": "a"
+        "id": "a",
+        "changes": null
       },
       "origin": {
         "actor": {
@@ -439,7 +447,8 @@
     {
       "event": {
         "type": "document_changed",
-        "id": "a"
+        "id": "a",
+        "changes": null
       },
       "origin": {
         "actor": {
@@ -451,7 +460,8 @@
     {
       "event": {
         "type": "document_changed",
-        "id": "a"
+        "id": "a",
+        "changes": null
       },
       "origin": {
         "actor": {
@@ -1249,7 +1259,8 @@
           "batch_ended"
         ],
         "topics": [],
-        "subjects": []
+        "subjects": [],
+        "changes": []
       },
       "follows": [
         "document",
@@ -1293,6 +1304,10 @@
             "kind": "folder",
             "path": "Diario"
           }
+        ],
+        "changes": [
+          "tags",
+          "frontmatter"
         ]
       },
       "follows": [],

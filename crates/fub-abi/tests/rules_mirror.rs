@@ -36,7 +36,7 @@
 //!   requisiti che devono divergere, e una fixture che li legasse nascerebbe
 //!   rossa e resterebbe rossa. Vedi `fub_abi::rules`.
 
-use fub_abi::event::{BatchId, Event, EventKind, EventMask, Subject};
+use fub_abi::event::{BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Subject};
 use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
 use fub_abi::rules::path::resolution_key;
@@ -276,10 +276,11 @@ fn folder_contains_cases() -> Vec<Value> {
     .collect()
 }
 
-/// La regola per intero: la specie, il topic, il soggetto — e i casi che
-/// distinguono una lettura giusta da una plausibile (il rename che esce dalla
-/// cartella, il lotto che la interseca, ciò che non nomina nessun documento e
-/// deve passare comunque).
+/// La regola per intero: la specie, il topic, il soggetto, **cosa è cambiato** —
+/// e i casi che distinguono una lettura giusta da una plausibile (il rename che
+/// esce dalla cartella, il lotto che la interseca, ciò che non nomina nessun
+/// documento e deve passare comunque, e il diff che non si sa contro quello che
+/// si sa vuoto).
 fn mask_wants_cases() -> Vec<Value> {
     let stretta = EventMask::of([
         EventKind::DocumentChanged,
@@ -295,15 +296,23 @@ fn mask_wants_cases() -> Vec<Value> {
         Subject::folder("Progetti"),
     ]);
     let larga = EventMask::of([EventKind::DocumentChanged, EventKind::Custom]);
+    // Il quarto asse (§22.2, decisione 0069). Senza una maschera che lo
+    // dichiari, `changes` sarebbe una lista vuota in ogni campione e il gemello
+    // TS resterebbe verde senza aver mai filtrato su un aspetto.
+    let sui_tag = EventMask::of([EventKind::DocumentChanged, EventKind::Overflow])
+        .on_changes([DocChange::Tags]);
     let eventi = [
         Event::DocumentChanged {
             id: DocId::new("Progetti/Alpha.md"),
+            changes: None,
         },
         Event::DocumentChanged {
             id: DocId::new("Altro/Beta.md"),
+            changes: None,
         },
         Event::DocumentChanged {
             id: DocId::new("Diario/oggi.md"),
+            changes: None,
         },
         // Il rename è del soggetto di partenza E di quello d'arrivo.
         Event::DocumentRenamed {
@@ -343,9 +352,37 @@ fn mask_wants_cases() -> Vec<Value> {
         },
         // La specie non dichiarata non arriva, e viene prima di tutto il resto.
         Event::IndexUpdated,
+        // I tre stati del quarto asse, che è tutto ciò che lo distingue da un
+        // filtro qualunque: un diff che tocca l'aspetto dichiarato, uno che non
+        // lo tocca, e uno **vuoto** — che è un fatto («niente è cambiato») e non
+        // passa, mentre `None` più sopra è *non lo so* e passa.
+        Event::DocumentChanged {
+            id: DocId::new("Progetti/Alpha.md"),
+            changes: Some(DocChanges {
+                aspects: vec![DocChange::Tags, DocChange::Body],
+                tags_added: vec!["urgente".into()],
+                ..DocChanges::default()
+            }),
+        },
+        Event::DocumentChanged {
+            id: DocId::new("Progetti/Alpha.md"),
+            changes: Some(DocChanges {
+                aspects: vec![DocChange::Frontmatter],
+                properties: vec!["scadenza".into()],
+                ..DocChanges::default()
+            }),
+        },
+        Event::DocumentChanged {
+            id: DocId::new("Progetti/Alpha.md"),
+            changes: Some(DocChanges::default()),
+        },
     ];
     let mut out = Vec::new();
-    for (nome, mask) in [("stretta", &stretta), ("larga", &larga)] {
+    for (nome, mask) in [
+        ("stretta", &stretta),
+        ("larga", &larga),
+        ("sui_tag", &sui_tag),
+    ] {
         for event in &eventi {
             out.push(json!({
                 "mask_name": nome,

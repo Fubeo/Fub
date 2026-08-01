@@ -23,6 +23,8 @@ export type ConflictPolicy = "skip" | "replace" | "rename";
 
 export type ContextKind = "document" | "selection" | "mode";
 
+export type DocChange = "body" | "frontmatter" | "tags" | "links" | "outline" | "anchors";
+
 export type EntryKind = "document" | "asset" | "unknown";
 
 export type EventKind =
@@ -44,6 +46,7 @@ export type EventKind =
   | "entry_removed"
   | "entry_renamed"
   | "trouble"
+  | "timer_fired"
 ;
 
 export type HealthCheck = "broken_links" | "orphan_documents";

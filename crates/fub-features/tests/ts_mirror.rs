@@ -28,7 +28,7 @@ use fub_abi::command::{
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{
-    Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
+    Actor, BatchId, DocChange, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{DocId, LinkTarget, Span};
@@ -336,6 +336,7 @@ fn event_samples() -> Vec<Value> {
         Event::VaultOpened { root: "r".into() },
         Event::DocumentChanged {
             id: DocId::new("a"),
+            changes: None,
         },
         Event::DocumentRemoved {
             id: DocId::new("a"),
@@ -417,6 +418,10 @@ fn event_samples() -> Vec<Value> {
             subject: None,
             error: PluginError::Internal("flush fallito".into()),
         },
+        Event::TimerFired {
+            owner: "com.acme.tasks".into(),
+            timer: "sync".into(),
+        },
     ];
     for e in &all {
         match e {
@@ -429,6 +434,7 @@ fn event_samples() -> Vec<Value> {
             | Event::Overflow { .. }
             | Event::ViewInvalidated { .. }
             | Event::Custom { .. }
+            | Event::TimerFired { .. }
             | Event::VaultClosed { .. }
             | Event::BatchEnded { .. }
             | Event::JobStarted { .. }
@@ -469,6 +475,7 @@ fn notice_samples() -> Vec<Value> {
             to_value(Notice::new(
                 Event::DocumentChanged {
                     id: DocId::new("a"),
+                    changes: None,
                 },
                 // `batch` come stringa: è un u64 pieno, come `VersionRef.hash`.
                 Origin::by(actor).in_batch(Some(BatchId(u64::MAX))),
@@ -1155,7 +1162,10 @@ fn expected() -> Value {
             // La maschera **stretta** (§10.1): senza un campione che porti un
             // topic e tutte e due le specie di soggetto, il mirror TS vedrebbe
             // solo liste vuote — cioè non vedrebbe la parte che questa
-            // decisione ha aggiunto.
+            // decisione ha aggiunto. Vale parola per parola per il quarto asse
+            // (§22.2, decisione 0069), che è qui per la stessa ragione: un
+            // `changes` vuoto in ogni campione lascerebbe il mirror verde senza
+            // aver mai visto un aspetto.
             to_value(
                 ViewSpec::new("v2", "V2", ViewSurface::Bottom).refreshing(
                     EventMask::of([EventKind::DocumentChanged, EventKind::Custom])
@@ -1163,7 +1173,8 @@ fn expected() -> Value {
                         .about([
                             Subject::document("Progetti/Alpha.md"),
                             Subject::folder("Diario"),
-                        ]),
+                        ])
+                        .on_changes([DocChange::Tags, DocChange::Frontmatter]),
                 ),
             ),
         ],

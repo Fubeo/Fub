@@ -95,13 +95,27 @@ pub fn mask_wants(mask: &EventMask, event: &Event) -> bool {
             return false;
         }
     }
+    if !mask.changes.is_empty() {
+        // Il quarto asse vale per i soli eventi che un cambiamento lo
+        // **raccontano**. `None` è *non lo so* — un `document-changed`
+        // costruito a mano, o che non viene dalla coda di una scrittura — e
+        // passa: è la stessa regola del soggetto, e per la stessa ragione.
+        // `Some(vuoto)` invece è un fatto, ed è *niente è cambiato*: quello non
+        // passa, o il filtro non toglierebbe niente proprio nel caso in cui ha
+        // la risposta più precisa.
+        if let Some(changes) = event.changes() {
+            if !changes.touches(&mask.changes) {
+                return false;
+            }
+        }
+    }
     true
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{BatchId, EventKind, Subject};
+    use crate::event::{BatchId, DocChange, DocChanges, EventKind, Subject};
     use crate::model::DocId;
 
     #[test]
@@ -147,6 +161,43 @@ mod tests {
         }));
         assert!(tutto.wants(&Event::DocumentChanged {
             id: DocId::new("ovunque/nota.md"),
+            changes: None,
+        }));
+    }
+
+    /// *Non lo so* non è *niente*, e i due vanno da parti opposte del filtro
+    /// (§22.2, decisione 0069).
+    ///
+    /// È la coppia che questa regola non può sbagliare: `None` è un evento che
+    /// non viene dalla coda di una scrittura del kernel, e filtrarlo via
+    /// vorrebbe dire perdere in silenzio su un diff che non è quello vero;
+    /// `Some(vuoto)` è un fatto — niente è cambiato — e lasciarlo passare
+    /// vorrebbe dire non filtrare proprio dove la risposta è più precisa.
+    #[test]
+    fn not_knowing_passes_and_knowing_nothing_does_not() {
+        let sui_tag = EventMask::of([EventKind::DocumentChanged]).on_changes([DocChange::Tags]);
+        assert!(sui_tag.wants(&Event::DocumentChanged {
+            id: DocId::new("a.md"),
+            changes: None,
+        }));
+        assert!(!sui_tag.wants(&Event::DocumentChanged {
+            id: DocId::new("a.md"),
+            changes: Some(DocChanges::default()),
+        }));
+        assert!(sui_tag.wants(&Event::DocumentChanged {
+            id: DocId::new("a.md"),
+            changes: Some(DocChanges {
+                aspects: vec![DocChange::Tags],
+                ..DocChanges::default()
+            }),
+        }));
+        // E un evento che un cambiamento non lo racconta affatto passa comunque:
+        // il quarto asse non è un modo di filtrare via le altre specie.
+        let anche_i_lotti = EventMask::of([EventKind::DocumentChanged, EventKind::BatchEnded])
+            .on_changes([DocChange::Tags]);
+        assert!(anche_i_lotti.wants(&Event::BatchEnded {
+            batch: BatchId(1),
+            changed: vec![DocId::new("a.md")],
         }));
     }
 

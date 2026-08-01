@@ -954,7 +954,7 @@ impl EventHandler for VersioningHandler {
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         match &notice.event {
             Event::VaultOpened { .. } => self.first_snapshot_of_the_vault(host)?,
-            Event::DocumentChanged { id } => {
+            Event::DocumentChanged { id, .. } => {
                 let source = host.read_document(id)?;
                 self.store.snapshot(id, &source, host)?;
             }

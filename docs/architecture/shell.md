@@ -201,7 +201,9 @@ Cosa ci si guadagna, oltre alla simmetria:
 - **La maschera si applica con la regola del contratto**, non con un `includes`
   scritto qui: `refresh` è una `EventMask` intera
   ([decisione 0033](../decisions/0033-la-grana-di-un-abbonamento.md)) — specie,
-  prefissi di topic, soggetto — e a deciderla è `maskWants` (`rules/mirrored.ts`),
+  prefissi di topic, soggetto, e **cosa è cambiato**
+  ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)) — e a deciderla è
+  `maskWants` (`rules/mirrored.ts`),
   gemella della funzione del kernel e legata a lei dalla fixture generata. Con la
   lista di specie di prima, la shell avrebbe ignorato in silenzio una view
   ristretta a una cartella.

@@ -17,7 +17,7 @@
 //
 // **Non aggiungere qui una regola senza la sua gemella Rust e i suoi casi nella
 // fixture**: sarebbe di nuovo una copia che nessuno confronta.
-import type { EventMask, KernelEvent, Subject } from "../host/contract";
+import type { DocChanges, EventMask, KernelEvent, Subject } from "../host/contract";
 
 /// L'ultimo segmento di un path: `Progetti/Alpha.md` → `Alpha.md`.
 ///
@@ -213,10 +213,13 @@ export function eventNames(event: KernelEvent): string[] {
 /// stessa del kernel non è un commento: è la fixture generata di
 /// `crates/fub-abi/tests/rules_mirror.rs`.
 ///
-/// I tre filtri sono in and, e ognuno vuoto vuol dire *non filtro*. Il soggetto
-/// vale per i soli eventi che un documento lo nominano: `overflow`,
+/// I quattro filtri sono in and, e ognuno vuoto vuol dire *non filtro*. Il
+/// soggetto vale per i soli eventi che un documento lo nominano: `overflow`,
 /// `vault_closed` e `job_done` passano comunque, perché nessuno dei tre si
-/// riscopre riguardando il vault.
+/// riscopre riguardando il vault. Il quarto — *cosa* è cambiato (§22.2) — vale
+/// per i soli eventi che un cambiamento lo raccontano: `changes` assente è
+/// *non lo so* e passa, `changes` presente e vuoto è *niente è cambiato* e non
+/// passa.
 export function maskWants(mask: EventMask, event: KernelEvent): boolean {
   if (!mask.kinds.includes(event.type)) return false;
   if (event.type === "custom" && mask.topics.length > 0) {
@@ -228,7 +231,19 @@ export function maskWants(mask: EventMask, event: KernelEvent): boolean {
       return false;
     }
   }
+  if (mask.changes && mask.changes.length > 0) {
+    const changes = eventChanges(event);
+    if (changes && !changes.aspects.some((a) => mask.changes.includes(a))) {
+      return false;
+    }
+  }
   return true;
+}
+
+/// Cosa è cambiato, per gli eventi che lo raccontano. Gemella di
+/// `Event::changes` (§22.2).
+export function eventChanges(event: KernelEvent): DocChanges | undefined {
+  return event.type === "document_changed" ? (event.changes ?? undefined) : undefined;
 }
 
 /// Questo documento sta nel soggetto? Gemella di `Subject::holds`.

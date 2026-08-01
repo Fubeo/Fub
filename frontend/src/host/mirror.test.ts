@@ -314,6 +314,12 @@ function touchEvent(e: KernelEvent): void {
       e.subject;
       e.error.kind;
       return;
+    // Una sveglia dichiarata nel manifest è scaduta (§22.1): non nomina nessun
+    // documento, e chi si riconosce lo fa da `owner`.
+    case "timer_fired":
+      e.owner;
+      e.timer;
+      return;
     default:
       assertNever(e);
   }
@@ -792,7 +798,12 @@ describe("mirror TS↔Rust", () => {
   it("la maschera di una view ha le chiavi del mirror, e ogni soggetto è gestito", () => {
     const maschere = (fixture.ViewSpec as ViewSpec[]).map((s) => s.refresh);
     expect(maschere.length).toBeGreaterThan(0);
-    const chiavi = keysOf<EventMask>({ kinds: true, topics: true, subjects: true });
+    const chiavi = keysOf<EventMask>({
+      kinds: true,
+      topics: true,
+      subjects: true,
+      changes: true,
+    });
     for (const m of maschere) {
       expect(Object.keys(m).sort()).toEqual(chiavi);
       m.kinds.forEach((k) => expect(typeof k).toBe("string"));

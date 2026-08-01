@@ -43,7 +43,7 @@ impl EventHandler for Spia {
 
     fn handle(&mut self, notice: &Notice, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         let riga = match &notice.event {
-            Event::DocumentChanged { id } => format!("cambiato:{id}"),
+            Event::DocumentChanged { id, .. } => format!("cambiato:{id}"),
             Event::DocumentRemoved { id } => format!("rimosso:{id}"),
             Event::DocumentRenamed { from, to } => format!("rinominato:{from}->{to}"),
             Event::Custom { topic, .. } => format!("custom:{topic}"),

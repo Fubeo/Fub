@@ -1120,8 +1120,46 @@ interface events {
     use settings.{setting-scope};
     use errors.{plugin-error};
 
-    record event-document-changed { id: doc-id }
+    /// QUALE PARTE di un documento è cambiata (§22.2, decisione 0069).
+    /// Insieme chiuso dal contratto, ed è l'unico asse su cui `event-mask`
+    /// filtra: chi applica una maschera lo fa per ogni handler a ogni evento e
+    /// deve rispondere sì o no confrontando due liste corte. Ciò che è APERTO —
+    /// quali chiavi, quali tag — sta in `doc-changes` e si legge, non si filtra.
+    /// Non c'è `tasks` perché un task non è un campo di `document-model`:
+    /// il giorno che lo sarà, questo enum cresce IN CODA.
+    enum doc-change {
+        body,
+        frontmatter,
+        tags,
+        links,
+        outline,
+        anchors,
+    }
+    /// Cosa è cambiato: gli ASPETTI, su cui si filtra, e i NOMI, che si leggono.
+    /// I nomi stanno qui perché il diff che li produce è già in mano a chi
+    /// emette l'evento — il modello nuovo è arrivato e i metadati di prima non
+    /// sono ancora stati sovrascritti. Un'automazione su «la scadenza è
+    /// cambiata» si sveglia sul solo aspetto `frontmatter` e guarda
+    /// `properties`: non rilegge il documento e non si tiene una copia di ieri.
+    /// Ordinati e senza ripetizioni.
+    record doc-changes {
+        aspects: list<doc-change>,
+        properties: list<string>,
+        tags-added: list<string>,
+        tags-removed: list<string>,
+    }
+    /// `changes` assente = NON LO SO (l'evento non viene dalla coda di una
+    /// scrittura del kernel), e passa qualunque filtro; presente e vuoto è un
+    /// fatto — NIENTE è cambiato — e non passa.
+    record event-document-changed { id: doc-id, changes: option<doc-changes> }
     record event-document-removed { id: doc-id }
+    /// Una sveglia dichiarata nel manifest (`plugin-manifest.timers`) è scaduta
+    /// (§22.1, decisione 0069). Che il tempo differito sia un evento e non una
+    /// capacità è la regola della decisione 0013 — ciò che si limita a informare
+    /// è un evento — e non più la ragione che quella decisione aveva scritto
+    /// («il kernel non possiede thread»), superata dalla 0032.
+    /// Non nomina nessun documento: passa il filtro di soggetto di ogni maschera.
+    record event-timer-fired { owner: string, timer: string }
     /// L'identità È il path: chi tiene stato per-documento migra la chiave,
     /// non tratta il rename come remove+add. (`from` è keyword WIT: `%from`.)
     record event-document-renamed { %from: doc-id, to: doc-id }
@@ -1261,6 +1299,7 @@ interface events {
         entry-removed(event-entry-removed),
         entry-renamed(event-entry-renamed),
         trouble(event-trouble),
+        timer-fired(event-timer-fired),
     }
 
     enum event-kind {
@@ -1296,6 +1335,8 @@ interface events {
         /// una superficie dove dirlo: il centro notifiche della shell è il
         /// primo, e non sarà l'unico.
         trouble,
+        /// Una sveglia dichiarata nel manifest è scaduta (§22.1).
+        timer-fired,
     }
     /// DOVE: il soggetto di un abbonamento (§10.1, decisione 0033).
     ///
@@ -1337,6 +1378,12 @@ interface events {
         kinds: list<event-kind>,
         topics: list<string>,
         subjects: list<subject>,
+        /// COSA è cambiato nel documento (§22.2, decisione 0069). Vuota =
+        /// qualunque cosa. Vale per i soli eventi che un cambiamento lo
+        /// RACCONTANO; tutti gli altri passano, per la stessa regola per cui
+        /// passa ciò che non nomina nessun documento. Filtra sugli aspetti e
+        /// non sui nomi: la precisione la dà l'evento, che il diff ce l'ha già.
+        changes: list<doc-change>,
     }
 
     /// Identità di un lotto (decisione 0011). Come `job-id`, sul confine JSON viaggia
@@ -3199,6 +3246,31 @@ interface plugin {
         /// La lingua in cui il componente è scritto: il penultimo gradino della
         /// scala di ripiego. Vuoto = si scende dritti alla chiave nuda.
         default-locale: string,
+        /// Le SVEGLIE che dichiara (§22.1, decisione 0069). Sta nel manifest per
+        /// la ragione di `settings` letta su un asse diverso: una sveglia è ciò
+        /// che FA SUCCEDERE un evento, non ciò che ne filtra uno, e una maschera
+        /// — che si applica a ciò che accade — è il posto sbagliato per
+        /// definizione. Nomi nudi: la qualifica è strutturale, e chi è il
+        /// proprietario lo dice `event-timer-fired.owner`.
+        timers: list<timer-spec>,
+    }
+
+    /// Una sveglia dichiarata da un componente (§22.1, decisione 0069).
+    record timer-spec {
+        /// Nudo: viaggia in `event-timer-fired.timer` e distingue le sveglie di
+        /// chi ne ha dichiarata più di una.
+        id: string,
+        schedule: timer-schedule,
+    }
+    /// Ogni quanto suona. Le due forme sono quelle che si misurano in TEMPO
+    /// TRASCORSO, ed è la ragione per cui sono due: un orario di parete («ogni
+    /// giorno alle 9») vuole un fuso e una regola sull'ora legale, cioè una
+    /// decisione che non è questa. Cresce in coda il giorno che si prende.
+    variant timer-schedule {
+        /// Ogni N secondi, per sempre, dalla registrazione.
+        every(u64),
+        /// Una volta sola, N secondi dopo la registrazione.
+        after(u64),
     }
 
     manifest: func() -> plugin-manifest;

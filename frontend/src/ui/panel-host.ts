@@ -32,14 +32,15 @@ import { t } from "../i18n/strings";
 
 export type EventType = KernelEvent["type"];
 
-/// Una maschera sulle sole specie: nessun filtro di topic, nessuno di soggetto.
+/// Una maschera sulle sole specie: nessun filtro di topic, di soggetto, né di
+/// cosa è cambiato.
 ///
 /// È `EventMask::of` scritta di qua, e serve ai pannelli **nativi** — che sono
 /// di questa shell e guardano tutto il vault. Una view dichiarata non passa da
 /// qui: la sua maschera arriva dal provider, e può essere più stretta di così
 /// (§10.1).
 export function refreshOn(...kinds: EventType[]): EventMask {
-  return { kinds, topics: [], subjects: [] };
+  return { kinds, topics: [], subjects: [], changes: [] };
 }
 
 /// Dove sta un pannello.
