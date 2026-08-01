@@ -36,8 +36,10 @@
 //!
 //! La promessa è di **una scrittura**, non di un aggiornamento: due processi che
 //! ricompongono lo stesso file dalla propria copia in memoria atterrano ognuno
-//! un file integro, e il secondo cancella le chiavi del primo. È la *lost
-//! update*, ed è l'altra casella del §15.2.
+//! un file integro, e il secondo cancella le chiavi del primo. Quella è la *lost
+//! update*, e chiede un'altra funzione — [`update_atomic`], che rilegge sotto
+//! lock prima di comporre
+//! ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
 //!
 //! L'altro asse — la **classe** di un dato, «si può buttare o no» — non è di
 //! qui affatto: sta nel path, e l'ha deciso la
@@ -486,6 +488,84 @@ pub fn write_atomic(path: &Utf8Path, bytes: &[u8]) -> Result<(), String> {
     FsStorage
         .write(path, bytes)
         .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
+}
+
+/// L'**aggiornamento** di un file della macchina: rileggi sotto lock, fondi,
+/// scrivi.
+///
+/// [`write_atomic`] è l'atomicità di *un file* e non di un *aggiornamento*: chi
+/// la chiama ricompone il contenuto intero dalla propria copia in memoria,
+/// quindi la seconda installazione che salva atterra un file integro **senza**
+/// le chiavi che la prima aveva scritto dopo che lei aveva letto. Nessuna
+/// quantità di `fsync` la risolve, perché non è un file a metà: è un file
+/// intero e vecchio.
+///
+/// Le due metà di questa funzione non fanno la stessa cosa, e conviene tenerle
+/// distinte:
+///
+/// - **`rileggi` è ciò che toglie la perdita.** La copia in memoria del
+///   chiamante è vecchia per definizione — l'ha letta all'apertura — e ciò che
+///   si scrive va composto su quella che c'è sul disco *adesso*, non su quella.
+///   Per questo `fondi` riceve lo stato **riletto** e non quello del chiamante,
+///   e per questo la funzione restituisce lo stato fuso: chi la chiama deve
+///   adottarlo, o la sua copia resterebbe l'unica a non sapere;
+/// - **il lock stringe la finestra.** Fra la rilettura e la scrittura resta un
+///   istante in cui un altro processo può infilarsi, e il lock del file lo
+///   toglie. È **best-effort** di proposito: dove il lock non c'è — una share
+///   di rete che non lo implementa — la rilettura vale lo stesso, e rifiutarsi
+///   di salvare sarebbe un danno certo al posto di uno improbabile.
+///
+/// Non ci sono un `write_atomic` e un `update_atomic` fra cui il chiamante
+/// sceglie per i file che si aggiornano: chi prende il lock e poi ricompone
+/// dalla copia vecchia non ha risolto niente, e la forma giusta si ripeterebbe
+/// tre volte. È la ragione della
+/// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) sul
+/// perché la scrittura del supporto è una sola.
+///
+/// `fondi` serializza ciò che ha appena mutato, invece di lasciarlo fare a chi
+/// chiama: fra la mutazione e i byte non deve poterci stare una riga.
+pub fn update_atomic<T>(
+    path: &Utf8Path,
+    rileggi: impl FnOnce() -> Result<T, String>,
+    fondi: impl FnOnce(&mut T) -> Result<Vec<u8>, String>,
+) -> Result<T, String> {
+    let _lock = lock_esclusivo(path);
+    let mut stato = rileggi()?;
+    let bytes = fondi(&mut stato)?;
+    write_atomic(path, &bytes)?;
+    Ok(stato)
+}
+
+/// Il lock esclusivo che accompagna un [`update_atomic`], finché il valore vive.
+///
+/// Sta su un file **accanto** e non sul file stesso, e non è una preferenza:
+/// [`write_atomic`] sostituisce l'inode, quindi un lock preso sul file che si
+/// sta per rimpiazzare è un lock su un inode che fra un istante non è più a quel
+/// nome — e il processo che arriva dopo la rename ne aprirebbe un altro,
+/// prendendoselo senza aspettare nessuno. Il compagno di lock non si rinomina
+/// mai, quindi è lo stesso oggetto per tutti.
+///
+/// Il nome comincia per punto per la ragione del temporaneo di
+/// [`tmp_path`]: è un file di servizio, e chi guarda la cartella non lo deve
+/// vedere.
+///
+/// `Err` non si propaga — vedi [`update_atomic`] — quindi qui il tipo di ritorno
+/// è un `Option`: o si ha il lock, o si procede senza.
+fn lock_esclusivo(path: &Utf8Path) -> Option<std::fs::File> {
+    let dir = path.parent().unwrap_or(Utf8Path::new(""));
+    let name = path.file_name().unwrap_or("senza-nome");
+    let lock_path = dir.join(format!(".{name}.lock"));
+    std::fs::create_dir_all(dir).ok()?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)
+        .ok()?;
+    // `File::lock` è bloccante e si rilascia alla chiusura del file, cioè
+    // quando il chiamante lascia cadere ciò che questa funzione ha restituito.
+    file.lock().ok()?;
+    Some(file)
 }
 
 // --- la memoria ------------------------------------------------------------

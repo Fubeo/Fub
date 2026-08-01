@@ -32,13 +32,20 @@ dovrà spezzare, e questa sezione andrà riscritta invece che aggirata.
 meglio che lasciar credere una stabilità che il progetto non ha ancora: nessuna
 versione è stata rilasciata, e la prima non è ancora uscita.
 
-**L'MSRV è parte del contratto.** `rust-version = "1.88"` è dichiarato una volta
+**L'MSRV è parte del contratto.** `rust-version = "1.89"` è dichiarato una volta
 nel workspace, e non è una nota di stile: il job `build + test` della CI pinna la
-toolchain esattamente a `1.88`
+toolchain esattamente a `1.89`
 ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)), quindi il primo uso
 di una feature più recente diventa rosso lì, non sulla macchina di chi ha una
 toolchain vecchia. Alzare l'MSRV è un cambio **minor**, e si fa deliberatamente,
 non perché è comparso un warning.
+
+È successo una volta, da 1.88 a 1.89, e il verbale dice perché
+([0066](decisions/0066-un-aggiornamento-non-e-una-scrittura.md)): serviva
+`std::fs::File::lock` per non far cancellare a due installazioni di Fub le
+impostazioni a vicenda, e l'alternativa era una dipendenza in più. Delle due
+promesse si è rotta quella a cui chi la legge può rispondere aggiornando la
+toolchain, invece di aggiungerne una che chiunque installi si tiene per sempre.
 
 ## 2. La versione del contratto
 

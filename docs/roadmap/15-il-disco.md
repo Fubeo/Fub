@@ -46,13 +46,22 @@ invece di essere scritta due volte, che era la ragione per cui la 15.1 veniva
 prima. La 15.2 resta aperta con l'altra metà, che non è la scrittura ma il
 **recovery**: cosa si fa dopo.
 
+Con la [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md) la metà
+*durabilità* è finita anche per l'unica riga che le restava e che recovery non
+era: un **aggiornamento** dei tre file della macchina non è una scrittura, e
+`update_atomic` rilegge sotto lock prima di comporre. Il prezzo non è stato il
+lock — sono quattro righe — ma l'**MSRV**, salito a 1.89 perché
+`std::fs::File::lock` è di lì: la voce ha pagato in una promessa verso chi
+compila invece che in lavoro, ed è la ragione per cui la 0065 l'aveva chiamata
+decisione e non casella.
+
 La 15.7 sta qui e non fra i presidi perché è la stessa domanda della durabilità
 vista all'apertura invece che alla scrittura: la verità non si rifiuta di aprire,
 si apre segnalando cosa non ha letto.
 
 ### 15.2 Durabilità e recovery
 
-*ex §2.5 · kernel · **P2** — **metà chiusa** con la [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) (la scrittura); resta il recovery, e il journal è il meccanismo di 13.3 e dell'audit trail di 0010*
+*ex §2.5 · kernel · **P2** — la **durabilità** è chiusa: la scrittura con la [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), l'aggiornamento con la [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md); resta il **recovery**, e il journal è il meccanismo di 13.3 e dell'audit trail di 0010*
 
 - [x] **Scrittura atomica vera**, chiusa dalla
       [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md): la promessa sta
@@ -75,27 +84,25 @@ si apre segnalando cosa non ha letto.
       chiude nella voce a cui era stata indirizzata. Con loro è salito un fatto
       che nessuno aveva scritto: dentro un workspace il supporto è **uno**, e lo
       condividono il vault e i tre store.
-- [ ] **Due processi sulla stessa cartella di configurazione si cancellano le
-      chiavi a vicenda.** `write_atomic` ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md))
-      è l'atomicità di *un file*, non di un *aggiornamento*: chi la chiama
-      compone il contenuto intero dalla propria copia in memoria, quindi la
-      seconda installazione che salva atterra un file integro **senza** le chiavi
-      che la prima aveva scritto dopo che lei aveva letto. Vale per i tre file
-      della macchina (`settings.json`, `vaults.json`, `view-state.json`); dentro
-      un processo il caso non esiste, perché il livello macchina è uno
-      (`Arc<MachineSettings>`) e il sidecar si scrive per chiave
-      ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)). È la stessa
-      *lost update* che quelle due voci hanno chiuso un piano più in basso, ed è
-      qui perché la risposta è di questo strato: un lock del file, o una
-      rilettura sotto lock prima di ricomporre. Non è P0 — non scade col freeze e
-      non tocca nessuna firma — ma è un dato **autorevole** che si perde in
-      silenzio, che è il criterio della [seduta 20](20-quando-qualcosa-va-storto.md).
-      La [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) l'ha
-      **lasciata aperta di proposito** e ha trovato il perché tecnico: il lock di
-      file portabile è `std::fs::File::lock`, stabilizzato in Rust 1.89, e l'MSRV
-      del workspace è 1.88. Chiuderla vuol dire alzare l'MSRV o prendere una
-      dipendenza, cioè decidere qualcosa — e ciò che decide qualcosa non è una
-      casella residua.
+- [x] **Due processi sulla stessa cartella di configurazione si cancellano le
+      chiavi a vicenda** — chiusa dalla
+      [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md):
+      `update_atomic` rilegge sotto lock e fonde, e chi la chiama adotta lo stato
+      fuso invece della propria copia. La riga che toglie la perdita è la
+      **rilettura**; il lock — su un file accanto, perché la rename sostituisce
+      l'inode — chiude la finestra che resta, ed è best-effort dove il filesystem
+      non lo implementa. È costata l'**MSRV a 1.89**
+      (`std::fs::File::lock`), preferito a una dipendenza in più: due promesse a
+      due platee, e si è rotta quella a cui si può rispondere aggiornando la
+      toolchain. Il difetto era l'atomicità di *un file* usata come atomicità di
+      un *aggiornamento*
+      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)): dentro un
+      processo non esisteva — il livello macchina è uno, e il sidecar si scrive
+      per chiave ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)) —
+      ed era un dato **autorevole** che si perdeva in silenzio, che è il criterio
+      della [seduta 20](20-quando-qualcosa-va-storto.md). I tre file non
+      perdevano la stessa cosa, e uno dei tre — `vaults.json` — non perdeva una
+      traccia ma i **preferiti**.
 - [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
       sopravvivere a un crash (2.1, 24.2).
 - [ ] **Journal delle mutazioni** (append-only in `.fub/data/`): base di

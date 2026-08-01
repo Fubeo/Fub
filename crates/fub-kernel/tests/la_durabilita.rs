@@ -214,3 +214,164 @@ fn i_file_di_fub_passano_dal_supporto() {
         "e nessuno dei due ha scritto sul filesystem vero"
     );
 }
+
+// --- l'aggiornamento, che non è una scrittura -------------------------------
+//
+// Ciò che segue non presidia più la scrittura di **un file** ma la fusione di un
+// **aggiornamento**: due installazioni di Fub sulla stessa cartella di
+// configurazione, e nessuna delle due che cancella le chiavi dell'altra
+// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+//
+// Due istanze aperte sullo stesso path **sono** il caso, e non una sua imitazione
+// approssimata: ognuna ha letto il file una volta e da lì tiene la propria copia
+// in memoria, che è esattamente ciò che distingue due processi da due chiamate.
+// Un test scritto con una sola istanza presidierebbe il caso che già non
+// esisteva, perché dentro un processo il livello macchina è uno solo.
+
+fn chiave(nome: &str) -> fub_abi::settings::SettingSpec {
+    fub_abi::settings::SettingSpec::toggle(nome, nome, false).per_machine()
+}
+
+/// Un'installazione con la sua copia in memoria del livello macchina: è ciò che
+/// un secondo processo ha, e un secondo `MachineSettings` sullo stesso path lo
+/// riproduce senza bisogno di un secondo processo.
+fn installazione(path: &Utf8Path, chiavi: &[&str]) -> fub_kernel::SettingsStore {
+    use std::sync::Arc;
+
+    let (machine, avviso) = fub_kernel::MachineSettings::open(path);
+    assert!(avviso.is_none(), "{avviso:?}");
+    let mut store = fub_kernel::SettingsStore::open(
+        Utf8Path::new("/vault"),
+        Arc::new(fub_kernel::storage::MemStorage::new()) as Arc<dyn VaultStorage>,
+        machine,
+    );
+    let specs: Vec<_> = chiavi.iter().map(|k| chiave(k)).collect();
+    store.declare("prova", &specs).unwrap();
+    store
+}
+
+/// La *lost update*: la seconda installazione che salva **non** cancella la
+/// chiave che la prima ha scritto dopo che lei aveva letto.
+///
+/// L'ordine dei tre passi è il difetto: entrambe leggono, poi entrambe scrivono.
+/// Prima della 0066 la seconda scriveva un file integro contenente solo la
+/// propria chiave, e la prima non aveva modo di accorgersene — il file era
+/// valido, l'unica cosa persa era il suo contenuto.
+#[test]
+fn due_installazioni_non_si_cancellano_le_chiavi() {
+    use fub_abi::settings::SettingValue;
+
+    let (_tmp, root) = banco();
+    let path = root.join("settings.json");
+
+    // Le due leggono **prima** che l'altra scriva: è il presupposto del caso.
+    let mut prima = installazione(&path, &["a.uno", "a.due"]);
+    let mut seconda = installazione(&path, &["a.uno", "a.due"]);
+
+    prima.set("a.uno", SettingValue::Toggle(true)).unwrap();
+    seconda.set("a.due", SettingValue::Toggle(true)).unwrap();
+
+    let terza = installazione(&path, &["a.uno", "a.due"]);
+    assert_eq!(
+        terza.effective("a.uno").unwrap().0,
+        SettingValue::Toggle(true),
+        "la chiave della prima è sopravvissuta al salvataggio della seconda"
+    );
+    assert_eq!(
+        terza.effective("a.due").unwrap().0,
+        SettingValue::Toggle(true),
+        "e quella della seconda c'è"
+    );
+}
+
+/// E la copia in memoria di chi ha scritto per **seconda** adotta la fusione,
+/// invece di restare l'unica a non sapere.
+///
+/// Senza questa riga il file sul disco sarebbe giusto e la finestra aperta
+/// mostrerebbe ancora lo stato di prima, fino al riavvio: la stessa «terza
+/// verità che torna al riavvio» che l'ordine disco→memoria esiste per evitare.
+#[test]
+fn chi_fonde_adotta_ciò_che_ha_trovato() {
+    use fub_abi::settings::SettingValue;
+
+    let (_tmp, root) = banco();
+    let path = root.join("settings.json");
+    let mut prima = installazione(&path, &["a.uno", "a.due"]);
+    let mut seconda = installazione(&path, &["a.uno", "a.due"]);
+
+    prima.set("a.uno", SettingValue::Toggle(true)).unwrap();
+    seconda.set("a.due", SettingValue::Toggle(true)).unwrap();
+
+    assert_eq!(
+        seconda.effective("a.uno").unwrap().0,
+        SettingValue::Toggle(true),
+        "la seconda ha letto la chiave dell'altra fondendola, e se la tiene"
+    );
+}
+
+/// Lo stesso caso sull'altro file della macchina: due finestre depositano lo
+/// scroll di due esemplari diversi, e nessuno dei due sparisce.
+#[test]
+fn due_installazioni_non_si_cancellano_lo_stato_di_vista() {
+    let (_tmp, root) = banco();
+    let path = root.join("view-state.json");
+
+    let (prima, _) = fub_kernel::ViewStates::open(&path);
+    let (seconda, _) = fub_kernel::ViewStates::open(&path);
+
+    prima
+        .set("/v", "p", "uno", "scroll", Some(serde_json::json!(10)))
+        .unwrap();
+    seconda
+        .set("/v", "p", "due", "scroll", Some(serde_json::json!(99)))
+        .unwrap();
+
+    let (terza, avviso) = fub_kernel::ViewStates::open(&path);
+    assert!(avviso.is_none(), "{avviso:?}");
+    assert_eq!(
+        terza.get("/v", "p", "uno", "scroll"),
+        Some(serde_json::json!(10)),
+        "l'esemplare della prima finestra è ancora lì"
+    );
+    assert_eq!(
+        terza.get("/v", "p", "due", "scroll"),
+        Some(serde_json::json!(99))
+    );
+}
+
+/// La fusione toglie la perdita, il lock toglie la **finestra**: fra la
+/// rilettura e la scrittura c'è un istante in cui un'altra installazione può
+/// infilarsi, e questo test lo cerca apposta.
+///
+/// Otto scrittori concorrenti, ognuno con la propria copia in memoria — cioè
+/// otto processi, se non fosse che condividono un binario. Senza il lock questo
+/// test è rosso a intermittenza, che è la forma peggiore di un presidio: qui il
+/// conteggio finale dice quante chiavi sono sopravvissute, e non ce n'è una che
+/// possa mancare per una ragione legittima.
+#[test]
+fn otto_scrittori_insieme_e_nessuna_chiave_persa() {
+    use fub_abi::settings::SettingValue;
+
+    let (_tmp, root) = banco();
+    let path = root.join("settings.json");
+    let nomi: Vec<String> = (0..8).map(|i| format!("a.k{i}")).collect();
+    let tutte: Vec<&str> = nomi.iter().map(String::as_str).collect();
+
+    std::thread::scope(|scope| {
+        for nome in &nomi {
+            let path = path.clone();
+            let tutte = tutte.clone();
+            scope.spawn(move || {
+                let mut store = installazione(&path, &tutte);
+                store.set(nome, SettingValue::Toggle(true)).unwrap();
+            });
+        }
+    });
+
+    let finale = installazione(&path, &tutte);
+    let accese = tutte
+        .iter()
+        .filter(|k| finale.effective(k).unwrap().0 == SettingValue::Toggle(true))
+        .count();
+    assert_eq!(accese, 8, "otto scritture, otto chiavi");
+}
