@@ -281,8 +281,10 @@ quella lettura si è sbagliata: chiedeva di promuovere la
 su cui poggia un capitolo intero e mezzo». La premessa è giusta; la conclusione
 confonde i due assi che questa pagina esiste per tenere separati. **La leva non è
 la scadenza.** P0 vuol dire *scade col freeze*, e nessuna delle due scade: la
-§15.1 è un `trait VaultStorage` interno al kernel e la §15.2 è temp+rename+fsync,
-nessuna delle due è una firma del contratto. Che la disciplina avesse già
+§15.1 è un `trait VaultStorage` interno al kernel e la §15.2 è temp+rename+fsync —
+e, dalla [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md), un file
+in coda dentro `.fub/`: nessuna delle due è una firma del contratto, e la seconda
+non lo è diventata nemmeno crescendo. Che la disciplina avesse già
 funzionato lo dimostra la seduta 15 stessa: la sua **unica metà di firma** era la
 §15.4 — dove si dichiara la classe di un dato persistito — ed era P0, ed è stata
 chiusa dalla [0048](../decisions/0048-una-radice-sola.md) **prima** del freeze,
@@ -319,17 +321,24 @@ snapshot nemmeno volendo. O lo fa il core, o è una promessa con sopra una UI.
 l'atomicità di scritture che non si eseguono. Il 24.2 chiede atomic writes,
 journaling, crash recovery, autosave e corruption detection, e nessuna delle
 cinque può essere un componente perché la correttezza di **tutti gli altri**
-poggia sopra. Delle cinque la prima è **fatta** — la
-[0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) l'ha messa dentro il
-supporto che la 0064 aveva appena costruito, e con la
-[0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md) l'atomicità
-vale anche per un **aggiornamento** e non solo per una scrittura — e le altre
-quattro sono lì. Il caso più netto non sta nemmeno nel 24: è il 22.4, che promette
-al centro di comando LLM la «transazione atomica per operazione batch» e il
-«rollback completo». Quel capitolo è per il resto un cliente del registro dei
-comandi e sta benissimo come plugin — ma quelle due righe le può mantenere solo
-il journal, perché il lotto della [0011](../decisions/0011-il-lotto.md) coalizza
-gli eventi e **non** è una transazione, e sta scritto nel suo stesso verbale.
+poggia sopra. Delle cinque **due** sono fatte: la prima con la
+[0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), che l'ha messa dentro
+il supporto che la 0064 aveva appena costruito — e con la
+[0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md) l'atomicità vale
+anche per un **aggiornamento** e non solo per una scrittura —, la seconda con la
+[0067](../decisions/0067-il-registro-di-cio-che-e-successo.md). Il caso più netto
+non stava nemmeno nel 24: era il 22.4, che promette al centro di comando LLM la
+«transazione atomica per operazione batch» e il «rollback completo». Quel capitolo
+è per il resto un cliente del registro dei comandi e sta benissimo come plugin —
+quelle due righe però le poteva mantenere solo il journal, perché il lotto della
+[0011](../decisions/0011-il-lotto.md) coalizza gli eventi e **non** è una
+transazione, e sta scritto nel suo stesso verbale. Adesso il journal c'è, e ciò che
+resta di quelle due righe non è più inesprimibile: è **da scrivere**, che è un'altra
+categoria — chi ripercorre il registro all'indietro compone `UndoStep`
+([0045](../decisions/0045-l-undo-ha-due-pile.md)) e trova nella riga tutto ciò che
+gli serve. È la prima volta che una voce di questa pagina scende da *inesprimibile*
+a *da fare* senza che il cliente sia stato scritto: la leva si misura su cosa si
+**può** dire, e dirlo è bastato.
 
 Entrambe restano **P2**, e le due cose non sono in contraddizione: è esattamente
 la frase con cui questa pagina si apre. La §15.1 è stata poi presa **da P2**,
@@ -349,3 +358,14 @@ misura dal codice che chiede**. Il lock è quattro righe; il suo prezzo è un MS
 alzato, cioè una promessa verso chi compila. Una voce che costa poco a scrivere e
 molto a decidere sta in questa pagina come una che costa il contrario, e chi
 ordina il lavoro guardando la dimensione del diff le vede tutte e due sbagliate.
+
+E la **quarta** è il journal, con la
+[0067](../decisions/0067-il-registro-di-cio-che-e-successo.md), presa per la
+ragione più esplicita delle tre: sotto ci stavano quattro promesse fatte altrove —
+17.3, 16.3, 23.3 e le due righe del 22.4 — che nessuna quantità di lavoro nei
+rispettivi capitoli avrebbe reso vere, perché non erano strette, erano
+**indicibili**. Quella è la prima riga di questa pagina, ed è la prima volta che a
+sceglierla è stata la nota che le due voci precedenti avevano lasciato scritta in
+fondo al proprio verbale: *«ciò che resta è recovery»*. Una voce che si è già
+divisa da sé, in due decisioni di fila, dice a chi arriva dopo quale pezzo
+prendere — che è la 0064 letta a scala di voce invece che di casella.

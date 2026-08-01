@@ -154,7 +154,11 @@ impl Dispatcher {
     }
 
     /// L'origine di ciò che il workspace sta emettendo adesso.
-    fn origin(&self) -> Origin {
+    ///
+    /// La legge anche il registro delle mutazioni (§15.2), e di proposito la
+    /// **stessa**: una riga di registro attribuita a un attore diverso da quello
+    /// dell'evento che la accompagna sarebbe due risposte alla stessa domanda.
+    pub(crate) fn origin(&self) -> Origin {
         Origin::by(self.actor.clone()).in_batch(self.batch.as_ref().map(|b| b.id))
     }
 

@@ -132,8 +132,21 @@ pub struct DirEntry {
 
 /// Il supporto su cui vive un vault.
 ///
-/// Sette operazioni, e sono quelle che il kernel usa davvero: chi ne aggiunge
-/// un'ottava sta chiedendo al supporto di sapere qualcosa sul contenuto.
+/// Otto operazioni, e sono quelle che il kernel usa davvero. La regola con cui
+/// questo trait è nato era «sette, e chi ne aggiunge un'ottava sta chiedendo al
+/// supporto di sapere qualcosa sul contenuto»; l'ottava è arrivata
+/// ([`VaultStorage::append`], con la
+/// [0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md))
+/// e quella frase è il metro con cui è stata giudicata invece che il veto che
+/// sembrava: `append` non chiede di sapere **cosa** c'è nel file, chiede di
+/// sapere **dove finisce**, che è l'unica cosa che un supporto sa già di ogni
+/// file che tiene.
+///
+/// Il criterio vero per distinguere un'operazione da una comodità sta più sotto,
+/// in [`VaultStorage::remove_dir_all`]: ciò che si **compone** dalle altre ha un
+/// default e non è una capacità in più. `append` non si compone — leggi+riscrivi
+/// costa l'intero file a ogni riga, e non è nemmeno la stessa cosa quando la si
+/// paga — quindi è un'operazione.
 ///
 /// # Gli errori sono `io::Error` e non `KernelError`
 ///
@@ -168,6 +181,24 @@ pub trait VaultStorage: Send + Sync {
     /// [`FsStorage::write`] per cosa costa darla e per i due casi in cui il
     /// prezzo si rifiuta di pagarlo.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()>;
+
+    /// Aggiunge i byte **in coda** a ciò che c'è, creando il file e le cartelle
+    /// se mancano.
+    ///
+    /// Non è una [`write`](VaultStorage::write) scritta diversamente, e le due
+    /// promesse non si assomigliano: `write` dice «questi byte o quelli di
+    /// prima», `append` dice «ciò che c'era resta dov'è». Un registro
+    /// append-only riscritto per intero a ogni riga costerebbe l'intero file a
+    /// ogni salvataggio — e la riscrittura di un file **autorevole** è anche
+    /// l'unico momento in cui lo si può perdere tutto insieme.
+    ///
+    /// **L'atomicità di una `write` qui non c'è, ed è il chiamante a doverlo
+    /// sapere**: un'aggiunta interrotta a metà lascia in coda dei byte
+    /// incompleti. Il supporto non li può nascondere — non sa dove finisca un
+    /// record, perché non sa cosa sia un record — quindi a renderli
+    /// riconoscibili è il **formato** di chi scrive, e a scartarli è la sua
+    /// lettura ([`crate::journal`]).
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()>;
 
     /// Sposta, **creando le cartelle di destinazione che mancano**. Funziona
     /// per un file come per una cartella.
@@ -407,6 +438,28 @@ impl VaultStorage for FsStorage {
             }
         }
         Ok(())
+    }
+
+    /// `O_APPEND` e **nessun `fsync`**: la scelta è a verbale
+    /// ([0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md)),
+    /// e sta tutta nell'ordine in cui le due scritture avvengono. Chi appende lo
+    /// fa **dopo** che la mutazione è riuscita, quindi un crash può far perdere
+    /// la coda del registro — le ultime operazioni non si potranno annullare — e
+    /// mai il contrario, una riga che racconta qualcosa che non è successo. Un
+    /// `fsync` per riga metterebbe un secondo giro sul disco dentro il percorso
+    /// del salvataggio, che la
+    /// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) ha
+    /// appena fatto pagare una volta, per proteggere un dato il cui smarrimento
+    /// costa un annullamento e non una nota.
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        file.write_all(bytes)
     }
 
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
@@ -667,6 +720,28 @@ impl VaultStorage for MemStorage {
         mem.tick += 1;
         let tick = mem.tick;
         mem.files.insert(path.to_owned(), (bytes.to_vec(), tick));
+        Ok(())
+    }
+
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+        let mut mem = self.lock();
+        if mem.dirs.contains(path) {
+            return Err(io::Error::new(
+                io::ErrorKind::IsADirectory,
+                format!("{path}: è una cartella"),
+            ));
+        }
+        if let Some(parent) = path.parent() {
+            mem.make_dirs(parent);
+        }
+        mem.tick += 1;
+        let tick = mem.tick;
+        let voce = mem
+            .files
+            .entry(path.to_owned())
+            .or_insert_with(|| (Vec::new(), tick));
+        voce.0.extend_from_slice(bytes);
+        voce.1 = tick;
         Ok(())
     }
 

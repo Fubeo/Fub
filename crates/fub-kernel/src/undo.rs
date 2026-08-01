@@ -27,7 +27,10 @@
 //! FEATURES 4.2 chiede. Farla sopravvivere a una chiusura non è tenerla su
 //! disco: è accorgersi di ciò che è cambiato mentre l'app era spenta, o
 //! riproporre l'annullamento di un'operazione il cui documento nel frattempo
-//! qualcun altro ha riscritto tre volte. Quello è il journal del §15.2, ed è
+//! qualcun altro ha riscritto tre volte. Quello è il journal del §15.2 — che
+//! dalla [0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md)
+//! esiste, e registra alla mutazione dove questa pila si riempie
+//! all'invocazione —, ed è
 //! un'altra cosa — questa pila è il pezzo che si può avere prima, e senza il
 //! quale il journal non saprebbe comunque *cosa* registrare.
 

@@ -139,6 +139,37 @@ fn le_due_implementazioni_rispondono_uguale() {
             dice("una cartella si sposta con dentro tutto")
         );
 
+        // `append` aggiunge in coda **e crea ciò che non c'è**: chi appende su
+        // un file che non esiste ancora non deve prima scriverlo vuoto, o quella
+        // riga la dimenticherebbe qualcuno. È l'ottava operazione (§15.2), e sta
+        // qui perché il registro delle mutazioni deve poter vivere su un
+        // supporto che non è il disco tanto quanto ci vive il vault.
+        let reg = root.join("registro/righe.jsonl");
+        storage
+            .append(&reg, b"una\n")
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("append su ciò che non c'è")));
+        storage
+            .append(&reg, b"due\n")
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("append")));
+        assert_eq!(
+            storage.read(&reg).unwrap(),
+            b"una\ndue\n",
+            "{}",
+            dice("ciò che c'era resta dov'è")
+        );
+        // E `write` sullo stesso path **sostituisce**: le due promesse sono
+        // diverse, e un supporto che le confondesse renderebbe verde un registro
+        // che perde tutto a ogni riga.
+        storage.write(&reg, b"tre\n").unwrap();
+        assert_eq!(
+            storage.read(&reg).unwrap(),
+            b"tre\n",
+            "{}",
+            dice("write non è append")
+        );
+        storage.remove(&reg).unwrap();
+        storage.remove_dir_all(&root.join("registro")).unwrap();
+
         // `remove` è dei file soltanto: per una cartella c'è `remove_dir_all`,
         // e la distinzione è ciò che impedisce a un `data_remove` di un plugin
         // di portarsi via un albero intero con un path che finisce bene.

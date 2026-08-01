@@ -18,7 +18,8 @@ plugin, e da lì passano anche le tre righe di `.fub/` — `workspace.json`,
 `settings.json` ed `entries.json` — che ci sono salite con la
 [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), cioè quando salirci
 ha smesso di voler dire perdere l'atomicità che avevano. Dentro un workspace il
-supporto è **uno**, condiviso dal vault e dai tre store. Fuori dal vault il
+supporto è **uno**, condiviso dal vault, dai tre store e dal registro delle
+mutazioni. Fuori dal vault il
 supporto non c'entra — quei file non sono di un vault, sono di questa macchina —
 e a dargli l'atomicità è `write_atomic`, che è lo stesso codice visto da chi un
 supporto non ce l'ha.
@@ -50,6 +51,7 @@ chiamate per nome.
 |---|---|---|---|---|
 | `.fub/workspace.json` | `kernel/organization.rs` | autorevole | 1 | `VaultStorage::write`, e **non riscrive** un file che non ha potuto leggere |
 | `.fub/settings.json` | `kernel/settings.rs` | autorevole | 1 | `VaultStorage::write`; le chiavi di scope `machine` scritte qui **si ignorano** |
+| `.fub/journal.jsonl` | `kernel/journal.rs` | autorevole | 1, **su ogni riga** | `VaultStorage::append` — in coda, senza `fsync`, e **dopo** che la mutazione è riuscita ([0067](../decisions/0067-il-registro-di-cio-che-e-successo.md)) |
 | `.fub/data/entries.json` | `kernel/entries.rs` | derivato | 2 | `VaultStorage::write` |
 | `.fub/data/trash/<nome>.json` | `kernel/vault.rs` | **né l'una né l'altra** (sotto) | — | `VaultStorage::write`, best-effort |
 | `.fub/data/plugins/<id>/…` | chiunque abbia `DataWrite` | dichiarata derivata, **in pratica entrambe** (sotto) | per plugin | `VaultStorage::write` (`host/kernel.rs`) |
@@ -85,7 +87,14 @@ l'inode: un lock preso su ciò che si sta per rimpiazzare non esclude nessuno.
 
 Sono scritte qui perché una mappa che nasconde le proprie eccezioni è peggio di
 nessuna mappa: sono anche l'elenco esatto di ciò che la seconda metà del §15.4
-deve sistemare.
+deve sistemare. **Il registro delle mutazioni non è fra loro**, e vale la pena
+dire perché: è il primo posto nuovo che ha scelto la propria riga guardando questa
+tabella invece di imitare un vicino. La riga di `todo.md` che lo apriva diceva
+`.fub/data/`, cioè la classe dei derivati per un file che non si rifà da niente, e
+sarebbe stato facile convincersi che ci stava bene — gli snapshot del versioning,
+eccezione numero uno qui sotto, sono esattamente quello. Ma un'eccezione si imita
+solo se si è deciso che la regola non vale, e qui la regola vale: il registro sta
+un livello più in su, e questo elenco non ne guadagna una quarta.
 
 1. **Gli snapshot del versioning stanno sotto la radice del derivato e non lo
    sono.** Da cosa si rigenererebbe «com'era questo file martedì»? Ci stanno
@@ -139,8 +148,10 @@ scritto il codice, dopo è qualcuno che non sa che esistono.
 ## Cosa non c'è ancora
 
 Le righe che questa tabella dovrà accogliere, con la voce che le porta: temi e
-snippet (§6.2), plugin installati da file (§20.2), il journal delle mutazioni e
-il buffer di crash ([§15.2](../roadmap/15-il-disco.md#152-durabilità-e-recovery)),
+snippet (§6.2), plugin installati da file (§20.2), il buffer di crash
+([§15.2](../roadmap/15-il-disco.md#152-durabilità-e-recovery) — il journal della
+stessa voce **c'è**, ed è la prima riga di questo elenco a essere diventata una
+riga della tabella),
 thumbnail e cache derivate (§14.1), i backup (§18.2), i layout salvati (§11.2).
 **Nessuna di queste sceglie il proprio posto per imitazione**: lo sceglie da
 questa tabella, e ci aggiunge una riga con la sua classe, la sua versione di
