@@ -26,6 +26,15 @@
             }
           ]
         }
+      ],
+      "unread": [
+        {
+          "doc_id": "rotta.md",
+          "why": {
+            "kind": "io",
+            "message": "permission denied"
+          }
+        }
       ]
     }
   ],
@@ -52,6 +61,15 @@
           "id": "com.acme.tasks:archive"
         }
       ]
+    }
+  ],
+  "UnreadDoc": [
+    {
+      "doc_id": "rotta.md",
+      "why": {
+        "kind": "io",
+        "message": "permission denied"
+      }
     }
   ],
   "EmbedContent": [

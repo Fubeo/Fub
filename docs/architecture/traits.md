@@ -579,6 +579,14 @@ Tre varianti che meritano una riga in più:
   (`rules::media::mime_of`), perché è funzione pura del nome; `fingerprint` è la
   stessa `Revision` di `document_revision` e c'è solo dove qualcuno ha già avuto
   i byte in mano.
+  E una riga che dalla
+  [0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md) non è più
+  implicita: **l'anagrafe e i documenti indicizzati possono divergere.** Questa
+  domanda dice cosa **c'è** nel vault; `Documents` dice cosa è arrivato agli
+  indici, e un documento che l'apertura non ha potuto leggere sta nella prima e
+  non nella seconda. Prima non potevano divergere — o un documento si parsava, o
+  il vault non si apriva — e chi deducesse l'una dall'altra oggi sbaglierebbe
+  proprio sulle note che hanno un problema.
 - `Resolve { target: LinkTarget, from: Option<DocId> }` →
   `Resolved(Option<ResolvedRef>)`, dove
   `ResolvedRef { doc: DocId, at: Option<DocPosition> }`,
@@ -655,7 +663,12 @@ evento.
 Restano due giunture, ed è il compito degli altri metodi:
 
 - `reconcile(ids)` — `ids` è l'insieme **completo** dei documenti del vault e ciò
-  che l'indice ha in più è morto. Chiude l'unico modo in cui un indice
+  che l'indice ha in più è morto. «Completo» vuol dire *esistenti*, non
+  *indicizzati*: dalla
+  [0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md) un
+  documento che l'apertura non è riuscita a leggere sta in questa lista pur non
+  essendo mai arrivato a nessun indice — il file c'è, e ometterlo direbbe agli
+  indici di buttare una nota che nessuno ha toccato. Chiude l'unico modo in cui un indice
   persistente può divergere: quel che succede mentre non è vivo. Il kernel lo
   chiama in coda a `reindex`. Non è un rebuild — gli immutati non vanno
   reindicizzati.
@@ -832,10 +845,17 @@ ViewInvalidated { view, instance }, VaultClosed { root },
 JobStarted { id, job }, JobProgress { id, progress },
 SettingChanged { key, scope },
 EntryChanged { id, kind }, EntryRemoved { id, kind },
-EntryRenamed { from, to, kind } }`,
+EntryRenamed { from, to, kind },
+Trouble { severity, subject, error } }`,
 `EventKind` (stesso set, senza payload),
 `EventMask { kinds, topics, subjects }` con
 `Subject { Document { id }, Folder { path } }`.
+
+`Trouble` ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) è
+l'unico che **non si emette** dall'esterno, e ha una riga che sorprende chi la
+scopre tardi: `EventMask::all()` **non lo nomina**, quindi un handler che chiede
+tutto non riceve i guasti. Chi li mostra oggi — il centro notifiche — li prende
+dal bus attraverso il ponte, che non passa da nessuna maschera.
 
 - `Origin` dice **chi ha chiesto** l'operazione
   ([0012](../decisions/0012-origine-degli-eventi.md)), non chi l'ha eseguita: un

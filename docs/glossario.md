@@ -145,6 +145,10 @@ frontmatter, outline, e quanto basta a decidere se il file su disco è ancora
 quello di prima. Salta la rilettura con `mtime` + `size`, che bastano a saltare
 ma non a fidarsi — è il caso *racily clean* di git.
 
+Elenca ciò che **esiste**, che non è ciò che è **indicizzato**: dalla
+[0068](decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md) un documento
+che non si è potuto leggere resta in anagrafe e non arriva a nessun indice.
+
 ### autorevole
 `FUB_DIR` · [`kernel/vault.rs:25`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 

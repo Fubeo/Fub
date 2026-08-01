@@ -78,6 +78,7 @@ cronologico di chiusura.
 | [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) | Una scrittura o c'è o non c'è, e i due casi in cui il file non è nostro | §15.2 (**metà voce**: la scrittura) **più** la casella residua della [0064](0064-il-supporto-sta-sotto.md) — resta il recovery ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0066](0066-un-aggiornamento-non-e-una-scrittura.md) | Un aggiornamento non è una scrittura, e il lock costa una promessa | §15.2 (la *lost update*, che la [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) aveva rimandata) — resta il recovery ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0067](0067-il-registro-di-cio-che-e-successo.md) | Il registro di ciò che è successo, e l'inverso al posto del contenuto | §15.2 (**una casella su tre** del recovery: il journal delle mutazioni) — restano il buffer di crash e i comandi di manutenzione ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
+| [0068](0068-un-vault-si-apre-per-quel-che-si-legge.md) | Un vault si apre per quel che si legge, e dice cosa non ha letto | §15.7 (**la prima metà**: fallire in parte) — resta la forma dell'apertura ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -407,3 +408,30 @@ di questa cartella è il *perché*, non la direzione: chi fra un anno troverà n
 contratto congelato un modo di chiedere una ricerca tollerante ai refusi deve
 poter leggere perché quella scelta è finita in una firma WIT invece che dentro un
 provider.
+
+La [0068](0068-un-vault-si-apre-per-quel-che-si-legge.md) porta un precedente
+sul criterio di questa cartella, ed è il **terzo** modo in cui una voce si può
+dividere a metà.
+
+I due che c'erano dividevano per **proprietà**: la [0031](0031-chi-possiede-i-bundle.md)
+ha preso una domanda di possesso e lasciato l'esecuzione alla
+[0032](0032-il-runner-dei-job.md), che era un confine fra due argomenti. Qui il
+taglio è fra un **prerequisito** e ciò che lo richiede, e la differenza si vede
+nel fatto che le due metà non sono scambiabili: la seconda — l'apertura a fasi,
+col progresso e la cancellazione — non si sarebbe potuta prendere per prima,
+perché un'apertura osservabile che si interrompe al primo documento illeggibile
+mostra una barra di avanzamento che arriva al 40% e poi dice che non si apre
+niente. Da tenere come criterio: **quando una voce nomina due cose e una regge
+l'altra, il taglio è già dichiarato dalla voce**, e non serve un cappello che lo
+autorizzi.
+
+E una seconda nota, che riguarda i presidi e non il taglio. Dei suoi otto
+sabotaggi il più utile non ha **confermato** niente: togliere gli scarti
+dall'insieme che `reconcile` dichiara completo ha reso rosso un test scritto
+per un'altra ragione, e ha mostrato che l'insieme costruito dai soli documenti
+indicizzati avrebbe detto agli indici che una nota illeggibile è sparita. Il
+difetto non esisteva prima di questa voce — non poteva, perché prima un
+documento non letto non lasciava aprire il vault — ed è nato e morto dentro lo
+stesso turno. È l'argomento della [0054](0054-il-banco-del-lato-provider.md)
+sull'altro verso: là un presidio dichiarava una copertura che non aveva, qui un
+presidio ha coperto qualcosa che chi lo scriveva non stava cercando.

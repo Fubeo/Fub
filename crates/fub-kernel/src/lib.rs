@@ -98,4 +98,6 @@ pub use storage::{DirEntry, EntryKind, FsStorage, MemStorage, Stat, VaultStorage
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
-pub use workspace::{new_doc_id, valid_doc_id, GraphUpdate, Trust, Workspace, MAIN_PANE};
+pub use workspace::{
+    new_doc_id, valid_doc_id, Apertura, GraphUpdate, Scarto, Trust, Workspace, MAIN_PANE,
+};
