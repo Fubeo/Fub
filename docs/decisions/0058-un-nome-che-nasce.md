@@ -298,7 +298,7 @@ identici, che è precisamente il difetto che senza fixture nessuno vedrebbe.
   che dipende da dove sta il vault: non è una proprietà del nome, e `fub-abi` non
   sa dove sia la radice né deve saperlo. Quello che è del nome è il limite del
   segmento; l'altro è di chi conosce il filesystem, cioè il
-  [§15.1](../roadmap/15-il-disco.md#151-astrazione-sullo-storage).
+  [§15.1](0064-il-supporto-sta-sotto.md).
 - **Legare il *messaggio* di un guasto invece della sua etichetta.** Legherebbe
   l'italiano di due cataloghi che devono restare liberi di divergere.
 - **Una gemella TypeScript di `text_policy`.** Sarebbe una copia senza clienti: la

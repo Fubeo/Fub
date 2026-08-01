@@ -83,7 +83,7 @@ impl DataRead for ReadHost<'_> {
             return Err(PluginError::BadArgs("nome del blob vuoto".into()));
         }
         let path = self.ws.plugin_data_path(self.plugin, path)?;
-        match std::fs::read(&path) {
+        match self.ws.storage().read(&path) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(e) => Err(PluginError::Internal(format!("{path}: {e}").into())),
@@ -94,7 +94,7 @@ impl DataRead for ReadHost<'_> {
         let root = self.ws.plugin_data_root(self.plugin);
         let dir = self.ws.plugin_data_path(self.plugin, prefix)?;
         let mut out = Vec::new();
-        collect_data_files(&root, &dir, &mut out);
+        collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out);
         out.sort_unstable();
         Ok(out)
     }

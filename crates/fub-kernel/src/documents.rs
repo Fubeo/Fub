@@ -213,18 +213,17 @@ impl DocumentStore {
     /// qualcun altro se ne accorga per lui.
     pub(crate) fn plugin_data_roots(&self) -> Vec<Utf8PathBuf> {
         let plugins = data_root(self.vault.root()).join(PLUGIN_DATA_DIR);
-        let Ok(entries) = std::fs::read_dir(&plugins) else {
-            return Vec::new();
-        };
-        let mut out: Vec<Utf8PathBuf> = entries
-            .flatten()
-            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-            .filter_map(|e| Utf8PathBuf::from_path_buf(e.path()).ok())
-            .collect();
-        // In ordine, perché gli errori che ne escono finiscono in un messaggio
-        // e un messaggio che cambia ordine a ogni giro non si confronta.
-        out.sort();
-        out
+        // In ordine — lo dà `VaultStorage::list` — perché gli errori che ne
+        // escono finiscono in un messaggio, e un messaggio che cambia ordine a
+        // ogni giro non si confronta.
+        self.vault
+            .storage()
+            .list(&plugins)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|e| e.stat.is_dir())
+            .map(|e| e.path)
+            .collect()
     }
 }
 

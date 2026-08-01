@@ -30,44 +30,40 @@ atomica, ed è la 15.2; la **classe** di un dato è «si può buttare o no», ed
 15.4. Chiamarle entrambe *durability* è l'errore che questa seduta deve evitare,
 non commettere.
 
+La 15.1 è chiusa con la [0064](../decisions/0064-il-supporto-sta-sotto.md): il
+kernel tocca i byte di un vault da un posto solo — un `trait VaultStorage` con
+`FsStorage` di default e un `MemStorage` che lo tiene onesto — e da lì passano il
+vault, il cestino coi suoi sidecar e lo spazio dati dei plugin. Ne resta una
+casella, che aspetta la 15.2 per la ragione scritta là. Il trait è **interno al
+kernel** e non tocca il contratto, e vale la pena ricordare perché: la lettura
+esterna che voleva promuoverla a P0 aveva ragione sulla leva e torto sulla
+scadenza — sono due assi, e [leva.md](leva.md) esiste per tenerli separati.
+
 La 15.7 sta qui e non fra i presidi perché è la stessa domanda della durabilità
 vista all'apertura invece che alla scrittura: la verità non si rifiuta di aprire,
 si apre segnalando cosa non ha letto.
-
-### 15.1 Astrazione sullo storage
-
-*ex §2.1 · kernel · **P2** — sblocca cifratura, sync e PWA in un colpo solo; **non** è una voce sui test*
-
-- [ ] **`trait VaultStorage`** (list, read, write atomico, rename, remove, stat,
-      exists) con impl `FsStorage` di default; `Vault` e lo spazio dati dei
-      plugin (`DocumentStore::plugin_data_root` in `documents.rs` per la radice,
-      i `data_*` in `host/kernel.rs` e `host/read.rs`, più `collect_data_files`
-      in `workspace.rs`) ci passano sopra invece di chiamare `std::fs`.
-- [ ] **Un `MemStorage`, ma non come banco di prova dei test e2e.** Il movente
-      «oggi ogni test e2e tocca il disco» era scritto qui e va tolto, perché
-      **lavora contro il §15.2**: tutto il punto del §15.2 è temp+rename+fsync
-      sulla directory, cioè durabilità che esiste solo su un filesystem vero. Un
-      `MemStorage` per costruzione non la modella, quindi una suite spostata
-      sopra di lui smetterebbe di esercitare **esattamente** la proprietà che il
-      §15.2 esiste per aggiungere — e il presidio della durabilità diventerebbe
-      verde su un supporto che non ha durabilità. Il `MemStorage` serve come
-      **seconda impl** che tiene onesto il trait (un'astrazione con un solo
-      cliente non è un'astrazione) e per i test *unitari* di chi ci sta sopra;
-      i test di durabilità restano su `FsStorage`, e il banco condiviso è un
-      altro problema — è il [§16.2](../decisions/0055-il-banco-del-lato-host.md).
-
-*Sblocca, in un colpo solo:* 23.1 (cifratura at-rest = uno storage che cifra),
-18.1 (vault remoti/sync), 26.3 (PWA su OPFS), 3.1 (vault read-only, vault su
-network share), 2.3 (drive rimovibili).
 
 ### 15.2 Durabilità e recovery
 
 *ex §2.5 · kernel · **P2** — il journal è il meccanismo di 13.3 e dell'audit trail di 0010*
 
-- [ ] **Scrittura atomica vera**: `Vault::write` è `std::fs::write`
-      (`vault.rs`) — un crash a metà lascia un file troncato. Serve
-      temp+rename+fsync sulla directory. (Il test `write_atomicity` presidia
-      un'altra cosa: l'ordine parse→scrittura.)
+- [ ] **Scrittura atomica vera**: `VaultStorage::write` è `std::fs::write`
+      (`FsStorage`, in `storage.rs`) — un crash a metà lascia un file troncato.
+      Serve temp+rename+fsync sulla directory. (Il test `write_atomicity`
+      presidia un'altra cosa: l'ordine parse→scrittura.) Dalla
+      [0064](../decisions/0064-il-supporto-sta-sotto.md) il posto è **uno**, e
+      con lui viene il prezzo che va guardato prima di pagarlo: temp+rename su
+      una nota dell'utente vuol dire cambiare inode a ogni salvataggio, con quel
+      che segue per gli hardlink, per i symlink e per chi guarda la cartella da
+      fuori. Su un file di configurazione che riscriviamo noi da capo quel prezzo
+      non si vede; qui sì.
+- [ ] **Le tre righe di `.fub/` che non passano dal supporto** — `workspace.json`
+      (`organization.rs`), `settings.json` del vault (`settings.rs`) ed
+      `entries.json` (`entries.rs`) — scrivono con `write_atomic`, cioè hanno
+      già la proprietà che il trait non promette. Vanno portate sopra il supporto
+      **quando** questa voce avrà detto che forma ha l'atomicità là dentro: è la
+      casella residua della [0064](../decisions/0064-il-supporto-sta-sotto.md), e
+      farla prima sarebbe un peggioramento travestito da uniformità.
 - [ ] **Due processi sulla stessa cartella di configurazione si cancellano le
       chiavi a vicenda.** `write_atomic` ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md))
       è l'atomicità di *un file*, non di un *aggiornamento*: chi la chiama

@@ -12,7 +12,7 @@ l'ha trovata una verifica.** È la seconda, dopo quella che ha aperto la
 accanto alle voci. Una lettura esterna di [FEATURES.md](../FEATURES.md) ha
 prodotto nove affermazioni sull'architettura di questo repo. Controllate contro i
 sorgenti: sei erano vere **e già scritte** — la cifratura at-rest che poggia sulla
-[§15.1](15-il-disco.md#151-astrazione-sullo-storage) sta nella voce da quando la
+[§15.1](../decisions/0064-il-supporto-sta-sotto.md) sta nella voce da quando la
 voce esiste, l'`Origin` che impedisce a un'automazione di richiamarsi da sola è
 la [0012](../decisions/0012-origine-degli-eventi.md), la maschera valutata dal
 kernel è la [0033](../decisions/0033-la-grana-di-un-abbonamento.md). La tesi

@@ -276,7 +276,7 @@ rilegge chi lo ha scritto.
 
 Ma la parte che appartiene a **questa** pagina è un'altra, ed è il modo in cui
 quella lettura si è sbagliata: chiedeva di promuovere la
-[§15.1](15-il-disco.md#151-astrazione-sullo-storage) e la
+[§15.1](../decisions/0064-il-supporto-sta-sotto.md) e la
 [§15.2](15-il-disco.md#152-durabilità-e-recovery) a P0 perché «sono il pavimento
 su cui poggia un capitolo intero e mezzo». La premessa è giusta; la conclusione
 confonde i due assi che questa pagina esiste per tenere separati. **La leva non è
@@ -290,7 +290,9 @@ lasciando indietro solo l'implementazione.
 
 Detto questo, la premessa merita di stare scritta, ed è questo il posto:
 
-**§15.1 (astrazione sullo storage)** rende **inesprimibile**, non stretta, la
+**§15.1 (astrazione sullo storage)** — ora **chiusa** con la
+[0064](../decisions/0064-il-supporto-sta-sotto.md), e la premessa resta scritta
+perché è la ragione per cui la voce contava — rende **inesprimibile**, non stretta, la
 cifratura at-rest — che è il capitolo 23.1 quasi per intero: per-note, per-folder,
 encrypted fields, encrypted cache, encrypted thumbnails, indice di ricerca
 cifrato. Il motivo per cui non può essere un plugin non è che manchi un hook sul
@@ -325,4 +327,7 @@ il journal, perché il lotto della [0011](../decisions/0011-il-lotto.md) coalizz
 gli eventi e **non** è una transazione, e sta scritto nel suo stesso verbale.
 
 Entrambe restano **P2**, e le due cose non sono in contraddizione: è esattamente
-la frase con cui questa pagina si apre.
+la frase con cui questa pagina si apre. La §15.1 è stata poi presa **da P2**,
+senza essere promossa e senza che il freeze c'entrasse, il giorno in cui non
+c'erano più P0 aperte: è la prima volta che a scegliere è stata la leva e non la
+scadenza, che è ciò per cui questa pagina esiste.

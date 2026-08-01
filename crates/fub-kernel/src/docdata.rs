@@ -55,6 +55,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::DocId;
 use fub_abi::rules::doc_data;
 
+use crate::storage::VaultStorage;
+
 /// Sposta lo spazio per-documento di `from` sotto `to`, in **ogni** spazio dati
 /// di plugin che ne ha uno. Restituisce ciò che non è riuscito, per plugin.
 ///
@@ -63,11 +65,16 @@ use fub_abi::rules::doc_data;
 /// fallire una rinomina riuscita perché un plugin non ha potuto seguirla sarebbe
 /// il verso sbagliato. La rinomina vale, i dati restano indietro, e qualcuno lo
 /// dice.
-pub(crate) fn migrate(roots: &[Utf8PathBuf], from: &DocId, to: &DocId) -> Vec<String> {
+pub(crate) fn migrate(
+    storage: &dyn VaultStorage,
+    roots: &[Utf8PathBuf],
+    from: &DocId,
+    to: &DocId,
+) -> Vec<String> {
     let mut errori = Vec::new();
     for root in roots {
         let sorgente = space_dir(root, from);
-        if !sorgente.is_dir() {
+        if !storage.stat(&sorgente).is_ok_and(|s| s.is_dir()) {
             continue;
         }
         let destinazione = space_dir(root, to);
@@ -75,13 +82,10 @@ pub(crate) fn migrate(roots: &[Utf8PathBuf], from: &DocId, to: &DocId) -> Vec<St
         // verso un documento che esiste — quindi una cartella già lì è di una
         // nota che non c'è più: la raccolta l'avrebbe tolta al prossimo giro, e
         // qui va tolta subito o la `rename` non ha dove atterrare.
-        if destinazione.exists() {
-            let _ = std::fs::remove_dir_all(&destinazione);
+        if storage.exists(&destinazione) {
+            let _ = storage.remove_dir_all(&destinazione);
         }
-        if let Some(parent) = destinazione.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Err(e) = std::fs::rename(&sorgente, &destinazione) {
+        if let Err(e) = storage.rename(&sorgente, &destinazione) {
             let plugin = root.file_name().unwrap_or(root.as_str());
             errori.push(format!("{plugin}: {e}"));
         }
@@ -94,28 +98,35 @@ pub(crate) fn migrate(roots: &[Utf8PathBuf], from: &DocId, to: &DocId) -> Vec<St
 ///
 /// `esiste` risponde alla sola domanda che il disco non sa fare da sé: *questo
 /// documento è ancora nell'anagrafe del vault, o nel suo cestino?*
-pub(crate) fn collect(roots: &[Utf8PathBuf], esiste: &dyn Fn(&DocId) -> bool) -> usize {
+pub(crate) fn collect(
+    storage: &dyn VaultStorage,
+    roots: &[Utf8PathBuf],
+    esiste: &dyn Fn(&DocId) -> bool,
+) -> usize {
     let mut tolti = 0usize;
     for root in roots {
         let base = root.join(doc_data::DOC_SPACE);
-        let Ok(entries) = std::fs::read_dir(&base) else {
+        let Ok(entries) = storage.list(&base) else {
             continue;
         };
-        for entry in entries.flatten() {
-            let Some(nome) = entry.file_name().to_str().map(str::to_owned) else {
-                // Un nome che non è UTF-8 non l'ha scritto questa convenzione, e
-                // toglierlo sarebbe cancellare roba di qualcun altro.
+        for entry in entries {
+            let Some(nome) = entry.path.file_name() else {
                 continue;
             };
-            // `decode` e non `doc_of`: la voce di `read_dir` **è** già il
+            // Un nome che il supporto non sa rendere in UTF-8 non l'ha scritto
+            // questa convenzione, e non arriva fin qui: `VaultStorage::list` lo
+            // rifiuta prima, perché un path non nominabile dal contratto non è
+            // nominabile nemmeno dal kernel.
+            //
+            // `decode` e non `doc_of`: la voce dell'elenco **è** già il
             // componente del documento, mentre `doc_of` parte da un path
             // relativo e lo isola. Passare di là vorrebbe dire ricomporre un
             // path per farselo smontare subito dopo.
-            let doc = DocId::new(doc_data::decode(&nome));
+            let doc = DocId::new(doc_data::decode(nome));
             if esiste(&doc) {
                 continue;
             }
-            if std::fs::remove_dir_all(base.join(&nome)).is_ok() {
+            if storage.remove_dir_all(&entry.path).is_ok() {
                 tolti += 1;
             }
         }
