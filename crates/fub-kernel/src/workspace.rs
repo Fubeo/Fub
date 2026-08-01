@@ -65,8 +65,8 @@ use fub_abi::text::{Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, HostApi,
     IndexLoss, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged,
-    PluginManifest, QueryRoute, ReadApi, ServiceProvider, VaultEntry, ViewInstance, ViewInterests,
-    ViewProvider, ViewSpec,
+    PluginManifest, QueryRoute, ReadApi, ServiceProvider, TimerSpec, VaultEntry, ViewInstance,
+    ViewInterests, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -614,6 +614,23 @@ impl Workspace {
         for spec in &manifest.settings {
             fub_abi::rules::ids::check(&spec.key, owner).map_err(RegistryError::Namespace)?;
         }
+        // E i **nomi delle sveglie** (§22.1), che valgono la regola opposta:
+        // nudi, come le chiavi di un catalogo di stringhe. Una sveglia vive
+        // dentro il componente che l'ha dichiarata e nessun altro la può
+        // nominare — la qualifica è strutturale, e a dire di chi è è
+        // `TimerFired.owner`. Ciò che si verifica è quindi solo che il nome ci
+        // sia e sia unico: due sveglie omonime dello stesso componente
+        // sarebbero due eventi indistinguibili da chi li riceve.
+        let mut visti = std::collections::BTreeSet::new();
+        for timer in &manifest.timers {
+            if timer.id.is_empty() || !visti.insert(timer.id.as_str()) {
+                return Err(RegistryError::Timer {
+                    plugin: manifest.id.clone(),
+                    timer: timer.id.clone(),
+                });
+            }
+        }
+        let timers_dichiarati = !manifest.timers.is_empty();
         let (id, specs) = (manifest.id.clone(), manifest.settings.clone());
         // La dichiarazione del plugin **prima** dello schema, e non per gusto
         // dell'ordine: se fosse al contrario, un id doppio lascerebbe dietro le
@@ -630,6 +647,17 @@ impl Workspace {
             self.providers.plugins.retire(&id);
             return Err(RegistryError::Setting(why));
         }
+        if !timers_dichiarati {
+            return Ok(());
+        }
+        // Chi dorme non sa che è arrivata una sveglia (§22.1, decisione 0069).
+        // Il pool aspetta senza scadenza finché nessuno dichiara timer — che è
+        // la promessa fatta a chi non ne dichiara — quindi un componente montato
+        // *dopo* che i thread si sono addormentati resterebbe senza sveglia fino
+        // al primo job di qualcun altro. È la stessa mossa con cui `stop` sveglia
+        // i dormienti: la campana non annuncia un job, annuncia che c'è da
+        // ricontare.
+        self.dispatch.bell().ring();
         Ok(())
     }
 
@@ -1768,6 +1796,12 @@ impl Workspace {
         // prima direbbe che il file è quello di ieri — a chi la interroga
         // adesso, e alla prossima apertura, che sull'anagrafe decide cosa
         // rileggere.
+        // **Prima** di toccare qualunque cosa: è l'unico momento in cui il
+        // vecchio e il nuovo esistono insieme (§22.2, decisione 0069). Un
+        // istante più in là l'anagrafe ha l'impronta nuova, `self.tags` i tag
+        // nuovi e `self.metas` i metadati nuovi, e dire *cosa* è cambiato
+        // costerebbe una lettura del disco invece di zero.
+        let changes = self.indexes.core.changes_for(&model, &fingerprint);
         self.touch_entry(id, Some(fingerprint));
         // Gli indici vedono la modifica nella stessa operazione del grafo:
         // stessa verità, nessun canale che può perdere pezzi per strada. E la
@@ -1789,7 +1823,10 @@ impl Workspace {
         // salvataggio); fino ad allora il contesto dice "non so dove", che è
         // la verità.
         self.session.invalidate(id, ContextChange::Rewritten);
-        self.emit_event(Event::DocumentChanged { id: id.clone() });
+        self.emit_event(Event::DocumentChanged {
+            id: id.clone(),
+            changes: Some(changes),
+        });
         self.emit_event(Event::IndexUpdated);
     }
 
@@ -4021,8 +4058,9 @@ impl Workspace {
             |ws, handlers| {
                 let mut troubles: Vec<(String, PluginError)> = Vec::new();
                 for (id, handler) in handlers.iter_mut() {
-                    // La maschera per intero (§10.1): la specie, il prefisso di
-                    // topic per i custom, il soggetto. La regola sta nel
+                    // La maschera per intero: la specie, il prefisso di topic
+                    // per i custom, il soggetto (§10.1) e **cosa è cambiato**
+                    // nel documento (§22.2, decisione 0069). La regola sta nel
                     // contratto (`fub_abi::rules::events`) e non qui, perché
                     // il secondo lettore è la shell — che decide da sé quando
                     // ridisegnare una view dichiarata.
@@ -4174,6 +4212,65 @@ impl Workspace {
     /// il prestito per **chiamata** — è `JobHost` in `fub-host`.
     pub fn take_pending_jobs(&mut self) -> Vec<PendingJob> {
         self.dispatch.take_pending_jobs()
+    }
+
+    /// Le **sveglie dichiarate** da chi è registrato adesso (§22.1, decisione
+    /// 0069): l'id del componente e la sua `TimerSpec`.
+    ///
+    /// È ciò che uno scheduler legge per sapere quando deve svegliarsi. Il
+    /// kernel non lo tiene: lo tiene il manifest, che è dove la dichiarazione è
+    /// stata scritta, e lo perde quando il componente si ritira — che è la
+    /// proprietà per cui non c'è un secondo registro da tenere allineato.
+    ///
+    /// **Il kernel non legge l'orologio.** Questa firma non dice *quando* è
+    /// adesso e non ha un `Instant` da nessuna parte: il tempo di parete è di
+    /// chi possiede i thread, e la 0032 ha già stabilito che è l'host. Il
+    /// contratto ci mette la regola ([`TimerSchedule::nth_after`](fub_abi::traits::TimerSchedule::nth_after)) perché due
+    /// host non abbiano due idee di cosa voglia dire «ogni ora».
+    pub fn declared_timers(&self) -> Vec<(String, TimerSpec)> {
+        self.providers
+            .plugins
+            .timers()
+            .into_iter()
+            .map(|(owner, spec)| (owner.to_string(), spec.clone()))
+            .collect()
+    }
+
+    /// Fa suonare una sveglia: emette [`Event::TimerFired`] sul giro sincrono
+    /// normale, come ogni altro evento.
+    ///
+    /// Risponde `false` — e non emette niente — se quel componente non dichiara
+    /// (più) quella sveglia. È la riga che rende la dichiarazione **valutata**
+    /// invece che decorativa: senza, uno scheduler che si tiene una copia
+    /// dell'elenco continuerebbe a svegliare un plugin disattivato, e il
+    /// contratto direbbe che la sveglia è del manifest mentre in realtà è di
+    /// chi l'ha copiata.
+    ///
+    /// L'origine è [`Actor::Kernel`] per la ragione di [`Event::JobDone`]: a
+    /// far scattare la sveglia non è stato il plugin, è stato il tempo. Chi si
+    /// riconosce lo fa da `owner`, che è il campo fatto apposta.
+    pub fn fire_timer(&mut self, owner: &str, timer: &str) -> bool {
+        let dichiarata = self
+            .providers
+            .plugins
+            .timers()
+            .iter()
+            .any(|(o, spec)| *o == owner && spec.id == timer);
+        if !dichiarata {
+            return false;
+        }
+        // Come `complete_job`, e per la stessa ragione: chi chiama arriva da
+        // fuori del giro sincrono — è il pool — quindi l'evento non trova
+        // nessuno che stia già drenando, e senza questa riga resterebbe in coda
+        // fino alla prossima scrittura di qualcun altro.
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.emit_event(Event::TimerFired {
+                owner: owner.to_string(),
+                timer: timer.to_string(),
+            });
+            ws.dispatch_pending();
+        });
+        true
     }
 
     /// Riconsegna l'esito di un job: emette [`Event::JobDone`] sul giro

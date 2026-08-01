@@ -25,9 +25,24 @@ firma** era la §15.4, ed era P0, ed è chiusa dalla
 [0048](../decisions/0048-una-radice-sola.md) prima del freeze; il `trait
 VaultStorage` è rimasto P2 perché è un trait interno al kernel e non scade.
 
-Restano tre cose che nessuno aveva scritto. Sono qui — e la terza è **chiusa**
-dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md), che ne lascia
-una casella.
+Restano tre cose che nessuno aveva scritto. Sono qui, e sono **tutte e tre
+chiuse**: la terza dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md),
+che ne lascia una casella, e le altre due dalla
+[0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md), che ne apre una nuova —
+la §22.4, l'orario di parete.
+
+**Un avvertimento su questo cappello, scritto dopo.** La frase qui sotto — «tre
+estensioni della stessa maschera» — **è sbagliata**, e le due decisioni che hanno
+chiuso la seduta l'hanno smentita ognuna a modo suo: la §22.3 è diventata una
+funzione su `ViewProvider` ([0063](../decisions/0063-la-maschera-e-dell-esemplare.md))
+e la §22.1 un campo di manifest, perché *una maschera filtra e non causa*
+([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)). L'accorpamento che
+questo cappello dichiarava ha retto lo stesso, ma per un'altra ragione — la
+**regola** che il ritiro della 0063 ha messo a verbale, non il record — e resta
+scritto qui com'era perché è il caso su cui il criterio della
+[0054](../decisions/0054-il-banco-del-lato-provider.md) si è precisato: un
+cappello si legge per cosa afferma, e ciò che afferma può essere falso senza che
+la sua conclusione lo sia.
 
 **Perché stanno insieme.** Un **abbonamento** — in questa seduta: ogni
 dichiarazione di interesse, non solo `subscriptions()` — è il modo con cui questo
@@ -39,7 +54,8 @@ cambiato** (§22.2), e **per quale esemplare** (§22.3). Decise separate darebbe
 tre estensioni della stessa maschera, disegnate da tre lati, con tre modi di
 essere valutate.
 
-**E nessuna delle tre scade col freeze.** Vale scriverlo perché la tentazione era
+**E nessuna delle tre scade col freeze** — né la quarta, che è nata chiudendo la
+prima. Vale scriverlo perché la tentazione era
 chiamarle P0 per importanza — cioè commettere l'errore che questa stessa seduta
 ha appena contestato a chi l'ha aperta. Passate una per una alla tabella di
 [`architecture/wit-congelato.md`](../architecture/wit-congelato.md): la
@@ -64,9 +80,9 @@ fatta a chi la scrive.
 
 ### 22.1 Un abbonamento non sa dire quando
 
-*nuova con la verifica del catalogo · contratto · **P1** — la premessa con cui la [0013](../decisions/0013-elenco-delle-capacita.md) l'aveva esclusa non è più vera*
+*chiusa dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) — la dichiarazione sta nel manifest, perché una maschera filtra e non causa; e ne nasce la §22.4*
 
-- [ ] **Il no della [0013](../decisions/0013-elenco-delle-capacita.md) è ancora
+- [x] **Il no della [0013](../decisions/0013-elenco-delle-capacita.md) è ancora
       giusto; la sua ragione no.** `schedule_at`/`schedule_every` erano stati
       esclusi così: «*il kernel è sincrono e non possiede thread: `spawn_job`
       accoda e chi ha i thread (l'app) drena*». Dalla
@@ -80,19 +96,37 @@ fatta a chi la scrive.
       evento — e il precedente che dice che funziona è la
       [0035](../decisions/0035-il-lavoro-lungo-si-racconta.md), che ha fatto
       esattamente questo col progresso.
-- [ ] **Ciò che manca è la dichiarazione, non lo scheduler.** `EventMask` sa dire
+
+      *Confermato, e con la premessa smentita per iscritto: dalla
+      [0032](../decisions/0032-il-runner-dei-job.md) i thread ci sono, quindi a
+      reggere la conclusione è l'altra regola. La 0013 aveva anche previsto la
+      forma — «quando arriveranno, arriveranno come `Event`, ed è additivo» — e
+      `Event::TimerFired { owner, timer }` è quella riga resa vera.*
+- [x] **Ciò che manca è la dichiarazione, non lo scheduler.** `EventMask` sa dire
       tre cose — le specie, il prefisso di topic, il soggetto (`event.rs`) — e
       nessuna delle tre è *quando*. Un plugin che voglia svegliarsi alle 9, o
       ogni ora, o fra dieci minuti, non ha **dove scriverlo**: non nella
       maschera, non nel manifest, non fra le capacità. Lo scheduler in sé è
       codice dell'host e non costa una decisione; il posto dove un plugin
       dichiara un timer sì, ed è l'unica parte che il freeze guarda.
-- [ ] **Chi lo chiede.** FEATURES 16.2 (trigger su orario, su data, su
+
+      *Il posto è il `PluginManifest` (`timers: list<timer-spec>`), e la ragione
+      per cui **non** è la maschera è più forte di «non ci stava»: una maschera si
+      applica agli eventi che accadono, e un timer che nessuno ha fatto partire
+      non ne genera nessuno da filtrare. Era un errore di categoria, ed è la
+      ragione per cui il tentativo ritirato non poteva trovare un valutatore. Lo
+      scheduler è dell'host come previsto, ma la **regola** di quando suona sta
+      nel contratto (`TimerSchedule::nth_after`): il kernel non legge l'orologio,
+      e due host non devono avere due idee di cosa voglia dire «ogni ora».*
+- [x] **Chi lo chiede.** FEATURES 16.2 (trigger su orario, su data, su
       intervallo), 16.3 (schedule, delay, retry), 10.5 (promemoria e notifiche a
       scadenza), 18.1 (sync periodico), 24.2 (background sync efficiente). Sono
       l'unica famiglia di trigger del 16.2 che **non** nasce da un evento del
       vault: tutte le altre hanno già il canale e aspettano solo chi le ascolti.
-- [ ] **Perché non è P0.** Le tre forme che la dichiarazione può prendere sono
+
+      *Servite, meno l'orario di parete: `every` e `after` coprono «ogni ora» e
+      «fra dieci minuti», «alle 9» diventa la §22.4.*
+- [x] **Perché non è P0.** Le tre forme che la dichiarazione può prendere sono
       tutte additive: un campo del `PluginManifest` (il precedente è `settings`,
       [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), un campo in
       fondo a `EventMask`, o un'interfaccia nuova. Il caso di `Event` per la
@@ -102,28 +136,50 @@ fatta a chi la scrive.
       lettere: nel component model un caso in più su un `variant` non è nemmeno
       additivo davvero.
 
+      *Presa la prima delle tre — il campo di manifest —, e il caso in coda al
+      `variant` c'è comunque. `frozen/0.1.0.wit` **non è stato toccato**: il
+      precedente per il caso in coda è la
+      [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md), che ne
+      aveva aggiunti tre a `plugin-error` chiamandoli additivi.*
+
 ### 22.2 Un evento dice quale documento, non cosa è cambiato
 
-*nuova con la verifica del catalogo · contratto · **P1** — è l'argomento della [0033](../decisions/0033-la-grana-di-un-abbonamento.md) un piano più in basso*
+*chiusa dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) — si filtra per aspetto e si legge per nome*
 
-- [ ] **`DocumentChanged { id }` e basta** (`abi.wit`, `event-document-changed`).
+- [x] **`DocumentChanged { id }` e basta** (`abi.wit`, `event-document-changed`).
       Chi ascolta sa che *quella nota* è cambiata, non cosa: per sapere se è
       cambiato un tag deve rileggere il modello e confrontarlo con quello che si
       era tenuto.
-- [ ] **La 16.2 chiede tre trigger che sono esattamente questo**: «trigger su tag
+
+      *Adesso dice anche cosa: `changes: option<doc-changes>`. E i due stati
+      dell'`option` sono due cose diverse — assente è *non lo so* e passa ogni
+      filtro, presente e vuoto è *niente è cambiato* e non passa.*
+- [x] **La 16.2 chiede tre trigger che sono esattamente questo**: «trigger su tag
       aggiunto», «su proprietà cambiata», «su task completato». Nessuno dei tre è
       una specie di evento e nessuno dei tre è filtrabile da una maschera:
       un'automazione su «la scadenza è cambiata» si sveglia a **ogni** scrittura
       di **ogni** nota del suo soggetto, e rilegge per scoprire che non la
       riguardava. È la famiglia di automazioni più grande del capitolo 16, ed è
       quella che paga il conto più alto.
-- [ ] **È l'argomento della [0033](../decisions/0033-la-grana-di-un-abbonamento.md)
+
+      *Due dei tre sono serviti per nome (`tags_added`/`tags_removed` e
+      `properties`); il terzo — «task completato» — **non ha un campo nel
+      modello**, quindi non è distinguibile da un cambio di corpo. Non è stato
+      nominato in `DocChange` per non promettere una grana che il kernel non sa
+      produrre: è un buco dichiarato, e l'enum cresce in coda il giorno che
+      `DocumentModel` avrà i task.*
+- [x] **È l'argomento della [0033](../decisions/0033-la-grana-di-un-abbonamento.md)
       un piano più in basso.** Quella voce esisteva perché con la sola grana
       delle specie ogni handler si svegliava per N feature × M documenti; la
       maschera ha guadagnato il topic e il soggetto, e il conto è sceso di due
       ordini. Il *cosa* è la terza grana, e la sua assenza rimette in piedi lo
       stesso moltiplicatore sull'evento più caldo del contratto.
-- [ ] **Il posto dove la differenza è calcolabile esiste, ed è uno solo**:
+
+      *La terza grana è `DocChange`, sei aspetti chiusi dal contratto. Il
+      moltiplicatore che resta è sul **risveglio** e non più sulla **rilettura**,
+      che era la parte cara: chi si sveglia sa già, dai nomi che l'evento porta,
+      se lo riguardava.*
+- [x] **Il posto dove la differenza è calcolabile esiste, ed è uno solo**:
       `Workspace::ingest_model` (`workspace.rs`), la coda di ogni scrittura. Lì
       il modello nuovo è in mano e i metadati di prima sono ancora in cache —
       `on_document_indexed(&model)` è la riga che li sostituisce. Chi volesse
@@ -131,8 +187,16 @@ fatta a chi la scrive.
       basta guardare prima di sovrascrivere. È la stessa specie di spreco della
       [seduta 20](20-quando-qualcosa-va-storto.md) — un esito che si ha in mano e
       si butta — vista sul canale degli eventi invece che su quello degli errori.
-- [ ] **Perché non è P0**: un campo in fondo a `event-document-changed` e uno in
+
+      *Esatto, e il diff costa **zero letture dal disco**: si calcola in
+      `ingest_model` prima di toccare qualunque cosa. Il corpo non stava in
+      cache — è lo split metadata/body — e a rispondere per lui è l'impronta che
+      l'anagrafe teneva dal giro prima (§14.1), che era già in memoria.*
+- [x] **Perché non è P0**: un campo in fondo a `event-document-changed` e uno in
       fondo a `EventMask` per filtrarlo. Due record, due aggiunte in coda.
+
+      *Alla lettera, più tre tipi nuovi (`doc-change`, `doc-changes`) e nessun
+      ritaglio della linea di base.*
 
 ### 22.3 La maschera di ridisegno è della view, non dell'esemplare
 
@@ -160,3 +224,34 @@ shell fa oggi ha già la sua risposta dentro `list_views`
       Un blocco reso dentro un documento non ha un id di view a cui appendere una
       spec, e la sua dipendenza nasce dal testo che lo contiene: è lì che la
       risposta va cercata, non in `ViewSpec`.
+
+### 22.4 Un orario di parete non è un intervallo
+
+*nata dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md), che ha chiuso la §22.1 senza di lei · contratto · **P1** — additiva, quindi non scade col freeze*
+
+`TimerSchedule` sa dire `every` e `after`, cioè le due forme che si misurano in
+**tempo trascorso**: «ogni ora» e «fra dieci minuti». La §22.1 ne nominava tre, e
+la terza — «alle 9» — non è la stessa specie di domanda.
+
+- [ ] **Un orario di parete vuole un fuso, e nessuno sa da dove lo prende.** Il
+      sistema? Un'impostazione (§11.1)? Il locale della
+      [0039](../decisions/0039-il-locale-e-il-caso.md), che l'host già conosce e
+      che però dice *come si scrive un'ora*, non *in che fuso si vive*? Sono tre
+      risposte diverse e producono tre comportamenti diversi per un vault
+      sincronizzato fra due macchine in due paesi — che è il caso normale, non
+      quello di frontiera.
+- [ ] **E vuole una regola sull'ora legale.** Il giorno in cui l'ora legale
+      entra, le 2:30 non esistono; il giorno in cui esce, esistono due volte. Una
+      sveglia dichiarata a quell'ora o salta un giro o ne fa due, e quale delle
+      due sia giusta dipende da cosa la sveglia fa: un promemoria vuole saltare,
+      un backup vuole girare. È una decisione, e prenderla di straforo dentro
+      un'implementazione vorrebbe dire che nessuno la trova più.
+- [ ] **Chi lo chiede.** FEATURES 16.2 (trigger su orario e su data), 10.5
+      (promemoria e notifiche a scadenza). Sono la metà della famiglia che la
+      §22.1 ha servito: chi vuole svegliarsi *ogni tanto* è servito, chi vuole
+      svegliarsi *alle nove* no.
+- [ ] **Perché non è P0.** `timer-schedule` è un `variant` nato con la
+      [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) e mai pubblicato:
+      un caso in coda è additivo, e chi ha dichiarato `every` non se ne accorge.
+      Ciò che il freeze guarda — il posto della dichiarazione — è già deciso ed è
+      il manifest.

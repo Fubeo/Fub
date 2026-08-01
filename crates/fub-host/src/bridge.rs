@@ -40,7 +40,7 @@
 //! sacrificabile lo dice il contratto, in un posto solo
 //! ([`Event::is_recoverable`]).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fub_abi::model::DocId;
@@ -104,7 +104,7 @@ fn reduce(burst: Vec<Notice>) -> Vec<Notice> {
 /// avanti (§10.3). Tutto il resto — rimozioni, rename, lotti, custom, avvii ed
 /// esiti di job — resta uno per uno: sono **fatti distinti**, e fonderli vorrebbe
 /// dire raccontare una storia diversa da quella che è successa.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 enum Grain {
     Index,
     Changed(DocId),
@@ -114,10 +114,31 @@ enum Grain {
     Progress(u64),
 }
 
+/// Porta dentro `tenuto` ciò che `scartato` diceva e lui non dice.
+///
+/// Riguarda la sola specie che un fatto ce l'ha: un `document-changed`. Per le
+/// altre tre grane la frase del doc qui sopra resta vera alla lettera — due
+/// copie dicono la stessa cosa — e non c'è niente da portare dietro.
+///
+/// `None` vince su `Some`: se di una delle due copie non si sa cosa è cambiato,
+/// dell'unione non si sa niente, e dirlo è l'unico modo di non far filtrare via
+/// un evento su un diff che non è quello vero.
+fn fondi(tenuto: &mut Event, scartato: Event) {
+    let (Event::DocumentChanged { changes: qui, .. }, Event::DocumentChanged { changes: la, .. }) =
+        (tenuto, scartato)
+    else {
+        return;
+    };
+    match (qui.as_mut(), la) {
+        (Some(qui), Some(la)) => qui.merge(la),
+        _ => *qui = None,
+    }
+}
+
 fn grain(event: &Event) -> Option<Grain> {
     match event {
         Event::IndexUpdated => Some(Grain::Index),
-        Event::DocumentChanged { id } => Some(Grain::Changed(id.clone())),
+        Event::DocumentChanged { id, .. } => Some(Grain::Changed(id.clone())),
         Event::ViewInvalidated { view, instance } => {
             Some(Grain::View(view.clone(), instance.clone()))
         }
@@ -139,6 +160,14 @@ fn grain(event: &Event) -> Option<Grain> {
 /// `view-invalidated` senza `instance` vuol dire **tutte** le istanze di quella
 /// view, quindi quelli che ne nominano una sola, nella stessa raffica, sono già
 /// compresi.
+///
+/// **Un `document-changed` però non si butta: si fonde.** Dalla decisione 0069
+/// porta il *cosa* ([`DocChanges`]), e due copie della stessa nota nella stessa
+/// raffica dicono due cose diverse — la prima può aver cambiato un tag e la
+/// seconda una proprietà. Tenere l'ultima e basta farebbe perdere metà del
+/// racconto in silenzio, e lo farebbe perdere **solo** a chi si è abbonato
+/// stretto, cioè a chi ha fatto la cosa giusta. È lo stesso argomento con cui la
+/// decisione 0033 lascia passare ciò che non nomina nessun documento.
 fn coalesce(burst: Vec<Notice>) -> Vec<Notice> {
     let tutte: HashSet<String> = burst
         .iter()
@@ -157,7 +186,7 @@ fn coalesce(burst: Vec<Notice>) -> Vec<Notice> {
         )
     };
 
-    let mut visti: HashSet<Grain> = HashSet::new();
+    let mut visti: HashMap<Grain, usize> = HashMap::new();
     let mut tenuti: Vec<Notice> = Vec::with_capacity(burst.len());
     // A rovescio, tenendo il primo che si incontra di ogni grana: è «l'ultimo»
     // letto nel verso giusto.
@@ -166,9 +195,11 @@ fn coalesce(burst: Vec<Notice>) -> Vec<Notice> {
             continue;
         }
         if let Some(g) = grain(&notice.event) {
-            if !visti.insert(g) {
+            if let Some(&dove) = visti.get(&g) {
+                fondi(&mut tenuti[dove].event, notice.event);
                 continue;
             }
+            visti.insert(g, tenuti.len());
         }
         tenuti.push(notice);
     }
@@ -229,10 +260,26 @@ fn per_specie(notices: &[Notice]) -> std::collections::HashMap<String, usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::event::{DocChange, DocChanges};
     use fub_abi::traits::JobId;
 
     fn cambiato(id: &str) -> Notice {
-        Notice::of(Event::DocumentChanged { id: DocId::new(id) })
+        Notice::of(Event::DocumentChanged {
+            id: DocId::new(id),
+            changes: None,
+        })
+    }
+
+    /// Lo stesso, ma con un diff dichiarato: serve alle prove che il
+    /// raggruppamento **fonde** invece di buttare (decisione 0069).
+    fn cambiato_con(id: &str, aspetto: DocChange) -> Notice {
+        Notice::of(Event::DocumentChanged {
+            id: DocId::new(id),
+            changes: Some(DocChanges {
+                aspects: vec![aspetto],
+                ..DocChanges::default()
+            }),
+        })
     }
 
     /// **Un guasto non si raggruppa, e non si perde in una raffica** (§20.2).
@@ -269,6 +316,56 @@ mod tests {
             2,
             "i due guasti sono due fatti e devono passare tutti e due: {out:?}"
         );
+    }
+
+    /// **Raggruppare non deve perdere il *cosa*** (§22.2, decisione 0069).
+    ///
+    /// Prima di quella decisione due `document-changed` della stessa nota
+    /// dicevano la stessa cosa due volte, e tenere l'ultima era gratis. Adesso
+    /// portano un diff, e la prima può aver cambiato un tag dove la seconda ha
+    /// cambiato una proprietà: buttarla vorrebbe dire far perdere un risveglio
+    /// a chi si è abbonato ai tag — cioè a chi ha ristretto il proprio
+    /// interesse, che è lo stesso danno che la 0033 ha evitato lasciando
+    /// passare ciò che non nomina nessun documento.
+    #[test]
+    fn grouping_two_changes_of_the_same_note_keeps_both_stories() {
+        let out = reduce(vec![
+            cambiato_con("Alpha.md", DocChange::Tags),
+            cambiato_con("Alpha.md", DocChange::Frontmatter),
+        ]);
+        assert_eq!(out.len(), 1, "restano una: {out:?}");
+        let Event::DocumentChanged { changes, .. } = &out[0].event else {
+            panic!("non è un document-changed: {out:?}");
+        };
+        let changes = changes.as_ref().expect("il diff c'è");
+        assert!(
+            changes.aspects.contains(&DocChange::Tags)
+                && changes.aspects.contains(&DocChange::Frontmatter),
+            "l'unione dei due, non l'ultimo: {changes:?}"
+        );
+    }
+
+    /// E se di **una** delle due copie non si sa cosa è cambiato, dell'unione
+    /// non si sa niente: dirlo è l'unico modo di non far filtrare via un evento
+    /// su un diff che non è quello vero.
+    #[test]
+    fn grouping_with_an_unknown_diff_makes_the_whole_thing_unknown() {
+        for burst in [
+            vec![
+                cambiato("Alpha.md"),
+                cambiato_con("Alpha.md", DocChange::Tags),
+            ],
+            vec![
+                cambiato_con("Alpha.md", DocChange::Tags),
+                cambiato("Alpha.md"),
+            ],
+        ] {
+            let out = reduce(burst);
+            let Event::DocumentChanged { changes, .. } = &out[0].event else {
+                panic!("non è un document-changed: {out:?}");
+            };
+            assert!(changes.is_none(), "doveva restare *non lo so*: {changes:?}");
+        }
     }
 
     #[test]

@@ -69,7 +69,8 @@ use fub_abi::custom::{
 use fub_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{
-    Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
+    Actor, BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Notice, Origin, Severity,
+    Subject,
 };
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
@@ -97,8 +98,8 @@ use fub_abi::traits::{
     JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef, Page, Paged, Plugin,
     PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter,
     PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef,
-    ServiceProvider, TagCount, TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance,
-    ViewInterests, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
+    ServiceProvider, TagCount, TimerSchedule, TimerSpec, TrashEntry, VaultEntry, VaultFolder,
+    VaultStatus, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fub_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -326,6 +327,10 @@ wit_kebab! {
     EventKind,
     EventMask,
     Subject,
+    DocChange,
+    DocChanges,
+    TimerSpec,
+    TimerSchedule,
     Actor,
     Origin,
     Notice,
@@ -1763,10 +1768,10 @@ fn event_case(e: &Event) -> Case {
             "event-vault-opened",
             vec![("root", wit(root))],
         ),
-        Event::DocumentChanged { id } => case_rec(
+        Event::DocumentChanged { id, changes } => case_rec(
             "document-changed",
             "event-document-changed",
-            vec![("id", wit(id))],
+            vec![("id", wit(id)), ("changes", wit(changes))],
         ),
         Event::DocumentRemoved { id } => case_rec(
             "document-removed",
@@ -1855,6 +1860,11 @@ fn event_case(e: &Event) -> Case {
                 ("subject", wit(subject)),
                 ("error", wit(error)),
             ],
+        ),
+        Event::TimerFired { owner, timer } => case_rec(
+            "timer-fired",
+            "event-timer-fired",
+            vec![("owner", wit(owner)), ("timer", wit(timer))],
         ),
     }
 }
@@ -2572,6 +2582,7 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             event_case(&Event::DocumentChanged {
                 id: DocId::new("a"),
+                changes: None,
             }),
             event_case(&Event::DocumentRemoved {
                 id: DocId::new("a"),
@@ -2631,6 +2642,10 @@ fn conform(source: &str) -> Result<(), String> {
                 severity: Severity::Warning,
                 subject: Some(DocId::new("a")),
                 error: PluginError::Internal("x".into()),
+            }),
+            event_case(&Event::TimerFired {
+                owner: "com.acme.tasks".into(),
+                timer: "sync".into(),
             }),
         ],
     );
@@ -4045,6 +4060,7 @@ fn conform(source: &str) -> Result<(), String> {
         settings,
         strings,
         default_locale,
+        timers,
     } = PluginManifest {
         id: String::new(),
         name: String::new(),
@@ -4056,6 +4072,7 @@ fn conform(source: &str) -> Result<(), String> {
         settings: Vec::new(),
         strings: Vec::new(),
         default_locale: String::new(),
+        timers: Vec::new(),
     };
     contract.record(
         "plugin-manifest",
@@ -4079,6 +4096,30 @@ fn conform(source: &str) -> Result<(), String> {
             // spostarsi per far posto a chi traduce.
             ("strings", wit(&strings)),
             ("default-locale", wit(&default_locale)),
+            // E le sveglie (§22.1, decisione 0069), in fondo per la stessa
+            // ragione di tutte le altre: chi si è congelato senza dichiarare
+            // timer non si sposta per far posto a chi ne dichiara.
+            ("timers", wit(&timers)),
+        ],
+    );
+
+    // Le sveglie (§22.1, decisione 0069). Il nome è nudo — vive dentro il
+    // componente — e la regola di quando suona sta nel contratto perché due
+    // host non abbiano due idee di cosa voglia dire «ogni ora».
+    let TimerSpec { id, schedule } = TimerSpec {
+        id: String::new(),
+        schedule: TimerSchedule::Every { seconds: 0 },
+    };
+    contract.record(
+        "timer-spec",
+        &[("id", wit(&id)), ("schedule", wit(&schedule))],
+    );
+    contract.variant_src(
+        "timer-schedule",
+        ("traits.rs", "TimerSchedule"),
+        &[
+            case_ty("every", wit_of::<u64>()),
+            case_ty("after", wit_of::<u64>()),
         ],
     );
 
@@ -4205,6 +4246,7 @@ fn conform(source: &str) -> Result<(), String> {
         kinds,
         topics,
         subjects,
+        changes,
     } = EventMask::all();
     contract.record(
         "event-mask",
@@ -4212,6 +4254,28 @@ fn conform(source: &str) -> Result<(), String> {
             ("kinds", wit(&kinds)),
             ("topics", wit(&topics)),
             ("subjects", wit(&subjects)),
+            // Il quarto asse (§22.2, decisione 0069), in fondo: chi ha scritto
+            // una maschera prima di lui riceve esattamente ciò che riceveva.
+            ("changes", wit(&changes)),
+        ],
+    );
+
+    // Cosa è cambiato in un documento (§22.2, decisione 0069): gli aspetti, su
+    // cui si filtra, e i nomi, che si leggono.
+    contract.enumeration_from("doc-change", ("event.rs", "DocChange"));
+    let DocChanges {
+        aspects,
+        properties,
+        tags_added,
+        tags_removed,
+    } = DocChanges::everything();
+    contract.record(
+        "doc-changes",
+        &[
+            ("aspects", wit(&aspects)),
+            ("properties", wit(&properties)),
+            ("tags-added", wit(&tags_added)),
+            ("tags-removed", wit(&tags_removed)),
         ],
     );
 

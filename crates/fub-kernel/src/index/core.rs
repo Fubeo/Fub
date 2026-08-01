@@ -31,9 +31,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use fub_abi::edit::Revision;
+use fub_abi::event::{DocChange, DocChanges};
 use fub_abi::model::{
     canonical_anchor, canonical_tag, heading_slug, Anchor, DocId, DocumentModel, Frontmatter,
-    Heading, Link, LinkTarget,
+    Heading, Link, LinkTarget, Tag,
 };
 use fub_abi::query::{
     in_folder, parent_folder, within_folder, Matches, QueryEvaluator, QueryPredicate,
@@ -492,6 +494,63 @@ impl CoreIndex {
     }
 
     /// Mette (o aggiorna) una voce dell'anagrafe.
+    /// **Cosa cambia** se questo modello sostituisce quello che c'è (§22.2,
+    /// decisione 0069).
+    ///
+    /// Si chiama **prima** di [`on_documents_indexed`](IndexProvider::on_documents_indexed)
+    /// e prima che l'anagrafe sia toccata, ed è l'unico momento in cui il
+    /// vecchio e il nuovo esistono insieme: il modello è appena arrivato, i
+    /// metadati di prima sono ancora in `metas` e i tag di prima ancora in
+    /// `tags`. Costa zero letture dal disco — è l'esito che la §22.2 dice
+    /// «si ha in mano e si butta».
+    ///
+    /// Un documento che **nasce** non ha un prima, e per lui tutto è nuovo:
+    /// [`DocChanges::everything`], che è la risposta vera e non una comodità —
+    /// chi si è abbonato ai cambi di tag vuole sapere della nota che nasce
+    /// con un tag.
+    pub(crate) fn changes_for(&self, model: &DocumentModel, new: &Revision) -> DocChanges {
+        let Some(before) = self.metas.get(&model.id) else {
+            return DocChanges::everything();
+        };
+        let mut changes = DocChanges::default();
+        // Il corpo non sta in cache (è lo split metadata/body): a rispondere è
+        // l'impronta che l'anagrafe teneva del giro prima. Se non ce l'ha —
+        // una voce entrata senza fingerprint — la risposta onesta è «sì»:
+        // dire di no vorrebbe dire far perdere un risveglio a chi ha ragione.
+        let body_changed = match self
+            .entries
+            .get(&model.id)
+            .and_then(|e| e.fingerprint.as_ref())
+        {
+            Some(old) => old != new,
+            None => true,
+        };
+        if body_changed {
+            changes.aspects.push(DocChange::Body);
+        }
+        let keys = changed_properties(&before.frontmatter, &model.frontmatter);
+        if !keys.is_empty() {
+            changes.aspects.push(DocChange::Frontmatter);
+            changes.properties = keys;
+        }
+        let (added, removed) = tag_diff(&self.tags.names_of(&model.id), &model.tags);
+        if !added.is_empty() || !removed.is_empty() {
+            changes.aspects.push(DocChange::Tags);
+            changes.tags_added = added;
+            changes.tags_removed = removed;
+        }
+        if before.links != model.links {
+            changes.aspects.push(DocChange::Links);
+        }
+        if before.outline != model.outline {
+            changes.aspects.push(DocChange::Outline);
+        }
+        if before.anchors != model.anchors {
+            changes.aspects.push(DocChange::Anchors);
+        }
+        changes
+    }
+
     pub(crate) fn set_entry(&mut self, entry: VaultEntry) {
         self.entries.insert(entry.id.clone(), entry);
     }
@@ -945,4 +1004,40 @@ impl IndexProvider for CoreIndex {
             }
         }
     }
+}
+
+/// Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
+/// ripetizioni.
+///
+/// Costa un passaggio su ognuna delle due mappe, con una ricerca per chiave
+/// sull'altra — non un confronto a coppie. È la ragione per cui questo diff si
+/// può permettere di girare a ogni scrittura. L'ordinamento in coda è
+/// **necessario** e non cosmetico: la mappa del frontmatter conserva l'ordine
+/// del file (`preserve_order`), quindi due documenti con le stesse chiavi
+/// scritte in ordine diverso produrrebbero due elenchi che non si confrontano.
+fn changed_properties(before: &Frontmatter, after: &Frontmatter) -> Vec<String> {
+    let mut keys = Vec::new();
+    for (key, value) in before.0.iter() {
+        if after.get(key) != Some(value) {
+            keys.push(key.clone());
+        }
+    }
+    for key in after.0.keys() {
+        if !before.0.contains_key(key) {
+            keys.push(key.clone());
+        }
+    }
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
+/// I tag comparsi e quelli spariti. Le grafie e non le chiavi canoniche, perché
+/// è la grafia che chi si è abbonato ha scritto nella propria automazione.
+fn tag_diff(before: &[String], after: &[Tag]) -> (Vec<String>, Vec<String>) {
+    let old: BTreeSet<&String> = before.iter().collect();
+    let new: BTreeSet<&String> = after.iter().map(|t| &t.name).collect();
+    let added: Vec<String> = new.difference(&old).map(|t| (*t).clone()).collect();
+    let removed: Vec<String> = old.difference(&new).map(|t| (*t).clone()).collect();
+    (added, removed)
 }

@@ -201,6 +201,7 @@ fn sopra_il_tetto_il_ponte_dice_riconcilia() {
     for n in 0..1000 {
         banco.emetti(Event::DocumentChanged {
             id: DocId::new(format!("nota-{n}.md")),
+            changes: None,
         });
     }
     banco.apri.send(()).expect("libera il sink");
@@ -233,6 +234,7 @@ fn a_vault_fermo_ogni_fatto_arriva_da_solo() {
     for n in 0..5 {
         banco.emetti(Event::DocumentChanged {
             id: DocId::new(format!("nota-{n}.md")),
+            changes: None,
         });
         // Si aspetta che questo sia arrivato prima di mandare il prossimo: è
         // ciò che rende la raffica di uno, che è il caso normale.

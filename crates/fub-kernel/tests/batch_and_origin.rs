@@ -443,7 +443,7 @@ fn the_actor_of_a_plugin_write_is_the_plugin_and_of_a_shell_write_is_the_user() 
     let mut per_doc: Vec<(String, Actor)> = rx
         .try_iter()
         .filter_map(|n| match n.event {
-            Event::DocumentChanged { id } => Some((id.0, n.origin.actor)),
+            Event::DocumentChanged { id, .. } => Some((id.0, n.origin.actor)),
             _ => None,
         })
         .collect();

@@ -838,7 +838,7 @@ pub trait EventHandler: Send + Sync {
 `Notice { event: Event, origin: Origin }`,
 `Origin { actor: Actor, batch: Option<BatchId> }`,
 `Actor { User, Watcher, Kernel, Plugin { id } }`,
-`Event { VaultOpened { root }, DocumentChanged { id }, DocumentRemoved { id },
+`Event { VaultOpened { root }, DocumentChanged { id, changes }, DocumentRemoved { id },
 DocumentRenamed { from, to }, IndexUpdated, JobDone { id, job, result },
 Overflow { dropped }, Custom { topic, payload }, BatchEnded { batch, changed },
 ViewInvalidated { view, instance }, VaultClosed { root },
@@ -846,15 +846,32 @@ JobStarted { id, job }, JobProgress { id, progress },
 SettingChanged { key, scope },
 EntryChanged { id, kind }, EntryRemoved { id, kind },
 EntryRenamed { from, to, kind },
-Trouble { severity, subject, error } }`,
+Trouble { severity, subject, error }, TimerFired { owner, timer } }`,
 `EventKind` (stesso set, senza payload),
-`EventMask { kinds, topics, subjects }` con
-`Subject { Document { id }, Folder { path } }`.
+`EventMask { kinds, topics, subjects, changes }` con
+`Subject { Document { id }, Folder { path } }` e
+`DocChange { Body, Frontmatter, Tags, Links, Outline, Anchors }`.
+
+I due campi arrivati con la [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)
+non hanno la stessa forma, ed è la sostanza di quella decisione:
+`DocumentChanged.changes` è un `Option<DocChanges>` che porta gli **aspetti** *e i
+nomi* — quali chiavi di frontmatter, quali tag aggiunti e tolti — mentre
+`EventMask.changes` filtra sui **soli aspetti**. Si filtra su un insieme chiuso
+dal contratto, perché la maschera si valuta a ogni consegna; i nomi si leggono,
+perché il diff che li produce è già in mano a chi emette. E i due stati
+dell'`Option` sono due cose: assente è *non lo so* e passa ogni filtro, presente e
+vuoto è *niente è cambiato* e non passa.
+
+`TimerFired` è l'unico evento che non nasce da qualcosa che è successo nel vault:
+lo fa nascere una **dichiarazione nel manifest** (`PluginManifest.timers`), che è
+il posto dove sta perché una maschera filtra e non causa.
 
 `Trouble` ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) è
 l'unico che **non si emette** dall'esterno, e ha una riga che sorprende chi la
 scopre tardi: `EventMask::all()` **non lo nomina**, quindi un handler che chiede
-tutto non riceve i guasti. Chi li mostra oggi — il centro notifiche — li prende
+tutto non riceve i guasti — e resta l'unico che non nomina, perché la
+[0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) ci ha messo dentro
+`TimerFired` invece di allargare il buco. Chi li mostra oggi — il centro notifiche — li prende
 dal bus attraverso il ponte, che non passa da nessuna maschera.
 
 - `Origin` dice **chi ha chiesto** l'operazione
@@ -1142,7 +1159,9 @@ materializza in `crates/fub-abi/wit/fub/*.wit` + test abi↔WIT.
 | `QueryPredicate`/`PropertySelect`/`QueryKind`/`PredicateKind`/`QueryRoute` | `variant` |
 | `PropertyTest` | `variant` (i casi senza valore — `exists`, `missing` — non portano payload) |
 | `LinkDirection`/`HealthCheck` | `enum` |
-| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`, `batch-ended`, `trouble`) / `enum` / `list<event-kind>` |
+| `Event`/`EventKind`/`EventMask` | `variant` (incl. `document-renamed`, `job-done`, `overflow`, `custom`, `batch-ended`, `trouble`, `timer-fired`) / `enum` / `record { kinds, topics, subjects, changes }` — `event-mask` è un **record** dalla [0033](../decisions/0033-la-grana-di-un-abbonamento.md), non più un alias su `list<event-kind>` |
+| `DocChange`/`DocChanges` | `enum` / `record` — cosa è cambiato in un documento ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)) |
+| `TimerSpec`/`TimerSchedule` | `record` / `variant` (`every`, `after`) — una sveglia dichiarata nel manifest ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)) |
 | `Severity` | `enum` (`warning`, `failure`) — la gravità di un guasto ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) |
 | `IndexLoss` | `record { id, why }` — cosa un indice non ha preso ([0051](../decisions/0051-l-alimentazione-risponde.md)) |
 | `Notice`/`Origin` | `record` (interface `events`): è ciò che `event-handler.handle` riceve — l'evento **e** chi lo ha chiesto |

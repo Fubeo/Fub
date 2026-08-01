@@ -79,6 +79,7 @@ cronologico di chiusura.
 | [0066](0066-un-aggiornamento-non-e-una-scrittura.md) | Un aggiornamento non è una scrittura, e il lock costa una promessa | §15.2 (la *lost update*, che la [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) aveva rimandata) — resta il recovery ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0067](0067-il-registro-di-cio-che-e-successo.md) | Il registro di ciò che è successo, e l'inverso al posto del contenuto | §15.2 (**una casella su tre** del recovery: il journal delle mutazioni) — restano il buffer di crash e i comandi di manutenzione ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0068](0068-un-vault-si-apre-per-quel-che-si-legge.md) | Un vault si apre per quel che si legge, e dice cosa non ha letto | §15.7 (**la prima metà**: fallire in parte) — resta la forma dell'apertura ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
+| [0069](0069-cosa-sa-dire-un-abbonamento.md) | Cosa sa dire un abbonamento: una dichiarazione che nessuno valuta mente a chi la scrive | §22.1 + §22.2 — chiude tutte e due le voci e ne **apre una**, la §22.4 ([seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)) | 2026-08-01 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -435,3 +436,40 @@ documento non letto non lasciava aprire il vault — ed è nato e morto dentro l
 stesso turno. È l'argomento della [0054](0054-il-banco-del-lato-provider.md)
 sull'altro verso: là un presidio dichiarava una copertura che non aveva, qui un
 presidio ha coperto qualcosa che chi lo scriveva non stava cercando.
+
+La [0069](0069-cosa-sa-dire-un-abbonamento.md) porta due precedenti, e nessuno
+dei due riguarda cosa ha deciso.
+
+Il primo è un accorpamento **dichiarato da un cappello che ha torto**, ed è il
+caso che mancava fra i due che ci sono. La [0053](0053-il-contratto-ha-una-sorgente.md)
+ha chiuso due voci in un verbale perché il cappello della sua seduta lo diceva in
+anticipo; la [0054](0054-il-banco-del-lato-provider.md)/[0055](0055-il-banco-del-lato-host.md)
+ne ha chiuse due in due perché lo stesso genere di frase dichiarava fra loro un
+**confine**. Qui il cappello afferma che le tre voci della seduta sono «tre
+estensioni della stessa maschera», e quell'affermazione **era già stata smentita**
+dalla [0063](0063-la-maschera-e-dell-esemplare.md): la §22.3 non è finita in un
+campo di `EventMask`, è diventata una funzione su un'altra interfaccia. Eppure
+l'accorpamento regge — per una ragione che il cappello non aveva visto: non è il
+*record* a legare le voci, è la **regola** che il ritiro della 0063 aveva messo a
+verbale (*una dichiarazione che il kernel non valuta mente a chi la scrive*), e
+applicarla una volta sola dà due case diverse. Da tenere perché precisa il
+criterio della 0054: un cappello va letto per cosa afferma, sì — e ciò che
+afferma può essere **falso** senza che la sua conclusione lo sia. Un cappello
+sbagliato non si eredita e non si butta: si rifà il ragionamento, e si scrive
+quale delle due parti ha retto.
+
+Il secondo è la **terza specie di premessa sbagliata**, e va distinta dalle due
+che la [0067](0067-il-registro-di-cio-che-e-successo.md) elenca. La
+[0053](0053-il-contratto-ha-una-sorgente.md) ha smentito un *fatto
+sull'architettura*, sbagliato nel momento in cui fu scritto; la 0067 una
+*classificazione*, nata falsa e con l'aria di un'istruzione. Qui la premessa della
+[0013](0013-elenco-delle-capacita.md) — «il kernel è sincrono e non possiede
+thread» — era **vera quando è stata scritta**, e l'ha resa falsa la
+[0032](0032-il-runner-dei-job.md), cioè un'altra voce, che non sapeva di toccarla.
+Non è un errore di nessuno: è la specie di riga che invecchia perché il repo si
+muove sotto di lei, ed è la più difficile da vedere, perché rileggerla contro i
+sorgenti *del suo tempo* non la smentisce. Il criterio che ne segue: **una voce
+che eredita la conclusione di un verbale eredita anche la sua premessa, e quella
+è un'affermazione su ieri** — si riverifica contro il repo di oggi prima di
+appoggiarcisi. Qui la conclusione ha retto lo stesso, ma per l'altra regola della
+stessa 0013, e il verbale dice quale.

@@ -318,7 +318,7 @@ fn a_surgical_edit_goes_through_the_whole_write_path() {
     // Eventi: quelli di una scrittura, una volta sola.
     let mut cambiati = 0;
     while let Ok(e) = rx.try_recv() {
-        if let Event::DocumentChanged { id } = e.event {
+        if let Event::DocumentChanged { id, .. } = e.event {
             assert_eq!(id, a);
             cambiati += 1;
         }
@@ -433,7 +433,7 @@ impl EventHandler for Correttore {
             // Questa l'ho scritta io.
             return Ok(());
         }
-        let Event::DocumentChanged { id } = &notice.event else {
+        let Event::DocumentChanged { id, .. } = &notice.event else {
             return Ok(());
         };
         let source = host.read_document(id)?;
@@ -499,7 +499,7 @@ impl EventHandler for ScriveAltrove {
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let Event::DocumentChanged { id } = &notice.event else {
+        let Event::DocumentChanged { id, .. } = &notice.event else {
             return Ok(());
         };
         if id.as_str() != "a.lnk" {

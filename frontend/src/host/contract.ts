@@ -22,6 +22,7 @@ import type {
   Axis,
   CommandReach,
   ContextKind,
+  DocChange,
   EntryKind,
   HourCycle,
   Intent,
@@ -368,7 +369,11 @@ export type ViewUpdate =
 // Evento del kernel (rispecchia fub_abi::event::Event).
 export type KernelEvent =
   | { type: "vault_opened"; root: string }
-  | { type: "document_changed"; id: string }
+  // `changes` dice COSA è cambiato (§22.2, decisione 0069). Assente/null =
+  // NON LO SO — l'evento non viene dalla coda di una scrittura del kernel — e
+  // passa qualunque filtro; presente e con `aspects` vuoto è un fatto, ed è
+  // *niente è cambiato*.
+  | { type: "document_changed"; id: string; changes?: DocChanges | null }
   | { type: "document_removed"; id: string }
   | { type: "document_renamed"; from: string; to: string }
   // NB: dentro un lotto questo NON arriva — arriva `batch_ended`. Chi reagisce
@@ -428,7 +433,24 @@ export type KernelEvent =
   // `subject` è il documento di cui si parla, `null` per ciò che riguarda il
   // vault intero (un flush fallito, il watcher che smette). CHI ha causato il
   // guasto non sta qui: lo dice `origin.actor`.
-  | { type: "trouble"; severity: Severity; subject: string | null; error: PluginError };
+  | { type: "trouble"; severity: Severity; subject: string | null; error: PluginError }
+  // UNA SVEGLIA DICHIARATA NEL MANIFEST È SCADUTA (§22.1, decisione 0069).
+  // `owner` è il componente che l'ha dichiarata, `timer` il nome che le ha
+  // dato: chi si sveglia riconosce i propri come chi ha lanciato un job
+  // riconosce il proprio `job_done`.
+  | { type: "timer_fired"; owner: string; timer: string };
+
+// COSA è cambiato in un documento (rispecchia fub_abi::event::DocChanges,
+// §22.2). Gli ASPETTI sono l'insieme chiuso su cui una maschera filtra; i NOMI
+// — quali chiavi di frontmatter, quali tag — si leggono e non si filtrano,
+// perché il diff che li produce è già in mano a chi emette l'evento: chi si
+// sveglia non rilegge il documento per scoprire se lo riguardava.
+export interface DocChanges {
+  aspects: DocChange[];
+  properties: string[];
+  tags_added: string[];
+  tags_removed: string[];
+}
 
 // Quanto pesa ciò che è andato storto (rispecchia fub_abi::event::Severity).
 // Due gradini, come i due toni del centro notifiche, e il criterio del taglio è
@@ -445,8 +467,8 @@ export type Subject =
   | { kind: "folder"; path: string };
 
 // A COSA si è abbonati (rispecchia fub_abi::event::EventMask, §10.1): le
-// specie, i prefissi di topic dei custom, il soggetto. I tre sono in AND, e
-// ognuno vuoto vuol dire *non filtro*.
+// specie, i prefissi di topic dei custom, il soggetto, e COSA è cambiato
+// (§22.2). I quattro sono in AND, e ognuno vuoto vuol dire *non filtro*.
 //
 // Applicarla non è affare di questo file: la regola è **una sola** e sta in
 // `rules/mirrored.ts` (`maskWants`), gemella di
@@ -455,6 +477,7 @@ export interface EventMask {
   kinds: KernelEvent["type"][];
   topics: string[];
   subjects: Subject[];
+  changes: DocChange[];
 }
 
 // Chi ha CHIESTO l'operazione da cui un evento nasce (rispecchia

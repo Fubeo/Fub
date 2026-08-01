@@ -120,9 +120,10 @@
 //!   dell'audit trail di 22.4, e vogliono un posto che li conservi (il journal
 //!   del §15.2): un campo che nessuno rilegge dopo la fine del giro non è un
 //!   audit trail, è una decorazione. Additivo il giorno che il posto c'è.
-//! - **L'edit sull'evento**: chi riceve `DocumentChanged` sa che il documento è
-//!   cambiato, non *come*. Resta la decisione 0008 a dare la forma e questa voce a non
-//!   usarla ancora.
+//! - **L'edit sull'evento**: chi riceve `DocumentChanged` sa **cosa** è
+//!   cambiato dalla decisione 0069 ([`DocChanges`]) — quali aspetti, quali
+//!   chiavi, quali tag — ma non *come*: l'edit che lo ha prodotto resta fuori.
+//!   Resta la decisione 0008 a dare la forma e questa voce a non usarla ancora.
 
 use serde::{Deserialize, Serialize};
 
@@ -247,6 +248,126 @@ impl Notice {
     }
 }
 
+/// **Quale parte** di un documento è cambiata (§22.2, decisione 0069).
+///
+/// È un insieme chiuso dal contratto, ed è l'unico asse su cui una
+/// [`EventMask`] filtra: chi applica una maschera lo fa per ogni handler a ogni
+/// evento, e deve poter rispondere sì o no confrontando due liste corte di
+/// valori senza payload. Ciò che è **aperto** — quali chiavi di frontmatter,
+/// quali tag — non sta qui: sta in [`DocChanges`], che l'evento porta e che chi
+/// si è svegliato legge senza rileggere il documento.
+///
+/// Non c'è un `Tasks`, e non è una dimenticanza: un task non è un campo di
+/// [`DocumentModel`](crate::model::DocumentModel), quindi «un task è stato
+/// completato» oggi non è distinguibile da un cambio di [`Body`](DocChange::Body).
+/// Il giorno che il modello avrà i task, questo `enum` cresce **in coda**.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DocChange {
+    /// Il testo del documento (corpo, e quindi anche il suo `Revision`).
+    Body,
+    /// Almeno una proprietà di frontmatter è nata, morta o cambiata di valore.
+    /// **Quali**, lo dice [`DocChanges::properties`].
+    Frontmatter,
+    /// L'insieme dei tag è cambiato. **Quali**, lo dicono
+    /// [`DocChanges::tags_added`] e [`DocChanges::tags_removed`].
+    Tags,
+    /// I link uscenti sono cambiati (numero, destinazione o ordine).
+    Links,
+    /// La struttura dei titoli.
+    Outline,
+    /// Le ancore di blocco (`^abc`).
+    Anchors,
+}
+
+/// Cosa è cambiato in un documento: gli **aspetti**, su cui si filtra, e i
+/// **nomi**, che si leggono (§22.2, decisione 0069).
+///
+/// La divisione è la sostanza di questo record. `aspects` è chiuso dal
+/// contratto e vive nella maschera; `properties`, `tags_added` e `tags_removed`
+/// sono dati dell'utente, e stanno qui perché il diff che li produce è già in
+/// mano a chi emette l'evento — il modello nuovo è arrivato e i metadati di
+/// prima non sono ancora stati sovrascritti. Un'automazione su «la scadenza è
+/// cambiata» si sveglia sul solo aspetto `frontmatter` e guarda
+/// `properties`: non rilegge il documento e non si tiene una copia di ieri per
+/// confrontarla, che è il conto che la §22.2 esisteva per togliere.
+///
+/// I nomi sono ordinati e senza ripetizioni, perché due elenchi che dicono la
+/// stessa cosa in ordini diversi non si confrontano.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocChanges {
+    /// Gli aspetti toccati. Vuoto = **niente** è cambiato di ciò che il
+    /// contratto sa nominare (una riscrittura con lo stesso contenuto): chi
+    /// filtra per aspetto non lo riceve, ed è la risposta giusta.
+    pub aspects: Vec<DocChange>,
+    /// Le chiavi di frontmatter nate, morte o cambiate di valore. Non vuota
+    /// solo se `aspects` contiene [`DocChange::Frontmatter`].
+    #[serde(default)]
+    pub properties: Vec<String>,
+    /// I tag comparsi.
+    #[serde(default)]
+    pub tags_added: Vec<String>,
+    /// I tag spariti. Distinguerli dai comparsi è il trigger che la FEATURES
+    /// 16.2 chiede per nome («trigger su tag aggiunto»), e costa zero: il diff
+    /// che li separa è lo stesso che li trova.
+    #[serde(default)]
+    pub tags_removed: Vec<String>,
+}
+
+impl DocChanges {
+    /// Questo insieme di cambiamenti tocca almeno uno degli aspetti dichiarati?
+    pub fn touches(&self, aspects: &[DocChange]) -> bool {
+        aspects.iter().any(|a| self.aspects.contains(a))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.aspects.is_empty()
+    }
+
+    /// Fonde dentro di sé un secondo insieme di cambiamenti, **precedente**,
+    /// sullo stesso documento.
+    ///
+    /// Serve a chi raggruppa (il ponte della decisione 0034): due
+    /// `document-changed` della stessa nota nella stessa raffica non dicono più
+    /// la stessa cosa due volte — il primo può aver cambiato un tag e il secondo
+    /// una proprietà —, quindi tenere l'ultimo e buttare l'altro perderebbe
+    /// metà del racconto, e la perderebbe **in silenzio** proprio a chi si è
+    /// abbonato stretto.
+    pub fn merge(&mut self, other: DocChanges) {
+        for aspect in other.aspects {
+            if !self.aspects.contains(&aspect) {
+                self.aspects.push(aspect);
+            }
+        }
+        self.aspects.sort();
+        for (mio, suo) in [
+            (&mut self.properties, other.properties),
+            (&mut self.tags_added, other.tags_added),
+            (&mut self.tags_removed, other.tags_removed),
+        ] {
+            mio.extend(suo);
+            mio.sort();
+            mio.dedup();
+        }
+    }
+
+    /// Un documento che **nasce**: tutto ciò che ha è nuovo. La scorciatoia dei
+    /// test e di chi costruisce un evento a mano.
+    pub fn everything() -> Self {
+        DocChanges {
+            aspects: vec![
+                DocChange::Body,
+                DocChange::Frontmatter,
+                DocChange::Tags,
+                DocChange::Links,
+                DocChange::Outline,
+                DocChange::Anchors,
+            ],
+            ..DocChanges::default()
+        }
+    }
+}
+
 /// Un evento del ciclo di vita del vault.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -254,7 +375,17 @@ pub enum Event {
     /// Il vault è stato aperto/caricato (path radice).
     VaultOpened { root: String },
     /// Un documento è stato creato o modificato.
-    DocumentChanged { id: DocId },
+    ///
+    /// `changes` dice **cosa** (§22.2, decisione 0069), e i suoi due stati sono
+    /// due cose diverse: `Some` è un diff calcolato, e chi filtra per aspetto
+    /// gli crede; `None` è *non lo so* — l'evento non viene dalla coda di una
+    /// scrittura del kernel — e passa qualunque filtro, per la stessa regola
+    /// per cui passa ciò che non nomina nessun documento.
+    DocumentChanged {
+        id: DocId,
+        #[serde(default)]
+        changes: Option<DocChanges>,
+    },
     /// Un documento è stato rimosso.
     DocumentRemoved { id: DocId },
     /// Un documento ha cambiato path (l'identità È il path: chi tiene stato
@@ -488,6 +619,20 @@ pub enum Event {
         /// lo mostra invece che una frase già composta.
         error: PluginError,
     },
+    /// Una **sveglia** dichiarata nel manifest è scaduta (§22.1, decisione 0069).
+    ///
+    /// Che il tempo differito sia un evento e non una capacità
+    /// (`schedule_at`/`schedule_every`) è la regola della decisione 0013 —
+    /// *ciò che si limita a informare è un evento* — e non più la ragione che
+    /// quella decisione aveva scritto: «il kernel è sincrono e non possiede
+    /// thread» era vera fino alla 0032, e non lo è più.
+    ///
+    /// `owner` è l'id del componente che ha dichiarato la sveglia e `timer` il
+    /// nome che le ha dato: chi si sveglia riconosce i propri come chi ha
+    /// lanciato un job riconosce il proprio [`JobDone`](Event::JobDone). Non
+    /// nomina nessun documento, quindi passa il filtro di soggetto di qualunque
+    /// maschera — una sveglia non è di una cartella.
+    TimerFired { owner: String, timer: String },
 }
 
 /// Quanto pesa ciò che è andato storto (§20.2, decisione 0052).
@@ -542,6 +687,7 @@ impl Event {
             Event::EntryRemoved { .. } => EventKind::EntryRemoved,
             Event::EntryRenamed { .. } => EventKind::EntryRenamed,
             Event::Trouble { .. } => EventKind::Trouble,
+            Event::TimerFired { .. } => EventKind::TimerFired,
         }
     }
 
@@ -552,7 +698,7 @@ impl Event {
     /// `changed`.
     pub fn touched(&self) -> Option<&DocId> {
         match self {
-            Event::DocumentChanged { id } | Event::DocumentRemoved { id } => Some(id),
+            Event::DocumentChanged { id, .. } | Event::DocumentRemoved { id } => Some(id),
             Event::DocumentRenamed { to, .. } => Some(to),
             // I tre dell'anagrafe **non** rispondono qui, e non è una
             // dimenticanza: questa risposta finisce nell'elenco `changed` di un
@@ -618,6 +764,10 @@ impl Event {
             // fallito il vault è identico a com'era, ed è la ragione per cui
             // quel fallimento va detto. Vedi il doc della variante.
             | Event::Trouble { .. } => false,
+            // Una sveglia persa non si riscopre guardando il vault: il vault
+            // non sa che ore sono. Chi la butta sotto pressione fa saltare un
+            // giro di un'automazione senza che nessuno lo sappia.
+            Event::TimerFired { .. } => false,
         }
     }
 
@@ -639,9 +789,22 @@ impl Event {
     /// `vault-closed`, `job-done`, un custom, un lotto che ha toccato il solo
     /// indice): chi filtra per soggetto lo lascia **passare**, perché filtrarlo
     /// via vorrebbe dire perdere in silenzio proprio ciò che non si può perdere.
+    /// **Cosa** è cambiato, per gli eventi che lo raccontano
+    /// ([`EventMask::changes`], §22.2).
+    ///
+    /// `None` per tutti gli altri, e per un `document-changed` che non viene
+    /// dalla coda di una scrittura del kernel: *non lo so* è diverso da
+    /// *niente*, e chi filtra lascia passare il primo e ferma il secondo.
+    pub fn changes(&self) -> Option<&DocChanges> {
+        match self {
+            Event::DocumentChanged { changes, .. } => changes.as_ref(),
+            _ => None,
+        }
+    }
+
     pub fn names(&self) -> Vec<&DocId> {
         match self {
-            Event::DocumentChanged { id } | Event::DocumentRemoved { id } => vec![id],
+            Event::DocumentChanged { id, .. } | Event::DocumentRemoved { id } => vec![id],
             Event::DocumentRenamed { from, to } => vec![from, to],
             Event::BatchEnded { changed, .. } => changed.iter().collect(),
             // Qui invece sì: la domanda è *questo evento riguarda la tua
@@ -707,6 +870,8 @@ pub enum EventKind {
     /// non sarà l'unico — un pannello di diagnostica e un log su file
     /// chiedono lo stesso canale.
     Trouble,
+    /// Una sveglia dichiarata nel manifest è scaduta (§22.1, decisione 0069).
+    TimerFired,
 }
 
 /// **Dove**: il soggetto di un abbonamento (decisione 0033).
@@ -786,6 +951,22 @@ pub struct EventMask {
     pub topics: Vec<String>,
     /// **Dove**. Vuota = tutto il vault.
     pub subjects: Vec<Subject>,
+    /// **Cosa** è cambiato nel documento (§22.2, decisione 0069). Vuota =
+    /// qualunque cosa.
+    ///
+    /// È il quarto asse, e vale per i soli eventi che un cambiamento lo
+    /// **raccontano** — cioè per i `document-changed` che vengono dalla coda di
+    /// una scrittura del kernel. Tutti gli altri passano, per la stessa regola
+    /// per cui passa ciò che non nomina nessun documento: filtrare via ciò di
+    /// cui non si sa niente vuol dire perdere in silenzio.
+    ///
+    /// Filtra sugli **aspetti** e non sui nomi. Un'automazione su «la scadenza è
+    /// cambiata» dichiara [`DocChange::Frontmatter`] e legge quali chiavi da
+    /// [`DocChanges::properties`]: la maschera resta un confronto fra due liste
+    /// corte, che è ciò che permette di applicarla per ogni handler a ogni
+    /// evento, e la precisione la dà l'evento — che il diff ce l'ha già in mano.
+    #[serde(default)]
+    pub changes: Vec<DocChange>,
 }
 
 impl EventMask {
@@ -816,7 +997,18 @@ impl EventMask {
             EventKind::EntryChanged,
             EventKind::EntryRemoved,
             EventKind::EntryRenamed,
+            // Una sveglia è un evento come gli altri, e chi chiede *tutto* la
+            // riceve. Che `Trouble` non sia in questo elenco resta un buco —
+            // vero, e di un'altra voce (§20.2): non lo si allarga aggiungendo
+            // qui il caso nuovo per lo stesso motivo.
+            EventKind::TimerFired,
         ])
+    }
+
+    /// Restringe i `document-changed` a chi ha toccato uno di questi aspetti.
+    pub fn on_changes(mut self, changes: impl IntoIterator<Item = DocChange>) -> Self {
+        self.changes = changes.into_iter().collect();
+        self
     }
 
     /// Restringe i custom a questi prefissi di topic.
@@ -869,6 +1061,7 @@ mod tests {
             Event::VaultOpened { root: "/v".into() },
             Event::DocumentChanged {
                 id: DocId::new("a.md"),
+                changes: None,
             },
             Event::DocumentRemoved {
                 id: DocId::new("a.md"),
@@ -945,9 +1138,11 @@ mod tests {
         let qui = EventMask::of([EventKind::DocumentChanged]).about([Subject::folder("Progetti")]);
         assert!(qui.wants(&Event::DocumentChanged {
             id: DocId::new("Progetti/Alpha.md"),
+            changes: None,
         }));
         assert!(!qui.wants(&Event::DocumentChanged {
             id: DocId::new("Diario/2026-07-28.md"),
+            changes: None,
         }));
     }
 
@@ -978,6 +1173,7 @@ mod tests {
         let notice = Notice::new(
             Event::DocumentChanged {
                 id: DocId::new("a.md"),
+                changes: None,
             },
             Origin::by(Actor::Plugin {
                 id: "fub.automa".into(),
@@ -1000,6 +1196,7 @@ mod tests {
         for event in [
             Event::DocumentChanged {
                 id: DocId::new("a.md"),
+                changes: None,
             },
             Event::IndexUpdated,
             Event::BatchEnded {

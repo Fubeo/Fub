@@ -424,6 +424,23 @@ impl JobBell {
         *self.queued.lock().expect("campanello avvelenato")
     }
 
+    /// Aspetta che suoni oltre `seen`, **o che scada `entro`**, e restituisce
+    /// il conto (che può essere ancora `seen`, se è scaduto il tempo).
+    ///
+    /// Esiste per le sveglie del §22.1 (decisione 0069) e non per il polling:
+    /// chi drena continua a non chiedere «ce n'è uno?» a intervalli: chiede «mi
+    /// svegli tu, ma non oltre questo momento, perché a quel punto ho un lavoro
+    /// mio». La differenza è che l'intervallo non lo sceglie chi aspetta — lo
+    /// dice la sveglia più vicina.
+    pub fn wait_beyond_or(&self, seen: u64, entro: std::time::Duration) -> u64 {
+        let queued = self.queued.lock().expect("campanello avvelenato");
+        let (queued, _) = self
+            .ring
+            .wait_timeout_while(queued, entro, |q| *q == seen)
+            .expect("campanello avvelenato");
+        *queued
+    }
+
     /// Aspetta che suoni oltre `seen`, e restituisce il conto nuovo.
     pub fn wait_beyond(&self, seen: u64) -> u64 {
         let queued = self.queued.lock().expect("campanello avvelenato");

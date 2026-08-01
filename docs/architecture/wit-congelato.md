@@ -81,6 +81,18 @@ deliberate stia in un posto solo e non solo nei commenti dei singoli punti:
 
 | [decisione 0051](../decisions/0051-l-alimentazione-risponde.md) | **i tre metodi dell'alimentazione di `index`** (§20.1): `on-document-indexed` e `on-document-removed` diventano `on-documents-indexed`/`on-documents-removed` — a **lotto** — e tutti e tre restituiscono `list<index-loss>` invece di niente. Non poteva essere additivo in nessuna delle due metà: un esito si aggiunge solo cambiando il tipo di ritorno, e la grana è il tipo del parametro. Le due domande — che forma ha l'esito, e quanti documenti per chiamata — hanno una risposta sola, ed è la ragione per cui il ritaglio è **uno** e non due: un esito per lotto dice *quale* documento (cosa che un esito cumulativo raccolto dal `flush` non sa fare) e costa un attraversamento del confine per lotto invece che per documento. Il tipo `index-loss` entra con loro. `up-to-date` **non** è toccata |
 
+La [decisione 0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) **non è in
+questa tabella**, e vale dirlo perché tocca il punto delicato di questa pagina:
+aggiunge un caso in coda al `variant event` (`timer-fired`) e uno in coda
+all'`enum event-kind`, più cinque tipi nuovi e tre campi in fondo ad altrettanti
+record. Per la regola che questo progetto ha scelto è **tutto additivo**, il
+discriminante di ciò che c'era non si muove, `wit_additivity` è verde e
+`frozen/0.1.0.wit` non è stato toccato. Il precedente del caso in coda a un
+`variant` è la [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md),
+che ne aveva aggiunti tre a `plugin-error`. Resta vero ciò che questa pagina
+scrive sopra — nel component model un caso in più non è additivo davvero — e resta
+il motivo per cui la regola scelta chiede *almeno* che l'ordine non si muova.
+
 **Dopo il freeze** un file già qui non si tocca più. Alla pubblicazione di una
 versione nuova:
 

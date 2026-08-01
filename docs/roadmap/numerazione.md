@@ -136,7 +136,7 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §4.5 | **§17.3** | Osservabilità |
 | §4.7 | **§16.3** | Un crate per bundle di feature |
 
-**Voci senza un numero vecchio.** Sei famiglie non compaiono qui sopra
+**Voci senza un numero vecchio.** Sette famiglie non compaiono qui sopra
 perché non traducono niente: sono **nate** con la numerazione per sedute.
 
 - La **§8.4** l'ha trovata una misura, non un giro
@@ -177,6 +177,13 @@ perché non traducono niente: sono **nate** con la numerazione per sedute.
   sorgenti non si presidia come un'affermazione scritta in italiano dentro un
   documento. È il rovescio dell'accorpamento della
   [0053](../decisions/0053-il-contratto-ha-una-sorgente.md).
+- La **§22.4** è la **seconda separazione**, e la differenza con la §16.8 vale la
+  riga. Là il pezzo che restava era lo stesso difetto con un presidio diverso;
+  qui è la stessa **parola** con due domande sotto: *quando*. «Ogni ora» si misura
+  in tempo trascorso, «alle 9» vuole un fuso e una regola sull'ora legale, e a
+  farle sembrare una cosa sola era l'elenco di esempi della §22.1 — scritto per
+  dire quanto è largo il buco, e letto come se dicesse quanto è grande il lavoro
+  ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)).
 
 Cercarle in un commit di prima della riorganizzazione non ha senso: prima non
 esistevano.

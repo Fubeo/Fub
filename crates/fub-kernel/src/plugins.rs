@@ -35,7 +35,7 @@
 
 use fub_abi::rules::ids::{self, IdFault, Owner};
 use fub_abi::text::StringCatalog;
-use fub_abi::traits::{PluginManifest, QueryRoute};
+use fub_abi::traits::{PluginManifest, QueryRoute, TimerSpec};
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
@@ -183,6 +183,11 @@ pub enum RegistryError {
     /// dichiarato prima di ogni registrazione — e chi lo riceve non ha nemmeno
     /// un provider da togliere.
     Setting(String),
+    /// Una **sveglia** senza nome, o due sveglie omonime dello stesso
+    /// componente (§22.1). Non è un `Namespace`: il nome di una sveglia è
+    /// nudo per contratto, e ciò che va verificato non è chi la può nominare
+    /// ma che chi la riceve sappia quale è suonata.
+    Timer { plugin: String, timer: String },
 }
 
 impl std::fmt::Display for RegistryError {
@@ -202,6 +207,16 @@ impl std::fmt::Display for RegistryError {
                  in meno, è l'assenza del permesso di essere eseguito"
             ),
             RegistryError::Namespace(fault) => write!(f, "{fault}"),
+            RegistryError::Timer { plugin, timer } if timer.is_empty() => write!(
+                f,
+                "`{plugin}` dichiara una sveglia senza nome: chi la riceve non ha \
+                 modo di sapere quale è suonata"
+            ),
+            RegistryError::Timer { plugin, timer } => write!(
+                f,
+                "`{plugin}` dichiara due sveglie di nome `{timer}`: sarebbero due \
+                 eventi indistinguibili da chi li riceve"
+            ),
             RegistryError::Claimed {
                 kind,
                 id,
@@ -318,6 +333,24 @@ impl PluginRegistry {
             Some(e) => (&e.manifest.strings, e.manifest.default_locale.as_str()),
             None => (&[], ""),
         }
+    }
+
+    /// Le **sveglie dichiarate** da chi è dichiarato adesso (§22.1, decisione
+    /// 0069): l'id del componente e la sua `TimerSpec`.
+    ///
+    /// Non c'è un registro suo, e non è una scorciatoia: il manifest lo tiene
+    /// già questo registro, e una seconda copia sarebbe un secondo posto da
+    /// tenere allineato a `retire` — cioè il modo di far suonare la sveglia di
+    /// un componente che se n'è andato.
+    pub fn timers(&self) -> Vec<(&str, &TimerSpec)> {
+        self.iter()
+            .flat_map(|e| {
+                e.manifest
+                    .timers
+                    .iter()
+                    .map(move |t| (e.manifest.id.as_str(), t))
+            })
+            .collect()
     }
 
     /// Chi può nominare cosa, per un plugin dichiarato: il core nomina anche

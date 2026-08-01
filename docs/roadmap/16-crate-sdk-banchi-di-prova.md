@@ -173,6 +173,19 @@ la forma dell'annotazione, la seconda contro la prima.
       per disegnare il presidio: la prima sta nello **stesso file** del codice che
       descrive, quindi la distanza fra la frase e la cosa non è la ragione per cui
       invecchia — e un'annotazione che vale solo per i `.md` ne mancherebbe metà.
+- [ ] **E c'è una quinta specie, che non è un conteggio: il numero di riga.**
+      [glossario.md](../glossario.md) ancora un file di codice **e una riga**
+      (`abi/event.rs:253`), e quella riga invecchia a ogni commit che aggiunge
+      qualcosa più in alto nel file — cioè senza che nessuno tocchi né la voce né
+      la cosa che nomina. La [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)
+      ne ha spostate cinque in un colpo solo facendo crescere `event.rs` di
+      duecento righe, e tre delle cinque erano **giuste** fino a quel commit; una
+      quarta era sbagliata da prima e nessuno se n'era accorto. È la specie
+      peggiore da presidiare a mano e la più facile da presidiare a macchina —
+      il link c'è già, gli manca solo di verificare che a quella riga ci sia
+      ancora ciò che la voce nomina — ed è l'unica di questa voce che
+      `check-doc-links.mjs` **quasi** copre: controlla che il file esista, non
+      che la riga dica ancora la stessa cosa.
 - [ ] **E la mezza voce del §17.1 ne ha trovate altre due**
       ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)), che insieme
       dicono una cosa che le otto di sopra non dicevano. La prima è nella

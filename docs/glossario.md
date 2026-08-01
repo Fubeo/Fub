@@ -430,7 +430,7 @@ prefisso mentre si digita, ricerca dentro la nota aperta.
 ## Gli eventi e il lavoro lungo
 
 ### attore
-`Actor` · [`abi/event.rs:171`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
+`Actor` · [`abi/event.rs:172`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
 
 Chi ha **chiesto** l'operazione da cui un evento nasce — non chi l'ha eseguita:
 l'utente, il watcher (cioè il filesystem), il kernel, un plugin. È un enum
@@ -441,15 +441,16 @@ decidere. La domanda per cui esiste è una sola: «questa l'ho scritta io?».
 `EventBus` · [`kernel/bus.rs:180`](../crates/fub-kernel/src/bus.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
 
 Dove gli eventi del kernel passano, e da dove chi si è abbonato li ritira.
-L'abbonamento ha una grana: un *topic*, un *soggetto*, e prefissi che non sono
-`starts_with`.
+L'abbonamento ha una grana: un *topic*, un *soggetto*, **cosa è cambiato**, e
+prefissi che non sono `starts_with`.
 
 ### evento
-`Event` · [`abi/event.rs:253`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
+`Event` · [`abi/event.rs:374`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
 
 Il fatto che qualcosa nel vault è cambiato, con l'*origine* attaccata. Ogni
-evento porta anche un `EventKind` e un `Subject`, che sono ciò su cui una
-maschera filtra.
+evento porta anche un `EventKind` e un `Subject`, e un `DocumentChanged` porta
+**cosa** è cambiato: sono ciò su cui una maschera filtra. Uno solo non nasce da
+un fatto del vault — `TimerFired`, che lo fa nascere una *sveglia*.
 
 ### freno
 — · [`host/bridge.rs`](../crates/fub-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
@@ -469,7 +470,7 @@ perché camminare il vault era esattamente ciò che non poteva fare — e si fer
 bandiera. Il runner tiene un pool per vault.
 
 ### lotto
-`BatchId` · [`abi/event.rs:145`](../crates/fub-abi/src/event.rs) · [0011](decisions/0011-il-lotto.md)
+`BatchId` · [`abi/event.rs:146`](../crates/fub-abi/src/event.rs) · [0011](decisions/0011-il-lotto.md)
 
 Il raggruppamento di più scritture in **una** operazione dal punto di vista di
 chi guarda: una rinomina che tocca duecento backlink è un lotto, e chi disegna
@@ -478,14 +479,17 @@ confrontarlo con `<` assume un ordine che un host con più sessioni non deve a
 nessuno.
 
 ### maschera
-`EventMask` · [`abi/event.rs:678`](../crates/fub-abi/src/event.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
+`EventMask` · [`abi/event.rs:940`](../crates/fub-abi/src/event.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
 
-Cosa un abbonato vuole ricevere. Dalla 0033 dice anche **dove**: non solo la
+Cosa un abbonato vuole ricevere. Dalla 0033 dice anche **dove** — non solo la
 specie dell'evento ma il suo soggetto, così un pannello che guarda una cartella
-non si sveglia per il resto del vault.
+non si sveglia per il resto del vault — e dalla
+[0069](decisions/0069-cosa-sa-dire-un-abbonamento.md) anche **cosa**, per
+aspetto. Non dice, e non dirà, *quando*: una maschera filtra ciò che accade, e un
+timer fa accadere.
 
 ### origine
-`Origin` · [`abi/event.rs:200`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
+`Origin` · [`abi/event.rs:201`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
 
 L'*attore* più il *lotto*: da dove viene un evento. `batch: None` non vuol dire
 «non importante», vuol dire che quella scrittura sta da sola.
@@ -514,6 +518,15 @@ prima.
 ---
 
 ## L'interfaccia
+
+### sveglia
+`TimerSpec` · [`abi/traits.rs`](../crates/fub-abi/src/traits.rs) · [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)
+
+Un nome e ogni quanto suona, dichiarati nel *manifest* di un componente. Quando
+scade, l'host emette un `Event::TimerFired`: informa, quindi è un evento e non
+una capacità ([0013](decisions/0013-elenco-delle-capacita.md)). Si misura in
+tempo trascorso — `every` e `after` — e non in orario di parete, che vuole un
+fuso (§22.4).
 
 ### azione
 `UiAction` / `ActionId` · [`abi/ui.rs:789`](../crates/fub-abi/src/ui.rs) · [0016](decisions/0016-cosa-e-una-view.md)

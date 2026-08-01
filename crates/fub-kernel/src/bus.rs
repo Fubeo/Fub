@@ -221,6 +221,7 @@ mod tests {
     fn cambiato(n: usize) -> Notice {
         Notice::of(Event::DocumentChanged {
             id: DocId::new(format!("nota-{n}.md")),
+            changes: None,
         })
     }
 
@@ -231,6 +232,7 @@ mod tests {
         let notice = Notice::new(
             Event::DocumentChanged {
                 id: DocId::new("a.md"),
+                changes: None,
             },
             Origin::by(Actor::Watcher).in_batch(Some(BatchId(3))),
         );

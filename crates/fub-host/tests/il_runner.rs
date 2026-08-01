@@ -20,7 +20,7 @@ use camino::Utf8PathBuf;
 use fub_abi::model::DocId;
 use fub_abi::traits::{
     HostApi, HostEvents, IndexQuery, IndexResult, JobProgress, JobSpec, JobStatus, Plugin,
-    PluginManifest,
+    PluginManifest, TimerSchedule, TimerSpec,
 };
 use fub_abi::{Event, PluginError};
 use fub_host::registry::Bundle;
@@ -540,4 +540,120 @@ fn fuori_da_un_job_il_progresso_non_ha_di_chi_essere() {
         "un progresso senza job non fa comparire niente"
     );
     host.close();
+}
+
+// --- le sveglie (§22.1, decisione 0069) -------------------------------------
+//
+// La metà che il contratto non guarda: il pool che, invece di dormire senza
+// scadenza, dorme **fino alla prossima sveglia**. Sta qui e non nel kernel per
+// la ragione che la 0032 ha già stabilito — i thread sono dell'host — e sta
+// nello stesso file del runner perché è lo stesso ciclo: il punto in cui un
+// thread stava per non fare niente.
+
+/// Un bundle che dichiara una sveglia, e nient'altro.
+struct BundleConSveglia;
+
+impl Bundle for BundleConSveglia {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::core("test.sveglia", "Con sveglia").waking(vec![TimerSpec {
+            id: "battito".into(),
+            // Un secondo è il minimo che il contratto sappia esprimere, ed è
+            // ciò che rende questa prova veloce senza renderla una prova sulla
+            // macchina: si aspetta il primo evento, non un tempo fisso.
+            schedule: TimerSchedule::Every { seconds: 1 },
+        }])
+    }
+
+    fn trust(&self) -> Trust {
+        Trust::Core
+    }
+
+    fn plugin(&self) -> Box<dyn Plugin> {
+        Box::new(Sveglione)
+    }
+
+    fn register(&self, _ws: &mut fub_kernel::Workspace) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+struct Sveglione;
+
+impl Plugin for Sveglione {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::core("test.sveglia", "Con sveglia")
+    }
+
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn deactivate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+}
+
+/// **Una sveglia dichiarata nel manifest suona davvero**, e a farla suonare è il
+/// pool: nessuno la chiede, nessuno drena, nessun test chiama `fire_timer`.
+///
+/// È la prova che distingue questa voce dal tentativo ritirato dalla 0063: là i
+/// campi c'erano e non li guardava nessuno.
+#[test]
+fn una_sveglia_dichiarata_suona_da_sola() {
+    let v = Vault::nuovo();
+    let host = Host::new()
+        .with_watcher(Box::new(NoWatcher))
+        .with_job_threads(1);
+    host.open(&v.root).expect("il vault si apre");
+    let eventi = host
+        .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
+        .expect("aperto");
+    host.with_session(None, |s| {
+        let mut ws = s.workspace().write().unwrap();
+        s.bundles()
+            .lock()
+            .unwrap()
+            .mount(&BundleConSveglia, &mut ws)
+            .expect("il bundle si monta");
+    })
+    .expect("aperto");
+
+    let scadenza = std::time::Instant::now() + Duration::from_secs(10);
+    while std::time::Instant::now() < scadenza {
+        if let Ok(notice) = eventi.recv_timeout(Duration::from_millis(200)) {
+            if let Event::TimerFired { owner, timer } = &notice.event {
+                assert_eq!(owner, "test.sveglia");
+                assert_eq!(timer, "battito");
+                return;
+            }
+        }
+    }
+    panic!(
+        "la sveglia non ha suonato: la dichiarazione c'è e non la guarda \
+         nessuno, che è esattamente il difetto per cui questa voce era stata \
+         ritirata una volta"
+    );
+}
+
+/// E chi **non** dichiara sveglie non paga nemmeno un risveglio: il pool torna
+/// ad aspettare senza scadenza.
+///
+/// Non si può osservare un thread che dorme, quindi ciò che si osserva è la
+/// promessa nella forma in cui è verificabile: senza dichiarazioni non esce
+/// nessun `TimerFired`, per quanto si aspetti.
+#[test]
+fn chi_non_dichiara_sveglie_non_ne_riceve() {
+    let v = Vault::nuovo();
+    let (passi, _regia) = passi();
+    let (_host, eventi) = banco(&v, &passi);
+    let scadenza = std::time::Instant::now() + Duration::from_millis(1500);
+    while std::time::Instant::now() < scadenza {
+        if let Ok(notice) = eventi.recv_timeout(Duration::from_millis(100)) {
+            assert!(
+                !matches!(notice.event, Event::TimerFired { .. }),
+                "nessuno ha dichiarato una sveglia: {:?}",
+                notice.event
+            );
+        }
+    }
 }

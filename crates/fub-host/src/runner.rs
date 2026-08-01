@@ -43,8 +43,9 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
-use fub_abi::traits::JobId;
+use fub_abi::traits::{JobId, TimerSchedule};
 use fub_abi::PluginError;
 use fub_kernel::{JobBell, PendingJob, Workspace};
 
@@ -137,8 +138,101 @@ impl Flags {
     }
 }
 
+/// Lo **scheduler delle sveglie** (§22.1, decisione 0069): la metà che il
+/// contratto non guarda, e che sta qui perché il tempo di parete è di chi
+/// possiede i thread.
+///
+/// Il kernel dice **quali** sveglie sono dichiarate
+/// ([`Workspace::declared_timers`]) e con che regola suonano
+/// ([`TimerSchedule::nth_after`]); questa struttura tiene la sola cosa che il
+/// kernel non può tenere senza leggere un orologio: da quando si conta.
+///
+/// L'ancora è un [`Instant`] e non un orario di sistema, ed è la ragione per cui
+/// «ogni ora» vuol dire un'ora anche se qualcuno sposta l'orologio della
+/// macchina — che è anche la ragione per cui `every`/`after` sono le due sole
+/// forme del contratto: un orario di parete non si può misurare così.
+#[derive(Default)]
+struct Sveglie {
+    /// Chiave: (componente, nome della sveglia).
+    quadranti: HashMap<(String, String), Quadrante>,
+}
+
+struct Quadrante {
+    schedule: TimerSchedule,
+    /// Da quando si conta: la prima volta che questo scheduler l'ha vista.
+    ancora: Instant,
+    /// Quante volte ha già suonato.
+    suonate: u64,
+    /// Quando suona la prossima. `None` = ha finito (un `after` che è già
+    /// suonato), e la voce **resta** in mappa proprio per non essere
+    /// riseminata dalla riconciliazione al giro dopo.
+    prossima: Option<Instant>,
+}
+
+impl Sveglie {
+    /// Allinea i quadranti a ciò che è dichiarato **adesso**.
+    ///
+    /// È qui che una sveglia nasce e muore, e il fatto che la sorgente sia il
+    /// manifest a ogni giro invece che una copia presa una volta è ciò che fa
+    /// smettere di suonare un componente disattivato — senza che questo codice
+    /// sappia niente della disattivazione.
+    fn riconcilia(&mut self, dichiarate: &[(String, fub_abi::traits::TimerSpec)], ora: Instant) {
+        self.quadranti.retain(|(owner, timer), _| {
+            dichiarate
+                .iter()
+                .any(|(o, spec)| o == owner && &spec.id == timer)
+        });
+        for (owner, spec) in dichiarate {
+            self.quadranti
+                .entry((owner.clone(), spec.id.clone()))
+                .or_insert_with(|| Quadrante {
+                    schedule: spec.schedule,
+                    ancora: ora,
+                    suonate: 0,
+                    prossima: spec
+                        .schedule
+                        .nth_after(0)
+                        .map(|s| ora + Duration::from_secs(s)),
+                });
+        }
+    }
+
+    /// Fra quanto suona la prima. `None` = nessuna sveglia viva, e chi aspetta
+    /// può dormire senza scadenza come faceva prima che le sveglie esistessero.
+    fn fra_quanto(&self, ora: Instant) -> Option<Duration> {
+        self.quadranti
+            .values()
+            .filter_map(|q| q.prossima)
+            .min()
+            .map(|p| p.saturating_duration_since(ora))
+    }
+
+    /// Chi è scaduto, con il quadrante già avanzato al giro dopo.
+    fn scadute(&mut self, ora: Instant) -> Vec<(String, String)> {
+        let mut suonano = Vec::new();
+        for (chiave, q) in self.quadranti.iter_mut() {
+            let Some(prossima) = q.prossima else { continue };
+            if prossima > ora {
+                continue;
+            }
+            suonano.push(chiave.clone());
+            q.suonate += 1;
+            // Dall'**ancora** e non da adesso: contare dal risveglio farebbe
+            // slittare in avanti «ogni ora» di quanto il pool ha tardato, e
+            // dopo un giorno la sveglia delle nove sarebbe delle nove e un
+            // quarto senza che nessuno abbia cambiato niente.
+            q.prossima = q
+                .schedule
+                .nth_after(q.suonate)
+                .map(|s| q.ancora + Duration::from_secs(s));
+        }
+        suonano.sort();
+        suonano
+    }
+}
+
 /// Ciò che i thread condividono: il vault, chi possiede i bundle, il campanello,
-/// e le bandiere di chi è stato annullato.
+/// le bandiere di chi è stato annullato, e i quadranti delle sveglie.
 struct Shared {
     workspace: Arc<RwLock<Workspace>>,
     bundles: Arc<Mutex<BundleRegistry>>,
@@ -146,6 +240,9 @@ struct Shared {
     /// Il pool sta chiudendo: nessun job nuovo parte.
     stopping: AtomicBool,
     flags: Mutex<Flags>,
+    /// Le sveglie sono **una** per pool e non una per thread: due thread con due
+    /// quadranti farebbero suonare ogni sveglia due volte.
+    sveglie: Mutex<Sveglie>,
 }
 
 impl Shared {
@@ -248,6 +345,54 @@ impl Shared {
         refusal
     }
 
+    /// Fra quanto suona la prima sveglia, riallineando prima i quadranti a ciò
+    /// che è dichiarato adesso (§22.1).
+    fn fra_quanto_suona(&self) -> Option<Duration> {
+        let dichiarate = self
+            .workspace
+            .read()
+            .expect("workspace avvelenato")
+            .declared_timers();
+        if dichiarate.is_empty() {
+            // Nessuna sveglia: si torna esattamente al pool di prima, che
+            // dorme senza scadenza. Vale la pena che sia un ramo e non un
+            // `Duration::MAX`, perché è la promessa che chi non dichiara timer
+            // non paga nemmeno un risveglio.
+            self.sveglie
+                .lock()
+                .expect("sveglie avvelenate")
+                .quadranti
+                .clear();
+            return None;
+        }
+        let ora = Instant::now();
+        let mut sveglie = self.sveglie.lock().expect("sveglie avvelenate");
+        sveglie.riconcilia(&dichiarate, ora);
+        sveglie.fra_quanto(ora)
+    }
+
+    /// Fa suonare ciò che è scaduto.
+    ///
+    /// Il quadrante si avanza tenendo il lock delle sveglie, l'evento si emette
+    /// **dopo** averlo lasciato: emettere è un giro sincrono del kernel, e
+    /// tenere due lock nello stesso ordine in due posti è il modo di scoprire un
+    /// giorno che l'ordine era tre.
+    fn suona(&self) {
+        let scadute = {
+            let mut sveglie = self.sveglie.lock().expect("sveglie avvelenate");
+            sveglie.scadute(Instant::now())
+        };
+        for (owner, timer) in scadute {
+            if self.stopping.load(Ordering::Acquire) {
+                return;
+            }
+            self.workspace
+                .write()
+                .expect("workspace avvelenato")
+                .fire_timer(&owner, &timer);
+        }
+    }
+
     /// Il mestiere di un thread del pool.
     fn work(&self) {
         while !self.stopping.load(Ordering::Acquire) {
@@ -276,7 +421,19 @@ impl Shared {
                 if self.stopping.load(Ordering::Acquire) {
                     return;
                 }
-                self.bell.wait_beyond(ticket);
+                // Le sveglie si guardano **qui**, cioè nel solo momento in cui
+                // questo thread stava per non fare niente: uno scheduler che
+                // gira accanto al pool sarebbe un thread in più, e uno che gira
+                // dentro il ciclo dei job pagherebbe un orologio a ogni job.
+                match self.fra_quanto_suona() {
+                    Some(fra) => {
+                        self.bell.wait_beyond_or(ticket, fra);
+                        self.suona();
+                    }
+                    None => {
+                        self.bell.wait_beyond(ticket);
+                    }
+                }
                 continue;
             }
             self.claim(&jobs);
@@ -316,6 +473,7 @@ impl JobRunner {
             bell,
             stopping: AtomicBool::new(false),
             flags: Mutex::new(Flags::default()),
+            sveglie: Mutex::new(Sveglie::default()),
         });
         let workers = (0..threads.max(1))
             .map(|n| {

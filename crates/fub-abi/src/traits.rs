@@ -3260,6 +3260,69 @@ pub struct PluginManifest {
     /// default corretto per chi non dichiara stringhe.
     #[serde(default)]
     pub default_locale: String,
+    /// Le **sveglie** che dichiara (§22.1, decisione 0069): un nome e ogni
+    /// quanto suona.
+    ///
+    /// Sta nel manifest per la ragione di `settings`, letta su un asse
+    /// diverso. Là la dichiarazione doveva precedere
+    /// [`Plugin::activate`](crate::traits::Plugin::activate) perché il primo
+    /// lettore di un'impostazione è proprio un `activate`; qui perché una
+    /// sveglia è ciò che **fa succedere** un evento, non ciò che ne filtra uno.
+    /// Una [`EventMask`](crate::event::EventMask) è il posto sbagliato per
+    /// definizione: si applica agli eventi che accadono, e un timer che nessuno
+    /// ha fatto partire non ne genera nessuno da filtrare — è la ragione per cui
+    /// il tentativo ritirato dalla decisione 0063 non trovava un valutatore.
+    ///
+    /// Ogni nome è **nudo** e vale dentro il componente, come le chiavi di un
+    /// catalogo di stringhe: la qualifica è strutturale, ed è
+    /// [`Event::TimerFired::owner`](crate::event::Event::TimerFired) a dire di
+    /// chi è.
+    #[serde(default)]
+    pub timers: Vec<TimerSpec>,
+}
+
+/// Una sveglia dichiarata da un componente (§22.1, decisione 0069).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimerSpec {
+    /// Il nome, nudo: viaggia in
+    /// [`Event::TimerFired::timer`](crate::event::Event::TimerFired) e serve a
+    /// chi ha dichiarato più di una sveglia per distinguerle.
+    pub id: String,
+    pub schedule: TimerSchedule,
+}
+
+/// Ogni quanto suona una sveglia (§22.1, decisione 0069).
+///
+/// Le due forme sono quelle che si misurano in **tempo trascorso**, ed è la
+/// ragione per cui sono solo due: un orario di parete («ogni giorno alle 9»)
+/// vuole un fuso e una regola sull'ora legale, cioè una decisione che non è
+/// questa. Il `variant` cresce in coda il giorno che quella decisione si
+/// prende, e chi ha dichiarato `every` non se ne accorge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TimerSchedule {
+    /// Suona ogni `seconds` secondi, per sempre, a partire dalla
+    /// registrazione del componente.
+    Every { seconds: u64 },
+    /// Suona **una volta sola**, `seconds` secondi dopo la registrazione.
+    After { seconds: u64 },
+}
+
+impl TimerSchedule {
+    /// Fra quanti secondi dalla registrazione suona la `n`-esima volta
+    /// (`n` a partire da 0)? `None` = non suona più.
+    ///
+    /// È la sola aritmetica di questa specie che sta nel contratto, e ci sta
+    /// perché è **la regola**: chi implementa lo scheduler la applica invece di
+    /// avere la propria idea di cosa voglia dire «ogni ora», che è il modo in
+    /// cui due host finirebbero per suonare in due momenti diversi.
+    pub fn nth_after(&self, n: u64) -> Option<u64> {
+        match *self {
+            TimerSchedule::Every { seconds } => seconds.max(1).checked_mul(n.checked_add(1)?),
+            TimerSchedule::After { seconds } if n == 0 => Some(seconds),
+            TimerSchedule::After { .. } => None,
+        }
+    }
 }
 
 impl PluginManifest {
@@ -3282,7 +3345,14 @@ impl PluginManifest {
             settings: Vec::new(),
             strings: Vec::new(),
             default_locale: String::new(),
+            timers: Vec::new(),
         }
+    }
+
+    /// Le sveglie che questo componente dichiara (§22.1).
+    pub fn waking(mut self, timers: Vec<TimerSpec>) -> Self {
+        self.timers = timers;
+        self
     }
 
     /// Le impostazioni che questo plugin dichiara (§11.1).

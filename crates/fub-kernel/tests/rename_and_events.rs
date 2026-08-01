@@ -670,7 +670,7 @@ impl EventHandler for ChainingHandler {
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         let event = &notice.event;
         match event {
-            Event::DocumentChanged { id } => {
+            Event::DocumentChanged { id, .. } => {
                 self.log.lock().unwrap().push(format!("changed:{id}"));
                 // Reagisce solo al documento "innesco", altrimenti la scrittura
                 // qui sotto rigenererebbe l'evento all'infinito (il budget del
@@ -812,7 +812,7 @@ impl EventHandler for JobRequestingHandler {
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         let event = &notice.event;
         match event {
-            Event::DocumentChanged { id } if id.as_str() == "innesco.lnk" => {
+            Event::DocumentChanged { id, .. } if id.as_str() == "innesco.lnk" => {
                 if self.job_id.lock().unwrap().is_none() {
                     let id = host.spawn_job(JobSpec {
                         job: "sommario".into(),

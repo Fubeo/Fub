@@ -5,7 +5,7 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 115 voci: novantanove da sette giri sulla stessa domanda, due da una
+Sono uscite 116 voci: novantanove da sette giri sulla stessa domanda, due da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md); e la §20.5, nata
 misurando la [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) contro il
@@ -16,11 +16,14 @@ che ha stabilito che la ricerca di Fub è built-in e di classe *omnisearch*
 **verifiche**: la §21.10 dal controllo contro il codice di un'affermazione
 arrivata da fuori, e le §22.1–§22.3 dallo stesso controllo su una lettura
 esterna dell'intero [FEATURES.md](FEATURES.md)
-([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)) — e una da una
-**separazione**, la §16.8, staccata dal §16.7 nel momento in cui lo si chiudeva
-([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)). Novanta sono
+([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)) — e **due** da una
+**separazione**: la §16.8, staccata dal §16.7 nel momento in cui lo si chiudeva
+([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
+dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
+perché vuole un fuso e una regola sull'ora legale
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Novantadue sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-venticinque sono qui, e questo file è il loro **indice**.
+ventiquattro sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -99,12 +102,19 @@ sbagliata avrebbe fatto riaprire una firma già a posto e lasciato aperta quella
 che scade.
 
 E una **nona**, che non cerca niente: chiudendo una voce ci si accorge che ne
-teneva due. La §16.8 era la seconda metà del §16.7 — stesso *difetto*, un elenco
+teneva due. È successo due volte. La §16.8 era la seconda metà del §16.7 — stesso *difetto*, un elenco
 che smette di dire il vero senza diventare rosso, ma non lo stesso *presidio*:
 uno è un insieme che un test estrae dai sorgenti, l'altra è un'affermazione
 scritta in italiano dentro un documento. È il rovescio dell'accorpamento della
 [0053](decisions/0053-il-contratto-ha-una-sorgente.md), e lo stesso criterio: un
-verbale è un ragionamento intero.
+verbale è un ragionamento intero. La §22.4 è il secondo caso, e con una
+differenza: là il pezzo che restava era lo **stesso difetto** con un presidio
+diverso, qui è la **stessa parola** — *quando* — con due domande sotto. «Ogni
+ora» si misura in tempo trascorso e «alle 9» vuole un fuso e una regola sull'ora
+legale, e a fargliele sembrare una sola cosa era stato l'elenco di esempi della
+voce, scritto per dire *quanto è largo il buco* e letto come se dicesse *quanto è
+grande il lavoro*
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)).
 
 ## Le sedute
 
@@ -131,11 +141,11 @@ verbale è un ragionamento intero.
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: quattro **rimandi** ai quattro giri di audit, di cui uno chiuso; restano **tre** caselle, e il lavoro sta nelle sedute che le hanno assorbite | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti, e tutti e tre sono chiusi: l'alimentazione ha un esito ([0051](decisions/0051-l-alimentazione-risponde.md)), ciò che va storto è un evento e il kernel non lo butta più ([0052](decisions/0052-cio-che-va-storto-e-un-evento.md)); restano la metà umana e una voce nata misurando | 2 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le quattro di firma sono state decise ([0049](decisions/0049-una-posizione-dentro-un-documento.md), [0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)); quel che resta è **dove quel comportamento si vede**, cosa lo rende regolabile, cosa gli darà da mangiare, e la sola misura che dice se è veloce | 6 | — |
-| **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | tre lati della stessa dichiarazione di interesse — *quando*, *cosa è cambiato*, *per quale esemplare* — e decise separate darebbero tre estensioni della stessa maschera disegnate da tre parti; nate da una **verifica**, e nessuna scade col freeze; la terza è chiusa dalla [0063](decisions/0063-la-maschera-e-dell-esemplare.md) — la maschera è dell'esemplare, additiva, risolta dove le spec si chiedono e senza un settimo ponte — e le altre due sono state tentate con lei e **ritirate**: una dichiarazione che il kernel non valuta mente a chi la scrive | 2 | — |
+| **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | tre lati della stessa dichiarazione di interesse — *quando*, *cosa è cambiato*, *per quale esemplare* — nati da una **verifica**, e nessuno scade col freeze; tutti e tre chiusi: il terzo dalla [0063](decisions/0063-la-maschera-e-dell-esemplare.md) (la maschera è dell'esemplare, additiva, senza un settimo ponte) e gli altri due dalla [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md), che ha ripreso i due tentati con lei e **ritirati** e ha risposto alla domanda che il ritiro poneva — *chi la valuta* —: il *cosa* si filtra per aspetto e si legge per nome, il *quando* non sta nella maschera affatto perché una maschera filtra e non causa. Il cappello della seduta diceva «tre estensioni della stessa maschera» e aveva torto due volte su tre; resta la §22.4, l'orario di parete | 1 | — |
 
 ## Le voci
 
-Venticinque. Il numero è quello con cui le nomina il resto del repo.
+Ventiquattro. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -147,7 +157,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella non è in nessun
 totale.** La colonna *Voci* conta le voci **aperte**, e la sua somma per riga fa
-venticinque come deve; il residuo di una voce **chiusa** è un'altra specie e finora
+ventiquattro come deve; il residuo di una voce **chiusa** è un'altra specie e finora
 non aveva dove essere contato — che è il modo in cui la riga della seduta 14 ha
 detto «due caselle» mentre il suo file ne aveva tre, e la 19 non ha detto niente
 avendone tre. Le caselle residue oggi sono **nove**, e stanno in cinque posti:
@@ -214,8 +224,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§21.7** | [Ricerche recenti, e la nota che la ricerca non ha trovato](roadmap/21-la-ricerca-predefinita.md#217-ricerche-recenti-e-la-nota-che-la-ricerca-non-ha-trovato) | 21. La ricerca predefinita | shell | **P2** |
 | **§21.8** | [Il testo che sta dentro gli allegati](roadmap/21-la-ricerca-predefinita.md#218-il-testo-che-sta-dentro-gli-allegati) | 21. La ricerca predefinita | kernel | **P2** |
 | **§21.9** | [Una query costa 23 ms su duemila note, e nessuno sa perché](roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché) | 21. La ricerca predefinita | kernel | **P1** |
-| **§22.1** | [Un abbonamento non sa dire quando](roadmap/22-cosa-sa-dire-un-abbonamento.md#221-un-abbonamento-non-sa-dire-quando) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
-| **§22.2** | [Un evento dice quale documento, non cosa è cambiato](roadmap/22-cosa-sa-dire-un-abbonamento.md#222-un-evento-dice-quale-documento-non-cosa-è-cambiato) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
+| **§22.4** | [Un orario di parete non è un intervallo](roadmap/22-cosa-sa-dire-un-abbonamento.md#224-un-orario-di-parete-non-è-un-intervallo) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
 
 ## Gli allegati
 
@@ -227,7 +236,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **sessantotto**,
+- [I verbali delle decisioni chiuse](decisions/README.md) — **sessantanove**,
   uno per file (`ls docs/decisions/0*.md | wc -l`; diceva «cinquantasette», ed
   erano cinquantanove). Non stanno qui perché questo è l'elenco di ciò che **resta da
   fare**.
