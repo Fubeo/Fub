@@ -50,7 +50,7 @@ use std::sync::{Arc, RwLock};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 
-use crate::settings::write_atomic;
+use crate::storage::write_atomic;
 
 /// La versione di schema del file (§15.3).
 const SCHEMA_VERSION: u32 = 1;

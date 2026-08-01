@@ -67,9 +67,19 @@ pub struct DocumentStore {
 }
 
 impl DocumentStore {
-    pub(crate) fn new(root: impl AsRef<Utf8Path>, registry: Arc<FormatRegistry>) -> Self {
+    /// Il supporto arriva da fuori e non si costruisce qui: dentro un workspace
+    /// è **uno solo**, condiviso col sidecar dell'organizzazione, con la
+    /// configurazione del vault e con l'anagrafe (§15.1, e la
+    /// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) per
+    /// il giorno in cui gliel'hanno dato). Due supporti sulla stessa cartella
+    /// sarebbero due idee di cosa c'è dentro.
+    pub(crate) fn new(
+        root: impl AsRef<Utf8Path>,
+        registry: Arc<FormatRegistry>,
+        storage: Arc<dyn crate::storage::VaultStorage>,
+    ) -> Self {
         Self {
-            vault: Vault::open(root),
+            vault: Vault::on(root, storage),
             registry,
             syntax: SyntaxRegistry::new(),
             renderers: RendererRegistry::new(),

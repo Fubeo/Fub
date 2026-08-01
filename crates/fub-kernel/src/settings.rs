@@ -36,14 +36,14 @@
 //! database di comodo.
 
 use std::collections::BTreeMap;
-use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingSpec, SettingValue};
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
+
+use crate::storage::{write_atomic, VaultStorage};
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
 /// giorno**, perché il file che non ce l'ha è quello che poi non si sa da che
@@ -63,10 +63,19 @@ struct SettingsFile {
 /// decide chi legge — sovrascriverlo col default in silenzio butterebbe via la
 /// configurazione dell'utente, che è la stessa regola del sidecar
 /// dell'organizzazione.
-fn load(path: &Utf8Path) -> Result<BTreeMap<String, SettingValue>, String> {
-    match std::fs::read_to_string(path) {
-        Ok(json) => {
-            let file: SettingsFile = serde_json::from_str(&json)
+///
+/// Chi legge i byte è un parametro, e non è pignoleria: il livello del **vault**
+/// li prende dal supporto (§15.1) e quello della **macchina** dal filesystem,
+/// perché sta fuori da ogni vault. La regola con cui si giudica ciò che si è
+/// letto è però la stessa, e scriverla due volte sarebbe due idee di cosa vuol
+/// dire «configurazione illeggibile».
+fn load_from(
+    path: &Utf8Path,
+    read: impl FnOnce(&Utf8Path) -> std::io::Result<Vec<u8>>,
+) -> Result<BTreeMap<String, SettingValue>, String> {
+    match read(path) {
+        Ok(raw) => {
+            let file: SettingsFile = serde_json::from_slice(&raw)
                 .map_err(|e| format!("{path} non è un settings.json valido: {e}"))?;
             if file.version > SCHEMA_VERSION {
                 return Err(format!(
@@ -82,88 +91,32 @@ fn load(path: &Utf8Path) -> Result<BTreeMap<String, SettingValue>, String> {
     }
 }
 
-/// Scrive un file di livello, **atomicamente**: file temporaneo accanto, e poi
-/// una rename.
+/// Il livello della macchina, che un supporto non ce l'ha.
+fn load(path: &Utf8Path) -> Result<BTreeMap<String, SettingValue>, String> {
+    load_from(path, |p| std::fs::read(p))
+}
+
+/// I byte di un file di livello.
 ///
-/// Non è pignoleria: questo file lo si riscrive a ogni interruttore toccato, e
-/// una `write` troncata da un crash o da una batteria che finisce lascerebbe un
-/// JSON a metà — cioè una configurazione che al riavvio è *malformata*, che per
-/// la regola qui sopra è un errore che blocca la lettura di tutte le altre
-/// chiavi. La primitiva generale è il §15.3; qui c'è la sua prima applicazione.
-fn store(path: &Utf8Path, values: &BTreeMap<String, SettingValue>) -> Result<(), String> {
+/// Che poi si scrivano **atomicamente** non è più una scelta di questa funzione:
+/// lo sono entrambe le scritture che la usano, quella del supporto (§15.1) e
+/// quella della macchina, perché l'atomicità è scesa sotto tutte e due
+/// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)). E
+/// qui conta: questo file si riscrive a ogni interruttore toccato, e un JSON
+/// troncato da un crash è una configurazione che al riavvio è *malformata* —
+/// cioè, per la regola di [`load_from`], un errore che blocca la lettura di
+/// tutte le altre chiavi.
+fn encode(values: &BTreeMap<String, SettingValue>) -> Result<Vec<u8>, String> {
     let file = SettingsFile {
         version: SCHEMA_VERSION,
         values: values.clone(),
     };
-    let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
-    write_atomic(path, json.as_bytes())
+    serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())
 }
 
-/// Il contatore che rende **unico** il nome del temporaneo. Vedi
-/// [`write_atomic`].
-static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
-
-/// Scrive un file di stato **atomicamente**: temporaneo accanto, poi rename.
-///
-/// È `pub` per un cliente solo, ed è la ragione per cui non ha un modulo suo: il
-/// registro dei vault (`fub_host::vaults`) è l'altro file che questa voce fa
-/// nascere, e due implementazioni della stessa riga sarebbero due idee di cosa
-/// vuol dire «scritto». La casa vera è il §15.3, che generalizza la disciplina
-/// (versione di schema, scrittura atomica, migrazione) a tutto ciò che il kernel
-/// mette su disco; quel giorno questa si sposta e non si riscrive.
-///
-/// Le due righe che la rendono vera e non solo dichiarata:
-///
-/// - il temporaneo ha un nome **unico**. Con un `.tmp` fisso, due scritture
-///   davvero contemporanee — due processi sulla stessa cartella di
-///   configurazione, o due thread di questo — si scrivono addosso sul
-///   temporaneo, e ciò che la rename fa atterrare è metà dell'uno e metà
-///   dell'altro;
-/// - il temporaneo si **sincronizza prima della rename**. Temp+rename dà
-///   atomicità *rispetto a chi legge*, non durabilità rispetto a un crash: senza
-///   `sync_all` il nome nuovo può atterrare con dietro un contenuto che non è
-///   ancora sceso, cioè esattamente il JSON troncato che questa funzione esiste
-///   per non produrre. La cartella si sincronizza dopo, e a farlo si prova
-///   soltanto: su Windows una cartella non si apre come file, e lì la rename ha
-///   un'altra semantica.
-///
-/// Ciò che **non** dà, e va detto qui perché il nome invita a crederlo: questa è
-/// l'atomicità di *un file*, non di un *aggiornamento*. Chi la chiama passa il
-/// contenuto intero, e lo compone dalla propria copia in memoria: due processi
-/// sulla stessa cartella di configurazione atterrano quindi ognuno un file
-/// integro, e il secondo che salva cancella le chiavi che il primo ha scritto
-/// dopo la sua ultima lettura. Dentro un processo il caso non esiste — il livello
-/// macchina è **uno** (`Arc<MachineSettings>`, decisione 0036) e le due finestre
-/// del sidecar le ha chiuse la 0038 scrivendo per chiave — fra processi resta, ed
-/// è scritto fra le cose scoperte della 0036. La via d'uscita è un lock del file
-/// o una rilettura sotto lock prima di ricomporre, ed è **§15.2** (durabilità e
-/// recovery) e non il §15.3, che di questa funzione sposta la casa e non la
-/// semantica.
-pub fn write_atomic(path: &Utf8Path, bytes: &[u8]) -> Result<(), String> {
-    let dir = path.parent().expect("un file sta sempre in una cartella");
-    std::fs::create_dir_all(dir).map_err(|e| format!("non riesco a creare {dir}: {e}"))?;
-    let tmp = path.with_extension(format!(
-        "tmp{}-{}",
-        std::process::id(),
-        TMP_SEQ.fetch_add(1, Ordering::Relaxed)
-    ));
-    let scritto = (|| -> std::io::Result<()> {
-        let mut file = std::fs::File::create(&tmp)?;
-        file.write_all(bytes)?;
-        file.sync_all()
-    })();
-    if let Err(e) = scritto {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(format!("non riesco a scrivere {tmp}: {e}"));
-    }
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("non riesco a rinominare {tmp} in {path}: {e}")
-    })?;
-    if let Ok(dir) = std::fs::File::open(dir) {
-        let _ = dir.sync_all();
-    }
-    Ok(())
+/// Scrive il livello della macchina.
+fn store(path: &Utf8Path, values: &BTreeMap<String, SettingValue>) -> Result<(), String> {
+    write_atomic(path, &encode(values)?)
 }
 
 /// Il rifiuto di sovrascrivere un file che all'apertura non si è potuto leggere.
@@ -286,6 +239,12 @@ struct Declared {
 pub struct SettingsStore {
     specs: BTreeMap<String, Declared>,
     vault_path: Utf8PathBuf,
+    /// Il supporto del vault (§15.1). `settings.json` sta dentro `.fub/`, cioè
+    /// **dentro il vault**: passa da qui e non da `std::fs`, o il giorno in cui
+    /// un vault vive su un supporto che cifra la sua configurazione resterebbe
+    /// in chiaro accanto ai documenti cifrati
+    /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
+    storage: Arc<dyn VaultStorage>,
     vault: BTreeMap<String, SettingValue>,
     /// Il file del vault si è letto? Se no **non lo si riscrive**: vedi
     /// [`non_lo_sovrascrivo`].
@@ -300,9 +259,13 @@ pub struct SettingsStore {
 impl SettingsStore {
     /// Apre lo store di un vault: carica il livello del vault e si aggancia a
     /// quello della macchina.
-    pub fn open(root: &Utf8Path, machine: Arc<MachineSettings>) -> Self {
+    pub fn open(
+        root: &Utf8Path,
+        storage: Arc<dyn VaultStorage>,
+        machine: Arc<MachineSettings>,
+    ) -> Self {
         let vault_path = root.join(crate::vault::FUB_DIR).join("settings.json");
-        let (vault, warnings) = match load(&vault_path) {
+        let (vault, warnings) = match load_from(&vault_path, |p| storage.read(p)) {
             Ok(values) => (values, Vec::new()),
             // Come per la macchina: un file rotto non impedisce di aprire il
             // vault. La differenza è che qui la perdita è più grave — è la
@@ -314,6 +277,7 @@ impl SettingsStore {
         SettingsStore {
             specs: BTreeMap::new(),
             vault_path,
+            storage,
             vault,
             vault_readable: warnings.is_empty(),
             machine,
@@ -513,7 +477,10 @@ impl SettingsStore {
                         next.remove(&spec.key);
                     }
                 }
-                store(&self.vault_path, &next).map_err(|e| PluginError::Internal(e.into()))?;
+                let bytes = encode(&next).map_err(|e| PluginError::Internal(e.into()))?;
+                self.storage.write(&self.vault_path, &bytes).map_err(|e| {
+                    PluginError::Internal(format!("{}: {e}", self.vault_path).into())
+                })?;
                 self.vault = next;
             }
         }
@@ -543,7 +510,11 @@ mod tests {
     use fub_abi::settings::SettingKind;
 
     fn store_su(dir: &Utf8Path) -> SettingsStore {
-        SettingsStore::open(dir, MachineSettings::in_memory())
+        SettingsStore::open(
+            dir,
+            Arc::new(crate::storage::FsStorage),
+            MachineSettings::in_memory(),
+        )
     }
 
     /// La `TempDir` va **tenuta**: cade con lei la cartella, e uno store che
@@ -574,7 +545,8 @@ mod tests {
     fn il_vault_vince_sulla_macchina_che_vince_sul_default() {
         let (_tmp, dir) = tempdir();
         let machine = MachineSettings::in_memory();
-        let mut store = SettingsStore::open(&dir, machine.clone());
+        let mut store =
+            SettingsStore::open(&dir, Arc::new(crate::storage::FsStorage), machine.clone());
         let spec = SettingSpec::new(
             "editor.font-size",
             "Corpo",

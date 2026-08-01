@@ -33,11 +33,18 @@ non commettere.
 La 15.1 è chiusa con la [0064](../decisions/0064-il-supporto-sta-sotto.md): il
 kernel tocca i byte di un vault da un posto solo — un `trait VaultStorage` con
 `FsStorage` di default e un `MemStorage` che lo tiene onesto — e da lì passano il
-vault, il cestino coi suoi sidecar e lo spazio dati dei plugin. Ne resta una
-casella, che aspetta la 15.2 per la ragione scritta là. Il trait è **interno al
-kernel** e non tocca il contratto, e vale la pena ricordare perché: la lettura
-esterna che voleva promuoverla a P0 aveva ragione sulla leva e torto sulla
-scadenza — sono due assi, e [leva.md](leva.md) esiste per tenerli separati.
+vault, il cestino coi suoi sidecar e lo spazio dati dei plugin. Il trait è
+**interno al kernel** e non tocca il contratto, e vale la pena ricordare perché:
+la lettura esterna che voleva promuoverla a P0 aveva ragione sulla leva e torto
+sulla scadenza — sono due assi, e [leva.md](leva.md) esiste per tenerli separati.
+
+E l'ordine fra le due ha reso quel che prometteva. La 15.1 aveva lasciato una
+casella indirizzata alla 15.2, e la
+[0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) l'ha chiusa
+insieme alla prima metà di questa voce: l'atomicità è **scesa dentro** il trait
+invece di essere scritta due volte, che era la ragione per cui la 15.1 veniva
+prima. La 15.2 resta aperta con l'altra metà, che non è la scrittura ma il
+**recovery**: cosa si fa dopo.
 
 La 15.7 sta qui e non fra i presidi perché è la stessa domanda della durabilità
 vista all'apertura invece che alla scrittura: la verità non si rifiuta di aprire,
@@ -45,25 +52,29 @@ si apre segnalando cosa non ha letto.
 
 ### 15.2 Durabilità e recovery
 
-*ex §2.5 · kernel · **P2** — il journal è il meccanismo di 13.3 e dell'audit trail di 0010*
+*ex §2.5 · kernel · **P2** — **metà chiusa** con la [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) (la scrittura); resta il recovery, e il journal è il meccanismo di 13.3 e dell'audit trail di 0010*
 
-- [ ] **Scrittura atomica vera**: `VaultStorage::write` è `std::fs::write`
-      (`FsStorage`, in `storage.rs`) — un crash a metà lascia un file troncato.
-      Serve temp+rename+fsync sulla directory. (Il test `write_atomicity`
-      presidia un'altra cosa: l'ordine parse→scrittura.) Dalla
-      [0064](../decisions/0064-il-supporto-sta-sotto.md) il posto è **uno**, e
-      con lui viene il prezzo che va guardato prima di pagarlo: temp+rename su
-      una nota dell'utente vuol dire cambiare inode a ogni salvataggio, con quel
-      che segue per gli hardlink, per i symlink e per chi guarda la cartella da
-      fuori. Su un file di configurazione che riscriviamo noi da capo quel prezzo
-      non si vede; qui sì.
-- [ ] **Le tre righe di `.fub/` che non passano dal supporto** — `workspace.json`
-      (`organization.rs`), `settings.json` del vault (`settings.rs`) ed
-      `entries.json` (`entries.rs`) — scrivono con `write_atomic`, cioè hanno
-      già la proprietà che il trait non promette. Vanno portate sopra il supporto
-      **quando** questa voce avrà detto che forma ha l'atomicità là dentro: è la
-      casella residua della [0064](../decisions/0064-il-supporto-sta-sotto.md), e
-      farla prima sarebbe un peggioramento travestito da uniformità.
+- [x] **Scrittura atomica vera**, chiusa dalla
+      [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md): la promessa sta
+      nella firma di `VaultStorage::write` — o ci sono questi byte o ci sono
+      quelli di prima — e `FsStorage` la mantiene con temporaneo nascosto,
+      `sync_all`, rename e fsync della cartella. Il prezzo che questa riga diceva
+      di guardare prima di pagarlo è stato guardato, e pagato **tranne** nei due
+      casi in cui l'inode non è solo nostro: su un symlink e su un file con più
+      di un nome si scrive sul posto, perché lì la rename farebbe un danno certo
+      e muto invece di uno raro e rumoroso. (Il test `write_atomicity` presidia
+      un'altra cosa — l'ordine parse→scrittura — e non è stato toccato; i
+      presidi di questa riga stanno in `kernel/tests/la_durabilita.rs`, su
+      `FsStorage` soltanto.)
+- [x] **Le tre righe di `.fub/`** — `workspace.json` (`organization.rs`),
+      `settings.json` del vault (`settings.rs`) ed `entries.json`
+      (`entries.rs`) — **sono salite sopra il supporto** con la stessa 0065, cioè
+      nel momento in cui salirci non voleva più dire perdere l'atomicità che
+      `write_atomic` gli dava. Era la casella residua della
+      [0064](../decisions/0064-il-supporto-sta-sotto.md), ed è la prima che si
+      chiude nella voce a cui era stata indirizzata. Con loro è salito un fatto
+      che nessuno aveva scritto: dentro un workspace il supporto è **uno**, e lo
+      condividono il vault e i tre store.
 - [ ] **Due processi sulla stessa cartella di configurazione si cancellano le
       chiavi a vicenda.** `write_atomic` ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md))
       è l'atomicità di *un file*, non di un *aggiornamento*: chi la chiama
@@ -79,6 +90,12 @@ si apre segnalando cosa non ha letto.
       rilettura sotto lock prima di ricomporre. Non è P0 — non scade col freeze e
       non tocca nessuna firma — ma è un dato **autorevole** che si perde in
       silenzio, che è il criterio della [seduta 20](20-quando-qualcosa-va-storto.md).
+      La [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) l'ha
+      **lasciata aperta di proposito** e ha trovato il perché tecnico: il lock di
+      file portabile è `std::fs::File::lock`, stabilizzato in Rust 1.89, e l'MSRV
+      del workspace è 1.88. Chiuderla vuol dire alzare l'MSRV o prendere una
+      dipendenza, cioè decidere qualcosa — e ciò che decide qualcosa non è una
+      casella residua.
 - [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
       sopravvivere a un crash (2.1, 24.2).
 - [ ] **Journal delle mutazioni** (append-only in `.fub/data/`): base di
@@ -138,7 +155,10 @@ si apre segnalando cosa non ha letto.
       (§15.3) e se la scrittura è atomica (§15.2). Ci sono anche le tre righe che
       contraddicono la regola, chiamate per nome — gli snapshot del versioning
       sotto la radice dei derivati, il sidecar del cestino che non è di nessuna
-      delle due classi, e tutto ciò che passa da `data_write` senza atomicità.
+      delle due classi, e — quando quel documento è stato scritto — tutto ciò che
+      passava da `data_write` senza atomicità: quella terza riga se n'è andata
+      con la [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), che ha
+      dato l'atomicità a chiunque passi dal supporto.
       Erano quattro posti e ne stavano arrivando otto; i primi tre sono arrivati
       con la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) e un
       quarto con la [0046](../decisions/0046-l-anagrafe-del-vault.md), ognuno con

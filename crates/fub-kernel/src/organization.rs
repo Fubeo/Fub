@@ -61,7 +61,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::organization::Organization;
 use serde::{Deserialize, Serialize};
 
-use crate::settings::write_atomic;
+use crate::storage::VaultStorage;
 
 /// La versione di schema del file (§15.3).
 ///
@@ -98,6 +98,11 @@ pub fn organization_path(root: &Utf8Path) -> Utf8PathBuf {
 /// ragione: un default che scrive è un difetto che si scopre tardi.
 pub struct OrganizationStore {
     path: Option<Utf8PathBuf>,
+    /// Il supporto del vault (§15.1), assente per lo store in memoria. Il
+    /// sidecar sta in `.fub/`, cioè **dentro il vault**, e da qui in poi ci
+    /// passa sopra come tutto il resto
+    /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
+    storage: Option<Arc<dyn VaultStorage>>,
     /// Il file si è letto? Se no **non lo si riscrive**, ed è qui che questa
     /// regola conta più che altrove: la configurazione al peggio si rifà
     /// cliccando gli stessi interruttori, l'organizzazione di un vault di mille
@@ -115,15 +120,16 @@ impl OrganizationStore {
     /// aprirlo**: torna l'avviso, si lavora con l'organizzazione vuota, e le
     /// scritture successive vengono rifiutate una per una invece di seppellire
     /// ciò che non si è riusciti a leggere.
-    pub fn open(root: &Utf8Path) -> (Arc<Self>, Option<String>) {
+    pub fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> (Arc<Self>, Option<String>) {
         let path = organization_path(root);
-        let (data, warning) = match load(&path) {
+        let (data, warning) = match load(&path, storage.as_ref()) {
             Ok(data) => (data, None),
             Err(e) => (Organization::default(), Some(e)),
         };
         (
             Arc::new(OrganizationStore {
                 path: Some(path),
+                storage: Some(storage),
                 readable: warning.is_none(),
                 data: RwLock::new(data),
                 warnings: RwLock::new(Vec::new()),
@@ -136,6 +142,7 @@ impl OrganizationStore {
     pub fn in_memory() -> Arc<Self> {
         Arc::new(OrganizationStore {
             path: None,
+            storage: None,
             readable: true,
             data: RwLock::new(Organization::default()),
             warnings: RwLock::new(Vec::new()),
@@ -294,8 +301,14 @@ impl OrganizationStore {
             version: SCHEMA_VERSION,
             organization: org.clone(),
         };
-        let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
-        write_atomic(path, json.as_bytes())
+        let json = serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())?;
+        let storage = self
+            .storage
+            .as_ref()
+            .expect("uno store con un path ha un supporto");
+        storage
+            .write(path, &json)
+            .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
     }
 }
 
@@ -316,10 +329,10 @@ fn child_name(path: &str) -> &str {
     }
 }
 
-fn load(path: &Utf8Path) -> Result<Organization, String> {
-    match std::fs::read_to_string(path) {
-        Ok(json) => {
-            let file: OrganizationFile = serde_json::from_str(&json)
+fn load(path: &Utf8Path, storage: &dyn VaultStorage) -> Result<Organization, String> {
+    match storage.read(path) {
+        Ok(raw) => {
+            let file: OrganizationFile = serde_json::from_slice(&raw)
                 .map_err(|e| format!("{path} non è un workspace.json valido: {e}"))?;
             if file.version > SCHEMA_VERSION {
                 return Err(format!(
@@ -435,11 +448,12 @@ mod tests {
     #[test]
     fn sopravvive_a_un_giro_su_disco() {
         let (_tmp, root) = tempdir();
-        let (store, warning) = OrganizationStore::open(&root);
+        let (store, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(warning.is_none());
         store.set_icon("a.md", Some("📌".into())).unwrap();
 
-        let (riletto, warning) = OrganizationStore::open(&root);
+        let (riletto, warning) =
+            OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(warning.is_none());
         assert_eq!(
             riletto.snapshot().icons.get("a.md").map(String::as_str),
@@ -460,7 +474,7 @@ mod tests {
         )
         .unwrap();
 
-        let (store, warning) = OrganizationStore::open(&root);
+        let (store, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(warning.is_none(), "{warning:?}");
         assert_eq!(store.snapshot().pinned, ["a.md"]);
 
@@ -479,7 +493,7 @@ mod tests {
         let rotto = "{ \"icons\": {,} }";
         std::fs::write(&path, rotto).unwrap();
 
-        let (store, warning) = OrganizationStore::open(&root);
+        let (store, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(warning.is_some(), "e lo dice");
         let e = store
             .set_icon("a.md", Some("📌".into()))
@@ -494,7 +508,7 @@ mod tests {
         let path = organization_path(&root);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, r#"{"version":99}"#).unwrap();
-        let (_, warning) = OrganizationStore::open(&root);
+        let (_, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
         let warning = warning.expect("una versione che non si sa leggere si dice");
         assert!(warning.contains("99"), "{warning}");
     }

@@ -24,18 +24,20 @@
 //! ricerca — che persiste attraverso lo spazio dati come chiunque altro —
 //! resterebbe in chiaro comunque.
 //!
-//! # Cosa questo trait **non** promette
+//! # La durabilità è scesa qui dentro
 //!
-//! La **durabilità**. [`VaultStorage::write`] dice «questi byte, a questo
-//! path», e non dice niente su cosa resta se la corrente va via a metà: oggi
-//! [`FsStorage`] è una `std::fs::write`, e un crash lascia un file troncato
-//! esattamente come prima. È deliberato ed è l'ordine della
-//! [seduta 15](../../../docs/roadmap/15-il-disco.md): l'atomicità è il **§15.2**,
-//! e scenderà *dentro* questa funzione. Metterla qui vorrebbe dire decidere di
-//! straforo che un documento del vault si riscrive con una rename — cioè che
-//! cambia inode a ogni salvataggio, con quel che comporta per gli hardlink, per
-//! i symlink e per chi guarda la cartella da fuori. È una scelta con un prezzo,
-//! e le scelte con un prezzo si mettono a verbale.
+//! [`VaultStorage::write`] dice «questi byte, a questo path», **o niente**: chi
+//! rilegge dopo un crash trova il contenuto di prima o quello nuovo, mai un file
+//! a metà. Non era così quando questo modulo è nato — era una `std::fs::write` —
+//! ed è l'ordine che la [seduta 15](../../../docs/roadmap/15-il-disco.md) aveva
+//! dichiarato: il §15.1 fa il posto, il §15.2 ci mette dentro la proprietà
+//! ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)),
+//! invece di scriverla due volte — una accanto all'astrazione e una dentro.
+//!
+//! La promessa è di **una scrittura**, non di un aggiornamento: due processi che
+//! ricompongono lo stesso file dalla propria copia in memoria atterrano ognuno
+//! un file integro, e il secondo cancella le chiavi del primo. È la *lost
+//! update*, ed è l'altra casella del §15.2.
 //!
 //! L'altro asse — la **classe** di un dato, «si può buttare o no» — non è di
 //! qui affatto: sta nel path, e l'ha deciso la
@@ -54,6 +56,7 @@
 
 use std::collections::BTreeMap;
 use std::io;
+use std::io::Write as _;
 use std::sync::Mutex;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -146,12 +149,22 @@ pub trait VaultStorage: Send + Sync {
     /// I byte a questo path.
     fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>>;
 
-    /// Scrive i byte, **creando le cartelle che mancano**.
+    /// Scrive i byte, **creando le cartelle che mancano**, e **o c'è o non
+    /// c'è**: chi rilegge dopo un crash trova questi byte o quelli di prima,
+    /// mai una metà dei due (§15.2).
     ///
     /// La creazione dei genitori sta qui e non nei chiamanti di proposito: era
     /// ripetuta a ogni scrittura, e ripeterla è il modo in cui un giorno una
-    /// scrittura se la dimentica. Sulla durabilità vedi il modulo: non è di
-    /// questa firma, è del §15.2.
+    /// scrittura se la dimentica. Vale identico per l'atomicità, ed è la ragione
+    /// per cui non ci sono due scritture fra cui scegliere: una scelta offerta a
+    /// ogni chiamante è una scelta che qualcuno un giorno fa storta, e la fa
+    /// storta sul file dell'utente.
+    ///
+    /// Un supporto che non sa dare la proprietà non ha modo di dirlo in questa
+    /// firma, e non è una svista: un supporto in memoria non ha niente a cui
+    /// sopravvivere, e uno che scrive su un disco vero la deve. Vedi
+    /// [`FsStorage::write`] per cosa costa darla e per i due casi in cui il
+    /// prezzo si rifiuta di pagarlo.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()>;
 
     /// Sposta, **creando le cartelle di destinazione che mancano**. Funziona
@@ -246,6 +259,60 @@ fn stat_con(kind: EntryKind, meta: &std::fs::Metadata) -> Stat {
     }
 }
 
+/// Il contatore che rende **unico** il nome del temporaneo di
+/// [`FsStorage::write`].
+///
+/// Col processo, distingue due scritture qualunque: due thread di Fub, e due
+/// installazioni sulla stessa cartella. Con un `.tmp` fisso si scriverebbero
+/// addosso sul temporaneo, e ciò che la rename fa atterrare sarebbe metà
+/// dell'uno e metà dell'altro — cioè il file troncato che l'atomicità esiste per
+/// non produrre, prodotto dalla sua implementazione.
+static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Il path del temporaneo di una scrittura: **accanto** al file, e con un nome
+/// che comincia per punto.
+///
+/// Accanto perché una rename attraverso due filesystem non è una rename, e una
+/// cartella di temporanei altrove sarebbe un secondo posto da tenere pulito.
+/// Nascosto perché quel file esiste per una frazione di secondo **dentro il
+/// vault**, e chi guarda il vault in quella frazione non deve vederlo: la
+/// scansione e il rilevatore saltano già ogni nome che comincia per punto
+/// (`is_ignored_name`), quindi la regola c'è e basta usarla. Un `Nota.tmp1234-5`
+/// accanto a `Nota.md` sarebbe invece un documento nuovo per chiunque stia
+/// guardando — il nostro watcher, o Obsidian aperto sulla stessa cartella.
+fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
+    let dir = path.parent().unwrap_or(Utf8Path::new(""));
+    let name = path.file_name().unwrap_or("senza-nome");
+    dir.join(format!(
+        ".{name}.tmp{}-{}",
+        std::process::id(),
+        TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ))
+}
+
+/// Il file a questo path è **condiviso**: un symlink, o un inode con più di un
+/// nome.
+///
+/// Sono i due casi in cui sostituire il file invece del suo contenuto cambia una
+/// cosa che non è nostra — vedi [`FsStorage::write`]. `Err` (il file non c'è
+/// ancora) è `false`: non c'è niente da conservare.
+fn condiviso(meta: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        meta.nlink() > 1
+    }
+    #[cfg(not(unix))]
+    {
+        // Windows sa avere hardlink e sa contarli, ma non attraverso
+        // `std::fs::Metadata`: chiederlo vorrebbe dire una syscall a mano per
+        // ogni scrittura. Il caso resta scoperto, e questa riga è il posto dove
+        // si vede — non un `else` implicito.
+        let _ = meta;
+        false
+    }
+}
+
 fn non_utf8(path: &std::path::Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
@@ -258,11 +325,86 @@ impl VaultStorage for FsStorage {
         std::fs::read(path)
     }
 
+    /// Temporaneo accanto, `fsync`, rename, `fsync` della cartella — **salvo**
+    /// quando il file che sostituirebbe è condiviso.
+    ///
+    /// Le tre righe che rendono la promessa vera e non solo dichiarata:
+    ///
+    /// - il temporaneo ha un nome **unico e nascosto** (vedi [`tmp_path`]);
+    /// - il temporaneo si **sincronizza prima della rename**. Temp+rename dà
+    ///   atomicità *rispetto a chi legge*, non durabilità rispetto a un crash:
+    ///   senza `sync_all` il nome nuovo può atterrare con dietro un contenuto
+    ///   che non è ancora sceso, cioè esattamente il file troncato che questa
+    ///   funzione esiste per non produrre;
+    ///   e la **cartella** si sincronizza dopo, perché è lei a portare il nome:
+    ///   a farlo si prova soltanto, che su Windows una cartella non si apre come
+    ///   file e la rename ha un'altra semantica.
+    /// - il temporaneo **eredita i permessi** del file che sostituisce. Un file
+    ///   nuovo nasce con la umask di chi scrive, e un salvataggio che
+    ///   trasformasse un `600` in un `644` avrebbe reso leggibile a tutti una
+    ///   nota che l'utente aveva chiuso — una modifica ai permessi senza che
+    ///   nessuno l'abbia chiesta.
+    ///
+    /// # I due casi in cui **non** si sostituisce il file
+    ///
+    /// Una rename cambia l'inode, e ci sono due situazioni in cui quell'inode
+    /// non è solo nostro:
+    ///
+    /// - il path **è un symlink**: la rename sostituirebbe il collegamento, e da
+    ///   quel momento il file vero non riceverebbe più niente. È il modo in cui
+    ///   una nota tenuta altrove e collegata dentro il vault smette in silenzio
+    ///   di essere la stessa nota;
+    /// - il file ha **più di un nome** (hardlink): la rename ne staccherebbe uno
+    ///   solo, e l'altro resterebbe fermo al contenuto di prima.
+    ///
+    /// In entrambi si scrive **sul posto** — `create` + `sync_all` — che
+    /// conserva l'inode e perde l'atomicità: un crash a metà lascia il file
+    /// troncato, come prima di questa voce. È il verso giusto della scelta,
+    /// perché i due danni non sono uguali: il troncamento richiede un crash
+    /// *durante* la scrittura ed è visibile, la sostituzione di un collegamento
+    /// avviene a ogni salvataggio e non la vede nessuno.
+    ///
+    /// Il costo è una `symlink_metadata` per scrittura, cioè la stessa syscall
+    /// che `std::fs::write` fa comunque aprendo il file.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, bytes)
+        let esistente = std::fs::symlink_metadata(path).ok();
+        let sul_posto = esistente
+            .as_ref()
+            .is_some_and(|meta| meta.file_type().is_symlink() || condiviso(meta));
+        if sul_posto {
+            let mut file = std::fs::File::create(path)?;
+            file.write_all(bytes)?;
+            return file.sync_all();
+        }
+
+        let tmp = tmp_path(path);
+        let scritto = (|| -> io::Result<()> {
+            let mut file = std::fs::File::create(&tmp)?;
+            file.write_all(bytes)?;
+            if let Some(meta) = &esistente {
+                // Best-effort: un filesystem che non sa di permessi (FAT su una
+                // chiavetta) non è una ragione per non salvare la nota.
+                let _ = std::fs::set_permissions(&tmp, meta.permissions());
+            }
+            file.sync_all()
+        })();
+        if let Err(e) = scritto {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+        if let Err(e) = std::fs::rename(&tmp, path) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+        if let Some(dir) = path.parent() {
+            if let Ok(dir) = std::fs::File::open(dir) {
+                let _ = dir.sync_all();
+            }
+        }
+        Ok(())
     }
 
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
@@ -322,6 +464,28 @@ impl VaultStorage for FsStorage {
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
         std::fs::remove_dir(dir)
     }
+}
+
+/// La scrittura del supporto **per chi un supporto non ce l'ha**: i tre file
+/// della macchina.
+///
+/// `settings.json`, `vaults.json` e `view-state.json` stanno nella cartella di
+/// configurazione dell'utente, cioè **fuori da ogni vault**: non c'è un
+/// [`VaultStorage`] a cui chiederlo, perché non sono roba di un vault — e il
+/// giorno in cui un vault vive su OPFS o dentro una share cifrata, la
+/// configurazione della macchina resta dov'è. Passano quindi da qui, che è
+/// [`FsStorage::write`] con l'errore vestito da stringa per i chiamanti che
+/// portano avvisi e non `io::Error`.
+///
+/// Fino alla [0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md) era
+/// il contrario: questa funzione era l'unica scrittura atomica del kernel, e i
+/// file *del vault* venivano qui a prendersela scavalcando il supporto. Adesso
+/// l'implementazione è **una**, e sta sotto il trait dove ogni supporto la
+/// eredita o la sostituisce.
+pub fn write_atomic(path: &Utf8Path, bytes: &[u8]) -> Result<(), String> {
+    FsStorage
+        .write(path, bytes)
+        .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
 }
 
 // --- la memoria ------------------------------------------------------------
@@ -402,6 +566,13 @@ impl VaultStorage for MemStorage {
             .ok_or_else(|| not_found(path))
     }
 
+    /// L'atomicità che [`VaultStorage::write`] promette qui è gratis e non
+    /// significa niente: la mappa si aggiorna sotto il lucchetto, quindi non
+    /// esiste un lettore che veda una scrittura a metà — e non esiste niente a
+    /// cui sopravvivere, perché non c'è un crash che lasci indietro questa
+    /// memoria. È la ragione per cui i test di durabilità stanno su
+    /// [`FsStorage`] e non qui: vedi il modulo di
+    /// `crates/fub-kernel/tests/il_supporto.rs`.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
         let mut mem = self.lock();
         if mem.dirs.contains(path) {
@@ -534,5 +705,53 @@ impl VaultStorage for MemStorage {
             return Err(not_found(dir));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Il temporaneo di una scrittura vive dentro il vault per una frazione di
+    /// secondo, e in quella frazione **non deve essere un documento**.
+    ///
+    /// Il presidio è sull'incastro fra due moduli, non su una stringa: il nome
+    /// del temporaneo lo compone `storage.rs`, la regola che lo rende invisibile
+    /// è `vault::is_ignored_name`, e sono lontani abbastanza perché un giorno
+    /// qualcuno cambi il nome del temporaneo senza sapere che c'era una regola
+    /// da rispettare. Se succede, questo diventa rosso.
+    #[test]
+    fn il_temporaneo_di_una_scrittura_non_e_un_documento() {
+        for path in [
+            "/vault/Nota.md",
+            "/vault/note/Idea.md",
+            "/vault/senza-punto",
+        ] {
+            let tmp = tmp_path(Utf8Path::new(path));
+            let nome = tmp.file_name().expect("il temporaneo ha un nome");
+            assert!(
+                crate::vault::is_ignored_name(nome),
+                "{nome}: la scansione lo vedrebbe come un documento nuovo"
+            );
+        }
+    }
+
+    /// E sta **accanto** al file, perché una rename fra due filesystem non è una
+    /// rename.
+    #[test]
+    fn il_temporaneo_sta_nella_cartella_di_destinazione() {
+        let tmp = tmp_path(Utf8Path::new("/vault/note/Idea.md"));
+        assert_eq!(tmp.parent(), Some(Utf8Path::new("/vault/note")));
+    }
+
+    /// Due scritture non si scrivono addosso sul temporaneo: se lo facessero,
+    /// ciò che la rename fa atterrare sarebbe metà dell'una e metà dell'altra —
+    /// il file troncato che l'atomicità esiste per non produrre, prodotto dalla
+    /// sua implementazione.
+    #[test]
+    fn due_scritture_non_hanno_lo_stesso_temporaneo() {
+        let a = tmp_path(Utf8Path::new("/vault/Nota.md"));
+        let b = tmp_path(Utf8Path::new("/vault/Nota.md"));
+        assert_ne!(a, b);
     }
 }

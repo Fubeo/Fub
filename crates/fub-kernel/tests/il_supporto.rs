@@ -21,6 +21,10 @@
 //! temp+rename+fsync sulla directory, cioè una proprietà che esiste solo su un
 //! filesystem vero, e un supporto in memoria per costruzione non la modella.
 //! Presidiarla qui vorrebbe dire renderla verde su un supporto che non ce l'ha.
+//! Stanno in `la_durabilita.rs`, su `FsStorage` soltanto — e il fatto che questa
+//! riga sia rimasta identica il giorno in cui la durabilità è arrivata
+//! ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)) è il
+//! punto: la ragione per cui non stanno qui non è cambiata insieme a loro.
 
 use std::sync::Arc;
 

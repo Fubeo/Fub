@@ -90,7 +90,8 @@ pub use plugins::{PluginInfo, PluginRegistry, Registration, RegistrationKind, Re
 pub use registry::{FormatRegistry, RegistryConflict};
 pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererRegistry};
 pub use session::Session;
-pub use settings::{write_atomic, MachineSettings, SettingsStore, SharedSettings};
+pub use settings::{MachineSettings, SettingsStore, SharedSettings};
+pub use storage::write_atomic;
 pub use storage::{DirEntry, EntryKind, FsStorage, MemStorage, Stat, VaultStorage};
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};

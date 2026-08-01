@@ -319,7 +319,9 @@ snapshot nemmeno volendo. O lo fa il core, o è una promessa con sopra una UI.
 l'atomicità di scritture che non si eseguono. Il 24.2 chiede atomic writes,
 journaling, crash recovery, autosave e corruption detection, e nessuna delle
 cinque può essere un componente perché la correttezza di **tutti gli altri**
-poggia sopra. Il caso più netto non sta nemmeno nel 24: è il 22.4, che promette
+poggia sopra. Delle cinque la prima è **fatta** — la
+[0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) l'ha messa dentro il
+supporto che la 0064 aveva appena costruito — e le altre quattro sono lì. Il caso più netto non sta nemmeno nel 24: è il 22.4, che promette
 al centro di comando LLM la «transazione atomica per operazione batch» e il
 «rollback completo». Quel capitolo è per il resto un cliente del registro dei
 comandi e sta benissimo come plugin — ma quelle due righe le può mantenere solo
@@ -330,4 +332,9 @@ Entrambe restano **P2**, e le due cose non sono in contraddizione: è esattament
 la frase con cui questa pagina si apre. La §15.1 è stata poi presa **da P2**,
 senza essere promossa e senza che il freeze c'entrasse, il giorno in cui non
 c'erano più P0 aperte: è la prima volta che a scegliere è stata la leva e non la
-scadenza, che è ciò per cui questa pagina esiste.
+scadenza, che è ciò per cui questa pagina esiste. E la seconda volta è stata
+mezza §15.2, il turno dopo, per la stessa ragione e con un'aggiunta che vale come
+criterio: **a scegliere è stata anche la voce già fatta**. La 0064 aveva lasciato
+scritto cosa sarebbe sceso dentro quella funzione, e una voce che ne aspetta
+un'altra scritta nero su bianco costa meno se la si prende subito — dopo, il
+posto preparato per lei bisogna ricostruirsi il perché era preparato.
