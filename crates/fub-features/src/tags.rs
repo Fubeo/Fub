@@ -44,8 +44,8 @@ use fub_abi::query::QueryExpr;
 use fub_abi::session::ContextMask;
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{
-    HostApi, IndexQuery, IndexResult, ReadApi, TagCount, ViewInstance, ViewProvider, ViewSpec,
-    ViewSurface,
+    HostApi, IndexQuery, IndexResult, ReadApi, TagCount, ViewInstance, ViewInterests, ViewProvider,
+    ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 
@@ -116,23 +116,25 @@ pub fn catalog() -> Vec<StringCatalog> {
 pub struct TagPanelView;
 
 impl ViewProvider for TagPanelView {
+    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+        ViewInterests {
+            // I tag sono aggregati vault-wide: invecchiano a ogni modifica
+            // dell'indice, non al cambio di nota.
+            refresh: EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]),
+            // …e non invecchiano per niente col contesto: la distribuzione dei
+            // tag del vault è la stessa da qualunque nota la si guardi. È il
+            // caso che la maschera esiste per servire — senza, questo pannello
+            // si ridisegnerebbe a ogni movimento del cursore.
+            follows: ContextMask::default(),
+        }
+    }
+
     fn views(&self) -> Vec<ViewSpec> {
         vec![
             // Finché il posto era lettera morta la shell metteva il pannello a
             // destra per conoscenza privata; ora che il montaggio lo rispetta,
             // la dichiarazione dice la stessa cosa.
             ViewSpec::new(TAGS_VIEW, Text::key(VIEW_TITLE), ViewSurface::RightSidebar)
-                // I tag sono aggregati vault-wide: invecchiano a ogni modifica
-                // dell'indice, non al cambio di nota.
-                .refreshing(EventMask::of([
-                    EventKind::IndexUpdated,
-                    EventKind::BatchEnded,
-                ]))
-                // …e non invecchiano per niente col contesto: la distribuzione
-                // dei tag del vault è la stessa da qualunque nota la si guardi.
-                // È il caso che la maschera esiste per servire — senza, questo
-                // pannello si ridisegnerebbe a ogni movimento del cursore.
-                .following(ContextMask::default())
                 .with_icon("tag")
                 .ordered(2)
                 .open_by_default(),

@@ -181,6 +181,12 @@ solo l'adattatore che traduce un `ViewSpec` in un `Panel`. Da lì in giù non c'
 differenza — ed è il punto, perché finché convivono due modi il secondo vince per
 pigrizia.
 
+La maschera che arriva in quel `ViewSpec` è già quella dell'**esemplare** e non
+della specie ([0063](../decisions/0063-la-maschera-e-dell-esemplare.md)): la
+risolve il kernel alla registrazione, chiedendola al provider per l'esemplare che
+la shell monta da sé. La shell non fa un secondo giro di IPC per riaverla — la
+domanda ha già la sua risposta dentro `list_views`.
+
 Cosa ci si guadagna, oltre alla simmetria:
 
 - **`overflow` si tratta in un posto solo.** Non è un fatto del dominio, è la

@@ -19,7 +19,9 @@ use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::session::{ContextMask, PaneMode, Selection};
 use fub_abi::text::{Arg, StringCatalog, Text};
-use fub_abi::traits::{HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fub_abi::traits::{
+    HostApi, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
+};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
@@ -69,6 +71,18 @@ pub fn reading_minutes(words: usize) -> usize {
 }
 
 impl ViewProvider for StatsView {
+    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+        ViewInterests {
+            // Il conteggio del documento invecchia a ogni scrittura (anche
+            // quelle del watcher): `IndexUpdated` le copre tutte.
+            refresh: EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]),
+            // Del contesto segue tutto: quale nota (di chi sono i conteggi), la
+            // selezione (il conteggio della selezione) e la modalità (in
+            // lettura il pannello dice un'altra cosa).
+            follows: ContextMask::all(),
+        }
+    }
+
     fn views(&self) -> Vec<ViewSpec> {
         vec![
             // Sta nella **barra di stato**, e ci sta da questa seduta: prima le
@@ -77,16 +91,6 @@ impl ViewProvider for StatsView {
             // nomina proprio questo caso — ciò che informa senza interrompere —
             // ed è il primo cliente di una superficie nuova.
             ViewSpec::new(STATS_VIEW, Text::key(VIEW_TITLE), ViewSurface::StatusBar)
-                // Il conteggio del documento invecchia a ogni scrittura (anche
-                // quelle del watcher): `IndexUpdated` le copre tutte.
-                .refreshing(EventMask::of([
-                    EventKind::IndexUpdated,
-                    EventKind::BatchEnded,
-                ]))
-                // Del contesto segue tutto: quale nota (di chi sono i
-                // conteggi), la selezione (il conteggio della selezione) e la
-                // modalità (in lettura il pannello dice un'altra cosa).
-                .following(ContextMask::all())
                 .open_by_default(),
         ]
     }

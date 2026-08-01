@@ -73,6 +73,7 @@ cronologico di chiusura.
 | [0060](0060-il-modello-dice-il-vero-sui-byte.md) | Il modello dice il vero sui byte del file, e un corpus che nessuno confronta non cresce | §17.1 (**prima metà**: il corpus e il fuzzing) — resta il banco delle prestazioni ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 | [0061](0061-un-giro-che-non-passa-dal-modello.md) | Un giro che non prende i byte dal modello, e uno che ci passa | §17.1 (**una casella su cinque**: il round-trip sul corpus) — resta il banco delle prestazioni ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 | [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) | Il log è il pavimento, l'evento è la porta — `tracing` al posto di `eprintln!`, con log su file, livelli e log per-plugin | §17.3 — chiude la voce **e** la casella residua della §20.2: i ventisette punti di `stderr` hanno due destinazioni, non una ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
+| [0063](0063-la-maschera-e-dell-esemplare.md) | La maschera è dell'esemplare, e la risposta stava già nell'elenco | §22.3 — chiude la voce **meno una casella**: la query incorporata in una nota, che non è un esemplare di `ViewSpec` ([seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)) | 2026-08-01 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

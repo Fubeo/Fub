@@ -241,6 +241,23 @@ fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
 struct Esplode;
 
 impl ViewProvider for Esplode {
+    /// La maschera è dell'**esemplare** (§22.3): si prende da *quella* spec,
+    /// non dalla prima dell'elenco — un provider che ne dichiara due darebbe a
+    /// tutte e due la maschera della prima.
+    fn interests(
+        &self,
+        instance: &fub_abi::traits::ViewInstance,
+    ) -> fub_abi::traits::ViewInterests {
+        self.views()
+            .into_iter()
+            .find(|s| s.id == instance.view)
+            .map(|s| fub_abi::traits::ViewInterests {
+                refresh: s.refresh,
+                follows: s.follows,
+            })
+            .unwrap_or_default()
+    }
+
     fn views(&self) -> Vec<ViewSpec> {
         vec![ViewSpec {
             id: "esplode".into(),

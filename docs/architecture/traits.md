@@ -482,7 +482,13 @@ pub trait ViewProvider: Send + Sync {
 `ViewSpec { id, title, placement: ViewPlacement, refresh: EventMask, follows:
 ContextMask }` con `ViewPlacement { LeftSidebar, RightSidebar, Bottom }`. Le due
 maschere dicono **quando** una view invecchia: `refresh` per gli eventi del
-vault, `follows` per le parti del contesto di sessione. Chi dichiara
+vault, `follows` per le parti del contesto di sessione. Dal §22.3
+([0063](../decisions/0063-la-maschera-e-dell-esemplare.md)) la maschera è
+dell'**esemplare**: la risponde `interests(&ViewInstance) -> ViewInterests
+{ refresh, follows }`, e i due campi della spec restano il caso largo — quello
+dichiarato prima che un esemplare esistesse. Il kernel le risolve dove le spec
+si chiedono, alla registrazione, così l'elenco che la shell legge porta già la
+maschera dell'esemplare che monta da sé. Chi dichiara
 `IndexUpdated` in `refresh` deve dichiarare anche `BatchEnded`: dentro un lotto
 ([0011](../decisions/0011-il-lotto.md)) il primo non arriva, e il secondo è ciò
 che fa fare **un** ridisegno dove prima ne faceva N — la regola è

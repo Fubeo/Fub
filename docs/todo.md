@@ -18,9 +18,9 @@ arrivata da fuori, e le §22.1–§22.3 dallo stesso controllo su una lettura
 esterna dell'intero [FEATURES.md](FEATURES.md)
 ([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)) — e una da una
 **separazione**, la §16.8, staccata dal §16.7 nel momento in cui lo si chiudeva
-([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)). Ottantasette sono
+([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)). Ottantanove sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-ventisette sono qui, e questo file è il loro **indice**.
+ventisei sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -131,11 +131,11 @@ verbale è un ragionamento intero.
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: quattro **rimandi** ai quattro giri di audit, di cui uno chiuso; restano **tre** caselle, e il lavoro sta nelle sedute che le hanno assorbite | — | — |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in tre punti, e tutti e tre sono chiusi: l'alimentazione ha un esito ([0051](decisions/0051-l-alimentazione-risponde.md)), ciò che va storto è un evento e il kernel non lo butta più ([0052](decisions/0052-cio-che-va-storto-e-un-evento.md)); restano la metà umana e una voce nata misurando | 2 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | le quattro di firma sono state decise ([0049](decisions/0049-una-posizione-dentro-un-documento.md), [0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)); quel che resta è **dove quel comportamento si vede**, cosa lo rende regolabile, cosa gli darà da mangiare, e la sola misura che dice se è veloce | 6 | — |
-| **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | tre lati della stessa dichiarazione di interesse — *quando*, *cosa è cambiato*, *per quale esemplare* — e decise separate darebbero tre estensioni della stessa maschera disegnate da tre parti; nate da una **verifica**, e nessuna scade col freeze | 3 | — |
+| **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | tre lati della stessa dichiarazione di interesse — *quando*, *cosa è cambiato*, *per quale esemplare* — e decise separate darebbero tre estensioni della stessa maschera disegnate da tre parti; nate da una **verifica**, e nessuna scade col freeze; la terza è chiusa dalla [0063](decisions/0063-la-maschera-e-dell-esemplare.md) — la maschera è dell'esemplare, additiva, risolta dove le spec si chiedono e senza un settimo ponte — e le altre due sono state tentate con lei e **ritirate**: una dichiarazione che il kernel non valuta mente a chi la scrive | 2 | — |
 
 ## Le voci
 
-Ventisette. Il numero è quello con cui le nomina il resto del repo.
+Ventisei. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -147,18 +147,21 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella non è in nessun
 totale.** La colonna *Voci* conta le voci **aperte**, e la sua somma per riga fa
-ventisette come deve; il residuo di una voce **chiusa** è un'altra specie e finora
+ventisei come deve; il residuo di una voce **chiusa** è un'altra specie e finora
 non aveva dove essere contato — che è il modo in cui la riga della seduta 14 ha
 detto «due caselle» mentre il suo file ne aveva tre, e la 19 non ha detto niente
-avendone tre. Le caselle residue oggi sono **otto**, e stanno in quattro posti:
+avendone tre. Le caselle residue oggi sono **nove**, e stanno in cinque posti:
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
 (tre: l'impronta degli allegati, la politica della cartella allegati, le
 derivate), [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
 (una: l'implementazione additiva delle due radici), il
 [§16.6](roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) (una: i cinque
 bespoke da migrare — ed è la prima casella residua che **non vive in una riga di
-prosa**, perché il suo numero lo asserisce un test) e la
-[seduta 19](roadmap/19-debito-quarto-audit.md) (tre rimandi). Non diventano voci
+prosa**, perché il suo numero lo asserisce un test), la
+[seduta 19](roadmap/19-debito-quarto-audit.md) (tre rimandi) e la
+[§22.3](roadmap/22-cosa-sa-dire-un-abbonamento.md#223-la-maschera-di-ridisegno-è-della-view-non-dellesemplare)
+(una: la query incorporata in una nota, che non è un esemplare di `ViewSpec` e
+non ha un canale di invalidazione affatto). Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte. La casella della §20.2 — i ventisette punti
 che scrivono su `stderr` — non è più fra queste: la
@@ -208,7 +211,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§21.9** | [Una query costa 23 ms su duemila note, e nessuno sa perché](roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché) | 21. La ricerca predefinita | kernel | **P1** |
 | **§22.1** | [Un abbonamento non sa dire quando](roadmap/22-cosa-sa-dire-un-abbonamento.md#221-un-abbonamento-non-sa-dire-quando) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
 | **§22.2** | [Un evento dice quale documento, non cosa è cambiato](roadmap/22-cosa-sa-dire-un-abbonamento.md#222-un-evento-dice-quale-documento-non-cosa-è-cambiato) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
-| **§22.3** | [La maschera di ridisegno è della view, non dell'esemplare](roadmap/22-cosa-sa-dire-un-abbonamento.md#223-la-maschera-di-ridisegno-è-della-view-non-dellesemplare) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
 
 ## Gli allegati
 

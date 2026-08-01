@@ -2584,7 +2584,14 @@ interface view {
         closable: bool,
     }
 
+    record view-interests {
+        /// Dichiarazione di interesse per l'istanza specifica.
+        refresh: event-mask,
+        follows: context-mask,
+    }
+
     views: func() -> list<view-spec>;
+    interests: func(instance: view-instance) -> view-interests;
     render-view: func(instance: view-instance) -> result<ui-tree, plugin-error>;
     on-action: func(instance: view-instance, action: ui-action) -> result<view-update, plugin-error>;
 }

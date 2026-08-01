@@ -73,6 +73,23 @@ struct Spia {
 }
 
 impl ViewProvider for Spia {
+    /// La maschera è dell'**esemplare** (§22.3): si prende da *quella* spec,
+    /// non dalla prima dell'elenco — un provider che ne dichiara due darebbe a
+    /// tutte e due la maschera della prima.
+    fn interests(
+        &self,
+        instance: &fub_abi::traits::ViewInstance,
+    ) -> fub_abi::traits::ViewInterests {
+        self.views()
+            .into_iter()
+            .find(|s| s.id == instance.view)
+            .map(|s| fub_abi::traits::ViewInterests {
+                refresh: s.refresh,
+                follows: s.follows,
+            })
+            .unwrap_or_default()
+    }
+
     fn views(&self) -> Vec<ViewSpec> {
         vec![ViewSpec::new(self.id, self.id, ViewSurface::RightSidebar)
             .refreshing(EventMask::of([

@@ -98,7 +98,7 @@ use fub_abi::traits::{
     PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter,
     PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef,
     ServiceProvider, TagCount, TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance,
-    ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
+    ViewInterests, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fub_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -348,6 +348,7 @@ wit_kebab! {
     ViewSpec,
     ViewSurface,
     ViewInstance,
+    ViewInterests,
 
     // L'edit chirurgico: la coppia (span, testo) e la revisione su cui è stata
     // calcolata.
@@ -3533,6 +3534,12 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let ViewInterests { refresh, follows } = ViewInterests::default();
+    contract.record(
+        "view-interests",
+        &[("refresh", wit(&refresh)), ("follows", wit(&follows))],
+    );
+
     // --- l'edit chirurgico (decisione 0008)
 
     let TextEdit { span, text } = TextEdit::insert(0, "");
@@ -4507,6 +4514,13 @@ fn conform(source: &str) -> Result<(), String> {
         "views",
         <dyn ViewProvider>::views as fn(&'static dyn ViewProvider) -> Vec<ViewSpec>,
         &[],
+    );
+    contract.method(
+        "view",
+        "interests",
+        <dyn ViewProvider>::interests
+            as fn(&'static dyn ViewProvider, &'static ViewInstance) -> ViewInterests,
+        &["instance"],
     );
     contract.method(
         "view",

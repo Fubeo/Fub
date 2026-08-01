@@ -159,6 +159,32 @@ pub(crate) struct RegisteredView {
     pub(crate) trust: Trust,
 }
 
+/// Ciò che un `ViewProvider` dichiara, chiesto **una volta sola**: le spec, e
+/// per ognuna la maschera dell'esemplare che la shell monta da sé (§22.3).
+///
+/// I campi `refresh` e `follows` della spec sono la dichiarazione fatta prima
+/// che un esemplare esistesse; dal §22.3 la maschera è dell'esemplare, e per
+/// l'esemplare unico ([`ViewInstance::only`]) le due coincidono per
+/// costruzione. Risolverle qui — e non a ogni lettura — è ciò che tiene in
+/// piedi «le spec sono dato di registrazione»: il kernel possiede la verità, e
+/// chi cambia idea lo dice passando da [`Providers::refresh_specs`].
+///
+/// Chi apre un esemplare **con parametri** non passa di qui: la sua maschera
+/// gliela risponde `Workspace::view_interests`, ed è il verso in cui il §22.3
+/// continua.
+pub(crate) fn specs_dichiarate(provider: &dyn ViewProvider) -> Vec<ViewSpec> {
+    provider
+        .views()
+        .into_iter()
+        .map(|mut spec| {
+            let interests = provider.interests(&ViewInstance::only(&spec.id));
+            spec.refresh = interests.refresh;
+            spec.follows = interests.follows;
+            spec
+        })
+        .collect()
+}
+
 pub(crate) struct RegisteredCommand {
     pub(crate) id: String,
     pub(crate) provider: Arc<dyn CommandProvider>,
@@ -354,7 +380,7 @@ impl ProviderRegistry {
             .iter()
             .enumerate()
             .filter(|(_, v)| v.id == id)
-            .map(|(at, v)| (at, v.provider.views()))
+            .map(|(at, v)| (at, specs_dichiarate(v.provider.as_ref())))
             .collect();
         let commands: Vec<(usize, Vec<CommandSpec>)> = self
             .commands
