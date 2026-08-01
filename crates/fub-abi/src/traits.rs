@@ -1342,6 +1342,14 @@ pub struct ViewSpec {
     /// Dichiarazione di interesse: gli eventi al cui arrivo la shell deve
     /// ridisegnare questa view (chiamare di nuovo `render_view`).
     ///
+    /// **Dal §22.3 questo campo è ciò che l'host ci ha scritto, non ciò che il
+    /// provider ci scrive**: la maschera la dichiara
+    /// [`ViewProvider::interests`], per esemplare, e l'host risolve qui quella
+    /// dell'esemplare unico quando prende in carico la spec. Scriverlo dal
+    /// provider non è un errore ed è ancora il modo di dirlo in un posto solo —
+    /// ma è `interests` a essere chiesta, e se le due dicessero cose diverse
+    /// vince lei. Maschera vuota = nessun ridisegno event-driven.
+    ///
     /// È il pezzo di protocollo che dice *quando* una view invecchia: senza,
     /// la shell può solo indovinare per conoscenza privata delle feature — e
     /// per una view di plugin non può indovinare niente. Maschera vuota =
@@ -1358,6 +1366,10 @@ pub struct ViewSpec {
     /// L'altra metà della stessa dichiarazione, per ciò che **non è un evento
     /// del vault**: le parti del contesto di sessione
     /// ([`HostEnv::active_context`]) al cui cambio questa view invecchia.
+    ///
+    /// Vale parola per parola ciò che è scritto su [`refresh`](Self::refresh):
+    /// dal §22.3 le due metà si dichiarano insieme in [`ViewInterests`], e
+    /// questo campo è dove l'host posa la risposta per l'esemplare unico.
     ///
     /// Esiste perché "la shell ridisegna comunque quando cambia il documento
     /// attivo" smette di essere sostenibile appena il contesto porta anche la
@@ -1486,6 +1498,25 @@ impl Localize for ViewSpec {
     }
 }
 
+/// **Quando questa view invecchia**, per l'esemplare che lo chiede (§22.3).
+///
+/// Le due metà stanno in un record solo perché sono la stessa dichiarazione
+/// vista su due canali — gli eventi del vault (`refresh`) e il contesto di
+/// sessione (`follows`) — e separarle darebbe due posti dove la stessa view può
+/// dire due cose diverse su quando ridisegnarsi.
+///
+/// I campi omonimi di [`ViewSpec`] restano il **caso largo**: sono la
+/// dichiarazione fatta prima che un esemplare esistesse, e per l'esemplare unico
+/// ([`ViewInstance::only`]) le due cose coincidono per costruzione — è l'host a
+/// risolverle, dove le spec si chiedono.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ViewInterests {
+    #[serde(default)]
+    pub refresh: EventMask,
+    #[serde(default)]
+    pub follows: ContextMask,
+}
+
 /// Chi disegna una view.
 ///
 /// # Perché `render_view` prende `&self` e `on_action` `&mut self`
@@ -1512,6 +1543,12 @@ impl Localize for ViewSpec {
 /// motivo per cui questa è la scelta che costa meno di tutte al confine.
 pub trait ViewProvider: Send + Sync {
     fn views(&self) -> Vec<ViewSpec>;
+    /// Cosa fa invecchiare **questo esemplare** (§22.3).
+    ///
+    /// Non ha un default, e non è una dimenticanza: con un default vuoto un
+    /// provider che non la implementa smetterebbe di ridisegnarsi in silenzio,
+    /// e a scoprirlo sarebbe uno schermo fermo invece del compilatore.
+    fn interests(&self, instance: &ViewInstance) -> ViewInterests;
     /// Restituisce l'albero di UI dichiarativa per **questa istanza** della
     /// view.
     ///

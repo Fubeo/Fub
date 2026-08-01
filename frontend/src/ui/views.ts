@@ -238,6 +238,10 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
     id: spec.id,
     title: spec.title,
     placement: spec.surface,
+    // Dal §22.3 questa maschera è quella dell'**esemplare**, non della specie:
+    // il kernel la risolve chiedendola al provider prima di mettere la spec
+    // nell'elenco, per l'esemplare che la shell monta da sé. La shell non fa un
+    // secondo giro per riaverla — la domanda ha già una risposta qui dentro.
     refresh: spec.refresh,
     // `follows` non si traduce in `followsDoc`: chi legge il `ViewSpec` e
     // decide quali view sono invecchiate è il **kernel**, che risponde col

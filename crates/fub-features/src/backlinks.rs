@@ -16,8 +16,8 @@ use fub_abi::event::{EventKind, EventMask};
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
-    BacklinkRef, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewProvider, ViewSpec,
-    ViewSurface,
+    BacklinkRef, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewInterests,
+    ViewProvider, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{ActionRef, UiAction, UiNode, ViewUpdate};
 
@@ -41,23 +41,23 @@ const DOC: &str = "doc";
 pub struct BacklinksView;
 
 impl ViewProvider for BacklinksView {
+    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+        ViewInterests {
+            // I backlink invecchiano quando il grafo cambia: ogni modifica al
+            // vault arriva come `IndexUpdated`.
+            refresh: EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]),
+            // …e quando cambia la nota guardata. Non dove ci si trova dentro: i
+            // backlink di una nota sono gli stessi da ogni punto di essa, e
+            // seguire la selezione qui sarebbe una query per battuta di tasto.
+            follows: ContextMask::document(),
+        }
+    }
     fn views(&self) -> Vec<ViewSpec> {
         vec![ViewSpec::new(
             BACKLINKS_VIEW,
             Text::key(VIEW_TITLE),
             ViewSurface::RightSidebar,
         )
-        // I backlink invecchiano quando il grafo cambia: ogni modifica
-        // al vault arriva come `IndexUpdated`.
-        .refreshing(EventMask::of([
-            EventKind::IndexUpdated,
-            EventKind::BatchEnded,
-        ]))
-        // …e quando cambia la nota guardata. Non dove ci si trova
-        // dentro: i backlink di una nota sono gli stessi da ogni punto
-        // di essa, e seguire la selezione qui sarebbe una query per
-        // battuta di tasto.
-        .following(ContextMask::document())
         .with_icon("backlink")
         .open_by_default()]
     }

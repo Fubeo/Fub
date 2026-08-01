@@ -25,7 +25,9 @@ firma** era la §15.4, ed era P0, ed è chiusa dalla
 [0048](../decisions/0048-una-radice-sola.md) prima del freeze; il `trait
 VaultStorage` è rimasto P2 perché è un trait interno al kernel e non scade.
 
-Restano tre cose che nessuno aveva scritto. Sono qui.
+Restano tre cose che nessuno aveva scritto. Sono qui — e la terza è **chiusa**
+dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md), che ne lascia
+una casella.
 
 **Perché stanno insieme.** Un **abbonamento** — in questa seduta: ogni
 dichiarazione di interesse, non solo `subscriptions()` — è il modo con cui questo
@@ -47,7 +49,18 @@ fondo a un record e uno in fondo alla maschera; una maschera per esemplare è un
 funzione nuova su un'interfaccia che c'è già. **Niente di pubblicato si sposta.**
 Sono P1: vanno con M3, e il loro conto lo paga chi scriverà la prima automazione.
 La §22.3 è la sola che ha un modo di diventare P0, ed è scritto nella sua ultima
-casella.
+casella — la [0063](../decisions/0063-la-maschera-e-dell-esemplare.md) ha preso
+l'altro verso, quello additivo, e con lui la voce non scade più.
+
+**Le due che restano sono state tentate una volta, e ritirate.** Vale scriverlo
+qui perché la prossima volta la tentazione tornerà nella stessa forma: i campi
+c'erano — `document-changes` e `schedule` in fondo alla maschera, un `changes` in
+fondo a `event-document-changed`, un `timer-fired` in coda al variant — e non li
+guardava nessuno. `mask_wants` non filtrava, `ingest_model` riempiva `None`, il
+timer non lo faceva scattare niente. Aggiungere la dichiarazione è la parte
+facile di tutte e due queste voci, ed è la parte che non serve a nulla da sola:
+finché il kernel non la valuta, una maschera che si può scrivere è una promessa
+fatta a chi la scrive.
 
 ### 22.1 Un abbonamento non sa dire quando
 
@@ -123,39 +136,27 @@ casella.
 
 ### 22.3 La maschera di ridisegno è della view, non dell'esemplare
 
-*nuova con la verifica del catalogo · contratto · **P1** — la [0016](../decisions/0016-cosa-e-una-view.md) ha dato i parametri all'esemplare e lasciato la maschera alla dichiarazione*
+*chiusa dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md) — resta una casella, ed è la sola metà che non si risolveva nel contratto delle view*
 
-- [ ] **`ViewSpec.refresh` è per view, `ViewInstance.params` è per esemplare**
-      (`abi/traits.rs`, `abi.wit`). La
-      [0016](../decisions/0016-cosa-e-una-view.md) ha reso le view istanziabili —
-      `render_view` e `on_action` ricevono un `ViewInstance { view, instance,
-      params }`, e i parametri arrivano già convalidati contro
-      `ViewSpec.params` — ma la **dichiarazione di interesse** è rimasta dove
-      stava: un campo solo, sulla spec, deciso prima che esistesse un esemplare.
-      Una view aperta con parametri ha quindi una dipendenza che nasce dai
-      parametri e una maschera che quei parametri non li ha mai visti.
-- [ ] **Chi lo chiede**: 9.2 (query embed, query salvate, parametriche), 11.5
-      (dashboard e widget), 11.2 (viste multiple dello stesso database), 8.3
-      (viste salvate). Sono tutte **istanze della stessa view con soggetti
-      diversi**. O si abbonano larghe — e allora ogni widget aperto si ridisegna
-      a ogni scrittura del vault, che è precisamente il conto che la
-      [0033](../decisions/0033-la-grana-di-un-abbonamento.md) esisteva per
-      togliere — o non si abbonano e non sono vive.
-- [ ] **E c'è un secondo cliente che non è nemmeno una view.** Una query
+`ViewProvider` ha `interests(&ViewInstance) -> ViewInterests { refresh, follows }`,
+e il record sta nel WIT accanto a `view-spec`. I due campi della spec restano il
+caso largo e il default — la decisione è additiva, e la §22.3 non scade più. Le
+maschere si risolvono **dove le spec si chiedono**, alla registrazione
+(`specs_dichiarate`), perché la verità su cosa un provider offre è del registro e
+non di chi interroga; chi apre un esemplare con parametri la chiede a
+`Workspace::view_interests`, e non è passata dall'IPC perché la domanda che la
+shell fa oggi ha già la sua risposta dentro `list_views`
+([0057](../decisions/0057-la-dieta-dell-ipc.md)).
+
+- [ ] **Resta il secondo cliente, che non è nemmeno una view.** Una query
       **incorporata in una nota** (9.2, «query embed») non è un esemplare di
       `ViewSpec`: è un blocco reso dal renderer, dentro il documento aperto. Per
       quella un canale di invalidazione non esiste **affatto**, e la domanda
       «chi la ridisegna quando cambia ciò che interroga» oggi non ha una riga in
-      nessuna voce. È la metà di questa voce che non si risolve nel contratto
-      delle view, e va decisa insieme all'altra o le due si sceglieranno due
-      meccanismi.
-- [ ] **Perché non è P0, e come lo diventerebbe.** Se la maschera per esemplare
-      si **aggiunge** — una funzione nuova sull'interfaccia che c'è già, con
-      `ViewSpec.refresh` che resta il caso largo e il default — è additiva e non
-      scade. Se invece si decidesse che la maschera è **solo** dell'esemplare,
-      allora `view-spec.refresh` è nel posto sbagliato e spostarla è una
-      migrazione: è l'unica delle tre voci che ha un verso in cui diventa P0, e
-      ci diventa nel momento in cui la decisione va in quel verso. La scelta fra
-      le due forme è quindi ciò che scade — esattamente come nella
-      [0048](../decisions/0048-una-radice-sola.md) ciò che scadeva era
-      *scegliere fra le tre*, non implementarla.
+      nessuna voce. La seduta diceva che le due metà vanno decise insieme «o le
+      due si sceglieranno due meccanismi»: la prima, decisa, **è** il meccanismo
+      — una dichiarazione di interesse per esemplare, valutata da chi possiede
+      l'evento — e ciò che resta è portarcelo dentro, non sceglierne un altro.
+      Un blocco reso dentro un documento non ha un id di view a cui appendere una
+      spec, e la sua dipendenza nasce dal testo che lo contiene: è lì che la
+      risposta va cercata, non in `ViewSpec`.

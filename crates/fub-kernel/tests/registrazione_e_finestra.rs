@@ -16,7 +16,8 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
-    CommandProvider, HostApi, Page, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    CommandProvider, HostApi, Page, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
+    ViewSurface,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
@@ -39,6 +40,13 @@ impl Conteggio {
 }
 
 impl ViewProvider for Conteggio {
+    /// Dichiarare non è rileggersi: questa non passa da `views()`, o il
+    /// conteggio che questo banco tiene direbbe due dove il kernel ha chiesto
+    /// una volta sola.
+    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+        ViewInterests::default()
+    }
+
     fn views(&self) -> Vec<ViewSpec> {
         *self.views.lock().unwrap() += 1;
         let mut all = vec![Conteggio::spec("prova.view")];

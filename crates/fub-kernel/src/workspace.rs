@@ -65,8 +65,8 @@ use fub_abi::text::{Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, HostApi,
     IndexLoss, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged,
-    PluginManifest, QueryRoute, ReadApi, ServiceProvider, VaultEntry, ViewInstance, ViewProvider,
-    ViewSpec,
+    PluginManifest, QueryRoute, ReadApi, ServiceProvider, VaultEntry, ViewInstance, ViewInterests,
+    ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -2685,8 +2685,8 @@ impl Workspace {
     // --- sessione ----------------------------------------------------------
 
     /// Pubblica il contesto del pannello con il focus e restituisce **le view
-    /// da ridisegnare**: quelle la cui `ViewSpec::follows` interseca ciò che è
-    /// cambiato, in ordine di registrazione.
+    /// da ridisegnare**: quelle il cui `follows` interseca ciò che è cambiato,
+    /// in ordine di registrazione.
     ///
     /// Lo chiama la shell a ogni cambio di nota, di selezione o di modalità. È
     /// l'unico modo di scrivere il contesto: le view lo **leggono** via
@@ -2706,6 +2706,9 @@ impl Workspace {
         if changed.is_empty() {
             return Vec::new();
         }
+        // `views()` risolve già le due maschere sull'esemplare unico (§22.3):
+        // qui non serve una seconda strada per la stessa domanda, e averla
+        // vorrebbe dire due posti dove la regola può divergere.
         self.views()
             .into_iter()
             .filter(|spec| spec.follows.intersects(&changed))
@@ -2923,7 +2926,7 @@ impl Workspace {
         provider: Box<dyn ViewProvider>,
         replacing: bool,
     ) -> std::result::Result<(), RegistryError> {
-        let specs = provider.views();
+        let specs = crate::providers::specs_dichiarate(provider.as_ref());
         let ids: Vec<String> = specs.iter().map(|s| s.id.clone()).collect();
         // Il permesso **prima** di togliere chi c'era: una sostituzione ha due
         // effetti, e un rifiuto in mezzo lascerebbe il primo fatto e il secondo
@@ -2984,6 +2987,12 @@ impl Workspace {
 
     /// Le view offerte dai provider registrati, in ordine di registrazione,
     /// **coi titoli risolti** nella lingua di chi guarda (§12.1).
+    ///
+    /// Le due maschere che escono di qui sono quelle dell'**esemplare unico**
+    /// (§22.3): le risolve
+    /// [`specs_dichiarate`](crate::providers::specs_dichiarate) al momento della
+    /// registrazione, che è dove le spec si chiedono — una volta sola, come
+    /// tutto il resto di ciò che un provider dichiara.
     pub fn views(&self) -> Vec<ViewSpec> {
         self.providers
             .view_specs_by_owner()
@@ -3035,6 +3044,22 @@ impl Workspace {
         // non fa passare niente dal catalogo prima del controllo.
         self.localize(&registered.id, &mut tree);
         Ok(tree)
+    }
+
+    /// La dichiarazione di interesse di **un esemplare** (§22.3).
+    ///
+    /// A differenza dei campi omonimi della spec — dichiarati prima che un
+    /// esemplare esistesse — questa la risponde il provider, che ha davanti i
+    /// parametri con cui l'esemplare è stato aperto. Per l'esemplare unico la
+    /// risposta è già dentro [`views`](Self::views); serve a chi ne apre uno
+    /// **con parametri**, ed è il verso in cui il §22.3 continua.
+    pub fn view_interests(
+        &self,
+        instance: &ViewInstance,
+    ) -> std::result::Result<ViewInterests, PluginError> {
+        let at = self.view_owner(&instance.view)?;
+        let registered = &self.providers.views[at];
+        Ok(registered.provider.interests(instance))
     }
 
     /// Consegna un'azione della UI al provider della view e restituisce il suo

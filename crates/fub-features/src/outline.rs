@@ -21,7 +21,8 @@ use fub_abi::model::{Heading, Span};
 use fub_abi::session::{ContextKind, ContextMask, Selection};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{
-    HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
+    ViewSurface,
 };
 use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 
@@ -45,26 +46,24 @@ const END: &str = "end";
 pub struct OutlineView;
 
 impl ViewProvider for OutlineView {
+    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+        ViewInterests {
+            // Gli heading cambiano quando cambia il documento: `IndexUpdated`
+            // copre ogni scrittura (anche quelle arrivate dal watcher).
+            refresh: EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]),
+            // Del contesto segue il documento (di chi è la struttura) e la
+            // selezione (in quale sezione sta il cursore). Non la modalità: in
+            // lettura la selezione sparisce, e sparisce con lei il segno.
+            follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
+        }
+    }
+
     fn views(&self) -> Vec<ViewSpec> {
         vec![ViewSpec::new(
             OUTLINE_VIEW,
             Text::key(VIEW_TITLE),
             ViewSurface::RightSidebar,
         )
-        // Gli heading cambiano quando cambia il documento:
-        // `IndexUpdated` copre ogni scrittura (anche quelle arrivate
-        // dal watcher).
-        .refreshing(EventMask::of([
-            EventKind::IndexUpdated,
-            EventKind::BatchEnded,
-        ]))
-        // Del contesto segue il documento (di chi è la struttura) e la
-        // selezione (in quale sezione sta il cursore). Non la modalità:
-        // in lettura la selezione sparisce, e sparisce con lei il segno.
-        .following(ContextMask(vec![
-            ContextKind::Document,
-            ContextKind::Selection,
-        ]))
         .with_icon("struttura")
         .ordered(1)
         .open_by_default()]
