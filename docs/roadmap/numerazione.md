@@ -114,7 +114,7 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | Vecchio | Nuovo | Voce |
 |---|---|---|
 | §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
-| §2.1 | **§15.1** | Astrazione sullo storage |
+| §2.1 | **§15.1** | Astrazione sullo storage → [0064](../decisions/0064-il-supporto-sta-sotto.md) |
 | §2.5 | **§15.2** | Durabilità e recovery |
 | §2.7 | **§9.6** | Sessioni multiple |
 | §2.9 | **§9.4** | Disattivazione — oggi si può solo *non registrare* |

@@ -3,12 +3,15 @@
 //! Agnostico rispetto al formato: conosce solo file, path e la mappatura
 //! path ⇆ [`DocId`]. Non sa cosa sia il markdown.
 
+use std::sync::Arc;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::rules::text_policy;
 use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{KernelError, Result};
+use crate::storage::{EntryKind, FsStorage, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
 
 /// La **radice unica** di ciò che Fub scrive dentro un vault
@@ -114,30 +117,38 @@ pub struct Scan {
     pub folders: Vec<String>,
 }
 
-/// L'mtime in millisecondi UNIX. Vedi
-/// [`VaultEntry::mtime`](fub_abi::traits::VaultEntry::mtime) per il perché
-/// dei millisecondi e non dei secondi né dei nanosecondi.
-fn mtime_millis(meta: &std::fs::Metadata) -> u64 {
-    meta.modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis().min(u64::MAX as u128) as u64)
-        .unwrap_or(0)
-}
-
 pub struct Vault {
     root: Utf8PathBuf,
+    /// Il supporto (§15.1). È un `Arc` e non un campo per valore perché lo
+    /// spazio dati dei plugin ci passa sopra dal lato del `Workspace`: il vault
+    /// e i blob dei plugin stanno **nella stessa cartella**, e due supporti
+    /// diversi per la stessa cartella sarebbero due idee di cosa c'è dentro —
+    /// il giorno in cui uno dei due cifra, un dato su due resta in chiaro.
+    storage: Arc<dyn VaultStorage>,
 }
 
 impl Vault {
+    /// Un vault sul filesystem, che è il caso di ogni chiamante di produzione.
     pub fn open(root: impl AsRef<Utf8Path>) -> Self {
+        Vault::on(root, Arc::new(FsStorage))
+    }
+
+    /// Un vault su un supporto qualunque (§15.1).
+    pub fn on(root: impl AsRef<Utf8Path>, storage: Arc<dyn VaultStorage>) -> Self {
         Vault {
             root: root.as_ref().to_owned(),
+            storage,
         }
     }
 
     pub fn root(&self) -> &Utf8Path {
         &self.root
+    }
+
+    /// Il supporto su cui vive, per chi scrive **dentro lo stesso vault** senza
+    /// passare per un [`DocId`] — lo spazio dati dei plugin, i sidecar.
+    pub fn storage(&self) -> &Arc<dyn VaultStorage> {
+        &self.storage
     }
 
     /// [`DocId`] (path relativo al vault, separatori `/`) per un path assoluto.
@@ -192,38 +203,32 @@ impl Vault {
     }
 
     fn walk(&self, dir: &Utf8Path, out: &mut Scan) -> Result<()> {
-        let entries = std::fs::read_dir(dir).map_err(|e| KernelError::Io {
+        let entries = self.storage.list(dir).map_err(|e| KernelError::Io {
             path: dir.to_owned(),
             source: e,
         })?;
         for entry in entries {
-            let entry = entry.map_err(|e| KernelError::Io {
-                path: dir.to_owned(),
-                source: e,
-            })?;
-            let path = entry.path();
-            let path = Utf8PathBuf::from_path_buf(path).map_err(KernelError::NonUtf8Path)?;
-            let name = path.file_name().unwrap_or_default();
+            let name = entry.path.file_name().unwrap_or_default();
             if is_ignored_name(name) {
                 continue;
             }
-            let file_type = entry.file_type().map_err(|e| KernelError::Io {
-                path: path.clone(),
-                source: e,
-            })?;
-            if file_type.is_dir() {
-                out.folders.push(self.doc_id_for_path(&path)?.0);
-                self.walk(&path, out)?;
-            } else if file_type.is_file() {
-                let meta = entry.metadata().map_err(|e| KernelError::Io {
-                    path: path.clone(),
-                    source: e,
-                })?;
-                out.files.push(ScannedFile {
-                    id: self.doc_id_for_path(&path)?,
-                    size: meta.len(),
-                    mtime: mtime_millis(&meta),
-                });
+            match entry.stat.kind {
+                EntryKind::Dir => {
+                    out.folders.push(self.doc_id_for_path(&entry.path)?.0);
+                    self.walk(&entry.path, out)?;
+                }
+                EntryKind::File => out.files.push(ScannedFile {
+                    id: self.doc_id_for_path(&entry.path)?,
+                    size: entry.stat.size,
+                    mtime: entry.stat.mtime,
+                }),
+                // Un symlink non partecipa, ed è ciò che la scansione faceva
+                // già: `read_dir` dava una specie che non è né file né
+                // cartella, e i due rami la saltavano. Adesso ha un nome
+                // (`EntryKind::Other`) invece di essere il terzo caso di un
+                // `if`, e col nome ha un posto dove il §15.6 potrà decidere
+                // altrimenti.
+                EntryKind::Other => {}
             }
         }
         Ok(())
@@ -234,8 +239,8 @@ impl Vault {
     /// metadati — che per chi chiama sono la stessa cosa: non c'è niente da
     /// mettere in anagrafe.
     pub fn stat(&self, id: &DocId) -> Option<(u64, u64)> {
-        let meta = std::fs::metadata(self.path_for(id)).ok()?;
-        meta.is_file().then(|| (meta.len(), mtime_millis(&meta)))
+        let stat = self.storage.stat(&self.path_for(id)).ok()?;
+        stat.is_file().then_some((stat.size, stat.mtime))
     }
 
     /// Il testo di un documento: i byte del file, decodificati e **niente
@@ -280,38 +285,32 @@ impl Vault {
     /// dimenticare di decodificare.
     pub fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
         let path = self.path_for(id);
-        std::fs::read(&path).map_err(|e| KernelError::Io { path, source: e })
+        self.storage
+            .read(&path)
+            .map_err(|e| KernelError::Io { path, source: e })
     }
 
     pub fn write(&self, id: &DocId, source: &str) -> Result<()> {
         let path = self.path_for(id);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| KernelError::Io {
-                path: parent.to_owned(),
-                source: e,
-            })?;
-        }
-        std::fs::write(&path, source).map_err(|e| KernelError::Io { path, source: e })
+        self.storage
+            .write(&path, source.as_bytes())
+            .map_err(|e| KernelError::Io { path, source: e })
     }
 
     pub fn exists(&self, id: &DocId) -> bool {
-        self.path_for(id).exists()
+        self.storage.exists(&self.path_for(id))
     }
 
     /// Sposta un documento (creando le cartelle di destinazione se mancano).
     pub fn rename(&self, from: &DocId, to: &DocId) -> Result<()> {
         let from_path = self.path_for(from);
         let to_path = self.path_for(to);
-        if let Some(parent) = to_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| KernelError::Io {
-                path: parent.to_owned(),
+        self.storage
+            .rename(&from_path, &to_path)
+            .map_err(|e| KernelError::Io {
+                path: from_path,
                 source: e,
-            })?;
-        }
-        std::fs::rename(&from_path, &to_path).map_err(|e| KernelError::Io {
-            path: from_path,
-            source: e,
-        })
+            })
     }
 
     // --- cestino ----------------------------------------------------------
@@ -330,12 +329,9 @@ impl Vault {
     /// occupato, cioè due cancellazioni nello stesso secondo — un contatore.
     pub fn trash(&self, id: &DocId) -> Result<(DocId, Option<KernelError>)> {
         let from = self.path_for(id);
-        let dir = self.root.join(TRASH_DIR);
-        std::fs::create_dir_all(&dir).map_err(|e| KernelError::Io {
-            path: dir.clone(),
-            source: e,
-        })?;
-
+        // La cartella del cestino non si crea qui: `VaultStorage::rename` crea
+        // le cartelle di destinazione che mancano, e farlo una seconda volta
+        // vorrebbe dire avere due idee di quando una cartella esiste.
         let name = file_name_of(id.as_str());
         let stamp = stamp_from_unix(now_unix());
         let target = (0u32..)
@@ -348,10 +344,12 @@ impl Vault {
             .find(|candidate| !self.exists(candidate))
             .expect("la sequenza dei candidati è infinita");
 
-        std::fs::rename(&from, self.path_for(&target)).map_err(|e| KernelError::Io {
-            path: from,
-            source: e,
-        })?;
+        self.storage
+            .rename(&from, &self.path_for(&target))
+            .map_err(|e| KernelError::Io {
+                path: from,
+                source: e,
+            })?;
         // Il sidecar col path d'origine è best-effort: se non si scrive, la
         // voce degrada al comportamento senza sidecar (ripristino in radice),
         // ma la cancellazione È riuscita e va detta con un Ok. Il sidecar
@@ -378,25 +376,22 @@ impl Vault {
     }
 
     fn write_trash_sidecar(&self, trashed: &DocId, original: &DocId) -> Result<()> {
-        let dir = self.trash_meta_dir();
-        std::fs::create_dir_all(&dir).map_err(|e| KernelError::Io {
-            path: dir,
-            source: e,
-        })?;
         let path = self.trash_sidecar_path(trashed);
         let json = serde_json::to_string(&TrashSidecar {
             original: original.to_string(),
         })
         .expect("un path è sempre serializzabile");
-        std::fs::write(&path, json).map_err(|e| KernelError::Io { path, source: e })
+        self.storage
+            .write(&path, json.as_bytes())
+            .map_err(|e| KernelError::Io { path, source: e })
     }
 
     /// Il path d'origine registrato dal sidecar, se è stata Fub a cestinare
     /// questa voce. Un sidecar assente o illeggibile non è un errore: è una
     /// voce cestinata da qualcun altro (Obsidian), o di un'altra epoca.
     fn trash_sidecar_original(&self, trashed: &DocId) -> Option<DocId> {
-        let raw = std::fs::read_to_string(self.trash_sidecar_path(trashed)).ok()?;
-        let sidecar: TrashSidecar = serde_json::from_str(&raw).ok()?;
+        let raw = self.storage.read(&self.trash_sidecar_path(trashed)).ok()?;
+        let sidecar: TrashSidecar = serde_json::from_slice(&raw).ok()?;
         Some(DocId::new(sidecar.original))
     }
 
@@ -409,7 +404,7 @@ impl Vault {
     /// lo dice quando glielo si chiede.
     pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
         let dir = self.root.join(TRASH_DIR);
-        if !dir.exists() {
+        if !self.storage.exists(&dir) {
             return Ok(Vec::new());
         }
         let mut out = Vec::new();
@@ -429,12 +424,9 @@ impl Vault {
             path: path.to_owned(),
             source: e,
         };
-        for entry in std::fs::read_dir(dir).map_err(|e| io(dir, e))? {
-            let entry = entry.map_err(|e| io(dir, e))?;
-            let path =
-                Utf8PathBuf::from_path_buf(entry.path()).map_err(KernelError::NonUtf8Path)?;
-            let meta = entry.metadata().map_err(|e| io(&path, e))?;
-            if meta.is_dir() {
+        for entry in self.storage.list(dir).map_err(|e| io(dir, e))? {
+            let path = entry.path;
+            if entry.stat.is_dir() {
                 self.walk_trash(&path, out)?;
                 continue;
             }
@@ -448,15 +440,13 @@ impl Vault {
                     .trash_sidecar_original(&id)
                     .unwrap_or_else(|| DocId::new(strip_stamp(name))),
                 // L'mtime è l'istante dello spostamento nel cestino. Se il
-                // filesystem non lo sa dire, meglio "epoca zero" che rifiutare
-                // di mostrare la riga: la data è un dettaglio, la nota no.
-                deleted_at: meta
-                    .modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0),
-                size: meta.len(),
+                // supporto non lo sa dire, meglio "epoca zero" che rifiutare di
+                // mostrare la riga: la data è un dettaglio, la nota no. Il
+                // contratto porta i secondi e il supporto i millisecondi
+                // (§14.2): la divisione sta qui, dove le due unità si
+                // incontrano.
+                deleted_at: entry.stat.mtime / 1000,
+                size: entry.stat.size,
                 id,
             });
         }
@@ -474,10 +464,12 @@ impl Vault {
         if !path.starts_with(self.root.join(TRASH_DIR)) {
             return Err(KernelError::OutsideVault(path));
         }
-        std::fs::remove_file(&path).map_err(|e| KernelError::Io { path, source: e })?;
+        self.storage
+            .remove(&path)
+            .map_err(|e| KernelError::Io { path, source: e })?;
         // Il sidecar segue la voce; se resta orfano nessuno lo leggerà più
         // (la chiave è il nome della voce), quindi l'esito non cambia.
-        let _ = std::fs::remove_file(self.trash_sidecar_path(id));
+        let _ = self.storage.remove(&self.trash_sidecar_path(id));
         Ok(())
     }
 
@@ -489,15 +481,17 @@ impl Vault {
             self.remove_trashed(&entry.id)?;
         }
         let dir = self.root.join(TRASH_DIR);
-        if dir.exists() {
-            std::fs::remove_dir_all(&dir).map_err(|e| KernelError::Io {
-                path: dir.clone(),
-                source: e,
-            })?;
+        if self.storage.exists(&dir) {
+            self.storage
+                .remove_dir_all(&dir)
+                .map_err(|e| KernelError::Io {
+                    path: dir.clone(),
+                    source: e,
+                })?;
         }
         // Cestino vuoto = nessun sidecar da ricordare (inclusi eventuali
         // orfani lasciati da chi ha svuotato il cestino da un'altra app).
-        let _ = std::fs::remove_dir_all(self.trash_meta_dir());
+        let _ = self.storage.remove_dir_all(&self.trash_meta_dir());
         Ok(entries.len())
     }
 }

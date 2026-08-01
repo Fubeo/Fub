@@ -74,6 +74,7 @@ cronologico di chiusura.
 | [0061](0061-un-giro-che-non-passa-dal-modello.md) | Un giro che non prende i byte dal modello, e uno che ci passa | §17.1 (**una casella su cinque**: il round-trip sul corpus) — resta il banco delle prestazioni ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 | [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) | Il log è il pavimento, l'evento è la porta — `tracing` al posto di `eprintln!`, con log su file, livelli e log per-plugin | §17.3 — chiude la voce **e** la casella residua della §20.2: i ventisette punti di `stderr` hanno due destinazioni, non una ([seduta 17](../roadmap/17-presidi-che-restano.md)) | 2026-07-30 |
 | [0063](0063-la-maschera-e-dell-esemplare.md) | La maschera è dell'esemplare, e la risposta stava già nell'elenco | §22.3 — chiude la voce **meno una casella**: la query incorporata in una nota, che non è un esemplare di `ViewSpec` ([seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)) | 2026-08-01 |
+| [0064](0064-il-supporto-sta-sotto.md) | Il supporto sta sotto, e la specie di una voce non segue il link | §15.1 — chiude la voce **meno una casella**: le tre righe di `.fub/` che scrivono con `write_atomic` e aspettano il §15.2 ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -289,6 +290,27 @@ un ragionamento — è un'affermazione su oggi che invecchia da sola, e in quel 
 invecchiava già nel commit che la scriveva. Si corregge dov'è, e il caso si
 consegna alla [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), che è la voce
 che tiene quell'elenco.
+
+La [0064](0064-il-supporto-sta-sotto.md) lascia una **casella residua** — la
+terza specie, quella della [0052](0052-cio-che-va-storto-e-un-evento.md) — con
+una precisazione che le altre non avevano: sa **quale voce** le darà il criterio.
+Le tre righe di `.fub/` che scrivono con `write_atomic` hanno già la proprietà
+che il supporto non promette, quindi portarle sopra il trait adesso vorrebbe dire
+toglierla; il criterio lo dà il §15.2. È il rovescio della
+[0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md), dove una casella si è
+**chiusa** perché la decisione di un'altra voce la risolveva senza esserne nata
+per lei: qui una casella si **apre** già indirizzata. Il criterio per
+distinguerla da una mezza voce resta quello di sempre — non manca un
+ragionamento a questa decisione, manca un pezzo di lavoro a un'altra.
+
+E ne inaugura una che non è un modo di lasciare qualcosa dietro: un **buco
+dichiarato**. `plugin_data_dir` consegna a un provider nativo una vera cartella
+del filesystem, e su un supporto che cifra è il punto in cui la cifratura si
+ferma. Non è lavoro rimandato — è un fatto sulla forma dei provider nativi, la
+cui risposta è M5 — quindi non è una casella e non entra in nessun totale; ma sta
+scritto nel verbale perché chi implementerà quel supporto deve **trovarlo** prima
+di scoprirlo. La differenza con una casella è che una casella si spunta, un buco
+dichiarato si legge.
 
 La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
 tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio

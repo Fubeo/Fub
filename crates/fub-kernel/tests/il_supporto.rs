@@ -1,0 +1,281 @@
+//! Il supporto su cui vive un vault (§15.1): che le due implementazioni dicano
+//! la stessa cosa, e che il [`Vault`] non tocchi nient'altro.
+//!
+//! Sono due presidi diversi e nessuno dei due basta da solo.
+//!
+//! Il primo — `le_due_implementazioni_rispondono_uguale` — esiste perché
+//! **un'astrazione con un cliente solo non è un'astrazione**: finché il
+//! `FsStorage` è l'unico, il trait può accumulare in silenzio le abitudini di
+//! `std::fs` (una `remove` che vale anche per le cartelle, una `list` che torna
+//! nell'ordine del filesystem) e il giorno in cui arriva il supporto che cifra,
+//! o quello su OPFS, il contratto che deve rispettare non sta scritto da
+//! nessuna parte. Sta qui: è questo file.
+//!
+//! Il secondo — `un_vault_intero_su_un_supporto_che_non_e_il_disco` — presidia
+//! l'altra metà della voce, che il primo non tocca: che il `Vault` ci passi
+//! **davvero** sopra. Un `std::fs::write` rimasto dentro un metodo del vault
+//! non fa fallire nessun test di conformità del trait; fa fallire questo,
+//! perché il disco lì sotto non c'è.
+//!
+//! Cosa **non** c'è qui, di proposito: i test di durabilità. Il §15.2 è
+//! temp+rename+fsync sulla directory, cioè una proprietà che esiste solo su un
+//! filesystem vero, e un supporto in memoria per costruzione non la modella.
+//! Presidiarla qui vorrebbe dire renderla verde su un supporto che non ce l'ha.
+
+use std::sync::Arc;
+
+use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::DocId;
+use fub_kernel::storage::{FsStorage, MemStorage, VaultStorage};
+use fub_kernel::Vault;
+
+/// Un supporto da provare: come si chiama nei messaggi, cosa è, dove sta la sua
+/// radice, e la `TempDir` che va tenuta viva finché dura il giro — che è la
+/// ragione per cui viaggia insieme al supporto invece di essere una variabile
+/// locale di chi lo costruisce.
+type Banco = (
+    &'static str,
+    Arc<dyn VaultStorage>,
+    Utf8PathBuf,
+    Option<tempfile::TempDir>,
+);
+
+/// I due supporti, ognuno sulla propria radice.
+fn supporti() -> Vec<Banco> {
+    let tmp = tempfile::tempdir().expect("cartella temporanea");
+    let root = Utf8Path::from_path(tmp.path())
+        .expect("path UTF-8")
+        .to_owned();
+    vec![
+        ("fs", Arc::new(FsStorage), root, Some(tmp)),
+        ("mem", Arc::new(MemStorage::new()), "/vault".into(), None),
+    ]
+}
+
+#[test]
+fn le_due_implementazioni_rispondono_uguale() {
+    for (nome, storage, root, _tmp) in supporti() {
+        let dice = |cosa: &str| format!("[{nome}] {cosa}");
+
+        // Scrivere crea le cartelle che mancano: è la riga che stava ripetuta a
+        // ogni chiamante, e che ora sta in una firma sola.
+        let a = root.join("note/idee/a.md");
+        storage
+            .write(&a, b"ciao")
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("scrittura")));
+        assert_eq!(storage.read(&a).unwrap(), b"ciao", "{}", dice("rilettura"));
+        assert!(storage.exists(&a), "{}", dice("esiste dopo la scrittura"));
+        assert!(
+            storage.stat(&root.join("note/idee")).unwrap().is_dir(),
+            "{}",
+            dice("il genitore è nato con la scrittura")
+        );
+
+        // Lo `stat` di un file dice la dimensione vera.
+        let stat = storage.stat(&a).unwrap();
+        assert!(stat.is_file(), "{}", dice("specie"));
+        assert_eq!(stat.size, 4, "{}", dice("dimensione"));
+
+        // Riscrivere cambia la data: è la sola cosa che chi salta un file
+        // chiede al supporto (§14.2), ed è la sola che un contatore e un
+        // orologio devono avere in comune.
+        let prima = storage.stat(&a).unwrap().mtime;
+        storage
+            .write(&a, b"ciao ciao")
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("riscrittura")));
+        assert!(
+            storage.stat(&a).unwrap().mtime >= prima,
+            "{}",
+            dice("la data non torna indietro")
+        );
+
+        // `list` è di **un** livello, in ordine di path, e porta i metadati con
+        // sé — file e cartelle insieme, perché chi cammina deve poter decidere
+        // se scendere senza chiedere una seconda volta.
+        storage.write(&root.join("note/b.md"), b"b").unwrap();
+        let voci = storage
+            .list(&root.join("note"))
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("elenco")));
+        let nomi: Vec<&str> = voci.iter().filter_map(|v| v.path.file_name()).collect();
+        assert_eq!(nomi, vec!["b.md", "idee"], "{}", dice("ordine e livello"));
+        assert!(
+            voci[0].stat.is_file() && voci[1].stat.is_dir(),
+            "{}",
+            dice("specie")
+        );
+        assert_eq!(voci[0].stat.size, 1, "{}", dice("metadati nell'elenco"));
+
+        // Una cartella che non c'è è un errore, non un elenco vuoto: chi
+        // preferisce il vuoto lo dice lui (`collect_data_files` lo fa), e
+        // sceglierlo qui toglierebbe a tutti gli altri il modo di accorgersene.
+        assert!(
+            storage.list(&root.join("mai-esistita")).is_err(),
+            "{}",
+            dice("elencare ciò che non c'è")
+        );
+
+        // `rename` funziona per un file e per una cartella, e crea la
+        // destinazione che manca.
+        storage
+            .rename(&a, &root.join("archivio/2026/a.md"))
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("rename di un file")));
+        assert!(!storage.exists(&a), "{}", dice("l'origine sparisce"));
+        assert_eq!(
+            storage.read(&root.join("archivio/2026/a.md")).unwrap(),
+            b"ciao ciao",
+            "{}",
+            dice("i byte seguono il rename")
+        );
+        storage
+            .rename(&root.join("archivio"), &root.join("vecchio"))
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("rename di una cartella")));
+        assert!(
+            storage.exists(&root.join("vecchio/2026/a.md")),
+            "{}",
+            dice("una cartella si sposta con dentro tutto")
+        );
+
+        // `remove` è dei file soltanto: per una cartella c'è `remove_dir_all`,
+        // e la distinzione è ciò che impedisce a un `data_remove` di un plugin
+        // di portarsi via un albero intero con un path che finisce bene.
+        assert!(
+            storage.remove(&root.join("vecchio")).is_err(),
+            "{}",
+            dice("remove non tocca le cartelle")
+        );
+        storage
+            .remove(&root.join("vecchio/2026/a.md"))
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("remove di un file")));
+        assert!(
+            storage.remove(&root.join("vecchio/2026/a.md")).is_err(),
+            "{}",
+            dice("due volte no")
+        );
+
+        // `remove_dir_all` scende, e il default composto dalle sette deve dare
+        // lo stesso esito dell'implementazione nativa del filesystem.
+        storage
+            .write(&root.join("vecchio/2026/c.md"), b"c")
+            .unwrap();
+        storage
+            .remove_dir_all(&root.join("vecchio"))
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("remove_dir_all")));
+        assert!(
+            !storage.exists(&root.join("vecchio")),
+            "{}",
+            dice("è sparita")
+        );
+        assert!(
+            !storage.exists(&root.join("vecchio/2026/c.md")),
+            "{}",
+            dice("ed è sparito ciò che aveva dentro")
+        );
+
+        // Leggere ciò che non c'è è un `NotFound`, e non un altro errore: sopra
+        // di qui `data_read` ci distingue «lo store è vuoto» da «il disco è
+        // rotto», e sbagliare specie di errore trasformerebbe un guasto in un
+        // silenzio.
+        let err = storage.read(&root.join("fantasma.md")).unwrap_err();
+        assert_eq!(
+            err.kind(),
+            std::io::ErrorKind::NotFound,
+            "{}",
+            dice("specie dell'errore")
+        );
+    }
+}
+
+/// Un symlink si presenta come `Other`, e non come la cosa a cui punta.
+///
+/// È il presidio della sola riga di comportamento che scrivere questo trait
+/// avrebbe cambiato in silenzio: la specie di una voce di elenco chiesta con
+/// `metadata()` invece che con `file_type()` segue il link, e una scansione che
+/// segue i link non torna da un anello. Vale su Unix, che è dove si sanno
+/// creare senza privilegi.
+#[cfg(unix)]
+#[test]
+fn un_collegamento_non_e_la_cosa_a_cui_punta() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = Utf8Path::from_path(tmp.path()).unwrap().to_owned();
+    let storage = FsStorage;
+
+    storage.write(&root.join("vera/nota.md"), b"x").unwrap();
+    std::os::unix::fs::symlink(root.join("vera"), root.join("finta")).unwrap();
+    std::os::unix::fs::symlink(root.join("mai-esistita"), root.join("rotta")).unwrap();
+
+    let voci = storage.list(&root).unwrap();
+    let specie: Vec<_> = voci
+        .iter()
+        .map(|v| (v.path.file_name().unwrap(), v.stat.kind))
+        .collect();
+    assert_eq!(
+        specie,
+        vec![
+            ("finta", fub_kernel::storage::EntryKind::Other),
+            ("rotta", fub_kernel::storage::EntryKind::Other),
+            ("vera", fub_kernel::storage::EntryKind::Dir),
+        ],
+        "la specie di una voce di elenco non segue il link — e un link rotto \
+         non fa fallire l'elenco intero"
+    );
+
+    // Uno `stat`, invece, lo segue: si chiede su un path e non su una voce, ed
+    // è ciò che ha sempre fatto (`std::fs::metadata`).
+    assert!(storage.stat(&root.join("finta")).unwrap().is_dir());
+
+    // E la scansione del vault lo salta, come faceva prima di questo trait.
+    let vault = Vault::on(&root, Arc::new(FsStorage));
+    let scan = vault.scan().unwrap();
+    assert_eq!(scan.folders, vec!["vera".to_string()]);
+    assert_eq!(
+        scan.files.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(),
+        vec!["vera/nota.md"]
+    );
+}
+
+#[test]
+fn un_vault_intero_su_un_supporto_che_non_e_il_disco() {
+    let storage = Arc::new(MemStorage::new());
+    let vault = Vault::on("/vault", Arc::clone(&storage) as Arc<dyn VaultStorage>);
+
+    let nota = DocId::new("progetti/Idea.md");
+    vault.write(&nota, "# Idea\n").unwrap();
+    assert!(vault.exists(&nota));
+    assert_eq!(vault.read(&nota).unwrap(), "# Idea\n");
+
+    // La scansione vede il file **e** la cartella, e non vede `.fub/`.
+    vault
+        .write(&DocId::new(".fub/data/qualcosa.json"), "{}")
+        .unwrap();
+    let scan = vault.scan().unwrap();
+    assert_eq!(
+        scan.files.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(),
+        vec!["progetti/Idea.md"]
+    );
+    assert_eq!(scan.folders, vec!["progetti".to_string()]);
+
+    // Il rename porta i byte e libera l'origine.
+    let rinominata = DocId::new("archivio/Idea.md");
+    vault.rename(&nota, &rinominata).unwrap();
+    assert!(!vault.exists(&nota));
+    assert_eq!(vault.read(&rinominata).unwrap(), "# Idea\n");
+
+    // Il cestino: la voce ci finisce, il sidecar si ricorda da dove veniva, e
+    // l'elenco lo dice. È il giro in cui il vault scrive **tre** posti diversi
+    // (il cestino, il sidecar sotto `.fub/data/`, e il file d'origine), quindi
+    // è quello che si accorge se uno solo dei tre è rimasto su `std::fs`.
+    let (cestinata, guasto) = vault.trash(&rinominata).unwrap();
+    assert!(guasto.is_none(), "il sidecar si è scritto: {guasto:?}");
+    assert!(cestinata.as_str().starts_with(".trash/"));
+    let voci = vault.list_trash().unwrap();
+    assert_eq!(voci.len(), 1);
+    assert_eq!(voci[0].original, rinominata, "il sidecar sa da dove veniva");
+
+    // Svuotare toglie le voci **e** i sidecar.
+    assert_eq!(vault.empty_trash().unwrap(), 1);
+    assert!(vault.list_trash().unwrap().is_empty());
+    assert!(
+        !storage.exists(Utf8Path::new("/vault/.fub/data/trash")),
+        "i sidecar se ne vanno col cestino"
+    );
+}

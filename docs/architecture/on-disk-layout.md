@@ -9,6 +9,18 @@ con quale disciplina di scrittura. È la metà documentale del
 
 ---
 
+## Chi ci arriva
+
+Sotto la linea del vault i byte passano tutti da un supporto solo, il
+`VaultStorage` della [0064](../decisions/0064-il-supporto-sta-sotto.md)
+(`kernel/storage.rs`): il vault, il cestino coi suoi sidecar e lo spazio dati dei
+plugin. Le tre righe di `.fub/` che ancora scrivono con `std::fs` —
+`workspace.json`, `settings.json` ed `entries.json` — lo fanno passando da
+`write_atomic`, e ci resteranno finché il §15.2 non avrà detto che forma ha
+l'atomicità dentro il trait: sono la casella residua di quella decisione. Fuori
+dal vault il supporto non c'entra — quei file non sono di un vault, sono di
+questa macchina.
+
 ## La regola
 
 **Dentro un vault, ciò che Fub scrive sta in una radice sola: `.fub/`.** La
@@ -37,8 +49,8 @@ chiamate per nome.
 | `.fub/workspace.json` | `kernel/organization.rs` | autorevole | 1 | atomica, e **non riscrive** un file che non ha potuto leggere |
 | `.fub/settings.json` | `kernel/settings.rs` | autorevole | 1 | atomica; le chiavi di scope `machine` scritte qui **si ignorano** |
 | `.fub/data/entries.json` | `kernel/entries.rs` | derivato | 2 | atomica |
-| `.fub/data/trash/<nome>.json` | `kernel/vault.rs` | **né l'una né l'altra** (sotto) | — | `std::fs::write`, best-effort |
-| `.fub/data/plugins/<id>/…` | chiunque abbia `DataWrite` | dichiarata derivata, **in pratica entrambe** (sotto) | per plugin | `std::fs::write` (`host/kernel.rs`), **non** atomica |
+| `.fub/data/trash/<nome>.json` | `kernel/vault.rs` | **né l'una né l'altra** (sotto) | — | `VaultStorage::write`, best-effort |
+| `.fub/data/plugins/<id>/…` | chiunque abbia `DataWrite` | dichiarata derivata, **in pratica entrambe** (sotto) | per plugin | `VaultStorage::write` (`host/kernel.rs`), **non** atomica |
 | `.fub/data/plugins/fub.search/` | `features/search.rs` | derivato | 5 | l'indice tantivy, più un `manifest.json` |
 | `.fub/data/plugins/fub.versioning/` | `features/versioning.rs` | **autorevole** (sotto) | 1 | `versions.json` derivato dallo store, gli snapshot no |
 | `.fub/data/plugins/<id>/doc/<documento>/…` | chiunque, per regola | quella del plugin | del plugin | lo stato per-documento della [0044](../decisions/0044-lo-stato-per-documento.md): il posto è dichiarato in `abi/rules/doc_data.rs`, e il kernel lo migra al rename |
@@ -75,12 +87,15 @@ deve sistemare.
    **degrado garbato** già scritto (`kernel/vault.rs`), che è anche il
    comportamento delle voci cestinate da Obsidian, che un sidecar non ce l'hanno
    mai avuto.
-3. **Ciò che passa da `data_write` non è scritto atomicamente**
-   (`host/kernel.rs`: `std::fs::write`). Vale anche per gli snapshot, che sono
-   autorevoli: un crash a metà scrittura lascia un file troncato. È il
+3. **Ciò che passa da `data_write` non è scritto atomicamente**. Vale anche per
+   gli snapshot, che sono autorevoli: un crash a metà scrittura lascia un file
+   troncato. È il
    [§15.2](../roadmap/15-il-disco.md#152-durabilità-e-recovery), non questa voce,
    ma va saputo leggendo la colonna «autorevole» di una riga che scrive con
-   `data_write`.
+   `data_write`. Dalla [0064](../decisions/0064-il-supporto-sta-sotto.md) il
+   posto da cui ripararlo è **uno solo** — `VaultStorage::write` in
+   `kernel/storage.rs` — e prima erano cinque: è la ragione per cui il §15.1
+   viene prima del §15.2 e non dopo.
 
 ## Il nome di prima
 

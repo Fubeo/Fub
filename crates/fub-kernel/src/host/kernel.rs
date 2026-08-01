@@ -188,7 +188,7 @@ impl VaultStructure for KernelHost<'_> {
 impl DataRead for KernelHost<'_> {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
         let path = self.data_blob(path)?;
-        match std::fs::read(&path) {
+        match self.ws.storage().read(&path) {
             Ok(bytes) => Ok(Some(bytes)),
             // Mancare non è un errore: chi legge uno store vuoto lo scopre così.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -200,7 +200,7 @@ impl DataRead for KernelHost<'_> {
         let root = self.ws.plugin_data_root(self.plugin);
         let dir = self.ws.plugin_data_path(self.plugin, prefix)?;
         let mut out = Vec::new();
-        collect_data_files(&root, &dir, &mut out);
+        collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out);
         out.sort_unstable();
         Ok(out)
     }
@@ -209,17 +209,17 @@ impl DataRead for KernelHost<'_> {
 impl DataWrite for KernelHost<'_> {
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
         let path = self.data_blob(path)?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| PluginError::Internal(format!("{parent}: {e}").into()))?;
-        }
-        std::fs::write(&path, bytes)
+        // Le cartelle che mancano le crea il supporto (§15.1): erano create
+        // qui, e la stessa riga stava anche dentro `Vault::write`.
+        self.ws
+            .storage()
+            .write(&path, bytes)
             .map_err(|e| PluginError::Internal(format!("{path}: {e}").into()))
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
         let path = self.data_blob(path)?;
-        match std::fs::remove_file(&path) {
+        match self.ws.storage().remove(&path) {
             Ok(()) => Ok(()),
             // Idempotente: cancellare ciò che non c'è è già il risultato voluto.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),

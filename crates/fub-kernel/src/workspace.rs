@@ -4140,7 +4140,8 @@ impl Workspace {
     /// dell'organizzazione, applicata a chi non è il kernel.
     fn migrate_doc_data(&mut self, from: &DocId, to: &DocId) {
         let roots = self.docs.plugin_data_roots();
-        for errore in crate::docdata::migrate(&roots, from, to) {
+        let storage = Arc::clone(self.docs.vault.storage());
+        for errore in crate::docdata::migrate(storage.as_ref(), &roots, from, to) {
             self.doc_data_warnings.push(format!(
                 "lo stato per-documento di {from} non ha potuto seguire la rinomina \
                  in {to} — {errore}"
@@ -4171,7 +4172,8 @@ impl Workspace {
             .map(|e| e.original)
             .collect();
         let metas = &self.indexes.core.metas;
-        crate::docdata::collect(&roots, &|doc: &DocId| {
+        let storage = Arc::clone(self.docs.vault.storage());
+        crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
             metas.contains_key(doc) || cestinate.contains(doc)
         })
     }
@@ -4223,6 +4225,13 @@ impl Workspace {
     /// La radice dello spazio dati di un plugin.
     pub(crate) fn plugin_data_root(&self, plugin: &str) -> Utf8PathBuf {
         self.docs.plugin_data_root(plugin)
+    }
+
+    /// Il supporto del vault (§15.1), per chi implementa `data_*`: lo spazio
+    /// dati di un plugin sta **dentro** il vault, e ci si scrive con lo stesso
+    /// supporto con cui si scrivono i documenti.
+    pub(crate) fn storage(&self) -> &Arc<dyn crate::storage::VaultStorage> {
+        self.docs.vault.storage()
     }
 
     /// Traduce un path relativo dello spazio di un plugin in un path assoluto,
@@ -4352,19 +4361,21 @@ fn is_safe_component(name: &str) -> bool {
 }
 
 /// Elenca ricorsivamente i file sotto `dir`, come path relativi a `root`.
-pub(crate) fn collect_data_files(root: &Utf8Path, dir: &Utf8Path, out: &mut Vec<String>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+pub(crate) fn collect_data_files(
+    storage: &dyn crate::storage::VaultStorage,
+    root: &Utf8Path,
+    dir: &Utf8Path,
+    out: &mut Vec<String>,
+) {
+    let Ok(entries) = storage.list(dir) else {
         // Una cartella che non c'è è una lista vuota, non un errore: chi
         // interroga uno storage vuoto non sta sbagliando niente.
         return;
     };
-    for entry in entries.flatten() {
-        let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else {
-            continue; // path non UTF-8: non è nominabile dal contratto
-        };
-        if path.is_dir() {
-            collect_data_files(root, &path, out);
-        } else if let Some(rel) = path.strip_prefix(root).ok().map(Utf8Path::as_str) {
+    for entry in entries {
+        if entry.stat.is_dir() {
+            collect_data_files(storage, root, &entry.path, out);
+        } else if let Some(rel) = entry.path.strip_prefix(root).ok().map(Utf8Path::as_str) {
             out.push(rel.replace('\\', "/"));
         }
     }
