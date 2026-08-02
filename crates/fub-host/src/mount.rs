@@ -27,26 +27,34 @@
 //! registrato prima di `reindex`, che è del chiamante (vedi
 //! [`Host::open`](crate::Host::open)).
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+// Solo lo store delle versioni ha bisogno di un lock qui dentro.
+#[cfg(feature = "versioning")]
+use std::sync::Mutex;
 
 use camino::Utf8Path;
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
 use fub_abi::traits::{Plugin, PluginManifest};
+#[cfg(feature = "blocks")]
 use fub_features::{
-    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, SearchIndex, VersionStore,
-    VersioningHandler, BLOCKS_ID, SEARCH_ID, VERSIONING_ID,
+    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID,
 };
+#[cfg(feature = "search")]
+use fub_features::{SearchIndex, SEARCH_ID};
+#[cfg(feature = "versioning")]
+use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::MarkdownProvider;
-use fub_kernel::{
-    FormatRegistry, MachineSettings, RegistryError, SystemLocale, Trust, ViewStates, Workspace,
-};
+use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
+// L'unico posto che distingue i modi di fallire di una registrazione è l'indice
+// di ricerca: gli altri hanno un esito solo.
+#[cfg(feature = "search")]
+use fub_kernel::RegistryError;
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
-use crate::settings::{
-    core_catalog, core_settings, disabled_plugins, versioning_enabled, versioning_settings,
-    versioning_settings_catalog, CORE_ID,
-};
+use crate::settings::{core_catalog, core_settings, disabled_plugins, CORE_ID};
+#[cfg(feature = "versioning")]
+use crate::settings::{versioning_enabled, versioning_settings, versioning_settings_catalog};
 
 /// Ciò che esce dal montaggio: il workspace con tutto registrato, chi possiede i
 /// bundle, e la metà dello store delle versioni che resta in mano a chi ha
@@ -63,21 +71,30 @@ pub struct Mounted {
     /// dei job troverà il corpo di un job.
     pub registry: BundleRegistry,
     /// Copia dello store delle versioni, se il versioning è acceso.
+    ///
+    /// Due gradi di «acceso», e non è una ripetizione: il campo esiste se la
+    /// cargo feature `versioning` è compilata (§16.3), e vale `Some` se
+    /// l'impostazione omonima è vera per questo vault (§11.1). Il primo è una
+    /// scelta di chi compila, il secondo di chi usa l'app.
+    #[cfg(feature = "versioning")]
     pub versions: Option<VersionStore>,
 }
 
 /// Una riga della tabella: una feature ufficiale di questo repo.
 ///
-/// Le nove righe hanno in comune tutto tranne cosa registrano — manifest di
+/// Le righe hanno in comune tutto tranne cosa registrano — manifest di
 /// core (`PluginManifest::core`), [`Trust::Core`], e nessuna risorsa propria da
-/// attivare — quindi sono **valori** e non nove implementazioni del trait. Il
+/// attivare — quindi sono **valori** e non un'implementazione del trait per
+/// ciascuna. Il
 /// trait resta quello generale: un bundle che a M5 arriva da un file porterà un
 /// manifest letto, un grado di fiducia deciso dall'host e un plugin che è un
 /// componente istanziato.
 ///
-/// Otto di quelle nove non sono più scritte qui: le enumera
-/// [`fub_features::ogni_feature_ufficiale`], e questo tipo è ciò in cui una
-/// riga dell'inventario si trasforma. La nona è il core, che è dell'host.
+/// Quante siano non è scritto qui e non è più un numero fisso: le enumera
+/// [`fub_features::ogni_feature_ufficiale`] — che dipende da quali cargo feature
+/// sono compilate (§16.3) — e questo tipo è ciò in cui una riga dell'inventario
+/// si trasforma. Una non viene da lì ed è sempre presente: il core, che è
+/// dell'host e per questo non si spegne.
 struct CoreBundle {
     id: &'static str,
     name: &'static str,
@@ -139,7 +156,7 @@ impl Bundle for CoreBundle {
         Trust::Core
     }
 
-    /// Nessuna delle nove possiede qualcosa che il kernel non sappia già
+    /// Nessuna di loro possiede qualcosa che il kernel non sappia già
     /// chiudere: ciò che tengono sono provider, e un provider il kernel lo
     /// attiva, lo interroga e lo chiude da sé (decisione 0028).
     fn plugin(&self) -> Box<dyn Plugin> {
@@ -151,9 +168,10 @@ impl Bundle for CoreBundle {
     }
 }
 
-/// Monta un workspace sulla radice data: registro dei formati, e poi gli otto
-/// bundle ufficiali — ricerca, versioning, backlink, struttura, tag,
-/// statistiche, comandi, blocchi.
+/// Monta un workspace sulla radice data: registro dei formati, e poi i bundle
+/// ufficiali che questa build ha — ricerca, versioning, backlink, struttura,
+/// tag, statistiche, comandi, blocchi, ognuno dietro la propria cargo feature
+/// (§16.3) e tutti accesi di default.
 ///
 /// **Non** fa la scansione: `reindex` è del chiamante, perché è lì in mezzo che
 /// chi ha un ponte eventi decide se abbonarsi prima o dopo (vedi
@@ -188,11 +206,12 @@ pub fn mount(
     // Lo store delle versioni nasce dentro il bundle e serve fuori: è la
     // composizione delle due metà, e il contenitore è il modo in cui chi monta
     // la riceve senza che il kernel debba sapere che il versioning esiste.
+    #[cfg(feature = "versioning")]
     let store: Arc<Mutex<Option<VersionStore>>> = Arc::default();
     // **Il core, e poi l'inventario.** Chi siano le feature ufficiali e in che
     // ordine si montino non è più scritto qui: è
     // [`fub_features::ogni_feature_ufficiale`], e la differenza è tutto il
-    // §16.7. Finché le otto righe stavano in questo file, l'inventario delle
+    // §16.7. Finché quelle righe stavano in questo file, l'inventario delle
     // feature ufficiali *era* questo file, e ogni presidio che volesse iterarle
     // ne teneva una copia che nessuno confrontava con l'originale — quattro
     // copie per le view, una per i cataloghi. Adesso l'elenco sta nel crate che
@@ -226,6 +245,51 @@ pub fn mount(
         ),
     ];
     for feature in fub_features::ogni_feature_ufficiale() {
+        // **Le tre irregolari, e perché stanno in un `Option` invece che in un
+        // ramo `else if`.** Da quando ognuna ha la propria cargo feature
+        // (§16.3), il ramo che le riconosce va compilato solo se la feature
+        // c'è — e un `else if` non si può spegnere con un `#[cfg]`, mentre una
+        // istruzione sì. Il risultato è lo stesso di prima: se nessuno dei tre
+        // riconosce la riga, si cade nell'`else` finale, che è il presidio
+        // contro l'inventario che dichiara ciò che nessuno monta.
+        //
+        // Che una riga arrivi qui con la sua cargo feature spenta non è uno
+        // stato possibile: l'inventario e questa tabella leggono lo stesso
+        // nome, quindi la riga sparisce insieme al ramo.
+        #[allow(unused_mut)]
+        let mut irregolare: Option<CoreBundle> = None;
+        #[cfg(feature = "search")]
+        if feature.id == SEARCH_ID {
+            irregolare = Some(
+                CoreBundle::new(feature.id, feature.nome, register_search)
+                    .speaking("it", (feature.catalog)()),
+            );
+        }
+        #[cfg(feature = "versioning")]
+        if feature.id == VERSIONING_ID {
+            let store = store.clone();
+            irregolare = Some(
+                CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
+                    register_versioning(ws, &store)
+                })
+                // L'interruttore è **dell'host** e non della feature (§11.1): il
+                // versioning non sa di poter essere spento, e le sue chiavi stanno
+                // qui accanto allo schema che le descrive. Da qui i due cataloghi
+                // che si sommano, come per il core.
+                .configuring(versioning_settings())
+                .speaking(
+                    "it",
+                    [versioning_settings_catalog(), (feature.catalog)()].concat(),
+                ),
+            );
+        }
+        #[cfg(feature = "blocks")]
+        if feature.id == BLOCKS_ID {
+            irregolare = Some(
+                CoreBundle::new(feature.id, feature.nome, register_blocks)
+                    .speaking("it", (feature.catalog)()),
+            );
+        }
         let bundle = if let Some(costruisci) = feature.view {
             // Le view sono tutte uguali, ed è questa uniformità che permette
             // all'inventario di **essere** la registrazione invece di
@@ -240,26 +304,8 @@ pub fn mount(
                 register_commands(ws, feature.id, costruisci())
             })
             .speaking("it", (feature.catalog)())
-        } else if feature.id == SEARCH_ID {
-            CoreBundle::new(feature.id, feature.nome, register_search)
-                .speaking("it", (feature.catalog)())
-        } else if feature.id == VERSIONING_ID {
-            let store = store.clone();
-            CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
-                register_versioning(ws, &store)
-            })
-            // L'interruttore è **dell'host** e non della feature (§11.1): il
-            // versioning non sa di poter essere spento, e le sue chiavi stanno
-            // qui accanto allo schema che le descrive. Da qui i due cataloghi
-            // che si sommano, come per il core.
-            .configuring(versioning_settings())
-            .speaking(
-                "it",
-                [versioning_settings_catalog(), (feature.catalog)()].concat(),
-            )
-        } else if feature.id == BLOCKS_ID {
-            CoreBundle::new(feature.id, feature.nome, register_blocks)
-                .speaking("it", (feature.catalog)())
+        } else if let Some(bundle) = irregolare {
+            bundle
         } else {
             // Una feature nell'inventario che qui nessuno sa registrare. Non è
             // uno stato che l'utente possa produrre: è qualcuno che ha aggiunto
@@ -340,10 +386,12 @@ pub fn mount(
         tracing::warn!(target: "fub.host", "`{kind}` non ha un renderer: degraderà alla resa generica");
     }
 
+    #[cfg(feature = "versioning")]
     let versions = store.lock().expect("store delle versioni").clone();
     Ok(Mounted {
         workspace: ws,
         registry,
+        #[cfg(feature = "versioning")]
         versions,
     })
 }
@@ -356,6 +404,7 @@ pub fn mount(
 /// Vive nel proprio spazio dati (`.fub/data/plugins/fub.search/`), che è il
 /// kernel ad assegnargli: la registrazione lo attiva, e l'attivazione è il
 /// momento in cui ritrova da `data_*` le impronte di ciò che ha già visto.
+#[cfg(feature = "search")]
 fn register_search(ws: &mut Workspace) -> Vec<String> {
     match ws
         .plugin_data_dir(SEARCH_ID)
@@ -389,6 +438,7 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
 /// privilegiato che un plugin non avrebbe. La prima fotografia del vault non è
 /// qui: è policy della feature, e scatta sull'evento `VaultOpened` che `reindex`
 /// emette dopo il montaggio.
+#[cfg(feature = "versioning")]
 fn register_versioning(ws: &mut Workspace, store: &Mutex<Option<VersionStore>>) -> Vec<String> {
     if !versioning_enabled(ws) {
         return Vec::new();
@@ -460,6 +510,7 @@ fn register_commands(
 /// come HTML. `Trust::Core` perché sono feature ufficiali — un renderer di terzi
 /// passerebbe dalla stessa porta con un grado più basso, e il suo albero
 /// verrebbe validato.
+#[cfg(feature = "blocks")]
 fn register_blocks(ws: &mut Workspace) -> Vec<String> {
     let mut warnings = Vec::new();
     for rule in [

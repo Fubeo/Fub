@@ -1,3 +1,13 @@
+// Le view sono un sottoinsieme dell'inventario, e questo banco ha senso se ce
+// n'è almeno una: il conto in coda — «zero implementazioni non è una suite» —
+// resta la sua ragione d'essere, e senza questo `cfg` diventerebbe rosso in una
+// build che non ha nessun pannello, che è una build legittima (§16.3).
+#![cfg(any(
+    feature = "backlinks",
+    feature = "outline",
+    feature = "tags",
+    feature = "stats"
+))]
 //! Le feature ufficiali passano la **suite di conformità** dell'SDK.
 //!
 //! È il primo cliente vero di `fub_sdk::testing::conformita` ([decisione

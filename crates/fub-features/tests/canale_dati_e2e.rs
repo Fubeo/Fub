@@ -1,3 +1,5 @@
+// Senza la cargo feature `search` (§16.3) questo banco non ha soggetto.
+#![cfg(feature = "search")]
 //! Il canale dati con **due** indici veri: quello del kernel (metadati, tag,
 //! grafo) e tantivy.
 //!

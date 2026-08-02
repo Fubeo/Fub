@@ -64,6 +64,17 @@ alla conformità abi↔WIT.
   impl dei trait, cioè quel che scriverà un plugin di terzi — e un plugin di
   terzi il kernel non ce l'ha. Il kernel sta nei `[dev-dependencies]`, per i
   soli test end-to-end.
+- **Le feature ufficiali si spengono davvero**
+  ([0071](decisions/0071-una-feature-si-spegne-dove-si-dichiara.md)). Una cargo
+  feature per bundle, omonima del modulo, con `tantivy` `optional` dietro
+  `search`: senza, compilare il pannello struttura compilava un motore di
+  ricerca. CI compila tre configurazioni parziali — nessuna feature, la sola
+  `outline`, `fub-host` con la sola `outline` — perché il `cargo test
+  --workspace` compila sempre la build piena e da solo non si accorgerebbe mai
+  che uno scorporo è tornato finto. Il `#[cfg]` sta sulla **riga
+  dell'inventario** (`crates/fub-features/src/inventario.rs`) e non solo sul
+  `pub mod`: è lì che si legge cosa esiste, e `tests/le_cargo_feature.rs`
+  confronta i due elenchi.
 - Conseguenza: **il banco di prova del kernel non può stare in `fub-sdk`**.
   L'SDK è ciò che un guest WASM importerà; ma la ragione stringente è già qui
   oggi, ed è che `fub-sdk` è dipendenza **normale** di

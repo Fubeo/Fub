@@ -43,6 +43,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::DocId;
 use fub_abi::traits::JobId;
 use fub_abi::{Notice, PluginError};
+#[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates, Workspace};
 
@@ -125,6 +126,7 @@ pub struct VaultSession {
     /// Copia dello store delle versioni, se il versioning è acceso. L'altra
     /// vive dentro l'handler registrato nel workspace: il kernel non sa che il
     /// versioning esiste, ed è l'host a comporre le due metà.
+    #[cfg(feature = "versioning")]
     versions: Option<VersionStore>,
     /// Va tenuto in vita, e **lasciato andare per primo**: quando smette di
     /// guardare, il vault non cambia più da sotto a chi lo sta chiudendo.
@@ -147,6 +149,7 @@ impl VaultSession {
         &self.registry
     }
 
+    #[cfg(feature = "versioning")]
     pub fn versions(&self) -> Option<&VersionStore> {
         self.versions.as_ref()
     }
@@ -421,6 +424,7 @@ impl Host {
         let crate::mount::Mounted {
             workspace: mut ws,
             registry,
+            #[cfg(feature = "versioning")]
             versions,
         } = mount(
             &root,
@@ -511,6 +515,7 @@ impl Host {
             unread,
             indicizzato,
             runner,
+            #[cfg(feature = "versioning")]
             versions,
             watcher,
         };
@@ -814,6 +819,7 @@ impl Host {
     // compone le due metà, che è esattamente ciò che dovrà fare per un plugin
     // di terzi.
 
+    #[cfg(feature = "versioning")]
     /// Lo store delle versioni di un vault, o l'errore se il versioning è
     /// spento: un chiamante che risponde "vuoto" quando la feature non c'è
     /// racconterebbe che non ci sono versioni, che è un'altra cosa.
@@ -825,6 +831,7 @@ impl Host {
             .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))
     }
 
+    #[cfg(feature = "versioning")]
     pub fn list_versions(
         &self,
         vault: Option<&str>,
@@ -836,6 +843,7 @@ impl Host {
     /// Rileggere una versione passa dall'`HostApi` come tutto il resto: l'host
     /// presta al versioning le sue stesse capacità (`Workspace::with_host`), non
     /// una scorciatoia sul filesystem.
+    #[cfg(feature = "versioning")]
     pub fn read_version(
         &self,
         vault: Option<&str>,
@@ -851,6 +859,7 @@ impl Host {
     /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
     /// grafo, indici ed eventi come ogni altra modifica — e siccome passa dagli
     /// eventi, genera a sua volta uno snapshot. Il ripristino è annullabile.
+    #[cfg(feature = "versioning")]
     pub fn restore_version(
         &self,
         vault: Option<&str>,

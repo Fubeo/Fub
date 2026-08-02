@@ -81,6 +81,7 @@ cronologico di chiusura.
 | [0068](0068-un-vault-si-apre-per-quel-che-si-legge.md) | Un vault si apre per quel che si legge, e dice cosa non ha letto | §15.7 (**la prima metà**: fallire in parte) — resta la forma dell'apertura ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0069](0069-cosa-sa-dire-un-abbonamento.md) | Cosa sa dire un abbonamento: una dichiarazione che nessuno valuta mente a chi la scrive | §22.1 + §22.2 — chiude tutte e due le voci e ne **apre una**, la §22.4 ([seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)) | 2026-08-01 |
 | [0070](0070-un-vault-si-apre-in-due-tempi.md) | Un vault si apre in due tempi, e il secondo è un job | §15.7 (**la seconda metà**: la forma dell'apertura) — chiude la voce ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-03 |
+| [0071](0071-una-feature-si-spegne-dove-si-dichiara.md) | Una feature si spegne dove si dichiara | §16.3 (**il primo tempo**: la cargo feature per bundle) — chiude **mezza** voce, il secondo tempo resta ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-08-03 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -496,3 +497,18 @@ cui la [0032](0032-il-runner-dei-job.md) aveva provato le bandiere su `Flags` e
 non su dei thread veri. La regola vale anche al contrario: se un sabotaggio non
 si può rendere rosso in modo deterministico, il posto da cui provarlo non è
 quello.
+
+La [0071](0071-una-feature-si-spegne-dove-si-dichiara.md) porta un precedente
+che è il §16.8 visto **dal lato in cui la prosa falsa si crea**, e non da quello
+in cui si scopre. `[FeatureUfficiale; 8]` e le sei righe che dicevano «gli otto
+bundle», «le nove righe», «nessuna delle nove» erano tutte vere fino al commit
+che ha reso quel numero condizionale. Il criterio: **chi rende condizionale un
+conteggio è l'unico che sa dove sono le righe che lo ripetono**, e riscriverle è
+parte del lavoro, non una pulizia successiva.
+
+E un secondo, sui presidi che diventano rossi per un caso nuovo e **legittimo**:
+non si indeboliscono, si circoscrivono. Il conto «zero view non è una suite»
+della [0056](0056-un-elenco-che-e-la-sorgente.md) è rimasto identico; è cambiata
+la condizione in cui gli si fa la domanda (`any(backlinks, outline, tags,
+stats)`). Abbassare la soglia avrebbe spento il presidio anche nel caso per cui
+era stato scritto — che è la differenza fra le due mosse, ed è l'unica che conta.

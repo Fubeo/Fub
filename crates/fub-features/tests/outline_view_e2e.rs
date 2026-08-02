@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `outline`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "outline")]
 //! Il pannello outline end-to-end **attraverso il kernel vero**: vault su disco,
 //! markdown vero, modelli veri, `KernelHost` vero.
 //!

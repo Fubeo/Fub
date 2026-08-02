@@ -49,6 +49,27 @@ jobs:
       # nominando dei casi che in Rust non ci sono più.
       - name: le union del mirror TS sono derivate dai tipi Rust
         run: cargo test -p fub-abi --test ts_enums
+      # **Le feature ufficiali si spengono davvero** (§16.3). Il `cargo test
+      # --workspace` compila sempre la build piena, quindi da solo non
+      # accorgerebbe mai che uno scorporo è tornato a essere finto: basta un
+      # `use` senza `#[cfg]` e tutto continua a passare — in verde, con tantivy
+      # dentro il pannello struttura. Questi tre comandi sono la misura al
+      # contrario, ed è per questo che sono `build` e non `test`: la domanda è
+      # se compila, non se funziona.
+      #
+      # Il primo è il caso limite (nessuna feature ufficiale: resta il solo
+      # bundle di core), il secondo è quello che porta il guadagno — il
+      # pannello struttura senza un motore di ricerca —, il terzo prova che
+      # anche chi monta un vault si spegne a pezzi.
+      - name: le feature ufficiali si spengono (§16.3)
+        run: |
+          cargo build -p fub-features --no-default-features
+          cargo build -p fub-features --no-default-features --features outline
+          cargo build -p fub-host --no-default-features --features outline,notify-watcher
+      # E la corrispondenza fra le cargo feature e l'inventario, che è ciò che
+      # impedisce ai due elenchi di divergere.
+      - name: una cargo feature per bundle, e l'inventario è dove si legge
+        run: cargo test -p fub-features --test le_cargo_feature
 
   # Licenze, advisory e provenienza delle dipendenze, più l'SBOM. È l'unica
   # parte del piano il cui costo cresce con il numero di dipendenze già entrate:

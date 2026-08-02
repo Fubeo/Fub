@@ -65,34 +65,47 @@ dichiarata guardando le voci insieme, come la seduta chiede.
 
 ### 16.3 Un crate per bundle di feature
 
-*ex §4.7 · presidi · **P1** — la precondizione (la 16.2) è **soddisfatta** · **in due tempi**, e il primo è piccolo*
+*ex §4.7 · presidi · **P1** · **in due tempi**: il primo è **chiuso** dalla [decisione 0071](../decisions/0071-una-feature-si-spegne-dove-si-dichiara.md), il secondo resta*
 
-- [ ] **`fub-features` è un crate solo**: tantivy è dipendenza dell'intero
-      crate, quindi compilare il pannello outline compila un motore di ricerca.
+- [x] **`fub-features` era un crate solo**: tantivy era dipendenza dell'intero
+      crate, quindi compilare il pannello outline compilava un motore di ricerca.
       Con i moduli di 21.2 (FubTasks, FubDB, FubCanvas, FubCalendar, FubAI,
       FubMaps…) diventa un monolite con il grafo di dipendenze di venti feature,
       non disattivabile a compile time e senza confini contro l'accoppiamento
       feature↔feature — l'invariante "una feature ufficiale è ciò che scriverà un
       plugin" resterebbe vera nel documento e falsa nel `Cargo.toml`.
-- [ ] **I due tempi, e vanno tenuti distinti perché comprano cose diverse.**
-      *Primo*: una **cargo feature per bundle**, con tantivy dietro la sua. Costa
-      un pomeriggio, si può fare **subito** e prende per intero il guadagno di
-      compilazione — l'outline smette di tirarsi dietro un motore di ricerca.
-      *Secondo*: lo **split in crate**, che è l'unica forma che compra il
-      **confine contro l'accoppiamento feature↔feature**, perché dentro un crate
-      solo `pub(crate)` lascia passare tutto. Il secondo tempo è quello che ha
-      bisogno della 16.2 fatta prima, ed è giustificato dai venti moduli di 21.2
-      — che oggi non esistono. Farlo adesso significa pagare venti `Cargo.toml`
-      per tre feature; farlo mai significa scoprire l'accoppiamento quando
-      districarlo costa venti volte tanto. Il primo tempo non ha nessuna di
-      queste due condizioni, e per questo va scorporato: **è la parte che si può
-      prendere senza decidere il resto.**
-- [ ] **E adesso ha un cliente in più, arrivato dalla
+- [x] **Primo tempo: una cargo feature per bundle, con tantivy dietro la sua.**
+      Fatto ([0071](../decisions/0071-una-feature-si-spegne-dove-si-dichiara.md)):
+      otto cargo feature omonime dei moduli, `default` che le accende tutte,
+      `tantivy` `optional` dietro `search`. Il guadagno promesso è arrivato
+      intero, e adesso è un numero: il grafo delle dipendenze di `fub-features`
+      passa da **120 crate a 26** compilando la sola `outline`. `fub-host` le
+      inoltra una per una; `fub-app` no, perché l'app che spediamo è la build
+      piena. CI compila tre configurazioni parziali con `build` e non con `test`
+      — la domanda è se compila, non se funziona, e il `cargo test --workspace`
+      da solo non se ne accorgerebbe mai.
+- [x] **Il cliente arrivato dalla
       [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)**: l'inventario
-      delle feature ufficiali è il posto naturale da cui una cargo feature per
-      bundle si legge, perché è già l'elenco di *cosa esiste* — e una riga che
-      sparisce dietro un `#[cfg]` deve sparire da lì, o l'inventario torna a
-      descrivere invece di costituire.
+      delle feature ufficiali è il posto da cui la cargo feature si legge, perché
+      è già l'elenco di *cosa esiste* — e una riga che sparisce dietro un
+      `#[cfg]` sparisce da lì. È così: il `#[cfg]` sta sulla **riga**
+      dell'inventario e non solo sul `pub mod`, quindi non esiste una build in
+      cui l'elenco prometta un bundle che nessuno ha compilato.
+      `tests/le_cargo_feature.rs` confronta i due elenchi **senza una tabella di
+      corrispondenza**: l'id è `fub.<nome del modulo>` e la cargo feature ha il
+      nome del modulo, quindi si calcola.
+- [ ] **Secondo tempo: lo split in crate.** Resta, ed è l'unica forma che compra
+      il **confine contro l'accoppiamento feature↔feature**, perché dentro un
+      crate solo `pub(crate)` lascia passare tutto. È giustificato dai venti
+      moduli di 21.2 — che oggi non esistono: le feature ufficiali sono otto e i
+      loro moduli non si citano fra loro, l'unico riferimento incrociato nei
+      sorgenti è un link di documentazione a `backlinks::catalog`. Farlo adesso
+      significa pagare venti `Cargo.toml` per otto moduli che non si parlano;
+      farlo mai significa scoprire l'accoppiamento quando districarlo costa venti
+      volte tanto. **La condizione che lo sblocca è scritta e non è una data**: il
+      primo import fra due moduli di feature che non sia un link di
+      documentazione. Il primo tempo non anticipa niente di questo — la cargo
+      feature per bundle è ciò da cui uno split partirebbe comunque.
 
 ### 16.6 Dieta dell'IPC
 

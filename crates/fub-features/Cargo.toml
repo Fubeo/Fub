@@ -6,12 +6,44 @@ license.workspace = true
 rust-version.workspace = true
 description = "Feature ufficiali come impl native dei trait di estensione: backlink, ricerca, graph, orchestrazione preview."
 
+# Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
+# (`src/inventario.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
+# quindi non è mai il documento a dire cosa esiste. Il default è **tutto**, cioè
+# l'app che spediamo: spegnere è una scelta di chi compila, non un difetto da
+# ricordarsi di correggere.
+#
+# La ragione per cui questo file esiste in questa forma è una sola misura: senza
+# di esso `tantivy` è dipendenza dell'intero crate, quindi compilare il pannello
+# struttura compila un motore di ricerca. Adesso `search` porta tantivy e nessun
+# altro lo tira dentro (§16.3, primo tempo).
+[features]
+default = [
+    "search",
+    "versioning",
+    "backlinks",
+    "outline",
+    "tags",
+    "stats",
+    "commands",
+    "blocks",
+]
+search = ["dep:tantivy"]
+versioning = []
+backlinks = []
+outline = []
+tags = []
+stats = []
+commands = []
+blocks = []
+
 [dependencies]
 camino.workspace = true
 fub-abi = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tantivy = "0.26"
+# Opzionale, e dietro `search`: è l'unica dipendenza pesante del crate ed è di
+# una feature sola.
+tantivy = { version = "0.26", optional = true }
 # La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
 # questo crate il kernel non lo vede per invariante — che è esattamente il
 # motivo per cui `tracing` è diviso in due crate.

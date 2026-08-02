@@ -53,6 +53,27 @@
 //! descrivono, perché sono la configurazione dell'applicazione e non di una
 //! feature. È anche la ragione per cui non si può spegnere.
 //!
+//! # Una riga è anche una cargo feature
+//!
+//! Ogni riga di questo elenco sta dietro un `#[cfg(feature = "…")]`, e il nome
+//! della cargo feature è il nome del modulo qui accanto — cioè il suffisso
+//! dell'id (`fub.search` ↔ `search`). È il primo tempo del
+//! [§16.3](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature),
+//! e la ragione per cui è **questo** il posto in cui si legge: se la scelta di
+//! compilare o no un bundle vivesse solo nel `Cargo.toml`, l'inventario
+//! tornerebbe a *descrivere* ciò che esiste invece di costituirlo — verde anche
+//! nella build in cui promette un pannello che nessuno ha compilato.
+//!
+//! Così invece i due sono la stessa cosa per costruzione: la riga sparisce
+//! insieme al modulo, `mount` non la vede, e il bundle non si dichiara. Che i
+//! due elenchi non divergano lo presidia `tests/le_cargo_feature.rs`, che li
+//! confronta senza una tabella di corrispondenza in mezzo — il nome è lo stesso,
+//! quindi si calcola.
+//!
+//! La misura che giustifica tutto questo è una sola: con la sola `outline` il
+//! grafo delle dipendenze di questo crate passa da **120 crate a 26**, perché
+//! tantivy è dietro `search` e non più dell'intero crate.
+//!
 //! # Perché puntatori a funzione
 //!
 //! Una riga non porta un provider costruito ma la **funzione che lo
@@ -66,13 +87,21 @@
 use fub_abi::text::StringCatalog;
 use fub_abi::traits::{CommandProvider, ViewProvider};
 
+#[cfg(feature = "backlinks")]
 use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
+#[cfg(feature = "blocks")]
 use crate::blocks::{self, BLOCKS_ID};
+#[cfg(feature = "commands")]
 use crate::commands::{self, CoreCommands, COMMANDS_ID};
+#[cfg(feature = "outline")]
 use crate::outline::{self, OutlineView, OUTLINE_ID};
+#[cfg(feature = "search")]
 use crate::search::{self, SEARCH_ID};
+#[cfg(feature = "stats")]
 use crate::stats::{self, StatsView, STATS_ID};
+#[cfg(feature = "tags")]
 use crate::tags::{self, TagPanelView, TAGS_ID};
+#[cfg(feature = "versioning")]
 use crate::versioning::{self, VERSIONING_ID};
 
 /// Una riga dell'inventario: una feature ufficiale di questo repo.
@@ -115,14 +144,15 @@ pub struct FeatureUfficiale {
     pub commands: Option<fn() -> Box<dyn CommandProvider>>,
 }
 
-/// L'elenco, **in ordine di montaggio**.
+/// L'elenco, **in ordine di montaggio** — e di questa build.
 ///
 /// L'ordine conta e non è alfabetico. L'indice va registrato prima di `reindex`
 /// (vedi `fub_host::mount`), e l'ordine delle view è quello in cui i pannelli
 /// compaiono nella barra laterale: cambiarlo qui sposta la UI sotto gli occhi di
 /// chi usa l'app, il che è una decisione di prodotto e non un riordino di un
 /// elenco.
-static UFFICIALI: [FeatureUfficiale; 8] = [
+static UFFICIALI: &[FeatureUfficiale] = &[
+    #[cfg(feature = "search")]
     FeatureUfficiale {
         id: SEARCH_ID,
         nome: "Ricerca",
@@ -130,6 +160,7 @@ static UFFICIALI: [FeatureUfficiale; 8] = [
         view: None,
         commands: None,
     },
+    #[cfg(feature = "versioning")]
     FeatureUfficiale {
         id: VERSIONING_ID,
         nome: "Versioning",
@@ -137,6 +168,7 @@ static UFFICIALI: [FeatureUfficiale; 8] = [
         view: None,
         commands: None,
     },
+    #[cfg(feature = "backlinks")]
     FeatureUfficiale {
         id: BACKLINKS_ID,
         nome: "Backlink",
@@ -144,6 +176,7 @@ static UFFICIALI: [FeatureUfficiale; 8] = [
         view: Some(|| Box::new(BacklinksView)),
         commands: None,
     },
+    #[cfg(feature = "outline")]
     FeatureUfficiale {
         id: OUTLINE_ID,
         nome: "Struttura",
@@ -151,6 +184,7 @@ static UFFICIALI: [FeatureUfficiale; 8] = [
         view: Some(|| Box::new(OutlineView)),
         commands: None,
     },
+    #[cfg(feature = "tags")]
     FeatureUfficiale {
         id: TAGS_ID,
         nome: "Tag",
@@ -158,6 +192,7 @@ static UFFICIALI: [FeatureUfficiale; 8] = [
         view: Some(|| Box::new(TagPanelView)),
         commands: None,
     },
+    #[cfg(feature = "stats")]
     FeatureUfficiale {
         id: STATS_ID,
         nome: "Statistiche",
@@ -165,6 +200,7 @@ static UFFICIALI: [FeatureUfficiale; 8] = [
         view: Some(|| Box::new(StatsView)),
         commands: None,
     },
+    #[cfg(feature = "commands")]
     FeatureUfficiale {
         id: COMMANDS_ID,
         nome: "Comandi",
@@ -172,6 +208,7 @@ static UFFICIALI: [FeatureUfficiale; 8] = [
         view: None,
         commands: Some(|| Box::new(CoreCommands)),
     },
+    #[cfg(feature = "blocks")]
     FeatureUfficiale {
         id: BLOCKS_ID,
         nome: "Blocchi",
@@ -188,7 +225,7 @@ static UFFICIALI: [FeatureUfficiale; 8] = [
 /// funzione restituisce una fetta e non un `Vec`: un test che itera non deve
 /// costruire niente per contare.
 pub fn ogni_feature_ufficiale() -> &'static [FeatureUfficiale] {
-    &UFFICIALI
+    UFFICIALI
 }
 
 /// Le sole righe che registrano una view — **derivate** dall'inventario, mai un

@@ -1,3 +1,5 @@
+// Senza la cargo feature `versioning` (§16.3) questo banco non ha soggetto.
+#![cfg(feature = "versioning")]
 //! I mirror TS↔Rust, legati da una **fixture generata dai tipi Rust**.
 //!
 //! `UiNode`, `ViewUpdate`, `KernelEvent`/`Event`, `Span`, `VersionRef`,

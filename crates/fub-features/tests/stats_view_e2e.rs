@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `stats`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "stats")]
 //! Il pannello statistiche end-to-end **attraverso il kernel vero**.
 //!
 //! Prova la cosa che la decisione 0007 ha aperto e che nessun'altra view esercita: il

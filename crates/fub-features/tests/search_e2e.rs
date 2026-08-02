@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `search`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "search")]
 //! Ricerca full-text end-to-end: vault vero su disco, provider markdown vero,
 //! kernel vero, tantivy vero. Nessuna spia e nessun doppio.
 //!

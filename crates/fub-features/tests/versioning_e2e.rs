@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `versioning`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "versioning")]
 //! Il versioning montato come lo monta l'app: workspace vero, provider
 //! markdown vero, handler registrato come un plugin qualsiasi.
 //!
