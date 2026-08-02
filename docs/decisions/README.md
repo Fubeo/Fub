@@ -80,6 +80,7 @@ cronologico di chiusura.
 | [0067](0067-il-registro-di-cio-che-e-successo.md) | Il registro di ciò che è successo, e l'inverso al posto del contenuto | §15.2 (**una casella su tre** del recovery: il journal delle mutazioni) — restano il buffer di crash e i comandi di manutenzione ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0068](0068-un-vault-si-apre-per-quel-che-si-legge.md) | Un vault si apre per quel che si legge, e dice cosa non ha letto | §15.7 (**la prima metà**: fallire in parte) — resta la forma dell'apertura ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-01 |
 | [0069](0069-cosa-sa-dire-un-abbonamento.md) | Cosa sa dire un abbonamento: una dichiarazione che nessuno valuta mente a chi la scrive | §22.1 + §22.2 — chiude tutte e due le voci e ne **apre una**, la §22.4 ([seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)) | 2026-08-01 |
+| [0070](0070-un-vault-si-apre-in-due-tempi.md) | Un vault si apre in due tempi, e il secondo è un job | §15.7 (**la seconda metà**: la forma dell'apertura) — chiude la voce ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-03 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
@@ -473,3 +474,25 @@ che eredita la conclusione di un verbale eredita anche la sua premessa, e quella
 è un'affermazione su ieri** — si riverifica contro il repo di oggi prima di
 appoggiarcisi. Qui la conclusione ha retto lo stesso, ma per l'altra regola della
 stessa 0013, e il verbale dice quale.
+
+La [0070](0070-un-vault-si-apre-in-due-tempi.md) porta un precedente sui
+**sabotaggi**, e va nel verso scomodo. Il metodo delle 0066/0067/0068 è
+sabotare il codice e guardare quale presidio diventa rosso; la 0068 aveva già
+mostrato che un sabotaggio serve anche quando **non** conferma — là ne aveva
+trovato un difetto. Qui due dei sei non hanno confermato niente e non hanno
+trovato niente: sono rimasti **verdi**, e il verde diceva che le due promesse
+più centrali della voce — un'indicizzazione si ferma, chi la ferma riceve
+comunque un esito — non erano presidiate affatto. Nessuno se n'era accorto
+perché i presidi dell'host le attraversano tutte e due senza asserirle.
+
+Da tenere come criterio: **un sabotaggio verde è un risultato, non un
+passaggio a vuoto**, e la sua risposta non è indebolire la frase del verbale
+finché diventa vera — è scrivere il presidio che manca. Il che porta con sé
+la ragione per cui mancava: entrambe le promesse, su un pool acceso, si
+osservano solo indovinando un istante. I due presidi nuovi mettono in scena
+quel momento — `avanza_apertura` chiamata a mano con la bandiera già alzata, un
+pool fermato **senza thread** — invece di aspettarlo, ed è la stessa regola con
+cui la [0032](0032-il-runner-dei-job.md) aveva provato le bandiere su `Flags` e
+non su dei thread veri. La regola vale anche al contrario: se un sabotaggio non
+si può rendere rosso in modo deterministico, il posto da cui provarlo non è
+quello.

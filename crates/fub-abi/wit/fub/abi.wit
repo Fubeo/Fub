@@ -2086,6 +2086,29 @@ interface index {
         /// forma dell'errore al confine è §12.2, e quando ci sarà varrà anche
         /// qui.
         last-sync-error: option<string>,
+        /// A che punto è l'indicizzazione dell'apertura (§15.7).
+        indexing: indexing-state,
+    }
+
+    /// **Se ciò che l'indice risponde è tutto** (§15.7).
+    ///
+    /// Un vault si apre in due tempi: appena scansionato è utilizzabile — le
+    /// note ci sono, si aprono, si scrivono — e la ricerca si popola dopo. Chi
+    /// disegna un risultato deve poter dire «sto ancora indicizzando» invece di
+    /// mostrare *niente trovato*, che nei primi secondi di un vault grande
+    /// sarebbe una risposta falsa.
+    ///
+    /// Non porta numeri: a che punto è lo dice il job `vault.index` come
+    /// qualunque altro lavoro lungo (§10.3), e ripeterli qui vorrebbe dire due
+    /// sorgenti per la stessa barra.
+    enum indexing-state {
+        /// L'indicizzazione sta camminando.
+        running,
+        /// È arrivata in fondo: l'indice sa tutto quello che c'è da sapere.
+        ready,
+        /// È stata interrotta — dal pulsante, o da un vault che chiude. Ciò che
+        /// c'è è buono, ciò che manca non ha un nome, e si rifà riaprendo.
+        stopped,
     }
     record property-entry {
         key: string,

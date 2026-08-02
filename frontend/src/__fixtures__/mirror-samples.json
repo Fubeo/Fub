@@ -966,7 +966,8 @@
       "value": {
         "watching": true,
         "sync_failures": 1,
-        "last_sync_error": "Nota.md: frontmatter illeggibile"
+        "last_sync_error": "Nota.md: frontmatter illeggibile",
+        "indexing": "running"
       }
     },
     {
@@ -1172,7 +1173,8 @@
     {
       "watching": true,
       "sync_failures": 1,
-      "last_sync_error": "Nota.md: frontmatter illeggibile"
+      "last_sync_error": "Nota.md: frontmatter illeggibile",
+      "indexing": "running"
     }
   ],
   "JobProgress": [

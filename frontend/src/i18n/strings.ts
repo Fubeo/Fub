@@ -82,6 +82,10 @@ const IT = {
   "search.hint": "Cerca nel vault",
   "search.results": "Risultati",
   "search.empty": "Nessun risultato",
+  // Zero risultati mentre il vault sta ancora indicizzando (§15.7): la
+  // risposta vera è «non lo so ancora», e dirla «nessun risultato» manderebbe
+  // a cercare altrove chi aveva cercato bene.
+  "search.indexing": "Indicizzazione in corso…",
   "search.count": "Risultati: {count}",
   "search.unavailable": "Ricerca non disponibile",
   "search.occurrence": "Occorrenza {n}",
@@ -292,6 +296,7 @@ const EN: Record<Chiave, string> = {
   "search.hint": "Search the vault",
   "search.results": "Results",
   "search.empty": "No results",
+  "search.indexing": "Indexing…",
   "search.count": "Results: {count}",
   "search.unavailable": "Search unavailable",
   "search.occurrence": "Occurrence {n}",

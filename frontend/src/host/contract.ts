@@ -25,6 +25,7 @@ import type {
   DocChange,
   EntryKind,
   HourCycle,
+  IndexingState,
   Intent,
   LinkDirection,
   PaneMode,
@@ -1142,6 +1143,7 @@ export type { SettingScope } from "./enums.generated";
 // è ciò che permette al pannello di dire «questa la stai sovrascrivendo» e al
 // pulsante «azzera» di comparire solo dove serve.
 export type { SettingSource } from "./enums.generated";
+export type { IndexingState } from "./enums.generated";
 
 // Di che specie è un'impostazione, col suo default dentro.
 export type SettingKind =
@@ -1224,6 +1226,12 @@ export interface VaultStatus {
   sync_failures: number;
   // L'ultimo di quei fallimenti, già composto.
   last_sync_error: string | null;
+  // A che punto è l'indicizzazione dell'apertura (§15.7). Un vault si apre in
+  // due tempi: appena scansionato è utilizzabile e la ricerca si popola dopo,
+  // quindi chi disegna un risultato deve poter dire «sto ancora indicizzando»
+  // invece di «niente trovato», che nei primi secondi di un vault grande
+  // sarebbe una risposta falsa.
+  indexing: IndexingState;
 }
 
 // A CHE PUNTO è un lavoro lungo (rispecchia fub_abi::traits::JobProgress,

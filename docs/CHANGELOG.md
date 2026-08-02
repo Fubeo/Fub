@@ -42,6 +42,13 @@ pubblicato. Quello che segue diventerà il contenuto di `0.1.0`.
 - **Registro dei comandi** con palette, impostazioni dichiarate nel manifest,
   localizzazione dei testi e degli errori, job lunghi con progresso e
   cancellazione.
+- **Apertura del vault a fasi** — aprire un vault torna appena si sa *cosa c'è*:
+  l'albero c'è, una nota si apre e si scrive mentre l'indicizzazione va avanti
+  per conto suo, con una barra di avanzamento e un pulsante per fermarla come
+  qualunque altro lavoro lungo. Finché non ha finito, la ricerca lo dice invece
+  di rispondere «nessun risultato». Un documento che non si legge o che non
+  parsa non fa più fallire l'apertura: il vault si apre e dichiara cosa non ha
+  letto.
 - **Contratto WIT** vivo accanto al crate che rispecchia, con la linea di base
   congelata di [`0.1.0`](architecture/wit-congelato.md).
 - **Presidi in CI** — invarianti di dipendenza, conformità `abi` ↔ WIT,

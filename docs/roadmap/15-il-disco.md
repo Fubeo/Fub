@@ -74,11 +74,21 @@ documento che non si legge o che il parser rifiuta non fa più fallire
 l'apertura: finisce fra gli scarti di un'`Apertura`, che è la
 [`Lettura`](../decisions/0067-il-registro-di-cio-che-e-successo.md) del registro
 un piano più in su, coi nomi al posto del conto perché un documento ha un id e
-una riga di journal rotta no. Resta la **forma** dell'apertura, e le due metà non
-erano scambiabili: quella fatta è il prerequisito dell'altra.
+una riga di journal rotta no. La **seconda** — la *forma* — è chiusa dalla
+[0070](../decisions/0070-un-vault-si-apre-in-due-tempi.md): l'apertura si taglia
+in due e la linea del taglio è la **scansione**, cioè la stessa riga con cui la
+0068 aveva separato il fatale dal tollerato — *se il vault sappia ancora dire
+quali documenti esistono* —, che separa allo stesso punto il sincrono dal
+differito. La fase 2 è un **job** vero, quindi si racconta e si ferma dai pezzi
+che c'erano già (0032, 0035), e `VaultStatus` guadagna il solo campo che serviva:
+se ciò che l'indice risponde è tutto. **La voce è chiusa**, e le due metà non
+erano scambiabili: la prima è il prerequisito della seconda. Di questa voce resta
+fuori solo ciò che è di qualcun altro — se 512 documenti siano la fetta giusta lo
+dirà il banco delle prestazioni del §17.1, che aspetta una macchina e non una
+decisione.
 
 E la seduta si chiude su un fatto di cui vale la pena tenere il conto: **è la
-quarta voce di fila che si chiude per pezzi**, e il criterio non è cambiato
+quinta voce di fila che si chiude per pezzi**, e il criterio non è cambiato
 nemmeno stavolta — anzi ne ha guadagnato un terzo, il taglio fra un
 prerequisito e ciò che lo richiede, che sta in coda a
 [decisions/README.md](../decisions/README.md).
@@ -282,49 +292,3 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 - [ ] È il gemello del §15.5, chiuso dalla
       [0058](../decisions/0058-un-nome-che-nasce.md), sul lato **quali file** e
       non **quali nomi**.
-
-### 15.7 L'apertura del vault è tutto-o-niente, sincrona e senza ritorno
-
-*ex §2.23 · kernel · **P1** — il **fallire in parte** è chiuso dalla [0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md); resta la **forma** dell'apertura*
-
-- [x] **`reindex` fallisce l'intera apertura per un solo documento** — chiusa
-      dalla [0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md):
-      i due `?` di read e parse sono diventati due scarti, e `reindex`
-      restituisce un'`Apertura` che porta i documenti di cui non si è potuto
-      vedere il contenuto, ognuno col proprio errore. Il precedente che questa
-      riga indicava — il flush tollerato dieci righe sotto — era quello giusto, e
-      la ragione per cui la tolleranza si fermava un passo prima non era scritta
-      da nessuna parte: non c'era.
-      Il confine che la voce non nominava, e che è la parte che vale: **non è
-      lettura-contro-parse, è se il vault sappia ancora dire *quali* documenti
-      esistono.** Perciò la **scansione resta fatale** — di un sottoalbero che
-      non si lista non si sa niente, e `reconcile` dichiarerebbe completo un
-      insieme bucato, cioè direbbe a ogni indice di dimenticare quella cartella.
-      Per la stessa ragione gli scarti **entrano** nell'insieme di `reconcile`:
-      un documento illeggibile non è sparito, e ometterlo l'avrebbe fatto uscire
-      dalla ricerca in silenzio (è il difetto che il presidio ha trovato invece
-      di confermare). Ne segue una proprietà nuova del kernel: **anagrafe e
-      documenti indicizzati adesso divergono**, e uno scarto è il caso in cui
-      divergono — prima non potevano. Ogni scarto esce anche come
-      `Event::Trouble` con severità `Failure`
-      ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) e non
-      `Warning`: non si è perso un derivato, si è persa la vista sul contenuto di
-      una nota — ed è la ragione per cui uno scarto non è un `IndexLoss`.
-- [ ] **E succede in una chiamata sola** (`Host::open`, `host/session.rs`, che
-      l'IPC si limita a inoltrare): scansione, parse di ogni documento, grafo,
-      riconciliazione e flush in una chiamata sincrona che ritorna un
-      `VaultInfo`. Niente progresso, niente
-      cancellazione, niente apertura parziale — «avvio rapido», «indexing
-      progress», «supporto vault enormi» (24.1) non hanno dove attaccarsi.
-- [ ] Le due cose vanno insieme e cambiano la **forma dell'apertura**: da
-      funzione che ritorna un vault a operazione a fasi (vault utilizzabile →
-      indicizzazione in corso → pronto) con errori raccolti per-documento e un
-      esito consultabile. Chi sposta il lavoro fuori dal lock è la firma dei
-      job — chiusa con la
-      [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) — col
-      §9.3, il runner, chiuso dalla
-      [0032](../decisions/0032-il-runner-dei-job.md) — il §8.3 ha messo il `RwLock`
-      ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e
-      ha misurato quanto costa tenercelo dentro: `reindex` tiene il workspace in
-      esclusiva ~780 ms su 2000 note. Questa voce dice l'altra cosa ancora: che
-      il lavoro deve poter **fallire in parte**.

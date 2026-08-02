@@ -323,6 +323,19 @@ impl Dispatcher {
     /// Sta qui e non nell'host perché il contatore è del workspace: un host è
     /// un prestito per la durata di una chiamata, e un'identità che si conta
     /// dentro un prestito ricomincerebbe da capo a ogni prestito.
+    /// Un'identità di job **senza una coda**: per il lavoro che il kernel fa da
+    /// sé (l'indicizzazione dell'apertura, §15.7) e che quindi non ha un corpo
+    /// da cercare nel registry.
+    ///
+    /// Il contatore è lo stesso, e deve esserlo: un id lo si annulla dal
+    /// pulsante del centro attività senza sapere chi lo esegue, e due contatori
+    /// vorrebbero dire due job vivi con lo stesso numero.
+    pub(crate) fn next_job_id(&mut self) -> JobId {
+        let id = JobId(self.next_job_id);
+        self.next_job_id += 1;
+        id
+    }
+
     pub(crate) fn enqueue_job(&mut self, plugin: &str, spec: JobSpec) -> JobId {
         let id = JobId(self.next_job_id);
         self.next_job_id += 1;

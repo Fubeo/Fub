@@ -99,5 +99,6 @@ pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
 pub use workspace::{
-    new_doc_id, valid_doc_id, Apertura, GraphUpdate, Scarto, Trust, Workspace, MAIN_PANE,
+    new_doc_id, valid_doc_id, Apertura, GraphUpdate, Indicizzazione, Scarto, Trust, Workspace,
+    INDEX_JOB, MAIN_PANE,
 };

@@ -197,6 +197,13 @@ fn banco(v: &Vault, passi: &Passi) -> (Host, Subscription) {
         .with_watcher(Box::new(NoWatcher))
         .with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
+    // **Si aspetta che l'apertura abbia finito di indicizzare** (§15.7) prima
+    // di guardare qualunque cosa. La seconda fase dell'apertura è un job come
+    // gli altri — ha un id, compare fra i vivi, racconta un progresso — e su un
+    // banco a un thread solo occupa anche l'unico turno disponibile. Senza
+    // questa riga ogni presidio del pool conterebbe un lavoro in più e
+    // aspetterebbe il proprio dietro a uno che non ha chiesto.
+    host.wait_indexed(None).expect("l'apertura ha finito");
     let eventi = host
         .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
         .expect("aperto");
@@ -605,6 +612,13 @@ fn una_sveglia_dichiarata_suona_da_sola() {
         .with_watcher(Box::new(NoWatcher))
         .with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
+    // **Si aspetta che l'apertura abbia finito di indicizzare** (§15.7) prima
+    // di guardare qualunque cosa. La seconda fase dell'apertura è un job come
+    // gli altri — ha un id, compare fra i vivi, racconta un progresso — e su un
+    // banco a un thread solo occupa anche l'unico turno disponibile. Senza
+    // questa riga ogni presidio del pool conterebbe un lavoro in più e
+    // aspetterebbe il proprio dietro a uno che non ha chiesto.
+    host.wait_indexed(None).expect("l'apertura ha finito");
     let eventi = host
         .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
         .expect("aperto");

@@ -31,9 +31,10 @@ use fub_abi::model::{DocId, DocumentModel, Heading, Span};
 use fub_abi::session::{PaneMode, Selection, ViewContext};
 use fub_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue};
 use fub_abi::traits::{
-    BacklinkRef, DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
-    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TagCount,
-    TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
+    BacklinkRef, DataRead, DataWrite, EntryKind, HostCommands, HostEnv, HostEvents, HostQuery,
+    HostServices, IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead,
+    SettingsWrite, TagCount, TrashEntry, VaultEntry, VaultRead, VaultStructure, VaultWrite,
+    ViewStateRead, ViewStateWrite,
 };
 use fub_abi::PluginError;
 
@@ -652,6 +653,35 @@ impl HostQuery for MemoryHost {
                     .cloned()
                     .unwrap_or_default(),
             )),
+            // **L'anagrafe**, e la serve dai documenti che ha in memoria: è la
+            // sola domanda del canale a cui questo doppio può rispondere il
+            // vero senza che gliela si semini, perché «cosa c'è» è esattamente
+            // ciò che un host in memoria sa di sé. Serve a chi chiede *quali
+            // documenti esistono* invece di *quali sono indicizzati* — una
+            // distinzione che l'apertura a fasi (§15.7) ha reso osservabile, e
+            // che senza questo ramo si proverebbe solo end-to-end.
+            //
+            // Solo i documenti: il doppio non ha allegati, quindi a una domanda
+            // su `Asset` risponde con l'elenco vuoto, che è la verità.
+            IndexQuery::Entries { of_kind, page, .. } => {
+                let entries: Vec<VaultEntry> = match of_kind {
+                    Some(EntryKind::Document) | None => self
+                        .docs
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .map(|(id, source)| VaultEntry {
+                            id: DocId::new(id),
+                            kind: EntryKind::Document,
+                            size: source.len() as u64,
+                            mtime: self.now.load(Ordering::Relaxed),
+                            fingerprint: None,
+                        })
+                        .collect(),
+                    Some(_) => Vec::new(),
+                };
+                Ok(IndexResult::Entries(Paged::window(entries, page)))
+            }
             IndexQuery::Tags { page, .. } => Ok(IndexResult::Tags(Paged::window(
                 self.tags.lock().unwrap().clone(),
                 page,
