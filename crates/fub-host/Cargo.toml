@@ -9,6 +9,9 @@ description = "Chi monta Fub: la tabella di montaggio delle feature, la sessione
 [dependencies]
 camino = { workspace = true }
 fub-abi = { workspace = true }
+# `default-features = false` e una feature per bundle qui sotto: chi monta
+# decide quali feature ufficiali esistono, e la scelta si propaga a un posto
+# solo (§16.3).
 fub-features = { workspace = true }
 fub-format-markdown = { workspace = true }
 fub-kernel = { workspace = true }
@@ -26,8 +29,32 @@ notify = { version = "8.2.0", optional = true }
 notify-debouncer-full = { version = "0.7.0", optional = true }
 
 [features]
-default = ["notify-watcher"]
+default = ["notify-watcher", "feature-ufficiali"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
+
+# **Le feature ufficiali, una cargo feature per bundle** (§16.3). Inoltrano e
+# basta: l'elenco vero è `fub_features::ogni_feature_ufficiale`, e questi nomi
+# sono i suoi. Chi ne spegne una toglie la riga dall'inventario, quindi il
+# bundle non si monta — non c'è uno stato in cui la feature sia compilata e non
+# dichiarata, o dichiarata e non compilata.
+feature-ufficiali = [
+    "search",
+    "versioning",
+    "backlinks",
+    "outline",
+    "tags",
+    "stats",
+    "commands",
+    "blocks",
+]
+search = ["fub-features/search"]
+versioning = ["fub-features/versioning"]
+backlinks = ["fub-features/backlinks"]
+outline = ["fub-features/outline"]
+tags = ["fub-features/tags"]
+stats = ["fub-features/stats"]
+commands = ["fub-features/commands"]
+blocks = ["fub-features/blocks"]
 
 [dev-dependencies]
 # Il banco del lato host (§16.2).

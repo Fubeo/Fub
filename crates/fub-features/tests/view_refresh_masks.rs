@@ -1,3 +1,13 @@
+// Le view sono un sottoinsieme dell'inventario, e questo banco ha senso se ce
+// n'è almeno una: il conto in coda — «zero implementazioni non è una suite» —
+// resta la sua ragione d'essere, e senza questo `cfg` diventerebbe rosso in una
+// build che non ha nessun pannello, che è una build legittima (§16.3).
+#![cfg(any(
+    feature = "backlinks",
+    feature = "outline",
+    feature = "tags",
+    feature = "stats"
+))]
 //! La regola del lotto (decisione 0011) sulle maschere `refresh`, resa **meccanica**.
 //!
 //! Il lotto è additivo dappertutto tranne in un punto: dentro di esso

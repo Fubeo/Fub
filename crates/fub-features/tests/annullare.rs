@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `commands`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "commands")]
 //! **Annullare un'operazione** end-to-end, attraverso il kernel vero (§13.3).
 //!
 //! La pila la tiene il kernel e si riempie da sola guardando passare gli esiti:

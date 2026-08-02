@@ -60,7 +60,11 @@ fub-sdk = { path = "crates/fub-sdk", version = "0.1.0" }
 # porterebbe dentro la libreria.
 fub-testkit = { path = "crates/fub-testkit", version = "0.1.0" }
 fub-format-markdown = { path = "crates/fub-format-markdown", version = "0.1.0" }
-fub-features = { path = "crates/fub-features", version = "0.1.0" }
+# `default-features = false` qui, e non nel crate che la usa: da quando ogni
+# feature ufficiale ha la propria cargo feature (§16.3) è chi monta a dire quali
+# vuole, e cargo ignora un `default-features = false` scritto nel consumatore se
+# la riga del workspace non lo dice già.
+fub-features = { path = "crates/fub-features", version = "0.1.0", default-features = false }
 fub-host = { path = "crates/fub-host", version = "0.1.0" }
 
 [profile.dev]

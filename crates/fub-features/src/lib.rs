@@ -34,31 +34,47 @@
 //!   dall'elenco semplicemente non c'è. Le view ne sono un sottoinsieme
 //!   derivato, non una seconda tabella (§16.7).
 
+#[cfg(feature = "backlinks")]
 pub mod backlinks;
+#[cfg(feature = "blocks")]
 pub mod blocks;
+#[cfg(feature = "commands")]
 pub mod commands;
 pub mod inventario;
+#[cfg(feature = "outline")]
 pub mod outline;
+#[cfg(feature = "search")]
 pub mod search;
+#[cfg(feature = "stats")]
 pub mod stats;
+#[cfg(feature = "tags")]
 pub mod tags;
+#[cfg(feature = "versioning")]
 pub mod versioning;
 
+#[cfg(feature = "backlinks")]
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
+#[cfg(feature = "blocks")]
 pub use blocks::{
     DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID, DIAGRAMS_RULE,
     DIAGRAM_NS, DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER, MATH_RULE,
 };
+#[cfg(feature = "commands")]
 pub use commands::{
     occurrences, CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TASK_TOGGLE, NOTE_TRASH,
     SEARCH_OPEN, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
     SETTINGS_SET, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
 pub use inventario::{ogni_feature_ufficiale, ogni_view_ufficiale, FeatureUfficiale};
+#[cfg(feature = "outline")]
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
+#[cfg(feature = "search")]
 pub use search::{SearchIndex, SEARCH_ID};
+#[cfg(feature = "stats")]
 pub use stats::{
     build_stats_view, count, reading_minutes, StatsView, TextStats, STATS_ID, STATS_VIEW,
 };
+#[cfg(feature = "tags")]
 pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
+#[cfg(feature = "versioning")]
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};

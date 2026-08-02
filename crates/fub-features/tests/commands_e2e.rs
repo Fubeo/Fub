@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `commands`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "commands")]
 //! I comandi ufficiali end-to-end **attraverso il kernel vero**.
 //!
 //! Gli unit test di `commands.rs` provano il comando contro il contratto (un

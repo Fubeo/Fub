@@ -19,8 +19,16 @@ fub-abi = { workspace = true }
 fub-kernel = { workspace = true }
 # Chi monta: registro, feature, sessione, watcher, ponte eventi (§8.2).
 fub-host = { workspace = true }
-# Solo per `VersionRef`, che è un tipo che attraversa l'IPC.
-fub-features = { workspace = true }
+# Solo per `VersionRef`, che è un tipo che attraversa l'IPC — e la feature che
+# lo possiede va chiesta per nome (§16.3). Che `fub-host` la accenda già di suo
+# non basta a renderla nostra: sarebbe una dipendenza che regge finché nessuno
+# tocca il `Cargo.toml` di qualcun altro.
+#
+# L'app è la build **piena**: qui non c'è una cargo feature per bundle perché
+# l'applicazione che spediamo le ha tutte, e chi vuole compilarne meno lo fa
+# sotto — su `fub-features` o su `fub-host`, che è dove il guadagno di
+# compilazione sta.
+fub-features = { workspace = true, features = ["versioning"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }

@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `backlinks`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "backlinks")]
 //! Il pannello backlink end-to-end **attraverso il kernel vero**: vault su
 //! disco, provider markdown vero, grafo vero, `KernelHost` vero.
 //!
