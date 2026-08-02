@@ -1,7 +1,7 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
 import type { DocumentMatch, Span } from "../host/contract";
 import { testoCercato } from "../host/contract";
-import { documentiCheCombaciano } from "../host/query";
+import { documentiCheCombaciano, statoDelVault } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { righeDaMostrare } from "../rules/risultati";
 import { $ } from "../ui/dom";
@@ -92,10 +92,35 @@ async function runSearch(): Promise<void> {
     return;
   }
   if (seq !== searchSeq) return;
-  showSearchResults(hits, null);
+
+  // **Zero risultati mentre il vault indicizza non è «niente trovato»** (§15.7).
+  // Un vault si apre in due tempi: appena scansionato è utilizzabile, e la
+  // ricerca si popola dopo. Nei primi secondi di un vault grande la risposta
+  // vera è *non lo so ancora*, e disegnarla come una risposta negativa
+  // manderebbe a cercare altrove chi aveva cercato bene.
+  //
+  // Lo si chiede **solo quando la risposta è vuota**: è l'unico caso in cui la
+  // distinzione cambia cosa si scrive, e a ogni tasto premuto su una ricerca
+  // che trova non si paga niente.
+  let parziale = false;
+  if (hits.length === 0) {
+    try {
+      parziale = (await statoDelVault()).indexing === "running";
+    } catch {
+      // Lo stato del vault è una **rifinitura del messaggio**: se non si
+      // riesce a chiederlo, si dice «nessun risultato» come si è sempre fatto.
+      // Un errore qui non deve togliere all'utente i risultati che ha.
+    }
+    if (seq !== searchSeq) return;
+  }
+  showSearchResults(hits, null, parziale);
 }
 
-function showSearchResults(hits: DocumentMatch[], error: string | null): void {
+function showSearchResults(
+  hits: DocumentMatch[],
+  error: string | null,
+  indicizzando = false,
+): void {
   showPanel("search");
   // Il conteggio è un **argomento**, non una parola declinata: «1 risultato»
   // e «2 risultati» erano due rami di un ternario, che è la forma che una
@@ -104,7 +129,9 @@ function showSearchResults(hits: DocumentMatch[], error: string | null): void {
   searchSummaryEl.textContent = error
     ? t("search.unavailable")
     : hits.length === 0
-      ? t("search.empty")
+      ? indicizzando
+        ? t("search.indexing")
+        : t("search.empty")
       : t("search.count", { count: hits.length });
 
   searchResultsEl.innerHTML = "";

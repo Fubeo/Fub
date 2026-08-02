@@ -48,6 +48,19 @@ impl EventSink for SinkConFreno {
     }
 }
 
+impl SinkConFreno {
+    /// **Arma la barriera**: da adesso il prossimo evento blocca il ponte.
+    ///
+    /// Si arma dopo l'apertura e non alla costruzione, da quando l'apertura è a
+    /// fasi (§15.7): la seconda fase racconta sé stessa sul bus — un
+    /// `JobStarted`, dei `JobProgress`, un `JobDone` — e una barriera armata
+    /// prima scatterebbe su quelli, cioè fermerebbe il ponte prima che il test
+    /// abbia emesso il proprio primo evento.
+    fn arma(&self, via: Receiver<()>) {
+        *self.via.lock().unwrap() = Some(via);
+    }
+}
+
 struct Banco {
     _dir: tempfile::TempDir,
     host: Host,
@@ -62,13 +75,37 @@ impl Banco {
         std::fs::write(root.join("Nota.md"), "# Nota\n").expect("scrive");
         let visti: Arc<Mutex<Vec<Notice>>> = Arc::default();
         let (apri, via) = channel();
+        let sink = Arc::new(SinkConFreno {
+            visti: visti.clone(),
+            via: Mutex::new(None),
+        });
         let host = Host::new()
             .with_watcher(Box::new(NoWatcher))
-            .with_sink(Arc::new(SinkConFreno {
-                visti: visti.clone(),
-                via: Mutex::new(Some(via)),
-            }));
+            .with_sink(sink.clone());
         host.open(&root).expect("il vault si apre");
+
+        // **Si parte da un ponte silenzioso.** L'apertura a fasi (§15.7)
+        // attraversa questo stesso ponte — è il suo racconto, ed è voluto — ma
+        // qui si prova il *freno*, e contare gli eventi di qualcun altro
+        // insieme ai propri renderebbe ogni conto una somma di due cose. Si
+        // aspetta che l'apertura abbia finito, si butta ciò che ha detto, e
+        // solo allora si arma la barriera.
+        host.wait_indexed(None).expect("l'apertura ha finito");
+        let scadenza = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < scadenza {
+            let finito = visti
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|n| matches!(n.event, Event::JobDone { .. }));
+            if finito {
+                break;
+            }
+            std::thread::yield_now();
+        }
+        visti.lock().unwrap().clear();
+        sink.arma(via);
+
         Banco {
             _dir: dir,
             host,

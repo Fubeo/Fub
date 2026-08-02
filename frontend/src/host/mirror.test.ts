@@ -535,6 +535,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     watching: true,
     sync_failures: true,
     last_sync_error: true,
+    indexing: true,
   }),
   JobProgress: keysOf<JobProgress>({ done: true, total: true, label: true }),
   JobStatus: keysOf<JobStatus>({

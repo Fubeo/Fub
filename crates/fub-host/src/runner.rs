@@ -41,15 +41,16 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use fub_abi::traits::{JobId, TimerSchedule};
+use fub_abi::traits::{JobId, JobProgress, TimerSchedule};
 use fub_abi::PluginError;
-use fub_kernel::{JobBell, PendingJob, Workspace};
+use fub_kernel::{Indicizzazione, JobBell, PendingJob, Workspace};
 
 use crate::jobs::JobHost;
+use crate::records::UnreadDoc;
 use crate::registry::BundleRegistry;
 
 /// Quanti thread, se non lo dice nessuno.
@@ -239,13 +240,132 @@ struct Shared {
     bell: Arc<JobBell>,
     /// Il pool sta chiudendo: nessun job nuovo parte.
     stopping: AtomicBool,
+    /// **La seconda fase dell'apertura**, finché non è finita (§15.7).
+    ///
+    /// Sta qui e non in un thread suo perché il pool è già ciò che serve: sa
+    /// aspettare senza chiedere, sa smettere, e ha le bandiere. Un thread
+    /// dedicato all'indicizzazione avrebbe voluto una seconda cancellazione, un
+    /// secondo modo di chiudere e un secondo posto da cui il workspace si
+    /// prende in esclusiva — cioè tre cose che il §9.3 ha già deciso una volta.
+    apertura: Mutex<Option<InCorso>>,
     flags: Mutex<Flags>,
     /// Le sveglie sono **una** per pool e non una per thread: due thread con due
     /// quadranti farebbero suonare ogni sveglia due volte.
     sveglie: Mutex<Sveglie>,
 }
 
+/// L'indicizzazione dell'apertura mentre gira: il lavoro, la sua identità di
+/// job, e dove va a finire il suo esito.
+pub struct InCorso {
+    pub(crate) id: JobId,
+    pub(crate) work: Indicizzazione,
+    /// Il totale non cambia più dopo la scansione, e si tiene qui perché il
+    /// progresso lo vuole a ogni fetta.
+    pub(crate) totale: u64,
+    /// Ciò che di questo vault non si è potuto leggere, per chi risponde a
+    /// `Host::vaults()`. È condiviso perché la risposta esiste **prima** di
+    /// questo esito: chi apre non aspetta l'indicizzazione, quindi il posto
+    /// dove gli scarti si depositano deve esserci già quando ancora non ce n'è
+    /// nessuno.
+    pub(crate) unread: Arc<Mutex<Vec<UnreadDoc>>>,
+    /// **Quando l'indicizzazione ha finito**, per chi deve aspettarla.
+    ///
+    /// Una condizione e non un'attesa a intervalli, per la stessa ragione per
+    /// cui il campanello dei job non è un polling
+    /// ([0032](../../../docs/decisions/0032-il-runner-dei-job.md)): un
+    /// intervallo è una politica da scegliere — ogni quanto? a che costo? —
+    /// dove basta un fatto.
+    pub(crate) fine: Arc<(Mutex<bool>, Condvar)>,
+}
+
 impl Shared {
+    /// **Porta avanti l'apertura di una fetta**, e dice se c'era qualcosa da
+    /// portare avanti (§15.7).
+    ///
+    /// Una fetta alla volta, e non il giro intero, perché fra una fetta e
+    /// l'altra succedono le tre cose per cui questa voce esiste: il workspace
+    /// si libera — `reindex` lo teneva in esclusiva ~780 ms su 2000 note
+    /// ([0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)) —,
+    /// il progresso si timbra, e la bandiera si guarda.
+    ///
+    /// **L'apertura ha la precedenza sui job**, e non è un caso: un job chiesto
+    /// da un provider all'apertura del vault vede un indice che si sta
+    /// popolando, e farlo aspettare la fine è il verso che gli fa vedere di
+    /// più. Non è fame: una fetta è limitata, e fra due fette la coda si drena.
+    fn avanza_apertura(&self) -> bool {
+        let Some(mut in_corso) = self.apertura.lock().expect("apertura avvelenata").take() else {
+            return false;
+        };
+        // La bandiera è **quella di tutti**: annullare l'indicizzazione è
+        // premere lo stesso pulsante che annulla un export, e passa dalla
+        // stessa `Flags`. Senza questo, «annulla» avrebbe avuto due
+        // implementazioni e una delle due sarebbe stata dimenticata.
+        let flag = self.flag(in_corso.id);
+        let smettere = flag.load(Ordering::Relaxed) || self.stopping.load(Ordering::Acquire);
+
+        if !smettere && !in_corso.work.finita() {
+            let label = in_corso.work.prossimo().map(|id| id.to_string());
+            {
+                let mut ws = self.workspace.write().expect("workspace avvelenato");
+                ws.index_batch(&mut in_corso.work);
+                // Il `total` c'è perché la scansione lo sa: l'apertura è il
+                // caso in cui una barra può dire il vero, e
+                // [`JobProgress::total`] è opzionale proprio per distinguerlo
+                // da quelli in cui mentirebbe.
+                ws.note_job_progress(
+                    in_corso.id,
+                    JobProgress {
+                        done: in_corso.work.fatti(),
+                        total: Some(in_corso.totale),
+                        label,
+                    },
+                );
+            }
+            *self.apertura.lock().expect("apertura avvelenata") = Some(in_corso);
+            return true;
+        }
+
+        // Finita, o smessa: si chiude comunque — `finish_index` fa il grafo e
+        // il flush di ciò che è stato alimentato, e **non riconcilia** se il
+        // giro non è arrivato in fondo.
+        let apertura = {
+            let mut ws = self.workspace.write().expect("workspace avvelenato");
+            ws.finish_index(in_corso.work)
+        };
+        *in_corso.unread.lock().expect("scarti avvelenati") = apertura
+            .scartati
+            .iter()
+            .map(|scarto| UnreadDoc {
+                doc_id: scarto.id.to_string(),
+                why: scarto.why.clone(),
+            })
+            .collect();
+
+        // L'esito di un'indicizzazione annullata è un `Cancelled` come quello
+        // di ogni altro job annullato: chi guarda il centro attività distingue
+        // «finito» da «fermato» senza sapere che quel job era un'apertura.
+        let outcome = if apertura.interrotta {
+            Err(PluginError::Cancelled(
+                "l'indicizzazione del vault è stata interrotta: la ricerca è parziale finché non si riapre"
+                    .into(),
+            ))
+        } else {
+            Ok(serde_json::json!({ "scartati": apertura.scartati.len() }))
+        };
+        self.forget(in_corso.id);
+        self.workspace
+            .write()
+            .expect("workspace avvelenato")
+            .complete_job(in_corso.id, fub_kernel::INDEX_JOB.to_string(), outcome);
+        // Ultimo, e dopo l'esito: chi si sveglia qui deve trovare il vault
+        // nello stato in cui l'indicizzazione lo ha lasciato, non mentre ce lo
+        // sta mettendo.
+        let (fatto, campana) = &*in_corso.fine;
+        *fatto.lock().expect("fine avvelenata") = true;
+        campana.notify_all();
+        true
+    }
+
     /// Prende in carico un lotto appena drenato ([`Flags::claim`]).
     fn claim(&self, jobs: &[PendingJob]) {
         let mut flags = self.flags.lock().expect("bandiere avvelenate");
@@ -396,6 +516,12 @@ impl Shared {
     /// Il mestiere di un thread del pool.
     fn work(&self) {
         while !self.stopping.load(Ordering::Acquire) {
+            // L'apertura prima di tutto, e **prima del biglietto**: finché c'è
+            // una fetta da fare questo thread non deve nemmeno considerare di
+            // dormire.
+            if self.avanza_apertura() {
+                continue;
+            }
             // Il biglietto si prende **prima** di drenare: un job accodato fra
             // il drenaggio e l'attesa cambia il conto, e l'attesa torna subito
             // invece di dormire su lavoro che c'è.
@@ -460,11 +586,20 @@ pub struct JobRunner {
 }
 
 impl JobRunner {
-    /// Avvia il pool su un vault aperto.
+    /// Avvia il pool su un vault **scansionato**, e gli affida la seconda fase
+    /// dell'apertura (§15.7).
+    ///
+    /// `apertura` è ciò che [`Workspace::scan_vault`] ha consegnato, insieme
+    /// all'identità di job che il kernel le ha dato e al posto dove
+    /// depositare ciò che non si legge. Il pool parte *già con del lavoro in
+    /// mano*, ed è la differenza fra un'apertura a fasi e un'apertura sincrona
+    /// con un thread in più: nessuno accende niente dopo, e non c'è una
+    /// finestra in cui l'indicizzazione esiste ma non la sta facendo nessuno.
     pub fn start(
         workspace: Arc<RwLock<Workspace>>,
         bundles: Arc<Mutex<BundleRegistry>>,
         threads: usize,
+        apertura: Option<InCorso>,
     ) -> Self {
         let bell = workspace.read().expect("workspace avvelenato").job_bell();
         let shared = Arc::new(Shared {
@@ -472,6 +607,7 @@ impl JobRunner {
             bundles,
             bell,
             stopping: AtomicBool::new(false),
+            apertura: Mutex::new(apertura),
             flags: Mutex::new(Flags::default()),
             sveglie: Mutex::new(Sveglie::default()),
         });
@@ -519,6 +655,13 @@ impl JobRunner {
         for worker in self.workers.drain(..) {
             let _ = worker.join();
         }
+        // **L'apertura che nessuno ha finito riceve comunque un esito.** Un
+        // worker che vede `stopping` in cima al ciclo esce senza passare da
+        // `avanza_apertura`, quindi chiudere un vault a metà indicizzazione
+        // lascerebbe un job vivo per sempre — e la regola che vale per i job
+        // dei plugin («sempre un esito», 0028) non vale meno per questo.
+        // `stopping` è già alto: la chiamata prende il ramo che chiude.
+        self.shared.avanza_apertura();
         self.refuse_pending()
     }
 
@@ -560,13 +703,16 @@ impl Drop for JobRunner {
     }
 }
 
-/// Le tre risposte di [`Flags::cancel`], provate **su [`Flags`]** e non su un
-/// pool acceso.
+/// Le risposte di [`Flags::cancel`] e le due dell'apertura a fasi, provate
+/// **senza un pool acceso**.
 ///
 /// Farle girare per davvero — un vault, dei bundle, dei thread — vorrebbe dire
-/// che un rosso non dice più quale dei quattro ha sbagliato, e che la terza
-/// (quella che non deve lasciare niente) si può osservare solo indovinando un
-/// istante. Qui sono tre asserzioni su una mappa.
+/// che un rosso non dice più quale ha sbagliato, e che quelle che riguardano un
+/// momento (la bandiera che non deve lasciare niente, la fetta che non deve
+/// partire, il pool che si ferma prima che l'apertura finisca) si possono
+/// osservare solo indovinando un istante. Qui il momento si **mette in scena**:
+/// le prime quattro sono asserzioni su una mappa, e le due del §15.7 chiamano a
+/// mano ciò che un worker chiamerebbe da sé.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -633,6 +779,109 @@ mod tests {
     /// averne drenato uno più avanti. Col solo segno, i job in attesa del
     /// proprio turno sarebbero scambiati per job già finiti — e annullarli non
     /// farebbe niente.
+    /// **La bandiera si guarda fra una fetta e l'altra**, ed è ciò che rende
+    /// annullabile un lavoro che non chiama mai l'host (§15.7).
+    ///
+    /// Sta qui, su [`Shared::avanza_apertura`] chiamata a mano, e non su un
+    /// pool acceso, per la ragione in testa a questo modulo: con dei thread
+    /// veri la differenza fra «la bandiera ha fermato l'indicizzazione» e «il
+    /// disco è arrivato in fondo prima che la si alzasse» è un istante da
+    /// indovinare, e un presidio che si indovina non presidia. Chiamata da qui,
+    /// nessuna fetta è ancora partita: se la bandiera vale, ne parte zero.
+    #[test]
+    fn con_la_bandiera_alzata_nessuna_fetta_parte() {
+        let (_dir, shared, id) = un_vault_da_indicizzare();
+        shared.flags.lock().unwrap().claim(id);
+        shared.flags.lock().unwrap().cancel(id);
+
+        assert!(
+            shared.avanza_apertura(),
+            "c'era un'apertura da portare avanti"
+        );
+
+        assert!(
+            shared.workspace.read().unwrap().documents().is_empty(),
+            "una fetta è partita lo stesso: la bandiera non l'ha fermata"
+        );
+        // E l'apertura è **chiusa**, non sospesa: chi smette riceve un esito
+        // come chiunque altro (0028), e non resta niente da portare avanti.
+        assert!(
+            !shared.avanza_apertura(),
+            "l'apertura annullata è rimasta in mano a qualcuno"
+        );
+    }
+
+    /// **Chi ferma il pool chiude anche l'apertura che nessun thread ha
+    /// finito** (§15.7).
+    ///
+    /// Il caso è quello di un worker che vede `stopping` in cima al proprio
+    /// ciclo ed esce **senza passare da `avanza_apertura`**: da fuori quel
+    /// momento non si provoca — dipende da dove il thread si trovava — e qui lo
+    /// si mette in scena esattamente, con un pool che non ha thread. Senza la
+    /// riga in fondo a [`JobRunner::stop`] l'apertura resterebbe in mano a
+    /// nessuno, cioè un job vivo per sempre e un `wait_indexed` che non torna.
+    #[test]
+    fn fermare_il_pool_da_un_esito_all_apertura_rimasta() {
+        let (_dir, shared, _id) = un_vault_da_indicizzare();
+        let fine = {
+            let apertura = shared.apertura.lock().unwrap();
+            Arc::clone(&apertura.as_ref().expect("un'apertura in corso").fine)
+        };
+        let mut runner = JobRunner {
+            shared: Arc::clone(&shared),
+            workers: Vec::new(),
+        };
+
+        runner.stop();
+
+        assert!(
+            shared.apertura.lock().unwrap().is_none(),
+            "l'apertura è rimasta appesa a pool fermo"
+        );
+        assert!(
+            *fine.0.lock().unwrap(),
+            "chi aspettava l'indicizzazione non è stato svegliato"
+        );
+    }
+
+    /// Un vault seminato, scansionato e con la sua identità di job: il punto in
+    /// cui `Host::open` consegna la seconda fase al pool.
+    fn un_vault_da_indicizzare() -> (tempfile::TempDir, Arc<Shared>, JobId) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root =
+            camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("una radice utf8");
+        for n in 0..3 {
+            std::fs::write(root.join(format!("Nota{n}.md")), "# Titolo\n\nCorpo.\n")
+                .expect("semina");
+        }
+        let mut formats = fub_kernel::FormatRegistry::new();
+        formats
+            .register(fub_format_markdown::MarkdownProvider::boxed())
+            .expect("un provider solo non va in conflitto");
+
+        let mut ws = Workspace::new(&root, formats);
+        let work = ws.scan_vault().expect("la scansione riesce");
+        assert_eq!(work.totale(), 3, "tre note da leggere");
+        let id = ws.begin_index_job();
+
+        let shared = Shared {
+            workspace: Arc::new(RwLock::new(ws)),
+            bundles: Arc::new(Mutex::new(BundleRegistry::new())),
+            bell: Arc::new(JobBell::default()),
+            stopping: AtomicBool::new(false),
+            apertura: Mutex::new(Some(InCorso {
+                id,
+                totale: work.totale(),
+                work,
+                unread: Arc::new(Mutex::new(Vec::new())),
+                fine: Arc::new((Mutex::new(false), Condvar::new())),
+            })),
+            flags: Mutex::new(Flags::default()),
+            sveglie: Mutex::new(Sveglie::default()),
+        };
+        (dir, Arc::new(shared), id)
+    }
+
     #[test]
     fn un_job_in_attesa_del_proprio_turno_si_annulla() {
         let mut flags = Flags::default();

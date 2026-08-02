@@ -55,6 +55,8 @@ export type HourCycle = "h23" | "h12";
 
 export type ImportMode = "preview" | "apply";
 
+export type IndexingState = "running" | "ready" | "stopped";
+
 export type Intent = "neutral" | "primary" | "danger";
 
 export type InvokeMode = "apply" | "dry_run";

@@ -33,7 +33,9 @@ da macOS, un `nota?.md` arrivato da un import. Le due letture possibili della
 
 - se la politica vale in lettura, Fub **si rifiuta di aprire** un vault per un
   file che c'è. Ma «il vault è la verità», e la verità non si rifiuta di aprire —
-  è la stessa frase con cui il [§15.7](../roadmap/15-il-disco.md#157-lapertura-del-vault-è-tutto-o-niente-sincrona-e-senza-ritorno) esiste;
+  è la stessa frase con cui il §15.7 esiste, e con cui poi si è chiuso
+  ([0068](0068-un-vault-si-apre-per-quel-che-si-legge.md),
+  [0070](0070-un-vault-si-apre-in-due-tempi.md));
 - se non vale affatto, Fub **crea** un file che il giorno in cui il vault
   attraversa un sistema operativo non si apre più. E lì il difetto è nostro,
   scoperto da chi sincronizza, quando il file c'è già e rinominarlo è un rename

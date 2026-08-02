@@ -104,6 +104,15 @@ fn vault(note: usize) -> Vault {
 fn aperto(v: &Vault) -> Host {
     let host = Host::new().with_watcher(Box::new(NoWatcher));
     host.open(&v.root).expect("il vault si apre");
+    // **Si aspetta l'indicizzazione**, e non è un dettaglio di comodo: da
+    // quando l'apertura è a fasi (§15.7,
+    // [0070](../../../docs/decisions/0070-un-vault-si-apre-in-due-tempi.md))
+    // `open` torna a indici ancora vuoti, e la seconda fase prende il prestito
+    // in esclusiva **una fetta alla volta** su questi stessi thread. Un test di
+    // questo file che partisse lì troverebbe il vault occupato da qualcosa che
+    // non è il job che sta guardando — e non c'è nessun modo di distinguere le
+    // due cose da fuori.
+    host.wait_indexed(None).expect("l'indicizzazione finisce");
     host.workspace(None)
         .unwrap()
         .write()

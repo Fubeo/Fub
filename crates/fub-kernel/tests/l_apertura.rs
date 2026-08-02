@@ -240,7 +240,7 @@ fn il_documento_scartato_resta_in_anagrafe_perche_il_file_c_e() {
 }
 
 #[test]
-fn ogni_scarto_esce_come_guasto_prima_che_il_vault_si_dica_aperto() {
+fn ogni_scarto_esce_come_guasto_dopo_che_il_vault_si_e_detto_aperto() {
     let (mut banco, _) = banco_da_aprire();
     std::fs::write(banco.root().join("rotta.md"), NON_UTF8).expect("semina");
 
@@ -277,9 +277,33 @@ fn ogni_scarto_esce_come_guasto_prima_che_il_vault_si_dica_aperto() {
         .iter()
         .position(|e| e.kind() == EventKind::VaultOpened)
         .expect("il vault si dice aperto");
+
+    // **L'ordine si è rovesciato con l'apertura a fasi (§15.7), e va letto come
+    // un acquisto e non come una perdita.** Finché l'apertura era una chiamata
+    // sola, i guasti potevano precedere `VaultOpened` — e la 0068 aveva chiesto
+    // che lo facessero, perché chi disegnava il vault appena aperto avesse già
+    // in mano ciò che non si era letto. Adesso `VaultOpened` esce quando il
+    // vault è **utilizzabile**, cioè prima che qualsiasi documento sia stato
+    // aperto: quel lotto non può più esistere, perché scoprire uno scarto vuol
+    // dire aver già letto, e leggere è la fase dopo. Ciò che resta promesso è
+    // che ogni scarto esca comunque, sulla stessa superficie, mentre
+    // l'indicizzazione procede.
     assert!(
-        guasto < aperto,
-        "chi disegna il vault appena aperto ha già in mano ciò che non si è letto"
+        aperto < guasto,
+        "il vault si dichiara aperto quando è usabile, e ciò che non si legge arriva mentre indicizza"
+    );
+
+    // E la parte che non si è rovesciata: un guasto resta **dentro**
+    // l'apertura, cioè arriva prima che l'indicizzazione si dica finita. Chi
+    // aspetta `IndexUpdated` per disegnare una ricerca ha già in mano ciò che di
+    // quel vault non entrerà mai nei risultati.
+    let indicizzato = visti
+        .iter()
+        .position(|e| e.kind() == EventKind::IndexUpdated)
+        .expect("l'indicizzazione si dice finita");
+    assert!(
+        guasto < indicizzato,
+        "uno scarto è un fatto dell'apertura, non una notizia che arriva dopo"
     );
 }
 
@@ -322,5 +346,99 @@ fn cio_che_non_si_e_letto_resta_fra_i_documenti_che_esistono() {
         esistenti,
         ["buona.md", "rotta.md"],
         "il documento illeggibile esiste, quindi nessun indice deve buttarlo"
+    );
+}
+
+// --- la forma dell'apertura: due tempi (§15.7, decisione 0070) --------------
+
+/// **Dopo la prima fase il vault sa cosa c'è, e non cosa dicono.**
+///
+/// È la linea del taglio, e questo presidio la fissa da tutte e due le parti:
+/// se l'anagrafe non fosse intera qui, il vault non sarebbe *utilizzabile* al
+/// ritorno di `open` — e se gli indici fossero già pieni, non ci sarebbe una
+/// seconda fase da fare.
+#[test]
+fn la_prima_fase_da_l_anagrafe_e_non_l_indice() {
+    let (mut banco, spia) = banco_da_aprire();
+    std::fs::write(banco.root().join("una.md"), "prima").expect("semina");
+    std::fs::write(banco.root().join("due.md"), "seconda").expect("semina");
+
+    let lavoro = banco.scan_vault().expect("la scansione riesce");
+
+    assert_eq!(lavoro.totale(), 2, "il totale lo sa la scansione");
+    assert_eq!(lavoro.fatti(), 0, "e non ha ancora guardato niente");
+    assert!(
+        spia.visti.lock().unwrap().is_empty(),
+        "nessun indice è stato alimentato: leggere è la fase dopo"
+    );
+
+    // L'anagrafe invece c'è **tutta**, ed è ciò che rende il vault usabile
+    // adesso: l'albero dei file si disegna, una nota si apre.
+    let entries = match banco.query_index(IndexQuery::Entries {
+        of_kind: None,
+        within: None,
+        page: None,
+    }) {
+        Ok(IndexResult::Entries(paged)) => paged,
+        altro => panic!("attesa l'anagrafe, trovato {altro:?}"),
+    };
+    let mut nomi: Vec<String> = entries.items.iter().map(|e| e.id.to_string()).collect();
+    nomi.sort();
+    assert_eq!(nomi, ["due.md", "una.md"]);
+}
+
+/// **Un'indicizzazione portata in fondo a fette dà lo stesso vault di `reindex`.**
+///
+/// È la promessa che rende `reindex` una composizione e non una seconda strada:
+/// se le due divergessero, ogni presidio scritto contro `reindex` starebbe
+/// provando qualcosa che in produzione non succede più.
+#[test]
+fn le_fette_arrivano_dove_arriva_il_giro_intero() {
+    let (mut banco, spia) = banco_da_aprire();
+    std::fs::write(banco.root().join("una.md"), "prima").expect("semina");
+    std::fs::write(banco.root().join("due.md"), "seconda").expect("semina");
+
+    let mut lavoro = banco.scan_vault().expect("scansiona");
+    while !lavoro.finita() {
+        banco.index_batch(&mut lavoro);
+    }
+    let apertura = banco.finish_index(lavoro);
+
+    assert!(apertura.intera(), "niente scarti e niente interruzioni");
+    let mut visti = spia.visti.lock().unwrap().clone();
+    visti.sort();
+    assert_eq!(visti, ["due.md", "una.md"], "gli indici hanno tutto");
+    let mut esistenti = spia.esistenti.lock().unwrap().clone();
+    esistenti.sort();
+    assert_eq!(
+        esistenti,
+        ["due.md", "una.md"],
+        "e `reconcile` ha dichiarato l'insieme completo"
+    );
+}
+
+/// **Chi smette a metà non riconcilia**, ed è la riga che separa «ho smesso di
+/// indicizzare» da «cancella».
+///
+/// `reconcile` dice a ogni indice *quali documenti esistono*, e ognuno cancella
+/// ciò che non è nell'elenco. Chiamarlo su un'indicizzazione fermata direbbe
+/// agli indici di dimenticare tutto ciò che l'interruzione non ha fatto in
+/// tempo a nominare — su un vault grande, quasi tutto.
+#[test]
+fn un_indicizzazione_interrotta_non_dichiara_completo_niente() {
+    let (mut banco, spia) = banco_da_aprire();
+    std::fs::write(banco.root().join("una.md"), "prima").expect("semina");
+    std::fs::write(banco.root().join("due.md"), "seconda").expect("semina");
+
+    // Si scansiona e **non si fa nessuna fetta**: è l'annullamento premuto
+    // sull'istante, che è il caso peggiore e quindi quello da fissare.
+    let lavoro = banco.scan_vault().expect("scansiona");
+    let apertura = banco.finish_index(lavoro);
+
+    assert!(apertura.interrotta, "l'apertura sa di non essere finita");
+    assert!(!apertura.intera(), "e quindi non è intera");
+    assert!(
+        spia.esistenti.lock().unwrap().is_empty(),
+        "`reconcile` non è stato chiamato: un insieme incompleto non si dichiara completo"
     );
 }

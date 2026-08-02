@@ -94,12 +94,13 @@ use fub_abi::settings::{
 use fub_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fub_abi::traits::{
     BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, FolderScope,
-    HealthCheck, HealthIssue, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, JobId,
-    JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef, Page, Paged, Plugin,
-    PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter,
-    PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef,
-    ServiceProvider, TagCount, TimerSchedule, TimerSpec, TrashEntry, VaultEntry, VaultFolder,
-    VaultStatus, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface, ABI_VERSION,
+    HealthCheck, HealthIssue, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult,
+    IndexingState, JobId, JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef, Page, Paged,
+    Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry,
+    PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi,
+    ResolvedRef, ServiceProvider, TagCount, TimerSchedule, TimerSpec, TrashEntry, VaultEntry,
+    VaultFolder, VaultStatus, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
+    ABI_VERSION,
 };
 use fub_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -391,6 +392,7 @@ wit_kebab! {
     ResolvedRef,
     TagCount,
     VaultStatus,
+    IndexingState,
     JobProgress,
     IndexLoss,
     Severity,
@@ -2867,6 +2869,8 @@ fn conform(source: &str) -> Result<(), String> {
 
     contract.enumeration_from("entry-kind", ("traits.rs", "EntryKind"));
 
+    contract.enumeration_from("indexing-state", ("traits.rs", "IndexingState"));
+
     contract.variant_src(
         "format-error",
         ("error.rs", "FormatError"),
@@ -3791,6 +3795,7 @@ fn conform(source: &str) -> Result<(), String> {
         watching,
         sync_failures,
         last_sync_error,
+        indexing,
     } = VaultStatus::default();
     contract.record(
         "vault-status",
@@ -3798,6 +3803,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("watching", wit(&watching)),
             ("sync-failures", wit(&sync_failures)),
             ("last-sync-error", wit(&last_sync_error)),
+            ("indexing", wit(&indexing)),
         ],
     );
 

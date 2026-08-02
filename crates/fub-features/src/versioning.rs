@@ -76,7 +76,7 @@ use std::sync::{Arc, Mutex};
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::DocId;
 use fub_abi::text::{Arg, StringCatalog, Text};
-use fub_abi::traits::{EventHandler, HostApi};
+use fub_abi::traits::{EntryKind, EventHandler, HostApi, IndexQuery, IndexResult};
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
@@ -826,7 +826,7 @@ impl VersioningHandler {
 
     /// Una passata sull'intero vault, e chi fotografare.
     fn sweep(&self, host: &mut dyn HostApi, chi: Passata) -> Result<(), PluginError> {
-        for id in host.list_documents(None)?.items {
+        for id in self.esistenti(host)? {
             if matches!(chi, Passata::SoloNuovi) && self.store.has_versions(&id) {
                 continue;
             }
@@ -860,6 +860,42 @@ impl VersioningHandler {
         Ok(())
     }
 
+    /// **Quali documenti esistono**, che non è «quali sono indicizzati».
+    ///
+    /// La domanda è all'anagrafe ([`IndexQuery::Entries`], §14.1) e non a
+    /// [`HostApi::list_documents`], e la differenza è diventata visibile con
+    /// l'apertura a fasi (§15.7): `list_documents` risponde dai documenti
+    /// **parsati**, e all'arrivo di [`Event::VaultOpened`] non ne è stato
+    /// parsato ancora nessuno — il vault a quel punto sa *cosa c'è*, non
+    /// *cosa dicono*. Chiedendo la lista sbagliata, la prima fotografia
+    /// sarebbe stata di zero note, e la prima modifica a una nota mai
+    /// versionata avrebbe cancellato per sempre lo stato in cui l'utente
+    /// l'aveva trovata: cioè esattamente il danno contro cui questa passata
+    /// esiste.
+    ///
+    /// Che le due liste potessero divergere lo aveva già scritto la
+    /// [0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)
+    /// — uno scarto è un documento che esiste e non è indicizzato — ma là la
+    /// divergenza era rara e piccola; qui è la normalità per tutta la durata
+    /// dell'indicizzazione. E per questa passata l'anagrafe è la sorgente
+    /// giusta anche nel merito: si fotografa ciò che sta **sul disco**, e
+    /// `read_document` legge dal disco, non dall'indice.
+    fn esistenti(&self, host: &mut dyn HostApi) -> Result<Vec<DocId>, PluginError> {
+        let risposta = host.query_index(IndexQuery::Entries {
+            of_kind: Some(EntryKind::Document),
+            within: None,
+            page: None,
+        })?;
+        match risposta {
+            IndexResult::Entries(paged) => {
+                Ok(paged.items.into_iter().map(|entry| entry.id).collect())
+            }
+            altro => Err(PluginError::Internal(
+                format!("l'anagrafe ha risposto con {altro:?}").into(),
+            )),
+        }
+    }
+
     /// La prima fotografia del vault, all'apertura.
     ///
     /// Gli snapshot nascono dagli eventi e l'apertura non ne emette per
@@ -891,12 +927,14 @@ impl VersioningHandler {
     /// può essere un rename o una copia, e una storia unita per sbaglio sarebbe
     /// peggio di una spezzata per onestà.
     fn reconcile_after_overflow(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let vivi: std::collections::BTreeSet<String> = host
-            .list_documents(None)?
-            .items
-            .into_iter()
-            .map(|id| id.0)
-            .collect();
+        // **Vivo = esiste, non = è indicizzato**, e qui la differenza fa il
+        // danno peggiore di tutto il file: un documento che esiste e che
+        // l'indice non ha — uno scarto della 0068, o una nota che
+        // l'indicizzazione non ha ancora raggiunto (§15.7) — riceverebbe un
+        // **tombstone**, cioè il versioning dichiarerebbe morta una nota viva.
+        // Chiedendolo all'anagrafe la domanda è quella che si intendeva fare.
+        let vivi: std::collections::BTreeSet<String> =
+            self.esistenti(host)?.into_iter().map(|id| id.0).collect();
         let mut sepolti = 0usize;
         for id in self.store.documents() {
             if vivi.contains(id.as_str()) || self.store.is_deleted(&id) {

@@ -43,8 +43,8 @@ use fub_abi::query::{
 use fub_abi::rules::properties;
 use fub_abi::traits::{
     DocPosition, EntryKind, FolderScope, HostApi, IndexLoss, IndexProvider, IndexQuery,
-    IndexResult, JobId, JobProgress, JobStatus, LinkDirection, Paged, PredicateKind, QueryKind,
-    QueryRoute, ResolvedRef, VaultEntry, VaultFolder, VaultStatus,
+    IndexResult, IndexingState, JobId, JobProgress, JobStatus, LinkDirection, Paged, PredicateKind,
+    QueryKind, QueryRoute, ResolvedRef, VaultEntry, VaultFolder, VaultStatus,
 };
 use fub_abi::PluginError;
 
@@ -306,6 +306,17 @@ pub(crate) struct WatchState {
     pub(crate) watching: Arc<AtomicBool>,
     failures: u32,
     last_error: Option<String>,
+    /// **A che punto è l'indicizzazione dell'apertura** (§15.7).
+    ///
+    /// Il *lavoro* dell'indicizzazione sta fuori dal kernel — è
+    /// l'[`Indicizzazione`](crate::Indicizzazione), che chi ha i thread si passa
+    /// di fetta in fetta — e qui sta solo ciò che se ne **osserva**. È la stessa
+    /// divisione della bandiera del rilevamento
+    /// ([0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md))
+    /// e del campanello dei job
+    /// ([0032](../../../docs/decisions/0032-il-runner-dei-job.md)): il kernel
+    /// non fa il mestiere, ma è l'unico posto da cui la domanda si può fare.
+    pub(crate) indexing: IndexingState,
 }
 
 impl WatchState {
@@ -325,6 +336,7 @@ impl WatchState {
             watching: self.watching.load(Ordering::Relaxed),
             sync_failures: self.failures,
             last_sync_error: self.last_error.clone(),
+            indexing: self.indexing,
         }
     }
 }

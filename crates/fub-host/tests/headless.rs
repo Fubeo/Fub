@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::event::EventKind;
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{IndexQuery, IndexResult, Page, PropertySelect, VaultStatus, ViewInstance};
@@ -69,6 +70,13 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     assert_eq!(info.root, atteso.to_string());
     // L'elenco delle note **non è più** in `VaultInfo` (§14.4): si chiede al
     // canale dati, che sa dire quale cartella e quante righe.
+    // E si chiede **a indicizzazione finita**: `open` torna appena si sa cosa
+    // c'è, non cosa dicono i documenti (§15.7,
+    // [0070](../../../docs/decisions/0070-un-vault-si-apre-in-due-tempi.md)).
+    // Quale sia l'anagrafe appena aperto il vault lo presidia
+    // `l_apertura_a_fasi.rs`; qui la domanda è un'altra, e chiederla presto
+    // farebbe fallire questo test per il disco invece che per il montaggio.
+    host.wait_indexed(None).expect("l'indicizzazione finisce");
     let aperto = host.workspace(None).expect("un vault è aperto");
     let mut docs = aperto.read().unwrap().documents();
     docs.sort();
@@ -128,10 +136,16 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
 
     let host = headless();
     host.open(&v.root).expect("il vault si apre");
+    // L'apertura è a fasi (§15.7): l'indice si popola dopo che `open` è
+    // tornata, quindi chi vuole interrogarlo intero aspetta. Nell'app questa
+    // riga non esiste — là si disegna subito e si aggiorna — ma un test che
+    // chiede «cosa risponde l'indice» deve chiederlo quando l'indice ha una
+    // risposta, o presidierebbe la velocità del disco.
+    host.wait_indexed(None).expect("aspetta l'indicizzazione");
     let ws = host.workspace(None).expect("un vault è aperto");
 
-    // Il canale dati: l'indice di ricerca è stato registrato PRIMA di
-    // `reindex`, quindi ha già visto il vault.
+    // Il canale dati: l'indice di ricerca è stato registrato PRIMA della
+    // scansione, quindi ha già visto il vault.
     let hits = {
         let ws = ws.read().unwrap();
         match ws.query_index(IndexQuery::Documents {
@@ -226,11 +240,62 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
         .with_watcher(Box::new(NoWatcher))
         .with_sink(Arc::new(Collected(seen.clone())));
     host.open(&v.root).expect("il vault si apre");
+    host.wait_indexed(None).expect("aspetta l'indicizzazione");
 
+    // Il ponte ha un **freno** per costruzione (§10.2, decisione 0034): fra
+    // l'evento emesso e l'evento consegnato al sink c'è un raggruppamento, e
+    // `wait_indexed` sa solo che il kernel ha finito. Aspettare la consegna è
+    // parte di ciò che si sta provando — che quegli eventi *arrivano* — e non
+    // un'attesa arbitraria: se non arrivano, il test fallisce sul tempo massimo
+    // invece che sul primo giro.
+    let scaduto = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < scaduto {
+        let arrivato = seen
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|n: &Notice| n.event.kind() == EventKind::JobDone);
+        if arrivato {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
+    // **Nessun evento per documento**, che è ciò che questo presidio ha sempre
+    // difeso: la scansione popola il vault, non lo cambia, e una shell che
+    // ricevesse un `DocumentChanged` per nota leggerebbe l'apertura come un
+    // temporale di modifiche.
+    let visti = seen.lock().unwrap().clone();
+    let modifiche: Vec<_> = visti
+        .iter()
+        .filter(|n| {
+            matches!(
+                n.event.kind(),
+                EventKind::DocumentChanged | EventKind::DocumentRemoved
+            )
+        })
+        .collect();
     assert!(
-        seen.lock().unwrap().is_empty(),
+        modifiche.is_empty(),
         "il ponte ha raccolto gli eventi della scansione: la shell li leggerebbe \
          come un temporale di modifiche"
+    );
+
+    // **Ciò che invece deve passare**, e prima non poteva: il racconto
+    // dell'indicizzazione (§15.7). Il ponte si accende *prima* della seconda
+    // fase apposta — accenderlo dopo vorrebbe dire perdere le prime fette
+    // proprio del lavoro che si vuole mostrare — e il progresso di
+    // un'apertura è un `JobProgress` come quello di ogni altro lavoro lungo,
+    // così il centro attività la disegna senza sapere che è un'apertura.
+    assert!(
+        visti
+            .iter()
+            .any(|n| n.event.kind() == EventKind::JobStarted),
+        "l'indicizzazione si annuncia come un lavoro lungo qualunque"
+    );
+    assert!(
+        visti.iter().any(|n| n.event.kind() == EventKind::JobDone),
+        "e ne torna un esito: chi la guarda sa quando ha finito"
     );
 
     {
@@ -269,6 +334,12 @@ fn due_vault_stanno_aperti_insieme_e_il_corrente_e_una_comodita() {
     );
 
     assert_eq!(host.vaults().len(), 2, "il primo non è stato chiuso");
+    // `documents()` sono i documenti **indicizzati**, e l'indicizzazione è la
+    // seconda fase (§15.7): la si aspetta per tutti e due i vault, perché ciò
+    // che questo presidio prova è *quale* vault risponde, non quanto in fretta.
+    host.wait_indexed(None).expect("il corrente ha indicizzato");
+    host.wait_indexed(Some(a.root.as_str()))
+        .expect("e anche il primo");
     let corrente = host.workspace(None).expect("c'è un corrente");
     assert_eq!(
         corrente.read().unwrap().documents(),
@@ -539,11 +610,24 @@ fn un_vault_con_una_nota_illeggibile_si_apre_e_dice_cosa_non_ha_letto() {
     let host = headless();
     let info = host.open(&v.root).expect("il vault si apre lo stesso");
 
+    // **Su `info` non c'è niente da asserire**, ed è la conseguenza vera
+    // dell'apertura a fasi (§15.7): `open` torna appena il vault è
+    // *utilizzabile*, e scoprire uno scarto vuol dire aver già provato a
+    // leggere — cioè la fase dopo. Quella lista dice «cosa non si è letto
+    // **finora**», quindi qui è vuota o piena a seconda di quanto ha fatto in
+    // tempo a camminare l'indicizzazione: asserire il vuoto sarebbe presidiare
+    // una corsa, e su tre note la si perderebbe quasi sempre.
+    let _ = &info;
+
+    // L'esito **si consulta**, che è ciò che la voce chiedeva: finita
+    // l'indicizzazione, chi chiede il vault trova cosa non si è potuto leggere.
+    host.wait_indexed(None).expect("aspetta l'indicizzazione");
+    let info = host.open(&v.root).expect("riapre, cioè rilegge lo stato");
     let non_lette: Vec<&str> = info.unread.iter().map(|u| u.doc_id.as_str()).collect();
     assert_eq!(
         non_lette,
         ["Rotta.md"],
-        "l'esito dell'apertura arriva fino a chi ha chiamato `open`"
+        "l'esito dell'apertura è consultabile quando l'apertura ha finito"
     );
 
     // Ed è un fatto **della sessione**: riaprire lo stesso vault non lo rimonta

@@ -39,9 +39,9 @@ use fub_abi::settings::{
 };
 use fub_abi::traits::{
     BacklinkRef, DocPosition, DocumentMatch, EntryKind, FolderScope, HealthCheck, IndexQuery,
-    IndexResult, JobId, JobProgress, JobStatus, LinkDirection, NeighborRef, Page, Paged,
-    PropertyEntry, PropertySelect, ResolvedRef, TagCount, VaultEntry, VaultFolder, VaultStatus,
-    ViewInstance, ViewSpec, ViewSurface,
+    IndexResult, IndexingState, JobId, JobProgress, JobStatus, LinkDirection, NeighborRef, Page,
+    Paged, PropertyEntry, PropertySelect, ResolvedRef, TagCount, VaultEntry, VaultFolder,
+    VaultStatus, ViewInstance, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
@@ -772,6 +772,10 @@ fn index_result_samples() -> Vec<Value> {
             watching: true,
             sync_failures: 1,
             last_sync_error: Some("Nota.md: frontmatter illeggibile".into()),
+            // **Non il default**: `Ready` è lo stato a riposo, e un campione
+            // che lo usasse non farebbe vedere al mirror nessuno degli altri
+            // due — che sono quelli per cui questo campo esiste (§15.7).
+            indexing: IndexingState::Running,
         }),
         // Due lavori in volo (§10.3): uno che racconta a che punto è e uno che
         // non racconta affatto, che sono le due forme che il centro attività
@@ -1114,6 +1118,10 @@ fn expected() -> Value {
             watching: true,
             sync_failures: 1,
             last_sync_error: Some("Nota.md: frontmatter illeggibile".into()),
+            // **Non il default**: `Ready` è lo stato a riposo, e un campione
+            // che lo usasse non farebbe vedere al mirror nessuno degli altri
+            // due — che sono quelli per cui questo campo esiste (§15.7).
+            indexing: IndexingState::Running,
         })],
         // Il lavoro lungo che si racconta (§10.3): un progresso che dice tutto
         // — coi default il mirror non vedrebbe né il totale né l'etichetta — e

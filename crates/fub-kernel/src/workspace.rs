@@ -64,9 +64,9 @@ use fub_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValue}
 use fub_abi::text::{Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, HostApi,
-    IndexLoss, IndexProvider, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged,
-    PluginManifest, QueryRoute, ReadApi, ServiceProvider, TimerSpec, VaultEntry, ViewInstance,
-    ViewInterests, ViewProvider, ViewSpec,
+    IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobSpec,
+    Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider, TimerSpec, VaultEntry,
+    ViewInstance, ViewInterests, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
@@ -149,6 +149,14 @@ pub struct Scarto {
 pub struct Apertura {
     /// I documenti rimasti fuori, in ordine di scansione.
     pub scartati: Vec<Scarto>,
+    /// L'indicizzazione ha smesso prima della fine (§15.7).
+    ///
+    /// Non è uno scarto in grande: uno scarto dice *questo documento non si è
+    /// letto* e il vault sa di averlo saltato, questo dice *non si è finito di
+    /// guardare*, e ciò che resta indietro non ha un nome. È la ragione per cui
+    /// chi si è interrotto non riconcilia — vedi
+    /// [`Workspace::finish_index`](crate::Workspace::finish_index).
+    pub interrotta: bool,
     /// Gli stessi id, per cercarli senza scorrere la lista.
     ///
     /// Il caso normale è zero scarti, dove non servirebbe; serve nel caso che
@@ -161,7 +169,7 @@ pub struct Apertura {
 impl Apertura {
     /// Il vault si è aperto per intero: niente da segnalare.
     pub fn intera(&self) -> bool {
-        self.scartati.is_empty()
+        self.scartati.is_empty() && !self.interrotta
     }
 
     fn scarta(&mut self, id: DocId, why: impl Into<PluginError>) {
@@ -174,6 +182,75 @@ impl Apertura {
 
     fn ha_scartato(&self, id: &DocId) -> bool {
         self.indice.contains(id)
+    }
+}
+
+/// **La seconda fase dell'apertura, mentre è in corso** (§15.7): cosa resta da
+/// indicizzare, e cosa si è raccolto finora.
+///
+/// La consegna [`scan_vault`](crate::Workspace::scan_vault), la porta avanti
+/// [`index_batch`](crate::Workspace::index_batch) una fetta alla volta, la
+/// chiude [`finish_index`](crate::Workspace::finish_index). Vive **fuori** dal
+/// `Workspace` e non dentro, ed è la scelta che rende l'apertura interrompibile
+/// senza aggiungere uno stato al kernel: chi la tiene in mano è chi ha i thread
+/// (il `JobRunner`, decisione 0032), e fra una fetta e l'altra il workspace non
+/// è prestato a nessuno — il che è precisamente ciò che questa voce chiedeva,
+/// perché `reindex` teneva il workspace in esclusiva ~780 ms su 2000 note.
+///
+/// Un'indicizzazione **abbandonata** non lascia niente da ripulire: il vault
+/// resta con gli indici che ha, e ciò che manca lo dice
+/// [`Apertura::interrotta`].
+pub struct Indicizzazione {
+    /// I documenti da esaminare, in ordine di scansione.
+    da_fare: Vec<VaultEntry>,
+    /// Quanti se ne sono già presi in carico. Non è «quanti sono riusciti»:
+    /// uno scarto è fatto quanto un documento indicizzato — è stato guardato.
+    cursore: usize,
+    apertura: Apertura,
+}
+
+impl Indicizzazione {
+    fn nuova(da_fare: Vec<VaultEntry>) -> Self {
+        Indicizzazione {
+            da_fare,
+            cursore: 0,
+            apertura: Apertura::default(),
+        }
+    }
+
+    /// Quanti documenti in tutto. Il kernel lo sa dalla scansione, ed è la
+    /// ragione per cui il progresso di questa fase ha un `total` invece di
+    /// essere indeterminato.
+    pub fn totale(&self) -> u64 {
+        self.da_fare.len() as u64
+    }
+
+    /// Quanti ne sono stati guardati.
+    pub fn fatti(&self) -> u64 {
+        self.cursore as u64
+    }
+
+    /// Non c'è più niente da guardare.
+    pub fn finita(&self) -> bool {
+        self.cursore >= self.da_fare.len()
+    }
+
+    /// Il documento da cui riparte la prossima fetta, per chi compone
+    /// l'etichetta di un progresso.
+    pub fn prossimo(&self) -> Option<&DocId> {
+        self.da_fare.get(self.cursore).map(|entry| &entry.id)
+    }
+
+    /// Ciò che di quest'apertura si sa finora: gli scarti raccolti fin qui.
+    pub fn apertura(&self) -> &Apertura {
+        &self.apertura
+    }
+
+    fn prossima_fetta(&mut self) -> Vec<VaultEntry> {
+        let fine = (self.cursore + FEED_BATCH).min(self.da_fare.len());
+        let fetta = self.da_fare[self.cursore..fine].to_vec();
+        self.cursore = fine;
+        fetta
     }
 }
 
@@ -271,6 +348,15 @@ const UNTITLED: &str = "Senza titolo";
 /// (M5). Fissarne una adesso vorrebbe dire chiedere a un utente un numero che
 /// nessuno sa ancora se conta.
 const FEED_BATCH: usize = 512;
+
+/// Il nome dell'entry point della seconda fase dell'apertura (§15.7), con cui
+/// compare nel centro attività e in
+/// [`IndexQuery::Jobs`](fub_abi::traits::IndexQuery::Jobs).
+///
+/// Ha la forma di un `JobSpec::job` qualunque perché **è** un job qualunque per
+/// chi lo guarda: chi disegna una riga di lavoro in corso non deve avere un
+/// ramo per l'apertura.
+pub const INDEX_JOB: &str = "vault.index";
 
 pub struct Workspace {
     /// *Il disco, e come ciò che ci sta sopra diventa un modello* (§8.1): il
@@ -1335,6 +1421,28 @@ impl Workspace {
     /// documenti esistono. Il perché sta nella
     /// [decisione 0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md).
     pub fn reindex(&mut self) -> Result<Apertura> {
+        let mut indicizzazione = self.scan_vault()?;
+        while !indicizzazione.finita() {
+            self.index_batch(&mut indicizzazione);
+        }
+        Ok(self.finish_index(indicizzazione))
+    }
+
+    /// **La prima fase dell'apertura** (§15.7): guarda cosa c'è, e basta.
+    ///
+    /// Al ritorno il vault è **utilizzabile** — l'anagrafe c'è, le cartelle ci
+    /// sono, una nota si apre — e *non* è indicizzato: la ricerca e il grafo
+    /// sono vuoti finché la [`Indicizzazione`] che questa funzione consegna non
+    /// è stata portata in fondo da [`index_batch`](Workspace::index_batch) e
+    /// chiusa da [`finish_index`](Workspace::finish_index).
+    ///
+    /// **Il `Result` è qui e non altrove**, ed è tutta la ragione per cui il
+    /// taglio cade in questo punto: ciò che può far fallire un'apertura è
+    /// rimasto solo la scansione
+    /// ([0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)),
+    /// quindi la fase che può fallire e la fase che dura sono due fasi diverse.
+    /// Chi apre aspetta la prima e non la seconda.
+    pub fn scan_vault(&mut self) -> Result<Indicizzazione> {
         let scanned = self.docs.vault.scan()?;
         let doc_extensions = self.docs.registry.all_extensions();
 
@@ -1357,46 +1465,120 @@ impl Workspace {
             })
             .collect();
 
-        // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
-        // dopo un `git checkout` che ha ritimbrato mille file senza cambiarne
-        // uno, la data non combacia ma il contenuto sì — e chi tiene l'impronta
-        // (l'anagrafe, e chi risponde alla domanda del punto 4) li riconosce
-        // tutti e mille.
-        let mut sources: BTreeMap<DocId, String> = BTreeMap::new();
-        // Ciò che non si è potuto leggere o parsare: si raccoglie qui e non si
-        // solleva. Gli scarti si emettono come guasti a giro finito, perché
-        // `report_trouble` vuole `&mut self` e qui il prestito è già preso.
-        let mut apertura = Apertura::default();
-        for entry in entries.iter_mut() {
-            if entry.kind != EntryKind::Document || entry.fingerprint.is_some() {
-                continue;
-            }
-            match self.docs.vault.read(&entry.id) {
-                Ok(source) => {
-                    entry.fingerprint = Some(Revision::of(&source));
-                    sources.insert(entry.id.clone(), source);
-                }
-                Err(why) => apertura.scarta(entry.id.clone(), why),
-            }
-        }
-
         let documents: Vec<VaultEntry> = entries
             .iter()
             .filter(|e| e.kind == EntryKind::Document)
             .cloned()
             .collect();
-        let already = self.indexes.up_to_date(&documents);
 
-        // Prima si parsa TUTTO, poi si muta: quando il parse era fatale questa
-        // riga teneva il tutto-o-niente, e adesso che non lo è più tiene
-        // un'altra cosa che vale uguale — gli indici si svuotano una volta
-        // sola, a giro di lettura finito, invece di restare vuoti per tutto il
-        // tempo in cui si cammina il disco. I modelli interi vivono solo qui,
-        // il tempo di alimentare indici e conteggi: in cache restano i metadati.
+        // **Gli indici si svuotano qui**, cioè all'inizio della prima fase e
+        // non a giro di lettura finito. Finché il parse era fatale, svuotare
+        // tardi teneva il tutto-o-niente; quando la
+        // [0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)
+        // gliel'ha tolto, teneva ancora una cosa vera — gli indici non restano
+        // vuoti per il tempo in cui si cammina il disco. Quella cosa **si
+        // perde qui**, ed è il prezzo dichiarato dell'apertura a fasi: fra
+        // `scan_vault` e `finish_index` la ricerca risponde poco e poi di più.
+        // Il prezzo si paga in questo verso perché l'alternativa lo fa pagare
+        // tutto a chi apre — che aspetta a schermo fermo — invece che a chi
+        // cerca nei primi secondi, che vede l'app viva e i risultati arrivare.
+        // Chi guarda non deve indovinarlo: lo dice `Indicizzazione` a chi la
+        // porta avanti, e `VaultStatus::indexing` a chiunque altro.
+        self.indexes.core.clear();
+        // Le cartelle prima delle voci, e dalla **camminata** e non dai path
+        // dei file (§14.3): una cartella vuota non compare in nessun path, e
+        // dedurle dai file vorrebbe dire che l'unica cartella che esiste è
+        // quella che ha già qualcosa dentro.
+        for folder in scanned.folders {
+            self.indexes.core.set_folder(folder);
+        }
+        // L'anagrafe è **intera già adesso**, ed è ciò che rende il vault
+        // utilizzabile alla fine di questa fase: l'albero dei file, le
+        // cartelle e la specie di ogni voce non aspettano di aver letto niente.
+        // Le impronte che mancano le riempirà la seconda fase, rimettendo in
+        // anagrafe le voci che legge.
+        for entry in entries.drain(..) {
+            self.indexes.core.set_entry(entry);
+        }
+
+        // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
+        // dichiara di esistere (decisione 0012).
+        //
+        // `VaultOpened` esce **qui**, dove il vault diventa usabile, e non alla
+        // fine dell'indicizzazione: è l'evento che dice *questo vault è
+        // aperto*, e con le fasi quel momento è questo. Chi lo riceve sa che
+        // l'anagrafe c'è; per sapere se la ricerca è pronta c'è `IndexUpdated`,
+        // che resta dov'era — in fondo.
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.emit_event(Event::VaultOpened {
+                root: ws.docs.vault.root().to_string(),
+            });
+            ws.dispatch_pending();
+        });
+
+        // Da qui l'indice risponde **meno di quanto il vault sappia**, e chi lo
+        // interroga deve poterlo distinguere da un vault vuoto (§15.7).
+        self.indexes.core.watch.indexing = IndexingState::Running;
+
+        Ok(Indicizzazione::nuova(documents))
+    }
+
+    /// **Una fetta della seconda fase** (§15.7): legge, parsa e alimenta fino a
+    /// [`FEED_BATCH`] documenti, e torna.
+    ///
+    /// Torna perché chi la chiama possa fare, fra una fetta e l'altra, le due
+    /// cose che una chiamata sola non lascia fare: **guardare la bandiera**
+    /// dell'annullamento e **timbrare un progresso**. È la stessa forma con cui
+    /// il §20.1 taglia l'alimentazione, applicata un piano più in su: là la
+    /// fetta serve a chi riceve, qui serve a chi guarda.
+    ///
+    /// Chiamarla su un'[`Indicizzazione`] già finita non fa niente.
+    pub fn index_batch(&mut self, work: &mut Indicizzazione) {
+        let fetta = work.prossima_fetta();
+        if fetta.is_empty() {
+            return;
+        }
+
+        // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
+        // dopo un `git checkout` che ha ritimbrato mille file senza cambiarne
+        // uno, la data non combacia ma il contenuto sì — e chi tiene l'impronta
+        // (l'anagrafe, e chi risponde alla domanda di `up_to_date`) li riconosce
+        // tutti e mille.
+        let mut sources: BTreeMap<DocId, String> = BTreeMap::new();
+        let mut letti: Vec<VaultEntry> = Vec::with_capacity(fetta.len());
+        for mut entry in fetta {
+            if entry.fingerprint.is_none() {
+                match self.docs.vault.read(&entry.id) {
+                    Ok(source) => {
+                        entry.fingerprint = Some(Revision::of(&source));
+                        sources.insert(entry.id.clone(), source);
+                    }
+                    // Ciò che non si è potuto leggere o parsare: si raccoglie
+                    // e non si solleva. I guasti si emettono in
+                    // `finish_index`, perché `report_trouble` vuole `&mut
+                    // self` e qui il prestito è già preso.
+                    Err(why) => work.apertura.scarta(entry.id.clone(), why),
+                }
+            }
+            letti.push(entry);
+        }
+
+        // **La domanda agli indici è per fetta**, come lo è l'alimentazione. Un
+        // indice che risponde `up_to_date` guardando ciò che ha non cambia
+        // risposta perché gliela si chiede in dieci volte; chiederla una volta
+        // sola vorrebbe dire tenere in mano l'elenco intero prima di alimentare
+        // il primo documento, che è esattamente ciò che questa voce toglie.
+        let already = self.indexes.up_to_date(&letti);
+
         let mut models = Vec::new();
-        let mut restored = Vec::new();
-        for entry in &documents {
-            if apertura.ha_scartato(&entry.id) {
+        for entry in &letti {
+            // L'impronta appena calcolata torna in anagrafe: la voce c'era già
+            // dalla prima fase, quello che qui si aggiunge è ciò che si è
+            // imparato leggendola.
+            if entry.fingerprint.is_some() {
+                self.indexes.core.set_entry(entry.clone());
+            }
+            if work.apertura.ha_scartato(&entry.id) {
                 continue;
             }
             let remembered = self
@@ -1406,7 +1588,7 @@ impl Workspace {
                 .and_then(|known| known.meta.clone());
             match remembered {
                 Some(meta) if already.contains(&entry.id) => {
-                    restored.push((entry.id.clone(), meta))
+                    self.indexes.core.restore(&entry.id, meta)
                 }
                 _ => {
                     let source = match sources.remove(&entry.id) {
@@ -1414,66 +1596,73 @@ impl Workspace {
                         None => match self.docs.vault.read(&entry.id) {
                             Ok(source) => source,
                             Err(why) => {
-                                apertura.scarta(entry.id.clone(), why);
+                                work.apertura.scarta(entry.id.clone(), why);
                                 continue;
                             }
                         },
                     };
                     match self.docs.parse(&entry.id, &source) {
                         Ok(model) => models.push(model),
-                        Err(why) => apertura.scarta(entry.id.clone(), why),
+                        Err(why) => work.apertura.scarta(entry.id.clone(), why),
                     }
                 }
             }
         }
         drop(sources);
 
-        self.indexes.core.clear();
-        // Le cartelle prima delle voci, e dalla **camminata** e non dai path
-        // dei file (§14.3): una cartella vuota non compare in nessun path, e
-        // dedurle dai file vorrebbe dire che l'unica cartella che esiste è
-        // quella che ha già qualcosa dentro.
-        for folder in scanned.folders {
-            self.indexes.core.set_folder(folder);
-        }
-        for entry in entries.drain(..) {
-            self.indexes.core.set_entry(entry);
-        }
-        for (id, meta) in restored {
-            self.indexes.core.restore(&id, meta);
-        }
-        // **Il kernel taglia** (§20.1): l'alimentazione è a lotti, e qui il
-        // lotto è tutto ciò che questa funzione ha in mano — che su un vault
-        // vero sono decine di migliaia di modelli. Si taglia in fette perché
-        // la dimensione di un lotto non è un dettaglio di chi lo riceve: a M5
-        // ogni fetta è una serializzazione, e una sola da 100k note vuol dire
-        // costruirne il buffer intero prima che l'indice ne veda una.
-        for fetta in models.chunks(FEED_BATCH) {
-            let lost = self.indexes.on_documents_indexed(fetta);
-            self.report_losses(lost);
-        }
-        drop(models);
+        // **Il kernel taglia** (§20.1): la fetta di lavoro è già grande quanto
+        // il lotto di alimentazione, quindi qui non si taglia una seconda
+        // volta. I modelli interi vivono solo dentro questa chiamata, il tempo
+        // di alimentare indici e conteggi: in cache restano i metadati.
+        let lost = self.indexes.on_documents_indexed(&models);
+        self.report_losses(lost);
+    }
+
+    /// **La chiusura dell'apertura** (§15.7): il grafo, la riconciliazione, il
+    /// flush, e i guasti di ciò che non si è letto.
+    ///
+    /// Si chiama sia su un'indicizzazione arrivata in fondo sia su una
+    /// **interrotta**, e la differenza sta in una riga sola — chi ha smesso a
+    /// metà non riconcilia. Il resto si fa comunque: ciò che è stato
+    /// alimentato è buono, e buttarlo perché non è tutto vorrebbe dire che
+    /// annullare costa più che non aver cominciato.
+    pub fn finish_index(&mut self, work: Indicizzazione) -> Apertura {
         // L'apertura ricostruisce il grafo in blocco anche in modalità
         // incrementale: gli `upsert` uno per uno l'hanno già costruito, ma la
         // risoluzione dei wikilink dipende dall'insieme intero (un alias
         // dichiarato dall'ultima nota vale anche per la prima).
         self.indexes.core.rebuild_graph();
 
-        // **Gli scarti entrano nell'insieme completo**, e non è un dettaglio.
-        // `reconcile` dice agli indici *quali documenti esistono*, così ognuno
-        // cancella ciò che è sparito ad app chiusa; un documento che non si è
-        // potuto leggere **non è sparito** — il file c'è, è la vista sul suo
-        // contenuto che manca. Ometterlo direbbe agli indici una cosa falsa, e
-        // alla prima apertura con un permesso storto la nota uscirebbe dalla
-        // ricerca in silenzio. È lo stesso principio per cui una scansione che
-        // fallisce non apre affatto: un insieme incompleto non si dichiara
-        // completo.
-        let mut ids: Vec<DocId> = self.documents();
-        ids.extend(apertura.scartati.iter().map(|s| s.id.clone()));
-        ids.sort();
-        ids.dedup();
-        let lost = self.indexes.reconcile(&ids);
-        self.report_losses(lost);
+        let mut apertura = work.apertura;
+        if work.cursore >= work.da_fare.len() {
+            // **Gli scarti entrano nell'insieme completo**, e non è un
+            // dettaglio. `reconcile` dice agli indici *quali documenti
+            // esistono*, così ognuno cancella ciò che è sparito ad app chiusa;
+            // un documento che non si è potuto leggere **non è sparito** — il
+            // file c'è, è la vista sul suo contenuto che manca. Ometterlo
+            // direbbe agli indici una cosa falsa, e alla prima apertura con un
+            // permesso storto la nota uscirebbe dalla ricerca in silenzio.
+            let mut ids: Vec<DocId> = self.documents();
+            ids.extend(apertura.scartati.iter().map(|s| s.id.clone()));
+            ids.sort();
+            ids.dedup();
+            let lost = self.indexes.reconcile(&ids);
+            self.report_losses(lost);
+        } else {
+            // **Un'indicizzazione interrotta non riconcilia**, ed è la stessa
+            // riga con cui la 0068 tiene fatale la scansione: un insieme
+            // incompleto non si dichiara completo. Qui l'insieme non è bucato
+            // da un permesso ma da un pulsante, e la conseguenza sarebbe la
+            // stessa e peggiore — dire a ogni indice di dimenticare tutto ciò
+            // che l'annullamento non ha fatto in tempo a nominare, cioè
+            // trasformare «ho smesso di indicizzare» in «cancella».
+            apertura.interrotta = true;
+        }
+        self.indexes.core.watch.indexing = if apertura.interrotta {
+            IndexingState::Stopped
+        } else {
+            IndexingState::Ready
+        };
         // Gli errori di flush non fanno fallire l'apertura del vault: un
         // indice è stato derivato, il vault è la verità (M4: notifica).
         let _ = self.flush_indexes();
@@ -1486,13 +1675,15 @@ impl Workspace {
         self.collect_doc_data();
         self.store_entries();
 
-        // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
-        // dichiara di esistere (decisione 0012).
         self.as_actor(Actor::Kernel, |ws| {
-            // I guasti prima di `VaultOpened`, e nello stesso lotto: chi si
-            // abbona per disegnare il vault appena aperto ha già in mano ciò
-            // che di quel vault non si è letto, invece di vederselo arrivare
-            // dopo aver disegnato un albero che si crede intero.
+            // I guasti erano nello stesso lotto di `VaultOpened`, perché chi si
+            // abbonava per disegnare il vault appena aperto avesse già in mano
+            // ciò che di quel vault non si era letto. Con le fasi quel lotto
+            // non esiste più — gli scarti si scoprono *dopo* che il vault è
+            // aperto, per definizione — e la promessa che resta è più debole e
+            // vera: chi disegna un albero lo disegna intero, e ciò che di quei
+            // documenti non si è potuto leggere arriva mentre l'indicizzazione
+            // procede, sulla stessa superficie di prima (`Event::Trouble`).
             for scarto in &apertura.scartati {
                 ws.report_trouble(
                     Severity::Failure,
@@ -1500,13 +1691,10 @@ impl Workspace {
                     scarto.why.clone(),
                 );
             }
-            ws.emit_event(Event::VaultOpened {
-                root: ws.docs.vault.root().to_string(),
-            });
             ws.emit_event(Event::IndexUpdated);
             ws.dispatch_pending();
         });
-        Ok(apertura)
+        apertura
     }
 
     /// Rimette in anagrafe un file che è appena cambiato, chiedendo al disco
@@ -4148,6 +4336,46 @@ impl Workspace {
         let id = self.dispatch.enqueue_job(plugin, spec);
         self.indexes.core.jobs.accepted(id, &job, plugin);
         self.emit_event(Event::JobStarted { id, job });
+        id
+    }
+
+    /// **Dichiara viva la seconda fase dell'apertura**, e le dà un'identità
+    /// (§15.7).
+    ///
+    /// L'indicizzazione è un job *vero* e non un meccanismo accanto ai job: da
+    /// qui compare in
+    /// [`IndexQuery::Jobs`](fub_abi::traits::IndexQuery::Jobs), si racconta con
+    /// [`note_job_progress`](Workspace::note_job_progress), si ferma dal
+    /// pulsante che ferma gli altri (§10.3) e si chiude con
+    /// [`complete_job`](Workspace::complete_job). Riusarli invece di
+    /// costruirne un secondo giro non è un risparmio di righe: è ciò che fa sì
+    /// che il centro attività mostri l'apertura senza sapere che l'apertura
+    /// esiste.
+    ///
+    /// **Non entra nella coda** ([`take_pending_jobs`](Workspace::take_pending_jobs)):
+    /// un job in coda dice *quale plugin* lo esegue, e il registry ne cerca il
+    /// corpo. Questo corpo non sta in nessun bundle — è il kernel — e mettercelo
+    /// vorrebbe dire o un bundle finto o una capacità con cui «alimenta gli
+    /// indici» sia esprimibile al confine. Chi ha i thread lo sa e lo porta
+    /// avanti a fette, che è la ragione per cui l'[`Indicizzazione`] è un valore
+    /// che si passa e non uno stato del kernel.
+    ///
+    /// L'intestatario è [`CORE_ID`](crate::index::CORE_ID) e l'origine è
+    /// [`Actor::Kernel`]: l'apertura non l'ha chiesta nessun plugin
+    /// (decisione 0012).
+    pub fn begin_index_job(&mut self) -> JobId {
+        let id = self.dispatch.next_job_id();
+        self.indexes
+            .core
+            .jobs
+            .accepted(id, INDEX_JOB, crate::index::CORE_ID);
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.emit_event(Event::JobStarted {
+                id,
+                job: INDEX_JOB.to_string(),
+            });
+            ws.dispatch_pending();
+        });
         id
     }
 

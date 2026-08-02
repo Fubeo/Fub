@@ -97,14 +97,27 @@ pub struct VaultSession {
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
     /// chiude deve poterci passare mentre un export cammina il vault.
     registry: Arc<Mutex<BundleRegistry>>,
-    /// **Cosa questa apertura non ha letto** (§15.7): l'esito che `reindex` ha
-    /// restituito, tenuto per la vita della sessione.
+    /// **Cosa questa apertura non ha letto** (§15.7): l'esito dell'apertura,
+    /// tenuto per la vita della sessione.
     ///
     /// Sta qui e non lo si ricalcola perché è un fatto **di questa apertura**:
     /// riaprire lo stesso vault non lo rimonta, quindi chi chiede l'informazione
     /// dopo deve ricevere quella di quando il vault è stato scandito, non un
     /// silenzio che sembrerebbe dire «adesso è tutto a posto».
-    unread: Vec<UnreadDoc>,
+    ///
+    /// È **condiviso e mutabile** da quando l'apertura è a fasi: chi apre non
+    /// aspetta più di aver letto, quindi al ritorno di `open` questa lista è
+    /// necessariamente vuota e si riempie mentre l'indicizzazione cammina. Il
+    /// campo non dice più «cosa non si è letto» ma «cosa non si è letto
+    /// **finora**», e le due frasi coincidono solo da `IndexUpdated` in poi.
+    unread: Arc<Mutex<Vec<UnreadDoc>>>,
+    /// **Quando l'indicizzazione di questa apertura ha finito** (§15.7): la
+    /// condizione su cui aspetta chi non può proseguire con una ricerca
+    /// parziale — un test, e la CLI che indicizza ed esce.
+    ///
+    /// L'app non la usa e non deve: il verso giusto per lei è disegnare subito
+    /// e aggiornare, che è tutto ciò per cui l'apertura è a fasi.
+    indicizzato: Arc<(Mutex<bool>, std::sync::Condvar)>,
     /// **Chi esegue il lavoro lungo** (§9.3): il pool che drena la coda dei job.
     /// Va fermato **prima** di chiudere, ed è il gemello del watcher — quello
     /// smette di guardare, questo smette di lavorare.
@@ -355,6 +368,28 @@ impl Host {
         self.with_session(vault, |s| s.cancel_job(id))
     }
 
+    /// **Aspetta che l'indicizzazione di un vault abbia finito** (§15.7).
+    ///
+    /// Torna subito se ha già finito, e torna anche se è stata **interrotta**:
+    /// la domanda è «l'apertura ha smesso di lavorare», non «l'indice è
+    /// completo» — chi vuole sapere la seconda cosa la chiede a
+    /// [`IndexQuery::VaultStatus`](fub_abi::traits::IndexQuery::VaultStatus),
+    /// che distingue `Ready` da `Stopped`.
+    ///
+    /// Esiste per chi **non può** proseguire con una ricerca parziale: i test,
+    /// e un uso da riga di comando che apre, indicizza ed esce. L'app non la
+    /// chiama — se la chiamasse all'avvio si ricomprerebbe esattamente l'attesa
+    /// che questa voce ha tolto.
+    pub fn wait_indexed(&self, vault: Option<&str>) -> Result<(), PluginError> {
+        let condizione = self.with_session(vault, |s| Arc::clone(&s.indicizzato))?;
+        let (fatto, campana) = &*condizione;
+        let mut fatto = fatto.lock().expect("fine avvelenata");
+        while !*fatto {
+            fatto = campana.wait(fatto).expect("fine avvelenata");
+        }
+        Ok(())
+    }
+
     /// Apre un vault — monta, scansiona, accende il ponte, avvia il rilevatore —
     /// e lo rende **corrente**.
     ///
@@ -400,18 +435,15 @@ impl Host {
         .map_err(|e| PluginError::Internal(e.into()))?;
         let registry = Arc::new(Mutex::new(registry));
 
-        // Il `?` che resta riguarda il vault intero — la scansione — e non i
-        // suoi documenti: quelli che non si sono letti tornano dentro
-        // l'`Apertura` e viaggiano fino a `VaultInfo` (§15.7).
-        let apertura = ws.reindex().map_err(PluginError::from)?;
-        let unread: Vec<UnreadDoc> = apertura
-            .scartati
-            .into_iter()
-            .map(|scarto| UnreadDoc {
-                doc_id: scarto.id.to_string(),
-                why: scarto.why,
-            })
-            .collect();
+        // **La prima fase, e solo quella** (§15.7): si guarda cosa c'è, e da
+        // qui il vault è utilizzabile. Il `?` che resta riguarda il vault
+        // intero — la scansione — e non i suoi documenti: quelli che non si
+        // leggono diventano scarti, e li raccoglie la seconda fase.
+        //
+        // Ciò che questa riga **non** fa più è leggere, parsare e indicizzare:
+        // è il lavoro che teneva `open` — e con lei l'intera app all'avvio —
+        // ferma per tutto il tempo di camminare il vault.
+        let work = ws.scan_vault().map_err(PluginError::from)?;
 
         // Ponte eventi kernel → sink (thread dedicato che vive quanto il bus).
         //
@@ -423,6 +455,22 @@ impl Host {
         if let Some(sink) = &self.sink {
             crate::bridge::spawn(ws.bus().subscribe(), sink.clone());
         }
+
+        // **La seconda fase nasce dopo il ponte**, e l'ordine è la sostanza:
+        // `begin_index_job` emette un `JobStarted`, cioè la prima riga del
+        // racconto dell'apertura. Nascendo prima, quella riga sarebbe finita
+        // nello stesso silenzio della scansione — e la shell avrebbe visto un
+        // lavoro progredire e finire senza averlo mai visto cominciare.
+        let index_job = ws.begin_index_job();
+        let unread: Arc<Mutex<Vec<UnreadDoc>>> = Arc::new(Mutex::new(Vec::new()));
+        let indicizzato = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        let in_corso = crate::runner::InCorso {
+            id: index_job,
+            totale: work.totale(),
+            work,
+            unread: Arc::clone(&unread),
+            fine: Arc::clone(&indicizzato),
+        };
 
         let workspace = Arc::new(RwLock::new(ws));
         // La bandiera del rilevamento è **del kernel** e la tiene chi guarda
@@ -439,16 +487,29 @@ impl Host {
             .map_err(|e| PluginError::Io(e.into()))?;
 
         // Il pool parte **dopo** la scansione e dopo il ponte eventi: i job che
-        // `reindex` ha fatto accodare sono già in coda, e il primo giro del pool
-        // li trova lì — drenare prima di aspettare è ciò che rende il campanello
-        // sufficiente.
-        let runner = JobRunner::start(workspace.clone(), registry.clone(), self.job_threads);
+        // la scansione ha fatto accodare sono già in coda, e il primo giro del
+        // pool li trova lì — drenare prima di aspettare è ciò che rende il
+        // campanello sufficiente. Dopo il ponte anche per un'altra ragione, che
+        // prima non c'era: il progresso dell'indicizzazione è un evento, e
+        // accendere il ponte dopo averla avviata vorrebbe dire perdere le prime
+        // fette proprio del lavoro che questa voce esiste per mostrare.
+        //
+        // E riceve la **seconda fase dell'apertura** insieme ai propri thread:
+        // da questa riga in poi il vault si indicizza da sé, con un progresso e
+        // un pulsante per fermarlo.
+        let runner = JobRunner::start(
+            workspace.clone(),
+            registry.clone(),
+            self.job_threads,
+            Some(in_corso),
+        );
 
         let session = VaultSession {
             root: root.clone(),
             workspace,
             registry,
             unread,
+            indicizzato,
             runner,
             versions,
             watcher,
@@ -882,7 +943,7 @@ fn info_of(session: &VaultSession) -> VaultInfo {
         root: ws.root().to_string(),
         extensions: ws.extensions(),
         plugins: ws.plugins(),
-        unread: session.unread.clone(),
+        unread: session.unread.lock().expect("scarti avvelenati").clone(),
     }
 }
 

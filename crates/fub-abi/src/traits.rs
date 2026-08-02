@@ -2615,6 +2615,38 @@ pub struct VaultStatus {
     /// codice, e va con il §12.2: quando l'errore al confine avrà una forma,
     /// l'avrà anche questo.
     pub last_sync_error: Option<String>,
+    /// **A che punto è l'indicizzazione** dell'apertura (§15.7).
+    pub indexing: IndexingState,
+}
+
+/// **Se ciò che l'indice risponde è tutto** (§15.7).
+///
+/// Un vault si apre in due tempi: appena scansionato è utilizzabile — le note
+/// ci sono, si aprono, si scrivono — e la ricerca si popola dopo. Chi disegna
+/// un risultato deve poter dire «sto ancora indicizzando» invece di mostrare
+/// *niente trovato*, che nei primi secondi di un vault grande sarebbe una
+/// risposta falsa e indistinguibile da quella vera.
+///
+/// **Non porta numeri**, ed è deliberato: a che punto è lo racconta il job
+/// `vault.index` come qualunque altro lavoro lungo
+/// ([`JobStatus::progress`], §10.3). Un `done`/`total` anche qui sarebbe una
+/// seconda sorgente per la stessa barra, e le due divergerebbero il giorno che
+/// una delle due si aggiorna e l'altra no.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexingState {
+    /// L'indicizzazione sta camminando.
+    Running,
+    /// È arrivata in fondo: l'indice sa tutto ciò che c'è da sapere.
+    ///
+    /// È il **default** perché è lo stato di un vault che non ha niente da
+    /// indicizzare, ed è la risposta giusta per ogni host che serve questa
+    /// struttura senza avere un'apertura in corso.
+    #[default]
+    Ready,
+    /// È stata interrotta — dal pulsante, o da un vault che chiude. Ciò che c'è
+    /// è buono, ciò che manca non ha un nome, e si rifà riaprendo.
+    Stopped,
 }
 
 /// Un tag del vault con quante note lo portano (risposta a

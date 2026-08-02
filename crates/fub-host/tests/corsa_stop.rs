@@ -46,7 +46,7 @@ fn chi_chiude_un_pool_torna_sempre() {
         for _ in 0..GIRI {
             let workspace = Arc::new(RwLock::new(Workspace::new(&root, Default::default())));
             let registry = Arc::new(Mutex::new(BundleRegistry::new()));
-            JobRunner::start(workspace, registry, THREAD).stop();
+            JobRunner::start(workspace, registry, THREAD, None).stop();
         }
         let _ = fatto.send(());
     });
