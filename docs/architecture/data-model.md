@@ -323,8 +323,17 @@ dei buffer, come è ignaro della UI); le regole stanno in
   reset del cursore se il contenuto è identico: l'eco del proprio salvataggio non
   è un cambio);
 - **cambio esterno, buffer sporco** → il buffer **vince** e il suo salvataggio
-  riallinea il disco; il conflitto è segnalato (warn), non silenzioso. È un
-  limite accettato a M2: niente merge. Il conflitto esplicito (dialogo/merge,
+  riallinea il disco; il conflitto è **detto all'utente** — un avviso nel centro
+  notifiche, con due toni: se ha scritto un'altra applicazione è un guasto,
+  perché quel lavoro non è nostro e non lo possiamo rifare; se ha riscritto il
+  kernel o un plugin informa, perché lo si riottiene rifacendo l'operazione
+  ([0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md), §20.4).
+  L'eco del **proprio** salvataggio non è un conflitto e non si dice: la
+  scrittura della shell torna indietro come `document_changed` di origine
+  `user`, e su un buffer che si è risporcato durante il debounce sarebbe
+  indistinguibile da una riscrittura altrui se non la si contasse.
+  Fino a lì era «segnalato (warn)», che con la console di un'app impacchettata
+  voleva dire silenzioso. È un limite accettato a M2: niente merge. Il conflitto esplicito (dialogo/merge,
   span-shift delle patch su buffer sporco) è lavoro di
   [M3](../milestones/M3-editor-fidelity.md).
 

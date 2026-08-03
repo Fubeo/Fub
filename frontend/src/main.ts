@@ -199,6 +199,16 @@ async function pickVault(): Promise<void> {
 async function openVaultPath(dir: string): Promise<void> {
   const info = await api.openVault(dir);
   vaultPathEl.textContent = info.root;
+  // «Questo vault si è aperto a metà» (§15.7): la riga che il contratto teneva
+  // in serbo per una superficie che non c'era. Ogni voce esce anche come evento
+  // `trouble` — e da lì il centro notifiche la mostra già — ma la si legge
+  // **anche** dall'esito, che è la ragione per cui il campo esiste: aprire un
+  // vault è il carico sotto cui la coda eventi tronca (§20.5), e una nota che
+  // la ricerca non trova e che il grafo non collega è precisamente ciò che non
+  // si scopre finché non la si cerca.
+  if (info.unread.length > 0) {
+    notify(t("vault.partial", { count: info.unread.length }), "guasto");
+  }
   state.vaultRoot = info.root;
   state.handledExtensions =
     info.extensions.length > 0 ? info.extensions : state.handledExtensions;
@@ -268,8 +278,9 @@ async function avvisaSeDueComandiSiContendonoUnTasto(): Promise<void> {
 /// vede le scritture altrui — network share, cloud drive, vault sincronizzati
 /// con strumenti esterni — e il salvataggio successivo copre ciò che non è
 /// stato visto. Un avviso all'apertura non è l'indicatore permanente che il
-/// §20.4 chiede insieme alla barra di stato: è ciò che questa shell può
-/// mostrare oggi senza inventarsi una superficie.
+/// §20.4 chiedeva insieme allo stato del salvataggio — quello, per il watcher,
+/// resta da fare — ma passa dalla stessa porta di tutto il resto, e non da una
+/// console.
 async function avvisaSeNessunoGuarda(): Promise<void> {
   try {
     const stato = await statoDelVault();
@@ -284,10 +295,16 @@ async function avvisaSeNessunoGuarda(): Promise<void> {
 
 // Un avvio che fallisce non deve morire in silenzio: senza questo, un errore
 // dell'IPC lascia la finestra a metà (lista file sì, vault no) e l'unico posto
-// dove si vede è la console della webview, che in un'app impacchettata non si
-// apre. La barra del vault è il posto più visibile che la shell ha — e il §20.4
-// chiede una superficie vera, che oggi non c'è.
+// dove si vedeva era la console della webview, che in un'app impacchettata non
+// si apre. Questo era l'unico fallimento della shell che arrivasse all'utente, e
+// ci arrivava perché la barra del vault è il posto più visibile che c'era; col
+// §20.4 la superficie vera c'è, e questo punto smette di essere l'eccezione per
+// diventare la regola. **La barra resta**, e non è un doppione: l'avviso dice
+// cosa è successo mentre succede, la barra dice perché quella finestra è a metà
+// anche a chi la guarda un minuto dopo — che è la stessa coppia «una volta /
+// finché non è riparato» dello stato di salvataggio.
 init().catch((e) => {
-  console.error("Fub: avvio fallito", e);
-  vaultPathEl.textContent = t("app.start_failed", { reason: errorText(e) });
+  const reason = errorText(e);
+  notify(t("app.start_failed", { reason }), "guasto");
+  vaultPathEl.textContent = t("app.start_failed", { reason });
 });

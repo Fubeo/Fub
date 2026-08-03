@@ -272,6 +272,35 @@ const IT = {
     "{doc} è stato cambiato da un'altra applicazione mentre il buffer è sporco: il buffer vince e quella modifica andrà persa al prossimo salvataggio.",
   "document.changed_on_disk":
     "{doc} è cambiato su disco mentre il buffer è sporco: il buffer vince.",
+  "document.deleted_dirty":
+    "{doc} è stato cancellato su disco mentre il buffer è sporco: il buffer vince, e il prossimo salvataggio lo ricrea.",
+  "document.save_failed": "{doc} non è stato salvato: {reason}",
+  "preview.open_failed": "Non riesco ad aprire «{page}»: {reason}",
+  "kernel.listener_failed": "Un ascoltatore di eventi del kernel ha lanciato: {reason}",
+  "store.listener_failed": "Un ascoltatore di «{signal}» ha lanciato: {reason}",
+  // Senza la chiave, e non per pigrizia: il nome dello stato cambierebbe la
+  // riga a ogni click, e quattordici righe diverse dicono peggio di una riga
+  // con «×14» ciò che è successo — che è la regola di `raccogli`.
+  "state.not_remembered": "Non ho potuto ricordare come hai lasciato i pannelli.",
+  "organization.unreadable":
+    "L'organizzazione del vault non si legge ({reason}): icone, appuntate e ordine di questa sessione non verranno salvati.",
+  "organization.not_saved": "Organizzazione non salvata: {reason}",
+  "views.surface_missing":
+    "La view «{view}» chiede la superficie «{surface}», che questa shell non ospita: {motivo}.",
+  "commands.list_failed":
+    "L'elenco dei comandi non è arrivato ({reason}): la palette è vuota e le scorciatoie dichiarate non rispondono.",
+  "vault.partial":
+    "{count} note non si sono lette all'apertura: la ricerca non le trova e il grafo non le collega.",
+
+  // --- lo stato del salvataggio (§20.4) ----------------------------------
+  // Quattro parole nella barra di stato, e non un'icona: «salvato» e «non
+  // salvato» sono la differenza fra un'ora di lavoro che c'è e un'ora che non
+  // c'è, e un pallino la fa indovinare. Il pallino sulla tab resta dov'era: dice
+  // *quale* nota, questa dice *cosa le è successo*.
+  "save.saved": "Salvato",
+  "save.saving": "Salvataggio…",
+  "save.unsaved": "Non salvato",
+  "save.failed": "Salvataggio fallito",
 } as const;
 
 /// Una chiave del catalogo della shell.
@@ -467,6 +496,27 @@ const EN: Record<Chiave, string> = {
   "document.overwritten":
     "{doc} was changed by another application while the buffer is dirty: the buffer wins and that change will be lost at the next save.",
   "document.changed_on_disk": "{doc} changed on disk while the buffer is dirty: the buffer wins.",
+  "document.deleted_dirty":
+    "{doc} was deleted on disk while the buffer is dirty: the buffer wins, and the next save recreates it.",
+  "document.save_failed": "{doc} was not saved: {reason}",
+  "preview.open_failed": "Cannot open «{page}»: {reason}",
+  "kernel.listener_failed": "A kernel event listener threw: {reason}",
+  "store.listener_failed": "A listener of «{signal}» threw: {reason}",
+  "state.not_remembered": "Could not remember how you left the panels.",
+  "organization.unreadable":
+    "The vault organization cannot be read ({reason}): icons, pins and ordering of this session will not be saved.",
+  "organization.not_saved": "Organization not saved: {reason}",
+  "views.surface_missing":
+    "The view «{view}» asks for the «{surface}» surface, which this shell does not host: {motivo}.",
+  "commands.list_failed":
+    "The command list did not arrive ({reason}): the palette is empty and the declared shortcuts do not respond.",
+  "vault.partial":
+    "{count} notes could not be read while opening: search does not find them and the graph does not link them.",
+
+  "save.saved": "Saved",
+  "save.saving": "Saving…",
+  "save.unsaved": "Unsaved",
+  "save.failed": "Save failed",
 };
 
 /// La lingua di ripiego di questa shell, che è quella in cui è scritta.

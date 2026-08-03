@@ -12,6 +12,8 @@
 import { onKernelEvent } from "../host/ipc";
 import type { KernelEvent, KernelNotice, Origin } from "../host/contract";
 import { errorText } from "../host/errors";
+import { notify } from "../ui/notify";
+import { t } from "../i18n/strings";
 
 type EventType = KernelEvent["type"];
 
@@ -69,7 +71,7 @@ function chiama(fn: () => void): void {
   try {
     fn();
   } catch (e) {
-    console.error(`Fub: un ascoltatore di eventi del kernel ha lanciato: ${errorText(e)}`);
+    notify(t("kernel.listener_failed", { reason: errorText(e) }), "guasto");
   }
 }
 

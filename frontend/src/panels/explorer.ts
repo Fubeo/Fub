@@ -37,6 +37,7 @@ import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
 import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
 import { onLingua, t, type Chiave } from "../i18n/strings";
+import { notify } from "../ui/notify";
 
 const fileListEl = $("#file-list");
 const filesTitleEl = $("#files-title");
@@ -726,9 +727,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   // sul disco: NFC, e senza spazi ai bordi dei segmenti.
   const guasto = nameFault(to, "new");
   if (guasto !== null) {
-    console.error(
-      `Fub: ${t("explorer.bad_name", { nome: newPageName, motivo: t(MOTIVO[guasto]) })}`,
-    );
+    notify(t("explorer.bad_name", { nome: newPageName, motivo: t(MOTIVO[guasto]) }), "info");
     renderFileList();
     return;
   }
@@ -740,7 +739,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   try {
     await renameNote(from, to);
   } catch (e) {
-    console.error(`Fub: ${t("explorer.rename_failed", { doc: from, to, reason: errorText(e) })}`);
+    notify(t("explorer.rename_failed", { doc: from, to, reason: errorText(e) }), "guasto");
     renderFileList();
   }
   // `currentDoc` lo aggiorna l'evento `document_renamed`: l'identità è il path,
@@ -761,7 +760,7 @@ async function convertToFolder(id: string): Promise<void> {
   try {
     await renameNote(id, `${folderPath}/${childName(id)}`);
   } catch (e) {
-    console.error(`Fub: ${t("explorer.to_folder_failed", { doc: id, reason: errorText(e) })}`);
+    notify(t("explorer.to_folder_failed", { doc: id, reason: errorText(e) }), "guasto");
     return;
   }
   state.expanded.add(folderPath);
@@ -857,12 +856,13 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   try {
     await renameNote(id, to);
   } catch (e) {
-    console.error(
-      `Fub: ${t("explorer.move_failed", {
+    notify(
+      t("explorer.move_failed", {
         doc: id,
         folder: folderPath || t("explorer.root"),
         reason: errorText(e),
-      })}`,
+      }),
+      "guasto",
     );
     return;
   }

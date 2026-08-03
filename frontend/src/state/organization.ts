@@ -29,6 +29,8 @@ import { api } from "../host/ipc";
 import { organizzazione } from "../host/query";
 import { emit, metaVuota, state } from "./store";
 import { errorText } from "../host/errors";
+import { notify } from "../ui/notify";
+import { t } from "../i18n/strings";
 
 /// Rilegge l'organizzazione del vault appena aperto. Non lancia: un sidecar
 /// rotto è una condizione prevista, non un avvio fallito — il kernel risponde
@@ -38,7 +40,12 @@ export async function loadOrganization(): Promise<void> {
   try {
     state.meta = await organizzazione();
   } catch (e) {
-    console.error(`Fub: organizzazione del vault illeggibile: ${errorText(e)}`);
+    // Un'organizzazione congelata è una sessione di lavoro buttata: il kernel
+    // rifiuta ogni scrittura una per una — ed è giusto, perché ciò che non ha
+    // letto non lo sovrascrive — ma finché non lo si dice a chi sta lavorando,
+    // ogni icona e ogni riordino continuano a essere accettati, disegnati e
+    // persi senza un segno (§20.4).
+    notify(t("organization.unreadable", { reason: errorText(e) }), "guasto");
     state.meta = metaVuota();
   }
 }
@@ -94,7 +101,7 @@ async function scrivi(
   try {
     await scrittura();
   } catch (e) {
-    console.error(`Fub: organizzazione non salvata: ${errorText(e)}`);
+    notify(t("organization.not_saved", { reason: errorText(e) }), "guasto");
     return;
   }
   applica(state.meta);

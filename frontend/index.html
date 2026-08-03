@@ -182,6 +182,14 @@
            poter guardare in qualunque momento senza che nulla lo interrompa:
            cosa sta girando, e cosa gli è stato detto. -->
       <footer id="statusbar" data-i18n-label="region.statusbar" aria-label="Barra di stato">
+        <!-- Lo stato del salvataggio del documento che si sta guardando
+             (§20.4). Senza `data-i18n`, per la ragione dei due pulsanti qui
+             sotto: il testo lo scrive chi conosce lo stato — `panels/document.ts`
+             — e un secondo proprietario lo cancellerebbe al primo cambio di
+             lingua. `role="status"`: cambia da sé mentre si scrive, e chi legge
+             con uno screen reader deve poterlo sapere senza che gli si tolga la
+             parola di bocca. -->
+        <span id="save-state" role="status"></span>
         <span id="statusbar-fill"></span>
         <!-- Il **testo** di questi due pulsanti non porta un `data-i18n`, e non
              è una dimenticanza: ci sta un conteggio («Attività 3»), quindi lo

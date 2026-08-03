@@ -20,8 +20,8 @@
 // sidebar/basso di prima, più barra di stato, ribbon, modale, la scheda di
 // impostazioni (§11.1) e, dalla §3.3, l'**area principale** — e le altre due le
 // dichiara **non ospitate** invece di lasciarle cadere in silenzio. Una view che
-// le chiede riceve un avviso che la nomina: è il minimo che il §20.4 chiede, in
-// attesa della superficie vera dove dirlo.
+// le chiede riceve un avviso che la nomina, e dal §20.4 quell'avviso arriva a
+// chi guarda lo schermo invece che a una console che nessuno apre.
 //
 // # `main` è ospitata, e in un modo diverso da tutte le altre
 //
@@ -44,6 +44,8 @@ import { mountTree, patchTree, unmountTree } from "./node";
 import { onEvent } from "../state/kernel";
 import { flushPendingSave } from "../panels/document";
 import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
+import { notify } from "./notify";
+import { t } from "../i18n/strings";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -227,10 +229,13 @@ export async function mountDeclaredViews(): Promise<void> {
     }
     const host = surfaceContainer(spec.surface);
     if (!host) {
-      console.warn(
-        `Fub: la view «${spec.id}» chiede la superficie «${spec.surface}», che questa shell non ospita: ${
-          NON_OSPITATE[spec.surface] ?? "superficie sconosciuta"
-        }.`,
+      notify(
+        t("views.surface_missing", {
+          view: spec.id,
+          surface: spec.surface,
+          motivo: NON_OSPITATE[spec.surface] ?? "superficie sconosciuta",
+        }),
+        "info",
       );
       continue;
     }

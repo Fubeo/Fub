@@ -67,8 +67,8 @@ export interface VaultInfo {
   // chi la chiama la legge dall'esito invece di ricostruirla da una sequenza di
   // incidenti che potrebbe non aver ricevuto tutta.
   //
-  // NESSUNO LO DISEGNA ANCORA: la superficie dove dire «questo vault si è
-  // aperto a metà» è il §20.4 e non c'è.
+  // Chi lo disegna è `main.ts`, all'apertura (§20.4): il centro notifiche è la
+  // superficie che questa riga aspettava.
   unread: UnreadDoc[];
 }
 

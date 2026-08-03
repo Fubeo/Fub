@@ -151,16 +151,17 @@ firma teneva insieme *due* domande — la forma dell'esito e la **grana** della
 chiamata — e avevano una risposta sola, l'esito per lotto. Deciderne una avrebbe
 lasciato l'altra a una major.
 
-Delle altre tre voci della [seduta 20](20-quando-qualcosa-va-storto.md) ne
-restano **due**, e vanno lette con un criterio diverso che il settimo giro
+Delle altre tre voci della [seduta 20](20-quando-qualcosa-va-storto.md) non ne
+resta nessuna, e vanno lette con un criterio diverso che il settimo giro
 aggiunge: **una voce che non scade non sale mai, e per questo il suo costo si
 paga tutto adesso**. Nessuna delle tre era una firma — il kernel che scartava
 gli esiti che aveva in mano (§20.3) e la variante di evento che il verbale della
 [decisione 0013](../decisions/0013-elenco-delle-capacita.md) aveva già deciso e
 rimandato per mancanza di clienti (§20.2), entrambe **chiuse** dalla
 [decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md); e la shell
-che non ha una superficie dove dire niente (§20.4), che resta aperta — quindi il
-freeze non le toccava, e nessuna passata precedente aveva un motivo per
+che non aveva una superficie dove dire niente (§20.4), chiusa dalla
+[decisione 0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md)
+— quindi il freeze non le toccava, e nessuna passata precedente aveva un motivo per
 guardarle. Ma il conto non era rimandato: erano le voci il cui prezzo si paga in
 difetti che non lasciano traccia, e un difetto che non lascia traccia non entra
 in nessuna lista di priorità perché nessuno lo ha visto. Averle prese guardandole
@@ -216,8 +217,10 @@ dalla [decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md), che
 li ha trovati scritti a mano in quattro posti con tre valori diversi e nessuno
 giusto: finché la [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio) non li presidia, si ricontano a ogni giro.) Il canale
 di destinazione è ora costruito per il primo dei due — `Event::Trouble` più il
-pavimento del log, con il centro notifiche in ascolto — e resta da costruire per
-il secondo (§20.4).
+pavimento del log, con il centro notifiche in ascolto — e con la
+[decisione 0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md) lo
+è anche per il secondo (§20.4): i quattordici della shell chiamano la stessa
+porta, e il salvataggio ha l'esito che non aveva.
 
 **Fuori dai giri**, e con lo statuto delle voci del quarto scaglione — *rende
 inesprimibile, non stretto* — ne arrivano due dalla
