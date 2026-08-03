@@ -284,7 +284,7 @@ sequenceDiagram
 | tetto della raffica del ponte | [bridge.rs:61](../../crates/fub-host/src/bridge.rs) | **128** notice |
 | chi timbra l'origine | [dispatcher.rs:157](../../crates/fub-kernel/src/dispatcher.rs) | un punto solo |
 | chi decide cosa è sacrificabile | [event.rs `is_recoverable`](../../crates/fub-abi/src/event.rs) | un punto solo, nel contratto |
-| chi decide se un pannello è invecchiato | [panel-host.ts:164](../../frontend/src/ui/panel-host.ts) via [rules/mirrored.ts](../../frontend/src/rules/mirrored.ts) | la gemella di `mask_wants` del kernel |
+| chi decide se un pannello è invecchiato | [panel-host.ts:186](../../frontend/src/ui/panel-host.ts) via [rules/mirrored.ts](../../frontend/src/rules/mirrored.ts) | la gemella di `mask_wants` del kernel |
 
 Tre cose che il disegno dice e che è facile dare per scontate al contrario.
 
