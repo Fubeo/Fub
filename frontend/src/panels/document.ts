@@ -45,6 +45,7 @@ import { riferimentoRisolto, tagDelVault, vociDelVault } from "../host/query";
 import type { PaneMode, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { emit, on, state } from "../state/store";
+import { cambioSotto, statoDi, type Esito } from "../state/salvataggio";
 import {
   apriIn,
   attivaTab,
@@ -74,7 +75,7 @@ import { notify } from "../ui/notify";
 import { clearPreview, updatePreview } from "./preview";
 import { montaVistaInRiquadro, smontaVistaDalRiquadro, viewPrincipale } from "../ui/views";
 import { errorText } from "../host/errors";
-import { t } from "../i18n/strings";
+import { onLingua, t } from "../i18n/strings";
 
 export interface DocumentDeps {
   /// Click su un `#tag` nella live preview. Iniettato invece che importato:
@@ -114,6 +115,29 @@ interface Buffer {
   /// Ha modifiche non ancora scritte su disco? Finché è sporco, questo testo è
   /// la verità del documento: non va MAI sovrascritto da un reload.
   dirty: boolean;
+  /// Com'è andata **l'ultima scrittura tentata** (§20.4). È un fatto diverso da
+  /// `dirty`, e per questo è un campo suo: `dirty` dice se c'è qualcosa da
+  /// scrivere, questo dice se ciò che si è provato a scrivere è arrivato. Un
+  /// buffer può essere pulito e l'ultima scrittura essere fallita — è il caso in
+  /// cui prima di oggi la shell non diceva niente — e può essere sporco mentre
+  /// una scrittura è in volo.
+  esito: Esito;
+  /// Quanti `document_changed` **nostri** stiamo ancora aspettando.
+  ///
+  /// Ogni scrittura che va a buon fine torna indietro come evento: il documento
+  /// è cambiato su disco, ed è cambiato perché l'abbiamo cambiato noi. Il kernel
+  /// non ci dà modo di riconoscerlo — l'evento non porta una revisione, e
+  /// l'origine di una scrittura della shell è `user`, la stessa di un comando
+  /// che l'utente lancia — quindi lo si riconosce contando: una scrittura
+  /// riuscita mette un eco in attesa, il primo evento non-watcher su quel
+  /// documento lo consuma.
+  ///
+  /// Il modo in cui questo conto può sbagliare è uno solo ed è **limitato**: se
+  /// un eco non arrivasse (coda troncata), il contatore resterebbe alto e si
+  /// mangerebbe un avviso vero **di origine kernel o plugin** — mai uno della
+  /// watcher, che è il caso grave, perché quello non lo consuma mai. Torna a
+  /// zero a ogni caricamento del documento.
+  echi: number;
   timer?: number;
 }
 
@@ -164,7 +188,8 @@ export function mountDocument(d: DocumentDeps): void {
     // La nota è cambiata (anche da fuori: watcher, altra app). Riguarda ogni
     // riquadro che la sta mostrando, non «il» riquadro.
     if (paneConDoc(e.id).length === 0) return;
-    void reloadIfClean(e.id, origin.actor.kind === "watcher");
+    avvisaSeIlBufferCopre(e.id, origin.actor.kind === "watcher");
+    void reloadIfClean(e.id);
     void ridisegnaLettura(e.id);
   });
 
@@ -176,7 +201,7 @@ export function mountDocument(d: DocumentDeps): void {
     // no: gli editor resterebbero su un contenuto fantasma che il primo
     // autosave resusciterebbe alle spalle dell'utente.
     if (buffers.get(e.id)?.dirty) {
-      console.warn(`Fub: ${e.id} cancellato su disco col buffer sporco: il buffer vince.`);
+      notify(t("document.deleted_dirty", { doc: e.id }), "guasto");
       return;
     }
     dimentica(e.id);
@@ -203,6 +228,11 @@ export function mountDocument(d: DocumentDeps): void {
       void ridisegnaLettura(id);
     }
   });
+
+  // Il testo dello stato di salvataggio non passa da `applicaStringhe` — non ha
+  // un `data-i18n`, perché lo scrive chi conosce lo stato — quindi si rifà da sé
+  // al cambio di lingua, come fanno i due pulsanti della barra.
+  onLingua(disegnaSalvataggio);
 
   registraComandi();
 }
@@ -378,6 +408,7 @@ async function disegna(): Promise<void> {
     await mostra(r, tabAttiva(id));
   }
   aggiornaCommutatore();
+  disegnaSalvataggio();
   if (state.currentDoc !== attivo) {
     state.currentDoc = attivo;
     emit("active-doc", attivo);
@@ -598,7 +629,7 @@ async function leggiBuffer(doc: string): Promise<string> {
   const gia = buffers.get(doc);
   if (gia) return gia.text;
   const text = await api.readDocument(doc);
-  buffers.set(doc, { text, dirty: false });
+  buffers.set(doc, { text, dirty: false, esito: "ok", echi: 0 });
   return text;
 }
 
@@ -711,7 +742,7 @@ export async function openWikilink(
 function scritto(paneId: string, text: string): void {
   const doc = docAttivo(paneId);
   if (!doc) return;
-  const buf = buffers.get(doc) ?? { text, dirty: false };
+  const buf = buffers.get(doc) ?? { text, dirty: false, esito: "ok" as Esito, echi: 0 };
   buf.text = text;
   buf.dirty = true;
   buffers.set(doc, buf);
@@ -728,8 +759,41 @@ function scritto(paneId: string, text: string): void {
     const p = pane(id);
     if (r && p) disegnaTab(r, p.tabs, p.active);
   }
+  disegnaSalvataggio();
   scheduleSave(doc);
 }
+
+/// Lo stato del salvataggio **del documento che si sta guardando**, nella barra
+/// di stato.
+///
+/// Lì e non sulla tab, perché la tab ha già il pallino del non salvato e ha
+/// spazio per una parola sola: il pallino dice *quale* nota ha qualcosa da
+/// scrivere, questa riga dice *cosa le è successo*. E lì e non in un pannello,
+/// perché è l'unica superficie della shell che c'è sempre e che non chiede di
+/// essere aperta.
+///
+/// Se la shell non ha quell'elemento — un test, un host che monta un pezzo solo
+/// — non succede niente: come per `notify`, il fatto non dipende dal suo disegno.
+function disegnaSalvataggio(): void {
+  const el = document.getElementById("save-state");
+  if (!el) return;
+  const doc = docAttivo();
+  const stato = doc ? statoDi(buffers.get(doc)) : null;
+  if (!stato) {
+    el.textContent = "";
+    delete el.dataset.stato;
+    return;
+  }
+  el.dataset.stato = stato;
+  el.textContent = t(CHIAVE_STATO[stato]);
+}
+
+const CHIAVE_STATO = {
+  salvato: "save.saved",
+  in_corso: "save.saving",
+  non_salvato: "save.unsaved",
+  fallito: "save.failed",
+} as const;
 
 function scheduleSave(doc: string): void {
   const buf = buffers.get(doc);
@@ -776,14 +840,47 @@ export function resumeSave(): void {
   sospeso = null;
 }
 
+/// Scrive il buffer su disco, e **dice com'è andata** (§20.4).
+///
+/// Prima di questa voce la scrittura era una riga sola senza `catch`, invocata
+/// da un `setTimeout`: un vault in sola lettura, un disco pieno, un file tenuto
+/// da un'altra app rifiutavano la scrittura, la promise veniva rigettata in un
+/// contesto senza gestore, e nella finestra non cambiava niente. Si continuava a
+/// scrivere per un'ora dentro una nota che nessuno stava scrivendo su disco.
+///
+/// Adesso il fallimento ha due destinazioni, e servono tutte e due: un avviso,
+/// che interrompe una volta, e lo **stato** accanto al documento, che resta.
+/// L'avviso da solo lo si perde girandosi dall'altra parte; lo stato da solo non
+/// si guarda finché non si ha già il sospetto.
+///
+/// Non rilancia, e non è una svista: il chiamante è un `setTimeout` che non ha
+/// dove prenderlo. Chi ha bisogno di sapere se il disco ha ricevuto il testo —
+/// `flushDoc`, cioè chi sta per far riscrivere quel file al kernel — legge
+/// l'esito dal buffer, che è il posto dove adesso l'esito c'è.
 async function saveDoc(doc: string): Promise<void> {
   const buf = buffers.get(doc);
   if (!buf) return;
   const text = buf.text;
-  await api.writeDocument(doc, text);
+  buf.esito = "in_corso";
+  disegnaSalvataggio();
+  try {
+    await api.writeDocument(doc, text);
+  } catch (e) {
+    buf.esito = "fallito";
+    notify(t("document.save_failed", { doc, reason: errorText(e) }), "guasto");
+    // Il buffer resta sporco: è la verità del documento, e il tentativo
+    // successivo — la battuta dopo, o il flush di una rinomina — riparte da qui.
+    disegnaSalvataggio();
+    return;
+  }
+  buf.esito = "ok";
+  // La scrittura è arrivata sul disco: il `document_changed` che ne segue è
+  // nostro, e chi lo riceve non deve raccontarlo come se fosse di qualcun altro.
+  buf.echi += 1;
   // Pulito solo se nel frattempo non è arrivato altro input: `dirty` è stato
   // rimesso a true da `scritto` se l'utente ha continuato a scrivere.
   if (buf.text === text) buf.dirty = false;
+  disegnaSalvataggio();
   for (const id of paneConDoc(doc)) {
     const r = riquadri.get(id);
     const p = pane(id);
@@ -803,14 +900,51 @@ async function saveDoc(doc: string): Promise<void> {
 /// buffer sta per coprire non è nostro e non lo possiamo rifare, mentre una
 /// riscrittura del kernel o di un plugin la si riottiene rifacendo
 /// l'operazione.
-async function reloadIfClean(id: string, daFuori = false): Promise<void> {
+/// Qualcuno ha riscritto il file **sotto un buffer sporco**: dirlo, se c'è
+/// davvero qualcuno.
+///
+/// Due casi e due toni, ed è la ragione per cui la 0012 distingue l'origine: se
+/// ha scritto un'ALTRA APP il lavoro che il buffer sta per coprire non è nostro
+/// e non lo possiamo rifare — è un guasto; una riscrittura del kernel o di un
+/// plugin la si riottiene rifacendo l'operazione, e informa. Fino al §20.4 la
+/// diagnosi era giusta, completa, e andava in un posto che non ha lettori.
+///
+/// **E c'è un terzo caso, che non è nessuno dei due**: l'eco del nostro
+/// salvataggio. Scrivere `issues.md` e continuare a battere durante i 400 ms del
+/// debounce produce, ogni volta, un `document_changed` di origine `user` su un
+/// buffer tornato sporco — cioè la frase «il file è cambiato sotto di te» detta
+/// del file che contiene esattamente ciò che abbiamo appena scritto noi. È
+/// sempre stata emessa; finché finiva in `console` nessuno l'ha vista, e il
+/// §20.4 l'ha portata sullo schermo tre volte di fila. Un avviso che compare
+/// quando non è successo niente non è un avviso in più: è ciò che insegna a
+/// ignorare gli altri tredici.
+function avvisaSeIlBufferCopre(id: string, daFuori: boolean): void {
   const buf = buffers.get(id);
-  if (buf?.dirty) {
-    console.warn(
-      `Fub: ${daFuori ? t("document.overwritten", { doc: id }) : t("document.changed_on_disk", { doc: id })}`,
-    );
-    return;
+  switch (cambioSotto(buf, daFuori)) {
+    case "muto":
+      return;
+    case "eco":
+      // Consumato: la scrittura successiva ne metterà un altro.
+      buf!.echi -= 1;
+      return;
+    case "altra_app":
+      notify(t("document.overwritten", { doc: id }), "guasto");
+      return;
+    case "riscrittura":
+      notify(t("document.changed_on_disk", { doc: id }), "info");
   }
+}
+
+/// Ricarica un documento dal disco, ma solo se non ha modifiche non salvate.
+///
+/// Non dice niente: chi è arrivato da un evento sa l'origine e ha già parlato
+/// (`avvisaSeIlBufferCopre`), e chi è arrivato da una riconciliazione — un
+/// `overflow`, un ripristino di versione — non sa **chi** abbia scritto e non ha
+/// niente da raccontare. Prima l'avviso stava qui, e quelle due strade lo
+/// facevano partire senza un'origine da cui dedurne il tono.
+async function reloadIfClean(id: string): Promise<void> {
+  const buf = buffers.get(id);
+  if (buf?.dirty) return;
   const source = await api.readDocument(id);
   const attuale = buffers.get(id);
   // Evita il reset del cursore quando l'evento è l'eco del nostro salvataggio.

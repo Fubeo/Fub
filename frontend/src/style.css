@@ -1118,6 +1118,19 @@ button:hover {
   flex: 1;
 }
 
+/* Lo stato del salvataggio (§20.4). Sta col colore della barra finché non c'è
+   niente da dire: «Salvato» è la parola che si legge il 99% del tempo, e
+   accendere quella vorrebbe dire spegnere l'unica che deve farsi notare. */
+#save-state[data-stato="non_salvato"],
+#save-state[data-stato="in_corso"] {
+  color: var(--text);
+}
+
+#save-state[data-stato="fallito"] {
+  color: var(--doc-danger);
+  font-weight: var(--weight-medium);
+}
+
 #statusbar button {
   background: none;
   border: none;

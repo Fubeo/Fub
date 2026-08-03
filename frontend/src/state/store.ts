@@ -17,6 +17,8 @@
 import type { CommandSpec, Organization } from "../host/contract";
 import { api } from "../host/ipc";
 import { errorText } from "../host/errors";
+import { notify } from "../ui/notify";
+import { t } from "../i18n/strings";
 
 // --- i segnali --------------------------------------------------------------
 //
@@ -78,7 +80,7 @@ export function emit<K extends keyof Signals>(signal: K, ...args: Signals[K]): v
     try {
       (listener as (...a: Signals[K]) => void)(...args);
     } catch (e) {
-      console.error(`Fub: un ascoltatore di «${signal}» ha lanciato: ${errorText(e)}`);
+      notify(t("store.listener_failed", { signal, reason: errorText(e) }), "guasto");
     }
   }
 }
@@ -196,12 +198,17 @@ export async function leggiStato<T>(key: string): Promise<T | null> {
 }
 
 /// Ricordare, **senza aspettare**: chi apre una cartella nell'albero non deve
-/// fermarsi per una scrittura su disco. È anche la ragione per cui il fallimento
-/// qui si scrive in console e non si mostra: l'unico modo di raccontarlo sarebbe
-/// un avviso a ogni click, per un file di cache che al prossimo avvio si
-/// riscrive da sé.
+/// fermarsi per una scrittura su disco.
+///
+/// L'obiezione che teneva questo punto in console era giusta e riguardava il
+/// *testo*, non il canale: nominare la chiave voleva dire un avviso diverso a
+/// ogni click, per un file di cache che al prossimo avvio si riscrive da sé. La
+/// frase qui non la nomina, e allora quattordici fallimenti di fila diventano
+/// una riga con «×14» — che è esattamente ciò per cui `raccogli` esiste (§10.3).
+/// Il tono è `info`: non si è perso lavoro dell'utente, si è persa la memoria di
+/// come aveva lasciato i pannelli.
 export function scriviStato(key: string, value: unknown): void {
-  void api.setViewState(key, value).catch((e) => {
-    console.warn(`Fub: non ho potuto ricordare \`${key}\``, e);
+  void api.setViewState(key, value).catch(() => {
+    notify(t("state.not_remembered"), "info");
   });
 }

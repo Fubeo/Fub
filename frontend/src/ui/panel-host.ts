@@ -40,6 +40,7 @@ import { onAnyEvent, onEvent } from "../state/kernel";
 import { on } from "../state/store";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
+import { notify } from "./notify";
 
 export type EventType = KernelEvent["type"];
 
@@ -148,8 +149,10 @@ export function registeredPanels(): Panel[] {
 ///
 /// Un pannello che lancia non deve zittire gli altri: sarebbe metà finestra
 /// ferma senza che nulla lo dica, il difetto che il §20.3 chiama «l'esito
-/// buttato via». Qui l'esito si nomina e si prosegue — e il §20.4 chiede una
-/// superficie vera, che oggi non c'è.
+/// buttato via». Qui l'esito si nomina, si prosegue, e dal §20.4 lo si **dice**:
+/// un pannello che non si ridisegna lascia montato l'albero precedente, cioè un
+/// pannello stantio identico a uno vivo — il sintomo peggiore che ci sia, perché
+/// somiglia a uno che funziona.
 export async function refreshPanel(id: string, notice?: KernelNotice): Promise<void> {
   const panel = registro.get(id);
   if (!panel) return;
@@ -157,7 +160,7 @@ export async function refreshPanel(id: string, notice?: KernelNotice): Promise<v
   try {
     await panel.render(notice);
   } catch (e) {
-    console.error(`Fub: ${t("panel.render_failed", { panel: id, reason: errorText(e) })}`);
+    notify(t("panel.render_failed", { panel: id, reason: errorText(e) }), "guasto");
   }
 }
 

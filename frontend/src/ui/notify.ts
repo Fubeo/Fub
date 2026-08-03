@@ -2,8 +2,8 @@
 // risposta — l'esito di un comando, un lavoro finito, un errore che non blocca.
 //
 // Era un toast solo, che il messaggio dopo cancellava. Bastava finché i
-// chiamanti erano tre; con il §20.4 (che porta qui i quattordici avvisi oggi
-// scritti in `console`) e con l'esito dei lavori lunghi, un messaggio che
+// chiamanti erano tre; con il §20.4 (che ha portato qui i quattordici avvisi
+// che erano scritti in `console`) e con l'esito dei lavori lunghi, un messaggio che
 // scompare in quattro secondi e sovrascrive il precedente è un canale che
 // **perde**, e in silenzio: chi era in un'altra finestra non ha modo di sapere
 // cosa gli è stato detto.
@@ -25,12 +25,17 @@
 // severità e il documento di cui parla — e qui sotto `ascoltaIGuasti` le
 // attacca il router degli eventi, che è la riga che questo commento aspettava.
 //
-// Resta il §20.4, e resta distinto: i quattordici `console.warn`/`console.error`
-// della shell sono suoi, e non passano da un evento del kernel — nascono di qua
-// dal confine.
+// **E il §20.4 è arrivato** ([decisione 0080]): i quattordici `console.warn` e
+// `console.error` della shell — che non passavano da un evento del kernel,
+// perché nascono di qua dal confine — chiamano tutti questa porta, e con loro il
+// salvataggio, che un esito non ce l'aveva proprio. Da lì è uscita anche
+// `esisteUnDom` qui sotto: aperta la porta a `state/store.ts` e
+// `state/kernel.ts`, che un DOM non ce l'hanno, la promessa di funzionare senza
+// disegno ha smesso di essere solo scritta.
 //
 // [decisione 0013]: ../../../docs/decisions/0013-elenco-delle-capacita.md
 // [decisione 0052]: ../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md
+// [decisione 0080]: ../../../docs/decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md
 
 import { onLingua, t } from "../i18n/strings";
 import type { KernelEvent } from "../host/contract";
@@ -162,6 +167,23 @@ export function svuotaStorico(): void {
   ridisegna();
 }
 
+/// C'è un documento su cui disegnare?
+///
+/// La riga che questo modulo prometteva da sempre — *«se la shell non li ha (un
+/// test, un host che monta solo un pezzo) non succede niente»* — e che era vera
+/// per il pannello e falsa per tutto il resto: `mostra` e `ridisegna` toccavano
+/// `document` senza chiederselo. Finché i chiamanti erano pannelli non si vedeva,
+/// perché un pannello un DOM ce l'ha per definizione. Col §20.4 la porta è aperta
+/// anche a `state/store.ts` e `state/kernel.ts`, che DOM non ne hanno e che nei
+/// test girano in Node: il primo avviso da lì è diventato un rifiuto non gestito.
+///
+/// È il difetto di questa seduta preso dal lato di chi ascolta — un canale che
+/// smette di funzionare in silenzio proprio mentre gli si racconta un guasto —
+/// e l'ha trovato un test che non guardava questo file.
+function esisteUnDom(): boolean {
+  return typeof document !== "undefined";
+}
+
 /// Il toast: l'avviso **mentre succede**. Sovrascrive il precedente di
 /// proposito — chi guarda lo schermo legge l'ultimo, e ciò che ha perso sta
 /// nello storico, che è la ragione per cui lo storico esiste.
@@ -171,7 +193,7 @@ export function svuotaStorico(): void {
 /// nuova compare in cima da sé, e un rettangolo sopra la lista coprirebbe
 /// proprio ciò che l'utente è andato a leggere.
 function mostra(avviso: Avviso): void {
-  if (aperto) return;
+  if (aperto || !esisteUnDom()) return;
   const vecchio = document.getElementById("toast");
   if (vecchio) vecchio.remove();
   const toast = document.createElement("div");
@@ -197,6 +219,7 @@ function mostra(avviso: Avviso): void {
 /// `notify` continua a funzionare, perché il canale non dipende dal suo
 /// disegno.
 function ridisegna(): void {
+  if (!esisteUnDom()) return;
   const pulsante = document.getElementById("notify-button");
   if (pulsante) {
     pulsante.textContent =

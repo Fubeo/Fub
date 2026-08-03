@@ -76,10 +76,12 @@ Resta fuori, e sono di altre sedute:
   le ragioni dei rifiuti attraversano come dato e restano italiane.
 - Che ciò che va storto **nel backend** abbia una variante di evento con dentro
   un errore tipizzato è il [§20.2](20-quando-qualcosa-va-storto.md) — il tipo
-  adesso c'è —, e che gli avvisi oggi scritti in `console` arrivino a una
-  superficie è il [§20.4](20-quando-qualcosa-va-storto.md). Il posto dove
-  atterreranno c'è già: il centro notifiche della
-  [0035](../decisions/0035-il-lavoro-lungo-si-racconta.md).
+  adesso c'è —, e che gli avvisi allora scritti in `console` arrivassero a una
+  superficie era il [§20.4](20-quando-qualcosa-va-storto.md), chiuso dalla
+  [0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md): sono
+  atterrati nel centro notifiche della
+  [0035](../decisions/0035-il-lavoro-lungo-si-racconta.md), ognuno con la sua
+  chiave nel catalogo della shell.
 - L'alto contrasto, il reduced motion, le dimensioni del testo e il font per
   dislessia sono la **§25.1**, e adesso hanno su cosa poggiare: i token. È anche
   la via d'uscita dell'unico debito di contrasto lasciato dichiarato (il dark

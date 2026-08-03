@@ -15,6 +15,9 @@ import { api } from "../host/ipc";
 import { vociDelVault } from "../host/query";
 import { COMANDI } from "../host/contract";
 import { emit, state } from "./store";
+import { notify } from "../ui/notify";
+import { errorText } from "../host/errors";
+import { t } from "../i18n/strings";
 
 /// Annuncia che l'elenco dei documenti è cambiato. Chi ne disegna uno si
 /// iscrive a `documents`; nessuno chiama nessuno per nome.
@@ -82,5 +85,14 @@ export async function trashNote(id: string): Promise<void> {
 /// nulla ed è l'unico in cui devono essere freschi; qui servono a riconoscere
 /// una combinazione di tasti senza un giro sull'IPC a ogni pressione.
 export async function loadCommandSpecs(): Promise<void> {
-  state.commandSpecs = await api.listCommands().catch(() => []);
+  // Il `catch` che c'era era peggio di un `console.warn`, ed è il punto che il
+  // §20.4 ha trovato **contandoli**: se l'elenco non arriva all'apertura del
+  // vault, la palette è vuota e ogni scorciatoia dichiarata è morta — cioè metà
+  // dei modi di usare l'app smette di rispondere — e non ne restava una riga da
+  // nessuna parte. L'elenco vuoto resta la risposta giusta (un vault si apre
+  // comunque, 0068); ciò che mancava è dirlo.
+  state.commandSpecs = await api.listCommands().catch((e: unknown) => {
+    notify(t("commands.list_failed", { reason: errorText(e) }), "guasto");
+    return [];
+  });
 }

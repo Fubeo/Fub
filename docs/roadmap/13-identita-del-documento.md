@@ -44,5 +44,7 @@ l'unico modo di sapere che non passa a vuoto.
 Resta fuori, e sono di altre sedute: la **durabilità** di quella pila — un undo
 che sopravviva alla chiusura del vault è un journal e non una pila, ed è il
 [§15.2](15-il-disco.md); il **redo**, che nessun cliente ha chiesto; e la
-superficie in cui la shell mostrerebbe cosa si annullerebbe, che sta col
-[§20.4](20-quando-qualcosa-va-storto.md). Il posto dove atterreranno adesso c'è.
+superficie in cui la shell mostrerebbe cosa si annullerebbe, che stava col
+[§20.4](20-quando-qualcosa-va-storto.md): quello adesso è chiuso
+([0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md)), e il posto
+dove atterrare c'è.

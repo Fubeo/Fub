@@ -19,6 +19,8 @@ import { api } from "../host/ipc";
 import { mountTree } from "../ui/node";
 import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
+import { notify } from "../ui/notify";
+import { t } from "../i18n/strings";
 
 /// Profondità massima di transclusion: oltre, l'embed resta un link.
 const MAX_EMBED_DEPTH = 5;
@@ -103,9 +105,11 @@ function wireWikilinks(container: HTMLElement): void {
       try {
         await apriPagina(page, a.dataset.wikilinkHeading, a.dataset.wikilinkBlock);
       } catch (err) {
-        // Link non risolto e nota non creabile: si segna, non si tace.
+        // Link non risolto e nota non creabile: si segna, non si tace. Il
+        // segno sul link dice *quale*, l'avviso dice *perché* — e senza il
+        // secondo un click che non fa niente resta senza spiegazione (§20.4).
         a.classList.add("unresolved");
-        console.error(`Fub: non riesco ad aprire «${page}»: ${errorText(err)}`);
+        notify(t("preview.open_failed", { page, reason: errorText(err) }), "guasto");
       }
     });
   });

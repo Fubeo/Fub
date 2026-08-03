@@ -1,6 +1,6 @@
 # 20. Quando qualcosa va storto, chi lo dice e a chi
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): il canale che dice cosa è andato storto, visto da chi non può dirlo, da chi lo butta via e da chi non ha dove scriverlo.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): il canale che dice cosa è andato storto, visto da chi non può dirlo, da chi lo butta via e da chi non ha dove scriverlo. **Quattro voci su cinque sono chiuse**; resta un troncamento.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -15,22 +15,27 @@ ascoltatore che **lo buttava via** (§20.3), e chi lo ascoltava non aveva **dove
 scriverlo** perché nel contratto la variante non c'era (§20.2) e nella shell la
 superficie non c'è (§20.4).
 
-**Tre sono chiuse**, e in due verbali perché sono due ragionamenti e non quattro:
+**Quattro sono chiuse**, e in tre verbali perché sono tre ragionamenti e non quattro:
 la [0051](../decisions/0051-l-alimentazione-risponde.md) ha dato un esito
 all'alimentazione — a lotti, perché forma e grana avevano una risposta sola — e
 la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) ha dato a quell'esito
 una destinazione, chiudendo insieme la variante di evento e il kernel che
 scartava. Deciderne una sola avrebbe dato un canale senza destinazione o una
-destinazione senza niente da metterci dentro.
+destinazione senza niente da metterci dentro. La quarta l'ha chiusa la
+[0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md), che è la
+metà umana delle prime tre: i quattordici avvisi che nella shell nascevano di
+qua dal confine — e che quindi da un evento del kernel non passano — hanno la
+stessa destinazione, e il salvataggio, che non aveva nemmeno un esito da
+mandarci, adesso ne ha uno con quattro stati.
 
 **Il progetto aveva già l'invariante, e la presidiava su un canale solo.**
 [traits.md](../architecture/traits.md) lo scrive per esteso a proposito
 dell'`Event::Overflow`: *«è la versione rumorosa del troncamento: perdite
 silenziose non esistono per contratto»*. Era vero, ed era vero soltanto lì.
-Adesso vale su tre canali: l'alimentazione degli indici, l'esito di un handler e
-il flush. Resta falso sull'ultimo, quello che va dal backend allo **schermo**
-(§20.4), e su un caso di troncamento che la 0052 ha scoperto misurandosi
-(§20.5).
+Adesso vale su quattro canali: l'alimentazione degli indici, l'esito di un
+handler, il flush e — con la 0080 — quello che va dallo schermo indietro, cioè i
+guasti che la shell produce di suo. Resta falso su un caso solo, il troncamento
+che la 0052 ha scoperto misurandosi (§20.5).
 
 Restava anche il fatto strutturale, e la ragione per cui sette giri non avevano
 trovato queste voci: di quelle quattro **una sola scadeva col freeze**. Le altre
@@ -38,8 +43,9 @@ non erano firme, quindi nessun criterio di scadenza le aveva mai messe in cima �
 e intanto il loro costo non si pagava a M4, si stava pagando in difetti che non
 si diagnosticavano. È il criterio di [seduta 17](17-presidi-che-restano.md)
 applicato al contrario: il costo dell'attesa non cresceva, era già massimo. Le due
-che restano hanno esattamente quella forma, ed è la ragione per cui vanno prese
-guardandole e non aspettando che scadano.
+che restavano avevano esattamente quella forma, ed è la ragione per cui sono
+state prese guardandole e non aspettando che scadessero. Della seconda — la
+§20.5 — vale ancora parola per parola.
 
 ### 20.2 Ciò che va storto ha un canale nel contratto e nessuna destinazione
 
@@ -88,9 +94,9 @@ visibile).
 
 ### 20.4 La shell non ha una superficie dove dire niente, e il salvataggio non ha esito
 
-*settimo giro · shell · **P1** — la metà umana del §20.2; il caso peggiore è una perdita di dati*
+*settimo giro · shell · **P1** — **chiusa** con la [0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md); era la metà umana del §20.2, e il caso peggiore era una perdita di dati*
 
-- [ ] **`saveCurrent` non ha un `catch`, e la shell non ha uno stato di
+- [x] **`saveCurrent` non ha un `catch`, e la shell non ha uno stato di
       salvataggio.** `await api.writeDocument(currentDoc, text)`
       (`panels/document.ts`) è invocato da un `setTimeout`: se la scrittura
       fallisce — vault in sola lettura, disco pieno, file bloccato da un'altra
@@ -100,7 +106,7 @@ visibile).
       usa; uno **stato di salvataggio** non esiste proprio — non c'è «salvato»,
       non c'è «salvataggio in corso», non c'è «non salvato». L'utente continua
       a scrivere per un'ora dentro una nota che nessuno sta scrivendo su disco.
-- [ ] **La shell sa già di stare per distruggere il lavoro di un'altra
+- [x] **La shell sa già di stare per distruggere il lavoro di un'altra
       applicazione, e lo dice alla console.** `reloadIfClean`
       (`panels/document.ts`) col buffer sporco e `origin.actor == watcher`
       stampa, testualmente, *«è stato cambiato da un'altra applicazione mentre
@@ -113,7 +119,7 @@ visibile).
       sono la stessa cosa. Il **dialogo di conflitto** è lavoro dichiarato di M3
       (§18.1); questa voce è ciò che serve **prima** e comunque, perché lo stesso
       buco copre altri undici avvisi che un dialogo di conflitto non riguarda.
-- [ ] **Un'organizzazione congelata è una sessione di lavoro buttata.**
+- [x] **Un'organizzazione congelata è una sessione di lavoro buttata.**
       Se `.fub/workspace.json` non si legge, non lo si sovrascrive: la
       decisione è giusta, ed è la stessa della configurazione. Ciò che manca è
       **dirlo a chi sta lavorando**. Dal §11.3
@@ -123,7 +129,7 @@ visibile).
       lo scrive in console. Ma la console di un'app impacchettata non si apre:
       finché non c'è una superficie, ogni icona e ogni riordino continuano a
       essere accettati, disegnati e persi senza un segno che l'utente veda.
-- [ ] **Gli altri punti dello stesso buco**, sparsi per la shell: una view che
+- [x] **Gli altri punti dello stesso buco**, sparsi per la shell: una view che
       non si ridisegna lascia montato l'albero precedente (`ui/panel-host.ts`) —
       cioè un pannello **stantio identico a uno vivo**, che è il sintomo che il
       test del lotto ([decisione 0011](../decisions/0011-il-lotto.md)) esiste per prevenire in un altro modo; un ascoltatore
@@ -147,7 +153,7 @@ visibile).
       un posto e «quattordici» in un altro, e cresce da sé a ogni pannello nuovo.
       (La palette, quando è lei a ricaricare i comandi, un `notify` lo fa:
       `ui/palette.ts`.)
-- [ ] Cosa serve, e non è più costruire un centro notifiche: **quello c'è**
+- [x] Cosa serve, e non è più costruire un centro notifiche: **quello c'è**
       (§10.3, [decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)
       — toast, storico, raggruppamento, due toni, e una porta sola, `notify`), e
       adesso ha anche una **sorgente** dal backend
@@ -163,6 +169,23 @@ visibile).
       barra del vault perché *«è il posto più visibile che la shell ha»*
       (`main.ts`, in coda). La regola è scritta, è giusta, ed è applicata **una
       volta su quattordici**.
+
+**Com'è andata**, e le due cose che si sono scoperte facendola. La prima: la
+superficie non era il problema — c'era dal §10.3 — e il salvataggio non la usava
+perché non aveva **un esito da darle**. Dirlo era metà del lavoro; l'altra metà è
+stata separare i due fatti che stavano in un campo solo, «c'è qualcosa da
+scrivere» e «ciò che ho scritto è arrivato», e decidere quale dei due vince
+quando sono veri insieme (vince il guasto: altrimenti la battuta dopo lo
+nasconde). La seconda: il conto era giusto e non copriva tutto. Il quindicesimo
+punto — l'elenco dei comandi che non arriva, e ogni scorciatoia dichiarata muore
+— non aveva nemmeno una `console` da contare, e la sedicesima riga che diceva
+«nessuno lo disegna» era in `VaultInfo.unread`. **Un conteggio trova ciò che ha
+lasciato una traccia; ciò che non ne ha lasciata nessuna si trova solo
+leggendo.** E una terza, arrivata **usandola**: dei tre casi in cui il file
+cambia sotto un buffer sporco, i due nominati erano quelli rari, e il terzo — la
+scrittura che torna indietro dal nostro stesso autosave — era quello che capita
+a ogni nota lunga. Un avviso che compare quando non è successo niente non è un
+avviso in più: è ciò che insegna a ignorare gli altri.
 
 *Sblocca:* 2.1 (autosave, crash recovery, gestione conflitti file), 24.2
 (error reporting chiaro, autosave recovery), 3.1 (vault read-only, vault su

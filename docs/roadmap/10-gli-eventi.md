@@ -28,5 +28,7 @@ passa lo firma chi l'identità ce l'ha.
 Resta fuori, ed è di un'altra seduta: che ciò che va storto **nel backend** abbia
 una variante di evento con dentro un errore tipizzato è il
 [§20.2](20-quando-qualcosa-va-storto.md) (col §12.2 per il tipo), e che i
-quattordici avvisi oggi scritti in `console` arrivino fin qui è il
-[§20.4](20-quando-qualcosa-va-storto.md). Il posto dove atterreranno adesso c'è.
+quattordici avvisi allora scritti in `console` arrivino fin qui era il
+[§20.4](20-quando-qualcosa-va-storto.md), **chiuso** dalla
+[0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md): ci sono
+atterrati tutti e quattordici.
