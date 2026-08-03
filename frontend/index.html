@@ -11,7 +11,7 @@
          attraversare la topbar, la ricerca e l'intero albero delle note — che
          su un vault vero sono centinaia di fermate — prima di arrivare al
          posto dove si scrive. -->
-    <a href="#editor" class="skip-link" data-i18n="app.skip_to_editor">Vai all'editor</a>
+    <a href="#panes" class="skip-link" data-i18n="app.skip_to_editor">Vai all'editor</a>
     <div id="app">
       <header id="topbar">
         <span class="brand">Fub</span>
@@ -126,14 +126,20 @@
           </div>
           <div id="views-left"></div>
         </aside>
-        <section id="editor-pane" data-i18n-label="region.document" aria-label="Documento">
-          <div id="editor"></div>
-          <!-- La modalità Lettura: lo stesso documento reso, non editabile.
-               Non è un pannello sempre acceso accanto all'editor — è l'editor
-               che lascia il posto, ed è perché `PaneMode` è un enum di
-               modalità **esclusive**. -->
-          <div id="preview" class="markdown-preview" tabindex="0" hidden></div>
-        </section>
+        <!-- L'area principale: **vuota nell'HTML**, e non per pigrizia.
+             Fino a ieri qui c'erano un editor e un'anteprima, uno ciascuno, ed
+             era il modello di layout scritto in un file statico: due riquadri
+             non si potevano avere perché non c'era dove metterli. Adesso i
+             riquadri li disegna `panels/document.ts` dall'albero che
+             `state/layout.ts` tiene — quanti sono e come sono disposti è uno
+             stato che si ricorda fra un avvio e l'altro, e uno stato non si
+             scrive nel markup. -->
+        <section
+          id="panes"
+          tabindex="-1"
+          data-i18n-label="region.document"
+          aria-label="Documento"
+        ></section>
         <section id="right-pane" data-i18n-label="region.sidebars" aria-label="Pannelli laterali">
           <!-- Le view dichiarative (Struttura, Tag, Backlink, …) si montano
                qui per placement: gli id e i titoli li dichiara il backend. -->

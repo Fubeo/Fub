@@ -18,16 +18,17 @@ e la [corrispondenza](numerazione.md) dice dove è andata a finire.
 Ne esce l'ordine in cui quelle quattro si sbloccano a vicenda, che era la cosa
 che nessuna delle quattro sedute poteva vedere da sola:
 
-**il modello di layout (§1.2) → il grafo nell'area principale (§3.3)**, e di
+**il modello di layout (~~§1.2~~) → il grafo nell'area principale (§3.3)**, e di
 lato la tastiera (§18.2) che deve arbitrare fra i comandi del kernel e quelli
 della shell prima che §4.4 le chieda un secondo livello di decorazioni. La
 §2.9 non è in coda a nessuno: si paga quando le liste diventano lunghe.
 
-Del §1.2 è caduta la parte che non aspettava niente — cestino e cronologia sono
-due `ViewProvider`
-([0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)) — e ciò che
-resta della voce è **solo** il modello di layout, cioè esattamente il nodo di
-quell'ordine.
+Il primo anello è **caduto**: il ~~§1.2~~ è chiuso con la
+[0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md), e l'ordine ha
+fatto il suo lavoro — la §3.3 non aspetta più niente. La cosa che quell'ordine
+non poteva prevedere è che il nodo costasse **zero firma**: i riquadri erano già
+nel contratto dalla [0007](../decisions/0007-contesto-di-sessione.md), e ciò che
+mancava era un corpo alla shell.
 
 Le due voci native della seduta. La 18.2 dipendeva dal registro comandi
 ([decisione 0009](../decisions/0009-registro-dei-comandi.md)) e dai settings
@@ -116,9 +117,9 @@ in [decisions/](../decisions/README.md). Stanno qui perché è qui che verranno
 eseguite: sono tutte shell, e la seduta che le ospitava non ha più niente da
 decidere per loro.
 
-### 1.2 Smontare il monolite
+### ~~1.2 Smontare il monolite~~
 
-*ex §3.1 · shell · **P1** — dalla [seduta 1](01-forma-della-shell.md) ([decisione 0015](../decisions/0015-la-forma-della-shell.md)); resta il modello di layout, ed è l'unico*
+*ex §3.1 · shell · **P1** — dalla [seduta 1](01-forma-della-shell.md) ([decisione 0015](../decisions/0015-la-forma-della-shell.md)); **chiusa** con la [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md), che era l'ultima casella*
 
 - [x] **Un modulo per dominio** (`explorer`, `search`, `trash`, `history`,
       `graph`) con un piccolo store condiviso e un router di eventi kernel:
@@ -146,19 +147,31 @@ decidere per loro.
       migrate, sono **sparite** insieme al loro unico chiamante. Con loro se ne
       sono andate cinque porte IPC in tutto, e il debito dichiarato del §16.6 è
       sceso da cinque a due.
-- [ ] **Modello di layout**: tab, split, pane, workspace salvabili (3.3, 4.1).
-      Oggi c'è un editor solo e un documento solo: tutto il capitolo 3.3 è
-      bloccato da questa mancanza, non dalla UI. **Non è un refactor, è una
-      feature**, e la sua metà kernel va decisa insieme a `PaneId` — le sessioni
-      multiple, che le stavano davanti, sono **fatte**
-      ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md):
-      l'host tiene una mappa di vault aperti, ogni comando IPC accetta un `vault`
-      opzionale, e ci sono `list_vaults`, `set_current_vault` e `close_vault`, che
-      oggi non chiama nessuno) —
-      la metà shell si esegue qui, e sblocca la §3.3 qui sotto. Ciò che è già
-      pronto: il contesto di sessione pubblicato porta l'identità del pannello,
-      quindi il giorno che i pannelli saranno due nessuno dovrà inventarsi da dove
-      viene la risposta.
+- [x] ~~**Modello di layout**: tab, split, pane, workspace salvabili (3.3, 4.1).~~
+      **Fatto** con la
+      [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md), e la
+      riga che diceva «la sua metà kernel va decisa insieme a `PaneId`» si è
+      rivelata falsa nel modo migliore: **non c'era niente da decidere**.
+      `ViewContext` porta un `pane` dalla
+      [0007](../decisions/0007-contesto-di-sessione.md) e lo stato di vista è già
+      per esemplare ([0037](../decisions/0037-lo-stato-di-vista.md)), quindi N
+      riquadri ci stavano già — la pluralità è un fatto della **shell**, e il
+      kernel una mappa di riquadri non la vuole, perché la domanda a cui risponde
+      («cosa sta guardando l'utente adesso») è una sola per definizione. Costo a
+      ridosso del freeze di M4: zero firma.
+
+      Le altre due cose che la voce teneva insieme si sono separate. «Il layout»
+      erano **due** oggetti — com'era aperta la finestra (nessun nome: stato di
+      vista, file della macchina) e un workspace **salvato con un nome** (creato
+      apposta: nel vault) — e distinguerli chiude anche la metà rimasta del
+      [§11.2](11-impostazioni-e-i-tre-stati.md#112-tre-stati-diversi-zero-contenitori).
+      E tab e split si sono disegnati **insieme**: un riquadro tiene N documenti
+      con uno attivo, e fare prima il solo split — che è ciò che sblocca la §3.3 —
+      avrebbe voluto dire buttare quel modello il giorno delle tab.
+
+      Il punto che la voce non nominava e che è costato di più: **una nota aperta
+      due volte è un buffer**. Due riquadri con due testi propri sarebbero due
+      note, e il salvataggio più recente coprirebbe l'altro senza dirlo.
 
 ### 2.9 Prestazioni della UI
 
@@ -202,9 +215,14 @@ decidere per loro.
       dalla [decisione 0016](../decisions/0016-cosa-e-una-view.md) e *come*
       disegnarci qualcosa che il core non conosce c'è dalla
       [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md).
-      **Aspetta il modello di layout della §1.2 qui sopra**, ed è la ragione per
-      cui le due voci ora stanno nello stesso file: finché l'area principale è un
-      pannello solo, spostarci il grafo vuol dire togliere di mezzo l'editor.
+      **E non aspetta più nemmeno il modello di layout**: il ~~§1.2~~ è chiuso
+      ([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)), i
+      riquadri sono N, e spostarci il grafo non vuol più dire togliere di mezzo
+      l'editor. Quel che manca adesso ha un nome preciso, ed è più piccolo di
+      quanto sembrasse: un riquadro tiene tab di **documenti**, e deve saperne
+      tenere una di **view**. È un pannello nativo che diventa `ViewProvider` —
+      il pattern della [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md) —
+      e merita il verbale suo.
 - [ ] **Il conto del 21.1 resta da saldare**: ogni modulo Suite è «installabile
       separatamente» e «disattivabile», e FubCanvas, FubDB, FubCharts, FubMaps e
       FubForms (21.2) hanno bisogno di un renderer proprio. Con la strada

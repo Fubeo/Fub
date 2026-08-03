@@ -3201,13 +3201,22 @@ impl Workspace {
             .collect()
     }
 
-    /// Scorciatoia per una shell a un pannello solo: il documento attivo, senza
+    /// Scorciatoia per chi ha un pannello solo: il documento attivo, senza
     /// selezione né modalità dichiarata.
     ///
     /// Non è una seconda strada per la stessa cosa — è la stessa strada con i
-    /// campi che una shell senza split non ha da dire. Azzera la selezione:
+    /// campi che chi non ha lo split non ha da dire. Azzera la selezione:
     /// dichiarare un documento e lasciare la selezione del precedente sarebbe
     /// l'unico modo di produrre uno span mentitore.
+    ///
+    /// La shell **non passa più di qui** dal §1.2: i suoi riquadri sono N e
+    /// pubblica `ViewContext` interi. Restano i test e gli esempi, ed è il
+    /// motivo per cui questo non si toglie — la comodità è onesta, e nominare
+    /// `MAIN_PANE` in un banco con un riquadro solo è ciò che si vuole davvero
+    /// dire. Che i riquadri siano N non ha cambiato niente qui sotto: il kernel
+    /// non tiene una mappa di riquadri e non deve, perché la domanda a cui
+    /// risponde — cosa sta guardando l'utente adesso — è una sola per
+    /// definizione (vedi la 0078).
     pub fn set_active_document(&mut self, id: Option<DocId>) -> Vec<String> {
         let context = id.map(|id| ViewContext::new(MAIN_PANE).with_doc(Some(id)));
         self.set_active_context(context)

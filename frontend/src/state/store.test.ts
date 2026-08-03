@@ -3,7 +3,7 @@
 // ricordare. Sono decisioni, non cablaggio — e una decisione che si prova solo
 // aprendo l'app non la prova nessuno.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadActiveSpace, loadExpanded, loadMode, saveExpanded, state } from "./store";
+import { loadActiveSpace, loadExpanded, saveExpanded, state } from "./store";
 
 const viewState = vi.fn();
 const setViewState = vi.fn();
@@ -26,7 +26,6 @@ beforeEach(() => {
 describe("rileggere dove si era rimasti", () => {
   it("la prima volta non c'è niente, e non è un errore", async () => {
     viewState.mockResolvedValue(null);
-    expect(await loadMode()).toBe("live_preview");
     await loadExpanded();
     expect(state.expanded.size).toBe(0);
     await loadActiveSpace();
@@ -34,24 +33,14 @@ describe("rileggere dove si era rimasti", () => {
   });
 
   it("ritrova ciò che aveva salvato", async () => {
-    viewState.mockResolvedValue("reading");
-    expect(await loadMode()).toBe("reading");
-
     viewState.mockResolvedValue(["note", "note/2026"]);
     await loadExpanded();
     expect([...state.expanded]).toEqual(["note", "note/2026"]);
   });
 
-  // Il file si apre con un editor di testo — è la promessa fatta alle
-  // impostazioni nella 0036 — quindi ci si può trovare dentro qualunque cosa. Un
-  // valore che non è una modalità vale come nessun valore: una shell che parte
-  // in uno stato che non esiste è peggio di una che parte al default.
-  it("un valore che non è una modalità vale come nessuno", async () => {
-    viewState.mockResolvedValue("lettura");
-    expect(await loadMode()).toBe("live_preview");
-    viewState.mockResolvedValue(42);
-    expect(await loadMode()).toBe("live_preview");
-  });
+  // La **modalità** non si prova più di qui: dal §1.2 è di ogni riquadro e vive
+  // nel layout, e la stessa regola — un valore che non è una modalità vale come
+  // nessun valore — è provata in `layout.test.ts`, dove adesso sta.
 
   it("cartelle aperte che non sono una lista non fanno cadere la sidebar", async () => {
     viewState.mockResolvedValue("note");
@@ -63,7 +52,6 @@ describe("rileggere dove si era rimasti", () => {
   // o con un file di stato che non si è potuto leggere — si riparte dal default.
   it("un errore dell'IPC non impedisce di partire", async () => {
     viewState.mockRejectedValue(new Error("nessun vault aperto"));
-    expect(await loadMode()).toBe("live_preview");
     await loadExpanded();
     expect(state.expanded.size).toBe(0);
   });

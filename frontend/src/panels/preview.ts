@@ -16,12 +16,9 @@
 // dell'editor.
 import type { RenderedDocument } from "../host/contract";
 import { api } from "../host/ipc";
-import { $ } from "../ui/dom";
 import { mountTree } from "../ui/node";
 import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
-
-const previewEl = $("#preview");
 
 /// Profondità massima di transclusion: oltre, l'embed resta un link.
 const MAX_EMBED_DEPTH = 5;
@@ -42,18 +39,21 @@ export function configurePreview(deps: PreviewDeps): void {
   apriPagina = deps.openPage;
 }
 
-/// Mostra o nasconde la superficie di lettura.
-export function setPreviewVisible(on: boolean): void {
-  previewEl.hidden = !on;
-}
-
-export function clearPreview(): void {
+/// Svuota una superficie di lettura.
+export function clearPreview(previewEl: HTMLElement): void {
   previewEl.innerHTML = "";
 }
 
-/// Chiede al kernel il documento reso e lo innesta, ricucendo link, parti ed
-/// embed.
-export async function updatePreview(id: string): Promise<void> {
+/// Chiede al kernel il documento reso e lo innesta in una superficie di
+/// lettura, ricucendo link, parti ed embed.
+///
+/// **Il contenitore arriva da fuori.** Fino a ieri era `#preview`, letto qui:
+/// era vero finché di riquadri ce n'era uno, e sarebbe diventato falso in
+/// silenzio — due riquadri in Lettura avrebbero disegnato due documenti diversi
+/// nello stesso elemento, e il secondo avrebbe vinto. Chi possiede la superficie
+/// è il riquadro (§1.2), e questo modulo torna a sapere solo *come* si rende un
+/// documento.
+export async function updatePreview(previewEl: HTMLElement, id: string): Promise<void> {
   const reso = await api.renderPreview(id);
   innesta(previewEl, reso);
   await hydrateEmbeds(previewEl, new Set([id]));

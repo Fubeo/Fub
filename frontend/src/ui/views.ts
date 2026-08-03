@@ -19,11 +19,16 @@
 // Il contratto ne nomina dieci (§2.2). Questa shell ne ospita **sette** — le
 // tre sidebar/basso di prima, più barra di stato, ribbon, modale e, dal §11.1,
 // la scheda di impostazioni — e le altre tre le dichiara **non ospitate**
-// invece di lasciarle cadere in silenzio: area principale, menu e menu
-// contestuale vogliono il modello di layout (§1.2, che è la feature 3.3) e un
-// menu applicativo, che non esistono ancora. Una view che le chiede riceve un
+// invece di lasciarle cadere in silenzio. Una view che le chiede riceve un
 // avviso che la nomina: è il minimo che il §20.4 chiede, in attesa della
 // superficie vera dove dirlo.
+//
+// L'area principale è quella che è cambiata di ragione. Non manca più il posto:
+// il modello di layout c'è (§1.2), e i riquadri sono N. Manca che un riquadro
+// possa tenere **una view** invece di un documento — oggi tiene tab di
+// documenti, e basta — ed è esattamente la §3.3, il grafo che deve smettere di
+// essere un pannello nativo. Il posto dove costruirla è chiaro adesso, che è
+// tutto ciò che questa voce doveva sbloccare.
 import { api } from "../host/ipc";
 import type { ActionRef, FieldValue, UiNode, ViewSpec, ViewSurface } from "../host/contract";
 import { $ } from "./dom";
@@ -87,7 +92,7 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
 /// perché è ciò che l'avviso dice a chi ha scritto la view: senza, il messaggio
 /// sarebbe «non supportato», che non aiuta nessuno a capire cosa aspettare.
 const NON_OSPITATE: Record<string, string> = {
-  main: "l'area principale ha un editor solo: serve il modello di layout (§1.2, FEATURES 3.3)",
+  main: "un riquadro dell'area principale tiene documenti, non ancora view: è la §3.3",
   menu: "questa shell non ha un menu applicativo",
   context_menu: "questa shell non ha un menu contestuale estendibile",
 };

@@ -14,7 +14,8 @@ import { statoDelVault, vociDelVault } from "./host/query";
 import { startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
 import { loadOrganization } from "./state/organization";
-import { emit, loadActiveSpace, loadExpanded, loadMode, state } from "./state/store";
+import { emit, loadActiveSpace, loadExpanded, state } from "./state/store";
+import { caricaLayout, docAttivo } from "./state/layout";
 import { loadCommandSpecs, primaNota } from "./state/vault";
 import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
@@ -35,12 +36,11 @@ import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
 import { mountTheme } from "./theme/theme";
 import {
-  closeDocument,
   mountDocument,
   openDocument,
   openWikilink,
   setEditorTheme,
-  setMode,
+  sincronizza,
 } from "./panels/document";
 import { mountExplorer } from "./panels/explorer";
 import { mountGraph } from "./panels/graph";
@@ -63,12 +63,6 @@ const paletteHost = {
 };
 
 async function init(): Promise<void> {
-  // La modalità **non si carica qui**: è per vault (§11.2), e un vault non c'è
-  // ancora. La carica `openVaultPath`, e chi apre applica; senza vault iniziale
-  // resta questo default, che è ciò che la shell mostrava prima che qualcuno
-  // guardasse qualcosa.
-  document.body.dataset.mode = state.mode;
-
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
   // giusta invece di correggersi mezzo secondo dopo. Va prima di
@@ -189,12 +183,12 @@ async function init(): Promise<void> {
   mountLocale(() => void mountDeclaredViews());
 
   const initial = await api.initialVault();
-  // Chi apre un vault applica anche la sua modalità (§11.2): è là dentro che si
-  // sa quale sia. Senza vault iniziale la applica qui, perché la stessa porta
-  // fa anche il cablaggio — classe attiva, resa inline, superficie di lettura —
-  // e la finestra vuota deve comunque essere in uno stato coerente.
+  // Chi apre un vault ripristina anche la sua disposizione (§1.2): è là dentro
+  // che si sa quale fosse. Senza vault iniziale si disegna comunque il layout di
+  // default, perché la finestra vuota deve essere in uno stato coerente — un
+  // riquadro, vuoto, col fuoco — e non in nessuno stato.
   if (initial) await openVaultPath(initial);
-  else await setMode(state.mode);
+  else await sincronizza();
 }
 
 async function pickVault(): Promise<void> {
@@ -212,18 +206,18 @@ async function openVaultPath(dir: string): Promise<void> {
   // Lo stato di vista di **questo** vault (§11.2): come lo si stava guardando.
   // Dopo l'apertura, perché è il backend a tenerlo e la chiave è il vault
   // aperto; e prima del segnale, perché chi si iscrive disegna con questi.
-  state.mode = await loadMode();
+  //
+  // Il layout è il pezzo che il §11.2 aspettava: quanti riquadri, con che tab
+  // dentro, in che modalità ciascuno. Non c'è più un `closeDocument()` qui —
+  // chiudeva il documento del vault precedente perché non c'era niente da
+  // ripristinare al posto suo, e adesso c'è: la finestra riparte com'era.
+  await caricaLayout();
   await loadExpanded();
   await loadActiveSpace();
-  // La modalità passa dalla stessa porta di un click sul commutatore: il
-  // cablaggio (classe attiva, resa inline, superficie di lettura, contesto
-  // pubblicato) sta in un punto solo invece che in due che devono restare
-  // d'accordo.
-  await setMode(state.mode);
+  await sincronizza();
   // Da qui in poi lo stato del vault è coerente: chi ne dipende può ripartire.
   emit("vault", info.root);
 
-  closeDocument();
   clearSearch();
   emit("documents");
 
@@ -243,8 +237,15 @@ async function openVaultPath(dir: string): Promise<void> {
 
   // La prima nota, chiesta con una finestra da uno (§14.4): l'apertura del
   // vault non porta più l'elenco intero, e per aprirne una non serve.
-  const prima = await primaNota();
-  if (prima) await openDocument(prima);
+  //
+  // **Solo se non c'era niente da ripristinare.** Aprire la prima nota era la
+  // cosa giusta quando la finestra ripartiva sempre vuota; adesso che si
+  // ricorda com'era, farlo comunque vorrebbe dire scavalcare con una nota
+  // qualunque le tab che l'utente aveva lasciato aperte.
+  if (!docAttivo()) {
+    const prima = await primaNota();
+    if (prima) await openDocument(prima);
+  }
 }
 
 /// Se due comandi si contendono la stessa combinazione, **dirlo** (§18.2).

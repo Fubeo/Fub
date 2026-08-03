@@ -89,6 +89,7 @@ cronologico di chiusura.
 | [0076](0076-le-impostazioni-vivono-nel-vault.md) | Le impostazioni vivono nel vault, e la macchina tiene solo ciò che serve quando il vault non si apre | **Revisione** della [0036](0036-le-impostazioni-e-i-tre-stati.md), §11.1 ([seduta 11](../roadmap/11-impostazioni-e-i-tre-stati.md)): non chiude una voce nuova, cambia dove sta un valore | 2026-08-03 |
 
 | [0077](0077-una-scorciatoia-e-una-chiave.md) | Una scorciatoia è una chiave di impostazione, e un comando di shell è un comando | §18.2 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — chiude registro unico, palette fuzzy, conflitti e scorciatoie riconfigurabili; resta il solo accordo **in sequenza** | 2026-08-03 |
+| [0078](0078-i-riquadri-sono-un-fatto-della-shell.md) | I riquadri sono un fatto della shell, e il buffer è del documento | §1.2 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — **chiude la voce**, ultima casella; chiude anche la metà rimasta del §11.2 e sblocca la §3.3. Zero firma: il `pane` del `ViewContext` c'era dalla [0007](0007-contesto-di-sessione.md) | 2026-08-03 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

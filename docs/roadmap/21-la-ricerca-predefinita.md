@@ -127,8 +127,11 @@ che lo ha prodotto.
       trasportata dall'altra parte del confine: là un indice che perde un
       documento adesso lo nomina, qui la shell non ha ancora niente di
       equivalente.
-- [ ] Va con la §1.2 (il modello di layout) per **dove** compare il modale, e
-      con la §18.2 per la scorciatoia che lo apre.
+- [ ] Va col ~~§1.2~~ per **dove** compare il modale — e quella metà adesso c'è
+      ([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)): il
+      riquadro col fuoco è una domanda con una risposta, quindi «aprire il
+      risultato *dove*» ha dove atterrare. Resta la §18.2 per la scorciatoia che
+      lo apre.
 
 ### 21.6 I pesi dei campi sono una costante di compilazione
 

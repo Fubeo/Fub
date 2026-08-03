@@ -35,12 +35,18 @@ decisione lascia scoperto (un vault nuovo riparte dalle impostazioni di fabbrica
 finché non nascerà la copia esplicita alla creazione) è nominato lì, non qui.
 
 Poi la [0037](../decisions/0037-lo-stato-di-vista.md) ha eseguito **metà** del
-§11.2: lo stato di vista c'è — due famiglie di capacità, un file della macchina
-che il kernel possiede, la chiave composta dall'host con dentro l'esemplare — e
-la shell ci è dentro. Il *layout* resta, e resta per una ragione che non è la
-pigrizia: oggi l'area principale è un pannello solo, quindi non c'è niente da
-disporre. Aspetta il modello di layout ([§1.2](18-editor-e-tastiera.md#12-smontare-il-monolite),
-seduta 18).
+~~§11.2~~: lo stato di vista c'è — due famiglie di capacità, un file della
+macchina che il kernel possiede, la chiave composta dall'host con dentro
+l'esemplare — e la shell ci è dentro. L'altra metà, il *layout*, l'ha chiusa la
+[0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md) **senza
+costruire un terzo contenitore**, ed è la parte che vale la pena raccontare: «il
+layout» erano due oggetti diversi, e ognuno aveva già la sua casa. *Com'era
+aperta la finestra* non ha un nome — è stato di vista, va nel file della
+macchina, non viaggia perché dipende dal monitor che uno ha davanti. *Un
+workspace salvato* un nome ce l'ha, e viaggia col vault come le note. Il criterio
+è quello che la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) aveva
+scritto e non applicato: **un'impostazione ha un valore alla volta, un layout ne
+ha uno per nome**. Il «terzo stato senza contenitore» del titolo non era terzo.
 
 Il sidecar dell'organizzazione (~~11.3~~) è **assorbito**, con la
 [0038](../decisions/0038-il-kernel-possiede-il-sidecar.md): lo possiede il
@@ -57,9 +63,9 @@ non stanno fra quelle, e un componente che può allargarsi i permessi da sé non
 permessi — non è una proprietà di chi chiede: è una proprietà di ciò che si
 scrive.
 
-### 11.2 Tre stati diversi, zero contenitori
+### ~~11.2 Tre stati diversi, zero contenitori~~
 
-*ex §3.10 · shell · **P2** — **mezza voce chiusa** con la [0037](../decisions/0037-lo-stato-di-vista.md) (lo stato di vista c'è, ed è nel contratto); resta il **layout**, che aspetta il modello di layout ([§1.2](18-editor-e-tastiera.md#12-smontare-il-monolite), seduta 18)*
+*ex §3.10 · shell · **P2** — **chiusa in due tempi**: lo stato di vista con la [0037](../decisions/0037-lo-stato-di-vista.md), il layout con la [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md). Resta **una casella**, e non è un contenitore che manca: è un formato che aspetta il suo primo cliente*
 
 - [x] **Un `ViewProvider` non ha dove tenere il proprio stato di vista**:
       scroll, sezioni collassate, filtro corrente, tab attiva. Non ha **niente**,
@@ -92,13 +98,22 @@ scrive.
       chiave — e il layout ha più configurazioni per lo stesso utente, quindi è
       un insieme nominato. La ragione sta in `fub_abi::settings`, dove la
       legge chi fosse tentato di infilarceli.
-- [ ] **Resta il layout** — l'altro contenitore. Il primo è fatto: lo stato di
-      vista della shell non sta più in `localStorage` (modalità, cartelle aperte,
-      spazio selezionato sono passati nel file della macchina) e quello dei
-      provider ha una casa, col pannello dei tag come primo cliente vero.
-      Il layout invece **aspetta**, e non per mancanza di disciplina: oggi
-      l'area principale è un pannello solo, quindi non c'è nessuna disposizione
-      da salvare, e un formato deciso adesso descriverebbe una cosa che non c'è
-      ancora. Si decide col modello di layout ([§1.2](18-editor-e-tastiera.md#12-smontare-il-monolite),
-      seduta 18) — dove nasce anche ciò che gli darebbe senso: più pannelli,
-      quindi più esemplari, quindi qualcosa da disporre.
+- [x] ~~**Resta il layout** — l'altro contenitore.~~ **Chiuso** con la
+      [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md), e non
+      costruendo il contenitore che questa riga si aspettava: **i due contenitori
+      c'erano già entrambi**. La riga diceva che il layout «aspetta» perché l'area
+      principale è un pannello solo, e su quello aveva ragione — il §1.2 ha fatto
+      i riquadri, e con loro c'è finalmente qualcosa da disporre. Ma diceva anche
+      «un formato deciso adesso descriverebbe una cosa che non c'è ancora», e lì
+      la separazione l'ha smentita a metà: *com'era aperta la finestra* è **stato
+      di vista** (nessun nome, file della macchina, non viaggia) e si è fatto
+      subito, perché è il contenitore che la 0037 aveva già costruito; il formato
+      che aspetta è solo quello dell'altro oggetto.
+- [ ] **I workspace salvati con un nome.** La casa è decisa — nel vault
+      (`.fub/`, [0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)),
+      perché li ha creati l'utente apposta, come le note e le scorciatoie — e il
+      formato aspetta di vedere **assetti veri**: quali disposizioni la gente
+      salva davvero, e se un workspace nomini anche i pannelli laterali o solo i
+      riquadri. È la casella residua di una voce chiusa, non una decisione
+      rimandata: la domanda «dove vive» ha una risposta, e indovinare un formato
+      prima del primo cliente è indovinare un formato da migrare.
