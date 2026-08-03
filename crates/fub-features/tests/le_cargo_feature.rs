@@ -7,6 +7,18 @@
 //! elenchi di cosa esiste, uno nel `Cargo.toml` e uno in `src/inventario.rs`,
 //! che nessuno confronta.
 //!
+//! # Cosa questo presidio **non** guarda
+//!
+//! Solo il `Cargo.toml` di questo crate. Chi consuma le feature ufficiali le
+//! **inoltra** (`fub-host` ha una cargo feature omonima per ognuna, e la
+//! dipendenza è a `default-features = false`), e quell'elenco lì nessuno lo
+//! confronta con questo: `trash` ci è mancato dal giorno in cui il bundle è
+//! nato, e non se n'è accorto nessuno perché `cargo test --workspace` unifica
+//! le feature — questo crate è anche un membro, quindi si compila coi suoi
+//! default e la mancanza sparisce. Si vede solo compilando `fub-host` da solo,
+//! che è ciò che farebbe chi lo usa come libreria. È il §16.3 visto da un piano
+//! più su, ed è una casella della [0079](../../../docs/decisions/0079-il-grafo-esce-dall-overlay.md).
+//!
 //! È esattamente il difetto che la
 //! [decisione 0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md)
 //! ha chiuso per la registrazione, e la ragione per cui la voce diceva che
@@ -126,7 +138,7 @@ fn ogni_cargo_feature_e_accesa_di_default() {
 /// Questa è la direzione opposta, e vale solo qui: se una riga sparisse
 /// dall'inventario lasciando la sua cargo feature nel `Cargo.toml`, il primo
 /// test resterebbe verde — l'inventario sarebbe più corto, non incoerente. Il
-/// `cfg` in testa è l'unico posto di questo file in cui gli otto nomi sono
+/// `cfg` in testa è l'unico posto di questo file in cui i dieci nomi sono
 /// scritti, e serve a dire *quando* la domanda ha senso: in una build parziale
 /// l'inventario è più corto di proposito.
 #[test]
@@ -136,7 +148,9 @@ fn ogni_cargo_feature_e_accesa_di_default() {
     feature = "backlinks",
     feature = "outline",
     feature = "tags",
+    feature = "trash",
     feature = "stats",
+    feature = "graph",
     feature = "commands",
     feature = "blocks"
 ))]

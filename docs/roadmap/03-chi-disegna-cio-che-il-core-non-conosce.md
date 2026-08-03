@@ -20,10 +20,13 @@ chiusi troppo presto, che sono diventati **un tipo solo** con namespace) e la
 §3.6 (sanitizzazione e CSP in un punto solo). Il verbale dice cosa si è scartato
 e cosa resta scoperto.
 
-Della §3.3 la **decisione** è presa — è la terza opzione, *solo prima parte e
-tutto il resto dichiarativo* — e resta la sua metà di esecuzione: il grafo è
-ancora un pannello nativo. È shell, e aspetta il modello di layout, quindi sta
-nella
-[§3.3 in coda alla seduta 18](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell),
-accanto alla [§1.2](18-editor-e-tastiera.md#12-smontare-il-monolite) che gliela
-sblocca. Il numero si trasferisce, non si rinomina.
+Della §3.3 la **decisione** era presa qui — è la terza opzione, *solo prima parte
+e tutto il resto dichiarativo* — e la sua metà di esecuzione è andata in coda
+alla seduta 18, accanto alla [§1.2](18-editor-e-tastiera.md#12-smontare-il-monolite)
+che gliela sbloccava. Il numero si trasferisce, non si rinomina. Ora è
+**chiusa** anche quella
+([0079](../decisions/0079-il-grafo-esce-dall-overlay.md)): il grafo è un
+`ViewProvider` sull'area principale, e il ramo «la shell che conosce `ns`
+disegna il suo widget» — che la 0017 aveva descritto senza costruire, perché non
+aveva un cliente — ha trovato il suo. Vale la pena rileggere la 0017 sapendolo:
+aveva ragione a non costruirlo, e ha avuto ragione a dire come sarebbe fatto.

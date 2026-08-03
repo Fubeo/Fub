@@ -52,6 +52,7 @@ import {
   chiudiTab,
   dividi,
   docAttivo,
+  documenti,
   fuocoSu,
   impostaModalita,
   layout,
@@ -60,14 +61,18 @@ import {
   paneConDoc,
   panes,
   rinomina,
+  stessaTab,
+  tabAttiva,
   togliDappertutto,
   type LayoutNode,
+  type Tab,
 } from "../state/layout";
 import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { clearPreview, updatePreview } from "./preview";
+import { montaVistaInRiquadro, smontaVistaDalRiquadro, viewPrincipale } from "../ui/views";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
 
@@ -91,8 +96,14 @@ interface Riquadro {
   tabsEl: HTMLElement;
   editorEl: HTMLElement;
   previewEl: HTMLElement;
+  /// Dove finisce una view dichiarata che questo riquadro sta ospitando (§3.3).
+  /// Vuoto quasi sempre: è la terza superficie di un riquadro, accanto
+  /// all'editor e alla lettura, e come loro c'è anche quando non si vede.
+  vistaEl: HTMLElement;
   editor: Editor;
-  mostrato: string | null;
+  /// Cosa c'è **adesso** in questo riquadro. Una tab e non un path: dalla §3.3
+  /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
+  mostrato: Tab | null;
 }
 
 /// Il testo di un documento aperto, con lo stato del suo salvataggio.
@@ -198,7 +209,11 @@ export function mountDocument(d: DocumentDeps): void {
 
 /// I documenti aperti in un riquadro qualunque, senza ripetizioni.
 function documentiAperti(): string[] {
-  return [...new Set(panes().flatMap((id) => pane(id)?.docs ?? []))];
+  const p = panes().flatMap((id) => {
+    const stato = pane(id);
+    return stato ? documenti(stato) : [];
+  });
+  return [...new Set(p)];
 }
 
 // --- i comandi dei riquadri (§18.2) -----------------------------------------
@@ -281,7 +296,8 @@ function dividiRiquadro(dir: "row" | "col"): void {
 
 async function chiudiRiquadroCorrente(): Promise<void> {
   const id = layout.focus;
-  const suoi = pane(id)?.docs ?? [];
+  const stato = pane(id);
+  const suoi = stato ? documenti(stato) : [];
   if (!chiudiPane(id)) return;
   // Il riquadro non c'è più: i suoi documenti possono essere rimasti senza
   // nessuno che li guardi, e allora il buffer va messo in salvo e dimenticato.
@@ -290,10 +306,23 @@ async function chiudiRiquadroCorrente(): Promise<void> {
 
 async function chiudiTabCorrente(): Promise<void> {
   const p = paneAttivo();
-  const doc = docAttivo();
+  const tab = tabAttiva();
   if (p.active < 0) return;
   chiudiTab(layout.focus, p.active);
-  if (doc) await congedaSeNessunoLoGuarda(doc);
+  await congeda(layout.focus, tab);
+}
+
+/// Una tab è stata chiusa: si lascia andare ciò che teneva in vita.
+///
+/// Le due specie di tab hanno due cose diverse da rilasciare, e nessuna delle
+/// due si raccoglie da sé: un documento ha un buffer che va **salvato** prima di
+/// dimenticarlo, una view ha un pannello registrato e un albero montato. Che
+/// stiano nella stessa funzione è ciò che tiene chi chiude una tab dal doversi
+/// ricordare quale delle due aveva sotto le dita.
+async function congeda(paneId: string, tab: Tab | null): Promise<void> {
+  if (!tab) return;
+  if (tab.k === "doc") await congedaSeNessunoLoGuarda(tab.doc);
+  else smontaVistaDalRiquadro(tab.view, paneId);
 }
 
 /// Un documento che nessun riquadro mostra più: si salva se era sporco, e poi si
@@ -343,10 +372,10 @@ async function disegna(): Promise<void> {
     const r = riquadri.get(id);
     const p = pane(id);
     if (!r || !p) continue;
-    disegnaTab(r, p.docs, p.active);
+    disegnaTab(r, p.tabs, p.active);
     r.root.dataset.mode = p.mode;
     r.root.classList.toggle("focus", id === layout.focus);
-    await mostra(r, docAttivo(id));
+    await mostra(r, tabAttiva(id));
   }
   aggiornaCommutatore();
   if (state.currentDoc !== attivo) {
@@ -408,7 +437,14 @@ function riquadro(id: string): Riquadro {
   previewEl.className = "pane-preview markdown-preview";
   previewEl.tabIndex = 0;
 
-  root.append(tabsEl, editorEl, previewEl);
+  // La terza superficie del riquadro (§3.3). Non è `declared-view` come nella
+  // sidebar e non deve esserlo: là una view è un pannello con un titolo che si
+  // apre e si chiude, qui **è** il contenuto del riquadro, e il titolo è già
+  // sulla tab.
+  const vistaEl = document.createElement("div");
+  vistaEl.className = "pane-view";
+
+  root.append(tabsEl, editorEl, previewEl, vistaEl);
   // Toccare un riquadro gli dà il fuoco. `mousedown` e non `click` perché il
   // fuoco deve essere già di questo riquadro quando l'editor riceve l'evento:
   // altrimenti il contesto pubblicato subito dopo sarebbe quello di prima.
@@ -442,27 +478,32 @@ function riquadro(id: string): Riquadro {
   // correggersi al primo cambio (§12.4).
   if (tema) editor.setTheme(tema);
 
-  const r: Riquadro = { id, root, tabsEl, editorEl, previewEl, editor, mostrato: null };
+  const r: Riquadro = { id, root, tabsEl, editorEl, previewEl, vistaEl, editor, mostrato: null };
   riquadri.set(id, r);
   return r;
 }
 
 /// Disegna la striscia delle tab di un riquadro.
-function disegnaTab(r: Riquadro, docs: string[], active: number): void {
+function disegnaTab(r: Riquadro, tabs: Tab[], active: number): void {
   r.tabsEl.replaceChildren(
-    ...docs.map((doc, i) => {
+    ...tabs.map((t0, i) => {
       const tab = document.createElement("button");
       tab.className = "tab" + (i === active ? " active" : "");
       tab.setAttribute("role", "tab");
       tab.setAttribute("aria-selected", String(i === active));
-      tab.title = doc;
+      // Il `title` di una tab di documento è il **path intero**, perché due note
+      // omonime in cartelle diverse sono il caso in cui il nome non basta. Una
+      // view non ha un path: il suo titolo è già tutto ciò che c'è da sapere.
+      tab.title = t0.k === "doc" ? t0.doc : nomeTab(t0);
 
       const nome = document.createElement("span");
       nome.className = "tab-name";
-      nome.textContent = titolo(doc);
+      nome.textContent = nomeTab(t0);
       // Il pallino del non salvato: è l'unica cosa che dica, guardando una tab
-      // che non è quella davanti, che lì dentro c'è del lavoro in coda.
-      if (buffers.get(doc)?.dirty) tab.classList.add("dirty");
+      // che non è quella davanti, che lì dentro c'è del lavoro in coda. Una view
+      // non ha un buffer, quindi non si sporca.
+      if (t0.k === "doc" && buffers.get(t0.doc)?.dirty) tab.classList.add("dirty");
+      if (t0.k === "view") tab.classList.add("tab-view");
 
       const chiudi = document.createElement("span");
       chiudi.className = "tab-close";
@@ -474,7 +515,7 @@ function disegnaTab(r: Riquadro, docs: string[], active: number): void {
         e.stopPropagation();
         e.preventDefault();
         chiudiTab(r.id, i);
-        void congedaSeNessunoLoGuarda(doc);
+        void congeda(r.id, t0);
       });
 
       tab.append(nome, chiudi);
@@ -482,12 +523,23 @@ function disegnaTab(r: Riquadro, docs: string[], active: number): void {
       return tab;
     }),
   );
-  r.tabsEl.hidden = docs.length === 0;
-  const aperto = active >= 0 ? titolo(docs[active]) : null;
+  r.tabsEl.hidden = tabs.length === 0;
+  const aperta = active >= 0 ? nomeTab(tabs[active]) : null;
   r.root.setAttribute(
     "aria-label",
-    aperto ? t("pane.named", { name: aperto }) : t("pane.empty"),
+    aperta ? t("pane.named", { name: aperta }) : t("pane.empty"),
   );
+}
+
+/// Come si chiama una tab.
+///
+/// Per un documento è il nome della nota; per una view è il **titolo che la view
+/// dichiara**, già risolto nella lingua dell'utente dal kernel (0040). Se quella
+/// view non è (più) dichiarata — un bundle spento fra due avvii, con la tab
+/// rimasta nel file della macchina — resta il suo id: è brutto e non mente, che
+/// è l'ordine giusto delle due cose.
+function nomeTab(tab: Tab): string {
+  return tab.k === "doc" ? titolo(tab.doc) : (viewPrincipale(tab.view)?.title ?? tab.view);
 }
 
 /// Il nome di una nota come si legge su una tab: l'ultimo pezzo del path, senza
@@ -499,17 +551,39 @@ function titolo(doc: string): string {
   return punto > 0 ? base.slice(0, punto) : base;
 }
 
-/// Mette nell'editor di un riquadro il documento che gli tocca, se non c'è già.
-async function mostra(r: Riquadro, doc: string | null): Promise<void> {
-  if (r.mostrato === doc) return;
-  r.mostrato = doc;
-  if (!doc) {
+/// Mette in un riquadro ciò che la sua tab attiva dice, se non c'è già.
+///
+/// Le due specie di tab accendono due superfici diverse dello stesso riquadro, e
+/// il ramo che le distingue sta **qui e basta**: da `disegna` in giù nessuno sa
+/// che esistano due specie, e chi cambia tab non deve dire quale.
+async function mostra(r: Riquadro, tab: Tab | null): Promise<void> {
+  const cambiata = !r.mostrato || !tab || !stessaTab(r.mostrato, tab);
+  // Una view che se ne va porta con sé il suo pannello: senza, resterebbe
+  // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
+  if (cambiata && r.mostrato?.k === "view") smontaVistaDalRiquadro(r.mostrato.view, r.id);
+  r.mostrato = tab;
+  r.root.classList.toggle("con-vista", tab?.k === "view");
+
+  if (tab?.k === "view") {
+    // **Non condizionata a `cambiata`**, ed è voluto: `montaVistaInRiquadro` è
+    // idempotente, e chiamarla a ogni giro è ciò che rimette in piedi le view
+    // dei riquadri quando `mountDeclaredViews` azzera tutto per un vault nuovo.
+    // Con un editor questo giro costerebbe cursore e cronologia; con una view
+    // dichiarata costa un `render_view`, che è la stessa cosa che il pannello
+    // farebbe da sé al primo evento.
+    r.editor.setDoc("");
+    clearPreview(r.previewEl);
+    await montaVistaInRiquadro(tab.view, r.id, r.vistaEl);
+    return;
+  }
+  if (!cambiata) return;
+  if (!tab) {
     r.editor.setDoc("");
     clearPreview(r.previewEl);
     return;
   }
-  r.editor.setDoc(await leggiBuffer(doc));
-  await ridisegnaLettura(doc);
+  r.editor.setDoc(await leggiBuffer(tab.doc));
+  await ridisegnaLettura(tab.doc);
 }
 
 /// Il testo di un documento: dal buffer se qualcuno lo tiene già aperto, dal
@@ -644,7 +718,7 @@ function scritto(paneId: string, text: string): void {
   for (const altro of paneConDoc(doc)) {
     if (altro === paneId) continue;
     const r = riquadri.get(altro);
-    if (r && r.mostrato === doc) r.editor.syncDoc(text);
+    if (r && r.mostrato?.k === "doc" && r.mostrato.doc === doc) r.editor.syncDoc(text);
   }
   // Il pallino del non salvato compare adesso, su ogni tab che mostra questa
   // nota. Ridisegnare le tab a ogni battuta costa poco — sono N pulsanti — e
@@ -652,7 +726,7 @@ function scritto(paneId: string, text: string): void {
   for (const id of paneConDoc(doc)) {
     const r = riquadri.get(id);
     const p = pane(id);
-    if (r && p) disegnaTab(r, p.docs, p.active);
+    if (r && p) disegnaTab(r, p.tabs, p.active);
   }
   scheduleSave(doc);
 }
@@ -713,7 +787,7 @@ async function saveDoc(doc: string): Promise<void> {
   for (const id of paneConDoc(doc)) {
     const r = riquadri.get(id);
     const p = pane(id);
-    if (r && p) disegnaTab(r, p.docs, p.active);
+    if (r && p) disegnaTab(r, p.tabs, p.active);
   }
   // Il sorgente sul disco è ora quello del buffer: la selezione torna
   // posizionabile, e il kernel — che l'aveva lasciata cadere alla scrittura —
@@ -746,7 +820,7 @@ async function reloadIfClean(id: string, daFuori = false): Promise<void> {
     const r = riquadri.get(paneId);
     // `syncDoc` e non `setDoc`: il documento è lo stesso, è cambiato il testo
     // sotto — e chi lo sta guardando non deve perdere il punto in cui era.
-    if (r && r.mostrato === id) r.editor.syncDoc(source);
+    if (r && r.mostrato?.k === "doc" && r.mostrato.doc === id) r.editor.syncDoc(source);
   }
 }
 

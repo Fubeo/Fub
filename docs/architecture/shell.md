@@ -64,7 +64,9 @@ frontend/src/
                    Il pannello del cestino è una view dichiarata (§1.2), e la
                    cronologia — che era `history.ts` — anche: il file non c'è più
     sidebar.ts     quale pannello della sidebar occupa lo spazio
-    graph.ts       il grafo su canvas (superficie privilegiata, fuori da UiNode)
+    graph.ts       la **metà shell** del grafo: il renderer di `fub:graph` su
+                   canvas. I dati li manda il `ViewProvider` (§3.3): di qua resta
+                   il disegno, che è ciò che `UiNode` non esprime e non deve
     activity.ts    il centro attività: cosa sta girando, a che punto è, come si ferma (§10.3)
     settings.ts    il pannello di impostazioni: il form generato dallo schema che
                    i componenti dichiarano, i componenti da accendere e spegnere,
@@ -316,13 +318,16 @@ modalità, e la finestra si ricorda com'era. Restano queste, che sono altre voci
   Con questo il [§11.2](../roadmap/11-impostazioni-e-i-tre-stati.md) si chiude:
   il «terzo stato senza contenitore» che il titolo nominava non era terzo — i
   due contenitori esistevano già entrambi.
-- **Una view dichiarata dentro un riquadro** ([§3.3](../roadmap/18-editor-e-tastiera.md)).
-  Un riquadro tiene tab di **documenti**; il giorno che ne tenga una di view, il
-  grafo smette di essere un pannello nativo in overlay. Non è più bloccato da
-  niente — è il posto che mancava, e adesso c'è.
+- ~~**Una view dichiarata dentro un riquadro**~~ ([§3.3](../roadmap/18-editor-e-tastiera.md)).
+  **Fatta** ([0079](../decisions/0079-il-grafo-esce-dall-overlay.md)): una tab è
+  un `Tab` discriminato — un documento o una view — e una view che dichiara
+  `ViewSurface::Main` non si monta all'avvio ma quando un riquadro apre la sua
+  tab, con l'esemplare che è l'id del riquadro. Il grafo è il primo cliente, e
+  con lui l'overlay è sparito.
 - ~~**Cestino e cronologia come `ViewProvider` veri.**~~ **Fatti**
   ([0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)): sono due
   provider di `fub-features`, e di qua è rimasto solo il *gesto* di cestinare —
-  che è della shell perché tocca il buffer aperto. Il grafo non è in attesa di
-  niente: resta fuori da `UiNode` per decisione di M2, ed è nel registro come
-  superficie `overlay`.
+  che è della shell perché tocca il buffer aperto. E il grafo è diventato il
+  settimo ([0079](../decisions/0079-il-grafo-esce-dall-overlay.md)): fuori da
+  `UiNode` per il disegno — quella decisione di M2 regge — e dentro il protocollo
+  per tutto il resto. La superficie `overlay` del registro non ha più clienti.

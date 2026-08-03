@@ -1,24 +1,57 @@
 // La vista grafo del vault: renderer force-directed su Canvas.
 //
-// È l'unica view FUORI dal protocollo dichiarativo (`UiNode` non esprime un
-// canvas, né deve): dal backend arriva solo DATO — nodi e archi, comando
-// `graph_data` — e tutto il disegno vive qui. Superficie privilegiata
-// dichiarata nel piano M2.
+// # Cosa è questo file, dalla §3.3
 //
-// La simulazione è il classico Fruchterman–Reingold ammorbidito: repulsione
-// fra tutti i nodi, molla sugli archi, gravità verso il centro, attrito. Gira
-// dentro requestAnimationFrame finché "raffredda", poi si ferma da sola: per
-// un vault personale (centinaia di note) l'O(n²) della repulsione è ben sotto
-// il frame budget, e la semplicità vale più di un quadtree.
+// **La metà shell di un componente che sta di là dal confine.** Il grafo è un
+// `ViewProvider` (`crates/fub-features/src/graph.rs`): è lui a chiedere al
+// canale dati quali documenti ci sono e quali archi li legano, e a mandarli qui
+// dentro un `UiKind::Custom { ns: "fub:graph", payload }`. Questo file non parla
+// con il kernel: riceve un payload e disegna.
+//
+// La divisione è quella che il §3.3 chiedeva, e la riga passa dove deve. `UiNode`
+// non esprime un canvas, **né deve** — un protocollo dichiarativo che esprimesse
+// un force-directed sarebbe un motore grafico travestito da enum — quindi il
+// disegno resta di qua. Ciò che è passato di là sono i **dati**, che era la
+// parte davvero privilegiata: finché a decidere nodi e archi era questo file, la
+// vista a grafo era una cosa che solo la shell poteva fare.
+//
+// Di conseguenza questo modulo non è più un pannello e non ha più un overlay.
+// Non si registra in `ui/panel-host.ts` — chi si registra è il pannello che
+// `ui/views.ts` crea per il riquadro che ospita la view — e non sa **dove** sta
+// disegnando: riceve un elemento, e quell'elemento è un riquadro dell'area
+// principale, cioè una superficie con tab, che si divide e che si ricorda com'era.
+//
+// # La simulazione, che è la stessa di prima
+//
+// Il classico Fruchterman–Reingold ammorbidito: repulsione fra tutti i nodi,
+// molla sugli archi, gravità verso il centro, attrito. Gira dentro
+// requestAnimationFrame finché "raffredda", poi si ferma da sola: per un vault
+// personale (centinaia di note) l'O(n²) della repulsione è ben sotto il frame
+// budget, e la semplicità vale più di un quadtree.
 
-import { OGNI_DOCUMENTO } from "../host/contract";
-import { archiDelVault, documentiCheCombaciano } from "../host/query";
 import { pageName } from "../rules/organizer";
-import { state } from "../state/store";
-import { $ } from "../ui/dom";
-import { refreshOn, registerPanel } from "../ui/panel-host";
+import { apriVistaIn, documenti, layout, pane, panes } from "../state/layout";
+import { registerCustomRenderer, type OnAction } from "../ui/custom";
 import { registerShellCommand } from "../ui/commands";
+import { $ } from "../ui/dom";
 import { t } from "../i18n/strings";
+
+/// Il namespace con cui il grafo arriva dal provider. È `fub_features::graph::GRAPH_NS`,
+/// e la costanza dei due nomi è il contratto fra le due metà del componente.
+export const NS_GRAFO = "fub:graph";
+/// L'id della `ViewSpec` che il provider dichiara (`fub_features::graph::GRAPH_VIEW`).
+///
+/// Che questo file lo conosca **non** è la conoscenza privata che il §1.2 ha
+/// tolto ai pannelli: quella era la shell che sapeva quali pannelli esistono.
+/// Questo è un componente che conosce il proprio altro capo — la stessa cosa che
+/// fa già con lo `ns` — e i due nomi viaggiano insieme perché nominano lo stesso
+/// componente.
+export const VISTA_GRAFO = "graph";
+
+/// L'azione con cui si chiede al provider di aprire una nota, e la chiave del
+/// suo payload. Gemelle di `OPEN` e `DOC` in `graph.rs`.
+const APRI = "open";
+const DOC = "doc";
 
 interface SimNode {
   id: string;
@@ -39,136 +72,134 @@ interface SimEdge {
   to: SimNode;
 }
 
-/// Ciò che il grafo chiede alla shell: il click su un nodo apre quella nota.
-/// Iniettato invece che importato, come per l'anteprima e il pannello del
-/// documento — `panels/document` importa a sua volta ciò che sta di qua.
-interface GraphHost {
-  openNote: (id: string) => void;
+/// Ciò che arriva nel `payload` del nodo custom. La forma la decide `graph.rs`,
+/// e questo tipo è la sua lettura di qua: se le due divergono, il grafo si
+/// disegna vuoto invece di lanciare — un payload storto viene da un provider, e
+/// un provider può essere di terzi.
+interface DatiGrafo {
+  nodes: string[];
+  edges: { from: string; to: string }[];
 }
 
-let host: GraphHost | null = null;
-
-const OVERLAY_ID = "graph-overlay";
-
-export function mountGraph(h: GraphHost): void {
-  host = h;
-  $("#show-graph").addEventListener("click", () => void openGraph());
+/// Attacca la metà shell del grafo: il renderer del suo `ns` e il comando che lo
+/// apre.
+export function mountGraph(): void {
+  $("#show-graph").addEventListener("click", () => apriGrafo());
 
   // Il grafo come **comando** (§18.2): era un bottone nella barra, e chi non lo
-  // trovava con il mouse non lo trovava. Lo dichiara il pannello che lo apre,
-  // come ogni altro comando di shell.
+  // trovava con il mouse non lo trovava. L'id e la scorciatoia sono quelli di
+  // prima — chi li ha imparati li tiene — ed è cambiato cosa fa: apriva un
+  // overlay sopra tutto, adesso apre una tab nel riquadro col fuoco. Che sia un
+  // comando è la parte che la 0077 ha reso non negoziabile.
   registerShellCommand({
     id: "shell.graph",
     title: "commands.graph",
     description: "commands.graph.desc",
     keybinding: "Mod-Shift-g",
-    run: () => void openGraph(),
+    run: () => apriGrafo(),
   });
 
-  // Il grafo è un pannello come gli altri per ciò che riguarda **chi lo
-  // conosce** — sta nell'inventario, dichiara dove sta e quando invecchia —
-  // e resta un'eccezione decisa per ciò che riguarda **cosa disegna**:
-  // `UiNode` non esprime un canvas, né deve (piano M2, §2.2).
-  //
-  // `refresh` vuoto non è una dimenticanza: il grafo si rilegge all'apertura,
-  // e ridisegnarlo a ogni salvataggio significherebbe far ripartire la
-  // simulazione sotto il mouse di chi lo sta guardando. L'unico caso in cui
-  // riparte è `overflow`, dove la coda è stata troncata e il dato in mano
-  // potrebbe essere di un vault che non esiste più.
-  registerPanel({
-    id: "shell:graph",
-    title: "Grafo",
-    placement: "overlay",
-    refresh: refreshOn(),
-    visible: () => document.getElementById(OVERLAY_ID) !== null,
-    render: openGraph,
-  });
+  registerCustomRenderer(NS_GRAFO, disegnaGrafo);
 }
 
-/// Apre l'overlay del grafo (o lo rifà da capo, se è già aperto). La nota
-/// aperta è evidenziata.
-export async function openGraph(): Promise<void> {
-  if (!host) return;
-  const { openNote } = host;
-  const current = state.currentDoc;
+/// Apre il grafo nel riquadro col fuoco.
+///
+/// **Nel riquadro col fuoco e non in uno nuovo**, che è la stessa regola con cui
+/// si apre una nota dall'esploratore: chi lo vuole di lato divide prima, ed è un
+/// gesto che ha già un comando suo (`shell.pane.split.right`). L'alternativa —
+/// dividere da sé — deciderebbe al posto dell'utente come vuole la finestra, e
+/// lo farebbe ogni volta.
+///
+/// Se la tab c'è già ci si sposta sopra: lo garantisce `apriVistaIn`, e per il
+/// grafo conta più che per una nota — due tab sullo stesso grafo sarebbero due
+/// simulazioni che girano insieme.
+function apriGrafo(): void {
+  apriVistaIn(layout.focus, VISTA_GRAFO);
+}
 
-  document.getElementById(OVERLAY_ID)?.remove();
-
-  // Due domande al canale dati, con le stesse capacità che avrà una vista a
-  // grafo di terzi: i nodi sono i documenti che combaciano con «tutti», gli
-  // archi i vicini a un passo di ognuno. Prima era un comando dell'app che
-  // prendeva gli archi una nota alla volta — cioè una superficie privilegiata,
-  // che è la definizione del §5.4.
-  const [documenti, archi] = await Promise.all([
-    documentiCheCombaciano(OGNI_DOCUMENTO),
-    archiDelVault(),
-  ]);
-  const data = {
-    nodes: documenti.items.map((d) => d.doc),
-    // Deduplicati: la molteplicità di un link non disegna nulla.
-    edges: [...new Set(archi.map((n) => `${n.via}\u0000${n.doc}`))].map((k) => {
-      const [from, to] = k.split("\u0000");
-      return { from, to };
+/// I documenti aperti in un riquadro qualunque: sono i nodi che il grafo accende.
+///
+/// Erano **uno** — la nota attiva — e con N riquadri non lo sono più. Prenderne
+/// uno solo vorrebbe dire scegliere fra due note che l'utente sta guardando
+/// entrambe; e la nota «attiva» sarebbe per giunta `null` proprio mentre si
+/// guarda il grafo, visto che il fuoco ce l'ha lui.
+function apertiOra(): Set<string> {
+  return new Set(
+    panes().flatMap((id) => {
+      const p = pane(id);
+      return p ? documenti(p) : [];
     }),
-  };
+  );
+}
 
-  const overlay = document.createElement("div");
-  overlay.id = OVERLAY_ID;
+/// Legge il payload del provider, con la tolleranza che si deve a un dato che
+/// viene da fuori.
+function leggiDati(payload: unknown): DatiGrafo {
+  const o = (payload ?? {}) as Partial<DatiGrafo>;
+  const nodes = Array.isArray(o.nodes) ? o.nodes.filter((n) => typeof n === "string") : [];
+  const edges = Array.isArray(o.edges)
+    ? o.edges.filter(
+        (e): e is { from: string; to: string } =>
+          !!e && typeof e.from === "string" && typeof e.to === "string",
+      )
+    : [];
+  return { nodes, edges };
+}
 
-  const bar = document.createElement("div");
-  bar.className = "graph-bar";
-  const title = document.createElement("span");
-  title.className = "panel-title";
-  title.textContent = t("graph.count", { note: data.nodes.length, archi: data.edges.length });
-  const close = document.createElement("button");
-  close.className = "link-button";
-  close.textContent = t("app.close");
-  bar.append(title, close);
+/// Il renderer di `fub:graph`: disegna il grafo dentro `host` e restituisce come
+/// spegnerlo.
+function disegnaGrafo(host: HTMLElement, payload: unknown, onAction: OnAction): () => void {
+  const data = leggiDati(payload);
+  const aperti = apertiOra();
 
   const canvas = document.createElement("canvas");
   canvas.className = "graph-canvas";
-  overlay.append(bar, canvas);
-  document.body.appendChild(overlay);
+  // Quanto si sta guardando. Era il titolo della barra dell'overlay; l'overlay
+  // non c'è più, e il conto sì — è l'unica cosa che dica se un grafo vuoto è un
+  // vault vuoto o un guasto.
+  const conto = document.createElement("div");
+  conto.className = "graph-count";
+  conto.textContent = t("graph.count", { note: data.nodes.length, archi: data.edges.length });
+  host.replaceChildren(canvas, conto);
 
   let disposed = false;
-  const dispose = () => {
-    disposed = true;
-    overlay.remove();
-    document.removeEventListener("keydown", onKey);
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") dispose();
-  };
-  close.addEventListener("click", dispose);
-  document.addEventListener("keydown", onKey);
 
-  // --- stato della simulazione ---------------------------------------------
-
-  const rect = canvas.getBoundingClientRect();
-  const W = rect.width;
-  const H = rect.height;
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  const ctx = canvas.getContext("2d")!;
-  ctx.scale(dpr, dpr);
   // I colori letti una volta sola: dentro `draw` costringevano il webview a un
   // ricalcolo di stile a ogni frame, che da solo mangiava più del disegno.
-  // L'overlay si ricrea a ogni apertura, quindi un cambio di tema viene
-  // comunque raccolto.
   //
-  // Vengono dai token (§12.4) e non più da tre esadecimali scritti qui. I tre
-  // di prima — `#888`, `#7aa2f7`, `#9ece6a` — erano di una **terza** tavolozza,
-  // che non era né quella della shell né quella del documento: il grafo era
-  // l'unica superficie di Fub colorata da nessun tema, e un tema chiaro
-  // l'avrebbe lasciata indietro senza che niente diventasse rosso.
-  const stile = getComputedStyle(overlay);
+  // Vengono dai token (§12.4) e non da tre esadecimali scritti qui. I tre di
+  // prima — `#888`, `#7aa2f7`, `#9ece6a` — erano di una **terza** tavolozza, che
+  // non era né quella della shell né quella del documento: il grafo era l'unica
+  // superficie di Fub colorata da nessun tema, e un tema chiaro l'avrebbe
+  // lasciata indietro senza che niente diventasse rosso.
+  const stile = getComputedStyle(host);
   const ink = stile.color;
   const tinta = (nome: string) => stile.getPropertyValue(nome).trim() || ink;
   const nodo = tinta("--graph-node");
   const nodoAttivo = tinta("--graph-node-active");
   const nodoSotto = tinta("--graph-node-hover");
   const TAU = 2 * Math.PI;
+
+  // La taglia non è più letta una volta: un riquadro si divide e si ridimensiona
+  // sotto il grafo, e un canvas che non se ne accorge disegna in un rettangolo
+  // che non c'è più. Nell'overlay questo non poteva succedere — era grande
+  // quanto la finestra e si rifaceva a ogni apertura.
+  let W = 1;
+  let H = 1;
+  const ctx = canvas.getContext("2d")!;
+
+  function ridimensiona(): void {
+    const rect = canvas.getBoundingClientRect();
+    // Un riquadro nascosto (la tab non è davanti) misura zero: disegnarci
+    // dentro non serve, e dividere per zero serve ancora meno.
+    W = Math.max(1, rect.width);
+    H = Math.max(1, rect.height);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  ridimensiona();
 
   const byId = new Map<string, SimNode>();
   // Semina deterministica su un cerchio: niente Math.random, così due
@@ -305,16 +336,16 @@ export async function openGraph(): Promise<void> {
     ctx.fillStyle = nodo;
     ctx.beginPath();
     for (const n of nodes) {
-      if (n === hovered || n.id === current) continue;
+      if (n === hovered || aperti.has(n.id)) continue;
       ctx.moveTo(n.x + n.r, n.y);
       ctx.arc(n.x, n.y, n.r, 0, TAU);
     }
     ctx.fill();
 
-    // Accesi: al più due (la nota aperta e quella sotto il mouse).
+    // Accesi: le note aperte in qualche riquadro, più quella sotto il mouse.
     ctx.globalAlpha = 1;
     for (const n of nodes) {
-      const attivo = n.id === current;
+      const attivo = aperti.has(n.id);
       if (!attivo && n !== hovered) continue;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, TAU);
@@ -328,14 +359,14 @@ export async function openGraph(): Promise<void> {
     ctx.globalAlpha = 0.7;
     ctx.font = "11px sans-serif";
     for (const n of nodes) {
-      if (n === hovered || n.id === current) continue;
+      if (n === hovered || aperti.has(n.id)) continue;
       if (!etichettaOvunque && n.degree < 3) continue;
       ctx.fillText(n.label, n.x + n.r + 3, n.y + 4);
     }
     ctx.globalAlpha = 1;
     ctx.font = "bold 12px sans-serif";
     for (const n of nodes) {
-      if (n !== hovered && n.id !== current) continue;
+      if (n !== hovered && !aperti.has(n.id)) continue;
       ctx.fillText(n.label, n.x + n.r + 3, n.y + 4);
     }
   }
@@ -351,6 +382,16 @@ export async function openGraph(): Promise<void> {
     draw();
   }
   requestAnimationFrame(frame);
+
+  // Il riquadro è cambiato di taglia (una divisione, la finestra, la sidebar
+  // che si apre): si ridisegna nel rettangolo nuovo senza far ripartire la
+  // simulazione — i nodi sono già dove vanno, cambia solo dove si guarda.
+  const osservatore = new ResizeObserver(() => {
+    if (disposed) return;
+    ridimensiona();
+    draw();
+  });
+  osservatore.observe(canvas);
 
   function nodeAt(e: MouseEvent): SimNode | null {
     const box = canvas.getBoundingClientRect();
@@ -376,10 +417,18 @@ export async function openGraph(): Promise<void> {
       draw();
     }
   });
+  // Il click torna al **provider**, che risponde `ViewUpdate::Navigate`. Prima
+  // era una chiamata diretta a chi apre i documenti, iniettata per non
+  // importarsi a vicenda con `panels/document`; adesso è la stessa porta di ogni
+  // altra azione di view, e quell'iniezione è sparita con lei.
   canvas.addEventListener("click", (e) => {
     const n = nodeAt(e);
     if (!n) return;
-    dispose();
-    openNote(n.id);
+    onAction({ action: APRI, payload: { [DOC]: n.id } }, []);
   });
+
+  return () => {
+    disposed = true;
+    osservatore.disconnect();
+  };
 }

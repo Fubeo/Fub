@@ -1351,7 +1351,7 @@ A ogni successiva riapertura del selettore prima della sua chiusura, si accumula
 
 **Dove:** `frontend/src/panels/graph.ts` (`openGraph`).
 
-**Stato:** Promossa alla voce [§18.3](todo.md)
+**Stato:** Risolto dalla [decisione 0079](decisions/0079-il-grafo-esce-dall-overlay.md) — e non come fix isolato, che è il motivo per cui era stata promossa. Il listener `keydown` non esiste più: serviva a chiudere l'overlay con Escape, e l'overlay non c'è più — il grafo sta in una tab di riquadro, e una tab si chiude come ogni altra. Ciò che resta da spegnere (il ciclo di `requestAnimationFrame` e un `ResizeObserver`) lo spegne `ui/node.ts`, che invoca lo smontaggio che il renderer custom restituisce ogni volta che quell'elemento esce dal DOM: la disciplina è del **protocollo di disegno** e non della buona memoria di chi scrive un renderer, che era il difetto vero dietro questa issue.
 
 **Perché si nota:** All'invocazione di `openGraph()`, se l'overlay `#graph-overlay` è già aperto nel DOM, il codice esegue `document.getElementById(OVERLAY_ID)?.remove()`. Questa operazione distrugge il nodo DOM ma non invoca la funzione `dispose()` dell'istanza del grafo precedente. Di conseguenza, `document.removeEventListener("keydown", onKey)` non viene mai eseguito e il listener registrato per intercettare il tasto Escape rimane permanentemente agganciato a `document`. Ogni riapertura del grafo accumula listener `keydown` inutilizzati che continuano a scattare simultaneamente a ogni pressione del tasto Escape.
 

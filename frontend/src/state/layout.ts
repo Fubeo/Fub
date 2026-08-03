@@ -10,12 +10,18 @@
 //
 // # La forma, e perché è questa
 //
-// Un riquadro tiene **N documenti con uno attivo**. Da quella forma sola escono
-// insieme le tab e lo split, e il motivo per cui non si è fatto prima lo split
-// (che è ciò che sblocca la §3.3) e le tab dopo è che «un riquadro = una nota»
-// andrebbe buttato il giorno delle tab: la forma con le tab lo *contiene*. Non è
-// più lavoro di design, è lo stesso lavoro fatto una volta invece che una volta
-// e mezza.
+// Un riquadro tiene **N tab con una attiva**. Da quella forma sola escono insieme
+// le tab e lo split, e il motivo per cui non si è fatto prima lo split (che è ciò
+// che sbloccava la §3.3) e le tab dopo è che «un riquadro = una nota» andrebbe
+// buttato il giorno delle tab: la forma con le tab lo *contiene*. Non è più
+// lavoro di design, è lo stesso lavoro fatto una volta invece che una volta e
+// mezza.
+//
+// «Tab» e non «documento», e la differenza è arrivata con la §3.3
+// ([0079](../../../docs/decisions/0079-il-grafo-esce-dall-overlay.md)): una tab
+// può essere una **view dichiarata** — il grafo — e allora quel riquadro non
+// mostra nessuna nota. Vedi `Tab` qui sotto per il perché sia un tipo
+// discriminato e non un path con un prefisso.
 //
 // La disposizione è un **albero binario-generalizzato**: una foglia è un
 // riquadro, un nodo è una divisione con un verso e N figli. Non una griglia con
@@ -41,16 +47,38 @@ import type { PaneMode } from "../host/contract";
 import { MAIN_PANE } from "../host/contract";
 import { emit, leggiStato, scriviStato } from "./store";
 
+/// Cosa tiene una tab.
+///
+/// **Discriminata, e non un path con un prefisso.** La tentazione era scrivere
+/// `"view:graph"` dentro l'elenco di prima e lasciare tutto com'era: costa una
+/// riga, e la si paga per sempre. Un path è l'identità di un documento
+/// ([0043](../../../docs/decisions/0043-il-path-e-la-chiave.md)) — è la chiave
+/// con cui si legge dal disco, quella che il rename insegue, quella che
+/// attraversa il confine dentro il `ViewContext` — e sovraccaricarla vorrebbe
+/// dire che ogni suo lettore deve sapere che a volte non è un path. Sono una
+/// decina di posti, e basta che uno non lo sappia perché la shell chieda al
+/// kernel di leggere un documento che si chiama `view:graph`.
+///
+/// Così invece il compilatore chiede a chi legge di dire quale dei due casi sta
+/// guardando, e `docAttivo()` resta la stessa domanda di prima con la stessa
+/// risposta: un path, o niente.
+export type Tab =
+  /// Un documento del vault, per path.
+  | { k: "doc"; doc: string }
+  /// Una view **dichiarata** dal backend, per id di `ViewSpec` (§3.3). Il
+  /// riquadro non sa cosa disegni: la monta `ui/views.ts` come le altre.
+  | { k: "view"; view: string };
+
 /// Cosa tiene aperto un riquadro.
 export interface PaneState {
-  /// I documenti aperti, in ordine di tab. Può essere vuoto: un riquadro senza
-  /// niente dentro è uno stato legittimo — è la finestra appena aperta.
-  docs: string[];
-  /// L'indice del documento attivo dentro `docs`, o -1 se non ce n'è.
+  /// Le tab aperte, in ordine. Può essere vuoto: un riquadro senza niente
+  /// dentro è uno stato legittimo — è la finestra appena aperta.
+  tabs: Tab[];
+  /// L'indice della tab attiva dentro `tabs`, o -1 se non ce n'è.
   ///
-  /// Un indice e non un path: due tab sullo **stesso** documento nello stesso
-  /// riquadro non sono vietate, e con un path non si saprebbe quale delle due è
-  /// davanti.
+  /// Un indice e non un'identità: due tab sullo **stesso** documento nello
+  /// stesso riquadro non sono vietate, e con un path non si saprebbe quale
+  /// delle due è davanti.
   active: number;
   /// La modalità di **questo** riquadro (FEATURES 4.1).
   ///
@@ -82,7 +110,7 @@ export const MODALITA_DI_DEFAULT: PaneMode = "live_preview";
 export function layoutDiDefault(mode: PaneMode = MODALITA_DI_DEFAULT): Layout {
   return {
     tree: { k: "leaf", pane: MAIN_PANE },
-    panes: { [MAIN_PANE]: { docs: [], active: -1, mode } },
+    panes: { [MAIN_PANE]: { tabs: [], active: -1, mode } },
     focus: MAIN_PANE,
   };
 }
@@ -113,18 +141,35 @@ export function paneAttivo(l: Layout = layout): PaneState {
   return l.panes[l.focus];
 }
 
-/// Il documento attivo di un riquadro, se ce n'è uno.
-export function docAttivo(id: string = layout.focus, l: Layout = layout): string | null {
+/// La tab attiva di un riquadro, se ce n'è una.
+export function tabAttiva(id: string = layout.focus, l: Layout = layout): Tab | null {
   const p = l.panes[id];
   if (!p) return null;
-  return p.active >= 0 && p.active < p.docs.length ? p.docs[p.active] : null;
+  return p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active] : null;
+}
+
+/// Il documento attivo di un riquadro, se ne ha uno.
+///
+/// `null` adesso ha **due** significati — nessuna tab, o una tab che non è un
+/// documento — e non ne servono due valori distinti: chi la chiama vuole sapere
+/// quale nota mostrare, e «nessuna» è la stessa risposta in entrambi i casi. È
+/// anche il motivo per cui il `ViewContext` non ha avuto bisogno di niente di
+/// nuovo: `doc: null` è uno stato che il contratto esprimeva già.
+export function docAttivo(id: string = layout.focus, l: Layout = layout): string | null {
+  const t = tabAttiva(id, l);
+  return t?.k === "doc" ? t.doc : null;
+}
+
+/// I documenti che un riquadro tiene aperti, in ordine di tab.
+export function documenti(p: PaneState): string[] {
+  return p.tabs.flatMap((t) => (t.k === "doc" ? [t.doc] : []));
 }
 
 /// In quali riquadri è aperto un documento. Serve a chi deve chiuderlo
 /// dappertutto — cancellato, spostato nel cestino — e a chi deve capire se una
 /// modifica riguarda qualche superficie a schermo.
 export function paneConDoc(doc: string, l: Layout = layout): string[] {
-  return panes(l).filter((id) => l.panes[id].docs.includes(doc));
+  return panes(l).filter((id) => documenti(l.panes[id]).includes(doc));
 }
 
 // --- scrivere ---------------------------------------------------------------
@@ -173,7 +218,7 @@ export function dividi(id: string, dir: "row" | "col", l: Layout = layout): stri
   }));
   if (!inserito) return null;
   l.tree = appiattisci(inserito);
-  l.panes[nuovo] = { docs: [], active: -1, mode: l.panes[id].mode };
+  l.panes[nuovo] = { tabs: [], active: -1, mode: l.panes[id].mode };
   l.focus = nuovo;
   cambiato();
   return nuovo;
@@ -210,12 +255,34 @@ export function fuocoSu(id: string, l: Layout = layout): void {
 /// davvero due tab sulla stessa nota nello stesso riquadro lo chiederà con un
 /// gesto suo, il giorno che quel gesto esista.
 export function apriIn(id: string, doc: string, l: Layout = layout): void {
+  apriTabIn(id, { k: "doc", doc }, l);
+}
+
+/// Mette una **view dichiarata** in un riquadro e la rende attiva (§3.3).
+///
+/// Stessa regola del documento — se c'è già ci si sposta sopra — e per una
+/// ragione più forte: due tab sullo stesso grafo sarebbero due simulazioni che
+/// girano insieme sullo stesso vault, cioè il doppio del lavoro per due disegni
+/// che convergono allo stesso posto.
+export function apriVistaIn(id: string, view: string, l: Layout = layout): void {
+  apriTabIn(id, { k: "view", view }, l);
+}
+
+function apriTabIn(id: string, tab: Tab, l: Layout): void {
   const p = l.panes[id];
   if (!p) return;
-  const gia = p.docs.indexOf(doc);
-  p.active = gia >= 0 ? gia : p.docs.push(doc) - 1;
+  const gia = p.tabs.findIndex((t) => stessaTab(t, tab));
+  p.active = gia >= 0 ? gia : p.tabs.push(tab) - 1;
   l.focus = id;
   cambiato();
+}
+
+/// Due tab sono la stessa cosa aperta? Serve a non aprirne una seconda, ed è
+/// l'unico posto in cui le due specie si confrontano fra loro.
+export function stessaTab(a: Tab, b: Tab): boolean {
+  if (a.k === "doc" && b.k === "doc") return a.doc === b.doc;
+  if (a.k === "view" && b.k === "view") return a.view === b.view;
+  return false;
 }
 
 /// Toglie una tab da un riquadro.
@@ -226,9 +293,9 @@ export function apriIn(id: string, doc: string, l: Layout = layout): void {
 /// uno.
 export function chiudiTab(id: string, indice: number, l: Layout = layout): void {
   const p = l.panes[id];
-  if (!p || indice < 0 || indice >= p.docs.length) return;
-  p.docs.splice(indice, 1);
-  if (p.docs.length === 0) p.active = -1;
+  if (!p || indice < 0 || indice >= p.tabs.length) return;
+  p.tabs.splice(indice, 1);
+  if (p.tabs.length === 0) p.active = -1;
   else if (p.active > indice) p.active -= 1;
   else if (p.active === indice) p.active = Math.max(0, indice - 1);
   cambiato();
@@ -237,7 +304,7 @@ export function chiudiTab(id: string, indice: number, l: Layout = layout): void 
 /// Rende attiva una tab per indice.
 export function attivaTab(id: string, indice: number, l: Layout = layout): void {
   const p = l.panes[id];
-  if (!p || indice < 0 || indice >= p.docs.length) return;
+  if (!p || indice < 0 || indice >= p.tabs.length) return;
   p.active = indice;
   l.focus = id;
   cambiato();
@@ -250,10 +317,10 @@ export function rinomina(da: string, a: string, l: Layout = layout): void {
   let toccato = false;
   for (const id of panes(l)) {
     const p = l.panes[id];
-    p.docs = p.docs.map((d) => {
-      if (d !== da) return d;
+    p.tabs = p.tabs.map((t) => {
+      if (t.k !== "doc" || t.doc !== da) return t;
       toccato = true;
-      return a;
+      return { k: "doc", doc: a };
     });
   }
   if (toccato) cambiato();
@@ -262,8 +329,10 @@ export function rinomina(da: string, a: string, l: Layout = layout): void {
 /// Il documento non c'è più: via da ogni riquadro che lo teneva.
 export function togliDappertutto(doc: string, l: Layout = layout): void {
   for (const id of paneConDoc(doc, l)) {
-    for (let i = l.panes[id].docs.length - 1; i >= 0; i--) {
-      if (l.panes[id].docs[i] === doc) chiudiTab(id, i, l);
+    const tabs = l.panes[id].tabs;
+    for (let i = tabs.length - 1; i >= 0; i--) {
+      const t = tabs[i];
+      if (t.k === "doc" && t.doc === doc) chiudiTab(id, i, l);
     }
   }
 }
@@ -437,18 +506,49 @@ function parseNodo(v: unknown): LayoutNode | null {
   return { k: "split", dir: o.dir, children };
 }
 
+/// Da JSON a `PaneState`, **leggendo anche la forma di prima**.
+///
+/// Fino alla §3.3 un riquadro teneva `docs: string[]`, cioè solo documenti. La
+/// forma nuova è `tabs`, e la vecchia si legge ancora: una stringa nell'elenco
+/// **è** una tab di documento, quindi la conversione è totale e nessuno perde le
+/// note che aveva aperte. Non si riscrive `docs` accanto a `tabs`, ed è la
+/// differenza con la migrazione della modalità qui sopra: `mode` restava
+/// leggibile perché il suo valore restava vero, mentre un `docs` scritto accanto
+/// a una tab di grafo sarebbe una bugia — l'elenco non conterrebbe quella tab, e
+/// una shell precedente riaprirebbe la finestra senza dire che le manca
+/// qualcosa. Chi torna indietro riparte dal default, che è rumoroso quanto basta
+/// e non mente.
 function parsePane(v: unknown): PaneState | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  if (!Array.isArray(o.docs) || !o.docs.every((d) => typeof d === "string")) return null;
-  const docs = o.docs as string[];
+  const grezze = Array.isArray(o.tabs) ? o.tabs : Array.isArray(o.docs) ? o.docs : null;
+  if (!grezze) return null;
+  const tabs: Tab[] = [];
+  for (const t of grezze) {
+    const tab = parseTab(t);
+    if (!tab) return null;
+    tabs.push(tab);
+  }
   const active = typeof o.active === "number" ? o.active : -1;
   return {
-    docs,
+    tabs,
     // Un indice fuori dalle tab è la forma più probabile di file rovinato a
     // mano, ed è anche l'unica che si può riparare invece di buttare tutto:
     // il riquadro c'è, le tab ci sono, non si sa quale era davanti.
-    active: Number.isInteger(active) && active >= 0 && active < docs.length ? active : docs.length > 0 ? 0 : -1,
+    active: Number.isInteger(active) && active >= 0 && active < tabs.length ? active : tabs.length > 0 ? 0 : -1,
     mode: modalitaValida(o.mode),
   };
+}
+
+/// Una tab, nella forma nuova o in quella di prima.
+///
+/// Severa come tutto il resto di questo parser, e con una sola clemenza: una
+/// **stringa** è un documento, che è ciò che c'era scritto fino a ieri.
+function parseTab(v: unknown): Tab | null {
+  if (typeof v === "string") return v ? { k: "doc", doc: v } : null;
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (o.k === "doc") return typeof o.doc === "string" && o.doc ? { k: "doc", doc: o.doc } : null;
+  if (o.k === "view") return typeof o.view === "string" && o.view ? { k: "view", view: o.view } : null;
+  return null;
 }

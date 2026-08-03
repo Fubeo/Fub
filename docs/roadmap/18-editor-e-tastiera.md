@@ -197,9 +197,9 @@ decidere per loro.
       e sono il presidio che dice *quando* questa voce ha smesso di essere P2. Le
       due si leggono insieme: là si misura, qui si fa.
 
-### 3.3 La UI di un plugin non ha modo di entrare nella shell
+### ~~3.3 La UI di un plugin non ha modo di entrare nella shell~~
 
-*ex §3.12 · shell · **P1** — dalla [seduta 3](03-chi-disegna-cio-che-il-core-non-conosce.md) ([decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)); la decisione è presa, resta il grafo*
+*ex §3.12 · shell · **P1** — dalla [seduta 3](03-chi-disegna-cio-che-il-core-non-conosce.md) ([decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)); **chiusa** con la [0079](../decisions/0079-il-grafo-esce-dall-overlay.md), che lascia una casella*
 
 - [x] **La decisione fra le tre opzioni**: la terza — *solo prima parte, e tutto
       il resto dichiarativo* — con la precisazione che questa voce chiedeva: il
@@ -210,26 +210,48 @@ decidere per loro.
 - [x] **`UiKind::Custom` ha il suo primo cliente** — il diagramma — e ha portato
       con sé la scoperta che il ramo «la shell che conosce `ns` disegna il suo
       widget» **ancora non serve**.
-- [ ] **Il grafo è ancora un pannello nativo** (`panels/graph.ts`), ed è ciò che
-      resta di questa voce. Non è bloccato dal contratto: l'area principale c'è
-      dalla [decisione 0016](../decisions/0016-cosa-e-una-view.md) e *come*
-      disegnarci qualcosa che il core non conosce c'è dalla
-      [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md).
-      **E non aspetta più nemmeno il modello di layout**: il ~~§1.2~~ è chiuso
-      ([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)), i
-      riquadri sono N, e spostarci il grafo non vuol più dire togliere di mezzo
-      l'editor. Quel che manca adesso ha un nome preciso, ed è più piccolo di
-      quanto sembrasse: un riquadro tiene tab di **documenti**, e deve saperne
-      tenere una di **view**. È un pannello nativo che diventa `ViewProvider` —
-      il pattern della [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md) —
-      e merita il verbale suo.
-- [ ] **Il conto del 21.1 resta da saldare**: ogni modulo Suite è «installabile
-      separatamente» e «disattivabile», e FubCanvas, FubDB, FubCharts, FubMaps e
-      FubForms (21.2) hanno bisogno di un renderer proprio. Con la strada
-      dichiarativa aperta la promessa è vera per la maggior parte di ciò che
-      disegnano; per i canvas ad alte prestazioni resta vera solo a M5, ed è il
-      limite che l'[asterisco di onestà](../architecture/ui-protocol.md) dichiara
-      già per la graph view.
+- [x] ~~**Il grafo è ancora un pannello nativo**~~ — **fatto** con la
+      [0079](../decisions/0079-il-grafo-esce-dall-overlay.md), e quel ramo che
+      «ancora non serviva» è il posto in cui è passato. Il grafo è un
+      `ViewProvider` (`fub-features/src/graph.rs`) che dichiara
+      `ViewSurface::Main` — la **prima** view di questo repo a dichiararla, dopo
+      che per tre sedute quella variante è stata nominata dal contratto e mai
+      ospitata da nessuno — e manda nodi e archi dentro un
+      `UiKind::Custom { ns: "fub:graph" }`; la shell ha imparato il ramo che
+      `ui/node.ts` aspettava per nome, e i `ns` che sa disegnare stanno in un
+      registro suo (`ui/custom.ts`) invece che in un `if`.
+
+      Le due cose che questa riga non prevedeva e che sono costate di più. La
+      prima: **una tab è diventata una cosa discriminata**. `PaneState.docs:
+      string[]` era un elenco di path, e un path è l'identità di un documento
+      ([0043](../decisions/0043-il-path-e-la-chiave.md)) — infilarci dentro
+      `"view:graph"` sarebbe costato una riga e l'avremmo pagata in ogni lettore.
+      La seconda: **il contratto non si è toccato**, per la terza voce di fila.
+      «Cosa pubblica un riquadro che mostra il grafo» sembrava chiedere un campo
+      nuovo, e la risposta era `doc: null` — uno stato che `ViewContext`
+      esprimeva già, e che significa esattamente ciò che serviva.
+- [x] ~~**Il conto del 21.1 resta da saldare**~~ — **ridotto al suo limite
+      dichiarato**, che è la cosa più onesta che questa casella potesse
+      diventare. La promessa era che ogni modulo Suite (FubCanvas, FubDB,
+      FubCharts, FubMaps, FubForms, 21.2) possa avere un renderer proprio, e ora
+      la strada è **percorsa** e non solo aperta: un modulo dichiara la sua view
+      su `main`, manda il suo dato in un `Custom` con `ns` suo, e chi disegna
+      registra una riga in `ui/custom.ts`. L'[asterisco di
+      onestà](../architecture/ui-protocol.md) resta e ha cambiato misura: prima
+      la graph view era privilegiata nei **dati** *e* nei **pixel**, adesso solo
+      nei pixel — cioè in quel `ns` che sta nel bundle della shell, e che un
+      plugin di terzi potrà spedire da sé solo quando la `WebView` avrà asset
+      story e CSP (M5). Non è questa voce a poterlo togliere, ed è giusto che
+      resti scritto dov'era.
+- [ ] **La casella che resta: aprire in un riquadro una view che non sia il
+      grafo.** Ci si arriva con `shell.graph`, che è il comando di *quel*
+      componente e apre *quella* view. Va bene per il primo cliente e non per il
+      secondo: quando una view principale sarà due, servirà un gesto generico —
+      «apri una view nel riquadro col fuoco», con l'elenco che
+      `viewPrincipali()` già restituisce. Non lo si è fatto adesso perché un
+      gesto disegnato su zero clienti è un gesto indovinato, e i comandi si
+      registrano al montaggio mentre le view si scoprono per vault: le due cose
+      vanno decise insieme, e la seconda oggi non ha nessuno che la chieda.
 
 ### 4.4 Due parser per la stessa sintassi
 

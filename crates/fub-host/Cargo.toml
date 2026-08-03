@@ -43,7 +43,9 @@ feature-ufficiali = [
     "backlinks",
     "outline",
     "tags",
+    "trash",
     "stats",
+    "graph",
     "commands",
     "blocks",
 ]
@@ -52,7 +54,9 @@ versioning = ["fub-features/versioning"]
 backlinks = ["fub-features/backlinks"]
 outline = ["fub-features/outline"]
 tags = ["fub-features/tags"]
+trash = ["fub-features/trash"]
 stats = ["fub-features/stats"]
+graph = ["fub-features/graph"]
 commands = ["fub-features/commands"]
 blocks = ["fub-features/blocks"]
 
