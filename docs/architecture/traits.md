@@ -445,10 +445,10 @@ sequenceDiagram
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
 | la pila del testo | [editor.ts:148](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
-| `UndoStack` | [undo.rs:49](../../crates/fub-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
+| `UndoStack` | [undo.rs:52](../../crates/fub-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
 | `Undo` / `UndoStep` | [command.rs:567](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:3217](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:3233](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo |
+| dove si spinge | [workspace.rs:832](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:3881](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo |
 | `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
 
 Le due pile non si fondono perché non hanno lo stesso soggetto: ordinarle
@@ -767,12 +767,12 @@ sequenceDiagram
 
 | Riquadro | Dove | Cosa fa qui |
 |---|---|---|
-| `Workspace::query_index` | [workspace.rs:2692](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
+| `Workspace::query_index` | [workspace.rs:361](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
 | `plan::run` | [plan.rs:49](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
 | `sole_evaluator` | [plan.rs:213](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
 | `RouteTable` | [routing.rs:57](../../crates/fub-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |
-| `CoreIndex` | [core.rs:618](../../crates/fub-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
-| `Matches::and` | [query.rs:377](../../crates/fub-abi/src/query.rs) | la fusione; `QueryEvaluator` ha una implementazione sola, quella del contratto |
+| `CoreIndex` | [core.rs:117](../../crates/fub-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
+| `Matches::and` | [query.rs:389](../../crates/fub-abi/src/query.rs) | la fusione; `QueryEvaluator` ha una implementazione sola, quella del contratto |
 | `properties::finish` | [properties.rs:232](../../crates/fub-abi/src/rules/properties.rs) | ordine, colonne e finestra, in coda e per tutti: rompe la parità per `DocId` o la paginazione ripete righe |
 
 **Le due chiamate sono in fila, non insieme.** Il kernel non parallelizza una
@@ -1107,7 +1107,7 @@ modello di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **34**, contando le funzioni delle quattordici interfacce `host-*` di `abi.wit`: le **dodici** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) e `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **34** [conta: hostapi-metodi], contando le funzioni delle quattordici [conta: wit-interfacce-host] interfacce `host-*` di `abi.wit`: le **dodici** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) e `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore

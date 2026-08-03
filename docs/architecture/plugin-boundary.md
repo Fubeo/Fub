@@ -164,7 +164,7 @@ strutturali non sono in nessun senso. Il presidio è
 [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) l'insieme atteso lo
 **calcola** da `Capability::ALL` invece di elencarlo — quindi una famiglia negata
 che nessuno prova è rossa. *(Questa riga diceva «tutte e sei le strutturali»: il
-numero era sbagliato — i metodi di `VaultStructure` sono cinque — e la portata lo
+numero era sbagliato — i metodi di `VaultStructure` sono cinque [conta: capacita-strutturali] — e la portata lo
 era di più, perché nominava una famiglia sola su sette.)* Il giorno che
 `write_vault` diventerà vincolante non dovrà costruire il rifiuto: dovrà
 aggiungere una seconda ragione per negare.
@@ -540,12 +540,12 @@ arriva in fondo.
 
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
-| la coda | [dispatcher.rs:322](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
+| la coda | [dispatcher.rs:389](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
 | il campanello | [dispatcher.rs:401](../../crates/fub-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
 | i thread | [runner.rs:307](../../crates/fub-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
-| l'host per chiamata | [jobs.rs:89](../../crates/fub-host/src/jobs.rs) | tiene l'`Arc<RwLock<Workspace>>` e prende un prestito **per capacità** |
-| la bandiera | [runner.rs:83](../../crates/fub-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
-| la riga viva | [core.rs:346](../../crates/fub-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
+| l'host per chiamata | [jobs.rs:9](../../crates/fub-host/src/jobs.rs) | tiene l'`Arc<RwLock<Workspace>>` e prende un prestito **per capacità** |
+| la bandiera | [runner.rs:42](../../crates/fub-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
+| la riga viva | [core.rs:360](../../crates/fub-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
 
 **`JobStatus` è una struct, non un enum**
 ([traits.rs:114](../../crates/fub-abi/src/traits.rs)): cinque campi — `id`,
@@ -630,8 +630,8 @@ flowchart TD
 | Maglia | Dove | Cosa produce |
 |---|---|---|
 | `calling` | [safety.rs:62](../../crates/fub-kernel/src/safety.rs) | `PluginError::Internal("«X» è andato in panico …")` |
-| `caught` | [safety.rs:79](../../crates/fub-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
-| `notifying` | [safety.rs:102](../../crates/fub-kernel/src/safety.rs) | una riga su stderr, perché non c'è nessuno a cui dire di no |
+| `caught` | [safety.rs:81](../../crates/fub-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
+| `reporting` | [safety.rs:114](../../crates/fub-kernel/src/safety.rs) | il `PluginError` **restituito** a chi chiama, perché non c'è nessuno a cui dire di no |
 
 Non disattiva niente, e il riquadro finale del disegno dice esattamente questo:
 il meccanismo per smontare esiste (`BundleRegistry::unmount`), e dal §11.1 esiste
@@ -892,12 +892,12 @@ sequenceDiagram
 
 | Passo | Dove | Perché è lì e non altrove |
 |---|---|---|
-| `Host::open` | [session.rs:341](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
-| `mount` | [mount.rs:162](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
+| `Host::open` | [session.rs:216](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
+| `mount` | [mount.rs:186](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
 | `BundleRegistry::mount` | [registry.rs:245](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
-| `reindex` | [workspace.rs:1301](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
+| `reindex` | [workspace.rs:149](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
 | `bridge::spawn` | [bridge.rs:69](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
-| `JobRunner::start` | [runner.rs:307](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
+| `JobRunner::start` | [runner.rs:583](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
 La riga che è facile perdere è la prima: **`fub.core` è un bundle come gli
 altri** e si monta per primo, e non registra nulla — esiste per avere un'identità
@@ -928,7 +928,7 @@ stateDiagram-v2
 Anche qui **nessuno di questi stati ha un enum**. Sono l'appartenenza a una mappa
 e un booleano: un vault è aperto se sta in `Sessions.open`
 ([session.rs:184](../../crates/fub-host/src/session.rs)), un workspace è chiuso
-se `Workspace.closed` è vero ([workspace.rs:234](../../crates/fub-kernel/src/workspace.rs)),
+se `Workspace.closed` è vero ([workspace.rs:361](../../crates/fub-kernel/src/workspace.rs)),
 un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
 ([registry.rs:218](../../crates/fub-host/src/registry.rs)). Le uniche
 transizioni che il **contratto** nomina sono eventi, non stati: `VaultOpened`,
@@ -939,8 +939,8 @@ L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 | Regola | Dove | Cosa costerebbe non averla |
 |---|---|---|
 | il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fub-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
-| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:356](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
-| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:366](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
+| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:457](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
+| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:450](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
 | i bundle si spengono in ordine **inverso** | [workspace.rs:870](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
 
 E un caso che il codice tratta e che vale la pena sapere: se un job in volo tiene
