@@ -113,6 +113,21 @@ export const CONTEGGI = [
     comando: "grep -rEc 'console\\.(warn|error)' frontend/src | awk -F: '{n+=$2} END{print n+0}'",
   },
   {
+    nome: "moduli-di-feature",
+    ragione:
+      "I moduli di feature di `fub-features`: i file di `src/` che non sono la " +
+      "radice né l'aggregatore. È il numero su cui poggia la §16.3 quando dice " +
+      "che pagare venti `Cargo.toml` per otto moduli che non si parlano è un " +
+      "costo senza compratore — cioè il numero che rende **falsa** la premessa " +
+      "il giorno in cui cresce, ed è la ragione per cui vale la pena contarlo " +
+      "invece che ricordarlo. Le due esclusioni sono le stesse di `RADICE` in " +
+      "`crates/fub-features/tests/i_moduli_non_si_parlano.rs`: se là si aggiunge " +
+      "un modulo condiviso, qui va tolto anche lui, o il banco e il conto " +
+      "smettono di parlare dello stesso insieme.",
+    comando:
+      "ls crates/fub-features/src/*.rs | grep -vE '/(lib|inventario)\\.rs$' | wc -l",
+  },
+  {
     nome: "verbali",
     ragione:
       "I verbali delle decisioni chiuse. È il conteggio che `todo.md` scriveva " +

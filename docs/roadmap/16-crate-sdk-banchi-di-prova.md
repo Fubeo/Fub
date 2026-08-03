@@ -8,7 +8,10 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): i banchi e i confin
 
 Delle sette voci con cui questa seduta è nata ne resta **una**: il secondo tempo
 della 16.3, cioè il confine fra crate, che è fuori con una condizione e non con
-una scadenza. La 16.8 — il presidio sulla prosa, nata qui — è chiusa dalla
+una scadenza — e da oggi quella condizione la **valuta un banco** invece di
+starsene scritta in italiano ([decisione 0073](../decisions/0073-una-condizione-che-nessuno-valuta.md)),
+che è l'ultima cosa successa in questa seduta e non chiude niente. La 16.8 — il
+presidio sulla prosa, nata qui — è chiusa dalla
 [decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md),
 ed è l'ultima ad andarsene. Le precedenze che la seduta dichiarava sono tutte
 **decadute**, e vale la pena dire come, perché due sono decadute insieme alla
@@ -99,15 +102,31 @@ dichiarata guardando le voci insieme, come la seduta chiede.
 - [ ] **Secondo tempo: lo split in crate.** Resta, ed è l'unica forma che compra
       il **confine contro l'accoppiamento feature↔feature**, perché dentro un
       crate solo `pub(crate)` lascia passare tutto. È giustificato dai venti
-      moduli di 21.2 — che oggi non esistono: le feature ufficiali sono otto e i
-      loro moduli non si citano fra loro, l'unico riferimento incrociato nei
-      sorgenti è un link di documentazione a `backlinks::catalog`. Farlo adesso
-      significa pagare venti `Cargo.toml` per otto moduli che non si parlano;
-      farlo mai significa scoprire l'accoppiamento quando districarlo costa venti
-      volte tanto. **La condizione che lo sblocca è scritta e non è una data**: il
-      primo import fra due moduli di feature che non sia un link di
-      documentazione. Il primo tempo non anticipa niente di questo — la cargo
+      moduli di 21.2 — che oggi non esistono: i moduli di feature sono
+      otto [conta: moduli-di-feature], e non si citano fra loro: l'unico
+      riferimento incrociato nei sorgenti è un link di documentazione a
+      `backlinks::catalog`.
+      Farlo adesso significa pagare venti `Cargo.toml` per otto moduli che non si
+      parlano; farlo mai significa scoprire l'accoppiamento quando districarlo
+      costa venti volte tanto. **La condizione che lo sblocca è scritta e non è
+      una data**: il primo import fra due moduli di feature che non sia un link
+      di documentazione. Il primo tempo non anticipa niente di questo — la cargo
       feature per bundle è ciò da cui uno split partirebbe comunque.
+- [x] **E la condizione la valuta qualcuno**, dalla
+      [decisione 0073](../decisions/0073-una-condizione-che-nessuno-valuta.md):
+      `crates/fub-features/tests/i_moduli_non_si_parlano.rs` chiede che nessun
+      modulo di feature nomini `crate::`, e quando è rosso non accusa chi ha
+      scritto — dice che **questa voce si è sbloccata** e la consegna da leggere.
+      Serviva perché una condizione che vive solo in italiano è una scadenza che
+      non arriva mai: il momento in cui scade è quello in cui nessuno la guarda.
+      Il confine del compilatore, che il primo tempo aveva regalato, copre solo
+      metà del caso — nella build della sola `outline` un `use crate::search`
+      non compila, ma la riparazione che quell'errore suggerisce è mettergli
+      davanti un `#[cfg(feature = "search")]`, e da lì l'accoppiamento c'è e
+      tutto torna verde. La forma che evade il confine è quella attenta, ed è il
+      confine stesso a insegnarla; per questo la domanda si pone ai sorgenti,
+      cioè prima del `cfg`. Un modulo condiviso legittimo non indebolisce la
+      soglia: entra in `RADICE` con la sua ragione.
 
 ### 16.6 Dieta dell'IPC
 
