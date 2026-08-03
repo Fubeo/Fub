@@ -88,6 +88,8 @@ cronologico di chiusura.
 | [0075](0075-una-view-non-chiede-con-una-finestra.md) | Una view non chiede con una finestra, e chi scrive le versioni è chi le disegna | §1.2 (**una casella su due**: cestino e cronologia come `ViewProvider`) — resta il modello di layout ([seduta 18](../roadmap/18-editor-e-tastiera.md)); e **tre righe su cinque** del debito del §16.6 | 2026-08-03 |
 | [0076](0076-le-impostazioni-vivono-nel-vault.md) | Le impostazioni vivono nel vault, e la macchina tiene solo ciò che serve quando il vault non si apre | **Revisione** della [0036](0036-le-impostazioni-e-i-tre-stati.md), §11.1 ([seduta 11](../roadmap/11-impostazioni-e-i-tre-stati.md)): non chiude una voce nuova, cambia dove sta un valore | 2026-08-03 |
 
+| [0077](0077-una-scorciatoia-e-una-chiave.md) | Una scorciatoia è una chiave di impostazione, e un comando di shell è un comando | §18.2 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — chiude registro unico, palette fuzzy, conflitti e scorciatoie riconfigurabili; resta il solo accordo **in sequenza** | 2026-08-03 |
+
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
 nel momento in cui la voce di `todo.md` si chiude.

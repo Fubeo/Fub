@@ -334,6 +334,33 @@ impl SettingSpec {
     }
 }
 
+/// La chiave d'impostazione con cui si riconfigura la scorciatoia di un comando
+/// (§18.2).
+///
+/// Una chiave **per comando**, di specie [`SettingKind::Text`], col suggerimento
+/// dichiarato dalla `CommandSpec` come default. Le due alternative sono state
+/// scartate e la ragione sta nella
+/// [0077](../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md): una lista
+/// di stringhe `"note.create=Mod-Alt-k"` è un formato dentro un formato — la
+/// stessa cosa che `LOG_VERBOSE` aveva già rifiutato — e un `SettingKind::Map`
+/// è **firma** a ridosso del freeze di M4, che pagherebbero host, shell, WIT e
+/// il pannello che le disegna.
+///
+/// La chiave nasce nel namespace del proprietario del comando, e per farlo si
+/// spezza l'id sul primo `:` come vuole la regola dei nomi
+/// ([`rules::ids`](crate::rules::ids)): `note.create` diventa `keys.note.create`,
+/// `com.acme:tasks.add` diventa `com.acme:keys.tasks.add`. Il prefisso non può
+/// stare davanti a tutto (`keys.com.acme:tasks.add` sarebbe un id nudo
+/// dichiarato da un plugin, cioè inammissibile), e questa funzione è l'unico
+/// posto in cui la composizione si scrive — la shell ne tiene il gemello, e i
+/// due si provano sullo stesso elenco di casi.
+pub fn keybinding_key(command_id: &str) -> String {
+    match command_id.split_once(':') {
+        Some((ns, name)) => format!("{ns}:keys.{name}"),
+        None => format!("keys.{command_id}"),
+    }
+}
+
 /// Da dove viene il valore che si sta leggendo.
 ///
 /// Serve a chi disegna il form — «questa la stai sovrascrivendo per questo

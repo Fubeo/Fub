@@ -7,6 +7,7 @@
 // davvero, in attesa di quello vero (tab, split, pane: FEATURES 3.3, la parte
 // del §1.2 lasciata aperta).
 import { $ } from "../ui/dom";
+import { registerShellCommand } from "../ui/commands";
 
 export type SidebarPanel = "files" | "search";
 
@@ -21,4 +22,28 @@ export function showPanel(panel: SidebarPanel): void {
 
 export function isPanelVisible(panel: SidebarPanel): boolean {
   return !panels[panel].hidden;
+}
+
+/// I due pannelli come **comandi** (§18.2), dichiarati da chi possiede la
+/// regola che li alterna.
+///
+/// Stanno qui e non nei due pannelli che mostrano perché è qui che vive
+/// `showPanel`: il pannello della ricerca sa cercare, non sa di essere uno di
+/// due che si escludono — ed è la stessa ragione per cui quella regola si è
+/// spostata fuori da `main.ts` a suo tempo.
+export function mountSidebarCommands(): void {
+  registerShellCommand({
+    id: "shell.panel.files",
+    title: "commands.panel.files",
+    description: "commands.panel.files.desc",
+    keybinding: "Mod-Shift-e",
+    run: () => showPanel("files"),
+  });
+  registerShellCommand({
+    id: "shell.panel.search",
+    title: "commands.panel.search",
+    description: "commands.panel.search.desc",
+    keybinding: "Mod-Shift-f",
+    run: () => showPanel("search"),
+  });
 }

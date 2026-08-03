@@ -27,6 +27,8 @@ import { pageName } from "../rules/organizer";
 import { errorText } from "../host/errors";
 import { intrappolaFuoco } from "./a11y";
 import { type Chiave, t } from "../i18n/strings";
+import { allCommands, loadKeyOverrides, type CommandEntry } from "./commands";
+import { state } from "../state/store";
 
 /// Ciò che la palette chiede alla shell: eseguire gli intenti e dire qualcosa
 /// all'utente. Il resto (invocare, disegnare, chiedere) è suo.
@@ -42,28 +44,66 @@ export interface PaletteHost {
 // argomenti sono le due cose che devono restare vere anche quando la palette
 // verrà ridisegnata, e si provano senza un browser (`palette.test.ts`).
 
+/// La query è una **sottosequenza** di questo testo? E quanto bene?
+///
+/// `null` se non lo è. Altrimenti un punteggio in cui **più basso è meglio**,
+/// come il rango di `filterCommands`, perché i due si sommano: conta quanti
+/// buchi ci sono fra un carattere trovato e il successivo, e da dove comincia il
+/// primo. È ciò che fa vincere «nuova nota» su «rinomina» per la query `nn`
+/// senza una tabella di casi speciali.
+export function fuzzyScore(testo: string, query: string): number | null {
+  const t = testo.toLowerCase();
+  let i = 0;
+  let punti = 0;
+  let precedente = -1;
+  for (const c of query) {
+    const trovato = t.indexOf(c, i);
+    if (trovato < 0) return null;
+    // Un carattere attaccato al precedente non costa niente; uno lontano costa
+    // la distanza. Il primo costa da dove comincia.
+    punti += precedente < 0 ? trovato : trovato - precedente - 1;
+    precedente = trovato;
+    i = trovato + 1;
+  }
+  return punti;
+}
+
 /// I comandi che corrispondono a ciò che l'utente sta scrivendo, dai più
 /// pertinenti ai meno.
 ///
 /// Cerca anche nella **descrizione**: è il campo che la decisione 0010 ha aggiunto per i
 /// chiamanti non umani, e si è rivelato utile anche qui — chi cerca «sostituisci
 /// in blocco» non conosce il titolo esatto.
-export function filterCommands(specs: CommandSpec[], query: string): CommandSpec[] {
+///
+/// Il filtro è a **sottosequenza** (§18.2): `nn` trova «Nuova nota» e `csd`
+/// trova «Cerca e sostituisci nel documento», che è ciò che chiunque abbia usato
+/// una palette si aspetta e che il prefisso non sa fare. Il rango di prima non è
+/// stato buttato — è diventato lo **spareggio**: prima i titoli che cominciano
+/// con la query, poi quelli che la contengono, poi l'id, poi la prosa, e dentro
+/// ciascuno di questi scaglioni vince chi ha la sottosequenza più compatta. Un
+/// punteggio fuzzy solo avrebbe messo una corrispondenza sparsa nel titolo
+/// davanti a una esatta nella descrizione, cioè avrebbe peggiorato il caso
+/// comune per far funzionare quello raro.
+export function filterCommands(entries: CommandEntry[], query: string): CommandEntry[] {
   const q = query.trim().toLowerCase();
-  if (!q) return specs;
-  const rank = (spec: CommandSpec): number => {
-    const title = spec.title.toLowerCase();
-    if (title.startsWith(q)) return 0;
-    if (title.includes(q)) return 1;
-    if (spec.id.toLowerCase().includes(q)) return 2;
-    if (spec.description.toLowerCase().includes(q)) return 3;
-    return -1;
+  if (!q) return entries;
+  const rank = (entry: CommandEntry): [number, number] | null => {
+    const title = entry.title.toLowerCase();
+    if (title.startsWith(q)) return [0, 0];
+    if (title.includes(q)) return [1, title.indexOf(q)];
+    if (entry.id.toLowerCase().includes(q)) return [2, 0];
+    if (entry.description.toLowerCase().includes(q)) return [3, 0];
+    const sparso = fuzzyScore(entry.title, q);
+    if (sparso !== null) return [4, sparso];
+    const nell_id = fuzzyScore(entry.id, q);
+    if (nell_id !== null) return [5, nell_id];
+    return null;
   };
-  return specs
-    .map((spec) => ({ spec, r: rank(spec) }))
-    .filter((x) => x.r >= 0)
-    .sort((a, b) => a.r - b.r)
-    .map((x) => x.spec);
+  return entries
+    .map((entry) => ({ entry, r: rank(entry) }))
+    .filter((x): x is { entry: CommandEntry; r: [number, number] } => x.r !== null)
+    .sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1])
+    .map((x) => x.entry);
 }
 
 /// Questo comando va **mostrato prima di essere fatto**?
@@ -143,43 +183,10 @@ export function argsFromForm(
   return args;
 }
 
-/// I tasti premuti, come li descrive un evento della tastiera.
-export interface KeyChord {
-  key: string;
-  ctrlKey: boolean;
-  metaKey: boolean;
-  shiftKey: boolean;
-  altKey: boolean;
-}
-
-/// Questa combinazione è la scorciatoia dichiarata da un comando?
-///
-/// La sintassi è quella dei suggerimenti delle spec (`Mod-Shift-f`), dove `Mod`
-/// è Ctrl o Cmd. Una scorciatoia **senza modificatori viene ignorata**: le spec
-/// sono suggerimenti di chi scrive il comando, e un comando che dichiarasse `f`
-/// ruberebbe una lettera a chi sta scrivendo una nota. Finché la tastiera non è
-/// configurabile (§18.2) la shell onora ciò che può onorare senza fare danni.
-export function matchesBinding(e: KeyChord, binding: string | null): boolean {
-  if (!binding) return false;
-  const parti = binding.split("-");
-  const tasto = parti.pop();
-  if (!tasto) return false;
-  const mods = parti.map((p) => p.toLowerCase());
-  if (mods.length === 0) return false;
-  const mod = e.ctrlKey || e.metaKey;
-  const vuole = (nome: string) => mods.includes(nome);
-  return (
-    e.key.toLowerCase() === tasto.toLowerCase() &&
-    vuole("mod") === mod &&
-    vuole("shift") === e.shiftKey &&
-    vuole("alt") === e.altKey
-  );
-}
-
-/// Il comando la cui scorciatoia dichiarata corrisponde, se ce n'è uno.
-export function findByBinding(specs: CommandSpec[], e: KeyChord): CommandSpec | undefined {
-  return specs.find((spec) => matchesBinding(e, spec.keybinding));
-}
+// Il riconoscimento di un accordo — `matchesBinding`, `findByChord` — sta in
+// `ui/commands.ts` da quando la tastiera guarda l'unione dei due registri: era
+// qui perché la palette era l'unico posto che sapesse cos'è una scorciatoia, e
+// non lo è più.
 
 /// Il piano in righe leggibili: il riassunto, poi una riga per nota.
 export function planLines(plan: CommandPlan): string[] {
@@ -209,23 +216,35 @@ export function closeCommandPalette() {
 }
 
 /// Apre la palette. Tre passi al più: scegli, compila, approva.
+///
+/// Le spec del kernel si rileggono **qui**: è il momento in cui costa nulla ed
+/// è l'unico in cui devono essere fresche — un componente acceso mezzo minuto fa
+/// ha comandi che nessuno ha ancora chiesto. Con loro si rileggono gli accordi
+/// riconfigurati, perché sono la stessa domanda fatta all'altro canale.
 export async function openCommandPalette(host: PaletteHost) {
-  let specs: CommandSpec[];
   try {
-    specs = await api.listCommands();
+    state.commandSpecs = await api.listCommands();
+    await loadKeyOverrides();
   } catch (e) {
     host.notify(t("palette.unavailable", { reason: errorText(e) }));
     return;
   }
-  scegli(specs, apriOverlay(), host);
+  scegli(allCommands(), apriOverlay(), host);
 }
 
-/// Fa partire **un** comando, saltando la scelta: è la via della scorciatoia
-/// dichiarata. I passi dopo sono gli stessi — parametri se ce ne sono, piano se
+/// Fa partire **un** comando, saltando la scelta: è la via della scorciatoia.
+///
+/// Per un comando di shell è tutto qui — `run()` e basta, che è la ragione per
+/// cui non si apre nessun overlay prima di sapere di chi è. Per uno del kernel i
+/// passi dopo sono gli stessi della palette — parametri se ce ne sono, piano se
 /// il raggio lo merita: una scorciatoia non è un permesso di saltare il
 /// consenso.
-export function startCommand(spec: CommandSpec, host: PaletteHost) {
-  avvia(spec, apriOverlay(), host);
+export function startCommand(entry: CommandEntry, host: PaletteHost) {
+  if (entry.run) {
+    void entry.run();
+    return;
+  }
+  avvia(entry, apriOverlay(), host);
 }
 
 function apriOverlay(): HTMLElement {
@@ -254,7 +273,7 @@ function apriOverlay(): HTMLElement {
 }
 
 /// Passo 1: l'elenco filtrabile.
-function scegli(specs: CommandSpec[], box: HTMLElement, host: PaletteHost) {
+function scegli(specs: CommandEntry[], box: HTMLElement, host: PaletteHost) {
   box.innerHTML = "";
   const input = document.createElement("input");
   input.className = "palette-input";
@@ -279,13 +298,21 @@ function scegli(specs: CommandSpec[], box: HTMLElement, host: PaletteHost) {
       const titolo = document.createElement("span");
       titolo.className = "palette-title";
       titolo.textContent = spec.title;
-      const raggio = document.createElement("span");
-      raggio.className = "palette-scope";
-      raggio.textContent = scopeLabel(spec);
-      riga.append(titolo, raggio);
-      if (spec.keybinding) {
+      riga.append(titolo);
+      // Il raggio lo dichiara chi sta dall'altra parte del confine: un comando
+      // di shell non tocca il vault, e una riga «legge la sessione» sotto
+      // «Mostra il grafo» sarebbe una promessa fatta a nome di nessuno.
+      if (spec.spec) {
+        const raggio = document.createElement("span");
+        raggio.className = "palette-scope";
+        raggio.textContent = scopeLabel(spec.spec);
+        riga.append(raggio);
+      }
+      // L'accordo **efficace**, non quello dichiarato: se l'utente l'ha
+      // cambiato, la palette è il posto in cui lo scopre.
+      if (spec.binding) {
         const kb = document.createElement("kbd");
-        kb.textContent = spec.keybinding;
+        kb.textContent = spec.binding;
         riga.appendChild(kb);
       }
 
@@ -330,7 +357,15 @@ function scegli(specs: CommandSpec[], box: HTMLElement, host: PaletteHost) {
 
 /// Passo 2: i parametri, se il comando ne dichiara. Se non ne dichiara, si va
 /// dritti all'esecuzione — la palette non inventa domande che nessuno ha fatto.
-function avvia(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
+function avvia(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
+  // Un comando di shell si fa e basta: non ha parametri da chiedere né un piano
+  // da mostrare, perché non tocca il vault.
+  if (entry.run) {
+    closeCommandPalette();
+    void entry.run();
+    return;
+  }
+  const spec = entry.spec!;
   if (spec.params.length === 0) {
     void esegui(spec, {}, box, host);
     return;

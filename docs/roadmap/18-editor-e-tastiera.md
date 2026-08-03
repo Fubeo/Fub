@@ -29,13 +29,15 @@ due `ViewProvider`
 resta della voce è **solo** il modello di layout, cioè esattamente il nodo di
 quell'ordine.
 
-Le due voci native della seduta. La 18.2 dipende dal registro comandi
-([decisione 0009](../decisions/0009-registro-dei-comandi.md)), che è fatto: oggi la
-shell **onora** i `keybinding` dichiarati dai comandi e ignora quelli senza
-modificatori; ciò che manca è la tastiera **configurabile dall'utente**, che vive
-nei settings (11.1), e i comandi **della shell** (toggle dei pannelli, cambio
-modalità), che non possono registrarsi nel kernel e finché non c'è un registro di
-qua restano bottoni.
+Le due voci native della seduta. La 18.2 dipendeva dal registro comandi
+([decisione 0009](../decisions/0009-registro-dei-comandi.md)) e dai settings
+(11.1), ed è **quasi chiusa** con la
+[0077](../decisions/0077-una-scorciatoia-e-una-chiave.md): la tastiera è
+configurabile perché una scorciatoia è una chiave di impostazione che il kernel
+fabbrica per ogni comando, e i comandi **della shell** — toggle dei pannelli,
+cambio modalità, grafo, palette — non sono più bottoni: sono comandi con la
+stessa forma, che si eseguono di qua invece che attraverso l'IPC. Resta il solo
+accordo **in sequenza**, che è un secondo problema.
 
 Con loro il residuo dichiarato della
 [decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md): l'arco adesso è
@@ -79,11 +81,31 @@ raccoglie.
 
 ### 18.2 Comandi e tastiera
 
-*ex §3.2 · shell · **P1** — il registro c'è (decisione 0009); manca il lato shell*
+*ex §3.2 · shell · **P1** — **quasi chiusa** con la [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md): resta il solo accordo **in sequenza***
 
-- [ ] **Registro comandi nel frontend** alimentato da `list_commands` +
-      command palette fuzzy + hotkey configurabili (con chord) + conflitti
-      segnalati. È la superficie con cui l'utente raggiunge tutto il resto.
+- [x] ~~**Registro comandi nel frontend** alimentato da `list_commands` +
+      command palette fuzzy + hotkey configurabili + conflitti segnalati.~~
+      Fatto con la [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md):
+      una scorciatoia è una **chiave di impostazione** `keys.<id>` che il kernel
+      fabbrica quando un `CommandProvider` si registra — col suggerimento
+      dichiarato come default, così il valore efficace *è* la scorciatoia — e i
+      comandi **della shell** sono comandi come gli altri, con la stessa forma e
+      un `run()` locale al posto dell'IPC. Il filtro è a sottosequenza, col rango
+      di prima come spareggio; i conflitti si **dicono** all'apertura, nominando
+      i comandi, invece di essere rifiutati alla scrittura.
+- [ ] **L'accordo in sequenza** (`g` poi `d`) — l'unica casella rimasta, ed è un
+      secondo problema e non un pezzo mancante del primo: una sequenza ha uno
+      stato («sto aspettando il secondo tasto»), un timeout, un modo di
+      annullarla e la domanda di cosa fare se il primo tasto è già una
+      scorciatoia da solo. Niente di tutto ciò si esprime nella sintassi che la
+      `CommandSpec` dichiara oggi, e accettare `g d` senza onorarlo sarebbe
+      peggio che non accettarlo.
+- [ ] **La scorciatoia di un comando di shell non si riconfigura**: la chiave la
+      fabbrica il kernel registrando un provider, e un comando che vive nella
+      webview un provider non ce l'ha (il pannello le mostra di sola lettura). La
+      via d'uscita non è un secondo registro di qua — è la shell che diventa un
+      componente come gli altri, cioè la domanda della
+      [§16.3](16-crate-sdk-banchi-di-prova.md).
 
 ---
 

@@ -60,7 +60,9 @@ use fub_abi::format::{DocumentFormat, RenderOptions};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fub_abi::session::ViewContext;
-use fub_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingValue};
+use fub_abi::settings::{
+    SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
+};
 use fub_abi::text::{Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, HostApi,
@@ -3653,6 +3655,27 @@ impl Workspace {
         self.providers
             .plugins
             .admit(&plugin, RegistrationKind::Command, &ids)?;
+        // Le **scorciatoie** come impostazioni (§18.2): una chiave per comando,
+        // fabbricata qui e non chiesta a chi registra. Chiederla avrebbe voluto
+        // dire che un comando con la scorciatoia riconfigurabile è un comando il
+        // cui autore si è ricordato di dichiararne una — cioè la proprietà che
+        // interessa affidata alla diligenza, mentre l'utente che vuole
+        // rimappare *quel* comando non ha modo di sapere perché non può.
+        //
+        // Va **dopo** `admit` e prima di `record`: `admit` è ciò che verifica
+        // che quegli id siano nominabili da questo plugin, e sintetizzare una
+        // chiave dal nome di un comando che il registro sta per rifiutare
+        // vorrebbe dire dichiarare l'impostazione di un comando che non
+        // esisterà.
+        let keys = self.keybinding_specs(&specs);
+        if let Err(why) = self
+            .settings
+            .write()
+            .expect("store di configurazione")
+            .declare(&plugin, &keys)
+        {
+            return Err(RegistryError::Setting(why));
+        }
         self.providers
             .plugins
             .record(&plugin, RegistrationKind::Command, &ids);
@@ -3665,6 +3688,43 @@ impl Workspace {
             provider: Arc::from(provider),
         });
         Ok(())
+    }
+
+    /// Le impostazioni `keys.<id>` di un elenco di comandi (§18.2).
+    ///
+    /// Tre scelte, e ognuna ha la sua ragione:
+    ///
+    /// - **Il default è il suggerimento dichiarato** (`CommandSpec.keybinding`,
+    ///   o la stringa vuota). Ne segue la proprietà che rende superflua ogni
+    ///   regola di fusione a valle: il valore *efficace* della chiave **è** la
+    ///   scorciatoia, sempre — e `SettingSource` dice da sé se l'utente l'ha
+    ///   cambiata, che è ciò da cui il pannello decide se mostrare «azzera».
+    /// - **L'etichetta e la descrizione sono quelle del comando**, riusate
+    ///   com'erano. Sono già dei `Text` del catalogo del suo proprietario, e
+    ///   inventare qui due chiavi nuove avrebbe voluto dire chiedere a ogni
+    ///   componente di tradurre una seconda volta il nome che ha già tradotto.
+    /// - **Nessun gruppo.** Un'intestazione si raggruppa per *testo risolto*
+    ///   (vedi [`SettingSpec::group`]), quindi una chiave di gruppo del core non
+    ///   si tradurrebbe nel catalogo di un plugin: dire «Scorciatoie» a nome di
+    ///   qualcun altro è ciò che qui non si può fare. A metterle insieme è la
+    ///   shell, che sa comporre la chiave e quindi sa riconoscerle.
+    ///
+    /// Non è `program_writable`: quali tasti fanno cosa è dell'utente, ed è lo
+    /// stesso argomento delle chiavi `locale.*`.
+    fn keybinding_specs(&self, specs: &[CommandSpec]) -> Vec<SettingSpec> {
+        specs
+            .iter()
+            .map(|spec| {
+                SettingSpec::new(
+                    fub_abi::settings::keybinding_key(&spec.id),
+                    spec.title.clone(),
+                    SettingKind::Text {
+                        default: spec.keybinding.clone().unwrap_or_default(),
+                    },
+                )
+                .describing(spec.description.clone())
+            })
+            .collect()
     }
 
     /// I comandi offerti dai provider registrati, in ordine di registrazione.

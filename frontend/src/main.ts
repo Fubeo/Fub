@@ -19,7 +19,15 @@ import { loadCommandSpecs, primaNota } from "./state/vault";
 import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
 import { ascoltaIGuasti, mountNotifications, notify } from "./ui/notify";
-import { findByBinding, openCommandPalette, startCommand } from "./ui/palette";
+import { openCommandPalette, startCommand } from "./ui/palette";
+import {
+  allCommands,
+  findByChord,
+  frasedeiConflitti,
+  loadKeyOverrides,
+  registerShellCommand,
+} from "./ui/commands";
+import { mountSidebarCommands } from "./panels/sidebar";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
 import { mountStrings, t } from "./i18n/strings";
@@ -129,19 +137,40 @@ async function init(): Promise<void> {
 
   $("#open-vault").addEventListener("click", () => void pickVault());
 
-  // La tastiera dei comandi, in un punto solo: la palette, e le scorciatoie
-  // che i comandi **dichiarano**. La shell non ne cabla nessuna — se un domani
-  // un plugin dichiara `Mod-Shift-t`, funziona senza toccare questo file.
+  // I due comandi che sono **di qui e di nessun pannello**: aprire un vault e
+  // aprire la palette. Come ogni altro pannello, questo file dichiara i propri
+  // (§18.2) invece di tenere l'elenco di tutti.
+  //
+  // Che la palette sia un comando come gli altri non è una civetteria: fino a
+  // ieri il suo `Mod-Shift-p` era l'unica combinazione cablata dentro il
+  // `keydown`, cioè l'unica che non compariva da nessuna parte e che nessuno
+  // poteva scoprire senza leggere questo file.
+  registerShellCommand({
+    id: "shell.vault.open",
+    title: "commands.vault.open",
+    description: "commands.vault.open.desc",
+    keybinding: "Mod-Shift-o",
+    run: () => void pickVault(),
+  });
+  registerShellCommand({
+    id: "shell.palette",
+    title: "commands.palette",
+    description: "commands.palette.desc",
+    keybinding: "Mod-Shift-p",
+    run: () => void openCommandPalette(paletteHost),
+  });
+  mountSidebarCommands();
+
+  // La tastiera, in un punto solo, e adesso su **un registro solo**: i comandi
+  // del kernel e quelli della shell, con l'accordo efficace di ognuno — quello
+  // che l'utente ha scelto, o quello dichiarato. La shell non cabla nessuna
+  // combinazione: se un domani un plugin dichiara `Mod-Shift-t`, funziona senza
+  // toccare questo file.
   document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "p") {
+    const entry = findByChord(allCommands(), e);
+    if (entry) {
       e.preventDefault();
-      void openCommandPalette(paletteHost);
-      return;
-    }
-    const spec = findByBinding(state.commandSpecs, e);
-    if (spec) {
-      e.preventDefault();
-      startCommand(spec, paletteHost);
+      startCommand(entry, paletteHost);
     }
   });
 
@@ -204,6 +233,11 @@ async function openVaultPath(dir: string): Promise<void> {
   // l'unico in cui deve essere fresco.
   await mountDeclaredViews();
   await loadCommandSpecs();
+  // Gli accordi riconfigurati vivono nelle impostazioni di **questo** vault
+  // (0076), quindi si rileggono quando il vault cambia — insieme ai comandi che
+  // ne sono i proprietari.
+  await loadKeyOverrides();
+  await avvisaSeDueComandiSiContendonoUnTasto();
 
   await avvisaSeNessunoGuarda();
 
@@ -211,6 +245,20 @@ async function openVaultPath(dir: string): Promise<void> {
   // vault non porta più l'elenco intero, e per aprirne una non serve.
   const prima = await primaNota();
   if (prima) await openDocument(prima);
+}
+
+/// Se due comandi si contendono la stessa combinazione, **dirlo** (§18.2).
+///
+/// È l'unica cosa di questa voce che non veniva gratis. Un conflitto non è un
+/// errore da rifiutare — chi ha rimappato ha il diritto di sbagliare, e
+/// rifiutare la scrittura vorrebbe dire non poter scambiare due scorciatoie fra
+/// loro senza passare per uno stato illegale — ma è qualcosa che nessuno
+/// scoprirebbe da sé: si preme, parte l'altro comando, e non c'è niente da
+/// guardare. L'avviso nomina i comandi, perché è da lì che si va a cambiarne
+/// uno.
+async function avvisaSeDueComandiSiContendonoUnTasto(): Promise<void> {
+  const frase = frasedeiConflitti(allCommands());
+  if (frase) notify(frase, "guasto");
 }
 
 /// Se questo vault non ha il rilevamento delle modifiche esterne, dirlo (§9.7).
