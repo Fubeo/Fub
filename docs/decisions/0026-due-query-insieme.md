@@ -144,12 +144,14 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
   così: sta sul percorso di chi scrive, e chi scrive è già serializzato dal
   prestito esclusivo del workspace un livello più su. Spezzarlo comprerebbe
   parallelismo dentro un percorso che non ne ha da spendere.
-- **I 23 ms per query restano, e restano della [§21.9](../roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché).**
+- **I 23 ms per query restano, e restano della [§21.9](0074-selezionare-non-e-raccontare.md).**
   Con la [0025](0025-la-ricerca-predefinita.md) quella domanda ha un proprietario
   suo, e ha ancora due numeri a due ordini di grandezza di distanza da spiegare
   (108 µs misurati a M2, ~21–23 ms qui). Questa voce ha tolto la ragione per cui
   quei millisecondi **non si dividevano per otto**; non ha spiegato perché siano
-  tanti.
+  tanti. *(La spiegazione è arrivata con la
+  [0074](0074-selezionare-non-e-raccontare.md), che ha chiuso la §21.9: non erano
+  della query, erano di duemila estratti generati per mostrarne venti.)*
 - **Il banco non è stato toccato.** Le sue tre fasi misuravano già la cosa
   giusta, e la prima esisteva proprio perché «un provider può avere un lock
   proprio dentro il prestito condiviso». Cambiarlo mentre si cambia ciò che

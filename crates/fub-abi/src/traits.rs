@@ -1794,6 +1794,47 @@ impl PropertySelect {
     }
 }
 
+/// Se la risposta deve portarsi dietro gli **estratti**, o solo dire quali
+/// documenti combaciano (§21.9).
+///
+/// È la stessa specie di distinzione di [`PropertySelect`] — *cosa* torna
+/// indietro, non *cosa* si seleziona — e nasce da una misura: una ricerca
+/// testuale su duemila note ne costava ventitré millisecondi, e ventuno erano
+/// duemila estratti generati per mostrarne venti. Il pianificatore chiede senza
+/// finestra (l'ordine della risposta è del contratto, non del motore), quindi
+/// senza questo campo non ha nessun modo di dire «per adesso mi bastano gli id»:
+/// chi indicizza deve presumere che l'estratto serva sempre, ed è il caso più
+/// caro.
+///
+/// Vale per chi **produce** una risposta, non per chi la legge: un estratto
+/// assente non vuol dire che non ce ne sia uno da fare — vuol dire che nessuno
+/// l'ha chiesto. È la stessa lettura di
+/// [`DocumentMatch::occurrences`] vuoto.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Excerpts {
+    /// Sì: chi ha cercato vede **perché** una nota è nel risultato. È il
+    /// default, ed è il verso giusto in cui sbagliare — chi non sa di questo
+    /// campo riceve una risposta completa e paga, invece di ricevere una
+    /// risposta muta e non capire perché.
+    #[default]
+    Attach,
+    /// No: la domanda seleziona e basta. La chiede chi sa che getterà via quasi
+    /// tutto — il pianificatore prima di applicare la finestra, un'automazione
+    /// che conta, `vault.replace` che riscrive — e non chi disegna un elenco di
+    /// risultati.
+    ///
+    /// Non tocca la **rilevanza**: il punteggio serve a ordinare, e ordinare è
+    /// esattamente ciò che si fa prima di sapere quale pagina resta.
+    Omit,
+}
+
+impl Excerpts {
+    pub fn wanted(self) -> bool {
+        matches!(self, Excerpts::Attach)
+    }
+}
+
 /// Una proprietà con il suo valore normalizzato ([`PropertyValue`], decisione 0003).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PropertyEntry {
@@ -2068,6 +2109,10 @@ pub enum IndexQuery {
         select: PropertySelect,
         #[serde(default)]
         page: Option<Page>,
+        /// Se le righe devono portare l'**estratto** attorno al match (§21.9).
+        /// Assente = sì: chi non lo nomina riceve una risposta completa.
+        #[serde(default)]
+        excerpts: Excerpts,
     },
     /// I riferimenti entranti verso un documento, col loro contesto.
     ///
@@ -2382,12 +2427,17 @@ impl IndexQuery {
     pub fn with_expression(self, resolved: QueryExpr) -> IndexQuery {
         match self {
             IndexQuery::Documents {
-                sort, select, page, ..
+                sort,
+                select,
+                page,
+                excerpts,
+                ..
             } => IndexQuery::Documents {
                 matching: resolved,
                 sort,
                 select,
                 page,
+                excerpts,
             },
             IndexQuery::Tags { page, .. } => IndexQuery::Tags {
                 matching: resolved,

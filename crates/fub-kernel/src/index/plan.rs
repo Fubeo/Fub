@@ -34,12 +34,17 @@
 //! [`QueryPredicate::Docs`]: chi la riceve non deve sapere da quale domanda
 //! venisse.
 
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+
+use fub_abi::model::DocId;
 use fub_abi::query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate,
 };
 use fub_abi::rules::properties;
 use fub_abi::traits::{
-    IndexQuery, IndexResult, Page, PredicateKind, PropertySelect, PropertySort, QueryKind,
+    DocumentMatch, Excerpts, IndexQuery, IndexResult, Page, PredicateKind, PropertySelect,
+    PropertySort, QueryKind,
 };
 use fub_abi::PluginError;
 
@@ -66,7 +71,8 @@ pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, P
                 sort,
                 select,
                 page,
-            } => documents(indexes, matching, sort, select, page),
+                excerpts,
+            } => documents(indexes, matching, sort, select, page, excerpts),
             other => Err(PluginError::Unserved(describe(&other).into())),
         },
     }
@@ -79,8 +85,9 @@ fn documents(
     sort: Option<PropertySort>,
     select: PropertySelect,
     page: Option<Page>,
+    excerpts: Excerpts,
 ) -> Result<IndexResult, PluginError> {
-    let router = Router { indexes };
+    let router = Router::new(indexes);
 
     // Pushdown intero: una sola clausola, un solo valutatore, e niente che
     // questo modulo debba aggiungere dopo. Vale **solo verso il core**, e la
@@ -99,6 +106,9 @@ fn documents(
     // Il prezzo è che una ricerca pura materializza tutti i suoi risultati
     // invece di farsi impaginare da tantivy. Non è un costo nuovo: è quello che
     // ogni domanda mista già paga, perché `Router::ask` chiede senza finestra.
+    // È un costo di **selezione**, e resta; quello che non resta è che chi
+    // seleziona debba anche *raccontare* ogni riga che sta per essere buttata —
+    // vedi `Router::ask` e [`rehydrate`] (§21.9).
     if sole_evaluator(indexes, matching.predicates()) == Some(Target::Core) {
         let index = indexes
             .at(Target::Core)
@@ -108,36 +118,148 @@ fn documents(
             sort,
             select,
             page,
+            excerpts,
         });
     }
 
     let matches = router.expr(&matching)?;
-    Ok(IndexResult::Documents(properties::finish(
-        matches,
-        sort.as_ref(),
-        &select,
-        page,
-        |id| indexes.core.frontmatter(id),
-    )))
+    let mut answer = properties::finish(matches, sort.as_ref(), &select, page, |id| {
+        indexes.core.frontmatter(id)
+    });
+    if excerpts.wanted() {
+        rehydrate(indexes, &router.asked.borrow(), &mut answer.items)?;
+    }
+    Ok(IndexResult::Documents(answer))
+}
+
+/// Gli estratti delle righe **rimaste**, chiesti a chi li sa fare.
+///
+/// È la seconda metà della §21.9, e la prima è in [`Router::ask`]: chi
+/// seleziona non genera estratti, perché non sa ancora quali righe
+/// sopravvivranno alla finestra. Qui le righe si sanno — sono venti, non
+/// duemila — e si torna da chi ha valutato la foglia di testo con la stessa
+/// espressione ristretta a quei documenti.
+///
+/// La mossa non è nuova: è quella che il pianificatore fa già in
+/// [`resolve_for`] — un'espressione che il destinatario non saprebbe valutare
+/// diventa [`QueryPredicate::Docs`] — applicata **dopo** invece che prima. Ed è
+/// la stessa disciplina con cui il kernel aggiunge le occorrenze
+/// (`Workspace::localize`, §21.3): si arricchisce la pagina, non il vault.
+fn rehydrate(
+    indexes: &Indexes,
+    asked: &[(Target, QueryExpr)],
+    rows: &mut [DocumentMatch],
+) -> Result<(), PluginError> {
+    if rows.is_empty() || asked.is_empty() {
+        return Ok(());
+    }
+    let docs: Vec<DocId> = rows.iter().map(|row| row.doc.clone()).collect();
+    for (target, expr) in asked {
+        let Some(index) = indexes.at(*target) else {
+            // Sparito fra le due chiamate: la selezione è già stata fatta e
+            // resta valida — quello che manca è l'estratto, e un estratto che
+            // manca è, da contratto, «nessuno l'ha calcolato».
+            continue;
+        };
+        let answer = index.query(IndexQuery::Documents {
+            matching: narrowed(expr, &docs),
+            sort: None,
+            select: PropertySelect::None,
+            page: None,
+            excerpts: Excerpts::Attach,
+        })?;
+        let mut told: BTreeMap<DocId, DocumentMatch> = answer
+            .documents()?
+            .items
+            .into_iter()
+            .map(|m| (m.doc.clone(), m))
+            .collect();
+        for row in rows.iter_mut() {
+            if let Some(m) = told.remove(&row.doc) {
+                row.absorb(m);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// La stessa espressione, ristretta a un insieme di documenti.
+///
+/// Il letterale in più va in **ogni** clausola, perché le clausole sono in OR:
+/// aggiungerlo a una sola restringerebbe quel ramo e lascerebbe gli altri
+/// liberi di riportare indietro il vault.
+fn narrowed(expr: &QueryExpr, docs: &[DocId]) -> QueryExpr {
+    let restriction = QueryLiteral {
+        negated: false,
+        predicate: QueryPredicate::Docs {
+            docs: docs.to_vec(),
+        },
+    };
+    QueryExpr {
+        any: expr
+            .any
+            .iter()
+            .map(|clause| {
+                let mut all = clause.all.clone();
+                all.push(restriction.clone());
+                QueryClause { all }
+            })
+            .collect(),
+    }
 }
 
 /// Il valutatore che sa **instradare**: ogni foglia al suo proprietario, la
 /// struttura al contratto.
 struct Router<'a> {
     indexes: &'a Indexes,
+    /// Cosa è stato chiesto **a chi**, per le sole espressioni che portano una
+    /// foglia di testo — cioè le sole che avrebbero un estratto da dare.
+    ///
+    /// Serve perché la domanda si fa in due tempi (§21.9): qui si seleziona, e
+    /// gli estratti si chiedono dopo la finestra, a chi ha selezionato. Senza
+    /// questo elenco il secondo tempo dovrebbe indovinare il destinatario, o
+    /// ricominciare dal routing con una domanda diversa da quella che ha
+    /// prodotto le righe.
+    ///
+    /// `RefCell` perché [`QueryEvaluator`] valuta con `&self`: il valutatore è
+    /// un lettore per il contratto, e ciò che si annota qui non è un risultato —
+    /// è la traccia di chi è stato interrogato.
+    asked: RefCell<Vec<(Target, QueryExpr)>>,
+}
+
+impl<'a> Router<'a> {
+    fn new(indexes: &'a Indexes) -> Self {
+        Router {
+            indexes,
+            asked: RefCell::new(Vec::new()),
+        }
+    }
 }
 
 impl Router<'_> {
     /// Chiede a un indice i documenti di un'espressione che gli appartiene.
+    ///
+    /// **Senza estratti**: qui si sta selezionando, e quali righe resteranno lo
+    /// deciderà la finestra di [`properties::finish`]. Chiederli adesso vorrebbe
+    /// dire farne uno per ogni documento che combacia — misurato: duemila
+    /// estratti per mostrarne venti, ventuno millisecondi su ventitré (§21.9).
+    /// Li richiede [`rehydrate`], quando le righe sono quelle vere.
     fn ask(&self, target: Target, matching: QueryExpr) -> Result<Matches, PluginError> {
         let index = self.indexes.at(target).ok_or_else(|| {
             PluginError::Unserved("indice sparito dalla tabella".to_string().into())
         })?;
+        if matching
+            .predicates()
+            .any(|p| matches!(p, QueryPredicate::Text(_)))
+        {
+            self.asked.borrow_mut().push((target, matching.clone()));
+        }
         let answer = index.query(IndexQuery::Documents {
             matching,
             sort: None,
             select: PropertySelect::None,
             page: None,
+            excerpts: Excerpts::Omit,
         })?;
         Ok(answer.documents()?.items.into_iter().collect())
     }
@@ -259,7 +381,7 @@ fn resolve_for(
     if expr.is_everything() {
         return Ok(query.with_expression(QueryExpr::all()));
     }
-    let router = Router { indexes };
+    let router = Router::new(indexes);
     let mut resolved = QueryExpr {
         any: Vec::with_capacity(expr.any.len()),
     };

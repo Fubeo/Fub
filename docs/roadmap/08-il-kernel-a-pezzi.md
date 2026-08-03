@@ -74,5 +74,8 @@ lungo adesso *può* stare fuori), ~~§9.3~~ (chiusa: gira, e si annulla) e
 ~~§10.3~~ (chiusa con la
 [decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md): l'utente lo
 vede, e lo ferma); e *quanto costa* una query — i ~21 ms su duemila note,
-che questa seduta ha fatto dividere per otto senza spiegarli — è della
-[§21.9](21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché).
+che questa seduta ha fatto dividere per otto senza spiegarli — era della
+~~§21.9~~, chiusa dalla
+[decisione 0074](../decisions/0074-selezionare-non-e-raccontare.md): non erano
+della query, erano di duemila estratti generati per mostrarne venti, e adesso
+quella stessa ricerca costa ~3,2 ms.

@@ -34,7 +34,7 @@ use std::time::{Duration, Instant};
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
-use fub_abi::traits::{IndexQuery, Page, PropertySelect, ViewInstance};
+use fub_abi::traits::{Excerpts, IndexQuery, Page, PropertySelect, ViewInstance};
 use fub_features::{BACKLINKS_VIEW, OUTLINE_VIEW, STATS_VIEW, TAGS_VIEW};
 use fub_host::{Host, NoWatcher};
 use fub_kernel::Workspace;
@@ -106,6 +106,7 @@ impl Lettura {
                 sort: None,
                 select: PropertySelect::None,
                 page: Some(Page::first(20)),
+                excerpts: Excerpts::Attach,
             })),
             Lettura::Anteprima => {
                 drop(ws.render_preview(&DocId::new(format!("Nota {}.md", i as usize % NOTES))))

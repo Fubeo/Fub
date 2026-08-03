@@ -190,6 +190,7 @@ fn prefix_len_ci(hay: &str, needle: &str) -> Option<usize> {
 mod tests {
     use super::*;
     use fub_abi::query::{QueryClause, QueryLiteral, TextQuery};
+    use fub_abi::traits::Excerpts;
 
     fn text_query(text: &str, mode: TextMode, negated: bool) -> IndexQuery {
         IndexQuery::Documents {
@@ -207,6 +208,7 @@ mod tests {
             sort: None,
             select: fub_abi::traits::PropertySelect::None,
             page: None,
+            excerpts: Excerpts::Attach,
         }
     }
 

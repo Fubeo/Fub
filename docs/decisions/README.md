@@ -84,6 +84,7 @@ cronologico di chiusura.
 | [0071](0071-una-feature-si-spegne-dove-si-dichiara.md) | Una feature si spegne dove si dichiara | §16.3 (**il primo tempo**: la cargo feature per bundle) — chiude **mezza** voce, il secondo tempo resta ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-08-03 |
 | [0072](0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) | Un numero si scrive accanto a come si ricava | §16.8 — chiude la voce, e con lei **l'ultima viva della seduta 16** oltre al secondo tempo della 16.3 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-08-03 |
 | [0073](0073-una-condizione-che-nessuno-valuta.md) | Una condizione che nessuno valuta è una scadenza senza data | §16.3 — **non chiude niente**: presidia la *condizione* che tiene fuori il secondo tempo, perché finora a valutarla non c'era nessuno ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-08-03 |
+| [0074](0074-selezionare-non-e-raccontare.md) | Selezionare non è raccontare | §21.9 — chiude la voce, e con lei l'unica della [seduta 21](../roadmap/21-la-ricerca-predefinita.md) che chiedesse una **misura** invece di un comportamento | 2026-08-03 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

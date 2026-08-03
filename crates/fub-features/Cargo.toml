@@ -66,3 +66,12 @@ fub-sdk = { workspace = true }
 fub-testkit = { workspace = true }
 fub-format-markdown.workspace = true
 tempfile = "3.27.0"
+
+# Il banco della §21.9 (decisione 0074): quanto costa una query, e **dove** vanno
+# i millisecondi. `required-features` e non un `#![cfg]` in testa al file: un
+# esempio con tutto spento non è un esempio vuoto, è un binario senza `main` —
+# cioè un errore di compilazione in una build parziale, che è precisamente ciò
+# che le build parziali della CI esistono per non avere.
+[[example]]
+name = "una_ricerca"
+required-features = ["search"]

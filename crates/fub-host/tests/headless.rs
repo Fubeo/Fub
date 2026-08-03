@@ -19,7 +19,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::event::EventKind;
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
-use fub_abi::traits::{IndexQuery, IndexResult, Page, PropertySelect, VaultStatus, ViewInstance};
+use fub_abi::traits::{
+    Excerpts, IndexQuery, IndexResult, Page, PropertySelect, VaultStatus, ViewInstance,
+};
 use fub_abi::Notice;
 use fub_features::BACKLINKS_VIEW;
 use fub_host::{EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
@@ -153,6 +155,7 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
             sort: None,
             select: PropertySelect::None,
             page: Some(Page::first(20)),
+            excerpts: Excerpts::Attach,
         }) {
             Ok(IndexResult::Documents(hits)) => hits.items,
             other => panic!("attesi documenti, trovato {other:?}"),

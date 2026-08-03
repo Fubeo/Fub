@@ -93,14 +93,14 @@ use fub_abi::settings::{
 };
 use fub_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fub_abi::traits::{
-    BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, FolderScope,
-    HealthCheck, HealthIssue, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult,
-    IndexingState, JobId, JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef, Page, Paged,
-    Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry,
-    PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi,
-    ResolvedRef, ServiceProvider, TagCount, TimerSchedule, TimerSpec, TrashEntry, VaultEntry,
-    VaultFolder, VaultStatus, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
-    ABI_VERSION,
+    BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, Excerpts,
+    FolderScope, HealthCheck, HealthIssue, HostApi, IndexLoss, IndexProvider, IndexQuery,
+    IndexResult, IndexingState, JobId, JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef,
+    Page, Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount,
+    PropertyEntry, PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind,
+    QueryRoute, ReadApi, ResolvedRef, ServiceProvider, TagCount, TimerSchedule, TimerSpec,
+    TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewInterests, ViewProvider,
+    ViewSpec, ViewSurface, ABI_VERSION,
 };
 use fub_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -417,6 +417,7 @@ wit_kebab! {
     PropertySort,
     PropertyEntry,
     PropertyCount,
+    Excerpts,
     HealthCheck,
     HealthIssue,
 
@@ -1935,6 +1936,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
             sort,
             select,
             page,
+            excerpts,
         } => case_rec(
             "documents",
             "index-query-documents",
@@ -1943,6 +1945,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
                 ("sort", wit(sort)),
                 ("select", wit(select)),
                 ("page", wit(page)),
+                ("excerpts", wit(excerpts)),
             ],
         ),
         IndexQuery::Backlinks { target, page } => case_rec(
@@ -2681,6 +2684,7 @@ fn conform(source: &str) -> Result<(), String> {
                 sort: None,
                 select: PropertySelect::None,
                 page: None,
+                excerpts: Excerpts::Attach,
             }),
             index_query_case(&IndexQuery::Backlinks {
                 target: DocId::new("a"),
@@ -2868,6 +2872,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.enumeration_from("health-check", ("traits.rs", "HealthCheck"));
 
     contract.enumeration_from("entry-kind", ("traits.rs", "EntryKind"));
+    contract.enumeration_from("excerpts", ("traits.rs", "Excerpts"));
 
     contract.enumeration_from("indexing-state", ("traits.rs", "IndexingState"));
 

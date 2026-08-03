@@ -891,6 +891,10 @@ impl IndexProvider for CoreIndex {
                 sort,
                 select,
                 page,
+                // Nessun estratto da omettere: questo indice non ha il corpo dei
+                // documenti (è lo split metadata/body di M2), quindi seleziona e
+                // basta — e una risposta senza estratti è già ciò che dà.
+                excerpts: _,
             } => {
                 let matches = self.expr(&matching)?;
                 Ok(IndexResult::Documents(properties::finish(

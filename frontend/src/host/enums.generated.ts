@@ -49,6 +49,8 @@ export type EventKind =
   | "timer_fired"
 ;
 
+export type Excerpts = "attach" | "omit";
+
 export type HealthCheck = "broken_links" | "orphan_documents";
 
 export type HourCycle = "h23" | "h12";
