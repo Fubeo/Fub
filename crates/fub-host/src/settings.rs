@@ -59,6 +59,23 @@ pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 /// aspettandosi l'altra.
 pub const APPEARANCE_THEME: &str = "appearance.theme";
 
+/// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
+///
+/// Dell'app e non della ricerca, benché il primo cliente sia la ricerca: chi la
+/// legge è la **shell**, che non è una feature e non porta un manifest, e chi
+/// legge una chiave è il candidato naturale a possederla. Appenderla al bundle
+/// della ricerca avrebbe voluto dire che spegnendo la ricerca sparisce
+/// l'interruttore della privacy — la stessa forma d'errore che
+/// [`PLUGINS_DISABLED`] evita — e per di più la chiave governa anche le note
+/// **aperte** di recente, che con la ricerca non c'entrano.
+///
+/// È l'inverso del precedente dei pesi
+/// ([0084](../../../docs/decisions/0084-un-peso-e-una-preferenza.md)), e la
+/// differenza è chi legge: un peso lo legge il provider di ricerca, e sta nel
+/// suo manifest; questo lo legge la shell, e la shell ha un solo posto dove
+/// dichiarare — qui.
+pub const HISTORY_ENABLED: &str = "history.enabled";
+
 /// Fino a che livello si scrive nel log (§17.3). Di **macchina** e non di
 /// vault, ed è rimasta l'unica famiglia a esserlo dopo che tema e locale sono
 /// scesi nel vault
@@ -134,10 +151,41 @@ pub fn core_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_THEME_DESC))
         .grouped(Text::key(C_GROUP_APPEARANCE)),
     );
+    settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
     settings.extend(fub_kernel::locale::locale_settings());
     settings
+}
+
+/// La memoria di ciò che si è cercato e aperto come [`SettingSpec`] (§21.7).
+///
+/// **Non** `program_writable`, e qui la ragione non è la reversibilità: è la
+/// riga della [0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)
+/// che il §11 ha messo per iscritto — *le impostazioni di privacy e dell'AI non
+/// stanno fra quelle*. Un componente che potesse riaccendere da sé la memoria di
+/// cosa cerchi è un componente che si allarga i permessi, e la differenza col
+/// tema è che qui il danno non si vede: un tema cambiato lo si nota al prossimo
+/// sguardo, una cronologia riaccesa la si scopre quando è già lunga.
+///
+/// **Accesa** di default, ed è una scelta e non un'inerzia. Il dato non lascia
+/// la macchina — vive nello stato di vista della shell, che sta nella cartella
+/// di configurazione e non nel vault, quindi non entra in un sync né in un
+/// repo — c'è un interruttore, e c'è un gesto che la cancella. L'opt-in è la
+/// forma giusta quando un dato *esce*; qui non esce, e una memoria spenta di
+/// default sarebbe una funzione che nessuno trova e che quindi tanto vale non
+/// scrivere.
+///
+/// Del **vault** e non di macchina, come ogni altra preferenza dopo la
+/// [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md): chi
+/// dice «di questo vault non tenere traccia» lo dice del vault — è la proprietà
+/// dell'archivio, non del computer da cui lo si apre — e una scelta di privacy
+/// che vale su un portatile e non sull'altro è una scelta che non protegge.
+/// L'interruttore viaggia; ciò che governa no.
+fn history_enabled_spec() -> SettingSpec {
+    SettingSpec::toggle(HISTORY_ENABLED, Text::key(C_HISTORY), true)
+        .describing(Text::key(C_HISTORY_DESC))
+        .grouped(Text::key(C_GROUP_PRIVACY))
 }
 
 /// Il livello del log come [`SettingSpec`] (§17.3). Le opzioni nascono dal
@@ -189,6 +237,9 @@ fn log_verbose_spec() -> SettingSpec {
 const C_GROUP_COMPONENTS: &str = "core.group.components";
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_DIAGNOSTICS: &str = "core.group.diagnostics";
+const C_GROUP_PRIVACY: &str = "core.group.privacy";
+const C_HISTORY: &str = "core.history";
+const C_HISTORY_DESC: &str = "core.history.desc";
 const C_PLUGINS_DISABLED: &str = "core.plugins_disabled";
 const C_PLUGINS_DISABLED_DESC: &str = "core.plugins_disabled.desc";
 const C_THEME: &str = "core.theme";
@@ -234,6 +285,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
     let mut it = StringCatalog::new("it")
         .with(C_GROUP_COMPONENTS, "Componenti")
         .with(C_GROUP_APPEARANCE, "Aspetto")
+        .with(C_GROUP_PRIVACY, "Privacy")
+        .with(C_HISTORY, "Ricerche e note recenti")
+        .with(
+            C_HISTORY_DESC,
+            "Ricorda cosa hai cercato e quali note hai aperto, per riproporteli \
+             quando torni. Resta su questo computer e non entra nel vault. \
+             Spegnendolo, ciò che era già stato ricordato viene cancellato.",
+        )
         .with(C_PLUGINS_DISABLED, "Componenti spenti")
         .with(
             C_PLUGINS_DISABLED_DESC,
@@ -281,6 +340,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "The ids of the components that are not mounted when this vault is \
              opened. You change them by turning a component on and off, not by \
              writing in here.",
+        )
+        .with(C_GROUP_PRIVACY, "Privacy")
+        .with(C_HISTORY, "Recent searches and notes")
+        .with(
+            C_HISTORY_DESC,
+            "Remembers what you searched for and which notes you opened, to offer \
+             them back when you return. It stays on this computer and never enters \
+             the vault. Turning it off deletes what was already remembered.",
         )
         .with(C_THEME, "Theme")
         .with(

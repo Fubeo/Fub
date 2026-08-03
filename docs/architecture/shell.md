@@ -43,8 +43,9 @@ frontend/src/
     kernel.ts      il router degli eventi del kernel
     vault.ts       le operazioni sul vault (tutte dal registro comandi)
     organization.ts  l'organizzazione del vault: specchio + le quattro scritture
-    recenti.ts     le note aperte di recente: memoria corta, in RAM, che il
-                   quick switcher mostra a mani vuote (§21.5, §21.7)
+    recenti.ts     le note aperte e le ricerche fatte di recente: due elenchi
+                   da dieci nello stato di vista della shell (chiave `history`),
+                   con un interruttore solo e un gesto che li cancella (§21.7)
 
   ui/            le primitive di interfaccia, senza dominio (un'eccezione: intents.ts)
     node.ts        il renderer di `UiNode`

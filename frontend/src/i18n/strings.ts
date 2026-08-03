@@ -82,6 +82,9 @@ const IT = {
   "search.hint": "Cerca nel vault",
   "search.results": "Risultati",
   "search.empty": "Nessun risultato",
+  // Sotto il nome proposto, dove per un risultato c'è lo snippet: la riga dice
+  // cosa succede premendola, perché il nome da solo sembrerebbe un risultato.
+  "search.create": "Crea questa nota",
   // Zero risultati mentre il vault sta ancora indicizzando (§15.7): la
   // risposta vera è «non lo so ancora», e dirla «nessun risultato» manderebbe
   // a cercare altrove chi aveva cercato bene.
@@ -113,8 +116,17 @@ const IT = {
   // niente.
   "switcher.hint": "Scrivi il nome di una nota",
   "switcher.empty": "Nessuna nota con questo nome",
+  // Le due righe sotto stanno nella colonna della descrizione, cioè dove per
+  // una nota c'è il path: dicono di che specie è la voce, perché in un elenco
+  // misto il nome da solo non lo direbbe.
+  "switcher.recent_search": "Ricerca recente",
+  "switcher.create": "Crea questa nota",
   "commands.switcher": "Vai alla nota",
   "commands.switcher.desc": "Apri una nota cercandola per nome, con lo stesso motore del vault.",
+  "commands.history_clear": "Cancella ricerche e note recenti",
+  "commands.history_clear.desc":
+    "Dimentica cosa hai cercato e quali note hai aperto. Non si può annullare.",
+  "history.cleared": "Ricerche e note recenti cancellate",
 
   // --- l'esplora ---------------------------------------------------------
   "explorer.notes": "Note",
@@ -370,6 +382,7 @@ const EN: Record<Chiave, string> = {
   "search.hint": "Search the vault",
   "search.results": "Results",
   "search.empty": "No results",
+  "search.create": "Create this note",
   "search.indexing": "Indexing…",
   "search.count": "Results: {count}",
   "search.unavailable": "Search unavailable",
@@ -385,8 +398,14 @@ const EN: Record<Chiave, string> = {
   "switcher.placeholder": "Go to note…",
   "switcher.hint": "Type the name of a note",
   "switcher.empty": "No note with this name",
+  "switcher.recent_search": "Recent search",
+  "switcher.create": "Create this note",
   "commands.switcher": "Go to note",
   "commands.switcher.desc": "Open a note by searching its name, with the same engine as the vault.",
+  "commands.history_clear": "Clear recent searches and notes",
+  "commands.history_clear.desc":
+    "Forget what you searched for and which notes you opened. This cannot be undone.",
+  "history.cleared": "Recent searches and notes cleared",
 
   "explorer.notes": "Notes",
   "explorer.notes.hint": "Notes of the vault",

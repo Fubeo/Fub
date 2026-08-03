@@ -23,22 +23,56 @@
 //
 // # A mani vuote
 //
-// Le note aperte di recente (`state/recenti.ts`), come in Obsidian: una
-// scorciatoia premuta deve mostrare **qualcosa**, e le prime venti note del
-// vault in ordine di path non sono qualcosa — sono un elenco arbitrario che
-// costringe comunque a scrivere. La memoria corta vive quanto la finestra: una
-// cronologia che resta è materia della §21.7 e del capitolo 23, e questa voce
-// non la anticipa.
+// Le note aperte di recente e le ricerche fatte di recente
+// (`state/recenti.ts`), come in Obsidian: una scorciatoia premuta deve mostrare
+// **qualcosa**, e le prime venti note del vault in ordine di path non sono
+// qualcosa — sono un elenco arbitrario che costringe comunque a scrivere.
+//
+// Fino a ieri quella memoria viveva quanto la finestra, in attesa che la §21.7
+// decidesse dove una cronologia si scrive. Adesso lo ha deciso
+// ([0086](../../../docs/decisions/0086-una-cronologia-e-la-sua-porta.md)): resta
+// fra un avvio e l'altro, nello stato di vista della shell, e ha un
+// interruttore — quindi le due liste qui sotto possono tornare **vuote** anche
+// dopo un mese di uso, e non è un difetto, è qualcuno che ha spento la memoria.
+//
+// # E il gesto che chiude il giro
+//
+// Non l'ho trovata, creala. Compare solo a risultati vuoti, e il nome che
+// propone non è la query così com'è: passa da `rules/nome-cercato.ts`, perché
+// `note.create` prende un **path** e una query può contenere uno slash.
 import { noteDalNome } from "../host/query";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
+import { notify } from "../ui/notify";
+import { nomeDaCercato } from "../rules/nome-cercato";
 import { pageName } from "../rules/organizer";
-import { noteRecentiEsistenti, ricordaLeAperture } from "../state/recenti";
+import {
+  dimenticaTutto,
+  noteRecentiEsistenti,
+  ricercheRecenti,
+  ricordaLeAperture,
+  ricordaRicerca,
+} from "../state/recenti";
+import { createNote } from "../state/vault";
 import { attivabile, intrappolaFuoco } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { openDocument } from "./document";
 
 const OVERLAY_ID = "quick-switcher";
+
+/// Cosa può stare in questa lista.
+///
+/// Discriminata e non tre liste parallele: la selezione è **un indice solo** —
+/// le frecce ci scorrono sopra e l'invio ne sceglie una — e tre liste
+/// vorrebbero dire tenere d'accordo un indice con un'aritmetica di confini, che
+/// è la cosa che si sbaglia il giorno in cui se ne aggiunge una quarta.
+type Voce =
+  /// Una nota del vault, per path.
+  | { k: "doc"; doc: string }
+  /// Una ricerca fatta di recente: si ripesca per rifarla.
+  | { k: "query"; q: string }
+  /// La nota che non c'era, col nome che il testo cercato propone.
+  | { k: "crea"; nome: string };
 
 /// Come si scioglie la trappola del fuoco, quando il modale è aperto.
 let sciogli: (() => void) | null = null;
@@ -67,6 +101,29 @@ export function mountQuickSwitcher(): void {
     description: "commands.switcher.desc",
     run: () => apriQuickSwitcher(),
   });
+  // **Cancellare la memoria**, e perché il comando è di *shell* e non del
+  // registro dei comandi.
+  //
+  // Perché non ci potrebbe arrivare. Lo stato di vista è recintato per
+  // proprietario e l'id di chi scrive **non è un parametro** — lo timbra la
+  // porta di Rust (0037) — quindi un `search.history.clear` scritto in
+  // `fub-features` non potrebbe toccare ciò che sta sotto `fub.shell` nemmeno
+  // volendo. Il prezzo, dichiarato nella 0086, è che questo gesto non è
+  // invocabile da CLI né da un'automazione: sta nella palette, come ogni
+  // comando di shell, e nient'altro.
+  //
+  // È dichiarato qui perché la regola del §18.2 è che dichiara chi ha
+  // interesse, e chi ha interesse alla memoria corta è questo pannello: è lui
+  // che la mette in ascolto (`ricordaLeAperture`) ed è lui che la mostra.
+  registerShellCommand({
+    id: "shell.history.clear",
+    title: "commands.history_clear",
+    description: "commands.history_clear.desc",
+    run: () => {
+      dimenticaTutto();
+      notify(t("history.cleared"), "info");
+    },
+  });
 }
 
 export function apriQuickSwitcher(): void {
@@ -80,7 +137,7 @@ export function apriQuickSwitcher(): void {
   lista.className = "palette-list";
   box.append(input, lista);
 
-  let visibili: string[] = [];
+  let visibili: Voce[] = [];
   let scelto = 0;
   // Come nella ricerca dentro la nota: una risposta lenta di una query vecchia
   // non deve sovrascrivere i risultati di una più recente.
@@ -90,20 +147,28 @@ export function apriQuickSwitcher(): void {
   const disegna = () => {
     lista.innerHTML = "";
     const nuove = document.createDocumentFragment();
-    for (const [i, doc] of visibili.entries()) {
+    for (const [i, voce] of visibili.entries()) {
       const li = document.createElement("li");
       li.classList.toggle("selected", i === scelto);
       const titolo = document.createElement("span");
       titolo.className = "palette-title";
-      // Il nome pagina davanti e il path sotto, come in una tab: due note
-      // omonime in cartelle diverse sono il caso in cui il nome non basta, ed è
-      // anche il caso in cui questa superficie serve di più.
-      titolo.textContent = pageName(doc);
       const dove = document.createElement("span");
       dove.className = "palette-desc";
-      dove.textContent = doc;
+      if (voce.k === "doc") {
+        // Il nome pagina davanti e il path sotto, come in una tab: due note
+        // omonime in cartelle diverse sono il caso in cui il nome non basta, ed
+        // è anche il caso in cui questa superficie serve di più.
+        titolo.textContent = pageName(voce.doc);
+        dove.textContent = voce.doc;
+      } else if (voce.k === "query") {
+        titolo.textContent = voce.q;
+        dove.textContent = t("switcher.recent_search");
+      } else {
+        titolo.textContent = voce.nome;
+        dove.textContent = t("switcher.create");
+      }
       li.append(titolo, dove);
-      li.addEventListener("click", () => apri(doc));
+      li.addEventListener("click", () => attiva(voce));
       attivabile(li);
       nuove.appendChild(li);
     }
@@ -116,20 +181,82 @@ export function apriQuickSwitcher(): void {
     lista.appendChild(nuove);
   };
 
+  /// Cosa fa una voce quando la si sceglie, ed è **una cosa diversa per specie**.
+  ///
+  /// Una nota si apre; una ricerca recente **riempie la casella** invece di
+  /// aprire qualcosa, che è ciò che uno si aspetta da una cronologia — la si
+  /// ripesca per rifarla, non per finire dritto da qualche parte; una nota da
+  /// creare si crea e si apre.
+  const attiva = (voce: Voce) => {
+    if (voce.k === "doc") {
+      // La ricerca che ha portato qui si ricorda **adesso**, non a ogni tasto:
+      // la memoria è di ciò che si è cercato, e ciò che si è cercato è il testo
+      // che ha prodotto un'apertura. Ricordare mentre si digita riempirebbe la
+      // lista di «r», «ri», «riu».
+      ricordaRicerca(input.value);
+      apri(voce.doc);
+      return;
+    }
+    if (voce.k === "query") {
+      input.value = voce.q;
+      input.focus();
+      void cerca();
+      return;
+    }
+    void crea(voce.nome);
+  };
+
   const apri = (doc: string) => {
     chiudiQuickSwitcher();
     void openDocument(doc);
+  };
+
+  /// La nota che la ricerca non ha trovato.
+  ///
+  /// Il nome è già passato da `nomeDaCercato`, quindi qui non si ripulisce
+  /// niente; e non si controlla se sia libero, perché lo sa solo il vault e il
+  /// comando glielo chiede già — `note.create` usa `create_document`, che su un
+  /// path occupato **fallisce** invece di sovrascrivere una nota. È un caso
+  /// possibile anche a risultati vuoti, perché la ricerca combacia sul
+  /// contenuto: una nota che si chiama come la query può esistere senza
+  /// contenerla. Quando succede si mostra l'errore del kernel e il modale resta
+  /// aperto, che è la sola risposta onesta — inventare un `nome (2)` sarebbe
+  /// creare una seconda nota a chi ne stava cercando una.
+  const crea = async (nome: string) => {
+    ricordaRicerca(input.value);
+    try {
+      const doc = await createNote(nome);
+      if (doc) apri(doc);
+    } catch (e) {
+      notify(errorText(e), "guasto");
+    }
   };
 
   const cerca = async () => {
     const testo = input.value.trim();
     const mio = ++seq;
     try {
-      // A mani vuote le recenti, ma passate dal vault: perché, e perché la
-      // domanda è una sola, sta in `state/recenti.ts`.
-      const trovate = testo ? await noteDalNome(testo) : await noteRecentiEsistenti();
+      // A mani vuote le note aperte di recente e le ricerche fatte di recente:
+      // dove stanno scritte, e a quali condizioni, sta in `state/recenti.ts`.
+      // Le note passano dal vault perché una rinominata non si può proporre;
+      // una ricerca non è un oggetto del vault e non ha niente da verificare.
+      const trovate = testo
+        ? (await noteDalNome(testo)).map((doc): Voce => ({ k: "doc", doc }))
+        : [
+            ...(await noteRecentiEsistenti()).map((doc): Voce => ({ k: "doc", doc })),
+            ...ricercheRecenti().map((q): Voce => ({ k: "query", q })),
+          ];
       if (mio !== seq) return;
       visibili = trovate;
+      // Il gesto che chiude il giro: non l'ho trovata, creala. Compare **solo**
+      // a risultati vuoti — con dei risultati sotto gli occhi, «crea» è la voce
+      // che si preme per sbaglio — e solo se dal testo esce un nome di nota
+      // (`nomeDaCercato` risponde `null` a chi ha scritto solo spazi o solo
+      // caratteri che in un nome non ci possono stare).
+      if (testo && trovate.length === 0) {
+        const nome = nomeDaCercato(testo);
+        if (nome) visibili = [{ k: "crea", nome }];
+      }
       scelto = 0;
       disegna();
     } catch (e) {
@@ -163,8 +290,8 @@ export function apriQuickSwitcher(): void {
       disegna();
       lista.children[scelto]?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
-      const doc = visibili[scelto];
-      if (doc) apri(doc);
+      const voce = visibili[scelto];
+      if (voce) attiva(voce);
     }
   });
 

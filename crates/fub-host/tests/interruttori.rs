@@ -385,3 +385,71 @@ fn la_chiave_del_tema_e_la_stessa_di_qua_e_di_la() {
         "la shell e il core nominano due chiavi diverse"
     );
 }
+
+/// Come il tema, e per una posta più alta: l'interruttore della **memoria**
+/// (§21.7) è nominato da due parti, e se le due stringhe divergono la casella
+/// resta nel pannello, si lascia spegnere, e non spegne niente.
+///
+/// La differenza col tema è cosa si perde quando il filo si rompe. Un tema che
+/// non cambia lo si vede subito e si riprova; una memoria che continua a
+/// scrivere dopo che qualcuno l'ha spenta non dà **nessun** segnale — e ciò che
+/// resta sul disco nel frattempo è precisamente il dato che quella casella
+/// prometteva di non tenere. Un interruttore di privacy che non comanda niente
+/// è peggio di un interruttore che non c'è, perché è una promessa.
+#[test]
+fn la_chiave_della_memoria_e_la_stessa_di_qua_e_di_la() {
+    let recenti_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../frontend/src/state/recenti.ts");
+    let sorgente = std::fs::read_to_string(&recenti_ts)
+        .unwrap_or_else(|e| panic!("la shell non ha più {}: {e}", recenti_ts.display()));
+
+    let dichiarata = sorgente
+        .lines()
+        .find_map(|riga| {
+            riga.strip_prefix("export const CHIAVE_CRONOLOGIA = \"")?
+                .strip_suffix("\";")
+        })
+        .expect(
+            "in `state/recenti.ts` non c'è più una riga \
+             `export const CHIAVE_CRONOLOGIA = \"…\";`: o la chiave si chiama in un \
+             altro modo, o questo presidio sta leggendo il vuoto",
+        )
+        .to_string();
+
+    let core = fub_host::settings::core_settings();
+    let chiavi: Vec<&str> = core.iter().map(|s| s.key.as_str()).collect();
+    assert!(
+        chiavi.contains(&dichiarata.as_str()),
+        "la shell legge l'impostazione «{dichiarata}», che il core non dichiara: \
+         la memoria di cosa si cerca si potrebbe spegnere dal pannello senza che \
+         si spenga niente. Le chiavi dichiarate sono {chiavi:?}"
+    );
+    assert_eq!(
+        dichiarata,
+        fub_host::settings::HISTORY_ENABLED,
+        "la shell e il core nominano due chiavi diverse"
+    );
+}
+
+/// E non è scrivibile da un programma, che qui è la riga della
+/// [0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md): *le
+/// impostazioni di privacy e dell'AI non stanno fra quelle*.
+///
+/// La differenza con `versioning.enabled`, che invece lo è, non è la
+/// reversibilità: è che un versioning riacceso da un profilo di vault fa una
+/// cosa in più e visibile, mentre una memoria riaccesa da un componente comincia
+/// a **raccogliere** — e la si scopre quando è già lunga.
+#[test]
+fn chi_puo_riaccendere_la_memoria_non_e_un_programma() {
+    let core = fub_host::settings::core_settings();
+    let memoria = core
+        .iter()
+        .find(|s| s.key == fub_host::settings::HISTORY_ENABLED)
+        .expect("il core la dichiara");
+    assert!(
+        !memoria.program_writable,
+        "`{}` scrivibile da un programma sarebbe un componente che si riaccende \
+         da sé la traccia di cosa cerchi",
+        memoria.key
+    );
+}

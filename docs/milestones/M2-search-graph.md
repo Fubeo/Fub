@@ -120,14 +120,16 @@ tre sono stati chiusi prima di quella scadenza:
   `highlights` c'è `occurrences`, che sono coordinate nel sorgente.
 
 Le voci che restano stanno nella
-[seduta 21](../roadmap/21-la-ricerca-predefinita.md), e oggi sono **due**: le
-ricerche recenti (§21.7) e il testo dentro gli allegati (§21.8). Le altre si sono
+[seduta 21](../roadmap/21-la-ricerca-predefinita.md), e oggi è **una**: il testo
+dentro gli allegati (§21.8), che aspetta la §14.1. Le altre si sono
 chiuse — le quattro superfici passano da una porta sola
 ([0082](../decisions/0082-una-porta-per-chi-cerca.md) e
 [0083](../decisions/0083-le-due-superfici-che-restavano.md)), la misura che non
 tornava misurava due cose diverse
 ([0074](../decisions/0074-selezionare-non-e-raccontare.md)), e i pesi dei campi
-sono un'impostazione ([0084](../decisions/0084-un-peso-e-una-preferenza.md)).
+sono un'impostazione ([0084](../decisions/0084-un-peso-e-una-preferenza.md)), e
+le ricerche recenti hanno dove stare e come spegnersi
+([0086](../decisions/0086-una-cronologia-e-la-sua-porta.md)).
 Nessuna di esse rimette in discussione ciò che questa milestone ha fatto: l'indice persistente e
 incrementale, il routing dichiarato e il linguaggio delle query restano, e sono
 esattamente ciò su cui quel comportamento si appoggia.

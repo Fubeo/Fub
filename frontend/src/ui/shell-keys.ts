@@ -50,6 +50,12 @@ export const SHELL_KEYS = {
   // per cui non è `Mod-p` come in un editor di codice: chi arriva da lì ha
   // `Mod-Shift-o` già occupato da «apri vault» e le due `o` restano vicine.
   "shell.switcher": "Mod-o",
+  // Cancellare le ricerche e le note recenti (§21.7). **Senza accordo**, e non
+  // per mancanza di tasti liberi: è un gesto distruttivo che non si annulla —
+  // la memoria cancellata non torna — e un tasto premuto per sbaglio è
+  // esattamente il modo in cui succederebbe. Si cerca nella palette, dove per
+  // arrivarci bisogna averlo scritto.
+  "shell.history.clear": null,
 } as const satisfies Record<string, string | null>;
 
 /// L'id di un comando della shell: uno di quelli in tabella, e nessun altro.

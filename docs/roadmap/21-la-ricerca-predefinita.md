@@ -28,10 +28,20 @@ già congelata — che è esattamente ciò che è successo al lotto e all'origin
 per cui la [0012](../decisions/0012-origine-degli-eventi.md) ha dichiarato di
 volersi decidere insieme alla [0011](../decisions/0011-il-lotto.md).
 
-Quello che resta non ha più niente che scada col freeze di M4. **Sono due
-voci, e sono tutte e due comportamento**: dove il comportamento si vede (§21.7)
-e cosa gli darà da mangiare (§21.8). La prima poggia su ciò che le P0 hanno
-appena messo nel contratto.
+Quello che resta non ha più niente che scada col freeze di M4. **È una voce
+sola**, e non è comportamento: è cosa la ricerca avrà da mangiare (§21.8), cioè
+il testo che sta dentro gli allegati — e sta ferma perché la §14.1 non è
+arrivata, non perché manchi una decisione.
+
+**Erano due, e la seconda è chiusa.** La §21.7 — le ricerche recenti e la nota
+che la ricerca non ha trovato — l'ha chiusa la
+[decisione 0086](../decisions/0086-una-cronologia-e-la-sua-porta.md), ed è la
+**sesta** di fila in questa seduta a chiudersi senza spendere contratto. La
+domanda vera non era dove mettere una cronologia per mancanza di posti: era se
+il posto che c'è — lo stato di vista della shell — sia quello giusto per un dato
+di quella specie. La risposta è sì, e il prezzo è scritto: quel recinto è per
+proprietario e l'id di chi scrive non è un parametro, quindi «cancella la
+cronologia» **non può** essere un comando del registro, e da CLI non si invoca.
 
 **Erano tre.** La §21.6 — i pesi dei campi — è chiusa dalla
 [decisione 0084](../decisions/0084-un-peso-e-una-preferenza.md), ed è la quinta
@@ -199,26 +209,57 @@ che lo ha prodotto.
 
 ### 21.7 Ricerche recenti, e la nota che la ricerca non ha trovato
 
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · shell · **P2***
+*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · shell · **P2** — **CHIUSA** dalla [decisione 0086](../decisions/0086-una-cronologia-e-la-sua-porta.md). Le caselle restano per il racconto; la voce non è più in [todo.md](../todo.md)*
 
-- [ ] **Ricerche recenti e suggerimenti** sono già in FEATURES §9.1 e non hanno
-      un posto dove stare: sono uno dei tre stati senza contenitore del §11.2.
-      La cronologia va **opzionale e spegnibile** — è materia del capitolo 23
+- [x] ~~**Ricerche recenti e suggerimenti** sono già in FEATURES §9.1 e non hanno
+      un posto dove stare: sono uno dei tre stati senza contenitore del §11.2.~~
+      **Il §11.2 è chiuso** — stato di vista con la
+      [0037](../decisions/0037-lo-stato-di-vista.md), layout con la
+      [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md) — e il
+      cappello di quella seduta lo aveva già scritto: *il terzo stato senza
+      contenitore non era terzo*. Il posto c'era; la domanda era se fosse quello
+      **giusto**. È lo stato di vista della shell (chiave `history`, accanto a
+      `layout`), e la ragione è che non viaggia col vault: la sola alternativa
+      vera — lo spazio `data_*` della feature di ricerca — sta **dentro**
+      l'archivio, cioè si sincronizza, che è l'opposto di ciò che serve qui.
+      I suggerimenti **non** ci sono, ed è voluto: un suggerimento è una proposta
+      *prima* che ci sia una storia, e questa voce chiedeva la storia.
+- [x] ~~La cronologia va **opzionale e spegnibile** — è materia del capitolo 23
       (privacy), non un dettaglio di comodo: cosa si è cercato dice di una
-      persona più di cosa ha scritto.
-      **E adesso questa voce ha un cliente che l'aspetta**: il quick switcher
+      persona più di cosa ha scritto.~~ `history.enabled`, di `fub.core` perché
+      chi la legge è la **shell**, che non è una feature e non porta un manifest.
+      Non `program_writable` (la riga di privacy della
+      [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), **accesa** di
+      default perché il dato non esce dalla macchina, e **di vault** perché una
+      scelta di privacy che vale su un portatile e non sull'altro non protegge:
+      l'interruttore viaggia, ciò che governa no. Spegnerlo **cancella**.
+- [x] ~~**E adesso questa voce ha un cliente che l'aspetta**: il quick switcher
       mostra a mani vuote le note aperte di recente
       ([0083](../decisions/0083-le-due-superfici-che-restavano.md)), da una lista
       che vive **quanto la finestra** (`state/recenti.ts`) proprio per non
       anticipare la decisione di qui. Chi chiuderà questa voce decide dove una
       cronologia si scrive e come si spegne; quel modulo ne diventa il lettore,
-      e non è un secondo posto da riconciliare.
-- [ ] **Dal risultato vuoto si crea la nota cercata.** È il gesto che chiude il
+      e non è un secondo posto da riconciliare.~~ L'impegno è mantenuto alla
+      lettera: non è nato un modulo accanto a quello. Le ricerche stanno dentro
+      `recenti.ts`, con lo stesso tetto (dieci), la stessa regola di risalita
+      (`conInCima`), lo stesso interruttore e lo stesso gesto che le cancella —
+      e le note aperte, che la voce non nominava, diventano persistenti con loro.
+- [x] ~~**Dal risultato vuoto si crea la nota cercata.** È il gesto che chiude il
       giro in omnisearch, e da noi manca **solo il chiamante**: `note.create`
       esiste ([0013](../decisions/0013-elenco-delle-capacita.md)), sa proporre un
       nome libero (`free_name`) e rifiuta un path occupato. È anche il punto in
       cui la ricerca smette di essere sola lettura, quindi la nota nasce con
-      l'`Origin` di chi l'ha chiesta ([0012](../decisions/0012-origine-degli-eventi.md)).
+      l'`Origin` di chi l'ha chiesta ([0012](../decisions/0012-origine-degli-eventi.md)).~~
+      L'`Origin` c'era già: `invoke_command` timbra `Actor::User` dalla porta, e
+      non è un parametro che arrivi da JS. Il costo vero era la domanda che la
+      voce non fa — **cosa si passa come `name`** — perché `name` è un path e non
+      un'etichetta: `rules/nome-cercato.ts` è la risposta, e non controlla se il
+      nome sia libero perché lo sa solo il vault.
+- [x] ~~E il gesto ha **due** superfici, non una~~: lo stato vuoto della ricerca
+      del vault (`panels/search.ts`) e il quick switcher a risultati vuoti. Non
+      ne ha una terza, e vale la pena scriverlo perché sembra la stessa:
+      `panels/doc-search.ts` usa la stessa chiave `search.empty`, ma cercare
+      dentro la nota aperta e non trovare non vuol dire che manchi una nota.
 
 ### 21.8 Il testo che sta dentro gli allegati
 
