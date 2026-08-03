@@ -32,6 +32,7 @@ import { onEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
 import { intrappolaFuoco } from "../ui/a11y";
 import { notify } from "../ui/notify";
+import { allCommands, keybindingKey } from "../ui/commands";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
 
@@ -117,7 +118,7 @@ let ganci: Ganci;
 /// Le schede che questo pannello ospita. `views` è la superficie
 /// `settings_tab` del contratto (§2.2): la dichiarano le view, e finora questa
 /// shell non aveva dove metterle.
-type Scheda = "impostazioni" | "componenti" | "vault";
+type Scheda = "impostazioni" | "componenti" | "scorciatoie" | "vault";
 
 let scheda: Scheda = "impostazioni";
 
@@ -195,6 +196,7 @@ async function disegna(): Promise<void> {
   try {
     if (scheda === "impostazioni") nodi = await disegnaForm();
     else if (scheda === "componenti") nodi = await disegnaComponenti();
+    else if (scheda === "scorciatoie") nodi = await disegnaScorciatoie();
     else nodi = await disegnaVault();
   } catch (e) {
     // Un pannello che non riesce a leggere lo dice: il §20.2 avrà il canale
@@ -207,8 +209,25 @@ async function disegna(): Promise<void> {
 
 // --- la scheda delle impostazioni -------------------------------------------
 
+/// Le chiavi che sono **scorciatoie**, e non righe di configurazione.
+///
+/// Non si riconoscono dal prefisso della chiave — sarebbe indovinare — ma
+/// componendole: per ogni comando che il kernel dichiara si sa quale chiave il
+/// kernel gli ha fabbricato, perché la regola è una sola e sta scritta in
+/// `keybindingKey` (§18.2). È la stessa mossa con cui questa shell riconosce
+/// qualunque altra cosa attraversi il confine: rifà il conto invece di leggere
+/// una convenzione.
+function chiaviDelleScorciatoie(): Set<string> {
+  return new Set(allCommands().filter((c) => c.spec).map((c) => keybindingKey(c.id)));
+}
+
 async function disegnaForm(): Promise<HTMLElement[]> {
-  const entries = await impostazioni();
+  const scorciatoie = chiaviDelleScorciatoie();
+  // Le scorciatoie **non stanno qui**: sono impostazioni come le altre, e
+  // proprio per questo sarebbero venti righe senza gruppo in fondo alla scheda
+  // della configurazione. Hanno una scheda loro, ed è la stessa forma — un
+  // campo di testo, una provenienza, un «azzera» — perché è la stessa cosa.
+  const entries = (await impostazioni()).filter((e) => !scorciatoie.has(e.spec.key));
   if (entries.length === 0) {
     return [riga("muted", t("settings.none"))];
   }
@@ -359,6 +378,54 @@ async function scrivi(azione: () => Promise<void>): Promise<void> {
     notify(t("settings.not_changed", { reason: errorText(e) }), "guasto");
   }
   await disegna();
+}
+
+// --- la scheda delle scorciatoie (§18.2) ------------------------------------
+//
+// Questa scheda **non ha un pannello suo**: è la scheda della configurazione con
+// un filtro, e disegna le sue righe con la stessa `disegnaRiga` di tutte le
+// altre. È la conseguenza di aver deciso che una scorciatoia è una chiave di
+// impostazione e non un formato nuovo: il campo di testo, il «vale per questo
+// vault» e l'«azzera» ci sono già, e nessuno li ha scritti due volte.
+
+async function disegnaScorciatoie(): Promise<HTMLElement[]> {
+  const entries = await impostazioni();
+  const per_chiave = new Map(entries.map((e) => [e.spec.key, e]));
+  const nodi: HTMLElement[] = [riga("muted", t("settings.shortcuts_hint"))];
+  const comandi = allCommands();
+  // In ordine di **comando**, non di chiave: chi cerca «Nuova nota» la cerca
+  // dove la palette gliela mostra.
+  for (const comando of comandi) {
+    if (!comando.spec) continue;
+    const entry = per_chiave.get(keybindingKey(comando.id));
+    if (entry) nodi.push(disegnaRiga(entry));
+  }
+  const di_shell = comandi.filter((c) => c.run !== null);
+  if (di_shell.length > 0) {
+    const titolo = document.createElement("div");
+    titolo.className = "panel-title";
+    titolo.textContent = t("settings.shortcuts.shell");
+    nodi.push(titolo);
+    // Di sola lettura, e la ragione sta nel verbale: la chiave che le terrebbe
+    // la fabbrica il kernel registrando un `CommandProvider`, e un comando che
+    // vive nella webview un provider non ce l'ha. Mostrarle comunque è ciò che
+    // permette di sapere quali tasti sono già presi prima di rimapparne uno.
+    for (const comando of di_shell) {
+      const el = document.createElement("div");
+      el.className = "setting-row";
+      const testo = document.createElement("div");
+      testo.className = "setting-text";
+      const label = document.createElement("label");
+      label.textContent = comando.title;
+      testo.append(label, riga("muted", comando.description));
+      const kbd = document.createElement("kbd");
+      kbd.textContent = comando.binding ?? "";
+      el.append(testo, kbd);
+      nodi.push(el);
+    }
+  }
+  if (nodi.length === 1) nodi.push(riga("muted", t("settings.shortcuts.none")));
+  return nodi;
 }
 
 // --- la scheda dei componenti -----------------------------------------------

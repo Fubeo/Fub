@@ -1,14 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CommandPlan, CommandSpec, ParamKind } from "../host/contract";
-import {
-  argsFromForm,
-  filterCommands,
-  findByBinding,
-  matchesBinding,
-  needsPlan,
-  planLines,
-  scopeLabel,
-} from "./palette";
+import { argsFromForm, filterCommands, fuzzyScore, needsPlan, planLines, scopeLabel } from "./palette";
+import type { CommandEntry } from "./commands";
 
 // Le decisioni della palette sono funzioni pure apposta: la regola del consenso
 // (quando mostrare il piano prima di eseguire) e la costruzione degli argomenti
@@ -26,15 +19,30 @@ function spec(over: Partial<CommandSpec> = {}): CommandSpec {
   };
 }
 
+/// Un comando **del kernel** come lo vede la palette: la spec, più l'accordo
+/// efficace che il registro le mette accanto.
+function voce(over: Partial<CommandSpec> = {}): CommandEntry {
+  const s = spec(over);
+  return {
+    id: s.id,
+    title: s.title,
+    description: s.description,
+    binding: s.keybinding,
+    declared: s.keybinding,
+    spec: s,
+    run: null,
+  };
+}
+
 function param(name: string, kind: ParamKind, required = false) {
   return { name, title: name, description: "", kind, required };
 }
 
 describe("scelta del comando", () => {
   const specs = [
-    spec({ id: "vault.replace", title: "Sostituisci in tutte le note" }),
-    spec({ id: "search.open", title: "Cerca nel vault", description: "ricerca full-text" }),
-    spec({ id: "selection.wikilink", title: "Trasforma la selezione in wikilink" }),
+    voce({ id: "vault.replace", title: "Sostituisci in tutte le note" }),
+    voce({ id: "search.open", title: "Cerca nel vault", description: "ricerca full-text" }),
+    voce({ id: "selection.wikilink", title: "Trasforma la selezione in wikilink" }),
   ];
 
   it("cerca nel titolo, nell'id e nella descrizione", () => {
@@ -50,6 +58,31 @@ describe("scelta del comando", () => {
   it("chi comincia col testo cercato viene prima", () => {
     const ordinati = filterCommands(specs, "cerca");
     expect(ordinati[0].id).toBe("search.open");
+  });
+
+  // Il filtro a **sottosequenza** (§18.2): è ciò che chiunque abbia usato una
+  // palette si aspetta, e il prefisso non lo sa fare.
+  it("trova per iniziali sparse", () => {
+    expect(filterCommands(specs, "sitn").map((s) => s.id)).toEqual(["vault.replace"]);
+    expect(filterCommands(specs, "tslw").map((s) => s.id)).toEqual(["selection.wikilink"]);
+  });
+
+  it("ma una corrispondenza esatta resta davanti a una sparsa", () => {
+    // «Cerca nel vault» contiene «cerca»; «Sostituisci in tutte le note» ha una
+    // sottosequenza `c-e-r-c-a`? No — ma ne ha una per `snt`, e il punto è che
+    // il rango di prima fa da spareggio invece di essere stato buttato.
+    const ordinati = filterCommands(
+      [voce({ id: "a", title: "Trasforma la selezione in wikilink" }), ...specs],
+      "cerca",
+    );
+    expect(ordinati[0]!.id).toBe("search.open");
+  });
+
+  it("una sottosequenza compatta batte una sparpagliata", () => {
+    // A parità di scaglione vince chi ha i caratteri più vicini: per `gr`,
+    // «Grafo» batte «Gestione della ricerca».
+    expect(fuzzyScore("grafo", "gr")).toBeLessThan(fuzzyScore("gestione ricerca", "gr")!);
+    expect(fuzzyScore("cerca", "zz")).toBeNull();
   });
 });
 
@@ -131,35 +164,8 @@ describe("gli argomenti che la palette costruisce", () => {
   });
 });
 
-describe("le scorciatoie dichiarate dai comandi", () => {
-  const chord = (over: Partial<Parameters<typeof matchesBinding>[0]> = {}) => ({
-    key: "f",
-    ctrlKey: false,
-    metaKey: false,
-    shiftKey: false,
-    altKey: false,
-    ...over,
-  });
-
-  it("`Mod-Shift-f` è Ctrl (o Cmd) + Shift + f", () => {
-    expect(matchesBinding(chord({ ctrlKey: true, shiftKey: true }), "Mod-Shift-f")).toBe(true);
-    expect(matchesBinding(chord({ metaKey: true, shiftKey: true }), "Mod-Shift-f")).toBe(true);
-    expect(matchesBinding(chord({ ctrlKey: true }), "Mod-Shift-f")).toBe(false);
-    expect(matchesBinding(chord({ shiftKey: true }), "Mod-Shift-f")).toBe(false);
-  });
-
-  it("una scorciatoia senza modificatori viene ignorata", () => {
-    // Un comando che dichiarasse `f` ruberebbe una lettera a chi scrive.
-    expect(matchesBinding(chord(), "f")).toBe(false);
-    expect(matchesBinding(chord(), null)).toBe(false);
-  });
-
-  it("trova il comando che l'ha dichiarata", () => {
-    const specs = [spec({ id: "a" }), spec({ id: "b", keybinding: "Mod-Shift-f" })];
-    expect(findByBinding(specs, chord({ ctrlKey: true, shiftKey: true }))?.id).toBe("b");
-    expect(findByBinding(specs, chord({ ctrlKey: true }))).toBeUndefined();
-  });
-});
+// Le scorciatoie non si provano più qui: riconoscere un accordo è del registro
+// dei comandi, che è l'unico posto che li vede tutti (`commands.test.ts`).
 
 describe("il piano che si guarda prima di approvarlo", () => {
   it("una riga per nota, col numero di modifiche", () => {

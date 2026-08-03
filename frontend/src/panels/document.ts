@@ -24,6 +24,7 @@ import { onEvent } from "../state/kernel";
 import { emit, saveMode, state } from "../state/store";
 import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
+import { registerShellCommand } from "../ui/commands";
 import { clearPreview, setPreviewVisible, updatePreview } from "./preview";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -110,6 +111,32 @@ export function mountDocument(deps: DocumentDeps): void {
     // riconciliato da zero, non aggiornato.
     void refreshCurrent();
     if (state.currentDoc) void reloadIfClean(state.currentDoc);
+  });
+
+  // Le due modalità come **comandi** (§18.2): erano due bottoni nel
+  // commutatore, cioè raggiungibili col mouse e con nient'altro. Passano dalla
+  // stessa porta del click (`setMode`), che è dove sta il cablaggio — classe
+  // attiva, resa inline, superficie di lettura, contesto pubblicato — e non da
+  // una seconda via che deve restare d'accordo con la prima.
+  //
+  // La terza modalità («sorgente») non è qui, e non è una dimenticanza: chi
+  // passa da Lettura a Modifica lo fa cento volte al giorno, chi guarda il
+  // sorgente nudo lo fa per capire cosa ha scritto un plugin. Dichiarare tre
+  // comandi perché le modalità sono tre vorrebbe dire tre scorciatoie da
+  // trovare per un caso che non le chiede.
+  registerShellCommand({
+    id: "shell.mode.reading",
+    title: "commands.mode.reading",
+    description: "commands.mode.reading.desc",
+    keybinding: "Mod-e",
+    run: () => void setMode("reading"),
+  });
+  registerShellCommand({
+    id: "shell.mode.live",
+    title: "commands.mode.live",
+    description: "commands.mode.live.desc",
+    keybinding: "Mod-Shift-l",
+    run: () => void setMode("live_preview"),
   });
 }
 

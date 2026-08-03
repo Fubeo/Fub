@@ -98,7 +98,7 @@ describe("il testo fermo di index.html", () => {
     // a togliere e non ad aggiungere.
     const elementi = [...documento.querySelectorAll("[data-i18n]")];
     expect(elementi.length, "l'HTML non nomina più nessuna chiave: il `?raw` legge ancora?").toBe(
-      20,
+      21,
     );
     for (const el of elementi) {
       const chiave = el.getAttribute("data-i18n")!;

@@ -17,6 +17,7 @@ import { pageName } from "../rules/organizer";
 import { state } from "../state/store";
 import { $ } from "../ui/dom";
 import { refreshOn, registerPanel } from "../ui/panel-host";
+import { registerShellCommand } from "../ui/commands";
 import { t } from "../i18n/strings";
 
 interface SimNode {
@@ -52,6 +53,17 @@ const OVERLAY_ID = "graph-overlay";
 export function mountGraph(h: GraphHost): void {
   host = h;
   $("#show-graph").addEventListener("click", () => void openGraph());
+
+  // Il grafo come **comando** (§18.2): era un bottone nella barra, e chi non lo
+  // trovava con il mouse non lo trovava. Lo dichiara il pannello che lo apre,
+  // come ogni altro comando di shell.
+  registerShellCommand({
+    id: "shell.graph",
+    title: "commands.graph",
+    description: "commands.graph.desc",
+    keybinding: "Mod-Shift-g",
+    run: () => void openGraph(),
+  });
 
   // Il grafo è un pannello come gli altri per ciò che riguarda **chi lo
   // conosce** — sta nell'inventario, dichiara dove sta e quando invecchia —

@@ -328,3 +328,104 @@ fn un_valore_scritto_sopravvive_alla_chiusura_del_vault() {
         SettingValue::Toggle(false)
     );
 }
+
+// --- le scorciatoie sono impostazioni (§18.2) ------------------------------
+
+/// Un provider con due comandi: uno che suggerisce una scorciatoia e uno che
+/// non ne suggerisce nessuna. Servono tutti e due, perché la chiave nasce per
+/// entrambi — chi non ha un suggerimento è precisamente chi ha più bisogno di
+/// poterselo dare.
+struct DueComandi;
+
+impl fub_abi::traits::CommandProvider for DueComandi {
+    fn commands(&self) -> Vec<fub_abi::command::CommandSpec> {
+        vec![
+            fub_abi::command::CommandSpec::new("note.create", "Nuova nota")
+                .describing("Crea una nota vuota.")
+                .with_keybinding("Mod-n"),
+            fub_abi::command::CommandSpec::new("note.reveal", "Mostra nel disco"),
+        ]
+    }
+
+    fn invoke(
+        &self,
+        _command: &str,
+        _args: serde_json::Value,
+        _mode: fub_abi::command::InvokeMode,
+        _host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<fub_abi::command::CommandOutcome, PluginError> {
+        Ok(fub_abi::command::CommandOutcome::done())
+    }
+}
+
+/// Registrare un `CommandProvider` fa nascere una chiave per comando, col
+/// suggerimento dichiarato come **default**: ne segue che il valore efficace
+/// della chiave *è* la scorciatoia, sempre, e nessuno a valle deve fondere due
+/// campi.
+#[test]
+fn ogni_comando_porta_con_se_la_chiave_della_sua_scorciatoia() {
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
+    ws.register_plugin(PluginManifest::core("fub.notes", "Note"), Trust::Core)
+        .expect("dichiarato");
+    ws.register_command_provider("fub.notes", Box::new(DueComandi))
+        .expect("registrato");
+
+    assert_eq!(
+        ws.setting("keys.note.create").unwrap(),
+        SettingValue::Text("Mod-n".into()),
+        "il default della chiave è il suggerimento della spec"
+    );
+    assert_eq!(
+        ws.setting("keys.note.reveal").unwrap(),
+        SettingValue::Text(String::new()),
+        "e un comando senza suggerimento ha comunque la sua chiave, vuota"
+    );
+
+    // Ed è un'impostazione come le altre: si scrive, e da lì in poi la
+    // provenienza dice che a decidere è stato l'utente.
+    ws.set_setting("keys.note.create", SettingValue::Text("Mod-Alt-k".into()))
+        .expect("scritta");
+    let IndexResult::Settings(sue) = ws
+        .query_index(IndexQuery::Settings {
+            plugin: Some("fub.notes".into()),
+        })
+        .expect("serve")
+    else {
+        panic!("risposta fuori tema");
+    };
+    let riga = sue
+        .iter()
+        .find(|e| e.spec.key == "keys.note.create")
+        .expect("la chiave è del proprietario del comando");
+    assert_eq!(riga.value, SettingValue::Text("Mod-Alt-k".into()));
+    assert_eq!(riga.source, SettingSource::Vault);
+    assert_eq!(
+        riga.spec.label,
+        fub_abi::text::Text::from("Nuova nota"),
+        "l'etichetta è quella del comando: nessuno traduce due volte lo stesso nome"
+    );
+
+    // **Un programma non riassegna i tasti di nessuno**: quali tasti fanno cosa
+    // è dell'utente, come la lingua in cui legge.
+    assert!(!riga.spec.program_writable);
+}
+
+/// Una chiave che **esiste finché esiste il comando**: il componente che smette
+/// se le porta via, e con lui il modo di riconfigurare qualcosa che non c'è.
+/// Il valore scritto resta — spegnere non è riconfigurare — ed è la regola che
+/// lo store applica a ogni ritiro.
+#[test]
+fn un_componente_spento_non_lascia_dietro_le_sue_scorciatoie() {
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
+    ws.register_plugin(PluginManifest::core("fub.notes", "Note"), Trust::Core)
+        .expect("dichiarato");
+    ws.register_command_provider("fub.notes", Box::new(DueComandi))
+        .expect("registrato");
+    assert!(ws.setting("keys.note.create").is_ok());
+
+    let _ = ws.deactivate_plugin("fub.notes");
+    assert!(
+        ws.setting("keys.note.create").is_err(),
+        "spento il componente, la chiave non c'è più"
+    );
+}
