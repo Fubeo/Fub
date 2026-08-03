@@ -31,6 +31,7 @@ import { attivabile, intrappolaFuoco } from "./a11y";
 import { applyIntent } from "./intents";
 import { mountTree, patchTree, unmountTree } from "./node";
 import { onEvent } from "../state/kernel";
+import { flushPendingSave } from "../panels/document";
 import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
 
 const viewsLeftEl = $("#views-left");
@@ -262,6 +263,18 @@ async function renderDeclaredView(id: string): Promise<void> {
 /// due metà, e la risposta si interpreta qui.
 function disegna(id: string, montata: Montata, albero: UiNode): void {
   mountTree(montata.container, albero, async (action: ActionRef, fields: FieldValue[]) => {
+    // **Il buffer esce prima.** Un'azione di view può finire in una scrittura
+    // del vault — la cronologia che ripristina una versione, il cestino che
+    // ripristina una nota — e la riscrittura del kernel finirebbe altrimenti
+    // sotto la copia più vecchia che l'autosave ha ancora in coda. La shell non
+    // sa quali azioni scrivono e quali no, quindi mette in salvo prima di tutte:
+    // costa zero quando il buffer è pulito, che è il caso di ogni battuta di
+    // tasto in un filtro.
+    //
+    // Non è **la** riparazione: quella è la revisione nella firma di
+    // `write_document` (§18.1), che toglie la corsa invece di ordinarla. Questa
+    // toglie l'unico caso in cui la corsa la perdeva sempre lo stesso.
+    await flushPendingSave();
     const update = await api.viewAction(
       id,
       montata.instance,

@@ -56,8 +56,9 @@ frontend/src/
     search.ts      la barra e i risultati (§21.4-§21.5: qui atterrano anche il
                    quick switcher e la ricerca dentro la nota aperta — una porta
                    sola verso l'indice, non tre)
-    trash.ts       il cestino, e la conferma prima di cestinare
-    history.ts     la cronologia delle versioni
+    trash.ts       **solo il gesto**: la conferma prima di cestinare una nota.
+                   Il pannello del cestino è una view dichiarata (§1.2), e la
+                   cronologia — che era `history.ts` — anche: il file non c'è più
     sidebar.ts     quale pannello della sidebar occupa lo spazio
     graph.ts       il grafo su canvas (superficie privilegiata, fuori da UiNode)
     activity.ts    il centro attività: cosa sta girando, a che punto è, come si ferma (§10.3)
@@ -164,9 +165,15 @@ l'anteprima riceve `openPage`.
 
 ### 4. Lo store è piccolo per costruzione
 
-Nello store sta ciò che serve a **più di un modulo**. I risultati di ricerca, le
-voci del cestino, l'anteprima di una versione restano nel loro pannello. Uno
-store che raccoglie tutto torna a essere l'oggetto-dio, con un file diverso.
+Nello store sta ciò che serve a **più di un modulo**. I risultati di ricerca
+restano nel loro pannello. Uno store che raccoglie tutto torna a essere
+l'oggetto-dio, con un file diverso.
+
+Le voci del cestino e l'anteprima di una versione erano gli altri due esempi, e
+adesso sono un esempio più forte: non stanno *nel loro pannello*, stanno **di là
+dal confine**, perché quei due pannelli sono view dichiarate e ciò che devono
+ricordare vive nello stato di vista dell'esemplare (§11.2). Uno stato che non ha
+mai attraversato il confine non può finire nello store per distrazione.
 
 ### 5. Un pannello dichiara cosa lo fa invecchiare; l'host decide quando chiamarlo
 
@@ -314,11 +321,9 @@ chiuse, più una migrazione:
   nominato, e va deciso col modello di layout
   ([§1.2](../roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite), seduta 18).
   Oggi l'area principale è un pannello solo, quindi non c'è niente da salvare.
-- **Cestino e cronologia come `ViewProvider` veri.** Il modo di montarli è ormai
-  uno (regola 5), ma sono pannelli **nativi** che dichiarano, non provider che
-  disegnano con `UiNode`. Dipendeva dai nodi di input e da un modo di dire «sto
-  caricando»: la [decisione 0016](../decisions/0016-cosa-e-una-view.md) li ha
-  portati tutti e due, quindi resta solo da farlo. La cronologia è il caso di
-  collaudo giusto — view con stato per-documento, input e azioni che scrivono. Il
-  grafo non è in attesa di niente: resta fuori da `UiNode` per decisione di M2,
-  ed è nel registro come superficie `overlay`.
+- ~~**Cestino e cronologia come `ViewProvider` veri.**~~ **Fatti**
+  ([0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)): sono due
+  provider di `fub-features`, e di qua è rimasto solo il *gesto* di cestinare —
+  che è della shell perché tocca il buffer aperto. Il grafo non è in attesa di
+  niente: resta fuori da `UiNode` per decisione di M2, ed è nel registro come
+  superficie `overlay`.

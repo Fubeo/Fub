@@ -15,7 +15,6 @@ import { api } from "../host/ipc";
 import { vociDelVault } from "../host/query";
 import { COMANDI } from "../host/contract";
 import { emit, state } from "./store";
-import { t } from "../i18n/strings";
 
 /// Annuncia che l'elenco dei documenti è cambiato. Chi ne disegna uno si
 /// iscrive a `documents`; nessuno chiama nessuno per nome.
@@ -69,34 +68,13 @@ export async function trashNote(id: string): Promise<void> {
   await api.invokeCommand(COMANDI.cestina, { doc: id });
 }
 
-/// Ripristina dal cestino e dice **dove** la nota è tornata.
-///
-/// Il comando non risponde con un id — non è ciò che un `CommandOutcome` sa
-/// fare — ma con l'effetto `navigate`, che è *anche* ciò che la shell deve fare
-/// dopo. Un effetto diverso qui sarebbe un comando che ha cambiato semantica
-/// sotto i piedi di chi lo invoca, e vale la pena dirlo invece di ignorarlo.
-export async function restoreFromTrash(entry: string, to?: string): Promise<string> {
-  const outcome = await api.invokeCommand(COMANDI.ripristina, {
-    entry,
-    ...(to ? { to } : {}),
-  });
-  if (outcome.effect.kind !== "navigate") {
-    throw new Error(`${COMANDI.ripristina} non ha detto dove è tornata la nota`);
-  }
-  return outcome.effect.doc;
-}
+// Ripristinare dal cestino, svuotarlo e proporre un nome libero non stanno più
+// qui: erano i tre servizi del pannello cestino, e il pannello cestino è un
+// `ViewProvider` (§1.2). Il provider invoca gli stessi due comandi — è il
+// registro a essere la strada, non questo modulo — e il nome libero se lo fa
+// dare da `VaultRead::free_name`, che è la stessa convenzione del kernel
+// chiesta dall'altro lato del confine.
 
-/// Svuota il cestino e restituisce il messaggio che il comando ha prodotto.
-export async function emptyTrash(): Promise<string> {
-  const outcome = await api.invokeCommand(COMANDI.svuota);
-  return outcome.notify ?? t("trash.emptied");
-}
-
-/// Il primo nome libero della famiglia «Nota», «Nota 1», … (D3): la convenzione
-/// vive nel kernel, chiederla evita di averne una seconda copia qui.
-export function proposeFreeName(id: string): Promise<string> {
-  return api.proposeFreeName(id);
-}
 
 /// I comandi dichiarati dal kernel, per le scorciatoie di tastiera.
 ///

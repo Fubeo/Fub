@@ -96,9 +96,6 @@ export interface ShellState {
   /// siano lo sanno i `FormatDescriptor`, non la UI — e markdown è il primo
   /// formato, non l'unico. Servono a riconoscere una folder note.
   handledExtensions: string[];
-  /// Il versioning è acceso in questa sessione? Spento significa assente (D7):
-  /// il pannello della cronologia non esiste, e non si interroga.
-  versioningOn: boolean;
   /// L'organizzazione del vault (icone, appuntate, ordinamenti, spazi): il
   /// sidecar `.fub/workspace.json`. Autorevole, non derivato — e dal §11.3 la
   /// possiede il **kernel**, quindi questo è uno specchio e non la verità.
@@ -127,7 +124,6 @@ export const state: ShellState = {
   dirty: false,
   mode: "live_preview",
   handledExtensions: ["md"],
-  versioningOn: false,
   meta: metaVuota(),
   activeSpace: null,
   expanded: new Set(),

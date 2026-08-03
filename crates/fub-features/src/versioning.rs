@@ -73,10 +73,19 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+use fub_abi::command::{
+    Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
+    InvokeMode, ParamKind, ParamSpec,
+};
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::DocId;
+use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
-use fub_abi::traits::{EntryKind, EventHandler, HostApi, IndexQuery, IndexResult};
+use fub_abi::traits::{
+    CommandProvider, EntryKind, EventHandler, HostApi, IndexQuery, IndexResult, ReadApi,
+    ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
+};
+use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
@@ -110,6 +119,29 @@ const VERSION_UNSAVED: &str = "version_unsaved";
 /// Il tombstone di un documento non è stato scritto: la sua storia resta viva
 /// quando dovrebbe essere chiusa. `Failure` (0052).
 const TOMBSTONE_UNWRITABLE: &str = "tombstone_unwritable";
+/// Le stringhe del **pannello cronologia** e del comando che ripristina. Sono
+/// l'eccezione al capoverso qui sopra — da quando questa feature ha una view,
+/// non è più vero che la sua unica prosa siano gli errori.
+const VIEW_TITLE: &str = "view_title";
+const NO_ACTIVE_DOC: &str = "no_active_doc";
+const EMPTY: &str = "empty";
+const COUNT: &str = "count";
+const CURRENT: &str = "current";
+const SIZE: &str = "size";
+const RESTORE_LABEL: &str = "restore";
+const CLOSE_PREVIEW: &str = "close_preview";
+const RESTORE_TITLE: &str = "version.restore.title";
+const RESTORE_DESC: &str = "version.restore.desc";
+const RESTORE_DOC_TITLE: &str = "version.restore.doc.title";
+const RESTORE_DOC_DESC: &str = "version.restore.doc.desc";
+const RESTORE_TS_TITLE: &str = "version.restore.ts.title";
+const RESTORE_TS_DESC: &str = "version.restore.ts.desc";
+const PLAN_RESTORE: &str = "plan.restore";
+const DONE_RESTORE: &str = "done.restore";
+const UNDO_RESTORE: &str = "undo.restore";
+const E_NO_NOTE_GIVEN: &str = "err.no_note_given";
+const E_NO_TS_GIVEN: &str = "err.no_ts_given";
+
 /// I nomi degli argomenti.
 const DOC: &str = "doc";
 const WHEN: &str = "when";
@@ -143,7 +175,33 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 TOMBSTONE_UNWRITABLE,
                 "Tombstone di {doc} non scritto: {reason}",
-            ),
+            )
+            .with(VIEW_TITLE, "Cronologia")
+            .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
+            .with(EMPTY, "Nessuna versione.")
+            .with(COUNT, "Versioni: {count}")
+            .with(CURRENT, "adesso")
+            .with(SIZE, "{size} byte")
+            .with(RESTORE_LABEL, "Ripristina")
+            .with(CLOSE_PREVIEW, "Chiudi l'anteprima")
+            .with(RESTORE_TITLE, "Ripristina una versione")
+            .with(
+                RESTORE_DESC,
+                "Riscrive la nota com'era in quell'istante. Il ripristino è a \
+                 sua volta una versione: si torna indietro anche da lui.",
+            )
+            .with(RESTORE_DOC_TITLE, "Nota")
+            .with(RESTORE_DOC_DESC, "La nota da riportare indietro.")
+            .with(RESTORE_TS_TITLE, "Istante")
+            .with(
+                RESTORE_TS_DESC,
+                "L'istante della versione, in millisecondi UNIX.",
+            )
+            .with(PLAN_RESTORE, "Riporta {doc} alla versione del {when}")
+            .with(DONE_RESTORE, "{doc} riportata alla versione del {when}")
+            .with(UNDO_RESTORE, "Rimetti {doc} com'era prima del ripristino")
+            .with(E_NO_NOTE_GIVEN, "Nessuna nota da ripristinare.")
+            .with(E_NO_TS_GIVEN, "Nessun istante da ripristinare."),
         StringCatalog::new("en")
             .with(NO_VERSIONS, "No version of {doc}.")
             .with(NO_SUCH_VERSION, "There is no version of {doc} from {when}.")
@@ -161,7 +219,33 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 TOMBSTONE_UNWRITABLE,
                 "Tombstone of {doc} not written: {reason}",
-            ),
+            )
+            .with(VIEW_TITLE, "History")
+            .with(NO_ACTIVE_DOC, "No note open.")
+            .with(EMPTY, "No versions.")
+            .with(COUNT, "Versions: {count}")
+            .with(CURRENT, "now")
+            .with(SIZE, "{size} bytes")
+            .with(RESTORE_LABEL, "Restore")
+            .with(CLOSE_PREVIEW, "Close the preview")
+            .with(RESTORE_TITLE, "Restore a version")
+            .with(
+                RESTORE_DESC,
+                "Rewrites the note as it was at that instant. The restore is \
+                 itself a version: you can come back from it too.",
+            )
+            .with(RESTORE_DOC_TITLE, "Note")
+            .with(RESTORE_DOC_DESC, "The note to take back in time.")
+            .with(RESTORE_TS_TITLE, "Instant")
+            .with(
+                RESTORE_TS_DESC,
+                "The version instant, in UNIX milliseconds.",
+            )
+            .with(PLAN_RESTORE, "Take {doc} back to the version from {when}")
+            .with(DONE_RESTORE, "{doc} taken back to the version from {when}")
+            .with(UNDO_RESTORE, "Put {doc} back as it was before the restore")
+            .with(E_NO_NOTE_GIVEN, "No note to restore.")
+            .with(E_NO_TS_GIVEN, "No instant to restore."),
     ]
 }
 
@@ -728,7 +812,10 @@ fn snapshot_name(ts: u64, doc_id: &str) -> String {
 }
 
 /// L'indice nello store, se c'è ed è della nostra epoca.
-fn load_index(host: &dyn HostApi) -> Option<BTreeMap<String, DocVersions>> {
+/// Prende un `&dyn ReadApi` e non un `&dyn HostApi`: leggere l'indice è una
+/// lettura, e da quando il pannello cronologia lo rilegge dal percorso di
+/// render — dove di scritture non ce ne sono — il tipo lo dice.
+fn load_index(host: &dyn ReadApi) -> Option<BTreeMap<String, DocVersions>> {
     let raw = host.data_read(INDEX_FILE).ok()??;
     let index: Index = serde_json::from_slice(&raw).ok()?;
     (index.schema_version == SCHEMA_VERSION).then_some(index.docs)
@@ -1002,6 +1089,336 @@ impl EventHandler for VersioningHandler {
             _ => {}
         }
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Il pannello cronologia (§1.2), e il comando che ripristina
+// ---------------------------------------------------------------------------
+//
+// # Chi scrive le versioni è chi le disegna
+//
+// Il §1.2 chiedeva di migrare la cronologia al protocollo dichiarativo, e la
+// domanda che la migrazione ha dovuto rispondere è *da dove le legge*. Il
+// pannello nativo le chiedeva a tre comandi Tauri, che le chiedevano allo store
+// che vive nell'host. Un `ViewProvider` non ha né l'uno né gli altri — e non gli
+// servono: questa view è dello **stesso plugin** che le versioni le scrive,
+// quindi le rilegge dal proprio spazio dati con `data_read`, che è una capacità
+// del contratto e non una scorciatoia. È la stessa strada che avrebbe un plugin
+// di terzi che si tenesse uno store suo.
+//
+// Ne segue che il pannello non condivide l'esemplare in memoria dello store con
+// l'handler che lo riempie: rilegge `versions.json` a ogni disegno. Non è un
+// costo trascurato, è la scelta giusta due volte — l'indice è un file piccolo
+// che sta nella cache del sistema, e un pannello che rilegge dice sempre la
+// verità anche quando a scrivere è stata un'altra finestra.
+//
+// # Versioning spento significa pannello assente, e adesso per costruzione
+//
+// La shell nativa lo faceva con un `hidden` guidato da `VaultInfo.versioning`:
+// il pannello c'era comunque, e a tenerlo vuoto era una riga di TypeScript.
+// Adesso la view la registra la feature, e una feature spenta non si monta —
+// quindi non c'è nessuna `ViewSpec` da montare, e nessuno la disegna. È la
+// spegnibilità totale (D7) ottenuta togliendo codice invece di aggiungendone.
+
+/// Id della `ViewSpec` della cronologia.
+pub const HISTORY_VIEW: &str = "history";
+/// L'id, nel registro, del comando che riporta una nota a una sua versione.
+pub const VERSION_RESTORE: &str = "version.restore";
+
+/// Mostra il contenuto di una versione; l'istante sta nel payload.
+const A_PREVIEW: &str = "preview";
+/// Chiude l'anteprima aperta.
+const A_CLOSE_PREVIEW: &str = "close_preview";
+/// Ripristina la versione il cui istante sta nel payload.
+const A_RESTORE: &str = "restore";
+/// La chiave del payload, e quella sotto cui l'anteprima aperta resta scritta
+/// nello stato di vista dell'esemplare (§11.2).
+const TS: &str = "ts";
+const PREVIEW_STATE: &str = "preview";
+
+/// Le versioni di un documento secondo l'indice **su disco**, dalla più recente
+/// alla più vecchia.
+fn versions_of(host: &dyn ReadApi, id: &DocId) -> Vec<VersionRef> {
+    load_index(host)
+        .and_then(|docs| docs.get(id.as_str()).cloned())
+        .map(|d| d.versions.iter().rev().copied().collect())
+        .unwrap_or_default()
+}
+
+/// Il contenuto di una versione, letto dallo spazio dati del plugin.
+///
+/// È il gemello in sola lettura di [`VersionStore::read`], e non lo sostituisce:
+/// quello risponde dall'indice in memoria — che è ciò che serve a chi sta
+/// scrivendo uno snapshot — questo dal file, che è ciò che serve a chi disegna.
+fn version_source(host: &dyn ReadApi, id: &DocId, ts: u64) -> Result<String, PluginError> {
+    let docs = load_index(host).unwrap_or_default();
+    let doc = docs.get(id.as_str()).ok_or_else(|| {
+        PluginError::NotFound(Text::message(
+            NO_VERSIONS,
+            vec![Arg::text(DOC, id.as_str())],
+        ))
+    })?;
+    if !doc.versions.iter().any(|v| v.ts == ts) {
+        return Err(PluginError::NotFound(Text::message(
+            NO_SUCH_VERSION,
+            vec![Arg::timestamp(WHEN, ts), Arg::text(DOC, id.as_str())],
+        )));
+    }
+    let path = blob(&doc.dir, &snapshot_name(ts, id.as_str()));
+    let bytes = host.data_read(&path)?.ok_or_else(|| {
+        PluginError::Internal(Text::message(
+            CONTENT_GONE,
+            vec![Arg::text(PATH, path.clone())],
+        ))
+    })?;
+    String::from_utf8(bytes).map_err(|e| {
+        PluginError::Internal(Text::message(
+            UNREADABLE,
+            vec![Arg::text(PATH, path), Arg::text(REASON, e.to_string())],
+        ))
+    })
+}
+
+/// Il pannello cronologia: le versioni della nota aperta, e come tornarci.
+pub struct HistoryView;
+
+impl ViewProvider for HistoryView {
+    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+        ViewInterests {
+            // Una versione nasce da una scrittura, e da niente altro: la
+            // maschera è più stretta di quella dei pannelli che leggono
+            // l'indice.
+            refresh: EventMask::of([EventKind::DocumentChanged, EventKind::BatchEnded]),
+            // …e la storia è di **quella** nota. Non di dove sta il cursore.
+            follows: ContextMask::document(),
+        }
+    }
+
+    fn views(&self) -> Vec<ViewSpec> {
+        vec![ViewSpec::new(
+            HISTORY_VIEW,
+            Text::key(VIEW_TITLE),
+            ViewSurface::RightSidebar,
+        )
+        .with_icon("history")
+        .ordered(3)]
+    }
+
+    fn render_view(
+        &self,
+        _instance: &ViewInstance,
+        host: &dyn ReadApi,
+    ) -> Result<UiNode, PluginError> {
+        tree(host)
+    }
+
+    fn on_action(
+        &mut self,
+        _instance: &ViewInstance,
+        action: UiAction,
+        host: &mut dyn HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        match action.action.0.as_str() {
+            // L'anteprima si **ricorda**, non si disegna e basta: il pannello si
+            // ridisegna a ogni scrittura, e un'anteprima che vivesse nel solo
+            // albero sparirebbe al primo salvataggio di chi la sta leggendo.
+            A_PREVIEW => {
+                let Some(ts) = action.payload.get(TS).and_then(|v| v.as_u64()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                host.set_view_state(PREVIEW_STATE, Some(serde_json::Value::from(ts)))?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            A_CLOSE_PREVIEW => {
+                host.set_view_state(PREVIEW_STATE, None)?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // Ripristinare **non** è una scrittura di questo pannello: è il
+            // comando `version.restore`, invocato per id come lo invocherebbe la
+            // palette o un plugin. Una view che riscrivesse il documento da sé
+            // avrebbe un'operazione fuori dal registro — quindi fuori
+            // dall'annullamento, fuori dalla simulazione e fuori dalla palette.
+            A_RESTORE => {
+                let (Some(doc), Some(ts)) = (
+                    host.active_context().and_then(|c| c.doc),
+                    action.payload.get(TS).and_then(|v| v.as_u64()),
+                ) else {
+                    return Ok(ViewUpdate::None);
+                };
+                host.set_view_state(PREVIEW_STATE, None)?;
+                host.run_command(
+                    VERSION_RESTORE,
+                    serde_json::json!({ DOC: doc.as_str(), TS: ts }),
+                )?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            _ => Ok(ViewUpdate::None),
+        }
+    }
+}
+
+fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
+    let Some(doc) = host.active_context().and_then(|c| c.doc) else {
+        return Ok(UiNode::empty_state(Text::key(NO_ACTIVE_DOC)));
+    };
+    let versions = versions_of(host, &doc);
+    if versions.is_empty() {
+        return Ok(UiNode::empty_state(Text::key(EMPTY)));
+    }
+
+    let mut figli = vec![UiNode::text(Text::message(
+        COUNT,
+        vec![Arg::int("count", versions.len() as i64)],
+    ))];
+    figli.push(UiNode::list(
+        versions
+            .iter()
+            .enumerate()
+            .map(|(i, v)| riga(v, i == 0))
+            .collect(),
+    ));
+
+    // L'anteprima, se qualcuno l'ha aperta. Il contenuto è testo di un file, e
+    // testo resta: un `Text` che la shell inserisce come testo, non `Html`.
+    if let Some(ts) = host
+        .view_state(PREVIEW_STATE)?
+        .and_then(|v| v.as_u64())
+        .filter(|ts| versions.iter().any(|v| v.ts == *ts))
+    {
+        figli.push(UiNode::keyed(
+            format!("preview:{ts}"),
+            UiKind::Section {
+                title: Text::message(WHEN, vec![Arg::timestamp(WHEN, ts)]),
+                collapsed: false,
+                children: vec![
+                    UiNode::text(version_source(host, &doc, ts)?),
+                    UiNode::button(
+                        Text::key(CLOSE_PREVIEW),
+                        Intent::Neutral,
+                        ActionRef::new(A_CLOSE_PREVIEW),
+                    ),
+                ],
+            },
+        ));
+    }
+    Ok(UiNode::column(1, figli))
+}
+
+/// Una versione: quando, quanto grande, e i due gesti che la riguardano.
+///
+/// La più recente porta scritto *«adesso»* invece della dimensione, ed è ciò che
+/// il pannello nativo già faceva: ripristinare la versione più recente è
+/// riscrivere il file con quello che c'è già dentro.
+fn riga(v: &VersionRef, corrente: bool) -> UiNode {
+    let quando = Text::message(WHEN, vec![Arg::timestamp(WHEN, v.ts)]);
+    let quanto = if corrente {
+        Text::key(CURRENT)
+    } else {
+        Text::message(SIZE, vec![Arg::int("size", v.size as i64)])
+    };
+    UiNode::keyed(
+        v.ts.to_string(),
+        UiKind::Stack {
+            dir: fub_abi::ui::Axis::Row,
+            gap: 1,
+            children: vec![
+                UiNode::list_item(
+                    quando,
+                    Some(quanto),
+                    Some(ActionRef::with(A_PREVIEW, serde_json::json!({ TS: v.ts }))),
+                ),
+                UiNode::button(
+                    Text::key(RESTORE_LABEL),
+                    Intent::Primary,
+                    ActionRef::with(A_RESTORE, serde_json::json!({ TS: v.ts })),
+                ),
+            ],
+        },
+    )
+}
+
+/// Il comando del registro che riporta una nota a una sua versione.
+///
+/// Era `restore_version`, un comando Tauri: la §16.6 lo aveva già classificato —
+/// *fa accadere qualcosa e risponde con un messaggio*, quindi è un comando del
+/// registro — e il pannello cronologia era il suo unico chiamante. Migrandolo
+/// col pannello, la palette lo eredita gratis.
+pub struct VersioningCommands;
+
+impl CommandProvider for VersioningCommands {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new(VERSION_RESTORE, Text::key(RESTORE_TITLE))
+            .describing(Text::key(RESTORE_DESC))
+            .with_param(
+                ParamSpec::new(DOC, Text::key(RESTORE_DOC_TITLE), ParamKind::Document)
+                    .describing(Text::key(RESTORE_DOC_DESC)),
+            )
+            .with_param(
+                ParamSpec::new(TS, Text::key(RESTORE_TS_TITLE), ParamKind::Number)
+                    .describing(Text::key(RESTORE_TS_DESC))
+                    .required(),
+            )
+            // Reversibile, e non per ottimismo: il ripristino è a sua volta una
+            // scrittura, quindi una versione (D8), quindi c'è una versione a cui
+            // tornare. L'`Undo` qui sotto la nomina.
+            .with_scope(CommandScope::writing(CommandReach::Document))]
+    }
+
+    fn invoke(
+        &self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        if command != VERSION_RESTORE {
+            return Err(PluginError::UnknownCommand(command.to_string().into()));
+        }
+        let args = Args::new(&args);
+        let doc = args
+            .document(DOC)
+            .or_else(|| host.active_context().and_then(|c| c.doc))
+            .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_NOTE_GIVEN)))?;
+        let ts = args
+            .number(TS)
+            .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_TS_GIVEN)))? as u64;
+
+        let quando_dove = |key: &str, when: u64| {
+            Text::message(
+                key,
+                vec![Arg::text(DOC, doc.as_str()), Arg::timestamp(WHEN, when)],
+            )
+        };
+
+        if mode.is_dry_run() {
+            let piano = CommandPlan::of_edits(quando_dove(PLAN_RESTORE, ts), Vec::new())
+                .with_doc(doc.clone());
+            return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(piano)));
+        }
+
+        // L'inverso di un ripristino è un altro ripristino: quello alla versione
+        // che il ripristino stesso sta per creare fotografando ciò che c'è
+        // adesso. La si nomina **prima** di scrivere, perché dopo la lista è
+        // cambiata — ed è l'istante dell'ultima versione salvata, non l'ora
+        // corrente: fra le due c'è il dedup (D6), che può non aver fotografato
+        // niente se il file era già uguale.
+        let prima = versions_of(host, &doc).first().map(|v| v.ts);
+        let source = version_source(host, &doc, ts)?;
+        host.write_document(&doc, &source)?;
+
+        let esito = CommandOutcome::notify(quando_dove(DONE_RESTORE, ts));
+        Ok(match prima {
+            Some(prima) => esito.undoable(fub_abi::command::Undo::by_command(
+                quando_dove(UNDO_RESTORE, prima),
+                VERSION_RESTORE,
+                serde_json::json!({ DOC: doc.as_str(), TS: prima }),
+            )),
+            // Nessuna versione prima di questa: non c'è niente a cui tornare, e
+            // dichiarare un annullamento che fallirebbe è peggio che non
+            // dichiararne nessuno.
+            None => esito,
+        })
     }
 }
 

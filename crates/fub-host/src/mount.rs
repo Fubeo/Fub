@@ -268,9 +268,15 @@ pub fn mount(
         #[cfg(feature = "versioning")]
         if feature.id == VERSIONING_ID {
             let store = store.clone();
+            // Le due costruzioni vengono **dall'inventario**, come per ogni
+            // altra feature: qui si aggiunge soltanto la cosa che l'inventario
+            // non può dire, cioè che si registrano insieme all'handler e sotto
+            // lo stesso interruttore.
+            let view = feature.view;
+            let commands = feature.commands;
             irregolare = Some(
                 CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
-                    register_versioning(ws, &store)
+                    register_versioning(ws, &store, view, commands)
                 })
                 // L'interruttore è **dell'host** e non della feature (§11.1): il
                 // versioning non sa di poter essere spento, e le sue chiavi stanno
@@ -290,7 +296,14 @@ pub fn mount(
                     .speaking("it", (feature.catalog)()),
             );
         }
-        let bundle = if let Some(costruisci) = feature.view {
+        // **Prima l'irregolare.** Era in fondo, e andava bene finché una riga
+        // irregolare non offriva anche una view: dal §1.2 il versioning ne offre
+        // una (la cronologia) e dichiara un comando, e presa dal ramo generico
+        // avrebbe registrato il pannello **senza** il suo handler — cioè una
+        // cronologia che disegna versioni che nessuno salva più.
+        let bundle = if let Some(bundle) = irregolare {
+            bundle
+        } else if let Some(costruisci) = feature.view {
             // Le view sono tutte uguali, ed è questa uniformità che permette
             // all'inventario di **essere** la registrazione invece di
             // raccontarla: una riga in più là dentro è un pannello in più
@@ -304,8 +317,6 @@ pub fn mount(
                 register_commands(ws, feature.id, costruisci())
             })
             .speaking("it", (feature.catalog)())
-        } else if let Some(bundle) = irregolare {
-            bundle
         } else {
             // Una feature nell'inventario che qui nessuno sa registrare. Non è
             // uno stato che l'utente possa produrre: è qualcuno che ha aggiunto
@@ -439,7 +450,12 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
 /// qui: è policy della feature, e scatta sull'evento `VaultOpened` che `reindex`
 /// emette dopo il montaggio.
 #[cfg(feature = "versioning")]
-fn register_versioning(ws: &mut Workspace, store: &Mutex<Option<VersionStore>>) -> Vec<String> {
+fn register_versioning(
+    ws: &mut Workspace,
+    store: &Mutex<Option<VersionStore>>,
+    view: Option<fn() -> Box<dyn fub_abi::ViewProvider>>,
+    commands: Option<fn() -> Box<dyn fub_abi::traits::CommandProvider>>,
+) -> Vec<String> {
     if !versioning_enabled(ws) {
         return Vec::new();
     }
@@ -448,10 +464,24 @@ fn register_versioning(ws: &mut Workspace, store: &Mutex<Option<VersionStore>>) 
         Err(e) => return vec![format!("versioning non disponibile: {e}")],
     };
     *store.lock().expect("store delle versioni") = Some(opened.clone());
-    match ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(opened))) {
-        Ok(()) => Vec::new(),
-        Err(e) => vec![format!("versioning non registrato: {e}")],
+    let mut guai = Vec::new();
+    if let Err(e) =
+        ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(opened)))
+    {
+        guai.push(format!("versioning non registrato: {e}"));
     }
+    // Il pannello cronologia e `version.restore` (§1.2). Stanno **dentro
+    // l'interruttore**: versioning spento significa pannello assente e comando
+    // assente, non un pannello vuoto e un comando che risponde «disattivato».
+    // È la spegnibilità totale (D7) ottenuta togliendo la registrazione, che è
+    // l'unico modo in cui è vera anche per chi guarda la palette.
+    if let Some(costruisci) = view {
+        guai.extend(register_view(ws, VERSIONING_ID, costruisci()));
+    }
+    if let Some(costruisci) = commands {
+        guai.extend(register_commands(ws, VERSIONING_ID, costruisci()));
+    }
+    guai
 }
 
 /// Un pannello che passa per il protocollo di view come dovrà fare un plugin:

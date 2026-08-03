@@ -214,12 +214,13 @@ informare è un evento*. `instance` assente = tutte le istanze. Il **freno** è 
 chi disegna: venti inviti in un giro sono un ridisegno, e la finestra è un
 microtask.
 
-Cosa dichiarano le quattro view ufficiali: i backlink solo `Document` (i backlink
+Cosa dichiarano le sei view ufficiali: i backlink solo `Document` (i backlink
 di una nota sono gli stessi da ogni punto di essa), l'outline
 `Document + Selection` (segna la sezione in cui sta il cursore), le statistiche
-tutto (contano la selezione e cambiano faccia in lettura), il pannello tag
-**niente** — la distribuzione dei tag del vault è la stessa da qualunque nota la
-si guardi.
+tutto (contano la selezione e cambiano faccia in lettura), la cronologia
+`Document` (la storia è di *quella* nota), il pannello tag e il cestino
+**niente** — la distribuzione dei tag del vault, e cosa c'è nel cestino, sono le
+stesse da qualunque nota le si guardi.
 
 ## La regola dell'escape hatch — e il confine di fiducia
 
@@ -312,7 +313,7 @@ plugin di terzi finché la `WebView` non ha asset story e CSP (M5). Il principio
 «se il protocollo basta alle feature ufficiali, basta ai plugin» vale per le
 superfici **dichiarative**.
 
-## Dogfooding: le quattro view ufficiali
+## Dogfooding: le sei view ufficiali
 
 Sono la strada che percorrerà un plugin di terzi, e per questo il protocollo si
 tiene "affamato". Ognuna esercita una parte diversa:
@@ -326,7 +327,15 @@ tiene "affamato". Ognuna esercita una parte diversa:
 - **tag** (`tags.rs`) — un **filtro**: un campo di testo il cui contenuto
   sopravvive fra due render, cioè il collaudo dello stato su `on_action` e del
   riconciliatore insieme;
-- **statistiche** (`stats.rs`) — il primo cliente della barra di stato.
+- **statistiche** (`stats.rs`) — il primo cliente della barra di stato;
+- **cestino** (`trash.rs`) — le due **domande**: svuotare e ripristinare su un
+  path occupato non chiedono una modale al contratto, disegnano la domanda al
+  posto dell'elenco e la ricordano nello stato di vista
+  ([0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md));
+- **cronologia** (`versioning.rs`) — la view che appartiene al plugin che
+  **scrive** ciò che disegna, e quindi lo rilegge dal proprio spazio dati invece
+  di chiedere un canale nuovo; e che agisce invocando un comando del registro
+  (`version.restore`) invece di scrivere da sé.
 
 ## Evoluzione prevista
 

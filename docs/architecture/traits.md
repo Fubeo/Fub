@@ -388,9 +388,12 @@ della [0013](../decisions/0013-elenco-delle-capacita.md) e `vault.archive`, che
 invoca `note.rename` una volta per nota.
 
 I cinque strutturali sono ciò che la shell cablava in sei comandi Tauri: adesso
-passano dalle stesse firme di un plugin (restano le due **letture**: `list_trash`
-e `propose_free_name`, perché un `CommandOutcome` porta un messaggio e un
-effetto, non dati). Due dettagli decisi lì: `note.rename` dichiara
+passano dalle stesse firme di un plugin. Le due **letture** che erano rimaste al
+loro fianco — `list_trash` e `propose_free_name`, porte IPC verso due capacità
+del contratto, perché un `CommandOutcome` porta un messaggio e un effetto e non
+dati — non ci sono più: dal §1.2 il cestino è una view dichiarata e le chiede
+dall'altro lato del confine, dove sono capacità e non porte
+([0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)). Due dettagli decisi lì: `note.rename` dichiara
 `CommandReach::Documents` e non `Document`, perché una rinomina riscrive anche le
 note che linkavano — e il suo piano le **nomina**, chiedendole all'indice;
 `note.trash` è `reversible` perché `trash.restore` sta nello stesso registro.

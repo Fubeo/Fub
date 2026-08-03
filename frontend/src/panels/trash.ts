@@ -1,139 +1,28 @@
-// Il cestino: elencare, ripristinare, svuotare — e la conferma prima di
-// cestinare, che è l'altra faccia della stessa cosa.
+// Cestinare una nota: il **gesto**, che è tutto ciò che di questo file resta.
 //
-// Il cestino è **piatto** (`.trash/`, come Obsidian) e la cartella di
-// provenienza sopravvive in un sidecar: qui non se ne sa nulla, è il kernel a
-// riportare la nota dov'era. Quello che la shell deve sapere è cosa fare quando
-// il path originale è di nuovo occupato — il kernel non inventa nomi al posto
-// dell'utente.
+// # Il pannello se n'è andato, e non è stato spostato: è stato tolto
+//
+// Il cestino era un pannello nativo di questa shell — 169 righe che elencavano
+// `list_trash`, disegnavano una riga per voce, chiedevano conferma con la modale
+// e proponevano un nome libero. Dal §1.2 è un `ViewProvider`
+// (`crates/fub-features/src/trash.rs`) e arriva qui per la stessa strada di
+// backlink, struttura, tag e statistiche: `mountDeclaredViews` lo scopre, lo
+// mette dove la sua `ViewSpec` dice, e nessuna riga di questo bundle sa che
+// esiste. Le due domande che sembravano volere la modale — *«svuoto davvero?»* e
+// *«il path è occupato: che nome le do?»* — si disegnano nell'albero, ed è la
+// cosa che quella migrazione ha deciso.
+//
+// Quel che **non** poteva andarsene è questo: cestinare è un gesto della shell
+// su un documento che la shell ha aperto. Chiede conferma, disinnesca un
+// salvataggio in volo e, se la nota cestinata era quella a schermo, decide cosa
+// mettere al suo posto — tre cose che vivono di qua dal confine e che un
+// provider non ha modo di fare. Il comando che scrive, invece, è del registro
+// (`note.trash`) e lo era già.
 import { confirm } from "../host/dialog";
-import { errorText, isErrorKind } from "../host/errors";
-import { api } from "../host/ipc";
-import {
-  emptyTrash as svuota,
-  proposeFreeName,
-  primaNota,
-  refreshDocuments,
-  restoreFromTrash,
-  trashNote,
-} from "../state/vault";
+import { primaNota, refreshDocuments, trashNote } from "../state/vault";
 import { pageName } from "../rules/organizer";
-import { $ } from "../ui/dom";
-import { notify } from "../ui/notify";
-import { refreshOn, registerPanel } from "../ui/panel-host";
-import {
-  closeDocument,
-  isOpen,
-  openDocument,
-  resumeSave,
-  suspendSave,
-} from "./document";
-import { isPanelVisible, showPanel } from "./sidebar";
+import { closeDocument, isOpen, openDocument, resumeSave, suspendSave } from "./document";
 import { t } from "../i18n/strings";
-
-const trashListEl = $("#trash-list");
-
-export function mountTrash(): void {
-  $("#show-trash").addEventListener("click", () => void openTrash());
-  $("#close-trash").addEventListener("click", () => showPanel("files"));
-  $("#empty-trash").addEventListener("click", () => void emptyTrashPanel());
-  // Il cestino può essere riempito o svuotato da un'altra app (o da un'altra
-  // finestra): se è aperto, si rilegge.
-  registerPanel({
-    id: "shell:trash",
-    title: "Cestino",
-    placement: "left_sidebar",
-    refresh: refreshOn("index_updated", "batch_ended"),
-    visible: () => isPanelVisible("trash"),
-    render: refreshTrash,
-  });
-}
-
-export async function openTrash(): Promise<void> {
-  showPanel("trash");
-  await refreshTrash();
-}
-
-async function refreshTrash(): Promise<void> {
-  const entries = await api.listTrash();
-  trashListEl.innerHTML = "";
-  if (entries.length === 0) {
-    const vuoto = document.createElement("li");
-    vuoto.className = "empty-note";
-    vuoto.textContent = t("trash.is_empty");
-    trashListEl.appendChild(vuoto);
-    return;
-  }
-  for (const entry of entries) {
-    const li = document.createElement("li");
-    li.title = entry.id;
-
-    const name = document.createElement("span");
-    name.className = "trash-name";
-    name.textContent = pageName(entry.original);
-
-    const when = document.createElement("span");
-    when.className = "trash-when";
-    when.textContent = new Date(entry.deleted_at * 1000).toLocaleString();
-
-    const restore = document.createElement("button");
-    restore.className = "link-button";
-    restore.textContent = t("trash.restore");
-    restore.addEventListener("click", () => void ripristina(entry.id, entry.original));
-
-    li.append(name, when, restore);
-    trashListEl.appendChild(li);
-  }
-}
-
-async function ripristina(trashId: string, original: string): Promise<void> {
-  let restored: string;
-  try {
-    restored = await restoreFromTrash(trashId);
-  } catch (e) {
-    // **Solo** se il path è di nuovo occupato (§12.2). Il `catch` era nudo, e
-    // trattava ogni fallimento come se fosse questo: con un disco pieno o un
-    // permesso negato l'utente si vedeva chiedere «esiste già: la ripristino
-    // con un altro nome?» — la domanda sbagliata — e rispondendo «Ripristina»
-    // ritentava con un nome libero, che falliva di nuovo per la vera ragione,
-    // che nessuno gli aveva mai detto.
-    //
-    // La domanda ha senso qui e in nessun altro ramo, ed è la variante
-    // `already_exists` a dirlo: è per questo cliente che esiste.
-    if (!isErrorKind(e, "already_exists")) {
-      notify(t("trash.restore_failed", { doc: pageName(original), reason: errorText(e) }), "guasto");
-      return;
-    }
-    // Il kernel non inventa nomi al posto dell'utente, quindi l'app ne propone
-    // uno e chiede. La convenzione «Nota», «Nota 1», … è del kernel:
-    // chiedergliela evita di averne una seconda implementazione qui, destinata
-    // a divergere.
-    const proposta = await proposeFreeName(original);
-    const ok = await confirm(
-      t("trash.exists_again", { doc: pageName(original), proposta: pageName(proposta) }),
-      { title: t("trash.restore_title"), okLabel: t("trash.restore") },
-    );
-    if (!ok) return;
-    restored = await restoreFromTrash(trashId, proposta);
-  }
-  await refreshTrash();
-  showPanel("files");
-  refreshDocuments();
-  await openDocument(restored);
-}
-
-async function emptyTrashPanel(): Promise<void> {
-  const entries = await api.listTrash();
-  if (entries.length === 0) return;
-  const ok = await confirm(t("trash.confirm_empty", { count: entries.length }), {
-    title: t("trash.empty_title"),
-    danger: true,
-    okLabel: t("trash.empty_button"),
-  });
-  if (!ok) return;
-  notify(await svuota());
-  await refreshTrash();
-}
 
 /// Cestina una nota, chiedendo prima conferma.
 ///
