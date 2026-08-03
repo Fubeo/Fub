@@ -28,10 +28,19 @@ già congelata — che è esattamente ciò che è successo al lotto e all'origin
 per cui la [0012](../decisions/0012-origine-degli-eventi.md) ha dichiarato di
 volersi decidere insieme alla [0011](../decisions/0011-il-lotto.md).
 
-Quello che resta non ha più niente che scada col freeze di M4. **Sono tre
-voci, e sono tutte comportamento**: dove il comportamento si vede (§21.7), cosa
-lo rende regolabile (§21.6) e cosa gli darà da mangiare (§21.8). La prima poggia
-su ciò che le P0 hanno appena messo nel contratto.
+Quello che resta non ha più niente che scada col freeze di M4. **Sono due
+voci, e sono tutte e due comportamento**: dove il comportamento si vede (§21.7)
+e cosa gli darà da mangiare (§21.8). La prima poggia su ciò che le P0 hanno
+appena messo nel contratto.
+
+**Erano tre.** La §21.6 — i pesi dei campi — è chiusa dalla
+[decisione 0084](../decisions/0084-un-peso-e-una-preferenza.md), ed è la quinta
+di fila in questa seduta a chiudersi **senza spendere contratto**: un peso è una
+preferenza e non un fatto sul vault, quindi va nelle impostazioni e non nella
+query. I due boost cablati sono diventati quattro chiavi, e la parte che era
+davvero una decisione non era quale numero: era che `query()` non riceve un host,
+quindi i pesi vivono in una copia in RAM — e una copia ha bisogno di qualcuno che
+la rinfreschi, o la chiave resta configurabile per finta.
 
 **E le superfici ci sono tutte e quattro.** La §21.4 — cercare *dentro* la nota
 aperta — è chiusa dalla [decisione 0082](../decisions/0082-una-porta-per-chi-cerca.md),
@@ -158,19 +167,29 @@ che lo ha prodotto.
 
 ### 21.6 I pesi dei campi sono una costante di compilazione
 
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel · **P2** — andava con la ~~§11.1~~, che adesso le ha dato dove atterrare*
+*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel · **P2** — andava con la ~~§11.1~~, che le ha dato dove atterrare · **CHIUSA** dalla [decisione 0084](../decisions/0084-un-peso-e-una-preferenza.md). Le caselle restano per il racconto; la voce non è più in [todo.md](../todo.md)*
 
-- [ ] **Il boost ×4 su `page_name` è cablato in `search.rs`** (ed è documentato
+- [x] ~~**Il boost ×4 su `page_name` è cablato in `search.rs`** (ed è documentato
       in [M2](../milestones/M2-search-graph.md): «chi cerca *Rust* vuole prima la
       nota *intitolata* Rust»). È un default buono e resta il default; il punto è
       che non è **toccabile**, e omnisearch quei pesi li rende regolabili perché
-      un vault di ricette e uno di paper non vogliono la stessa cosa.
-- [ ] **Metà è già dicibile e metà no.** `TextQuery.fields` dice **dove**
+      un vault di ricette e uno di paper non vogliono la stessa cosa.~~ Resta il
+      default, e adesso è *il default di una chiave*: `search.boost.name`. Le
+      chiavi sono **quattro** e non due — anche corpo e tag — perché tre chiavi su
+      quattro campi indicizzati lasciavano un caso speciale da spiegare a voce.
+- [x] ~~**Metà è già dicibile e metà no.** `TextQuery.fields` dice **dove**
       cercare; nessun campo dice **quanto** pesa ciascun campo. La domanda da
       decidere è se il peso stia nella query o nelle impostazioni, e la risposta
       plausibile è la seconda: un peso è una **preferenza**, non un fatto sul
       vault, e i fatti sul vault sono ciò che il linguaggio delle query contiene
-      (`abi/query.rs`, «un predicato è un fatto sul vault, non un servizio»).
+      (`abi/query.rs`, «un predicato è un fatto sul vault, non un servizio»).~~
+      È la seconda, e la firma non si è mossa di un campo. La domanda che è
+      rimasta dopo quella — e che la voce non aveva visto — è che
+      `IndexProvider::query` non riceve un `HostApi`: i pesi si leggono in
+      `activate` e si tengono nel provider, cioè sono una **copia**. Un
+      `EventHandler` sul prefisso `search.boost.` la rinfresca a vault aperto,
+      perché un peso si tara e una taratura che passa dalla riapertura non la fa
+      nessuno.
 - [x] ~~**Ma le impostazioni oggi sono variabili d'ambiente** (§11.1), quindi
       questa voce non ha dove atterrare finché quella è aperta.~~ Il contenitore
       c'è ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)): il

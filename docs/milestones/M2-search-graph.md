@@ -24,7 +24,9 @@ full-rebuild di grafo/indice con un aggiornamento **incrementale**.
   nativo `Workspace::plugin_data_dir`.
 - **Schema:** `doc_id` (STRING → termine esatto, è ciò che rende `delete_term`
   chirurgico), `page_name` (TEXT, con boost ×4: chi cerca "Rust" vuole prima la
-  nota *intitolata* Rust), `body` (TEXT+STORED, dalla proiezione
+  nota *intitolata* Rust — dalla
+  [0084](../decisions/0084-un-peso-e-una-preferenza.md) quel ×4 è il **default**
+  di un'impostazione e non più un numero cablato), `body` (TEXT+STORED, dalla proiezione
   `DocumentModel.text`; STORED perché il generatore di snippet rilegge il
   testo), `tags` (TEXT). Lo schema è versionato: un bump forza il rebuild.
 - **Aggiornamento incrementale:** `on_documents_indexed(docs)` fa,
@@ -117,9 +119,16 @@ tre sono stati chiusi prima di quella scadenza:
   [0049](../decisions/0049-una-posizione-dentro-un-documento.md): accanto agli
   `highlights` c'è `occurrences`, che sono coordinate nel sorgente.
 
-Le altre sei voci (superfici, pesi, allegati, e la misura che non torna) stanno
-nella [seduta 21](../roadmap/21-la-ricerca-predefinita.md). Nessuna di esse
-rimette in discussione ciò che questa milestone ha fatto: l'indice persistente e
+Le voci che restano stanno nella
+[seduta 21](../roadmap/21-la-ricerca-predefinita.md), e oggi sono **due**: le
+ricerche recenti (§21.7) e il testo dentro gli allegati (§21.8). Le altre si sono
+chiuse — le quattro superfici passano da una porta sola
+([0082](../decisions/0082-una-porta-per-chi-cerca.md) e
+[0083](../decisions/0083-le-due-superfici-che-restavano.md)), la misura che non
+tornava misurava due cose diverse
+([0074](../decisions/0074-selezionare-non-e-raccontare.md)), e i pesi dei campi
+sono un'impostazione ([0084](../decisions/0084-un-peso-e-una-preferenza.md)).
+Nessuna di esse rimette in discussione ciò che questa milestone ha fatto: l'indice persistente e
 incrementale, il routing dichiarato e il linguaggio delle query restano, e sono
 esattamente ciò su cui quel comportamento si appoggia.
 

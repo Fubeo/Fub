@@ -302,6 +302,18 @@ function campo(entry: SettingEntry): HTMLElement {
       input.value = String(entry.value);
       if (kind.min !== null) input.min = String(kind.min);
       if (kind.max !== null) input.max = String(kind.max);
+      // Senza questa riga il passo è **uno**, e un `2.5` diventa un campo che il
+      // browser segna come invalido. Lo scoperto lo ha portato il primo numero
+      // vero dello schema — i pesi dei campi della ricerca (§21.6), che sono
+      // frazionari per natura: un peso a metà strada fra il corpo e il titolo è
+      // esattamente il genere di taratura per cui quelle chiavi esistono.
+      //
+      // «Qualunque passo» e non un passo dichiarato: `SettingKind::Number` ha
+      // `min` e `max` e non ha uno `step`, e aggiungerglielo sarebbe firma. Il
+      // valore lo controllano comunque i due estremi, che è ciò che il kernel
+      // verifica davvero — lo `step` di un `input` è un aiuto alla digitazione,
+      // non una regola sul dato.
+      input.step = "any";
       input.addEventListener("change", () => {
         // `Number("")` è **zero**, non `NaN`: con il solo controllo su `NaN`,
         // svuotare il campo (o scriverci del testo, che per un `input[number]`

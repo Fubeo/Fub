@@ -262,6 +262,12 @@ pub fn mount(
         if feature.id == SEARCH_ID {
             irregolare = Some(
                 CoreBundle::new(feature.id, feature.nome, register_search)
+                    // I pesi dei campi (§21.6). A differenza dell'interruttore
+                    // del versioning, lo schema è **della feature** e non di chi
+                    // monta — un motore di ricerca sa di avere dei pesi — e per
+                    // la stessa ragione le sue etichette stanno già dentro il
+                    // catalogo della feature, senza un secondo da sommare.
+                    .configuring(fub_features::search::settings())
                     .speaking("it", (feature.catalog)()),
             );
         }
@@ -425,15 +431,33 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
         // conflitto di rotte vuol dire che l'indice **non c'è** e la ricerca non
         // risponderà; un'attivazione fallita che c'è ma reindicizza tutto, che è
         // lento e non sbagliato.
-        Ok(index) => match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
-            Ok(()) => Vec::new(),
-            Err(RegistryError::Activate(e)) => {
-                vec![format!(
-                    "indice di ricerca: impronte non ritrovate, reindicizzo: {e}"
-                )]
+        Ok(index) => {
+            // **Il capo dell'`Arc` si prende prima di consegnare l'indice**:
+            // dopo `register_index_provider` il provider è nel workspace e non
+            // lo si tocca più. È l'handler che tiene i pesi allineati alle
+            // impostazioni (§21.6) — senza di lui i pesi si leggerebbero una
+            // volta in `activate` e resterebbero fermi fino alla riapertura del
+            // vault.
+            let impostazioni = index.settings_handler();
+            match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
+                Ok(()) => match ws.register_event_handler(SEARCH_ID, Box::new(impostazioni)) {
+                    Ok(()) => Vec::new(),
+                    // L'indice c'è e cerca: quello che manca è che si accorga
+                    // di un peso cambiato. Va detto, e non è lo stesso avviso
+                    // di una ricerca che non risponde.
+                    Err(e) => vec![format!(
+                        "indice di ricerca: i pesi dei campi non si aggiorneranno \
+                         a vault aperto: {e}"
+                    )],
+                },
+                Err(RegistryError::Activate(e)) => {
+                    vec![format!(
+                        "indice di ricerca: impronte non ritrovate, reindicizzo: {e}"
+                    )]
+                }
+                Err(e) => vec![format!("indice di ricerca NON registrato: {e}")],
             }
-            Err(e) => vec![format!("indice di ricerca NON registrato: {e}")],
-        },
+        }
         Err(e) => vec![format!("indice di ricerca non disponibile: {e}")],
     }
 }

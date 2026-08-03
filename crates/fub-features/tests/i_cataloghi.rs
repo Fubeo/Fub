@@ -238,3 +238,36 @@ fn le_impostazioni_del_core_parlano_anche_loro() {
         .collect();
     assert!(mancanti.is_empty(), "{}", mancanti.join(", "));
 }
+
+/// I pesi dei campi della ricerca (§21.6): l'unica feature di questo crate che
+/// dichiari uno schema di impostazioni suo.
+///
+/// Il presidio generale qui sopra cammina view e comandi, cioè ciò che
+/// l'inventario sa dire di una feature; le impostazioni non sono in quell'elenco
+/// e passerebbero mute. La prosa è la parte che conta più dello schema: un campo
+/// numerico senza la frase che spiega cosa fa lo zero è un campo che qualcuno
+/// mette a zero credendo di spegnere la ricerca su quel campo, e trova le stesse
+/// note di prima in un altro ordine.
+#[cfg(feature = "search")]
+#[test]
+fn i_pesi_della_ricerca_parlano_in_tutte_le_lingue() {
+    let cataloghi = fub_features::search::catalog();
+    let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
+    for spec in fub_features::search::settings() {
+        let dove = format!("ricerca: `{}`", spec.key);
+        chiave(&spec.label, &dove, &mut chiavi, &mut cablate);
+        chiave(&spec.description, &dove, &mut chiavi, &mut cablate);
+        chiave(&spec.group, &dove, &mut chiavi, &mut cablate);
+    }
+    assert!(cablate.is_empty(), "{cablate:?}");
+    let mancanti: Vec<String> = chiavi
+        .iter()
+        .flat_map(|k| {
+            cataloghi
+                .iter()
+                .filter(move |c| !c.entries.contains_key(k))
+                .map(move |c| format!("«{k}» manca in «{}»", c.locale))
+        })
+        .collect();
+    assert!(mancanti.is_empty(), "{}", mancanti.join(", "));
+}

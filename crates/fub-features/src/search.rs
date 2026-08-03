@@ -45,18 +45,20 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, RwLock};
 
 use camino::Utf8Path;
 use fub_abi::edit::Revision;
+use fub_abi::event::{Event, EventKind, EventMask, Notice};
 use fub_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery, TextTolerance,
 };
+use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
-    DocumentMatch, EntryKind, Excerpts, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult,
-    Page, Paged, PredicateKind, QueryRoute, VaultEntry,
+    DocumentMatch, EntryKind, EventHandler, Excerpts, HostApi, IndexLoss, IndexProvider,
+    IndexQuery, IndexResult, Page, Paged, PredicateKind, QueryRoute, VaultEntry,
 };
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
@@ -100,13 +102,132 @@ const SNIPPET_CHARS: usize = 220;
 
 /// Il `page_name` conta più del corpo: chi cerca "Rust" vuole prima la nota
 /// *intitolata* Rust, poi le mille che la nominano.
-const PAGE_NAME_BOOST: f32 = 4.0;
+///
+/// È il **default** dell'impostazione `search.boost.name`, non più una legge
+/// del motore (§21.6): resta il numero giusto per la maggioranza dei vault, e
+/// chi ne ha uno diverso lo cambia. Pubblica perché ha due lettori che non
+/// devono poter divergere — lo schema che la dichiara
+/// (`fub_host::settings::search_settings`) e il banco della seduta
+/// (`examples/una_ricerca.rs`).
+pub const PAGE_NAME_BOOST: f32 = 4.0;
 
 /// Un heading conta più del corpo e meno del titolo della nota: chi ci ha
 /// dedicato una **sezione** ne parla più di chi la nomina in una riga, e meno
 /// di chi ci ha intitolato la nota intera. Il boost si somma alla copia che il
 /// termine ha già nel corpo, ed è precisamente l'effetto voluto.
-const HEADING_BOOST: f32 = 2.0;
+///
+/// Default di `search.boost.heading`.
+pub const HEADING_BOOST: f32 = 2.0;
+
+/// Il corpo è l'**unità di misura** degli altri tre, e per questo il suo
+/// default è 1.0: in un punteggio contano i rapporti fra i pesi, non i loro
+/// valori assoluti — moltiplicarli tutti e quattro per dieci non sposta un
+/// solo risultato. È configurabile lo stesso, per non avere un campo indicizzato
+/// su quattro che si comporta diversamente dagli altri senza che la firma lo
+/// dica, e la descrizione della chiave lo spiega invece di lasciarlo scoprire.
+pub const BODY_BOOST: f32 = 1.0;
+
+/// I tag pesano quanto il corpo, e non è una scelta forte: è il default di chi
+/// non sa come l'utente organizza le note. Chi organizza *per tag* li vuole
+/// sopra, chi non li usa li vuole a zero, e da qui in poi può dirlo
+/// (`search.boost.tags`).
+pub const TAGS_BOOST: f32 = 1.0;
+
+/// Il prefisso delle chiavi dei pesi. Chi reagisce a `SettingChanged` guarda
+/// questo e non i quattro nomi a uno a uno: aggiungere un campo indicizzato non
+/// deve poter lasciare indietro il ramo che lo rilegge.
+pub const BOOST_PREFIX: &str = "search.boost.";
+
+/// Quanto pesa una corrispondenza nel nome della nota.
+pub const BOOST_NAME_KEY: &str = "search.boost.name";
+/// Quanto pesa una corrispondenza in un heading.
+pub const BOOST_HEADING_KEY: &str = "search.boost.heading";
+/// Quanto pesa una corrispondenza nel corpo.
+pub const BOOST_BODY_KEY: &str = "search.boost.body";
+/// Quanto pesa una corrispondenza in un tag.
+pub const BOOST_TAGS_KEY: &str = "search.boost.tags";
+
+/// Il minimo di un peso, e il massimo (§21.6).
+///
+/// Zero è **ammesso** e non vuol dire «non cercare lì»: un campo con peso zero
+/// continua a far *combaciare* il documento, e smette solo di farlo salire. È
+/// una distinzione che si spiega nella descrizione della chiave invece di
+/// vietarla, perché il caso è reale — «trova anche nei tag, ma non premiarli» —
+/// e perché «non cercare lì» ha già la sua porta, che è `TextQuery.fields`.
+///
+/// Il tetto non è una legge di natura: è il guardrail contro il refuso, `40`
+/// battuto al posto di `4.0`. Un peso fuori intervallo viene **rifiutato** e
+/// non arrotondato — è la regola di [`SettingKind::rejects`], e vale qui come
+/// altrove: un valore corretto in silenzio è un valore che l'utente non ha
+/// scelto e non sa di non avere.
+///
+/// [`SettingKind::rejects`]: fub_abi::settings::SettingKind::rejects
+pub const BOOST_MIN: f64 = 0.0;
+/// Vedi [`BOOST_MIN`].
+pub const BOOST_MAX: f64 = 100.0;
+
+/// Quanto pesa ciascun campo, cioè lo stato che la §21.6 ha tolto dal codice
+/// sorgente e messo nelle mani di chi usa il vault.
+///
+/// # Una copia che non invecchia
+///
+/// [`IndexProvider::query`] riceve `&self` e **nessun `HostApi`**: i pesi non
+/// si possono leggere nel momento in cui servono, e vanno tenuti qui. Uno stato
+/// letto una volta e tenuto in RAM è una copia, e una copia invecchia — così
+/// questa ha chi la rinfresca: [`SearchSettings`], un `EventHandler` che
+/// registriamo accanto al provider e che rilegge le chiavi a ogni
+/// [`Event::SettingChanged`]. I due condividono l'`Arc`, ed è il motivo per cui
+/// il campo non è un semplice `FieldWeights`.
+///
+/// Il `RwLock` sta sul percorso di ogni query, ed è la cosa giusta da fare per
+/// la stessa ragione della decisione 0024: chi legge è tutto il mondo, chi
+/// scrive è una persona che muove uno slider ogni tanto. Il costo di una
+/// `read()` non contendibile non si misura accanto al giro dentro tantivy — e
+/// il banco della seduta è lì per smentirmi se sbaglio.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FieldWeights {
+    pub name: f32,
+    pub heading: f32,
+    pub body: f32,
+    pub tags: f32,
+}
+
+impl Default for FieldWeights {
+    fn default() -> Self {
+        FieldWeights {
+            name: PAGE_NAME_BOOST,
+            heading: HEADING_BOOST,
+            body: BODY_BOOST,
+            tags: TAGS_BOOST,
+        }
+    }
+}
+
+impl FieldWeights {
+    /// I pesi come sono adesso nelle impostazioni.
+    ///
+    /// Una chiave che non c'è, o che porta un valore di un'altra specie, vale
+    /// il proprio default: è la stessa risposta che darebbe uno schema
+    /// dichiarato e mai scritto, e qui non è un ripiego — un motore di ricerca
+    /// che si rifiutasse di partire perché un peso non si legge sarebbe un
+    /// vault senza ricerca per un numero.
+    pub fn read(host: &dyn HostApi) -> Self {
+        let d = FieldWeights::default();
+        let one = |key: &str, fallback: f32| -> f32 {
+            host.setting(key)
+                .ok()
+                .and_then(|v| v.as_number())
+                .map(|n| n as f32)
+                .unwrap_or(fallback)
+        };
+        FieldWeights {
+            name: one(BOOST_NAME_KEY, d.name),
+            heading: one(BOOST_HEADING_KEY, d.heading),
+            body: one(BOOST_BODY_KEY, d.body),
+            tags: one(BOOST_TAGS_KEY, d.tags),
+        }
+    }
+}
 
 /// Ciò che il manifest deve dire perché ci si possa fidare delle impronte.
 ///
@@ -312,6 +433,9 @@ pub struct SearchIndex {
     ///
     /// Non atomico: lo scrivono solo `activate` e `flush`, che hanno `&mut self`.
     manifest_at: Option<u64>,
+    /// Quanto pesa ciascun campo (§21.6). Condiviso con [`SearchSettings`], che
+    /// è chi lo rinfresca: vedi [`FieldWeights`].
+    weights: Arc<RwLock<FieldWeights>>,
 }
 
 impl SearchIndex {
@@ -378,7 +502,29 @@ impl SearchIndex {
             dirty: AtomicBool::new(false),
             opstamp: AtomicU64::new(opstamp),
             manifest_at: None,
+            // I default finché non c'è un host da cui leggere i veri: `open`
+            // non ne ha uno, `activate` sì.
+            weights: Arc::new(RwLock::new(FieldWeights::default())),
         })
+    }
+
+    /// Il capo dell'`Arc` da dare a [`SearchSettings`] perché possa rinfrescare
+    /// i pesi di *questo* indice.
+    ///
+    /// Esiste perché i due si registrano separatamente — un `IndexProvider` e
+    /// un `EventHandler` sono due registrazioni distinte, e dopo la prima
+    /// l'indice è dentro il workspace e non lo si tocca più. Il capo si prende
+    /// **prima**, al montaggio.
+    pub fn settings_handler(&self) -> SearchSettings {
+        SearchSettings {
+            weights: Arc::clone(&self.weights),
+        }
+    }
+
+    /// I pesi con cui questo indice sta punteggiando adesso. Per i test e le
+    /// diagnostiche: una query non la si può interrogare su come ha pesato.
+    pub fn weights(&self) -> FieldWeights {
+        *self.weights.read().expect("rwlock")
     }
 
     /// Quanti documenti l'indice crede di avere. Utile ai test e alle
@@ -439,9 +585,93 @@ const PATH: &str = "path";
 const REASON: &str = "reason";
 const WHAT: &str = "what";
 
-/// Le stringhe della ricerca. Vedi
-/// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
-/// componente e non nella shell.
+/// Le chiavi delle stringhe dei **pesi** (§21.6). Sono le etichette che il
+/// pannello disegna, e stanno accanto allo schema che le nomina: una `label`
+/// senza la sua `SettingSpec` a fianco è la prima cosa che si disallinea.
+///
+/// Il suffisso `.label` sulle prime distingue la chiave della *stringa* da
+/// quella dell'*impostazione* ([`BOOST_NAME_KEY`] e compagne): sono due spazi di
+/// nomi diversi (§7.4) e potrebbero anche coincidere, ma due cose diverse con lo
+/// stesso nome dentro lo stesso file sono un invito a scambiarle.
+const S_GROUP: &str = "search.group";
+const S_NAME: &str = "search.boost.name.label";
+const S_NAME_DESC: &str = "search.boost.name.desc";
+const S_HEADING: &str = "search.boost.heading.label";
+const S_HEADING_DESC: &str = "search.boost.heading.desc";
+const S_BODY: &str = "search.boost.body.label";
+const S_BODY_DESC: &str = "search.boost.body.desc";
+const S_TAGS: &str = "search.boost.tags.label";
+const S_TAGS_DESC: &str = "search.boost.tags.desc";
+
+/// Lo schema delle impostazioni della ricerca: **quanto pesa ciascun campo**
+/// (§21.6).
+///
+/// # Perché sta qui e non in `fub-host`
+///
+/// L'altro schema di una feature ufficiale — l'interruttore del versioning —
+/// vive in `fub_host::settings`, e la ragione scritta lì è che quell'interruttore
+/// è **dell'host**: il versioning non sa di poter essere spento, e chi lo spegne
+/// è chi monta. Qui è l'opposto e va detto, perché la disposizione diversa non
+/// sia scambiata per una dimenticanza: un motore di ricerca sa benissimo di
+/// avere dei pesi, li legge lui, ed è lui a saper dire cosa vuol dire metterne
+/// uno a zero. Questa è la forma normale — un componente che dichiara le proprie
+/// chiavi — ed è **esattamente** ciò che scriverebbe un plugin di terzi con un
+/// indice configurabile; quella del versioning è l'eccezione, per un
+/// interruttore che il componente stesso non possiede.
+///
+/// Ne segue la proprietà che rende la voce chiusa invece che spostata: i default
+/// dello schema **sono** le costanti che il motore usa e che il banco della
+/// seduta (`examples/una_ricerca.rs`) importa. Una fonte sola, e nessun posto in
+/// cui possano divergere.
+///
+/// # Quattro chiavi, e i rapporti che contano
+///
+/// Anche il corpo, il cui default è 1.0 e che di fatto è l'unità di misura degli
+/// altri tre. La ragione di dichiararlo lo stesso è che quattro campi
+/// indicizzati con tre chiavi lasciano un caso speciale da spiegare a voce; la
+/// cosa che va detta — alzarli tutti e quattro insieme non sposta un solo
+/// risultato — si dice nella descrizione, che è dove qualcuno la legge.
+///
+/// Tutte e quattro `program_writable`, come `versioning.enabled`: un peso è
+/// reversibile e non riguarda la privacy, e «questo vault è un archivio di
+/// paper, alza gli heading» è il profilo di vault che il §11.1 apre. Il permesso
+/// `fub:write-settings` resta il primo cancello, e nessun plugin di terzi ce
+/// l'ha finché non se lo dichiara e qualcuno glielo concede.
+pub fn settings() -> Vec<SettingSpec> {
+    let peso = |key: &str, label: &str, desc: &str, default: f32| {
+        SettingSpec::new(
+            key,
+            Text::key(label),
+            SettingKind::Number {
+                default: default as f64,
+                min: Some(BOOST_MIN),
+                max: Some(BOOST_MAX),
+            },
+        )
+        .describing(Text::key(desc))
+        .grouped(Text::key(S_GROUP))
+        .program_writable()
+    };
+    vec![
+        peso(BOOST_NAME_KEY, S_NAME, S_NAME_DESC, PAGE_NAME_BOOST),
+        peso(BOOST_HEADING_KEY, S_HEADING, S_HEADING_DESC, HEADING_BOOST),
+        peso(BOOST_BODY_KEY, S_BODY, S_BODY_DESC, BODY_BOOST),
+        peso(BOOST_TAGS_KEY, S_TAGS, S_TAGS_DESC, TAGS_BOOST),
+    ]
+}
+
+/// Le stringhe della ricerca: i suoi errori, e le etichette dei suoi pesi.
+///
+/// Vedi [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
+/// componente e non nella shell. Le etichette dei pesi stanno in **questo**
+/// catalogo e non in un secondo che il montaggio somma — come fa il versioning —
+/// per la stessa ragione per cui ci sta lo schema: sono della ricerca, e un
+/// componente che parla di sé lo fa con una voce sola.
+///
+/// Le descrizioni dicono le due cose che nessuno indovina guardando un numero:
+/// che conta il **rapporto** fra i pesi e non il loro valore, e che **zero non
+/// spegne la ricerca su quel campo** — la nota si trova ancora, smette solo di
+/// salire per merito suo.
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
@@ -501,6 +731,37 @@ pub fn catalog() -> Vec<StringCatalog> {
                 SELECT_UNSUPPORTED,
                 "La ricerca non ordina per proprietà e non sceglie le colonne: \
                  quello lo fa chi ha il frontmatter.",
+            )
+            .with(S_GROUP, "Ricerca")
+            .with(S_NAME, "Peso del nome della nota")
+            .with(
+                S_NAME_DESC,
+                "Quanto una corrispondenza nel titolo della nota la fa salire fra \
+                 i risultati. Conta il rapporto fra i quattro pesi, non il loro \
+                 valore: raddoppiarli tutti non cambia nessun ordine. A zero il \
+                 campo si cerca ancora — la nota si trova — ma non fa più salire \
+                 il risultato; per non cercarci affatto si restringono i campi \
+                 della ricerca.",
+            )
+            .with(S_HEADING, "Peso dei titoli di sezione")
+            .with(
+                S_HEADING_DESC,
+                "Quanto pesa una corrispondenza in un'intestazione. Chi a un \
+                 argomento ha dedicato una sezione ne parla più di chi lo nomina \
+                 in una riga.",
+            )
+            .with(S_BODY, "Peso del testo")
+            .with(
+                S_BODY_DESC,
+                "Quanto pesa una corrispondenza nel corpo della nota. È il \
+                 riferimento con cui si leggono gli altri tre: lasciandolo a 1 \
+                 gli altri pesi si leggono come «quante volte più del testo».",
+            )
+            .with(S_TAGS, "Peso dei tag")
+            .with(
+                S_TAGS_DESC,
+                "Quanto pesa una corrispondenza in un tag. Alzatelo se le note le \
+                 organizzate per tag, abbassatelo se i tag li usate poco.",
             ),
         StringCatalog::new("en")
             .with(INDEX_CREATE, "Cannot create the search index: {reason}")
@@ -532,6 +793,37 @@ pub fn catalog() -> Vec<StringCatalog> {
                 SELECT_UNSUPPORTED,
                 "The search does not sort by property and does not pick columns: \
                  that is for whoever has the frontmatter.",
+            )
+            .with(S_GROUP, "Search")
+            .with(S_NAME, "Note name weight")
+            .with(
+                S_NAME_DESC,
+                "How much a match in the note title lifts it among the results. \
+                 What counts is the ratio between the four weights, not their \
+                 value: doubling them all changes no ordering. At zero the field \
+                 is still searched — the note is still found — but it no longer \
+                 lifts the result; to not search it at all, narrow the fields of \
+                 the search.",
+            )
+            .with(S_HEADING, "Heading weight")
+            .with(
+                S_HEADING_DESC,
+                "How much a match in a heading weighs. Someone who devoted a \
+                 section to a topic says more about it than someone who names it \
+                 in one line.",
+            )
+            .with(S_BODY, "Body weight")
+            .with(
+                S_BODY_DESC,
+                "How much a match in the body of the note weighs. It is the \
+                 reference the other three are read against: leaving it at 1 makes \
+                 the others read as «how many times more than the body».",
+            )
+            .with(S_TAGS, "Tag weight")
+            .with(
+                S_TAGS_DESC,
+                "How much a match in a tag weighs. Raise it if you organize your \
+                 notes by tag, lower it if you barely use them.",
             ),
     ]
 }
@@ -987,21 +1279,27 @@ impl SearchIndex {
     /// dell'analizzatore.
     fn text_query(&self, text: &TextQuery) -> Result<Option<Box<dyn Query>>, PluginError> {
         let f = self.fields;
+        // Una sola lettura per query, e non una per campo: i quattro pesi vanno
+        // presi nello stesso istante, o una query lanciata mentre qualcuno
+        // muove uno slider potrebbe pesare il nome con la taratura nuova e gli
+        // heading con quella vecchia — un ordinamento che non corrisponde a
+        // nessuna configurazione mai esistita.
+        let w = *self.weights.read().expect("rwlock");
         let wanted: Vec<(Field, f32)> = if text.fields.is_empty() {
             vec![
-                (f.page_name, PAGE_NAME_BOOST),
-                (f.headings, HEADING_BOOST),
-                (f.body, 1.0),
-                (f.tags, 1.0),
+                (f.page_name, w.name),
+                (f.headings, w.heading),
+                (f.body, w.body),
+                (f.tags, w.tags),
             ]
         } else {
             text.fields
                 .iter()
                 .map(|field| match field {
-                    TextField::Name => (f.page_name, PAGE_NAME_BOOST),
-                    TextField::Body => (f.body, 1.0),
-                    TextField::Tags => (f.tags, 1.0),
-                    TextField::Heading => (f.headings, HEADING_BOOST),
+                    TextField::Name => (f.page_name, w.name),
+                    TextField::Body => (f.body, w.body),
+                    TextField::Tags => (f.tags, w.tags),
+                    TextField::Heading => (f.headings, w.heading),
                 })
                 .collect()
         };
@@ -1197,6 +1495,11 @@ impl IndexProvider for SearchIndex {
     }
 
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        // I pesi **prima** del manifest, e senza `?`: se le impostazioni non si
+        // leggono valgono i default (vedi [`FieldWeights::read`]), mentre un
+        // manifest che non si legge è una diagnostica vera. Sono due errori di
+        // gravità diversa e sarebbe sbagliato farli cadere insieme.
+        *self.weights.write().expect("rwlock") = FieldWeights::read(host);
         self.load_manifest(host)
     }
 
@@ -1464,6 +1767,53 @@ impl IndexProvider for SearchIndex {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Chi rinfresca i pesi (§21.6)
+// ---------------------------------------------------------------------------
+
+/// L'`EventHandler` che tiene i pesi di [`SearchIndex`] allineati alle
+/// impostazioni.
+///
+/// # Perché è un secondo oggetto e non un metodo dell'indice
+///
+/// Perché il contratto lo impone, ed è giusto che lo imponga:
+/// [`IndexProvider`] non riceve eventi e [`IndexProvider::query`] non riceve un
+/// host, quindi l'unico posto in cui un indice può *sapere* che una chiave è
+/// cambiata è un handler. Registrarne uno accanto al provider non è una
+/// scorciatoia interna alle feature ufficiali: è esattamente ciò che farebbe un
+/// plugin di terzi che volesse un indice configurabile, e il bundle della
+/// ricerca passa dalle stesse due registrazioni.
+///
+/// # L'evento non porta il valore, e chi reagisce rilegge
+///
+/// [`Event::SettingChanged`] dice **quale** chiave è cambiata e in che livello,
+/// non il valore nuovo — è una scelta di progetto (vedi il contratto in
+/// `frontend/src/host/contract.ts`), e la ragione è che un evento che portasse
+/// il valore sarebbe una seconda fonte di verità che arriva in ritardo. Qui si
+/// rilegge, e si rilegge **tutto**: quattro `setting()` su un file già in
+/// memoria costano meno del ramo che deciderebbe quale delle quattro toccare.
+pub struct SearchSettings {
+    weights: Arc<RwLock<FieldWeights>>,
+}
+
+impl EventHandler for SearchSettings {
+    fn subscribed(&self) -> EventMask {
+        EventMask::of([EventKind::SettingChanged])
+    }
+
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        // Il **prefisso**, e non i quattro nomi: il giorno che un quinto campo
+        // diventa indicizzabile, la sua chiave arriva qui senza che nessuno si
+        // ricordi di aggiungerla a un elenco.
+        if let Event::SettingChanged { key, .. } = &notice.event {
+            if key.starts_with(BOOST_PREFIX) {
+                *self.weights.write().expect("rwlock") = FieldWeights::read(host);
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1474,8 +1824,9 @@ mod tests {
     use camino::Utf8PathBuf;
     use fub_abi::model::Tag;
     use fub_abi::query::QueryLiteral;
+    use fub_abi::settings::{SettingScope, SettingValue};
     use fub_abi::traits::PropertySelect;
-    use fub_abi::traits::{DataRead, DataWrite};
+    use fub_abi::traits::{DataRead, DataWrite, SettingsWrite};
 
     fn doc(id: &str, text: &str) -> DocumentModel {
         let mut m = DocumentModel::empty(DocId::new(id));
@@ -1612,6 +1963,166 @@ mod tests {
             DocId::new("nota/Rust.md"),
             "il titolo pesa di più"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // I pesi dei campi sono un'impostazione (§21.6)
+    // -----------------------------------------------------------------------
+
+    /// Un host che dichiara le quattro chiavi come le dichiara il montaggio, e
+    /// dà a una di esse il valore che il test vuole provare.
+    fn host_con_peso(key: &str, valore: f64) -> MemoryHost {
+        let mut host = MemoryHost::new();
+        for spec in settings() {
+            host = if spec.key == key {
+                host.con_valore(spec, SettingValue::Number(valore))
+            } else {
+                host.con_impostazione(spec)
+            };
+        }
+        host
+    }
+
+    /// I due documenti di `page_name_outranks_body`: uno vince per il titolo,
+    /// l'altro per la ripetizione nel corpo. È la coppia giusta per provare un
+    /// peso, perché l'esito dipende **solo** da quello.
+    fn titolo_contro_corpo(idx: &mut SearchIndex) {
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "nota/Rust.md",
+            "appunti sparsi di programmazione",
+        )));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            "altro.md",
+            "rust rust rust rust rust rust",
+        )));
+    }
+
+    #[test]
+    fn i_pesi_arrivano_dalle_impostazioni() {
+        let (_g, path) = tmp();
+        // Il titolo azzerato: la nota *intitolata* Rust non ha più il vantaggio
+        // che le dava il default, e passa dietro a chi ripete il termine nel
+        // corpo. È l'esatto rovescio di `page_name_outranks_body`, e i due test
+        // insieme dicono che quella riga non è più una legge del motore.
+        let mut host = host_con_peso(BOOST_NAME_KEY, 0.0);
+        let mut idx = open(&path, &mut host);
+        assert_eq!(idx.weights().name, 0.0, "letto in `activate`");
+        titolo_contro_corpo(&mut idx);
+
+        let hits = search(&idx, "rust");
+        assert_eq!(hits.len(), 2, "zero non esclude: la nota si trova ancora");
+        assert_eq!(
+            hits[0].doc,
+            DocId::new("altro.md"),
+            "col peso del titolo a zero vince chi ripete nel corpo"
+        );
+    }
+
+    #[test]
+    fn una_chiave_mai_scritta_vale_il_suo_default() {
+        let (_g, path) = tmp();
+        // Nessuna dichiarazione affatto: è il caso di un host che di
+        // impostazioni non sa niente, e la ricerca deve partire lo stesso. Un
+        // motore che si rifiutasse di pesare perché un numero non si legge
+        // sarebbe un vault senza ricerca per una chiave assente.
+        let (idx, _host) = fresh(&path);
+        assert_eq!(idx.weights(), FieldWeights::default());
+    }
+
+    #[test]
+    fn i_pesi_si_aggiornano_a_vault_aperto() {
+        let (_g, path) = tmp();
+        let mut host = host_con_peso(BOOST_NAME_KEY, PAGE_NAME_BOOST as f64);
+        let mut idx = open(&path, &mut host);
+        titolo_contro_corpo(&mut idx);
+        assert_eq!(
+            search(&idx, "rust")[0].doc,
+            DocId::new("nota/Rust.md"),
+            "col default vince il titolo"
+        );
+
+        // Qualcuno muove lo slider. L'evento **non porta il valore** — per
+        // progetto chi reagisce rilegge — quindi il valore va cambiato
+        // nell'host, e poi si annuncia.
+        let mut handler = idx.settings_handler();
+        host.set_setting(BOOST_NAME_KEY, SettingValue::Number(0.0))
+            .expect("scrittura");
+        handler
+            .handle(
+                &Notice::of(Event::SettingChanged {
+                    key: BOOST_NAME_KEY.into(),
+                    scope: SettingScope::Vault,
+                }),
+                &mut host,
+            )
+            .expect("rilettura");
+
+        assert_eq!(idx.weights().name, 0.0, "il provider ha visto il cambio");
+        assert_eq!(
+            search(&idx, "rust")[0].doc,
+            DocId::new("altro.md"),
+            "e l'ordine è cambiato senza riaprire il vault"
+        );
+    }
+
+    #[test]
+    fn una_chiave_che_non_e_un_peso_non_fa_rileggere() {
+        let (_g, path) = tmp();
+        let mut host = host_con_peso(BOOST_NAME_KEY, PAGE_NAME_BOOST as f64);
+        let idx = open(&path, &mut host);
+        let mut handler = idx.settings_handler();
+
+        // Il tema cambia mille volte in una sessione, e la ricerca non deve
+        // rileggere quattro chiavi ogni volta. Il presidio guarda l'effetto e
+        // non il numero di letture — che sarebbe un dettaglio interno — ma il
+        // ramo che protegge è quello del prefisso.
+        host.set_setting(BOOST_NAME_KEY, SettingValue::Number(0.0))
+            .expect("scrittura");
+        handler
+            .handle(
+                &Notice::of(Event::SettingChanged {
+                    key: "appearance.theme".into(),
+                    scope: SettingScope::Vault,
+                }),
+                &mut host,
+            )
+            .expect("nessuna rilettura");
+        assert_eq!(
+            idx.weights().name,
+            PAGE_NAME_BOOST,
+            "un'altra chiave non trascina i pesi con sé"
+        );
+    }
+
+    #[test]
+    fn lo_schema_dichiara_i_default_che_il_motore_usa() {
+        // La duplicazione che questa voce ha tolto: prima i pesi erano costanti
+        // cablate, e il banco ne teneva una copia con un commento che chiedeva
+        // di non farle divergere. Adesso i default dello schema **sono** quelle
+        // costanti, e se qualcuno ne cambiasse una sola questo test è il posto
+        // in cui lo scopre.
+        let d = FieldWeights::default();
+        for (key, atteso) in [
+            (BOOST_NAME_KEY, d.name),
+            (BOOST_HEADING_KEY, d.heading),
+            (BOOST_BODY_KEY, d.body),
+            (BOOST_TAGS_KEY, d.tags),
+        ] {
+            let spec = settings()
+                .into_iter()
+                .find(|s| s.key == key)
+                .unwrap_or_else(|| panic!("`{key}` non è dichiarata"));
+            let SettingKind::Number { default, min, max } = spec.kind else {
+                panic!("`{key}` non è un numero");
+            };
+            assert_eq!(default as f32, atteso, "`{key}`");
+            assert_eq!(min, Some(BOOST_MIN));
+            assert_eq!(max, Some(BOOST_MAX));
+            assert!(
+                spec.program_writable,
+                "`{key}` è un profilo di vault scrivibile da un comando"
+            );
+        }
     }
 
     #[test]
