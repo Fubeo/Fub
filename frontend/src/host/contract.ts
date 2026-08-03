@@ -897,6 +897,48 @@ export function testoCercato(text: string, mentreSiDigita = false): QueryExpr {
   };
 }
 
+// Il testo cercato **dentro** un pugno di documenti: una clausola sola con due
+// letterali in AND.
+//
+// È la ricerca nella nota aperta (§21.4), ed è la prova che quella voce non
+// chiedeva niente di nuovo al linguaggio: `Docs { docs: [la nota] }` e un `Text`
+// nella stessa clausola sono già dicibili dalla 0019. Sta qui accanto alle altre
+// due, e non dentro il pannello che la usa, perché la regola della §21.5 è che
+// **una** porta serve tutte le superfici che accettano del testo e propongono
+// delle note: se ogni superficie si compone la propria query, il giorno in cui
+// il ranking cambia ne cambiamo quattro (0082).
+//
+// La composizione non è un `and` generico apposta: due `QueryExpr` in AND
+// vorrebbero il prodotto delle clausole, e un combinatore che lo fa in silenzio
+// è il posto dove nasce la query che non fa ciò che sembra. Qui i letterali
+// sono due e la clausola è una, scritta.
+export function testoNelDocumento(
+  docs: string[],
+  text: string,
+  mentreSiDigita = false,
+): QueryExpr {
+  return {
+    any: [
+      {
+        all: [
+          { negated: false, predicate: { kind: "docs", docs } },
+          {
+            negated: false,
+            predicate: {
+              kind: "text",
+              text,
+              mode: "terms",
+              fields: [],
+              tolerance: "exact",
+              partial_last_term: mentreSiDigita,
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 // Questi documenti, per nome: la foglia che chiede «quali di questi esistono?».
 // Chi la valuta la restringe a ciò che l'indice conosce, quindi la risposta è
 // l'intersezione — ed è il modo di verificare un pugno di path in UNA domanda

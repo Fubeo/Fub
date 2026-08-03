@@ -270,42 +270,36 @@ function registraComandi(): void {
     id: "shell.mode.reading",
     title: "commands.mode.reading",
     description: "commands.mode.reading.desc",
-    keybinding: "Mod-e",
     run: () => void setMode("reading"),
   });
   registerShellCommand({
     id: "shell.mode.live",
     title: "commands.mode.live",
     description: "commands.mode.live.desc",
-    keybinding: "Mod-Shift-l",
     run: () => void setMode("live_preview"),
   });
   registerShellCommand({
     id: "shell.pane.split.right",
     title: "commands.pane.split.right",
     description: "commands.pane.split.right.desc",
-    keybinding: "Mod-\\",
     run: () => dividiRiquadro("row"),
   });
   registerShellCommand({
     id: "shell.pane.split.down",
     title: "commands.pane.split.down",
     description: "commands.pane.split.down.desc",
-    keybinding: "Mod-Shift-\\",
     run: () => dividiRiquadro("col"),
   });
   registerShellCommand({
     id: "shell.pane.close",
     title: "commands.pane.close",
     description: "commands.pane.close.desc",
-    keybinding: "Mod-Shift-w",
     run: () => void chiudiRiquadroCorrente(),
   });
   registerShellCommand({
     id: "shell.tab.close",
     title: "commands.tab.close",
     description: "commands.tab.close.desc",
-    keybinding: "Mod-w",
     run: () => void chiudiTabCorrente(),
   });
 }

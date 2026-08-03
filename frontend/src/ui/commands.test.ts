@@ -109,7 +109,6 @@ describe("i due registri sono uno solo", () => {
       id: "shell.graph",
       title: "commands.graph",
       description: "commands.graph.desc",
-      keybinding: "Mod-Shift-g",
       run: () => {
         fatto = true;
       },
@@ -125,12 +124,18 @@ describe("i due registri sono uno solo", () => {
   it("dichiarare due volte lo stesso id sostituisce, non affianca", () => {
     // È ciò che succede rimontando un pannello: senza la sostituzione, la
     // seconda dichiarazione si presenterebbe come un conflitto con la prima.
+    //
+    // Il `conflitti` qui sotto parla **solo** di questo: in un banco
+    // `allCommands()` vede il registro della shell e basta, perché le spec del
+    // kernel arrivano da `list_commands` a runtime. La domanda sui conflitti
+    // veri — i due registri insieme — sta in `keybindings.test.ts`, ed è nata
+    // dopo che questa riga verde ha lasciato passare `Mod-Shift-f` dichiarato
+    // da tutte e due le parti (0081).
     for (const _ of [1, 2]) {
       registerShellCommand({
         id: "shell.graph",
         title: "commands.graph",
         description: "commands.graph.desc",
-        keybinding: "Mod-Shift-g",
         run: () => {},
       });
     }

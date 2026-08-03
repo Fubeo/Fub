@@ -28,6 +28,7 @@ import type { CommandSpec, SettingEntry } from "../host/contract";
 import { impostazioni } from "../host/query";
 import { type Chiave, t } from "../i18n/strings";
 import { state } from "../state/store";
+import { SHELL_KEYS, type ShellCommandId } from "./shell-keys";
 
 /// La chiave d'impostazione che tiene la scorciatoia di un comando.
 ///
@@ -49,11 +50,12 @@ export function keybindingKey(commandId: string): string {
 /// regola che tiene i moduli aciclici e che ha già smontato il monolite (§1.1) —
 /// chi ha interesse dichiara, e nessuno tiene la lista di tutti.
 export interface ShellCommand {
-  id: string;
+  /// Uno degli id in tabella, e nessun altro: è così che l'accordo di un
+  /// comando di shell finisce dove il presidio dei conflitti lo può leggere
+  /// (0081). Un comando nuovo non compila finché non si dichiara di là.
+  id: ShellCommandId;
   title: Chiave;
   description: Chiave;
-  /// L'accordo suggerito, nella sintassi delle spec (`Mod-Shift-f`).
-  keybinding: string | null;
   run: () => void | Promise<void>;
 }
 
@@ -140,8 +142,8 @@ export function allCommands(): CommandEntry[] {
     id: c.id,
     title: t(c.title),
     description: t(c.description),
-    binding: vuotoENull(c.keybinding),
-    declared: c.keybinding,
+    binding: vuotoENull(SHELL_KEYS[c.id]),
+    declared: SHELL_KEYS[c.id] ?? null,
     spec: null,
     run: c.run,
   }));
