@@ -45,6 +45,7 @@ import {
 import { mountExplorer } from "./panels/explorer";
 import { mountDocSearch } from "./panels/doc-search";
 import { mountGraph } from "./panels/graph";
+import { mountQuickSwitcher } from "./panels/quick-switcher";
 import { configurePreview } from "./panels/preview";
 import { clearSearch, mountSearch, searchFor } from "./panels/search";
 import { errorText } from "./host/errors";
@@ -112,6 +113,7 @@ async function init(): Promise<void> {
   // del vault, raggio ristretto al documento col fuoco. È un comando e non un
   // pannello, quindi qui basta dichiararlo.
   mountDocSearch();
+  mountQuickSwitcher();
   mountGraph();
   // Le due superfici della barra di stato (§10.3): cosa sta girando, e cosa è
   // stato detto. Il centro attività si iscrive agli eventi del kernel, quindi

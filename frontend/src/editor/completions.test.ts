@@ -120,11 +120,11 @@ describe("tagCompletions", () => {
 });
 
 describe("wikilinkSource (headless)", () => {
-  const listNotes = async () => ["Alpha.md", "Progetti/Beta.md"];
+  const cercaNote = async () => ["Alpha.md", "Progetti/Beta.md"];
 
   it("dentro [[ propone le note, dal punto giusto", async () => {
     const doc = "vedi [[Al";
-    const res = (await wikilinkSource(listNotes)(ctxAt(doc, doc.length))) as CompletionResult;
+    const res = (await wikilinkSource(cercaNote)(ctxAt(doc, doc.length))) as CompletionResult;
     expect(res).not.toBeNull();
     expect(res.from).toBe(7);
     expect(res.options.map((o) => o.label)).toEqual(["Alpha", "Beta"]);
@@ -133,13 +133,62 @@ describe("wikilinkSource (headless)", () => {
 
   it("con ]] subito dopo il cursore l'inserimento non chiude di nuovo", async () => {
     const doc = "vedi [[Al]] fine";
-    const res = (await wikilinkSource(listNotes)(ctxAt(doc, 9))) as CompletionResult;
+    const res = (await wikilinkSource(cercaNote)(ctxAt(doc, 9))) as CompletionResult;
     expect(res.options[0].apply).toBe("Alpha");
   });
 
   it("fuori contesto risponde null: nessun popup", async () => {
     const doc = "testo normale";
-    expect(await wikilinkSource(listNotes)(ctxAt(doc, doc.length))).toBeNull();
+    expect(await wikilinkSource(cercaNote)(ctxAt(doc, doc.length))).toBeNull();
+  });
+
+  // --- il §21.5, e le due righe che lo rendono vero ------------------------
+
+  it("la sorgente riceve il PREFISSO digitato, non una domanda senza argomenti", async () => {
+    // È tutta la voce: prima la sorgente chiedeva l'elenco intero e il filtro
+    // lo faceva CodeMirror; adesso la domanda porta con sé ciò che si è
+    // scritto, e a filtrare è chi ha l'indice.
+    const chiesto: string[] = [];
+    const sorgente = async (prefisso: string) => {
+      chiesto.push(prefisso);
+      return ["Alpha.md"];
+    };
+    const doc = "vedi [[Alp";
+    await wikilinkSource(sorgente)(ctxAt(doc, doc.length));
+    expect(chiesto).toEqual(["Alp"]);
+  });
+
+  it("su [[ appena aperto il prefisso è vuoto: cosa proporre lo decide chi inietta", async () => {
+    const chiesto: string[] = [];
+    const sorgente = async (prefisso: string) => {
+      chiesto.push(prefisso);
+      return ["Recente.md"];
+    };
+    const doc = "vedi [[";
+    const res = (await wikilinkSource(sorgente)(ctxAt(doc, doc.length))) as CompletionResult;
+    expect(chiesto).toEqual([""]);
+    expect(res.options.map((o) => o.label)).toEqual(["Recente"]);
+  });
+
+  it("niente validFor e filter: false — CM6 non rifiltra e non riordina", async () => {
+    // Le due metà della stessa decisione. `validFor` faceva ripartire la
+    // sorgente una volta per `[[`: con la query sul prefisso deve ripartire a
+    // ogni battuta, o si rifiltrerebbe una finestra vecchia. E `filter: false`
+    // difende l'ordine del kernel: senza, il fuzzy di CodeMirror rimescolerebbe
+    // una rilevanza calcolata dove ci sono i dati per calcolarla.
+    const doc = "vedi [[Al";
+    const res = (await wikilinkSource(cercaNote)(ctxAt(doc, doc.length))) as CompletionResult;
+    expect(res.validFor).toBeUndefined();
+    expect(res.filter).toBe(false);
+  });
+
+  it("l'ordine di chi cerca è l'ordine proposto", async () => {
+    // Il kernel ordina per pertinenza, e `noteCompletions` è un map: se un
+    // giorno diventasse un sort, questo banco diventa rosso.
+    const sorgente = async () => ["Zeta.md", "Alpha.md", "Mu.md"];
+    const doc = "vedi [[a";
+    const res = (await wikilinkSource(sorgente)(ctxAt(doc, doc.length))) as CompletionResult;
+    expect(res.options.map((o) => o.label)).toEqual(["Zeta", "Alpha", "Mu"]);
   });
 });
 

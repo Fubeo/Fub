@@ -28,18 +28,22 @@ già congelata — che è esattamente ciò che è successo al lotto e all'origin
 per cui la [0012](../decisions/0012-origine-degli-eventi.md) ha dichiarato di
 volersi decidere insieme alla [0011](../decisions/0011-il-lotto.md).
 
-Quello che resta non ha più niente che scada col freeze di M4. **Sono quattro
-voci, e sono tutte comportamento**: dove il comportamento si vede (§21.5,
-§21.7), cosa lo rende regolabile (§21.6) e cosa gli darà da mangiare (§21.8).
-Le prime due poggiano su ciò che le P0 hanno appena messo nel contratto.
+Quello che resta non ha più niente che scada col freeze di M4. **Sono tre
+voci, e sono tutte comportamento**: dove il comportamento si vede (§21.7), cosa
+lo rende regolabile (§21.6) e cosa gli darà da mangiare (§21.8). La prima poggia
+su ciò che le P0 hanno appena messo nel contratto.
 
-**E la prima superficie c'è.** La §21.4 — cercare *dentro* la nota aperta — è
-chiusa dalla [decisione 0082](../decisions/0082-una-porta-per-chi-cerca.md), che
-l'ha decisa insieme alla regola della §21.5 perché erano la stessa cosa vista
+**E le superfici ci sono tutte e quattro.** La §21.4 — cercare *dentro* la nota
+aperta — è chiusa dalla [decisione 0082](../decisions/0082-una-porta-per-chi-cerca.md),
+che l'ha decisa insieme alla regola della §21.5 perché erano la stessa cosa vista
 dai due lati: costruire una superficie che cerca senza decidere da dove passano
-tutte quelle che cercano avrebbe aggiunto la quinta. Della §21.5 resta la metà
-che è lavoro e non decisione — il quick switcher, che non esiste ancora, e
-l'autocompletamento dei wikilink, da migrare alla query con prefisso.
+tutte quelle che cercano avrebbe aggiunto la quinta. La metà che restava della
+§21.5 — lavoro e non decisione — l'ha chiusa la
+[decisione 0083](../decisions/0083-le-due-superfici-che-restavano.md): il quick
+switcher è nato sulla porta unica invece che da sé, l'autocompletamento è
+passato alla query con prefisso, e il giro per battuta che la 0082 aveva
+scelto senza misurarlo adesso è **misurato** — il banco della seduta ha una
+quinta fase apposta.
 
 **E la sesta — la §21.9, la sola che chiedesse una misura invece di un
 comportamento — è chiusa**, dalla
@@ -63,13 +67,20 @@ che lo ha prodotto.
 
 ### 21.5 Quattro superfici cercano, e rischiano di nascere con quattro ranking
 
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · shell · **P1** — **mezza chiusa** dalla [decisione 0082](../decisions/0082-una-porta-per-chi-cerca.md): la regola è decisa e la prima superficie ci passa; restano le due che mancano*
+*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · shell · **P1** — **CHIUSA** in due tempi: la regola dalla [decisione 0082](../decisions/0082-una-porta-per-chi-cerca.md), le due superfici che mancavano dalla [decisione 0083](../decisions/0083-le-due-superfici-che-restavano.md). Le caselle restano per il racconto; la voce non è più in [todo.md](../todo.md)*
 
-- [ ] **Il quick switcher (8.1) non esiste ancora**, ed è la superficie che si
+- [x] ~~**Il quick switcher (8.1) non esiste ancora**, ed è la superficie che si
       usa più della ricerca stessa: si preme una scorciatoia, si scrivono tre
       lettere, si apre una nota. Se nasce da sé, nasce su `list_documents` con un
       confronto di sottostringhe — cioè una **seconda ricerca**, peggiore della
-      prima, sulla strada più battuta dell'app.
+      prima, sulla strada più battuta dell'app.~~ Adesso c'è
+      ([0083](../decisions/0083-le-due-superfici-che-restavano.md)):
+      `panels/quick-switcher.ts` su `Mod-o`, e **non** su `list_documents` —
+      `nomeCercato` in `host/contract.ts` è la porta unica con `TextField::Name`
+      e il prefisso, `noteDalNome` in `host/query.ts` è il giro. Nel pannello non
+      compare né `IndexQuery` né `QueryExpr`, che è la regola resa verificabile.
+      A mani vuote mostra le note aperte di recente, in una memoria che vive
+      quanto la finestra: dove una cronologia si **scriva** lo decide la §21.7.
 - [x] ~~**La palette dei comandi c'è** ([0009](../decisions/0009-registro-dei-comandi.md))
       e non cabla nessun id: legge le spec e disegna. È la prova che la forma
       giusta è già stata trovata una volta, e il modello da ripetere.~~
@@ -83,7 +94,7 @@ che lo ha prodotto.
       `host/contract.ts`, non nel pannello che le usa — una superficie che se la
       compone in casa è già una seconda implementazione. La prima a passarci è
       la ricerca dentro la nota (ex §21.4).
-- [ ] **Le superfici sono quattro, e la quarta è già scritta.**
+- [x] ~~**Le superfici sono quattro, e la quarta è già scritta.**
       L'autocompletamento dei wikilink esiste
       (`frontend/src/editor/completions.ts`) e la sua sorgente chiede al canale
       dati **l'elenco intero del vault** a ogni apertura di `[[`
@@ -91,7 +102,14 @@ che lo ha prodotto.
       provvisorio — *«l'autocompletamento vuole i nomi di tutte le note, quindi
       qui la lista resta intera: cambia la porta, non la domanda»*. È la regola
       di questa voce vista dalla superficie che la viola per prima: accetta del
-      testo e propone delle note, e non passa da `IndexQuery::Documents`.
+      testo e propone delle note, e non passa da `IndexQuery::Documents`.~~
+      Adesso ci passa ([0083](../decisions/0083-le-due-superfici-che-restavano.md)):
+      la sorgente prende il **prefisso** e riceve una finestra ordinata. Le due
+      righe che contano sono una sparita e una nuova: `validFor` non c'è più —
+      era ciò che rendeva sostenibile l'elenco intero, e con la query sul
+      prefisso terrebbe buona una finestra vecchia — e `filter: false` c'è,
+      perché l'ordine di quelle opzioni **è** la rilevanza del kernel e il fuzzy
+      di CodeMirror la rimescolerebbe.
 - [x] ~~**E su questa la regola non basta, perché il budget non è per
       invocazione: è per battuta.**~~ **Decisa: la query con prefisso**
       ([0082](../decisions/0082-una-porta-per-chi-cerca.md)). La lista spinta
@@ -106,7 +124,7 @@ che lo ha prodotto.
       già P0 e già la lingua giusta — un giro per battuta, ma piccolo), oppure
       la **lista dei candidati spinta nella shell** e tenuta aggiornata dagli
       eventi (nessun giro, ma uno stato da mantenere consistente).
-- [ ] **La seconda uscita ha un vincolo che il progetto ha già scritto per gli
+- [x] ~~**La seconda uscita ha un vincolo che il progetto ha già scritto per gli
       indici, ed è ciò che la rende decidibile.** Una lista di candidati
       mantenuta dagli eventi **è** un indice alimentato dagli eventi: la cosa
       che [PIANO.md](../PIANO.md) rifiuta con l'argomento *«un indice che perde
@@ -121,12 +139,22 @@ che lo ha prodotto.
       [decisione 0051](../decisions/0051-l-alimentazione-risponde.md)
       trasportata dall'altra parte del confine: là un indice che perde un
       documento adesso lo nomina, qui la shell non ha ancora niente di
-      equivalente.
-- [ ] Va col ~~§1.2~~ per **dove** compare il modale — e quella metà adesso c'è
+      equivalente.~~ Il vincolo ha deciso, e la [0083](../decisions/0083-le-due-superfici-che-restavano.md)
+      ha **misurato** il prezzo di ciò che ha scelto: fase 5 di
+      [`una_ricerca.rs`](../../crates/fub-features/examples/una_ricerca.rs), ~3 ms
+      per battuta nel caso peggiore (la prima lettera, che combacia con tutto) e
+      metà del budget risparmiata con `Excerpts::Omit`, perché chi propone dei
+      nomi non disegna estratti. Il numero onesto da ricordare è l'altro: di lato
+      kernel l'elenco intero costa **meno** (0,13 ms) — quei 3 ms comprano la
+      correttezza, non la velocità, ed è ciò che il vincolo diceva.
+- [x] ~~Va col §1.2 per **dove** compare il modale — e quella metà adesso c'è
       ([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)): il
       riquadro col fuoco è una domanda con una risposta, quindi «aprire il
-      risultato *dove*» ha dove atterrare. Resta la §18.2 per la scorciatoia che
-      lo apre.
+      risultato *dove*» ha dove atterrare.~~ Il risultato apre nel riquadro col
+      fuoco, come ogni altra apertura. La §18.2 **resta**, e non per questa voce:
+      l'accordo è dichiarato in `SHELL_KEYS` e visto dal presidio della
+      [0081](../decisions/0081-un-accordo-ha-un-proprietario.md), ma una
+      scorciatoia di un comando di shell non è ancora riconfigurabile.
 
 ### 21.6 I pesi dei campi sono una costante di compilazione
 
@@ -159,6 +187,13 @@ che lo ha prodotto.
       La cronologia va **opzionale e spegnibile** — è materia del capitolo 23
       (privacy), non un dettaglio di comodo: cosa si è cercato dice di una
       persona più di cosa ha scritto.
+      **E adesso questa voce ha un cliente che l'aspetta**: il quick switcher
+      mostra a mani vuote le note aperte di recente
+      ([0083](../decisions/0083-le-due-superfici-che-restavano.md)), da una lista
+      che vive **quanto la finestra** (`state/recenti.ts`) proprio per non
+      anticipare la decisione di qui. Chi chiuderà questa voce decide dove una
+      cronologia si scrive e come si spegne; quel modulo ne diventa il lettore,
+      e non è un secondo posto da riconciliare.
 - [ ] **Dal risultato vuoto si crea la nota cercata.** È il gesto che chiude il
       giro in omnisearch, e da noi manca **solo il chiamante**: `note.create`
       esiste ([0013](../decisions/0013-elenco-delle-capacita.md)), sa proporre un

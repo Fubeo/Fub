@@ -27,7 +27,7 @@ function editor(): { ed: Editor; view: () => EditorView } {
     onSelectionChange: () => {},
     onOpenWikilink: () => {},
     onSearchTag: () => {},
-    completions: { listNotes: async () => [], listTags: async () => [] },
+    completions: { cercaNote: async () => [], listTags: async () => [] },
   });
   return {
     ed,

@@ -14,6 +14,7 @@ import type {
   Organization,
   DocumentMatch,
   EntryKind,
+  Excerpts,
   FolderScope,
   IndexQuery,
   JobStatus,
@@ -30,7 +31,7 @@ import type {
   VaultFolder,
   VaultStatus,
 } from "./contract";
-import { OGNI_DOCUMENTO, questiDocumenti } from "./contract";
+import { OGNI_DOCUMENTO, nomeCercato, questiDocumenti } from "./contract";
 
 /// Apre la risposta, o dice **cosa** è arrivato invece.
 ///
@@ -52,9 +53,17 @@ function open<K extends keyof PayloadOf>(result: IndexResult, kind: K): PayloadO
 }
 
 /// I documenti che combaciano.
+///
+/// `excerpts` omesso = `attach`, cioè una risposta completa: è il default del
+/// contratto e la cosa giusta per chi mostra dei risultati. Chi mostra dei
+/// **nomi** passa `omit` e non fa generare un estratto per riga — sul banco
+/// della seduta (`una_ricerca.rs`, fase 5) è la differenza fra 3 e 5 ms su un
+/// vault da duemila note, e per una superficie che parte a ogni battuta è la
+/// metà del budget spesa per del testo che nessuno disegna.
 export async function documentiCheCombaciano(
   matching: QueryExpr,
   page?: Page,
+  excerpts?: Excerpts,
 ): Promise<Paged<DocumentMatch>> {
   const query: IndexQuery = {
     kind: "documents",
@@ -62,8 +71,43 @@ export async function documentiCheCombaciano(
     sort: null,
     select: { kind: "none" },
     page: page ?? null,
+    excerpts,
   };
   return open(await api.queryIndex(query), "documents");
+}
+
+/// Quante note propone chi propone dei nomi.
+///
+/// Venti, e il numero è la finestra di ciò che si **guarda**, non di ciò che si
+/// cerca: nessuno legge la ventunesima riga di un elenco che si ridisegna
+/// mentre si scrive, e la finestra è ciò che tiene il giro per battuta lontano
+/// dal costo per risultato misurato dal banco.
+const QUANTI_NOMI = 20;
+
+/// **Le note il cui nome combacia**, dalla più pertinente: il giro per battuta
+/// del quick switcher e dell'autocompletamento dei wikilink (§21.5).
+///
+/// È una funzione sola per le due superfici perché è **una** domanda: se
+/// domani il ranking dei nomi cambia — la tolleranza ai refusi della §21.1, i
+/// pesi regolabili della §21.6 — cambia qui, e le due superfici lo scoprono
+/// insieme invece che una alla volta (0082, 0083).
+///
+/// L'ordine che torna è quello del kernel, ed è ciò che chi disegna deve
+/// **rispettare**: un secondo ordinamento nella shell — il fuzzy di CodeMirror,
+/// un `sort` per nome — rimescolerebbe una rilevanza calcolata dove ci sono i
+/// dati per calcolarla, e le due ricerche tornerebbero due.
+export async function noteDalNome(testo: string, quante = QUANTI_NOMI): Promise<string[]> {
+  const scritto = testo.trim();
+  // La query vuota non si manda: il provider risponderebbe «nessun predicato
+  // di testo», cioè tutto il vault, e sarebbe l'elenco intero rientrato dalla
+  // finestra. Chi ha bisogno di mostrare qualcosa a mani vuote lo decide da sé.
+  if (!scritto) return [];
+  const page = await documentiCheCombaciano(
+    nomeCercato(scritto),
+    { offset: 0, limit: quante },
+    "omit",
+  );
+  return page.items.map((m) => m.doc);
 }
 
 /// Quali di questi documenti **esistono**, in una domanda sola.

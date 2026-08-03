@@ -939,6 +939,43 @@ export function testoNelDocumento(
   };
 }
 
+// Il testo cercato **nel nome delle note**, e nient'altro.
+//
+// È la terza configurazione della porta unica (0082): il quick switcher e
+// l'autocompletamento dei wikilink non cercano dentro le note — propongono
+// **nomi**, ed è ciò che `TextField::Name` esiste per dire. La differenza con
+// `testoCercato` non è di ranking ma di dominio: cercare `rust` ovunque trova le
+// trecento note che ne parlano, e chi ha premuto la scorciatoia per aprire la
+// nota *Rust* le voleva tutte e trecento davanti a sé come non le vorrebbe mai.
+//
+// `mentreSiDigita` qui è il caso NORMALE e non l'eccezione: queste due
+// superfici partono a ogni battuta, e chi ha scritto `ar` sta cercando
+// *architettura* e non una nota che si chiami «ar». È il prefisso della §21.2,
+// e la ragione per cui non lo mette la casella appendendo un `*` è la stessa di
+// `testoCercato`: la dice la query, o due chiamanti diversi cercano in due
+// lingue diverse.
+export function nomeCercato(text: string, mentreSiDigita = true): QueryExpr {
+  return {
+    any: [
+      {
+        all: [
+          {
+            negated: false,
+            predicate: {
+              kind: "text",
+              text,
+              mode: "terms",
+              fields: ["name"],
+              tolerance: "exact",
+              partial_last_term: mentreSiDigita,
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 // Questi documenti, per nome: la foglia che chiede «quali di questi esistono?».
 // Chi la valuta la restringe a ciò che l'indice conosce, quindi la risposta è
 // l'intersezione — ed è il modo di verificare un pugno di path in UNA domanda
@@ -1029,6 +1066,12 @@ export interface Heading {
   slug: string;
   span: Span;
 }
+
+// Se una risposta porta gli estratti (§21.9). Sta fra i tipi ri-esportati e non
+// solo dentro `IndexQuery` perché chi compone una domanda dal canale
+// (`host/query.ts`) deve poterlo **nominare**: «voglio i nomi e non il testo
+// attorno» è una scelta di chi chiede, non un dettaglio della variante.
+export type { Excerpts } from "./enums.generated";
 
 // Una interrogazione (rispecchia fub_abi::traits::IndexQuery).
 export type IndexQuery =

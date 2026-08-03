@@ -27,7 +27,10 @@ frontend/src/
   style.css      le regole dei componenti
 
   host/          la cucitura con l'esterno, e nient'altro
-    contract.ts    i tipi (e i pochi valori) rispecchiati dal Rust (nessun @tauri-apps)
+    contract.ts    i tipi (e i pochi valori) rispecchiati dal Rust (nessun @tauri-apps),
+                   e le QUERY: `testoCercato`, `testoNelDocumento`, `nomeCercato`.
+                   Si compongono qui e non nei pannelli — una porta sola verso
+                   l'indice, con tre configurazioni (decisioni 0082, 0083)
     enums.generated.ts  le union di stringhe EMESSE dai tipi Rust (decisione 0053)
     ipc.ts         `api` + il canale eventi: i comandi del backend
     query.ts       il canale dati: si costruisce una query, si apre una risposta
@@ -40,6 +43,8 @@ frontend/src/
     kernel.ts      il router degli eventi del kernel
     vault.ts       le operazioni sul vault (tutte dal registro comandi)
     organization.ts  l'organizzazione del vault: specchio + le quattro scritture
+    recenti.ts     le note aperte di recente: memoria corta, in RAM, che il
+                   quick switcher mostra a mani vuote (§21.5, §21.7)
 
   ui/            le primitive di interfaccia, senza dominio (un'eccezione: intents.ts)
     node.ts        il renderer di `UiNode`
@@ -57,9 +62,11 @@ frontend/src/
                    sessione del riquadro col fuoco
     preview.ts     il documento reso (modalità Lettura) e gli embed
     explorer.ts    l'albero, gli spazi, le appuntate, il drag & drop
-    search.ts      la barra e i risultati (§21.4-§21.5: qui atterrano anche il
-                   quick switcher e la ricerca dentro la nota aperta — una porta
-                   sola verso l'indice, non tre)
+    search.ts      la barra e i risultati del vault
+    doc-search.ts  la ricerca **dentro la nota aperta** (§21.4), su `Mod-f`
+    quick-switcher.ts  vai alla nota (§21.5, FEATURES 8.1), su `Mod-o`: cerca
+                   per **nome**, e a mani vuote mostra le recenti
+                   (`state/recenti.ts`, una memoria che vive quanto la finestra)
     trash.ts       **solo il gesto**: la conferma prima di cestinare una nota.
                    Il pannello del cestino è una view dichiarata (§1.2), e la
                    cronologia — che era `history.ts` — anche: il file non c'è più

@@ -101,6 +101,21 @@ const IT = {
   "commands.doc.search": "Cerca nella nota",
   "commands.doc.search.desc": "Cerca dentro la nota aperta, con lo stesso motore del vault.",
 
+  // --- il quick switcher (§21.5) -----------------------------------------
+  //
+  // «Vai alla nota» e non «apri nota»: il gesto non è aprire qualcosa di nuovo,
+  // è **spostarsi** su una nota che di solito si sa già di avere — ed è la
+  // ragione per cui questa superficie si usa più della ricerca.
+  "switcher.title": "Vai alla nota",
+  "switcher.placeholder": "Vai alla nota…",
+  // A mani vuote si mostrano le recenti, quindi questa riga compare solo
+  // quando non se ne è ancora aperta nessuna: dice cosa fare, non che non c'è
+  // niente.
+  "switcher.hint": "Scrivi il nome di una nota",
+  "switcher.empty": "Nessuna nota con questo nome",
+  "commands.switcher": "Vai alla nota",
+  "commands.switcher.desc": "Apri una nota cercandola per nome, con lo stesso motore del vault.",
+
   // --- l'esplora ---------------------------------------------------------
   "explorer.notes": "Note",
   "explorer.notes.hint": "Note del vault",
@@ -365,6 +380,13 @@ const EN: Record<Chiave, string> = {
   "docsearch.no_doc": "No note open",
   "commands.doc.search": "Search in note",
   "commands.doc.search.desc": "Search inside the open note, with the same engine as the vault.",
+
+  "switcher.title": "Go to note",
+  "switcher.placeholder": "Go to note…",
+  "switcher.hint": "Type the name of a note",
+  "switcher.empty": "No note with this name",
+  "commands.switcher": "Go to note",
+  "commands.switcher.desc": "Open a note by searching its name, with the same engine as the vault.",
 
   "explorer.notes": "Notes",
   "explorer.notes.hint": "Notes of the vault",
