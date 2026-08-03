@@ -110,7 +110,10 @@ fn no_two_official_commands_want_the_same_chord() {
                 .push(spec.id.clone());
         }
     }
-    let contesi: Vec<_> = per_accordo.iter().filter(|(_, ids)| ids.len() > 1).collect();
+    let contesi: Vec<_> = per_accordo
+        .iter()
+        .filter(|(_, ids)| ids.len() > 1)
+        .collect();
     assert!(
         contesi.is_empty(),
         "due comandi ufficiali vogliono lo stesso accordo: {contesi:?}"
