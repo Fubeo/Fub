@@ -16,6 +16,10 @@
 //! - [`stats`] — il pannello statistiche come
 //!   [`ViewProvider`](fub_abi::traits::ViewProvider): parole, caratteri,
 //!   selezione e tempo di lettura dal **contesto di sessione** (M2, decisione 0007).
+//! - [`trash`] — il cestino come
+//!   [`ViewProvider`](fub_abi::traits::ViewProvider): elenca `list_trash` e
+//!   agisce con i comandi `trash.restore` e `trash.empty` del registro, senza
+//!   una capacità sua (§1.2).
 //! - [`search`] — [`IndexProvider`](fub_abi::traits::IndexProvider) full-text
 //!   su tantivy, persistente e incrementale (M2).
 //! - [`commands`] — i comandi ufficiali come
@@ -49,6 +53,8 @@ pub mod search;
 pub mod stats;
 #[cfg(feature = "tags")]
 pub mod tags;
+#[cfg(feature = "trash")]
+pub mod trash;
 #[cfg(feature = "versioning")]
 pub mod versioning;
 
@@ -76,5 +82,7 @@ pub use stats::{
 };
 #[cfg(feature = "tags")]
 pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
+#[cfg(feature = "trash")]
+pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};
 #[cfg(feature = "versioning")]
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};

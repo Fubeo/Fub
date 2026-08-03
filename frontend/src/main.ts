@@ -8,7 +8,6 @@
 // somma di eccezioni a quella regola, era arrivato a 1622 righe con 81 funzioni
 // e 18 variabili globali (§1.1, §1.2).
 import "./style.css";
-import { hasPlugin } from "./host/contract";
 import { pickFolder } from "./host/dialog";
 import { api } from "./host/ipc";
 import { statoDelVault, vociDelVault } from "./host/query";
@@ -37,10 +36,8 @@ import {
 } from "./panels/document";
 import { mountExplorer } from "./panels/explorer";
 import { mountGraph } from "./panels/graph";
-import { mountHistory } from "./panels/history";
 import { configurePreview } from "./panels/preview";
 import { clearSearch, mountSearch, searchFor } from "./panels/search";
-import { mountTrash } from "./panels/trash";
 import { errorText } from "./host/errors";
 
 const vaultPathEl = $("#vault-path");
@@ -108,8 +105,6 @@ async function init(): Promise<void> {
   mountViewInvalidation();
   mountExplorer();
   mountSearch();
-  mountTrash();
-  mountHistory();
   mountGraph({ openNote: (id) => void openDocument(id) });
   // Le due superfici della barra di stato (§10.3): cosa sta girando, e cosa è
   // stato detto. Il centro attività si iscrive agli eventi del kernel, quindi
@@ -184,10 +179,6 @@ async function openVaultPath(dir: string): Promise<void> {
   state.vaultRoot = info.root;
   state.handledExtensions =
     info.extensions.length > 0 ? info.extensions : state.handledExtensions;
-  // §7.6: non un booleano che il backend calcola per noi, ma una domanda
-  // all'inventario di ciò che è attivo.
-  state.versioningOn = hasPlugin(info, "fub.versioning");
-
   await loadOrganization();
   // Lo stato di vista di **questo** vault (§11.2): come lo si stava guardando.
   // Dopo l'apertura, perché è il backend a tenerlo e la chiave è il vault

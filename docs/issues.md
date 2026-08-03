@@ -708,7 +708,13 @@ problema che non c'è.
 
 ## 0039 — TOCTOU Race Condition in propose_free_name
 
-**Dove:** `crates/fub-app/src/lib.rs`
+**Dove:** `crates/fub-kernel/src/workspace.rs` (`Workspace::free_name`). Era il
+comando IPC `propose_free_name` in `crates/fub-app/src/lib.rs`, che non esiste
+più — chi chiede un nome libero adesso è il pannello cestino, dall'altro lato del
+confine (verbale [0075](decisions/0075-una-view-non-chiede-con-una-finestra.md),
+che è un altro 0075: questo elenco e quello delle decisioni numerano per conto
+loro). La
+corsa è la stessa: cambia solo chi la corre.
 
 **Stato:** Da revisionare
 

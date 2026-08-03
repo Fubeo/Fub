@@ -35,9 +35,8 @@ use fub_abi::settings::SettingValue;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
-use fub_features::VersionRef;
 use fub_host::{doc_id, EventSink, Host};
-use fub_kernel::{RenderedDocument, TrashEntry};
+use fub_kernel::RenderedDocument;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -173,36 +172,14 @@ fn write_document(
 // aggiungere un comando Tauri" — che finché quelle cinque stavano qui valeva
 // solo per le feature che non toccano il vault.
 //
-// Restano le due LETTURE del giro, e resta la stessa linea a dividerle: un
-// `CommandOutcome` porta un messaggio e un effetto, non dati. Ciò che risponde
-// con dei dati si chiede al canale di lettura, come i documenti, i tag e i
-// backlink — anche quando i dati riguardano il cestino, e anche quando la
-// risposta è un nome.
-
-#[tauri::command]
-fn list_trash(host: State<Host>, vault: Option<String>) -> Result<Vec<TrashEntry>, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
-    ws.list_trash().map_err(PluginError::from)
-}
-
-/// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, … a partire da un
-/// path occupato (D3).
-///
-/// Esiste per non avere **due** implementazioni della stessa convenzione: la
-/// proposta che il frontend mostra quando un ripristino trova il path occupato
-/// esce dallo stesso codice che nomina le note nuove. Non prenota nulla — il
-/// kernel resta il backstop se il nome viene preso nel frattempo.
-#[tauri::command]
-fn propose_free_name(
-    host: State<Host>,
-    id: String,
-    vault: Option<String>,
-) -> Result<String, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
-    Ok(ws.free_name(&DocId::new(id)).0)
-}
+// E adesso non restano nemmeno le due LETTURE che il giro si era tenuto —
+// `list_trash` e `propose_free_name`. Non sono state migrate: sono rimaste
+// **senza chiamante**. Le chiedeva il pannello cestino di questa shell, che dal
+// §1.2 è un `ViewProvider` e le chiede dall'altro lato del confine, dove sono
+// due capacità del contratto (`VaultRead::list_trash`, `VaultRead::free_name`)
+// e non due porte. Una porta che nessuno attraversa è una promessa che nessuno
+// mantiene: il modo giusto di reggerla è toglierla, e rimetterla il giorno che
+// qualcuno di qua abbia di nuovo quella domanda.
 
 /// Contenuto di un embed `![[page#heading]]`: il frontend lo innesta nel
 /// placeholder emesso dal provider (profondità massima e cicli a suo carico).
@@ -459,34 +436,14 @@ fn cancel_job(host: State<Host>, id: String, vault: Option<String>) -> Result<()
 // Il kernel non sa che il versioning esiste, e comporre le due metà — lo store
 // e l'handler registrato — è lavoro dell'host: qui restano le tre firme IPC.
 
-#[tauri::command]
-fn list_versions(
-    host: State<Host>,
-    id: String,
-    vault: Option<String>,
-) -> Result<Vec<VersionRef>, PluginError> {
-    host.list_versions(vault.as_deref(), &DocId::new(id))
-}
-
-#[tauri::command]
-fn read_version(
-    host: State<Host>,
-    id: String,
-    ts: u64,
-    vault: Option<String>,
-) -> Result<String, PluginError> {
-    host.read_version(vault.as_deref(), &DocId::new(id), ts)
-}
-
-#[tauri::command]
-fn restore_version(
-    host: State<Host>,
-    id: String,
-    ts: u64,
-    vault: Option<String>,
-) -> Result<(), PluginError> {
-    host.restore_version(vault.as_deref(), &DocId::new(id), ts)
-}
+// Il versioning **non ha più tre porte**. `list_versions`, `read_version` e
+// `restore_version` erano i tre bespoke che la §16.6 aveva già classificato —
+// due letture e un comando — e chi li chiamava era uno solo: il pannello
+// cronologia di questa shell. Dal §1.2 la cronologia è un `ViewProvider` della
+// feature versioning, cioè dello stesso plugin che le versioni le scrive: legge
+// dal proprio spazio dati e ripristina invocando `version.restore`, che adesso è
+// un comando del **registro** e non di Tauri. Le due letture non sono state
+// migrate a `IndexQuery`: sono sparite, perché chi le faceva era di là.
 
 // --- organizzazione del vault (§11.3) ---------------------------------------
 //
@@ -717,8 +674,6 @@ pub fn run() {
             initial_vault,
             read_document,
             write_document,
-            list_trash,
-            propose_free_name,
             render_preview,
             render_embed,
             set_active_context,
@@ -730,9 +685,6 @@ pub fn run() {
             invoke_command,
             query_index,
             cancel_job,
-            list_versions,
-            read_version,
-            restore_version,
             set_icon,
             set_pinned,
             set_space,

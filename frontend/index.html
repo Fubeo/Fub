@@ -112,15 +112,6 @@
               >
                 + Nuova
               </button>
-              <button
-                id="show-trash"
-                class="link-button"
-                data-i18n="trash.title"
-                data-i18n-title="trash.hint"
-                title="Apri il cestino"
-              >
-                Cestino
-              </button>
             </div>
             <div class="panel-title" id="pinned-title" role="heading" aria-level="2" hidden>
               <span data-i18n="explorer.pinned">Appuntate</span>
@@ -134,30 +125,6 @@
             ></ul>
           </div>
           <div id="views-left"></div>
-          <div id="trash-panel" hidden>
-            <div class="panel-title" role="heading" aria-level="2">
-              <span data-i18n="trash.title">Cestino</span>
-              <button
-                id="empty-trash"
-                class="link-button"
-                data-i18n="trash.empty_button"
-                data-i18n-title="trash.empty_button.hint"
-                title="Cancella tutto per sempre"
-              >
-                Svuota
-              </button>
-              <button
-                id="close-trash"
-                class="link-button"
-                data-i18n="app.close"
-                data-i18n-title="trash.back"
-                title="Torna alle note"
-              >
-                Chiudi
-              </button>
-            </div>
-            <ul id="trash-list" role="list"></ul>
-          </div>
         </aside>
         <section id="editor-pane" data-i18n-label="region.document" aria-label="Documento">
           <div id="editor"></div>
@@ -171,14 +138,6 @@
           <!-- Le view dichiarative (Struttura, Tag, Backlink, …) si montano
                qui per placement: gli id e i titoli li dichiara il backend. -->
           <div id="views-right"></div>
-          <div id="history-panel" hidden>
-            <div class="panel-title" role="heading" aria-level="2">
-              <span data-i18n="history.title">Cronologia</span>
-              <span id="history-summary" class="muted"></span>
-            </div>
-            <ul id="history-list" role="list"></ul>
-            <pre id="history-preview" tabindex="0" hidden></pre>
-          </div>
         </section>
         <section
           id="views-bottom"

@@ -179,9 +179,11 @@ Le caselle residue oggi sono **nove**, e stanno in cinque posti:
 derivate),
 [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
 (una: l'implementazione additiva delle due radici), il
-[§16.6](roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) (una: i cinque
-bespoke da migrare — ed è la prima casella residua che **non vive in una riga di
-prosa**, perché il suo numero lo asserisce un test), la
+[§16.6](roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) (una: i due bespoke
+del render ancora da migrare — erano cinque fino alla
+[0075](decisions/0075-una-view-non-chiede-con-una-finestra.md) — ed è la prima
+casella residua che **non vive in una riga di prosa**, perché il suo numero lo
+asserisce un test), la
 [seduta 19](roadmap/19-debito-quarto-audit.md) (tre rimandi) e la
 [§22.3](roadmap/22-cosa-sa-dire-un-abbonamento.md#223-la-maschera-di-ridisegno-è-della-view-non-dellesemplare)
 (una: la query incorporata in una nota, che non è un esemplare di `ViewSpec` e

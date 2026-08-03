@@ -23,6 +23,12 @@ lato la tastiera (§18.2) che deve arbitrare fra i comandi del kernel e quelli
 della shell prima che §4.4 le chieda un secondo livello di decorazioni. La
 §2.9 non è in coda a nessuno: si paga quando le liste diventano lunghe.
 
+Del §1.2 è caduta la parte che non aspettava niente — cestino e cronologia sono
+due `ViewProvider`
+([0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)) — e ciò che
+resta della voce è **solo** il modello di layout, cioè esattamente il nodo di
+quell'ordine.
+
 Le due voci native della seduta. La 18.2 dipende dal registro comandi
 ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), che è fatto: oggi la
 shell **onora** i `keybinding` dichiarati dai comandi e ignora quelli senza
@@ -90,7 +96,7 @@ decidere per loro.
 
 ### 1.2 Smontare il monolite
 
-*ex §3.1 · shell · **P1** — dalla [seduta 1](01-forma-della-shell.md) ([decisione 0015](../decisions/0015-la-forma-della-shell.md)); tre punti su quattro sono fatti*
+*ex §3.1 · shell · **P1** — dalla [seduta 1](01-forma-della-shell.md) ([decisione 0015](../decisions/0015-la-forma-della-shell.md)); resta il modello di layout, ed è l'unico*
 
 - [x] **Un modulo per dominio** (`explorer`, `search`, `trash`, `history`,
       `graph`) con un piccolo store condiviso e un router di eventi kernel:
@@ -106,16 +112,18 @@ decidere per loro.
       [architecture/shell.md](../architecture/shell.md).
 - [x] **Il protocollo di disegno** che la seduta 2 le bloccava, chiuso con la
       [decisione 0016](../decisions/0016-cosa-e-una-view.md).
-- [ ] **Migrare cestino e cronologia a `ViewProvider`** (dogfooding già
-      pianificato): la cronologia è il caso "view con stato per-documento,
-      input e azioni che scrivono". Era bloccata dalla seduta 2 e **non lo è
-      più** — la 0016 le dà i nodi di input, lo stato su `on_action`, il «sto
-      caricando» e il riconciliatore che rende usabile un campo di testo. Migrarla
-      prima avrebbe dato una view che sa mostrare la lista e non sa offrire il
-      bottone «Ripristina» se non come `list_item` cliccabile, cioè il protocollo
-      collaudato su un caso ammorbidito per farlo passare. Ora il caso non è più
-      ammorbidito, e resta solo da farlo. **È l'unica delle quattro code che non
-      aspetta nient'altro**, ed è il motivo per cui vale la pena che stia in cima.
+- [x] ~~**Migrare cestino e cronologia a `ViewProvider`**~~ — **fatto** con la
+      [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md), e ha
+      trovato due cose che questa riga non prevedeva. La prima: le due domande
+      del cestino non volevano un `ViewUpdate::Confirm` nel contratto, si
+      **disegnano** — la domanda in corso sta nello stato di vista dell'esemplare
+      e l'albero la mostra al posto dell'elenco. La seconda: alla cronologia non
+      mancava un canale. È una view della feature *versioning*, cioè dello stesso
+      plugin che le versioni le scrive, quindi le rilegge dal proprio spazio dati
+      — e le due letture che il §16.6 voleva migrare a `IndexQuery` non sono
+      migrate, sono **sparite** insieme al loro unico chiamante. Con loro se ne
+      sono andate cinque porte IPC in tutto, e il debito dichiarato del §16.6 è
+      sceso da cinque a due.
 - [ ] **Modello di layout**: tab, split, pane, workspace salvabili (3.3, 4.1).
       Oggi c'è un editor solo e un documento solo: tutto il capitolo 3.3 è
       bloccato da questa mancanza, non dalla UI. **Non è un refactor, è una

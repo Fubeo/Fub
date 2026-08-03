@@ -153,12 +153,19 @@ dichiarata guardando le voci insieme, come la seduta chiede.
       ha prodotto **sei** categorie e non tre — fra cui *la porta è una
       credenziale*, che salva sei comandi da una migrazione sbagliata (`set_setting`
       non poteva essere `settings.set`: sono due autorità, non due strade).
-- [ ] **Migrare i bespoke che restano — e sono cinque, non tre.** ~~cestino (4)~~,
-      ~~organizzazione (2)~~ e ~~grafo (1)~~ sono fatti; il grafo lo era **da
+- [ ] **Migrare i bespoke che restano — e adesso sono due.** ~~cestino (4)~~,
+      ~~organizzazione (2)~~ e ~~grafo (1)~~ erano già fatti; il grafo lo era **da
       prima**, con la [0019](../decisions/0019-il-canale-dati.md), e questa riga
-      non se n'era accorta. Restano il versioning (`list_versions` e
-      `read_version` sono letture → `IndexQuery`, `restore_version` è un comando
-      → registro) e **due che nessuno nominava**: `render_preview` e
+      non se n'era accorta. ~~Il versioning (3)~~ se n'è andato con la
+      [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md), e non
+      come questa riga si aspettava: `restore_version` è diventato davvero un
+      comando del registro (`version.restore`), ma `list_versions` e
+      `read_version` **non sono migrate a `IndexQuery`** — sono sparite, perché
+      chi le chiamava era il pannello cronologia di questa shell, che adesso è un
+      `ViewProvider` della feature versioning e legge dal proprio spazio dati.
+      Davanti a un bespoke la prima domanda non è *su che canale lo sposto*: è
+      **chi lo chiama, e da che parte del confine dovrebbe stare**.
+      Restano i **due che nessuno nominava**: `render_preview` e
       `render_embed`, che rispondono con dati e per cui un `ViewProvider` non ha
       nessuna porta mentre la shell ce l'ha. Il criterio per farlo è deciso,
       quindi è lavoro; ma chi lo prende deve porre una domanda di firma che qui

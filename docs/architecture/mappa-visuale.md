@@ -348,8 +348,10 @@ risposte del kernel sono **un provider registrato per primo**, non un ramo prima
 del ciclo, e chi serve cosa è dichiarato al montaggio — un conflitto si vede
 subito, e «nessuno la serve» è distinguibile da «chi la serve ha fallito».
 
-**🧩 I provider** — otto bundle di feature montati da `fub-host` (ricerca,
-versioning, quattro view, comandi, blocchi), più un nono intestato al core
+**🧩 I provider** — nove bundle di feature montati da `fub-host` (ricerca,
+versioning — che dalla [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)
+porta anche la sua view e il suo comando —, cinque view, comandi, blocchi), più
+un decimo intestato al core
 stesso, che non registra nulla e serve solo a dargli un'identità nel registro.
 E il provider markdown, che è il primo cliente del `FormatRegistry` e non un
 caso speciale.

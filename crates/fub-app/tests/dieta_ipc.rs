@@ -193,20 +193,13 @@ const ALLOWLIST: &[(&str, Perche)] = &[
         "write_document",
         Perche::CapacitaDelContratto("VaultWrite::write_document"),
     ),
-    // Il cestino **non è indicizzato**: una nota cestinata non ha modello, né
-    // tag, né archi. Chiederla al canale dati vorrebbe dire promettere che quel
-    // canale risponda su ciò che non ha letto — per questo 0013 ha messo
-    // `list_trash` accanto a `list_documents` e non dentro `IndexQuery`.
-    (
-        "list_trash",
-        Perche::CapacitaDelContratto("VaultRead::list_trash"),
-    ),
-    // Un nome libero non è un fatto sul vault: è una **convenzione** applicata a
-    // un path occupato. Esiste per non averne due implementazioni.
-    (
-        "propose_free_name",
-        Perche::CapacitaDelContratto("VaultRead::free_name"),
-    ),
+    // Qui stavano `list_trash` e `propose_free_name`, ed erano due righe
+    // legittime: due capacità del contratto affacciate alla shell. Se ne sono
+    // andate col pannello cestino, che dal §1.2 è un `ViewProvider` e le chiede
+    // dall'altro lato del confine. Non è una migrazione — non hanno cambiato
+    // canale, hanno perso il chiamante — ed è il modo in cui questo elenco
+    // accorcia più spesso: non spostando una porta, ma smettendo di averne
+    // bisogno.
     // --- ciò che vale perché lo dice questa porta ---------------------------
     ("set_active_context", Perche::LaPortaEUnaCredenziale),
     ("set_system_locale", Perche::LaPortaEUnaCredenziale),
@@ -221,30 +214,20 @@ const ALLOWLIST: &[(&str, Perche)] = &[
     ("set_order", Perche::AspettaUnCliente),
     // --- il debito, che il §16.6 nomina e che qui si conta ------------------
     //
-    // Il versioning: due letture e un comando. `list_versions` e `read_version`
-    // rispondono con dati — l'elenco delle revisioni, il testo di una — e per la
-    // riga che divide vanno sul canale di lettura. `restore_version` invece fa
-    // accadere qualcosa: è un comando vero, ma è **bespoke**, e i comandi veri
-    // hanno un registro da cui una palette, una macro e una CLI li vedono tutti.
-    (
-        "list_versions",
-        Perche::DaMigrare {
-            verso: "IndexQuery",
-        },
-    ),
-    (
-        "read_version",
-        Perche::DaMigrare {
-            verso: "IndexQuery",
-        },
-    ),
-    (
-        "restore_version",
-        Perche::DaMigrare {
-            verso: "il registro dei comandi",
-        },
-    ),
-    // E due che il §16.6 **non** nominava, trovate applicando lo stesso metro.
+    // Il versioning **non è più qui**, e le sue tre righe sono la lezione più
+    // utile che questo elenco abbia dato finora. Erano classificate «due letture
+    // → `IndexQuery`» e «un comando → il registro», e la classificazione era
+    // giusta a metà: il comando è diventato davvero un comando del registro
+    // (`version.restore`), ma le due letture non sono migrate da nessuna parte —
+    // sono **sparite**, perché chi le faceva era il pannello cronologia di
+    // questa shell, e dal §1.2 la cronologia è un `ViewProvider` della feature
+    // versioning, che legge dal proprio spazio dati.
+    //
+    // Cioè: la domanda giusta davanti a un bespoke non è sempre *su che canale
+    // lo sposto*, è prima *chi lo chiama, e da che parte del confine dovrebbe
+    // stare*. Un `IndexQuery::Versions` scritto a suo tempo sarebbe oggi una
+    // rotta del contratto che nessuno percorre.
+    // Restano due, che il §16.6 **non** nominava, trovate applicando lo stesso metro.
     //
     // `render_preview` risponde con un `RenderedDocument` e `render_embed` con un
     // `EmbedContent`: sono dati, e nessuna delle due è il ponte generico, una
@@ -547,8 +530,8 @@ fn il_debito_dichiarato_e_un_numero_presidiato() {
 
     assert_eq!(
         da_migrare.len(),
-        5,
-        "i comandi ancora da migrare sono {} e non 5:\n  {}\n\
+        2,
+        "i comandi ancora da migrare sono {} e non 2:\n  {}\n\
          Aggiorna il numero in questo test. Se sei arrivato a zero, il §16.6 ha finito\n\
          il suo debito e questa asserzione è la riga che te lo dice.",
         da_migrare.len(),

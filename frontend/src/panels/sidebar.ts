@@ -1,6 +1,6 @@
 // Quale dei pannelli della sidebar occupa lo spazio.
 //
-// I tre si escludono a vicenda: uno solo alla volta, e chi ne apre uno non deve
+// I due si escludono a vicenda: uno solo alla volta, e chi ne apre uno non deve
 // ricordarsi di chiudere gli altri. Prima la regola stava in `main.ts`, che era
 // anche l'unico posto da cui la si poteva invocare; qui è di chiunque ne abbia
 // bisogno — ed è il pezzetto di "modello di layout" che questa shell ha
@@ -8,12 +8,11 @@
 // del §1.2 lasciata aperta).
 import { $ } from "../ui/dom";
 
-export type SidebarPanel = "files" | "search" | "trash";
+export type SidebarPanel = "files" | "search";
 
 const panels: Record<SidebarPanel, HTMLElement> = {
   files: $("#files-panel"),
   search: $("#search-panel"),
-  trash: $("#trash-panel"),
 };
 
 export function showPanel(panel: SidebarPanel): void {

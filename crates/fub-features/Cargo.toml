@@ -24,6 +24,7 @@ default = [
     "outline",
     "tags",
     "stats",
+    "trash",
     "commands",
     "blocks",
 ]
@@ -33,6 +34,13 @@ backlinks = []
 outline = []
 tags = []
 stats = []
+# Il cestino invoca `trash.restore` e `trash.empty`, che sono comandi del
+# registro e li dichiara `commands`. Non è una dipendenza di **compilazione** —
+# un id di comando è una stringa del contratto, non un item Rust, e infatti
+# `trash.rs` non nomina `crate::` — è una dipendenza di **funzionamento**: senza
+# quel bundle i due bottoni del pannello premono un registro che non ha quei
+# comandi. Dichiararla qui è il modo di non spedire quella build.
+trash = ["commands"]
 commands = []
 blocks = []
 
