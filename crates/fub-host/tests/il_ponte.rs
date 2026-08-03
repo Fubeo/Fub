@@ -18,9 +18,19 @@
 //! primo evento, il test ne accoda mille sapendo che nessuno li sta ritirando,
 //! e poi lo libera. Da quel momento il ponte trova mille eventi in coda **per
 //! forza**, e ciò che consegna è la politica, non la fortuna.
+//!
+//! # E perché non si aspetta nemmeno il ponte a occhio
+//!
+//! Il banco deve cominciare a contare da un ponte silenzioso, e l'apertura a
+//! fasi (§15.7) di eventi ne racconta parecchi. Sapere che l'apertura ha finito
+//! — `wait_indexed` — non dice **quanti dei suoi eventi il ponte abbia già
+//! consegnato**: il ponte è un thread a sé, e quella è l'unica domanda che
+//! conta qui. Chiederlo guardando cosa è arrivato al sink e poi buttarlo è
+//! guardare due volte una cosa che si muove; il banco lo ha fatto per un po', e
+//! si è visto — vedi [`SinkConFreno`] e il **sigillo**.
 
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
@@ -29,42 +39,92 @@ use fub_abi::traits::JobId;
 use fub_abi::{Event, Notice};
 use fub_host::{EventSink, Host, NoWatcher};
 
+/// Il topic del **sigillo**: l'evento che chiude l'apertura e apre il conto.
+///
+/// È un `custom` perché di tutte le specie del contratto è quella che nessuna
+/// delle due riduzioni può toccare — non ha una grana con cui raggrupparsi
+/// (`bridge::grain`) e non è recuperabile, quindi né il tetto del bus né il
+/// degrado lo sostituiscono con un «riconcilia». Un sigillo che il ponte può
+/// legittimamente non consegnare non sigillerebbe niente.
+const SIGILLO: &str = "test.banco:pronto";
+
 /// Un sink che si ferma al primo evento e riparte quando glielo si dice.
 ///
 /// È la barriera a due tempi della decisione 0032, applicata al ponte: il primo
 /// `emit` blocca il thread del ponte, e finché è bloccato tutto ciò che il bus
 /// riceve si accumula. Nessun `sleep`, e nessuna ipotesi su chi sia più veloce.
+///
+/// # Perché tutto sta sotto **un** lucchetto
+///
+/// Il sink fa due cose per ogni evento — lo registra, e decide se fermarsi — e
+/// il banco ne fa due sue: azzera il conto e arma la barriera. Quando erano due
+/// lucchetti (`visti` e `via`) le due coppie si potevano intrecciare, e una
+/// delle quattro trecce fermava il banco per sempre: il ponte registrava
+/// l'ultimo evento dell'apertura, il banco lo vedeva, azzerava e armava, e il
+/// ponte — ripreso — trovava la barriera armata e **si fermava su un evento che
+/// il test aveva appena buttato**. Da lì `visti` era vuoto e il ponte fermo:
+/// ogni attesa successiva contava zero, che è precisamente il rosso da cui
+/// questo commento nasce. Sotto un lucchetto solo quella treccia non esiste,
+/// perché registrare e decidere sono la stessa mossa.
 struct SinkConFreno {
-    visti: Arc<Mutex<Vec<Notice>>>,
-    via: Mutex<Option<Receiver<()>>>,
+    stato: Mutex<Stato>,
+    campana: Condvar,
+}
+
+/// Le due fasi del banco. Prima del sigillo si butta tutto e non ci si ferma
+/// mai; dopo, si registra tutto e ci si ferma una volta.
+#[derive(PartialEq)]
+enum Fase {
+    /// L'apertura sta ancora raccontandosi: ciò che arriva è suo.
+    Apertura,
+    /// Il sigillo è passato: da qui in poi ogni evento è del test.
+    Conto,
+}
+
+struct Stato {
+    fase: Fase,
+    visti: Vec<Notice>,
+    /// **La barriera**: il primo evento del conto la prende e si ferma finché
+    /// il test non manda il via. Si arma alla costruzione e non dopo
+    /// l'apertura, perché in fase [`Fase::Apertura`] non la si guarda affatto:
+    /// il racconto dell'apertura (§15.7) — un `JobStarted`, dei `JobProgress`,
+    /// un `JobDone` — attraversa il sink senza toccarla.
+    via: Option<Receiver<()>>,
+    /// Le specie viste prima del sigillo: non servono a nessuna prova, servono
+    /// al messaggio di un'attesa che scade. Un banco che non arriva in fondo
+    /// deve poter dire **a che punto era**, o il rosso costa un giro di ipotesi.
+    apertura: Vec<String>,
 }
 
 impl EventSink for SinkConFreno {
     fn emit(&self, notice: &Notice) {
-        self.visti.lock().unwrap().push(notice.clone());
-        if let Some(via) = self.via.lock().unwrap().take() {
+        let mut stato = self.stato.lock().unwrap();
+        if stato.fase == Fase::Apertura {
+            if matches!(&notice.event, Event::Custom { topic, .. } if topic == SIGILLO) {
+                stato.fase = Fase::Conto;
+                self.campana.notify_all();
+            } else {
+                stato.apertura.push(format!("{:?}", notice.kind()));
+            }
+            return;
+        }
+        stato.visti.push(notice.clone());
+        // Si prende la barriera **sotto lo stesso lucchetto** con cui si è
+        // registrato, e la si aspetta fuori: fermarsi tenendo il lucchetto
+        // fermerebbe anche chi guarda.
+        let via = stato.via.take();
+        drop(stato);
+        self.campana.notify_all();
+        if let Some(via) = via {
             let _ = via.recv();
         }
-    }
-}
-
-impl SinkConFreno {
-    /// **Arma la barriera**: da adesso il prossimo evento blocca il ponte.
-    ///
-    /// Si arma dopo l'apertura e non alla costruzione, da quando l'apertura è a
-    /// fasi (§15.7): la seconda fase racconta sé stessa sul bus — un
-    /// `JobStarted`, dei `JobProgress`, un `JobDone` — e una barriera armata
-    /// prima scatterebbe su quelli, cioè fermerebbe il ponte prima che il test
-    /// abbia emesso il proprio primo evento.
-    fn arma(&self, via: Receiver<()>) {
-        *self.via.lock().unwrap() = Some(via);
     }
 }
 
 struct Banco {
     _dir: tempfile::TempDir,
     host: Host,
-    visti: Arc<Mutex<Vec<Notice>>>,
+    sink: Arc<SinkConFreno>,
     apri: Sender<()>,
 }
 
@@ -73,45 +133,69 @@ impl Banco {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
         std::fs::write(root.join("Nota.md"), "# Nota\n").expect("scrive");
-        let visti: Arc<Mutex<Vec<Notice>>> = Arc::default();
         let (apri, via) = channel();
         let sink = Arc::new(SinkConFreno {
-            visti: visti.clone(),
-            via: Mutex::new(None),
+            stato: Mutex::new(Stato {
+                fase: Fase::Apertura,
+                visti: Vec::new(),
+                via: Some(via),
+                apertura: Vec::new(),
+            }),
+            campana: Condvar::new(),
         });
         let host = Host::new()
             .with_watcher(Box::new(NoWatcher))
             .with_sink(sink.clone());
         host.open(&root).expect("il vault si apre");
 
-        // **Si parte da un ponte silenzioso.** L'apertura a fasi (§15.7)
-        // attraversa questo stesso ponte — è il suo racconto, ed è voluto — ma
-        // qui si prova il *freno*, e contare gli eventi di qualcun altro
-        // insieme ai propri renderebbe ogni conto una somma di due cose. Si
-        // aspetta che l'apertura abbia finito, si butta ciò che ha detto, e
-        // solo allora si arma la barriera.
+        // **Si parte da un ponte silenzioso, e lo si sa per certo.** L'apertura
+        // a fasi (§15.7) attraversa questo stesso ponte — è il suo racconto, ed
+        // è voluto — ma qui si prova il *freno*, e contare gli eventi di
+        // qualcun altro insieme ai propri renderebbe ogni conto una somma di
+        // due cose.
+        //
+        // Il confine fra i due conti non si indovina guardando cosa è arrivato:
+        // si **manda**. Finita l'apertura si mette sul bus un sigillo, e il
+        // sink butta tutto finché non lo vede passare. Il bus consegna a ogni
+        // abbonato nell'ordine in cui riceve e il raggruppamento conserva
+        // l'ordine relativo di ciò che tiene, quindi tutto ciò che l'apertura
+        // ha detto **precede** il sigillo per costruzione: quando il sigillo
+        // arriva, non c'è più niente di suo in volo. È l'unico modo di
+        // sincronizzarsi col ponte che non contenga né un tempo né un'ipotesi
+        // su chi corre più veloce.
         host.wait_indexed(None).expect("l'apertura ha finito");
-        let scadenza = Instant::now() + Duration::from_secs(5);
-        while Instant::now() < scadenza {
-            let finito = visti
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|n| matches!(n.event, Event::JobDone { .. }));
-            if finito {
-                break;
-            }
-            std::thread::yield_now();
-        }
-        visti.lock().unwrap().clear();
-        sink.arma(via);
-
-        Banco {
+        let banco = Banco {
             _dir: dir,
             host,
-            visti,
+            sink,
             apri,
-        }
+        };
+        banco.emetti(Event::Custom {
+            topic: SIGILLO.into(),
+            payload: serde_json::Value::Null,
+        });
+        banco.attende_il_sigillo();
+        banco
+    }
+
+    /// Aspetta che il sigillo abbia attraversato il ponte, e **grida** se non
+    /// lo fa: la scadenza esiste per non piantare la suite, non per proseguire
+    /// lo stesso. Un banco che tira dritto su un'apertura ancora in volo si
+    /// porta dietro un ponte fermo su un evento buttato, e il rosso che ne
+    /// segue arriva più tardi e parla di un'altra cosa.
+    fn attende_il_sigillo(&self) {
+        let stato = self.sink.stato.lock().unwrap();
+        let (stato, esito) = self
+            .sink
+            .campana
+            .wait_timeout_while(stato, Duration::from_secs(5), |s| s.fase == Fase::Apertura)
+            .expect("stato avvelenato");
+        assert!(
+            !esito.timed_out(),
+            "il sigillo non ha attraversato il ponte in cinque secondi: \
+             dell'apertura sono arrivati {:?}",
+            stato.apertura
+        );
     }
 
     /// Mette un evento sul bus. Il ponte è abbonato al bus, non al dispatcher:
@@ -131,22 +215,35 @@ impl Banco {
     /// Aspetta che il sink abbia visto **almeno** `n` eventi. Non è un tempo
     /// fisso: è una condizione, con una scadenza che esiste solo per non
     /// piantare la suite se il ponte è morto.
+    ///
+    /// «Almeno» e non «esattamente», perché il ponte può legittimamente
+    /// consegnarne di più: quanti ne consegna è la politica, e la provano gli
+    /// `assert_eq!` dei test, non questa attesa.
     fn attendi(&self, n: usize) {
-        let scadenza = Instant::now() + Duration::from_secs(5);
-        while self.visti.lock().unwrap().len() < n && Instant::now() < scadenza {
-            std::thread::yield_now();
-        }
+        let stato = self.sink.stato.lock().unwrap();
+        let (stato, esito) = self
+            .sink
+            .campana
+            .wait_timeout_while(stato, Duration::from_secs(5), |s| s.visti.len() < n)
+            .expect("stato avvelenato");
         assert!(
-            self.visti.lock().unwrap().len() >= n,
-            "il ponte non ha consegnato {n} eventi: ne ha consegnati {}",
-            self.visti.lock().unwrap().len()
+            !esito.timed_out(),
+            "il ponte non ha consegnato {n} eventi: ne ha consegnati {} ({:?})",
+            stato.visti.len(),
+            stato
+                .visti
+                .iter()
+                .map(|n| format!("{:?}", n.kind()))
+                .collect::<Vec<_>>()
         );
     }
 
+    fn visti(&self) -> Vec<Notice> {
+        self.sink.stato.lock().unwrap().visti.clone()
+    }
+
     fn specie(&self) -> Vec<String> {
-        self.visti
-            .lock()
-            .unwrap()
+        self.visti()
             .iter()
             .map(|n| format!("{:?}", n.kind()))
             .collect()
@@ -248,7 +345,7 @@ fn sopra_il_tetto_il_ponte_dice_riconcilia() {
     while Instant::now() < fermo {
         std::thread::yield_now();
     }
-    let visti = banco.visti.lock().unwrap().clone();
+    let visti = banco.visti();
     assert_eq!(visti.len(), 2, "{:?}", banco.specie());
     assert!(
         matches!(visti[1].event, Event::Overflow { dropped } if dropped == 1000),
