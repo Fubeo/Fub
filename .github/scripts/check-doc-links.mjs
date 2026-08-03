@@ -240,12 +240,94 @@ function estraiLink(testo) {
       if (destinazione.startsWith("<") && destinazione.endsWith(">")) {
         destinazione = destinazione.slice(1, -1);
       }
-      link.push({ destinazione, riga: rigaDiOffset(mascherato, m.index) });
+      // L'etichetta e il resto della riga si leggono dal testo **originale**,
+      // non da quello mascherato: la maschera conserva gli offset apposta, e
+      // qui servono i backtick — è dentro i tratti di codice in linea che
+      // stanno sia il `file.rs:N` sia il nome della cosa che la riga descrive.
+      const inizioRiga = testo.lastIndexOf("\n", m.index) + 1;
+      const fineRiga = testo.indexOf("\n", m.index);
+      const testoRiga = testo.slice(inizioRiga, fineRiga === -1 ? testo.length : fineRiga);
+      const etichetta = testo.slice(m.index + 1, testo.indexOf("]", m.index));
+
+      link.push({
+        destinazione,
+        etichetta,
+        testoRiga,
+        riga: rigaDiOffset(mascherato, m.index),
+      });
     }
   }
 
   link.sort((a, b) => a.riga - b.riga);
   return link;
+}
+
+// ---------------------------------------------------------------------------
+// Numeri di riga
+// ---------------------------------------------------------------------------
+//
+// Un link `[`abi/model.rs:600`](../crates/fub-abi/src/model.rs)` promette due
+// cose e questo controllo, fino alla §16.8, ne verificava una: che il file ci
+// sia. Il `:600` invecchia da solo — a ogni commit che aggiunge qualcosa più in
+// alto in quel file, cioè **senza che nessuno tocchi né la voce né la cosa che
+// nomina**. È la specie peggiore da presidiare a mano e la più facile a
+// macchina, perché il link il file lo apre già: manca solo di leggere due
+// caratteri in più.
+//
+// Cosa si verifica: che a quella riga ci sia ancora **la cosa che la voce
+// nomina**. Il nome non va dichiarato — è già scritto lì accanto, nei tratti di
+// codice in linea della stessa riga (`Anchor`, `LinkTarget::Wiki`,
+// `HostQuery::query_index`). Se nessuno di quei nomi compare alla riga N, il
+// link è stantio; e siccome il nome c'è, il controllo sa anche **dove è
+// finito** e lo dice, così ripararlo è copiare un numero invece di cercarlo.
+
+/** Le parole che in un tratto di codice non sono un nome da cercare. */
+const PAROLE_NON_NOMI = new Set([
+  "pub", "fn", "let", "mut", "self", "crate", "super", "use", "mod", "impl",
+  "for", "the", "and", "not", "una", "uno", "che", "del", "della", "con",
+]);
+
+/**
+ * I nomi che una riga di documento promette di trovare in fondo al link: i
+ * tratti di codice in linea della riga, meno quello che è il link stesso,
+ * spezzati sui separatori (`::`, `/`, `.`, `<`, `>`) e tenuti se lunghi almeno
+ * tre caratteri.
+ */
+function nomiPromessi(testoRiga, etichetta) {
+  const nomi = new Set();
+  for (const m of testoRiga.matchAll(/`([^`]+)`/g)) {
+    const tratto = m[1];
+    if (tratto === etichetta.replace(/`/g, "")) continue;
+    // Un percorso non è un simbolo: `.fub/workspace.json` non si cerca dentro
+    // `organization.rs`, e cercarlo lo stesso troverebbe un `workspace`
+    // qualsiasi a riga 1 e chiamerebbe verde un link stantio.
+    if (tratto.includes("/") || /\.(json|md|rs|ts|tsx|toml|wit)$/.test(tratto)) continue;
+    for (const pezzo of tratto.split(/[^A-Za-z0-9_]+/)) {
+      if (pezzo.length >= 3 && !PAROLE_NON_NOMI.has(pezzo.toLowerCase())) nomi.add(pezzo);
+    }
+  }
+  return [...nomi];
+}
+
+/**
+ * Dove è finita la cosa che il link nomina: la riga (1-based) che la
+ * **definisce**, se c'è, altrimenti la prima che la nomina, altrimenti `null`.
+ *
+ * L'ordine conta più di quanto sembri. Un nome come `Block` compare cinquanta
+ * volte in `model.rs` — quasi tutte in un commento — e suggerire la prima
+ * occorrenza vorrebbe dire riparare un numero stantio con un altro numero
+ * stantio, che è il difetto di questa voce fatto a macchina.
+ */
+function dovEFinito(righe, nomi) {
+  const definizione = nomi.map((n) => new RegExp(`\\b(struct|enum|trait|fn|const|type)\\s+${n}\\b`));
+  const menzione = nomi.map((n) => new RegExp(`\\b${n}\\b`));
+
+  for (const re of [definizione, menzione]) {
+    for (let i = 0; i < righe.length; i += 1) {
+      if (re.some((r) => r.test(righe[i]))) return i + 1;
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -336,13 +418,15 @@ function main() {
   };
 
   let totaleLink = 0;
+  let totaleRighe = 0;
+  let righeSenzaNome = 0;
   const problemi = [];
 
   for (const percorso of file) {
     const testo = fs.readFileSync(percorso, "utf8");
     const cartella = path.dirname(percorso);
 
-    for (const { destinazione, riga } of estraiLink(testo)) {
+    for (const { destinazione, etichetta, testoRiga, riga } of estraiLink(testo)) {
       if (!destinazione || esterno(destinazione) || destinazione.startsWith("#")) continue;
       totaleLink += 1;
 
@@ -375,6 +459,30 @@ function main() {
         continue;
       }
 
+      // Il `:N` dell'etichetta, se c'è. Vale per i sorgenti (un `.md` linkato
+      // si àncora col `#`, non con un numero di riga).
+      const conRiga = etichetta.replace(/`/g, "").trim().match(/^(\S+):(\d+)$/);
+      if (conRiga && fs.statSync(bersaglio).isFile() && !bersaglio.toLowerCase().endsWith(".md")) {
+        totaleRighe += 1;
+        const nomi = nomiPromessi(testoRiga, etichetta);
+        const righeBersaglio = fs.readFileSync(bersaglio, "utf8").split("\n");
+        const attesa = Number(conRiga[2]);
+
+        if (nomi.length === 0) {
+          // Non si inventa un nome: la riga non promette niente di cercabile, e
+          // il conto in fondo lo dice invece di far finta di aver controllato.
+          righeSenzaNome += 1;
+        } else if (attesa > righeBersaglio.length) {
+          segnala(`il file ha ${righeBersaglio.length} righe, il link ne cita ${attesa}`);
+        } else if (!nomi.some((n) => new RegExp(`\\b${n}\\b`).test(righeBersaglio[attesa - 1]))) {
+          const dove = dovEFinito(righeBersaglio, nomi);
+          segnala(
+            `alla riga ${attesa} non c'è ${nomi.map((n) => `\`${n}\``).join(" né ")}` +
+              (dove === null ? " (e non c'è da nessuna parte)" : `: è a ${dove}`),
+          );
+        }
+      }
+
       if (!frammento) continue;
       if (!fs.statSync(bersaglio).isFile() || !bersaglio.toLowerCase().endsWith(".md")) continue;
 
@@ -389,7 +497,11 @@ function main() {
     console.log(`${p.file}:${p.riga}  link rotto -> ${p.destinazione}  (${p.motivo})`);
   }
   if (problemi.length > 0) console.log("");
-  console.log(`${file.length} file controllati, ${totaleLink} link, ${problemi.length} rotti`);
+  console.log(
+    `${file.length} file controllati, ${totaleLink} link, ${problemi.length} rotti` +
+      ` — di cui ${totaleRighe} con un numero di riga` +
+      (righeSenzaNome > 0 ? `, ${righeSenzaNome} senza un nome accanto da cercare` : ""),
+  );
 
   // Un presidio che non ha guardato niente non è verde: è spento. È il modo in
   // cui questo si era già spento una volta, e «0 rotti» lo diceva verde.

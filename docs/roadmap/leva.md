@@ -200,7 +200,7 @@ stavolta, è quella sul silenzio stesso — *«perdite silenziose non esistono p
 contratto»* è scritto nell'architettura ed è vero della sola coda eventi.
 Cercandola, il presupposto da non dare per buono è che un `Result` restituito sia
 un `Result` letto, e che un messaggio scritto sia un messaggio arrivato: nel repo
-di oggi **quattordici** messaggi vanno alla console della webview e nessuno ha un
+di oggi **sedici** messaggi [conta: diagnostica-shell] vanno alla console della webview e nessuno ha un
 lettore in un'app impacchettata — quelli che andavano a `stderr` erano
 **ventisette** e oggi sono zero in codice di produzione, distribuiti fra due
 destinazioni dalla [decisione 0062](../decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)

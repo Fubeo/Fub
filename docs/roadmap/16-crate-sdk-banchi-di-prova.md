@@ -6,9 +6,11 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): i banchi e i confin
 
 ---
 
-Delle sette voci con cui questa seduta è nata ne restano **due**, e non si
-somigliano: una è un confine fra crate (la 16.3), l'altra è un presidio sulla
-prosa (la 16.8, nata qui). Le precedenze che la seduta dichiarava sono tutte
+Delle sette voci con cui questa seduta è nata ne resta **una**: il secondo tempo
+della 16.3, cioè il confine fra crate, che è fuori con una condizione e non con
+una scadenza. La 16.8 — il presidio sulla prosa, nata qui — è chiusa dalla
+[decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md),
+ed è l'ultima ad andarsene. Le precedenze che la seduta dichiarava sono tutte
 **decadute**, e vale la pena dire come, perché due sono decadute insieme alla
 voce e una si è rivelata falsa.
 
@@ -149,7 +151,7 @@ dichiarata guardando le voci insieme, come la seduta chiede.
 
 ### 16.8 La prosa che conta i sorgenti non ha nessun presidio
 
-*ottavo giro · presidi · **P1** — separata dalla 16.7 dalla [decisione 0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)*
+*ottavo giro · presidi · **P1** — separata dalla 16.7 dalla [decisione 0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) · **chiusa** dalla [decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)*
 
 Questa voce era la seconda metà del §16.7, e ne è stata staccata chiudendolo. La
 ragione è quella con cui la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md)
@@ -160,7 +162,7 @@ che resta qui è un'**affermazione scritta in italiano dentro un documento**, ch
 nessun compilatore legge. Deciderle insieme avrebbe voluto dire decidere due volte
 la forma dell'annotazione, la seconda contro la prima.
 
-- [ ] **La famiglia più grande non sono i presidi: è la prosa che conta i
+- [x] **La famiglia più grande non sono i presidi: è la prosa che conta i
       sorgenti.** Un giro dedicato ha ricontato i numeri dei documenti contro il
       codice, e in **quattro famiglie** li ha trovati falsi — tutti silenziosi:
       `HostApi` dichiarata di «ventitré metodi» in [PIANO.md](../PIANO.md) e in
@@ -173,7 +175,7 @@ la forma dell'annotazione, la seconda contro la prima.
       promessa fatta ai file dell'utente; i conteggi del §16.2 raddoppiati; le
       cinque capacità del `TriesEverything` diventate sette. Nessuno di questi
       ha rotto un test, e ognuno è dello stesso tipo.
-- [ ] **E chiudere la 16.7 ne ha trovate altre quattro in mezza giornata**, che è
+- [x] **E chiudere la 16.7 ne ha trovate altre quattro in mezza giornata**, che è
       la misura di quanto la famiglia sia fitta
       ([0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)): `guard.rs` dice
       «**dieci** famiglie» in **tre** punti dove ne ha quattordici — e cinque
@@ -186,7 +188,7 @@ la forma dell'annotazione, la seconda contro la prima.
       per disegnare il presidio: la prima sta nello **stesso file** del codice che
       descrive, quindi la distanza fra la frase e la cosa non è la ragione per cui
       invecchia — e un'annotazione che vale solo per i `.md` ne mancherebbe metà.
-- [ ] **E c'è una quinta specie, che non è un conteggio: il numero di riga.**
+- [x] **E c'è una quinta specie, che non è un conteggio: il numero di riga.**
       [glossario.md](../glossario.md) ancora un file di codice **e una riga**
       (`abi/event.rs:253`), e quella riga invecchia a ogni commit che aggiunge
       qualcosa più in alto nel file — cioè senza che nessuno tocchi né la voce né
@@ -199,7 +201,7 @@ la forma dell'annotazione, la seconda contro la prima.
       ancora ciò che la voce nomina — ed è l'unica di questa voce che
       `check-doc-links.mjs` **quasi** copre: controlla che il file esista, non
       che la riga dica ancora la stessa cosa.
-- [ ] **E la mezza voce del §17.1 ne ha trovate altre due**
+- [x] **E la mezza voce del §17.1 ne ha trovate altre due**
       ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)), che insieme
       dicono una cosa che le otto di sopra non dicevano. La prima è nella
       [0054](../decisions/0054-il-banco-del-lato-provider.md): «un terzo crate per
@@ -218,7 +220,7 @@ la forma dell'annotazione, la seconda contro la prima.
       un'annotazione che rifà il conto solo *dopo*, in CI, arriverebbe comunque
       prima di chi legge — nessuno di questi due numeri è stato letto da qualcuno
       prima che il presidio lo ricontasse a mano.
-- [ ] **E un giro di verifica fatto chiudendo quella mezza voce ne ha trovate
+- [x] **E un giro di verifica fatto chiudendo quella mezza voce ne ha trovate
       altre cinque, più un bersaglio nuovo.** Non sono riparate lì — sono il
       lavoro di questa voce — e stanno scritte col comando accanto perché chi la
       prende le trovi. `crates/fub-abi/wit/fub/abi.wit` è **3400 righe di cui
@@ -235,7 +237,7 @@ la forma dell'annotazione, la seconda contro la prima.
       stderr» — si chiama **`reporting`** e *restituisce* il panico invece di
       stamparlo, che è precisamente ciò che la 0052 ha cambiato: **sesta specie**,
       smentita da un verbale a due file di distanza.
-- [ ] **Il bersaglio nuovo è meccanico, ed è a portata di un presidio che c'è
+- [x] **Il bersaglio nuovo è meccanico, ed è a portata di un presidio che c'è
       già**: **quindici** link della forma `[file.rs:N](…)` portano un numero di
       riga stantio — sei in [data-model.md](../architecture/data-model.md)
       (sfalsati tutti di **+44**, cioè `model.rs` è cresciuto sopra quel punto),
@@ -247,7 +249,7 @@ la forma dell'annotazione, la seconda contro la prima.
       mezza voce del §17.1, perché quel file era già aperto; gli altri nove no, e
       sono qui. Da tenere per il disegno: un numero di riga è la sola specie di
       questo elenco che **non** ha bisogno che qualcuno dichiari come si ricava.
-- [ ] **E ci sono due specie peggiori dei numeri.** La **quinta**: il *limite
+- [x] **E ci sono due specie peggiori dei numeri.** La **quinta**: il *limite
       dichiarato* che non esiste più — [traits.md](../architecture/traits.md)
       scriveva «limite dichiarato: l'**ordine** dei casi di un variant è
       confrontato con l'ordine in cui il test li elenca, non con quello dell'enum
@@ -265,7 +267,7 @@ la forma dell'annotazione, la seconda contro la prima.
       perché **il motivo per cui si scrive una garanzia è smettere di doverci
       pensare**: un conteggio qualcuno prima o poi lo ricontrolla, una rete che
       si crede tesa non la guarda nessuno.
-- [ ] **Il presidio è a portata, e il repo ne ha già uno dello stesso genere.**
+- [x] **Il presidio è a portata, e il repo ne ha già uno dello stesso genere.**
       `check-doc-links.mjs` esiste perché «una promessa senza presidio meccanico
       decade», e presidia i **link**; i **conteggi** sono la stessa promessa
       nella stessa prosa. La forma non è un linter di prosa — impossibile — ma
@@ -280,12 +282,12 @@ la forma dell'annotazione, la seconda contro la prima.
       `rules_mirror.rs` → `rules-samples.json` della
       [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md),
       applicata alla prosa invece che alle regole.
-- [ ] **E per la sesta specie il presidio è lo stesso, letto al contrario**: non
+- [x] **E per la sesta specie il presidio è lo stesso, letto al contrario**: non
       «rifai il conto», ma **una frase che dice *questo è presidiato da X* deve
       nominare un X che esiste** — e `X` è un nome di test, cioè una cosa che si
       può cercare meccanicamente. Il primo posto in cui girerebbe è il cappello di
       ogni seduta, che è dove la garanzia inesistente è stata trovata.
-- [ ] **E c'è una seconda metà che i conteggi non coprono: gli elenchi che
+- [x] **E c'è una seconda metà che i conteggi non coprono: gli elenchi che
       rimandano.** [strozzature.md](strozzature.md) è l'indice inverso — si entra
       da un capitolo di FEATURES per sapere *cosa manca* — e una sua riga
       invecchia quando qualcosa si chiude **altrove**, cioè in un file che chi
@@ -306,10 +308,21 @@ la forma dell'annotazione, la seconda contro la prima.
       in entrambi i casi. **Fatto**, e con la causa invece del solo sintomo: la
       regola del vault resta ma non si applica a una cartella in cui **git tiene
       dei `.md`**; ogni albero saltato è una riga in uscita; **zero file
-      controllati esce rosso**. Oggi: **134 file, 2553 link**.
+      controllati esce rosso**. Oggi: **145 file, 2965 link**, più 123 numeri
+      di riga verificati dalla [0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).
       Questa riga ha detto, in fila: «81 file, 1105 link», «122 file, 2155»,
       «125 file, 2231», «127 file, 2284», «129 file, 2336», «132 file, 2464»,
-      «132 file, 2475». La correzione di oggi è l'**ottava**, e stavolta il numero
+      «132 file, 2475», «134 file, 2553». La correzione di oggi è la **nona**,
+      e ha la causa più semplice di tutte: **il commit che chiude la §16.8 aggiunge
+      prosa**, cioè un verbale e le righe che lo linkano. Chiudere la voce che
+      presidia i conteggi ha falsificato il conteggio che la voce non presidia —
+      il che non è un'ironia, è il criterio funzionante: questo numero sta fuori
+      dal registro *proprio perché* si muove così — e infatti la prima stesura di
+      questa riga diceva 2964 ed era falsa di uno prima di essere salvata, perché
+      il link alla 0072 due righe più su l'ha invecchiata mentre la si scriveva:
+      la quinta specie, colta in diretta per la seconda volta —, e resta scritto a mano nel
+      solo posto che tiene anche il conto delle sue falsificazioni.
+      La correzione precedente era l'**ottava**, e stavolta il numero
       si ricostruisce: sono i valori che `git log -- questo file` restituisce, uno
       per riscrittura. L'ordinale che c'era prima diceva «nona» e poi «decima» e non
       si ricostruiva da niente — con cinque valori elencati e nove falsificazioni
@@ -339,6 +352,51 @@ la forma dell'annotazione, la seconda contro la prima.
       sé stesso non ha un valore fermo abbastanza a lungo da poter essere scritto a
       mano. È l'argomento più corto a favore di questa voce, ed è stato prodotto
       scrivendola — quattro volte su otto.
+
+**Chiusa dalla [0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).**
+La forma è quella che questa voce chiedeva: `.github/scripts/conteggi.mjs` tiene
+**i comandi e non i valori** — un nome, il comando che ricava il numero dai
+sorgenti, la ragione per cui quel numero conta — e `check-prosa.mjs` rifà il
+conto e lo confronta con ogni riga che lo cita per nome, nei `.md` **e nei
+commenti del codice**, perché la prima falsità del censimento stava dentro
+`guard.rs`. Le due direzioni tutte e due le volte: un numero che cambia nel
+codice è rosso, e una voce che nessuno cita più è rossa anche lei. Il secondo
+controllo è la sesta specie letta al contrario — una frase che dice «presidiato
+da X» deve nominare un `fn` o un file di test che esiste — e il terzo è il
+bersaglio meccanico: `check-doc-links.mjs` legge il `:N` e chiede che a quella
+riga ci sia ancora il nome che la voce scrive lì accanto.
+
+Cosa ha trovato accendendosi, che è la misura di quanto la famiglia fosse fitta:
+gli `SCHEMA_VERSION` su disco dichiarati **sette** e sono otto — il numero il cui
+errore non si annulla, di nuovo lui; i messaggi alla console della shell dati per
+quattordici e risaliti a **sedici**, cioè un numero che deve scendere e che
+nessuno guardava salire; le righe di commento di `abi.wit` ferme a 1683 su 3386
+quando sono 1758 su 3502; `safety::notifying` che non esiste e non è mai esistito
+sotto quel nome; e i numeri di riga stantii, stimati **quindici** e contati
+**cinquantuno** — di cui 49 riparati leggendo il numero che il presidio stesso
+stampava, e due che erano la specie senza riparazione meccanica.
+
+Tre cose che il disegno ha deciso e che non vanno ridiscusse senza motivo stanno
+nel verbale: il registro tiene i comandi perché un valore scritto a mano
+tornerebbe falso al giro dopo; il numero sta sulla **stessa riga**
+dell'annotazione, e il presidio l'ha subito dimostrato segnalando tre
+annotazioni andate a capo mentre le si scriveva; e **un verbale non si
+presidia**, perché è prosa datata — è la sola regola sotto cui la 0053 e la 0060
+possono raccontare un nome che è cambiato.
+
+Resta fuori, con la sua ragione, la seconda metà: gli **elenchi che rimandano**.
+Una riga di [strozzature.md](strozzature.md) invecchia quando qualcosa si chiude
+altrove, e il giudizio che porta non è un conteggio — il presidio giusto chiede
+prima di decidere cosa significhi «chiusa» per una strozzatura. E resta fuori il
+numero di questa riga qui sotto, che **non** è entrato nel registro: dipende
+anche da cosa c'è nell'albero di lavoro, e un numero che cambia per un `.md` non
+tracciato in radice non è una promessa che valga la pena presidiare. Quel numero
+continua a vivere in una riga sola, la casella del §16.7 qui sopra, che lo tiene
+insieme all'elenco delle volte in cui è stato falso — ed è l'unico posto del repo
+in cui una famiglia di prosa falsa si racconta da sé. Il controllo dice anche
+quanti dei suoi link portano un numero di riga e quanti di quelli non hanno un
+nome accanto da cercare: quei secondi il presidio li **dice**, invece di far
+finta di averli guardati.
 
 *Sblocca:* 27.4 (plugin sandbox test, security test, upgrade migration test),
 27.3 (plugin linting, test utilities), 20.3 (permission revocation, crash

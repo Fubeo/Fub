@@ -25,9 +25,11 @@ use fub_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le quattordici famiglie di capacità, come nomi su cui una politica risponde.
+/// Le quattordici famiglie di capacità [conta: guard-famiglie], come nomi su cui
+/// una politica risponde.
 ///
-/// Sono esattamente i quattordici trait di `fub_abi::traits`, e non è una
+/// Sono esattamente i quattordici trait [conta: guard-famiglie] di
+/// `fub_abi::traits`, e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono restare la stessa lista, e il presidio è
 /// che [`Guard`] non compila se una famiglia non è coperta.
@@ -130,7 +132,8 @@ impl Capability {
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a quattordici nomi e non
+/// Una politica è **piccola per costruzione**: risponde a quattordici nomi [conta: guard-famiglie]
+/// e non
 /// sa niente di documenti, di blob o di comandi. È ciò che permette di comporne
 /// due senza chiedersi cosa significhi comporre venticinque metodi.
 pub trait Policy: Send + Sync {
@@ -313,7 +316,7 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le quattordici famiglie
+/// Delega ciò che la politica concede e nega il resto. Le quattordici famiglie [conta: guard-famiglie]
 /// sono implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.

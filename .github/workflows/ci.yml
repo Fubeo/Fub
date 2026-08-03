@@ -155,6 +155,17 @@ jobs:
           node-version: 22
       - name: Link interni dei documenti
         run: node .github/scripts/check-doc-links.mjs
+      # E ciò che i documenti **affermano** sui sorgenti (§16.8). Il link rotto
+      # è la promessa che si vede; il numero sbagliato è quella che si legge, si
+      # crede e non si ricontrolla mai — un giro dedicato ne ha trovati falsi
+      # una dozzina, nessuno dei quali aveva mai rotto un test. Prima
+      # l'autoprova, perché qui la parte fragile è il lettore dei numeri scritti
+      # in lettere: se si spegnesse lui, il controllo direbbe verde senza aver
+      # guardato.
+      - name: Il lettore dei numeri sa leggere l'italiano
+        run: node .github/scripts/check-prosa.mjs --autoprova
+      - name: I numeri e le garanzie che la prosa afferma sui sorgenti
+        run: node .github/scripts/check-prosa.mjs
 
   frontend:
     name: frontend (type-check + test + build)

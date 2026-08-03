@@ -16,8 +16,13 @@ quarantasei senza che si chiudesse niente di nuovo. Prima di quel giro erano gi�
 successe due volte, ed è raccontato: la riga «nessun `^block-id`» è stata falsa
 per undici verbali, quella su `views()` per trentaquattro. **Chi entra da qui
 cerca se una cosa manca, ed è per questo che una riga vecchia non allunga il
-lavoro: lo dirotta.** Il presidio che lo renderebbe rosso invece che silenzioso è
-la [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio).
+lavoro: lo dirotta.** La [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
+ha chiuso il presidio dei **numeri** ([0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)),
+e questo file resta la metà che non copre: una riga di qui non porta un
+conteggio, porta un **giudizio**, e renderla rossa chiede prima di decidere cosa
+significhi «chiusa» per una strozzatura. Il collegamento però è verificabile
+quanto un link rotto — un `§X.Y` che si è chiuso, un simbolo che non esiste più —
+ed è da lì che ricomincia chi la prende.
 
 | Famiglia FEATURES | Cosa serve | Cosa manca oggi |
 |---|---|---|

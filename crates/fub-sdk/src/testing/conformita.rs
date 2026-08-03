@@ -2,7 +2,14 @@
 //! eseguibili da chi il contratto lo implementa.
 //!
 //! È la differenza fra «il contratto è documentato» e «il contratto è
-//! verificabile da chi lo implementa». Ogni funzione qui dentro corrisponde a
+//! verificabile da chi lo implementa». Sono ventitré funzioni [conta: conformita-funzioni],
+//! ed è il numero che la [decisione 0054] scriveva come «otto» quando ne aveva
+//! già quattordici: da qui in poi lo conta il presidio della §16.8, non chi
+//! scrive la frase.
+//!
+//! [decisione 0054]: https://github.com/Fubeo/Fub/blob/main/docs/decisions/0054-il-banco-del-lato-provider.md
+//!
+//! Ogni funzione qui dentro corrisponde a
 //! una frase del doc-comment di un trait in `fub-abi/src/traits.rs`, ed è
 //! scritta per essere chiamata da un test di *chi scrive il provider* — non da
 //! un test del kernel.

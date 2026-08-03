@@ -82,6 +82,7 @@ cronologico di chiusura.
 | [0069](0069-cosa-sa-dire-un-abbonamento.md) | Cosa sa dire un abbonamento: una dichiarazione che nessuno valuta mente a chi la scrive | §22.1 + §22.2 — chiude tutte e due le voci e ne **apre una**, la §22.4 ([seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)) | 2026-08-01 |
 | [0070](0070-un-vault-si-apre-in-due-tempi.md) | Un vault si apre in due tempi, e il secondo è un job | §15.7 (**la seconda metà**: la forma dell'apertura) — chiude la voce ([seduta 15](../roadmap/15-il-disco.md)) | 2026-08-03 |
 | [0071](0071-una-feature-si-spegne-dove-si-dichiara.md) | Una feature si spegne dove si dichiara | §16.3 (**il primo tempo**: la cargo feature per bundle) — chiude **mezza** voce, il secondo tempo resta ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-08-03 |
+| [0072](0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) | Un numero si scrive accanto a come si ricava | §16.8 — chiude la voce, e con lei **l'ultima viva della seduta 16** oltre al secondo tempo della 16.3 ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-08-03 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
