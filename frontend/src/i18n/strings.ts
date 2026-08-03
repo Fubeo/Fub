@@ -90,6 +90,17 @@ const IT = {
   "search.unavailable": "Ricerca non disponibile",
   "search.occurrence": "Occorrenza {n}",
 
+  // --- la ricerca dentro la nota aperta (§21.4) --------------------------
+  // Non è il trova/sostituisci: quello è editing e cammina sulle occorrenze in
+  // ordine di posizione. Questa cerca dentro la nota con lo stesso motore di
+  // fuori, ordinata per rilevanza e con gli estratti — quindi il testo dice
+  // «cerca», non «trova».
+  "docsearch.title": "Cerca nella nota",
+  "docsearch.placeholder": "Cerca in questa nota…",
+  "docsearch.no_doc": "Nessuna nota aperta",
+  "commands.doc.search": "Cerca nella nota",
+  "commands.doc.search.desc": "Cerca dentro la nota aperta, con lo stesso motore del vault.",
+
   // --- l'esplora ---------------------------------------------------------
   "explorer.notes": "Note",
   "explorer.notes.hint": "Note del vault",
@@ -348,6 +359,12 @@ const EN: Record<Chiave, string> = {
   "search.count": "Results: {count}",
   "search.unavailable": "Search unavailable",
   "search.occurrence": "Occurrence {n}",
+
+  "docsearch.title": "Search in note",
+  "docsearch.placeholder": "Search in this note…",
+  "docsearch.no_doc": "No note open",
+  "commands.doc.search": "Search in note",
+  "commands.doc.search.desc": "Search inside the open note, with the same engine as the vault.",
 
   "explorer.notes": "Notes",
   "explorer.notes.hint": "Notes of the vault",

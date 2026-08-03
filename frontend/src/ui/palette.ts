@@ -251,6 +251,10 @@ function apriOverlay(): HTMLElement {
   closeCommandPalette();
   const overlay = document.createElement("div");
   overlay.id = OVERLAY_ID;
+  // La forma sta in `.modale` e non più sull'id: da quando le modali sono due
+  // (§21.4) l'aspetto di una modale è un fatto della shell, non una proprietà
+  // della palette.
+  overlay.className = "modale";
   // La palette è una modale a tutti gli effetti: copre lo schermo, chiede
   // qualcosa e se ne va. Dirlo è ciò che fa annunciare «finestra di dialogo» a
   // chi entra, invece di lasciarlo dentro un `div` sopra la pagina di prima —

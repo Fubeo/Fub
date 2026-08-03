@@ -1,0 +1,17 @@
+{
+  "search.open": null,
+  "selection.wikilink": null,
+  "vault.replace": null,
+  "note.create": null,
+  "note.rename": null,
+  "note.trash": null,
+  "trash.restore": null,
+  "trash.empty": null,
+  "vault.archive": null,
+  "note.task.toggle": null,
+  "settings.set": null,
+  "settings.reset": null,
+  "settings.export": null,
+  "settings.import": null,
+  "vault.undo": "Mod-Alt-z"
+}

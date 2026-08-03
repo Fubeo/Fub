@@ -43,6 +43,7 @@ import {
   sincronizza,
 } from "./panels/document";
 import { mountExplorer } from "./panels/explorer";
+import { mountDocSearch } from "./panels/doc-search";
 import { mountGraph } from "./panels/graph";
 import { configurePreview } from "./panels/preview";
 import { clearSearch, mountSearch, searchFor } from "./panels/search";
@@ -107,6 +108,10 @@ async function init(): Promise<void> {
   mountViewInvalidation();
   mountExplorer();
   mountSearch();
+  // La ricerca **dentro** la nota aperta (§21.4): stesso motore della casella
+  // del vault, raggio ristretto al documento col fuoco. È un comando e non un
+  // pannello, quindi qui basta dichiararlo.
+  mountDocSearch();
   mountGraph();
   // Le due superfici della barra di stato (§10.3): cosa sta girando, e cosa è
   // stato detto. Il centro attività si iscrive agli eventi del kernel, quindi
@@ -143,14 +148,12 @@ async function init(): Promise<void> {
     id: "shell.vault.open",
     title: "commands.vault.open",
     description: "commands.vault.open.desc",
-    keybinding: "Mod-Shift-o",
     run: () => void pickVault(),
   });
   registerShellCommand({
     id: "shell.palette",
     title: "commands.palette",
     description: "commands.palette.desc",
-    keybinding: "Mod-Shift-p",
     run: () => void openCommandPalette(paletteHost),
   });
   mountSidebarCommands();

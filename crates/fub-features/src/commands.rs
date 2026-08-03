@@ -957,8 +957,14 @@ impl CoreCommands {
     /// legge senza montare un workspace.
     pub fn specs() -> Vec<CommandSpec> {
         vec![
+            // Senza accordo, e non per distrazione: `Mod-Shift-f` è della shell,
+            // che con quel tasto porta il pannello della ricerca sotto gli occhi
+            // — la cosa che fa Obsidian e che le dita hanno già imparato. Questo
+            // comando vuole una `query` **obbligatoria**: premere un tasto per
+            // farsi aprire un modulo da compilare è il gesto sbagliato, mentre
+            // dalla palette — che i parametri li sa chiedere — è esattamente il
+            // gesto giusto. Il perché sta nella 0081.
             comando(SEARCH_OPEN)
-                .with_keybinding("Mod-Shift-f")
                 .with_param(parametro(SEARCH_OPEN, "query", ParamKind::Text).required()),
             comando(SELECTION_WIKILINK).with_scope(CommandScope::writing(CommandReach::Document)),
             comando(VAULT_REPLACE)

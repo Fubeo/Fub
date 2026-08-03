@@ -28,10 +28,18 @@ già congelata — che è esattamente ciò che è successo al lotto e all'origin
 per cui la [0012](../decisions/0012-origine-degli-eventi.md) ha dichiarato di
 volersi decidere insieme alla [0011](../decisions/0011-il-lotto.md).
 
-Quello che resta non ha più niente che scada col freeze di M4. **Sono cinque
-voci, e sono tutte comportamento**: dove il comportamento si vede (§21.4, §21.5,
+Quello che resta non ha più niente che scada col freeze di M4. **Sono quattro
+voci, e sono tutte comportamento**: dove il comportamento si vede (§21.5,
 §21.7), cosa lo rende regolabile (§21.6) e cosa gli darà da mangiare (§21.8).
-Tutte e tre le prime poggiano su ciò che le P0 hanno appena messo nel contratto.
+Le prime due poggiano su ciò che le P0 hanno appena messo nel contratto.
+
+**E la prima superficie c'è.** La §21.4 — cercare *dentro* la nota aperta — è
+chiusa dalla [decisione 0082](../decisions/0082-una-porta-per-chi-cerca.md), che
+l'ha decisa insieme alla regola della §21.5 perché erano la stessa cosa vista
+dai due lati: costruire una superficie che cerca senza decidere da dove passano
+tutte quelle che cercano avrebbe aggiunto la quinta. Della §21.5 resta la metà
+che è lavoro e non decisione — il quick switcher, che non esiste ancora, e
+l'autocompletamento dei wikilink, da migrare alla query con prefisso.
 
 **E la sesta — la §21.9, la sola che chiedesse una misura invece di un
 comportamento — è chiusa**, dalla
@@ -53,45 +61,28 @@ Ciò che manca è il modo di **dire** in una query quanto si vuole essere
 indovinati, e il modo di **tornare indietro** da un risultato al punto del testo
 che lo ha prodotto.
 
-### 21.4 La ricerca dentro la nota aperta non esiste
-
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · shell · **P1** — poggia sulla [§21.3](#213-gli-estratti-sono-ancorati-allo-snippet-non-al-documento)*
-
-- [ ] **È il secondo modale di omnisearch, e non è il trova/sostituisci.**
-      FEATURES 4.2 ha già `Trova/sostituisci` e `Sostituzione in file corrente`:
-      quello è **editing**, cammina sulle occorrenze grezze in ordine di
-      posizione. Questa cerca *dentro* la nota con lo stesso motore di fuori —
-      ordinata per rilevanza, con gli estratti, e tollerante ai refusi come il
-      resto.
-- [ ] **Il linguaggio la esprime già**, e questa è la parte buona: è
-      `Docs { docs: [la nota aperta] }` in AND con un `Text`, cioè una clausola
-      di due letterali del linguaggio della
-      [0019](../decisions/0019-il-canale-dati.md). Non serve nessuna variante
-      nuova di `IndexQuery`.
-- [ ] **E il contesto pure**: quale nota sia aperta lo dice `active_context`
-      ([0007](../decisions/0007-contesto-di-sessione.md)), che porta pannello,
-      documento, selezione e modalità. Quindi di questa voce resta **solo** la
-      superficie nella shell — più le coordinate della §21.3, senza cui il
-      risultato non è cliccabile.
-
 ### 21.5 Quattro superfici cercano, e rischiano di nascere con quattro ranking
 
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · shell · **P1***
+*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · shell · **P1** — **mezza chiusa** dalla [decisione 0082](../decisions/0082-una-porta-per-chi-cerca.md): la regola è decisa e la prima superficie ci passa; restano le due che mancano*
 
 - [ ] **Il quick switcher (8.1) non esiste ancora**, ed è la superficie che si
       usa più della ricerca stessa: si preme una scorciatoia, si scrivono tre
       lettere, si apre una nota. Se nasce da sé, nasce su `list_documents` con un
       confronto di sottostringhe — cioè una **seconda ricerca**, peggiore della
       prima, sulla strada più battuta dell'app.
-- [ ] **La palette dei comandi c'è** ([0009](../decisions/0009-registro-dei-comandi.md))
+- [x] ~~**La palette dei comandi c'è** ([0009](../decisions/0009-registro-dei-comandi.md))
       e non cabla nessun id: legge le spec e disegna. È la prova che la forma
-      giusta è già stata trovata una volta, e il modello da ripetere.
-- [ ] **La regola che questa voce chiede è una sola**: tutto ciò che nella shell
+      giusta è già stata trovata una volta, e il modello da ripetere.~~
+- [x] ~~**La regola che questa voce chiede è una sola**: tutto ciò che nella shell
       accetta del testo e propone delle note passa da `IndexQuery::Documents`.
       Il quick switcher è quella query con i campi pesati sul nome
       (`TextField::Name`, che esiste per questo); la casella di ricerca è la
       stessa senza vincoli sui campi. Una porta, due configurazioni — non due
-      porte.
+      porte.~~ Decisa dalla [0082](../decisions/0082-una-porta-per-chi-cerca.md),
+      che aggiunge **dove** sta scritta: le query si compongono in
+      `host/contract.ts`, non nel pannello che le usa — una superficie che se la
+      compone in casa è già una seconda implementazione. La prima a passarci è
+      la ricerca dentro la nota (ex §21.4).
 - [ ] **Le superfici sono quattro, e la quarta è già scritta.**
       L'autocompletamento dei wikilink esiste
       (`frontend/src/editor/completions.ts`) e la sua sorgente chiede al canale
@@ -101,8 +92,12 @@ che lo ha prodotto.
       qui la lista resta intera: cambia la porta, non la domanda»*. È la regola
       di questa voce vista dalla superficie che la viola per prima: accetta del
       testo e propone delle note, e non passa da `IndexQuery::Documents`.
-- [ ] **E su questa la regola non basta, perché il budget non è per
-      invocazione: è per battuta.** Le altre tre pagano un giro quando si
+- [x] ~~**E su questa la regola non basta, perché il budget non è per
+      invocazione: è per battuta.**~~ **Decisa: la query con prefisso**
+      ([0082](../decisions/0082-una-porta-per-chi-cerca.md)). La lista spinta
+      perde per la ragione scritta nella casella qui sotto — sarebbe un indice
+      alimentato dagli eventi, su un ponte che scarta per progetto — e la
+      migrazione di `completions.ts` resta da fare. Il testo di prima: Le altre tre pagano un giro quando si
       aprono; questa lo pagherebbe a ogni tasto, e su un vault da 50k note
       l'elenco intero non è una risposta — né come costo di trasporto né come
       cosa da ordinare nella shell. Le uscite sono due, e sono una decisione di

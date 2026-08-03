@@ -880,15 +880,22 @@ button:hover {
   font-style: italic;
 }
 
-/* --- palette dei comandi ------------------------------------------------- */
+/* --- le modali ------------------------------------------------------------ */
 /*
    La palette è la superficie del registro comandi (§1.1): la stessa lista che
    leggerebbero una CLI o un chiamante programmatico, disegnata per un umano.
    Le due righe che contano visivamente sono la **descrizione** (che il §1.36 ha
    aggiunto per chi non ha letto il codice, e serve anche a chi cerca) e il
-   **raggio** dichiarato — perché è ciò su cui l'utente decide se fidarsi. */
+   **raggio** dichiarato — perché è ciò su cui l'utente decide se fidarsi.
 
-#command-palette {
+   Queste regole stavano sotto `#command-palette`, cioè la forma di una modale
+   apparteneva all'unica che c'era. Con la ricerca dentro la nota (§21.4) le
+   modali sono due, e una seconda copia di trentacinque regole sarebbe divergita
+   al primo ritocco: adesso la classe è `.modale`, e i nomi `palette-*` che
+   restano sotto sono i pezzi *dentro* — la casella, la lista, il piano — che
+   una modale nuova riusa se le servono e ignora se non le servono. */
+
+.modale {
   position: fixed;
   inset: 0;
   z-index: var(--z-popover);
@@ -899,7 +906,7 @@ button:hover {
   background: var(--scrim);
 }
 
-#command-palette .palette-box {
+.modale .palette-box {
   width: min(640px, 92vw);
   max-height: 70vh;
   display: flex;
@@ -913,9 +920,9 @@ button:hover {
   overflow: auto;
 }
 
-#command-palette input,
-#command-palette textarea,
-#command-palette select {
+.modale input,
+.modale textarea,
+.modale select {
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -925,56 +932,56 @@ button:hover {
   width: 100%;
 }
 
-#command-palette input[type="checkbox"] {
+.modale input[type="checkbox"] {
   width: auto;
 }
 
-#command-palette input:focus,
-#command-palette textarea:focus,
-#command-palette select:focus {
+.modale input:focus,
+.modale textarea:focus,
+.modale select:focus {
   border-color: var(--accent);
 }
 
-#command-palette .palette-input {
+.modale .palette-input {
   font-size: var(--text-lg);
 }
 
-#command-palette .palette-list {
+.modale .palette-list {
   list-style: none;
   margin: 0;
   padding: 0;
   overflow: auto;
 }
 
-#command-palette .palette-list li {
+.modale .palette-list li {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
-#command-palette .palette-list li.selected,
-#command-palette .palette-list li:hover {
+.modale .palette-list li.selected,
+.modale .palette-list li:hover {
   background: var(--bg-hover);
 }
 
-#command-palette .palette-row {
+.modale .palette-row {
   display: flex;
   align-items: baseline;
   gap: var(--space-4);
 }
 
-#command-palette .palette-title {
+.modale .palette-title {
   flex: 1;
 }
 
-#command-palette .palette-scope,
-#command-palette .palette-desc,
-#command-palette .palette-help {
+.modale .palette-scope,
+.modale .palette-desc,
+.modale .palette-help {
   color: var(--muted);
   font-size: var(--text-sm);
 }
 
-#command-palette kbd {
+.modale kbd {
   padding: var(--space-1) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
@@ -982,37 +989,45 @@ button:hover {
   font-size: var(--text-xs);
 }
 
-#command-palette .palette-empty {
+.modale .palette-empty {
   color: var(--muted);
   cursor: default;
 }
 
-#command-palette .palette-heading {
+/* Quanti risultati ha la ricerca dentro la nota (§21.4). Sopra la lista e non
+   sotto: è la riga che dice «zero» quando non c'è lista da guardare. */
+.modale .docsearch-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.modale .palette-heading {
   font-size: var(--text-lg);
 }
 
-#command-palette .palette-form {
+.modale .palette-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
 }
 
-#command-palette .palette-form label {
+.modale .palette-form label {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-#command-palette .palette-label {
+.modale .palette-label {
   font-size: var(--text-sm);
   color: var(--muted);
 }
 
-#command-palette .palette-summary {
+.modale .palette-summary {
   color: var(--accent-soft);
 }
 
-#command-palette .palette-plan {
+.modale .palette-plan {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1022,23 +1037,23 @@ button:hover {
   border-radius: var(--radius-sm);
 }
 
-#command-palette .palette-plan li {
+.modale .palette-plan li {
   padding: var(--space-2) var(--space-4);
   font-size: var(--text-base);
   border-bottom: 1px solid var(--border);
 }
 
-#command-palette .palette-plan li:last-child {
+.modale .palette-plan li:last-child {
   border-bottom: none;
 }
 
-#command-palette .palette-actions {
+.modale .palette-actions {
   display: flex;
   gap: var(--space-4);
   justify-content: flex-end;
 }
 
-#command-palette .palette-actions button {
+.modale .palette-actions button {
   padding: var(--space-3) var(--space-6);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1048,23 +1063,23 @@ button:hover {
   cursor: pointer;
 }
 
-#command-palette .palette-actions button.primary {
+.modale .palette-actions button.primary {
   background: var(--accent);
   border-color: var(--accent);
 }
 
-#command-palette .palette-actions button.danger {
+.modale .palette-actions button.danger {
   background: var(--doc-danger);
   border-color: var(--doc-danger);
   color: var(--danger-contrast);
 }
 
-#command-palette .palette-actions button:disabled {
+.modale .palette-actions button:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-#command-palette .palette-error {
+.modale .palette-error {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-sm);
   background: var(--danger-wash);

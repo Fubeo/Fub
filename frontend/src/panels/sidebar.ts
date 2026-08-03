@@ -36,14 +36,12 @@ export function mountSidebarCommands(): void {
     id: "shell.panel.files",
     title: "commands.panel.files",
     description: "commands.panel.files.desc",
-    keybinding: "Mod-Shift-e",
     run: () => showPanel("files"),
   });
   registerShellCommand({
     id: "shell.panel.search",
     title: "commands.panel.search",
     description: "commands.panel.search.desc",
-    keybinding: "Mod-Shift-f",
     run: () => showPanel("search"),
   });
 }

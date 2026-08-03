@@ -95,7 +95,6 @@ export function mountGraph(): void {
     id: "shell.graph",
     title: "commands.graph",
     description: "commands.graph.desc",
-    keybinding: "Mod-Shift-g",
     run: () => apriGrafo(),
   });
 
