@@ -16,19 +16,25 @@
 //
 // # Le superfici che questa shell ospita, e quelle che no
 //
-// Il contratto ne nomina dieci (§2.2). Questa shell ne ospita **sette** — le
-// tre sidebar/basso di prima, più barra di stato, ribbon, modale e, dal §11.1,
-// la scheda di impostazioni — e le altre tre le dichiara **non ospitate**
-// invece di lasciarle cadere in silenzio. Una view che le chiede riceve un
-// avviso che la nomina: è il minimo che il §20.4 chiede, in attesa della
-// superficie vera dove dirlo.
+// Il contratto ne nomina dieci (§2.2). Questa shell ne ospita **otto** — le tre
+// sidebar/basso di prima, più barra di stato, ribbon, modale, la scheda di
+// impostazioni (§11.1) e, dalla §3.3, l'**area principale** — e le altre due le
+// dichiara **non ospitate** invece di lasciarle cadere in silenzio. Una view che
+// le chiede riceve un avviso che la nomina: è il minimo che il §20.4 chiede, in
+// attesa della superficie vera dove dirlo.
 //
-// L'area principale è quella che è cambiata di ragione. Non manca più il posto:
-// il modello di layout c'è (§1.2), e i riquadri sono N. Manca che un riquadro
-// possa tenere **una view** invece di un documento — oggi tiene tab di
-// documenti, e basta — ed è esattamente la §3.3, il grafo che deve smettere di
-// essere un pannello nativo. Il posto dove costruirla è chiaro adesso, che è
-// tutto ciò che questa voce doveva sbloccare.
+// # `main` è ospitata, e in un modo diverso da tutte le altre
+//
+// Le altre sette hanno un contenitore in `index.html`: c'è, è uno, e una view
+// che le dichiara ci finisce dentro da sola all'avvio. L'area principale no —
+// di riquadri ce ne sono N, si dividono e si chiudono, e un riquadro non è un
+// posto che si riempie da solo: è un posto in cui **qualcuno mette qualcosa**.
+//
+// Quindi una view di `main` non si monta all'avvio. Si dichiara e aspetta, e
+// quando un riquadro apre la sua tab è `panels/document.ts` a chiedere che venga
+// montata **lì**, con l'esemplare che è l'id del riquadro. È il punto in cui i
+// due registri del §1.2 si incontrano, che `ui/panel-host.ts` diceva sarebbe
+// arrivato con questa voce e non prima.
 import { api } from "../host/ipc";
 import type { ActionRef, FieldValue, UiNode, ViewSpec, ViewSurface } from "../host/contract";
 import { $ } from "./dom";
@@ -50,14 +56,92 @@ const viewsSettingsEl = $("#views-settings");
 /// Un esemplare montato: dove disegnarlo, e con che identità e parametri
 /// chiederlo al kernel.
 interface Montata {
+  /// Quale view è, cioè l'id della `ViewSpec`. Non coincide più con la chiave
+  /// della mappa: dalla §3.3 la stessa view può essere montata in due riquadri,
+  /// e allora gli esemplari sono due e la view una.
+  view: string;
   container: HTMLElement;
   instance: string;
   params: unknown;
 }
 
-/// Le istanze montate, per id di view: il registro dei pannelli sa **quando**
-/// ridisegnarle, questo sa **dove** e **quale**.
+/// Le istanze montate, per **id di pannello**: il registro dei pannelli sa
+/// **quando** ridisegnarle, questo sa **dove** e **quale**.
+///
+/// La chiave era l'id della view, ed era la stessa cosa finché di esemplari ce
+/// n'era uno per view. Con l'area principale non lo è più — il grafo aperto in
+/// due riquadri è un pannello per riquadro — quindi la chiave è quella del
+/// pannello, e chi cerca «tutte le istanze di questa view» filtra su `view`.
 const montate = new Map<string, Montata>();
+
+/// Le view che dichiarano la superficie principale, per id.
+///
+/// Non sono montate: sono **disponibili**. Chi apre una tab di view le cerca
+/// qui, e il titolo che ne legge è quello che finisce sulla tab.
+const principali = new Map<string, ViewSpec>();
+
+/// Le view che un riquadro può ospitare, in ordine di dichiarazione.
+export function viewPrincipali(): ViewSpec[] {
+  return [...principali.values()];
+}
+
+export function viewPrincipale(id: string): ViewSpec | undefined {
+  return principali.get(id);
+}
+
+/// L'id del pannello di una view montata in un riquadro.
+///
+/// Composto, e non l'id della view: due riquadri sullo stesso grafo sono due
+/// pannelli, che invecchiano e si ridisegnano ognuno per conto suo.
+function pannelloDiRiquadro(view: string, pane: string): string {
+  return `${view}@${pane}`;
+}
+
+/// Monta (o rimonta) una view dichiarata dentro il riquadro `pane`.
+///
+/// **Idempotente**: chiamarla di nuovo sullo stesso contenitore ridisegna e
+/// basta. È ciò che permette a chi disegna i riquadri di chiamarla a ogni giro
+/// senza tenere il conto di cosa ha già montato — e ciò che rimette in piedi le
+/// view dei riquadri dopo un cambio di vault, quando `mountDeclaredViews`
+/// azzera tutto.
+export async function montaVistaInRiquadro(
+  view: string,
+  pane: string,
+  container: HTMLElement,
+): Promise<void> {
+  const spec = principali.get(view);
+  if (!spec) return;
+  const id = pannelloDiRiquadro(view, pane);
+  const gia = montate.get(id);
+  if (!gia || gia.container !== container) {
+    if (gia) unmountTree(gia.container);
+    // L'esemplare **è il riquadro**: è la stessa identità che il `ViewContext`
+    // porta di là dal confine (`pane`), quindi lo stato di vista di una view
+    // aperta in due riquadri si separa esattamente dove l'utente vede due cose.
+    montate.set(id, { view, container, instance: pane, params: null });
+    registerPanel({
+      id,
+      title: spec.title,
+      placement: spec.surface,
+      refresh: spec.refresh,
+      // Chi il kernel dichiara invecchiato è la **view**; questo pannello è uno
+      // dei suoi esemplari, e senza questa riga `stale-views` non lo troverebbe.
+      view,
+      render: () => renderDeclaredView(id),
+    });
+  }
+  await refreshPanel(id);
+}
+
+/// Il riquadro ha smesso di mostrare questa view.
+export function smontaVistaDalRiquadro(view: string, pane: string): void {
+  const id = pannelloDiRiquadro(view, pane);
+  const montata = montate.get(id);
+  if (!montata) return;
+  unregisterPanel(id);
+  unmountTree(montata.container);
+  montate.delete(id);
+}
 
 /// La superficie di una view → il contenitore che la ospita, o `null` se questa
 /// shell non ce l'ha ancora.
@@ -81,6 +165,10 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
     // nomina, ospitata dove ha senso.
     case "settings_tab":
       return viewsSettingsEl;
+    // L'area principale è ospitata, ma non da qui: il suo contenitore è un
+    // riquadro, e quale riquadro lo decide chi apre la tab. Vedi
+    // `viewPrincipali` più sotto — `null` qui significa «non all'avvio», non
+    // «non si può».
     case "main":
     case "menu":
     case "context_menu":
@@ -92,7 +180,6 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
 /// perché è ciò che l'avviso dice a chi ha scritto la view: senza, il messaggio
 /// sarebbe «non supportato», che non aiuta nessuno a capire cosa aspettare.
 const NON_OSPITATE: Record<string, string> = {
-  main: "un riquadro dell'area principale tiene documenti, non ancora view: è la §3.3",
   menu: "questa shell non ha un menu applicativo",
   context_menu: "questa shell non ha un menu contestuale estendibile",
 };
@@ -108,6 +195,7 @@ export async function mountDeclaredViews(): Promise<void> {
     unmountTree(montata.container);
   }
   montate.clear();
+  principali.clear();
   for (const el of [
     viewsLeftEl,
     viewsRightEl,
@@ -131,6 +219,12 @@ export async function mountDeclaredViews(): Promise<void> {
   // i pari merito restano nell'ordine di registrazione, che è ciò che
   // `sort` stabile garantisce.
   for (const spec of [...specs].sort((a, b) => a.order - b.order)) {
+    // L'area principale si dichiara e aspetta un riquadro: non è un avviso, è
+    // il suo modo di essere ospitata.
+    if (spec.surface === "main") {
+      principali.set(spec.id, spec);
+      continue;
+    }
     const host = surfaceContainer(spec.surface);
     if (!host) {
       console.warn(
@@ -238,10 +332,11 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
   // sua specie e non ha parametri (§2.3). Le istanze multiple arrivano con chi
   // le apre — `CommandEffect::OpenView` — e con il modello di layout che dà
   // loro dove stare.
-  montate.set(spec.id, { container, instance: spec.id, params: null });
+  montate.set(spec.id, { view: spec.id, container, instance: spec.id, params: null });
 
   registerPanel({
     id: spec.id,
+    view: spec.id,
     title: spec.title,
     placement: spec.surface,
     // Dal §22.3 questa maschera è quella dell'**esemplare**, non della specie:
@@ -256,10 +351,18 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
   });
 }
 
+/// `id` è quello del **pannello**, che per una view di riquadro non è quello
+/// della view: al kernel si chiede `montata.view`.
+///
+/// La distinzione è nata con la §3.3 e va detta perché è invisibile finché i due
+/// coincidono — cioè per le sette superfici di prima, dove un pannello *è* una
+/// view. Chiedere al kernel di disegnare «graph@main» significa nominare una
+/// view che non esiste, e la risposta è un errore che `refreshPanel` scrive in
+/// console: un riquadro vuoto, e niente che dica perché.
 async function renderDeclaredView(id: string): Promise<void> {
   const montata = montate.get(id);
   if (!montata) return;
-  const albero = await api.renderView(id, montata.instance, montata.params);
+  const albero = await api.renderView(montata.view, montata.instance, montata.params);
   disegna(id, montata, albero);
 }
 
@@ -281,7 +384,8 @@ function disegna(id: string, montata: Montata, albero: UiNode): void {
     // toglie l'unico caso in cui la corsa la perdeva sempre lo stesso.
     await flushPendingSave();
     const update = await api.viewAction(
-      id,
+      // La view, non il pannello: vedi la nota su `renderDeclaredView`.
+      montata.view,
       montata.instance,
       montata.params,
       action.action,
@@ -319,10 +423,13 @@ export function mountViewInvalidation(): void {
     // istanza per view le due cose coincidono, e la distinzione conta il giorno
     // che le istanze saranno N: chi ne ha invecchiata una non deve pagare il
     // ridisegno delle sorelle.
-    const montata = montate.get(event.view);
-    if (!montata) return;
-    if (event.instance !== null && event.instance !== montata.instance) return;
-    invecchiate.add(event.view);
+    // Tutti gli esemplari di quella view, che dalla §3.3 possono essere N: uno
+    // per sidebar e uno per riquadro che la tiene aperta.
+    const colpiti = [...montate].filter(
+      ([, m]) => m.view === event.view && (event.instance === null || event.instance === m.instance),
+    );
+    if (colpiti.length === 0) return;
+    for (const [id] of colpiti) invecchiate.add(id);
     if (programmato) return;
     programmato = true;
     queueMicrotask(() => {

@@ -107,7 +107,7 @@ async function init(): Promise<void> {
   mountViewInvalidation();
   mountExplorer();
   mountSearch();
-  mountGraph({ openNote: (id) => void openDocument(id) });
+  mountGraph();
   // Le due superfici della barra di stato (§10.3): cosa sta girando, e cosa è
   // stato detto. Il centro attività si iscrive agli eventi del kernel, quindi
   // va montato prima che il router parta.

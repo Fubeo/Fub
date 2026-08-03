@@ -25,9 +25,15 @@
 // una **superficie** (`placement`), che è una domanda di collocazione: la
 // sidebar, il basso, la barra di stato. Un riquadro dell'area principale è
 // un'altra cosa: ne esistono N, si dividono e si chiudono, e ognuno tiene le
-// sue tab. Il giorno che una view dichiarata potrà stare in un riquadro — che è
-// la §3.3, il grafo — sarà questo il punto in cui le due domande si incontrano,
-// e non prima.
+// sue tab.
+//
+// Dalla §3.3 le due domande **si incontrano**, e non si sono fuse. Una view
+// dell'area principale è un pannello con `placement: "main"` che `ui/views.ts`
+// registra quando un riquadro apre la sua tab, e ne registra **uno per
+// riquadro**: il registro continua a rispondere «quando ridisegnarti» e non ha
+// imparato cosa sia un albero di riquadri. Ciò che è servito è una riga sola —
+// il campo `view` qui sotto — perché il kernel invecchia le view e qui i
+// pannelli sono di più.
 import type { EventMask, KernelEvent, KernelNotice, ViewSpec } from "../host/contract";
 import { maskWants } from "../rules/mirrored";
 import { onAnyEvent, onEvent } from "../state/kernel";
@@ -77,6 +83,14 @@ export interface Panel {
   /// dichiarate.
   readonly title: string;
   readonly placement: PanelPlacement;
+  /// L'id della **view dichiarata** che questo pannello disegna, se ne disegna
+  /// una.
+  ///
+  /// Non è l'id del pannello, e la differenza è nata con la §3.3: una view
+  /// dell'area principale ha un pannello per riquadro, quindi N pannelli per una
+  /// view. Il kernel invecchia le **view** (`stale-views`), e senza questo campo
+  /// nessuno saprebbe quali pannelli sono i suoi.
+  readonly view?: string;
   /// Gli eventi al cui arrivo questo pannello è invecchiato: la **maschera del
   /// contratto**, non un elenco di specie (§10.1).
   ///
@@ -178,7 +192,16 @@ export function mountPanelHost(): void {
   // Il contesto di sessione è stato pubblicato e il kernel ha detto **quali**
   // view seguono ciò che è cambiato (`ViewSpec.follows`).
   on("stale-views", (ids) => {
-    for (const id of ids) void refreshPanel(id);
+    // Il kernel nomina **view**; qui i pannelli possono essere N per view (una
+    // view dell'area principale ne ha uno per riquadro). L'id diretto resta
+    // perché per le sette superfici di prima pannello e view si chiamano
+    // uguale, ed è la strada che non paga il giro sul registro.
+    for (const id of ids) {
+      void refreshPanel(id);
+      for (const panel of registro.values()) {
+        if (panel.view === id && panel.id !== id) void refreshPanel(panel.id);
+      }
+    }
   });
   // Il documento aperto è cambiato: invecchia chi lo segue.
   on("active-doc", () => {

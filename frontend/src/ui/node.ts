@@ -31,6 +31,7 @@
 // parallelo è la seconda verità che diverge appena il riconciliatore tocca un
 // nodo, ed è esattamente ciò che questo file esiste per evitare.
 import type { ActionRef, FieldValue, UiNode, UiValue } from "../host/contract";
+import { customRenderer } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
 import { attivabile, identificatore, nonAttivabile } from "./a11y";
 import { t } from "../i18n/strings";
@@ -69,6 +70,7 @@ export function mountTree(container: HTMLElement, node: UiNode, onAction: Action
     montati.set(container, aggiornato);
     return;
   }
+  for (const figlio of [...container.children]) smonta(figlio);
   container.replaceChildren();
   const el = renderUiNode(node, onAction);
   container.appendChild(el);
@@ -94,7 +96,30 @@ export function patchTree(container: HTMLElement, key: string, node: UiNode): bo
 /// Dimentica ciò che è montato qui: il prossimo giro ridisegna da zero.
 export function unmountTree(container: HTMLElement): void {
   montati.delete(container);
+  for (const figlio of [...container.children]) smonta(figlio);
   container.replaceChildren();
+}
+
+/// Come si smonta ciò che un renderer custom ha acceso su un elemento.
+///
+/// Serve perché un renderer può possedere qualcosa che il DOM non raccoglie da
+/// sé — un ciclo di animazione, un timer, un `ResizeObserver` — e togliere
+/// l'elemento non lo spegne. Nessun altro nodo ne ha bisogno: quelli sono
+/// elementi e basta.
+const disposizioni = new WeakMap<HTMLElement, () => void>();
+
+/// Spegne ciò che sta per essere tolto: `el` e tutto quello che ha sotto.
+///
+/// Si cammina il sottoalbero e non il solo `el` perché un nodo custom sta quasi
+/// sempre **dentro** ciò che viene sostituito — è una foglia dell'albero di una
+/// view, e a essere rimpiazzata è la view intera.
+function smonta(el: Element): void {
+  disposizioni.get(el as HTMLElement)?.();
+  disposizioni.delete(el as HTMLElement);
+  for (const dentro of el.querySelectorAll<HTMLElement>(".ui-custom")) {
+    disposizioni.get(dentro)?.();
+    disposizioni.delete(dentro);
+  }
 }
 
 /// L'handler di un sottoalbero, per il patch: sta sull'elemento perché un patch
@@ -122,6 +147,7 @@ function riconcilia(el: HTMLElement, next: UiNode, onAction: ActionHandler): HTM
   const prev = resi.get(el)?.node;
   if (!prev || prev.node !== next.node) {
     const nuovo = renderUiNode(next, onAction);
+    smonta(el);
     el.replaceWith(nuovo);
     return nuovo;
   }
@@ -131,6 +157,7 @@ function riconcilia(el: HTMLElement, next: UiNode, onAction: ActionHandler): HTM
     return el;
   }
   const nuovo = renderUiNode(next, onAction);
+  smonta(el);
   el.replaceWith(nuovo);
   return nuovo;
 }
@@ -225,10 +252,21 @@ function aggiorna(
       figli(el, next.cells, onAction);
       collega(el, next.action, onAction);
       return true;
-    case "custom":
+    case "custom": {
       if (prev.node !== "custom" || prev.ns !== next.ns) return false;
+      // **Un `ns` che questa shell conosce non si riconcilia: o è lo stesso
+      // dato, o si rifà.** Dentro quell'elemento c'è un widget che il
+      // riconciliatore non ha disegnato e non sa leggere — un canvas, e domani
+      // una mappa o una tabella virtualizzata — quindi l'unica cosa onesta che
+      // possa dire di lui è se il `payload` è cambiato. Se non lo è, lo lascia
+      // in pace: è ciò che tiene in vita una simulazione mentre il resto della
+      // view si ridisegna intorno.
+      if (customRenderer(next.ns)) {
+        return JSON.stringify(prev.payload) === JSON.stringify(next.payload);
+      }
       figli(el, next.fallback, onAction);
       return true;
+    }
     case "text_input":
     case "text_area":
     case "date_picker":
@@ -365,7 +403,10 @@ function figli(parent: HTMLElement, nodi: UiNode[], onAction: ActionHandler): vo
   });
 
   for (const el of esistenti) {
-    if (!usati.has(el)) el.remove();
+    if (!usati.has(el)) {
+      smonta(el);
+      el.remove();
+    }
   }
   // Rimettere in ordine: `insertBefore` di un nodo già figlio lo SPOSTA, e
   // spostarlo conserva focus, scroll e stato — che è tutto il punto.
@@ -766,14 +807,28 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
       return el;
     }
     case "custom": {
-      // Questa shell non conosce nessun `ns`, quindi disegna il fallback — che
-      // è ciò che il contratto chiede a chi non lo conosce. Il ramo che manca
-      // non è una svista: arriverà col suo primo cliente, cioè il giorno che il
-      // grafo smetterà di essere un pannello nativo e diventerà un provider
-      // sulla superficie principale.
+      // **Il ramo che aspettava il suo primo cliente**, e il cliente è
+      // arrivato: dalla §3.3 il grafo è un `ViewProvider` che manda i suoi nodi
+      // e i suoi archi dentro un `Custom`, e questa shell sa disegnarlo.
+      //
+      // Quali `ns` conosca non è scritto qui: sta in `ui/custom.ts`, e chi ne
+      // registra uno non tocca questo file. Un `ns` sconosciuto continua a
+      // ricevere il **fallback**, che è ciò che il contratto chiede a chi non
+      // lo conosce — ed è la condizione normale per un plugin di terzi fino a
+      // M5, non un caso d'errore.
       const el = div("ui-custom");
       el.dataset.ns = node.ns;
-      for (const child of node.fallback) el.appendChild(renderUiNode(child, onAction));
+      const disegna = customRenderer(node.ns);
+      if (disegna) {
+        // Lo smontaggio torna dal renderer e si mette da parte: un canvas con
+        // un `requestAnimationFrame` in volo su un elemento che nessuno guarda
+        // più è un ciclo che continua a girare per sempre, e a saperlo è solo
+        // chi lo ha acceso.
+        const smonta = disegna(el, node.payload, onAction);
+        if (smonta) disposizioni.set(el, smonta);
+      } else {
+        for (const child of node.fallback) el.appendChild(renderUiNode(child, onAction));
+      }
       return el;
     }
     case "pending": {

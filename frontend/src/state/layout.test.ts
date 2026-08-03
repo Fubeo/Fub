@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   apriIn,
+  apriVistaIn,
   attivaTab,
   caricaLayout,
   chiudiPane,
@@ -16,12 +17,14 @@ import {
   coniaPaneId,
   dividi,
   docAttivo,
+  documenti,
   layout,
   layoutDiDefault,
   paneConDoc,
   panes,
   parseLayout,
   rinomina,
+  tabAttiva,
   togliDappertutto,
   type Layout,
 } from "./layout";
@@ -119,7 +122,7 @@ describe("le tab di un riquadro", () => {
     apriIn("main", "a.md", l);
     apriIn("main", "b.md", l);
     apriIn("main", "a.md", l);
-    expect(l.panes.main.docs).toEqual(["a.md", "b.md"]);
+    expect(documenti(l.panes.main)).toEqual(["a.md", "b.md"]);
     expect(docAttivo("main", l)).toBe("a.md");
   });
 
@@ -173,6 +176,57 @@ describe("le tab di un riquadro", () => {
   });
 });
 
+// La §3.3: una tab può essere una **view** e non un documento. Le prove qui
+// sotto guardano la cosa che si romperebbe in silenzio — un path e una view che
+// si confondono — più che il fatto che una tab in più si apra.
+describe("una tab che non è un documento", () => {
+  it("una view sta accanto alle note e non è una di loro", () => {
+    const l = nuovo();
+    apriIn("main", "a.md", l);
+    apriVistaIn("main", "graph", l);
+    expect(l.panes.main.tabs).toEqual([
+      { k: "doc", doc: "a.md" },
+      { k: "view", view: "graph" },
+    ]);
+    // La domanda «quale nota sta mostrando questo riquadro» ha una risposta
+    // sola, e con il grafo davanti è «nessuna». È ciò che rende `doc: null` nel
+    // `ViewContext` uno stato già previsto invece di un campo nuovo.
+    expect(docAttivo("main", l)).toBeNull();
+    expect(documenti(l.panes.main)).toEqual(["a.md"]);
+    expect(tabAttiva("main", l)).toEqual({ k: "view", view: "graph" });
+  });
+
+  it("aprire due volte la stessa view ci si sposta sopra", () => {
+    const l = nuovo();
+    apriVistaIn("main", "graph", l);
+    apriIn("main", "a.md", l);
+    apriVistaIn("main", "graph", l);
+    expect(l.panes.main.tabs).toHaveLength(2);
+    expect(tabAttiva("main", l)).toEqual({ k: "view", view: "graph" });
+  });
+
+  // Un rename è un fatto dei documenti: una view che si chiamasse come una nota
+  // non deve seguirlo. È il caso che un elenco di stringhe avrebbe sbagliato.
+  it("un rename non tocca le view", () => {
+    const l = nuovo();
+    apriVistaIn("main", "a.md", l);
+    apriIn("main", "a.md", l);
+    rinomina("a.md", "b.md", l);
+    expect(l.panes.main.tabs).toEqual([
+      { k: "view", view: "a.md" },
+      { k: "doc", doc: "b.md" },
+    ]);
+  });
+
+  it("una nota cancellata non porta via la view omonima", () => {
+    const l = nuovo();
+    apriVistaIn("main", "a.md", l);
+    apriIn("main", "a.md", l);
+    togliDappertutto("a.md", l);
+    expect(l.panes.main.tabs).toEqual([{ k: "view", view: "a.md" }]);
+  });
+});
+
 // Il file si apre con un editor di testo — è la promessa fatta alle
 // impostazioni nella 0036 — quindi ci si può trovare dentro qualunque cosa. La
 // regola di `store.ts`: assente non è un errore, e un valore che non regge la
@@ -187,9 +241,43 @@ describe("rileggere la finestra com'era", () => {
   it("ritrova ciò che aveva salvato", () => {
     const l = nuovo();
     apriIn("main", "a.md", l);
+    apriVistaIn("main", "graph", l);
     dividi("main", "col", l);
     const riletto = parseLayout(JSON.parse(JSON.stringify(l)));
     expect(riletto).toEqual(l);
+  });
+
+  // **La migrazione della §3.3.** Fino a ieri un riquadro teneva `docs:
+  // string[]`, e quel file è già sul disco di chiunque abbia aperto questa
+  // shell: una stringa nell'elenco è una tab di documento, quindi si legge
+  // ancora e nessuno perde le note che aveva aperte.
+  it("legge la forma di prima, in cui una tab era un path", () => {
+    const riletto = parseLayout({
+      tree: { k: "leaf", pane: "main" },
+      panes: { main: { docs: ["a.md", "b.md"], active: 1, mode: "reading" } },
+      focus: "main",
+    });
+    expect(riletto?.panes.main.tabs).toEqual([
+      { k: "doc", doc: "a.md" },
+      { k: "doc", doc: "b.md" },
+    ]);
+    expect(docAttivo("main", riletto!)).toBe("b.md");
+  });
+
+  it("una tab che non è né un documento né una view vale come file rovinato", () => {
+    const con = (t: unknown) =>
+      parseLayout({
+        tree: { k: "leaf", pane: "main" },
+        panes: { main: { tabs: [t], active: 0, mode: "live_preview" } },
+        focus: "main",
+      });
+    expect(con({ k: "grafo", id: "x" })).toBeNull();
+    expect(con({ k: "doc" })).toBeNull();
+    expect(con({ k: "view", view: "" })).toBeNull();
+    expect(con(42)).toBeNull();
+    // …e la stringa vuota non è un path: era l'unico modo in cui la clemenza
+    // verso la forma di prima poteva far entrare una tab senza documento.
+    expect(con("")).toBeNull();
   });
 
   // Le tre forme di file rovinato che si possono davvero disegnare male: un

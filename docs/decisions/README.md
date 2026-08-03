@@ -90,6 +90,7 @@ cronologico di chiusura.
 
 | [0077](0077-una-scorciatoia-e-una-chiave.md) | Una scorciatoia è una chiave di impostazione, e un comando di shell è un comando | §18.2 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — chiude registro unico, palette fuzzy, conflitti e scorciatoie riconfigurabili; resta il solo accordo **in sequenza** | 2026-08-03 |
 | [0078](0078-i-riquadri-sono-un-fatto-della-shell.md) | I riquadri sono un fatto della shell, e il buffer è del documento | §1.2 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — **chiude la voce**, ultima casella; chiude anche la metà rimasta del §11.2 e sblocca la §3.3. Zero firma: il `pane` del `ViewContext` c'era dalla [0007](0007-contesto-di-sessione.md) | 2026-08-03 |
+| [0079](0079-il-grafo-esce-dall-overlay.md) | Il grafo esce dall'overlay, e una tab non è più per forza un documento | §3.3 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — **chiude la voce**, lasciando una casella. Il grafo è un `ViewProvider` su `ViewSurface::Main` (la prima a dichiararla) e disegna via `UiKind::Custom`: i **dati** passano dal canale di tutti, i **pixel** restano della shell. Una tab è un tipo discriminato, non un path con un prefisso. Zero firma, la terza volta di fila | 2026-08-03 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

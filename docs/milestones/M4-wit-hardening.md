@@ -254,7 +254,10 @@ delle quattro era invece una P0 rimasta invisibile per sei giri.
       il `via` con cui si ricostruiscono gli archi oltre il primo passo. Il
       comando `graph_data` non è più superficie privilegiata: è il **primo
       cliente** della variante, e prende gli archi una nota alla volta come farà
-      una vista a grafo di terzi.
+      una vista a grafo di terzi. *Poi anche quel comando è sparito*: dalla
+      [0079](../decisions/0079-il-grafo-esce-dall-overlay.md) il grafo è un
+      `ViewProvider`, chiede i vicini di **tutto il vault in una domanda sola**
+      (semi vuoti, `depth: 1`), e non ha più nessuna porta sua.
 - [x] **Import ed export nel contratto** — fatto con la [decisione 0006](../decisions/0006-import-export-come-trait.md):
       `ImportProvider`/`ExportProvider` in `abi/transfer.rs`, con
       `MarkdownImport`/`MarkdownExport` come **primo cliente** vero attraverso

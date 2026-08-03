@@ -31,10 +31,10 @@ use fub_abi::model::{DocId, DocumentModel, Heading, Span};
 use fub_abi::session::{PaneMode, Selection, ViewContext};
 use fub_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue};
 use fub_abi::traits::{
-    BacklinkRef, DataRead, DataWrite, EntryKind, HostCommands, HostEnv, HostEvents, HostQuery,
-    HostServices, IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead,
-    SettingsWrite, TagCount, TrashEntry, VaultEntry, VaultRead, VaultStructure, VaultWrite,
-    ViewStateRead, ViewStateWrite,
+    BacklinkRef, DataRead, DataWrite, DocumentMatch, EntryKind, HostCommands, HostEnv, HostEvents,
+    HostQuery, HostServices, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef,
+    Page, Paged, SettingsRead, SettingsWrite, TagCount, TrashEntry, VaultEntry, VaultRead,
+    VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
 use fub_abi::PluginError;
 
@@ -56,6 +56,12 @@ pub struct MemoryHost {
     outlines: Mutex<BTreeMap<String, Vec<Heading>>>,
     /// Aggregazione dei tag finta per [`IndexQuery::Tags`].
     tags: Mutex<Vec<TagCount>>,
+    /// Archi finti per [`IndexQuery::Neighbors`], seminati come coppie
+    /// (sorgente, destinazione). Il doppio non ha un grafo — come per i
+    /// backlink — e la ragione per cui questo campo esiste comunque è che una
+    /// vista a grafo (§3.3) chiede il vault **intero** in una domanda sola, e
+    /// senza un ramo qui si proverebbe solo end-to-end.
+    archi: Mutex<Vec<(String, String)>>,
     /// Modelli finti per [`VaultRead::read_model`], seminati per documento. Il
     /// doppio **non parsa** — come non parsa per l'outline — e la ragione è la
     /// stessa: un host in memoria che si portasse dentro un `FormatProvider`
@@ -197,6 +203,19 @@ impl MemoryHost {
         let mut context = ctx.take().unwrap_or_else(|| ViewContext::new("main"));
         f(&mut context);
         *ctx = Some(context);
+    }
+
+    /// Semina un arco del grafo dei link: `from` nomina `to` (stile builder).
+    ///
+    /// Non deriva dai documenti seminati, e non è una pigrizia del doppio: per
+    /// derivarlo bisognerebbe parsare, e questo host non parsa — è la stessa
+    /// regola dell'outline e dei modelli.
+    pub fn con_arco(self, from: &str, to: &str) -> Self {
+        self.archi
+            .lock()
+            .unwrap()
+            .push((from.to_string(), to.to_string()));
+        self
     }
 
     /// Semina i backlink che [`HostQuery::query_index`] restituirà per `target`
@@ -686,6 +705,67 @@ impl HostQuery for MemoryHost {
                 self.tags.lock().unwrap().clone(),
                 page,
             ))),
+            // **I documenti che ci sono**, come l'anagrafe qui sopra e per la
+            // stessa ragione: «quali documenti esistono» è ciò che un host in
+            // memoria sa di sé senza che glielo si semini. Niente rilevanza e
+            // niente estratti — quelli li produce un indice, e qui non ce n'è
+            // uno — quindi la selezione si **ignora**: chi vuole provare un
+            // filtro vuole un kernel vero.
+            IndexQuery::Documents { page, .. } => Ok(IndexResult::Documents(Paged::window(
+                self.docs
+                    .lock()
+                    .unwrap()
+                    .keys()
+                    .map(|id| DocumentMatch {
+                        doc: DocId::new(id),
+                        score: None,
+                        snippet: None,
+                        highlights: Vec::new(),
+                        occurrences: Default::default(),
+                        properties: Default::default(),
+                    })
+                    .collect(),
+                page,
+            ))),
+            // I vicini, dagli archi seminati. Il verso lo si onora — è l'unica
+            // cosa che questo ramo possa sbagliare in modo invisibile — e la
+            // profondità no: oltre il primo passo servirebbe una chiusura
+            // transitiva, cioè un grafo, cioè il kernel. Chiederne di più è
+            // `Unserved`, che è la risposta onesta.
+            IndexQuery::Neighbors {
+                direction,
+                depth,
+                page,
+                ..
+            } => {
+                if depth > 1 {
+                    return Err(PluginError::Unserved(
+                        "MemoryHost non cammina il grafo: chiedi depth 1, o usa un Workspace vero"
+                            .into(),
+                    ));
+                }
+                let archi = self.archi.lock().unwrap();
+                let mut items = Vec::new();
+                for (from, to) in archi.iter() {
+                    // `via` è da dove si parte, `doc` dove si arriva: entrante
+                    // vuol dire che i due si scambiano.
+                    if matches!(direction, LinkDirection::Outbound | LinkDirection::Both) {
+                        items.push(NeighborRef {
+                            doc: DocId::new(to),
+                            via: DocId::new(from),
+                            depth: 1,
+                        });
+                    }
+                    if matches!(direction, LinkDirection::Inbound | LinkDirection::Both) {
+                        items.push(NeighborRef {
+                            doc: DocId::new(from),
+                            via: DocId::new(to),
+                            depth: 1,
+                        });
+                    }
+                }
+                Ok(IndexResult::Neighbors(Paged::window(items, page)))
+            }
             // Le impostazioni le serve, e dal canale dati come il kernel: una
             // feature che le disegnasse chiedendole a una porta diversa nel test
             // non proverebbe la strada che percorre nell'app.
@@ -718,8 +798,8 @@ impl HostQuery for MemoryHost {
             // risposta — non un `BadArgs`, che direbbe che la domanda è
             // malposta.
             _ => Err(PluginError::Unserved(
-                "MemoryHost serve solo backlink, outline, tag e impostazioni \
-                 seminati a mano"
+                "MemoryHost serve solo backlink, outline, tag, archi e impostazioni \
+                 seminati a mano, più i documenti che ha in memoria"
                     .into(),
             )),
         }

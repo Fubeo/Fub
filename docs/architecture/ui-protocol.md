@@ -214,13 +214,15 @@ informare è un evento*. `instance` assente = tutte le istanze. Il **freno** è 
 chi disegna: venti inviti in un giro sono un ridisegno, e la finestra è un
 microtask.
 
-Cosa dichiarano le sei view ufficiali: i backlink solo `Document` (i backlink
+Cosa dichiarano le sette view ufficiali: i backlink solo `Document` (i backlink
 di una nota sono gli stessi da ogni punto di essa), l'outline
 `Document + Selection` (segna la sezione in cui sta il cursore), le statistiche
 tutto (contano la selezione e cambiano faccia in lettura), la cronologia
 `Document` (la storia è di *quella* nota), il pannello tag e il cestino
 **niente** — la distribuzione dei tag del vault, e cosa c'è nel cestino, sono le
-stesse da qualunque nota le si guardi.
+stesse da qualunque nota le si guardi — e il grafo **niente nemmeno lui**, né dal
+contesto né dagli eventi: la sua maschera è vuota, perché ridisegnarlo vuol dire
+far ripartire una simulazione sotto il mouse di chi la sta guardando.
 
 ## La regola dell'escape hatch — e il confine di fiducia
 
@@ -302,18 +304,30 @@ Così il provider resta puro, il kernel resta l'unico che conosce la topologia d
 vault, e il frontend fa per il contenuto quel che già fa per la navigazione dei
 wikilink.
 
-Caso guida per M2: la **graph view** ad alte prestazioni (force-directed su
-Canvas/WebGL) **non** passa da `UiNode`. Il `ViewProvider` del grafo espone i
-dati (nodi/archi) e il frontend possiede un componente canvas dedicato. Vedi la
-sezione "Graph view" in [M2](../milestones/M2-search-graph.md).
+Caso guida, e dalla [0079](../decisions/0079-il-grafo-esce-dall-overlay.md) non
+più una promessa: la **graph view** ad alte prestazioni (force-directed su
+Canvas) **non** passa da `UiNode`, e passa da tutto il resto. Il `ViewProvider`
+del grafo (`fub-features/src/graph.rs`) dichiara `ViewSurface::Main`, chiede
+nodi e archi al canale dati (`IndexQuery::Documents` e `IndexQuery::Neighbors`,
+due domande e nessuna porta), e li manda dentro un
+`UiKind::Custom { ns: "fub:graph", payload }`; il frontend riconosce quello `ns`
+e ci mette sopra il suo canvas (`frontend/src/panels/graph.ts`, registrato in
+`ui/custom.ts`). Il click su un nodo torna indietro come una qualunque azione di
+view, e la risposta è `ViewUpdate::Navigate` — la stessa che usa il backlink.
 
-**Asterisco di onestà sul dogfooding.** La graph view è quindi una superficie
-*privilegiata*: componente frontend + canale IPC dedicato, non percorribile da un
-plugin di terzi finché la `WebView` non ha asset story e CSP (M5). Il principio
-«se il protocollo basta alle feature ufficiali, basta ai plugin» vale per le
-superfici **dichiarative**.
+**Asterisco di onestà sul dogfooding, riscritto perché è cambiato di misura.**
+La graph view *era* una superficie privilegiata in due sensi: possedeva i propri
+**dati** e i propri **pixel**. Il primo se n'è andato — i dati vengono dal canale
+di tutti, e una vista a grafo di terzi può chiedere esattamente le stesse due
+query. Il secondo resta, e la sua misura è precisa: **un `ns` che la shell
+conosce**. Un plugin di terzi manda il suo `Custom` e riceve il `fallback`
+finché non ha modo di spedire codice di disegno, cioè finché la `WebView` non ha
+asset story e CSP (M5). Il principio «se il protocollo basta alle feature
+ufficiali, basta ai plugin» vale per le superfici **dichiarative**, e il varco
+`Custom` è il punto in cui una superficie smette di esserlo — dichiarato, con un
+degrado scritto nel contratto, e non un canale a parte.
 
-## Dogfooding: le sei view ufficiali
+## Dogfooding: le sette view ufficiali
 
 Sono la strada che percorrerà un plugin di terzi, e per questo il protocollo si
 tiene "affamato". Ognuna esercita una parte diversa:
@@ -327,6 +341,10 @@ tiene "affamato". Ognuna esercita una parte diversa:
 - **tag** (`tags.rs`) — un **filtro**: un campo di testo il cui contenuto
   sopravvive fra due render, cioè il collaudo dello stato su `on_action` e del
   riconciliatore insieme;
+- **grafo** (`graph.rs`) — l'**area principale** e il varco `Custom`: la prima
+  view che dichiari `ViewSurface::Main`, e la prima che mandi alla shell un dato
+  che il protocollo non sa disegnare. È il caso più duro, ed è quello che dice
+  dove passa davvero il confine fra ciò che si dichiara e ciò che si disegna;
 - **statistiche** (`stats.rs`) — il primo cliente della barra di stato;
 - **cestino** (`trash.rs`) — le due **domande**: svuotare e ripristinare su un
   path occupato non chiedono una modale al contratto, disegnano la domanda al

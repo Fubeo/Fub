@@ -20,6 +20,11 @@
 //!   [`ViewProvider`](fub_abi::traits::ViewProvider): elenca `list_trash` e
 //!   agisce con i comandi `trash.restore` e `trash.empty` del registro, senza
 //!   una capacità sua (§1.2).
+//! - [`graph`] — la vista a grafo come
+//!   [`ViewProvider`](fub_abi::traits::ViewProvider): nodi e archi dal canale
+//!   dati, disegnati dalla shell dentro un [`UiKind::Custom`](fub_abi::ui::UiKind::Custom)
+//!   sulla superficie principale — la prima view di questo repo che dichiari
+//!   `ViewSurface::Main` (§3.3).
 //! - [`search`] — [`IndexProvider`](fub_abi::traits::IndexProvider) full-text
 //!   su tantivy, persistente e incrementale (M2).
 //! - [`commands`] — i comandi ufficiali come
@@ -44,6 +49,8 @@ pub mod backlinks;
 pub mod blocks;
 #[cfg(feature = "commands")]
 pub mod commands;
+#[cfg(feature = "graph")]
+pub mod graph;
 pub mod inventario;
 #[cfg(feature = "outline")]
 pub mod outline;
@@ -71,6 +78,8 @@ pub use commands::{
     SEARCH_OPEN, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
     SETTINGS_SET, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
+#[cfg(feature = "graph")]
+pub use graph::{GraphView, GRAPH_ID, GRAPH_NS, GRAPH_VIEW};
 pub use inventario::{ogni_feature_ufficiale, ogni_view_ufficiale, FeatureUfficiale};
 #[cfg(feature = "outline")]
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};

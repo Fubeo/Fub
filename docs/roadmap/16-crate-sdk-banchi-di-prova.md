@@ -103,10 +103,10 @@ dichiarata guardando le voci insieme, come la seduta chiede.
       il **confine contro l'accoppiamento feature↔feature**, perché dentro un
       crate solo `pub(crate)` lascia passare tutto. È giustificato dai venti
       moduli di 21.2 — che oggi non esistono: i moduli di feature sono
-      nove [conta: moduli-di-feature], e non si citano fra loro: l'unico
+      dieci [conta: moduli-di-feature], e non si citano fra loro: l'unico
       riferimento incrociato nei sorgenti è un link di documentazione a
       `backlinks::catalog`.
-      Farlo adesso significa pagare venti `Cargo.toml` per otto moduli che non si
+      Farlo adesso significa pagare venti `Cargo.toml` per dieci moduli che non si
       parlano; farlo mai significa scoprire l'accoppiamento quando districarlo
       costa venti volte tanto. **La condizione che lo sblocca è scritta e non è
       una data**: il primo import fra due moduli di feature che non sia un link

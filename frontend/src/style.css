@@ -815,34 +815,69 @@ button:hover {
   font: inherit;
 }
 
-/* --- vista grafo (overlay canvas) --------------------------------------- */
+/* --- la view in un riquadro, e il grafo che è la prima ------------------- */
 
-#graph-overlay {
-  position: fixed;
-  inset: 48px;
-  z-index: var(--z-overlay);
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+/* La terza superficie di un riquadro (§3.3), accanto all'editor e alla lettura.
+   Le tre sono esclusive come le modalità: quando la tab davanti è una view non
+   c'è nessun documento da mostrare, e le altre due si tolgono di mezzo invece
+   di restare sotto a occupare spazio. */
+.pane-view {
+  display: none;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
+  position: relative;
 }
-
-#graph-overlay .graph-bar {
+.pane.con-vista > .pane-view {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-6);
-  border-bottom: 1px solid var(--border);
+}
+.pane.con-vista > .pane-editor,
+.pane.con-vista > .pane-preview {
+  display: none;
 }
 
-#graph-overlay .graph-canvas {
+/* L'albero di una view dichiarata riempie il riquadro. Nella sidebar un
+   pannello è alto quanto il suo contenuto e scorre; qui è il contrario — il
+   contenuto è alto quanto il riquadro — e senza questa regola un nodo che si
+   dimensiona in percentuale (un canvas, una mappa) chiede il 100% di `auto` e
+   riceve zero. È il primo posto in cui `ui-custom` ha un'altezza da dare. */
+.pane-view > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+/* Il grafo dentro il riquadro. Niente cornice, niente ombra, niente barra col
+   bottone di chiusura: quelle erano dell'overlay, e un overlay è una finestra
+   sopra le cose. Un riquadro **è** il posto — lo si chiude dalla sua tab, come
+   ogni altra cosa aperta. */
+.pane-view .graph-canvas {
   flex: 1;
   width: 100%;
   height: 100%;
+  display: block;
+}
+
+/* Il conto di nodi e archi: sopra il canvas e in un angolo, perché è
+   un'annotazione su ciò che si sta guardando e non una testata. */
+.graph-count {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-4);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--text-muted, var(--text));
+  font-size: var(--font-sm, 0.85em);
+  pointer-events: none;
+}
+
+/* La tab di una view non è la tab di una nota: non si sporca mai e non nomina
+   un file, quindi il corsivo dice che è un'altra specie senza aggiungere
+   un'icona a una striscia già fitta. */
+.tab-view .tab-name {
+  font-style: italic;
 }
 
 /* --- palette dei comandi ------------------------------------------------- */

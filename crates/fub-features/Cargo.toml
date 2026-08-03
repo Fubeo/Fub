@@ -25,6 +25,7 @@ default = [
     "tags",
     "stats",
     "trash",
+    "graph",
     "commands",
     "blocks",
 ]
@@ -41,6 +42,7 @@ stats = []
 # quel bundle i due bottoni del pannello premono un registro che non ha quei
 # comandi. Dichiararla qui è il modo di non spedire quella build.
 trash = ["commands"]
+graph = []
 commands = []
 blocks = []
 

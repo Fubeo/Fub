@@ -38,10 +38,13 @@ principale, status bar, ribbon e menu nel contratto, i capitoli 11, 12, 7.3,
 atterrare, e ognuno avrebbe ripetuto la scappatoia che il grafo ha già fatto.
 Ora il contratto le nomina; **ospitarle** tutte è un'altra cosa — e il modello di
 layout, che era il pezzo mancante, c'è dal ~~§1.2~~
-([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)). Delle dieci
-superfici ne restano tre non ospitate, e adesso per ragioni loro: `main` vuole che
-un riquadro sappia tenere una **view** e non solo tab di documenti (§3.3), `menu`
-e `context_menu` vogliono superfici che questa shell non ha.
+([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)). Con la
+~~§3.3~~ ([0079](../decisions/0079-il-grafo-esce-dall-overlay.md)) anche `main` è
+ospitata — un riquadro tiene una tab di **view**, e il grafo è il primo a starci
+dentro — quindi delle dieci superfici ne restano **due** non ospitate: `menu` e
+`context_menu`, che vogliono superfici che questa shell non ha. Ed è la riga che
+vale la pena rileggere fra un anno: l'ultima delle tre a cadere è caduta perché
+il contratto bastava già, non perché qualcuno gli abbia aggiunto qualcosa.
 **[decisione 0008](../decisions/0008-modifica-chirurgica.md) (la primitiva di edit)**: finché l'unico modo di cambiare un documento è
 riscriverlo tutto, ogni feature che tocca il testo perde cursore, selezione e
 undo, e due di loro non si possono comporre — è il prerequisito silenzioso della

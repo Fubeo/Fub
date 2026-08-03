@@ -93,6 +93,8 @@ use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
 use crate::blocks::{self, BLOCKS_ID};
 #[cfg(feature = "commands")]
 use crate::commands::{self, CoreCommands, COMMANDS_ID};
+#[cfg(feature = "graph")]
+use crate::graph::{self, GraphView, GRAPH_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineView, OUTLINE_ID};
 #[cfg(feature = "search")]
@@ -205,6 +207,14 @@ static UFFICIALI: &[FeatureUfficiale] = &[
         nome: "Cestino",
         catalog: trash::catalog,
         view: Some(|| Box::new(TrashView)),
+        commands: None,
+    },
+    #[cfg(feature = "graph")]
+    FeatureUfficiale {
+        id: GRAPH_ID,
+        nome: "Grafo",
+        catalog: graph::catalog,
+        view: Some(|| Box::new(GraphView)),
         commands: None,
     },
     #[cfg(feature = "stats")]
