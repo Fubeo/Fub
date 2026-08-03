@@ -207,15 +207,22 @@ famiglia della [decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md)
 stavolta, è quella sul silenzio stesso — *«perdite silenziose non esistono per
 contratto»* è scritto nell'architettura ed è vero della sola coda eventi.
 Cercandola, il presupposto da non dare per buono è che un `Result` restituito sia
-un `Result` letto, e che un messaggio scritto sia un messaggio arrivato: nel repo
-di oggi **sedici** messaggi [conta: diagnostica-shell] vanno alla console della webview e nessuno ha un
-lettore in un'app impacchettata — quelli che andavano a `stderr` erano
+un `Result` letto, e che un messaggio scritto sia un messaggio arrivato: i
+messaggi che vanno alla console della webview — dove, in un'app impacchettata,
+non ha un lettore nessuno — erano **sedici** e oggi sono **tre** [conta: diagnostica-shell],
+e quelli che andavano a `stderr` erano
 **ventisette** e oggi sono zero in codice di produzione, distribuiti fra due
 destinazioni dalla [decisione 0062](../decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)
 (*il log è il pavimento, l'evento è la porta*). (I numeri sono stati ricontati
 dalla [decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md), che
 li ha trovati scritti a mano in quattro posti con tre valori diversi e nessuno
-giusto: finché la [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio) non li presidia, si ricontano a ogni giro.) Il canale
+giusto. **Non si ricontano più a ogni giro**: la
+[§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
+è chiusa dalla [decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)
+e li presidia lei — e il «sedici» di due righe più su è **uno dei numeri che quel
+presidio ha trovato invecchiati**, cioè il caso esatto per cui è stato scritto.
+Vale la pena tenerlo scritto invece di sostituirlo: la frase che dice quanto un
+numero è sceso è vera più a lungo di quella che dice quanto vale.) Il canale
 di destinazione è ora costruito per il primo dei due — `Event::Trouble` più il
 pavimento del log, con il centro notifiche in ascolto — e con la
 [decisione 0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md) lo
