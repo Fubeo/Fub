@@ -36,8 +36,12 @@ Dal terzo giro se ne aggiungono due dello stesso peso. **Le superfici
 principale, status bar, ribbon e menu nel contratto, i capitoli 11, 12, 7.3,
 10.3 e 11.5 — cioè la metà di FEATURES per volume — non avevano un posto dove
 atterrare, e ognuno avrebbe ripetuto la scappatoia che il grafo ha già fatto.
-Ora il contratto le nomina; **ospitarle** tutte è un'altra cosa, ed è il modello
-di layout del §1.2.
+Ora il contratto le nomina; **ospitarle** tutte è un'altra cosa — e il modello di
+layout, che era il pezzo mancante, c'è dal ~~§1.2~~
+([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)). Delle dieci
+superfici ne restano tre non ospitate, e adesso per ragioni loro: `main` vuole che
+un riquadro sappia tenere una **view** e non solo tab di documenti (§3.3), `menu`
+e `context_menu` vogliono superfici che questa shell non ha.
 **[decisione 0008](../decisions/0008-modifica-chirurgica.md) (la primitiva di edit)**: finché l'unico modo di cambiare un documento è
 riscriverlo tutto, ogni feature che tocca il testo perde cursore, selezione e
 undo, e due di loro non si possono comporre — è il prerequisito silenzioso della

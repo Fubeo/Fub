@@ -35,6 +35,8 @@ frontend/src/
 
   state/         lo stato condiviso e ciò che lo cambia
     store.ts       i campi condivisi + il bus dei segnali + lo stato di vista
+    layout.ts      l'albero dei riquadri: quanti sono, come sono disposti, che
+                   tab tiene ognuno e in che modalità (§1.2)
     kernel.ts      il router degli eventi del kernel
     vault.ts       le operazioni sul vault (tutte dal registro comandi)
     organization.ts  l'organizzazione del vault: specchio + le quattro scritture
@@ -50,7 +52,9 @@ frontend/src/
     dom.ts         `$`
 
   panels/        un modulo per dominio
-    document.ts    l'editor, il buffer, la modalità, il contesto di sessione
+    document.ts    i riquadri: gli editor, **un buffer per documento** (non per
+                   riquadro), le tab, la modalità di ciascuno, il contesto di
+                   sessione del riquadro col fuoco
     preview.ts     il documento reso (modalità Lettura) e gli embed
     explorer.ts    l'albero, gli spazi, le appuntate, il drag & drop
     search.ts      la barra e i risultati (§21.4-§21.5: qui atterrano anche il
@@ -296,31 +300,26 @@ questa catena disegnerebbe un evento che non arriva mai.
 
 ## Cosa resta aperto, e perché
 
-Le due metà del [§1.2](../roadmap/01-forma-della-shell.md) che **non** sono
-chiuse, più una migrazione:
+Del [§1.2](../roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite) non resta
+niente: il modello di layout è fatto
+([decisione 0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)) —
+l'area principale è un albero di riquadri, ognuno con le sue tab e la sua
+modalità, e la finestra si ricorda com'era. Restano queste, che sono altre voci:
 
-- **Il modello di layout** — tab, split, pane, workspace salvabili. Non è un
-  refactor: è la feature 3.3, e va decisa insieme a `PaneId`. La metà backend
-  delle sessioni multiple **c'è**
-  ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)):
-  l'host tiene una mappa di vault aperti, ogni comando IPC accetta un `vault`
-  opzionale, e il «corrente» è una comodità di questa shell. È già pronto anche
-  che il contesto pubblicato porti l'identità del pannello (`MAIN_PANE`): la
-  costante sta in `host/contract.ts` perché è un **valore del confine**, ed è
-  presidiata — la fixture del mirror è generata da `ViewContext::new(MAIN_PANE)`,
-  la costante vera del kernel, e `host/mirror.test.ts` ci lega quella TS. Due
-  valori che divergono sarebbero, da contratto, un cambio di pannello a ogni
-  pubblicazione del contesto.
-- **Il layout** ([§11.2](../roadmap/11-impostazioni-e-i-tre-stati.md), metà
-  rimasta). Il §11.1 ha dato una casa alle **impostazioni** e la
-  [decisione 0037](../decisions/0037-lo-stato-di-vista.md) allo *stato di vista*
-  (scroll, sezioni collassate, filtro, scheda attiva), che è per-macchina **e per
-  esemplare**: modalità, cartelle aperte e spazio selezionato non stanno più in
-  `localStorage`, che moriva col profilo della webview. Resta il *layout*, perché
-  ha più configurazioni per lo stesso utente: non è un valore ma un insieme
-  nominato, e va deciso col modello di layout
-  ([§1.2](../roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite), seduta 18).
-  Oggi l'area principale è un pannello solo, quindi non c'è niente da salvare.
+- **I workspace salvati con un nome.** La casa è decisa — nel vault, come le
+  note e le scorciatoie ([0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)),
+  perché li ha creati l'utente apposta — e il formato aspetta di vedere assetti
+  veri. È l'altra metà della distinzione che la 0078 ha fatto: *com'era aperta
+  la finestra* non ha un nome ed è stato di vista (file della macchina), *un
+  workspace* un nome ce l'ha, e un'impostazione ha un valore alla volta mentre
+  un layout ne ha uno per nome ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)).
+  Con questo il [§11.2](../roadmap/11-impostazioni-e-i-tre-stati.md) si chiude:
+  il «terzo stato senza contenitore» che il titolo nominava non era terzo — i
+  due contenitori esistevano già entrambi.
+- **Una view dichiarata dentro un riquadro** ([§3.3](../roadmap/18-editor-e-tastiera.md)).
+  Un riquadro tiene tab di **documenti**; il giorno che ne tenga una di view, il
+  grafo smette di essere un pannello nativo in overlay. Non è più bloccato da
+  niente — è il posto che mancava, e adesso c'è.
 - ~~**Cestino e cronologia come `ViewProvider` veri.**~~ **Fatti**
   ([0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)): sono due
   provider di `fub-features`, e di qua è rimasto solo il *gesto* di cestinare —

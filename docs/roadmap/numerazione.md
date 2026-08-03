@@ -92,6 +92,8 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §1.8 · §12.1 | [0040 — Chi localizza](../decisions/0040-chi-localizza.md) |
 | §1.11 · §12.2 | [0041 — Un errore è testo che qualcuno legge](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) |
 | §3.3 · §12.4 | [0042 — Il catalogo della shell](../decisions/0042-il-catalogo-della-shell.md) |
+| §3.1 · §1.2 | [0078 — I riquadri sono un fatto della shell](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md) |
+| §3.10 · §11.2 | [0078 — I riquadri sono un fatto della shell](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md) (la metà layout; lo stato di vista è della [0037](../decisions/0037-lo-stato-di-vista.md)) |
 | §4.9 | [0001 — Supply chain e SBOM](../decisions/0001-supply-chain-e-sbom.md) |
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
@@ -104,9 +106,9 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 
 | Voce | Dov'era | Dov'è adesso | Perché lì |
 |---|---|---|---|
-| §1.2 Smontare il monolite | 1. La forma della shell | [18. L'editor e la tastiera](18-editor-e-tastiera.md#12-smontare-il-monolite) | restano due punti di **esecuzione** shell (cestino/cronologia a `ViewProvider`, modello di layout), e la decisione è chiusa con la [0015](../decisions/0015-la-forma-della-shell.md) |
+| ~~§1.2~~ Smontare il monolite | 1. La forma della shell | [18. L'editor e la tastiera](18-editor-e-tastiera.md#12-smontare-il-monolite) | c'era andata coi suoi due punti di **esecuzione** shell, e lì si è chiusa: cestino e cronologia a `ViewProvider` con la [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md), il modello di layout con la [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md) |
 | §2.9 Prestazioni della UI | 2. Cosa è una view | [18. L'editor e la tastiera](18-editor-e-tastiera.md#29-prestazioni-della-ui) | non è una decisione: è virtualizzazione e rendering incrementale, cioè shell |
-| §3.3 La UI di un plugin non ha modo di entrare nella shell | 3. Chi disegna ciò che il core non conosce | [18. L'editor e la tastiera](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | la decisione è presa con la [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md); resta il grafo, che aspetta il modello di layout della §1.2 |
+| §3.3 La UI di un plugin non ha modo di entrare nella shell | 3. Chi disegna ciò che il core non conosce | [18. L'editor e la tastiera](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | la decisione è presa con la [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md); resta il grafo, che non aspetta più il modello di layout ([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)) ma un riquadro che sappia tenere una view |
 | §4.4 Due parser per la stessa sintassi | 4. Chi vede il modello parsato | [18. L'editor e la tastiera](18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | il canale è deciso con la [0018](../decisions/0018-chi-vede-il-modello-parsato.md); resta il moltiplicatore, che si toglie nell'editor accanto alla §18.1 |
 
 **Voci aperte** — hanno un numero nuovo in questo documento:
@@ -124,12 +126,10 @@ dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
 | §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
 | §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
 | §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
-| §3.1 | **§1.2** | Smontare il monolite |
 | §3.2 | **§18.2** | Comandi e tastiera |
 | §3.6 | **§2.9** | Prestazioni della UI |
 | §3.7 | **§18.1** | Editor |
 | §3.8 | **§4.4** | Due parser per la stessa sintassi |
-| §3.10 | **§11.2** | Tre stati diversi, zero contenitori |
 | §3.12 | **§3.3** | La UI di un plugin non ha modo di entrare nella shell |
 | §4.3 | **§17.1** | Corpus, fuzzing, prestazioni |
 | §4.4 | **§17.2** | Test della shell |

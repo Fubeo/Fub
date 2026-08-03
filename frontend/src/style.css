@@ -438,18 +438,119 @@ button:hover {
   color: var(--bg);
 }
 
-#editor-pane {
+/* L'area principale, che dal §1.2 è **l'albero dei riquadri** e non un editor.
+   La disposizione la disegna `panels/document.ts` da `state/layout.ts`: qui
+   ci sono solo le regole che valgono per qualunque albero, e infatti non c'è
+   nessuna misura — quanto è largo un riquadro lo decide quanti sono. */
+#panes {
   min-width: 0;
   border-right: 1px solid var(--border);
   overflow: hidden;
+  display: flex;
+}
+#panes > * {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+.pane-split {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.pane-split.row {
+  flex-direction: row;
+}
+.pane-split.col {
+  flex-direction: column;
+}
+.pane-split > * {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+/* Il bordo lo porta il secondo figlio in poi, non il contenitore: così una
+   divisione a tre ha due righe di separazione e non tre, e nessun riquadro ha
+   un bordo che dà sul vuoto. */
+.pane-split.row > * + * {
+  border-left: 1px solid var(--border);
+}
+.pane-split.col > * + * {
+  border-top: 1px solid var(--border);
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Le tab di un riquadro. La striscia sparisce quando non c'è niente aperto:
+   una fila di pulsanti vuota è rumore che occupa spazio. */
+.pane-tabs {
+  display: flex;
+  flex-shrink: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft, var(--bg));
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  max-width: 16rem;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab.active {
+  background: var(--doc-bg);
+  color: var(--fg);
+}
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Il pallino del non salvato: dice, guardando una tab che non è quella
+   davanti, che lì dentro c'è del lavoro in coda. */
+.tab.dirty .tab-name::after {
+  content: " •";
+  color: var(--accent);
+}
+.tab-close {
+  opacity: 0.4;
+}
+.tab-close:hover {
+  opacity: 1;
+}
+
+/* Quale riquadro ha il fuoco si deve **vedere**, o dividere lo schermo è un
+   gesto che rende la finestra ambigua: due editor identici e nessun indizio su
+   dove finirà la prossima nota che si apre. */
+.pane.focus > .pane-tabs {
+  border-bottom-color: var(--accent);
+}
+
+.pane-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 /* Lettura: l'editor lascia il posto al documento reso, nello stesso spazio.
-   Le due superfici non convivono — è ciò che «modalità esclusiva» significa. */
-body[data-mode="reading"] #editor {
+   Le due superfici non convivono — è ciò che «modalità esclusiva» significa.
+   Ed è **del riquadro**: era `body[data-mode]`, cioè una modalità per tutta la
+   finestra, e con N riquadri sarebbe la cosa sbagliata proprio nel caso per cui
+   si divide (la nota di lato in Lettura mentre si scrive). */
+.pane[data-mode="reading"] .pane-editor {
   display: none;
 }
-#editor {
-  height: 100%;
+.pane:not([data-mode="reading"]) .pane-preview {
+  display: none;
 }
 .cm-editor {
   height: 100%;
@@ -466,8 +567,9 @@ body[data-mode="reading"] #editor {
 /* Lettura: la superficie del documento, con i colori della superficie del
    documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
    fare sulla nota, non di che colore è. */
-#preview {
-  height: 100%;
+.pane-preview {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-5) var(--space-7);
   background: var(--doc-bg);

@@ -5,7 +5,7 @@
 // collegamenti col mondo (aprire una nota, cercare un tag, le sorgenti dei
 // completamenti) da chi crea l'editor: qui si compone, non si decide.
 import { EditorView, keymap } from "@codemirror/view";
-import { Compartment, EditorState } from "@codemirror/state";
+import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";
@@ -43,6 +43,25 @@ export interface Editor {
   /// soggetto: la pila delle **operazioni** è un'altra cosa, sta nel kernel e
   /// non passa di qui (vedi la 0045).
   setDoc(text: string): void;
+  /// Porta l'editor su un testo che ha scritto **un altro editor sullo stesso
+  /// documento** — la stessa nota aperta in due riquadri (§1.2).
+  ///
+  /// Non è `setDoc`, e la differenza è tutta nelle due cose che qui non devono
+  /// succedere. La prima: il cursore di chi guarda non si muove. `setDoc`
+  /// ricostruisce lo stato e riporta il cursore a zero, che su un riquadro in
+  /// cui non si sta scrivendo è un salto senza causa visibile; qui si applica la
+  /// **modifica minima** — prefisso e suffisso comuni — e CodeMirror rimappa la
+  /// selezione da sé, come fa per ogni altra modifica.
+  ///
+  /// La seconda: la modifica **non entra nella pila di undo** di questo editor.
+  /// È la regola della 0045 vista da un'altra angolazione — le pile non si
+  /// fondono: un Ctrl-Z qui deve disfare ciò che si è scritto *qui*, non ciò che
+  /// ha scritto l'altro riquadro. Chi ha scritto ha la sua pila e se lo disfa da
+  /// sé, e la disfatta arriva di qua per questa stessa via.
+  ///
+  /// Chiamarla con un testo identico a quello che c'è non fa niente: è il caso
+  /// normale — l'eco del proprio salvataggio — e costa un confronto.
+  syncDoc(text: string): void;
   getDoc(): string;
   focus(): void;
   /// Porta la vista su un offset in **byte UTF-8** del documento (es. l'inizio
@@ -158,6 +177,34 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       // il contesto di sessione resterebbe quello del documento di prima —
       // che è metà del difetto che questa funzione esiste per non avere.
       opts.onSelectionChange();
+    },
+    syncDoc(text: string) {
+      const attuale = view.state.doc.toString();
+      if (attuale === text) return;
+      // La modifica minima: il prefisso e il suffisso in comune non si toccano,
+      // e ciò che resta in mezzo è l'unica cosa che è davvero cambiata. Un
+      // `changes` che rimpiazza tutto il documento sarebbe corretto e
+      // sposterebbe il cursore in fondo a ogni battuta dell'altro riquadro.
+      let testa = 0;
+      const minimo = Math.min(attuale.length, text.length);
+      while (testa < minimo && attuale[testa] === text[testa]) testa++;
+      let coda = 0;
+      while (
+        coda < minimo - testa &&
+        attuale[attuale.length - 1 - coda] === text[text.length - 1 - coda]
+      ) {
+        coda++;
+      }
+      programmatic = true;
+      view.dispatch({
+        changes: {
+          from: testa,
+          to: attuale.length - coda,
+          insert: text.slice(testa, text.length - coda),
+        },
+        annotations: Transaction.addToHistory.of(false),
+      });
+      programmatic = false;
     },
     getDoc: () => view.state.doc.toString(),
     focus: () => view.focus(),

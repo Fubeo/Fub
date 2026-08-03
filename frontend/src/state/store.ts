@@ -14,7 +14,7 @@
 // Cosa NON sta qui: lo stato che appartiene a un pannello solo (i risultati di
 // ricerca, le voci del cestino, l'anteprima di una versione). Uno store che
 // raccoglie tutto torna a essere l'oggetto-dio, con un file diverso.
-import type { CommandSpec, Organization, PaneMode } from "../host/contract";
+import type { CommandSpec, Organization } from "../host/contract";
 import { api } from "../host/ipc";
 import { errorText } from "../host/errors";
 
@@ -37,6 +37,11 @@ export interface Signals {
   /// L'organizzazione (icone, appuntate, ordinamenti, spazi, spazio attivo,
   /// cartelle aperte) è cambiata: la sidebar si ridisegna.
   organization: [];
+  /// La disposizione dei riquadri è cambiata: qualcuno ha diviso, chiuso,
+  /// aperto una tab, spostato il fuoco. **Senza payload**, come `documents`:
+  /// dice quando, e la parte che serve la legge chi disegna da `state/layout.ts`
+  /// — che è la verità, non una copia che passa di qui.
+  layout: [];
   /// Il kernel ha detto **quali** view sono invecchiate dopo la pubblicazione
   /// del contesto (`ViewSpec.follows`). Il verso è questo, e non una chiamata
   /// diretta, perché chi pubblica il contesto è il pannello del documento e
@@ -83,15 +88,14 @@ export function emit<K extends keyof Signals>(signal: K, ...args: Signals[K]): v
 export interface ShellState {
   /// La radice del vault aperto ("" se nessuno).
   vaultRoot: string;
-  /// Il documento aperto nel pannello, se c'è.
+  /// Il documento attivo nel riquadro **col fuoco**, se c'è.
+  ///
+  /// È uno specchio, non la verità: la verità è `state/layout.ts`, dove ogni
+  /// riquadro ha le sue tab. Resta qui perché chi lo legge — l'esploratore che
+  /// evidenzia la riga, il grafo che centra il nodo — chiede *cosa sta
+  /// guardando l'utente*, che è una domanda sola anche con N riquadri; e
+  /// tenerla qui evita a cinque punti di disegno di sapere cos'è un riquadro.
   currentDoc: string | null;
-  /// Il buffer ha modifiche non ancora scritte su disco? Finché è sporco, il
-  /// buffer è la verità del documento aperto (vedi
-  /// docs/architecture/data-model.md, "Fonte di verità"): non va MAI
-  /// sovrascritto da un reload.
-  dirty: boolean;
-  /// La modalità del pannello (FEATURES 4.1).
-  mode: PaneMode;
   /// Le estensioni che i provider registrati del backend gestiscono: quali
   /// siano lo sanno i `FormatDescriptor`, non la UI — e markdown è il primo
   /// formato, non l'unico. Servono a riconoscere una folder note.
@@ -121,8 +125,6 @@ export function metaVuota(): Organization {
 export const state: ShellState = {
   vaultRoot: "",
   currentDoc: null,
-  dirty: false,
-  mode: "live_preview",
   handledExtensions: ["md"],
   meta: metaVuota(),
   activeSpace: null,
@@ -146,36 +148,21 @@ export const state: ShellState = {
 // come prima chiave da sé, ed è anche più corretto — `state.vaultRoot` è la
 // stringa che la shell ha in mano, il root canonico lo conosce il backend.
 //
-// Cosa cambia per chi guarda: la **modalità** era globale (una chiave sola per
-// tutte le cartelle) e ora è per vault. È un cambiamento voluto: un vault di
-// appunti che si legge e uno di note che si scrive non hanno ragione di
-// condividere la modalità, e chi ne teneva uno solo non vede differenza.
+// La **modalità** stava qui, e adesso non più: da quando i riquadri sono N è di
+// ciascuno, e vive dentro il layout (`state/layout.ts`) insieme alle tab. La
+// chiave vecchia si legge ancora una volta, di là, per non far ripartire in Live
+// Preview chi stava leggendo — è l'unica traccia che questa migrazione lascia.
 //
 // Le chiavi sono raccolte qui perché una chiave di persistenza scritta in due
-// punti diverge al primo refuso.
+// punti diverge al primo refuso. Quella del layout fa eccezione e sta col
+// layout, che è l'unico a scriverla: il criterio è *chi la possiede*, non *dove
+// sta la funzione che legge*.
 
-const MODE_KEY = "mode";
 const EXPANDED_KEY = "expanded";
 const ACTIVE_SPACE_KEY = "activeSpace";
 
-/// La modalità con cui si guardava questo vault, se ne resta traccia.
-///
-/// Un valore che non è una delle tre modalità vale come nessun valore: il file
-/// si apre con un editor di testo, e una parola scritta a mano dentro `mode` non
-/// vale una shell che parte in uno stato che non esiste.
-export async function loadMode(): Promise<PaneMode> {
-  const salvata = await leggi<string>(MODE_KEY);
-  return salvata === "source" || salvata === "reading" || salvata === "live_preview"
-    ? salvata
-    : "live_preview";
-}
-
-export function saveMode(mode: PaneMode): void {
-  scrivi(MODE_KEY, mode);
-}
-
 export async function loadExpanded(): Promise<void> {
-  const salvate = await leggi<string[]>(EXPANDED_KEY);
+  const salvate = await leggiStato<string[]>(EXPANDED_KEY);
   state.expanded = new Set(Array.isArray(salvate) ? salvate : []);
 }
 
@@ -183,16 +170,16 @@ export function saveExpanded(): void {
   // Nessuna cartella aperta si **dimentica** invece di scrivere una lista vuota:
   // è ciò che significa, e il file non si porta dietro una riga per ogni vault
   // che qualcuno ha aperto e richiuso.
-  scrivi(EXPANDED_KEY, state.expanded.size > 0 ? [...state.expanded] : null);
+  scriviStato(EXPANDED_KEY, state.expanded.size > 0 ? [...state.expanded] : null);
 }
 
 export async function loadActiveSpace(): Promise<void> {
-  const salvato = await leggi<string>(ACTIVE_SPACE_KEY);
+  const salvato = await leggiStato<string>(ACTIVE_SPACE_KEY);
   state.activeSpace = typeof salvato === "string" ? salvato : null;
 }
 
 export function saveActiveSpace(): void {
-  scrivi(ACTIVE_SPACE_KEY, state.activeSpace);
+  scriviStato(ACTIVE_SPACE_KEY, state.activeSpace);
 }
 
 /// Rileggere: **assente non è un errore**, ed è il caso normale del primo avvio.
@@ -200,7 +187,7 @@ export function saveActiveSpace(): void {
 /// non si è potuto leggere — si riparte dal default, che è ciò che la shell
 /// mostrava prima che qualcuno guardasse qualcosa. Perdere lo scroll è meglio di
 /// una shell che non parte.
-async function leggi<T>(key: string): Promise<T | null> {
+export async function leggiStato<T>(key: string): Promise<T | null> {
   try {
     return await api.viewState<T>(key);
   } catch {
@@ -213,7 +200,7 @@ async function leggi<T>(key: string): Promise<T | null> {
 /// qui si scrive in console e non si mostra: l'unico modo di raccontarlo sarebbe
 /// un avviso a ogni click, per un file di cache che al prossimo avvio si
 /// riscrive da sé.
-function scrivi(key: string, value: unknown): void {
+export function scriviStato(key: string, value: unknown): void {
   void api.setViewState(key, value).catch((e) => {
     console.warn(`Fub: non ho potuto ricordare \`${key}\``, e);
   });

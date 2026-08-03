@@ -19,10 +19,15 @@
 // non c'è differenza, e il registro è anche l'unico elenco di quali superfici
 // questa shell abbia davvero — il pezzetto di §7.6 che riguarda la shell.
 //
-// Cosa **non** è: un modello di layout. Dove un pannello sta lo dice
-// `placement`, ma chi glielo ritaglia è ancora l'HTML per i nativi e
-// `ui/views.ts` per le dichiarate. Tab, split e pane sono l'altra metà del
-// §1.2, che è una feature (FEATURES 3.3) e non un refactor.
+// Cosa **non** è: il modello di layout. Quello c'è, dal §1.2, e sta altrove —
+// `state/layout.ts` per l'albero dei riquadri, `panels/document.ts` per
+// disegnarlo — e i due registri non si sono fusi apposta. Un pannello dichiara
+// una **superficie** (`placement`), che è una domanda di collocazione: la
+// sidebar, il basso, la barra di stato. Un riquadro dell'area principale è
+// un'altra cosa: ne esistono N, si dividono e si chiudono, e ognuno tiene le
+// sue tab. Il giorno che una view dichiarata potrà stare in un riquadro — che è
+// la §3.3, il grafo — sarà questo il punto in cui le due domande si incontrano,
+// e non prima.
 import type { EventMask, KernelEvent, KernelNotice, ViewSpec } from "../host/contract";
 import { maskWants } from "../rules/mirrored";
 import { onAnyEvent, onEvent } from "../state/kernel";

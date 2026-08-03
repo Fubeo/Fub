@@ -726,7 +726,7 @@ export interface Locale {
   hour_cycle: HourCycle;
 }
 
-/// L'unico pannello di questa shell, e il `MAIN_PANE` del kernel.
+/// Il **primo** riquadro di questa shell, e il `MAIN_PANE` del kernel.
 ///
 /// Sta qui e non nel pannello del documento perché è un **valore del confine**,
 /// non un dettaglio di chi lo pubblica: il kernel confronta il `pane` di un
@@ -736,9 +736,13 @@ export interface Locale {
 /// fixture del mirror porta il valore vero della costante Rust e
 /// `mirror.test.ts` lega questa a quella.
 ///
-/// Il giorno che i pannelli saranno due (il modello di layout: FEATURES 3.3,
-/// §9.6) questa costante diventa un `PaneId` per pannello, ed è la riga da cui
-/// partire.
+/// I riquadri adesso sono N (il modello di layout, §1.2), e questa costante
+/// **non** è diventata «un `PaneId` per riquadro»: gli altri li conia la shell
+/// (`state/layout.ts`), perché quanti riquadri ci siano è un fatto suo e non del
+/// confine. Questo resta il nome del primo — e resta per sempre, perché è già
+/// scritto dentro gli esemplari delle view nei file di stato di macchina (0037):
+/// cambiarlo vorrebbe dire buttare via lo stato di vista di chiunque abbia già
+/// aperto questa shell.
 export const MAIN_PANE = "main";
 
 // Un documento **reso**: l'HTML, e le parti dichiarative che la shell monta da
