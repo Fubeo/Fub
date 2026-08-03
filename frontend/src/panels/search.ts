@@ -11,6 +11,10 @@ import { isPanelVisible, showPanel } from "./sidebar";
 import { errorText } from "../host/errors";
 import { attivabile } from "../ui/a11y";
 import { t } from "../i18n/strings";
+import { nomeDaCercato } from "../rules/nome-cercato";
+import { ricordaRicerca } from "../state/recenti";
+import { createNote } from "../state/vault";
+import { notify } from "../ui/notify";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -161,7 +165,52 @@ function showSearchResults(
     apriA(li, riga.doc, riga.byteOffset);
     nuove.appendChild(li);
   }
+  // **Non l'ho trovata, creala** (§21.7): il gesto che chiude il giro in
+  // omnisearch. Solo a mani davvero vuote — non mentre il vault indicizza, dove
+  // la risposta è *non lo so ancora*, e non su un errore, dove non si è cercato
+  // affatto — e solo se dal testo esce un nome di nota: `nomeDaCercato` risponde
+  // `null` a chi ha scritto solo spazi o solo caratteri che in un nome non ci
+  // possono stare, e allora il gesto non si offre.
+  //
+  // Il nome non è la query così com'è, e la ragione sta in
+  // `rules/nome-cercato.ts`: `note.create` prende un **path**, quindi uno slash
+  // cercato creerebbe una cartella che nessuno ha chiesto.
+  if (!error && hits.length === 0 && !indicizzando) {
+    const nome = nomeDaCercato(searchInputEl.value);
+    if (nome) nuove.appendChild(rigaCrea(nome));
+  }
   searchResultsEl.appendChild(nuove);
+}
+
+/// La riga «crea questa nota».
+///
+/// Non si controlla se il nome sia **libero**: lo sa solo il vault, e il comando
+/// glielo chiede già — `note.create` usa `create_document`, che su un path
+/// occupato fallisce invece di sovrascrivere. È un caso possibile anche a
+/// risultati vuoti, perché la ricerca combacia sul **contenuto**: una nota che
+/// si chiama come la query può esistere senza contenerla. Quando succede si
+/// mostra l'errore del kernel, che è la sola risposta onesta — inventare un
+/// `nome (2)` sarebbe creare una seconda nota a chi ne stava cercando una.
+function rigaCrea(nome: string): HTMLElement {
+  const li = document.createElement("li");
+  li.className = "hit-create";
+  const title = document.createElement("span");
+  title.className = "hit-title";
+  title.textContent = nome;
+  const desc = document.createElement("span");
+  desc.className = "hit-snippet";
+  desc.textContent = t("search.create");
+  li.append(title, desc);
+  li.addEventListener("click", () => {
+    ricordaRicerca(searchInputEl.value);
+    void createNote(nome)
+      .then((doc) => {
+        if (doc) void openDocument(doc);
+      })
+      .catch((e: unknown) => notify(errorText(e), "guasto"));
+  });
+  attivabile(li);
+  return li;
 }
 
 /// Cliccare (o attivare da tastiera) apre il documento e, se c'è un punto, ci
@@ -173,6 +222,11 @@ function showSearchResults(
 /// naturale di quel giro e non aveva le coordinate da passargli.
 function apriA(el: HTMLElement, doc: string, byteOffset?: number): void {
   el.addEventListener("click", () => {
+    // La ricerca si ricorda **qui**, non a ogni tasto: questa casella interroga
+    // mentre si digita, e una cronologia alimentata da lì si riempirebbe di
+    // «r», «ri», «riu». Ciò che vale la pena ricordare è il testo che ha
+    // prodotto un'apertura, cioè una ricerca **conclusa** (0086).
+    ricordaRicerca(searchInputEl.value);
     void openDocument(doc).then(() => {
       if (byteOffset !== undefined) revealByteOffset(byteOffset);
     });

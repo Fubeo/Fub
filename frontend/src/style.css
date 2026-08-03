@@ -399,6 +399,17 @@ button:hover {
   font-size: var(--text-sm);
   color: var(--muted);
 }
+/* «Crea questa nota» (§21.7): l'unica riga di questa lista che **non** è un
+   risultato, e l'unica che scrive invece di aprire. Il filetto d'accento la
+   stacca senza farne un bottone: sta nella lista perché è lì che si guarda
+   quando non si è trovato niente, ma chi scorre deve vedere che è di un'altra
+   specie prima di premerla. */
+.hit-create {
+  border-left: 2px solid var(--accent);
+}
+.hit-create .hit-snippet {
+  color: var(--accent);
+}
 .hit-snippet {
   display: block;
   font-size: var(--text-sm);
