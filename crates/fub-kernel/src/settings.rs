@@ -1,30 +1,35 @@
 //! Lo **store di configurazione** (§11.1): chi tiene gli schemi dichiarati, i
 //! valori scritti e la regola con cui i due si incontrano.
 //!
-//! # Due livelli, una precedenza, e nessun terzo posto
+//! # Un posto solo, e un'eccezione che si dichiara
 //!
-//! Un valore può stare in due file: quello del **vault**
-//! (`<root>/.fub/settings.json`, che viaggia col vault) e quello della
-//! **macchina** (dove lo decide chi monta — `fub_host::config_dir`). La
-//! precedenza è dichiarata e va in un verso solo: **vault → macchina →
-//! default dello schema**. Il default non è un file: è parte della
-//! dichiarazione, ed è per questo che un valore c'è sempre.
+//! Un valore sta nel file del **vault** (`<root>/.fub/settings.json`), e basta:
+//! è la [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md),
+//! ed è la forma che ha Obsidian con `.obsidian/`. Un file solo, visibile e
+//! copiabile, e nessuna regola di precedenza da tenere a mente per capire perché
+//! ciò che si è scritto non si vede.
+//!
+//! L'eccezione è la **diagnostica** (`log.*`), dichiarata con
+//! [`SettingScope::Machine`]: sta nel file della macchina (dove lo decide chi
+//! monta — `fub_host::config_dir`) perché deve valere anche quando un vault non
+//! si apre, che è precisamente il caso in cui il log serve. Per una chiave così
+//! la precedenza resta **macchina → default dello schema**; per tutte le altre è
+//! **vault → default**. Il default non è un file: è parte della dichiarazione,
+//! ed è per questo che un valore c'è sempre.
 //!
 //! Il terzo livello che il §11.1 nominava — «profilo/portable» — non è un terzo
 //! posto in cui cercare: è **dove sta** il livello macchina, e quella è una
-//! decisione di chi monta, non di questo store. Un terzo strato di merge
-//! avrebbe voluto dire un terzo posto in cui la stessa chiave può valere
-//! un'altra cosa, e nessuno dei tre in grado di dire da solo chi ha vinto.
+//! decisione di chi monta, non di questo store.
 //!
 //! # Un vault non decide della macchina
 //!
 //! La regola che questo modulo applica e che nessun altro può applicare al posto
 //! suo: una chiave di [`SettingScope::Machine`] scritta in un
-//! `.fub/settings.json` **si ignora**. Un vault è dato che arriva da fuori — si
-//! scarica, si sincronizza, lo passa un collega — e senza questa riga aprire un
-//! vault altrui sarebbe un modo di cambiare la configurazione della propria
-//! macchina. Ignorarla non è silenzioso: chi carica il file raccoglie un avviso
-//! che nomina la chiave.
+//! `.fub/settings.json` **si ignora**. Con l'eccezione ridotta al log vuol dire
+//! una cosa più stretta di prima — un vault non alza il livello di log di chi lo
+//! apre — ma la riga vale lo stesso, perché è ciò che rende la dichiarazione di
+//! scope una regola invece di un suggerimento. Ignorarla non è silenzioso: chi
+//! carica il file raccoglie un avviso che nomina la chiave.
 //!
 //! # Perché non è uno spazio chiave→valore
 //!
@@ -353,17 +358,21 @@ impl SettingsStore {
             // cioè nel momento in cui esiste qualcuno che sa dire cosa
             // quella chiave accetta. Prima di questa dichiarazione era solo una
             // riga in un file.
-            for (level, present) in [
-                (SettingSource::Vault, self.vault.get(&spec.key)),
-                (SettingSource::Machine, self.machine.get(&spec.key).as_ref()),
-            ] {
-                if let Some(value) = present {
-                    if let Some(why) = spec.kind.rejects(value) {
-                        self.warnings.push(format!(
-                            "impostazione `{}` ignorata (livello {level:?}): {why}",
-                            spec.key
-                        ));
-                    }
+            // E si guarda **il livello che la chiave dichiara**, non tutti e
+            // due: da quando `resolve` non scala più (0076), un valore nel file
+            // sbagliato non è un valore scartato — è un valore che nessuno
+            // leggerà mai, e dirlo come se fosse stato *ignorato per la sua
+            // forma* manderebbe a cercare il difetto dalla parte opposta.
+            let (level, present) = match spec.scope {
+                SettingScope::Vault => (SettingSource::Vault, self.vault.get(&spec.key).cloned()),
+                SettingScope::Machine => (SettingSource::Machine, self.machine.get(&spec.key)),
+            };
+            if let Some(value) = present {
+                if let Some(why) = spec.kind.rejects(&value) {
+                    self.warnings.push(format!(
+                        "impostazione `{}` ignorata (livello {level:?}): {why}",
+                        spec.key
+                    ));
                 }
             }
             if spec.scope == SettingScope::Machine && self.vault.contains_key(&spec.key) {
@@ -406,22 +415,30 @@ impl SettingsStore {
         Ok(self.resolve(declared))
     }
 
+    /// Il livello che una chiave dichiara, e **nient'altro sotto di lui**.
+    ///
+    /// Fino alla 0076 una chiave di vault non trovata nel vault scendeva al file
+    /// della macchina, e quella era la precedenza. Adesso non c'è: una chiave ha
+    /// un posto, e sotto quel posto c'è il default dello schema. Ciò che si
+    /// guadagna è la domanda a cui si può rispondere guardando un file solo —
+    /// *perché questo vault è chiaro?* — e ciò che si perde è nominato nel
+    /// verbale: un vault nuovo riparte dalle impostazioni di fabbrica.
+    ///
+    /// Un valore che non regge lo schema non è un valore: si ricade sul default,
+    /// come se non ci fosse. La sua diagnosi è già un avviso (vedi [`declare`]),
+    /// e restituirlo qui vorrebbe dire dare a chi legge un `bool` dove il suo
+    /// codice si aspetta un numero.
+    ///
+    /// [`declare`]: SettingsStore::declare
     fn resolve(&self, declared: &Declared) -> (SettingValue, SettingSource) {
         let spec = &declared.spec;
-        // Un valore che non regge lo schema non è un valore: si scende al
-        // livello sotto, come se non ci fosse. La sua diagnosi è già un avviso
-        // (vedi `declare`), e restituirlo qui vorrebbe dire dare a chi legge un
-        // `bool` dove il suo codice si aspetta un numero.
-        if spec.scope == SettingScope::Vault {
-            if let Some(value) = self.vault.get(&spec.key) {
-                if spec.kind.rejects(value).is_none() {
-                    return (value.clone(), SettingSource::Vault);
-                }
-            }
-        }
-        if let Some(value) = self.machine.get(&spec.key) {
+        let (trovato, source) = match spec.scope {
+            SettingScope::Vault => (self.vault.get(&spec.key).cloned(), SettingSource::Vault),
+            SettingScope::Machine => (self.machine.get(&spec.key), SettingSource::Machine),
+        };
+        if let Some(value) = trovato {
             if spec.kind.rejects(&value).is_none() {
-                return (value, SettingSource::Machine);
+                return (value, source);
             }
         }
         (spec.kind.default_value(), SettingSource::Default)
@@ -573,8 +590,11 @@ mod tests {
         assert_eq!(source, SettingSource::Default);
     }
 
+    /// Una chiave di vault legge **solo** il file del vault (0076): il livello
+    /// macchina non è più il gradino sotto di lei, ed è la prova che la
+    /// precedenza è sparita davvero e non solo dalla prosa.
     #[test]
-    fn il_vault_vince_sulla_macchina_che_vince_sul_default() {
+    fn una_chiave_del_vault_non_guarda_il_file_della_macchina() {
         let (_tmp, dir) = tempdir();
         let machine = MachineSettings::in_memory();
         let mut store =
@@ -590,12 +610,15 @@ mod tests {
         );
         store.declare("fub.editor", &[spec]).unwrap();
 
+        // Un valore rimasto nel file della macchina — da una versione di prima
+        // della 0076, o da una chiave che allora era di macchina — non parla
+        // più per una chiave di vault.
         machine
             .write("editor.font-size", Some(SettingValue::Number(16.0)))
             .unwrap();
         assert_eq!(
             store.effective("editor.font-size").unwrap(),
-            (SettingValue::Number(16.0), SettingSource::Machine)
+            (SettingValue::Number(14.0), SettingSource::Default)
         );
 
         store
@@ -606,12 +629,40 @@ mod tests {
             (SettingValue::Number(18.0), SettingSource::Vault)
         );
 
-        // E azzerare **ricade**, non riporta al default: è la differenza fra
-        // «smetto di decidere» e «decido il default».
+        // E azzerare riporta al **default dello schema**, perché sotto non c'è
+        // più niente.
         store.reset("editor.font-size").unwrap();
         assert_eq!(
             store.effective("editor.font-size").unwrap(),
-            (SettingValue::Number(16.0), SettingSource::Machine)
+            (SettingValue::Number(14.0), SettingSource::Default)
+        );
+    }
+
+    /// La diagnostica è l'eccezione dichiarata, e continua a vivere nel file
+    /// della macchina: è ciò che deve valere anche quando un vault non si apre.
+    #[test]
+    fn il_log_resta_della_macchina() {
+        let (_tmp, dir) = tempdir();
+        let machine = MachineSettings::in_memory();
+        let mut store =
+            SettingsStore::open(&dir, Arc::new(crate::storage::FsStorage), machine.clone());
+        store
+            .declare(
+                "fub.core",
+                &[SettingSpec::toggle("log.verbose", "Verboso", false).per_machine()],
+            )
+            .unwrap();
+        store
+            .set("log.verbose", SettingValue::Toggle(true))
+            .unwrap();
+        assert_eq!(
+            store.effective("log.verbose").unwrap(),
+            (SettingValue::Toggle(true), SettingSource::Machine)
+        );
+        assert_eq!(
+            machine.get("log.verbose"),
+            Some(SettingValue::Toggle(true)),
+            "ed è finita nel file della macchina, non in quello del vault"
         );
     }
 

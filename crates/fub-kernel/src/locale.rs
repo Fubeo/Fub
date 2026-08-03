@@ -18,8 +18,10 @@
 //!   cui un default può dire «non decidere tu».
 //!
 //! La precedenza è quella della
-//! [decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md),
-//! con un gradino in più in fondo: **vault → macchina → ciò che la shell riporta
+//! [decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)
+//! come la
+//! [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md) l'ha
+//! ridotta, con un gradino in più in fondo: **vault → ciò che la shell riporta
 //! → [`Locale::default`]**. Il gradino nuovo sta *sotto* la configurazione e
 //! *sopra* il default dello schema, ed è l'unico posto in cui poteva stare: un
 //! fatto del sistema non ha titolo a scavalcare una scelta dell'utente, e ha
@@ -103,12 +105,19 @@ impl SystemLocale {
 
 /// Le impostazioni che il core dichiara per il locale.
 ///
-/// Sono di livello **macchina**, e la ragione è quella dello scope della 0036: un
-/// vault è dato che arriva da fuori, e un vault che decidesse in che lingua leggi
-/// sarebbe un file che cambia l'interfaccia di chi lo apre. Nessuna è
-/// `program_writable`: la lingua di chi legge è dell'utente, e un componente che
-/// potesse cambiarla avrebbe il modo di rendere l'app illeggibile a chi lo ha
-/// installato.
+/// Sono di livello **vault**, come tutto il resto
+/// ([0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)).
+/// Erano di macchina, con l'argomento della 0036 — un vault arriva da fuori e
+/// non decide in che lingua leggi — e l'argomento non regge il suo prezzo: una
+/// lingua imposta è visibile e si cambia in un gesto, mentre la precedenza fra
+/// due file è una regola che chiunque tocchi queste chiavi deve tenere a mente.
+/// Senza un vault aperto non serve un livello di riserva: il default è
+/// [`AS_SYSTEM`], cioè l'app segue il sistema operativo finché qualcuno non
+/// apre un vault che ha deciso altro.
+///
+/// Nessuna è `program_writable`, e quello non è cambiato: la lingua di chi
+/// legge è dell'utente, e un componente che potesse cambiarla avrebbe il modo
+/// di rendere l'app illeggibile a chi lo ha installato.
 pub fn locale_settings() -> Vec<SettingSpec> {
     vec![
         SettingSpec::new(
@@ -119,8 +128,7 @@ pub fn locale_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(L_LANGUAGE_DESC))
-        .grouped(Text::key(L_GROUP))
-        .per_machine(),
+        .grouped(Text::key(L_GROUP)),
         SettingSpec::new(
             TIMEZONE,
             Text::key(L_TIMEZONE),
@@ -129,8 +137,7 @@ pub fn locale_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(L_TIMEZONE_DESC))
-        .grouped(Text::key(L_GROUP))
-        .per_machine(),
+        .grouped(Text::key(L_GROUP)),
         SettingSpec::new(
             FIRST_DAY,
             Text::key(L_FIRST_DAY),
@@ -145,8 +152,7 @@ pub fn locale_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(L_FIRST_DAY_DESC))
-        .grouped(Text::key(L_GROUP))
-        .per_machine(),
+        .grouped(Text::key(L_GROUP)),
         SettingSpec::new(
             HOUR_CYCLE,
             Text::key(L_HOUR_CYCLE),
@@ -160,8 +166,7 @@ pub fn locale_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(L_HOUR_CYCLE_DESC))
-        .grouped(Text::key(L_GROUP))
-        .per_machine(),
+        .grouped(Text::key(L_GROUP)),
     ]
 }
 
@@ -412,15 +417,16 @@ mod tests {
         );
     }
 
-    /// Ogni chiave dichiarata è di livello macchina e nessuna è scrivibile da un
-    /// programma: la lingua di chi legge è dell'utente.
+    /// Ogni chiave dichiarata vive nel vault e nessuna è scrivibile da un
+    /// programma: la lingua di chi legge è dell'utente, e viaggia col vault che
+    /// sta leggendo (0076).
     #[test]
     fn no_component_can_change_the_language_of_who_reads() {
         for spec in locale_settings() {
             assert_eq!(
                 spec.scope,
-                fub_abi::settings::SettingScope::Machine,
-                "{} viaggerebbe col vault",
+                fub_abi::settings::SettingScope::Vault,
+                "{} non viaggerebbe col vault",
                 spec.key
             );
             assert!(

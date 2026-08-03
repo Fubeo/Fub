@@ -15,15 +15,24 @@ vista/sessione (per-macchina, per-pane) e il layout (salvabile e ripristinabile)
 
 La condizione è soddisfatta. La
 [decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) ha chiuso il
-~~§11.1~~ — schema dichiarato nel manifest, due livelli con una precedenza sola
-(vault → macchina → default), il registro dei vault, gli interruttori al posto
-delle variabili d'ambiente, import/export/reset come comandi — e degli altri due
+~~§11.1~~ — schema dichiarato nel manifest, il registro dei vault, gli
+interruttori al posto delle variabili d'ambiente, import/export/reset come
+comandi — e degli altri due
 ha deciso la sola cosa che col contratto scadeva: **dove non vanno**. Lo stato di
 vista è per-macchina *e per-pannello*, quindi non è una chiave di configurazione
 ma una mappa indicizzata da `PaneId`; il layout ha più configurazioni per lo
 stesso utente, quindi non è un valore ma un insieme nominato. Nessuno dei due
 entra in quello store, e la ragione sta scritta in `fub_abi::settings` — dove
 la leggerà chi fosse tentato di infilarceli.
+
+I **due livelli** che la 0036 aveva dato al §11.1 sono poi diventati **uno**, con
+la [0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md): un valore sta
+nel file del vault, come in `.obsidian/`, e la precedenza «prima guardo qui, poi
+lì» non c'è più. Della macchina resta la sola diagnostica (`log.*`), che deve
+valere anche quando un vault non si apre. La voce era già chiusa e resta chiusa:
+è cambiato **dove sta un valore**, non chi lo dichiara — e ciò che quella
+decisione lascia scoperto (un vault nuovo riparte dalle impostazioni di fabbrica,
+finché non nascerà la copia esplicita alla creazione) è nominato lì, non qui.
 
 Poi la [0037](../decisions/0037-lo-stato-di-vista.md) ha eseguito **metà** del
 §11.2: lo stato di vista c'è — due famiglie di capacità, un file della macchina
