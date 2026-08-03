@@ -123,20 +123,36 @@ pub(crate) fn locate(source: &str, needles: &[String]) -> Vec<Span> {
             continue;
         }
         let mut from = 0usize;
-        while from < source.len() {
+        // **Il tetto vale anche qui, e non cambia la risposta.** La scansione di
+        // un termine trova le sue occorrenze in ordine di posizione, quindi
+        // quella che verrebbe dopo la sessantaquattresima sta più avanti di
+        // tutte le sue: nessun termine può contribuire più di [`MAX_PER_DOC`]
+        // occorrenze alle prime [`MAX_PER_DOC`] del documento, e cercarne altre
+        // vuol dire percorrere il resto del file per buttare via ciò che si
+        // trova. Su una nota lunga e una parola comune — cioè su ogni tasto
+        // premuto in una casella di ricerca — quel resto era il documento
+        // intero, moltiplicato per i documenti della pagina.
+        let mut trovate = 0usize;
+        while from < source.len() && trovate < MAX_PER_DOC {
             let Some(span) = first_at_or_after(source, needle, from) else {
                 break;
             };
-            if !spans.contains(&span) {
-                spans.push(span);
-            }
+            spans.push(span);
+            trovate += 1;
             // Si riparte **dopo l'inizio** e non dopo la fine: due termini
             // diversi possono cadere sullo stesso pezzo di testo (`arch` dentro
             // `architettura`), e saltare la coda ne perderebbe uno.
             from = next_boundary(source, span.start);
         }
     }
+    // I duplicati si tolgono **dopo** l'ordinamento, non impedendoli a ogni
+    // inserimento: dentro un termine non ce ne sono (gli inizi crescono), quindi
+    // l'unico caso è lo stesso pezzo di testo trovato da due termini diversi, e
+    // chiederlo a una lista che cresce costava un confronto per ogni coppia —
+    // una parola comune in una nota lunga sono migliaia di occorrenze, cioè
+    // milioni di confronti per scartarne una manciata.
     spans.sort_by_key(|s| (s.start, s.end));
+    spans.dedup();
     spans.truncate(MAX_PER_DOC);
     spans
 }
@@ -278,5 +294,28 @@ mod tests {
     fn oltre_il_tetto_la_lista_si_tronca() {
         let source = "a ".repeat(MAX_PER_DOC * 2);
         assert_eq!(locate(&source, &["a".to_string()]).len(), MAX_PER_DOC);
+    }
+
+    /// **Il tetto è del documento, non del termine.** Ogni termine smette di
+    /// cercare dopo [`MAX_PER_DOC`] occorrenze — è ciò che impedisce a una
+    /// parola comune di far percorrere una nota lunga per intero — e la
+    /// risposta deve restare quella di prima: le prime `MAX_PER_DOC` posizioni
+    /// del documento, da qualunque termine vengano. Qui il termine raro sta
+    /// **in mezzo** a quelle di quello comune, cioè nel solo posto in cui un
+    /// tetto applicato male lo perderebbe.
+    #[test]
+    fn il_termine_raro_non_lo_scaccia_quello_comune() {
+        let mut source = "comune ".repeat(10);
+        source.push_str("ittiosauro ");
+        source.push_str(&"comune ".repeat(MAX_PER_DOC * 2));
+        let spans = locate(&source, &["comune".to_string(), "ittiosauro".to_string()]);
+        assert_eq!(spans.len(), MAX_PER_DOC);
+        let raro = source.find("ittiosauro").unwrap();
+        assert!(
+            spans.iter().any(|s| s.start == raro),
+            "l'occorrenza del termine raro sta fra le prime {MAX_PER_DOC} posizioni"
+        );
+        // E restano in ordine di posizione, senza doppioni.
+        assert!(spans.windows(2).all(|w| w[0].start < w[1].start));
     }
 }
