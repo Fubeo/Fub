@@ -238,7 +238,7 @@ Obsidian**. La mappa è
 [architecture/on-disk-layout.md](architecture/on-disk-layout.md).
 
 ### versioning
-`SCHEMA_VERSION` · [`features/versioning.rs:168`](../crates/fub-features/src/versioning.rs) · —
+`SCHEMA_VERSION` · [`features/versioning.rs:252`](../crates/fub-features/src/versioning.rs) · —
 
 Gli snapshot che Fub tiene di ogni nota mentre la si modifica: la memoria di
 com'era il file prima. Vive in `.fub/data/`, che è ignorato da git — anche in
