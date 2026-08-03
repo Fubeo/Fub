@@ -86,6 +86,7 @@ cronologico di chiusura.
 | [0073](0073-una-condizione-che-nessuno-valuta.md) | Una condizione che nessuno valuta è una scadenza senza data | §16.3 — **non chiude niente**: presidia la *condizione* che tiene fuori il secondo tempo, perché finora a valutarla non c'era nessuno ([seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)) | 2026-08-03 |
 | [0074](0074-selezionare-non-e-raccontare.md) | Selezionare non è raccontare | §21.9 — chiude la voce, e con lei l'unica della [seduta 21](../roadmap/21-la-ricerca-predefinita.md) che chiedesse una **misura** invece di un comportamento | 2026-08-03 |
 | [0075](0075-una-view-non-chiede-con-una-finestra.md) | Una view non chiede con una finestra, e chi scrive le versioni è chi le disegna | §1.2 (**una casella su due**: cestino e cronologia come `ViewProvider`) — resta il modello di layout ([seduta 18](../roadmap/18-editor-e-tastiera.md)); e **tre righe su cinque** del debito del §16.6 | 2026-08-03 |
+| [0076](0076-le-impostazioni-vivono-nel-vault.md) | Le impostazioni vivono nel vault, e la macchina tiene solo ciò che serve quando il vault non si apre | **Revisione** della [0036](0036-le-impostazioni-e-i-tre-stati.md), §11.1 ([seduta 11](../roadmap/11-impostazioni-e-i-tre-stati.md)): non chiude una voce nuova, cambia dove sta un valore | 2026-08-03 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
 il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**

@@ -90,6 +90,14 @@ e hanno due firme.
 
 ### Un vault non decide della macchina
 
+> **Corretta dalla [0076](0076-le-impostazioni-vivono-nel-vault.md)**, che ha
+> riguardato l'argomento di questa sezione e l'ha trovato debole: un tema o una
+> lingua imposti da un vault sono visibili e reversibili, cioè una precauzione e
+> non una regola di sicurezza, e non valevano il prezzo di una precedenza fra due
+> file. Tema e `locale.*` sono scesi nel vault, la scalata di `resolve` è sparita,
+> e `SettingScope::Machine` è rimasto al solo `log.*` — che deve valere anche
+> quando un vault non si apre. Ciò che segue racconta come si ragionava allora.
+
 `SettingScope` non è una preferenza di chi scrive lo schema: è una **regola di
 sicurezza**. Un vault è dato che arriva da fuori — si scarica, si sincronizza, lo
 passa un collega — e un vault che potesse decidere impostazioni della macchina

@@ -31,15 +31,19 @@
 //! un file di configurazione condiviso, nessuno si accorgerebbe mai di aver
 //! perso.
 //!
-//! # I due livelli, e perché uno solo dei due viaggia
+//! # Un posto solo, e l'eccezione che lo conferma
 //!
-//! [`SettingScope`] è ciò che dice *dove* un valore ha il diritto di stare. Non
-//! è una preferenza di chi scrive lo schema: è una regola di sicurezza. Un vault
-//! è **dato che arriva da fuori** — si scarica, si sincronizza, lo passa un
-//! collega — e un vault che potesse decidere impostazioni della macchina
-//! sarebbe un file che cambia il comportamento di chi lo apre. Le chiavi
-//! [`SettingScope::Machine`] scritte in un `.fub/settings.json` si **ignorano**,
-//! e chi le legge lo dice.
+//! Un'impostazione vive nel **vault**, in `.fub/settings.json`: un file
+//! visibile, copiabile, che viaggia col vault a cui si riferisce. È la
+//! [0076](../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md), e
+//! costa una riga di regole invece di due — «prima guardo qui, poi lì» era la
+//! parte del §11.1 che nessuno avrebbe indovinato guardando il file.
+//!
+//! [`SettingScope`] resta perché resta il caso che l'ha fatto nascere, uno
+//! solo: la **diagnostica** (`log.*`) deve valere anche quando un vault non si
+//! apre, cioè quando una chiave che vive nel vault non è nemmeno leggibile. Le
+//! chiavi [`SettingScope::Machine`] scritte in un `.fub/settings.json` si
+//! **ignorano**, e chi le legge lo dice.
 //!
 //! # Cosa NON entra, e va detto
 //!
@@ -62,21 +66,21 @@ use crate::ui::UiOption;
 
 /// Dove un'impostazione ha il diritto di stare.
 ///
-/// Due livelli e non tre: il terzo — «profilo/portable» — non è un posto in cui
-/// cercare un valore, è **dove sta il livello macchina**, e lo decide chi monta
-/// (`fub_host::config_dir`). Un terzo strato di merge avrebbe voluto dire un
-/// terzo posto in cui la stessa chiave può avere un valore diverso, e nessuno
-/// dei tre in grado di dire da solo chi ha vinto.
+/// Il posto normale è **uno**, il vault; [`Machine`](SettingScope::Machine) è
+/// l'eccezione dichiarata di chi non può dipendere da un vault aperto. Due e
+/// non tre: il terzo — «profilo/portable» — non è un posto in cui cercare un
+/// valore, è **dove sta il livello macchina**, e lo decide chi monta
+/// (`fub_host::config_dir`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SettingScope {
     /// Del vault: sta in `.fub/settings.json`, **viaggia** col vault, ed è
-    /// autorevole per quel vault. Il livello macchina resta il default di chi
-    /// non ha ancora deciso vault per vault.
+    /// l'unico posto in cui quel valore esiste. Senza vault aperto vale il
+    /// default dello schema — che per tema e lingua è «come il sistema».
     #[default]
     Vault,
-    /// Della macchina: tema, scorciatoie, vault recenti. Non viaggia, e un
-    /// vault che provasse a dichiararla non viene ascoltato.
+    /// Della macchina: il livello del log, e per ora nient'altro. Non viaggia,
+    /// e un vault che provasse a dichiararla non viene ascoltato.
     Machine,
 }
 

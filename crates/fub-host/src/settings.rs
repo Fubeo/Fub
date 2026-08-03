@@ -1,5 +1,11 @@
-//! Le impostazioni **dell'applicazione**: quali chiavi il core dichiara, e dove
-//! si aprono i due file (§11.1).
+//! Le impostazioni **dell'applicazione**: quali chiavi il core dichiara, e in
+//! che livello vivono (§11.1).
+//!
+//! Il livello, da
+//! [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md), è
+//! il **vault** per tutto ciò che è una preferenza su come leggi le tue note —
+//! tema e `locale.*` compresi — e la macchina solo per il log, che serve
+//! proprio quando un vault non si apre.
 //!
 //! Fino a questa voce qui c'erano due `std::env::var`, con un commento che
 //! diceva «il §11.1 li assorbirà entrambi». Ne è rimasta **una**, e non per
@@ -53,10 +59,14 @@ pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 /// aspettandosi l'altra.
 pub const APPEARANCE_THEME: &str = "appearance.theme";
 
-/// Fino a che livello si scrive nel log (§17.3). Di **macchina** e non di vault
-/// per la stessa ragione del tema: il log è uno strumento di chi guarda Fub, e
-/// un vault che decidesse quanto raccontare di sé sarebbe un file che cambia il
-/// comportamento di chi lo apre.
+/// Fino a che livello si scrive nel log (§17.3). Di **macchina** e non di
+/// vault, ed è rimasta l'unica famiglia a esserlo dopo che tema e locale sono
+/// scesi nel vault
+/// ([0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)):
+/// il log non è una preferenza su come leggi le tue note, è lo strumento per
+/// diagnosticare l'applicazione, e deve valere anche **quando un vault non si
+/// apre** — che è precisamente il caso in cui serve. Una chiave che vive dentro
+/// il vault, in quel caso, non si può nemmeno leggere.
 pub const LOG_LEVEL: &str = "log.level";
 
 /// Gli id dei componenti di cui si vuole vedere tutto, fino al
@@ -88,6 +98,18 @@ pub fn core_settings() -> Vec<SettingSpec> {
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
     // tutto ciò che gli sta accanto — compreso ciò che lo controlla. Chi
     // accende e spegne è la persona davanti allo schermo, e passa dalla shell.
+    // Il tema è **del vault**, come ogni altra preferenza di lettura
+    // ([0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)):
+    // fino a ieri era di macchina perché «un vault che arriva da fuori non
+    // decide come guardi lo schermo», e riguardato è un argomento debole — un
+    // tema imposto è visibile e si cambia in un gesto, cioè non è il genere di
+    // danno per cui si paga una regola di precedenza.
+    //
+    // **Non** `program_writable`, e questa resta: un tema è reversibile e si
+    // vede subito, quindi il danno di un componente che lo cambia è piccolo. La
+    // ragione non è il danno, è che *nessuno lo ha chiesto* — il caso vero,
+    // «scuro al tramonto», è un pezzo di 6.2, dove si decide se un componente
+    // possa avere in mano l'aspetto e con che permesso.
     settings.push(
         SettingSpec::new(
             APPEARANCE_THEME,
@@ -110,22 +132,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(C_THEME_DESC))
-        .grouped(Text::key(C_GROUP_APPEARANCE))
-        // Di **macchina**, e non di vault, per la ragione dello scope della
-        // 0036: un vault è dato che arriva da fuori, e un vault che decidesse
-        // in che luce leggi sarebbe un file che cambia l'interfaccia di chi lo
-        // apre. È lo stesso argomento delle chiavi `locale.*`, e vale qui
-        // perché è lo stesso genere di scelta: riguarda gli occhi di chi
-        // guarda, non il contenuto guardato.
-        //
-        // **Non** `program_writable`, e questa è meno ovvia della precedente:
-        // un tema è reversibile e si vede subito, quindi il danno di un
-        // componente che lo cambia è piccolo. La ragione non è il danno, è che
-        // *nessuno lo ha chiesto*: il caso vero — «scuro al tramonto» — è un
-        // pezzo di 6.2, dove si decide se un componente possa avere in mano
-        // l'aspetto e con che permesso. Aprire il cancello adesso vorrebbe
-        // dire deciderlo qui, di sfuggita, e per un cliente che non esiste.
-        .per_machine(),
+        .grouped(Text::key(C_GROUP_APPEARANCE)),
     );
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
