@@ -135,6 +135,13 @@ function showSearchResults(
       : t("search.count", { count: hits.length });
 
   searchResultsEl.innerHTML = "";
+  // Le righe si montano **fuori dal documento** e si attaccano in una volta
+  // sola. Non è cosmetica: una pagina di cinquanta note con le loro occorrenze
+  // sono qualche migliaio di `<li>`, e attaccarli uno per uno a una lista che è
+  // già nella pagina vuol dire chiedere al motore di rifare i conti del layout
+  // qualche migliaio di volte — a ogni tasto premuto, perché questo pannello si
+  // ridisegna mentre si scrive.
+  const nuove = document.createDocumentFragment();
   for (const riga of righeDaMostrare(hits)) {
     const li = document.createElement("li");
     li.title = riga.doc;
@@ -152,8 +159,9 @@ function showSearchResults(
       li.textContent = t("search.occurrence", { n: riga.occorrenza });
     }
     apriA(li, riga.doc, riga.byteOffset);
-    searchResultsEl.appendChild(li);
+    nuove.appendChild(li);
   }
+  searchResultsEl.appendChild(nuove);
 }
 
 /// Cliccare (o attivare da tastiera) apre il documento e, se c'è un punto, ci

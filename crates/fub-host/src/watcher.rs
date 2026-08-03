@@ -107,7 +107,7 @@ mod notify_watcher {
     use fub_abi::event::Event;
     use fub_abi::{PluginError, Severity};
     use fub_kernel::Workspace;
-    use notify::event::{EventKind, ModifyKind, RenameMode};
+    use notify::event::{EventKind, MetadataKind, ModifyKind, RenameMode};
     use notify::RecursiveMode;
     use notify_debouncer_full::{new_debouncer, DebounceEventResult};
 
@@ -141,6 +141,32 @@ mod notify_watcher {
         }
     }
 
+    /// Se questo evento dice che **qualcosa è cambiato**, o solo che qualcuno
+    /// ha guardato.
+    ///
+    /// La distinzione non è un'ottimizzazione: un rilevatore che confonde la
+    /// lettura con la scrittura non rileva le scritture altrui — rileva anche le
+    /// proprie letture, e le proprie letture le fa in risposta a ciò che ha
+    /// rilevato. Il verso in cui si sbaglia, nel dubbio, è quello di
+    /// **considerarlo un cambiamento**: `Any` e `Other` arrivano dai backend che
+    /// non sanno dire cosa è successo, e lì una rilettura di troppo costa un
+    /// file aperto, mentre una di meno costa un indice che drifta in silenzio.
+    fn is_a_change(event: &notify_debouncer_full::DebouncedEvent) -> bool {
+        is_a_change_kind(&event.kind)
+    }
+
+    fn is_a_change_kind(kind: &EventKind) -> bool {
+        match kind {
+            // Aperture, letture, chiusure: nessun byte è diverso da prima.
+            EventKind::Access(_) => false,
+            // L'atime è la traccia di una lettura, scritta dal filesystem: è la
+            // stessa cosa detta come metadato.
+            EventKind::Modify(ModifyKind::Metadata(MetadataKind::AccessTime)) => false,
+            EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => true,
+            EventKind::Any | EventKind::Other => true,
+        }
+    }
+
     impl WatcherFactory for NotifyWatcher {
         fn start(
             &self,
@@ -154,6 +180,29 @@ mod notify_watcher {
                 None,
                 move |result: DebounceEventResult| match result {
                     Ok(events) => {
+                        // **Leggere un file non è cambiarlo.** inotify riporta
+                        // anche le aperture e gli accessi (`Access(Open)`,
+                        // `Access(Close(Read))`, e l'atime che ne segue), e chi
+                        // apre i documenti di questo vault più spesso di
+                        // chiunque altro è Fub stesso: la localizzazione delle
+                        // occorrenze (§21.3) apre il sorgente di ogni riga di
+                        // una pagina di risultati. Trattare quelle aperture come
+                        // cambiamenti chiudeva un anello: una ricerca leggeva
+                        // sessanta note, il rilevatore riferiva sessanta
+                        // «modifiche», il kernel rileggeva quelle note per
+                        // scoprire che erano identiche — e quelle riletture
+                        // erano altre sessanta aperture. Il giro si alimentava
+                        // da solo, con un `DocumentChanged` a vuoto e un
+                        // `IndexUpdated` per ogni passaggio, finché il ponte non
+                        // andava in overflow e la shell non rispondeva più.
+                        let events: Vec<_> = events.into_iter().filter(is_a_change).collect();
+                        // Un lotto di sole letture non è un lotto: non c'è
+                        // niente da sincronizzare e niente da rendere durevole,
+                        // e prendere il lucchetto esclusivo per non fare niente
+                        // toglierebbe il vault ai lettori a ogni ricerca.
+                        if events.is_empty() {
+                            return;
+                        }
                         let mut ws = workspace.write().unwrap();
                         for event in events {
                             // Un rename accoppiato (`paths = [from, to]`) è una
@@ -250,6 +299,47 @@ mod notify_watcher {
                 _debouncer: Box::new(debouncer),
                 watching,
             }))
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, RemoveKind};
+
+        /// **L'anello che si chiudeva.** Questi sono gli eventi che inotify
+        /// riporta quando Fub apre un documento per localizzare le occorrenze
+        /// di una ricerca: se contassero come cambiamenti, il rilevatore
+        /// chiederebbe al kernel di rileggere ciò che il kernel ha appena
+        /// letto — e la rilettura sarebbe un'altra apertura.
+        #[test]
+        fn reading_a_document_is_not_changing_it() {
+            for kind in [
+                EventKind::Access(AccessKind::Open(AccessMode::Any)),
+                EventKind::Access(AccessKind::Read),
+                EventKind::Access(AccessKind::Close(AccessMode::Read)),
+                EventKind::Modify(ModifyKind::Metadata(MetadataKind::AccessTime)),
+            ] {
+                assert!(!is_a_change_kind(&kind), "{kind:?} non è un cambiamento");
+            }
+        }
+
+        /// E ciò che cambia davvero continua ad arrivare: il filtro sta fra le
+        /// letture e le scritture, non fra il rilevatore e il vault.
+        #[test]
+        fn what_changes_still_gets_through() {
+            for kind in [
+                EventKind::Create(CreateKind::File),
+                EventKind::Modify(ModifyKind::Data(DataChange::Content)),
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+                EventKind::Remove(RemoveKind::File),
+                // Chi non sa dire cosa è successo va creduto: meglio una
+                // rilettura in più di un indice che drifta.
+                EventKind::Any,
+                EventKind::Other,
+            ] {
+                assert!(is_a_change_kind(&kind), "{kind:?} è un cambiamento");
+            }
         }
     }
 }
