@@ -24,6 +24,7 @@ import type {
   ContextKind,
   DocChange,
   EntryKind,
+  Excerpts,
   HourCycle,
   IndexingState,
   Intent,
@@ -991,6 +992,11 @@ export type IndexQuery =
       sort?: { key: string; descending: boolean } | null;
       select?: PropertySelect;
       page?: Page | null;
+      // Se le righe devono portare l'estratto attorno al match (§21.9).
+      // Omesso = "attach": chi non lo nomina riceve una risposta completa.
+      // Chi seleziona e basta — un conteggio, una lista di nomi — mette
+      // "omit" e non fa generare un estratto per ogni nota che combacia.
+      excerpts?: Excerpts;
     }
   | { kind: "backlinks"; target: string; page?: Page | null }
   | { kind: "outline"; doc: string }

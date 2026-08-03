@@ -55,8 +55,8 @@ use fub_abi::query::{
 };
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
-    DocumentMatch, EntryKind, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page,
-    Paged, PredicateKind, QueryRoute, VaultEntry,
+    DocumentMatch, EntryKind, Excerpts, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult,
+    Page, Paged, PredicateKind, QueryRoute, VaultEntry,
 };
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
@@ -757,6 +757,7 @@ impl SearchIndex {
         &self,
         matching: &QueryExpr,
         page: Option<Page>,
+        excerpts: Excerpts,
     ) -> Result<Paged<DocumentMatch>, PluginError> {
         // Chi interroga vede le proprie scritture, anche senza flush. È la sola
         // riga di questa funzione che possa fermarsi ad aspettare qualcuno, e
@@ -799,11 +800,22 @@ impl SearchIndex {
             .search(&*query, &collector)
             .map_err(|e| PluginError::Internal(motivo(SEARCH, e)))?;
 
-        // Gli snippet li generano le sole foglie di **testo**: evidenziare la
-        // cartella o il tag per cui una nota è stata selezionata non vuol dire
-        // niente. Senza foglie di testo non c'è nessuna rilevanza da mostrare —
-        // e infatti la risposta non porta né `score` né `snippet`.
-        let mut snippets = match text_parts.is_empty() {
+        // La **rilevanza** ce l'ha chi ha una foglia di testo, e solo lui:
+        // evidenziare la cartella o il tag per cui una nota è stata selezionata
+        // non vuol dire niente, e `tipo: progetto` non è più vero su una nota
+        // che su un'altra. Si decide qui perché `text_parts` finisce dentro il
+        // generatore, e perché non dipende dagli estratti: il punteggio serve a
+        // **ordinare**, e ordinare è ciò che si fa prima di sapere quale pagina
+        // resta.
+        let scored = !text_parts.is_empty();
+        // Gli estratti invece si generano solo se qualcuno li ha chiesti
+        // (§21.9). Non è una micro-ottimizzazione: senza finestra — che è come
+        // chiede il pianificatore, perché l'ordine della risposta è del
+        // contratto e non di tantivy — questa riga vale un estratto per **ogni**
+        // documento che combacia. Su duemila note e un termine comune erano
+        // duemila estratti generati per mostrarne venti, cioè i ventuno
+        // millisecondi che la §21.9 non sapeva spiegare.
+        let mut snippets = match !scored || !excerpts.wanted() {
             true => None,
             false => {
                 let text_query: Box<dyn Query> = Box::new(BooleanQuery::new(
@@ -828,6 +840,9 @@ impl SearchIndex {
                 continue;
             };
             let mut hit = DocumentMatch::of(DocId::new(id));
+            if scored {
+                hit.score = Some(score);
+            }
             if let Some(snippets) = snippets.as_mut() {
                 let body = doc.get_first(f.body).and_then(|v| v.as_str()).unwrap_or("");
                 let snippet = snippets.snippet_from_doc(&doc);
@@ -843,7 +858,6 @@ impl SearchIndex {
                         .collect();
                     (snippet.fragment().to_string(), ranges)
                 };
-                hit.score = Some(score);
                 hit.snippet = Some(text);
                 hit.highlights = highlights;
             }
@@ -1422,6 +1436,7 @@ impl IndexProvider for SearchIndex {
                 sort,
                 select,
                 page,
+                excerpts,
             } => {
                 // Il pianificatore non chiede a un indice ciò che l'indice non
                 // sa fare: ordinare per una proprietà del frontmatter e
@@ -1431,7 +1446,9 @@ impl IndexProvider for SearchIndex {
                 if sort.is_some() || !select.is_none() {
                     return Err(PluginError::BadArgs(Text::key(SELECT_UNSUPPORTED)));
                 }
-                Ok(IndexResult::Documents(self.search(&matching, page)?))
+                Ok(IndexResult::Documents(
+                    self.search(&matching, page, excerpts)?,
+                ))
             }
             // Tutto il resto ha già una fonte di verità nel kernel — grafo,
             // modelli parsati, frontmatter — e non si duplica qui: due verità
@@ -1533,6 +1550,7 @@ mod tests {
             sort: None,
             select: PropertySelect::None,
             page,
+            excerpts: Excerpts::Attach,
         }) {
             Ok(IndexResult::Documents(hits)) => hits,
             other => panic!("attesi documenti, trovato {other:?}"),

@@ -28,14 +28,24 @@ già congelata — che è esattamente ciò che è successo al lotto e all'origin
 per cui la [0012](../decisions/0012-origine-degli-eventi.md) ha dichiarato di
 volersi decidere insieme alla [0011](../decisions/0011-il-lotto.md).
 
-Quello che resta non ha più niente che scada col freeze di M4. **Sono sei voci, e
-sono tutte comportamento**: dove il comportamento si vede (§21.4, §21.5, §21.7),
-cosa lo rende regolabile (§21.6), cosa gli darà da mangiare (§21.8), e la sola
-misura che dice se la ricerca predefinita è **veloce** — che oggi non si sa
-(§21.9). Tre di queste poggiano su ciò che le P0 hanno appena messo nel
-contratto, e la §21.9 ha adesso un motivo in più per essere fatta: un prefisso
-apre un intervallo nel dizionario dei termini, e quel costo è entrato in repo con
-la [0050](../decisions/0050-cosa-si-chiede-a-una-ricerca.md).
+Quello che resta non ha più niente che scada col freeze di M4. **Sono cinque
+voci, e sono tutte comportamento**: dove il comportamento si vede (§21.4, §21.5,
+§21.7), cosa lo rende regolabile (§21.6) e cosa gli darà da mangiare (§21.8).
+Tutte e tre le prime poggiano su ciò che le P0 hanno appena messo nel contratto.
+
+**E la sesta — la §21.9, la sola che chiedesse una misura invece di un
+comportamento — è chiusa**, dalla
+[decisione 0074](../decisions/0074-selezionare-non-e-raccontare.md). La risposta
+è che i due numeri lontani due ordini di grandezza misuravano cose diverse e
+avevano ragione tutti e due: una query non costava, costava **raccontare**
+duemila righe per mostrarne venti — il pianificatore chiede senza finestra, e il
+contratto non sapeva dire *«per adesso mi bastano gli id»*. Adesso lo sa
+(`Excerpts`), la query dalla porta del workspace è passata da 22,3 a 3,4 ms, e la
+seduta ha il proprio banco: [`una_ricerca.rs`](../../crates/fub-features/examples/una_ricerca.rs).
+Vale anche come precondizione delle §21.1 e §21.2 — un motore tollerante espande
+i termini e un prefisso apre un intervallo nel dizionario, cioè le due operazioni
+che moltiplicano il lavoro per query, e adesso si sa su quale numero
+moltiplicheranno.
 
 Un avvertimento che vale per tutta la seduta: nessuna di queste voci è
 «aggiungere il fuzzy». Il fuzzy in sé è una riga di configurazione di un motore.
@@ -176,34 +186,3 @@ che lo ha prodotto.
       aprirà la §14.1 sappia chi lo aspetta a valle e non progetti una entry di
       vault che sa dire il proprio mime type e non sa produrre testo.
 
-### 21.9 Una query costa 23 ms su duemila note, e nessuno sa perché
-
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel/presidi · **P1** — trovata misurando, come la §8.4, che però è chiusa ([0026](../decisions/0026-due-query-insieme.md))*
-
-- [ ] **I due numeri che abbiamo sono a due ordini di grandezza di distanza.**
-      [M2](../milestones/M2-search-graph.md) ha misurato la query peggiore a
-      **108 µs** su 2000 note; il banco della
-      [0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha misurato
-      **~23 ms** per query sullo stesso ordine di vault, e la sua ultima riga lo
-      lascia scoperto per iscritto: «*perché* una query costi 23 ms su 2000 note
-      è un'altra domanda ancora, e non è di concorrenza». Nessuno dei due numeri
-      è sbagliato, il che vuol dire che i due banchi misurano cose diverse — e
-      finché non si sa quale, **«la ricerca è veloce» non è una frase
-      verificata**, è un criterio di accettazione spuntato su una misura che non
-      copre il caso vero.
-- [ ] **Con la §21.1 e la §21.2 il costo può solo salire.** Un motore tollerante
-      espande i termini prima di cercarli, e un prefisso apre un intervallo nel
-      dizionario: sono esattamente le due operazioni che moltiplicano il lavoro
-      per query. Misurare **prima** è la stessa disciplina che la
-      [0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha applicato
-      al lock, e con lo stesso motivo: lì misurando è cambiata la ragione per
-      fare la voce.
-- [ ] **L'altra metà misurata sullo stesso banco — la §8.4 — è chiusa, e questa
-      resta.** La [decisione 0026](../decisions/0026-due-query-insieme.md) ha
-      tolto il `Mutex` che faceva rimettere in fila da sé `SearchIndex::query`:
-      adesso otto ricerche passano insieme, e il carico misto è tornato a scalare
-      (6,8× a otto thread). Ma le due voci non erano la stessa — una è *quante ne
-      passano insieme*, questa è *quanto costa una* — e infatti il costo non si è
-      mosso di un filo: ~21 ms a ricerca allora, ~21 ms adesso. Il banco è lo
-      stesso e si rilancia allo stesso modo, il che vuol dire che questa voce ha
-      già il proprio strumento.

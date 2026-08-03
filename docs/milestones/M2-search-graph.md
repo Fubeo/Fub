@@ -376,15 +376,21 @@ link. E2e: `crates/fub-kernel/tests/structural_host.rs`,
 ## Criteri di accettazione
 
 - Ricerca full-text su un vault di ≥1000 note con risultati rilevanti < 50 ms a
-  query (indice caldo), snippet evidenziati. ✅ misurato su 2000 note (release,
-  vocabolario ristretto = caso peggiore): query peggiore **108 µs**, indice
-  costruito da zero in 25 ms. **Ma la spunta va letta con un asterisco**: il
-  banco della [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)
-  ha misurato ~**23 ms** per query passando dal workspace, cioè due ordini di
-  grandezza sopra. Nessuno dei due numeri è sbagliato, quindi i due banchi
-  misurano cose diverse — ed è la [§21.9](../roadmap/21-la-ricerca-predefinita.md#219-una-query-costa-23-ms-su-duemila-note-e-nessuno-sa-perché),
-  che esiste perché «la ricerca è veloce» non sia una frase spuntata su una
-  misura che non copre il caso vero.
+  query (indice caldo), snippet evidenziati. ✅ — e **l'asterisco che questa riga
+  ha portato per mesi è stato tolto misurando**. I 108 µs misurati qui erano
+  veri e misuravano `SearchIndex` **nudo**; il banco della
+  [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md) ne
+  misurava ~**23 ms** passando dal workspace, cioè dalla porta da cui passa
+  l'utente. La [decisione 0074](../decisions/0074-selezionare-non-e-raccontare.md)
+  ha chiuso la §21.9 e ha detto la differenza: il pianificatore chiedeva
+  all'indice **tutti** i risultati con i loro estratti e poi ne teneva venti —
+  duemila estratti per mostrarne venti. Oggi, sullo stesso vault sintetico e
+  dalla stessa porta, quella query costa **3,4 ms**, e il lavoro del motore per
+  la pagina che si vede è **0,2 ms**. Il criterio resta scritto qui com'era,
+  perché il numero che afferma è vero; quello che è cambiato è che adesso si sa
+  di quale soggetto parla — e che una soglia larga non è un presidio di
+  prestazione: era verde con un margine di 4,5× mentre lo spreco era un fattore
+  cinquanta.
 - Riapertura del vault **senza** reindicizzazione completa (indice caricato da
   disco). ✅ **13,9 ms** per 2000 note, con **zero** scritture sull'indice
   (verificato sull'opstamp di tantivy, non a occhio).

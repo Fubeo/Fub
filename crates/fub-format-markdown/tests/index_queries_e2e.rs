@@ -11,8 +11,8 @@ use camino::Utf8PathBuf;
 use fub_abi::model::{DocId, PropertyValue};
 use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate};
 use fub_abi::traits::{
-    HealthCheck, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter, PropertySelect,
-    PropertySort, PropertyTest,
+    Excerpts, HealthCheck, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter,
+    PropertySelect, PropertySort, PropertyTest,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace};
@@ -183,6 +183,7 @@ fn documents_filter_sort_and_select_like_a_collection_would() {
             }),
             select: PropertySelect::keys(&["stato"]),
             page: None,
+            excerpts: Excerpts::Attach,
         },
     );
     assert_eq!(
@@ -204,6 +205,7 @@ fn documents_filter_sort_and_select_like_a_collection_would() {
             sort: None,
             select: PropertySelect::keys(&["stato"]),
             page: None,
+            excerpts: Excerpts::Attach,
         },
     ) else {
         panic!("attesi documenti");
@@ -224,6 +226,7 @@ fn a_page_of_documents_is_a_window_over_a_stable_order() {
         sort: None,
         select: PropertySelect::None,
         page: None,
+        excerpts: Excerpts::Attach,
     };
     let (everything, total) = rows(&ws, all);
     assert_eq!(total, 4);
@@ -237,6 +240,7 @@ fn a_page_of_documents_is_a_window_over_a_stable_order() {
                 sort: None,
                 select: PropertySelect::None,
                 page: Some(Page::new(offset, 2)),
+                excerpts: Excerpts::Attach,
             },
         );
         assert_eq!(page_total, 4, "il totale è del vault, non della pagina");

@@ -18,8 +18,8 @@ use camino::Utf8PathBuf;
 use fub_abi::model::{DocId, LinkTarget, PropertyValue};
 use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextMode, TextQuery};
 use fub_abi::traits::{
-    DocumentMatch, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter, PropertySelect,
-    PropertySort, PropertyTest,
+    DocumentMatch, Excerpts, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter,
+    PropertySelect, PropertySort, PropertyTest,
 };
 use fub_abi::PluginError;
 use fub_features::{SearchIndex, SEARCH_ID};
@@ -133,6 +133,7 @@ fn pagina(
         sort,
         select,
         page,
+        excerpts: Excerpts::Attach,
     }) {
         Ok(IndexResult::Documents(page)) => page,
         other => panic!("attesi documenti, trovato {other:?}"),
@@ -252,6 +253,7 @@ fn una_clausola_tutta_di_un_motore_ci_va_intera() {
         sort: None,
         select: PropertySelect::None,
         page: None,
+        excerpts: Excerpts::Attach,
     };
     let plan = ws.query_plan(&q);
     let step = plan.steps.first().expect("un passo");
@@ -283,6 +285,7 @@ fn una_clausola_tutta_di_un_motore_ci_va_intera() {
         sort: None,
         select: PropertySelect::None,
         page: None,
+        excerpts: Excerpts::Attach,
     });
     assert!(mista.steps.iter().all(|s| !s.pushed_down));
     let a_chi: Vec<Option<&str>> = mista.steps.iter().map(|s| s.evaluator.as_deref()).collect();

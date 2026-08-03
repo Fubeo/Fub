@@ -749,7 +749,8 @@
       "page": {
         "offset": 0,
         "limit": 20
-      }
+      },
+      "excerpts": "attach"
     },
     {
       "kind": "backlinks",

@@ -40,10 +40,10 @@ use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
 use fub_abi::traits::{
-    BacklinkRef, DocPosition, DocumentMatch, EntryKind, FolderScope, HealthCheck, IndexQuery,
-    IndexResult, IndexingState, JobId, JobProgress, JobStatus, LinkDirection, NeighborRef, Page,
-    Paged, PropertyEntry, PropertySelect, ResolvedRef, TagCount, VaultEntry, VaultFolder,
-    VaultStatus, ViewInstance, ViewSpec, ViewSurface,
+    BacklinkRef, DocPosition, DocumentMatch, EntryKind, Excerpts, FolderScope, HealthCheck,
+    IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobStatus, LinkDirection,
+    NeighborRef, Page, Paged, PropertyEntry, PropertySelect, ResolvedRef, TagCount, VaultEntry,
+    VaultFolder, VaultStatus, ViewInstance, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
@@ -627,6 +627,7 @@ fn index_query_samples() -> Vec<Value> {
             sort: None,
             select: PropertySelect::None,
             page: Some(Page::first(20)),
+            excerpts: Excerpts::Attach,
         },
         IndexQuery::Backlinks {
             target: DocId::new("a.md"),

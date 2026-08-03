@@ -14,8 +14,8 @@ use fub_abi::event::Notice;
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
-    DocumentMatch, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page, Paged,
-    PredicateKind, PropertySelect, QueryRoute,
+    DocumentMatch, Excerpts, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page,
+    Paged, PredicateKind, PropertySelect, QueryRoute,
 };
 use fub_kernel::{data_root, FormatRegistry, Workspace};
 use fub_testkit::TestoDiProva;
@@ -32,7 +32,10 @@ enum Call {
     Flush,
     /// L'ultima chiamata (decisione 0028): dopo di lei non arriva più niente.
     Close,
-    Query,
+    /// Una domanda, con **cosa** è stato chiesto di portare indietro: dalla
+    /// §21.9 il pianificatore seleziona senza estratti e li richiede dopo, e la
+    /// differenza fra i due tempi si vede solo da qui.
+    Query(Excerpts),
 }
 
 /// Nome del blob con cui la spia si ricorda di sé stessa, nello spazio dati che
@@ -127,8 +130,12 @@ impl IndexProvider for SpyIndex {
         Ok(())
     }
 
-    fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
-        self.record(Call::Query);
+    fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+        let excerpts = match query {
+            IndexQuery::Documents { excerpts, .. } => excerpts,
+            _ => Excerpts::Attach,
+        };
+        self.record(Call::Query(excerpts));
         Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(
             DocId::new("risposta.txt"),
         )
@@ -395,6 +402,7 @@ fn a_provider_that_declared_nothing_is_never_asked() {
         sort: None,
         select: PropertySelect::None,
         page: Some(Page::first(5)),
+        excerpts: Excerpts::Attach,
     });
 
     match r {
@@ -408,7 +416,15 @@ fn a_provider_that_declared_nothing_is_never_asked() {
         "prima veniva interpellata per prima e rispondeva `BadArgs`: il \
          dispatch per tentativi faceva girare ogni query su ogni indice"
     );
-    assert_eq!(calls_of(&answering_log), vec![Call::Query]);
+    // Due, e non una: dalla §21.9 una domanda testuale si fa in **due tempi** —
+    // si seleziona senza estratti, e gli estratti si richiedono per le sole
+    // righe che sono sopravvissute alla finestra. Chi risponde li vede
+    // entrambi, e li vede sullo stesso indice: il secondo tempo non riparte dal
+    // routing, torna da chi ha selezionato.
+    assert_eq!(
+        calls_of(&answering_log),
+        vec![Call::Query(Excerpts::Omit), Call::Query(Excerpts::Attach)]
+    );
 }
 
 /// «Nessuno la serve» è una risposta a sé, e non l'errore dell'ultimo
@@ -441,6 +457,7 @@ fn with_no_provider_a_search_says_so_instead_of_pretending() {
         sort: None,
         select: PropertySelect::None,
         page: Some(Page::first(5)),
+        excerpts: Excerpts::Attach,
     });
     // Zero risultati e "nessun indice sa cercare nel testo" sono due cose
     // diverse: la prima è una risposta, la seconda una mancanza, e confonderle

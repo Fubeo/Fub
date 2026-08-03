@@ -761,15 +761,17 @@ sequenceDiagram
     S-->>P: Matches
     P->>P: Matches::and — l'AND è del contratto, non di chi risponde
     P->>R: finish(sort, select, page)
-    R-->>P: IndexResult::Documents
-    P-->>C: risposta
+    R-->>P: le venti righe della pagina
+    P->>S: query(testo("rust") AND Docs{le venti}) — con gli estratti
+    S-->>P: le venti righe raccontate
+    P-->>C: IndexResult::Documents
 ```
 
 | Riquadro | Dove | Cosa fa qui |
 |---|---|---|
 | `Workspace::query_index` | [workspace.rs:361](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
-| `plan::run` | [plan.rs:49](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
-| `sole_evaluator` | [plan.rs:213](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
+| `plan::run` | [plan.rs:54](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
+| `sole_evaluator` | [plan.rs:335](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
 | `RouteTable` | [routing.rs:57](../../crates/fub-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |
 | `CoreIndex` | [core.rs:117](../../crates/fub-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
 | `Matches::and` | [query.rs:389](../../crates/fub-abi/src/query.rs) | la fusione; `QueryEvaluator` ha una implementazione sola, quella del contratto |
@@ -782,6 +784,21 @@ ciò che la [0026](../decisions/0026-due-query-insieme.md) ha comprato è che du
 `query` possano essere **in volo insieme** sullo stesso `&self`, non che una si
 spezzi in due. Quel che il pianificatore evita non è il tempo di attesa, è il
 lavoro: chiede a ciascuno la sua foglia e nient'altro.
+
+**Le frecce 6 e 8 chiedono `Excerpts::Omit`, la 12 chiede `Excerpts::Attach`, e
+la ragione è che quando si seleziona non si sa ancora chi resterà.** Il
+pianificatore non può consegnare la **finestra** a chi indicizza — l'ordine di
+una risposta paginata è del contratto (`finish` rompe la parità per `DocId`;
+tantivy la rompe per indirizzo di segmento, che cambia quando i segmenti si
+fondono) — quindi chiede senza finestra, e senza il campo `excerpts` chi
+risponde dovrebbe presumere che l'estratto serva per ognuna delle righe che sta
+per consegnare. Misurato: duemila estratti generati per mostrarne venti, ventuno
+millisecondi su ventitré ([0074](../decisions/0074-selezionare-non-e-raccontare.md)).
+Il secondo giro (`rehydrate`) torna **dallo stesso indice** con la stessa
+espressione ristretta ai documenti sopravvissuti, ed è la mossa di `resolve_for`
+qui sotto applicata dopo la finestra invece che prima. Il **punteggio** non
+segue gli estratti: arriva già dal primo giro, perché serve a ordinare — e
+ordinare è ciò che si fa prima di sapere quale pagina resta.
 
 Il passo che il disegno non mostra sta dentro le frecce 6 e 8: `resolve_for`
 ([plan.rs:246](../../crates/fub-kernel/src/index/plan.rs)) riscrive ogni

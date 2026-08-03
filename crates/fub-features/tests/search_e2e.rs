@@ -14,7 +14,7 @@
 use camino::Utf8PathBuf;
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
-use fub_abi::traits::{DocumentMatch, IndexQuery, IndexResult, Page, PropertySelect};
+use fub_abi::traits::{DocumentMatch, Excerpts, IndexQuery, IndexResult, Page, PropertySelect};
 use fub_features::{SearchIndex, SEARCH_ID};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{data_root, FormatRegistry, Workspace};
@@ -83,6 +83,7 @@ fn matching(ws: &Workspace, matching: QueryExpr) -> Vec<DocumentMatch> {
         sort: None,
         select: PropertySelect::None,
         page: Some(Page::first(20)),
+        excerpts: Excerpts::Attach,
     }) {
         Ok(IndexResult::Documents(hits)) => hits.items,
         other => panic!("attesi documenti, trovato {other:?}"),
@@ -427,4 +428,102 @@ fn query_latency_on_a_large_vault() {
     );
     assert_eq!(ws2.documents().len(), DOCS);
     println!("riapertura di {DOCS} note (indice caldo su disco): {reopen:?}");
+}
+
+/// Gli estratti sopravvivono al **pianificatore**, che è dove la §21.9 li ha
+/// spostati: una domanda testuale non arriva all'indice come una domanda sola —
+/// prima si seleziona senza estratti, poi si richiedono per le righe rimaste. Se
+/// il secondo tempo sparisse, la ricerca continuerebbe a trovare le note giuste
+/// e la casella di ricerca smetterebbe di dire *perché*, senza che niente
+/// diventi rosso. Questo test è quel rosso.
+#[test]
+fn excerpts_survive_the_planner() {
+    let v = Vault::new();
+    v.put(
+        "Rust.md",
+        "# Rust\n\nUn linguaggio di sistema con una gestione della memoria \
+         senza garbage collector.\n",
+    );
+    v.put(
+        "Altra.md",
+        "# Altra\n\nQui la memoria non c'entra niente.\n",
+    );
+    let ws = v.open();
+
+    let hits = search(&ws, "memoria");
+    assert_eq!(hits.len(), 2, "due note nominano la memoria");
+    for hit in &hits {
+        let snippet = hit
+            .snippet
+            .as_ref()
+            .unwrap_or_else(|| panic!("{} senza estratto", hit.doc));
+        assert!(
+            snippet.contains("memoria"),
+            "l'estratto deve contenere ciò che è stato cercato: {snippet:?}"
+        );
+        assert!(
+            !hit.highlights.is_empty(),
+            "{}: un estratto senza evidenziazioni non dice dove",
+            hit.doc
+        );
+        assert!(hit.score.is_some(), "{}: rilevanza assente", hit.doc);
+    }
+}
+
+/// E chi non li vuole non li paga — ma continua a essere **ordinato**.
+///
+/// È la metà del contratto che si sbaglierebbe volentieri: `Omit` parla di cosa
+/// torna indietro, non di come si ordina, e un punteggio che sparisse insieme
+/// agli estratti rimetterebbe i risultati in ordine di `DocId` senza dirlo.
+#[test]
+fn omitting_excerpts_keeps_relevance() {
+    let v = Vault::new();
+    // La nota **intitolata** così viene prima: è il boost del titolo, cioè
+    // qualcosa che si vede solo se il punteggio c'è.
+    v.put(
+        "Nota.md",
+        "# Nota\n\nUn corpo che non nomina nient'altro.\n",
+    );
+    v.put(
+        "Memoria.md",
+        "# Memoria\n\nLa nota intitolata proprio così.\n",
+    );
+    v.put(
+        "Terza.md",
+        "# Terza\n\nQui si parla di memoria di sfuggita.\n",
+    );
+    let ws = v.open();
+
+    let con = search(&ws, "memoria");
+    let senza = match ws.query_index(IndexQuery::Documents {
+        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("memoria"))),
+        sort: None,
+        select: PropertySelect::None,
+        page: Some(Page::first(20)),
+        excerpts: Excerpts::Omit,
+    }) {
+        Ok(IndexResult::Documents(hits)) => hits.items,
+        other => panic!("attesi documenti, trovato {other:?}"),
+    };
+
+    assert_eq!(
+        con.iter().map(|h| h.doc.to_string()).collect::<Vec<_>>(),
+        senza.iter().map(|h| h.doc.to_string()).collect::<Vec<_>>(),
+        "stessa selezione e stesso ordine: `Omit` non è un'altra domanda"
+    );
+    assert_eq!(
+        senza[0].doc.to_string(),
+        "Memoria.md",
+        "il boost del titolo"
+    );
+    assert!(
+        senza
+            .iter()
+            .all(|h| h.snippet.is_none() && h.highlights.is_empty()),
+        "nessun estratto era stato chiesto"
+    );
+    assert!(
+        senza.iter().all(|h| h.score.is_some()),
+        "la rilevanza resta: serve a ordinare, non a raccontare"
+    );
 }

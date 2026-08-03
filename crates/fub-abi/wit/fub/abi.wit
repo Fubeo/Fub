@@ -1805,7 +1805,14 @@ interface index {
         sort: option<property-sort>,
         select: property-select,
         page: option<page>,
+        /// Se le righe devono portare l'estratto attorno al match (§21.9).
+        excerpts: excerpts,
     }
+    /// Se una risposta deve portarsi dietro gli ESTRATTI, o solo dire quali
+    /// documenti combaciano. `attach` è il default: chi non lo nomina riceve
+    /// una risposta completa e paga, invece di riceverla muta senza capire
+    /// perché.
+    enum excerpts { attach, omit }
     /// `matching` vuoto = tutto il vault; altrimenti sono le FACCETTE di un
     /// risultato (quali tag hanno le note che parlano di rust).
     record index-query-tags {
