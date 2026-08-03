@@ -43,6 +43,7 @@ use std::time::{Duration, Instant};
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::query::{QueryExpr, QueryPredicate, TextField, TextQuery};
 use fub_abi::traits::{EntryKind, Excerpts, IndexQuery, IndexResult, Page, PropertySelect};
+use fub_features::search::{HEADING_BOOST, PAGE_NAME_BOOST};
 use fub_features::{SearchIndex, SEARCH_ID};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace};
@@ -59,10 +60,17 @@ const NOTES: usize = 2000;
 const GIRI: usize = 30;
 /// Lo stesso tetto che il provider dà agli estratti (`SNIPPET_CHARS`).
 const SNIPPET_CHARS: usize = 220;
-/// Gli stessi pesi del provider: se qui divergessero, la fase 3 misurerebbe una
-/// query che nessuno esegue.
-const PAGE_NAME_BOOST: f32 = 4.0;
-const HEADING_BOOST: f32 = 2.0;
+// Gli stessi pesi del provider — e adesso **non possono** divergere: sono le sue
+// costanti, importate. Erano due copie con un commento che chiedeva a chi legge
+// di tenerle allineate («se qui divergessero, la fase 3 misurerebbe una query
+// che nessuno esegue»), e finché erano cablate era una promessa a basso rischio.
+// Dalla §21.6 sono i **default** di quattro impostazioni, cioè un numero che
+// qualcuno cambia: una copia sarebbe diventata la misura di una taratura che
+// nessuno esegue.
+//
+// Il banco misura i default e non ciò che il vault di chi lo lancia ha
+// configurato, ed è voluto: un banco che cambiasse numeri con le preferenze di
+// chi lo esegue non sarebbe confrontabile con la volta prima.
 
 /// Il vault della contesa, identico: sei sezioni, tre paragrafi l'una, e un
 /// vocabolario ristretto — cioè il caso peggiore per un motore full-text,
