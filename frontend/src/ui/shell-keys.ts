@@ -46,6 +46,10 @@ export const SHELL_KEYS = {
   "shell.pane.close": "Mod-Shift-w",
   "shell.tab.close": "Mod-w",
   "shell.doc.search": "Mod-f",
+  // Il quick switcher (§21.5). `Mod-o` è quello di Obsidian, ed è la ragione
+  // per cui non è `Mod-p` come in un editor di codice: chi arriva da lì ha
+  // `Mod-Shift-o` già occupato da «apri vault» e le due `o` restano vicine.
+  "shell.switcher": "Mod-o",
 } as const satisfies Record<string, string | null>;
 
 /// L'id di un comando della shell: uno di quelli in tabella, e nessun altro.

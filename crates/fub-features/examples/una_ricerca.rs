@@ -11,7 +11,7 @@
 //! cargo run --release -p fub-features --example una_ricerca
 //! ```
 //!
-//! Quattro fasi, e quattro domande diverse:
+//! Cinque fasi, e cinque domande diverse:
 //!
 //! 1. **Il totale, dal workspace** — la stessa chiamata che fa la contesa, così
 //!    il numero di partenza è confrontabile e non citato.
@@ -23,6 +23,15 @@
 //!    costruzione del generatore, generazione degli estratti.
 //! 4. **Il kernel quanto ci mette** — la differenza fra la porta del workspace
 //!    e l'indice nudo, cioè quanto costa il giro che il numero di M2 non faceva.
+//! 5. **Il giro per battuta** — la fase nata con la §21.5 (decisione 0083). Le
+//!    altre quattro misurano una query che parte quando qualcuno *apre* una
+//!    superficie; questa misura la query che parte a **ogni tasto**, che è il
+//!    budget dell'autocompletamento dei wikilink e del quick switcher. La
+//!    [0082](../../../docs/decisions/0082-una-porta-per-chi-cerca.md) ha scelto
+//!    il prefisso contro la lista spinta *senza* misurarlo, dichiarando che
+//!    andava misurato: qui si misura — una battuta alla volta, sul prefisso più
+//!    corto (il caso peggiore: `n` apre un intervallo di dizionario enorme) fino
+//!    alla parola intera.
 //!
 //! Il vault sintetico è quello del banco della contesa, riga per riga: 2000
 //! note con sei sezioni l'una e un vocabolario ristretto. Non è un dettaglio
@@ -33,7 +42,7 @@ use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::query::{QueryExpr, QueryPredicate, TextField, TextQuery};
-use fub_abi::traits::{Excerpts, IndexQuery, IndexResult, Page, PropertySelect};
+use fub_abi::traits::{EntryKind, Excerpts, IndexQuery, IndexResult, Page, PropertySelect};
 use fub_features::{SearchIndex, SEARCH_ID};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace};
@@ -238,6 +247,100 @@ fn main() {
     let porta =
         mediana(|| drop(ws.query_index(documenti(testo("ittiosauro"), Some(Page::first(1))))));
     println!("query minima dalla porta del workspace      {porta:>9.3} ms");
+
+    // --- 5. il giro per battuta (§21.5, decisione 0083) --------------------
+    // Le fasi di sopra misurano una query che parte quando una superficie si
+    // apre. Questa misura la query che parte a **ogni tasto**: il prefisso
+    // dell'autocompletamento dei wikilink e del quick switcher.
+    //
+    // Si misura una battuta alla volta, dal prefisso di un carattere in su,
+    // perché il costo di un prefisso non è piatto: `n` apre un intervallo di
+    // dizionario grande quanto tutte le note che cominciano per n, `nota 1`
+    // quasi niente. Il primo tasto è il caso peggiore, e un budget si prende
+    // sul caso peggiore.
+    //
+    // Due configurazioni, che sono le due superfici:
+    //
+    // - **solo nome, senza estratti**: `TextField::Name` e `Excerpts::Omit`.
+    //   Chi propone delle note mostra dei nomi, e un estratto per riga sarebbe
+    //   il lavoro della §21.9 rifatto a ogni tasto;
+    // - **ovunque, con estratti**: la casella del vault, per confronto — cioè
+    //   cosa costerebbe far battere la ricerca piena a ogni tasto.
+    println!("\n== 5. il giro per battuta (prefisso mentre si digita) ==");
+    let per_battuta = |testo: &str, campi: Vec<TextField>, ex: Excerpts| {
+        let q = || IndexQuery::Documents {
+            matching: QueryExpr::of(QueryPredicate::Text(TextQuery {
+                fields: campi.clone(),
+                ..TextQuery::terms(testo).while_typing()
+            })),
+            sort: None,
+            select: PropertySelect::None,
+            page: Some(Page::first(20)),
+            excerpts: ex,
+        };
+        let (resi, tot) = quanti(&ws, q());
+        let ms = mediana(|| drop(ws.query_index(q())));
+        (ms, resi, tot)
+    };
+    let parola = "nota 1";
+    for i in 1..=parola.len() {
+        let prefisso = &parola[..i];
+        let (ms, resi, tot) = per_battuta(prefisso, vec![TextField::Name], Excerpts::Omit);
+        riga(
+            &format!("solo nome, senza estratti: \"{prefisso}\""),
+            ms,
+            resi,
+            tot,
+        );
+    }
+    for i in 1..=parola.len() {
+        let prefisso = &parola[..i];
+        let (ms, resi, tot) = per_battuta(prefisso, Vec::new(), Excerpts::Attach);
+        riga(
+            &format!("ovunque, con estratti:     \"{prefisso}\""),
+            ms,
+            resi,
+            tot,
+        );
+    }
+    // Il termine di paragone, ed è ciò che il prefisso **sostituisce**:
+    // l'elenco intero del vault, che è quello che l'autocompletamento dei
+    // wikilink chiedeva a ogni apertura di `[[` (una volta sola, grazie al
+    // `validFor` di CM6, e per questo era sostenibile). Il confronto onesto
+    // non è «una query contro zero query»: è una query da N ms per battuta
+    // contro *questa* più 2001 righe da trasportare sull'IPC e da ordinare
+    // nella shell — e questa riga misura solo la prima metà, perché il
+    // trasporto JSON e il `noteCompletions` su 2001 voci non sono in questo
+    // processo.
+    let elenco = || IndexQuery::Entries {
+        of_kind: Some(EntryKind::Document),
+        within: None,
+        page: None,
+    };
+    let quante = match ws.query_index(elenco()) {
+        Ok(IndexResult::Entries(paged)) => paged.items.len(),
+        altro => panic!("risposta inattesa: {altro:?}"),
+    };
+    let ms = mediana(|| drop(ws.query_index(elenco())));
+    riga(
+        "l'elenco intero (com'era, per apertura)",
+        ms,
+        quante,
+        quante as u32,
+    );
+
+    // E il termine dell'altro banco, digitato: un prefisso su un vocabolario
+    // comune, cioè il caso in cui l'intervallo del dizionario è largo e il
+    // numero di note che combaciano è tutto il vault.
+    for prefisso in ["c", "co", "conc", "concorrenza"] {
+        let (ms, resi, tot) = per_battuta(prefisso, vec![TextField::Name], Excerpts::Omit);
+        riga(
+            &format!("solo nome, termine comune: \"{prefisso}\""),
+            ms,
+            resi,
+            tot,
+        );
+    }
 }
 
 /// Il conto per fase, sullo stesso indice ma senza il provider in mezzo.

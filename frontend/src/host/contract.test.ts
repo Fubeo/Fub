@@ -1,0 +1,48 @@
+import { describe, expect, it } from "vitest";
+import { nomeCercato, testoCercato } from "./contract";
+
+// **Le query si compongono qui**, ed è la regola della
+// [0082](../../../docs/decisions/0082-una-porta-per-chi-cerca.md): una
+// superficie che se la componesse in casa sarebbe già una seconda
+// implementazione. Se le query hanno un posto solo, hanno anche un banco solo —
+// e questo è il posto in cui le due proprietà su cui poggia la §21.5 restano
+// vere anche quando qualcuno riscriverà il quick switcher.
+describe("nomeCercato", () => {
+  const testo = (q: ReturnType<typeof nomeCercato>) => {
+    const predicato = q.any[0]!.all[0]!.predicate;
+    if (predicato.kind !== "text") throw new Error("non è un predicato di testo");
+    return predicato;
+  };
+
+  it("cerca SOLO nel nome", () => {
+    // È ciò che distingue il quick switcher dalla casella del vault: chi ha
+    // premuto la scorciatoia per aprire la nota *Rust* non vuole davanti a sé
+    // le trecento note che ne parlano.
+    expect(testo(nomeCercato("rust")).fields).toEqual(["name"]);
+  });
+
+  it("il prefisso è acceso per default", () => {
+    // Queste superfici partono a ogni battuta: chi ha scritto `ar` sta cercando
+    // *architettura*, non una nota che si chiami «ar». È la §21.2, e lo dice la
+    // query — non la casella appendendo un `*`.
+    expect(testo(nomeCercato("ar")).partial_last_term).toBe(true);
+    expect(testo(nomeCercato("ar", false)).partial_last_term).toBe(false);
+  });
+
+  it("è una clausola sola con un letterale solo, non negato", () => {
+    const q = nomeCercato("ar");
+    expect(q.any).toHaveLength(1);
+    expect(q.any[0]!.all).toHaveLength(1);
+    expect(q.any[0]!.all[0]!.negated).toBe(false);
+  });
+
+  it("la casella del vault non ha ereditato niente: là i campi restano liberi", () => {
+    // Le due configurazioni della stessa porta devono restare due: se un
+    // giorno `testoCercato` si restringesse al nome, la ricerca del vault
+    // smetterebbe di trovare il testo delle note e nessuno lo direbbe.
+    const predicato = testoCercato("rust").any[0]!.all[0]!.predicate;
+    if (predicato.kind !== "text") throw new Error("non è un predicato di testo");
+    expect(predicato.fields).toEqual([]);
+    expect(predicato.partial_last_term).toBe(false);
+  });
+});

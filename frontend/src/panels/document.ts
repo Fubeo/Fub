@@ -41,9 +41,10 @@
 import { createEditor, type Editor } from "../editor/editor";
 import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
-import { riferimentoRisolto, tagDelVault, vociDelVault } from "../host/query";
+import { noteDalNome, riferimentoRisolto, tagDelVault } from "../host/query";
 import type { PaneMode, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
+import { noteRecentiEsistenti } from "../state/recenti";
 import { emit, on, state } from "../state/store";
 import { cambioSotto, statoDi, type Esito } from "../state/salvataggio";
 import {
@@ -489,13 +490,21 @@ function riquadro(id: string): Riquadro {
     // Le sorgenti dei completamenti sono l'IPC, ammorbidite: prima che un
     // vault sia aperto rispondono vuoto, non con un errore in console.
     completions: {
-      // Dal canale dati (§14.4): l'autocompletamento vuole i nomi di **tutte**
-      // le note, quindi qui la lista resta intera — cambia la porta, non la
-      // domanda. Il §21 la cambierà anche di forma.
-      listNotes: () =>
-        vociDelVault("document")
-          .then((page) => page.items.map((e) => e.id))
-          .catch(() => []),
+      // **La quarta superficie che cerca** (§21.5), e la prima che violava la
+      // regola: chiedeva `vociDelVault("document")`, cioè l'elenco intero, e
+      // filtrava CodeMirror. Adesso passa dalla porta di tutte le altre —
+      // `noteDalNome`, che è `IndexQuery::Documents` con i campi sul nome e il
+      // prefisso della §21.2 (0082, 0083).
+      //
+      // A prefisso vuoto — `[[` appena scritto — si propongono le **recenti**,
+      // come nel quick switcher: una domanda al kernel per una query vuota
+      // sarebbe l'elenco intero rientrato dalla porta nuova, e un popup vuoto
+      // sarebbe un autocompletamento che non parte finché non si indovina la
+      // prima lettera. La decisione è la stessa delle due superfici perché la
+      // domanda è la stessa; è qui e non in `editor/completions.ts` perché
+      // quel modulo non conosce né il vault né la memoria corta.
+      cercaNote: (prefisso: string) =>
+        (prefisso.trim() ? noteDalNome(prefisso) : noteRecentiEsistenti()).catch(() => []),
       listTags: () => tagDelVault().catch(() => []),
     },
   });
