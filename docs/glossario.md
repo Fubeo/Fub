@@ -300,13 +300,15 @@ delle sei di sola lettura); al confine WIT ogni famiglia è un'`interface` — s
 quattordici `host-*` in `abi.wit` — e negarne una non è un rifiuto a runtime, è
 l'**assenza della funzione**.
 
-Dal lato di **chi concede**, dalla
-[0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md), i nomi sono
-**sedici**: `Capability` ne porta due che nel contratto non hanno un trait loro,
-perché `HostEnv` presta dallo stesso metodo una cosa della macchina (l'orologio)
-e due dell'utente (quale nota guarda, cosa ci ha selezionato). L'invariante che
-il compilatore presidia è quindi «nessun trait senza almeno una famiglia», non
-«una famiglia, un trait».
+Dal lato di **chi concede** i nomi sono **diciassette**, e `Capability` ne porta
+tre che nel contratto non hanno un trait loro. Due per la
+[0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md), perché `HostEnv`
+presta dallo stesso metodo una cosa della macchina (l'orologio) e due
+dell'utente (quale nota guarda, cosa ci ha selezionato); una per la
+[0096](decisions/0096-una-bozza-non-e-una-nota.md), perché `HostQuery` porta una
+domanda — le **bozze** — il cui contenuto non è nel vault, e il cancello guarda
+quindi *quale* richiesta passa. L'invariante che il compilatore presidia è
+quindi «nessun trait senza almeno una famiglia», non «una famiglia, un trait».
 
 ### freeze
 — · [milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md) · [0002](decisions/0002-additivita-del-contratto.md)
@@ -343,6 +345,13 @@ Di norma sono uno per famiglia, e i due della sessione —
 selezionato), [0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) —
 sono i soli a governare **un metodo solo** in due: la scelta che servivano a
 dare all'utente sta in mezzo, e un permesso solo non sapeva esprimerla.
+
+`fub:read-drafts` ([0096](decisions/0096-una-bozza-non-e-una-nota.md)) fa la
+stessa cosa a `query_index`, con una differenza che vale saperla: quei due si
+**sommano** — senza `read-session` il testo non ha dove stare — mentre questo
+sta **al posto** di `fub:read-vault` sulla variante `Drafts`. Sommarli avrebbe
+reso indicibile la frase di chi ha bisogno solo di quelle: un pannello che
+recupera ciò che non è stato salvato dopo un crash.
 
 ### provider
 `FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1657`](../crates/fub-abi/src/traits.rs) · —

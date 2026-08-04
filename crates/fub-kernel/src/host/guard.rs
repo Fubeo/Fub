@@ -25,17 +25,17 @@ use fub_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le sedici famiglie di capacità [conta: guard-famiglie], come nomi su cui
-/// una politica risponde.
+/// Le diciassette famiglie di capacità [conta: guard-famiglie], come nomi su
+/// cui una politica risponde.
 ///
-/// Sono i quattordici trait di `fub_abi::traits` **più due**, e non è una
+/// Sono i quattordici trait di `fub_abi::traits` **più tre**, e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono coprire le stesse cose, e il presidio è
 /// che [`Guard`] non compila se un trait non è coperto.
 ///
-/// # Perché sedici e non quattordici
+/// # Perché diciassette e non quattordici
 ///
-/// Per dodici trait su quattordici la corrispondenza è uno a uno, ed era vera
+/// Per undici trait su quattordici la corrispondenza è uno a uno, ed era vera
 /// per tutti e quattordici fino alla
 /// [0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md).
 /// [`HostEnv`] ne porta **tre** perché è il solo trait che presta, dallo stesso
@@ -50,6 +50,15 @@ use crate::workspace::Trust;
 /// due. Spaccare il record era un'opzione, ed è quella che si è scartata; vedi
 /// il verbale. Il prezzo è che l'invariante da presidiare cambia forma: non
 /// «una famiglia, un trait», ma «nessun trait senza almeno una famiglia».
+///
+/// [`HostQuery`] ne porta **due** dalla
+/// [0096](../../../docs/decisions/0096-una-bozza-non-e-una-nota.md), e per una
+/// ragione diversa da quella di [`HostEnv`]: là le tre cose escono insieme da
+/// un record, qui escono da **richieste diverse** — una [`IndexQuery`] nomina
+/// già la propria famiglia ([`fub_abi::traits::QueryKind`]), e le bozze sono
+/// l'unica il cui contenuto non è nel vault. Il cancello guarda quindi *quale*
+/// domanda passa, che è la prima volta che il `Guard` legge un argomento invece
+/// del solo metodo — vedi [`Guard::query_capability`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Capability {
     /// Leggere il vault: sorgente, modello, elenco, cestino.
@@ -62,8 +71,22 @@ pub enum Capability {
     DataRead,
     /// Scrivere i propri blob persistenti.
     DataWrite,
-    /// Interrogare l'indice.
+    /// Interrogare l'indice — **tranne** le bozze, che hanno la loro.
     Query,
+    /// Leggere le **bozze**: ciò che l'utente stava scrivendo e non ha salvato.
+    ///
+    /// È l'unica famiglia che non copre un trait né un metodo, ma **una
+    /// variante di una richiesta**: [`IndexQuery::Drafts`] passa di qui e ogni
+    /// altra passa da [`Capability::Query`]. Il taglio è lì perché è lì che sta
+    /// la differenza — non fra due canali, ma fra ciò che l'utente ha
+    /// consegnato al disco e ciò che non ha ancora deciso di consegnare.
+    ///
+    /// Sta **al posto** di [`Capability::Query`] e non sopra: chi ha questa e
+    /// non quella legge le bozze e nient'altro, che è il pannello di recupero;
+    /// chi ha quella e non questa legge tutto il vault e non ciò che si sta
+    /// scrivendo adesso. Sono le due frasi che l'utente deve poter dire, e una
+    /// famiglia cumulativa ne avrebbe resa inesprimibile la prima.
+    Drafts,
     /// Sapere che ore sono, e tirare a sorte.
     ///
     /// **Non** «cosa guarda l'utente»: quella era qui, e se n'è andata con la
@@ -114,13 +137,14 @@ impl Capability {
     /// [`Granted::new`] e il presidio delle capacità simulate in
     /// `kernel/tests/invoke_command.rs` — e una famiglia che non ci finisse
     /// sparirebbe da entrambi restando verde.
-    pub const ALL: [Capability; 16] = [
+    pub const ALL: [Capability; 17] = [
         Capability::VaultRead,
         Capability::VaultWrite,
         Capability::VaultStructure,
         Capability::DataRead,
         Capability::DataWrite,
         Capability::Query,
+        Capability::Drafts,
         Capability::Env,
         Capability::Session,
         Capability::SessionSelection,
@@ -146,6 +170,15 @@ impl Capability {
             // perché una risposta aggregata non ha un path da confrontare con
             // una allowlist.
             Capability::VaultRead | Capability::Query => Some(permission::READ_VAULT),
+            // Le bozze non stanno sotto `read-vault`, e non è una sfumatura:
+            // chi legge il vault legge un documento **che ha nominato**, chi
+            // legge le bozze riceve in blocco il testo che l'utente non ha
+            // ancora deciso di salvare. È la stessa forma della coppia
+            // `read-session`/`read-selection` (0095), applicata al canale dati
+            // invece che al contesto — e per la stessa ragione: appoggiarcele
+            // renderebbe impossibile la sola cosa che questo permesso esiste
+            // per permettere, cioè concedere il vault e negare le bozze.
+            Capability::Drafts => Some(permission::READ_DRAFTS),
             Capability::VaultWrite | Capability::VaultStructure => Some(permission::WRITE_VAULT),
             Capability::Commands => Some(permission::RUN_COMMAND),
             // Cosa guarda l'utente e cosa ha selezionato sono **due** permessi
@@ -181,7 +214,7 @@ impl Capability {
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a sedici nomi [conta: guard-famiglie]
+/// Una politica è **piccola per costruzione**: risponde a diciassette nomi [conta: guard-famiglie]
 /// e non
 /// sa niente di documenti, di blob o di comandi. È ciò che permette di comporne
 /// due senza chiedersi cosa significhi comporre venticinque metodi.
@@ -248,6 +281,12 @@ impl Policy for ReadOnly {
             Capability::VaultRead
             | Capability::DataRead
             | Capability::Query
+            // Rileggere ciò che si stava scrivendo non è un effetto, come non
+            // lo è nessun'altra lettura: una simulazione che non vedesse le
+            // bozze direbbe cosa farebbe su un vault diverso da quello che
+            // l'utente ha davanti. È il permesso a decidere chi le vede, non la
+            // modalità.
+            | Capability::Drafts
             | Capability::Env
             // Leggere la sessione non è un effetto: una simulazione che non
             // sapesse quale nota è aperta direbbe cosa farebbe **su un'altra**.
@@ -292,23 +331,39 @@ pub struct Granted {
 
 /// Le famiglie concesse, come insieme.
 ///
-/// Sedici bit in un `u16` — cioè **tutti**, da quando le famiglie sono sedici:
-/// la prossima che nascesse vuole un `u32`, e il presidio dei discriminanti è
-/// il posto in cui ci si accorge di doverlo cambiare invece di perdere un bit
-/// in silenzio. Sedici bit: è la forma che rende [`Granted`] clonabile senza
+/// Diciassette bit in un `u32`, ed era un `u16` fino alla diciassettesima
+/// famiglia.
+///
+/// **È il primo limite strutturale che questo elenco abbia incontrato**, e vale
+/// la pena che resti scritto: con la 0095 le famiglie erano diventate sedici,
+/// cioè esattamente i bit disponibili, e la 0096 le ha portate a diciassette.
+/// Senza questo cambio `1 << cap` sarebbe andato in overflow — in debug con un
+/// panic, in release **in silenzio**, cioè con una famiglia concessa a chi non
+/// l'aveva dichiarata. A vederlo è stato l'`assert` in coda a
+/// `i_discriminanti_coprono_ogni_famiglia`, scritto quando i bit erano appena
+/// finiti e proprio perché finivano: il presidio ha fatto il suo mestiere una
+/// riga prima del danno.
+///
+/// Un `u32` regge fino a trentadue famiglie, e la stessa riga se ne accorgerà
+/// di nuovo. Il tipo largo è la forma che rende [`Granted`] clonabile senza
 /// allocare, ed è anche il motivo per cui [`Capability`] è un enum piccolo e
 /// chiuso invece di una stringa — e per cui i suoi discriminanti devono restare
 /// contigui, che è ciò che presidia `i_discriminanti_coprono_ogni_famiglia`.
+///
+/// Che l'insieme non si **persista** da nessuna parte è ciò che ha reso questo
+/// cambio meccanico: si ricalcola da [`Capability::ALL`] a ogni registrazione,
+/// quindi allargare il tipo non ha una migrazione dietro. Se un giorno lo si
+/// salvasse su disco, quella proprietà se ne andrebbe con la prima riga.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct CapabilitySet(u16);
+pub struct CapabilitySet(u32);
 
 impl CapabilitySet {
     pub fn contains(self, cap: Capability) -> bool {
-        self.0 & (1 << cap as u16) != 0
+        self.0 & (1 << cap as u32) != 0
     }
 
     pub fn with(mut self, cap: Capability) -> Self {
-        self.0 |= 1 << cap as u16;
+        self.0 |= 1 << cap as u32;
         self
     }
 }
@@ -372,7 +427,7 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le sedici famiglie [conta: guard-famiglie]
+/// Delega ciò che la politica concede e nega il resto. Le diciassette famiglie [conta: guard-famiglie]
 /// sono implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.
@@ -702,8 +757,49 @@ impl<H: HostEvents, P: Policy> HostEvents for Guard<H, P> {
 
 impl<H: HostQuery, P: Policy> HostQuery for Guard<H, P> {
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
-        self.check(Capability::Query, || "interrogare l'indice".into())?;
+        let (cap, what) = Guard::<H, P>::query_capability(&query.kind());
+        self.check(cap, || what.into())?;
         self.inner.query_index(query)
+    }
+}
+
+impl<H, P: Policy> Guard<H, P> {
+    /// Quale famiglia governa **questa** domanda, e cosa si stava facendo.
+    ///
+    /// Il `match` è **esaustivo di proposito**, e senza un `_`: una famiglia di
+    /// query nuova non compila finché qualcuno non ha detto sotto quale
+    /// permesso passa. Con un ramo di scarto la variante nuova sarebbe
+    /// atterrata su [`Capability::Query`] restando verde — che è esattamente il
+    /// modo in cui [`IndexQuery::Drafts`] ci è atterrata, e ci è restata per
+    /// otto verbali.
+    ///
+    /// È anche il primo punto in cui il `Guard` legge un **argomento** e non
+    /// solo il metodo. Non spacca il canale dati della
+    /// [0019](../../../docs/decisions/0019-il-canale-dati.md) — resta una
+    /// domanda sola con un instradamento solo — e non allarga la [`Policy`],
+    /// che continua a rispondere a nomi e a non sapere niente di query: è la
+    /// stessa mossa di `undo_last`, che da un metodo ricava due famiglie perché
+    /// due sono le cose che fa.
+    fn query_capability(kind: &fub_abi::traits::QueryKind) -> (Capability, &'static str) {
+        use fub_abi::traits::QueryKind;
+        match kind {
+            QueryKind::Drafts => (Capability::Drafts, "leggere le bozze"),
+            QueryKind::Documents
+            | QueryKind::Backlinks
+            | QueryKind::Outline
+            | QueryKind::Tags
+            | QueryKind::Neighbors
+            | QueryKind::PropertyValues
+            | QueryKind::VaultHealth
+            | QueryKind::Custom(_)
+            | QueryKind::VaultStatus
+            | QueryKind::Jobs
+            | QueryKind::Settings
+            | QueryKind::Organization
+            | QueryKind::Resolve
+            | QueryKind::Entries
+            | QueryKind::Folders => (Capability::Query, "interrogare l'indice"),
+        }
     }
 }
 
@@ -936,11 +1032,126 @@ mod tests {
              verde."
         );
         assert!(
-            Capability::ALL.len() <= u16::BITS as usize,
-            "`CapabilitySet` tiene le famiglie in un `u16`, e con la 0095 i bit \
-             sono finiti esattamente: la diciassettesima vuole un `u32`, e \
-             senza questa riga se ne accorgerebbe `1 << cap` andando in \
-             overflow — in debug con un panic, in release in silenzio."
+            Capability::ALL.len() <= u32::BITS as usize,
+            "`CapabilitySet` tiene le famiglie in un `u32`. Era un `u16`, e i \
+             bit sono finiti davvero: con la 0095 le famiglie erano sedici — \
+             esattamente i bit — e la 0096 le ha portate a diciassette. Questa \
+             riga se n'è accorta prima che `1 << cap` andasse in overflow (in \
+             debug con un panic, in release **in silenzio**, cioè concedendo \
+             una famiglia a chi non l'ha dichiarata). Alla trentatreesima \
+             tocca di nuovo: allargare il tipo, non togliere l'assert."
+        );
+    }
+
+    /// Un host che risponde a qualunque domanda: ciò che si prova qui è quale
+    /// **cancello** attraversa, non cosa c'è dietro.
+    struct Indice;
+
+    impl HostQuery for Indice {
+        fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+            match query {
+                IndexQuery::Drafts { .. } => Ok(IndexResult::Drafts(Paged::all(vec![
+                    fub_abi::traits::DraftInfo {
+                        doc: DocId::new("Diario/2026-08-04.md"),
+                        at: 0,
+                        base: None,
+                        exists: true,
+                        current: None,
+                        text: "non l'ho ancora salvato".into(),
+                    },
+                ]))),
+                _ => Ok(IndexResult::Documents(Paged::all(Vec::new()))),
+            }
+        }
+    }
+
+    /// **La leva che questa decisione esiste per dare, primo verso**: il vault
+    /// concesso, le bozze no.
+    ///
+    /// Prima della 0096 questo caso non era esprimibile — `IndexQuery::Drafts`
+    /// passava da `Capability::Query`, cioè dallo stesso `fub:read-vault` che
+    /// governa i documenti salvati — e la frase *«puoi cercare nelle mie note,
+    /// non puoi leggere ciò che sto scrivendo adesso»* non aveva una spunta con
+    /// cui dirsi.
+    #[test]
+    fn denying_drafts_leaves_the_rest_of_the_index_readable() {
+        let guard = Guard::new(Indice, Nega(Capability::Drafts));
+        guard
+            .query_index(IndexQuery::Documents {
+                matching: Default::default(),
+                sort: None,
+                select: Default::default(),
+                excerpts: Default::default(),
+                page: None,
+            })
+            .expect("il resto dell'indice resta leggibile: è l'altro permesso");
+        let err = guard
+            .query_index(IndexQuery::Drafts { page: None })
+            .expect_err("le bozze no");
+        assert!(
+            matches!(err, PluginError::PermissionDenied(_)),
+            "e il rifiuto deve dirlo invece di rendere un elenco vuoto: {err}"
+        );
+        assert!(
+            err.message().to_string().contains("bozze"),
+            "il rifiuto nomina cosa si stava facendo: {err}"
+        );
+    }
+
+    /// **Secondo verso, ed è quello che la forma cumulativa avrebbe reso
+    /// impossibile**: le bozze concesse, il vault no.
+    ///
+    /// È il pannello di recupero dopo un crash — l'unico cliente che questa
+    /// domanda abbia mai avuto — e chiede una cosa sola: ritrovare ciò che si
+    /// stava scrivendo. Farlo dipendere da `read-vault` gli avrebbe fatto
+    /// chiedere l'intero vault per leggere il testo che l'utente non gli ha
+    /// consegnato, che è il modo in cui i permessi smettono di significare
+    /// qualcosa.
+    #[test]
+    fn granting_drafts_alone_does_not_open_the_index() {
+        let guard = Guard::new(Indice, Nega(Capability::Query));
+        match guard.query_index(IndexQuery::Drafts { page: None }) {
+            Ok(IndexResult::Drafts(page)) => {
+                assert_eq!(page.items.len(), 1, "le bozze passano");
+            }
+            altro => panic!("le bozze devono passare col loro permesso: {altro:?}"),
+        }
+        assert!(
+            guard
+                .query_index(IndexQuery::Documents {
+                    matching: Default::default(),
+                    sort: None,
+                    select: Default::default(),
+                    excerpts: Default::default(),
+                    page: None,
+                })
+                .is_err(),
+            "e non devono aprire il resto dell'indice"
+        );
+    }
+
+    /// I due permessi sono **due chiavi diverse**, e il presidio è che nessuna
+    /// apra la porta dell'altra.
+    ///
+    /// Senza questa riga la coppia avrebbe potuto nascere con `read-drafts`
+    /// mappato su `fub:read-vault` — cioè con un nome nuovo davanti al cancello
+    /// vecchio, che è la forma in cui un permesso sembra esserci e non c'è.
+    #[test]
+    fn the_two_permissions_are_not_the_same_key() {
+        assert_eq!(Capability::Query.permission(), Some(permission::READ_VAULT));
+        assert_eq!(
+            Capability::Drafts.permission(),
+            Some(permission::READ_DRAFTS)
+        );
+        let solo_vault = PluginPermissions::of(&[permission::READ_VAULT]);
+        let granted = Granted::new("p", &solo_vault, Trust::Community);
+        assert!(
+            granted.denies(Capability::Query).is_none(),
+            "`read-vault` concede l'indice"
+        );
+        assert!(
+            granted.denies(Capability::Drafts).is_some(),
+            "ma non le bozze: erano la stessa spunta nello stesso manifest"
         );
     }
 }

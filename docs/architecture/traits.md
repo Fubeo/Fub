@@ -288,7 +288,16 @@ un buco nel contratto si scopre prima del freeze, invece che a M5:
   plugin WASM no.)*
 - `query_index` — la porta di `Workspace::query_index` aperta ai provider, stesso
   dispatch. `&self`: una query non muta, e così una view la serve sotto prestito
-  condiviso.
+  condiviso. **Due permessi, non uno**
+  ([0096](../decisions/0096-una-bozza-non-e-una-nota.md)): `fub:read-vault` per
+  ogni domanda tranne una, `fub:read-drafts` per `IndexQuery::Drafts` — **al
+  posto** dell'altro e non in aggiunta, così che si possa concedere il vault e
+  negare ciò che l'utente sta scrivendo *e* concedere le bozze a un pannello di
+  recupero senza dargli il vault. È il primo punto in cui il `Guard` guarda
+  **quale** domanda passa e non solo il metodo; la mappa (`query_capability`) è
+  un `match` esaustivo su `QueryKind` senza ramo di scarto, perché con uno la
+  famiglia nuova erediterebbe `read-vault` restando verde — che è esattamente
+  come `Drafts` ci era finita.
 - `active_context` — pannello, documento, selezione, modalità (`ViewContext`, in
   `fub_abi::session`). **Due permessi, non uno**
   ([0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md)):

@@ -301,6 +301,26 @@ pub mod permission {
     /// `read-vault` avrebbe reso impossibile la cosa che questo permesso
     /// esiste per permettere: concedere il vault e negare la selezione.
     pub const READ_SELECTION: &str = "fub:read-selection";
+    /// Leggere le **bozze**: ciò che l'utente stava scrivendo e non ha salvato
+    /// ([`IndexQuery::Drafts`](crate::traits::IndexQuery::Drafts)).
+    ///
+    /// **Non è [`READ_VAULT`] con un altro nome, e non gli sta sotto.** Un
+    /// documento salvato lo si legge **nominandolo**, ed è testo che l'utente
+    /// ha deciso di consegnare al disco; una bozza non ha un nome da chiedere —
+    /// la risposta le porta **tutte insieme, col testo dentro** — ed è
+    /// precisamente ciò che l'utente *non* ha ancora deciso di consegnare. La
+    /// [0088](../../../docs/decisions/0088-cio-che-non-e-ancora-successo.md)
+    /// lo dice nella riga con cui nega per sempre la scrittura: *«il testo che
+    /// l'utente non ha ancora salvato è il dato più privato che un vault
+    /// contenga»*. Quella frase vale anche in lettura, perché la minaccia da
+    /// cui difende è la **riservatezza** e non l'integrità.
+    ///
+    /// Sta **al posto** di `read-vault` su quella variante e non accanto, così
+    /// che la leva valga nei due versi: *«puoi leggere le mie note, non ciò che
+    /// sto scrivendo adesso»* e *«puoi ritrovare ciò che non ho salvato, il
+    /// resto del vault no»*. Un pannello di recupero è la seconda frase, ed è
+    /// il solo cliente che questa domanda abbia mai avuto.
+    pub const READ_DRAFTS: &str = "fub:read-drafts";
 }
 
 #[cfg(test)]
