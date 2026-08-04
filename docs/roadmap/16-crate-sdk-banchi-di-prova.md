@@ -127,6 +127,33 @@ dichiarata guardando le voci insieme, come la seduta chiede.
       confine stesso a insegnarla; per questo la domanda si pone ai sorgenti,
       cioè prima del `cfg`. Un modulo condiviso legittimo non indebolisce la
       soglia: entra in `RADICE` con la sua ragione.
+- [ ] **Un cliente in più, arrivato dalla ~~§18.2~~**
+      ([0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)): **la
+      scorciatoia di un comando di shell non si riconfigura.** La chiave `keys.*`
+      la fabbrica il kernel registrando un `CommandProvider`
+      ([0077](../decisions/0077-una-scorciatoia-e-una-chiave.md)), e un comando
+      che vive nella webview un provider non ce l'ha — il pannello impostazioni
+      le mostra di sola lettura. È la stessa domanda di questa voce vista da
+      fuori: *la shell diventa un componente come gli altri*.
+
+      La 0090 ha misurato la scorciatoia che eviterebbe di aspettarla — un
+      `CommandProvider` **di prossimità** registrato da `fub-host` per conto
+      della shell, che dichiari i comandi `shell.*` al solo scopo di far nascere
+      le chiavi, lasciando l'esecuzione di là — e ha trovato cinque ostacoli, che
+      si scrivono qui perché chi esegue questa voce non li rimisuri. Quattro sono
+      lavoro: `CommandProvider` non ha una forma solo dichiarativa (`invoke` è
+      obbligatorio, e il kernel non ha un canale verso la webview); `PluginError`
+      non ha un caso che significhi «dichiarato qui, eseguito altrove»;
+      `allCommands()` concatena senza deduplicare, quindi ogni comando di shell
+      comparirebbe due volte e in conflitto con sé stesso; e la fixture
+      `command-keys.json` nasce dal solo `CoreCommands::specs()`, quindi il
+      presidio della [0081](../decisions/0081-un-accordo-ha-un-proprietario.md)
+      resterebbe verde. Il quinto invece è una **contraddizione**, ed è quello
+      che dice che la scorciatoia non esiste: i provider si registrano **per
+      vault** e le chiavi `keys.*` sono di scope `Vault`
+      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), ma `shell.vault.open` è il
+      comando che esiste *prima* di ogni vault — la sua chiave nascerebbe solo
+      dopo che un vault è aperto, e vivrebbe dentro il vault che serve ad aprire.
 
 ### 16.6 Dieta dell'IPC
 
