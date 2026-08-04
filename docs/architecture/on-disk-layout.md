@@ -52,7 +52,9 @@ chiamate per nome.
 | `.fub/workspace.json` | `kernel/organization.rs` | autorevole | 1 | `VaultStorage::write`, e **non riscrive** un file che non ha potuto leggere |
 | `.fub/settings.json` | `kernel/settings.rs` | autorevole | 1 | `VaultStorage::write`; le chiavi di scope `machine` scritte qui **si ignorano** |
 | `.fub/journal.jsonl` | `kernel/journal.rs` | autorevole | 1, **su ogni riga** | `VaultStorage::append` — in coda, senza `fsync`, e **dopo** che la mutazione è riuscita ([0067](../decisions/0067-il-registro-di-cio-che-e-successo.md)) |
+| `.fub/drafts/<documento>.json` | `kernel/drafts.rs` | autorevole | 1, **per bozza** | `VaultStorage::write` — una bozza per file, così ogni salvataggio automatico è una *scrittura* e non un *aggiornamento* ([0088](../decisions/0088-cio-che-non-e-ancora-successo.md)) |
 | `.fub/data/entries.json` | `kernel/entries.rs` | derivato | 2 | `VaultStorage::write` |
+| `.fub/data/diagnostics.json` | `kernel/workspace.rs` (`vault.diagnostic-bundle`) | derivato | 1 | `VaultStorage::write` — è una copia di fatti che stanno altrove, quindi si butta |
 | `.fub/data/trash/<nome>.json` | `kernel/vault.rs` | **né l'una né l'altra** (sotto) | — | `VaultStorage::write`, best-effort |
 | `.fub/data/plugins/<id>/…` | chiunque abbia `DataWrite` | dichiarata derivata, **in pratica entrambe** (sotto) | per plugin | `VaultStorage::write` (`host/kernel.rs`) |
 | `.fub/data/plugins/fub.search/` | `features/search.rs` | derivato | 5 | l'indice tantivy, più un `manifest.json` |

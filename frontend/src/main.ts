@@ -39,6 +39,7 @@ import {
   mountDocument,
   openDocument,
   openWikilink,
+  recuperaBozze,
   setEditorTheme,
   sincronizza,
 } from "./panels/document";
@@ -230,6 +231,16 @@ async function openVaultPath(dir: string): Promise<void> {
   await loadExpanded();
   await loadActiveSpace();
   await sincronizza();
+  // **Ciò che era rimasto non salvato** (§15.2), e sta qui accanto a
+  // `vault.partial` perché è la stessa specie di riga: due cose che l'apertura
+  // deve dire e che nessun'altra superficie direbbe. La differenza è il verso —
+  // là il vault ha perso qualcosa da leggere, qui l'utente ritrova qualcosa che
+  // aveva scritto — ed è dopo il layout di proposito: il testo recuperato è un
+  // buffer, e i buffer vanno messi quando i riquadri ci sono già.
+  const recuperate = await recuperaBozze();
+  if (recuperate > 0) {
+    notify(t("draft.found", { count: recuperate }), "info");
+  }
   // Da qui in poi lo stato del vault è coerente: chi ne dipende può ripartire.
   emit("vault", info.root);
 

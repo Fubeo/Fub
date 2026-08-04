@@ -96,8 +96,9 @@ impl Indexes {
         registry: Arc<FormatRegistry>,
         settings: SharedSettings,
         organization: Arc<OrganizationStore>,
+        drafts: Arc<crate::drafts::Drafts>,
     ) -> Self {
-        let core = CoreIndex::new(registry, settings, organization);
+        let core = CoreIndex::new(registry, settings, organization, drafts);
         let mut routes = RouteTable::default();
         routes
             .declare(Target::Core, &core.routes())

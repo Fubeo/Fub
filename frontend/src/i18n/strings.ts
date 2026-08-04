@@ -330,6 +330,22 @@ const IT = {
   "vault.partial":
     "{count} note non si sono lette all'apertura: la ricerca non le trova e il grafo non le collega.",
 
+  // --- il buffer di crash (§15.2) ----------------------------------------
+  //
+  // Una frase per CASO e non una sola con dentro dei se: la domanda da fare è
+  // diversa in ognuno, e una frase generica («c'è del testo non salvato»)
+  // costringerebbe chi la legge ad aprire per capire cosa gli sta succedendo.
+  "draft.found":
+    "{count} note hanno del testo che non era stato salvato. È stato ritrovato: aprile per decidere cosa tenere.",
+  "draft.case.superata": "Il file contiene già questo testo.",
+  "draft.case.nuova": "Questa nota non è mai stata salvata: la bozza è tutto ciò che c'è.",
+  "draft.case.orfana":
+    "La nota è stata cancellata mentre questo testo era ancora nell'editor: recuperarlo la farebbe tornare.",
+  "draft.case.divergente":
+    "Il file è cambiato da quando questo testo se n'è discostato: tenendone uno si perde l'altro.",
+  "draft.case.incerta":
+    "Non si sa da quale versione del file questo testo sia partito: guardali prima di scegliere.",
+
   // --- lo stato del salvataggio (§20.4) ----------------------------------
   // Quattro parole nella barra di stato, e non un'icona: «salvato» e «non
   // salvato» sono la differenza fra un'ora di lavoro che c'è e un'ora che non
@@ -570,6 +586,17 @@ const EN: Record<Chiave, string> = {
     "The command list did not arrive ({reason}): the palette is empty and the declared shortcuts do not respond.",
   "vault.partial":
     "{count} notes could not be read while opening: search does not find them and the graph does not link them.",
+
+  "draft.found":
+    "{count} notes have text that was never saved. It has been recovered: open them to decide what to keep.",
+  "draft.case.superata": "The file already contains this text.",
+  "draft.case.nuova": "This note was never saved: the draft is all there is.",
+  "draft.case.orfana":
+    "The note was deleted while this text was still in the editor: recovering it would bring the note back.",
+  "draft.case.divergente":
+    "The file changed after this text diverged from it: keeping one loses the other.",
+  "draft.case.incerta":
+    "It is not known which version of the file this text started from: look at both before choosing.",
 
   "save.saved": "Saved",
   "save.saving": "Saving…",

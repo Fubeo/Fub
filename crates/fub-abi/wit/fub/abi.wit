@@ -1861,6 +1861,12 @@ interface index {
         under: option<folder-scope>,
         page: option<page>,
     }
+    /// COSA È RIMASTO NON SALVATO (§15.2): le bozze che il buffer di crash ha
+    /// lasciato sul disco. Leggere non è cambiare — è chi decide cosa farne a
+    /// mutare qualcosa, e quello è un comando.
+    record index-query-drafts {
+        page: option<page>,
+    }
     /// DOVE guardare, per le domande che si fanno per cartella. Due campi e non
     /// due varianti perché sono la stessa domanda con un raggio diverso — ed è
     /// la stessa coppia del predicato `folder`, di proposito: la regola che
@@ -1989,6 +1995,11 @@ interface index {
         /// `vault-entry` avrebbe voluto dire tre campi che mentono e un filtro
         /// da ricordarsi in ogni cliente dell'anagrafe.
         folders(index-query-folders),
+        /// In CODA e non accanto a `vault-health`, che pure è la sua vicina di
+        /// senso: l'ordine dei casi è il discriminante dell'ABI, quindi una
+        /// variante in mezzo rinumera tutte quelle dopo. Additiva vuol dire in
+        /// fondo.
+        drafts(index-query-drafts),
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -2039,6 +2050,8 @@ interface index {
         /// indice che sappia elencare i file di un supporto remoto possa
         /// rivendicare la prima senza doversi inventare la seconda.
         folders,
+        /// Ciò che è rimasto non salvato (§15.2).
+        drafts,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -2181,6 +2194,25 @@ interface index {
         /// Dove sta nel sorgente, quando il problema ha un punto.
         span: option<span>,
     }
+    /// UNA BOZZA (§15.2): ciò che l'utente stava scrivendo e non ha salvato.
+    /// Porta il testo con sé e non un puntatore da risolvere: la sola ragione
+    /// per cui questo tipo esiste è che quel testo non vada perso.
+    record draft-info {
+        doc: doc-id,
+        /// Millisecondi UNIX dell'ultima scrittura della bozza.
+        at: u64,
+        /// La revisione del file su cui il buffer stava lavorando, QUANDO chi
+        /// ha scritto la bozza la sapeva. Assente vuol dire «non lo so», non
+        /// «nota nuova»: quello lo dice `exists`.
+        base: option<revision>,
+        /// Il documento c'è ancora? Lo dice l'anagrafe. `false` è una bozza
+        /// ORFANA, cioè l'unica copia rimasta di ciò che era stato scritto.
+        exists: bool,
+        /// La revisione del file ADESSO, per quel che il vault ne sa. È un
+        /// fatto, non un giudizio: cosa farne lo decide chi la mostra.
+        current: option<revision>,
+        text: string,
+    }
     // Una risposta a finestra porta gli elementi, da dove cominciano e quanti ce
     // ne sarebbero IN TUTTO (`total` è il conteggio prima della finestra: senza,
     // "1-20 di 4321" non si scrive). Lato Rust è un solo `Paged<T>` generico;
@@ -2231,6 +2263,11 @@ interface index {
         offset: u32,
         total: u32,
     }
+    record drafts-page {
+        items: list<draft-info>,
+        offset: u32,
+        total: u32,
+    }
 
     variant index-result {
         documents(documents-page),
@@ -2273,6 +2310,8 @@ interface index {
         /// sotto una cartella sono poche, chieste su tutto il vault sono tante
         /// quante le cartelle.
         folders(folders-page),
+        /// In coda come la sua domanda: l'ordine è il discriminante.
+        drafts(drafts-page),
     }
 
     /// SU QUESTA IDENTITÀ, L'INDICE ADESSO MENTE (§20.1, decisione 0051).

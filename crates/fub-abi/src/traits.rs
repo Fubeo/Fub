@@ -2100,6 +2100,48 @@ pub struct HealthIssue {
     pub span: Option<Span>,
 }
 
+/// Una **bozza**: ciò che l'utente stava scrivendo e non ha salvato (§15.2).
+///
+/// Porta il testo con sé, e non un puntatore da risolvere con una seconda
+/// domanda: la sola ragione per cui questo tipo esiste è che quel testo non
+/// vada perso, e un elenco che dice *ci sono tre bozze* senza poterle mostrare
+/// avrebbe rimandato l'unica cosa che conta a una chiamata che può fallire.
+/// Quante ce ne sono lo governa la paginazione, come per ogni altra risposta.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DraftInfo {
+    /// Di quale documento è. Per una nota mai salvata è il nome che avrebbe.
+    pub doc: DocId,
+    /// Millisecondi UNIX dell'ultima scrittura della bozza.
+    pub at: u64,
+    /// La revisione del file su cui il buffer stava lavorando, **quando chi ha
+    /// scritto la bozza la sapeva**.
+    ///
+    /// `None` non vuol dire «nota nuova» — quello lo dice `exists` — vuol dire
+    /// *non lo so*: chi tiene un buffer non sempre ha in mano l'impronta del
+    /// file da cui è partito, e inventargliela sarebbe peggio che ammetterlo.
+    /// La differenza si vede in cosa si può offrire: con una base si può dire
+    /// «il file è cambiato sotto», senza si può solo mostrare i due testi.
+    pub base: Option<Revision>,
+    /// Il documento c'è ancora? Lo dice l'anagrafe (§14.1), che è chi sa cosa
+    /// contiene il vault.
+    ///
+    /// `false` è il caso che questa voce esiste per non nascondere: una nota
+    /// cancellata mentre il suo buffer era sporco lascia una bozza **orfana**,
+    /// e quella bozza è l'unica copia rimasta di ciò che l'utente aveva
+    /// scritto. Buttarla in silenzio sarebbe la perdita che la seduta 20 vieta.
+    pub exists: bool,
+    /// La revisione del file **adesso**, per quel che il vault ne sa; `None` se
+    /// il documento non c'è o se nessuno ne ha ancora letto i byte.
+    ///
+    /// Sta accanto a `base` perché è il fatto che il chiamante non può
+    /// procurarsi da sé, e **non** un giudizio: che `base != current` voglia
+    /// dire *tieni il tuo testo* o *tieni quello sul disco* è una domanda da
+    /// fare a una persona, non un ramo di un `if` nel kernel.
+    pub current: Option<Revision>,
+    /// Il testo non salvato.
+    pub text: String,
+}
+
 /// Una interrogazione all'indice: il canale dati unico verso le view.
 ///
 /// Ogni variante che seleziona documenti lo fa con lo stesso linguaggio
@@ -2392,6 +2434,24 @@ pub enum IndexQuery {
         #[serde(default)]
         page: Option<Page>,
     },
+    // In **coda** e non accanto a `VaultHealth`, che pure è la sua vicina di
+    // senso: l'ordine dei casi è il discriminante dell'ABI, quindi una variante
+    // inserita in mezzo rinumera tutte quelle che vengono dopo. Additiva vuol
+    // dire in fondo — è la stessa disciplina delle righe che si appendono a un
+    // registro, applicata a un enum.
+    /// **Cosa è rimasto non salvato** (§15.2): le bozze che il buffer di crash
+    /// ha lasciato sul disco.
+    ///
+    /// Passa da qui e non da un comando IPC suo per la ragione di `Watching`
+    /// più sopra — i clienti sono già qui — e per una che è di questa variante
+    /// soltanto: **leggere non è cambiare**
+    /// ([0085](../../../docs/decisions/0085-leggere-non-e-cambiare.md)), e
+    /// ritrovare ciò che si stava scrivendo è la lettura più innocua che ci
+    /// sia. È chi decide *cosa farne* a mutare qualcosa, e quello è un comando.
+    Drafts {
+        #[serde(default)]
+        page: Option<Page>,
+    },
 }
 
 impl IndexQuery {
@@ -2404,6 +2464,7 @@ impl IndexQuery {
             | IndexQuery::Neighbors { page, .. }
             | IndexQuery::PropertyValues { page, .. }
             | IndexQuery::VaultHealth { page, .. }
+            | IndexQuery::Drafts { page }
             | IndexQuery::Entries { page, .. }
             | IndexQuery::Folders { page, .. } => *page,
             IndexQuery::Outline { .. }
@@ -2428,6 +2489,7 @@ impl IndexQuery {
             IndexQuery::Backlinks { .. }
             | IndexQuery::Outline { .. }
             | IndexQuery::VaultHealth { .. }
+            | IndexQuery::Drafts { .. }
             | IndexQuery::Custom { .. }
             | IndexQuery::VaultStatus
             | IndexQuery::Jobs
@@ -2494,6 +2556,7 @@ impl IndexQuery {
             IndexQuery::Neighbors { .. } => QueryKind::Neighbors,
             IndexQuery::PropertyValues { .. } => QueryKind::PropertyValues,
             IndexQuery::VaultHealth { .. } => QueryKind::VaultHealth,
+            IndexQuery::Drafts { .. } => QueryKind::Drafts,
             IndexQuery::Custom { ns, .. } => QueryKind::Custom(ns.clone()),
             IndexQuery::VaultStatus => QueryKind::VaultStatus,
             IndexQuery::Jobs => QueryKind::Jobs,
@@ -2572,6 +2635,9 @@ pub enum QueryKind {
     /// che sappia elencare i file di un supporto remoto possa rivendicare la
     /// prima senza doversi inventare la seconda.
     Folders,
+    /// Ciò che è rimasto non salvato (§15.2). In coda come nell'[`IndexQuery`],
+    /// e per la stessa ragione: l'ordine è il discriminante.
+    Drafts,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -2818,6 +2884,10 @@ pub enum IndexResult {
     /// chieste su tutto il vault sono tante quante le cartelle — e chi ne offre
     /// un elenco da scegliere non deve trasferirle tutte per mostrarne dieci.
     Folders(Paged<VaultFolder>),
+    /// Ciò che era rimasto non salvato (risposta a [`IndexQuery::Drafts`]). In
+    /// coda come la sua domanda, e per la stessa ragione: l'ordine dei casi è
+    /// il discriminante dell'ABI.
+    Drafts(Paged<DraftInfo>),
 }
 
 impl IndexResult {
@@ -2858,6 +2928,7 @@ impl IndexResult {
             IndexResult::Resolved(_) => "resolved",
             IndexResult::Entries(_) => "entries",
             IndexResult::Folders(_) => "folders",
+            IndexResult::Drafts(_) => "drafts",
         }
     }
 }

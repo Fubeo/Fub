@@ -10,7 +10,7 @@ documento esiste.
 |---|---|---|---|
 | **versione dei crate** | [`Cargo.toml:19`](../Cargo.toml), ereditata dagli otto crate [conta: crate-del-workspace]; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila Fub, o ci compila contro | la build rossa, subito |
 | **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:2912`) e `package fub:abi@0.1.0` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
-| **versione degli schemi su disco** | otto `SCHEMA_VERSION` [conta: schemi-su-disco] indipendenti nei crate (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
+| **versione degli schemi su disco** | nove `SCHEMA_VERSION` [conta: schemi-su-disco] indipendenti nei crate (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
 
 ## 1. La versione dei crate
 
@@ -107,7 +107,9 @@ momenti diversi e legarli vorrebbe dire migrare sei file per una modifica a uno.
 | anagrafe | [`crates/fub-kernel/src/entries.rs:86`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
 | impostazioni | [`crates/fub-kernel/src/settings.rs:51`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
 | versioning | [`crates/fub-features/src/versioning.rs:147`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
-| indice di ricerca | [`crates/fub-features/src/search.rs:87`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
+| indice di ricerca | [`crates/fub-features/src/search.rs:89`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
+| registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:112`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
+| bozze | [`crates/fub-kernel/src/drafts.rs:109`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |
 
 **La regola comune è il rifiuto in avanti.** Un file la cui `version` è
 **maggiore** di quella che questa copia di Fub conosce non si legge e non si

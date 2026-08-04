@@ -27,6 +27,7 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::edit::Revision;
 use fub_abi::event::Actor;
 use fub_abi::locale::Locale;
 use fub_abi::model::DocId;
@@ -161,6 +162,41 @@ fn write_document(
     let mut ws = ws.write().unwrap();
     ws.write_document(&doc_id(&id)?, &source)
         .map_err(PluginError::from)
+}
+
+/// **Scrive la bozza di un documento** (§15.2): ciò che c'è nel buffer adesso.
+///
+/// Una porta e non un comando del registro, ed è la sola riga di questo file
+/// dove l'assenza di una capacità è **voluta per sempre** invece che in attesa
+/// di un cliente: il testo non ancora salvato è il dato più privato che un vault
+/// contenga, e una `draft_write` sull'`HostApi` lo darebbe a ogni plugin
+/// montato. La shell non è un plugin, e questa è la sua porta.
+///
+/// `base` è la revisione del file su cui il buffer sta lavorando — assente per
+/// una nota mai salvata — e la manda **chi ha il buffer**, perché è l'unico a
+/// sapere da quale lettura quel testo si è discostato.
+#[tauri::command]
+fn save_draft(
+    host: State<Host>,
+    id: String,
+    text: String,
+    base: Option<String>,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    let ws = host.workspace(vault.as_deref())?;
+    let mut ws = ws.write().unwrap();
+    ws.save_draft(&doc_id(&id)?, &text, base.map(Revision::new))
+        .map_err(|e| PluginError::Internal(format!("bozza non scritta: {e}").into()))
+}
+
+/// **Butta la bozza di un documento**: il buffer è tornato pulito, o l'utente ha
+/// scelto di scartare ciò che aveva recuperato.
+#[tauri::command]
+fn discard_draft(host: State<Host>, id: String, vault: Option<String>) -> Result<(), PluginError> {
+    let ws = host.workspace(vault.as_deref())?;
+    let mut ws = ws.write().unwrap();
+    ws.discard_draft(&doc_id(&id)?)
+        .map_err(|e| PluginError::Internal(format!("bozza non buttata: {e}").into()))
 }
 
 // Le cinque azioni STRUTTURALI — crea, rinomina, cestina, ripristina, svuota —
@@ -674,6 +710,8 @@ pub fn run() {
             initial_vault,
             read_document,
             write_document,
+            save_draft,
+            discard_draft,
             render_preview,
             render_embed,
             set_active_context,

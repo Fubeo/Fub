@@ -47,6 +47,9 @@ import { onEvent } from "../state/kernel";
 import { noteRecentiEsistenti } from "../state/recenti";
 import { emit, on, state } from "../state/store";
 import { cambioSotto, statoDi, type Esito } from "../state/salvataggio";
+import { CHIAVE_CASO, casoDi, daRecuperare } from "../state/bozze";
+import { bozzeNonSalvate } from "../host/query";
+import type { DraftInfo } from "../host/contract";
 import {
   apriIn,
   attivaTab,
@@ -139,6 +142,9 @@ interface Buffer {
   /// watcher, che è il caso grave, perché quello non lo consuma mai. Torna a
   /// zero a ogni caricamento del documento.
   echi: number;
+  /// Il debounce della **bozza** (§15.2), separato da quello del salvataggio
+  /// perché ha un ritmo suo: vedi `scheduleDraft`.
+  draftTimer?: number;
   timer?: number;
 }
 
@@ -662,6 +668,43 @@ function aggiornaCommutatore(): void {
   }
 }
 
+/// **Ritrova ciò che era rimasto non salvato** (§15.2), all'apertura del vault.
+///
+/// Il recupero è un buffer **precaricato e sporco**, e non un file riscritto:
+/// è la scelta che tiene la decisione all'utente. Il disco resta com'è finché
+/// qualcuno non salva, e la nota recuperata si comporta esattamente come una
+/// che si stava scrivendo — pallino sulla tab, «Non salvato» nella barra di
+/// stato, e i gesti di sempre per tenerla o buttarla. Non serve una superficie
+/// nuova per una cosa che la shell sa già disegnare.
+///
+/// Che sia un buffer e non un dialogo modale ha anche una conseguenza che vale
+/// più dell'economia di codice: chi apre il vault e vuole solo leggere qualcosa
+/// non viene fermato da una domanda. Il testo c'è, lo trova quando apre quella
+/// nota, e nel frattempo la notifica gli dice che c'è.
+///
+/// Le bozze **superate** — il disco contiene già quel testo, cioè il caso
+/// normale dopo una chiusura ordinata — non arrivano fin qui: le toglie
+/// `daRecuperare`.
+export async function recuperaBozze(): Promise<number> {
+  let bozze: DraftInfo[];
+  try {
+    bozze = daRecuperare(await bozzeNonSalvate());
+  } catch {
+    // Un recupero che non parte non deve impedire di aprire il vault: è una
+    // rete di sicurezza, e una rete che blocca la porta è peggio di nessuna
+    // rete. Ciò che non si è letto lo dice il rapporto diagnostico.
+    return 0;
+  }
+  for (const b of bozze) {
+    // Solo se nessuno tiene già quel buffer: chi ha già aperto quella nota in
+    // questa sessione ha un testo più recente di ciò che stava sul disco.
+    if (buffers.has(b.doc)) continue;
+    buffers.set(b.doc, { text: b.text, dirty: true, esito: "ok", echi: 0 });
+    notify(`${b.doc}: ${t(CHIAVE_CASO[casoDi(b)])}`, "info");
+  }
+  return bozze.length;
+}
+
 // --- aprire e chiudere ------------------------------------------------------
 
 /// Apre un documento nel riquadro col fuoco.
@@ -764,6 +807,55 @@ function scritto(paneId: string, text: string): void {
   }
   disegnaSalvataggio();
   scheduleSave(doc);
+  scheduleDraft(doc);
+}
+
+// --- il buffer di crash (§15.2) ---------------------------------------------
+//
+// Perché serve, dato che l'autosave scatta dopo 400 ms: perché i 400 ms non sono
+// il caso interessante. I casi sono tre, e nessuno dei tre lo copre l'autosave —
+// il salvataggio che **fallisce** (disco pieno, file in sola lettura, share di
+// rete caduta: il buffer resta sporco a tempo indeterminato, ed è la ragione per
+// cui `salvataggio.ts` tiene «fallito» come stato a sé), la nota che non è
+// **mai** stata salvata, e la finestra fra l'ultima battuta e la scrittura.
+//
+// Il debounce è più **lungo** di quello del salvataggio, non più corto, e la
+// ragione è che i due non fanno la stessa cosa: il salvataggio è la strada
+// normale e va veloce, la bozza è la rete sotto e deve costare poco. Quando il
+// salvataggio riesce, la bozza si butta — il disco è di nuovo la verità.
+const DRAFT_MS = 1_000;
+
+function scheduleDraft(doc: string): void {
+  const buf = buffers.get(doc);
+  if (!buf) return;
+  window.clearTimeout(buf.draftTimer);
+  buf.draftTimer = window.setTimeout(() => void writeDraft(doc), DRAFT_MS);
+}
+
+/// Mette la bozza sul disco. Non racconta il proprio fallimento all'utente, ed è
+/// una scelta: è una rete di sicurezza che gira di fianco al lavoro vero, e un
+/// avviso per ogni bozza non scritta insegnerebbe a ignorare gli avvisi — che è
+/// il difetto che `cambioSotto` esiste per non avere. Chi vuole saperlo lo trova
+/// nel rapporto diagnostico.
+async function writeDraft(doc: string): Promise<void> {
+  const buf = buffers.get(doc);
+  if (!buf?.dirty) return;
+  try {
+    await api.saveDraft(doc, buf.text);
+  } catch {
+    // Volutamente muto: vedi sopra.
+  }
+}
+
+/// La bozza non serve più: il disco è tornato a essere la verità.
+async function dropDraft(doc: string): Promise<void> {
+  const buf = buffers.get(doc);
+  if (buf) window.clearTimeout(buf.draftTimer);
+  try {
+    await api.discardDraft(doc);
+  } catch {
+    // Muto per la ragione di `writeDraft`.
+  }
 }
 
 /// Lo stato del salvataggio **del documento che si sta guardando**, nella barra
@@ -871,6 +963,11 @@ async function saveDoc(doc: string): Promise<void> {
   } catch (e) {
     buf.esito = "fallito";
     notify(t("document.save_failed", { doc, reason: errorText(e) }), "guasto");
+    // **Qui la bozza conta più che altrove**, ed è il caso per cui esiste: il
+    // disco ha appena rifiutato questo testo, quindi l'unica copia è in RAM.
+    // Non si aspetta il debounce — si scrive adesso.
+    window.clearTimeout(buf.draftTimer);
+    void writeDraft(doc);
     // Il buffer resta sporco: è la verità del documento, e il tentativo
     // successivo — la battuta dopo, o il flush di una rinomina — riparte da qui.
     disegnaSalvataggio();
@@ -882,7 +979,13 @@ async function saveDoc(doc: string): Promise<void> {
   buf.echi += 1;
   // Pulito solo se nel frattempo non è arrivato altro input: `dirty` è stato
   // rimesso a true da `scritto` se l'utente ha continuato a scrivere.
-  if (buf.text === text) buf.dirty = false;
+  if (buf.text === text) {
+    buf.dirty = false;
+    // Il testo è sul disco: la rete si può togliere. Solo se il buffer è
+    // davvero pulito — chi ha continuato a battere durante la scrittura ha una
+    // bozza che vale ancora.
+    void dropDraft(doc);
+  }
   disegnaSalvataggio();
   for (const id of paneConDoc(doc)) {
     const r = riquadri.get(id);

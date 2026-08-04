@@ -55,16 +55,32 @@ lock — sono quattro righe — ma l'**MSRV**, salito a 1.89 perché
 compila invece che in lavoro, ed è la ragione per cui la 0065 l'aveva chiamata
 decisione e non casella.
 
-Del **recovery** — l'altra metà, quella che resta — la prima delle tre caselle è
-chiusa dalla
+Del **recovery** — l'altra metà — la prima delle tre caselle era stata chiusa
+dalla
 [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md): il registro delle
 mutazioni esiste, sta in `.fub/` perché la profondità dichiara la classe e un
 registro non si rifà da niente, e non conserva il contenuto di prima ma
 l'**inverso** — che è la [0045](../decisions/0045-l-undo-ha-due-pile.md) letta dal
 disco. Il taglio della voce è quello che il suo titolo diceva già, ed è la terza
-volta di fila che questa voce si chiude per pezzi senza che il criterio cambi: le
-due restanti — il buffer di crash dell'editor e i comandi di manutenzione — sono
-recovery come questa, e la seconda è un **cliente** del registro appena nato.
+volta di fila che questa voce si è chiusa per pezzi senza che il criterio
+cambiasse.
+
+E le due restanti — il buffer di crash e i comandi di manutenzione — sono cadute
+insieme con la [0088](../decisions/0088-cio-che-non-e-ancora-successo.md), che
+**chiude la voce**. La lezione che vale oltre di lei è quella di metodo, ed è la
+stessa del verbale precedente della roadmap: *una voce ferma va rimisurata prima
+di essere eseguita*. Le due caselle erano scritte prima che esistessero il
+supporto, la scrittura atomica e il journal, e rilette contro quel codice hanno
+dato due esiti diversi. Il buffer di crash aveva la propria specifica **già
+scritta altrove**: `journal.rs` dichiarava di non contenere il buffer sporco, e
+quella frase diceva che le bozze sono il gemello del registro dall'altro verso —
+l'uno conserva l'inverso e mai il testo di ciò che è successo, l'altro solo il
+testo di ciò che non è ancora successo. I comandi di manutenzione invece
+chiedevano una cosa **diventata impossibile nel modo in cui la chiedevano**: dei
+quattro che elencavano, `vault_health` era nel frattempo diventato una query, che
+è una terza forma che la casella non contemplava. Riformularla è costato una
+domanda, ed è stata la mossa giusta: quella query non aveva **nessun lettore**,
+e adesso ne ha uno.
 
 La 15.7 sta qui e non fra i presidi perché è la stessa domanda della durabilità
 vista all'apertura invece che alla scrittura: la verità non si rifiuta di aprire,
@@ -95,7 +111,7 @@ prerequisito e ciò che lo richiede, che sta in coda a
 
 ### 15.2 Durabilità e recovery
 
-*ex §2.5 · kernel · **P2** — la **durabilità** è chiusa: la scrittura con la [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), l'aggiornamento con la [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md); del **recovery** è chiuso il journal con la [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md), e restano **due** caselle: il buffer di crash e i comandi di manutenzione*
+*ex §2.5 · kernel · **P2** — **chiusa** con la [0088](../decisions/0088-cio-che-non-e-ancora-successo.md), in quattro tempi: la scrittura ([0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)), l'aggiornamento ([0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md)), il journal ([0067](../decisions/0067-il-registro-di-cio-che-e-successo.md)) e infine il buffer di crash con i comandi di manutenzione*
 
 - [x] **Scrittura atomica vera**, chiusa dalla
       [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md): la promessa sta
@@ -137,8 +153,33 @@ prerequisito e ciò che lo richiede, che sta in coda a
       della [seduta 20](20-quando-qualcosa-va-storto.md). I tre file non
       perdevano la stessa cosa, e uno dei tre — `vaults.json` — non perdeva una
       traccia ma i **preferiti**.
-- [ ] **Buffer di crash / autosave recovery**: il buffer sporco dell'editor deve
-      sopravvivere a un crash (2.1, 24.2).
+- [x] **Buffer di crash / autosave recovery**, chiuso dalla
+      [0088](../decisions/0088-cio-che-non-e-ancora-successo.md): le bozze
+      stanno in `.fub/drafts/`, **una per documento**, e sono il **gemello del
+      journal dall'altro verso** — quello conserva l'inverso e mai il testo di
+      ciò che è *successo*, queste conservano soltanto il testo di ciò che *non
+      è ancora successo*. La specifica era già scritta in testa a `journal.rs`,
+      che dichiarava di non contenere il buffer sporco. Profondità uno, cioè
+      classe **autorevole** ([0048](../decisions/0048-una-radice-sola.md)): un
+      testo mai salvato è per definizione l'unica copia, e `.fub/data/` lo
+      avrebbe dichiarato buttabile. Lo stato di vista è scartato perché è la
+      [0086](../decisions/0086-una-cronologia-e-la-sua-porta.md)
+      **all'incontrario** — là decideva che il dato non deve viaggiare, qui che
+      deve. Un file per bozza e non uno solo, o ogni autosave sarebbe stato un
+      *aggiornamento* di un documento condiviso, cioè il difetto che la
+      [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md) aveva
+      appena tolto; così invece ogni salvataggio è una **scrittura** e la
+      atomicità arriva dal supporto senza scriverla due volte. La tensione di
+      strato che la voce portava — dichiarata *kernel*, per metà lavoro di shell
+      — è **nominata** e non risolta di straforo: *la shell decide quando una
+      bozza esiste, il kernel decide cosa vuol dire tenerla*. La scrittura ha due
+      porte IPC e non un comando del registro, e la capacità manca **per sempre**
+      invece che «in attesa di un cliente»: il testo non salvato è il dato più
+      privato di un vault. La lettura sta sul canale di tutti
+      (`IndexQuery::Drafts`) e manda i **fatti** — `base`, `current`, `exists` —
+      tacendo sul giudizio, perché *tenere il mio testo o quello sul disco* è una
+      domanda che si fa a una persona. Una bozza **orfana** non si raccoglie: è
+      l'unica copia rimasta.
 - [x] **Journal delle mutazioni**, chiuso dalla
       [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md): una riga
       per mutazione del kernel in `.fub/journal.jsonl`, con la versione di schema
@@ -162,9 +203,26 @@ prerequisito e ciò che lo richiede, che sta in coda a
       quello che questa casella doveva rendere possibile è che sia **scrivibile**,
       e il lotto ([0011](../decisions/0011-il-lotto.md)) resta ciò che ne segna i
       confini senza esserne la transazione.
-- [ ] **Comandi di manutenzione**: `rebuild_index`, `vault_health`,
-      `diagnostic_bundle`, `repair` — come `CommandProvider` ([decisione 0009](../decisions/0009-registro-dei-comandi.md)), non come
-      comandi Tauri.
+- [x] **Comandi di manutenzione**, chiusi dalla
+      [0088](../decisions/0088-cio-che-non-e-ancora-successo.md) — e la casella è
+      stata **riformulata** prima di essere eseguita, perché uno dei quattro era
+      già altrove e non nel posto sbagliato. `vault_health` è una `IndexQuery`
+      che risponde `Paged<HealthIssue>`: la salute del vault **è una lettura**, e
+      una lettura che risponde con dati non può essere un comando
+      ([0013](../decisions/0013-elenco-delle-capacita.md)). Resta dov'è, e
+      guadagna il suo primo lettore — il rapporto diagnostico — perché non ne
+      aveva **nessuno**: era una porta aperta su una stanza dove non entrava
+      nessuno. Gli altri tre sono mutazioni e sono comandi del registro
+      ([0009](../decisions/0009-registro-dei-comandi.md)) con la regola che
+      generalizza la [0086](../decisions/0086-una-cronologia-e-la-sua-porta.md):
+      **la dichiarazione sta nel registro, l'esecuzione sta dove sta il potere**.
+      Le `CommandSpec` passano dalla porta di tutti — ammesse, convalidate, con
+      la loro chiave di scorciatoia — e a separarsi è solo chi le esegue, perché
+      rifare l'indice non è una capacità da prestare a ogni plugin montato. Così
+      i tre sono in palette, rimappabili e raggiungibili dalla CLI (27.1) senza
+      che una capacità nuova compaia sul confine — che è il prezzo che la 0086
+      aveva dovuto pagare. `vault.repair` **dice ciò che non ripara**, o avrebbe
+      avuto lo stesso corpo di `vault.rebuild-index` con un altro nome.
 
 ### 15.3 Una versione di schema su ogni formato persistito
 

@@ -31,6 +31,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::drafts::Drafts;
 use fub_abi::edit::Revision;
 use fub_abi::event::{DocChange, DocChanges};
 use fub_abi::model::{
@@ -42,7 +43,7 @@ use fub_abi::query::{
 };
 use fub_abi::rules::properties;
 use fub_abi::traits::{
-    DocPosition, EntryKind, FolderScope, HostApi, IndexLoss, IndexProvider, IndexQuery,
+    DocPosition, DraftInfo, EntryKind, FolderScope, HostApi, IndexLoss, IndexProvider, IndexQuery,
     IndexResult, IndexingState, JobId, JobProgress, JobStatus, LinkDirection, Paged, PredicateKind,
     QueryKind, QueryRoute, ResolvedRef, VaultEntry, VaultFolder, VaultStatus,
 };
@@ -187,6 +188,16 @@ pub(crate) struct CoreIndex {
     /// interrogabile affatto — la leggeva un comando IPC, quindi la sapeva
     /// chiedere la shell e nessun altro.
     organization: Arc<OrganizationStore>,
+    /// **Cosa è rimasto non salvato** (§15.2), e per la quarta volta la ragione
+    /// della 0019: è una risposta del kernel, e le risposte del kernel sono un
+    /// provider. Condiviso col workspace come i due di sopra — a scrivere le
+    /// bozze è chi batte sulla tastiera, e questo indice le legge.
+    ///
+    /// Che una bozza non sia dato d'*indice* non è un'obiezione: non lo è
+    /// nemmeno il rapporto col disco, e sta qui da prima. Ciò che questa
+    /// tabella instrada è **chi risponde a quale domanda**, e a questa risponde
+    /// il kernel.
+    drafts: Arc<Drafts>,
 }
 
 /// Il **file** che un path nomina dentro un'anagrafe, se c'è — di qualunque
@@ -421,6 +432,7 @@ impl CoreIndex {
         registry: Arc<FormatRegistry>,
         settings: SharedSettings,
         organization: Arc<OrganizationStore>,
+        drafts: Arc<Drafts>,
     ) -> Self {
         CoreIndex {
             metas: BTreeMap::new(),
@@ -434,6 +446,7 @@ impl CoreIndex {
             jobs: JobsState::default(),
             settings,
             organization,
+            drafts,
         }
     }
 
@@ -780,6 +793,10 @@ impl IndexProvider for CoreIndex {
             QueryRoute::Query(QueryKind::Neighbors),
             QueryRoute::Query(QueryKind::PropertyValues),
             QueryRoute::Query(QueryKind::VaultHealth),
+            // Ciò che è rimasto non salvato (§15.2): il kernel è l'unico che
+            // può rispondere, perché è l'unico che possiede quel posto sul
+            // disco — e l'unico che sa, dall'anagrafe, se la nota c'è ancora.
+            QueryRoute::Query(QueryKind::Drafts),
             // Il rapporto col disco (§9.7): il kernel è l'unico che può
             // rispondere, perché è l'unico che conosce insieme l'esito delle
             // sincronizzazioni e il fatto — passatogli da chi monta — che un
@@ -973,6 +990,30 @@ impl IndexProvider for CoreIndex {
                     &self.registry.all_extensions(),
                 );
                 Ok(IndexResult::VaultHealth(Paged::window(issues, page)))
+            }
+            IndexQuery::Drafts { page } => {
+                let drafts = self.drafts.read();
+                let items = drafts
+                    .drafts
+                    .into_iter()
+                    .map(|d| {
+                        let entry = self.entries.get(&d.doc);
+                        DraftInfo {
+                            doc: d.doc,
+                            at: d.at,
+                            base: d.base,
+                            // L'anagrafe è la fonte di entrambi: `exists` è
+                            // «c'è una voce», `current` è l'impronta che
+                            // qualcuno ha già pagato. Nessuna delle due apre un
+                            // file — offrire un recupero non deve costare una
+                            // rilettura del vault.
+                            exists: entry.is_some(),
+                            current: entry.and_then(|e| e.fingerprint.clone()),
+                            text: d.text,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                Ok(IndexResult::Drafts(Paged::window(items, page)))
             }
             // Il filtro sta **prima** della finestra, e non è un dettaglio: una
             // pagina tagliata sull'anagrafe intera e poi filtrata sarebbe una

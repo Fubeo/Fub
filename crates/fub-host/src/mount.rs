@@ -232,7 +232,7 @@ pub fn mount(
         // meno strana dell'alternativa — appendere la configurazione dell'app a
         // una feature che si può spegnere.
         Arc::new(
-            CoreBundle::new(CORE_ID, "Fub", |_| Vec::new())
+            CoreBundle::new(CORE_ID, "Fub", register_maintenance)
                 .configuring(core_settings())
                 // **Due** cataloghi per lingua, e si sommano: le chiavi del
                 // core stanno in `fub-host` accanto al loro schema, quelle
@@ -240,7 +240,12 @@ pub fn mount(
                 // `Strings::template`, e il perché sta nel suo doc.
                 .speaking(
                     "it",
-                    [core_catalog(), fub_kernel::locale::catalog()].concat(),
+                    [
+                        core_catalog(),
+                        fub_kernel::locale::catalog(),
+                        fub_kernel::maintenance::catalog(),
+                    ]
+                    .concat(),
                 ),
         ),
     ];
@@ -540,6 +545,24 @@ fn register_view(
 /// Come [`register_view`], prende un provider già costruito: quale sia lo dice
 /// l'inventario, e oggi ce n'è uno solo — che è appunto la premessa che il §16.7
 /// dice di non voler più cablare da nessuna parte.
+/// I **comandi di manutenzione** (§15.2), e perché stanno nel bundle del core
+/// invece che in uno loro.
+///
+/// Perché il bundle del core è l'unico che non si può spegnere: è quello che
+/// dichiara `plugins.disabled`. Un comando che ripara il vault dietro un
+/// interruttore sarebbe assente esattamente nel caso in cui serve — chi ha un
+/// vault messo male è anche chi può avere una configurazione messa male.
+///
+/// Il provider li **dichiara** soltanto: a eseguirli è il kernel, per la ragione
+/// scritta in testa a `fub_kernel::maintenance`.
+fn register_maintenance(ws: &mut Workspace) -> Vec<String> {
+    register_commands(
+        ws,
+        fub_kernel::maintenance::MAINTENANCE_ID,
+        Box::new(fub_kernel::maintenance::Maintenance),
+    )
+}
+
 fn register_commands(
     ws: &mut Workspace,
     id: &str,
