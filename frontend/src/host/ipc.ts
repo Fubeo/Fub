@@ -38,6 +38,17 @@ export const api = {
   readDocument: (id: string) => invoke<string>("read_document", { id }),
   writeDocument: (id: string, source: string) =>
     invoke<void>("write_document", { id, source }),
+  // Il **buffer di crash** (§15.2): ciò che è nell'editor e non è ancora sul
+  // disco. Due porte e non due comandi del registro, ed è l'unica coppia di
+  // questo file la cui capacità mancante è voluta per sempre: il testo non
+  // salvato è il dato più privato di un vault, e una capacità lo darebbe a ogni
+  // plugin montato. Leggerle invece è del canale di tutti (`IndexQuery::Drafts`).
+  //
+  // `base` è la revisione da cui il buffer si è discostato, quando chi lo tiene
+  // la sa; `null` è «non lo so», e chi legge lo tratta come tale.
+  saveDraft: (id: string, text: string, base: string | null = null) =>
+    invoke<void>("save_draft", { id, text, base }),
+  discardDraft: (id: string) => invoke<void>("discard_draft", { id }),
   // Crea, rinomina, cestina, ripristina e svuota NON hanno più un comando
   // Tauri: sono comandi del registro, e la shell li chiede con `invokeCommand`
   // (vedi `COMANDI` in `contract.ts`). Quelle due che restano restano perché

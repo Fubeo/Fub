@@ -881,6 +881,17 @@
         "offset": 0,
         "limit": 20
       }
+    },
+    {
+      "kind": "drafts",
+      "page": null
+    },
+    {
+      "kind": "drafts",
+      "page": {
+        "offset": 0,
+        "limit": 20
+      }
     }
   ],
   "IndexResult": [

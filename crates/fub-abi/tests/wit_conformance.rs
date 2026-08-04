@@ -93,8 +93,8 @@ use fub_abi::settings::{
 };
 use fub_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fub_abi::traits::{
-    BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, Excerpts,
-    FolderScope, HealthCheck, HealthIssue, HostApi, IndexLoss, IndexProvider, IndexQuery,
+    BacklinkRef, CommandProvider, DocPosition, DocumentMatch, DraftInfo, EntryKind, EventHandler,
+    Excerpts, FolderScope, HealthCheck, HealthIssue, HostApi, IndexLoss, IndexProvider, IndexQuery,
     IndexResult, IndexingState, JobId, JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef,
     Page, Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount,
     PropertyEntry, PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind,
@@ -218,6 +218,7 @@ wit_type! {
     Paged<HealthIssue> => "vault-health-page",
     Paged<VaultEntry> => "entries-page",
     Paged<VaultFolder> => "folders-page",
+    Paged<DraftInfo> => "drafts-page",
 
     // Ciò che NON attraversa il confine: il ricevitore e le capacità dell'host.
     dyn HostApi => HOST,
@@ -420,6 +421,9 @@ wit_kebab! {
     Excerpts,
     HealthCheck,
     HealthIssue,
+
+    // Le bozze (§15.2): ciò che è rimasto non salvato.
+    DraftInfo,
 
     // L'anagrafe (§14.1): che specie di file è, e cosa se ne sa senza aprirlo.
     EntryKind,
@@ -2024,6 +2028,9 @@ fn index_query_case(q: &IndexQuery) -> Case {
             "index-query-folders",
             vec![("under", wit(under)), ("page", wit(page))],
         ),
+        IndexQuery::Drafts { page } => {
+            case_rec("drafts", "index-query-drafts", vec![("page", wit(page))])
+        }
     }
 }
 
@@ -2084,6 +2091,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::Resolve => case("resolve"),
         QueryKind::Entries => case("entries"),
         QueryKind::Folders => case("folders"),
+        QueryKind::Drafts => case("drafts"),
     }
 }
 
@@ -2122,6 +2130,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Resolved(v) => case_ty("resolved", wit(v)),
         IndexResult::Entries(v) => case_ty("entries", wit(v)),
         IndexResult::Folders(v) => case_ty("folders", wit(v)),
+        IndexResult::Drafts(v) => case_ty("drafts", wit(v)),
     }
 }
 
@@ -2733,6 +2742,7 @@ fn conform(source: &str) -> Result<(), String> {
                 under: None,
                 page: None,
             }),
+            index_query_case(&IndexQuery::Drafts { page: None }),
         ],
     );
 
@@ -2755,6 +2765,7 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::Resolved(None)),
             index_result_case(&IndexResult::Entries(Paged::all(vec![]))),
             index_result_case(&IndexResult::Folders(Paged::all(vec![]))),
+            index_result_case(&IndexResult::Drafts(Paged::all(vec![]))),
         ],
     );
 
@@ -2818,6 +2829,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::Resolve),
             query_kind_case(&QueryKind::Entries),
             query_kind_case(&QueryKind::Folders),
+            query_kind_case(&QueryKind::Drafts),
         ],
     );
 
@@ -3960,6 +3972,33 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let DraftInfo {
+        doc,
+        at,
+        base,
+        exists,
+        current,
+        text,
+    } = DraftInfo {
+        doc: DocId::new("a"),
+        at: 0,
+        base: None,
+        exists: true,
+        current: None,
+        text: String::new(),
+    };
+    contract.record(
+        "draft-info",
+        &[
+            ("doc", wit(&doc)),
+            ("at", wit(&at)),
+            ("base", wit(&base)),
+            ("exists", wit(&exists)),
+            ("current", wit(&current)),
+            ("text", wit(&text)),
+        ],
+    );
+
     // Le finestre: un solo tipo in Rust, un record per istanza nel WIT.
     // Il destructuring è generico ma i tipi dei campi li deduce il compilatore
     // dall'istanza, quindi `items` porta davvero `list<backlink-ref>` e non una
@@ -3995,6 +4034,10 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record(
         "entries-page",
         &paged_fields(&Paged::all(Vec::<VaultEntry>::new())),
+    );
+    contract.record(
+        "drafts-page",
+        &paged_fields(&Paged::all(Vec::<DraftInfo>::new())),
     );
     contract.record(
         "folders-page",

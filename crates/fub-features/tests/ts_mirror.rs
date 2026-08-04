@@ -723,6 +723,13 @@ fn index_query_samples() -> Vec<Value> {
                 limit: 20,
             }),
         },
+        IndexQuery::Drafts { page: None },
+        IndexQuery::Drafts {
+            page: Some(Page {
+                offset: 0,
+                limit: 20,
+            }),
+        },
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -742,7 +749,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::Organization
             | IndexQuery::Resolve { .. }
             | IndexQuery::Entries { .. }
-            | IndexQuery::Folders { .. } => {}
+            | IndexQuery::Folders { .. }
+            | IndexQuery::Drafts { .. } => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -921,7 +929,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::Organization(_)
             | IndexResult::Resolved(_)
             | IndexResult::Entries(_)
-            | IndexResult::Folders(_) => {}
+            | IndexResult::Folders(_)
+            | IndexResult::Drafts(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()

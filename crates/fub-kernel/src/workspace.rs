@@ -86,6 +86,7 @@ use fub_abi::rules::path_policy::{self, Naming};
 use crate::bus::EventBus;
 use crate::dispatcher::{Dispatcher, JobBell, PendingJob, ToDeliver};
 use crate::documents::{extension_of, DocumentStore};
+use crate::drafts::{Bozze, Drafts};
 use crate::entries::{EntryStore, StoredEntry};
 use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
@@ -460,6 +461,12 @@ pub struct Workspace {
     /// classe: l'anagrafe è l'unico stato di questa lista che si può buttare
     /// senza perdere niente, il registro è quello che non si rifà da niente.
     journal: Journal,
+    /// **Ciò che l'utente ha scritto e non ha salvato** (§15.2): le bozze.
+    ///
+    /// Sta accanto al registro e ne condivide la classe — autorevole, non si
+    /// rifà da niente — ed è il suo opposto per verso: il registro conserva ciò
+    /// che è **successo** al vault, questo ciò che non è ancora successo.
+    drafts: Arc<Drafts>,
     /// Quali spazi per-documento non hanno potuto seguire una rinomina (§13.2).
     ///
     /// Un `Vec` nudo e non un `Arc<RwLock<…>>` come le altre due liste di
@@ -515,9 +522,18 @@ impl Workspace {
         if let Some(warning) = warning {
             organization.warn(warning);
         }
+        // Le bozze sono **del vault** come il registro: ciò che si stava
+        // scrivendo in questo archivio viaggia con questo archivio. Condivise
+        // con l'indice del kernel, che è chi risponde a chi le chiede (0019).
+        let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
         Workspace {
             docs: DocumentStore::new(root, Arc::clone(&registry), Arc::clone(&storage)),
-            indexes: Indexes::new(registry, Arc::clone(&settings), Arc::clone(&organization)),
+            indexes: Indexes::new(
+                registry,
+                Arc::clone(&settings),
+                Arc::clone(&organization),
+                Arc::clone(&drafts),
+            ),
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
@@ -534,6 +550,7 @@ impl Workspace {
             // col root: ciò che è successo a queste note viaggia con queste
             // note.
             journal: Journal::open(root, storage),
+            drafts,
             doc_data_warnings: Vec::new(),
         }
     }
@@ -1921,6 +1938,49 @@ impl Workspace {
         self.journal.read()
     }
 
+    // -----------------------------------------------------------------------
+    // Le bozze (§15.2)
+    // -----------------------------------------------------------------------
+    //
+    // Tre righe e non una capacità dell'`HostApi`, ed è una scelta: il testo
+    // che l'utente non ha ancora salvato è il dato più privato che il vault
+    // contenga, e una porta su `HostApi` lo consegnerebbe a **ogni** plugin
+    // montato — compresi quelli che a M5 non scriviamo noi. Chi ha bisogno di
+    // scriverci è la shell, che non è un plugin.
+
+    /// Scrive la bozza di un documento: ciò che c'è nel buffer adesso.
+    ///
+    /// `base` è la revisione del file su cui il buffer sta lavorando (`None`
+    /// per una nota mai salvata) e non si deduce qui di proposito: dedurla
+    /// vorrebbe dire rileggere il file a ogni battuta, e per giunta darebbe la
+    /// revisione di **adesso** invece di quella su cui l'utente stava
+    /// scrivendo — cioè proprio l'informazione che serve per accorgersi che il
+    /// file è cambiato sotto.
+    pub fn save_draft(
+        &mut self,
+        doc: &DocId,
+        text: &str,
+        base: Option<Revision>,
+    ) -> std::io::Result<()> {
+        let at = crate::time::now_unix_millis();
+        self.drafts.save(doc, text, base, at)
+    }
+
+    /// Butta la bozza di un documento: il buffer è tornato pulito, o l'utente ha
+    /// scelto di scartarla.
+    pub fn discard_draft(&mut self, doc: &DocId) -> std::io::Result<()> {
+        self.drafts.discard(doc)
+    }
+
+    /// Le bozze di questo vault, **e quante non si sono lette**.
+    ///
+    /// Dal disco e non da una cache, per la ragione del registro: dopo un crash
+    /// non c'è nessuna memoria da consultare, ed è l'unico momento in cui questa
+    /// domanda conta davvero.
+    pub fn drafts(&self) -> Bozze {
+        self.drafts.read()
+    }
+
     /// La revisione del sorgente di un documento: l'identità del testo su cui
     /// una modifica chirurgica va calcolata (decisione 0008).
     ///
@@ -2716,6 +2776,19 @@ impl Workspace {
         // spento oggi non deve riaccendersi domani con le chiavi di ieri, ed è
         // esattamente chi non può accorgersene da solo.
         self.migrate_doc_data(from, to);
+        // **E la bozza non salvata** (§15.2), che sta accanto ai due di sopra
+        // per la ragione dei due di sopra e con un motivo in più: una bozza è
+        // l'**unica** copia di ciò che l'utente ha scritto. Chi rinomina una
+        // nota mentre il suo buffer è sporco non deve poter perdere il testo
+        // per essere passato dal nome nuovo. L'errore non risale — la rinomina
+        // è già avvenuta — ma si dice, e per dirlo si usa lo stesso canale
+        // dell'organizzazione, che è quello che qualcuno guarda.
+        if let Err(e) = self.drafts.migrate(from, to) {
+            self.organization.warn(format!(
+                "la bozza non salvata di {from} non ha potuto seguire la \
+                 rinomina in {to}: {e}"
+            ));
+        }
         // Per ogni indice — quello del kernel compreso — il rename è
         // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
         // tiene stato *per-documento* invece migra la chiave sull'evento
@@ -3876,6 +3949,15 @@ impl Workspace {
             ));
         }
 
+        // **La manutenzione la esegue il kernel** (§15.2). L'id è passato dalla
+        // porta di tutti — è stato ammesso, ha una spec, i suoi argomenti sono
+        // stati convalidati, ha la sua chiave di scorciatoia — e qui si separa,
+        // perché ciò che fa non sta sull'`HostApi` e non deve starci: rifare
+        // l'indice non è una capacità da prestare a ogni plugin montato. È la
+        // 0086 generalizzata — *la dichiarazione sta nel registro, l'esecuzione
+        // sta dove sta il potere* — e sta **prima** del prestito di proposito:
+        // ciò che viene dopo costruisce un host che a questi comandi non
+        // servirebbe.
         // Il provider **resta** nel registro: si condivide il puntatore (vedi
         // il campo `commands`). È ciò che permette a `run_command` di trovare
         // gli altri comandi — e anche gli altri comandi dello stesso provider —
@@ -3883,7 +3965,23 @@ impl Workspace {
         let owner = self.providers.commands[at].id.clone();
         let provider = Arc::clone(&self.providers.commands[at].provider);
         self.providers.command_stack.push(command.to_string());
-        let outcome = if spec.scope.writes && mode == InvokeMode::Apply {
+        // **La manutenzione la esegue il kernel** (§15.2). L'id è passato dalla
+        // porta di tutti — ammesso, con una spec, con gli argomenti convalidati,
+        // con la sua chiave di scorciatoia — e si separa **solo** su chi lo
+        // esegue, perché ciò che fa non sta sull'`HostApi` e non deve starci:
+        // rifare l'indice non è una capacità da prestare a ogni plugin montato.
+        // È la 0086 generalizzata — *la dichiarazione sta nel registro,
+        // l'esecuzione sta dove sta il potere*.
+        //
+        // Che il ramo sia **qui dentro** e non un ritorno anticipato più su non
+        // è cosmesi, ed è un difetto che un test ha trovato prima di questa
+        // riga: ciò che viene dopo — la localizzazione dell'esito col catalogo
+        // di chi l'ha scritto (0040), il completamento del piano, il drenaggio
+        // della coda — vale per **ogni** comando, e un comando che salta quella
+        // coda consegna una chiave di catalogo a chi si aspetta una frase.
+        let outcome = if self.providers.commands[at].id == crate::maintenance::MAINTENANCE_ID {
+            self.run_maintenance(command, mode)
+        } else if spec.scope.writes && mode == InvokeMode::Apply {
             self.with_provider_call(|ws| {
                 let mut host = ws.host_for(&owner, mode);
                 crate::safety::calling(&owner, &format!("eseguendo `{command}`"), || {
@@ -4826,6 +4924,151 @@ impl Workspace {
     /// «Non esiste più» vuol dire né indicizzata **né nel cestino**: una nota
     /// cestinata è recuperabile, e ripristinarla senza i suoi dati sarebbe una
     /// perdita silenziosa fatta da chi doveva impedirla.
+    /// Esegue un comando di manutenzione (§15.2).
+    ///
+    /// Sta qui e non in un `CommandProvider` per la ragione scritta in testa a
+    /// [`crate::maintenance`]: ciò che questi comandi fanno non è una capacità
+    /// dell'`HostApi`, e non deve diventarlo per poterli scrivere.
+    ///
+    /// Il **modo** è onorato come per ogni altro comando: una simulazione dice
+    /// cosa farebbe e non lo fa. Che i tre siano innocui non è una ragione per
+    /// saltare quel ramo — chi simula una macro che li contiene si aspetta un
+    /// piano, non un vault reindicizzato.
+    fn run_maintenance(
+        &mut self,
+        command: &str,
+        mode: InvokeMode,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        use crate::maintenance::{
+            Diagnostics, BUNDLE_FILE, DIAGNOSTICS_VERSION, VAULT_DIAGNOSTIC_BUNDLE,
+            VAULT_REBUILD_INDEX, VAULT_REPAIR,
+        };
+        if mode.is_dry_run() {
+            // Il piano è **vuoto di documenti**, e non è una lacuna: nessuno dei
+            // tre tocca una nota, quindi l'insieme impattato è davvero vuoto.
+            // Dirlo è più utile che inventarsi una riga.
+            return Ok(CommandOutcome::done()
+                .with_effect(CommandEffect::Plan(fub_abi::command::CommandPlan::default())));
+        }
+        match command {
+            VAULT_REBUILD_INDEX => {
+                let apertura = self.reindex().map_err(|e| {
+                    PluginError::Internal(format!("l'indice non si è rifatto: {e}").into())
+                })?;
+                let scartati = apertura.scartati.len();
+                Ok(CommandOutcome::notify(Text::message(
+                    crate::maintenance::T_REBUILT,
+                    vec![
+                        fub_abi::text::Arg::int(
+                            crate::maintenance::A_DOCS,
+                            self.indexes.core.metas.len() as i64,
+                        ),
+                        fub_abi::text::Arg::int(
+                            crate::maintenance::A_ENTRIES,
+                            self.indexes.core.entries.len() as i64,
+                        ),
+                        fub_abi::text::Arg::int(crate::maintenance::A_SKIPPED, scartati as i64),
+                    ],
+                )))
+            }
+            VAULT_REPAIR => {
+                // Il rebuild rifà il derivato; questo raccoglie ciò che il
+                // rebuild non guarda — i dati attaccati a note che non ci sono
+                // più — e **dice** ciò che non ripara, invece di tacerlo.
+                let raccolti = self.collect_doc_data();
+                let journal = self.journal.read();
+                let bozze = self.drafts.read();
+                let orfane = bozze
+                    .drafts
+                    .iter()
+                    .filter(|b| !self.indexes.core.entries.contains_key(&b.doc))
+                    .count();
+                // Il messaggio è **una chiave per caso**, e non una frase
+                // composta a pezzi: concatenare stringhe tradotte produce testo
+                // che nella lingua dopo non sta in piedi (0040).
+                let key = if journal.scartate > 0 || bozze.scartate > 0 || orfane > 0 {
+                    crate::maintenance::T_REPAIRED_PARZIALE
+                } else {
+                    crate::maintenance::T_REPAIRED
+                };
+                // Le due righe che questo comando **non** ripara si dicono, e
+                // sono due specie diverse di cosa: una riga di registro rotta è
+                // perduta, una bozza orfana è l'unica copia di un testo — e la
+                // seconda si ripara solo decidendo, cioè non qui.
+                Ok(CommandOutcome::notify(Text::message(
+                    key,
+                    vec![
+                        fub_abi::text::Arg::int(crate::maintenance::A_COLLECTED, raccolti as i64),
+                        fub_abi::text::Arg::int(
+                            crate::maintenance::A_LOST,
+                            journal.scartate as i64,
+                        ),
+                        fub_abi::text::Arg::int(
+                            crate::maintenance::A_UNREAD,
+                            bozze.scartate as i64,
+                        ),
+                        fub_abi::text::Arg::int(crate::maintenance::A_ORPHANS, orfane as i64),
+                    ],
+                )))
+            }
+            VAULT_DIAGNOSTIC_BUNDLE => {
+                let journal = self.journal.read();
+                let bozze = self.drafts.read();
+                let orfane = bozze
+                    .drafts
+                    .iter()
+                    .filter(|b| !self.indexes.core.entries.contains_key(&b.doc))
+                    .count();
+                // Il primo lettore vero di `IndexQuery::VaultHealth`: quella
+                // query esisteva e non la chiedeva nessuno.
+                let health = [
+                    fub_abi::traits::HealthCheck::BrokenLinks,
+                    fub_abi::traits::HealthCheck::OrphanDocuments,
+                ]
+                .into_iter()
+                .map(|check| {
+                    let quanti =
+                        match self.query_index(IndexQuery::VaultHealth { check, page: None }) {
+                            Ok(IndexResult::VaultHealth(page)) => page.total as usize,
+                            _ => 0,
+                        };
+                    (format!("{check:?}"), quanti)
+                })
+                .collect();
+                let report = Diagnostics {
+                    v: DIAGNOSTICS_VERSION,
+                    at: crate::time::now_unix_millis(),
+                    fub: env!("CARGO_PKG_VERSION").to_string(),
+                    documents: self.indexes.core.metas.len(),
+                    entries: self.indexes.core.entries.len(),
+                    journal_scartate: journal.scartate,
+                    drafts: bozze.drafts.len(),
+                    drafts_orfane: orfane,
+                    health,
+                };
+                let bytes = serde_json::to_vec_pretty(&report)
+                    .map_err(|e| PluginError::Internal(format!("rapporto: {e}").into()))?;
+                let path = crate::vault::data_root(self.docs.vault.root()).join(BUNDLE_FILE);
+                // Dal **supporto**, come ogni altro byte sotto la linea del
+                // vault: un rapporto scritto con `std::fs` sarebbe il primo file
+                // di Fub a non essere né atomico né cifrabile.
+                self.docs
+                    .vault
+                    .storage()
+                    .write(&path, &bytes)
+                    .map_err(|e| PluginError::Internal(format!("rapporto: {e}").into()))?;
+                Ok(CommandOutcome::notify(Text::message(
+                    crate::maintenance::T_BUNDLE_WRITTEN,
+                    vec![fub_abi::text::Arg::text(
+                        crate::maintenance::A_PATH,
+                        path.as_str(),
+                    )],
+                )))
+            }
+            other => Err(PluginError::UnknownCommand(other.to_string().into())),
+        }
+    }
+
     fn collect_doc_data(&mut self) -> usize {
         let roots = self.docs.plugin_data_roots();
         if roots.is_empty() {

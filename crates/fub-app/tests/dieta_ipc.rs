@@ -212,6 +212,20 @@ const ALLOWLIST: &[(&str, Perche)] = &[
     ("set_pinned", Perche::AspettaUnCliente),
     ("set_space", Perche::AspettaUnCliente),
     ("set_order", Perche::AspettaUnCliente),
+    // --- il buffer di crash (§15.2): la stessa forma, e una ragione in più ---
+    //
+    // Passerebbero la riga che divide — fanno accadere qualcosa, rispondono con
+    // niente — e il registro non le può servire perché una capacità non c'è. Qui
+    // però l'assenza non è «nessuno l'ha ancora chiesta»: è **deliberata e
+    // definitiva**. Il testo che l'utente non ha ancora salvato è il dato più
+    // privato che un vault contenga, e una capacità `draft_write` lo
+    // consegnerebbe a ogni plugin montato — compresi quelli che a M5 non
+    // scriviamo noi. Chi ha bisogno di scriverci è la shell, che non è un
+    // plugin: qui la porta **non** aspetta un cliente, aspetta di non averne mai.
+    // La lettura invece è già sul canale di tutti (`IndexQuery::Drafts`), perché
+    // leggere ciò che si stava scrivendo è ciò che un pannello di recupero fa.
+    ("save_draft", Perche::AspettaUnCliente),
+    ("discard_draft", Perche::AspettaUnCliente),
     // --- il debito, che il §16.6 nomina e che qui si conta ------------------
     //
     // Il versioning **non è più qui**, e le sue tre righe sono la lezione più

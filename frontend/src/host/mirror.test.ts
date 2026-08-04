@@ -390,6 +390,10 @@ function touchIndexQuery(q: IndexQuery): void {
     // apre. Non porta specie da nominare — una cartella non ne ha.
     case "folders":
       return;
+    // Le bozze (§15.2): la domanda non porta niente da nominare — chiede tutto
+    // ciò che è rimasto non salvato, e la finestra la governa `page`.
+    case "drafts":
+      return;
     default:
       assertNever(q);
   }
@@ -472,6 +476,8 @@ function touchIndexResult(r: IndexResult): void {
       r.value.items.forEach((e: VaultEntry) => touchEntryKind(e.kind));
       return;
     case "folders":
+      return;
+    case "drafts":
       return;
     default:
       assertNever(r);

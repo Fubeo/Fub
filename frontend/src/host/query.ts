@@ -11,6 +11,7 @@
 // plugin. È solo il posto dove la risposta si apre.
 import { api } from "./ipc";
 import type {
+  DraftInfo,
   Organization,
   DocumentMatch,
   EntryKind,
@@ -156,6 +157,17 @@ export async function archiDelVault(): Promise<NeighborRef[]> {
 /// pannello, e dopo un `overflow`, che vuol dire esattamente *richiedi*.
 export async function lavoriInCorso(): Promise<JobStatus[]> {
   return open(await api.queryIndex({ kind: "jobs" }), "jobs");
+}
+
+/// **Cosa è rimasto non salvato** (§15.2): le bozze che il buffer di crash ha
+/// lasciato sul disco.
+///
+/// Dal canale dati come tutto il resto qui dentro, e non da una porta sua:
+/// leggere non è cambiare. Scriverne una invece ha una porta (`saveDraft`),
+/// perché quella è una capacità che non esiste e non deve esistere — il testo
+/// non salvato è il dato più privato di un vault.
+export async function bozzeNonSalvate(): Promise<DraftInfo[]> {
+  return open(await api.queryIndex({ kind: "drafts" }), "drafts").items;
 }
 
 /// Com'è configurato questo vault (§11.1): schema, valore che vale adesso, e

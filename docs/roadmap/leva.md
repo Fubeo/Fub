@@ -338,12 +338,17 @@ snapshot nemmeno volendo. O lo fa il core, o è una promessa con sopra una UI.
 l'atomicità di scritture che non si eseguono. Il 24.2 chiede atomic writes,
 journaling, crash recovery, autosave e corruption detection, e nessuna delle
 cinque può essere un componente perché la correttezza di **tutti gli altri**
-poggia sopra. Delle cinque **due** sono fatte: la prima con la
+poggia sopra. Delle cinque ne restava fuori una sola quando la voce si è chiusa,
+ed è la **corruption detection** — che non è di qui: la sua metà scrivibile è la
+versione di schema del §15.3, e il resto è del 24.2. Le altre quattro: la prima
+con la
 [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), che l'ha messa dentro
 il supporto che la 0064 aveva appena costruito — e con la
 [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md) l'atomicità vale
 anche per un **aggiornamento** e non solo per una scrittura —, la seconda con la
-[0067](../decisions/0067-il-registro-di-cio-che-e-successo.md). Il caso più netto
+[0067](../decisions/0067-il-registro-di-cio-che-e-successo.md), e le due rimaste
+— **crash recovery** e **autosave**, che erano poi la stessa casella — con la
+[0088](../decisions/0088-cio-che-non-e-ancora-successo.md). Il caso più netto
 non stava nemmeno nel 24: era il 22.4, che promette al centro di comando LLM la
 «transazione atomica per operazione batch» e il «rollback completo». Quel capitolo
 è per il resto un cliente del registro dei comandi e sta benissimo come plugin —
@@ -357,8 +362,10 @@ gli serve. È la prima volta che una voce di questa pagina scende da *inesprimib
 a *da fare* senza che il cliente sia stato scritto: la leva si misura su cosa si
 **può** dire, e dirlo è bastato.
 
-Entrambe restano **P2**, e le due cose non sono in contraddizione: è esattamente
-la frase con cui questa pagina si apre. La §15.1 è stata poi presa **da P2**,
+Entrambe erano **P2** mentre erano aperte, e le due cose non erano in
+contraddizione: è esattamente la frase con cui questa pagina si apre. Adesso sono
+chiuse tutte e due, e questa pagina le tiene perché **la premessa resta vera** —
+è la ragione per cui contavano, non un residuo di lavoro. La §15.1 è stata poi presa **da P2**,
 senza essere promossa e senza che il freeze c'entrasse, il giorno in cui non
 c'erano più P0 aperte: è la prima volta che a scegliere è stata la leva e non la
 scadenza, che è ciò per cui questa pagina esiste. E la seconda volta è stata
@@ -386,3 +393,18 @@ sceglierla è stata la nota che le due voci precedenti avevano lasciato scritta 
 fondo al proprio verbale: *«ciò che resta è recovery»*. Una voce che si è già
 divisa da sé, in due decisioni di fila, dice a chi arriva dopo quale pezzo
 prendere — che è la 0064 letta a scala di voce invece che di casella.
+
+E la **quinta** chiude la §15.2, con la
+[0088](../decisions/0088-cio-che-non-e-ancora-successo.md). È la volta in cui il
+criterio si è visto meglio, perché è quella in cui è stato **applicato al
+contrario**: le due caselle rimaste erano state scritte prima del supporto, della
+scrittura atomica e del journal, e rileggerle contro quel codice ha detto che una
+delle due chiedeva una cosa **diventata impossibile nel modo in cui la
+chiedeva**. `vault_health` non era da spostare nel registro: era già una query, e
+una lettura non è un comando. Il criterio delle prime quattro dice quale voce
+prendere; questa aggiunge cosa farne quando la si è presa — **una voce ferma non
+si esegue, si rimisura**, perché ciò che aspettava può essere caduto e ciò che
+manca può non essere scritto nella voce. È la stessa lezione della
+[0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md), arrivata da
+una seduta diversa a un turno di distanza: due volte di fila, quindi non un
+caso.

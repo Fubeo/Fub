@@ -1054,6 +1054,30 @@ export interface HealthIssue {
   span: Span | null;
 }
 
+// UNA BOZZA (§15.2): ciò che l'utente stava scrivendo e non ha salvato.
+//
+// Porta il testo con sé e non un puntatore da risolvere con una seconda
+// domanda: la sola ragione per cui questo tipo esiste è che quel testo non vada
+// perso, e un elenco che dice «ci sono tre bozze» senza poterle mostrare
+// avrebbe rimandato l'unica cosa che conta a una chiamata che può fallire.
+export interface DraftInfo {
+  doc: string;
+  /// Millisecondi UNIX dell'ultima scrittura della bozza.
+  at: number;
+  /// La revisione del file su cui il buffer stava lavorando, QUANDO chi ha
+  /// scritto la bozza la sapeva. `null` vuol dire «non lo so», non «nota
+  /// nuova»: quello lo dice `exists`.
+  base: string | null;
+  /// Il documento c'è ancora? `false` è una bozza ORFANA: l'unica copia rimasta
+  /// di ciò che era stato scritto, e per questo non si butta da sola.
+  exists: boolean;
+  /// La revisione del file ADESSO, per quel che il vault ne sa. È un FATTO, non
+  /// un giudizio: che diverga da `base` vuol dire che il file è cambiato sotto,
+  /// e cosa farne lo decide chi lo mostra — cioè si chiede a una persona.
+  current: string | null;
+  text: string;
+}
+
 export interface PropertyCount {
   value: unknown;
   count: number;
@@ -1145,7 +1169,16 @@ export type IndexQuery =
   // Quali cartelle ci sono? (§14.3) Una domanda sua e non una specie in più di
   // `EntryKind`: una cartella non ha dimensione, data né impronta. `under`
   // assente = ogni cartella del vault, a ogni profondità.
-  | { kind: "folders"; under?: FolderScope | null; page?: Page | null };
+  | { kind: "folders"; under?: FolderScope | null; page?: Page | null }
+  // COSA È RIMASTO NON SALVATO (§15.2): le bozze che il buffer di crash ha
+  // lasciato sul disco. Passa dal canale dati e non da una porta sua per la
+  // ragione di `vault_status` — i clienti sono già qui — e per una che è di
+  // questa variante soltanto: leggere non è cambiare. È chi decide COSA FARNE a
+  // mutare qualcosa, e la scrittura di una bozza ha infatti una porta sua.
+  //
+  // In coda e non accanto a `vault_health`: l'ordine dei casi è il discriminante
+  // dell'ABI, quindi additiva vuol dire in fondo.
+  | { kind: "drafts"; page?: Page | null };
 
 // La risposta (rispecchia fub_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -1169,7 +1202,8 @@ export type IndexResult =
   // deve proporre qualcos'altro.
   | { kind: "resolved"; value: ResolvedRef | null }
   | { kind: "entries"; value: Paged<VaultEntry> }
-  | { kind: "folders"; value: Paged<VaultFolder> };
+  | { kind: "folders"; value: Paged<VaultFolder> }
+  | { kind: "drafts"; value: Paged<DraftInfo> };
 
 // CHE SPECIE DI FILE È (§14.1). Non è una proprietà del file: è una proprietà
 // del file dato chi è registrato adesso — un `.canvas` è `unknown` finché
