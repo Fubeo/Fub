@@ -12,8 +12,8 @@
 //! risponde `ViewUpdate::Reveal` sull'intervallo dell'heading.
 
 use camino::Utf8PathBuf;
-use fub_abi::model::{DocId, Span};
-use fub_abi::session::{Selection, ViewContext};
+use fub_abi::model::DocId;
+use fub_abi::session::{SelectionSet, ViewContext};
 use fub_abi::traits::ViewInstance;
 use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 use fub_features::{OutlineView, OUTLINE_ID, OUTLINE_VIEW};
@@ -165,7 +165,7 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
     let cursore = |byte: usize| {
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(doc.clone()))
-            .with_selection(Some(Selection::caret(Some(Span::new(byte, byte)))))
+            .with_selections(Some(SelectionSet::caret(byte)))
     };
 
     // Il cursore è nel corpo della prima sezione.
@@ -195,7 +195,7 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(doc.clone()))
-            .with_selection(Some(Selection::caret(None))),
+            .with_selections(Some(SelectionSet::floating(""))),
     ));
     assert_eq!(
         segnate(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),

@@ -35,7 +35,10 @@ use fub_abi::event::{
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{DocId, LinkTarget, Span};
 use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
-use fub_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
+use fub_abi::session::{
+    AnchoredSelection, AnchoredSelections, ContextKind, ContextMask, FloatingSelection,
+    FloatingSelections, PaneMode, SelectionSet, ViewContext,
+};
 use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
@@ -1219,26 +1222,42 @@ fn expected() -> Value {
             to_value(
                 ViewContext::new(MAIN_PANE)
                     .with_doc(Some(DocId::new("a.md")))
-                    .with_selection(Some(Selection {
-                        span: Some(Span::new(3, 7)),
-                        text: "ciao".into(),
-                    }))
+                    .with_selections(Some(SelectionSet::anchored(Span::new(3, 7), "ciao")))
                     .with_mode(PaneMode::Reading),
             ),
             // Pannello vuoto: nessuna nota, nessun cursore.
             to_value(ViewContext::new(MAIN_PANE)),
-            // Buffer sporco: il testo c'è, lo span no (vedi `Selection`).
-            to_value(ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new("a.md"))).with_selection(
-                Some(Selection {
-                    span: None,
-                    text: "ciao".into(),
-                }),
-            )),
+            // Buffer sporco: il testo c'è, le coordinate no (vedi `SelectionSet`).
+            to_value(
+                ViewContext::new(MAIN_PANE)
+                    .with_doc(Some(DocId::new("a.md")))
+                    .with_selections(Some(SelectionSet::floating("ciao"))),
+            ),
+            // Tre cursori: il campione che la forma di prima non sapeva
+            // esprimere (decisione 0093).
+            to_value(
+                ViewContext::new(MAIN_PANE)
+                    .with_doc(Some(DocId::new("a.md")))
+                    .with_selections(Some(SelectionSet::Anchored(AnchoredSelections {
+                        primary: AnchoredSelection::new(Span::new(10, 14), "ciao"),
+                        secondary: vec![
+                            AnchoredSelection::new(Span::new(3, 7), "ciao"),
+                            AnchoredSelection::caret(20),
+                        ],
+                    }))),
+            ),
         ],
-        "Selection": [to_value(Selection {
-            span: Some(Span::new(0, 4)),
-            text: "ciao".into(),
-        })],
+        "SelectionSet": [
+            to_value(SelectionSet::anchored(Span::new(0, 4), "ciao")),
+            to_value(SelectionSet::Floating(FloatingSelections {
+                primary: FloatingSelection::new("ciao"),
+                secondary: vec![FloatingSelection::new("mondo")],
+            })),
+        ],
+        "AnchoredSelection": [to_value(AnchoredSelection::new(Span::new(0, 4), "ciao"))],
+        "FloatingSelection": [to_value(FloatingSelection::new("ciao"))],
+        "AnchoredSelections": [to_value(AnchoredSelections::one(AnchoredSelection::caret(0)))],
+        "FloatingSelections": [to_value(FloatingSelections::one(FloatingSelection::new("x")))],
         // Il locale (§12.3): l'altro tipo che viaggia dalla shell al kernel, e
         // il secondo dopo il contesto di sessione. Tre campioni perché tre sono
         // i casi che il mirror deve reggere: nessuno ha ancora parlato, un fuso

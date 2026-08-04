@@ -195,6 +195,7 @@ const E_NOT_JSON: &str = "err.not_json";
 const E_NOT_AN_OBJECT: &str = "err.not_an_object";
 
 const P_WIKILINK: &str = "plan.wikilink";
+const P_WIKILINK_MANY: &str = "plan.wikilink.many";
 const P_REPLACE: &str = "plan.replace";
 const P_CREATE: &str = "plan.create";
 const P_RENAME: &str = "plan.rename";
@@ -212,6 +213,7 @@ const Y_SETTINGS_SET: &str = "dry.settings_set";
 const Y_SETTINGS_RESET: &str = "dry.settings_reset";
 
 const D_WIKILINK: &str = "done.wikilink";
+const D_WIKILINK_MANY: &str = "done.wikilink.many";
 const D_REPLACE: &str = "done.replace";
 const D_REPLACE_PARTIAL: &str = "done.replace_partial";
 const D_CREATE: &str = "done.create";
@@ -232,6 +234,7 @@ const P_UNDO: &str = "plan.undo";
 
 /// Le etichette dell'annullamento: cosa si disferebbe, non cosa è successo.
 const U_WIKILINK: &str = "undo.wikilink";
+const U_WIKILINK_MANY: &str = "undo.wikilink.many";
 const U_REPLACE: &str = "undo.replace";
 const U_CREATE: &str = "undo.create";
 const U_RENAME: &str = "undo.rename";
@@ -542,6 +545,10 @@ fn catalogo_it() -> StringCatalog {
             "Atteso un oggetto `{{\"chiave\": valore}}`.",
         )
         .with(P_WIKILINK, "«{text}» diventa un riferimento in {doc}")
+        .with(
+            P_WIKILINK_MANY,
+            "{count} selezioni diventano riferimenti in {doc}",
+        )
         .with(P_REPLACE, "Sostituzioni: {occurrences} · Note: {notes}")
         .with(P_CREATE, "Crea «{doc}»")
         .with(P_RENAME, "«{doc}» diventa «{to}»")
@@ -560,6 +567,7 @@ fn catalogo_it() -> StringCatalog {
             "`{key}` smetterebbe di valere {value} per decisione di qualcuno",
         )
         .with(D_WIKILINK, "Creato il riferimento a «{text}»")
+        .with(D_WIKILINK_MANY, "Creati {count} riferimenti")
         .with(
             D_REPLACE,
             "Sostituzioni: {occurrences} · Note aggiornate: {notes}",
@@ -607,6 +615,7 @@ fn catalogo_it() -> StringCatalog {
         .with(D_UNDONE, "Annullato: {what}")
         .with(D_NOTHING_TO_UNDO, "Niente da annullare")
         .with(U_WIKILINK, "il riferimento a «{text}»")
+        .with(U_WIKILINK_MANY, "i {count} riferimenti")
         .with(
             U_REPLACE,
             "le sostituzioni · Occorrenze: {occurrences} · Note: {notes}",
@@ -877,6 +886,10 @@ fn catalogo_en() -> StringCatalog {
         .with(E_NOT_JSON, "Not valid JSON: {reason}")
         .with(E_NOT_AN_OBJECT, "Expected an object `{{\"key\": value}}`.")
         .with(P_WIKILINK, "«{text}» becomes a reference in {doc}")
+        .with(
+            P_WIKILINK_MANY,
+            "{count} selections become references in {doc}",
+        )
         .with(P_REPLACE, "Replacements: {occurrences} · Notes: {notes}")
         .with(P_CREATE, "Create «{doc}»")
         .with(P_RENAME, "«{doc}» becomes «{to}»")
@@ -895,6 +908,7 @@ fn catalogo_en() -> StringCatalog {
             "`{key}` would stop being {value} by someone's decision",
         )
         .with(D_WIKILINK, "Created the reference to «{text}»")
+        .with(D_WIKILINK_MANY, "Created {count} references")
         .with(
             D_REPLACE,
             "Replacements: {occurrences} · Notes updated: {notes}",
@@ -935,6 +949,7 @@ fn catalogo_en() -> StringCatalog {
         .with(D_UNDONE, "Undone: {what}")
         .with(D_NOTHING_TO_UNDO, "Nothing to undo")
         .with(U_WIKILINK, "the reference to “{text}”")
+        .with(U_WIKILINK_MANY, "the {count} references")
         .with(
             U_REPLACE,
             "the replacements · Occurrences: {occurrences} · Notes: {notes}",
@@ -1106,10 +1121,21 @@ impl CommandProvider for CoreCommands {
 // selection.wikilink
 // ---------------------------------------------------------------------------
 
-/// Il testo selezionato diventa `[[testo]]`.
+/// Il testo selezionato diventa `[[testo]]` — **in ogni punto selezionato**.
+///
+/// Con più cursori le selezioni sono N e l'azione è una sola (decisione 0093):
+/// applicarla alla sola primaria vorrebbe dire lasciare all'utente due dei tre
+/// punti che ha appena scelto, che è il gesto per cui il multi-cursore esiste.
+/// Gli edit sono **tutti o nessuno**, perché è la garanzia che
+/// [`EditRequest`] porta già.
+///
+/// I cursori senza testo dentro non hanno niente da avvolgere e restano fuori:
+/// non in silenzio, però — il messaggio dice **quante** selezioni sono state
+/// trasformate, e la prova a vuoto (`mode.is_dry_run()`) elenca gli edit veri.
+/// Se nessuna delle N ha del testo, il comando non fa niente e lo dice.
 ///
 /// Lo stato in cui il comando non può agire — nessuna nota, nessuna selezione,
-/// oppure una selezione senza span (buffer sporco: le coordinate non valgono per
+/// oppure un insieme fluttuante (buffer sporco: le coordinate non valgono per
 /// il file) — è un [`PluginError::BadArgs`] con dentro la ragione. È il caso
 /// che il §12.2 chiuderà bene (un errore *di precondizione* non è un errore di
 /// argomenti): finché il confine ha questo vocabolario, un errore che si spiega
@@ -1124,38 +1150,77 @@ fn selection_wikilink(
         .active_context()
         .ok_or_else(|| stato(E_NO_ACTIVE_PANE))?;
     let doc = context.doc.ok_or_else(|| stato(E_NO_OPEN_NOTE))?;
-    let selection = context.selection.ok_or_else(|| stato(E_NOTHING_SELECTED))?;
-    if selection.is_empty() {
-        return Err(stato(E_EMPTY_SELECTION));
-    }
-    // La regola dello span della decisione 0007: senza span la selezione ha coordinate che
-    // valgono per il buffer e non per il file. Scrivere lì significa tagliare i
-    // byte sbagliati proprio mentre l'utente scrive.
-    let span = selection.span.ok_or_else(|| stato(E_DIRTY_SELECTION))?;
+    let selections = context
+        .selections
+        .ok_or_else(|| stato(E_NOTHING_SELECTED))?;
+    // La regola dello span della decisione 0007, nel posto in cui la 0093 l'ha
+    // messa: senza ancoraggio le coordinate valgono per il buffer e non per il
+    // file, e non ne vale **nessuna** — il buffer è uno. Scrivere lì
+    // significa tagliare i byte sbagliati proprio mentre l'utente scrive.
+    let ancorate = selections
+        .placed()
+        .ok_or_else(|| stato(E_DIRTY_SELECTION))?;
 
     let source = host.read_document(&doc)?;
     // Il testo che verrà sostituito è quello del **file**, non quello del
-    // buffer: sono lo stesso testo (lo span esiste solo a buffer pulito), e
+    // buffer: sono lo stesso testo (uno span esiste solo a buffer pulito), e
     // prenderlo da qui lo rende vero per costruzione invece che per fiducia.
-    let selected = source
-        .get(span.start..span.end)
-        .ok_or_else(|| stato(E_SELECTION_OUTSIDE))?;
-    if selected.contains("[[") || selected.contains(']') {
-        return Err(stato(E_SELECTION_HAS_LINK));
+    let mut avvolgere = Vec::new();
+    for selezione in ancorate.all() {
+        if selezione.is_empty() {
+            continue;
+        }
+        let selected = source
+            .get(selezione.span.start..selezione.span.end)
+            .ok_or_else(|| stato(E_SELECTION_OUTSIDE))?;
+        if selected.contains("[[") || selected.contains(']') {
+            return Err(stato(E_SELECTION_HAS_LINK));
+        }
+        avvolgere.push((selezione.span, selected));
     }
+    // Nessuna delle N ha del testo: sono tutti cursori, e un cursore non si
+    // avvolge. È lo stesso rifiuto di prima, contato su tutte invece che su una.
+    let (_, primo_testo) = *avvolgere.first().ok_or_else(|| stato(E_EMPTY_SELECTION))?;
+    let quante = avvolgere.len();
 
     let request = EditRequest::new(
         host.document_revision(&doc)?,
-        vec![TextEdit::replace(span, format!("[[{selected}]]"))],
+        avvolgere
+            .iter()
+            .map(|(span, selected)| TextEdit::replace(*span, format!("[[{selected}]]")))
+            .collect(),
     );
-
+    // Una selezione sola si racconta col testo che ha dentro; N si raccontano
+    // col numero, perché elencarli non aiuterebbe nessuno a capire cosa sta per
+    // succedere.
+    let racconto = |uno: &str, molte: &str| {
+        if quante == 1 {
+            Text::message(uno, vec![Arg::text(A_TEXT, primo_testo)])
+        } else {
+            Text::message(molte, vec![Arg::int(A_COUNT, quante as i64)])
+        }
+    };
     if mode.is_dry_run() {
+        let cosa = if quante == 1 {
+            Text::message(
+                P_WIKILINK,
+                vec![
+                    Arg::text(A_TEXT, primo_testo),
+                    Arg::text(A_DOC, doc.as_str()),
+                ],
+            )
+        } else {
+            Text::message(
+                P_WIKILINK_MANY,
+                vec![
+                    Arg::int(A_COUNT, quante as i64),
+                    Arg::text(A_DOC, doc.as_str()),
+                ],
+            )
+        };
         return Ok(
             CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
-                Text::message(
-                    P_WIKILINK,
-                    vec![Arg::text(A_TEXT, selected), Arg::text(A_DOC, doc.as_str())],
-                ),
+                cosa,
                 vec![PlannedEdit::new(doc, request)],
             ))),
         );
@@ -1163,7 +1228,7 @@ fn selection_wikilink(
 
     let report = host.apply_edit(&doc, request)?;
     let undo = Undo::of_edits(
-        Text::message(U_WIKILINK, vec![Arg::text(A_TEXT, selected)]),
+        racconto(U_WIKILINK, U_WIKILINK_MANY),
         vec![PlannedEdit::new(doc.clone(), report.inverse())],
     );
     // Dov'è finito il testo nuovo: è il rapporto a saperlo, nelle coordinate
@@ -1177,7 +1242,7 @@ fn selection_wikilink(
         None => CommandEffect::Done,
     };
     Ok(
-        CommandOutcome::notify(Text::message(D_WIKILINK, vec![Arg::text(A_TEXT, selected)]))
+        CommandOutcome::notify(racconto(D_WIKILINK, D_WIKILINK_MANY))
             .undoable(undo)
             .with_effect(effect),
     )
@@ -1692,16 +1757,26 @@ fn note_task_toggle(
             if context.doc.as_ref() != Some(&doc) {
                 return Err(stato(uno(E_TASK_WRONG_PANE, A_DOC, doc.as_str())));
             }
-            let selection = context
-                .selection
+            let selections = context
+                .selections
                 .as_ref()
                 .ok_or_else(|| stato(Text::key(E_TASK_NO_CARET)))?;
             // La regola dello span della decisione 0007, per la stessa ragione di
             // `selection.wikilink`: a buffer sporco le coordinate valgono per il
             // buffer, e il modello che si sta per chiedere è quello del **file**.
-            selection
-                .span
+            //
+            // Con più cursori qui si legge la **primaria**, e non è la
+            // sottrazione che è per `selection.wikilink` (decisione 0093): la
+            // posizione di questo comando è un *argomento* — `at`, uno scalare
+            // in una `CommandSpec` pubblicata — e il comando è «spunta il task
+            // sotto il cursore», al singolare per costruzione. Spuntarne N
+            // vorrebbe dire un `at` che è una lista, cioè una seconda decisione
+            // di firma, e non la si prende di straforo dentro questa.
+            selections
+                .placed()
                 .ok_or_else(|| stato(Text::key(E_TASK_DIRTY_BUFFER)))?
+                .primary
+                .span
                 .start
         }
     };
@@ -2145,7 +2220,7 @@ fn mostra(value: &SettingValue) -> String {
 mod tests {
     use super::*;
     use fub_abi::model::{DocId, ListItem};
-    use fub_abi::session::{Selection, ViewContext};
+    use fub_abi::session::{SelectionSet, ViewContext};
     use fub_abi::settings::SettingSpec;
     use fub_abi::text::Strings;
     use fub_abi::traits::VaultRead;
@@ -2242,10 +2317,7 @@ mod tests {
         host.set_context(Some(
             ViewContext::new("main")
                 .with_doc(Some(DocId::new("nota.md")))
-                .with_selection(Some(Selection {
-                    span: None,
-                    text: "nota".into(),
-                })),
+                .with_selections(Some(SelectionSet::floating("nota"))),
         ));
         let err = invoke(&mut host, SELECTION_WIKILINK, json!({}), InvokeMode::Apply).unwrap_err();
         let PluginError::BadArgs(msg) = err else {

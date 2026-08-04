@@ -1936,26 +1936,65 @@ interface session {
     /// qui: non cambia cosa un provider deve fare.
     enum pane-mode { source, live-preview, reading }
 
-    /// Ciò che è selezionato in un pannello — o dove sta il cursore, che è una
-    /// selezione vuota.
+    /// RITAGLIO della linea di base (decisione 0093). Qui c'era un record
+    /// `selection { span: option<span>, text: string }` e il campo
+    /// `view-context.selection` che ne portava UNO. I cinque tipi qui sotto
+    /// prendono il posto di quell'uno, e il campo si chiama ora `selections`.
     ///
-    /// `text` è SEMPRE il testo vero dell'editor; `span` c'è solo quando le
-    /// sue coordinate valgono anche per il sorgente che il kernel ha in mano
-    /// (buffer senza modifiche non salvate). È così che il contratto rende
-    /// impossibile ritagliare `read-document` con uno span calcolato su un
-    /// altro testo.
-    record selection {
-        span: option<span>,
+    /// Non è «metterci una lista», ed è la ragione per cui il ritaglio è largo
+    /// quanto è. La 0007 aveva dichiarato il multi-cursore fuori dicendo che la
+    /// seconda selezione «sarebbe `list<selection>`, cioè additiva solo
+    /// cambiando il tipo del campo»: la dichiarazione era giusta, la previsione
+    /// no. Una lista sola non basta, perché nel passaggio da uno a molti
+    /// cambiano due cose che nella forma di prima non si vedevano — quale sia
+    /// la PRIMARIA (che «la prima della lista» non sa dire senza perderla,
+    /// visto che CodeMirror la tiene in un indice a parte e di norma è
+    /// l'ultima aggiunta), e che la condizione dello span è del BUFFER e non
+    /// della singola selezione, quindi sta sopra l'insieme e non dentro le
+    /// voci.
+    ///
+    /// A non essere mai stato fuori, intanto, era il multi-cursore stesso:
+    /// l'editor della shell lo porta acceso da sempre. Fuori era la sola
+    /// facoltà di dirlo, e per tutto questo tempo la shell ha pubblicato la
+    /// primaria buttando via le altre. Dopo M4 lo stesso ritaglio costerebbe
+    /// una major.
+    record floating-selection {
         text: string,
+    }
+
+    record anchored-selection {
+        span: span,
+        text: string,
+    }
+
+    record anchored-selections {
+        primary: anchored-selection,
+        secondary: list<anchored-selection>,
+    }
+
+    record floating-selections {
+        primary: floating-selection,
+        secondary: list<floating-selection>,
+    }
+
+    variant selection-set {
+        anchored(anchored-selections),
+        floating(floating-selections),
     }
 
     /// Il contesto in cui una view sta girando. Nessun gemello che scrive:
     /// quale nota si guarda e dove si è cliccato sono decisioni dell'utente
     /// sull'app, non capacità concesse a un plugin.
+    ///
+    /// `selection: option<selection>` è diventato
+    /// `selections: option<selection-set>` col ritaglio qui sopra: è un campo
+    /// di record RITIPATO, cioè la rottura che `wit_additivity` elenca per
+    /// prima e che un provider compilato non sopravvive — non la ignora come
+    /// farebbe con un campo in più, non compila.
     record view-context {
         pane: pane-id,
         doc: option<doc-id>,
-        selection: option<selection>,
+        selections: option<selection-set>,
         mode: pane-mode,
     }
 

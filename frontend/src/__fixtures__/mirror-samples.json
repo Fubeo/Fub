@@ -1351,38 +1351,135 @@
     {
       "pane": "main",
       "doc": "a.md",
-      "selection": {
-        "span": {
-          "start": 3,
-          "end": 7
-        },
-        "text": "ciao"
+      "selections": {
+        "kind": "anchored",
+        "value": {
+          "primary": {
+            "span": {
+              "start": 3,
+              "end": 7
+            },
+            "text": "ciao"
+          },
+          "secondary": []
+        }
       },
       "mode": "reading"
     },
     {
       "pane": "main",
       "doc": null,
-      "selection": null,
+      "selections": null,
       "mode": "live_preview"
     },
     {
       "pane": "main",
       "doc": "a.md",
-      "selection": {
-        "span": null,
-        "text": "ciao"
+      "selections": {
+        "kind": "floating",
+        "value": {
+          "primary": {
+            "text": "ciao"
+          },
+          "secondary": []
+        }
+      },
+      "mode": "live_preview"
+    },
+    {
+      "pane": "main",
+      "doc": "a.md",
+      "selections": {
+        "kind": "anchored",
+        "value": {
+          "primary": {
+            "span": {
+              "start": 10,
+              "end": 14
+            },
+            "text": "ciao"
+          },
+          "secondary": [
+            {
+              "span": {
+                "start": 3,
+                "end": 7
+              },
+              "text": "ciao"
+            },
+            {
+              "span": {
+                "start": 20,
+                "end": 20
+              },
+              "text": ""
+            }
+          ]
+        }
       },
       "mode": "live_preview"
     }
   ],
-  "Selection": [
+  "SelectionSet": [
+    {
+      "kind": "anchored",
+      "value": {
+        "primary": {
+          "span": {
+            "start": 0,
+            "end": 4
+          },
+          "text": "ciao"
+        },
+        "secondary": []
+      }
+    },
+    {
+      "kind": "floating",
+      "value": {
+        "primary": {
+          "text": "ciao"
+        },
+        "secondary": [
+          {
+            "text": "mondo"
+          }
+        ]
+      }
+    }
+  ],
+  "AnchoredSelection": [
     {
       "span": {
         "start": 0,
         "end": 4
       },
       "text": "ciao"
+    }
+  ],
+  "FloatingSelection": [
+    {
+      "text": "ciao"
+    }
+  ],
+  "AnchoredSelections": [
+    {
+      "primary": {
+        "span": {
+          "start": 0,
+          "end": 0
+        },
+        "text": ""
+      },
+      "secondary": []
+    }
+  ],
+  "FloatingSelections": [
+    {
+      "primary": {
+        "text": "x"
+      },
+      "secondary": []
     }
   ],
   "Locale": [

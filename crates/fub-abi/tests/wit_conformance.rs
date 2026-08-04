@@ -87,7 +87,10 @@ use fub_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
     TextTolerance,
 };
-use fub_abi::session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
+use fub_abi::session::{
+    AnchoredSelection, AnchoredSelections, ContextKind, ContextMask, FloatingSelection,
+    FloatingSelections, PaneId, PaneMode, SelectionSet, ViewContext,
+};
 use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
@@ -370,7 +373,11 @@ wit_kebab! {
     // Il contesto di sessione: il pannello con il focus e ciò che contiene.
     PaneId,
     PaneMode,
-    Selection,
+    FloatingSelection,
+    AnchoredSelection,
+    AnchoredSelections,
+    FloatingSelections,
+    SelectionSet,
     ViewContext,
     ContextKind,
     ContextMask,
@@ -3618,13 +3625,41 @@ fn conform(source: &str) -> Result<(), String> {
 
     // --- il contesto di sessione (decisione 0007)
 
-    let Selection { span, text } = Selection::default();
-    contract.record("selection", &[("span", wit(&span)), ("text", wit(&text))]);
+    // Le selezioni: cinque tipi dove ce n'era uno (decisione 0093).
+    let FloatingSelection { text } = FloatingSelection::default();
+    contract.record("floating-selection", &[("text", wit(&text))]);
+
+    let AnchoredSelection { span, text } = AnchoredSelection::default();
+    contract.record(
+        "anchored-selection",
+        &[("span", wit(&span)), ("text", wit(&text))],
+    );
+
+    let AnchoredSelections { primary, secondary } = AnchoredSelections::default();
+    contract.record(
+        "anchored-selections",
+        &[("primary", wit(&primary)), ("secondary", wit(&secondary))],
+    );
+
+    let FloatingSelections { primary, secondary } = FloatingSelections::default();
+    contract.record(
+        "floating-selections",
+        &[("primary", wit(&primary)), ("secondary", wit(&secondary))],
+    );
+
+    contract.variant_src(
+        "selection-set",
+        ("session.rs", "SelectionSet"),
+        &[
+            case_ty("anchored", wit(&AnchoredSelections::default())),
+            case_ty("floating", wit(&FloatingSelections::default())),
+        ],
+    );
 
     let ViewContext {
         pane,
         doc,
-        selection,
+        selections,
         mode,
     } = ViewContext::new("main");
     contract.record(
@@ -3632,7 +3667,7 @@ fn conform(source: &str) -> Result<(), String> {
         &[
             ("pane", wit(&pane)),
             ("doc", wit(&doc)),
-            ("selection", wit(&selection)),
+            ("selections", wit(&selections)),
             ("mode", wit(&mode)),
         ],
     );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byteToCharIndex, charToByteIndex } from "./offsets";
+import { byteToCharIndex, charToByteIndex, charToByteIndices } from "./offsets";
 
 // Il ponte byte UTF-8 → code unit UTF-16 è codice load-bearing: uno scroll
 // dell'outline (o, a M3, una decorazione di live-preview) calcolato su un
@@ -112,5 +112,31 @@ describe("charToByteIndex", () => {
     // Indice a metà della coppia surrogata: arrotonda al confine successivo,
     // come fa l'andata. Non esiste in una selezione vera, non deve lanciare.
     expect(charToByteIndex(doc, 1)).toBe(4);
+  });
+});
+
+describe("charToByteIndices", () => {
+  const doc = "però e così, con un'emoji 🙂 e altro testo ancora";
+
+  it("dà per ogni indice la stessa risposta della conversione singola", () => {
+    // È il presidio della batteria: la versione a un attraversamento solo
+    // esiste per il costo, non per la semantica, e il giorno che le due
+    // divergessero le selezioni pubblicate sarebbero sbagliate senza che
+    // nulla lo dica (decisione 0093).
+    const indici = [...Array(doc.length + 3).keys()];
+    expect(charToByteIndices(doc, indici)).toEqual(indici.map((i) => charToByteIndex(doc, i)));
+  });
+
+  it("risponde nell'ordine in cui gli indici arrivano, non in quello ordinato", () => {
+    // Chi chiama ha delle coppie (inizio, fine) da ricomporre: restituirle
+    // ordinate accoppierebbe la fine di una con l'inizio di un'altra.
+    const indici = [9, 0, 4, 2];
+    expect(charToByteIndices(doc, indici)).toEqual(indici.map((i) => charToByteIndex(doc, i)));
+  });
+
+  it("regge il vuoto, il negativo e l'oltre la fine come la singola", () => {
+    expect(charToByteIndices(doc, [])).toEqual([]);
+    expect(charToByteIndices(doc, [-3, 9999])).toEqual([0, charToByteIndex(doc, 9999)]);
+    expect(charToByteIndices("", [0, 5])).toEqual([0, 0]);
   });
 });

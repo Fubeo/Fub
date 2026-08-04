@@ -11,19 +11,33 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";
 import { temaEditor } from "./theme";
 import { temaCorrente, type Tema } from "../theme/theme";
-import { byteToCharIndex, charToByteIndex } from "../rules/offsets";
+import { byteToCharIndex, charToByteIndices } from "../rules/offsets";
 import { editingExtensions } from "./editor-commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview } from "./livepreview";
 
-/// La selezione dell'editor come la capisce il kernel: **byte UTF-8** del
-/// buffer, più il testo che ci sta dentro (vuoto = cursore). È metà di
-/// `ViewContext.selection`; l'altra metà — se lo span sia vero anche per il
-/// sorgente salvato — la sa solo chi conosce lo stato del buffer, cioè la shell.
-export interface EditorSelection {
+/// Una selezione dell'editor come la capisce il kernel: **byte UTF-8** del
+/// buffer, più il testo che ci sta dentro (vuoto = cursore).
+export interface EditorRange {
   start: number;
   end: number;
   text: string;
+}
+
+/// Tutte le selezioni dell'editor, con la **primaria** distinta.
+///
+/// La primaria è `state.selection.main`, cioè `ranges[mainIndex]`: non è la
+/// prima della lista, ed è di norma l'ultima aggiunta. Pubblicarla come «la
+/// prima» sarebbe stata una conversione che la perde, ed è la ragione per cui
+/// di là dal confine è un campo (decisione 0093).
+///
+/// È metà di `ViewContext.selections`; l'altra metà — se le coordinate siano
+/// vere anche per il sorgente salvato — la sa solo chi conosce lo stato del
+/// buffer, cioè la shell.
+export interface EditorSelections {
+  primary: EditorRange;
+  /// Le altre, in ordine di posizione (CodeMirror tiene `ranges` ordinato).
+  secondary: EditorRange[];
 }
 
 export interface Editor {
@@ -67,8 +81,8 @@ export interface Editor {
   /// Porta la vista su un offset in **byte UTF-8** del documento (es. l'inizio
   /// di un heading da `ViewUpdate::Reveal`). Converte al volo byte→code unit.
   revealByteOffset(byteOffset: number): void;
-  /// La selezione corrente in byte UTF-8 (il ponte inverso, `offsets.ts`).
-  selection(): EditorSelection;
+  /// Le selezioni correnti in byte UTF-8 (il ponte inverso, `offsets.ts`).
+  selections(): EditorSelections;
   /// Accende o spegne la resa inline: è la differenza fra la modalità Live
   /// Preview e la modalità Sorgente (FEATURES 4.1).
   setLivePreview(on: boolean): void;
@@ -208,13 +222,24 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     },
     getDoc: () => view.state.doc.toString(),
     focus: () => view.focus(),
-    selection() {
+    selections() {
       const text = view.state.doc.toString();
-      const { from, to } = view.state.selection.main;
+      const { ranges, mainIndex } = view.state.selection;
+      // Una conversione sola per tutte le estremità: `charToByteIndex` è una
+      // scansione dall'inizio, e questa funzione gira a ogni battuta di
+      // tastiera. Vedi `charToByteIndices`.
+      const byte = charToByteIndices(
+        text,
+        ranges.flatMap((r) => [r.from, r.to]),
+      );
+      const tutte = ranges.map((r, i) => ({
+        start: byte[2 * i],
+        end: byte[2 * i + 1],
+        text: text.slice(r.from, r.to),
+      }));
       return {
-        start: charToByteIndex(text, from),
-        end: charToByteIndex(text, to),
-        text: text.slice(from, to),
+        primary: tutte[mainIndex],
+        secondary: tutte.filter((_, i) => i !== mainIndex),
       };
     },
     setLivePreview(on: boolean) {

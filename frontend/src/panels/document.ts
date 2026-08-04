@@ -42,7 +42,7 @@ import { createEditor, type Editor } from "../editor/editor";
 import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
 import { noteDalNome, riferimentoRisolto, tagDelVault } from "../host/query";
-import type { PaneMode, ViewContext, WriteBase } from "../host/contract";
+import type { PaneMode, SelectionSet, ViewContext, WriteBase } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { noteRecentiEsistenti } from "../state/recenti";
 import { emit, on, state } from "../state/store";
@@ -1251,18 +1251,36 @@ function paneContext(): ViewContext {
   const p = paneAttivo();
   const doc = docAttivo();
   const r = riquadri.get(layout.focus);
-  const sel = r?.editor.selection();
+  const sel = r?.editor.selections();
   const inEditing = doc !== null && p.mode !== "reading" && sel !== undefined;
   const dirty = doc ? (buffers.get(doc)?.dirty ?? false) : false;
-  return {
-    pane: layout.focus,
-    doc,
-    selection:
-      inEditing && sel
-        ? { span: dirty ? null : { start: sel.start, end: sel.end }, text: sel.text }
-        : null,
-    mode: p.mode,
-  };
+  if (!inEditing || !sel) {
+    return { pane: layout.focus, doc, selections: null, mode: p.mode };
+  }
+  // Il buffer è UNO, e il suo stato decide per tutte le selezioni insieme: è
+  // la ragione per cui il caso si sceglie qui, una volta, e non dentro ogni
+  // selezione (decisione 0093). Prima di allora questa funzione pubblicava la
+  // sola primaria: l'editor i cursori li faceva già, il contratto sapeva dirne
+  // uno, e gli altri morivano qui.
+  const selections: SelectionSet = dirty
+    ? {
+        kind: "floating",
+        value: {
+          primary: { text: sel.primary.text },
+          secondary: sel.secondary.map((s) => ({ text: s.text })),
+        },
+      }
+    : {
+        kind: "anchored",
+        value: {
+          primary: { span: { start: sel.primary.start, end: sel.primary.end }, text: sel.primary.text },
+          secondary: sel.secondary.map((s) => ({
+            span: { start: s.start, end: s.end },
+            text: s.text,
+          })),
+        },
+      };
+  return { pane: layout.focus, doc, selections, mode: p.mode };
 }
 
 /// Pubblica il contesto e annuncia **quali** view il kernel ha dichiarato

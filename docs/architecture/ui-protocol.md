@@ -216,7 +216,7 @@ microtask.
 
 Cosa dichiarano le sette view ufficiali: i backlink solo `Document` (i backlink
 di una nota sono gli stessi da ogni punto di essa), l'outline
-`Document + Selection` (segna la sezione in cui sta il cursore), le statistiche
+`Document + Selection` (segna la sezione in cui sta la primaria), le statistiche
 tutto (contano la selezione e cambiano faccia in lettura), la cronologia
 `Document` (la storia è di *quella* nota), il pannello tag e il cestino
 **niente** — la distribuzione dei tag del vault, e cosa c'è nel cestino, sono le

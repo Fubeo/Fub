@@ -17,7 +17,7 @@ use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::edit::WriteBase;
 use fub_abi::event::{Actor, Event, EventKind, Notice};
 use fub_abi::model::{DocId, Span};
-use fub_abi::session::{Selection, ViewContext};
+use fub_abi::session::{AnchoredSelection, AnchoredSelections, SelectionSet, ViewContext};
 use fub_abi::PluginError;
 use fub_features::{
     CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TRASH, SELECTION_WIKILINK,
@@ -133,10 +133,7 @@ fn a_command_writes_through_the_normal_path_so_the_graph_sees_it() {
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(nota.clone()))
-            .with_selection(Some(Selection {
-                span: Some(Span::new(9, 13)),
-                text: "Kant".into(),
-            })),
+            .with_selections(Some(SelectionSet::anchored(Span::new(9, 13), "Kant"))),
     ));
 
     let outcome = ws
@@ -166,6 +163,155 @@ fn a_command_writes_through_the_normal_path_so_the_graph_sees_it() {
     assert_eq!(backlinks[0].source, nota);
 }
 
+/// Tre cursori, un comando: la prova che la lista è **onorata** e non solo
+/// dichiarata (decisione 0093).
+///
+/// Prima di questa decisione questo test non era scrivibile: la shell poteva
+/// pubblicare una selezione sola, quindi il comando avvolgeva la primaria e
+/// lasciava all'utente gli altri due punti che aveva appena scelto. L'editor i
+/// tre cursori li faceva già.
+#[test]
+fn a_command_acts_on_every_selection_and_undoes_them_together() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("Hegel.md"), "# Hegel\n", WriteBase::Dictated)
+        .expect("scrive");
+    let nota = DocId::new("Nota.md");
+    ws.write_document(&nota, "Kant, Hegel e Fichte\n", WriteBase::Dictated)
+        .expect("scrive");
+
+    // La primaria è l'ultima aggiunta — come in CodeMirror, dove `main` di
+    // norma è quella —, e infatti qui è la terza per posizione: che il comando
+    // agisca in ordine di documento e non in ordine di aggiunta è ciò che
+    // rende gli offset ancora veri al secondo edit.
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE)
+            .with_doc(Some(nota.clone()))
+            .with_selections(Some(SelectionSet::Anchored(AnchoredSelections {
+                primary: AnchoredSelection::new(Span::new(14, 20), "Fichte"),
+                secondary: vec![
+                    AnchoredSelection::new(Span::new(0, 4), "Kant"),
+                    AnchoredSelection::new(Span::new(6, 11), "Hegel"),
+                ],
+            }))),
+    ));
+
+    let outcome = ws
+        .invoke_command(
+            SELECTION_WIKILINK,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("applica");
+    assert_eq!(
+        ws.read_source(&nota).expect("legge"),
+        "[[Kant]], [[Hegel]] e [[Fichte]]\n",
+        "tre selezioni, tre riferimenti: agire sulla sola primaria \
+         lascerebbe due dei tre punti che l'utente ha scelto"
+    );
+    assert_eq!(
+        ws.backlinks(&DocId::new("Hegel.md")).len(),
+        1,
+        "e il grafo li vede tutti, perché la scrittura è quella normale"
+    );
+
+    // Un solo passo indietro li disfa tutti e tre: gli edit erano una richiesta
+    // sola, quindi l'inverso è uno solo.
+    ws.invoke_command(
+        fub_features::VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("disfa");
+    assert_eq!(
+        ws.read_source(&nota).expect("legge"),
+        "Kant, Hegel e Fichte\n",
+        "un gesto solo si disfa con un gesto solo"
+    );
+    let _ = outcome;
+}
+
+/// Fra i tre cursori uno è vuoto: si avvolge ciò che c'è, e il messaggio dice
+/// **quanti** — che è la differenza fra saltare un punto e saltarlo in
+/// silenzio.
+#[test]
+fn a_caret_among_the_selections_has_nothing_to_wrap_and_the_count_says_so() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    let nota = DocId::new("Nota.md");
+    ws.write_document(&nota, "Kant, Hegel e altro\n", WriteBase::Dictated)
+        .expect("scrive");
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE)
+            .with_doc(Some(nota.clone()))
+            .with_selections(Some(SelectionSet::Anchored(AnchoredSelections {
+                primary: AnchoredSelection::new(Span::new(0, 4), "Kant"),
+                secondary: vec![
+                    AnchoredSelection::new(Span::new(6, 11), "Hegel"),
+                    AnchoredSelection::caret(14),
+                ],
+            }))),
+    ));
+
+    let outcome = ws
+        .invoke_command(
+            SELECTION_WIKILINK,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("applica");
+    assert_eq!(
+        ws.read_source(&nota).expect("legge"),
+        "[[Kant]], [[Hegel]] e altro\n"
+    );
+    let notify = outcome.notify.expect("il comando lo dice");
+    assert_eq!(
+        notify.to_string(),
+        "Creati 2 riferimenti",
+        "il cursore vuoto non si avvolge, e il numero è come si dice che è \
+         stato saltato"
+    );
+}
+
+/// Tutte cursori: non c'è niente da avvolgere, e il rifiuto è quello di sempre
+/// contato su tutte invece che su una.
+#[test]
+fn carets_only_is_still_nothing_to_wrap() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    let nota = DocId::new("Nota.md");
+    ws.write_document(&nota, "Kant e Hegel\n", WriteBase::Dictated)
+        .expect("scrive");
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE)
+            .with_doc(Some(nota.clone()))
+            .with_selections(Some(SelectionSet::Anchored(AnchoredSelections {
+                primary: AnchoredSelection::caret(0),
+                secondary: vec![AnchoredSelection::caret(7)],
+            }))),
+    ));
+    let err = ws
+        .invoke_command(
+            SELECTION_WIKILINK,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("non c'è niente da avvolgere");
+    assert!(
+        matches!(err, PluginError::BadArgs(_)),
+        "uno stato che non permette l'operazione si spiega: {err:?}"
+    );
+    assert_eq!(
+        ws.read_source(&nota).expect("legge"),
+        "Kant e Hegel\n",
+        "e non ha scritto niente"
+    );
+}
+
 #[test]
 fn the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so() {
     let vault = Vault::new();
@@ -176,10 +322,7 @@ fn the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so() {
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(nota.clone()))
-            .with_selection(Some(Selection {
-                span: Some(Span::new(9, 13)),
-                text: "Kant".into(),
-            })),
+            .with_selections(Some(SelectionSet::anchored(Span::new(9, 13), "Kant"))),
     ));
 
     // Qualcun altro riscrive la nota: il kernel lascia cadere lo span, perché
