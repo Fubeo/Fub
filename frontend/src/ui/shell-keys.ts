@@ -56,6 +56,13 @@ export const SHELL_KEYS = {
   // esattamente il modo in cui succederebbe. Si cerca nella palette, dove per
   // arrivarci bisogna averlo scritto.
   "shell.history.clear": null,
+  // Le due vie d'uscita da un conflitto di salvataggio (§18.1). **Senza
+  // accordo**, e per la ragione di `shell.history.clear` più una sua: sono i
+  // due gesti in cui l'utente sceglie quale testo perdere, e un tasto premuto
+  // per sbaglio sceglierebbe al posto suo. Si cercano nella palette, dove per
+  // arrivarci bisogna averli scritti.
+  "shell.doc.conflict.mine": null,
+  "shell.doc.conflict.theirs": null,
 } as const satisfies Record<string, string | null>;
 
 /// L'id di un comando della shell: uno di quelli in tabella, e nessun altro.

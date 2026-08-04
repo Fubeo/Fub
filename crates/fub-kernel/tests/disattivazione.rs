@@ -487,7 +487,7 @@ impl EventHandler for Ultimo {
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         if matches!(notice.event, Event::VaultClosed { .. }) {
-            host.write_document(&DocId::new("ultimo.txt"), "detto all'ultimo")?;
+            host.write_document(&DocId::new("ultimo.txt"), "detto all'ultimo", None)?;
         }
         Ok(())
     }

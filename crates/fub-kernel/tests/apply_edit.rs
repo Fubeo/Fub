@@ -510,7 +510,8 @@ impl EventHandler for ScriveAltrove {
         if source.contains("Aggiunta") {
             return Ok(());
         }
-        host.write_document(&b, &format!("{source}\nAggiunta"))
+        host.write_document(&b, &format!("{source}\nAggiunta"), None)
+            .map(|_| ())
     }
 }
 

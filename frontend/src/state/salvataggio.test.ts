@@ -8,7 +8,7 @@
 // il guasto — cioè esattamente il difetto che questa voce esiste per togliere,
 // rimesso al suo posto da un'altra parte.
 import { describe, expect, it } from "vitest";
-import { cambioSotto, statoDi } from "./salvataggio";
+import { cambioSotto, esitoDelFallimento, statoDi } from "./salvataggio";
 
 describe("lo stato del salvataggio", () => {
   it("non dice niente di un documento che non ha un buffer", () => {
@@ -39,6 +39,27 @@ describe("lo stato del salvataggio", () => {
     // dire.
     expect(statoDi({ dirty: false, esito: "fallito" })).toBe("fallito");
   });
+
+  // Le tre del conflitto (§18.1). Sta accanto a `fallito` perché è la stessa
+  // domanda — quale dei fatti veri insieme vince — su un caso che si ripara in
+  // un modo diverso: aspettare non lo risolve, e la barra non lo deve far
+  // sembrare un guasto qualunque.
+  it("dice che il file è cambiato sotto, anche se l'utente continua a scrivere", () => {
+    expect(statoDi({ dirty: true, esito: "conflitto" })).toBe("conflitto");
+  });
+
+  it("tiene il conflitto anche a buffer pulito", () => {
+    expect(statoDi({ dirty: false, esito: "conflitto" })).toBe("conflitto");
+  });
+
+  it("il conflitto non si lascia coprire da nessuno degli altri stati", () => {
+    // L'invariante: è l'unico stato che chiede una **decisione** invece che
+    // dell'attesa, e uno stato da decidere che si nasconde dietro uno da
+    // aspettare non viene deciso.
+    for (const dirty of [true, false]) {
+      expect(statoDi({ dirty, esito: "conflitto" })).toBe("conflitto");
+    }
+  });
 });
 
 describe("chi ha riscritto il file sotto un buffer sporco", () => {
@@ -62,5 +83,34 @@ describe("chi ha riscritto il file sotto un buffer sporco", () => {
 
   it("senza echi in attesa, un cambio non nostro è una riscrittura", () => {
     expect(cambioSotto({ dirty: true, echi: 0 }, false)).toBe("riscrittura");
+  });
+});
+
+describe("che specie di fallimento è un salvataggio che non è arrivato", () => {
+  it("un conflitto si decide", () => {
+    expect(esitoDelFallimento({ kind: "conflict", message: "cambiato sotto" })).toBe("conflitto");
+  });
+
+  it("tutto il resto si riprova", () => {
+    expect(esitoDelFallimento({ kind: "io", message: "disco pieno" })).toBe("fallito");
+    expect(esitoDelFallimento({ kind: "permission_denied", message: "sola lettura" })).toBe(
+      "fallito",
+    );
+  });
+
+  it("ciò che non viene dal backend si riprova come tutto il resto", () => {
+    // Una `TypeError` della webview, una promessa rigettata da noi: non è un
+    // `PluginError`, quindi non è un conflitto — e trattarla come tale
+    // bloccherebbe l'autosave aspettando una decisione che nessuno può prendere.
+    expect(esitoDelFallimento(new TypeError("boom"))).toBe("fallito");
+    expect(esitoDelFallimento("stringa nuda")).toBe("fallito");
+    expect(esitoDelFallimento(undefined)).toBe("fallito");
+  });
+
+  it("non legge la specie dalla prosa del messaggio", () => {
+    // Il messaggio arriva **già tradotto** (0041): cercarci dentro «conflict»
+    // funzionerebbe in inglese e smetterebbe di funzionare in italiano, cioè
+    // nella lingua in cui l'app viene usata.
+    expect(esitoDelFallimento({ kind: "io", message: "conflict while writing" })).toBe("fallito");
   });
 });

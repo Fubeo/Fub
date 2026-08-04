@@ -21,9 +21,9 @@ esterna dell'intero [FEATURES.md](FEATURES.md)
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centocinque sono
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centosei sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-undici [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
+dieci [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -144,15 +144,15 @@ che questo piano passa il tempo a togliere dal codice.
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | 2 | 1 |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 1 | 1 |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza: il criterio è se il costo cresce con l'attesa | 2 | — |
-| **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell e non appartiene a nessuna delle sedute sopra, code delle sedute 1-4 comprese | 4 | 1 |
-| **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: rimandi ai quattro giri di audit, e il lavoro sta nelle sedute che li hanno assorbiti | — | 3 |
+| **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell e non appartiene a nessuna delle sedute sopra, code delle sedute 1-4 comprese | 3 | 1 |
+| **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: rimandi ai quattro giri di audit, e il lavoro sta nelle sedute che li hanno assorbiti | — | 2 |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 1 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | 1 | 1 |
 
 ## Le voci
 
-Undici [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
+Dieci [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -164,7 +164,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-undici [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+dieci [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -173,7 +173,7 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-Le caselle residue oggi sono **undici**, e stanno in sette posti:
+Le caselle residue oggi sono **dieci**, e stanno in sette posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
@@ -190,7 +190,10 @@ asserisce un test), la
 (una: aprire in un riquadro una view principale che **non** sia il grafo — oggi
 lo fa `shell.graph`, che è il comando di quel componente, e il secondo cliente
 vorrà un gesto generico), la
-[seduta 19](roadmap/19-debito-quarto-audit.md) (tre rimandi) e la
+[seduta 19](roadmap/19-debito-quarto-audit.md) (due rimandi: il terzo — le «tre
+copie» custodite da un flag TS — è caduto con la
+[0089](decisions/0089-da-cosa-e-partita-una-scrittura.md), e non fondendo le tre
+ma togliendo a una di esse il compito di avere ragione) e la
 [§22.3](roadmap/22-cosa-sa-dire-un-abbonamento.md#223-la-maschera-di-ridisegno-è-della-view-non-dellesemplare)
 (una: la query incorporata in una nota, che non è un esemplare di `ViewSpec` e
 non ha un canale di invalidazione affatto). Non diventano voci
@@ -226,7 +229,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§16.3** | [Un crate per bundle di feature](roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 | **§17.1** | [Corpus, fuzzing, prestazioni](roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni) | 17. I presidi che restano | presidi | **P2** |
 | **§17.2** | [Test della shell](roadmap/17-presidi-che-restano.md#172-test-della-shell) | 17. I presidi che restano | presidi | **P2** |
-| **§18.1** | [Editor](roadmap/18-editor-e-tastiera.md#181-editor) | 18. L'editor e la tastiera | shell | **P1** |
 | **§18.2** | [Comandi e tastiera](roadmap/18-editor-e-tastiera.md#182-comandi-e-tastiera) | 18. L'editor e la tastiera | shell | **P1** |
 | **§20.5** | [Il budget del dispatch tronca senza guardare cosa sta troncando](roadmap/20-quando-qualcosa-va-storto.md#205-il-budget-del-dispatch-tronca-senza-guardare-cosa-sta-troncando) | 20. Quando qualcosa va storto | kernel | **P2** |
 | **§22.4** | [Un orario di parete non è un intervallo](roadmap/22-cosa-sa-dire-un-abbonamento.md#224-un-orario-di-parete-non-è-un-intervallo) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
@@ -241,7 +243,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **ottantotto** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **ottantanove** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

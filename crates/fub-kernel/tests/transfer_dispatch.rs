@@ -62,8 +62,8 @@ impl ImportProvider for SpyImport {
         let Some(doc) = self.writes.clone() else {
             return Ok(report);
         };
-        let outcome = match host.write_document(&doc, source.text()?) {
-            Ok(()) => ImportOutcome::Created,
+        let outcome = match host.write_document(&doc, source.text()?, None) {
+            Ok(_) => ImportOutcome::Created,
             Err(e) => ImportOutcome::Failed(e.to_string()),
         };
         // Un evento emesso DENTRO la chiamata: gli handler lo devono vedere

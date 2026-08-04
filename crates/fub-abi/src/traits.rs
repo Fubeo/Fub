@@ -524,9 +524,46 @@ pub trait VaultWrite: VaultRead {
     /// È la scrittura di chi il documento intero ce l'ha in mano: l'editor che
     /// salva il proprio buffer, un importer che crea una nota. Chi vuole
     /// cambiarne **un pezzo** usa [`apply_edit`](VaultWrite::apply_edit) — non
-    /// per eleganza, ma perché una riscrittura totale non dice cosa è cambiato
-    /// e non si accorge di chi ha scritto nel frattempo.
-    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+    /// per eleganza, ma perché una riscrittura totale non dice *cosa* è
+    /// cambiato.
+    ///
+    /// # La base, e perché qui è opzionale mentre in `apply_edit` non lo è
+    ///
+    /// `base` è la revisione che chi scrive si aspetta di trovare sul disco. Se
+    /// c'è e non combacia, l'host risponde [`PluginError::Conflict`] e **non
+    /// scrive niente**: qualcuno ha riscritto il file da quando questo testo è
+    /// stato preso, e sovrascriverlo distruggerebbe il suo lavoro senza che
+    /// nessuna delle due metà del sistema se ne accorga. È la stessa guardia di
+    /// [`apply_edit`](VaultWrite::apply_edit) (decisione 0008), applicata alla
+    /// seconda primitiva di scrittura invece di restare privilegio della prima.
+    ///
+    /// È un [`Option`] e là no perché le due firme rispondono a due domande
+    /// diverse. Un edit **non esiste** senza la revisione su cui è stato
+    /// calcolato: i suoi offset indicano un testo, e senza dire quale non sono
+    /// una modifica ma un'ipotesi. Una riscrittura totale invece è compiuta da
+    /// sé — un importer che crea una nota, un template che scrive la nota di
+    /// oggi, il ripristino di una versione non stanno correggendo un testo che
+    /// hanno letto: lo stanno **dettando**. Obbligare quei chiamanti a esibire
+    /// una base vorrebbe dire farsela inventare, e una base inventata è una
+    /// guardia che dice sempre di sì.
+    ///
+    /// Quindi: `None` = «scrivi, questo testo non discende da niente»; `Some` =
+    /// «scrivi solo se il file è ancora quello da cui sono partito».
+    ///
+    /// # Cosa torna
+    ///
+    /// La revisione **prodotta**, cioè quella che il file ha adesso. Serve a chi
+    /// scrive due volte di fila senza rileggere: è la `base` della scrittura
+    /// dopo. Senza, l'unico modo di averla sarebbe ricalcolarla per conto
+    /// proprio — cioè una seconda implementazione di come questo host deriva le
+    /// impronte, che è la cosa che [`Revision`](crate::edit::Revision) è opaca
+    /// per impedire.
+    fn write_document(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: Option<Revision>,
+    ) -> Result<Revision, PluginError>;
 
     /// Cambia **un pezzo** di documento: gli edit della richiesta, tutti o
     /// nessuno, sul sorgente che la sua `base` nomina.

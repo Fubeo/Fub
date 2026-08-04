@@ -23,6 +23,14 @@ lato la tastiera (§18.2) che deve arbitrare fra i comandi del kernel e quelli
 della shell prima che §4.4 le chieda un secondo livello di decorazioni. La
 §2.9 non è in coda a nessuno: si paga quando le liste diventano lunghe.
 
+Di quell'ordine è caduto anche il pezzo che riguardava l'editor, e in un modo che
+nessuna delle quattro sedute poteva vedere: il secondo livello di decorazioni non
+aspettava la tastiera **né** un canale, perché il canale è stato deciso
+inesistente ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)). La
+~~§18.1~~ è chiusa con la
+[0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md), che ne ha eseguita
+una casella e riformulata l'altra.
+
 Il primo anello è **caduto**: il ~~§1.2~~ è chiuso con la
 [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md), e l'ordine ha
 fatto il suo lavoro — la §3.3 non aspetta più niente. La cosa che quell'ordine
@@ -30,7 +38,7 @@ non poteva prevedere è che il nodo costasse **zero firma**: i riquadri erano gi
 nel contratto dalla [0007](../decisions/0007-contesto-di-sessione.md), e ciò che
 mancava era un corpo alla shell.
 
-Le due voci native della seduta. La 18.2 dipendeva dal registro comandi
+Le due voci native della seduta, e ne resta una. La 18.2 dipendeva dal registro comandi
 ([decisione 0009](../decisions/0009-registro-dei-comandi.md)) e dai settings
 (11.1), ed è **quasi chiusa** con la
 [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md): la tastiera è
@@ -46,20 +54,48 @@ vero, **il clic no** — la shell non naviga né i link markdown né i wikilink,
 in anteprima un `.internal-path` porta già il suo `data-path` che nessuno
 raccoglie.
 
-### 18.1 Editor
+### ~~18.1 Editor~~
 
-*ex §3.7 · shell · **P1** — il ponte inverso è fatto (decisione 0007); il secondo livello aspetta il capitolo 4*
+*ex §3.7 · shell · **P1** — **chiusa** con la [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md)*
 
 - [x] **Ponte inverso code unit → byte** (`offsets.ts`): fatto con la [decisione 0007](../decisions/0007-contesto-di-sessione.md)
       (`charToByteIndex`, testato su accenti ed emoji in andata e ritorno), che
       ne aveva bisogno per far attraversare il confine alla selezione. Le due
       direzioni stanno in un punto solo.
-- [ ] **Due livelli di decorazione dichiarati**: sintassi dal tree Lezer
+- [x] ~~**Due livelli di decorazione dichiarati**: sintassi dal tree Lezer
       (già fatto), semantica dagli `Span` del modello (embed risolti, callout,
-      math) — con la regola di chi vince dove.
-- [ ] **Invariante del buffer sporco** irrobustita (oggi custodita da un flag TS)
-      e conflitto buffer↔disco esplicito: è lavoro M3 già dichiarato. Ci è
-      arrivato anche il **residuo del ~~§9.7~~**
+      math) — con la regola di chi vince dove.~~ **Riformulata e passata alla
+      [§4.4](#44-due-parser-per-la-stessa-sintassi)** con la
+      [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md). La casella
+      nominava un canale — il modello parsato fino alla webview — che la
+      [0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha deciso che
+      **non ci sarà**, e non per rimandarlo: la live preview decora un *buffer*,
+      che può essere sporco, mentre il modello è quello del *file*. Ciò che
+      resta di vero — il confine dichiarato, e la sintassi scritta una volta
+      sola da cui il lato TS genera le proprie decorazioni — è già una casella
+      della §4.4, scritta dal lato giusto. Eseguirla di qua avrebbe voluto dire
+      anticipare quel canale con un cliente solo, che è ciò che la §4.4 chiama
+      indovinare.
+- [x] ~~**Invariante del buffer sporco** irrobustita (oggi custodita da un flag TS)
+      e conflitto buffer↔disco esplicito: è lavoro M3 già dichiarato.~~
+      **Fatto** con la
+      [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md):
+      `write_document` prende una `base: Option<Revision>` e rende la revisione
+      **prodotta**, quindi il salvataggio dell'editor è una scrittura *guardata*
+      e non più una sovrascrittura. Le due cose che questa riga non prevedeva e
+      che sono costate di più. La prima: **il ritorno paga quanto la base**.
+      Senza, la guardia varrebbe alla prima battuta e basta — il secondo
+      salvataggio nominerebbe la base d'apertura e fallirebbe contro sé stesso —
+      e per giunta è ciò che riempie il `DraftInfo::base` che la
+      [0088](../decisions/0088-cio-che-non-e-ancora-successo.md) aveva dovuto
+      lasciare `null` un verbale fa. La seconda: **non era additiva**, in
+      nessuna delle due metà, e il ripiego di affiancare una firma nuova è stato
+      scartato perché lascerebbe per sempre due modi di scrivere un documento,
+      di cui uno cieco: si è ritagliata la linea di base, che prima del freeze è
+      l'uscita onesta. Di là dal confine il conflitto **non ha un dialogo**: il
+      buffer sporco resta e aspetta, come una bozza recuperata, e le due vie
+      d'uscita sono comandi della shell senza scorciatoia.
+      Ci è arrivato anche il **residuo del ~~§9.7~~**
       ([decisione 0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md)):
       `write_document` non porta una `base`, quindi il salvataggio dell'editor
       **copre** una scrittura altrui che il watcher non ha visto, e nessuna delle
@@ -280,7 +316,10 @@ decidere per loro.
       mano. Serve un canale che porti alla shell le spec registrate, e la parte di
       `livepreview.ts` che oggi è un elenco di regex diventa un interprete di
       trigger.
-- [ ] **Va con il secondo livello della [§18.1](#181-editor)**, che è la stessa
-      cosa vista dall'editor: «le decorazioni semantiche vengono dal modello»
-      diventa scrivibile solo quando la dichiarazione è condivisa, e a buffer
-      pulito.
+- [ ] **Il secondo livello della ~~§18.1~~ è arrivato qui**, ed è la stessa cosa
+      vista dall'editor: «le decorazioni semantiche vengono dal modello» diventa
+      scrivibile solo quando la dichiarazione è condivisa, e a buffer pulito. Con
+      la [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md) non è più
+      una nota di coordinamento fra due voci: la §18.1 è chiusa, e la sua casella
+      è **questa**. Chi la esegue non deve andare a cercare cosa chiedeva di là —
+      chiedeva un canale che le tre righe qui sopra dichiarano già inesistente.

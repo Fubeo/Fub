@@ -155,7 +155,8 @@ pub trait HostApi:
 pub trait VaultRead: Send + Sync {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
     // il documento intero (chi ce l'ha in mano) …
-    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError>;
+    fn write_document(&mut self, id: &DocId, source: &str, base: Option<Revision>)
+        -> Result<Revision, PluginError>;
     // … e un pezzo solo, sopra la revisione su cui è stato calcolato
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError>;
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError>;
@@ -451,7 +452,7 @@ sequenceDiagram
 | `UndoStack` | [undo.rs:52](../../crates/fub-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
 | `Undo` / `UndoStep` | [command.rs:567](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
 | dove si spinge | [workspace.rs:851](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:4062](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo |
+| `undo_last` | [workspace.rs:4099](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo |
 | `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
 
 Le due pile non si fondono perché non hanno lo stesso soggetto: ordinarle

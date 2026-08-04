@@ -119,8 +119,11 @@ impl ImportProvider for MarkdownImport {
         let writes = matches!(outcome, ImportOutcome::Created | ImportOutcome::Replaced)
             && request.mode == ImportMode::Apply;
         let outcome = if writes {
-            match host.write_document(&doc, text) {
-                Ok(()) => outcome,
+            // Senza base: un importer non sta correggendo un testo che ha
+            // letto, lo sta **dettando** — e una base inventata sarebbe una
+            // guardia che dice sempre di sì (§18.1).
+            match host.write_document(&doc, text, None) {
+                Ok(_) => outcome,
                 // Un rifiuto del recinto o un errore di scrittura riguardano
                 // QUESTO documento: il rapporto lo dice e l'import resta valido.
                 Err(e) => ImportOutcome::Failed(e.to_string()),

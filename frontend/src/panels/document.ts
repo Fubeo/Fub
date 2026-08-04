@@ -46,7 +46,7 @@ import type { PaneMode, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { noteRecentiEsistenti } from "../state/recenti";
 import { emit, on, state } from "../state/store";
-import { cambioSotto, statoDi, type Esito } from "../state/salvataggio";
+import { cambioSotto, esitoDelFallimento, statoDi, type Esito } from "../state/salvataggio";
 import { CHIAVE_CASO, casoDi, daRecuperare } from "../state/bozze";
 import { bozzeNonSalvate } from "../host/query";
 import type { DraftInfo } from "../host/contract";
@@ -142,6 +142,21 @@ interface Buffer {
   /// watcher, che è il caso grave, perché quello non lo consuma mai. Torna a
   /// zero a ogni caricamento del documento.
   echi: number;
+  /// **Da cosa questo testo si è discostato** (§18.1): la revisione che il file
+  /// aveva quando il buffer l'ha preso in mano, o che l'ultimo salvataggio ha
+  /// prodotto.
+  ///
+  /// È ciò che rende il salvataggio una scrittura *guardata* invece che una
+  /// sovrascrittura: viaggia in `writeDocument`, e se il file non è più quello
+  /// il kernel risponde `conflict` senza toccare niente. Prima di questa voce
+  /// il salvataggio dell'editor copriva una scrittura altrui che il watcher non
+  /// aveva visto, e nessuna delle due metà del sistema se ne accorgeva.
+  ///
+  /// Non si calcola di qua e non si potrebbe: la deriva il kernel dallo stesso
+  /// testo che ci consegna. `null` è «non lo so» — una bozza recuperata da una
+  /// sessione che non la sapeva, o un buffer che ha appena scelto di
+  /// sovrascrivere comunque — e vuol dire scrittura cieca, come prima.
+  base: string | null;
   /// Il debounce della **bozza** (§15.2), separato da quello del salvataggio
   /// perché ha un ritmo suo: vedi `scheduleDraft`.
   draftTimer?: number;
@@ -309,6 +324,69 @@ function registraComandi(): void {
     description: "commands.tab.close.desc",
     run: () => void chiudiTabCorrente(),
   });
+  // Le due vie d'uscita da un conflitto (§18.1), e sono comandi e non un
+  // dialogo per la ragione della 0088: la decisione è dell'utente, e un modale
+  // che scatta durante un autosave con debounce la chiede in un momento che
+  // l'utente non ha scelto. Il buffer sporco resta lì e aspetta, come una bozza
+  // recuperata — e chi ha deciso lo dice quando ha deciso.
+  registerShellCommand({
+    id: "shell.doc.conflict.mine",
+    title: "commands.doc.conflict.mine",
+    description: "commands.doc.conflict.mine.desc",
+    run: () => void risolviTenendoIlMio(),
+  });
+  registerShellCommand({
+    id: "shell.doc.conflict.theirs",
+    title: "commands.doc.conflict.theirs",
+    description: "commands.doc.conflict.theirs.desc",
+    run: () => void risolviScartandoIlMio(),
+  });
+}
+
+/// «Vince il mio testo»: si riscrive **senza base**, cioè alla cieca e
+/// apposta.
+///
+/// Azzerare la base e non rileggerla è la differenza fra decidere e indovinare:
+/// rileggere la revisione di adesso e riprovare con quella sarebbe la
+/// sovrascrittura silenziosa di prima con un giro in più, e la guardia non
+/// guarderebbe niente. Qui la sovrascrittura c'è, ed è ciò che l'utente ha
+/// chiesto — dopo che gli è stato detto cosa stava coprendo.
+async function risolviTenendoIlMio(): Promise<void> {
+  const doc = docAttivo();
+  const buf = doc ? buffers.get(doc) : undefined;
+  if (!doc || buf?.esito !== "conflitto") {
+    notify(t("document.conflict_none"), "info");
+    return;
+  }
+  buf.base = null;
+  buf.esito = "in_corso";
+  window.clearTimeout(buf.timer);
+  await saveDoc(doc);
+}
+
+/// «Vince il testo sul disco»: si butta il buffer e si ricarica.
+///
+/// È l'unico gesto di questa voce che **perde** qualcosa, e per questo è l'unico
+/// che non si può innescare da solo: sta nella palette, dove per arrivarci
+/// bisogna averlo scritto — la stessa regola per cui `shell.history.clear` non
+/// ha un accordo.
+async function risolviScartandoIlMio(): Promise<void> {
+  const doc = docAttivo();
+  const buf = doc ? buffers.get(doc) : undefined;
+  if (!doc || buf?.esito !== "conflitto") {
+    notify(t("document.conflict_none"), "info");
+    return;
+  }
+  window.clearTimeout(buf.timer);
+  buf.dirty = false;
+  buf.esito = "ok";
+  // La bozza se ne va con lui: teneva *questo* testo, ed è appena stato
+  // scartato da chi l'aveva scritto. Lasciarla vorrebbe dire riproporlo al
+  // prossimo avvio come se fosse andato perso.
+  await dropDraft(doc);
+  await reloadIfClean(doc);
+  await ridisegnaLettura(doc);
+  disegnaSalvataggio();
 }
 
 /// Divide il riquadro col fuoco e ci porta dentro **lo stesso documento**.
@@ -637,8 +715,8 @@ async function mostra(r: Riquadro, tab: Tab | null): Promise<void> {
 async function leggiBuffer(doc: string): Promise<string> {
   const gia = buffers.get(doc);
   if (gia) return gia.text;
-  const text = await api.readDocument(doc);
-  buffers.set(doc, { text, dirty: false, esito: "ok", echi: 0 });
+  const { text, revision } = await api.readDocument(doc);
+  buffers.set(doc, { text, dirty: false, esito: "ok", echi: 0, base: revision });
   return text;
 }
 
@@ -699,7 +777,11 @@ export async function recuperaBozze(): Promise<number> {
     // Solo se nessuno tiene già quel buffer: chi ha già aperto quella nota in
     // questa sessione ha un testo più recente di ciò che stava sul disco.
     if (buffers.has(b.doc)) continue;
-    buffers.set(b.doc, { text: b.text, dirty: true, esito: "ok", echi: 0 });
+    // `b.base` è la revisione da cui quel testo si era discostato, e da questa
+    // voce non è più `null` per forza: chi ha scritto la bozza la sapeva
+    // (§18.1). Una bozza vecchia, scritta da una sessione che non la sapeva,
+    // entra con `null` e riparte cieca — che è ciò che era prima per tutti.
+    buffers.set(b.doc, { text: b.text, dirty: true, esito: "ok", echi: 0, base: b.base });
     notify(`${b.doc}: ${t(CHIAVE_CASO[casoDi(b)])}`, "info");
   }
   return bozze.length;
@@ -788,7 +870,7 @@ export async function openWikilink(
 function scritto(paneId: string, text: string): void {
   const doc = docAttivo(paneId);
   if (!doc) return;
-  const buf = buffers.get(doc) ?? { text, dirty: false, esito: "ok" as Esito, echi: 0 };
+  const buf = buffers.get(doc) ?? { text, dirty: false, esito: "ok" as Esito, echi: 0, base: null };
   buf.text = text;
   buf.dirty = true;
   buffers.set(doc, buf);
@@ -841,7 +923,12 @@ async function writeDraft(doc: string): Promise<void> {
   const buf = buffers.get(doc);
   if (!buf?.dirty) return;
   try {
-    await api.saveDraft(doc, buf.text);
+    // La base c'è davvero, da questa voce: la 0088 aveva dovuto lasciarla a
+    // `null` perché la shell non aveva modo di dire da cosa il buffer si fosse
+    // discostato — e ricalcolarla di qua sarebbe stata una seconda
+    // implementazione dell'impronta, cioè una seconda verità. Adesso la porta
+    // il documento quando lo si apre.
+    await api.saveDraft(doc, buf.text, buf.base);
   } catch {
     // Volutamente muto: vedi sopra.
   }
@@ -888,6 +975,7 @@ const CHIAVE_STATO = {
   in_corso: "save.saving",
   non_salvato: "save.unsaved",
   fallito: "save.failed",
+  conflitto: "save.conflitto",
 } as const;
 
 function scheduleSave(doc: string): void {
@@ -958,9 +1046,28 @@ async function saveDoc(doc: string): Promise<void> {
   const text = buf.text;
   buf.esito = "in_corso";
   disegnaSalvataggio();
+  let prodotta: string;
   try {
-    await api.writeDocument(doc, text);
+    // La base viaggia con la scrittura: se il file non è più quello da cui
+    // questo buffer è partito, il kernel risponde `conflict` e **non scrive
+    // niente** (§18.1).
+    prodotta = await api.writeDocument(doc, text, buf.base);
   } catch (e) {
+    // Un conflitto non è un disco pieno, ed è la ragione per cui questo ramo è
+    // suo (0041 ha reso la specie interrogabile proprio per poterlo fare). Il
+    // secondo si riprova — e la battuta dopo ci riprova da sola. Il primo no:
+    // riprovare è la sovrascrittura che la guardia ha appena impedito, e ciò
+    // che manca non è un tentativo ma una decisione, che è dell'utente.
+    if (esitoDelFallimento(e) === "conflitto") {
+      buf.esito = "conflitto";
+      notify(t("document.save_conflict", { doc }), "guasto");
+      // Come per il fallimento: il testo è solo in RAM finché la decisione non
+      // è presa, e la rete si stende adesso invece che al debounce.
+      window.clearTimeout(buf.draftTimer);
+      void writeDraft(doc);
+      disegnaSalvataggio();
+      return;
+    }
     buf.esito = "fallito";
     notify(t("document.save_failed", { doc, reason: errorText(e) }), "guasto");
     // **Qui la bozza conta più che altrove**, ed è il caso per cui esiste: il
@@ -974,6 +1081,11 @@ async function saveDoc(doc: string): Promise<void> {
     return;
   }
   buf.esito = "ok";
+  // Il disco adesso è questo testo: la scrittura dopo riparte da qui. È ciò che
+  // rende la guardia una catena invece di un controllo alla prima battuta —
+  // senza, il secondo salvataggio nominerebbe una base ormai vecchia e
+  // fallirebbe contro sé stesso.
+  buf.base = prodotta;
   // La scrittura è arrivata sul disco: il `document_changed` che ne segue è
   // nostro, e chi lo riceve non deve raccontarlo come se fosse di qualcun altro.
   buf.echi += 1;
@@ -1051,10 +1163,16 @@ function avvisaSeIlBufferCopre(id: string, daFuori: boolean): void {
 async function reloadIfClean(id: string): Promise<void> {
   const buf = buffers.get(id);
   if (buf?.dirty) return;
-  const source = await api.readDocument(id);
+  const { text: source, revision } = await api.readDocument(id);
   const attuale = buffers.get(id);
+  if (!attuale || attuale.dirty) return;
+  // La base segue il testo, e si aggiorna **prima** dell'uscita anticipata: un
+  // buffer pulito il cui testo coincide già col disco non ha niente da
+  // ricaricare, ma può benissimo non sapere da cosa discende — ed è il caso di
+  // chi ha appena scelto di sovrascrivere comunque.
+  attuale.base = revision;
   // Evita il reset del cursore quando l'evento è l'eco del nostro salvataggio.
-  if (!attuale || attuale.dirty || attuale.text === source) return;
+  if (attuale.text === source) return;
   attuale.text = source;
   for (const paneId of paneConDoc(id)) {
     const r = riquadri.get(paneId);

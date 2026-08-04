@@ -1851,32 +1851,69 @@ impl Workspace {
 
     /// Scrive la sorgente, riparsa il documento, aggiorna il grafo ed emette
     /// gli eventi. Il grafo si aggiorna per-documento ([`GraphUpdate`]).
-    pub fn write_document(&mut self, id: &DocId, source: &str) -> Result<()> {
+    pub fn write_document(&mut self, id: &DocId, source: &str) -> Result<Revision> {
+        self.write_document_from(id, source, None)
+    }
+
+    /// La stessa scrittura, ma dicendo **da cosa si è partiti** (§18.1).
+    ///
+    /// `base` è la revisione che chi scrive si aspetta di trovare sul disco. Se
+    /// c'è e non combacia si risponde [`KernelError::Stale`] e non si tocca
+    /// niente: è la guardia che `apply_edit` ha dalla
+    /// [0008](../../../docs/decisions/0008-modifica-chirurgica.md) e che questa
+    /// metà non aveva, cioè il buco per cui il salvataggio dell'editor
+    /// **copriva** una scrittura altrui che il watcher non aveva visto.
+    ///
+    /// Il confronto è col **disco** e non con l'anagrafe, per la ragione di
+    /// [`document_revision`](Workspace::document_revision): la verità di un
+    /// documento è il file, e una guardia che si fidasse di una cache
+    /// direbbe di sì proprio nel caso in cui la cache è indietro — che è
+    /// esattamente il caso che deve prendere. La lettura in più si paga **solo**
+    /// quando qualcuno la chiede: senza `base` questa funzione legge dalla
+    /// memoria come prima, perché una riga di registro non vale una lettura a
+    /// ogni salvataggio (§15.2).
+    pub fn write_document_from(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: Option<Revision>,
+    ) -> Result<Revision> {
         // Cosa si sapeva **prima**: l'impronta che l'anagrafe teneva, e se il
-        // documento esistesse affatto. Si prendono da ciò che è già in memoria e
-        // non rileggendo il file — una riga di registro non vale una lettura in
-        // più a ogni salvataggio (§15.2).
+        // documento esistesse affatto.
         let esisteva = self.indexes.core.metas.contains_key(id);
-        let from = self
-            .indexes
-            .core
-            .entries
-            .get(id)
-            .and_then(|e| e.fingerprint.clone());
+        let from = match base {
+            Some(attesa) => {
+                // `ok()` e non `?`: un file che non c'è non è un errore di
+                // lettura da propagare, è una base che non combacia — chi
+                // scrive credeva di riscrivere qualcosa che nel frattempo è
+                // stato cestinato, e ha diritto alla stessa risposta.
+                let adesso = self.docs.vault.read(id).ok().map(|s| Revision::of(&s));
+                if adesso.as_ref() != Some(&attesa) {
+                    return Err(KernelError::Stale(id.to_string()));
+                }
+                adesso
+            }
+            None => self
+                .indexes
+                .core
+                .entries
+                .get(id)
+                .and_then(|e| e.fingerprint.clone()),
+        };
         let to = self.write_source(id, source)?;
         self.record(if esisteva {
             JournalOp::Written {
                 doc: id.clone(),
                 from,
-                to,
+                to: to.clone(),
             }
         } else {
             JournalOp::Created {
                 doc: id.clone(),
-                to,
+                to: to.clone(),
             }
         });
-        Ok(())
+        Ok(to)
     }
 
     /// Il corpo di una scrittura, **senza la riga di registro**: parse, disco,

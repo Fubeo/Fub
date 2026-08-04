@@ -409,12 +409,30 @@ impl VaultRead for MemoryHost {
 }
 
 impl VaultWrite for MemoryHost {
-    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.docs
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), source.as_bytes().to_vec());
-        Ok(())
+    /// La scrittura intera come la fa l'host vero, **guardia compresa**: se chi
+    /// scrive dice da cosa era partito e il testo non è più quello, `Conflict` e
+    /// non si scrive niente. Vale qui la ragione scritta sotto per `apply_edit`
+    /// — un doppio che accettasse qualunque base non proverebbe niente proprio
+    /// della cosa che questa firma esiste per rendere impossibile.
+    fn write_document(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
+        let mut docs = self.docs.lock().unwrap();
+        if let Some(attesa) = base {
+            let adesso = docs
+                .get(id.as_str())
+                .map(|b| Revision::of(&String::from_utf8_lossy(b)));
+            if adesso.as_ref() != Some(&attesa) {
+                return Err(PluginError::Conflict(
+                    format!("`{id}` è cambiato da sotto").into(),
+                ));
+            }
+        }
+        docs.insert(id.to_string(), source.as_bytes().to_vec());
+        Ok(Revision::of(source))
     }
 
     /// La modifica chirurgica come la fa l'host vero: la base si verifica, gli
@@ -428,7 +446,7 @@ impl VaultWrite for MemoryHost {
         if report.is_empty() {
             return Ok(report);
         }
-        self.write_document(id, &next)?;
+        self.write_document(id, &next, None)?;
         Ok(report)
     }
 }
@@ -438,7 +456,7 @@ impl VaultStructure for MemoryHost {
         if self.docs.lock().unwrap().contains_key(id.as_str()) {
             return Err(PluginError::BadArgs(format!("{id} esiste già").into()));
         }
-        self.write_document(id, source)
+        self.write_document(id, source, None).map(|_| ())
     }
 
     /// Sposta il sorgente e basta: questo doppio non ha un grafo, quindi non

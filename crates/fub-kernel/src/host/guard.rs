@@ -415,9 +415,14 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
 }
 
 impl<H: VaultWrite, P: Policy> VaultWrite for Guard<H, P> {
-    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
+    fn write_document(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
         self.check(Capability::VaultWrite, || format!("scrivere `{id}`"))?;
-        self.inner.write_document(id, source)
+        self.inner.write_document(id, source, base)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {

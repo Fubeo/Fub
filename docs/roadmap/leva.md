@@ -408,3 +408,25 @@ manca può non essere scritto nella voce. È la stessa lezione della
 [0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md), arrivata da
 una seduta diversa a un turno di distanza: due volte di fila, quindi non un
 caso.
+
+E la **sesta** è la §18.1, con la
+[0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md), presa come P1 più
+grossa fra le rimaste e con un criterio che le cinque prima non avevano: **due
+caselle che si pagano una volta sola**. Dare una base a `write_document` chiude
+un difetto vecchio — il salvataggio dell'editor copriva una scrittura altrui che
+il watcher non aveva visto — *e* rende calcolabile la base delle bozze, che la
+0088 aveva dovuto lasciare a «non lo so» un turno prima, per iscritto, perché
+ricalcolarla di là dal confine sarebbe stata una seconda verità. Il secondo
+effetto non era ottenibile lavorando sulla 0088: quel verbale l'aveva già
+guardato e aveva potuto solo scriverne il limite. Una voce che **sblocca il
+residuo dichiarato di quella prima** vale più della somma delle due, e la somma
+è ciò che una tabella di priorità sa vedere.
+
+E la rimisurazione è arrivata per la **terza** volta di fila, con un modo nuovo:
+la 0087 e la 0088 avevano trovato che ciò che la voce aspettava era **caduto**;
+qui ciò che la voce chiedeva era stato **deciso di no** — la prima casella
+nominava un canale verso la webview che la
+[0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha stabilito che non ci
+sarà. È una specie diversa di obsolescenza e si trova solo nello stesso modo:
+rileggendo la voce contro i verbali venuti dopo di lei. Una voce è sempre più
+vecchia del verbale che la contraddice, e non ha modo di saperlo da sé.

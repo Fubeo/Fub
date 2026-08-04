@@ -35,7 +35,16 @@ chiude con loro e non lascia niente indietro.
       superficie plugin di M5 — con i nodi `Tree`/`Custom`, che dalla
       [decisione 0016](../decisions/0016-cosa-e-una-view.md) esistono, la scelta
       cambia natura.
-- [ ] **"Tre copie" custodite da un flag TS**: merge esplicito a M3 (§18.1).
+- [x] ~~**"Tre copie" custodite da un flag TS**: merge esplicito a M3 (§18.1).~~
+      **Chiuso** con la
+      [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md), e non nel modo
+      che questa riga si aspettava. Le tre copie non si sono **fuse**: il flag TS
+      (`dirty`) resta dov'era, perché dice una cosa vera che nessun altro dice —
+      *c'è qualcosa da scrivere*. Ciò che è cambiato è che la **correttezza** non
+      dipende più da lui: la guardia è nel kernel, che confronta col disco e
+      risponde `Conflict`, e un flag della shell non la può ingannare. Un merge
+      esplicito fra le tre copie sarebbe stato il modo lungo per ottenere ciò che
+      si ottiene togliendo a una delle tre il compito di avere ragione.
 
 **Due voci sono state tolte da qui, e per due ragioni diverse.**
 

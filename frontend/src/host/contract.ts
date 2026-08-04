@@ -745,6 +745,21 @@ export interface Locale {
 /// aperto questa shell.
 export const MAIN_PANE = "main";
 
+// Il sorgente di un documento **e la revisione che lo nomina** (§18.1):
+// rispecchia `fub_app::DocumentSource`.
+//
+// Due campi e non uno perché chi apre un documento è chi lo salverà, e per
+// salvarlo in sicurezza deve poter dire da cosa era partito. Viaggiano insieme
+// e non in due porte per la ragione per cui la revisione è opaca: l'alternativa
+// a riceverla è ricalcolarla di qua, cioè una seconda implementazione di come
+// il kernel deriva le impronte — ed è esattamente ciò che ha costretto la
+// [0088](../../../docs/decisions/0088-cio-che-non-e-ancora-successo.md) a
+// lasciare `DraftInfo.base` a `null`.
+export interface DocumentSource {
+  text: string;
+  revision: string;
+}
+
 // Un documento **reso**: l'HTML, e le parti dichiarative che la shell monta da
 // sé (rispecchia `fub_kernel::RenderedDocument`).
 //

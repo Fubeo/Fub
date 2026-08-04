@@ -89,7 +89,7 @@ impl ViewProvider for WritingView {
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
         self.0.lock().unwrap().push("on_action:inizio".into());
-        host.write_document(&DocId::new("nota.md"), "scritto dal provider")?;
+        host.write_document(&DocId::new("nota.md"), "scritto dal provider", None)?;
         self.0.lock().unwrap().push("on_action:fine".into());
         Ok(ViewUpdate::None)
     }
@@ -152,7 +152,7 @@ fn events_emitted_through_with_host_are_delivered_after_the_closure_returns() {
         .expect("registrato");
 
     ws.with_host("prova.plugin", |host| {
-        host.write_document(&DocId::new("altra.md"), "via with_host")
+        host.write_document(&DocId::new("altra.md"), "via with_host", None)
             .unwrap();
         assert!(
             log.lock().unwrap().is_empty(),

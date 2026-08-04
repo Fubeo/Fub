@@ -116,7 +116,12 @@ impl VaultRead for KernelHost<'_> {
 }
 
 impl VaultWrite for KernelHost<'_> {
-    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
+    fn write_document(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
         // Il recinto del vault, sul confine dei plugin e in un punto solo. Fino
         // alla decisione 0006 l'unico input esterno che diventava un `DocId` arrivava dai
         // comandi IPC, che lo sanitizzano; un `ImportProvider` invece nomina i
@@ -126,7 +131,7 @@ impl VaultWrite for KernelHost<'_> {
         // scrittura fuori dal vault.
         let id = fenced_doc_id(id)?;
         self.ws
-            .write_document(&id, source)
+            .write_document_from(&id, source, base)
             .map_err(PluginError::from)
     }
 

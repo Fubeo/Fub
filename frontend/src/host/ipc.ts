@@ -11,6 +11,7 @@ import type {
   BundleInfo,
   CommandOutcome,
   CommandSpec,
+  DocumentSource,
   EmbedContent,
   FieldValue,
   IndexQuery,
@@ -35,9 +36,21 @@ export const api = {
   // `string[]`, senza finestra e senza saper dire *quale cartella*. Chi vuole
   // l'elenco lo chiede dal canale dati (`vociDelVault`, `contenutoDiCartella`),
   // che è la stessa porta da cui lo chiederebbe un plugin.
-  readDocument: (id: string) => invoke<string>("read_document", { id }),
-  writeDocument: (id: string, source: string) =>
-    invoke<void>("write_document", { id, source }),
+  //
+  // Il sorgente **e la revisione che lo nomina** (§18.1). Due campi in una
+  // porta sola e non due chiamate: chi apre un documento è chi lo salverà, e
+  // per salvarlo in sicurezza deve poter dire da cosa era partito. Che la
+  // revisione arrivi da qui invece di essere ricalcolata di qua è la stessa
+  // regola per cui è opaca — due implementazioni della stessa impronta sono due
+  // verità, e la seconda mente in silenzio.
+  readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
+  // `base` è la revisione che il buffer si aspetta di trovare sul disco:
+  // `null` = «scrivi comunque», una revisione = «scrivi solo se il file è
+  // ancora quello». Un `PluginError` di specie `conflict` vuol dire che non lo
+  // era e che **non è stato scritto niente**. Torna la revisione prodotta, cioè
+  // la base della scrittura dopo.
+  writeDocument: (id: string, source: string, base: string | null = null) =>
+    invoke<string>("write_document", { id, source, base }),
   // Il **buffer di crash** (§15.2): ciò che è nell'editor e non è ancora sul
   // disco. Due porte e non due comandi del registro, ed è l'unica coppia di
   // questo file la cui capacità mancante è voluta per sempre: il testo non
