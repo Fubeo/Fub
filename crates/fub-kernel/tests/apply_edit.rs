@@ -20,6 +20,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
@@ -124,7 +125,7 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
 fn con_nota(dir: &Utf8PathBuf, source: &str) -> (Workspace, DocId, Revision) {
     let mut ws = workspace(dir);
     let id = DocId::new("nota.lnk");
-    ws.write_document(&id, source).unwrap();
+    ws.write_document(&id, source, WriteBase::Dictated).unwrap();
     let base = ws.document_revision(&id).unwrap();
     (ws, id, base)
 }
@@ -179,7 +180,8 @@ fn a_stale_base_writes_nothing() {
 
     // Qualcun altro scrive fra il calcolo e l'applicazione: è il caso vero —
     // l'utente che digita mentre un'automazione lavora.
-    ws.write_document(&id, "Alfa\nBeta\nGamma").unwrap();
+    ws.write_document(&id, "Alfa\nBeta\nGamma", WriteBase::Dictated)
+        .unwrap();
 
     let err = ws
         .apply_edit(
@@ -216,8 +218,9 @@ fn a_revision_is_content_so_a_round_trip_of_the_text_keeps_it_valid() {
     // Scritto e disfatto: il documento è di nuovo quello su cui l'edit è stato
     // calcolato, e l'edit vale ancora. Un contatore avrebbe fatto ricalcolare
     // per un cambiamento che non c'è.
-    ws.write_document(&id, "Alfa modificata").unwrap();
-    ws.write_document(&id, "Alfa").unwrap();
+    ws.write_document(&id, "Alfa modificata", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&id, "Alfa", WriteBase::Dictated).unwrap();
 
     ws.apply_edit(
         &id,
@@ -294,9 +297,12 @@ fn a_surgical_edit_goes_through_the_whole_write_path() {
     let dir = TempDir::new("coda");
     let mut ws = workspace(&dir.0);
     let a = DocId::new("a.lnk");
-    ws.write_document(&DocId::new("Vecchia.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("Nuova.lnk"), "").unwrap();
-    ws.write_document(&a, "Vecchia").unwrap();
+    ws.write_document(&DocId::new("Vecchia.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("Nuova.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&a, "Vecchia", WriteBase::Dictated)
+        .unwrap();
     assert_eq!(ws.backlinks(&DocId::new("Vecchia.lnk")).len(), 1);
 
     let rx = ws.bus().subscribe();
@@ -467,7 +473,7 @@ fn a_provider_patches_a_document_through_the_host_api() {
     .expect("registrato");
 
     let id = DocId::new("nota.lnk");
-    ws.write_document(&id, "Alfa\nTOODO: sistemare\nBeta")
+    ws.write_document(&id, "Alfa\nTOODO: sistemare\nBeta", WriteBase::Dictated)
         .unwrap();
 
     assert_eq!(
@@ -510,7 +516,7 @@ impl EventHandler for ScriveAltrove {
         if source.contains("Aggiunta") {
             return Ok(());
         }
-        host.write_document(&b, &format!("{source}\nAggiunta"), None)
+        host.write_document(&b, &format!("{source}\nAggiunta"), WriteBase::Dictated)
             .map(|_| ())
     }
 }
@@ -536,9 +542,12 @@ impl EventHandler for ScriveAltrove {
 fn a_rename_and_a_neighbour_write_no_longer_race_because_the_batch_defers_the_dispatch() {
     let dir = TempDir::new("rename-vicino");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Vecchia.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "Vecchia").unwrap();
-    ws.write_document(&DocId::new("b.lnk"), "Vecchia").unwrap();
+    ws.write_document(&DocId::new("Vecchia.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "Vecchia", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("b.lnk"), "Vecchia", WriteBase::Dictated)
+        .unwrap();
     ws.register_event_handler("test.vicino", Box::new(ScriveAltrove))
         .expect("registrato");
 
@@ -563,7 +572,8 @@ fn a_rename_and_a_neighbour_write_no_longer_race_because_the_batch_defers_the_di
 fn a_stale_base_from_a_provider_is_a_conflict_not_an_internal_error() {
     let dir = TempDir::new("conflitto-plugin");
     let (mut ws, id, base) = con_nota(&dir.0, "Alfa");
-    ws.write_document(&id, "Alfa cambiata").unwrap();
+    ws.write_document(&id, "Alfa cambiata", WriteBase::Dictated)
+        .unwrap();
 
     let err = ws
         .with_host("test.plugin", |host| {

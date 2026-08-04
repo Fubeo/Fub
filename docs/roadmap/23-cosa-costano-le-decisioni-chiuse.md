@@ -199,16 +199,19 @@ che dopo M4 costa una major. È anche l'unica voce di questa seduta il cui costo
 non cresce di poco per volta: cresce **tutto in una volta**, il giorno del
 freeze.
 
-**Le altre due P0 le porta il terzo giro, e hanno la stessa forma della §23.4** —
-non l'importanza, il **tipo**. La [§23.11](#2311-la-base-di-una-scrittura-è-facoltativa-e-la-passa-un-chiamante-solo)
-vorrebbe che `base` smettesse di essere `Option`, e la
+**Le altre due P0 le ha portate il terzo giro, e hanno la stessa forma della
+§23.4** — non l'importanza, il **tipo**. La §23.11 voleva che `base` smettesse di
+essere `Option`, e la
 [§23.12](#2312-un-troncamento-che-il-chiamante-non-può-vedere) che `random-bytes`
-smettesse di restituire una lista nuda: in tutti e tre i casi ciò che cambia è il
+smetta di restituire una lista nuda: in tutti e tre i casi ciò che cambia è il
 tipo di qualcosa di già pubblicato, cioè la riga che
-[`wit_additivity`](../architecture/wit-congelato.md) fa diventare rossa. Che siano
-tre su sedici, e che le altre tredici non lo siano nemmeno parlando di privacy e
-di dati persi, è la prova che il criterio ha retto anche a un giro fatto con una
-lente — qualità, libertà, privacy — che spinge in direzione opposta.
+[`wit_additivity`](../architecture/wit-congelato.md) fa diventare rossa. Che
+fossero tre su sedici, e che le altre tredici non lo siano nemmeno parlando di
+privacy e di dati persi, è la prova che il criterio ha retto anche a un giro
+fatto con una lente — qualità, libertà, privacy — che spinge in direzione
+opposta. La §23.11 è **chiusa** dalla
+[0092](../decisions/0092-una-base-si-dichiara.md), e ne restano due: la scadenza
+non è cambiata, è cambiato quanto ci sta dentro.
 
 **E una ha una scadenza che non è il freeze**, il che non la rende P0 ma le dà un
 **ordine**: la §23.5 va decisa prima della §23.3. Finché non c'è rete, un plugin
@@ -420,7 +423,7 @@ di un campo non è meno di aggiungerne uno, è di più — un provider che ricev
 campo nuovo lo ignora e continua a compilare, un provider che riceve `list` dove
 leggeva un valore **non compila**, e uno compilato a wasm legge byte che non sono
 più quelli. È esattamente ciò che
-[`wit_additivity`](../architecture/wit-congelato.md) elenca fra le diciannove
+[`wit_additivity`](../architecture/wit-congelato.md) elenca fra le venti
 rotture che deve far diventare rosse (*campo ritipato*), e sarà rosso.
 
 - [ ] **La forma, e non è solo «metterci una lista».** Una selezione primaria
@@ -744,7 +747,7 @@ manifest.
 
 ### 23.11 La base di una scrittura è facoltativa, e la passa un chiamante solo
 
-*contratto · **P0** — `base: Option<Revision>` è già pubblicata: renderla obbligatoria è ritipare un parametro, cioè una migrazione*
+*chiusa dalla [0092](../decisions/0092-una-base-si-dichiara.md) — `base` diventa un `WriteBase` a due casi nominati: scrivere ciechi resta possibile e smette di essere ciò che succede omettendo · secondo ritaglio sulla stessa firma in tre commit, e sta scritto*
 
 La [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md) ha aggiunto a
 `write_document` il parametro che mancava, e l'argomento per cui è `Option` è
@@ -767,7 +770,7 @@ qualcun altro sparisce senza che nessuno dei due meccanismi possa accorgersene.
 La 0030 lo nominava come residuo e lo rimandava al §18.1; la 0089 ha costruito
 l'attrezzo e l'ha lasciato facoltativo.
 
-- [ ] **Obbligatoria, con un modo esplicito di dire «da niente».** La forma che
+- [x] **Obbligatoria, con un modo esplicito di dire «da niente».** La forma che
       chiude la voce non è togliere l'`Option`: è renderla un'**enum** con due
       casi nominati — «discende da questa revisione» e «detta, e la sovrascrittura
       è voluta» — così che scrivere ciechi resti possibile e diventi una cosa che
@@ -775,19 +778,19 @@ l'attrezzo e l'ha lasciato facoltativo.
       [0007](../decisions/0007-contesto-di-sessione.md) scrive per lo span: «un
       flag che chiunque può dimenticare di leggere protegge meno di un campo che,
       quando non è vero, non c'è».
-- [ ] **I chiamanti interni vanno passati uno per uno**, e non tutti hanno la
+- [x] **I chiamanti interni vanno passati uno per uno**, e non tutti hanno la
       stessa risposta: il versioning che ripristina una versione **detta** davvero,
       l'import pure; `session.rs` e `workspace.rs` che salvano per conto della
       shell no. La distinzione esiste già nel verbale, non è mai stata applicata al
       codice.
-- [ ] **Perché è P0.** `Option<Revision>` → un tipo con due casi è un **parametro
+- [x] **Perché è P0.** `Option<Revision>` → un tipo con due casi è un **parametro
       ritipato**, che è fra le diciannove rotture che
       [`wit_additivity`](../architecture/wit-congelato.md) fa diventare rosse. Dopo
       M4 costa una major, e la via additiva — un secondo metodo accanto — è la
       trappola delle due firme per la stessa domanda che la 0007 descrive e la
       [§23.4](#234-selection-ne-porta-una-sola-e-il-tipo-di-un-campo-non-è-additivo)
       ripete. **Oggi costa un tipo.**
-- [ ] **Chi lo chiede.** FEATURES 3.1 (share di rete), 2.3 (modifiche esterne),
+- [x] **Chi lo chiede.** FEATURES 3.1 (share di rete), 2.3 (modifiche esterne),
       18.1 (sync). La stessa famiglia della §23.1, e per la stessa ragione: sono
       le voci in cui il vault non è di Fub soltanto.
 
@@ -921,9 +924,11 @@ metà**, e oggi ha solo due parole, riuscito e fallito.
 - [ ] **Perché non è P0.** Un campo in più su un record è la migrazione che la
       0007 descrive, ma qui la strada del `Trouble` accanto all'esito non tocca
       nessuna firma esistente: è una variante già additiva su un canale che c'è. La
-      scadenza è semmai la §23.11, con cui condivide il verso — un chiamante che
-      non sa di aver fatto metà lavoro e uno che non sa di aver sovrascritto sono
-      lo stesso silenzio.
+      scadenza era semmai quella della §23.11, con cui condivide il verso — un
+      chiamante che non sa di aver fatto metà lavoro e uno che non sapeva di aver
+      sovrascritto sono lo stesso silenzio. Quella metà l'ha chiusa la
+      [0092](../decisions/0092-una-base-si-dichiara.md), e il modo in cui l'ha
+      chiusa vale anche qui: non si toglie il caso silenzioso, gli si dà un nome.
 
 ### 23.15 La rete che regge i panici non ha un presidio, ha una nota
 

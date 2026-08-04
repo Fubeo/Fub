@@ -23,7 +23,7 @@ use std::sync::Mutex;
 pub mod conformita;
 
 use fub_abi::command::CommandOutcome;
-use fub_abi::edit::{EditReport, EditRequest, Revision};
+use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::event::Event;
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
@@ -418,10 +418,10 @@ impl VaultWrite for MemoryHost {
         &mut self,
         id: &DocId,
         source: &str,
-        base: Option<Revision>,
+        base: WriteBase,
     ) -> Result<Revision, PluginError> {
         let mut docs = self.docs.lock().unwrap();
-        if let Some(attesa) = base {
+        if let WriteBase::DescendsFrom(attesa) = base {
             let adesso = docs
                 .get(id.as_str())
                 .map(|b| Revision::of(&String::from_utf8_lossy(b)));
@@ -446,7 +446,10 @@ impl VaultWrite for MemoryHost {
         if report.is_empty() {
             return Ok(report);
         }
-        self.write_document(id, &next, None)?;
+        // La base è quella appena letta, e dirlo qui non è cerimonia: questo
+        // doppio *discende* dal sorgente su cui ha calcolato gli edit, e un
+        // `Dictated` direbbe il falso in una firma che esiste per non farlo.
+        self.write_document(id, &next, WriteBase::DescendsFrom(Revision::of(&source)))?;
         Ok(report)
     }
 }
@@ -456,7 +459,10 @@ impl VaultStructure for MemoryHost {
         if self.docs.lock().unwrap().contains_key(id.as_str()) {
             return Err(PluginError::BadArgs(format!("{id} esiste già").into()));
         }
-        self.write_document(id, source, None).map(|_| ())
+        // Il nome è libero — la riga sopra l'ha appena verificato — quindi non
+        // c'è nessuna revisione da cui discendere.
+        self.write_document(id, source, WriteBase::Dictated)
+            .map(|_| ())
     }
 
     /// Sposta il sorgente e basta: questo doppio non ha un grafo, quindi non

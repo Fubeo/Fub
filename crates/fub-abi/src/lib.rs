@@ -73,7 +73,7 @@ pub use custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
     SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
-pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
+pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit, WriteBase};
 pub use error::{FormatError, PluginError};
 pub use event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Severity, Subject};
 pub use format::{

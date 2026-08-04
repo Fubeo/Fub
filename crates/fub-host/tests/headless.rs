@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::edit::WriteBase;
 use fub_abi::event::EventKind;
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
@@ -205,7 +206,8 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     {
         let ws = host.workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
-        ws.write_document(&id, "# Nota\n\ndopo\n").expect("scrive");
+        ws.write_document(&id, "# Nota\n\ndopo\n", WriteBase::Dictated)
+            .expect("scrive");
     }
 
     let after = host.list_versions(None, &id).expect("versioning acceso");
@@ -306,7 +308,7 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     {
         let ws = host.workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
-        ws.write_document(&DocId::new("Nota.md"), "# Nota\n\nx\n")
+        ws.write_document(&DocId::new("Nota.md"), "# Nota\n\nx\n", WriteBase::Dictated)
             .expect("scrive");
     }
 
@@ -453,7 +455,7 @@ fn chiudere_un_vault_e_lultimo_giro_in_cui_e_ancora_aperto() {
         .unwrap()
         .write()
         .unwrap()
-        .write_document(&DocId::new("Nuova.md"), "# Nuova\n")
+        .write_document(&DocId::new("Nuova.md"), "# Nuova\n", WriteBase::Dictated)
         .expect("scrittura");
     assert!(
         !manifest_dell_indice(&v.root).contains("Nuova.md"),

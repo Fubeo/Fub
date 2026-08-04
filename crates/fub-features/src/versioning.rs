@@ -77,6 +77,7 @@ use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     InvokeMode, ParamKind, ParamSpec,
 };
+use fub_abi::edit::WriteBase;
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::DocId;
 use fub_abi::session::ContextMask;
@@ -1405,7 +1406,13 @@ impl CommandProvider for VersioningCommands {
         // niente se il file era già uguale.
         let prima = versions_of(host, &doc).first().map(|v| v.ts);
         let source = version_source(host, &doc, ts)?;
-        host.write_document(&doc, &source, None)?;
+        // **Detta**, e qui la parola è precisa: un ripristino non discende dal
+        // testo che c'è adesso — lo sostituisce apposta, ed è il gesto con cui
+        // l'utente dice che quello di adesso non gli va bene. Guardarlo con la
+        // revisione corrente vorrebbe dire rifiutare il ripristino ogni volta
+        // che c'è qualcosa da ripristinare, cioè sempre. Ciò che si copre non
+        // è perduto: il dedup (D6) ne fotografa una versione prima.
+        host.write_document(&doc, &source, WriteBase::Dictated)?;
 
         let esito = CommandOutcome::notify(quando_dove(DONE_RESTORE, ts));
         Ok(match prima {
@@ -1887,7 +1894,8 @@ mod tests {
         let mut handler = VersioningHandler::new(store.clone());
 
         // Il contenuto cambia e il `DocumentChanged` va perso.
-        host.write_document(&id("a.md"), "seconda", None).unwrap();
+        host.write_document(&id("a.md"), "seconda", WriteBase::Dictated)
+            .unwrap();
         host.avanza(1_000);
         handler
             .handle(&Notice::of(Event::Overflow { dropped: 2 }), &mut host)

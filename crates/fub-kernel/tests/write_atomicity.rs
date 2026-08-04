@@ -3,6 +3,7 @@
 //! il disco avanti rispetto a modelli/grafo/indici — né un file nuovo, né una
 //! sovrascrittura, con il chiamante che riceve `Err` pur avendo scritto.
 
+use fub_abi::edit::WriteBase;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -63,7 +64,7 @@ fn a_failed_parse_writes_nothing_to_disk() {
     let mut ws = vault();
     let root = ws.root().to_path_buf();
 
-    let err = ws.write_document(&DocId::new("nuova.fal"), "BOOM");
+    let err = ws.write_document(&DocId::new("nuova.fal"), "BOOM", WriteBase::Dictated);
     assert!(
         err.is_err(),
         "il parse rifiutato deve arrivare al chiamante"
@@ -79,11 +80,15 @@ fn a_failed_parse_writes_nothing_to_disk() {
 #[test]
 fn a_failed_overwrite_leaves_the_old_content_everywhere() {
     let mut ws = vault();
-    ws.write_document(&DocId::new("nota.fal"), "prima versione")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("nota.fal"),
+        "prima versione",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     assert!(ws
-        .write_document(&DocId::new("nota.fal"), "seconda BOOM")
+        .write_document(&DocId::new("nota.fal"), "seconda BOOM", WriteBase::Dictated)
         .is_err());
 
     // Disco e stato del workspace raccontano la stessa storia: quella

@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use fub_abi::command::CommandOutcome;
-use fub_abi::edit::{EditReport, EditRequest, Revision};
+use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel};
@@ -419,7 +419,7 @@ impl<H: VaultWrite, P: Policy> VaultWrite for Guard<H, P> {
         &mut self,
         id: &DocId,
         source: &str,
-        base: Option<Revision>,
+        base: WriteBase,
     ) -> Result<Revision, PluginError> {
         self.check(Capability::VaultWrite, || format!("scrivere `{id}`"))?;
         self.inner.write_document(id, source, base)

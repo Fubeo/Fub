@@ -10,6 +10,7 @@
 //! motivo per cui `Selection` porta il testo e non solo lo span.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::session::{PaneMode, Selection, ViewContext};
 use fub_abi::traits::ViewInstance;
@@ -72,7 +73,7 @@ fn the_selection_text_survives_a_dirty_buffer_where_a_span_would_not() {
     let vault = Vault::new();
     let mut ws = vault.open();
     let doc = DocId::new("Nota.md");
-    ws.write_document(&doc, "una nota di prova\n")
+    ws.write_document(&doc, "una nota di prova\n", WriteBase::Dictated)
         .expect("scrive");
 
     // L'utente sta scrivendo: nel buffer c'è del testo che il vault non ha
@@ -115,7 +116,8 @@ fn a_write_makes_the_kernel_drop_the_selection_under_it() {
     let vault = Vault::new();
     let mut ws = vault.open();
     let doc = DocId::new("Nota.md");
-    ws.write_document(&doc, "prima versione\n").expect("scrive");
+    ws.write_document(&doc, "prima versione\n", WriteBase::Dictated)
+        .expect("scrive");
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(doc.clone()))
@@ -125,7 +127,7 @@ fn a_write_makes_the_kernel_drop_the_selection_under_it() {
             })),
     ));
 
-    ws.write_document(&doc, "seconda versione, più lunga\n")
+    ws.write_document(&doc, "seconda versione, più lunga\n", WriteBase::Dictated)
         .expect("riscrive");
     assert_eq!(
         testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),

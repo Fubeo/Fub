@@ -12,6 +12,7 @@
 //! si prova la parte che richiede il disco e l'anagrafe del vault.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -85,7 +86,8 @@ fn leggi_dato(root: &Utf8PathBuf, plugin: &str, rel: &str) -> Option<Vec<u8>> {
 
 fn nota(ws: &mut Workspace, id: &str, testo: &str) -> DocId {
     let doc = DocId::new(id);
-    ws.write_document(&doc, testo).expect("scrittura");
+    ws.write_document(&doc, testo, WriteBase::Dictated)
+        .expect("scrittura");
     doc
 }
 

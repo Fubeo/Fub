@@ -15,6 +15,7 @@
 //! provider (§5.1).
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::model::{DocId, LinkTarget, PropertyValue};
 use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextMode, TextQuery};
 use fub_abi::traits::{
@@ -399,6 +400,7 @@ fn il_grafo_intero_e_una_domanda_sola() {
     ws.write_document(
         &DocId::new("Progetti/Ferrite.md"),
         "---\ntipo: progetto\npriorita: 3\n---\nUn motore in rust, vedi [[Cucina]]. #lavoro\n",
+        WriteBase::Dictated,
     )
     .expect("scrittura");
 

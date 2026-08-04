@@ -7,6 +7,7 @@
 //! stesso senza l'implementazione vera.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -143,7 +144,8 @@ fn workspace_incremental_matches_full_rebuild() {
                 if let Some(parent) = ws.root().join(path).parent() {
                     std::fs::create_dir_all(parent).expect("crea sottocartella");
                 }
-                ws.write_document(&id, source).expect("scrive il documento");
+                ws.write_document(&id, source, WriteBase::Dictated)
+                    .expect("scrive il documento");
             }
         }
 
@@ -189,13 +191,13 @@ fn creating_a_missing_note_makes_the_backlink_appear() {
     let mut ws = workspace(&dir.0, GraphUpdate::Incremental);
 
     let source = DocId::new("origine.lnk");
-    ws.write_document(&source, "Da Creare")
+    ws.write_document(&source, "Da Creare", WriteBase::Dictated)
         .expect("scrive origine");
     assert_eq!(ws.resolve_link("Da Creare"), None);
     assert!(ws.outgoing(&source).is_empty());
 
     let created = DocId::new("Da Creare.lnk");
-    ws.write_document(&created, "")
+    ws.write_document(&created, "", WriteBase::Dictated)
         .expect("crea la nota mancante");
 
     assert_eq!(ws.resolve_link("Da Creare"), Some(created.clone()));

@@ -9,6 +9,7 @@
 //! documento (anche quando a spostarla è stato qualcun altro), e che la si
 //! chiede dal canale dati come qualunque altro dato.
 
+use fub_abi::edit::WriteBase;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -92,7 +93,7 @@ fn si_chiede_dal_canale_dati() {
 #[test]
 fn una_rinomina_porta_con_se_lorganizzazione() {
     let mut ws = vault();
-    ws.write_document(&DocId::new("Nota.md"), "corpo")
+    ws.write_document(&DocId::new("Nota.md"), "corpo", WriteBase::Dictated)
         .expect("scrive");
     ws.set_icon("Nota.md", Some("📌".into())).expect("scrive");
     ws.set_pinned("Nota.md", true).expect("scrive");
@@ -115,7 +116,7 @@ fn una_rinomina_porta_con_se_lorganizzazione() {
 fn anche_una_rinomina_fatta_da_unaltra_app_la_porta_con_se() {
     let mut ws = vault();
     let root = ws.root().to_path_buf();
-    ws.write_document(&DocId::new("Nota.md"), "corpo")
+    ws.write_document(&DocId::new("Nota.md"), "corpo", WriteBase::Dictated)
         .expect("scrive");
     ws.set_icon("Nota.md", Some("📌".into())).expect("scrive");
 

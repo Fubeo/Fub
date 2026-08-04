@@ -47,11 +47,12 @@ tipo spostato da un'interfaccia a un'altra conta come rinomina. Regole complete 
 ciclo di vita della cartella in `docs/architecture/wit-congelato.md`.
 
 Tre proprietà che il test si autopresidia, perché è un presidio che si spegne da
-solo se non ci si bada: **diciannove** rotture introdotte ad arte sul modello
+solo se non ci si bada: **venti** rotture introdotte ad arte sul modello
 parsato (tipo rimosso o spostato, campo rinominato/ritipato/riordinato/tolto/
 inserito in mezzo, caso di variant rimosso o riordinato, payload cambiato, alias
-ridiretto, funzione sparita, parametro in più o rinominato, risultato cambiato,
-package rinominato, import di world sparito) devono tutte farlo diventare rosso;
+ridiretto, funzione sparita, parametro in più, rinominato o ritipato, risultato
+cambiato, package rinominato, import di world sparito) devono tutte farlo
+diventare rosso;
 **sette** aggiunte vere — fra cui proprio quelle che il §1 dovrà fare: una
 superficie in più in `view-placement` (§2.2), una variante in più in
 `index-query` ([decisione 0005](../decisions/0005-canale-dati-verso-le-view.md)), una capacità in più sull'`host-api` ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)) — devono

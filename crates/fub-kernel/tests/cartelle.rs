@@ -12,6 +12,7 @@
 //!    finestra: una pagina di una cartella è una pagina di quella cartella.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -176,7 +177,7 @@ fn una_nota_creata_porta_con_se_le_cartelle_che_attraversa() {
     let mut ws = v.open();
     assert!(folders(&ws, None).is_empty());
 
-    ws.write_document(&DocId::new("a/b/nuova.md"), "x")
+    ws.write_document(&DocId::new("a/b/nuova.md"), "x", WriteBase::Dictated)
         .expect("scritta");
 
     assert_eq!(

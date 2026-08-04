@@ -17,6 +17,7 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::thread::JoinHandle;
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::model::{DocId, Span};
 use fub_abi::traits::{HostApi, Plugin, PluginManifest, VaultRead, VaultWrite};
@@ -308,7 +309,11 @@ fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
          di una chiamata, ed è il difetto che la voce esisteva per togliere",
     );
     chi_salva
-        .write_document(&DocId::new("Nota 0.md"), "# Nota 0\n\nsalvata\n")
+        .write_document(
+            &DocId::new("Nota 0.md"),
+            "# Nota 0\n\nsalvata\n",
+            WriteBase::Dictated,
+        )
         .expect("il salvataggio riesce");
     drop(chi_salva);
 
@@ -406,7 +411,11 @@ fn un_job_che_scrive_su_una_base_vecchia_riceve_conflict() {
     // L'utente salva mentre il job calcola.
     ws.write()
         .unwrap()
-        .write_document(&id, "# Nota 1\n\nscritta dall'utente\n")
+        .write_document(
+            &id,
+            "# Nota 1\n\nscritta dall'utente\n",
+            WriteBase::Dictated,
+        )
         .expect("il salvataggio riesce");
 
     let esito = job_host.apply_edit(

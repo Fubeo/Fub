@@ -22,6 +22,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{DocChange, Event, EventKind, EventMask, Notice};
 use fub_abi::format::{
@@ -163,8 +164,12 @@ fn righe(log: &Log) -> Vec<String> {
 #[test]
 fn a_document_that_is_born_has_changed_in_every_way() {
     let (_dir, mut ws, log) = vault(EventMask::of([EventKind::DocumentChanged]));
-    ws.write_document(&DocId::new("a.txt"), "@scadenza domani\n#urgente\ncorpo")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("a.txt"),
+        "@scadenza domani\n#urgente\ncorpo",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     let r = righe(&log);
     assert_eq!(r.len(), 1);
     for aspetto in ["Body", "Frontmatter", "Tags", "Links", "Outline", "Anchors"] {
@@ -183,12 +188,20 @@ fn a_document_that_is_born_has_changed_in_every_way() {
 fn the_event_names_which_properties_and_which_tags() {
     let (_dir, mut ws, log) = vault(EventMask::of([EventKind::DocumentChanged]));
     let id = DocId::new("a.txt");
-    ws.write_document(&id, "@scadenza lunedì\n@stato aperto\n#urgente\ncorpo")
-        .unwrap();
+    ws.write_document(
+        &id,
+        "@scadenza lunedì\n@stato aperto\n#urgente\ncorpo",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     // Cambia UNA proprietà, toglie un tag, ne aggiunge un altro. Il corpo
     // cambia per forza, perché è lo stesso file.
-    ws.write_document(&id, "@scadenza martedì\n@stato aperto\n#casa\ncorpo")
-        .unwrap();
+    ws.write_document(
+        &id,
+        "@scadenza martedì\n@stato aperto\n#casa\ncorpo",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     let r = righe(&log);
     assert_eq!(r.len(), 2);
@@ -219,12 +232,13 @@ fn a_mask_on_an_aspect_does_not_wake_up_for_the_others() {
     let stretta = EventMask::of([EventKind::DocumentChanged]).on_changes([DocChange::Frontmatter]);
     let (_dir, mut ws, log) = vault(stretta);
     let id = DocId::new("a.txt");
-    ws.write_document(&id, "@scadenza lunedì\ncorpo").unwrap();
+    ws.write_document(&id, "@scadenza lunedì\ncorpo", WriteBase::Dictated)
+        .unwrap();
     // Solo il corpo: chi guarda le proprietà non ha niente da fare.
-    ws.write_document(&id, "@scadenza lunedì\ncorpo diverso")
+    ws.write_document(&id, "@scadenza lunedì\ncorpo diverso", WriteBase::Dictated)
         .unwrap();
     // E adesso la proprietà.
-    ws.write_document(&id, "@scadenza martedì\ncorpo diverso")
+    ws.write_document(&id, "@scadenza martedì\ncorpo diverso", WriteBase::Dictated)
         .unwrap();
 
     let r = righe(&log);
@@ -239,10 +253,11 @@ fn a_mask_on_an_aspect_does_not_wake_up_for_the_others() {
     // è il filtro e non un handler mai chiamato.
     let (_dir, mut ws, largo) = vault(EventMask::of([EventKind::DocumentChanged]));
     let id = DocId::new("a.txt");
-    ws.write_document(&id, "@scadenza lunedì\ncorpo").unwrap();
-    ws.write_document(&id, "@scadenza lunedì\ncorpo diverso")
+    ws.write_document(&id, "@scadenza lunedì\ncorpo", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&id, "@scadenza martedì\ncorpo diverso")
+    ws.write_document(&id, "@scadenza lunedì\ncorpo diverso", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&id, "@scadenza martedì\ncorpo diverso", WriteBase::Dictated)
         .unwrap();
     assert_eq!(righe(&largo).len(), 3);
 }
@@ -259,8 +274,10 @@ fn rewriting_the_same_bytes_changes_nothing_and_that_is_a_fact() {
     let (_dir, mut ws, log) =
         vault(EventMask::of([EventKind::DocumentChanged]).on_changes([DocChange::Body]));
     let id = DocId::new("a.txt");
-    ws.write_document(&id, "@scadenza lunedì\ncorpo").unwrap();
-    ws.write_document(&id, "@scadenza lunedì\ncorpo").unwrap();
+    ws.write_document(&id, "@scadenza lunedì\ncorpo", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&id, "@scadenza lunedì\ncorpo", WriteBase::Dictated)
+        .unwrap();
     assert_eq!(
         righe(&log).len(),
         1,
@@ -272,8 +289,10 @@ fn rewriting_the_same_bytes_changes_nothing_and_that_is_a_fact() {
     // è successa, e dirlo resta compito dell'evento.
     let (_dir, mut ws, largo) = vault(EventMask::of([EventKind::DocumentChanged]));
     let id = DocId::new("a.txt");
-    ws.write_document(&id, "@scadenza lunedì\ncorpo").unwrap();
-    ws.write_document(&id, "@scadenza lunedì\ncorpo").unwrap();
+    ws.write_document(&id, "@scadenza lunedì\ncorpo", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&id, "@scadenza lunedì\ncorpo", WriteBase::Dictated)
+        .unwrap();
     let r = righe(&largo);
     assert_eq!(r.len(), 2, "ricevute: {r:?}");
     assert_eq!(

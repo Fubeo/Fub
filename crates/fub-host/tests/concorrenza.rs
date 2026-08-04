@@ -19,6 +19,7 @@ use std::sync::{Arc, Barrier, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::traits::{ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
@@ -214,6 +215,7 @@ fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
         w.write_document(
             &DocId::new("Nota 0.md"),
             &format!("# Nota 0\n\ngiro {giro}\n"),
+            WriteBase::Dictated,
         )
         .expect("il salvataggio riesce");
         drop(w);
@@ -357,6 +359,10 @@ fn una_view_che_pania_disegnando_non_avvelena_il_vault() {
     );
     ws.write()
         .unwrap()
-        .write_document(&DocId::new("Nota 0.md"), "# Nota 0\n\ndopo il panico\n")
+        .write_document(
+            &DocId::new("Nota 0.md"),
+            "# Nota 0\n\ndopo il panico\n",
+            WriteBase::Dictated,
+        )
         .expect("si scrive ancora");
 }

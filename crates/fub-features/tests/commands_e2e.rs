@@ -14,6 +14,7 @@
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, InvokeMode};
+use fub_abi::edit::WriteBase;
 use fub_abi::event::{Actor, Event, EventKind, Notice};
 use fub_abi::model::{DocId, Span};
 use fub_abi::session::{Selection, ViewContext};
@@ -68,10 +69,18 @@ impl Vault {
 fn a_bulk_replace_is_shown_before_it_is_done_and_then_done() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("a.md"), "il gatto dorme, il gatto mangia")
-        .expect("scrive");
-    ws.write_document(&DocId::new("b.md"), "nessun felino qui")
-        .expect("scrive");
+    ws.write_document(
+        &DocId::new("a.md"),
+        "il gatto dorme, il gatto mangia",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
+    ws.write_document(
+        &DocId::new("b.md"),
+        "nessun felino qui",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
 
     let args = serde_json::json!({ "find": "gatto", "replace": "cane" });
 
@@ -109,10 +118,10 @@ fn a_bulk_replace_is_shown_before_it_is_done_and_then_done() {
 fn a_command_writes_through_the_normal_path_so_the_graph_sees_it() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("Kant.md"), "# Kant\n")
+    ws.write_document(&DocId::new("Kant.md"), "# Kant\n", WriteBase::Dictated)
         .expect("scrive");
     let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "parlo di Kant e di altro\n")
+    ws.write_document(&nota, "parlo di Kant e di altro\n", WriteBase::Dictated)
         .expect("scrive");
     assert!(
         ws.backlinks(&DocId::new("Kant.md")).is_empty(),
@@ -162,7 +171,8 @@ fn the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so() {
     let vault = Vault::new();
     let mut ws = vault.open();
     let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "parlo di Kant\n").expect("scrive");
+    ws.write_document(&nota, "parlo di Kant\n", WriteBase::Dictated)
+        .expect("scrive");
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(nota.clone()))
@@ -174,8 +184,12 @@ fn the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so() {
 
     // Qualcun altro riscrive la nota: il kernel lascia cadere lo span, perché
     // quelle coordinate erano di un altro testo (decisione 0007).
-    ws.write_document(&nota, "un testo completamente diverso\n")
-        .expect("scrive");
+    ws.write_document(
+        &nota,
+        "un testo completamente diverso\n",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
 
     let err = ws
         .invoke_command(
@@ -247,7 +261,7 @@ fn a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked() {
     let vault = Vault::new();
     let mut ws = vault.open();
     for nome in ["a.md", "b.md", "c.md"] {
-        ws.write_document(&DocId::new(nome), "il gatto dorme")
+        ws.write_document(&DocId::new(nome), "il gatto dorme", WriteBase::Dictated)
             .expect("scrive");
     }
     let rx = ws.bus().subscribe();
@@ -301,7 +315,7 @@ fn a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked() {
 fn a_dry_run_opens_no_batch_because_it_touches_nothing() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("a.md"), "il gatto dorme")
+    ws.write_document(&DocId::new("a.md"), "il gatto dorme", WriteBase::Dictated)
         .expect("scrive");
     let rx = ws.bus().subscribe();
 
@@ -499,7 +513,7 @@ fn restoring_onto_an_occupied_path_says_exactly_that() {
 fn trashing_without_an_argument_takes_the_note_the_user_is_looking_at() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("aperta.md"), "x")
+    ws.write_document(&DocId::new("aperta.md"), "x", WriteBase::Dictated)
         .expect("scrive");
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new("aperta.md"))),
@@ -532,7 +546,7 @@ fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
     let vault = Vault::new();
     let mut ws = vault.open();
     let sorgente = "---\ntitolo: Spesa\n---\n\n- [ ] pane\n- [ ] latte\n";
-    ws.write_document(&DocId::new("spesa.md"), sorgente)
+    ws.write_document(&DocId::new("spesa.md"), sorgente, WriteBase::Dictated)
         .expect("scrive");
 
     // La posizione è dentro il testo della **seconda** voce: nessuno qui conta
@@ -581,8 +595,12 @@ fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
 fn a_position_outside_every_task_is_refused_by_the_command_not_guessed() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("spesa.md"), "# Titolo\n\n- [ ] pane\n")
-        .expect("scrive");
+    ws.write_document(
+        &DocId::new("spesa.md"),
+        "# Titolo\n\n- [ ] pane\n",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
 
     let err = ws
         .invoke_command(
@@ -608,10 +626,14 @@ fn a_position_outside_every_task_is_refused_by_the_command_not_guessed() {
 fn the_plan_of_a_rename_names_the_notes_that_link_it() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("bersaglio.md"), "sono io")
+    ws.write_document(&DocId::new("bersaglio.md"), "sono io", WriteBase::Dictated)
         .expect("scrive");
-    ws.write_document(&DocId::new("chi-linka.md"), "vedi [[bersaglio]]")
-        .expect("scrive");
+    ws.write_document(
+        &DocId::new("chi-linka.md"),
+        "vedi [[bersaglio]]",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
 
     let outcome = ws
         .invoke_command(
@@ -645,10 +667,15 @@ fn archiving_n_notes_is_n_renames_one_batch_and_one_actor() {
     let vault = Vault::new();
     let mut ws = vault.open();
     for nome in ["a.md", "b.md", "c.md"] {
-        ws.write_document(&DocId::new(nome), "x").expect("scrive");
+        ws.write_document(&DocId::new(nome), "x", WriteBase::Dictated)
+            .expect("scrive");
     }
-    ws.write_document(&DocId::new("indice.md"), "vedi [[a]] e [[b]]")
-        .expect("scrive");
+    ws.write_document(
+        &DocId::new("indice.md"),
+        "vedi [[a]] e [[b]]",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
     let rx = ws.bus().subscribe();
 
     ws.invoke_command(
@@ -707,9 +734,10 @@ fn the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps() {
     let vault = Vault::new();
     let mut ws = vault.open();
     for nome in ["a.md", "b.md"] {
-        ws.write_document(&DocId::new(nome), "x").expect("scrive");
+        ws.write_document(&DocId::new(nome), "x", WriteBase::Dictated)
+            .expect("scrive");
     }
-    ws.write_document(&DocId::new("indice.md"), "vedi [[a]]")
+    ws.write_document(&DocId::new("indice.md"), "vedi [[a]]", WriteBase::Dictated)
         .expect("scrive");
 
     let outcome = ws

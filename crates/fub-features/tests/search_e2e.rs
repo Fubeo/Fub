@@ -12,6 +12,7 @@
 //! risposta sbagliata.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{DocumentMatch, Excerpts, IndexQuery, IndexResult, Page, PropertySelect};
@@ -147,8 +148,12 @@ fn editing_a_note_updates_what_is_findable() {
     let mut ws = v.open();
     assert_eq!(found(&ws, "vulcani"), vec!["nota.md"]);
 
-    ws.write_document(&DocId::new("nota.md"), "Ora parla di ghiacciai.\n")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("nota.md"),
+        "Ora parla di ghiacciai.\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     assert!(
         found(&ws, "vulcani").is_empty(),
@@ -289,15 +294,27 @@ fn incremental_index_matches_one_built_from_scratch() {
     incremental.put("tre.md", "zeta eta\n");
     let mut ws = incremental.open();
 
-    ws.write_document(&DocId::new("uno.md"), "alfa riscritto con theta\n")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("uno.md"),
+        "alfa riscritto con theta\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     ws.remove_document(&DocId::new("due.md"));
-    ws.write_document(&DocId::new("quattro.md"), "iota kappa\n")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("quattro.md"),
+        "iota kappa\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     ws.rename_document(&DocId::new("tre.md"), &DocId::new("archivio/tre.md"))
         .unwrap();
-    ws.write_document(&DocId::new("uno.md"), "alfa di nuovo, ora con lambda\n")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("uno.md"),
+        "alfa di nuovo, ora con lambda\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     // Stesso stato finale, ma raggiunto in un colpo solo.
     let scratch = Vault::new();

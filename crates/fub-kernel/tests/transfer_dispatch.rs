@@ -16,6 +16,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::{Event, EventMask, Notice};
 use fub_abi::model::DocId;
@@ -62,7 +63,7 @@ impl ImportProvider for SpyImport {
         let Some(doc) = self.writes.clone() else {
             return Ok(report);
         };
-        let outcome = match host.write_document(&doc, source.text()?, None) {
+        let outcome = match host.write_document(&doc, source.text()?, WriteBase::Dictated) {
             Ok(_) => ImportOutcome::Created,
             Err(e) => ImportOutcome::Failed(e.to_string()),
         };

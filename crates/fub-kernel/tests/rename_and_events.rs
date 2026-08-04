@@ -17,6 +17,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
 use fub_abi::format::{
@@ -144,8 +145,9 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
 fn rename_moves_identity_rewrites_name_links_and_emits_renamed() {
     let dir = TempDir::new("rename-base");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("sub/Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "Nota\nAltraCosa")
+    ws.write_document(&DocId::new("sub/Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "Nota\nAltraCosa", WriteBase::Dictated)
         .unwrap();
 
     let rx = ws.bus().subscribe();
@@ -186,9 +188,14 @@ fn rename_moves_identity_rewrites_name_links_and_emits_renamed() {
 fn rename_leaves_alias_links_untouched() {
     let dir = TempDir::new("rename-alias");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Persona.lnk"), "alias: Mario")
+    ws.write_document(
+        &DocId::new("Persona.lnk"),
+        "alias: Mario",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.write_document(&DocId::new("b.lnk"), "Mario", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&DocId::new("b.lnk"), "Mario").unwrap();
 
     ws.rename_document(&DocId::new("Persona.lnk"), &DocId::new("Anagrafica.lnk"))
         .unwrap();
@@ -205,9 +212,12 @@ fn rename_does_not_hijack_links_to_a_homonym() {
     let dir = TempDir::new("rename-homonym");
     let mut ws = workspace(&dir.0);
     // `Nota` risolve alla radice (shortest path), non a sub/Nota.
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("sub/Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "Nota").unwrap();
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("sub/Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "Nota", WriteBase::Dictated)
+        .unwrap();
 
     ws.rename_document(&DocId::new("sub/Nota.lnk"), &DocId::new("sub/Z.lnk"))
         .unwrap();
@@ -224,9 +234,12 @@ fn rename_does_not_hijack_links_to_a_homonym() {
 fn rename_to_contended_name_rewrites_by_path() {
     let dir = TempDir::new("rename-ambiguous");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Altra.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("sub/Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "Nota").unwrap();
+    ws.write_document(&DocId::new("Altra.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("sub/Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "Nota", WriteBase::Dictated)
+        .unwrap();
 
     // Il nuovo nome `Altra` è conteso: la riscrittura deve usare il path.
     ws.rename_document(&DocId::new("sub/Nota.lnk"), &DocId::new("sub/Altra.lnk"))
@@ -244,8 +257,10 @@ fn case_only_rename_preserves_identity() {
     // "esiste già" (è lo stesso file) — il rename deve comunque riuscire.
     let dir = TempDir::new("rename-case");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "nota").unwrap();
+    ws.write_document(&DocId::new("nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "nota", WriteBase::Dictated)
+        .unwrap();
 
     ws.rename_document(&DocId::new("nota.lnk"), &DocId::new("Nota.lnk"))
         .unwrap();
@@ -265,7 +280,8 @@ fn rename_rewrites_the_self_link_too() {
     // dangling — e verrebbe dirottato da chi ricreasse il vecchio nome.
     let dir = TempDir::new("rename-self");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "Nota").unwrap();
+    ws.write_document(&DocId::new("Nota.lnk"), "Nota", WriteBase::Dictated)
+        .unwrap();
 
     ws.rename_document(&DocId::new("Nota.lnk"), &DocId::new("Rinominata.lnk"))
         .unwrap();
@@ -287,9 +303,14 @@ fn a_markdown_path_link_is_an_edge_like_a_wikilink() {
     // come `[[Nota]]`, o «aggiornamento link su rinomina» è vero a metà.
     let dir = TempDir::new("pathlink-edge");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("sub/Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "[testo](sub/Nota.lnk)")
+    ws.write_document(&DocId::new("sub/Nota.lnk"), "", WriteBase::Dictated)
         .unwrap();
+    ws.write_document(
+        &DocId::new("a.lnk"),
+        "[testo](sub/Nota.lnk)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     let bl = ws.backlinks(&DocId::new("sub/Nota.lnk"));
     assert_eq!(bl.len(), 1);
@@ -300,10 +321,12 @@ fn a_markdown_path_link_is_an_edge_like_a_wikilink() {
 fn urls_and_links_out_of_the_vault_are_not_edges() {
     let dir = TempDir::new("pathlink-nonedge");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
     ws.write_document(
         &DocId::new("a.lnk"),
         "[web](https://esempio.test/Nota.lnk)\n[fuori](../Nota.lnk)\n[ancora](#sezione)",
+        WriteBase::Dictated,
     )
     .unwrap();
 
@@ -323,11 +346,16 @@ fn a_path_link_does_not_resolve_by_name_or_alias() {
     // l'utente ha scritto un path, e alla radice quel path non c'è.
     let dir = TempDir::new("pathlink-strict");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("sub/Nota.lnk"), "alias: Mario")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("sub/Nota.lnk"),
+        "alias: Mario",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     ws.write_document(
         &DocId::new("a.lnk"),
         "[per nome](Nota.lnk)\n[per alias](Mario)",
+        WriteBase::Dictated,
     )
     .unwrap();
 
@@ -340,11 +368,20 @@ fn a_path_link_takes_its_extension_seriously() {
     // `sub/Nota.png` no: non esiste, e non deve ricadere sul `.lnk` omonimo.
     let dir = TempDir::new("pathlink-ext");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("sub/Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "[senza](sub/Nota)")
+    ws.write_document(&DocId::new("sub/Nota.lnk"), "", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&DocId::new("b.lnk"), "[sbagliata](sub/Nota.png)")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("a.lnk"),
+        "[senza](sub/Nota)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.write_document(
+        &DocId::new("b.lnk"),
+        "[sbagliata](sub/Nota.png)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     let sources: Vec<DocId> = ws
         .backlinks(&DocId::new("sub/Nota.lnk"))
@@ -361,13 +398,26 @@ fn renaming_a_target_rewrites_incoming_path_links_relative_to_each_source() {
     // relativo a chi lo contiene. È la differenza col wikilink, ed è tutta qui.
     let dir = TempDir::new("pathlink-rewrite");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("note/Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "[t](note/Nota.lnk)")
+    ws.write_document(&DocId::new("note/Nota.lnk"), "", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&DocId::new("note/vicina.lnk"), "[t](Nota.lnk)")
-        .unwrap();
-    ws.write_document(&DocId::new("x/y/lontana.lnk"), "[t](../../note/Nota.lnk)")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("a.lnk"),
+        "[t](note/Nota.lnk)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.write_document(
+        &DocId::new("note/vicina.lnk"),
+        "[t](Nota.lnk)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.write_document(
+        &DocId::new("x/y/lontana.lnk"),
+        "[t](../../note/Nota.lnk)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     ws.rename_document(
         &DocId::new("note/Nota.lnk"),
@@ -400,12 +450,14 @@ fn moving_a_document_rebases_its_own_relative_links() {
     // il documento che si rompe è quello che si è mosso.
     let dir = TempDir::new("pathlink-rebase");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("note/altra.lnk"), "")
+    ws.write_document(&DocId::new("note/altra.lnk"), "", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&DocId::new("radice.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("radice.lnk"), "", WriteBase::Dictated)
+        .unwrap();
     ws.write_document(
         &DocId::new("a.lnk"),
         "[giù](note/altra.lnk)\n[accanto](radice.lnk)\n[dalla radice](/radice.lnk)\n[[radice]]",
+        WriteBase::Dictated,
     )
     .unwrap();
 
@@ -428,9 +480,14 @@ fn moving_a_document_rebases_its_own_relative_links() {
 fn a_moved_document_rewrites_its_self_link_and_its_links_together() {
     let dir = TempDir::new("pathlink-self");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("altra.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "[io](a.lnk)\n[lei](altra.lnk)")
+    ws.write_document(&DocId::new("altra.lnk"), "", WriteBase::Dictated)
         .unwrap();
+    ws.write_document(
+        &DocId::new("a.lnk"),
+        "[io](a.lnk)\n[lei](altra.lnk)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     ws.rename_document(&DocId::new("a.lnk"), &DocId::new("sub/b.lnk"))
         .unwrap();
@@ -447,8 +504,9 @@ fn a_rewritten_reference_is_escaped_and_regains_its_extension() {
     // stia dentro `[]()` senza rompersi, e che risolva senza ambiguità.
     let dir = TempDir::new("pathlink-escape");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "[t](Nota)")
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "[t](Nota)", WriteBase::Dictated)
         .unwrap();
 
     ws.rename_document(&DocId::new("Nota.lnk"), &DocId::new("f(x) uno.lnk"))
@@ -469,10 +527,14 @@ fn a_rewritten_reference_is_escaped_and_regains_its_extension() {
 fn an_encoded_path_link_is_the_same_edge_as_a_bare_one() {
     let dir = TempDir::new("pathlink-encoded");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("sub/nota uno.lnk"), "")
+    ws.write_document(&DocId::new("sub/nota uno.lnk"), "", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "[t](sub/nota%20uno.lnk)")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("a.lnk"),
+        "[t](sub/nota%20uno.lnk)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     assert_eq!(
         ws.backlinks(&DocId::new("sub/nota uno.lnk"))[0].source,
@@ -484,9 +546,14 @@ fn an_encoded_path_link_is_the_same_edge_as_a_bare_one() {
 fn a_fragment_survives_the_rewrite() {
     let dir = TempDir::new("pathlink-fragment");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "[t](Nota.lnk#una-sezione)")
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
         .unwrap();
+    ws.write_document(
+        &DocId::new("a.lnk"),
+        "[t](Nota.lnk#una-sezione)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     ws.rename_document(&DocId::new("Nota.lnk"), &DocId::new("sub/Spostata.lnk"))
         .unwrap();
@@ -502,9 +569,14 @@ fn a_dangling_path_link_is_left_alone() {
     // Riscrivere un link già rotto vorrebbe dire indovinare cosa intendeva.
     let dir = TempDir::new("pathlink-dangling");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "[rotto](mai/esistito.lnk)")
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
         .unwrap();
+    ws.write_document(
+        &DocId::new("a.lnk"),
+        "[rotto](mai/esistito.lnk)",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     ws.rename_document(&DocId::new("a.lnk"), &DocId::new("sub/a.lnk"))
         .unwrap();
@@ -519,7 +591,8 @@ fn a_dangling_path_link_is_left_alone() {
 fn rename_migrates_the_active_document_and_removal_clears_it() {
     let dir = TempDir::new("rename-active");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
     ws.set_active_document(Some(DocId::new("Nota.lnk")));
 
     // Dopo il rename il kernel deve rispondere col path nuovo, o le view che
@@ -537,7 +610,8 @@ fn rename_migrates_the_active_document_and_removal_clears_it() {
 fn rename_cannot_escape_the_vault() {
     let dir = TempDir::new("rename-escape");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
 
     for fuori in ["../fuori.lnk", "sub/../../fuori.lnk", "a//b.lnk", "./x.lnk"] {
         let err = ws
@@ -557,8 +631,10 @@ fn rename_cannot_escape_the_vault() {
 fn rename_onto_existing_document_is_refused() {
     let dir = TempDir::new("rename-clash");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("a.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("b.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("b.lnk"), "", WriteBase::Dictated)
+        .unwrap();
 
     let err = ws
         .rename_document(&DocId::new("a.lnk"), &DocId::new("b.lnk"))
@@ -577,7 +653,7 @@ fn rename_onto_existing_document_is_refused() {
 fn an_external_rename_migrates_identity_and_emits_renamed() {
     let dir = TempDir::new("extrename");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "AltraCosa")
+    ws.write_document(&DocId::new("Nota.lnk"), "AltraCosa", WriteBase::Dictated)
         .unwrap();
     ws.set_active_document(Some(DocId::new("Nota.lnk")));
 
@@ -614,8 +690,10 @@ fn an_external_rename_migrates_identity_and_emits_renamed() {
 fn an_external_rename_does_not_rewrite_incoming_links() {
     let dir = TempDir::new("extrename-links");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
-    ws.write_document(&DocId::new("a.lnk"), "Nota").unwrap();
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "Nota", WriteBase::Dictated)
+        .unwrap();
 
     std::fs::rename(dir.0.join("Nota.lnk"), dir.0.join("Spostata.lnk")).unwrap();
     ws.sync_renamed_path(&dir.0.join("Nota.lnk"), &dir.0.join("Spostata.lnk"))
@@ -630,7 +708,8 @@ fn an_external_rename_does_not_rewrite_incoming_links() {
 fn an_external_rename_into_an_ignored_folder_is_a_removal() {
     let dir = TempDir::new("extrename-trash");
     let mut ws = workspace(&dir.0);
-    ws.write_document(&DocId::new("Nota.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
 
     std::fs::create_dir_all(dir.0.join(".trash")).unwrap();
     std::fs::rename(dir.0.join("Nota.lnk"), dir.0.join(".trash/Nota.lnk")).unwrap();
@@ -681,7 +760,11 @@ impl EventHandler for ChainingHandler {
                         topic: "test/derivato".into(),
                         payload: serde_json::json!({ "da": id.as_str() }),
                     });
-                    host.write_document(&DocId::new("derivato.lnk"), "innesco", None)?;
+                    host.write_document(
+                        &DocId::new("derivato.lnk"),
+                        "innesco",
+                        WriteBase::Dictated,
+                    )?;
                 }
                 Ok(())
             }
@@ -708,7 +791,8 @@ fn handlers_run_queued_not_recursive_and_can_write_documents() {
     )
     .expect("registrato");
 
-    ws.write_document(&DocId::new("innesco.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("innesco.lnk"), "", WriteBase::Dictated)
+        .unwrap();
 
     // Il documento scritto DAL handler esiste ed è nel grafo.
     assert!(ws.documents().contains(&DocId::new("derivato.lnk")));
@@ -770,7 +854,8 @@ fn dispatch_budget_stops_infinite_event_loops_loudly() {
     let rx = ws.bus().subscribe();
     // L'evento Custom emesso dal handler rialimenta sé stesso: senza budget
     // questo write non tornerebbe mai.
-    ws.write_document(&DocId::new("x.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("x.lnk"), "", WriteBase::Dictated)
+        .unwrap();
 
     let n = *count.lock().unwrap();
     assert!(n > 0, "il handler deve essere stato chiamato");
@@ -827,7 +912,7 @@ impl EventHandler for JobRequestingHandler {
                 if Some(*id) == *self.job_id.lock().unwrap() {
                     assert_eq!(job, "sommario");
                     let text = result.as_ref().unwrap().as_str().unwrap().to_string();
-                    host.write_document(&DocId::new("sommario.lnk"), &text, None)?;
+                    host.write_document(&DocId::new("sommario.lnk"), &text, WriteBase::Dictated)?;
                 }
                 Ok(())
             }
@@ -851,7 +936,8 @@ fn jobs_run_outside_the_kernel_and_complete_via_event() {
 
     // 1. Il handler chiede il job durante il giro sincrono: il kernel lo
     //    accoda soltanto (niente esecuzione dentro al lock).
-    ws.write_document(&DocId::new("innesco.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("innesco.lnk"), "", WriteBase::Dictated)
+        .unwrap();
     let jobs = ws.take_pending_jobs();
     assert_eq!(jobs.len(), 1);
     let in_coda = &jobs[0];

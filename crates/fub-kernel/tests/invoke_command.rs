@@ -20,6 +20,7 @@ use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     InvokeMode, ParamKind, ParamSpec, PlannedEdit,
 };
+use fub_abi::edit::WriteBase;
 use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{Actor, EventMask, Notice};
@@ -102,7 +103,7 @@ impl CommandProvider for AlwaysWrites {
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         let doc = DocId::new("nota.md");
-        if let Err(e) = host.write_document(&doc, "scritto dal comando", None) {
+        if let Err(e) = host.write_document(&doc, "scritto dal comando", WriteBase::Dictated) {
             *self.rifiutato.lock().unwrap() = Some(e.to_string());
         }
         if mode.is_dry_run() {
@@ -167,7 +168,7 @@ impl CommandProvider for TriesEverything {
         annota(
             Capability::VaultWrite,
             "write",
-            host.write_document(&doc, "scritto dal comando", None)
+            host.write_document(&doc, "scritto dal comando", WriteBase::Dictated)
                 .map(|_| ()),
         );
         annota(
@@ -314,7 +315,7 @@ impl CommandProvider for Toucher {
         _mode: InvokeMode,
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
-        host.write_document(&DocId::new("nota.md"), "toccata", None)?;
+        host.write_document(&DocId::new("nota.md"), "toccata", WriteBase::Dictated)?;
         Ok(CommandOutcome::done())
     }
 }
@@ -419,7 +420,8 @@ fn the_arguments_are_validated_before_the_command_is_ever_called() {
 fn a_dry_run_cannot_write_even_if_the_command_tries() {
     let (_dir, mut ws) = vault();
     let doc = DocId::new("nota.md");
-    ws.write_document(&doc, "originale").expect("scrive");
+    ws.write_document(&doc, "originale", WriteBase::Dictated)
+        .expect("scrive");
 
     let rifiutato = Arc::new(Mutex::new(None));
     ws.register_command_provider(
@@ -469,7 +471,8 @@ fn a_dry_run_cannot_write_even_if_the_command_tries() {
 fn declaring_yourself_read_only_is_binding() {
     let (_dir, mut ws) = vault();
     let doc = DocId::new("nota.md");
-    ws.write_document(&doc, "originale").expect("scrive");
+    ws.write_document(&doc, "originale", WriteBase::Dictated)
+        .expect("scrive");
 
     let rifiutato = Arc::new(Mutex::new(None));
     ws.register_command_provider(
@@ -544,7 +547,8 @@ fn declaring_yourself_read_only_is_binding() {
 fn every_structural_capability_is_refused_by_the_same_gate() {
     let (_dir, mut ws) = vault();
     let doc = DocId::new("nota.md");
-    ws.write_document(&doc, "originale").expect("scrive");
+    ws.write_document(&doc, "originale", WriteBase::Dictated)
+        .expect("scrive");
 
     let tentativi = Arc::new(Mutex::new(Vec::new()));
     ws.register_command_provider(
@@ -633,8 +637,10 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
 #[test]
 fn the_host_completes_the_set_of_documents_a_plan_would_touch() {
     let (_dir, mut ws) = vault();
-    ws.write_document(&DocId::new("a.md"), "a").expect("scrive");
-    ws.write_document(&DocId::new("b.md"), "b").expect("scrive");
+    ws.write_document(&DocId::new("a.md"), "a", WriteBase::Dictated)
+        .expect("scrive");
+    ws.write_document(&DocId::new("b.md"), "b", WriteBase::Dictated)
+        .expect("scrive");
     ws.register_command_provider("test", Box::new(HalfHonestPlan))
         .expect("registrato");
 
@@ -661,10 +667,12 @@ fn the_host_completes_the_set_of_documents_a_plan_would_touch() {
 fn a_plan_calculated_now_refuses_to_apply_over_someone_elses_write() {
     let (_dir, mut ws) = vault();
     let doc = DocId::new("a.md");
-    ws.write_document(&doc, "il gatto").expect("scrive");
+    ws.write_document(&doc, "il gatto", WriteBase::Dictated)
+        .expect("scrive");
     ws.register_command_provider("test", Box::new(HalfHonestPlan))
         .expect("registrato");
-    ws.write_document(&DocId::new("b.md"), "b").expect("scrive");
+    ws.write_document(&DocId::new("b.md"), "b", WriteBase::Dictated)
+        .expect("scrive");
 
     let outcome = ws
         .invoke_command(
@@ -679,7 +687,8 @@ fn a_plan_calculated_now_refuses_to_apply_over_someone_elses_write() {
     };
 
     // Fra il piano e l'approvazione, qualcuno scrive.
-    ws.write_document(&doc, "un altro testo").expect("scrive");
+    ws.write_document(&doc, "un altro testo", WriteBase::Dictated)
+        .expect("scrive");
 
     let piano_su_a = plan
         .edits

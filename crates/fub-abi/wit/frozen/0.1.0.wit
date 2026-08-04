@@ -2109,6 +2109,17 @@ interface edit {
         revision: revision,
         applied: list<applied-edit>,
     }
+
+    /// DA COSA parte una riscrittura totale (`write-document`): o discende da
+    /// una revisione, o è dettata.
+    ///
+    /// RITAGLIO della linea di base (decisione 0092), il tipo che accompagna il
+    /// ritipo del parametro di `write-document` qui sotto. Non è nato dopo il
+    /// taglio della linea: prende il posto di un `option<revision>` che c'era.
+    variant write-base {
+        descends-from(revision),
+        dictated,
+    }
 }
 
 /// View dichiarative (`ViewProvider`).
@@ -2370,7 +2381,7 @@ interface host-vault-read {
 interface host-vault-write {
     use model.{doc-id};
     use errors.{plugin-error};
-    use edit.{edit-request, edit-report, revision};
+    use edit.{edit-request, edit-report, revision, write-base};
 
     /// Scrive il documento INTERO: è la scrittura di chi il testo intero ce l'ha
     /// in mano (l'editor che salva, un importer che crea una nota). Chi ne
@@ -2386,8 +2397,18 @@ interface host-vault-write {
     /// ripiego — una `write-document-based` accanto — è stato scartato a
     /// verbale: lascerebbe per sempre due modi di scrivere un documento, di cui
     /// uno cieco, cioè esattamente la cosa che il ritaglio esiste per togliere.
+    ///
+    /// SECONDO RITAGLIO, sulla stessa firma e tre commit dopo (decisione 0092):
+    /// `base` passa da `option<revision>` a `write-base`, che dei due modi di
+    /// scrivere ne fa due casi nominati. Che serva un secondo ritaglio dove il
+    /// primo aveva appena guardato è un fatto e sta scritto qui: la 0089 si è
+    /// chiesta SE la guardia esistesse e ha risposto bene, non si è chiesta come
+    /// si SBAGLIA a non usarla — e la risposta era che non si sbaglia, si omette,
+    /// che è la cosa che nessuno vede in review. Fra i due ritagli non c'è stato
+    /// nessun rilascio: il costo è di questo repo, non di chi ha compilato un
+    /// plugin. Dopo M4 lo stesso cambio costerebbe una major.
     write-document: func(id: doc-id, source: string,
-                         base: option<revision>) -> result<revision, plugin-error>;
+                         base: write-base) -> result<revision, plugin-error>;
     /// Cambia un PEZZO di documento: gli edit della richiesta, tutti o nessuno,
     /// sul sorgente che la sua `base` nomina. `conflict` = il documento è
     /// cambiato nel frattempo e non è stato scritto niente (si rilegge e si

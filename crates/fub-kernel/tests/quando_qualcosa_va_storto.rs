@@ -14,6 +14,7 @@
 //! «nessuno lo ha saputo».
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::{Event, EventMask, Notice, Severity};
 use fub_abi::model::{DocId, DocumentModel};
@@ -136,7 +137,8 @@ fn un_documento_che_l_indice_non_prende_arriva_a_chi_guarda() {
     let rx = ws.bus().subscribe();
 
     ws.create_note(Some("Nota.txt")).unwrap();
-    ws.write_document(&DocId::new("Nota.txt"), "corpo").unwrap();
+    ws.write_document(&DocId::new("Nota.txt"), "corpo", WriteBase::Dictated)
+        .unwrap();
 
     let visti = guasti(&rx);
     assert!(
@@ -171,7 +173,7 @@ fn la_scrittura_riesce_lo_stesso_quando_l_indice_rifiuta() {
     ws.reindex().unwrap();
 
     ws.create_note(Some("Nota.txt")).unwrap();
-    ws.write_document(&DocId::new("Nota.txt"), "corpo")
+    ws.write_document(&DocId::new("Nota.txt"), "corpo", WriteBase::Dictated)
         .expect("la scrittura riesce");
     assert_eq!(ws.read_source(&DocId::new("Nota.txt")).unwrap(), "corpo");
 }
@@ -186,7 +188,8 @@ fn l_errore_di_un_handler_non_si_perde_piu() {
     let rx = ws.bus().subscribe();
 
     ws.create_note(Some("Nota.txt")).unwrap();
-    ws.write_document(&DocId::new("Nota.txt"), "corpo").unwrap();
+    ws.write_document(&DocId::new("Nota.txt"), "corpo", WriteBase::Dictated)
+        .unwrap();
 
     let visti = guasti(&rx);
     assert!(
@@ -215,6 +218,6 @@ fn un_handler_che_fallisce_non_fa_fallire_la_scrittura() {
     ws.reindex().unwrap();
 
     ws.create_note(Some("Nota.txt")).unwrap();
-    ws.write_document(&DocId::new("Nota.txt"), "corpo")
+    ws.write_document(&DocId::new("Nota.txt"), "corpo", WriteBase::Dictated)
         .expect("la scrittura riesce anche se un handler ha detto di no");
 }

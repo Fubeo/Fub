@@ -9,6 +9,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::Notice;
 use fub_abi::model::{DocId, DocumentModel};
@@ -234,7 +235,7 @@ fn writes_and_removals_reach_the_index() {
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
-    ws.write_document(&DocId::new("nuova.txt"), "contenuto")
+    ws.write_document(&DocId::new("nuova.txt"), "contenuto", WriteBase::Dictated)
         .unwrap();
     ws.remove_document(&DocId::new("nuova.txt"));
 
@@ -308,7 +309,7 @@ fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
     log.lock().unwrap().clear();
 
     // Questa scrittura fa traboccare la coda eventi...
-    ws.write_document(&DocId::new("a.txt"), "sopravvissuto")
+    ws.write_document(&DocId::new("a.txt"), "sopravvissuto", WriteBase::Dictated)
         .unwrap();
 
     // ...ma l'indice ha ricevuto comunque il suo aggiornamento, perché non

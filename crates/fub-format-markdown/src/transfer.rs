@@ -12,6 +12,7 @@
 //! sono l'unico posto del progetto a cui è concesso sapere che il markdown
 //! esiste.
 
+use fub_abi::edit::WriteBase;
 use fub_abi::format::ParseContext;
 use fub_abi::traits::ReadApi;
 use fub_abi::transfer::{
@@ -119,10 +120,14 @@ impl ImportProvider for MarkdownImport {
         let writes = matches!(outcome, ImportOutcome::Created | ImportOutcome::Replaced)
             && request.mode == ImportMode::Apply;
         let outcome = if writes {
-            // Senza base: un importer non sta correggendo un testo che ha
-            // letto, lo sta **dettando** — e una base inventata sarebbe una
-            // guardia che dice sempre di sì (§18.1).
-            match host.write_document(&doc, text, None) {
+            // **Detta**, ed è il caso in cui la parola si guadagna il nome: un
+            // importer non sta correggendo un testo che ha letto, lo sta
+            // dettando, e una base inventata sarebbe una guardia che dice
+            // sempre di sì (§18.1). Con `ConflictPolicy::Replace` la
+            // sovrascrittura è per di più **richiesta**, e l'ha chiesta chi ha
+            // scelto la politica: le altre due strade di quel `match` esistono
+            // apposta per chi non la vuole.
+            match host.write_document(&doc, text, WriteBase::Dictated) {
                 Ok(_) => outcome,
                 // Un rifiuto del recinto o un errore di scrittura riguardano
                 // QUESTO documento: il rapporto lo dice e l'import resta valido.

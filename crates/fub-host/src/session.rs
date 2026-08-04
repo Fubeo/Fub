@@ -40,6 +40,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::traits::JobId;
 use fub_abi::{Notice, PluginError};
@@ -869,10 +870,12 @@ impl Host {
         let source = self.read_version(vault, id, ts)?;
         let ws = self.workspace(vault)?;
         let mut ws = ws.write().unwrap();
-        // Senza base, come l'importer (§18.1): un ripristino non discende dal
+        // **Detta**, come l'importer (§18.1): un ripristino non discende dal
         // testo che c'è adesso — lo sostituisce **apposta**, ed è il gesto con
-        // cui l'utente dice che quello di adesso non gli va bene.
-        ws.write_document(id, &source)
+        // cui l'utente dice che quello di adesso non gli va bene. È l'altra
+        // metà del ripristino che il comando `version.restore` dichiara allo
+        // stesso modo, e le due righe dicono adesso la stessa parola.
+        ws.write_document(id, &source, WriteBase::Dictated)
             .map(|_| ())
             .map_err(PluginError::from)
     }

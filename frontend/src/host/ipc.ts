@@ -27,6 +27,7 @@ import type {
   ViewContext,
   ViewSpec,
   ViewUpdate,
+  WriteBase,
 } from "./contract";
 
 export const api = {
@@ -44,12 +45,14 @@ export const api = {
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
   readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
-  // `base` è la revisione che il buffer si aspetta di trovare sul disco:
-  // `null` = «scrivi comunque», una revisione = «scrivi solo se il file è
-  // ancora quello». Un `PluginError` di specie `conflict` vuol dire che non lo
-  // era e che **non è stato scritto niente**. Torna la revisione prodotta, cioè
-  // la base della scrittura dopo.
-  writeDocument: (id: string, source: string, base: string | null = null) =>
+  // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
+  // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
+  // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è
+  // stato scritto niente**; `dictated` = «copri, è voluto». Prima era
+  // `base: string | null = null`, cioè la guardia si perdeva non passandola —
+  // e chi la perdeva non lo scriveva da nessuna parte. Torna la revisione
+  // prodotta, cioè la base della scrittura dopo.
+  writeDocument: (id: string, source: string, base: WriteBase) =>
     invoke<string>("write_document", { id, source, base }),
   // Il **buffer di crash** (§15.2): ciò che è nell'editor e non è ancora sul
   // disco. Due porte e non due comandi del registro, ed è l'unica coppia di

@@ -23,6 +23,7 @@
 //! crash.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::model::DocId;
 use fub_kernel::{JournalOp, Workspace};
@@ -40,8 +41,12 @@ fn ops(ws: &Workspace) -> Vec<JournalOp> {
 #[test]
 fn ogni_mutazione_del_kernel_lascia_la_propria_riga() {
     let mut banco = Banco::nuovo().monta();
-    banco.write_document(&doc("a.md"), "uno").unwrap();
-    banco.write_document(&doc("a.md"), "due").unwrap();
+    banco
+        .write_document(&doc("a.md"), "uno", WriteBase::Dictated)
+        .unwrap();
+    banco
+        .write_document(&doc("a.md"), "due", WriteBase::Dictated)
+        .unwrap();
     let cestinata = banco.delete_document(&doc("a.md")).unwrap();
     banco.restore_from_trash(&cestinata, None).unwrap();
     banco.rename_document(&doc("a.md"), &doc("b.md")).unwrap();
@@ -70,7 +75,9 @@ fn ogni_mutazione_del_kernel_lascia_la_propria_riga() {
 #[test]
 fn cio_che_il_vault_subisce_da_fuori_non_e_una_nostra_mutazione() {
     let mut banco = Banco::nuovo().monta();
-    banco.write_document(&doc("a.md"), "uno").unwrap();
+    banco
+        .write_document(&doc("a.md"), "uno", WriteBase::Dictated)
+        .unwrap();
     let prima = ops(&banco).len();
 
     banco.scrivi("a.md", "cambiata da un'altra app");
@@ -93,7 +100,9 @@ fn il_registro_sopravvive_alla_chiusura_del_vault() {
 
     {
         let mut banco = Banco::su(&root).monta();
-        banco.write_document(&doc("a.md"), "uno").unwrap();
+        banco
+            .write_document(&doc("a.md"), "uno", WriteBase::Dictated)
+            .unwrap();
         banco.rename_document(&doc("a.md"), &doc("b.md")).unwrap();
     }
 
@@ -113,10 +122,14 @@ fn il_registro_sopravvive_alla_chiusura_del_vault() {
 #[test]
 fn un_lotto_tiene_insieme_le_proprie_righe() {
     let mut banco = Banco::nuovo().monta();
-    banco.write_document(&doc("fuori.md"), "x").unwrap();
+    banco
+        .write_document(&doc("fuori.md"), "x", WriteBase::Dictated)
+        .unwrap();
     banco.batch(|ws| {
-        ws.write_document(&doc("a.md"), "a").unwrap();
-        ws.write_document(&doc("b.md"), "b").unwrap();
+        ws.write_document(&doc("a.md"), "a", WriteBase::Dictated)
+            .unwrap();
+        ws.write_document(&doc("b.md"), "b", WriteBase::Dictated)
+            .unwrap();
     });
 
     let records = banco.journal().records;
@@ -137,7 +150,9 @@ fn un_lotto_tiene_insieme_le_proprie_righe() {
 fn l_inverso_di_una_modifica_chirurgica_riporta_il_documento_com_era() {
     let mut banco = Banco::nuovo().monta();
     let id = doc("a.md");
-    banco.write_document(&id, "il gatto dorme").unwrap();
+    banco
+        .write_document(&id, "il gatto dorme", WriteBase::Dictated)
+        .unwrap();
     let base = banco.document_revision(&id).unwrap();
     banco
         .apply_edit(
@@ -175,8 +190,12 @@ fn l_inverso_di_una_modifica_chirurgica_riporta_il_documento_com_era() {
 #[test]
 fn il_salvataggio_integrale_e_la_sola_riga_che_non_si_annulla() {
     let mut banco = Banco::nuovo().monta();
-    banco.write_document(&doc("a.md"), "uno").unwrap();
-    banco.write_document(&doc("a.md"), "due").unwrap();
+    banco
+        .write_document(&doc("a.md"), "uno", WriteBase::Dictated)
+        .unwrap();
+    banco
+        .write_document(&doc("a.md"), "due", WriteBase::Dictated)
+        .unwrap();
     banco.rename_document(&doc("a.md"), &doc("b.md")).unwrap();
 
     let invertibili: Vec<bool> = ops(&banco).iter().map(JournalOp::is_invertible).collect();
@@ -196,8 +215,12 @@ fn una_coda_troncata_si_scarta_senza_far_rifiutare_il_resto() {
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("path UTF-8");
     {
         let mut banco = Banco::su(&root).monta();
-        banco.write_document(&doc("a.md"), "uno").unwrap();
-        banco.write_document(&doc("b.md"), "due").unwrap();
+        banco
+            .write_document(&doc("a.md"), "uno", WriteBase::Dictated)
+            .unwrap();
+        banco
+            .write_document(&doc("b.md"), "due", WriteBase::Dictated)
+            .unwrap();
     }
 
     // Il crash: gli ultimi byte della riga non sono arrivati sul disco.
@@ -216,7 +239,9 @@ fn una_coda_troncata_si_scarta_senza_far_rifiutare_il_resto() {
 
     // E il registro resta utilizzabile: la riga rotta è stata chiusa
     // all'apertura, quindi la prima aggiunta dopo non ci si attacca sopra.
-    banco.write_document(&doc("c.md"), "tre").unwrap();
+    banco
+        .write_document(&doc("c.md"), "tre", WriteBase::Dictated)
+        .unwrap();
     let dopo = banco.journal();
     assert_eq!(
         dopo.records.len(),
@@ -253,9 +278,15 @@ fn il_registro_e_autorevole_e_il_path_lo_dice() {
 fn il_registro_non_porta_dentro_il_documento() {
     let mut banco = Banco::nuovo().monta();
     let segreto = "una frase che sta soltanto dentro la nota";
-    banco.write_document(&doc("a.md"), segreto).unwrap();
     banco
-        .write_document(&doc("a.md"), &format!("{segreto} e poi dell'altro"))
+        .write_document(&doc("a.md"), segreto, WriteBase::Dictated)
+        .unwrap();
+    banco
+        .write_document(
+            &doc("a.md"),
+            &format!("{segreto} e poi dell'altro"),
+            WriteBase::Dictated,
+        )
         .unwrap();
 
     let raw = std::fs::read_to_string(fub_kernel::journal_path(banco.root())).expect("il registro");

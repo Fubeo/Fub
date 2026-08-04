@@ -13,6 +13,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventMask, Notice};
 use fub_abi::model::DocId;
@@ -89,7 +90,11 @@ impl ViewProvider for WritingView {
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
         self.0.lock().unwrap().push("on_action:inizio".into());
-        host.write_document(&DocId::new("nota.md"), "scritto dal provider", None)?;
+        host.write_document(
+            &DocId::new("nota.md"),
+            "scritto dal provider",
+            WriteBase::Dictated,
+        )?;
         self.0.lock().unwrap().push("on_action:fine".into());
         Ok(ViewUpdate::None)
     }
@@ -152,8 +157,12 @@ fn events_emitted_through_with_host_are_delivered_after_the_closure_returns() {
         .expect("registrato");
 
     ws.with_host("prova.plugin", |host| {
-        host.write_document(&DocId::new("altra.md"), "via with_host", None)
-            .unwrap();
+        host.write_document(
+            &DocId::new("altra.md"),
+            "via with_host",
+            WriteBase::Dictated,
+        )
+        .unwrap();
         assert!(
             log.lock().unwrap().is_empty(),
             "dentro la chiusura la coda non si drena"

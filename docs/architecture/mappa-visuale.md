@@ -312,7 +312,7 @@ flowchart TB
 |---|---|---|
 | processi | **uno**: non c'è né un demone né un servizio | [fub-app/src/lib.rs](../../crates/fub-app/src/lib.rs) |
 | webview | uno, e il core lo considera **privilegiato** — è la ragione per cui `UiNode::Html` è negato a chi non è fidato | [ui-protocol.md](ui-protocol.md) |
-| `VaultSession` | una per vault aperto, in una mappa | [session.rs:76](../../crates/fub-host/src/session.rs) |
+| `VaultSession` | una per vault aperto, in una mappa | [session.rs:77](../../crates/fub-host/src/session.rs) |
 | thread del ponte | uno per vault; dorme su `recv()` e non consuma niente a vault fermo | [bridge.rs:7](../../crates/fub-host/src/bridge.rs) |
 | thread del rilevatore | uno per vault, ed è **facoltativo**: dietro una cargo feature, altrimenti nessuno | [watcher.rs:74](../../crates/fub-host/src/watcher.rs) |
 | thread dei job | **due** di default, per vault e non globali | [runner.rs:67](../../crates/fub-host/src/runner.rs) |
