@@ -3167,6 +3167,7 @@ interface host-view-state-write {
 interface host-env {
     use session.{view-context};
     use intl.{locale};
+    use errors.{plugin-error};
 
     /// Orologio dell'host: millisecondi dall'epoca Unix. Un plugin non ha
     /// accesso al tempo di sistema (WASI lo può negare, e in test serve
@@ -3185,7 +3186,15 @@ interface host-env {
     /// (2.2, 8.3, 5.2, 13.3): la capacità è l'entropia, la forma è codice di
     /// libreria. PER L'IDENTITÀ, NON PER I SEGRETI: promette che due chiamate
     /// non diano lo stesso valore, non che il prossimo sia imprevedibile.
-    random-bytes: func(n: u32) -> list<u8>;
+    /// CHI RIESCE RICEVE ESATTAMENTE `n` BYTE, mai meno: i due modi di non
+    /// riuscire sono nominati perché chi chiama ci risponde diversamente —
+    /// `bad-args` sopra il tetto dell'host (si corregge chiedendo meno) e
+    /// `permission-denied` senza la capacità (non si corregge, si dice a chi
+    /// guarda). Il tetto NON attraversa il confine: un numero pubblicato è una
+    /// promessa congelata, e ciò che il contratto garantisce è che superarlo si
+    /// dica — la forma di `overflow`, dove si pubblica la perdita e non la
+    /// soglia.
+    random-bytes: func(n: u32) -> result<list<u8>, plugin-error>;
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `none` = la shell non ne ha ancora
     /// pubblicato uno. Lo imposta la shell; una view lo chiede quando ne ha

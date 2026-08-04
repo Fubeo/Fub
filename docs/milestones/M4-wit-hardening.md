@@ -73,8 +73,8 @@ con il payload in un record a sé). Nessuno dei due si genera dall'altro. Ciò c
 si genera è quello che finora li ripeteva: il lettore del sorgente Rust sta in
 `tests/common/`, `ts_enums.rs` emette le union del mirror, e il conteggio dei
 casi di un `enum` è sceso da quattro scritture a due — Rust e WIT. Generare
-l'`abi.wit` stesso resta **scartato**, e il motivo è misurabile: 1884 righe [conta: wit-commenti]
-su 3685 [conta: wit-righe] sono prosa italiana del confine, che in Rust non c'è e ha un altro lettore.
+l'`abi.wit` stesso resta **scartato**, e il motivo è misurabile: 1892 righe [conta: wit-commenti]
+su 3694 [conta: wit-righe] sono prosa italiana del confine, che in Rust non c'è e ha un altro lettore.
 
 Resta a M4, sulla conformità:
 
@@ -137,6 +137,16 @@ giri ha ancora guardato, con le sei domande di [todo.md](../todo.md) e col
 dogfooding. La seduta 20 è il precedente da tenere presente: le sue voci non
 scadevano, quindi nessun criterio di scadenza le aveva mai portate in cima, e una
 delle quattro era invece una P0 rimasta invisibile per sei giri.
+
+**E infatti la ricerca ne ha trovate altre tre**, tutte dalla seduta 23 — la
+§23.4, la §23.11 e la §23.12 — che è esattamente il lavoro che il paragrafo qui
+sopra descriveva: non voci datate, ma firme che nessun giro aveva guardato. Sono
+**chiuse tutte e tre**, in tre commit di fila, dalla
+[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md), dalla
+[0092](../decisions/0092-una-base-si-dichiara.md) e dalla
+[0094](../decisions/0094-un-tetto-che-si-fa-sentire.md). Al 2026-08-04 non resta
+aperta nessuna P0, e la frase vale di nuovo con lo stesso avvertimento di prima:
+dice che è finito ciò che qualcuno ha già trovato, non che non ci sia altro.
 
 **Chiuse prima del freeze:**
 

@@ -199,12 +199,21 @@ pub trait VaultRead: Send + Sync {
 }
 ```
 
-**Sei di queste capacità non sanno dire di no**, ed è una proprietà delle firme:
-`emit`, `report_progress`, `free_name`, `format_of`, `now_unix_millis`,
-`active_context` non restituiscono un `Result`, quindi una politica che le nega
-può solo dare la risposta nulla. Regola che ne segue: una capacità nuova porti un
-esito **anche quando "non può fallire"** — non potendo fallire, non può nemmeno
-essere negata.
+**Sette di queste capacità non sanno dire di no**, ed è una proprietà delle
+firme: `emit`, `report_progress`, `free_name`, `format_of`, `now_unix_millis`,
+`user_locale` e `active_context` non restituiscono un `Result`, quindi una
+politica che le nega può solo dare la risposta nulla. Regola che ne segue: una
+capacità nuova porti un esito **anche quando "non può fallire"** — non potendo
+fallire, non può nemmeno essere negata.
+
+Diceva **sei** e ne nominava sei, e ne mancavano due: `user_locale` e
+`random_bytes`, nate con la [0039](../decisions/0039-il-locale-e-il-caso.md) dopo
+che il conto era stato fatto, non ci si erano aggiunte. La regola era scritta e
+il censimento che la faceva rispettare no — che è il modo tipico in cui una
+regola giusta smette di mordere. `random_bytes` ne è uscita con la
+[0094](../decisions/0094-un-tetto-che-si-fa-sentire.md), che le ha dato l'esito;
+`user_locale` ci resta a ragione, perché il locale di default *è* la risposta del
+contratto per «nessuno me l'ha detto» e negarla non produce una bugia.
 
 **L'elenco è chiuso** ([decisione 0013](../decisions/0013-elenco-delle-capacita.md)).
 Chiuso **alla sottrazione**, non alla crescita: da quel giro in avanti aggiungere

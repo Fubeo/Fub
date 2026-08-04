@@ -834,6 +834,13 @@ pub trait ViewStateWrite: ViewStateRead {
 /// pare a chi chiama — la stessa disciplina del freno degli eventi
 /// ([decisione 0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)),
 /// dove il tetto sta con chi ritira.
+///
+/// **Non è un termine del contratto.** Il numero non attraversa il confine, e
+/// chi lo supera non lo scopre chiedendolo ma sentendoselo dire: sopra il tetto
+/// `random_bytes` rende [`BadArgs`](PluginError::BadArgs) invece di mille byte
+/// zitti ([decisione 0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md)).
+/// Così resta alzabile senza rompere nessuno — una promessa pubblica di mille
+/// byte, dopo il congelamento di M4, sarebbe stata mille byte per sempre.
 pub const MAX_RANDOM_BYTES: u32 = 1024;
 
 /// Ciò che **l'host sa e il provider no**: che ore sono, in che fuso e in che
@@ -911,10 +918,28 @@ pub trait HostEnv: Send + Sync {
     /// una capacità sua, con una firma sua — come il portachiavi di sistema per
     /// i segreti ([`crate::settings`]).
     ///
-    /// `n` è limitato a [`MAX_RANDOM_BYTES`]: oltre, l'host rende ciò che può.
-    /// Un plugin che ne chiedesse un gigabyte non ha un caso d'uso, ha un
-    /// difetto.
-    fn random_bytes(&self, n: u32) -> Vec<u8>;
+    /// # Chi riesce riceve esattamente `n` byte
+    ///
+    /// È la sola lettura possibile di questa firma, ed è ciò per cui rende un
+    /// esito: `Ok` sono `n` byte, mai meno. I due modi di non riuscire sono
+    /// **nominati** perché chi chiama ci risponde in due modi diversi.
+    ///
+    /// - [`BadArgs`](crate::PluginError::BadArgs) — sopra
+    ///   [`MAX_RANDOM_BYTES`]. È una colpa di chi chiama e si corregge
+    ///   chiedendo meno: un plugin che ne chiedesse un gigabyte non ha un caso
+    ///   d'uso, ha un difetto, e riceverlo troncato lo lascerebbe convinto di
+    ///   avere l'entropia che ha chiesto.
+    /// - [`PermissionDenied`](crate::PluginError::PermissionDenied) — la
+    ///   capacità [`Capability::Env`](crate::Capability::Env) non è concessa.
+    ///   Non si corregge affatto: chiedere meno non serve, e la risposta giusta
+    ///   è dirlo a chi guarda.
+    ///
+    /// Il **tetto non attraversa il confine** ed è di proposito: un numero
+    /// pubblicato è una promessa che si congela, mentre ciò che il contratto
+    /// deve garantire è che superarlo si **dica** — la stessa forma di
+    /// [`Event::Overflow`](crate::Event), dove ciò che si pubblica è la perdita
+    /// e non la soglia.
+    fn random_bytes(&self, n: u32) -> Result<Vec<u8>, PluginError>;
 
     /// Il contesto del pannello con il focus: quale documento, cosa c'è
     /// selezionato, in che modalità. `None` = la shell non ne ha ancora

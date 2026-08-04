@@ -345,8 +345,15 @@ impl HostEnv for JobHost {
         self.reading(|h| h.user_locale())
     }
 
-    fn random_bytes(&self, n: u32) -> Vec<u8> {
-        self.reading(|h| h.random_bytes(n))
+    /// La sola delle quattro capacità di `HostEnv` che passa da `read_result`, e
+    /// non per scelta di questo modulo: è l'unica che ha un esito, e da quando
+    /// ce l'ha (decisione 0094) la regola della
+    /// [0032](../../../docs/decisions/0032-il-runner-dei-job.md) — *la
+    /// cancellazione non aggiunge una capacità, toglie le altre* — la può
+    /// raggiungere. Prima non poteva: un job annullato che chiedeva byte li
+    /// riceveva, perché la firma non aveva un posto in cui dire di no.
+    fn random_bytes(&self, n: u32) -> Result<Vec<u8>, PluginError> {
+        self.read_result(|h| h.random_bytes(n))
     }
 
     /// Che pannello guarda l'utente **adesso**, non quando il job è partito: un

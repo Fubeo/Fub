@@ -250,8 +250,12 @@ impl Journal {
             path: journal_path(root),
             storage,
             // Sedici cifre esadecimali dal caso del kernel: serve che due
-            // aperture non collidano, non che nessuno le indovini.
+            // aperture non collidano, non che nessuno le indovini. Otto byte
+            // sono due ordini di grandezza sotto il tetto, quindi il rifiuto è
+            // irraggiungibile e l'`expect` dice quale invariante lo esclude —
+            // non «speriamo».
             writer: crate::random::random_bytes(8)
+                .expect("otto byte stanno sotto ogni tetto")
                 .iter()
                 .map(|b| format!("{b:02x}"))
                 .collect(),

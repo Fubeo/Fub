@@ -31,7 +31,7 @@ use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
-use fub_abi::MAX_RANDOM_BYTES;
+use fub_abi::{PluginError, MAX_RANDOM_BYTES};
 
 /// Il seme del processo: `RandomState` presa una volta, che la std ha già
 /// seminato dal sistema operativo.
@@ -45,11 +45,30 @@ fn seed() -> &'static RandomState {
 /// tenerli distinti è il motivo per cui questo non è un orologio travestito.
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// `n` byte di caso, con il tetto di
-/// [`MAX_RANDOM_BYTES`]: chi ne chiede di più ne riceve mille, e non un errore —
-/// una richiesta assurda non deve far fallire la generazione di un id.
-pub fn random_bytes(n: u32) -> Vec<u8> {
-    let n = n.min(MAX_RANDOM_BYTES) as usize;
+/// `n` byte di caso, o il rifiuto se `n` supera [`MAX_RANDOM_BYTES`].
+///
+/// Il tetto c'era già; ciò che è cambiato con la
+/// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md) è che si
+/// **sente**. Prima chi ne chiedeva quattromila ne riceveva mille e l'unico modo
+/// di accorgersene era misurare la lunghezza di ciò che era tornato: una perdita
+/// che non si dichiara, cioè l'unico posto del progetto in cui l'invariante
+/// della [0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)
+/// era falsa. Il criterio della 0039 — *una richiesta assurda non deve far
+/// fallire la generazione di un id* — resta onorato: le identità chiedono
+/// sedici, dieci, `len` byte, e nessuna di quelle richieste ha smesso di
+/// riuscire.
+pub fn random_bytes(n: u32) -> Result<Vec<u8>, PluginError> {
+    if n > MAX_RANDOM_BYTES {
+        return Err(PluginError::BadArgs(
+            format!(
+                "sono stati chiesti {n} byte di caso, e questo host ne rende al \
+                 massimo {MAX_RANDOM_BYTES}: un'identità che ne volesse di più \
+                 non è un'identità"
+            )
+            .into(),
+        ));
+    }
+    let n = n as usize;
     let mut out = Vec::with_capacity(n);
     while out.len() < n {
         let mut h = seed().build_hasher();
@@ -60,7 +79,7 @@ pub fn random_bytes(n: u32) -> Vec<u8> {
         out.extend_from_slice(&h.finish().to_le_bytes());
     }
     out.truncate(n);
-    out
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -70,14 +89,38 @@ mod tests {
 
     #[test]
     fn it_gives_exactly_what_was_asked() {
-        for n in [0u32, 1, 7, 8, 9, 16, 64] {
-            assert_eq!(random_bytes(n).len(), n as usize);
+        for n in [0u32, 1, 7, 8, 9, 16, 64, MAX_RANDOM_BYTES] {
+            assert_eq!(random_bytes(n).unwrap().len(), n as usize);
         }
     }
 
+    /// Si chiamava `the_ceiling_holds_and_does_not_fail`, e asseriva esattamente
+    /// la frase che la §23.12 contesta: che il tetto reggesse **senza**
+    /// fallire — cioè che il troncamento fosse muto. Adesso presidia il
+    /// contrario, ed è il solo modo di provare che chi chiede troppo lo
+    /// **sappia**: un `assert` sulla lunghezza avrebbe continuato a passare
+    /// anche col difetto in piedi.
     #[test]
-    fn the_ceiling_holds_and_does_not_fail() {
-        assert_eq!(random_bytes(u32::MAX).len(), MAX_RANDOM_BYTES as usize);
+    fn the_ceiling_says_no_instead_of_truncating() {
+        for n in [MAX_RANDOM_BYTES + 1, 4096, u32::MAX] {
+            let err = random_bytes(n).expect_err("sopra il tetto non si tronca, si rifiuta");
+            assert!(
+                matches!(err, PluginError::BadArgs(_)),
+                "chiedere troppo è una colpa di chi chiama: {err}"
+            );
+            assert!(
+                err.message().to_string().contains(&n.to_string()),
+                "il rifiuto deve dire quanto era stato chiesto: {err}"
+            );
+        }
+    }
+
+    /// Il confine fra l'ultimo `Ok` e il primo rifiuto sta esattamente sul
+    /// tetto, non uno di qua o uno di là.
+    #[test]
+    fn the_ceiling_itself_is_still_granted() {
+        assert!(random_bytes(MAX_RANDOM_BYTES).is_ok());
+        assert!(random_bytes(MAX_RANDOM_BYTES + 1).is_err());
     }
 
     /// La sola promessa vera: due chiamate non danno lo stesso valore. Diecimila
@@ -87,7 +130,7 @@ mod tests {
         let mut visti = HashSet::new();
         for _ in 0..10_000 {
             assert!(
-                visti.insert(random_bytes(16)),
+                visti.insert(random_bytes(16).unwrap()),
                 "due identità uguali: il flusso si ripete"
             );
         }
@@ -97,7 +140,7 @@ mod tests {
     /// ogni giro, non solo nel primo.
     #[test]
     fn a_long_block_does_not_repeat_itself() {
-        let b = random_bytes(64);
+        let b = random_bytes(64).unwrap();
         let primo = &b[..8];
         assert!(
             b.chunks(8).skip(1).any(|c| c != primo),

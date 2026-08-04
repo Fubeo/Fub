@@ -38,7 +38,7 @@ use fub_abi::traits::{
     Page, Paged, SettingsRead, SettingsWrite, TagCount, TrashEntry, VaultEntry, VaultRead,
     VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
-use fub_abi::PluginError;
+use fub_abi::{PluginError, MAX_RANDOM_BYTES};
 
 /// Storage dei blob e dei documenti in memoria, più un orologio pilotabile.
 #[derive(Default)]
@@ -106,10 +106,10 @@ pub struct MemoryHost {
     locale: Mutex<Locale>,
     /// Contatore da cui [`HostEnv::random_bytes`] deriva byte deterministici.
     entropy: AtomicU64,
-    /// Un host che **non concede entropia**: `random_bytes` risponde vuoto.
-    /// Non è un capriccio del doppio, è una condizione che il contratto
-    /// ammette — e l'unico modo di provare che chi costruisce un id se ne
-    /// accorga invece di produrne uno tutto a zeri.
+    /// Un host che **non concede entropia**: `random_bytes` rende
+    /// `PermissionDenied`. Non è un capriccio del doppio, è la condizione di un
+    /// `Guard` senza `Capability::Env` — e l'unico modo di provare che chi
+    /// costruisce un id se ne accorga invece di produrne uno tutto a zeri.
     senza_entropia: std::sync::atomic::AtomicBool,
 }
 
@@ -127,8 +127,8 @@ impl MemoryHost {
         self
     }
 
-    /// Un host che non concede entropia: `random_bytes` risponde vuoto, e chi
-    /// costruisce un'identità deve accorgersene.
+    /// Un host che non concede entropia: `random_bytes` rifiuta nominando il
+    /// permesso, e chi costruisce un'identità deve accorgersene.
     pub fn senza_entropia(self) -> Self {
         self.senza_entropia.store(true, Ordering::Relaxed);
         self
@@ -709,18 +709,28 @@ impl HostEnv for MemoryHost {
     /// asserire su ciò che produce, e un banco che non si può asserire non
     /// presidia niente. Che siano diversi a ogni chiamata è tutto ciò che serve
     /// a chi verifica di non collidere.
-    fn random_bytes(&self, n: u32) -> Vec<u8> {
+    fn random_bytes(&self, n: u32) -> Result<Vec<u8>, PluginError> {
         // Il contatore in little-endian nei primi otto byte, l'indice negli
         // altri. Due chiamate non danno mai lo stesso blocco — che è la sola
         // promessa della capacità vera — e ogni chiamata è prevedibile, che è la
         // sola cosa che rende asseribile un test.
         if self.senza_entropia.load(Ordering::Relaxed) {
-            return Vec::new();
+            return Err(PluginError::PermissionDenied(
+                "questo banco non concede entropia".into(),
+            ));
+        }
+        // Il tetto lo porta anche il doppio, e non è pedanteria: un banco che
+        // concedesse ciò che l'host vero rifiuta lascerebbe verde un test scritto
+        // sopra una richiesta che in produzione non riesce.
+        if n > MAX_RANDOM_BYTES {
+            return Err(PluginError::BadArgs(
+                format!("chiesti {n} byte di caso, il massimo è {MAX_RANDOM_BYTES}").into(),
+            ));
         }
         let base = self.entropy.fetch_add(1, Ordering::Relaxed).to_le_bytes();
-        (0..n as usize)
+        Ok((0..n as usize)
             .map(|i| base.get(i).copied().unwrap_or(i as u8))
-            .collect()
+            .collect())
     }
 
     fn active_context(&self) -> Option<ViewContext> {
@@ -970,8 +980,8 @@ mod tests {
     #[test]
     fn the_doubles_entropy_never_repeats() {
         let host = MemoryHost::new();
-        let primo = host.random_bytes(16);
-        let secondo = host.random_bytes(16);
+        let primo = host.random_bytes(16).unwrap();
+        let secondo = host.random_bytes(16).unwrap();
         assert_eq!(primo.len(), 16);
         assert_ne!(primo, secondo);
     }
