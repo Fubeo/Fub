@@ -2370,12 +2370,24 @@ interface host-vault-read {
 interface host-vault-write {
     use model.{doc-id};
     use errors.{plugin-error};
-    use edit.{edit-request, edit-report};
+    use edit.{edit-request, edit-report, revision};
 
     /// Scrive il documento INTERO: è la scrittura di chi il testo intero ce l'ha
     /// in mano (l'editor che salva, un importer che crea una nota). Chi ne
     /// cambia un pezzo usa `apply-edit`.
-    write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;
+    ///
+    /// RITAGLIO della linea di base (decisione 0089): questa funzione aveva due
+    /// parametri e non rendeva niente. La guardia di `apply-edit` — dire da
+    /// cosa si è partiti, e ricevere `conflict` invece di sovrascrivere in
+    /// silenzio — valeva per i provider e non per l'editor, e il salvataggio
+    /// dell'editor copriva una scrittura altrui che il watcher non aveva visto.
+    /// Nessuna delle due metà è additiva: una guardia si aggiunge solo cambiando
+    /// l'arità, e la revisione prodotta solo cambiando il tipo di ritorno. Il
+    /// ripiego — una `write-document-based` accanto — è stato scartato a
+    /// verbale: lascerebbe per sempre due modi di scrivere un documento, di cui
+    /// uno cieco, cioè esattamente la cosa che il ritaglio esiste per togliere.
+    write-document: func(id: doc-id, source: string,
+                         base: option<revision>) -> result<revision, plugin-error>;
     /// Cambia un PEZZO di documento: gli edit della richiesta, tutti o nessuno,
     /// sul sorgente che la sua `base` nomina. `conflict` = il documento è
     /// cambiato nel frattempo e non è stato scritto niente (si rilegge e si

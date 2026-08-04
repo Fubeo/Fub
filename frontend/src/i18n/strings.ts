@@ -271,6 +271,15 @@ const IT = {
   "commands.pane.close.desc": "Toglie questo riquadro; l'ultimo non si chiude.",
   "commands.tab.close": "Chiudi la scheda",
   "commands.tab.close.desc": "Toglie la nota da questo riquadro, salvandola se serve.",
+  // Le due vie d'uscita da un conflitto (§18.1). I titoli nominano **cosa si
+  // perde** e non «risolvi»: chi legge una riga in una palette sta scegliendo
+  // fra due testi, e «risolvi il conflitto» non dice quale dei due resta.
+  "commands.doc.conflict.mine": "Conflitto: tieni il mio testo",
+  "commands.doc.conflict.mine.desc":
+    "Riscrive il file col testo del buffer, coprendo la modifica arrivata da fuori.",
+  "commands.doc.conflict.theirs": "Conflitto: tieni il testo sul disco",
+  "commands.doc.conflict.theirs.desc":
+    "Butta le modifiche non salvate e ricarica il file come sta sul disco.",
   "panes.redraw_failed": "I riquadri non si sono ridisegnati: {reason}",
   "pane.named": "Riquadro: {name}",
   "pane.empty": "Riquadro vuoto",
@@ -313,6 +322,12 @@ const IT = {
   "document.deleted_dirty":
     "{doc} è stato cancellato su disco mentre il buffer è sporco: il buffer vince, e il prossimo salvataggio lo ricrea.",
   "document.save_failed": "{doc} non è stato salvato: {reason}",
+  // Dice **che non è stato scritto niente**, e non è un dettaglio tecnico: è la
+  // sola frase che distingue questo caso da «non ci sono riuscito», e senza di
+  // essa chi legge crede di aver perso il proprio testo.
+  "document.save_conflict":
+    "{doc} è cambiato su disco da quando l'hai aperto: non è stato scritto niente, e le tue modifiche sono ancora qui. Scegli quale testo tenere dalla palette dei comandi.",
+  "document.conflict_none": "Nessun conflitto da risolvere su questo documento.",
   "preview.open_failed": "Non riesco ad aprire «{page}»: {reason}",
   "kernel.listener_failed": "Un ascoltatore di eventi del kernel ha lanciato: {reason}",
   "store.listener_failed": "Un ascoltatore di «{signal}» ha lanciato: {reason}",
@@ -355,6 +370,7 @@ const IT = {
   "save.saving": "Salvataggio…",
   "save.unsaved": "Non salvato",
   "save.failed": "Salvataggio fallito",
+  "save.conflitto": "Cambiato su disco",
 } as const;
 
 /// Una chiave del catalogo della shell.
@@ -536,6 +552,12 @@ const EN: Record<Chiave, string> = {
   "commands.pane.close.desc": "Removes this pane; the last one does not close.",
   "commands.tab.close": "Close the tab",
   "commands.tab.close.desc": "Removes the note from this pane, saving it if needed.",
+  "commands.doc.conflict.mine": "Conflict: keep my text",
+  "commands.doc.conflict.mine.desc":
+    "Rewrites the file with the buffer text, covering the change that arrived from outside.",
+  "commands.doc.conflict.theirs": "Conflict: keep the text on disk",
+  "commands.doc.conflict.theirs.desc":
+    "Discards the unsaved changes and reloads the file as it is on disk.",
   "panes.redraw_failed": "The panes did not redraw: {reason}",
   "pane.named": "Pane: {name}",
   "pane.empty": "Empty pane",
@@ -573,6 +595,9 @@ const EN: Record<Chiave, string> = {
   "document.deleted_dirty":
     "{doc} was deleted on disk while the buffer is dirty: the buffer wins, and the next save recreates it.",
   "document.save_failed": "{doc} was not saved: {reason}",
+  "document.save_conflict":
+    "{doc} changed on disk since you opened it: nothing was written, and your changes are still here. Choose which text to keep from the command palette.",
+  "document.conflict_none": "No conflict to resolve on this document.",
   "preview.open_failed": "Cannot open «{page}»: {reason}",
   "kernel.listener_failed": "A kernel event listener threw: {reason}",
   "store.listener_failed": "A listener of «{signal}» threw: {reason}",
@@ -602,6 +627,7 @@ const EN: Record<Chiave, string> = {
   "save.saving": "Saving…",
   "save.unsaved": "Unsaved",
   "save.failed": "Save failed",
+  "save.conflitto": "Changed on disk",
 };
 
 /// La lingua di ripiego di questa shell, che è quella in cui è scritta.

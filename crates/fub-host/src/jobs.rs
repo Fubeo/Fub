@@ -240,8 +240,13 @@ impl VaultRead for JobHost {
 }
 
 impl VaultWrite for JobHost {
-    fn write_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.write_result(|h| h.write_document(id, source))
+    fn write_document(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
+        self.write_result(|h| h.write_document(id, source, base.clone()))
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {

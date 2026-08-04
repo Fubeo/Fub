@@ -56,7 +56,7 @@ fn la_spia_vede_cio_che_il_kernel_emette_e_non_cio_che_e_successo_montando() {
     assert_eq!(banco.eventi(), vec![]);
 
     banco.with_host("prova", |host| {
-        host.write_document(&doc("nuova.md"), "corpo")
+        host.write_document(&doc("nuova.md"), "corpo", None)
             .expect("scrittura consentita");
     });
 
@@ -76,7 +76,7 @@ fn un_id_non_dichiarato_non_riceve_capacita() {
     let mut banco = Banco::nuovo().monta();
 
     let esito = banco.with_host("mai.dichiarato", |host| {
-        host.write_document(&doc("x.md"), "y")
+        host.write_document(&doc("x.md"), "y", None)
     });
     assert!(
         esito.is_err(),

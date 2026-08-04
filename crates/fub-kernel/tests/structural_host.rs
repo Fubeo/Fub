@@ -146,7 +146,7 @@ fn creating_over_an_existing_note_is_refused_and_writing_over_it_is_not() {
         // La differenza è tutta qui: la stessa scrittura, con l'altra capacità,
         // passa. Se `create_document` si comportasse così, un template che
         // sbaglia la data cancellerebbe una nota dell'utente.
-        host.write_document(&id, "sovrascritto")
+        host.write_document(&id, "sovrascritto", None)
             .expect("sovrascrive");
         assert_eq!(host.read_document(&id).expect("legge"), "sovrascritto");
     });

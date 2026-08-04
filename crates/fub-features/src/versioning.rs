@@ -1405,7 +1405,7 @@ impl CommandProvider for VersioningCommands {
         // niente se il file era già uguale.
         let prima = versions_of(host, &doc).first().map(|v| v.ts);
         let source = version_source(host, &doc, ts)?;
-        host.write_document(&doc, &source)?;
+        host.write_document(&doc, &source, None)?;
 
         let esito = CommandOutcome::notify(quando_dove(DONE_RESTORE, ts));
         Ok(match prima {
@@ -1887,7 +1887,7 @@ mod tests {
         let mut handler = VersioningHandler::new(store.clone());
 
         // Il contenuto cambia e il `DocumentChanged` va perso.
-        host.write_document(&id("a.md"), "seconda").unwrap();
+        host.write_document(&id("a.md"), "seconda", None).unwrap();
         host.avanza(1_000);
         handler
             .handle(&Notice::of(Event::Overflow { dropped: 2 }), &mut host)

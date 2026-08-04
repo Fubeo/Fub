@@ -681,7 +681,7 @@ impl EventHandler for ChainingHandler {
                         topic: "test/derivato".into(),
                         payload: serde_json::json!({ "da": id.as_str() }),
                     });
-                    host.write_document(&DocId::new("derivato.lnk"), "innesco")?;
+                    host.write_document(&DocId::new("derivato.lnk"), "innesco", None)?;
                 }
                 Ok(())
             }
@@ -827,7 +827,7 @@ impl EventHandler for JobRequestingHandler {
                 if Some(*id) == *self.job_id.lock().unwrap() {
                     assert_eq!(job, "sommario");
                     let text = result.as_ref().unwrap().as_str().unwrap().to_string();
-                    host.write_document(&DocId::new("sommario.lnk"), &text)?;
+                    host.write_document(&DocId::new("sommario.lnk"), &text, None)?;
                 }
                 Ok(())
             }

@@ -4745,8 +4745,13 @@ fn conform(source: &str) -> Result<(), String> {
         "host-vault-write",
         "write-document",
         <dyn HostApi>::write_document
-            as fn(Host, &'static DocId, &'static str) -> Result<(), PluginError>,
-        &["id", "source"],
+            as fn(
+                Host,
+                &'static DocId,
+                &'static str,
+                Option<Revision>,
+            ) -> Result<Revision, PluginError>,
+        &["id", "source", "base"],
     );
     contract.method(
         "host-vault-read",
@@ -5267,8 +5272,8 @@ fn wit_conformance_actually_fails_on_drift() {
         (
             "tipo di un parametro cambiato",
             base.replace(
-                "    write-document: func(id: doc-id, source: string) -> result<_, plugin-error>;",
-                "    write-document: func(id: doc-id, source: list<u8>) -> result<_, plugin-error>;",
+                "    write-document: func(id: doc-id, source: string,\n                         base: option<revision>) -> result<revision, plugin-error>;",
+                "    write-document: func(id: doc-id, source: list<u8>,\n                         base: option<revision>) -> result<revision, plugin-error>;",
             ),
             "source",
         ),

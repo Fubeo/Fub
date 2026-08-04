@@ -199,7 +199,7 @@ fn a_plugin_without_write_vault_cannot_write_even_though_the_host_could() {
         // un rifiuto che non lo dicesse non sarebbe diagnosticabile in un
         // montaggio con venti plugin.
         let err = host
-            .write_document(&DocId::new("a.md"), "ciao")
+            .write_document(&DocId::new("a.md"), "ciao", None)
             .expect_err("non ha `write-vault`");
         let PluginError::PermissionDenied(msg) = &err else {
             panic!("atteso permesso negato, trovato {err:?}");

@@ -102,7 +102,7 @@ impl CommandProvider for AlwaysWrites {
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         let doc = DocId::new("nota.md");
-        if let Err(e) = host.write_document(&doc, "scritto dal comando") {
+        if let Err(e) = host.write_document(&doc, "scritto dal comando", None) {
             *self.rifiutato.lock().unwrap() = Some(e.to_string());
         }
         if mode.is_dry_run() {
@@ -167,7 +167,8 @@ impl CommandProvider for TriesEverything {
         annota(
             Capability::VaultWrite,
             "write",
-            host.write_document(&doc, "scritto dal comando"),
+            host.write_document(&doc, "scritto dal comando", None)
+                .map(|_| ()),
         );
         annota(
             Capability::VaultStructure,
@@ -313,7 +314,7 @@ impl CommandProvider for Toucher {
         _mode: InvokeMode,
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
-        host.write_document(&DocId::new("nota.md"), "toccata")?;
+        host.write_document(&DocId::new("nota.md"), "toccata", None)?;
         Ok(CommandOutcome::done())
     }
 }

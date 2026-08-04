@@ -869,7 +869,12 @@ impl Host {
         let source = self.read_version(vault, id, ts)?;
         let ws = self.workspace(vault)?;
         let mut ws = ws.write().unwrap();
-        ws.write_document(id, &source).map_err(PluginError::from)
+        // Senza base, come l'importer (§18.1): un ripristino non discende dal
+        // testo che c'è adesso — lo sostituisce **apposta**, ed è il gesto con
+        // cui l'utente dice che quello di adesso non gli va bene.
+        ws.write_document(id, &source)
+            .map(|_| ())
+            .map_err(PluginError::from)
     }
 
     // --- organizzazione del vault (§11.3) ----------------------------------

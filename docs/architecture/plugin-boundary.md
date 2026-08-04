@@ -289,11 +289,12 @@ un'automazione che si difende con l'origine e la stessa che non lo fa),
 
 Un plugin ha due modi di cambiare un documento, e la differenza sta nella firma:
 
-| | `write_document(id, source)` | `apply_edit(id, request)` |
+| | `write_document(id, source, base)` | `apply_edit(id, request)` |
 |---|---|---|
 | Cosa manda | il documento **intero** | una lista di `(span, testo)` |
-| Su cosa si applica | su qualunque cosa ci sia adesso | sul sorgente che `request.base` nomina |
-| Chi ha scritto nel frattempo | viene sovrascritto **in silenzio** | fa fallire la richiesta (`Conflict`), niente scritto |
+| Su cosa si applica | sul sorgente che `base` nomina, o su qualunque cosa ci sia adesso se `base` è `None` | sul sorgente che `request.base` nomina |
+| Chi ha scritto nel frattempo | fa fallire la richiesta (`Conflict`) se `base` c'è; con `base: None` viene sovrascritto **in silenzio**, e apposta | fa fallire la richiesta (`Conflict`), niente scritto |
+| La base è obbligatoria? | **no**: un importer, un template, un ripristino non correggono un testo che hanno letto — lo **dettano**, e una base inventata è una guardia che dice sempre di sì ([0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md)) | **sì**: un edit senza la revisione su cui è calcolato non è una modifica, è un'ipotesi |
 | Chi lo usa | chi il testo intero ce l'ha in mano: l'editor che salva, un importer che crea | tutti gli altri |
 
 `EditRequest { base: Revision, edits: Vec<TextEdit> }`. La base **non è

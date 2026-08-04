@@ -377,7 +377,8 @@ impl EventHandler for Automa {
         *self.scritture.lock().unwrap() += 1;
         // Scrive SEMPRE qualcosa di nuovo: è il caso che una guardia di
         // contenuto non sa fermare, perché il documento è ogni volta diverso.
-        host.write_document(&diario, &format!("{source}\nriga"))
+        host.write_document(&diario, &format!("{source}\nriga"), None)
+            .map(|_| ())
     }
 }
 

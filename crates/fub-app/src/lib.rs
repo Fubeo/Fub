@@ -140,15 +140,34 @@ fn initial_vault() -> Option<String> {
 // La **capacità** omonima resta dov'era (`VaultRead::list_documents`): quella
 // la `Page` la prende, ed è l'elenco dei plugin, non quello della shell.
 
+/// Il sorgente di un documento **e la revisione che lo nomina** (§18.1):
+/// rispecchiato da `DocumentSource` in `frontend/src/host/contract.ts`.
+///
+/// Due campi e non uno perché chi apre un documento è chi lo salverà, e per
+/// salvarlo in sicurezza deve poter dire da cosa era partito. Viaggiano
+/// **insieme** e non in due porte per la ragione per cui la revisione è opaca
+/// (`fub_abi::edit`): l'alternativa a riceverla è ricalcolarla di là dal
+/// confine, cioè una seconda implementazione di come questo host deriva le
+/// impronte — due implementazioni che a un certo punto divergono, e la seconda
+/// mente in silenzio. Qui la deriva chi ha appena letto il file, dallo stesso
+/// testo, senza rileggere niente.
+#[derive(serde::Serialize)]
+pub struct DocumentSource {
+    pub text: String,
+    pub revision: String,
+}
+
 #[tauri::command]
 fn read_document(
     host: State<Host>,
     id: String,
     vault: Option<String>,
-) -> Result<String, PluginError> {
+) -> Result<DocumentSource, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read().unwrap();
-    ws.read_source(&doc_id(&id)?).map_err(PluginError::from)
+    let text = ws.read_source(&doc_id(&id)?).map_err(PluginError::from)?;
+    let revision = Revision::of(&text).0;
+    Ok(DocumentSource { text, revision })
 }
 
 #[tauri::command]
@@ -156,11 +175,13 @@ fn write_document(
     host: State<Host>,
     id: String,
     source: String,
+    base: Option<String>,
     vault: Option<String>,
-) -> Result<(), PluginError> {
+) -> Result<String, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
-    ws.write_document(&doc_id(&id)?, &source)
+    ws.write_document_from(&doc_id(&id)?, &source, base.map(Revision::new))
+        .map(|r| r.0)
         .map_err(PluginError::from)
 }
 
