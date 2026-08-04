@@ -355,6 +355,27 @@ pub trait VaultRead: Send + Sync {
     /// Legge la sorgente di un documento dal vault.
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
 
+    /// I **byte** di un documento, senza decodificarli.
+    ///
+    /// Sta accanto a [`VaultRead::read_document`] e non al posto suo, per la
+    /// stessa ragione per cui nel kernel `read` e `read_bytes` sono due
+    /// funzioni: chi legge del testo non deve poter dimenticare di decodificare.
+    ///
+    /// Esiste perché senza di lei il confine dei plugin è **testo e basta**, e
+    /// un estrattore di terzi — il PDF, l'OCR, la trascrizione di FEATURES §9.1,
+    /// che è il modo in cui omnisearch fa entrare gli allegati nella ricerca —
+    /// non ha modo di chiedere ciò che gli serve. Il kernel sapeva già leggere a
+    /// byte per conto proprio (`SourceKind::Bytes`, dalla
+    /// [decisione 0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md));
+    /// quel sapere si fermava sul confine, e questa è la firma che lo fa passare
+    /// (§21.8).
+    ///
+    /// È sotto lo stesso permesso di ogni altra lettura del vault
+    /// ([`permission::READ_VAULT`](crate::options::permission::READ_VAULT)):
+    /// leggere del testo e leggere dei byte non sono due gradi di fiducia — chi
+    /// può leggere una nota può già leggerne i byte decodificandoli lui.
+    fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError>;
+
     /// La revisione del sorgente di un documento: l'identità del testo su cui
     /// si sta per calcolare una modifica.
     ///

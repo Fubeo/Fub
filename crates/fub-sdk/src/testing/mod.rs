@@ -42,7 +42,11 @@ use fub_abi::PluginError;
 #[derive(Default)]
 pub struct MemoryHost {
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
-    docs: Mutex<BTreeMap<String, String>>,
+    /// I documenti **a byte**, come stanno nel vault vero: un doppio che li
+    /// tenesse come `String` non saprebbe rappresentare un allegato, e chi
+    /// scrive un estrattore a `SourceKind::Bytes` non avrebbe come provarlo
+    /// senza un kernel (§21.8).
+    docs: Mutex<BTreeMap<String, Vec<u8>>>,
     now: AtomicU64,
     /// Il contesto servito da [`HostEnv::active_context`], come lo
     /// pubblicherebbe la shell.
@@ -144,7 +148,20 @@ impl MemoryHost {
         self.docs
             .lock()
             .unwrap()
-            .insert(id.to_string(), source.to_string());
+            .insert(id.to_string(), source.as_bytes().to_vec());
+        self
+    }
+
+    /// Aggiunge un documento che **non è testo**: un PDF, un `.canvas`, un file
+    /// con un encoding suo.
+    ///
+    /// Chi lo legge con `read_document` riceve lo stesso errore che riceverebbe
+    /// dal vault vero; chi lo legge con `read_document_bytes` riceve i byte.
+    pub fn con_documento_binario(self, id: &str, bytes: &[u8]) -> Self {
+        self.docs
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), bytes.to_vec());
         self
     }
 
@@ -315,6 +332,13 @@ impl MemoryHost {
 
 impl VaultRead for MemoryHost {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
+        let bytes = self.read_document_bytes(id)?;
+        // Come il vault vero: non si indovina un encoding, si dice di no.
+        String::from_utf8(bytes)
+            .map_err(|e| PluginError::Io(format!("{id} non è UTF-8: {e}").into()))
+    }
+
+    fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
         self.docs
             .lock()
             .unwrap()
@@ -389,7 +413,7 @@ impl VaultWrite for MemoryHost {
         self.docs
             .lock()
             .unwrap()
-            .insert(id.to_string(), source.to_string());
+            .insert(id.to_string(), source.as_bytes().to_vec());
         Ok(())
     }
 

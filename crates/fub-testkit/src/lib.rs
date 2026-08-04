@@ -52,7 +52,7 @@ use fub_kernel::{FormatRegistry, Trust, Workspace};
 
 pub mod formato;
 
-pub use formato::TestoDiProva;
+pub use formato::{EstrattoreDiProva, TestoDiProva};
 
 /// Il registro degli eventi visti da [`Banco::eventi`], condiviso con la spia.
 type Registro = Arc<Mutex<Vec<Event>>>;
@@ -282,6 +282,16 @@ impl Montato {
     /// programma — o Obsidian — mentre Fub guarda altrove.
     pub fn scrivi(&self, rel: &str, corpo: &str) {
         scrivi_in(&self.root, rel, corpo);
+    }
+
+    /// Scrive dei **byte**, che è l'unico modo di mettere nel vault un file che
+    /// non è testo — un allegato, o un documento con un encoding suo.
+    pub fn scrivi_byte(&self, rel: &str, corpo: &[u8]) {
+        let path = self.root.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("cartelle intermedie");
+        }
+        std::fs::write(&path, corpo).unwrap_or_else(|e| panic!("scrittura di `{rel}`: {e}"));
     }
 
     /// Legge un file dal disco, saltando il kernel.

@@ -210,6 +210,10 @@ impl VaultRead for JobHost {
         self.read_result(|h| h.read_document(id))
     }
 
+    fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
+        self.read_result(|h| h.read_document_bytes(id))
+    }
+
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
         self.read_result(|h| h.document_revision(id))
     }

@@ -142,17 +142,28 @@ impl DocumentStore {
         self.parse_source(id, DocumentSource::Text(source.to_string()))
     }
 
-    /// Legge e parsa un documento **nella forma che il suo provider chiede**:
-    /// testo decodificato o byte grezzi (§3.4).
-    pub(crate) fn parse_from_disk(&self, id: &DocId) -> Result<DocumentModel> {
-        let source = match self.provider_for(id)?.descriptor().source {
+    /// Legge un documento **nella forma che il suo provider chiede**: testo
+    /// decodificato o byte grezzi (§3.4).
+    ///
+    /// È il **punto unico** in cui `FormatDescriptor::source` viene consultato.
+    /// Non è una comodità: finché la scelta stava dentro `parse_from_disk`,
+    /// valeva per chi apre un documento e non per chi **indicizza** — che legge
+    /// e prende l'impronta in una fase e parsa in un'altra, e quindi non passava
+    /// di lì. Lo stesso file aveva due destini a seconda di chi lo leggeva
+    /// (§21.8).
+    pub(crate) fn source_from_disk(&self, id: &DocId) -> Result<DocumentSource> {
+        Ok(match self.provider_for(id)?.descriptor().source {
             SourceKind::Text => DocumentSource::Text(self.vault.read(id)?),
             SourceKind::Bytes => DocumentSource::Bytes(self.vault.read_bytes(id)?),
-        };
-        self.parse_source(id, source)
+        })
     }
 
-    fn parse_source(&self, id: &DocId, source: DocumentSource) -> Result<DocumentModel> {
+    /// Legge e parsa un documento nella forma che il suo provider chiede.
+    pub(crate) fn parse_from_disk(&self, id: &DocId) -> Result<DocumentModel> {
+        self.parse_source(id, self.source_from_disk(id)?)
+    }
+
+    pub(crate) fn parse_source(&self, id: &DocId, source: DocumentSource) -> Result<DocumentModel> {
         let provider = self.provider_for(id)?;
         let ctx = ParseContext::obsidian(id.as_str());
         // Il parse è dentro ogni scrittura, quindi sotto il prestito esclusivo
