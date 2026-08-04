@@ -14,7 +14,7 @@ use crate::edit::{EditReport, EditRequest, Revision};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
 use crate::format::DocumentFormat;
-use crate::locale::Locale;
+use crate::locale::{Locale, Weekday};
 use crate::model::{
     DocId, DocumentModel, Heading, LinkTarget, PropertyScalar, PropertyValue, Span,
 };
@@ -3502,14 +3502,24 @@ pub struct TimerSpec {
     pub schedule: TimerSchedule,
 }
 
-/// Ogni quanto suona una sveglia (§22.1, decisione 0069).
+/// Ogni quanto suona una sveglia (§22.1, decisione 0069; §22.4, decisione 0091).
 ///
-/// Le due forme sono quelle che si misurano in **tempo trascorso**, ed è la
-/// ragione per cui sono solo due: un orario di parete («ogni giorno alle 9»)
-/// vuole un fuso e una regola sull'ora legale, cioè una decisione che non è
-/// questa. Il `variant` cresce in coda il giorno che quella decisione si
-/// prende, e chi ha dichiarato `every` non se ne accorge.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// **Due famiglie, e la differenza non è di comodo.** `Every` e `After` si
+/// misurano in *tempo trascorso*: la loro regola è pura e sta tutta in
+/// [`nth_after`](TimerSchedule::nth_after), che non ha bisogno di sapere che ore
+/// sono. `AtWallClock` si misura in *ora civile*: quanti secondi manchino alle
+/// nove dipende da che ore sono adesso, e nessuna funzione che non lo riceva lo
+/// può calcolare. La regola di questa seconda famiglia esiste lo stesso e sta
+/// lo stesso nel contratto — è [`WallClock::next_after`], che riceve l'ora
+/// civile invece di leggerla — e per questo `nth_after` risponde `None` a un
+/// orario di parete: non è «non suona più», è *questa non è la sua regola*, e il
+/// suo doc lo dice.
+///
+/// Il caso nuovo è **in coda**, e non «dove starebbe meglio»: l'ordine dei casi
+/// è il discriminante dell'ABI
+/// ([0088](../../../docs/decisions/0088-cio-che-non-e-ancora-successo.md)),
+/// quindi additivo vuol dire in fondo.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TimerSchedule {
     /// Suona ogni `seconds` secondi, per sempre, a partire dalla
@@ -3517,21 +3527,321 @@ pub enum TimerSchedule {
     Every { seconds: u64 },
     /// Suona **una volta sola**, `seconds` secondi dopo la registrazione.
     After { seconds: u64 },
+    /// Suona a un **orario di parete** (§22.4, decisione 0091): «ogni giorno
+    /// alle 9», «il lunedì alle 7:30».
+    AtWallClock(WallClock),
 }
 
 impl TimerSchedule {
     /// Fra quanti secondi dalla registrazione suona la `n`-esima volta
     /// (`n` a partire da 0)? `None` = non suona più.
     ///
-    /// È la sola aritmetica di questa specie che sta nel contratto, e ci sta
-    /// perché è **la regola**: chi implementa lo scheduler la applica invece di
+    /// È la regola della famiglia che si misura in **tempo trascorso**, e sta
+    /// nel contratto perché chi implementa lo scheduler la applichi invece di
     /// avere la propria idea di cosa voglia dire «ogni ora», che è il modo in
     /// cui due host finirebbero per suonare in due momenti diversi.
+    ///
+    /// **Per un [`AtWallClock`](TimerSchedule::AtWallClock) risponde `None`, e
+    /// non vuol dire che non suona.** Vuol dire che la sua regola è un'altra —
+    /// [`WallClock::next_after`] — perché di questa firma manca l'ingrediente:
+    /// quanti secondi manchino alle nove non è una funzione di *quante volte ha
+    /// già suonato*, è una funzione di *che ore sono adesso*. Chi implementa uno
+    /// scheduler distingue le due famiglie con
+    /// [`wall_clock`](TimerSchedule::wall_clock), che è la domanda fatta apposta
+    /// per non doverlo dedurre da un `None`.
     pub fn nth_after(&self, n: u64) -> Option<u64> {
         match *self {
             TimerSchedule::Every { seconds } => seconds.max(1).checked_mul(n.checked_add(1)?),
             TimerSchedule::After { seconds } if n == 0 => Some(seconds),
             TimerSchedule::After { .. } => None,
+            TimerSchedule::AtWallClock(_) => None,
+        }
+    }
+
+    /// L'orario di parete, se è di quella famiglia.
+    ///
+    /// Esiste perché uno scheduler non debba distinguere le due famiglie da un
+    /// `None` di [`nth_after`](TimerSchedule::nth_after): un `None` è già la
+    /// risposta di un `After` che ha finito, e due significati sullo stesso
+    /// valore sono il modo in cui una sveglia smette di suonare senza che
+    /// nessuno abbia scritto una riga sbagliata.
+    pub fn wall_clock(&self) -> Option<&WallClock> {
+        match self {
+            TimerSchedule::AtWallClock(w) => Some(w),
+            _ => None,
+        }
+    }
+}
+
+/// Una sveglia a **orario di parete** (§22.4, decisione 0091).
+///
+/// «Ogni giorno alle 9» non è «ogni 86400 secondi»: l'una segue il calendario di
+/// chi la legge — e quindi il suo fuso e la sua ora legale — l'altra no.
+///
+/// **L'orario è in due interi e non in una stringa `"09:00"`**: una stringa
+/// vuole un parser al confine, e con lui un modo di fallire che nessuno sa dove
+/// mettere — un manifest si legge quando il componente si registra, e «l'orario
+/// non si capisce» diventerebbe un errore di registrazione per un campo che
+/// avrebbe potuto non essere sbagliabile. Due interi si controllano dove si
+/// leggono.
+///
+/// **Un caso solo per «ogni giorno» e «il lunedì»**, con [`days`](Self::days)
+/// vuoto a dire *ogni giorno*: un `Daily` e un `Weekly` separati sarebbero due
+/// casi del `variant` con la stessa aritmetica dentro, e il secondo si
+/// distinguerebbe dal primo solo per un campo in più.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WallClock {
+    /// L'ora, `0..=23`. Fuori scala la sveglia non suona: vedi
+    /// [`valid`](Self::valid).
+    pub hour: u8,
+    /// I minuti, `0..=59`.
+    pub minute: u8,
+    /// In che giorni. **Vuoto = ogni giorno.**
+    #[serde(default)]
+    pub days: Vec<Weekday>,
+    /// Il fuso in cui leggere [`hour`](Self::hour), come nome IANA
+    /// (`Europe/Rome`). **Assente = il fuso della macchina** — cioè quello del
+    /// sistema, salvo l'impostazione `timers.zone` che lo sovrascrive per questa
+    /// macchina.
+    ///
+    /// I due stati sono due significati diversi, e la ragione per cui il campo
+    /// c'è. Assente vuol dire *quando chi guarda lo schermo comincia a
+    /// lavorare*: un portatile portato a Tokyo suona alle 9 di Tokyo, ed è il
+    /// caso normale. Presente vuol dire *ancorato a un posto*: «il digest delle
+    /// 9 dell'ufficio di Roma» resta delle 9 di Roma anche per chi lo legge
+    /// altrove — che è ciò che un vault condiviso fra persone in due paesi vuole
+    /// poter dire, e che un fuso implicito non sa esprimere.
+    ///
+    /// Un nome che il database dei fusi non conosce **non fa suonare la
+    /// sveglia**, e non ripiega su UTC: un ripiego silenzioso è la specie di
+    /// bugia che la [0077] rifiuta nel registro dei comandi — la dichiarazione
+    /// sarebbe onorata da un'altra sveglia, all'ora sbagliata, senza che nessuno
+    /// se ne accorga.
+    ///
+    /// [0077]: ../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone: Option<String>,
+    /// Quanto tardi è ancora utile suonare, in secondi. **`0` = mai.**
+    ///
+    /// **Non è il campo dell'ora legale**, ed è la cosa che questa decisione ha
+    /// scoperto misurando: l'ora legale non ne vuole uno, perché a lei
+    /// rispondono due *regole* — quelle qui sotto — e restava scoperta un'altra
+    /// domanda, che la voce non aveva fatto. Un'occorrenza può essere passata
+    /// senza che nessuno la suonasse perché la macchina dormiva, perché il pool
+    /// era occupato, perché l'app era chiusa. La domanda utile non è
+    /// *si recupera?* ma *fino a quanto tardi ha ancora senso*: un promemoria
+    /// delle 9 alle 17 non serve più (`0`), un backup notturno in ritardo di
+    /// venti minuti va fatto lo stesso (`3600`).
+    ///
+    /// Un intero al posto di una bandiera **risolve da sé la macchina che dorme
+    /// due giorni**: quelle occorrenze cadono fuori da qualunque finestra
+    /// sensata e non suonano — invece di suonare due volte, che è la risposta
+    /// che nessuno vuole e che un `catch-up: bool` avrebbe dato.
+    ///
+    /// # Le due regole dell'ora legale, che non sono campi
+    ///
+    /// **Un'ora che non esiste si sposta in avanti** della durata del salto: la
+    /// domenica in cui l'ora legale entra, una sveglia delle 2:30 suona alle
+    /// 3:30. È la disambiguazione *compatible* di RFC 5545, cioè ciò che fa ogni
+    /// calendario, e vuol dire che la sveglia non perde mai un giorno.
+    ///
+    /// **Un'ora che esiste due volte suona alla prima.** Discende
+    /// dall'invariante e non da una scelta: al più *una* suonata per occorrenza,
+    /// sempre, perché **un'occorrenza è la sua data civile e non il suo
+    /// istante**. La domenica in cui l'ora legale esce, le 2:30 che accadono due
+    /// volte sono una sola data civile.
+    #[serde(default)]
+    pub catch_up_seconds: u64,
+}
+
+impl WallClock {
+    /// Ogni giorno a quest'ora, nel fuso della macchina, senza recupero.
+    pub fn daily(hour: u8, minute: u8) -> Self {
+        WallClock {
+            hour,
+            minute,
+            days: Vec::new(),
+            zone: None,
+            catch_up_seconds: 0,
+        }
+    }
+
+    /// Solo in questi giorni.
+    pub fn on(mut self, days: impl IntoIterator<Item = Weekday>) -> Self {
+        self.days = days.into_iter().collect();
+        self
+    }
+
+    /// In questo fuso, per nome IANA, invece che in quello della macchina.
+    pub fn anchored(mut self, zone: impl Into<String>) -> Self {
+        self.zone = Some(zone.into());
+        self
+    }
+
+    /// Con questa finestra di recupero.
+    pub fn catching_up(mut self, seconds: u64) -> Self {
+        self.catch_up_seconds = seconds;
+        self
+    }
+
+    /// L'orario è scrivibile su un orologio?
+    ///
+    /// Un orario fuori scala non è un errore di registrazione ed è deliberato:
+    /// il manifest si legge quando il componente entra, e rifiutare un
+    /// componente intero per una sveglia storta sarebbe una punizione
+    /// sproporzionata. Non suona, e non suona **in modo osservabile** — chi
+    /// implementa uno scheduler chiama questa funzione e sa perché.
+    pub fn valid(&self) -> bool {
+        self.hour < 24 && self.minute < 60
+    }
+
+    /// Il giorno è fra quelli dichiarati? (elenco vuoto = ogni giorno)
+    pub fn falls_on(&self, day: Weekday) -> bool {
+        self.days.is_empty() || self.days.contains(&day)
+    }
+
+    /// **La regola.** La prima occorrenza *strettamente dopo* `now`, in ora
+    /// civile locale; `None` se non ne esiste nessuna.
+    ///
+    /// È pura come [`TimerSchedule::nth_after`] ed è nel contratto per la stessa
+    /// ragione — due host non devono avere due idee di quando siano le nove del
+    /// prossimo lunedì — ma riceve l'ora civile invece di riceverne il
+    /// trascorso: è l'ingrediente che alla firma sorella manca, ed è tutto ciò
+    /// che serve perché anche questa famiglia abbia la sua regola qui dentro.
+    ///
+    /// **Il calendario finisce qui, il fuso no.** Questa funzione lavora su ore
+    /// civili e non sa cosa sia un fuso: convertire un'ora civile nell'istante
+    /// in cui accade — e decidere cosa fare dell'ora che l'ora legale cancella o
+    /// raddoppia — è di chi possiede l'orologio, cioè dell'host. Il contratto
+    /// dice *quali* occorrenze esistono, l'host dice *quando* accadono.
+    pub fn next_after(&self, now: CivilTime) -> Option<CivilTime> {
+        if !self.valid() {
+            return None;
+        }
+        let oggi = CivilTime {
+            hour: self.hour,
+            minute: self.minute,
+            second: 0,
+            ..now
+        };
+        let primo = if oggi > now { oggi } else { oggi.next_day() };
+        // Al più otto giorni: sette coprono ogni elenco non vuoto, e l'ottavo
+        // esiste solo perché il primo candidato può essere già domani.
+        let mut c = primo;
+        for _ in 0..8 {
+            if self.falls_on(c.weekday()) {
+                return Some(c);
+            }
+            c = c.next_day();
+        }
+        None
+    }
+
+    /// L'ultima occorrenza **a `now` o prima**, in ora civile locale.
+    ///
+    /// È la metà della regola che serve al recupero: senza di lei uno scheduler
+    /// che si sveglia in ritardo sa solo qual è la prossima, e non ha modo di
+    /// sapere se ne ha appena persa una — cioè
+    /// [`catch_up_seconds`](Self::catch_up_seconds) non sarebbe onorabile, e un
+    /// campo dichiarato e non onorato è peggio di un campo assente.
+    pub fn latest_upto(&self, now: CivilTime) -> Option<CivilTime> {
+        if !self.valid() {
+            return None;
+        }
+        let oggi = CivilTime {
+            hour: self.hour,
+            minute: self.minute,
+            second: 0,
+            ..now
+        };
+        let primo = if oggi <= now { oggi } else { oggi.prev_day() };
+        let mut c = primo;
+        for _ in 0..8 {
+            if self.falls_on(c.weekday()) {
+                return Some(c);
+            }
+            c = c.prev_day();
+        }
+        None
+    }
+}
+
+/// Un'**ora civile**: ciò che si legge su un calendario appeso al muro, senza
+/// fuso e senza offset (§22.4, decisione 0091).
+///
+/// Non attraversa il confine e non sta nel WIT: è l'ingrediente della regola,
+/// come `n` lo è di [`TimerSchedule::nth_after`]. Chi possiede l'orologio la
+/// costruisce dal proprio istante e la riconverte in un istante; chi applica la
+/// regola non ha bisogno d'altro.
+///
+/// **Il confronto è l'ordine cronologico**, ed è la ragione dell'ordine dei
+/// campi: `derive(PartialOrd)` confronta in ordine di dichiarazione, e dall'anno
+/// al secondo quello è esattamente l'ordine del tempo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CivilTime {
+    pub year: i32,
+    /// `1..=12`.
+    pub month: u8,
+    /// `1..=31`.
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+}
+
+impl CivilTime {
+    /// Il giorno della settimana, dal calendario gregoriano proplettico.
+    pub fn weekday(&self) -> Weekday {
+        // Giorni dal 1970-01-01, che era un giovedì.
+        let d = self.days_from_epoch().rem_euclid(7);
+        match (d + 3) % 7 {
+            0 => Weekday::Monday,
+            1 => Weekday::Tuesday,
+            2 => Weekday::Wednesday,
+            3 => Weekday::Thursday,
+            4 => Weekday::Friday,
+            5 => Weekday::Saturday,
+            _ => Weekday::Sunday,
+        }
+    }
+
+    /// Stessa ora, il giorno dopo.
+    pub fn next_day(self) -> Self {
+        Self::from_days(self.days_from_epoch() + 1, self)
+    }
+
+    /// Stessa ora, il giorno prima.
+    pub fn prev_day(self) -> Self {
+        Self::from_days(self.days_from_epoch() - 1, self)
+    }
+
+    /// I giorni dal 1970-01-01 (algoritmo *days from civil* di Howard Hinnant).
+    fn days_from_epoch(&self) -> i64 {
+        let y = self.year as i64 - i64::from(self.month <= 2);
+        let era = if y >= 0 { y } else { y - 399 } / 400;
+        let yoe = y - era * 400;
+        let m = self.month as i64;
+        let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + self.day as i64 - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        era * 146_097 + doe - 719_468
+    }
+
+    /// L'inverso, tenendo l'ora di `ora_del_giorno`.
+    fn from_days(days: i64, ora_del_giorno: Self) -> Self {
+        let z = days + 719_468;
+        let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        CivilTime {
+            year: (y + i64::from(m <= 2)) as i32,
+            month: m as u8,
+            day: d as u8,
+            ..ora_del_giorno
         }
     }
 }

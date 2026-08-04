@@ -23,8 +23,10 @@ use std::sync::{Arc, Mutex};
 use camino::Utf8PathBuf;
 use fub_abi::error::PluginError;
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
+use fub_abi::locale::Weekday;
 use fub_abi::traits::{
-    EventHandler, HostApi, PluginManifest, PluginPermissions, TimerSchedule, TimerSpec,
+    CivilTime, EventHandler, HostApi, PluginManifest, PluginPermissions, TimerSchedule, TimerSpec,
+    WallClock,
 };
 use fub_kernel::{FormatRegistry, Trust, Workspace};
 use fub_testkit::TestoDiProva;
@@ -191,4 +193,178 @@ fn the_contract_says_when_the_nth_ring_is_due() {
     // Una divisione per zero qui sarebbe un pool che gira a vuoto su un numero
     // che qualcuno ha scritto per sbaglio nel proprio manifest.
     assert_eq!(TimerSchedule::Every { seconds: 0 }.nth_after(0), Some(1));
+}
+
+// ---------------------------------------------------------------------------
+// **Un orario di parete non è un intervallo** (§22.4, decisione 0091).
+//
+// Le prove qui sotto guardano la metà che è **contratto**: quali occorrenze
+// esistono. *Quando* accadono — cioè il fuso e l'ora legale — è dell'host, e lo
+// prova `crates/fub-host/src/parete.rs`.
+// ---------------------------------------------------------------------------
+
+/// **La trappola vera di questa voce, resa un test.**
+///
+/// `nth_after` è una firma di forma «tempo trascorso»: quanti secondi manchino
+/// alle nove non è una funzione di *quante volte ha già suonato*, è una funzione
+/// di *che ore sono adesso*, che quella firma non riceve. Un orario di parete
+/// che ci passasse dentro sarebbe una sveglia dichiarata e non onorata — la
+/// specie di bugia che la 0077 rifiuta nel registro dei comandi e la 0090 ha
+/// rifiutato per le scorciatoie.
+///
+/// La risposta non è stata cambiare la firma: è stata **dichiararne una seconda
+/// accanto**, che l'ora civile la riceve. Questo test tiene ferme le due metà
+/// della risposta: che `nth_after` dica `None`, e che ci sia una domanda con cui
+/// distinguere quel `None` da quello di un `after` che ha finito.
+#[test]
+fn a_wall_clock_is_not_an_elapsed_time_and_says_so() {
+    let alle_nove = TimerSchedule::AtWallClock(WallClock::daily(9, 0));
+    assert_eq!(
+        alle_nove.nth_after(0),
+        None,
+        "la regola del tempo trascorso non sa esprimere un orario di parete"
+    );
+
+    // E il `None` non si confonde con quello di chi ha finito: c'è una domanda
+    // fatta apposta, e le due famiglie si distinguono senza dedurre.
+    assert!(alle_nove.wall_clock().is_some());
+    assert!(TimerSchedule::After { seconds: 600 }.wall_clock().is_none());
+    assert!(TimerSchedule::Every { seconds: 60 }.wall_clock().is_none());
+}
+
+/// La regola dell'ora civile è **pura** come la sorella, e sta nel contratto per
+/// la stessa ragione: due host non devono avere due idee di quando siano le nove
+/// del prossimo lunedì.
+#[test]
+fn the_contract_says_which_occurrences_exist() {
+    // Il 15 gennaio 2026 è un giovedì.
+    let adesso = CivilTime {
+        year: 2026,
+        month: 1,
+        day: 15,
+        hour: 10,
+        minute: 30,
+        second: 0,
+    };
+
+    // Ogni giorno alle 9: le nove di oggi sono passate, quindi è domani.
+    let ogni_giorno = WallClock::daily(9, 0);
+    let p = ogni_giorno.next_after(adesso).expect("una prossima c'è");
+    assert_eq!((p.day, p.hour, p.minute), (16, 9, 0));
+    // E l'ultima a oggi o prima è quella di stamattina.
+    let u = ogni_giorno.latest_upto(adesso).expect("una passata c'è");
+    assert_eq!((u.day, u.hour), (15, 9));
+
+    // Più tardi oggi: è ancora oggi.
+    let p = WallClock::daily(18, 45)
+        .next_after(adesso)
+        .expect("una prossima c'è");
+    assert_eq!((p.day, p.hour, p.minute), (15, 18, 45));
+
+    // **Elenco vuoto = ogni giorno**, ed è la ragione per cui `daily` e `weekly`
+    // sono un caso solo: la differenza è un campo, non un'aritmetica.
+    let solo_lunedi = WallClock::daily(9, 0).on([Weekday::Monday]);
+    let p = solo_lunedi.next_after(adesso).expect("una prossima c'è");
+    assert_eq!((p.day, p.weekday()), (19, Weekday::Monday));
+    let u = solo_lunedi.latest_upto(adesso).expect("una passata c'è");
+    assert_eq!((u.day, u.weekday()), (12, Weekday::Monday));
+}
+
+/// Il calendario non si ferma alla fine del mese, né a quella dell'anno, né al
+/// 28 febbraio di un anno bisestile: è aritmetica gregoriana vera, e questi sono
+/// i tre punti in cui una scritta a mano si rompe.
+#[test]
+fn the_calendar_rolls_over_months_years_and_leap_days() {
+    let alle_nove = WallClock::daily(9, 0);
+    let sera = |year, month, day| CivilTime {
+        year,
+        month,
+        day,
+        hour: 23,
+        minute: 0,
+        second: 0,
+    };
+
+    let p = alle_nove.next_after(sera(2026, 1, 31)).expect("prossima");
+    assert_eq!((p.year, p.month, p.day), (2026, 2, 1));
+
+    let p = alle_nove.next_after(sera(2026, 12, 31)).expect("prossima");
+    assert_eq!((p.year, p.month, p.day), (2027, 1, 1));
+
+    // Il 2028 è bisestile: dopo il 28 febbraio viene il 29.
+    let p = alle_nove.next_after(sera(2028, 2, 28)).expect("prossima");
+    assert_eq!((p.year, p.month, p.day), (2028, 2, 29));
+    // Il 2026 non lo è.
+    let p = alle_nove.next_after(sera(2026, 2, 28)).expect("prossima");
+    assert_eq!((p.year, p.month, p.day), (2026, 3, 1));
+
+    // E all'indietro allo stesso modo.
+    let mattina = CivilTime {
+        hour: 1,
+        ..sera(2027, 1, 1)
+    };
+    let u = alle_nove.latest_upto(mattina).expect("passata");
+    assert_eq!((u.year, u.month, u.day), (2026, 12, 31));
+}
+
+/// Un orario che non sta su un orologio **non suona**, e non fa fallire la
+/// registrazione del componente che l'ha scritto.
+///
+/// È la scelta deliberata di dove mettere l'errore: un manifest si legge quando
+/// il componente entra, e rifiutare un componente intero per una sveglia storta
+/// sarebbe sproporzionato — mentre non suonare è osservabile e ha un nome
+/// (`WallClock::valid`).
+#[test]
+fn an_impossible_time_does_not_ring_and_does_not_refuse_the_component() {
+    let storta = WallClock::daily(25, 0);
+    assert!(!storta.valid());
+    assert_eq!(storta.next_after(mezzanotte()), None);
+    assert_eq!(storta.latest_upto(mezzanotte()), None);
+    assert!(!WallClock::daily(9, 60).valid());
+
+    let (_dir, ws, _log) = vault(vec![TimerSpec {
+        id: "storta".into(),
+        schedule: TimerSchedule::AtWallClock(storta),
+    }]);
+    assert_eq!(
+        ws.declared_timers().len(),
+        1,
+        "il componente è entrato lo stesso: l'errore è di quella sveglia, non suo"
+    );
+}
+
+/// Una sveglia di parete è una sveglia come le altre: si dichiara nel manifest,
+/// si trova in `declared_timers`, e quando suona è un evento.
+#[test]
+fn a_wall_clock_alarm_is_declared_and_fired_like_any_other() {
+    let (_dir, mut ws, log) = vault(vec![TimerSpec {
+        id: "digest".into(),
+        schedule: TimerSchedule::AtWallClock(
+            WallClock::daily(9, 0)
+                .anchored("Europe/Rome")
+                .catching_up(3600),
+        ),
+    }]);
+    let dichiarate = ws.declared_timers();
+    assert_eq!(dichiarate.len(), 1);
+    let sveglia = dichiarate[0].1.schedule.wall_clock().expect("di parete");
+    assert_eq!(sveglia.zone.as_deref(), Some("Europe/Rome"));
+    assert_eq!(sveglia.catch_up_seconds, 3600);
+
+    assert!(ws.fire_timer(ACME, "digest"));
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec!["com.acme.tasks/digest".to_string()]
+    );
+}
+
+fn mezzanotte() -> CivilTime {
+    CivilTime {
+        year: 2026,
+        month: 1,
+        day: 15,
+        hour: 0,
+        minute: 0,
+        second: 0,
+    }
 }

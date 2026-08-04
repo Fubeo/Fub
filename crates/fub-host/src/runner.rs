@@ -48,6 +48,9 @@ use std::time::{Duration, Instant};
 use fub_abi::traits::{JobId, JobProgress, TimerSchedule};
 use fub_abi::PluginError;
 use fub_kernel::{Indicizzazione, JobBell, PendingJob, Workspace};
+use jiff::Timestamp;
+
+use crate::parete::{verdetto, Fuso, Posizione};
 
 use crate::jobs::JobHost;
 use crate::records::UnreadDoc;
@@ -139,19 +142,31 @@ impl Flags {
     }
 }
 
-/// Lo **scheduler delle sveglie** (§22.1, decisione 0069): la metà che il
-/// contratto non guarda, e che sta qui perché il tempo di parete è di chi
-/// possiede i thread.
+/// Lo **scheduler delle sveglie** (§22.1, decisione 0069; §22.4, decisione
+/// 0091): la metà che il contratto non guarda, e che sta qui perché il tempo è
+/// di chi possiede i thread.
 ///
 /// Il kernel dice **quali** sveglie sono dichiarate
 /// ([`Workspace::declared_timers`]) e con che regola suonano
-/// ([`TimerSchedule::nth_after`]); questa struttura tiene la sola cosa che il
-/// kernel non può tenere senza leggere un orologio: da quando si conta.
+/// ([`TimerSchedule::nth_after`] per il tempo trascorso,
+/// [`WallClock::next_after`] per l'ora civile); questa struttura tiene la sola
+/// cosa che il kernel non può tenere senza leggere un orologio: dov'è arrivata.
 ///
-/// L'ancora è un [`Instant`] e non un orario di sistema, ed è la ragione per cui
-/// «ogni ora» vuol dire un'ora anche se qualcuno sposta l'orologio della
-/// macchina — che è anche la ragione per cui `every`/`after` sono le due sole
-/// forme del contratto: un orario di parete non si può misurare così.
+/// # Due sorgenti di tempo, e perché non si mescolano
+///
+/// L'ancora di `every`/`after` è un [`Instant`] e non un orario di sistema, ed è
+/// la ragione per cui «ogni ora» vuol dire un'ora anche se qualcuno sposta
+/// l'orologio della macchina. Un orario di parete non si può misurare così — un
+/// `Instant` non ha un calendario — e ne vuole una seconda, che è
+/// [`crate::parete`].
+///
+/// Le due **non si sommano mai**: l'attesa resta sempre e solo monotona, perché
+/// aspettare è «per quanto» e non «fino a quando». Il tempo di parete entra in
+/// un punto solo — *fra quanti secondi accade quell'ora civile* — e da lì in poi
+/// il campo [`prossima`](Quadrante::prossima) è dello stesso tipo per tutte e
+/// tre le forme. Un orologio spostato allunga o accorcia una singola attesa e
+/// poi si ricalcola; che una sveglia di parete non suoni due volte non dipende
+/// dall'orologio ma dalla sua [`ultima`](Quadrante::ultima) occorrenza civile.
 #[derive(Default)]
 struct Sveglie {
     /// Chiave: (componente, nome della sveglia).
@@ -161,12 +176,21 @@ struct Sveglie {
 struct Quadrante {
     schedule: TimerSchedule,
     /// Da quando si conta: la prima volta che questo scheduler l'ha vista.
+    /// Solo per il tempo trascorso — un orario di parete non conta da quando è
+    /// stato registrato, conta dal calendario.
     ancora: Instant,
-    /// Quante volte ha già suonato.
+    /// Quante volte ha già suonato (tempo trascorso).
     suonate: u64,
+    /// Dove sta una sveglia di **parete**: l'ultima occorrenza civile
+    /// considerata e quella che sta aspettando.
+    ///
+    /// È l'invariante «al più una suonata per occorrenza» reso un campo, ed è
+    /// ciò che fa suonare una volta sola le 2:30 che l'uscita dell'ora legale fa
+    /// accadere due volte.
+    dove: Posizione,
     /// Quando suona la prossima. `None` = ha finito (un `after` che è già
-    /// suonato), e la voce **resta** in mappa proprio per non essere
-    /// riseminata dalla riconciliazione al giro dopo.
+    /// suonato, o un orario di parete impossibile), e la voce **resta** in mappa
+    /// proprio per non essere riseminata dalla riconciliazione al giro dopo.
     prossima: Option<Instant>,
 }
 
@@ -177,7 +201,17 @@ impl Sveglie {
     /// manifest a ogni giro invece che una copia presa una volta è ciò che fa
     /// smettere di suonare un componente disattivato — senza che questo codice
     /// sappia niente della disattivazione.
-    fn riconcilia(&mut self, dichiarate: &[(String, fub_abi::traits::TimerSpec)], ora: Instant) {
+    ///
+    /// `fuso_macchina` è il nome IANA che il locale risolve
+    /// ([`locale.timezone`](fub_kernel::locale::TIMEZONE)): vuoto = quello del
+    /// sistema. Non è una chiave nuova, ed è la misura che ha risparmiato
+    /// un'impostazione — vedi la decisione 0091.
+    fn riconcilia(
+        &mut self,
+        dichiarate: &[(String, fub_abi::traits::TimerSpec)],
+        ora: Instant,
+        fuso_macchina: &str,
+    ) {
         self.quadranti.retain(|(owner, timer), _| {
             dichiarate
                 .iter()
@@ -187,15 +221,55 @@ impl Sveglie {
             self.quadranti
                 .entry((owner.clone(), spec.id.clone()))
                 .or_insert_with(|| Quadrante {
-                    schedule: spec.schedule,
+                    schedule: spec.schedule.clone(),
                     ancora: ora,
                     suonate: 0,
+                    dove: Posizione::default(),
                     prossima: spec
                         .schedule
                         .nth_after(0)
                         .map(|s| ora + Duration::from_secs(s)),
                 });
         }
+        // Gli orari di parete si ricalcolano **a ogni giro** e non solo alla
+        // nascita, perché la loro prossima non è una funzione di quante volte
+        // hanno suonato: è una funzione di che giorno è. Ricalcolarla qui è
+        // anche ciò che rende gratis il caso in cui l'utente sposta l'orologio o
+        // cambia `locale.timezone` mentre l'app è viva — non c'è niente da
+        // invalidare, perché non c'era niente di derivato da tenere.
+        self.parete(ora, fuso_macchina);
+    }
+
+    /// Riporta i quadranti di parete a ciò che dice il calendario adesso, e
+    /// raccoglie chi va suonato **per recupero**.
+    ///
+    /// È l'unico punto in cui questo modulo tocca il tempo di sistema. Il fatto
+    /// che restituisca già le suonate invece di lasciarle a
+    /// [`scadute`](Sveglie::scadute) non è comodità: un recupero è per
+    /// definizione un'occorrenza già passata, e passarla per un `prossima` nel
+    /// passato l'avrebbe fatta suonare *anche* la volta dopo.
+    fn parete(&mut self, ora: Instant, fuso_macchina: &str) -> Vec<(String, String)> {
+        let adesso = Timestamp::now();
+        let mut recuperi = Vec::new();
+        for (chiave, q) in self.quadranti.iter_mut() {
+            let Some(sveglia) = q.schedule.wall_clock() else {
+                continue;
+            };
+            let Some(fuso) = Fuso::della(sveglia, fuso_macchina) else {
+                // Fuso irrisolvibile: la sveglia non suona, e resta in mappa a
+                // non suonare — non ripiega su UTC.
+                q.prossima = None;
+                continue;
+            };
+            let v = verdetto(sveglia, &fuso, adesso, q.dove);
+            q.dove = v.dove;
+            q.prossima = v.fra.map(|d| ora + d);
+            if v.suona {
+                recuperi.push(chiave.clone());
+            }
+        }
+        recuperi.sort();
+        recuperi
     }
 
     /// Fra quanto suona la prima. `None` = nessuna sveglia viva, e chi aspetta
@@ -209,9 +283,15 @@ impl Sveglie {
     }
 
     /// Chi è scaduto, con il quadrante già avanzato al giro dopo.
-    fn scadute(&mut self, ora: Instant) -> Vec<(String, String)> {
+    fn scadute(&mut self, ora: Instant, fuso_macchina: &str) -> Vec<(String, String)> {
         let mut suonano = Vec::new();
         for (chiave, q) in self.quadranti.iter_mut() {
+            // Un orario di parete non si avanza qui: la sua prossima non è una
+            // funzione di quante volte ha suonato, e a ricalcolarla è
+            // [`parete`](Sveglie::parete), che gira subito sotto.
+            if q.schedule.wall_clock().is_some() {
+                continue;
+            }
             let Some(prossima) = q.prossima else { continue };
             if prossima > ora {
                 continue;
@@ -228,6 +308,10 @@ impl Sveglie {
                 .map(|s| q.ancora + Duration::from_secs(s));
         }
         suonano.sort();
+        // I due modi di essere scaduti si uniscono qui e non prima, perché sono
+        // due domande diverse fatte allo stesso orologio: «è passato
+        // l'intervallo?» e «è passata l'ora?».
+        suonano.extend(self.parete(ora, fuso_macchina));
         suonano
     }
 }
@@ -465,6 +549,27 @@ impl Shared {
         refusal
     }
 
+    /// Il fuso della **macchina**, per le sveglie di parete che non ne
+    /// dichiarano uno (§22.4).
+    ///
+    /// È [`locale.timezone`](fub_kernel::locale::TIMEZONE), risolto come ogni
+    /// altra parte del locale: vuoto = quello del sistema. **Non è una chiave
+    /// nuova**, ed è la misura che ha risparmiato un'impostazione — il locale di
+    /// questo repo porta il nome IANA proprio perché serva a fare aritmetica su
+    /// date, e lo dice per iscritto nel suo modulo.
+    ///
+    /// Si rilegge a ogni giro e non si tiene: il fuso cambia mentre l'app è viva
+    /// — l'utente lo scrive nelle impostazioni, o si porta il portatile in un
+    /// altro paese — e non c'è niente da invalidare perché non c'è niente di
+    /// derivato.
+    fn fuso_macchina(&self) -> String {
+        self.workspace
+            .read()
+            .expect("workspace avvelenato")
+            .locale()
+            .timezone
+    }
+
     /// Fra quanto suona la prima sveglia, riallineando prima i quadranti a ciò
     /// che è dichiarato adesso (§22.1).
     fn fra_quanto_suona(&self) -> Option<Duration> {
@@ -485,9 +590,10 @@ impl Shared {
                 .clear();
             return None;
         }
+        let fuso = self.fuso_macchina();
         let ora = Instant::now();
         let mut sveglie = self.sveglie.lock().expect("sveglie avvelenate");
-        sveglie.riconcilia(&dichiarate, ora);
+        sveglie.riconcilia(&dichiarate, ora, &fuso);
         sveglie.fra_quanto(ora)
     }
 
@@ -498,9 +604,14 @@ impl Shared {
     /// tenere due lock nello stesso ordine in due posti è il modo di scoprire un
     /// giorno che l'ordine era tre.
     fn suona(&self) {
+        // Il fuso si prende **prima** del lock delle sveglie, e non dentro: è
+        // una lettura del workspace, e l'ordine fra i due lock è già stabilito
+        // da `fra_quanto_suona`. Invertirlo qui sarebbe la seconda metà di un
+        // abbraccio mortale che nessuno vedrebbe finché non capita.
+        let fuso = self.fuso_macchina();
         let scadute = {
             let mut sveglie = self.sveglie.lock().expect("sveglie avvelenate");
-            sveglie.scadute(Instant::now())
+            sveglie.scadute(Instant::now(), &fuso)
         };
         for (owner, timer) in scadute {
             if self.stopping.load(Ordering::Acquire) {
@@ -716,6 +827,7 @@ impl Drop for JobRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::traits::WallClock;
 
     /// Cosa dice la bandiera di un job, o `None` se non ne ha una.
     fn bandiera(flags: &Flags, id: u64) -> Option<bool> {
@@ -893,5 +1005,110 @@ mod tests {
         flags.cancel(JobId(5)); // il 5 aspetta ancora il proprio turno
         assert_eq!(bandiera(&flags, 5), Some(true));
         assert_eq!(bandiera(&flags, 4), None);
+    }
+    // -----------------------------------------------------------------------
+    // Le due sorgenti di tempo dentro lo stesso quadrante (§22.4, 0091).
+    // -----------------------------------------------------------------------
+
+    fn dichiara(id: &str, schedule: TimerSchedule) -> (String, fub_abi::traits::TimerSpec) {
+        (
+            "test.sveglia".to_string(),
+            fub_abi::traits::TimerSpec {
+                id: id.to_string(),
+                schedule,
+            },
+        )
+    }
+
+    /// **Le due famiglie convivono nello stesso scheduler e non si mescolano.**
+    ///
+    /// Un `every` prende la propria prossima da `nth_after` e un orario di parete
+    /// dal calendario, e nessuno dei due passa dalla regola dell'altro: se ci
+    /// passassero, o «ogni ora» slitterebbe con l'ora legale, o «alle 9»
+    /// diventerebbe «ogni 86400 secondi da adesso», che è la cosa che questa
+    /// voce esiste per non fare.
+    #[test]
+    fn le_due_famiglie_convivono_nello_stesso_quadrante() {
+        let mut sveglie = Sveglie::default();
+        let ora = Instant::now();
+        sveglie.riconcilia(
+            &[
+                dichiara("battito", TimerSchedule::Every { seconds: 3600 }),
+                dichiara(
+                    "digest",
+                    // Mezzanotte e un minuto: sempre nel futuro, salvo il minuto
+                    // in cui questo test giri esattamente lì.
+                    TimerSchedule::AtWallClock(WallClock::daily(0, 1).anchored("Europe/Rome")),
+                ),
+            ],
+            ora,
+            "",
+        );
+        assert_eq!(sveglie.quadranti.len(), 2);
+
+        let parete = &sveglie.quadranti[&("test.sveglia".into(), "digest".into())];
+        assert!(
+            parete.prossima.is_some(),
+            "una sveglia di parete ha una prossima: gliela dà il calendario"
+        );
+        assert!(
+            parete.dove.attesa.is_some(),
+            "e sa quale occorrenza sta aspettando, che è ciò che le fa \
+             distinguere una suonata puntuale da un recupero"
+        );
+        assert_eq!(parete.dove.attesa.map(|a| (a.hour, a.minute)), Some((0, 1)));
+
+        // Il trascorso non ha imparato niente dal calendario: la sua prossima è
+        // ancora un'ora dall'ancora, come è sempre stata.
+        let trascorso = &sveglie.quadranti[&("test.sveglia".into(), "battito".into())];
+        assert_eq!(trascorso.dove, Posizione::default());
+        assert_eq!(
+            trascorso.prossima,
+            Some(trascorso.ancora + Duration::from_secs(3600))
+        );
+    }
+
+    /// **Un fuso che il database non conosce non fa suonare la sveglia.**
+    ///
+    /// E la voce resta in mappa a non suonare, invece di sparire: sparire
+    /// vorrebbe dire farla riseminare dalla riconciliazione al giro dopo, e il
+    /// pool si sveglierebbe a vuoto per sempre.
+    #[test]
+    fn un_fuso_irrisolvibile_non_ripiega_e_non_suona() {
+        let mut sveglie = Sveglie::default();
+        let ora = Instant::now();
+        sveglie.riconcilia(
+            &[dichiara(
+                "digest",
+                TimerSchedule::AtWallClock(WallClock::daily(9, 0).anchored("Europa/Roma")),
+            )],
+            ora,
+            "",
+        );
+        let q = &sveglie.quadranti[&("test.sveglia".into(), "digest".into())];
+        assert_eq!(q.prossima, None, "non suona");
+        assert_eq!(
+            sveglie.fra_quanto(ora),
+            None,
+            "e chi aspetta non si sveglia per lei"
+        );
+        assert!(sveglie.scadute(ora, "").is_empty());
+        assert_eq!(sveglie.quadranti.len(), 1, "ma resta dichiarata");
+    }
+
+    /// Una sveglia di parete che sparisce dal manifest sparisce dai quadranti,
+    /// come ogni altra: la sorgente resta il manifest a ogni giro.
+    #[test]
+    fn anche_una_sveglia_di_parete_muore_col_manifest() {
+        let mut sveglie = Sveglie::default();
+        let ora = Instant::now();
+        let dichiarata = [dichiara(
+            "digest",
+            TimerSchedule::AtWallClock(WallClock::daily(9, 0)),
+        )];
+        sveglie.riconcilia(&dichiarata, ora, "");
+        assert_eq!(sveglie.quadranti.len(), 1);
+        sveglie.riconcilia(&[], ora, "");
+        assert!(sveglie.quadranti.is_empty());
     }
 }

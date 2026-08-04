@@ -81,6 +81,8 @@ mod bridge;
 pub mod config;
 pub mod jobs;
 pub mod mount;
+/// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
+mod parete;
 pub mod records;
 pub mod registry;
 pub mod runner;
