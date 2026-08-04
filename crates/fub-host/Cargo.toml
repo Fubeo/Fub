@@ -27,6 +27,38 @@ tracing = { workspace = true }
 # locale 27.2, l'app) la vogliono, e spegnerla è la scelta di chi non può averla.
 notify = { version = "8.2.0", optional = true }
 notify-debouncer-full = { version = "0.7.0", optional = true }
+# Il **database dei fusi orari** (§22.4, decisione 0091), e sta qui e solo qui:
+# `fub-abi` non ha e non deve avere una dipendenza di date, perché la regola del
+# contratto è aritmetica su ore civili e le ore civili non sanno cosa sia l'ora
+# legale. Serve in due conversioni sole — istante → ora civile e ritorno — e
+# sono in `parete.rs`.
+#
+# **Misurato, come vuole il precedente di `tracing`: dieci pacchetti nel
+# lockfile**, da 541 a 551 (`jiff`, `jiff-core`, `jiff-static`, `jiff-tzdb`,
+# `jiff-tzdb-platform`, `portable-atomic`, `portable-atomic-util`, `defmt`,
+# `defmt-macros`, `defmt-parser`). Dieci volte il conto di `tracing`, e va
+# scritto invece che nascosto. I tre `defmt` sono voci di lock e non
+# compilazione: arrivano da un ramo `no_std` che qui non si accende.
+#
+# `default-features = false` toglie `serde` (un `WallClock` si serializza da sé,
+# nel contratto, senza tipi di `jiff` al confine) e `logging`. Restano le tre che
+# fanno il lavoro: `std`, `tz-system` per leggere il fuso della macchina, e
+# le due del database: `tzdb-zoneinfo` legge `/usr/share/zoneinfo`, che su Unix
+# c'è già, e `tzdb-bundle-platform` imbarca il database sulle piattaforme dove
+# non c'è — cioè Windows. Sono due e non una perché coprono due mondi: con la
+# sola seconda, su Linux `TimeZone::get("Europe/Rome")` fallisce, e questo si
+# scopre solo eseguendo (le prove di `parete.rs` lo hanno scoperto).
+#
+# **L'alternativa a zero crate esiste ed è stata scartata per iscritto**: senza
+# tzdb, «alle 9 a Roma» calcolato su una macchina in UTC è sbagliato di un'ora
+# per metà anno, e `locale.timezone` — che è un nome IANA, e c'era già —
+# smetterebbe di essere onorabile.
+jiff = { version = "0.2.35", default-features = false, features = [
+    "std",
+    "tz-system",
+    "tzdb-zoneinfo",
+    "tzdb-bundle-platform",
+] }
 
 [features]
 default = ["notify-watcher", "feature-ufficiali"]

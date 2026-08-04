@@ -3290,6 +3290,10 @@ interface plugin {
     use options.{option-map};
     use settings.{setting-spec};
     use text.{string-catalog};
+    // Il giorno della settimana è quello del locale (§22.4, decisione 0091): un
+    // secondo enum con gli stessi sette casi sarebbe stato due modi di dire
+    // lunedì, e il secondo si sarebbe scoperto il giorno di tradurli.
+    use intl.{weekday};
 
     /// Cosa un plugin dichiara di voler fare. Erano tre booleani — leggere,
     /// scrivere, rete — contro ciò che 20.1, 23.1 e 20.3 chiedono: appunti,
@@ -3355,15 +3359,61 @@ interface plugin {
         id: string,
         schedule: timer-schedule,
     }
-    /// Ogni quanto suona. Le due forme sono quelle che si misurano in TEMPO
-    /// TRASCORSO, ed è la ragione per cui sono due: un orario di parete («ogni
-    /// giorno alle 9») vuole un fuso e una regola sull'ora legale, cioè una
-    /// decisione che non è questa. Cresce in coda il giorno che si prende.
+    /// Ogni quanto suona (§22.1, decisione 0069; §22.4, decisione 0091). DUE
+    /// FAMIGLIE: le prime due si misurano in TEMPO TRASCORSO e la loro regola è
+    /// pura senza sapere che ore sono (`TimerSchedule::nth_after`); la terza si
+    /// misura in ORA CIVILE, e la sua regola è `WallClock::next_after`, che l'ora
+    /// civile la riceve invece di leggerla. Il terzo caso è IN CODA perché
+    /// l'ordine dei casi è il discriminante dell'ABI (decisione 0088).
     variant timer-schedule {
         /// Ogni N secondi, per sempre, dalla registrazione.
         every(u64),
         /// Una volta sola, N secondi dopo la registrazione.
         after(u64),
+        /// A un orario di parete: «ogni giorno alle 9».
+        at-wall-clock(wall-clock),
+    }
+
+    /// Una sveglia a ORARIO DI PARETE (§22.4, decisione 0091). «Ogni giorno alle
+    /// 9» non è «ogni 86400 secondi»: l'una segue il calendario di chi la legge,
+    /// e quindi il suo fuso e la sua ora legale, l'altra no.
+    record wall-clock {
+        /// 0..=23. Fuori scala non suona, e non è un errore di registrazione: un
+        /// manifest si legge quando il componente entra, e rifiutare un
+        /// componente intero per una sveglia storta è sproporzionato.
+        hour: u8,
+        /// 0..=59.
+        minute: u8,
+        /// In che giorni. VUOTO = ogni giorno — un caso solo invece di un
+        /// `daily` e un `weekly` che avrebbero la stessa aritmetica dentro. È il
+        /// `weekday` del locale, che c'era già: un secondo enum con gli stessi
+        /// sette casi sarebbe stato due modi di dire lunedì.
+        days: list<weekday>,
+        /// Il fuso come nome IANA (`Europe/Rome`). ASSENTE = il fuso della
+        /// macchina, cioè il sistema salvo l'impostazione `timers.zone`. I due
+        /// stati sono due significati: assente è «quando chi guarda lo schermo
+        /// comincia a lavorare» (un portatile a Tokyo suona alle 9 di Tokyo),
+        /// presente è «ancorato a un posto» — ciò che un vault condiviso fra due
+        /// paesi vuole poter dire. Un nome sconosciuto NON fa suonare la sveglia
+        /// e non ripiega su UTC.
+        zone: option<string>,
+        /// Quanto tardi è ancora utile suonare, in secondi. 0 = mai. NON è il
+        /// campo dell'ora legale: a quella rispondono due REGOLE (sotto), e
+        /// restava scoperta un'altra domanda — la macchina che dormiva, il pool
+        /// occupato, l'app chiusa. Non «si recupera?» ma «fino a quanto tardi ha
+        /// senso»: un promemoria delle 9 alle 17 non serve più (0), un backup in
+        /// ritardo di venti minuti va fatto (3600). Un intero al posto di una
+        /// bandiera risolve da sé la macchina spenta due giorni: cade fuori
+        /// dalla finestra invece di suonare due volte.
+        ///
+        /// LE DUE REGOLE DELL'ORA LEGALE, che non sono campi. Un'ora che NON
+        /// ESISTE si sposta in avanti della durata del salto: le 2:30 suonano
+        /// alle 3:30 (disambiguazione «compatible» di RFC 5545, cioè ciò che fa
+        /// ogni calendario) — la sveglia non perde mai un giorno. Un'ora che
+        /// esiste DUE VOLTE suona alla prima, e discende dall'invariante e non
+        /// da una scelta: al più UNA suonata per occorrenza, sempre, perché
+        /// un'occorrenza è la sua data civile e non il suo istante.
+        catch-up-seconds: u64,
     }
 
     manifest: func() -> plugin-manifest;

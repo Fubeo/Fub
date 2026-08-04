@@ -28,8 +28,10 @@ VaultStorage` è rimasto P2 perché è un trait interno al kernel e non scade.
 Restano tre cose che nessuno aveva scritto. Sono qui, e sono **tutte e tre
 chiuse**: la terza dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md),
 che ne lascia una casella, e le altre due dalla
-[0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md), che ne apre una nuova —
-la §22.4, l'orario di parete.
+[0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md), che ne ha aperta una
+quarta — la §22.4, l'orario di parete, chiusa a sua volta dalla
+[0091](../decisions/0091-un-orario-di-parete-non-e-un-intervallo.md), che ne
+lascia anche lei una casella. **La seduta non ha più voci aperte.**
 
 **Un avvertimento su questo cappello, scritto dopo.** La frase qui sotto — «tre
 estensioni della stessa maschera» — **è sbagliata**, e le due decisioni che hanno
@@ -227,31 +229,85 @@ shell fa oggi ha già la sua risposta dentro `list_views`
 
 ### 22.4 Un orario di parete non è un intervallo
 
-*nata dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md), che ha chiuso la §22.1 senza di lei · contratto · **P1** — additiva, quindi non scade col freeze*
+*chiusa dalla [0091](../decisions/0091-un-orario-di-parete-non-e-un-intervallo.md) — la regola di una sveglia che il contratto non può calcolare da sé nasce **accanto** a quella che c'era, e non al suo posto · resta una casella*
 
-`TimerSchedule` sa dire `every` e `after`, cioè le due forme che si misurano in
-**tempo trascorso**: «ogni ora» e «fra dieci minuti». La §22.1 ne nominava tre, e
-la terza — «alle 9» — non è la stessa specie di domanda.
+`TimerSchedule` sapeva dire `every` e `after`, cioè le due forme che si misurano
+in **tempo trascorso**: «ogni ora» e «fra dieci minuti». La §22.1 ne nominava tre,
+e la terza — «alle 9» — non è la stessa specie di domanda.
 
-- [ ] **Un orario di parete vuole un fuso, e nessuno sa da dove lo prende.** Il
+- [x] **Un orario di parete vuole un fuso, e nessuno sa da dove lo prende.** Il
       sistema? Un'impostazione (§11.1)? Il locale della
       [0039](../decisions/0039-il-locale-e-il-caso.md), che l'host già conosce e
       che però dice *come si scrive un'ora*, non *in che fuso si vive*? Sono tre
       risposte diverse e producono tre comportamenti diversi per un vault
       sincronizzato fra due macchine in due paesi — che è il caso normale, non
       quello di frontiera.
-- [ ] **E vuole una regola sull'ora legale.** Il giorno in cui l'ora legale
+
+      *L'esclusione del terzo era sbagliata, ed è la quinta volta che una voce
+      ferma non si esegue ma si rimisura: il `Locale` di questo repo dice **tutte
+      e due** — `locale.timezone` è il nome IANA e lo dice per iscritto nel
+      proprio modulo, «chi deve fare aritmetica su date usa `Locale::timezone`,
+      che si porta dietro le regole». Di più: è già un'impostazione, con la scala
+      vault → macchina → default, e il default vuoto vuol dire «chiedilo al
+      sistema». I tre candidati non erano tre risposte diverse: erano **tre
+      strati della stessa risposta, già montati**, e leggerli ha risparmiato una
+      chiave nuova — che sarebbe stata la seconda con lo stesso significato.
+      Il fuso è quindi **della macchina** per default, perché «alle 9» quasi
+      sempre vuol dire «quando comincio a lavorare» e ogni macchina fa già girare
+      il proprio scheduler. E il caso che la voce nominava — due macchine in due
+      paesi — ha guadagnato un **terzo strato nuovo**: `zone: option<string>`,
+      con cui una sveglia dichiara il proprio fuso quando il suo significato è
+      ancorato a un posto («il digest delle 9 dell'ufficio di Roma»), che è la
+      cosa che un fuso implicito non sa dire. Un nome che il database non conosce
+      non fa suonare la sveglia e non ripiega su UTC.*
+- [x] **E vuole una regola sull'ora legale.** Il giorno in cui l'ora legale
       entra, le 2:30 non esistono; il giorno in cui esce, esistono due volte. Una
       sveglia dichiarata a quell'ora o salta un giro o ne fa due, e quale delle
       due sia giusta dipende da cosa la sveglia fa: un promemoria vuole saltare,
       un backup vuole girare. È una decisione, e prenderla di straforo dentro
       un'implementazione vorrebbe dire che nessuno la trova più.
-- [ ] **Chi lo chiede.** FEATURES 16.2 (trigger su orario e su data), 10.5
+
+      *Presa, e **non è un campo**, che era la forma che la voce si aspettava. Le
+      2:30 che esistono due volte suonano una volta per un invariante e non per
+      una scelta — un'occorrenza è la sua **data civile** e non il suo istante —
+      e le 2:30 che non esistono si spostano in avanti della durata del salto
+      (la disambiguazione `compatible` di RFC 5545, cioè ciò che fa ogni
+      calendario), quindi una sveglia di parete non perde mai un giorno. Un campo
+      c'è, ma risponde a una domanda che la voce **non faceva**: cosa fa
+      un'occorrenza passata mentre nessuno guardava — la macchina dormiva, il pool
+      era occupato, l'app era chiusa. `catch_up_seconds` è una **finestra** e non
+      una bandiera, e la differenza si vede sul caso che una bandiera sbaglia:
+      una macchina riaccesa dopo due giorni suona **zero** volte, non due.*
+- [x] **Chi lo chiede.** FEATURES 16.2 (trigger su orario e su data), 10.5
       (promemoria e notifiche a scadenza). Sono la metà della famiglia che la
       §22.1 ha servito: chi vuole svegliarsi *ogni tanto* è servito, chi vuole
       svegliarsi *alle nove* no.
-- [ ] **Perché non è P0.** `timer-schedule` è un `variant` nato con la
+
+      *Servita: `at-wall-clock` dice «ogni giorno alle 9» e «il lunedì alle
+      7:30» — un caso solo, con l'elenco dei giorni vuoto a dire «ogni giorno»,
+      perché un `daily` e un `weekly` separati sarebbero stati due discriminanti
+      per la stessa aritmetica.*
+- [x] **Perché non è P0.** `timer-schedule` è un `variant` nato con la
       [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) e mai pubblicato:
       un caso in coda è additivo, e chi ha dichiarato `every` non se ne accorge.
       Ciò che il freeze guarda — il posto della dichiarazione — è già deciso ed è
       il manifest.
+
+      *Confermato alla lettera, e con la sola firma che poteva contraddirlo
+      lasciata intatta: `nth_after` non cambia forma, perché la regola dell'ora
+      civile nasce **accanto** e non al suo posto. `frozen/0.1.0.wit` non è stato
+      toccato, e non c'era niente da ritagliare: `timer-schedule` non ci compare
+      affatto.*
+
+- [ ] **Resta il recupero attraverso un riavvio dell'app.** `catch_up_seconds` è
+      onorato dentro una sessione e attraverso il sonno della macchina, non
+      attraverso una chiusura: lo scheduler non persiste dove è arrivato, quindi
+      al primo giro l'occorrenza passata si **consuma in silenzio** invece di
+      essere recuperata. È deliberato — altrimenti aprire Fub alle dieci farebbe
+      suonare la sveglia delle nove per il solo fatto di essere le dieci — ma
+      vuol dire che un backup notturno dichiarato con una finestra larga non
+      recupera se l'app era chiusa, che è precisamente il caso in cui una
+      finestra larga serviva. Recuperare davvero vuole un posto dove scrivere
+      l'ultima occorrenza onorata, per sveglia e per macchina: è un meccanismo
+      suo, e la casa naturale è il file della macchina della
+      [0037](../decisions/0037-lo-stato-di-vista.md).

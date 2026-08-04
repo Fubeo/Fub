@@ -100,7 +100,7 @@ use fub_abi::traits::{
     PropertyEntry, PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind,
     QueryRoute, ReadApi, ResolvedRef, ServiceProvider, TagCount, TimerSchedule, TimerSpec,
     TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewInterests, ViewProvider,
-    ViewSpec, ViewSurface, ABI_VERSION,
+    ViewSpec, ViewSurface, WallClock, ABI_VERSION,
 };
 use fub_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -333,6 +333,7 @@ wit_kebab! {
     DocChanges,
     TimerSpec,
     TimerSchedule,
+    WallClock,
     Actor,
     Origin,
     Notice,
@@ -4168,12 +4169,33 @@ fn conform(source: &str) -> Result<(), String> {
         "timer-spec",
         &[("id", wit(&id)), ("schedule", wit(&schedule))],
     );
+    // Il terzo caso è **in coda** (§22.4, decisione 0091): l'ordine dei casi è
+    // il discriminante dell'ABI, quindi additivo vuol dire in fondo — ed è
+    // `variant_src` a farlo rispettare, leggendo l'ordine dall'enum Rust.
     contract.variant_src(
         "timer-schedule",
         ("traits.rs", "TimerSchedule"),
         &[
             case_ty("every", wit_of::<u64>()),
             case_ty("after", wit_of::<u64>()),
+            case_ty("at-wall-clock", wit_of::<WallClock>()),
+        ],
+    );
+    let WallClock {
+        hour,
+        minute,
+        days,
+        zone,
+        catch_up_seconds,
+    } = WallClock::daily(0, 0);
+    contract.record(
+        "wall-clock",
+        &[
+            ("hour", wit(&hour)),
+            ("minute", wit(&minute)),
+            ("days", wit(&days)),
+            ("zone", wit(&zone)),
+            ("catch-up-seconds", wit(&catch_up_seconds)),
         ],
     );
 

@@ -218,7 +218,8 @@ pub fn catalog() -> Vec<StringCatalog> {
                 L_TIMEZONE_DESC,
                 "Il nome IANA del fuso (`Europe/Rome`). Vuoto = quello del sistema. \
                  Cambiarlo qui non cambia l'orologio del sistema: cambia come Fub \
-                 mostra le date.",
+                 mostra le date, e a che ora suonano le sveglie dei componenti \
+                 che ne dichiarano una a un orario di parete.",
             )
             .with(L_FIRST_DAY, "Primo giorno della settimana")
             .with(
@@ -249,7 +250,8 @@ pub fn catalog() -> Vec<StringCatalog> {
                 L_TIMEZONE_DESC,
                 "The IANA name of the time zone (`Europe/Rome`). Empty = the system \
                  one. Changing it here does not change the system clock: it changes \
-                 how Fub shows dates.",
+                 how Fub shows dates, and what time wall-clock alarms declared by \
+                 components go off.",
             )
             .with(L_FIRST_DAY, "First day of the week")
             .with(L_FIRST_DAY_DESC, "Which day the calendar week starts on.")
