@@ -190,6 +190,14 @@
              con uno screen reader deve poterlo sapere senza che gli si tolga la
              parola di bocca. -->
         <span id="save-state" role="status"></span>
+        <!-- «Sto aspettando il tasto successivo» (§18.2). Vive due secondi ed è
+             la differenza fra una sequenza e una tastiera che ogni tanto non
+             risponde: chi ha premuto `Mod-k` deve poter vedere che l'app ha
+             capito. `role="status"` per la ragione di `#save-state`: cambia da
+             sé, e chi legge con uno screen reader deve saperlo senza che gli si
+             tolga la parola di bocca. Lo riempie `ui/keyboard.ts`, che è
+             l'unico a sapere quando l'attesa è aperta. -->
+        <span id="key-pending" role="status" hidden></span>
         <span id="statusbar-fill"></span>
         <!-- Il **testo** di questi due pulsanti non porta un `data-i18n`, e non
              è una dimenticanza: ci sta un conteggio («Attività 3»), quindi lo

@@ -19,6 +19,16 @@
 // `run()` di qua, `invoke_command` di là. Questo modulo è il posto in cui la
 // differenza smette di riguardare chiunque altro.
 //
+// # La sequenza
+//
+// L'ultima cosa che mancava alla voce, e non era un pezzo di questo registro: è
+// una **sintassi** in più — `Mod-k d`, due tasti uno dopo l'altro — e uno stato
+// che dura fra i due. La sintassi sta qui sotto (`leggiAccordi`, `avanza`); lo
+// stato sta in `ui/keyboard.ts`, perché è una cosa che scade e che si mostra, e
+// niente di ciò riguarda chi tiene l'elenco dei comandi. Costo sul contratto:
+// **zero**. `CommandSpec.keybinding` è una stringa dalla 0009, e una stringa con
+// uno spazio dentro ci sta senza chiedere niente a nessuno.
+//
 // Ne resta scoperta una cosa, ed è nominata nella
 // [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md): la
 // scorciatoia di un comando di shell **non è ancora riconfigurabile**, perché la
@@ -164,28 +174,124 @@ export interface KeyChord {
   altKey: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// La sintassi di una scorciatoia
+// ---------------------------------------------------------------------------
+//
+// **Un accordo, o più d'uno in sequenza** (§18.2), separati da uno spazio:
+// `Mod-Shift-f` è un gesto solo, `Mod-k d` sono due tasti premuti uno dopo
+// l'altro. `Mod` è Ctrl o Cmd, e i modificatori riconosciuti sono tre —
+// `Mod`, `Shift`, `Alt` — e nessun altro: un `Ctrl-k` scritto a mano nelle
+// impostazioni non è un accordo che questa shell onora, e viene **detto**
+// invece che ignorato (`accordiRifiutati`).
+//
+// # Perché il primo tasto porta un modificatore e il secondo no
+//
+// È la regola che rende la sequenza eseguibile senza inventare una modalità, e
+// le due metà si tengono. Il **primo** accordo deve portare un modificatore per
+// la ragione di sempre: un comando che dichiarasse `f` ruberebbe una lettera a
+// chi sta scrivendo una nota, e questa shell non ha modi, quindi un tasto nudo
+// non ha un momento in cui è libero. Il **secondo** può essere nudo proprio
+// perché il primo non lo era: `Mod-k` apre una modalità che dura quanto
+// l'attesa, dichiarata (la barra di stato dice che è aperta) e con una via
+// d'uscita (`Escape`, un tasto che non continua niente, o il tempo che scade).
+// Dentro quella finestra la `d` non appartiene a nessuno, e nessuno gliela ruba.
+//
+// È il modello di VS Code, e la ragione per cui non è quello di vim (`g` poi
+// `d`) è la stessa: `g` nudo è libero solo dove esiste una modalità normale, e
+// qui non esiste. Accettare `g d` senza onorarlo sarebbe peggio che non
+// accettarlo.
+
+/// I modificatori che questa shell riconosce, e nessun altro.
+const MODIFICATORI = ["mod", "shift", "alt"] as const;
+
+/// Un accordo solo: i modificatori e il tasto, già in forma confrontabile.
+export interface Accordo {
+  /// Il tasto, minuscolo — come lo scrive `KeyboardEvent.key`.
+  key: string;
+  /// Ctrl o Cmd. Sono lo stesso modificatore per chi scrive un accordo, e due
+  /// tasti diversi solo per chi ha comprato il computer.
+  mod: boolean;
+  shift: boolean;
+  alt: boolean;
+}
+
+/// Una scorciatoia scomposta negli accordi che la compongono, o `null` se non è
+/// una scorciatoia che questa shell sa premere.
+///
+/// `null` e non un accordo vuoto: chi la scrive deve poterlo **sapere**, e un
+/// valore che si confonde con «nessuna scorciatoia» è esattamente il modo in cui
+/// non lo saprebbe.
+export function leggiAccordi(binding: string | null | undefined): Accordo[] | null {
+  const testo = (binding ?? "").trim();
+  if (testo === "") return null;
+  const accordi: Accordo[] = [];
+  for (const pezzo of testo.split(/\s+/)) {
+    const parti = pezzo.split("-");
+    const tasto = parti.pop();
+    if (!tasto) return null;
+    const mods = parti.map((p) => p.toLowerCase());
+    // Un modificatore che non esiste non si ignora: `Ctrl-k` sarebbe letto come
+    // `k` nudo — cioè un tasto che risponde mentre si scrive — e chi l'ha
+    // scritto crederebbe di aver configurato Ctrl.
+    if (mods.some((m) => !(MODIFICATORI as readonly string[]).includes(m))) return null;
+    if (new Set(mods).size !== mods.length) return null;
+    accordi.push({
+      key: tasto.toLowerCase(),
+      mod: mods.includes("mod"),
+      shift: mods.includes("shift"),
+      alt: mods.includes("alt"),
+    });
+  }
+  const primo = accordi[0]!;
+  if (!primo.mod && !primo.shift && !primo.alt) return null;
+  return accordi;
+}
+
+function uguali(a: Accordo, b: Accordo): boolean {
+  return a.key === b.key && a.mod === b.mod && a.shift === b.shift && a.alt === b.alt;
+}
+
+/// L'accordo che questa combinazione di tasti **è**.
+function accordoPremuto(e: KeyChord): Accordo {
+  return {
+    key: e.key.toLowerCase(),
+    mod: e.ctrlKey || e.metaKey,
+    shift: e.shiftKey,
+    alt: e.altKey,
+  };
+}
+
+/// Un accordo in forma canonica: modificatori in ordine alfabetico, minuscolo.
+/// Serve a **confrontare**, e per questo non è la forma che si legge.
+function canonico(a: Accordo): string {
+  const mods: string[] = [];
+  if (a.alt) mods.push("alt");
+  if (a.mod) mods.push("mod");
+  if (a.shift) mods.push("shift");
+  return [...mods, a.key].join("-");
+}
+
+/// Un accordo com'è scritto da chi lo dichiara: modificatori nell'ordine in cui
+/// si pronunciano, tasto in maiuscolo. Serve a **leggere**, e per questo non è
+/// la forma che si confronta — la barra di stato dice `Mod-K`, non `mod-k`.
+function scrivi(a: Accordo): string {
+  const mods: string[] = [];
+  if (a.mod) mods.push("Mod");
+  if (a.shift) mods.push("Shift");
+  if (a.alt) mods.push("Alt");
+  return [...mods, a.key.length === 1 ? a.key.toUpperCase() : a.key].join("-");
+}
+
 /// Questa combinazione è l'accordo scritto?
 ///
-/// La sintassi è quella delle spec (`Mod-Shift-f`), dove `Mod` è Ctrl o Cmd. Un
-/// accordo **senza modificatori viene ignorato**: un comando che dichiarasse `f`
-/// ruberebbe una lettera a chi sta scrivendo una nota. Vale anche per ciò che
-/// l'utente riconfigura, e non è una restrizione dimenticata lì: la shell non ha
-/// modi (§18.1), quindi un tasto nudo non ha un momento in cui è libero.
+/// Vale per una scorciatoia di **un accordo solo**: una sequenza non corrisponde
+/// mai a un tasto premuto, perché per definizione ne vuole due, e chi la deve
+/// riconoscere è `avanza`.
 export function matchesBinding(e: KeyChord, binding: string | null): boolean {
-  if (!binding) return false;
-  const parti = binding.split("-");
-  const tasto = parti.pop();
-  if (!tasto) return false;
-  const mods = parti.map((p) => p.toLowerCase());
-  if (mods.length === 0) return false;
-  const mod = e.ctrlKey || e.metaKey;
-  const vuole = (nome: string) => mods.includes(nome);
-  return (
-    e.key.toLowerCase() === tasto.toLowerCase() &&
-    vuole("mod") === mod &&
-    vuole("shift") === e.shiftKey &&
-    vuole("alt") === e.altKey
-  );
+  const accordi = leggiAccordi(binding);
+  if (!accordi || accordi.length !== 1) return false;
+  return uguali(accordi[0]!, accordoPremuto(e));
 }
 
 /// Il comando il cui accordo efficace corrisponde, se ce n'è uno.
@@ -195,8 +301,115 @@ export function matchesBinding(e: KeyChord, binding: string | null): boolean {
 /// niente — chi preme quei tasti vuole che succeda qualcosa. Che ci sia un
 /// conflitto lo dice `conflitti`, una volta sola, invece che ogni volta che si
 /// preme.
+///
+/// Guarda le sole scorciatoie di un accordo: la tastiera dell'app passa da
+/// `avanza`, che le comprende tutte. Questo resta perché è la domanda che fa chi
+/// ha in mano un tasto e nessuno stato — la palette, un banco.
 export function findByChord(entries: CommandEntry[], e: KeyChord): CommandEntry | undefined {
   return entries.find((entry) => matchesBinding(e, entry.binding));
+}
+
+// ---------------------------------------------------------------------------
+// La sequenza, che è uno stato
+// ---------------------------------------------------------------------------
+
+/// Quanto dura l'attesa del tasto successivo, in millisecondi.
+///
+/// Due secondi. Deve stare **sopra** un gesto deliberato di due tasti (tre-
+/// quattro decimi per chi ha le dita sulla tastiera) e **sotto** il tempo in cui
+/// si distoglie lo sguardo: la cosa da evitare non è l'attesa breve, è
+/// l'attesa che sopravvive al motivo per cui era cominciata, e che fa rispondere
+/// il tasto dopo a un gesto che nessuno ricorda di aver iniziato.
+///
+/// VS Code aspetta per sempre, e se lo può permettere perché tiene un avviso
+/// fisso in fondo alla finestra. Qui sotto c'è un **editor**: il tasto dopo è
+/// testo di qualcuno, e fallire per scadenza è l'unico modo di fallire che non
+/// tocca la nota.
+export const ATTESA_MS = 2000;
+
+/// I tasti che da soli non sono un tasto premuto: `Shift` tenuto per fare una
+/// maiuscola non deve annullare una sequenza in corso.
+const SOLO_MODIFICATORI = new Set([
+  "shift",
+  "control",
+  "alt",
+  "meta",
+  "altgraph",
+  "capslock",
+  "os",
+  "dead",
+]);
+
+/// «Sto aspettando il tasto successivo»: gli accordi già premuti, e come si
+/// scrivono per chi guarda la barra di stato.
+export interface Attesa {
+  premuti: Accordo[];
+  etichetta: string;
+}
+
+/// Cosa fa la tastiera con questo tasto.
+///
+/// `passa` è l'unico esito che **non** consuma il tasto: tutti gli altri sono
+/// gesti dell'app, e un gesto dell'app non finisce anche nella nota.
+export type EsitoTasti =
+  | { tipo: "passa" }
+  | { tipo: "esegue"; entry: CommandEntry }
+  | { tipo: "attende"; attesa: Attesa }
+  | { tipo: "annulla" };
+
+/// Un tasto, dato ciò che si stava aspettando.
+///
+/// Pura, e l'attesa entra ed esce invece di stare qui dentro: lo stato di una
+/// sequenza è una variabile di **chi guida la tastiera**, non un secondo
+/// registro dei comandi — di registro ce n'è uno solo dalla 0077, e questa è una
+/// funzione che lo legge.
+///
+/// # Chi vince fra un accordo e il prefisso di una sequenza
+///
+/// **L'accordo completo**, sempre, e in qualunque ordine stiano nel registro. Se
+/// esistono `Mod-k` e `Mod-k d`, premere `Mod-k` esegue il primo e il secondo
+/// diventa irraggiungibile. Le tre ragioni, in ordine di peso: un tasto che
+/// funziona oggi non deve diventare più lento domani (la regola opposta —
+/// aspettare per vedere se arriva la `d` — mette un ritardo di due secondi su
+/// ogni pressione di `Mod-k`); la sequenza è l'ultima arrivata, e chi arriva
+/// paga; e soprattutto la cosa si decide **guardando il registro fermo**, quindi
+/// `prefissiOscurati` la può dire all'avvio invece di lasciarla scoprire a chi
+/// preme. Un conflitto che si annuncia è un conflitto che si va a sistemare
+/// nelle impostazioni.
+export function avanza(
+  entries: CommandEntry[],
+  attesa: Attesa | null,
+  e: KeyChord,
+): EsitoTasti {
+  if (SOLO_MODIFICATORI.has(e.key.toLowerCase())) return { tipo: "passa" };
+  // `Escape` annulla, e non è una scorciatoia che si possa contendere: una via
+  // d'uscita che un comando potesse rubare non sarebbe una via d'uscita.
+  if (attesa && e.key === "Escape") return { tipo: "annulla" };
+
+  const premuto = accordoPremuto(e);
+  const passo = attesa ? attesa.premuti.length : 0;
+  let piuLungo: Accordo[] | null = null;
+
+  for (const entry of entries) {
+    const accordi = leggiAccordi(entry.binding);
+    if (!accordi || accordi.length <= passo) continue;
+    if (attesa && !attesa.premuti.every((a, i) => uguali(a, accordi[i]!))) continue;
+    if (!uguali(accordi[passo]!, premuto)) continue;
+    // Completo: si esegue subito, senza finire di guardare gli altri. È la
+    // regola del prefisso, ed è per questo che sta qui e non in un secondo giro.
+    if (accordi.length === passo + 1) return { tipo: "esegue", entry };
+    piuLungo ??= accordi;
+  }
+
+  if (piuLungo) {
+    const premuti = [...(attesa?.premuti ?? []), premuto];
+    return { tipo: "attende", attesa: { premuti, etichetta: premuti.map(scrivi).join(" ") } };
+  }
+  // In attesa, un tasto che non continua niente **la chiude e si ferma qui**. Il
+  // motivo per cui non arriva alla nota: chi ha premuto `Mod-k` ha già lasciato
+  // il gesto di scrivere, e vedersi comparire una lettera è l'unico esito che
+  // non si può prevedere da fuori.
+  return attesa ? { tipo: "annulla" } : { tipo: "passa" };
 }
 
 /// Due o più comandi sullo stesso accordo, raggruppati.
@@ -219,31 +432,83 @@ export function conflitti(entries: CommandEntry[]): CommandEntry[][] {
   return [...per_accordo.values()].filter((g) => g.length > 1);
 }
 
-/// Un accordo in forma canonica: modificatori in ordine, tutto minuscolo.
-/// `null` se non è un accordo che questa shell onora (nessun modificatore).
+/// Una scorciatoia in forma canonica: gli accordi in ordine, i modificatori in
+/// ordine, tutto minuscolo. `null` se non è una scorciatoia che questa shell
+/// onora — nessun modificatore sul primo tasto, un modificatore che non esiste,
+/// un accordo senza tasto.
 export function normalizza(binding: string): string | null {
-  const parti = binding.split("-");
-  const tasto = parti.pop();
-  if (!tasto) return null;
-  const mods = parti.map((p) => p.toLowerCase()).sort();
-  if (mods.length === 0) return null;
-  return [...mods, tasto.toLowerCase()].join("-");
+  const accordi = leggiAccordi(binding);
+  return accordi ? accordi.map(canonico).join(" ") : null;
 }
 
-/// I conflitti in una frase, o `null` se non ce ne sono.
+/// Le scorciatoie rese **irraggiungibili** perché un'altra è un loro prefisso.
 ///
-/// Nomina i comandi, perché «hai due comandi sullo stesso tasto» manda a
-/// cercare quali: la frase intera è ciò che permette di andare nelle
-/// impostazioni e cambiarne uno.
+/// È il conflitto che nasce con le sequenze e che `conflitti` non può vedere:
+/// `Mod-k` e `Mod-k d` non sono lo stesso accordo, sono uno l'inizio dell'altro,
+/// e per la regola di `avanza` il corto vince e il lungo non si preme mai. Detto
+/// all'avvio insieme agli altri, è una riga da sistemare nelle impostazioni;
+/// scoperto premendo, sarebbe una tastiera che qualche volta non risponde.
+export function prefissiOscurati(
+  entries: CommandEntry[],
+): { corto: CommandEntry; lunghe: CommandEntry[] }[] {
+  const letti = entries
+    .map((entry) => ({ entry, accordi: leggiAccordi(entry.binding) }))
+    .filter((x): x is { entry: CommandEntry; accordi: Accordo[] } => x.accordi !== null);
+  const esito: { corto: CommandEntry; lunghe: CommandEntry[] }[] = [];
+  for (const corto of letti) {
+    const lunghe = letti
+      .filter(
+        (lunga) =>
+          lunga.accordi.length > corto.accordi.length &&
+          corto.accordi.every((a, i) => uguali(a, lunga.accordi[i]!)),
+      )
+      .map((x) => x.entry);
+    if (lunghe.length > 0) esito.push({ corto: corto.entry, lunghe });
+  }
+  return esito;
+}
+
+/// Gli accordi che questa shell **non sa premere**, con chi li ha scritti.
+///
+/// Esistono perché una scorciatoia è un'impostazione, cioè una stringa che
+/// l'utente scrive a mano, e `Ctrl-k` o `d` sono i due modi più facili di
+/// sbagliarla. Prima di questa voce finivano in un `continue` dentro il conteggio
+/// dei conflitti: non erano un conflitto — vero — ma non erano nemmeno una
+/// scorciatoia, e nessuno lo diceva. Un valore scritto e ignorato in silenzio è
+/// peggio di un valore rifiutato.
+export function accordiRifiutati(entries: CommandEntry[]): CommandEntry[] {
+  return entries.filter((e) => e.binding !== null && normalizza(e.binding) === null);
+}
+
+/// Tutto ciò che non torna negli accordi, in una frase, o `null` se torna tutto.
+///
+/// Le tre cose si dicono insieme perché chiedono la stessa cosa a chi legge —
+/// aprire le impostazioni e cambiare una riga — e perché sono tre modi di avere
+/// un comando che non risponde: due che se lo contendono, uno coperto dal
+/// proprio prefisso, uno scritto in un modo che non si può premere. Ognuna
+/// **nomina i comandi**: «hai due comandi sullo stesso tasto» manda a cercare
+/// quali.
 export function frasedeiConflitti(entries: CommandEntry[]): string | null {
-  const gruppi = conflitti(entries);
-  if (gruppi.length === 0) return null;
-  return gruppi
-    .map((g) =>
+  const frasi: string[] = [];
+  for (const g of conflitti(entries)) {
+    frasi.push(
       t("commands.conflict", {
         chord: g[0]!.binding ?? "",
         commands: g.map((e) => e.title).join(", "),
       }),
-    )
-    .join(" ");
+    );
+  }
+  for (const { corto, lunghe } of prefissiOscurati(entries)) {
+    frasi.push(
+      t("commands.shadowed", {
+        chord: corto.binding ?? "",
+        command: corto.title,
+        commands: lunghe.map((e) => `${e.title} («${e.binding}»)`).join(", "),
+      }),
+    );
+  }
+  for (const entry of accordiRifiutati(entries)) {
+    frasi.push(t("commands.rejected", { chord: entry.binding ?? "", command: entry.title }));
+  }
+  return frasi.length === 0 ? null : frasi.join(" ");
 }

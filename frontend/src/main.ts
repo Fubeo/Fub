@@ -23,11 +23,11 @@ import { ascoltaIGuasti, mountNotifications, notify } from "./ui/notify";
 import { openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
-  findByChord,
   frasedeiConflitti,
   loadKeyOverrides,
   registerShellCommand,
 } from "./ui/commands";
+import { mountKeyboard } from "./ui/keyboard";
 import { mountSidebarCommands } from "./panels/sidebar";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
@@ -161,18 +161,14 @@ async function init(): Promise<void> {
   });
   mountSidebarCommands();
 
-  // La tastiera, in un punto solo, e adesso su **un registro solo**: i comandi
-  // del kernel e quelli della shell, con l'accordo efficace di ognuno — quello
-  // che l'utente ha scelto, o quello dichiarato. La shell non cabla nessuna
-  // combinazione: se un domani un plugin dichiara `Mod-Shift-t`, funziona senza
-  // toccare questo file.
-  document.addEventListener("keydown", (e) => {
-    const entry = findByChord(allCommands(), e);
-    if (entry) {
-      e.preventDefault();
-      startCommand(entry, paletteHost);
-    }
-  });
+  // La tastiera, in un punto solo, e su **un registro solo**: i comandi del
+  // kernel e quelli della shell, con l'accordo efficace di ognuno — quello che
+  // l'utente ha scelto, o quello dichiarato. La shell non cabla nessuna
+  // combinazione: se un domani un plugin dichiara `Mod-Shift-t`, o `Mod-k d`,
+  // funziona senza toccare questo file. Cos'è un accordo e quando è finito lo
+  // sa `ui/keyboard.ts`, che è il posto in cui una sequenza a metà ha un tempo
+  // e una via d'uscita (§18.2).
+  mountKeyboard((entry) => startCommand(entry, paletteHost));
 
   // Chi ascolta i guasti si iscrive **prima** che il router parta (§20.2): un
   // vault che va storto mentre si apre è esattamente il caso in cui l'utente

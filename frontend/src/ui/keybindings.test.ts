@@ -14,7 +14,7 @@
 // un `document`.
 import { describe, expect, it } from "vitest";
 import kernelKeys from "../__fixtures__/command-keys.json";
-import { conflitti, normalizza, type CommandEntry } from "./commands";
+import { conflitti, normalizza, prefissiOscurati, type CommandEntry } from "./commands";
 import { SHELL_KEYS } from "./shell-keys";
 
 /// Una voce come la vedono `conflitti` e la tastiera. Titolo e descrizione sono
@@ -59,6 +59,20 @@ describe("gli accordi dei due registri, guardati insieme", () => {
     const conAccordo = (o: object) => Object.values(o).filter((v) => v !== null).length;
     expect(conAccordo(kernelKeys)).toBeGreaterThan(0);
     expect(conAccordo(SHELL_KEYS)).toBeGreaterThan(5);
+  });
+
+  it("nessuna scorciatoia è il prefisso di un'altra", () => {
+    // La domanda che la 0081 non poteva porsi, perché una scorciatoia era un
+    // accordo solo e due accordi diversi non si possono contenere. Con le
+    // sequenze (§18.2) si possono: `Mod-k` e `Mod-k d` non litigano per
+    // `conflitti` — non sono lo stesso accordo — e però il secondo non si preme
+    // mai, perché il primo vince e parte subito. È lo stesso genere di guasto
+    // di `Mod-Shift-f` dichiarato due volte: invisibile a ogni banco che guardi
+    // un registro per volta.
+    const oscurati = prefissiOscurati(tutti());
+    expect(
+      oscurati.map((o) => `${o.corto.id} («${o.corto.binding}») copre ${o.lunghe.map((e) => e.id).join(" + ")}`),
+    ).toEqual([]);
   });
 
   it("gli accordi dichiarati sono accordi che questa shell onora", () => {

@@ -1152,6 +1152,15 @@ button:hover {
   color: var(--text);
 }
 
+/* L'attesa del secondo tasto di una sequenza (§18.2). Accesa, al contrario di
+   `#save-state`: qui non c'è nessuno stato che si legge il 99% del tempo — o
+   l'app sta aspettando, e allora è l'unica cosa che conta in quella barra, o la
+   riga non c'è proprio. */
+#key-pending {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
 #save-state[data-stato="fallito"] {
   color: var(--doc-danger);
   font-weight: var(--weight-medium);

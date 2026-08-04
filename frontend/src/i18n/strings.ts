@@ -255,6 +255,15 @@ const IT = {
   // I comandi **della finestra**: gli stessi campi di quelli del kernel, perché
   // sono comandi come loro — quello che cambia è chi li esegue.
   "commands.conflict": "«{chord}» è la scorciatoia di più comandi: {commands}.",
+  // I due modi, oltre alla contesa, in cui una scorciatoia scritta non si preme
+  // (§18.2). Si dicono all'avvio insieme ai conflitti veri, perché chiedono la
+  // stessa cosa a chi legge: aprire le impostazioni e cambiare una riga.
+  "commands.shadowed":
+    "«{chord}» è già un comando da solo ({command}): le scorciatoie che cominciano di lì non si possono premere ({commands}).",
+  "commands.rejected":
+    "«{chord}» non è una scorciatoia che si possa premere ({command}): il primo tasto deve portare Mod, Shift o Alt.",
+  // L'attesa del tasto successivo, nella barra di stato.
+  "keys.pending": "{chord}…",
   "commands.mode.reading": "Passa a Lettura",
   "commands.mode.reading.desc": "Mostra la nota resa, senza l'editor.",
   "commands.mode.live": "Passa a Modifica",
@@ -539,6 +548,11 @@ const EN: Record<Chiave, string> = {
   "icons.none": "No icon",
   "palette.title": "Commands",
   "commands.conflict": "«{chord}» is the shortcut of more than one command: {commands}.",
+  "commands.shadowed":
+    "«{chord}» is already a command on its own ({command}): shortcuts starting there cannot be pressed ({commands}).",
+  "commands.rejected":
+    "«{chord}» is not a shortcut that can be pressed ({command}): the first key must carry Mod, Shift or Alt.",
+  "keys.pending": "{chord}…",
   "commands.mode.reading": "Switch to Reading",
   "commands.mode.reading.desc": "Show the rendered note, without the editor.",
   "commands.mode.live": "Switch to Editing",

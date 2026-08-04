@@ -19,9 +19,19 @@ Ne esce l'ordine in cui quelle quattro si sbloccano a vicenda, che era la cosa
 che nessuna delle quattro sedute poteva vedere da sola:
 
 **il modello di layout (~~§1.2~~) → il grafo nell'area principale (§3.3)**, e di
-lato la tastiera (§18.2) che deve arbitrare fra i comandi del kernel e quelli
+lato la tastiera (~~§18.2~~) che deve arbitrare fra i comandi del kernel e quelli
 della shell prima che §4.4 le chieda un secondo livello di decorazioni. La
 §2.9 non è in coda a nessuno: si paga quando le liste diventano lunghe.
+
+Di quell'ordine, **l'anello della tastiera si è sciolto senza essere servito a
+niente**. La §18.2 è chiusa
+([0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)) e la §4.4 è
+ancora aperta, ma non stava aspettando *lei*: l'arbitrato fra i due registri era
+già arrivato con la [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md), e
+ciò che restava — l'accordo in sequenza — non tocca le decorazioni da nessun
+lato. È il secondo dei tre anelli che si scioglie invece di sbloccarsi, dopo il
+~~§1.2~~, e per la stessa ragione: un ordine fra voci di sedute diverse indovina
+la **dipendenza** meglio di quanto indovini *quale pezzo* della voce la porta.
 
 Di quell'ordine è caduto anche il pezzo che riguardava l'editor, e in un modo che
 nessuna delle quattro sedute poteva vedere: il secondo livello di decorazioni non
@@ -38,15 +48,24 @@ non poteva prevedere è che il nodo costasse **zero firma**: i riquadri erano gi
 nel contratto dalla [0007](../decisions/0007-contesto-di-sessione.md), e ciò che
 mancava era un corpo alla shell.
 
-Le due voci native della seduta, e ne resta una. La 18.2 dipendeva dal registro comandi
+Le due voci native della seduta sono **chiuse tutte e due**, e ciò che resta in
+questo file sono solo code di sedute concluse altrove — cioè la definizione per
+esclusione con cui la seduta era nata, arrivata fino in fondo. La ~~18.2~~
+dipendeva dal registro comandi
 ([decisione 0009](../decisions/0009-registro-dei-comandi.md)) e dai settings
-(11.1), ed è **quasi chiusa** con la
+(11.1), ed è stata chiusa in due tempi. Con la
 [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md): la tastiera è
 configurabile perché una scorciatoia è una chiave di impostazione che il kernel
 fabbrica per ogni comando, e i comandi **della shell** — toggle dei pannelli,
 cambio modalità, grafo, palette — non sono più bottoni: sono comandi con la
-stessa forma, che si eseguono di qua invece che attraverso l'IPC. Resta il solo
-accordo **in sequenza**, che è un secondo problema.
+stessa forma, che si eseguono di qua invece che attraverso l'IPC. E con la
+[0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md), che ha preso
+l'accordo **in sequenza** — «un secondo problema», diceva la voce, e lo era — e
+ha trovato che il blocco che lo teneva fermo non esisteva: la sintassi degli
+accordi non è mai stata nel contratto, quindi `Mod-k d` costa **zero firma**. Il
+resto della voce, invece, era vero fino in fondo: una sequenza ha uno stato, un
+timeout, un annullamento e una regola sul prefisso, e valeva la pena eseguirle
+tutte e quattro insieme.
 
 Con loro il residuo dichiarato della
 [decisione 0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md): l'arco adesso è
@@ -116,9 +135,9 @@ raccoglie.
       history»: `setDoc` ricostruisce lo stato. Il presidio è
       `frontend/src/editor/editor.test.ts`, verificato rosso sul codice di prima.
 
-### 18.2 Comandi e tastiera
+### ~~18.2 Comandi e tastiera~~
 
-*ex §3.2 · shell · **P1** — **quasi chiusa** con la [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md): resta il solo accordo **in sequenza***
+*ex §3.2 · shell · **P1** — **chiusa** con la [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md) e la [0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md), che ne ha eseguita una casella e trasferita l'altra*
 
 - [x] ~~**Registro comandi nel frontend** alimentato da `list_commands` +
       command palette fuzzy + hotkey configurabili + conflitti segnalati.~~
@@ -130,19 +149,60 @@ raccoglie.
       un `run()` locale al posto dell'IPC. Il filtro è a sottosequenza, col rango
       di prima come spareggio; i conflitti si **dicono** all'apertura, nominando
       i comandi, invece di essere rifiutati alla scrittura.
-- [ ] **L'accordo in sequenza** (`g` poi `d`) — l'unica casella rimasta, ed è un
-      secondo problema e non un pezzo mancante del primo: una sequenza ha uno
-      stato («sto aspettando il secondo tasto»), un timeout, un modo di
-      annullarla e la domanda di cosa fare se il primo tasto è già una
-      scorciatoia da solo. Niente di tutto ciò si esprime nella sintassi che la
-      `CommandSpec` dichiara oggi, e accettare `g d` senza onorarlo sarebbe
-      peggio che non accettarlo.
-- [ ] **La scorciatoia di un comando di shell non si riconfigura**: la chiave la
+- [x] ~~**L'accordo in sequenza** (`g` poi `d`) — una sequenza ha uno stato («sto
+      aspettando il secondo tasto»), un timeout, un modo di annullarla e la
+      domanda di cosa fare se il primo tasto è già una scorciatoia da solo.
+      Niente di tutto ciò si esprime nella sintassi che la `CommandSpec` dichiara
+      oggi.~~ **Fatto** con la
+      [0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md), e le
+      quattro cose che la riga elencava ci sono tutte e quattro — perché
+      implementarne tre su quattro voleva dire una tastiera che ogni tanto non
+      risponde. Ma l'ultima frase era **falsa**, e scoprirlo per primo ha
+      cambiato la forma di tutto il resto: `CommandSpec.keybinding` è un
+      `Option<String>` dalla [0009](../decisions/0009-registro-dei-comandi.md), e
+      il contratto non dichiara una *sintassi* — dice per iscritto che «chi
+      assegna davvero i tasti è la shell». `"Mod-k d"` ci sta dentro, quindi
+      **zero firma e zero Rust**. La voce aveva confuso il *tipo* con la
+      *sintassi*, che non è mai stata nel contratto ma in quaranta righe di
+      TypeScript.
+
+      L'esempio era ineseguibile, e non per un dettaglio: `g` poi `d` è un gesto
+      vim, e vim ha una modalità normale. Sotto questa tastiera c'è un editor, e
+      `g` è testo di qualcuno. Si è preso il modello **VS Code** — il primo tasto
+      porta un modificatore — e la cosa che non era ovvia prima di scriverla è
+      che la regola ha **due metà che si tengono**: il secondo tasto può essere
+      nudo *proprio perché il primo non lo era*. `Mod-k` apre una modalità che
+      dura due secondi, che si vede nella barra di stato e che ha una porta
+      d'uscita, e dentro quella finestra la `d` non appartiene a nessuno.
+
+      Il punto che questa riga non prevedeva e che è costato di più: il conflitto
+      di **prefisso** non è un conflitto che `conflitti` sappia vedere. `Mod-k` e
+      `Mod-k d` non sono lo stesso accordo, e però il secondo non si preme mai —
+      cioè è il modo esatto in cui una sequenza resterebbe *accettata e non
+      onorata*, che era il criterio con cui questa casella si giudicava. Vince il
+      corto, e la cosa si **dice all'avvio** perché si decide guardando il
+      registro fermo. Con lei è venuto fuori un difetto vecchio: un accordo
+      scritto male era **escluso** dal conteggio dei conflitti invece che
+      segnalato, e da quando una scorciatoia è una stringa che l'utente scrive a
+      mano è un silenzio che non si può tenere.
+- [x] ~~**La scorciatoia di un comando di shell non si riconfigura**: la chiave la
       fabbrica il kernel registrando un provider, e un comando che vive nella
       webview un provider non ce l'ha (il pannello le mostra di sola lettura). La
       via d'uscita non è un secondo registro di qua — è la shell che diventa un
-      componente come gli altri, cioè la domanda della
-      [§16.3](16-crate-sdk-banchi-di-prova.md).
+      componente come gli altri, cioè la domanda della §16.3.~~
+      **Trasferita alla
+      [§16.3](16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature)**
+      con la [0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md),
+      e non per abitudine: prima si è misurata una terza strada che la casella
+      non aveva guardato — un `CommandProvider` **di prossimità**, registrato
+      dall'host per conto della shell al solo scopo di far nascere le chiavi
+      `keys.shell.*`. Gli id passerebbero davvero, e si rompe in cinque punti,
+      quattro dei quali sono lavoro e il quinto una **contraddizione**: i
+      provider si registrano per vault e le chiavi `keys.*` sono di scope
+      `Vault`, ma `shell.vault.open` è il comando che esiste *prima* di ogni
+      vault. La sua chiave nascerebbe solo dopo che un vault è aperto — quando
+      serve meno — e vivrebbe dentro il vault che serve ad aprire. I cinque punti
+      stanno nel verbale, così che chi eseguirà la §16.3 non debba rimisurarli.
 
 ---
 
