@@ -27,7 +27,7 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
-use fub_abi::edit::Revision;
+use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::event::Actor;
 use fub_abi::locale::Locale;
 use fub_abi::model::DocId;
@@ -170,17 +170,25 @@ fn read_document(
     Ok(DocumentSource { text, revision })
 }
 
+/// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
+///
+/// `base` non è opzionale, e non è una svista: un campo mancante qui è un errore
+/// di deserializzazione, cioè la shell che ha dimenticato di dichiarare non
+/// scrive di nascosto — smette di scrivere, e lo si vede al primo salvataggio.
+/// Fino alla decisione 0092 era un `Option<String>` col default `null`, e il
+/// default voleva dire «sovrascrivi comunque»: la guardia si perdeva
+/// **omettendola**, che è il modo in cui una guardia non protegge nessuno.
 #[tauri::command]
 fn write_document(
     host: State<Host>,
     id: String,
     source: String,
-    base: Option<String>,
+    base: WriteBase,
     vault: Option<String>,
 ) -> Result<String, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write().unwrap();
-    ws.write_document_from(&doc_id(&id)?, &source, base.map(Revision::new))
+    ws.write_document(&doc_id(&id)?, &source, base)
         .map(|r| r.0)
         .map_err(PluginError::from)
 }

@@ -760,6 +760,23 @@ export interface DocumentSource {
   revision: string;
 }
 
+// **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).
+// Tag adiacente (`kind` + `value`) come `LinkTarget`: un caso porta uno scalare
+// e l'altro niente.
+//
+// Due casi e non una revisione opzionale, ed è la
+// [0092](../../../docs/decisions/0092-una-base-si-dichiara.md): finché era
+// `string | null` col default `null`, scrivere ciechi era ciò che succedeva
+// **omettendo** — cioè il default, che non lo sceglie nessuno. Adesso chi copre
+// una scrittura altrui lo scrive, e chi legge questa riga lo vede.
+export type WriteBase =
+  // «Scrivi solo se il file è ancora quello da cui sono partito»: se non
+  // combacia, `PluginError` di specie `conflict` e non è stato scritto niente.
+  | { kind: "descends_from"; value: string }
+  // «Scrivi: questo testo non discende da un testo di prima, e se ne copre uno
+  // è voluto» — nella shell è un posto solo, «vince il mio testo».
+  | { kind: "dictated" };
+
 // Un documento **reso**: l'HTML, e le parti dichiarative che la shell monta da
 // sé (rispecchia `fub_kernel::RenderedDocument`).
 //

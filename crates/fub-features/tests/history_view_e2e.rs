@@ -17,6 +17,7 @@
 //!    una versione (D8).
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
 use fub_abi::traits::ViewInstance;
@@ -143,10 +144,10 @@ fn la_view_elenca_le_versioni_senza_ricevere_lo_store() {
     // Nessuna nota aperta: è uno stato, non un errore.
     assert!(detto(&ws.render_view(&istanza()).unwrap()).contains("Nessuna nota"));
 
-    ws.write_document(&DocId::new("Uno.md"), "primo\n")
+    ws.write_document(&DocId::new("Uno.md"), "primo\n", WriteBase::Dictated)
         .expect("creata");
     guarda(&mut ws, "Uno.md");
-    ws.write_document(&DocId::new("Uno.md"), "secondo\n")
+    ws.write_document(&DocId::new("Uno.md"), "secondo\n", WriteBase::Dictated)
         .expect("riscritta");
 
     let tree = ws.render_view(&istanza()).unwrap();
@@ -164,10 +165,10 @@ fn la_view_elenca_le_versioni_senza_ricevere_lo_store() {
 fn lanteprima_si_ricorda_fra_due_ridisegni() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("Uno.md"), "com'era\n")
+    ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
         .expect("creata");
     guarda(&mut ws, "Uno.md");
-    ws.write_document(&DocId::new("Uno.md"), "com'è\n")
+    ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
         .expect("riscritta");
 
     let tree = ws.render_view(&istanza()).unwrap();
@@ -220,10 +221,10 @@ fn ultimo_ts(tree: &UiNode) -> u64 {
 fn ripristinare_passa_dal_registro_e_si_annulla() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("Uno.md"), "com'era\n")
+    ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
         .expect("creata");
     guarda(&mut ws, "Uno.md");
-    ws.write_document(&DocId::new("Uno.md"), "com'è\n")
+    ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
         .expect("riscritta");
 
     // Il comando è nel registro, cioè: la palette lo vede, una macro lo può
@@ -257,10 +258,10 @@ fn ripristinare_passa_dal_registro_e_si_annulla() {
 fn linverso_di_un_ripristino_e_dichiarato_dal_comando() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("Uno.md"), "com'era\n")
+    ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
         .expect("creata");
     guarda(&mut ws, "Uno.md");
-    ws.write_document(&DocId::new("Uno.md"), "com'è\n")
+    ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
         .expect("riscritta");
     let ts = ultimo_ts(&ws.render_view(&istanza()).unwrap());
 

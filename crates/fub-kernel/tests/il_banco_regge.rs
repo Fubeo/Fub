@@ -10,6 +10,7 @@
 //! tutti i test che ci si appoggiano, e lo farebbero **passando**. Un banco
 //! condiviso è codice di produzione dei test, e va provato come tale.
 
+use fub_abi::edit::WriteBase;
 use fub_abi::event::EventKind;
 use fub_testkit::{doc, Banco, TestoDiProva};
 
@@ -56,7 +57,7 @@ fn la_spia_vede_cio_che_il_kernel_emette_e_non_cio_che_e_successo_montando() {
     assert_eq!(banco.eventi(), vec![]);
 
     banco.with_host("prova", |host| {
-        host.write_document(&doc("nuova.md"), "corpo", None)
+        host.write_document(&doc("nuova.md"), "corpo", WriteBase::Dictated)
             .expect("scrittura consentita");
     });
 
@@ -76,7 +77,7 @@ fn un_id_non_dichiarato_non_riceve_capacita() {
     let mut banco = Banco::nuovo().monta();
 
     let esito = banco.with_host("mai.dichiarato", |host| {
-        host.write_document(&doc("x.md"), "y", None)
+        host.write_document(&doc("x.md"), "y", WriteBase::Dictated)
     });
     assert!(
         esito.is_err(),

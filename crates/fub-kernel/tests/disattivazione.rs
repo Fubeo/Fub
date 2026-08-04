@@ -25,6 +25,7 @@ use fub_abi::custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
     SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
+use fub_abi::edit::WriteBase;
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
 use fub_abi::format::{ParseContext, RenderOptions};
@@ -320,7 +321,7 @@ fn un_indice_disattivato_riceve_flush_poi_close_e_poi_nientaltro() {
 
     let prima = vita(&log).len();
     std::fs::write(banco.root.join("b.txt"), "nuovo").unwrap();
-    ws.write_document(&DocId::new("b.txt"), "nuovo")
+    ws.write_document(&DocId::new("b.txt"), "nuovo", WriteBase::Dictated)
         .expect("scrittura");
     assert_eq!(
         vita(&log).len(),
@@ -399,7 +400,7 @@ fn disattivare_toglie_tutto_e_lascia_liberi_i_nomi() {
     // produce sempre.
     let prima = *colpi.lock().unwrap();
     std::fs::write(banco.root.join("c.txt"), "x").unwrap();
-    ws.write_document(&DocId::new("c.txt"), "x")
+    ws.write_document(&DocId::new("c.txt"), "x", WriteBase::Dictated)
         .expect("scrittura");
     assert_eq!(*colpi.lock().unwrap(), prima, "l'handler è staccato");
 
@@ -487,7 +488,11 @@ impl EventHandler for Ultimo {
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         if matches!(notice.event, Event::VaultClosed { .. }) {
-            host.write_document(&DocId::new("ultimo.txt"), "detto all'ultimo", None)?;
+            host.write_document(
+                &DocId::new("ultimo.txt"),
+                "detto all'ultimo",
+                WriteBase::Dictated,
+            )?;
         }
         Ok(())
     }

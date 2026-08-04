@@ -13,6 +13,7 @@
 
 use camino::Utf8PathBuf;
 use fub_abi::custom::{SyntaxMatch, SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger};
+use fub_abi::edit::WriteBase;
 use fub_abi::error::FormatError;
 use fub_abi::format::ParseContext;
 use fub_abi::model::{Block, DocId};
@@ -139,7 +140,7 @@ fn dal_canale_esce_il_corpo_che_la_cache_non_ha() {
 fn il_modello_e_quello_del_disco_adesso_non_quello_di_quando_e_stato_indicizzato() {
     let (_dir, mut ws) = vault();
 
-    ws.write_document(&DocId::new("Altra.md"), "# Cambiata\n")
+    ws.write_document(&DocId::new("Altra.md"), "# Cambiata\n", WriteBase::Dictated)
         .expect("scrittura");
 
     let model = chiedendo(&mut ws, |host| host.read_model(&DocId::new("Altra.md")))

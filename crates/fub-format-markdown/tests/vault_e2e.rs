@@ -2,6 +2,7 @@
 //! scansione vault → provider markdown nativo → grafo dei link, senza GUI.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, KernelError, Workspace};
@@ -123,8 +124,12 @@ fn edit_updates_graph_and_backlinks() {
         .iter()
         .any(|r| r.source == daily));
     // Scrive un nuovo contenuto che aggiunge un link a index.
-    ws.write_document(&daily, "# Diario\n\nAdesso punto a [[index]].\n")
-        .unwrap();
+    ws.write_document(
+        &daily,
+        "# Diario\n\nAdesso punto a [[index]].\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     assert!(ws
         .backlinks(&DocId::new("index.md"))
         .iter()
@@ -202,6 +207,7 @@ fn markdown_links_are_edges_and_survive_a_rename() {
             "Un [link relativo](<../Nota B.md>) e uno [dentro la cartella](Alpha.md).\n",
             "Un [link con ancora](../Nota%20B.md#sezione) e un [url](https://esempio.test/Nota%20B.md).\n",
         ),
+        WriteBase::Dictated,
     )
     .unwrap();
 
@@ -280,6 +286,7 @@ fn an_embedded_reference_is_an_edge_too() {
             "Incorporo ![una nota](<../Nota B.md>) e un ![allegato](../allegati/foto.png).\n",
             "E una ![remota](https://esempio.test/x.png), che non è del vault.\n",
         ),
+        WriteBase::Dictated,
     )
     .unwrap();
 
@@ -316,6 +323,7 @@ fn the_label_is_not_mistaken_for_the_reference() {
     ws.write_document(
         &sorgente,
         "Un [[Nota B|Nota B]] e un [Progetti/Alpha.md](Progetti/Alpha.md).\n",
+        WriteBase::Dictated,
     )
     .unwrap();
 

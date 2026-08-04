@@ -157,6 +157,73 @@ impl Default for Revision {
     }
 }
 
+/// **Da cosa parte** una riscrittura totale: o discende da una revisione, o è
+/// dettata.
+///
+/// È il parametro di
+/// [`write_document`](crate::traits::VaultWrite::write_document), e i suoi due
+/// casi sono due significati, non un valore e la sua assenza.
+///
+/// # Perché non è un `Option<Revision>`
+///
+/// Perché lo è stato, e il difetto si è visto. Una guardia contro la
+/// sovrascrittura che si ottiene **passando** qualcosa e si perde
+/// **omettendola** protegge chi si ricorda di attivarla, cioè non protegge:
+/// scrivere ciechi era il default, e il default non lo sceglie nessuno. Con due
+/// casi nominati scrivere ciechi resta possibile — deve restarlo, un importer
+/// non discende da niente — ma diventa una cosa che si **dichiara**, e una
+/// dichiarazione la si legge in review.
+///
+/// È il criterio della
+/// [0007](../../../docs/decisions/0007-contesto-di-sessione.md): *«un flag che
+/// chiunque può dimenticare di leggere protegge meno di un campo che, quando
+/// non è vero, non c'è»*. Qui il campo non manca mai, e allora la stessa regola
+/// dice l'altra metà: **quando c'è una scelta, la si nomina**.
+///
+/// # I due casi, e a chi appartengono
+///
+/// [`DescendsFrom`](WriteBase::DescendsFrom) è di chi ha **letto** il testo di
+/// prima e ne sta consegnando una versione modificata: l'editor che salva il
+/// proprio buffer. Se il file non è più quello, l'host risponde
+/// [`Conflict`](crate::error::PluginError::Conflict) e non scrive niente.
+///
+/// [`Dictated`](WriteBase::Dictated) è di chi il testo lo **produce**: un
+/// importer che crea una nota, un template che scrive la nota di oggi, il
+/// ripristino di una versione, l'utente che ha visto il conflitto e ha risposto
+/// «vince il mio testo». Nessuno di loro sta correggendo un testo che ha letto,
+/// e obbligarli a esibire una base vorrebbe dire farsela inventare — una base
+/// inventata è una guardia che dice sempre di sì.
+///
+/// L'ordine dei casi è il discriminante al confine e non si tocca:
+/// `descends-from` sta per primo perché è quello **guardato**, cioè quello che
+/// una firma su cui si può sbagliare deve nominare per primo.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+// Tag adiacente come [`LinkTarget`](crate::model::LinkTarget): un caso porta uno
+// scalare e l'altro niente, e col tag interno `serde_json` non li
+// serializzerebbe entrambi.
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum WriteBase {
+    /// «Scrivi solo se il file è ancora quello da cui sono partito.»
+    DescendsFrom(Revision),
+    /// «Scrivi: questo testo non discende da un testo di prima, e se ne copre
+    /// uno è voluto.»
+    Dictated,
+}
+
+impl WriteBase {
+    /// La revisione attesa, se questa scrittura ne ha una.
+    ///
+    /// Non è un ritorno all'`Option`: è la lettura che serve a chi la guardia la
+    /// **applica** — un punto solo, dentro l'host — e che a chiamare
+    /// `write_document` non serve mai.
+    pub fn expected(&self) -> Option<&Revision> {
+        match self {
+            WriteBase::DescendsFrom(r) => Some(r),
+            WriteBase::Dictated => None,
+        }
+    }
+}
+
 /// Una sostituzione: i byte dentro `span` diventano `text`.
 ///
 /// Le tre operazioni sono la stessa cosa vista da tre parti: inserire è uno span

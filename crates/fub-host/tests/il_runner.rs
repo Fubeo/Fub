@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::traits::{
     HostApi, HostEvents, IndexQuery, IndexResult, JobProgress, JobSpec, JobStatus, Plugin,
@@ -364,7 +365,11 @@ fn un_job_che_pania_costa_il_job_e_non_il_pool() {
         s.workspace()
             .write()
             .unwrap()
-            .write_document(&DocId::new("Nota.md"), "# ancora qui\n")
+            .write_document(
+                &DocId::new("Nota.md"),
+                "# ancora qui\n",
+                WriteBase::Dictated,
+            )
             .expect("si scrive ancora");
     })
     .expect("aperto");

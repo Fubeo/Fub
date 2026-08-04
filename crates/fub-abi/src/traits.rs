@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec};
-use crate::edit::{EditReport, EditRequest, Revision};
+use crate::edit::{EditReport, EditRequest, Revision, WriteBase};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
 use crate::format::DocumentFormat;
@@ -527,28 +527,33 @@ pub trait VaultWrite: VaultRead {
     /// per eleganza, ma perché una riscrittura totale non dice *cosa* è
     /// cambiato.
     ///
-    /// # La base, e perché qui è opzionale mentre in `apply_edit` non lo è
+    /// # La base, e perché è un tipo a due casi e non un `Option`
     ///
-    /// `base` è la revisione che chi scrive si aspetta di trovare sul disco. Se
-    /// c'è e non combacia, l'host risponde [`PluginError::Conflict`] e **non
-    /// scrive niente**: qualcuno ha riscritto il file da quando questo testo è
-    /// stato preso, e sovrascriverlo distruggerebbe il suo lavoro senza che
-    /// nessuna delle due metà del sistema se ne accorga. È la stessa guardia di
+    /// [`WriteBase::DescendsFrom`] porta la revisione che chi scrive si aspetta
+    /// di trovare sul disco. Se non combacia, l'host risponde
+    /// [`PluginError::Conflict`] e **non scrive niente**: qualcuno ha riscritto
+    /// il file da quando questo testo è stato preso, e sovrascriverlo
+    /// distruggerebbe il suo lavoro senza che nessuna delle due metà del sistema
+    /// se ne accorga. È la stessa guardia di
     /// [`apply_edit`](VaultWrite::apply_edit) (decisione 0008), applicata alla
     /// seconda primitiva di scrittura invece di restare privilegio della prima.
     ///
-    /// È un [`Option`] e là no perché le due firme rispondono a due domande
-    /// diverse. Un edit **non esiste** senza la revisione su cui è stato
-    /// calcolato: i suoi offset indicano un testo, e senza dire quale non sono
-    /// una modifica ma un'ipotesi. Una riscrittura totale invece è compiuta da
-    /// sé — un importer che crea una nota, un template che scrive la nota di
-    /// oggi, il ripristino di una versione non stanno correggendo un testo che
-    /// hanno letto: lo stanno **dettando**. Obbligare quei chiamanti a esibire
-    /// una base vorrebbe dire farsela inventare, e una base inventata è una
-    /// guardia che dice sempre di sì.
+    /// [`WriteBase::Dictated`] è l'altra metà, e non è l'assenza della prima:
+    /// una riscrittura totale può essere compiuta da sé — un importer che crea
+    /// una nota, un template che scrive la nota di oggi, il ripristino di una
+    /// versione non stanno correggendo un testo che hanno letto, lo stanno
+    /// **dettando**. Obbligarli a esibire una base vorrebbe dire farsela
+    /// inventare, e una base inventata è una guardia che dice sempre di sì.
     ///
-    /// Quindi: `None` = «scrivi, questo testo non discende da niente»; `Some` =
-    /// «scrivi solo se il file è ancora quello da cui sono partito».
+    /// La differenza con [`apply_edit`](VaultWrite::apply_edit), che una base la
+    /// pretende e basta, resta e ha la stessa ragione di prima: un edit **non
+    /// esiste** senza la revisione su cui è stato calcolato — i suoi offset
+    /// indicano un testo, e senza dire quale non sono una modifica ma
+    /// un'ipotesi. Qui invece i due casi sono due mestieri, e il tipo li fa
+    /// nominare entrambi: fino alla decisione 0092 questo parametro era un
+    /// `Option`, e scrivere ciechi era ciò che succedeva **omettendo** —
+    /// cioè il default, che è il modo in cui una guardia protegge chi si
+    /// ricorda di attivarla e nessun altro.
     ///
     /// # Cosa torna
     ///
@@ -562,7 +567,7 @@ pub trait VaultWrite: VaultRead {
         &mut self,
         id: &DocId,
         source: &str,
-        base: Option<Revision>,
+        base: WriteBase,
     ) -> Result<Revision, PluginError>;
 
     /// Cambia **un pezzo** di documento: gli edit della richiesta, tutti o

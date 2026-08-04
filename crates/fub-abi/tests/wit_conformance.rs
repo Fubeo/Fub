@@ -66,7 +66,7 @@ use fub_abi::custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
     SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
-use fub_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit};
+use fub_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{
     Actor, BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Notice, Origin, Severity,
@@ -365,6 +365,7 @@ wit_kebab! {
     EditRequest,
     AppliedEdit,
     EditReport,
+    WriteBase,
 
     // Il contesto di sessione: il pannello con il focus e ciò che contiene.
     PaneId,
@@ -3603,6 +3604,18 @@ fn conform(source: &str) -> Result<(), String> {
         &[("revision", wit(&revision)), ("applied", wit(&applied))],
     );
 
+    contract.variant_src(
+        "write-base",
+        ("edit.rs", "WriteBase"),
+        &[
+            match &WriteBase::DescendsFrom(Revision::default()) {
+                WriteBase::DescendsFrom(r) => case_ty("descends-from", wit(r)),
+                WriteBase::Dictated => unreachable!(),
+            },
+            case("dictated"),
+        ],
+    );
+
     // --- il contesto di sessione (decisione 0007)
 
     let Selection { span, text } = Selection::default();
@@ -4767,12 +4780,7 @@ fn conform(source: &str) -> Result<(), String> {
         "host-vault-write",
         "write-document",
         <dyn HostApi>::write_document
-            as fn(
-                Host,
-                &'static DocId,
-                &'static str,
-                Option<Revision>,
-            ) -> Result<Revision, PluginError>,
+            as fn(Host, &'static DocId, &'static str, WriteBase) -> Result<Revision, PluginError>,
         &["id", "source", "base"],
     );
     contract.method(
@@ -5294,8 +5302,8 @@ fn wit_conformance_actually_fails_on_drift() {
         (
             "tipo di un parametro cambiato",
             base.replace(
-                "    write-document: func(id: doc-id, source: string,\n                         base: option<revision>) -> result<revision, plugin-error>;",
-                "    write-document: func(id: doc-id, source: list<u8>,\n                         base: option<revision>) -> result<revision, plugin-error>;",
+                "    write-document: func(id: doc-id, source: string,\n                         base: write-base) -> result<revision, plugin-error>;",
+                "    write-document: func(id: doc-id, source: list<u8>,\n                         base: write-base) -> result<revision, plugin-error>;",
             ),
             "source",
         ),

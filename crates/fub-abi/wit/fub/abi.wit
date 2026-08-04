@@ -2614,6 +2614,30 @@ interface edit {
         revision: revision,
         applied: list<applied-edit>,
     }
+
+    /// DA COSA parte una riscrittura totale (`write-document`): o discende da
+    /// una revisione, o è dettata. Due casi, non un valore e la sua assenza.
+    ///
+    /// Fino alla decisione 0092 era `option<revision>`, e il difetto era la
+    /// forma: una guardia che si ottiene passando qualcosa e si perde
+    /// OMETTENDOLA protegge chi si ricorda di attivarla, cioè non protegge.
+    /// Scrivere ciechi resta possibile — un importer non discende da niente —
+    /// ma si DICHIARA. È il criterio della 0007 sullo span, applicato al verso
+    /// opposto: là un campo che quando non è vero non c'è, qui una scelta che
+    /// quando c'è si nomina.
+    ///
+    /// L'ordine è il discriminante: `descends-from` per primo perché è il caso
+    /// guardato.
+    variant write-base {
+        /// «Scrivi solo se il file è ancora quello da cui sono partito»:
+        /// se non combacia, `conflict` e non viene scritto NIENTE.
+        descends-from(revision),
+        /// «Scrivi: questo testo non discende da un testo di prima, e se ne
+        /// copre uno è voluto» — l'importer, il template, il ripristino di una
+        /// versione, l'utente che ha visto il conflitto e ha detto «vince il
+        /// mio testo».
+        dictated,
+    }
 }
 
 /// View dichiarative (`ViewProvider`).
@@ -2893,25 +2917,26 @@ interface host-vault-read {
 interface host-vault-write {
     use model.{doc-id};
     use errors.{plugin-error};
-    use edit.{edit-request, edit-report, revision};
+    use edit.{edit-request, edit-report, revision, write-base};
 
     /// Scrive il documento INTERO: è la scrittura di chi il testo intero ce l'ha
     /// in mano (l'editor che salva, un importer che crea una nota). Chi ne
     /// cambia un pezzo usa `apply-edit`.
     ///
-    /// `base` è la revisione che chi scrive si aspetta di trovare sul disco:
-    /// se c'è e non combacia, `conflict` e non viene scritto NIENTE. È la
-    /// stessa guardia di `apply-edit` (decisione 0008) sulla seconda primitiva
-    /// di scrittura. Qui è opzionale e là no perché un edit senza base non
-    /// esiste — i suoi offset indicano un testo — mentre una riscrittura totale
-    /// è compiuta da sé: un importer non sta correggendo un testo che ha letto,
-    /// lo sta dettando, e una base inventata è una guardia che dice sempre sì.
+    /// `base` dice DA COSA si parte, e i suoi due casi sono due mestieri:
+    /// `descends-from` è di chi il testo di prima l'ha letto e ne consegna una
+    /// versione modificata — se il file non è più quello, `conflict` e non viene
+    /// scritto NIENTE, che è la stessa guardia di `apply-edit` (decisione 0008)
+    /// sulla seconda primitiva di scrittura; `dictated` è di chi il testo lo
+    /// produce, e obbligarlo a esibire una base vorrebbe dire farsela inventare.
+    /// Che sia un `variant` e non un `option` è la decisione 0092: scrivere
+    /// ciechi si DICHIARA invece di succedere per omissione.
     ///
     /// Torna la revisione PRODOTTA, cioè la `base` della scrittura dopo: senza,
     /// l'unico modo di averla sarebbe ricalcolarla, cioè una seconda
     /// implementazione di ciò che `revision` è opaca per impedire.
     write-document: func(id: doc-id, source: string,
-                         base: option<revision>) -> result<revision, plugin-error>;
+                         base: write-base) -> result<revision, plugin-error>;
     /// Cambia un PEZZO di documento: gli edit della richiesta, tutti o nessuno,
     /// sul sorgente che la sua `base` nomina. `conflict` = il documento è
     /// cambiato nel frattempo e non è stato scritto niente (si rilegge e si

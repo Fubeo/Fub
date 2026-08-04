@@ -22,6 +22,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice};
@@ -125,10 +126,15 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
 /// Un vault con `Vecchia.lnk` e `n` note che la linkano.
 fn con_backlink(dir: &Utf8PathBuf, n: usize) -> Workspace {
     let mut ws = workspace(dir);
-    ws.write_document(&DocId::new("Vecchia.lnk"), "").unwrap();
+    ws.write_document(&DocId::new("Vecchia.lnk"), "", WriteBase::Dictated)
+        .unwrap();
     for i in 0..n {
-        ws.write_document(&DocId::new(format!("src{i}.lnk")), "Vecchia")
-            .unwrap();
+        ws.write_document(
+            &DocId::new(format!("src{i}.lnk")),
+            "Vecchia",
+            WriteBase::Dictated,
+        )
+        .unwrap();
     }
     ws
 }
@@ -199,10 +205,13 @@ fn the_touched_set_has_no_repetitions_and_keeps_the_order_of_what_happened() {
     let rx = ws.bus().subscribe();
 
     ws.batch(|ws| {
-        ws.write_document(&DocId::new("b.lnk"), "uno").unwrap();
-        ws.write_document(&DocId::new("a.lnk"), "due").unwrap();
+        ws.write_document(&DocId::new("b.lnk"), "uno", WriteBase::Dictated)
+            .unwrap();
+        ws.write_document(&DocId::new("a.lnk"), "due", WriteBase::Dictated)
+            .unwrap();
         // Scritta due volte: un documento toccato N volte resta un documento.
-        ws.write_document(&DocId::new("b.lnk"), "tre").unwrap();
+        ws.write_document(&DocId::new("b.lnk"), "tre", WriteBase::Dictated)
+            .unwrap();
     });
 
     let Some(Event::BatchEnded { changed, .. }) = rx
@@ -253,7 +262,8 @@ fn a_nested_batch_joins_the_one_that_is_open() {
     ws.batch(|ws| {
         ws.rename_document(&DocId::new("Vecchia.lnk"), &DocId::new("Nuova.lnk"))
             .unwrap();
-        ws.write_document(&DocId::new("dopo.lnk"), "coda").unwrap();
+        ws.write_document(&DocId::new("dopo.lnk"), "coda", WriteBase::Dictated)
+            .unwrap();
     });
 
     let terminali: Vec<Event> = rx
@@ -282,16 +292,17 @@ fn a_batch_does_not_roll_back_and_says_so_by_closing_anyway() {
     let mut ws = workspace(&dir.0);
     let a = DocId::new("a.lnk");
     let b = DocId::new("b.lnk");
-    ws.write_document(&a, "prima").unwrap();
-    ws.write_document(&b, "prima").unwrap();
+    ws.write_document(&a, "prima", WriteBase::Dictated).unwrap();
+    ws.write_document(&b, "prima", WriteBase::Dictated).unwrap();
     // Una base calcolata adesso e resa stantia da una scrittura che arriva
     // prima che il lotto la usi: è il caso di un'automazione lunga (decisione 0008).
     let base_vecchia = ws.document_revision(&b).unwrap();
-    ws.write_document(&b, "qualcun altro").unwrap();
+    ws.write_document(&b, "qualcun altro", WriteBase::Dictated)
+        .unwrap();
     let rx = ws.bus().subscribe();
 
     let esito = ws.batch(|ws| {
-        ws.write_document(&a, "dopo").unwrap();
+        ws.write_document(&a, "dopo", WriteBase::Dictated).unwrap();
         ws.apply_edit(
             &b,
             EditRequest::new(base_vecchia, vec![TextEdit::insert(0, "x")]),
@@ -377,7 +388,7 @@ impl EventHandler for Automa {
         *self.scritture.lock().unwrap() += 1;
         // Scrive SEMPRE qualcosa di nuovo: è il caso che una guardia di
         // contenuto non sa fermare, perché il documento è ogni volta diverso.
-        host.write_document(&diario, &format!("{source}\nriga"), None)
+        host.write_document(&diario, &format!("{source}\nriga"), WriteBase::Dictated)
             .map(|_| ())
     }
 }
@@ -394,7 +405,7 @@ fn quante_scritture(tag: &str, guardia: bool) -> usize {
         }),
     )
     .expect("registrato");
-    ws.write_document(&DocId::new("innesco.lnk"), "via")
+    ws.write_document(&DocId::new("innesco.lnk"), "via", WriteBase::Dictated)
         .unwrap();
     let n = *scritture.lock().unwrap();
     n
@@ -438,7 +449,7 @@ fn the_actor_of_a_plugin_write_is_the_plugin_and_of_a_shell_write_is_the_user() 
     .expect("registrato");
     let rx = ws.bus().subscribe();
 
-    ws.write_document(&DocId::new("innesco.lnk"), "via")
+    ws.write_document(&DocId::new("innesco.lnk"), "via", WriteBase::Dictated)
         .unwrap();
 
     let mut per_doc: Vec<(String, Actor)> = rx
@@ -471,7 +482,8 @@ fn the_watcher_is_a_distinct_actor_because_that_write_did_not_pass_from_us() {
     let dir = TempDir::new("watcher");
     let mut ws = workspace(&dir.0);
     let id = DocId::new("fuori.lnk");
-    ws.write_document(&id, "nostra").unwrap();
+    ws.write_document(&id, "nostra", WriteBase::Dictated)
+        .unwrap();
     let rx = ws.bus().subscribe();
 
     // Un'altra app scrive il file, e il watcher ce lo riferisce.
@@ -540,7 +552,7 @@ fn inside_a_batch_no_handler_sees_the_vault_halfway_through() {
 
     ws.batch(|ws| {
         for i in 0..5 {
-            ws.write_document(&DocId::new(format!("n{i}.lnk")), "x")
+            ws.write_document(&DocId::new(format!("n{i}.lnk")), "x", WriteBase::Dictated)
                 .unwrap();
         }
     });
@@ -569,7 +581,7 @@ fn a_batch_id_is_new_every_time() {
     let mut ids = Vec::new();
     for i in 0..3 {
         ws.batch(|ws| {
-            ws.write_document(&DocId::new(format!("n{i}.lnk")), "x")
+            ws.write_document(&DocId::new(format!("n{i}.lnk")), "x", WriteBase::Dictated)
                 .unwrap();
         });
     }

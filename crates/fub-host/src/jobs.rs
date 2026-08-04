@@ -54,7 +54,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 use fub_abi::command::CommandOutcome;
-use fub_abi::edit::{EditReport, EditRequest, Revision};
+use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel};
@@ -244,7 +244,7 @@ impl VaultWrite for JobHost {
         &mut self,
         id: &DocId,
         source: &str,
-        base: Option<Revision>,
+        base: WriteBase,
     ) -> Result<Revision, PluginError> {
         self.write_result(|h| h.write_document(id, source, base.clone()))
     }

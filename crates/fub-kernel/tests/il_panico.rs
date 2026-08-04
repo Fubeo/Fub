@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode};
+use fub_abi::edit::WriteBase;
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Actor, EventMask, Notice};
 use fub_abi::format::{
@@ -93,8 +94,12 @@ fn banco() -> (tempfile::TempDir, Workspace) {
 fn il_vault_risponde_ancora(ws: &mut Workspace) {
     ws.read_source(&DocId::new("Nota.txt"))
         .expect("il vault si legge ancora");
-    ws.write_document(&DocId::new("Nota.txt"), "riscritta dopo il panico")
-        .expect("il vault si scrive ancora");
+    ws.write_document(
+        &DocId::new("Nota.txt"),
+        "riscritta dopo il panico",
+        WriteBase::Dictated,
+    )
+    .expect("il vault si scrive ancora");
 }
 
 // --- i cinque provider che esplodono ----------------------------------------
@@ -310,8 +315,12 @@ fn un_handler_che_pania_non_ferma_la_scrittura_che_lo_ha_svegliato() {
     ws.register_event_handler("test.mina", Box::new(HandlerMina))
         .expect("registrato");
 
-    ws.write_document(&DocId::new("Nota.txt"), "una scrittura qualunque")
-        .expect("la scrittura arriva in fondo");
+    ws.write_document(
+        &DocId::new("Nota.txt"),
+        "una scrittura qualunque",
+        WriteBase::Dictated,
+    )
+    .expect("la scrittura arriva in fondo");
     assert_eq!(
         ws.read_source(&DocId::new("Nota.txt")).unwrap(),
         "una scrittura qualunque"
@@ -329,9 +338,9 @@ fn un_indice_che_pania_indicizzando_non_ferma_la_scrittura() {
     ws.register_index_provider("test.mina", Box::new(IndiceMina(visti.clone())))
         .expect("registrato");
 
-    ws.write_document(&DocId::new("Nota.txt"), "prima")
+    ws.write_document(&DocId::new("Nota.txt"), "prima", WriteBase::Dictated)
         .expect("la scrittura arriva in fondo");
-    ws.write_document(&DocId::new("Nota.txt"), "seconda")
+    ws.write_document(&DocId::new("Nota.txt"), "seconda", WriteBase::Dictated)
         .expect("e anche la successiva");
     assert_eq!(
         *visti.lock().unwrap(),
@@ -351,7 +360,7 @@ fn un_formato_che_pania_costa_il_documento_e_non_muove_il_disco() {
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
 
     let errore = ws
-        .write_document(&DocId::new("Storta.txt"), BOOM)
+        .write_document(&DocId::new("Storta.txt"), BOOM, WriteBase::Dictated)
         .expect_err("un parser che pania non scrive");
     assert!(
         errore.to_string().contains("fragile") && errore.to_string().contains("è andato in panico"),

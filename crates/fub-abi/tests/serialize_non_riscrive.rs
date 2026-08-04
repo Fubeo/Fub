@@ -530,7 +530,7 @@ impl Workspace {\n\
         let mut model = self.read_model(id)?;\n\
         model.frontmatter.0.insert(chiave.to_string(), Value::Bool(true));\n\
         let source = self.docs.provider_for(id)?.serialize(&model)?;\n\
-        self.write_document(id, &source)\n\
+        self.write_document(id, &source, WriteBase::Dictated)\n\
     }\n\
 }\n";
     assert_eq!(

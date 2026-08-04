@@ -42,7 +42,7 @@ import { createEditor, type Editor } from "../editor/editor";
 import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
 import { noteDalNome, riferimentoRisolto, tagDelVault } from "../host/query";
-import type { PaneMode, ViewContext } from "../host/contract";
+import type { PaneMode, ViewContext, WriteBase } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { noteRecentiEsistenti } from "../state/recenti";
 import { emit, on, state } from "../state/store";
@@ -87,6 +87,15 @@ export interface DocumentDeps {
   /// importassero a vicenda sarebbe un ciclo.
   searchTag(tag: string): void;
 }
+
+/// «Questo testo non discende da un testo di prima»: il caso *dettato* di
+/// `WriteBase`, che non porta niente e quindi si può tenere in una costante.
+///
+/// Sta qui e ha un nome perché nella shell i posti che la usano sono pochi e
+/// ognuno è una decisione — «vince il mio testo», una bozza vecchia che la sua
+/// base non la sapeva, un buffer nato da una battuta prima di aver letto il
+/// disco — e un nome li rende cercabili tutti insieme.
+const DETTA: WriteBase = { kind: "dictated" };
 
 /// Un riquadro **a schermo**: la sua parte di DOM, il suo editor, e quale
 /// documento l'editor sta effettivamente mostrando.
@@ -153,10 +162,15 @@ interface Buffer {
   /// aveva visto, e nessuna delle due metà del sistema se ne accorgeva.
   ///
   /// Non si calcola di qua e non si potrebbe: la deriva il kernel dallo stesso
-  /// testo che ci consegna. `null` è «non lo so» — una bozza recuperata da una
-  /// sessione che non la sapeva, o un buffer che ha appena scelto di
-  /// sovrascrivere comunque — e vuol dire scrittura cieca, come prima.
-  base: string | null;
+  /// testo che ci consegna.
+  ///
+  /// È un `WriteBase` e non più una revisione opzionale
+  /// ([0092](../../../docs/decisions/0092-una-base-si-dichiara.md)): `null`
+  /// teneva insieme due cose diverse — «non so da cosa discendo» e «ho scelto
+  /// di sovrascrivere» — e le due si leggono uguali proprio nel punto in cui
+  /// contano. Adesso chi non lo sa lo **dichiara** dove lo scopre (il recupero
+  /// di una bozza vecchia), e chi sceglie lo dichiara dove sceglie.
+  base: WriteBase;
   /// Il debounce della **bozza** (§15.2), separato da quello del salvataggio
   /// perché ha un ritmo suo: vedi `scheduleDraft`.
   draftTimer?: number;
@@ -343,8 +357,7 @@ function registraComandi(): void {
   });
 }
 
-/// «Vince il mio testo»: si riscrive **senza base**, cioè alla cieca e
-/// apposta.
+/// «Vince il mio testo»: si **detta**, cioè si copre apposta ciò che c'è.
 ///
 /// Azzerare la base e non rileggerla è la differenza fra decidere e indovinare:
 /// rileggere la revisione di adesso e riprovare con quella sarebbe la
@@ -358,7 +371,7 @@ async function risolviTenendoIlMio(): Promise<void> {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  buf.base = null;
+  buf.base = DETTA;
   buf.esito = "in_corso";
   window.clearTimeout(buf.timer);
   await saveDoc(doc);
@@ -716,7 +729,13 @@ async function leggiBuffer(doc: string): Promise<string> {
   const gia = buffers.get(doc);
   if (gia) return gia.text;
   const { text, revision } = await api.readDocument(doc);
-  buffers.set(doc, { text, dirty: false, esito: "ok", echi: 0, base: revision });
+  buffers.set(doc, {
+    text,
+    dirty: false,
+    esito: "ok",
+    echi: 0,
+    base: { kind: "descends_from", value: revision },
+  });
   return text;
 }
 
@@ -780,8 +799,16 @@ export async function recuperaBozze(): Promise<number> {
     // `b.base` è la revisione da cui quel testo si era discostato, e da questa
     // voce non è più `null` per forza: chi ha scritto la bozza la sapeva
     // (§18.1). Una bozza vecchia, scritta da una sessione che non la sapeva,
-    // entra con `null` e riparte cieca — che è ciò che era prima per tutti.
-    buffers.set(b.doc, { text: b.text, dirty: true, esito: "ok", echi: 0, base: b.base });
+    // riparte **dettando**: è l'unica risposta possibile — non c'è nessuna
+    // revisione da esibire — ed è qui che si scrive, dove il fatto si scopre,
+    // invece che al salvataggio, dove sembrerebbe una scelta di chi salva.
+    buffers.set(b.doc, {
+      text: b.text,
+      dirty: true,
+      esito: "ok",
+      echi: 0,
+      base: b.base === null ? DETTA : { kind: "descends_from", value: b.base },
+    });
     notify(`${b.doc}: ${t(CHIAVE_CASO[casoDi(b)])}`, "info");
   }
   return bozze.length;
@@ -870,7 +897,10 @@ export async function openWikilink(
 function scritto(paneId: string, text: string): void {
   const doc = docAttivo(paneId);
   if (!doc) return;
-  const buf = buffers.get(doc) ?? { text, dirty: false, esito: "ok" as Esito, echi: 0, base: null };
+  // Un buffer che nasce qui non ha mai letto il disco — è il testo che sta
+  // arrivando dall'editor su un documento che nessuno aveva aperto — quindi non
+  // discende da niente che si possa nominare.
+  const buf = buffers.get(doc) ?? { text, dirty: false, esito: "ok" as Esito, echi: 0, base: DETTA };
   buf.text = text;
   buf.dirty = true;
   buffers.set(doc, buf);
@@ -928,7 +958,11 @@ async function writeDraft(doc: string): Promise<void> {
     // discostato — e ricalcolarla di qua sarebbe stata una seconda
     // implementazione dell'impronta, cioè una seconda verità. Adesso la porta
     // il documento quando lo si apre.
-    await api.saveDraft(doc, buf.text, buf.base);
+    await api.saveDraft(
+      doc,
+      buf.text,
+      buf.base.kind === "descends_from" ? buf.base.value : null,
+    );
   } catch {
     // Volutamente muto: vedi sopra.
   }
@@ -1085,7 +1119,7 @@ async function saveDoc(doc: string): Promise<void> {
   // rende la guardia una catena invece di un controllo alla prima battuta —
   // senza, il secondo salvataggio nominerebbe una base ormai vecchia e
   // fallirebbe contro sé stesso.
-  buf.base = prodotta;
+  buf.base = { kind: "descends_from", value: prodotta };
   // La scrittura è arrivata sul disco: il `document_changed` che ne segue è
   // nostro, e chi lo riceve non deve raccontarlo come se fosse di qualcun altro.
   buf.echi += 1;
@@ -1170,7 +1204,7 @@ async function reloadIfClean(id: string): Promise<void> {
   // buffer pulito il cui testo coincide già col disco non ha niente da
   // ricaricare, ma può benissimo non sapere da cosa discende — ed è il caso di
   // chi ha appena scelto di sovrascrivere comunque.
-  attuale.base = revision;
+  attuale.base = { kind: "descends_from", value: revision };
   // Evita il reset del cursore quando l'evento è l'eco del nostro salvataggio.
   if (attuale.text === source) return;
   attuale.text = source;

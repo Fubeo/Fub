@@ -55,7 +55,7 @@ use std::sync::{Arc, RwLock};
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode, UndoStep};
 use fub_abi::custom::{CustomRenderer, SyntaxRule};
-use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
+use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, LinkTarget, Span};
@@ -1850,39 +1850,43 @@ impl Workspace {
     }
 
     /// Scrive la sorgente, riparsa il documento, aggiorna il grafo ed emette
-    /// gli eventi. Il grafo si aggiorna per-documento ([`GraphUpdate`]).
-    pub fn write_document(&mut self, id: &DocId, source: &str) -> Result<Revision> {
-        self.write_document_from(id, source, None)
-    }
-
-    /// La stessa scrittura, ma dicendo **da cosa si è partiti** (§18.1).
+    /// gli eventi (il grafo per-documento, [`GraphUpdate`]) — dicendo **da cosa
+    /// si parte** (§18.1).
     ///
-    /// `base` è la revisione che chi scrive si aspetta di trovare sul disco. Se
-    /// c'è e non combacia si risponde [`KernelError::Stale`] e non si tocca
-    /// niente: è la guardia che `apply_edit` ha dalla
+    /// Con [`WriteBase::DescendsFrom`] la revisione attesa è quella che chi
+    /// scrive si aspetta di trovare sul disco: se non combacia si risponde
+    /// [`KernelError::Stale`] e non si tocca niente. È la guardia che
+    /// `apply_edit` ha dalla
     /// [0008](../../../docs/decisions/0008-modifica-chirurgica.md) e che questa
     /// metà non aveva, cioè il buco per cui il salvataggio dell'editor
     /// **copriva** una scrittura altrui che il watcher non aveva visto.
+    ///
+    /// Con [`WriteBase::Dictated`] la guardia non c'è perché non ci sarebbe
+    /// niente da guardare, ed è una **dichiarazione**: fino alla
+    /// [0092](../../../docs/decisions/0092-una-base-si-dichiara.md) esisteva
+    /// anche una `write_document` a due argomenti, che voleva dire `Dictated`
+    /// senza dirlo. Era la stessa trappola del contratto, in casa: due firme per
+    /// la stessa domanda, di cui una cieca e più corta da scrivere.
     ///
     /// Il confronto è col **disco** e non con l'anagrafe, per la ragione di
     /// [`document_revision`](Workspace::document_revision): la verità di un
     /// documento è il file, e una guardia che si fidasse di una cache
     /// direbbe di sì proprio nel caso in cui la cache è indietro — che è
     /// esattamente il caso che deve prendere. La lettura in più si paga **solo**
-    /// quando qualcuno la chiede: senza `base` questa funzione legge dalla
-    /// memoria come prima, perché una riga di registro non vale una lettura a
-    /// ogni salvataggio (§15.2).
-    pub fn write_document_from(
+    /// quando qualcuno la chiede: una scrittura dettata legge dalla memoria come
+    /// prima, perché una riga di registro non vale una lettura a ogni
+    /// salvataggio (§15.2).
+    pub fn write_document(
         &mut self,
         id: &DocId,
         source: &str,
-        base: Option<Revision>,
+        base: WriteBase,
     ) -> Result<Revision> {
         // Cosa si sapeva **prima**: l'impronta che l'anagrafe teneva, e se il
         // documento esistesse affatto.
         let esisteva = self.indexes.core.metas.contains_key(id);
         let from = match base {
-            Some(attesa) => {
+            WriteBase::DescendsFrom(attesa) => {
                 // `ok()` e non `?`: un file che non c'è non è un errore di
                 // lettura da propagare, è una base che non combacia — chi
                 // scrive credeva di riscrivere qualcosa che nel frattempo è
@@ -1893,7 +1897,7 @@ impl Workspace {
                 }
                 adesso
             }
-            None => self
+            WriteBase::Dictated => self
                 .indexes
                 .core
                 .entries
@@ -2292,8 +2296,10 @@ impl Workspace {
             }
         };
         // Una nota nuova è una scrittura come le altre: grafo, indici ed eventi
-        // la vedono nascere per la via normale.
-        self.write_document(&id, "")?;
+        // la vedono nascere per la via normale. `Dictated` perché il nome
+        // appena scelto è libero — `free_name` l'ha appena stabilito — e una
+        // base sarebbe la revisione di un file che non esiste.
+        self.write_document(&id, "", WriteBase::Dictated)?;
         Ok(id)
     }
 

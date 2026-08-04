@@ -21,6 +21,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Subject};
 use fub_abi::model::DocId;
@@ -141,12 +142,20 @@ fn a_topic_prefix_wakes_up_who_declared_it_and_nobody_else() {
 fn a_subject_narrows_the_hottest_event_to_one_folder() {
     let stretta = EventMask::of([EventKind::DocumentChanged]).about([Subject::folder("Progetti")]);
     let (_dir, mut ws, log) = vault(stretta);
-    ws.write_document(&DocId::new("Progetti/Alpha.txt"), "a")
+    ws.write_document(&DocId::new("Progetti/Alpha.txt"), "a", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&DocId::new("Diario/2026-07-28.txt"), "d")
-        .unwrap();
-    ws.write_document(&DocId::new("Progetti/2026/Beta.txt"), "b")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("Diario/2026-07-28.txt"),
+        "d",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.write_document(
+        &DocId::new("Progetti/2026/Beta.txt"),
+        "b",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     assert_eq!(
         *log.lock().unwrap(),
         vec![
@@ -158,8 +167,12 @@ fn a_subject_narrows_the_hottest_event_to_one_folder() {
     );
 
     let (_dir, mut ws, largo) = vault(EventMask::of([EventKind::DocumentChanged]));
-    ws.write_document(&DocId::new("Diario/2026-07-28.txt"), "d")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("Diario/2026-07-28.txt"),
+        "d",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     assert_eq!(
         largo.lock().unwrap().len(),
         1,
@@ -173,7 +186,7 @@ fn a_note_leaving_the_folder_is_news_for_the_folder() {
         EventMask::of([EventKind::DocumentChanged, EventKind::DocumentRenamed])
             .about([Subject::folder("Progetti")]),
     );
-    ws.write_document(&DocId::new("Progetti/Alpha.txt"), "a")
+    ws.write_document(&DocId::new("Progetti/Alpha.txt"), "a", WriteBase::Dictated)
         .unwrap();
     ws.rename_document(
         &DocId::new("Progetti/Alpha.txt"),
@@ -197,7 +210,7 @@ fn a_batch_arrives_to_whoever_it_touched() {
         vault(EventMask::of([EventKind::BatchEnded]).about([Subject::folder("Progetti")]));
     // Una rinomina con backlink è un lotto vero, ma qui basta il caso più
     // piccolo: due lotti, uno che tocca la cartella e uno che non la tocca.
-    ws.write_document(&DocId::new("Progetti/Alpha.txt"), "a")
+    ws.write_document(&DocId::new("Progetti/Alpha.txt"), "a", WriteBase::Dictated)
         .unwrap();
     ws.rename_document(
         &DocId::new("Progetti/Alpha.txt"),
@@ -206,7 +219,7 @@ fn a_batch_arrives_to_whoever_it_touched() {
     .expect("rinomina dentro");
     let dentro = log.lock().unwrap().len();
 
-    ws.write_document(&DocId::new("Diario/oggi.txt"), "d")
+    ws.write_document(&DocId::new("Diario/oggi.txt"), "d", WriteBase::Dictated)
         .unwrap();
     ws.rename_document(
         &DocId::new("Diario/oggi.txt"),

@@ -15,6 +15,7 @@
 //!    il documento attivo prima che il contesto lo contenesse.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::FormatError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::format::{
@@ -261,8 +262,12 @@ fn con_provider(root: &Utf8PathBuf) -> Workspace {
 fn a_rewritten_source_drops_the_selection_under_it() {
     let fx = Fixture::new();
     let mut ws = con_provider(&fx.root);
-    ws.write_document(&DocId::new("Nota.md"), "# Titolo\n\ntesto\n")
-        .expect("scrive");
+    ws.write_document(
+        &DocId::new("Nota.md"),
+        "# Titolo\n\ntesto\n",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
 
     ws.set_active_context(Some(contesto("Nota.md").with_selection(Some(Selection {
         span: Some(Span::new(2, 8)),
@@ -271,8 +276,12 @@ fn a_rewritten_source_drops_the_selection_under_it() {
 
     // Qualcuno riscrive il documento (l'utente, il watcher, un bulk fix): gli
     // offset pubblicati erano di un altro testo.
-    ws.write_document(&DocId::new("Nota.md"), "# Altro titolo\n\ntesto\n")
-        .expect("riscrive");
+    ws.write_document(
+        &DocId::new("Nota.md"),
+        "# Altro titolo\n\ntesto\n",
+        WriteBase::Dictated,
+    )
+    .expect("riscrive");
     assert_eq!(
         ws.active_context().and_then(|c| c.selection.clone()),
         None,
@@ -289,7 +298,7 @@ fn a_rewritten_source_drops_the_selection_under_it() {
     ws.set_active_context(Some(
         contesto("Nota.md").with_selection(Some(Selection::caret(Some(Span::new(3, 3))))),
     ));
-    ws.write_document(&DocId::new("Altra.md"), "niente\n")
+    ws.write_document(&DocId::new("Altra.md"), "niente\n", WriteBase::Dictated)
         .expect("scrive l'altra");
     assert!(ws
         .active_context()
@@ -301,7 +310,7 @@ fn a_rewritten_source_drops_the_selection_under_it() {
 fn the_context_follows_a_rename_and_empties_on_removal() {
     let fx = Fixture::new();
     let mut ws = con_provider(&fx.root);
-    ws.write_document(&DocId::new("Nota.md"), "# Titolo\n")
+    ws.write_document(&DocId::new("Nota.md"), "# Titolo\n", WriteBase::Dictated)
         .expect("scrive");
     ws.set_active_context(Some(
         contesto("Nota.md").with_selection(Some(Selection::caret(Some(Span::new(2, 2))))),

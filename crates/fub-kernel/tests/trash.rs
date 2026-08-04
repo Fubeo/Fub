@@ -16,6 +16,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::Event;
 use fub_abi::model::{DocId, DocumentModel};
@@ -213,8 +214,12 @@ fn restoring_under_a_new_name_announces_the_identity_migration() {
         .delete_document(&DocId::new("progetti/Nota.txt"))
         .unwrap();
     // Il path d'origine è di nuovo occupato: il ripristino andrà altrove.
-    ws.write_document(&DocId::new("progetti/Nota.txt"), "seconda vita")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("progetti/Nota.txt"),
+        "seconda vita",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     let events = ws.bus().subscribe();
     let restored = ws
@@ -296,11 +301,19 @@ fn deleting_the_same_name_twice_never_overwrites_the_first_copy() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
 
-    ws.write_document(&DocId::new("Idea.txt"), "prima stesura")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("Idea.txt"),
+        "prima stesura",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     ws.delete_document(&DocId::new("Idea.txt")).unwrap();
-    ws.write_document(&DocId::new("Idea.txt"), "seconda stesura")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("Idea.txt"),
+        "seconda stesura",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     let seconda = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
 
     assert_eq!(fx.trash_files().len(), 2, "due cancellazioni, due copie");
@@ -380,8 +393,12 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
     let mut ws = fx.workspace();
 
     let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
-    ws.write_document(&DocId::new("Idea.txt"), "una nuova nota, stesso nome")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("Idea.txt"),
+        "una nuova nota, stesso nome",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     let err = ws.restore_from_trash(&trashed, None).unwrap_err();
     assert!(

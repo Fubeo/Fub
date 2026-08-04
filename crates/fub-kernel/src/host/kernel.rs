@@ -2,7 +2,7 @@
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, InvokeMode};
-use fub_abi::edit::{EditReport, EditRequest, Revision};
+use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel};
@@ -120,7 +120,7 @@ impl VaultWrite for KernelHost<'_> {
         &mut self,
         id: &DocId,
         source: &str,
-        base: Option<Revision>,
+        base: WriteBase,
     ) -> Result<Revision, PluginError> {
         // Il recinto del vault, sul confine dei plugin e in un punto solo. Fino
         // alla decisione 0006 l'unico input esterno che diventava un `DocId` arrivava dai
@@ -131,7 +131,7 @@ impl VaultWrite for KernelHost<'_> {
         // scrittura fuori dal vault.
         let id = fenced_doc_id(id)?;
         self.ws
-            .write_document_from(&id, source, base)
+            .write_document(&id, source, base)
             .map_err(PluginError::from)
     }
 
@@ -157,8 +157,12 @@ impl VaultStructure for KernelHost<'_> {
                 id.to_string(),
             )));
         }
+        // `Dictated` per definizione: questa capacità esiste per creare un
+        // documento che **non c'è**, e l'ha appena verificato la riga sopra.
+        // Non c'è nessuna revisione da cui discendere, e chiederne una qui
+        // sarebbe chiedere l'impronta del nulla.
         self.ws
-            .write_document(&id, source)
+            .write_document(&id, source, WriteBase::Dictated)
             .map_err(PluginError::from)?;
         Ok(())
     }

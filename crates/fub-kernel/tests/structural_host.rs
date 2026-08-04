@@ -21,6 +21,7 @@ use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind,
     ParamSpec,
 };
+use fub_abi::edit::WriteBase;
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Actor, Event};
 use fub_abi::format::{
@@ -146,7 +147,7 @@ fn creating_over_an_existing_note_is_refused_and_writing_over_it_is_not() {
         // La differenza è tutta qui: la stessa scrittura, con l'altra capacità,
         // passa. Se `create_document` si comportasse così, un template che
         // sbaglia la data cancellerebbe una nota dell'utente.
-        host.write_document(&id, "sovrascritto", None)
+        host.write_document(&id, "sovrascritto", WriteBase::Dictated)
             .expect("sovrascrive");
         assert_eq!(host.read_document(&id).expect("legge"), "sovrascritto");
     });
@@ -185,10 +186,14 @@ fn free_name_and_create_compose_into_what_create_note_did() {
 #[test]
 fn the_rename_a_plugin_gets_is_the_one_that_rewrites_backlinks() {
     let (_dir, mut ws) = vault_con_link();
-    ws.write_document(&DocId::new("bersaglio.md"), "")
+    ws.write_document(&DocId::new("bersaglio.md"), "", WriteBase::Dictated)
         .expect("scrive");
-    ws.write_document(&DocId::new("chi-linka.md"), "bersaglio")
-        .expect("scrive");
+    ws.write_document(
+        &DocId::new("chi-linka.md"),
+        "bersaglio",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
 
     ws.with_host("prova.plugin", |host| {
         host.rename_document(
@@ -211,10 +216,10 @@ fn the_rename_a_plugin_gets_is_the_one_that_rewrites_backlinks() {
 #[test]
 fn a_rename_through_the_boundary_is_one_batch_not_one_per_backlink() {
     let (_dir, mut ws) = vault_con_link();
-    ws.write_document(&DocId::new("bersaglio.md"), "")
+    ws.write_document(&DocId::new("bersaglio.md"), "", WriteBase::Dictated)
         .expect("scrive");
     for nome in ["uno.md", "due.md", "tre.md"] {
-        ws.write_document(&DocId::new(nome), "bersaglio")
+        ws.write_document(&DocId::new(nome), "bersaglio", WriteBase::Dictated)
             .expect("scrive");
     }
     let rx = ws.bus().subscribe();
@@ -251,7 +256,7 @@ fn a_rename_through_the_boundary_is_one_batch_not_one_per_backlink() {
 #[test]
 fn the_trash_round_trip_closes_without_touching_the_workspace() {
     let (_dir, mut ws) = vault_plain();
-    ws.write_document(&DocId::new("nota.md"), "contenuto")
+    ws.write_document(&DocId::new("nota.md"), "contenuto", WriteBase::Dictated)
         .expect("scrive");
 
     let ripristinata = ws.with_host("prova.plugin", |host| {
@@ -294,7 +299,7 @@ fn the_trash_round_trip_closes_without_touching_the_workspace() {
 #[test]
 fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
     let (_dir, mut ws) = vault_plain();
-    ws.write_document(&DocId::new("nota.md"), "vecchia")
+    ws.write_document(&DocId::new("nota.md"), "vecchia", WriteBase::Dictated)
         .expect("scrive");
 
     ws.with_host("prova.plugin", |host| {
@@ -326,7 +331,8 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
 fn emptying_the_trash_says_how_much_it_destroyed() {
     let (_dir, mut ws) = vault_plain();
     for nome in ["a.md", "b.md"] {
-        ws.write_document(&DocId::new(nome), "x").expect("scrive");
+        ws.write_document(&DocId::new(nome), "x", WriteBase::Dictated)
+            .expect("scrive");
     }
 
     ws.with_host("prova.plugin", |host| {

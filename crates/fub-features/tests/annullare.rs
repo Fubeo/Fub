@@ -14,6 +14,7 @@
 
 use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;
+use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
@@ -92,11 +93,12 @@ fn annullare_una_rinomina_riporta_anche_i_link_che_erano_stati_riscritti() {
     // quel lavoro, e rifarlo uguale.
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("Vecchia.md"), "sono io\n")
+    ws.write_document(&DocId::new("Vecchia.md"), "sono io\n", WriteBase::Dictated)
         .expect("scrive");
     ws.write_document(
         &DocId::new("Chi mi nomina.md"),
         "vedi [[Vecchia]] per i dettagli\n",
+        WriteBase::Dictated,
     )
     .expect("scrive");
 
@@ -131,8 +133,12 @@ fn annullare_una_rinomina_riporta_anche_i_link_che_erano_stati_riscritti() {
 fn annullare_un_cestino_riporta_la_nota_dov_era() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("Progetti/Idea.md"), "un'idea\n")
-        .expect("scrive");
+    ws.write_document(
+        &DocId::new("Progetti/Idea.md"),
+        "un'idea\n",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
 
     fai(
         &mut ws,
@@ -153,9 +159,13 @@ fn annullare_un_cestino_riporta_la_nota_dov_era() {
 fn annullare_una_sostituzione_rimette_il_testo_di_prima() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("a.md"), "il gatto dorme, il gatto mangia\n")
-        .expect("scrive");
-    ws.write_document(&DocId::new("b.md"), "un altro gatto\n")
+    ws.write_document(
+        &DocId::new("a.md"),
+        "il gatto dorme, il gatto mangia\n",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
+    ws.write_document(&DocId::new("b.md"), "un altro gatto\n", WriteBase::Dictated)
         .expect("scrive");
 
     fai(
@@ -179,8 +189,12 @@ fn una_macro_di_tre_rinomine_e_una_voce_sola() {
     let vault = Vault::new();
     let mut ws = vault.open();
     for n in ["Uno", "Due", "Tre"] {
-        ws.write_document(&DocId::new(format!("{n}.md")), "corpo\n")
-            .expect("scrive");
+        ws.write_document(
+            &DocId::new(format!("{n}.md")),
+            "corpo\n",
+            WriteBase::Dictated,
+        )
+        .expect("scrive");
     }
 
     fai(
@@ -211,9 +225,9 @@ fn annullare_non_e_annullabile() {
     // seconda pressione rifarebbe ciò che la prima aveva disfatto, per sempre.
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("Prima.md"), "corpo\n")
+    ws.write_document(&DocId::new("Prima.md"), "corpo\n", WriteBase::Dictated)
         .expect("scrive");
-    ws.write_document(&DocId::new("Seconda.md"), "corpo\n")
+    ws.write_document(&DocId::new("Seconda.md"), "corpo\n", WriteBase::Dictated)
         .expect("scrive");
 
     fai(
@@ -244,7 +258,7 @@ fn una_simulazione_non_lascia_niente_da_annullare() {
     // uscire dalla simulazione, e ci si uscirebbe **scrivendo**.
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("a.md"), "il gatto dorme\n")
+    ws.write_document(&DocId::new("a.md"), "il gatto dorme\n", WriteBase::Dictated)
         .expect("scrive");
 
     ws.invoke_command(
@@ -268,7 +282,7 @@ fn chi_ha_scritto_nel_frattempo_non_si_vede_cancellare_il_lavoro() {
     // per l'annullamento: è quella firma che vale anche qui.
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("a.md"), "il gatto dorme\n")
+    ws.write_document(&DocId::new("a.md"), "il gatto dorme\n", WriteBase::Dictated)
         .expect("scrive");
 
     fai(
@@ -277,8 +291,12 @@ fn chi_ha_scritto_nel_frattempo_non_si_vede_cancellare_il_lavoro() {
         serde_json::json!({ "find": "gatto", "replace": "cane" }),
     );
     // Qualcun altro (l'editor che salva, un'altra app, un job) riscrive.
-    ws.write_document(&DocId::new("a.md"), "il cane dorme e russa\n")
-        .expect("riscrive");
+    ws.write_document(
+        &DocId::new("a.md"),
+        "il cane dorme e russa\n",
+        WriteBase::Dictated,
+    )
+    .expect("riscrive");
 
     let e = ws
         .invoke_command(
@@ -308,7 +326,7 @@ fn svuotare_il_cestino_resta_irreversibile_e_lo_dice() {
     // dichiara l'inverso non promette niente, e nessuno lo indovina per lui.
     let vault = Vault::new();
     let mut ws = vault.open();
-    ws.write_document(&DocId::new("a.md"), "corpo\n")
+    ws.write_document(&DocId::new("a.md"), "corpo\n", WriteBase::Dictated)
         .expect("scrive");
     fai(&mut ws, NOTE_TRASH, serde_json::json!({ "doc": "a.md" }));
     fai(&mut ws, fub_features::TRASH_EMPTY, serde_json::Value::Null);

@@ -11,6 +11,7 @@
 //! (D8), genera a sua volta una versione, quindi si può annullare.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
 use fub_abi::event::Notice;
 use fub_abi::model::DocId;
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
@@ -94,10 +95,13 @@ fn every_save_that_changes_something_leaves_a_version_behind() {
     let (mut ws, store) = v.open();
     let nota = DocId::new("Nota.md");
 
-    ws.write_document(&nota, "prima stesura\n").unwrap();
-    ws.write_document(&nota, "seconda stesura\n").unwrap();
+    ws.write_document(&nota, "prima stesura\n", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&nota, "seconda stesura\n", WriteBase::Dictated)
+        .unwrap();
     // Salvare senza aver cambiato niente non è una versione (D6).
-    ws.write_document(&nota, "seconda stesura\n").unwrap();
+    ws.write_document(&nota, "seconda stesura\n", WriteBase::Dictated)
+        .unwrap();
 
     let versioni = store.list(&nota);
     assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
@@ -116,15 +120,17 @@ fn restoring_a_version_is_itself_undoable() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
     let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "quella buona\n").unwrap();
-    ws.write_document(&nota, "quella che ho rovinato\n")
+    ws.write_document(&nota, "quella buona\n", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&nota, "quella che ho rovinato\n", WriteBase::Dictated)
         .unwrap();
 
     // Il ripristino è una scrittura normale (D8): non c'è un percorso speciale
     // che scavalchi grafo, indici ed eventi — e infatti passa dall'handler.
     let vecchia = *store.list(&nota).last().unwrap();
     let contenuto = versione(&mut ws, &store, &nota, vecchia.ts);
-    ws.write_document(&nota, &contenuto).unwrap();
+    ws.write_document(&nota, &contenuto, WriteBase::Dictated)
+        .unwrap();
 
     assert_eq!(ws.read_source(&nota).unwrap(), "quella buona\n");
     let versioni = store.list(&nota);
@@ -140,7 +146,7 @@ fn restoring_a_version_is_itself_undoable() {
 fn a_renamed_note_keeps_its_history_under_the_new_name() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
-    ws.write_document(&DocId::new("Bozza.md"), "appunti\n")
+    ws.write_document(&DocId::new("Bozza.md"), "appunti\n", WriteBase::Dictated)
         .unwrap();
 
     ws.rename_document(&DocId::new("Bozza.md"), &DocId::new("Definitivo.md"))
@@ -167,8 +173,12 @@ fn a_note_thrown_away_can_still_be_read_from_its_history() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
     let nota = DocId::new("Effimera.md");
-    ws.write_document(&nota, "contenuto che vorrò rileggere\n")
-        .unwrap();
+    ws.write_document(
+        &nota,
+        "contenuto che vorrò rileggere\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     ws.delete_document(&nota).unwrap();
 
@@ -191,7 +201,8 @@ fn a_restore_from_a_folder_reunites_the_note_with_its_history() {
     let (mut ws, store) = v.open();
     std::fs::create_dir_all(v.root.join("progetti")).unwrap();
     let nota = DocId::new("progetti/Nota.md");
-    ws.write_document(&nota, "prima del cestino\n").unwrap();
+    ws.write_document(&nota, "prima del cestino\n", WriteBase::Dictated)
+        .unwrap();
 
     let trashed = ws.delete_document(&nota).unwrap();
     let restored = ws.restore_from_trash(&trashed, None).unwrap();
@@ -214,10 +225,12 @@ fn a_restore_under_a_new_name_migrates_the_history() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
     let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "prima vita\n").unwrap();
+    ws.write_document(&nota, "prima vita\n", WriteBase::Dictated)
+        .unwrap();
     let trashed = ws.delete_document(&nota).unwrap();
     // Il path d'origine viene rioccupato: il ripristino dovrà andare altrove.
-    ws.write_document(&nota, "usurpatrice\n").unwrap();
+    ws.write_document(&nota, "usurpatrice\n", WriteBase::Dictated)
+        .unwrap();
 
     let restored = ws
         .restore_from_trash(&trashed, Some(DocId::new("Nota 1.md")))
@@ -244,9 +257,9 @@ fn with_versioning_off_the_vault_has_no_trace_of_it() {
     let v = Vault::new();
     let mut ws = v.open_senza_versioning();
 
-    ws.write_document(&DocId::new("Nota.md"), "una stesura\n")
+    ws.write_document(&DocId::new("Nota.md"), "una stesura\n", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&DocId::new("Nota.md"), "un'altra\n")
+    ws.write_document(&DocId::new("Nota.md"), "un'altra\n", WriteBase::Dictated)
         .unwrap();
 
     // Spento = non esiste (D7): nessun handler, e quindi nemmeno la cartella.
@@ -264,7 +277,8 @@ fn the_state_a_note_was_found_in_is_recoverable_after_the_first_edit() {
     let (mut ws, store) = v.open();
     let nota = DocId::new("Trovata.md");
 
-    ws.write_document(&nota, "come l'ho rovinata\n").unwrap();
+    ws.write_document(&nota, "come l'ho rovinata\n", WriteBase::Dictated)
+        .unwrap();
 
     // L'handler gira *dopo* la scrittura e vede solo il testo nuovo: senza la
     // prima fotografia all'apertura, lo stato originale sarebbe perso.
@@ -282,7 +296,8 @@ fn the_history_survives_closing_and_reopening_the_vault() {
     let nota = DocId::new("Nota.md");
     {
         let (mut ws, _store) = v.open();
-        ws.write_document(&nota, "scritta ieri\n").unwrap();
+        ws.write_document(&nota, "scritta ieri\n", WriteBase::Dictated)
+            .unwrap();
     }
 
     let (mut ws, store) = v.open();
@@ -337,8 +352,12 @@ fn a_real_overflow_reaches_the_handler_and_it_reconciles() {
     assert_eq!(store.list(&nota).len(), 1);
 
     // Un'altra operazione fa traboccare la coda: da qui nasce l'`Event::Overflow`.
-    ws.write_document(&DocId::new("Altra.md"), "qualsiasi cosa\n")
-        .unwrap();
+    ws.write_document(
+        &DocId::new("Altra.md"),
+        "qualsiasi cosa\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     // L'handler era abbonato, l'overflow gli è arrivato, e la riconciliazione ha
     // riletto il vault: la versione che l'evento perso non ha prodotto c'è.

@@ -713,6 +713,25 @@ fn ogni_forma_di_rottura_e_rossa() {
             }),
         ),
         (
+            // Il caso di questa voce (decisione 0092), e ci è arrivato tardi:
+            // `write-document` ha ritipato il proprio `base` e il banco non
+            // aveva nessuna rottura che *ritipasse* un parametro — solo
+            // aggiungerne uno e rinominarne uno. Il confronto la prendeva
+            // comunque, perché `prefix` confronta le coppie (nome, tipo) e il
+            // suo messaggio nomina già il ritipo; ciò che mancava non era il
+            // presidio, era la **prova** che quel ramo funzioni. Un ramo che
+            // nessuno esercita è un ramo di cui si scopre lo stato il giorno
+            // che serve.
+            "un parametro ritipato",
+            Box::new(|c: &mut Contract| {
+                let sig = c
+                    .functions
+                    .get_mut("host-vault-read::read-document")
+                    .expect("host-vault-read::read-document esiste");
+                sig.params[0].1 = "string".into();
+            }),
+        ),
+        (
             "un parametro rinominato",
             Box::new(|c: &mut Contract| {
                 let sig = c

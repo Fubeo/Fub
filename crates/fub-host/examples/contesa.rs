@@ -32,6 +32,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{Excerpts, IndexQuery, Page, PropertySelect, ViewInstance};
@@ -179,6 +180,7 @@ fn latenza_di_chi_scrive(
         w.write_document(
             &DocId::new("Scrittore.md"),
             &format!("# Scrittore\n\ngiro {n}\n"),
+            WriteBase::Dictated,
         )
         .unwrap();
         drop(w);
