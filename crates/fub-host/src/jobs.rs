@@ -58,15 +58,17 @@ use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
-    DataRead, DataWrite, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices,
-    IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi, SettingsRead,
-    SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead,
+    DataRead, DataWrite, HostApi, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery,
+    HostServices, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi,
+    SettingsRead, SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead,
     ViewStateWrite,
 };
 use fub_abi::{Event, PluginError};
+use fub_kernel::host::Guard;
 use fub_kernel::Workspace;
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
@@ -421,6 +423,51 @@ impl HostCommands for JobHost {
     /// nel giro sincrono invece di portarsi via il vault.
     fn undo_last(&mut self) -> Result<Option<fub_abi::Text>, PluginError> {
         self.write_result(|h| h.undo_last())
+    }
+}
+
+impl HostNetwork for JobHost {
+    /// **L'unica capacità che non passa dal prestito del workspace**, e non è
+    /// una scorciatoia: è la sola la cui durata l'host non governa.
+    ///
+    /// Tutte le altre righe di questo file delegano dentro `reading` o
+    /// `writing`, cioè tenendo il lock per il tempo della chiamata — che per
+    /// una lettura di documento è microscopico. Una richiesta di rete dura
+    /// quanto la rete: tenere il prestito condiviso per quel tempo affamerebbe
+    /// chi scrive, che è precisamente il difetto contro cui la
+    /// [0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+    /// ha scelto l'`RwLock` — e lo farebbe su una chiamata che **il vault non
+    /// lo tocca affatto**.
+    ///
+    /// Quindi il lock si prende due volte e per un istante: una per il permesso
+    /// e il filo, una — implicita — per ciò che chi chiama farà del risultato.
+    /// Il permesso si rilegge **adesso** invece di catturarlo all'avvio del job,
+    /// perché un plugin revocato mentre una richiesta è in volo deve trovare il
+    /// cancello chiuso alla successiva, non alla fine del job.
+    ///
+    /// La cancellazione si guarda **due volte**, prima e dopo aver preso il
+    /// filo, ed è la lezione della
+    /// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md) presa
+    /// sul serio: questa è la cosa più lunga che un job possa fare, quindi è
+    /// quella in cui *la cancellazione toglie le altre capacità* conta di più.
+    /// Fermare la richiesta **già partita** è un'altra domanda e non ha una
+    /// risposta qui: chi annulla non aspetta la rete, aspetta il tetto di tempo
+    /// dell'host — e questa riga è il posto dove si vede.
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.stopped()?;
+        let (client, granted) = {
+            let ws = self.workspace.read().expect("workspace avvelenato");
+            (ws.network(), ws.granted_policy(&self.plugin))
+        };
+        self.stopped()?;
+        let Some(client) = client else {
+            return Err(PluginError::Unserved(
+                "questo host è montato senza client di rete".into(),
+            ));
+        };
+        // Lo stesso `Guard` di tutti gli altri: il cancello è uno solo, e chi
+        // gira dentro un job non ne attraversa uno più largo.
+        Guard::new(client.as_ref(), granted).fetch(request)
     }
 }
 

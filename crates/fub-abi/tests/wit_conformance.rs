@@ -81,6 +81,7 @@ use fub_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
     PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
 };
+use fub_abi::net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 use fub_abi::options::OptionMap;
 use fub_abi::organization::Organization;
 use fub_abi::query::{
@@ -244,6 +245,12 @@ wit_type! {
 // non è una decisione di nessuno, ed è la ragione per cui non si scrive più
 // (decisione 0053).
 wit_kebab! {
+    // La rete (§23.3).
+    HttpMethod,
+    HttpHeader,
+    HttpRequest,
+    HttpResponse,
+
     // Primitivi e stringhe.
     bool,
     u8,
@@ -4149,6 +4156,49 @@ fn conform(source: &str) -> Result<(), String> {
     };
     contract.record("ui-node", &[("key", wit(&key)), ("kind", wit(&kind))]);
 
+    // --- la rete (§23.3): due record, un enum, e il corpo che è byte
+    contract.enumeration(
+        "http-method",
+        &["get", "head", "post", "put", "patch", "delete"],
+    );
+    let HttpHeader { name, value } = HttpHeader::new("content-type", "application/json");
+    contract.record(
+        "http-header",
+        &[("name", wit(&name)), ("value", wit(&value))],
+    );
+    let HttpRequest {
+        url,
+        method,
+        headers,
+        body,
+    } = HttpRequest::get("https://esempio.test/");
+    contract.record(
+        "http-request",
+        &[
+            ("url", wit(&url)),
+            ("method", wit(&method)),
+            ("headers", wit(&headers)),
+            ("body", wit(&body)),
+        ],
+    );
+    let HttpResponse {
+        status,
+        headers,
+        body,
+    } = HttpResponse {
+        status: 200,
+        headers: Vec::new(),
+        body: Vec::new(),
+    };
+    contract.record(
+        "http-response",
+        &[
+            ("status", wit(&status)),
+            ("headers", wit(&headers)),
+            ("body", wit(&body)),
+        ],
+    );
+
     let PluginPermissions { granted } = PluginPermissions::default();
     contract.record("plugin-permissions", &[("granted", wit(&granted))]);
 
@@ -4592,6 +4642,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("intl");
     contract.types_only("text");
     contract.types_only("edit");
+    contract.types_only("net");
     contract.types_only("transfer");
     contract.types_only("settings");
     contract.types_only("organization");
@@ -5014,6 +5065,13 @@ fn conform(source: &str) -> Result<(), String> {
         &[],
     );
     contract.method(
+        "host-network",
+        "fetch",
+        <dyn HostApi>::fetch
+            as fn(&'static dyn HostApi, HttpRequest) -> Result<HttpResponse, PluginError>,
+        &["request"],
+    );
+    contract.method(
         "host-services",
         "call-service",
         <dyn HostApi>::call_service
@@ -5159,6 +5217,7 @@ fn conform(source: &str) -> Result<(), String> {
         "host-query",
         "host-commands",
         "host-services",
+        "host-network",
         "host-settings-read",
         "host-settings-write",
         "host-view-state-read",
@@ -5171,7 +5230,7 @@ fn conform(source: &str) -> Result<(), String> {
     }
     assert!(
         !imports.contains("host-api"),
-        "`host-api` è stata divisa nelle quattordici famiglie del §7.1: se riappare, \
+        "`host-api` è stata divisa nelle quindici famiglie del §7.1: se riappare, \
          è tornata la superficie che si concede per intero o per niente"
     );
     let expected_exports: BTreeSet<String> = [

@@ -53,6 +53,7 @@ pub mod format;
 pub mod ipc;
 pub mod locale;
 pub mod model;
+pub mod net;
 pub mod options;
 pub mod organization;
 pub mod query;
@@ -84,6 +85,7 @@ pub use locale::{HourCycle, Locale, Weekday};
 pub use model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
 };
+pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::OptionMap;
 pub use query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TextField,
@@ -99,12 +101,12 @@ pub use settings::{
 pub use text::{Arg, ArgValue, Localize, Message, StringCatalog, Strings, Text};
 pub use traits::{
     BacklinkRef, CommandProvider, DataRead, DataWrite, DocumentMatch, EventHandler, HealthCheck,
-    HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexLoss,
-    IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged, Plugin,
-    PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
-    PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider, SettingsRead,
-    SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewInstance, ViewProvider,
-    ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface, MAX_RANDOM_BYTES,
+    HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices,
+    IndexLoss, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged,
+    Plugin, PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter,
+    PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider,
+    SettingsRead, SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewInstance,
+    ViewProvider, ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface, MAX_RANDOM_BYTES,
 };
 pub use transfer::{
     ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,

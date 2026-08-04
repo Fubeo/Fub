@@ -44,7 +44,8 @@ momento in cui poteva costare così.
 
 *strato kernel — è lavoro, non una decisione: il criterio è già scritto e il bloccante è caduto*
 
-- [ ] **Le allowlist dei permessi non filtrano.** `read_vault` e `write_vault`
+- [ ] **Le allowlist dei permessi non filtrano — tranne una.** `read_vault` e
+      `write_vault`
       hanno un **parametro** — un elenco di prefissi di path, la forma che la
       [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) ha
       dato a un permesso — e la politica di oggi legge la sola presenza della
@@ -72,6 +73,30 @@ momento in cui poteva costare così.
       negare la domanda intera. Messi in fila, il criterio che li distingue è
       più semplice di come sembrava: **si filtra ciò che nomina un documento,
       non ciò che ne aggrega molti**.
+
+      **E la casella si è ristretta invece di chiudersi.** La
+      [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+      ha reso `fub:network` il **primo parametro di permesso letto in questo
+      repo**: un plugin che dichiara `["api.acme.com"]` raggiunge quell'host e
+      nessun altro, e la frase in testa a questa casella non è più vera in
+      generale. Ciò che resta sono i **prefissi di path** di
+      `read-vault`/`write-vault` (più i tre posti qui sopra), e il fatto che la
+      rete sia arrivata prima non è una scorciatoia: là il divario era di
+      un'altra specie — un `read-vault` ristretto che legge tutto è un recinto
+      che perde, mentre un manifest che dichiara un host, **mostrato e accettato
+      dall'utente**, che poi ne raggiunga un altro è una frase falsa scritta
+      dall'app. La differenza è chi ha letto la promessa.
+
+      Va tenuta anche la ragione per cui i due filtri **non condividono una
+      riga**, perché è la stessa che questa casella dovrà onorare quando verrà
+      presa: `Policy::denies_host` è deliberatamente stretta — host, non
+      «bersaglio generico» — perché un path si confronta **per prefisso dentro
+      una radice che è dell'utente** e un host **per nome dentro uno spazio che
+      non è di nessuno**, dove `acme.com` che copre `evil-acme.com` è una
+      consegna del dominio di qualcun altro. Una funzione sola avrebbe avuto due
+      semantiche, cioè esattamente il timore che la 0021 scrive nel bloccante di
+      questa casella. Chi la prende scriva la **seconda** funzione, non
+      generalizzi la prima.
 
       Che sia rimasta ferma per trentadue verbali dopo che il suo indirizzo era
       stato onorato è la ragione per cui adesso è **contata** in

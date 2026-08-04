@@ -81,6 +81,11 @@ mod bridge;
 pub mod config;
 pub mod jobs;
 pub mod mount;
+/// Il filo verso fuori (§23.3), dietro la cargo feature `http-client` per la
+/// ragione del watcher: il trait esiste anche per i montaggi che una rete non
+/// ce l'hanno.
+#[cfg(feature = "http-client")]
+pub mod net;
 /// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
 mod parete;
 pub mod records;

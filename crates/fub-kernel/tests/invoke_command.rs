@@ -251,6 +251,18 @@ impl CommandProvider for TriesEverything {
             host.call_service("test.altro", "qualcosa", serde_json::Value::Null)
                 .map(|_| ()),
         );
+        // **Una `DryRun` che scarica non è una simulazione**, ed è l'unica
+        // famiglia il cui effetto non è nemmeno *in questo processo*: un `POST`
+        // crea qualcosa dall'altra parte, e un `GET` viene contato e registrato
+        // da chi risponde. Che questo montaggio non abbia un client di rete non
+        // c'entra — come sopra, il cancello risponde prima, e un `Unserved` qui
+        // sarebbe già la prova che il controllo è arrivato dopo.
+        annota(
+            Capability::Network,
+            "fetch",
+            host.fetch(fub_abi::net::HttpRequest::get("https://api.acme.test/x"))
+                .map(|_| ()),
+        );
         Ok(
             CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
                 "niente",

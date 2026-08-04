@@ -6,13 +6,14 @@ use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::text::Text;
 use fub_abi::traits::{
-    DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexQuery,
-    IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TrashEntry, VaultRead,
-    VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
+    DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices,
+    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TrashEntry,
+    VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
 use fub_abi::{Event, PluginError, Severity};
 
@@ -392,6 +393,28 @@ impl HostCommands for KernelHost<'_> {
             ));
         }
         self.ws.undo_last()
+    }
+}
+
+impl HostNetwork for KernelHost<'_> {
+    /// Il kernel non parla con la rete: **delega al filo che chi monta ha
+    /// messo**, e se non c'è lo dice.
+    ///
+    /// I permessi non si controllano qui e non è una dimenticanza: li ha già
+    /// applicati il [`Guard`](super::Guard) che sta davanti a questo host,
+    /// insieme all'allowlist. Ripeterli qui sarebbe una seconda idea della
+    /// stessa regola.
+    ///
+    /// `Unserved` e non `Internal`: un host senza client di rete non ha
+    /// sbagliato niente, e chi riceve la risposta deve poter distinguere «non
+    /// c'è modo di chiedere su questo montaggio» da «ho chiesto e si è rotto».
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        match self.ws.network() {
+            Some(client) => client.fetch(request),
+            None => Err(PluginError::Unserved(
+                "questo host è montato senza client di rete".into(),
+            )),
+        }
     }
 }
 

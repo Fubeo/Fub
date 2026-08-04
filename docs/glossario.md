@@ -266,7 +266,7 @@ backlink è un bundle, e a M5 lo sarà un plugin WASM. Esiste perché montare
 doveva avere **una strada sola**, la stessa per chi è nativo e per chi non lo è.
 
 ### capacità
-`HostApi` · [`abi/traits.rs:1273`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md)
+`HostApi` · [`abi/traits.rs:1352`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md)
 
 Ciò che un componente può chiedere all'host: leggere il vault, scriverlo,
 cambiarne la struttura, leggere i propri dati, emettere eventi, interrogare
@@ -292,15 +292,15 @@ Mappa in [architecture/traits.md](architecture/traits.md).
 ### famiglia
 `VaultRead`, `VaultWrite`, … · [`abi/traits.rs:354`](../crates/fub-abi/src/traits.rs) · [0021](decisions/0021-il-confine.md)
 
-Uno dei **quattordici** gruppi in cui le capacità sono divise, e il criterio è
+Uno dei **quindici** gruppi in cui le capacità sono divise, e il criterio è
 **cosa vuol dire negarne una**: leggere il vault è separato dallo scriverlo, e
 scriverlo dal cambiarne la struttura. Chi le implementa tutte lo dichiara una
 volta sola (`HostApi` è una somma con una impl generica, e `ReadApi` è la somma
 delle sei di sola lettura); al confine WIT ogni famiglia è un'`interface` — sono
-quattordici `host-*` in `abi.wit` — e negarne una non è un rifiuto a runtime, è
+quindici `host-*` in `abi.wit` — e negarne una non è un rifiuto a runtime, è
 l'**assenza della funzione**.
 
-Dal lato di **chi concede** i nomi sono **diciassette**, e `Capability` ne porta
+Dal lato di **chi concede** i nomi sono **diciotto**, e `Capability` ne porta
 tre che nel contratto non hanno un trait loro. Due per la
 [0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md), perché `HostEnv`
 presta dallo stesso metodo una cosa della macchina (l'orologio) e due
@@ -326,7 +326,7 @@ rottura deliberata prima del freeze si fa *ritagliandola*, con un commit che la
 tocca e dice perché — così si vede in review.
 
 ### manifest
-`PluginManifest` · [`abi/traits.rs:3463`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`PluginManifest` · [`abi/traits.rs:3544`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e i
 permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria: se
@@ -339,6 +339,18 @@ provato da nessuno.
 La stringa con cui un manifest chiede una capacità: `fub:read-vault`,
 `fub:write-vault`, `fub:network`, `fub:clipboard`, `fub:run-command`… È
 il lato dichiarativo di ciò che la *famiglia* è dal lato dei tipi.
+
+**Uno solo ha un parametro che cambia cosa si può fare**, ed è `fub:network`
+([0097](decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)): il
+valore della chiave è una allowlist di host, e il `Guard` la **legge**. Gli
+altri parametri dichiarabili — i prefissi di path di `read-vault` — sono scritti
+nei manifest e non li guarda nessuno (la casella del
+[§7.1](roadmap/07-il-confine.md#la-casella-rimasta)), quindi per tutti gli altri
+permessi vale ancora che *presente = acceso e basta*. È anche la ragione per cui
+`fub:network` **senza** elenco significa *qualunque host* invece di *nessuno*:
+ribaltarlo avrebbe reso questa l'unica chiave la cui assenza di parametro
+significa il contrario che altrove, e ciò che cambia deve restare nella frase che
+l'utente legge accettando, non nella regola di lettura della mappa.
 
 Di norma sono uno per famiglia, e i due della sessione —
 `fub:read-session` (quale nota guardo) e `fub:read-selection` (cosa ci ho
@@ -354,7 +366,7 @@ reso indicibile la frase di chi ha bisogno solo di quelle: un pannello che
 recupera ciò che non è stato salvato dopo un crash.
 
 ### provider
-`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1657`](../crates/fub-abi/src/traits.rs) · —
+`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1738`](../crates/fub-abi/src/traits.rs) · —
 
 Chi implementa un trait del contratto e si registra: è **il** modo in cui Fub
 si estende. Il criterio di tutta la roadmap è che la stragrande maggioranza delle
@@ -390,7 +402,7 @@ accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
 ## Il canale dati
 
 ### canale dati
-`IndexQuery` / `IndexResult` · [`abi/traits.rs:2245`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
+`IndexQuery` / `IndexResult` · [`abi/traits.rs:2326`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
 
 L'unico modo in cui chi disegna chiede dati al kernel: si costruisce una query,
 si ottiene un risultato. Esiste perché una view non deve poter chiamare il
@@ -405,21 +417,21 @@ outline, tag, statistiche — invece che per il testo. È il canale che ha reso 
 pannelli nativi dei `ViewProvider` veri invece che rami privilegiati del kernel.
 
 ### finestra
-`Page` / `Paged<T>` · [`abi/traits.rs:1740`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`Page` / `Paged<T>` · [`abi/traits.rs:1821`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Il modo di chiedere *venti* invece di tutto, con il totale nella risposta.
 `None` resta «tutto», perché chi ha davvero bisogno dell'insieme intero non deve
 inventarsi un tetto; ma senza finestra ogni giro clona il vault.
 
 ### indice
-`IndexProvider` · [`abi/traits.rs:3130`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`IndexProvider` · [`abi/traits.rs:3211`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Chi sa rispondere a una parte delle query. Ce n'è più di uno — il grafo e
 l'anagrafe stanno nel kernel, la ricerca full-text è un provider su tantivy — e
 il canale dati esiste anche per non far sapere a chi chiede quale sia quale.
 
 ### instradamento
-`QueryRoute` · [`abi/traits.rs:2795`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`QueryRoute` · [`abi/traits.rs:2876`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Come il kernel decide **a chi** mandare una query. Si dichiara alla
 registrazione, non si scopre per tentativi: la tabella delle rotte
@@ -434,7 +446,7 @@ mandarne due **insieme**: non è una dichiarazione nel contratto, è una misura 
 la ricerca è passata da 1,0× a 6,8× su otto thread.
 
 ### risultato
-`DocumentMatch` · [`abi/traits.rs:2054`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`DocumentMatch` · [`abi/traits.rs:2135`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Un documento che risponde a una query, con quello che serve per mostrarlo: il
 punteggio, lo snippet, ciò che ha fatto scattare la corrispondenza. È il tipo su
@@ -574,7 +586,7 @@ la regola si aggira con una parola — e un test lo verifica leggendo i sorgenti
 Non è stile: è il prerequisito del PWA, del mobile e degli e2e headless.
 
 ### esemplare
-`ViewInstance` · [`abi/traits.rs:1399`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
+`ViewInstance` · [`abi/traits.rs:1480`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
 
 Una particolare apparizione di una view: la stessa specie di pannello può essere
 aperta due volte, e le due hanno stato diverso. La chiave dello stato la compone
@@ -634,7 +646,7 @@ copiare un vault su un altro computer non deve portarsi dietro dove si era
 arrivati a leggere.
 
 ### superficie di vista
-`ViewSurface` · [`abi/traits.rs:1353`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewSurface` · [`abi/traits.rs:1434`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 **Dove** una view può apparire: sidebar sinistra o destra, fondo, area
 principale, modale, barra di stato, ribbon, menu. Il contratto deve poter
@@ -651,7 +663,7 @@ strutturale è un comando, non una voce di vocabolario, e `vault.undo` sta su
 `Mod-Alt-z` perché `Mod-z` è dell'editor.
 
 ### view
-`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1451`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1532`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 Un pannello dichiarato dal core: cosa mostra, dove sta, cosa si può fare
 dentro. Backlink, outline, tag e statistiche sono view vere — non rami del

@@ -28,15 +28,16 @@ use fub_abi::event::Event;
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, Heading, Span};
+use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::session::{
     AnchoredSelection, AnchoredSelections, PaneMode, SelectionSet, ViewContext,
 };
 use fub_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue};
 use fub_abi::traits::{
     BacklinkRef, DataRead, DataWrite, DocumentMatch, EntryKind, HostCommands, HostEnv, HostEvents,
-    HostQuery, HostServices, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef,
-    Page, Paged, SettingsRead, SettingsWrite, TagCount, TrashEntry, VaultEntry, VaultRead,
-    VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
+    HostNetwork, HostQuery, HostServices, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection,
+    NeighborRef, Page, Paged, SettingsRead, SettingsWrite, TagCount, TrashEntry, VaultEntry,
+    VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
 use fub_abi::{PluginError, MAX_RANDOM_BYTES};
 
@@ -111,6 +112,20 @@ pub struct MemoryHost {
     /// `Guard` senza `Capability::Env` — e l'unico modo di provare che chi
     /// costruisce un id se ne accorga invece di produrne uno tutto a zeri.
     senza_entropia: std::sync::atomic::AtomicBool,
+    /// Le risposte di rete **preparate**, nell'ordine in cui verranno servite.
+    ///
+    /// Vuota è il default, e il default **rifiuta**: un banco che rispondesse
+    /// `200` a una richiesta che nessuno ha preparato renderebbe verde un test
+    /// che chiede alla rete cose che il suo autore non sapeva di chiedere. Il
+    /// rifiuto è `Unserved` e non un errore inventato, perché è esattamente ciò
+    /// che risponde un host montato senza client (§23.3): il doppio non finge
+    /// di avere un filo.
+    risposte: Mutex<std::collections::VecDeque<Result<HttpResponse, PluginError>>>,
+    /// Le richieste **viste**, in ordine. È la metà che serve ad asserire: che
+    /// un provider abbia chiesto *quell'URL con quel verbo* è la cosa che si
+    /// vuole provare, e senza questo elenco si potrebbe solo provare cosa ne ha
+    /// fatto.
+    richieste: Mutex<Vec<HttpRequest>>,
 }
 
 impl MemoryHost {
@@ -132,6 +147,29 @@ impl MemoryHost {
     pub fn senza_entropia(self) -> Self {
         self.senza_entropia.store(true, Ordering::Relaxed);
         self
+    }
+
+    /// Prepara la prossima risposta di rete. Si può chiamare più volte: le
+    /// risposte escono nell'ordine in cui sono entrate.
+    pub fn con_risposta(self, risposta: HttpResponse) -> Self {
+        self.risposte.lock().unwrap().push_back(Ok(risposta));
+        self
+    }
+
+    /// Prepara un **guasto** del trasporto: è l'altra metà, e serve tanto
+    /// quanto la prima — chi scarica deve saper dire cosa fa quando la rete non
+    /// c'è, e un banco che sa solo riuscire non glielo chiede mai.
+    pub fn con_guasto_di_rete(self, why: &str) -> Self {
+        self.risposte
+            .lock()
+            .unwrap()
+            .push_back(Err(PluginError::Io(why.to_string().into())));
+        self
+    }
+
+    /// Le richieste di rete che questo doppio ha visto, in ordine.
+    pub fn richieste_di_rete(&self) -> Vec<HttpRequest> {
+        self.richieste.lock().unwrap().clone()
     }
 
     /// Sposta l'orologio in avanti di `ms`.
@@ -927,6 +965,23 @@ impl HostCommands for MemoryHost {
     /// eseguito niente, e non un finto successo.
     fn undo_last(&mut self) -> Result<Option<fub_abi::Text>, PluginError> {
         Ok(None)
+    }
+}
+
+impl HostNetwork for MemoryHost {
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.richieste.lock().unwrap().push(request);
+        self.risposte
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| {
+                Err(PluginError::Unserved(
+                    "nessuna risposta preparata: questo banco non ha un filo verso \
+                 fuori finché non glielo si dà (`con_risposta`)"
+                        .into(),
+                ))
+            })
     }
 }
 
