@@ -230,6 +230,23 @@ pub struct BundleInfo {
     pub id: String,
     pub name: String,
     pub mounted: bool,
+    /// Quanto l'host si fida di chi lo ha prodotto.
+    ///
+    /// Non è una decorazione accanto ai permessi: è **l'altra metà della
+    /// domanda** che qualcuno si pone leggendoli. «Può leggere le mie note» non
+    /// vuol dire la stessa cosa detto di una feature di questo repo e di un
+    /// componente arrivato da fuori, e chi decide se lasciarglielo fare sta
+    /// decidendo soprattutto di **chi** si fida.
+    pub trust: Trust,
+    /// I permessi che il suo manifest dichiara, coi loro parametri (§23.17).
+    ///
+    /// Stanno qui e non solo in [`PluginInfo`](fub_kernel::PluginInfo) per una
+    /// ragione che si vede da chi guarda: l'inventario del kernel racconta chi è
+    /// **dichiarato**, e un componente spento non lo è. Ma la domanda *cosa
+    /// chiederebbe se lo accendessi* si pone precisamente **prima** di
+    /// accenderlo — e un elenco che comparisse solo dopo aver acceso sarebbe un
+    /// elenco che si legge quando la decisione è già stata presa.
+    pub permissions: fub_abi::options::OptionMap,
 }
 
 impl BundleRegistry {
@@ -309,6 +326,8 @@ impl BundleRegistry {
                 let manifest = b.manifest();
                 BundleInfo {
                     mounted: self.mounted.iter().any(|m| m.id == manifest.id),
+                    trust: b.trust(),
+                    permissions: manifest.permissions.granted,
                     id: manifest.id,
                     name: manifest.name,
                 }

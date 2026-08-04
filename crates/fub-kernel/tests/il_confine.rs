@@ -256,6 +256,138 @@ fn an_undeclared_id_is_refused_and_not_granted_in_blank() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// §23.17 — e l'utente può negare, uno per uno
+// ---------------------------------------------------------------------------
+
+/// **Un permesso negato è negato adesso.**
+///
+/// La riga che conta è l'ordine: si legge, si nega, si rilegge nella stessa
+/// sessione. La 0097 ha scritto il precedente per la rete — il permesso si
+/// rilegge a ogni chiamata invece di catturarlo all'avvio di un job — e qui lo
+/// si onora dalla parte opposta: la politica si riscrive nel momento in cui
+/// l'interruttore si muove, e chi la prende in prestito dopo la trova cambiata.
+/// Se avesse effetto alla riapertura del vault, una revoca sarebbe un'intenzione
+/// e non una decisione.
+#[test]
+fn a_denied_permission_shuts_the_gate_at_once() {
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
+    ws.register_plugin(
+        PluginManifest::new("terzi.lettore", "Lettore")
+            .granting(PluginPermissions::of(&[permission::READ_VAULT])),
+        Trust::Community,
+    )
+    .expect("dichiarato");
+
+    ws.with_host("terzi.lettore", |host| {
+        host.list_documents(None).expect("prima legge");
+    });
+
+    let chiave = fub_abi::settings::permission_key("terzi.lettore", permission::READ_VAULT);
+    ws.set_setting(&chiave, fub_abi::settings::SettingValue::Toggle(false))
+        .expect("la chiave è dichiarata");
+
+    ws.with_host("terzi.lettore", |host| {
+        let err = host.list_documents(None).expect_err("adesso non legge più");
+        assert!(
+            matches!(&err, PluginError::PermissionDenied(msg)
+                if msg.to_string().contains(permission::READ_VAULT)),
+            "il rifiuto nomina il permesso che manca: {err:?}"
+        );
+    });
+
+    // E riconcedere è **azzerare**: il default della chiave è ciò che il
+    // manifest dichiara, quindi non c'è un secondo posto in cui l'elenco dei
+    // permessi concessi sia scritto.
+    ws.reset_setting(&chiave).expect("si azzera");
+    ws.with_host("terzi.lettore", |host| {
+        host.list_documents(None).expect("torna a leggere");
+    });
+}
+
+/// **Negare la rete nega insieme il *se* e il *dove*.**
+///
+/// È la proprietà per cui la negazione è una sottrazione sulla mappa del
+/// manifest invece di un secondo elenco letto accanto: tolta la chiave, cade la
+/// famiglia e con lei l'allowlist. Un elenco parallelo avrebbe avuto un caso in
+/// cui i due non sono d'accordo — e quel caso, per `fub:network`, è un permesso
+/// senza parametro, che vuol dire *qualunque host*.
+#[test]
+fn denying_the_network_takes_the_allowlist_with_it() {
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
+    let mut permessi = PluginPermissions::of(&[]);
+    permessi.granted.set(
+        permission::NETWORK,
+        serde_json::Value::Array(vec![serde_json::Value::String("api.acme.com".into())]),
+    );
+    ws.register_plugin(
+        PluginManifest::new("terzi.rete", "Rete").granting(permessi),
+        Trust::Community,
+    )
+    .expect("dichiarato");
+
+    use fub_kernel::Policy;
+    assert!(
+        ws.granted_policy("terzi.rete")
+            .denies_host("api.acme.com")
+            .is_none(),
+        "l'host dichiarato passa"
+    );
+
+    ws.set_setting(
+        &fub_abi::settings::permission_key("terzi.rete", permission::NETWORK),
+        fub_abi::settings::SettingValue::Toggle(false),
+    )
+    .expect("la chiave è dichiarata");
+
+    let politica = ws.granted_policy("terzi.rete");
+    assert!(
+        politica.denies(fub_kernel::Capability::Network).is_some(),
+        "la famiglia è caduta"
+    );
+    // E l'allowlist non è rimasta ad autorizzare qualcosa: senza il permesso
+    // non c'è più un recinto, perché non c'è più niente da recintare. Il
+    // cancello che si legge per primo è quello della famiglia (`Guard::fetch`),
+    // ed è il motivo per cui questo non è un buco.
+    assert!(
+        politica.denies_host("evil.example").is_none(),
+        "senza il permesso il recinto non esiste: a fermare è la famiglia"
+    );
+}
+
+/// **Ciò che l'utente ha negato non si può riconcedere scrivendo un file.**
+///
+/// La negazione si applica *prima* di [`Granted`], sulla mappa del manifest, e
+/// una mappa a cui si tolgono chiavi non ne acquista: nessun valore di
+/// configurazione — nemmeno quello di un vault che arriva da fuori — può dare a
+/// un componente una famiglia che il suo manifest non dichiarava.
+#[test]
+fn a_permission_key_can_only_ever_subtract() {
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
+    ws.register_plugin(
+        PluginManifest::new("terzi.lettore", "Lettore")
+            .granting(PluginPermissions::of(&[permission::READ_VAULT])),
+        Trust::Community,
+    )
+    .expect("dichiarato");
+
+    // La chiave di un permesso **non dichiarato** non esiste: non c'è niente da
+    // accendere, e chiedere di accenderla è un errore che nomina la chiave.
+    let chiave = fub_abi::settings::permission_key("terzi.lettore", permission::WRITE_VAULT);
+    assert!(
+        ws.set_setting(&chiave, fub_abi::settings::SettingValue::Toggle(true))
+            .is_err(),
+        "una chiave che nessuno ha dichiarato non si scrive"
+    );
+
+    ws.with_host("terzi.lettore", |host| {
+        assert!(matches!(
+            host.write_document(&DocId::new("a.md"), "ciao", WriteBase::Dictated),
+            Err(PluginError::PermissionDenied(_))
+        ));
+    });
+}
+
 #[test]
 fn the_two_policies_compose_and_the_first_reason_is_the_one_read() {
     // La combinatoria del §7.3, senza un tipo per combinazione: un comando

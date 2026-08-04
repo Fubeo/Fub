@@ -33,8 +33,13 @@ import { $ } from "../ui/dom";
 import { intrappolaFuoco } from "../ui/a11y";
 import { notify } from "../ui/notify";
 import { allCommands, keybindingKey } from "../ui/commands";
+import { FIDUCIA, isPermissionKey, righe, type RigaPermesso } from "../ui/permessi";
 import { errorText } from "../host/errors";
-import { t } from "../i18n/strings";
+import { t, type Chiave } from "../i18n/strings";
+
+/// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
+/// una chiave che ha composto invece di leggerla da un elenco.
+type Mappa = Map<string, SettingEntry>;
 
 /// Un gruppo del form: l'intestazione e le sue righe, nell'ordine in cui il
 /// canale dati le ha date (che è l'ordine di chiave).
@@ -227,7 +232,14 @@ async function disegnaForm(): Promise<HTMLElement[]> {
   // proprio per questo sarebbero venti righe senza gruppo in fondo alla scheda
   // della configurazione. Hanno una scheda loro, ed è la stessa forma — un
   // campo di testo, una provenienza, un «azzera» — perché è la stessa cosa.
-  const entries = (await impostazioni()).filter((e) => !scorciatoie.has(e.spec.key));
+  // E nemmeno i **permessi** (§23.17), per la stessa ragione e con lo stesso
+  // conto rifatto: sono impostazioni come le altre, quindi finirebbero qui
+  // come settanta righe senza gruppo la cui etichetta è una chiave nuda. Le
+  // disegna la scheda dei componenti, accanto a chi le ha chieste, che è
+  // l'unico posto in cui significano qualcosa.
+  const entries = (await impostazioni()).filter(
+    (e) => !scorciatoie.has(e.spec.key) && !isPermissionKey(e.spec.key),
+  );
   if (entries.length === 0) {
     return [riga("muted", t("settings.none"))];
   }
@@ -383,11 +395,17 @@ function campo(entry: SettingEntry): HTMLElement {
 /// Scrive, e ridisegna: la provenienza di una riga cambia insieme al valore, e
 /// un form che non si ridisegnasse mostrerebbe «valore predefinito» sotto un
 /// valore appena scelto.
-async function scrivi(azione: () => Promise<void>): Promise<void> {
+/// `guasto` è la frase da dire se non è andata: un permesso non cambiato e
+/// un'impostazione non cambiata sono due cose diverse per chi legge, e dirle
+/// uguali manderebbe a cercare il difetto nella scheda sbagliata.
+async function scrivi(
+  azione: () => Promise<void>,
+  guasto: Chiave = "settings.not_changed",
+): Promise<void> {
   try {
     await azione();
   } catch (e) {
-    notify(t("settings.not_changed", { reason: errorText(e) }), "guasto");
+    notify(t(guasto, { reason: errorText(e) }), "guasto");
   }
   await disegna();
 }
@@ -443,14 +461,25 @@ async function disegnaScorciatoie(): Promise<HTMLElement[]> {
 // --- la scheda dei componenti -----------------------------------------------
 
 async function disegnaComponenti(): Promise<HTMLElement[]> {
-  const bundles = await api.listBundles();
+  // Le due domande insieme, e non una per componente: i permessi sono
+  // impostazioni come le altre, quindi arrivano tutti dalla stessa risposta che
+  // il pannello già chiedeva. Chiederne una per componente sarebbe N chiamate
+  // per disegnare una scheda.
+  const [bundles, entries] = await Promise.all([api.listBundles(), impostazioni()]);
+  const perChiave = new Map(entries.map((e) => [e.spec.key, e]));
   return [
     riga("muted", t("settings.components_hint")),
-    ...bundles.map(disegnaComponente),
+    ...bundles.flatMap((b) => disegnaComponente(b, perChiave)),
   ];
 }
 
-function disegnaComponente(bundle: BundleInfo): HTMLElement {
+/// Un componente: la sua riga, e sotto ciò che ha dichiarato di voler fare.
+///
+/// Torna **più** nodi e non un blocco annidato perché le righe dei permessi
+/// sono righe di impostazione come tutte le altre — stessa classe, stessa
+/// colonna del controllo — e infilarle dentro un contenitore proprio le
+/// allineerebbe diversamente da ogni altra casella di questo pannello.
+function disegnaComponente(bundle: BundleInfo, perChiave: Mappa): HTMLElement[] {
   const el = document.createElement("div");
   el.className = "setting-row";
   const testo = document.createElement("div");
@@ -458,7 +487,9 @@ function disegnaComponente(bundle: BundleInfo): HTMLElement {
   const label = document.createElement("label");
   label.textContent = bundle.name;
   label.htmlFor = `bundle-${bundle.id}`;
-  testo.append(label, riga("muted", bundle.id));
+  // Di chi ci si sta fidando sta accanto all'id e non fra i permessi: è la
+  // premessa con cui si leggono, non una riga dell'elenco.
+  testo.append(label, riga("muted", `${bundle.id} · ${t(FIDUCIA[bundle.trust])}`));
   const input = document.createElement("input");
   input.type = "checkbox";
   input.id = `bundle-${bundle.id}`;
@@ -481,6 +512,66 @@ function disegnaComponente(bundle: BundleInfo): HTMLElement {
     })();
   });
   el.append(testo, input);
+
+  const permessi = righe(bundle);
+  if (permessi.length === 0) {
+    return [el, riga("muted setting-sub", t("settings.permissions.none"))];
+  }
+  const titolo = document.createElement("div");
+  titolo.className = "panel-title setting-sub";
+  titolo.textContent = t("settings.permissions");
+  const nodi = [el, titolo, riga("muted setting-sub", t("settings.permissions.hint"))];
+  // Un componente **spento** non è dichiarato nel kernel, quindi le chiavi con
+  // cui si negano i suoi permessi non esistono: si legge cosa chiederebbe, e
+  // per deciderlo lo si accende. Dirlo è meglio che mostrare interruttori che
+  // non risponderebbero — e mostrare l'elenco lo stesso è il punto, perché
+  // «cosa chiederebbe se lo accendessi» è una domanda che ci si pone **prima**.
+  if (!bundle.mounted) {
+    nodi.push(riga("muted setting-sub", t("settings.permissions.off_hint")));
+  }
+  for (const p of permessi) nodi.push(disegnaPermesso(p, perChiave.get(p.chiave)));
+  return nodi;
+}
+
+/// Una riga di permesso: la frase, il suo parametro, e l'interruttore.
+///
+/// L'interruttore c'è solo quando c'è qualcosa da negare — cioè quando l'host
+/// conosce il permesso **e** il componente è acceso, che è quando la chiave è
+/// dichiarata. Un interruttore che non risponde insegna a non fidarsi degli
+/// interruttori, ed è la stessa riga con cui questo pannello nasconde «azzera»
+/// dove non c'è niente da azzerare.
+function disegnaPermesso(p: RigaPermesso, entry: SettingEntry | undefined): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "setting-row setting-sub";
+  const testo = document.createElement("div");
+  testo.className = "setting-text";
+  const label = document.createElement("label");
+  label.textContent = p.frase;
+  label.htmlFor = `permission-${p.chiave}`;
+  testo.append(label);
+  if (p.dettaglio) testo.append(riga("setting-source", p.dettaglio));
+  el.append(testo);
+
+  if (!p.noto || !entry) return el;
+
+  const concesso = entry.value !== false;
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `permission-${p.chiave}`;
+  input.checked = concesso;
+  // La frase è già l'etichetta visibile, ma è lunga e comincia tutta uguale
+  // («Può leggere…»): chi ascolta la lista dei controlli sentirebbe undici
+  // caselle che si somigliano. Il nome accessibile porta quindi la frase
+  // dentro una che dice cosa fa la casella.
+  input.setAttribute("aria-label", t("settings.permission.grant", { cosa: p.frase }));
+  input.addEventListener("change", () => {
+    void scrivi(() => api.setSetting(p.chiave, input.checked), "settings.permission_not_changed");
+  });
+  el.append(input);
+  // Che sia stato **l'utente** a toglierlo è l'informazione che distingue «non
+  // lo chiede» da «gliel'ho tolto io», e senza di essa una riga spenta si legge
+  // come una riga che il componente non ha dichiarato.
+  if (!concesso) testo.append(riga("setting-source", t("settings.permission.denied")));
   return el;
 }
 

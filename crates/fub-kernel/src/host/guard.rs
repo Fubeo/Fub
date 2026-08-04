@@ -1262,6 +1262,35 @@ mod tests {
         );
     }
 
+    /// **Ogni permesso che governa una famiglia ha un nome nell'elenco che si
+    /// mostra** (§23.17).
+    ///
+    /// È il presidio che rende vera la parola *tutti* del pannello dei permessi:
+    /// una famiglia nuova col suo permesso nuovo, dimenticato in
+    /// [`permission::ALL`](fub_abi::options::permission::ALL), sarebbe un
+    /// cancello che esiste, che l'utente non vede e che non può negare — cioè
+    /// esattamente il difetto da cui questa voce è nata, ripetuto in silenzio.
+    ///
+    /// Il verso opposto **non** si presidia, ed è deliberato: `fub:camera`,
+    /// `fub:microphone`, `fub:clipboard` e `fub:external-fs` sono nomi che
+    /// nessuna famiglia consuma ancora, e pretendere la corrispondenza piena
+    /// costringerebbe a toglierli — cioè a lasciare liberi quattro nomi che
+    /// qualcun altro potrebbe prendersi.
+    #[test]
+    fn ogni_permesso_di_una_famiglia_e_nominato() {
+        for cap in Capability::ALL {
+            let Some(key) = cap.permission() else {
+                continue;
+            };
+            assert!(
+                permission::ALL.contains(&key),
+                "la famiglia {cap:?} è governata da `{key}`, che non sta in \
+                 `permission::ALL`: nessun pannello lo mostrerebbe, e il \
+                 kernel non fabbricherebbe la chiave con cui si nega."
+            );
+        }
+    }
+
     /// Un host che risponde a qualunque domanda: ciò che si prova qui è quale
     /// **cancello** attraversa, non cosa c'è dietro.
     struct Indice;

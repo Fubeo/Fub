@@ -286,6 +286,43 @@ impl PluginRegistry {
         Ok(())
     }
 
+    /// Rifà la politica di un plugin **togliendo** dai permessi del suo
+    /// manifest quelli che l'utente ha negato (§23.17).
+    ///
+    /// # È una sottrazione, e non un secondo elenco
+    ///
+    /// La negazione non arriva fino a [`Granted`]: si applica **prima**, sulla
+    /// mappa del manifest, e ciò che resta è un manifest più povero. Da questo
+    /// discendono tre proprietà che un campo `denied` dentro la politica non
+    /// avrebbe avuto:
+    ///
+    /// - **non può concedere.** Una mappa a cui si tolgono chiavi non ne
+    ///   acquista, quindi nessun valore scritto in un file di configurazione —
+    ///   nemmeno quello di un vault che arriva da fuori — può dare a un
+    ///   componente un permesso che il suo manifest non dichiarava;
+    /// - **nega anche il parametro.** Togliere `fub:network` spegne insieme
+    ///   *se* e *dove*: la famiglia cade, e con lei l'allowlist. Se la
+    ///   negazione fosse un secondo elenco letto accanto, chi la scrive
+    ///   dovrebbe ricordarsi di spegnere due cose;
+    /// - **non c'è un secondo ordine di cancelli da tenere allineato.** Il
+    ///   `Guard` continua a fare le due domande che faceva — la famiglia, poi
+    ///   l'host — e non sa che qualcuno ha detto di no.
+    ///
+    /// Torna `false` se il plugin non è dichiarato: è il caso di chi scrive la
+    /// chiave di un componente spento, e non è un errore — la chiave resta nel
+    /// file e tornerà a valere quando il componente si riaccende.
+    pub(crate) fn restrict(&mut self, plugin: &str, denied: &[String]) -> bool {
+        let Some(entry) = self.entries.iter_mut().find(|e| e.manifest.id == plugin) else {
+            return false;
+        };
+        let mut permissions = entry.manifest.permissions.clone();
+        for key in denied {
+            permissions.granted.remove(key);
+        }
+        entry.granted = Granted::new(&entry.manifest.id, &permissions, entry.trust);
+        true
+    }
+
     pub fn get(&self, id: &str) -> Option<&PluginEntry> {
         self.entries.iter().find(|e| e.manifest.id == id)
     }

@@ -121,16 +121,29 @@ fn expected() -> Value {
         // I componenti che questo host sa montare (§11.1): il campione ne ha
         // uno acceso e uno spento, perché con uno solo il record non direbbe
         // ciò per cui esiste — che «spento» è uno stato, non un'assenza.
+        //
+        // I due permessi (§23.17) sono anche loro una coppia scelta: uno
+        // **senza** parametro e uno **con**, perché la differenza fra le due
+        // forme è precisamente la frase che l'utente legge accettando — «può
+        // connettersi a qualunque host» non è «può connettersi ad api.acme.com»
+        // — e un campione con la sola forma nuda non proverebbe che la seconda
+        // attraversa l'IPC.
         "BundleInfo": [
             to_value(BundleInfo {
                 id: "fub.versioning".into(),
                 name: "Versioning".into(),
                 mounted: true,
+                trust: Trust::Core,
+                permissions: PluginPermissions::core().granted,
             }),
             to_value(BundleInfo {
                 id: "fub.stats".into(),
                 name: "Statistiche".into(),
                 mounted: false,
+                trust: Trust::Community,
+                permissions: fub_abi::options::OptionMap::new()
+                    .on(permission::READ_VAULT)
+                    .with(permission::NETWORK, json!(["api.acme.com"])),
             }),
         ],
         // Il registro dei vault (§11.1): quello appuntato con la sua icona e un

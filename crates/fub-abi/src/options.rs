@@ -321,6 +321,57 @@ pub mod permission {
     /// resto del vault no»*. Un pannello di recupero è la seconda frase, ed è
     /// il solo cliente che questa domanda abbia mai avuto.
     pub const READ_DRAFTS: &str = "fub:read-drafts";
+
+    /// **Tutti e tredici** [conta: permessi-dichiarabili], in ordine di
+    /// dichiarazione: l'elenco che questo host sa nominare.
+    ///
+    /// Serve a chi deve *mostrarli* — un pannello, una CLI, il momento in cui
+    /// qualcuno accetta un componente — e la ragione per cui è una costante e
+    /// non una convenzione sul prefisso è la stessa di `Capability::ALL`, che
+    /// sta nel kernel e che questo crate non può nominare: una chiave che nascesse
+    /// e non finisse qui **non sarebbe negabile**, cioè comparirebbe nel
+    /// manifest e non sotto gli occhi di chi la concede. Che l'elenco sia
+    /// chiuso è ciò che permette di dire, di una qualunque, *questo host non la
+    /// conosce* — e un permesso che l'host non conosce non recinta niente, il
+    /// che è un'informazione e non un dettaglio.
+    ///
+    /// Il presidio che lo tiene onesto sta accanto al `Guard`
+    /// (`ogni_permesso_di_una_famiglia_e_nominato`): ogni famiglia che ha un
+    /// permesso ha il proprio nome qui dentro. Il verso opposto **non** è
+    /// presidiato e non deve esserlo — [`CAMERA`], [`MICROPHONE`],
+    /// [`EXTERNAL_FS`] e [`CLIPBOARD`] sono nomi senza famiglia, cioè permessi
+    /// che si dichiarano e che nessuna capacità di oggi consuma. Toglierli
+    /// perché «non fanno niente» vorrebbe dire scoprire il giorno della prima
+    /// capacità che il nome era libero.
+    pub const ALL: [&str; 13] = [
+        READ_VAULT,
+        WRITE_VAULT,
+        NETWORK,
+        CLIPBOARD,
+        CAMERA,
+        MICROPHONE,
+        EXTERNAL_FS,
+        RUN_COMMAND,
+        CALL_SERVICE,
+        WRITE_SETTINGS,
+        READ_SESSION,
+        READ_SELECTION,
+        READ_DRAFTS,
+    ];
+
+    /// Il nome di un permesso senza il suo namespace: `fub:network` →
+    /// `network`.
+    ///
+    /// È la metà che entra in una chiave d'impostazione
+    /// ([`settings::permission_key`](crate::settings::permission_key)) e in una
+    /// chiave di catalogo, e sta qui perché lo spezzettamento della chiave è
+    /// della mappa che la definisce — non di chi la mostra.
+    pub fn name_of(permission: &str) -> &str {
+        match permission.split_once(':') {
+            Some((_, name)) => name,
+            None => permission,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -373,6 +424,27 @@ mod tests {
         // La nota spegne i wikilink e NON si porta via i tag.
         assert!(effettivo.enabled(syntax::TAGS));
         assert!(!effettivo.enabled(syntax::WIKILINKS));
+    }
+
+    /// L'elenco dei permessi è **chiuso e senza doppioni**, e ogni nome sta nel
+    /// namespace del core: sono le tre proprietà su cui poggia il fatto che un
+    /// pannello possa mostrarli tutti sapendo di averli mostrati tutti.
+    #[test]
+    fn l_elenco_dei_permessi_e_chiuso() {
+        let unici: std::collections::BTreeSet<&str> = permission::ALL.iter().copied().collect();
+        assert_eq!(unici.len(), permission::ALL.len(), "un nome è ripetuto");
+        for nome in permission::ALL {
+            assert_eq!(
+                OptionMap::ns_of(nome),
+                Some(CORE_NS),
+                "`{nome}` non è nel namespace del core"
+            );
+            assert!(!permission::name_of(nome).is_empty());
+        }
+        assert_eq!(permission::name_of(permission::NETWORK), "network");
+        // Una chiave senza namespace è sé stessa: chi la mostra non deve
+        // inventarsi un pezzo che non c'è.
+        assert_eq!(permission::name_of("nudo"), "nudo");
     }
 
     #[test]

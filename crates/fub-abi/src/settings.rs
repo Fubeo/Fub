@@ -361,6 +361,69 @@ pub fn keybinding_key(command_id: &str) -> String {
     }
 }
 
+/// La chiave d'impostazione con cui si **nega a un componente un permesso che
+/// il suo manifest dichiara** (§23.17).
+///
+/// Una chiave per coppia *(componente, permesso)*, di specie
+/// [`SettingKind::Toggle`] e con **`true` come default**: ciò che il manifest
+/// dichiara è concesso finché qualcuno non dice di no, che è la sola forma
+/// compatibile con ciò che c'era prima — un permesso mai visto da nessuno non
+/// deve cominciare a mancare perché ha acquistato un interruttore.
+///
+/// # Perché è la stessa mossa di [`keybinding_key`], e dove si scosta
+///
+/// Uguale per il motivo che conta: la fabbrica la **chiave**, non il plugin. Le
+/// due alternative sono le stesse che la
+/// [0077](../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md) ha
+/// scartato — una lista di stringhe `"com.acme fub:network"` è un formato dentro
+/// un formato, un `SettingKind::Map` è firma a ridosso del freeze — e qui c'è
+/// una terza ragione che là non c'era: con una chiave per coppia, **negare un
+/// permesso eredita da solo tutto ciò che le impostazioni sanno già fare**, cioè
+/// da dove viene il valore, l'azzeramento che lo fa ricadere, l'evento che
+/// avvisa le altre finestre e il fatto che non sia scrivibile da un programma.
+///
+/// Si scosta in **un** punto, e va detto perché è la sola asimmetria: un id di
+/// comando è unico da sé (`note.create`), quindi `keys.note.create` non collide
+/// con nessuno; un nome di permesso invece è lo **stesso per tutti** — dieci
+/// componenti dichiarano `fub:read-vault` — e quindi il componente deve entrare
+/// nella chiave. L'unico posto in cui può entrare, per la regola dei nomi del
+/// §7.4, è la fessura del namespace: `com.acme:permissions.read-vault`.
+///
+/// Ne segue che **anche una feature ufficiale nomina col proprio id** invece che
+/// nudo, che è l'unico posto del repo in cui il core non usa la sua licenza di
+/// nominare nudo. La licenza esiste perché il core dichiara chiavi
+/// *dell'applicazione* (`versioning.enabled`, `plugins.disabled`): qui non c'è
+/// niente dell'applicazione, perché **ogni permesso è di esattamente un
+/// componente** — e una chiave nuda dovrebbe comunque portarsi dentro il nome
+/// del componente per non collidere, cioè scriverlo due volte in due posti
+/// diversi della stessa stringa.
+pub fn permission_key(plugin: &str, permission: &str) -> String {
+    format!(
+        "{plugin}:permissions.{}",
+        crate::options::permission::name_of(permission)
+    )
+}
+
+/// Il componente e il permesso che una chiave fabbricata da
+/// [`permission_key`] nomina, o `None` se non è una di quelle.
+///
+/// Esiste perché la scrittura di un'impostazione arriva con una chiave e basta,
+/// e chi la riceve deve sapere **se ha appena cambiato un recinto**: senza
+/// questa lettura, negare un permesso avrebbe effetto alla riapertura del vault
+/// invece che subito — e la 0097 ha scritto il precedente opposto
+/// (`JobHost::fetch` rilegge il permesso a ogni chiamata invece di catturarlo).
+///
+/// Il permesso torna **qualificato** (`fub:network`, non `network`): è la forma
+/// in cui lo porta il manifest, cioè quella con cui chi chiama lo confronterà.
+pub fn permission_of_key(key: &str) -> Option<(&str, String)> {
+    let (plugin, rest) = key.split_once(':')?;
+    let name = rest.strip_prefix("permissions.")?;
+    if plugin.is_empty() || name.is_empty() {
+        return None;
+    }
+    Some((plugin, crate::options::key(crate::options::CORE_NS, name)))
+}
+
 /// Da dove viene il valore che si sta leggendo.
 ///
 /// Serve a chi disegna il form — «questa la stai sovrascrivendo per questo
@@ -427,6 +490,52 @@ impl Localize for SettingEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// La chiave di un permesso e la sua lettura al contrario sono **una
+    /// funzione sola vista da due lati**, e si provano insieme: è la coppia da
+    /// cui dipende che negare abbia effetto adesso invece che alla riapertura.
+    #[test]
+    fn la_chiave_di_un_permesso_si_compone_e_si_rilegge() {
+        for plugin in ["com.acme", "fub.search"] {
+            for permesso in crate::options::permission::ALL {
+                let chiave = permission_key(plugin, permesso);
+                assert_eq!(
+                    permission_of_key(&chiave),
+                    Some((plugin, permesso.to_string())),
+                    "`{chiave}` non si rilegge"
+                );
+            }
+        }
+        assert_eq!(
+            permission_key("com.acme", "fub:read-vault"),
+            "com.acme:permissions.read-vault"
+        );
+        // **Anche una feature ufficiale nomina col proprio id.** Un nome di
+        // permesso è lo stesso per tutti, quindi il componente deve stare nella
+        // chiave, e la fessura del namespace è l'unico posto in cui il §7.4 lo
+        // lascia entrare.
+        assert_eq!(
+            permission_key("fub.search", "fub:read-vault"),
+            "fub.search:permissions.read-vault"
+        );
+    }
+
+    /// Ciò che **non** è una chiave di permesso non deve somigliarci: chi
+    /// scrive un'impostazione qualunque non deve veder ricalcolare un recinto.
+    #[test]
+    fn una_chiave_qualunque_non_e_un_permesso() {
+        for chiave in [
+            "plugins.disabled",
+            "versioning.enabled",
+            "com.acme:permissions.",
+            ":permissions.network",
+            "permissions.network",
+            "com.acme:keys.tasks.add",
+            "com.acme:permission.network",
+        ] {
+            assert_eq!(permission_of_key(chiave), None, "`{chiave}`");
+        }
+    }
 
     #[test]
     fn il_default_esce_dalla_specie() {

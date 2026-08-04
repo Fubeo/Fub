@@ -162,6 +162,135 @@ fn spegnere_un_componente_resta_scritto_fra_un_avvio_e_l_altro() {
     assert_eq!(spenti.value, SettingValue::List(vec!["fub.stats".into()]));
 }
 
+/// **Un permesso negato sopravvive a chi lo aveva** (§23.17).
+///
+/// È il presidio più importante di questa voce, e prova una cosa che si vede
+/// solo mettendo insieme due meccanismi che non si conoscono. La chiave con cui
+/// si nega un permesso è dichiarata **dal componente a cui appartiene**, quindi
+/// spegnere quel componente la fa sparire dallo schema; il valore però resta nel
+/// file, perché togliere uno schema non è cancellare un valore. Se non fosse
+/// così, spegnere e riaccendere un componente sarebbe il modo di **ridargli
+/// tutto** — e sarebbe un giro che si fa con due clic, per sbaglio, senza che
+/// niente lo dica.
+///
+/// Le tre righe si provano in fila: negare, spegnere e riaccendere, riaprire il
+/// vault da capo.
+#[test]
+fn un_permesso_negato_sopravvive_allo_spegnimento_e_alla_riapertura() {
+    use fub_abi::options::permission;
+    use fub_abi::settings::permission_key;
+
+    let v = Vault::new();
+    let chiave = permission_key("fub.stats", permission::WRITE_VAULT);
+
+    let host = headless();
+    host.open(&v.root).expect("si apre");
+    host.with_session(None, |s| {
+        s.workspace()
+            .write()
+            .unwrap()
+            .set_setting(&chiave, SettingValue::Toggle(false))
+            .expect("la chiave è dichiarata")
+    })
+    .expect("aperto");
+    assert!(!concessa(&host, "fub.stats", permission::WRITE_VAULT));
+
+    // Spento, il componente non è dichiarato: non ha permessi, e nemmeno la
+    // chiave che li nega. Il valore però è già sul disco.
+    host.set_plugin_enabled(None, "fub.stats", false)
+        .expect("si spegne");
+    host.set_plugin_enabled(None, "fub.stats", true)
+        .expect("si riaccende");
+    assert!(
+        !concessa(&host, "fub.stats", permission::WRITE_VAULT),
+        "riaccendere un componente non è il modo di ridargli ciò che gli è \
+         stato tolto"
+    );
+
+    host.close_vault(&v.root).expect("chiuso");
+    let host = headless();
+    host.open(&v.root).expect("si riapre");
+    assert!(
+        !concessa(&host, "fub.stats", permission::WRITE_VAULT),
+        "e vale anche fra un avvio e l'altro, come per `plugins.disabled`"
+    );
+    // Le **altre** non le ha toccate nessuno: si nega un permesso per volta, e
+    // negarne uno non è spegnere il componente.
+    assert!(concessa(&host, "fub.stats", permission::READ_VAULT));
+}
+
+/// Questo componente ha ancora questa famiglia? Si chiede alla **politica**, che
+/// è ciò che il cancello legge davvero — non alla mappa del manifest, che non
+/// cambia mai.
+fn concessa(host: &Host, plugin: &str, permesso: &str) -> bool {
+    use fub_kernel::{Capability, Policy};
+    let famiglia = Capability::ALL
+        .into_iter()
+        .find(|c| c.permission() == Some(permesso))
+        .expect("un permesso che governa una famiglia");
+    host.with_session(None, |s| {
+        s.workspace()
+            .read()
+            .unwrap()
+            .granted_policy(plugin)
+            .denies(famiglia)
+            .is_none()
+    })
+    .expect("aperto")
+}
+
+/// **L'elenco dei permessi è lo stesso di qua e di là** (§23.17).
+///
+/// Terzo presidio della stessa specie, dopo il tema e la memoria, e con la posta
+/// più alta dei tre. Le frasi che l'utente legge decidendo di cosa fidarsi le
+/// scrive la **shell**, dal proprio catalogo, e non chi il permesso lo sta
+/// chiedendo: è la riga di sicurezza di questa voce. Ma una frase per elenco
+/// vuol dire due elenchi, e due elenchi divergono — e qui divergerebbero nel
+/// verso peggiore, perché un permesso che il contratto conosce e la shell no è
+/// un permesso **che nessuno mostra**, cioè esattamente il difetto da cui questa
+/// voce è nata.
+///
+/// Il verso del controllo è quello utile, come per il tema: si legge l'elenco
+/// **dal file della shell** e lo si confronta con quello del contratto. Al
+/// contrario — cercare le stringhe di Rust dentro il TypeScript — passerebbe
+/// anche trovandole in un commento.
+#[test]
+fn i_permessi_sono_gli_stessi_di_qua_e_di_la() {
+    let permessi_ts =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/ui/permessi.ts");
+    let sorgente = std::fs::read_to_string(&permessi_ts)
+        .unwrap_or_else(|e| panic!("la shell non ha più {}: {e}", permessi_ts.display()));
+
+    let elenco = sorgente
+        .split_once("export const PERMESSI = [")
+        .and_then(|(_, resto)| resto.split_once("] as const;"))
+        .map(|(dentro, _)| dentro)
+        .expect(
+            "in `ui/permessi.ts` non c'è più un `export const PERMESSI = [ … ] as const;`: \
+             o l'elenco si chiama in un altro modo, o questo presidio sta leggendo il vuoto",
+        );
+    let dalla_shell: Vec<String> = elenco
+        .lines()
+        .filter_map(|riga| {
+            let riga = riga.trim().trim_end_matches(',');
+            riga.strip_prefix('"')?.strip_suffix('"').map(String::from)
+        })
+        .collect();
+
+    let dal_contratto: Vec<String> = fub_abi::options::permission::ALL
+        .iter()
+        .map(|k| (*k).to_string())
+        .collect();
+    assert_eq!(
+        dalla_shell, dal_contratto,
+        "la shell e il contratto non hanno lo stesso elenco di permessi. Uno in \
+         più di qua è una frase che non si mostrerà mai; uno in meno è un \
+         permesso che il manifest dichiara, che il cancello onora e che nessuno \
+         fa vedere a chi dovrebbe accettarlo. **L'ordine conta anche lui**: è \
+         l'ordine in cui si leggono."
+    );
+}
+
 /// Il bundle che tiene l'elenco degli spenti non può essere fra gli spenti.
 #[test]
 fn il_core_non_si_spegne() {
