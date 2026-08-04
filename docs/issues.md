@@ -12,6 +12,7 @@
 
 # Issues
 
+
 > [!WARNING]
 > Questo file è un contenitore "raw" di osservazioni. Molti di questi punti sono stati
 > **promossi a voci architetturali** in [`todo.md`](todo.md) e raggruppati per area (es. §15.8, §20.7).
@@ -27,6 +28,16 @@
 > utile: *queste osservazioni sono famiglie, non fix isolati*. Chi rifarà il
 > raggruppamento le trova già scritte; fino ad allora vanno lette come un
 > proposito, non come un rimando.
+>
+> **E adesso uno di quei numeri esiste, e nomina un'altra cosa.** La seduta 23 è
+> nata davvero, da tutt'altra strada — una verifica sui verbali — e occupa
+> §23.1–§23.16. Quindi «Promossa alla §23.1» qui dentro **non** rimanda alla
+> voce che oggi porta quel numero: rimanda a una voce mai committata. È
+> esattamente il rimando cieco che [`roadmap/numerazione.md`](roadmap/numerazione.md)
+> esiste per impedire, arrivato dal lato che quella disciplina non copre — non un
+> numero *ritirato* e riusato, ma un numero **mai nato** e poi assegnato altrove.
+> Finché queste righe non vengono rifatte, i loro `§` vanno letti come se non
+> avessero numero.
 
 L'elenco delle osservazioni che **non sono decisioni chiuse** (quelle stanno in
 [`decisions/`](decisions/README.md)) né lavoro aperto con priorità (quello sta

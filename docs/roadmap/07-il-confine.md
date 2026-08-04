@@ -1,6 +1,6 @@
 # 7. Il confine: quante volte si scrive la disciplina
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): la disciplina del confine, vista da chi lo attraversa e da chi lo presta. La risposta è nella [decisione 0021](../decisions/0021-il-confine.md); qui non resta niente.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): la disciplina del confine, vista da chi lo attraversa e da chi lo presta. La risposta è nella [decisione 0021](../decisions/0021-il-confine.md); resta una casella, in fondo.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -39,3 +39,29 @@ Il §7.4 era la voce **più datata** del piano — l'unica che non riguardava ci
 che avremmo scritto ma ciò che avremmo già pubblicato — e il suo costo è stato
 quello previsto: nessuno, perché nessun id di terzi esiste ancora. È il solo
 momento in cui poteva costare così.
+
+## La casella rimasta
+
+*strato kernel — è lavoro, non una decisione: il criterio è già scritto e il bloccante è caduto*
+
+- [ ] **Le allowlist dei permessi non filtrano.** `read_vault` e `write_vault`
+      hanno un **parametro** — un elenco di prefissi di path, la forma che la
+      [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) ha
+      dato a un permesso — e la politica di oggi legge la sola presenza della
+      chiave: un plugin con `read-vault` ristretto a `Progetti/` legge tutto il
+      vault. La [0021](../decisions/0021-il-confine.md) lo dichiara nel suo
+      «cosa resta fuori» e ne nomina il bloccante — il §15.5, «la politica dei
+      path in un modulo solo», *per non nascere con due idee di cosa sia un
+      prefisso*. Quel bloccante è caduto con la
+      [0058](../decisions/0058-un-nome-che-nasce.md): `fub_abi::rules::path` è
+      il posto, e un prefisso ha una definizione sola. Resta additivo dentro
+      `Granted`, e resta una casella e non una voce perché la decisione — *dove
+      si applica, e con quale nozione di prefisso* — è già presa in tutte e due
+      le sue metà.
+
+      Che sia rimasta ferma per trentadue verbali dopo che il suo indirizzo era
+      stato onorato è la ragione per cui adesso è **contata** in
+      [todo.md](../todo.md) invece di vivere solo dentro un verbale: una casella
+      che nessun totale nomina non la cerca nessuno, ed è la stessa diagnosi che
+      la [§16.7](16-crate-sdk-banchi-di-prova.md) fa agli elenchi — *chi lo
+      legge, lo trova?*

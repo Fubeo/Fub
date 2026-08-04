@@ -5,25 +5,31 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 116 voci: novantanove da sette giri sulla stessa domanda, due da una
+Sono uscite 132 voci: novantanove da sette giri sulla stessa domanda, due da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md); e la §20.5, nata
 misurando la [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) contro il
 codice), nove da una
 **decisione di prodotto** — la [0025](decisions/0025-la-ricerca-predefinita.md),
 che ha stabilito che la ricerca di Fub è built-in e di classe *omnisearch*
-([seduta 21](roadmap/21-la-ricerca-predefinita.md)) — e quattro da due
+([seduta 21](roadmap/21-la-ricerca-predefinita.md)) — e venti da cinque
 **verifiche**: la §21.10 dal controllo contro il codice di un'affermazione
 arrivata da fuori, e le §22.1–§22.3 dallo stesso controllo su una lettura
 esterna dell'intero [FEATURES.md](FEATURES.md)
-([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)) — e **due** da una
+([seduta 22](roadmap/22-cosa-sa-dire-un-abbonamento.md)), e le §23.1–§23.3 dalla
+**terza**, che non guardava un'affermazione esterna ma i verbali stessi
+([seduta 23](roadmap/23-cosa-costano-le-decisioni-chiuse.md)) — cinque dalla
+**quarta**, che ha ripercorso la terza su un insieme scelto invece che in fila —
+i **primi dieci verbali**, riletti uno per uno contro i sorgenti di oggi — otto
+dalla **quinta**, che li ha presi **tutti** con una lente dichiarata (§23.9–§23.16)
+— e **due** da una
 **separazione**: la §16.8, staccata dal §16.7 nel momento in cui lo si chiudeva
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
 ([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centosette sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-nove [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
+venticinque [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -87,7 +93,7 @@ nuove, e vanno fatte in quest'ordine:
 E una settima strada, che non è una domanda: **una decisione di prodotto presa a
 verbale**. La [0025](decisions/0025-la-ricerca-predefinita.md) non ha trovato
 voci cercandole, le ha **create**: deciso cosa l'app deve fare, quello che manca
-al contratto per permetterlo si calcola. Le altre ventuno sedute descrivono un
+al contratto per permetterlo si calcola. Le altre ventidue sedute descrivono un
 debito, la [21](roadmap/21-la-ricerca-predefinita.md) descrive una promessa.
 
 E un'ottava, che non è nemmeno una strada: **una verifica**. La §21.10 è uscita
@@ -116,6 +122,61 @@ voce, scritto per dire *quanto è largo il buco* e letto come se dicesse *quanto
 grande il lavoro*
 ([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)).
 
+E una **decima**, che è l'ottava con l'oggetto cambiato: una verifica che non
+guarda un'affermazione arrivata da fuori ma **i verbali stessi**, riletti in fila
+con una domanda che nessuna delle sei qui sopra pone. Le sei guardano il sistema;
+questa guarda **chi usa l'app** e **chi scriverà un plugin**: *una decisione
+presa bene, cosa costa a loro?* Ne sono uscite tre voci, e la proprietà che le
+lega è che in tutte e tre la decisione regge e la sua **premessa** no — un'unica
+alternativa guardata, un invariante vero nel documento che lo scrive e falso su
+una superficie cresciuta dopo, due bloccanti caduti in due sedute che non
+sapevano di toccarli. Nessuna delle tre si vede rileggendo un verbale contro i
+sorgenti **del suo tempo**, che è il modo in cui una premessa si riverifica di
+solito ([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). E quello che
+questa strada produce soprattutto sono **falsi positivi**: cinque, in quel primo
+giro, ed è la [seduta 23](roadmap/23-cosa-costano-le-decisioni-chiuse.md) a
+elencarli, perché chi la ripercorre non li ribatta.
+
+**La decima si ripercorre, e cambia di poco.** Un secondo giro ne ha prese
+**dieci** — i primi dieci verbali — e invece di rileggerle in fila le ha lette
+una per una contro i sorgenti di oggi. Ne sono uscite altre cinque voci
+(§23.4–§23.8), tre falsi positivi in più e un **doppione**, che è il rischio
+nuovo di questa variante: partendo dai verbali vecchi si ritrovano per forza le
+voci già aperte, e una voce scritta due volte non si vede come un errore ma come
+due lavori. La cosa che il secondo giro insegna al terzo è però un'altra, e non
+stava nel primo: due delle cinque hanno una premessa che era **incompleta il
+giorno stesso** — un criterio scritto benissimo nel verbale e non applicato a una
+riga del verbale stesso, una capacità la cui documentazione dice «che ore sono» e
+il cui contenuto è il testo dell'utente. Non si vedono rileggendo il verbale
+contro i sorgenti del suo tempo *né* contro quelli di oggi: si vedono solo
+**eseguendo il criterio del verbale sul verbale**.
+
+**Il terzo giro cambia due cose, e sono di metodo.** Ha preso **tutti e novanta**
+i verbali invece di dieci, letti in cinque lotti in parallelo, e ha portato una
+**lente dichiarata in anticipo** invece della domanda larga delle prime due:
+*questa decisione toglie a chi usa l'app qualità, libertà di modificare e
+scegliere, o privacy?* Ne sono uscite otto voci (§23.9–§23.16) e cinque falsi
+positivi.
+
+La prima cosa che insegna è che una lente stretta trova ciò che una larga
+attraversa senza vedere, **ma solo se qualcuno legge tutto insieme**: le tre voci
+migliori del giro sono **coppie** — due verbali difendibili separatamente il cui
+prodotto non ha guardato nessuno — e una coppia non si vede né leggendo in fila
+né leggendo un sottoinsieme, perché le due metà stanno in verbali che non si
+nominano a vicenda. È la forma della §23.3, ritrovata tre volte in un giro solo:
+va promossa da aneddoto a **cosa da cercare apposta**.
+
+La seconda è più scomoda e riguarda questo file. Il primo falso positivo del terzo
+giro nominava una funzione che **non esiste** — l'accusa era plausibile,
+argomentata, e la funzione citata non c'era — e il difetto vero stava un
+centimetro più in là, come nella §21.10. Ma la §21.10 verificava un'affermazione
+arrivata **da fuori**, ed è per quel caso che l'ottava strada è scritta. Questa
+l'affermazione l'aveva prodotta una nostra rilettura, e per un'affermazione di
+casa nessuna riga chiedeva la verifica. **La regola vale per la plausibilità, non
+per la provenienza**: si verifica contro i sorgenti ciò che suona giusto, e una
+rilettura che produce decine di affermazioni plausibili in un colpo è la sorgente
+che ne genera di più.
+
 ## Le sedute
 
 Cosa c'è in questa tabella, e cosa no: la colonna *Perché insieme* dice la
@@ -133,7 +194,7 @@ che questo piano passa il tempo a togliere dal codice.
 | **4** | [Chi vede il modello parsato](roadmap/04-chi-vede-il-modello-parsato.md) | *chi vede la struttura di un documento?* | — | — |
 | **5** | [Il canale dati: chi risponde, e chi instrada](roadmap/05-il-canale-dati.md) | *chi risponde a una query, e chi la instrada?* | — | — |
 | **6** | [Le regole in un posto solo](roadmap/06-le-regole-in-un-posto-solo.md) | la stessa regola serve a tre consumatori: provider, shell, e a M5 un guest WASM | — | — |
-| **7** | [Il confine](roadmap/07-il-confine.md) | la disciplina del confine, vista da chi lo attraversa e da chi lo presta | — | — |
+| **7** | [Il confine](roadmap/07-il-confine.md) | la disciplina del confine, vista da chi lo attraversa e da chi lo presta | — | 1 |
 | **8** | [Il kernel a pezzi, e chi lo monta](roadmap/08-il-kernel-a-pezzi.md) | l'oggetto-dio, chi lo monta e chi lo blocca: scomporlo senza decidere il lock lo avrebbe rifatto a grana grossa | — | — |
 | **9** | [Il lavoro lungo, e come un componente smette](roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md) | lo spegnimento visto per intero: un componente, un vault, tutti i vault, e chi esegue ciò che è ancora in corso | — | — |
 | **10** | [Gli eventi: grana, freno, destinatari](roadmap/10-gli-eventi.md) | lo stesso canale a tre distanze: chi si abbona, quanti messaggi passano, chi li mostra | — | — |
@@ -149,10 +210,11 @@ che questo piano passa il tempo a togliere dal codice.
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 1 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | 1 | 1 |
+| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | 16 | — |
 
 ## Le voci
 
-Nove [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
+Venticinque [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -164,7 +226,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-nove [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+venticinque [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -173,7 +235,15 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-Le caselle residue oggi sono **dieci**, e stanno in sette posti:
+La colonna *Voci* somma **venticinque** [conta: voci-aperte], e la seduta 23 ne
+tiene sedici da sola. Non è uno squilibrio da correggere: è ciò che succede
+quando una strada nuova viene percorsa tre volte di fila e produce voci ogni
+volta, e la sua forma — *prezzi dichiarati e mai risommati* — attraversa tutte le
+altre sedute invece di stare accanto a loro. Se un giorno converrà spezzarla, il
+taglio naturale non è il numero ma la **lente**: le §23.9–§23.16 rispondono a una
+domanda più stretta delle prime otto.
+
+Le caselle residue oggi sono **undici**, e stanno in otto posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
@@ -196,14 +266,25 @@ copie» custodite da un flag TS — è caduto con la
 ma togliendo a una di esse il compito di avere ragione) e la
 [§22.3](roadmap/22-cosa-sa-dire-un-abbonamento.md#223-la-maschera-di-ridisegno-è-della-view-non-dellesemplare)
 (una: la query incorporata in una nota, che non è un esemplare di `ViewSpec` e
-non ha un canale di invalidazione affatto). Non diventano voci
+non ha un canale di invalidazione affatto) e la
+[§7.1](roadmap/07-il-confine.md#la-casella-rimasta) (una: le allowlist dei permessi hanno un
+**parametro** — un elenco di prefissi di path — e la politica legge solo la
+presenza della chiave, quindi un plugin con `read-vault` ristretto a `Progetti/`
+legge tutto; la [0021](decisions/0021-il-confine.md) l'aveva lasciata in attesa
+del §15.5, «la politica dei path in un modulo solo», che la
+[0058](decisions/0058-un-nome-che-nasce.md) ha chiuso). Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte.
 
 E una casella su cui è scritto **quale voce** la risolverà vale più di una
-scritta a vuoto: l'unica che avesse quell'indirizzo — le tre righe di `.fub/`
+scritta a vuoto: la prima che avesse quell'indirizzo — le tre righe di `.fub/`
 che scrivevano con `write_atomic` — è stata risolta proprio da quella voce.
-Vale la pena scriverlo quando si sa.
+Vale la pena scriverlo quando si sa. La seconda mostra però l'altro esito
+possibile, e va scritto con la stessa onestà: il filtro per prefisso dei
+permessi aspettava il §15.5, il §15.5 è chiuso da trentadue verbali, e nessuno è
+tornato a prendere la casella. **Un indirizzo dice chi potrà, non chi lo farà**,
+e una casella indirizzata a una voce che si chiude senza guardarla resta ferma
+esattamente come una scritta a vuoto — con l'aggravante che sembra sistemata.
 
 **Una seduta chiusa non tiene le proprie code.** Le prime quattro sedute hanno
 il verbale, ma qualcuna aveva lasciato dietro dei punti di **esecuzione**: sono
@@ -231,6 +312,22 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§17.2** | [Test della shell](roadmap/17-presidi-che-restano.md#172-test-della-shell) | 17. I presidi che restano | presidi | **P2** |
 | **§20.5** | [Il budget del dispatch tronca senza guardare cosa sta troncando](roadmap/20-quando-qualcosa-va-storto.md#205-il-budget-del-dispatch-tronca-senza-guardare-cosa-sta-troncando) | 20. Quando qualcosa va storto | kernel | **P2** |
 | **§22.4** | [Un orario di parete non è un intervallo](roadmap/22-cosa-sa-dire-un-abbonamento.md#224-un-orario-di-parete-non-è-un-intervallo) | 22. Cosa sa dire un abbonamento | contratto | **P1** |
+| **§23.1** | [Una rinomina fatta ad app chiusa scollega tutto ciò che è indicizzato per path](roadmap/23-cosa-costano-le-decisioni-chiuse.md#231-una-rinomina-fatta-ad-app-chiusa-scollega-tutto-ciò-che-è-indicizzato-per-path) | 23. Cosa le decisioni chiuse costano | kernel | **P1** |
+| **§23.2** | [L'invariante dei terzi ha una seconda eccezione, e non è scritta](roadmap/23-cosa-costano-le-decisioni-chiuse.md#232-linvariante-dei-terzi-ha-una-seconda-eccezione-e-non-è-scritta) | 23. Cosa le decisioni chiuse costano | presidi | **P1** |
+| **§23.3** | [Due bloccanti caduti, e la rete non se n'è accorta](roadmap/23-cosa-costano-le-decisioni-chiuse.md#233-due-bloccanti-caduti-e-la-rete-non-se-nè-accorta) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
+| **§23.4** | [`Selection` ne porta una sola, e il tipo di un campo non è additivo](roadmap/23-cosa-costano-le-decisioni-chiuse.md#234-selection-ne-porta-una-sola-e-il-tipo-di-un-campo-non-è-additivo) | 23. Cosa le decisioni chiuse costano | contratto | **P0** |
+| **§23.5** | [Il testo che l'utente seleziona viaggia sotto una capacità che nessuno può negare](roadmap/23-cosa-costano-le-decisioni-chiuse.md#235-il-testo-che-lutente-seleziona-viaggia-sotto-una-capacità-che-nessuno-può-negare) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
+| **§23.6** | [Un import sta tutto in memoria, e la cosa che si importa più spesso è un vault intero](roadmap/23-cosa-costano-le-decisioni-chiuse.md#236-un-import-sta-tutto-in-memoria-e-la-cosa-che-si-importa-più-spesso-è-un-vault-intero) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
+| **§23.7** | [Una data scritta come la scrive l'utente non è una data, e non c'è modo di dirlo](roadmap/23-cosa-costano-le-decisioni-chiuse.md#237-una-data-scritta-come-la-scrive-lutente-non-è-una-data-e-non-cè-modo-di-dirlo) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
+| **§23.8** | [Due file che differiscono per una maiuscola sono lo stesso arco](roadmap/23-cosa-costano-le-decisioni-chiuse.md#238-due-file-che-differiscono-per-una-maiuscola-sono-lo-stesso-arco) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
+| **§23.9** | [Il registro non si spegne, e per una modifica chirurgica porta i byte dell'utente](roadmap/23-cosa-costano-le-decisioni-chiuse.md#239-il-registro-non-si-spegne-e-per-una-modifica-chirurgica-porta-i-byte-dellutente) | 23. Cosa le decisioni chiuse costano | kernel | **P1** |
+| **§23.10** | [Le bozze si leggono con il permesso di leggere il vault](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2310-le-bozze-si-leggono-con-il-permesso-di-leggere-il-vault) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
+| **§23.11** | [La base di una scrittura è facoltativa, e la passa un chiamante solo](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2311-la-base-di-una-scrittura-è-facoltativa-e-la-passa-un-chiamante-solo) | 23. Cosa le decisioni chiuse costano | contratto | **P0** |
+| **§23.12** | [Un troncamento che il chiamante non può vedere](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2312-un-troncamento-che-il-chiamante-non-può-vedere) | 23. Cosa le decisioni chiuse costano | contratto | **P0** |
+| **§23.13** | [Un vault che arriva da fuori rimappa la tastiera](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2313-un-vault-che-arriva-da-fuori-rimappa-la-tastiera) | 23. Cosa le decisioni chiuse costano | kernel | **P1** |
+| **§23.14** | [Un'operazione a metà non sa di essere a metà](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2314-unoperazione-a-metà-non-sa-di-essere-a-metà) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
+| **§23.15** | [La rete che regge i panici non ha un presidio, ha una nota](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2315-la-rete-che-regge-i-panici-non-ha-un-presidio-ha-una-nota) | 23. Cosa le decisioni chiuse costano | presidi | **P2** |
+| **§23.16** | [Su Windows un hardlink si stacca in silenzio](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2316-su-windows-un-hardlink-si-stacca-in-silenzio) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
 
 ## Gli allegati
 
