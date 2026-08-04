@@ -119,10 +119,15 @@ tre sono stati chiusi prima di quella scadenza:
   [0049](../decisions/0049-una-posizione-dentro-un-documento.md): accanto agli
   `highlights` c'è `occurrences`, che sono coordinate nel sorgente.
 
-Le voci che restano stanno nella
-[seduta 21](../roadmap/21-la-ricerca-predefinita.md), e oggi è **una**: il testo
-dentro gli allegati (§21.8), che aspetta la §14.1. Le altre si sono
-chiuse — le quattro superfici passano da una porta sola
+Non ne resta nessuna: la
+[seduta 21](../roadmap/21-la-ricerca-predefinita.md) è **chiusa**. L'ultima era
+il testo dentro gli allegati (§21.8), e non aspettava la §14.1 come credeva —
+quella si era chiusa sotto di lei
+([0046](../decisions/0046-l-anagrafe-del-vault.md)), e ciò che mancava davvero
+era il tragitto fra un file e l'indice, che leggeva testo senza guardare cosa il
+provider avesse dichiarato
+([0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)). Le altre si
+sono chiuse — le quattro superfici passano da una porta sola
 ([0082](../decisions/0082-una-porta-per-chi-cerca.md) e
 [0083](../decisions/0083-le-due-superfici-che-restavano.md)), la misura che non
 tornava misurava due cose diverse

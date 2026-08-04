@@ -361,6 +361,15 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
         self.inner.read_document(id)
     }
 
+    fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
+        // Stesso permesso della lettura di testo, e non uno suo: vedi la firma
+        // nel contratto — i byte non sono un grado di fiducia in più.
+        self.check(Capability::VaultRead, || {
+            format!("leggere i byte di `{id}`")
+        })?;
+        self.inner.read_document_bytes(id)
+    }
+
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
         self.check(Capability::VaultRead, || {
             format!("leggere la revisione di `{id}`")

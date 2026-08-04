@@ -4692,6 +4692,13 @@ fn conform(source: &str) -> Result<(), String> {
         &["id"],
     );
     contract.method(
+        "host-vault-read",
+        "read-document-bytes",
+        <dyn HostApi>::read_document_bytes
+            as fn(&'static dyn HostApi, &'static DocId) -> Result<Vec<u8>, PluginError>,
+        &["id"],
+    );
+    contract.method(
         "host-vault-write",
         "write-document",
         <dyn HostApi>::write_document

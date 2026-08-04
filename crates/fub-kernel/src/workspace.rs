@@ -56,7 +56,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode, UndoStep};
 use fub_abi::custom::{CustomRenderer, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit};
-use fub_abi::format::{DocumentFormat, RenderOptions};
+use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, LinkTarget, Span};
 use fub_abi::session::ViewContext;
@@ -1546,13 +1546,18 @@ impl Workspace {
         // uno, la data non combacia ma il contenuto sì — e chi tiene l'impronta
         // (l'anagrafe, e chi risponde alla domanda di `up_to_date`) li riconosce
         // tutti e mille.
-        let mut sources: BTreeMap<DocId, String> = BTreeMap::new();
+        //
+        // **Si legge nella forma che il provider ha dichiarato** (§21.8): un
+        // documento rivendicato a byte non passa da una decodifica UTF-8 che
+        // fallirebbe, e la sua impronta si prende sui byte — che per una
+        // sorgente di testo è lo stesso numero di prima.
+        let mut sources: BTreeMap<DocId, DocumentSource> = BTreeMap::new();
         let mut letti: Vec<VaultEntry> = Vec::with_capacity(fetta.len());
         for mut entry in fetta {
             if entry.fingerprint.is_none() {
-                match self.docs.vault.read(&entry.id) {
+                match self.docs.source_from_disk(&entry.id) {
                     Ok(source) => {
-                        entry.fingerprint = Some(Revision::of(&source));
+                        entry.fingerprint = Some(Revision::of_bytes(source.bytes()));
                         sources.insert(entry.id.clone(), source);
                     }
                     // Ciò che non si è potuto leggere o parsare: si raccoglie
@@ -1595,7 +1600,7 @@ impl Workspace {
                 _ => {
                     let source = match sources.remove(&entry.id) {
                         Some(source) => source,
-                        None => match self.docs.vault.read(&entry.id) {
+                        None => match self.docs.source_from_disk(&entry.id) {
                             Ok(source) => source,
                             Err(why) => {
                                 work.apertura.scarta(entry.id.clone(), why);
@@ -1603,7 +1608,7 @@ impl Workspace {
                             }
                         },
                     };
-                    match self.docs.parse(&entry.id, &source) {
+                    match self.docs.parse_source(&entry.id, source) {
                         Ok(model) => models.push(model),
                         Err(why) => work.apertura.scarta(entry.id.clone(), why),
                     }
@@ -1816,6 +1821,15 @@ impl Workspace {
     /// Sorgente grezza di un documento dal disco.
     pub fn read_source(&self, id: &DocId) -> Result<String> {
         self.docs.vault.read(id)
+    }
+
+    /// I byte di un documento, senza decodificarli (§21.8).
+    ///
+    /// Non è una variante di comodo di [`Workspace::read_source`]: è la sola
+    /// forma in cui un allegato — un PDF, un audio — si lascia leggere, e chi la
+    /// chiama è chi da quei byte tira fuori del testo.
+    pub fn read_source_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
+        self.docs.vault.read_bytes(id)
     }
 
     /// Scrive la sorgente, riparsa il documento, aggiorna il grafo ed emette

@@ -121,10 +121,23 @@ impl Revision {
     /// dipende da questo host, e ciò che il confine promette è solo che due
     /// revisioni uguali sono lo stesso sorgente.
     pub fn of(source: &str) -> Self {
+        Revision::of_bytes(source.as_bytes())
+    }
+
+    /// La stessa impronta, presa sui byte.
+    ///
+    /// Serve a chi ha una sorgente che **non è testo**: un documento che il suo
+    /// provider vuole a byte ([`SourceKind::Bytes`](crate::format::SourceKind))
+    /// non si può decodificare per prenderne l'impronta, e non deve — chi
+    /// indicizza confronta impronte, non testi. Per una sorgente UTF-8 le due
+    /// funzioni danno lo stesso valore, che è la ragione per cui è la stessa
+    /// famiglia e non una seconda: un documento non cambia impronta il giorno
+    /// che qualcuno lo rivendica a byte.
+    pub fn of_bytes(source: &[u8]) -> Self {
         const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
         const PRIME: u64 = 0x0000_0100_0000_01b3;
         let mut h = OFFSET;
-        for b in source.as_bytes() {
+        for b in source {
             h ^= *b as u64;
             h = h.wrapping_mul(PRIME);
         }

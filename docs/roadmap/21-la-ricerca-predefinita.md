@@ -28,10 +28,28 @@ già congelata — che è esattamente ciò che è successo al lotto e all'origin
 per cui la [0012](../decisions/0012-origine-degli-eventi.md) ha dichiarato di
 volersi decidere insieme alla [0011](../decisions/0011-il-lotto.md).
 
-Quello che resta non ha più niente che scada col freeze di M4. **È una voce
-sola**, e non è comportamento: è cosa la ricerca avrà da mangiare (§21.8), cioè
-il testo che sta dentro gli allegati — e sta ferma perché la §14.1 non è
-arrivata, non perché manchi una decisione.
+**La seduta è chiusa.** Dieci voci, otto verbali, e l'ultima a cadere è stata la
+§21.8 — il testo che sta dentro gli allegati — con la
+[decisione 0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md).
+
+Quella voce merita una riga a parte, perché è l'unica della seduta che si è
+chiusa **non facendo ciò che chiedeva**. Nominava due blocchi, e mentre stava
+ferma ad aspettare la §14.1 tutti e due erano caduti sotto di lei: la
+[0046](../decisions/0046-l-anagrafe-del-vault.md) ha tolto `list_documents`, la
+[0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) aveva già
+messo `DocumentSource::Bytes` nel contratto. Ciò che restava non era né
+l'anagrafe né il parser: era il **tragitto**. Il descrittore di formato veniva
+consultato da chi apre un documento e non da chi lo **indicizza**, quindi lo
+stesso file aveva due destini a seconda di chi lo leggeva — e un provider a byte
+vedeva i propri documenti quando l'utente li apriva e li vedeva scartare in
+silenzio all'apertura del vault. La lezione riusabile è quella: **una voce che
+sta ferma va rimisurata prima di essere eseguita**, perché ciò che aspettava può
+essere già successo, e ciò che manca davvero può non essere scritto da nessuna
+parte.
+
+Il conto della seduta, alla fine: di otto verbali, **tre** hanno speso contratto
+prima di questo — le due P0 e la 0074 — e questo è il quarto, il solo arrivato
+dopo che le P0 erano chiuse.
 
 **Erano due, e la seconda è chiusa.** La §21.7 — le ricerche recenti e la nota
 che la ricerca non ha trovato — l'ha chiusa la
@@ -263,19 +281,44 @@ che lo ha prodotto.
 
 ### 21.8 Il testo che sta dentro gli allegati
 
-*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel · **P2** — bloccata dalla §14.1*
+*nuova con la [decisione 0025](../decisions/0025-la-ricerca-predefinita.md) · kernel · **P2** — **CHIUSA** dalla [decisione 0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md). Le caselle restano per il racconto; la voce non è più in [todo.md](../todo.md)*
 
-- [ ] **PDF, immagini con OCR, audio e video trascritti** sono nove voci di
+- [x] ~~**PDF, immagini con OCR, audio e video trascritti** sono nove voci di
       FEATURES §9.1, e in omnisearch arrivano da un'estensione a parte che
       estrae il testo e glielo passa. Da noi il blocco è **prima**: finché
       `Vault::list_documents` filtra per estensione dei `FormatProvider`, un PDF
-      **non esiste** — non c'è niente da indicizzare (§14.1).
-- [ ] **E c'è un secondo blocco, più profondo**: `parse(source: &str)` e
+      **non esiste** — non c'è niente da indicizzare (§14.1).~~ **Questo blocco
+      non c'era più quando la voce si è aperta a decidere.** La
+      [0046](../decisions/0046-l-anagrafe-del-vault.md) ha tolto
+      `list_documents` da `vault.rs` e `IndexQuery::Entries` porta un
+      `VaultEntry` per **ogni** file: un PDF esiste, ha una dimensione e una
+      data. La nove voci di FEATURES §9.1 restano lavoro di provider, e questa
+      voce non ne ha scritta nessuna — nessun crate di parsing entra nel
+      workspace senza una decisione sua.
+- [x] ~~**E c'è un secondo blocco, più profondo**: `parse(source: &str)` e
       `Vault::read -> String`. Un formato binario non entra nel contratto
       (`strozzature.md`, riga dei documenti non-testo). Un estrattore di testo è
-      un provider, ma il canale che dovrebbe percorrere oggi accetta solo testo.
-- [ ] **Questa voce non chiede di risolvere né l'uno né l'altro.** Chiede di
+      un provider, ma il canale che dovrebbe percorrere oggi accetta solo
+      testo.~~ **Mezzo falso e mezzo vero, e la metà vera non era dove è
+      scritta.** `parse` prende un `&DocumentSource` dalla
+      [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md): il
+      parser sapeva già ricevere byte, e `strozzature.md` diceva il contrario in
+      una riga e la cosa giusta due righe sotto (corretto dalla
+      [0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)). Il
+      canale che accettava solo testo era un altro, ed erano **due**:
+      l'indicizzazione, che non consultava `FormatDescriptor::source` e leggeva
+      testo comunque — adesso il descrittore si consulta in un posto solo,
+      `DocumentStore::source_from_disk` — e il **confine dei plugin**, che è la
+      sola parte di questa voce costata contratto: `read-document-bytes` accanto
+      a `read-document`, sotto lo stesso permesso, senza la quale un estrattore
+      di terzi non ha modo di chiedere i byte di un allegato.
+- [x] ~~**Questa voce non chiede di risolvere né l'uno né l'altro.** Chiede di
       dichiarare che **la ricerca è il cliente** di quel lavoro, così che chi
       aprirà la §14.1 sappia chi lo aspetta a valle e non progetti una entry di
-      vault che sa dire il proprio mime type e non sa produrre testo.
+      vault che sa dire il proprio mime type e non sa produrre testo.~~ **Questa
+      casella è caduta col suo destinatario**: la §14.1 è chiusa dalla 0046, e
+      le tre caselle che le restano — l'impronta degli allegati, la politica
+      della cartella allegati, le derivate — non sono «estrarre testo da un
+      PDF». Dichiarare un cliente a un lavoro senza più contenitore non serviva
+      a nessuno; misurare cosa fosse rimasto vero sotto la voce, sì.
 

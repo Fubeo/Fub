@@ -42,6 +42,11 @@ impl VaultRead for ReadHost<'_> {
         self.ws.read_source(&id).map_err(PluginError::from)
     }
 
+    fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws.read_source_bytes(&id).map_err(PluginError::from)
+    }
+
     /// Leggere una revisione è una lettura: una view che prepara una modifica
     /// (calcolare gli edit è la parte lunga) può farlo mentre disegna, e
     /// consegnarla poi da `on_action`, dove l'host sa scrivere.

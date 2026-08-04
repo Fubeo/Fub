@@ -110,3 +110,71 @@ impl FormatProvider for TestoDiProva {
         Ok(model.text.clone())
     }
 }
+
+/// Un formato che vuole la sorgente **a byte** e ne tira fuori del testo: la
+/// forma di un estrattore (PDF, OCR, trascrizione) senza esserne uno.
+///
+/// Esiste perché `SourceKind::Bytes` c'era dalla
+/// [decisione 0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+/// e nessun cliente lo percorreva: un ramo dichiarato senza nessuno che ci
+/// passi è indistinguibile da un ramo rotto, e infatti era rotto — chi
+/// indicizzava non consultava il descrittore e leggeva testo comunque (§21.8).
+///
+/// Decodifica **latin-1**, che non è una scelta di prodotto ma la più corta che
+/// tenga insieme le due cose che servono al banco: dei byte che **non sono
+/// UTF-8 valido** — quindi che il canale del testo rifiuterebbe — e che
+/// **portano comunque del testo**, quindi che si possono cercare. Nessun crate
+/// di parsing entra qui: la voce chiedeva il canale, non l'estrattore.
+pub struct EstrattoreDiProva {
+    id: String,
+    estensioni: Vec<String>,
+}
+
+impl EstrattoreDiProva {
+    pub fn per_estensione(ext: &str) -> Self {
+        EstrattoreDiProva {
+            id: format!("estrattore.{ext}"),
+            estensioni: vec![ext.to_string()],
+        }
+    }
+
+    pub fn boxed(self) -> Box<dyn FormatProvider> {
+        Box::new(self)
+    }
+}
+
+impl FormatProvider for EstrattoreDiProva {
+    fn descriptor(&self) -> FormatDescriptor {
+        let exts: Vec<&str> = self.estensioni.iter().map(String::as_str).collect();
+        FormatDescriptor {
+            source: fub_abi::format::SourceKind::Bytes,
+            ..FormatDescriptor::text(&self.id, "Estrattore di prova", &exts)
+        }
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        FormatCapabilities::default()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
+        model.text = source.bytes().iter().map(|b| *b as char).collect();
+        Ok(model)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        _opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+}

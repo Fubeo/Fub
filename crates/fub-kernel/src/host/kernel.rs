@@ -79,6 +79,11 @@ impl VaultRead for KernelHost<'_> {
         self.ws.read_source(&id).map_err(PluginError::from)
     }
 
+    fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws.read_source_bytes(&id).map_err(PluginError::from)
+    }
+
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
         let id = fenced_doc_id(id)?;
         self.ws.document_revision(&id).map_err(PluginError::from)

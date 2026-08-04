@@ -2774,6 +2774,17 @@ interface host-vault-read {
     }
 
     read-document: func(id: doc-id) -> result<string, plugin-error>;
+    /// I BYTE di un documento, senza decodificarli. Sta accanto a
+    /// `read-document` e non al posto suo, per la stessa ragione per cui nel
+    /// kernel `read` e `read-bytes` sono due funzioni: chi legge del testo non
+    /// deve poter dimenticare di decodificare.
+    ///
+    /// Senza di lei il confine è testo e basta, e un estrattore di terzi — il
+    /// PDF, l'OCR, la trascrizione di FEATURES 9.1, cioè il modo in cui gli
+    /// allegati entrano nella ricerca — non ha modo di chiedere ciò che gli
+    /// serve. Stesso permesso di ogni altra lettura del vault: leggere del testo
+    /// e leggere dei byte non sono due gradi di fiducia.
+    read-document-bytes: func(id: doc-id) -> result<list<u8>, plugin-error>;
     /// La revisione del sorgente di un documento: l'identità del testo su cui si
     /// sta per calcolare una modifica. È una capacità e non un calcolo perché la
     /// revisione è opaca e la sua derivazione non è promessa a nessuno.
