@@ -36,7 +36,7 @@ flowchart TB
     %% ============================ CONTRATTO ============================
     subgraph CONTRATTO ["📜 fub-abi — il contratto, definito una volta sola"]
         Traits["i trait di estensione<br>Format · View · Index · Command · EventHandler · Plugin"]:::contract
-        HostApiN["HostApi<br>quattordici famiglie: l'unico varco"]:::contract
+        HostApiN["HostApi<br>quattordici trait: l'unico varco"]:::contract
         QueryN["IndexQuery<br>un albero di predicati, non una stringa"]:::contract
         Model["modello comune<br>+ arena al confine"]:::contract
         UiN["UI dichiarativa<br>UiNode, Intent, eventi"]:::contract
@@ -330,7 +330,8 @@ disciplina di scrittura, non si ridisegna qui: è una tabella, ed è in
 
 **📜 `fub-abi`** — modello di documento comune e la sua forma al confine
 (alberi appiattiti, span a larghezza fissa: la conversione che il proxy WASM
-erediterà); i trait di estensione; `HostApi` come somma di quattordici famiglie;
+erediterà); i trait di estensione; `HostApi` come somma di quattordici trait
+(che una politica nega con sedici nomi, [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md));
 il linguaggio delle interrogazioni; i comandi con argomenti e raggio dichiarati,
 e la simulazione come modo di invocarli; import ed export a byte e non a path;
 l'edit come coppia span-testo sopra una revisione; il protocollo di UI

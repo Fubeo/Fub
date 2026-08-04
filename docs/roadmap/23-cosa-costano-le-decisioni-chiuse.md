@@ -223,12 +223,23 @@ rifiuto che l'host conosceva e rendeva come un dato. Nessuno dei tre ritagli ha
 aggiunto una funzione: hanno dato una forma a ciò che si stava già perdendo per
 strada.
 
-**E una ha una scadenza che non è il freeze**, il che non la rende P0 ma le dà un
-**ordine**: la §23.5 va decisa prima della §23.3. Finché non c'è rete, un plugin
-che legge quel che l'utente seleziona non ha dove mandarlo; il giorno che la rete
-entra, ce l'ha. Le due voci non si sono mai incontrate perché stanno in due
-verbali diversi, ed è la stessa forma della §23.3 stessa — due cose vere
-separatamente che nessuno ha moltiplicato.
+**E una aveva una scadenza che non era il freeze**, il che non la rendeva P0 ma
+le dava un **ordine**: la §23.5 andava decisa prima della §23.3. Finché non c'è
+rete, un plugin che legge quel che l'utente seleziona non ha dove mandarlo; il
+giorno che la rete entra, ce l'ha. Le due voci non si sono mai incontrate perché
+stanno in due verbali diversi, ed è la stessa forma della §23.3 stessa — due cose
+vere separatamente che nessuno ha moltiplicato.
+
+**È stata presa per prima appena le P0 sono finite**, e la
+[0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) l'ha chiusa: quello
+che era «un ordine e non una priorità» è diventato il criterio con cui si è
+scelto, il primo turno in cui a ordinare il lavoro non era una scadenza. Ciò che
+si è trovato facendola vale per le voci di questa seduta ancora aperte: **la
+raccomandazione della voce era sbagliata**, e non per poco — diceva di guardare
+per prima l'opzione che «non inventa niente», e quell'opzione avrebbe fatto
+scomparire la scelta che la voce esiste per dare. Una voce di questa seduta
+dichiara un prezzo bene e propone un rimedio a intuito: il primo va creduto, il
+secondo va misurato.
 
 ### 23.1 Una rinomina fatta ad app chiusa scollega tutto ciò che è indicizzato per path
 
@@ -465,7 +476,7 @@ rotture che deve far diventare rosse (*campo ritipato*), e sarà rosso.
 
 ### 23.5 Il testo che l'utente seleziona viaggia sotto una capacità che nessuno può negare
 
-*contratto · **P1** — sposta un permesso, non una firma; ma va decisa **prima** della [§23.3](#233-due-bloccanti-caduti-e-la-rete-non-se-nè-accorta)*
+*contratto · **chiusa dalla [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) — `Env` si spacca in tre: l'orologio resta senza permesso perché è della macchina, quale nota è aperta diventa `fub:read-session`, il testo selezionato `fub:read-selection`. Le tre premesse della voce erano cadute tutte e tre, e la sua raccomandazione — appoggiare la selezione a `read-vault` «perché non inventa niente» — era sbagliata: avrebbe fatto scomparire la scelta che la voce esiste per dare***
 
 `Capability::Env` è documentata in `guard.rs` come *«sapere che ore sono e cosa
 guarda l'utente»*, e la sua `permission()` è `None`. La riga che spiega quel
@@ -500,7 +511,7 @@ decide una sola delle due metà:
   Un provider che dichiara di non seguire niente — come il pannello dei tag, che
   la 0007 porta a esempio — può chiamare `active_context()` quando vuole.
 
-- [ ] **Dove passa il taglio.** Le opzioni sono tre e non sono equivalenti:
+- [x] **Dove passa il taglio.** Le opzioni sono tre e non sono equivalenti:
       spaccare la famiglia in due (`Env` per l'orologio senza permesso, una
       famiglia della **sessione** con un permesso dichiarabile), lasciare la
       famiglia dov'è e mettere il solo `Selection.text` dietro `read-vault` —
@@ -509,19 +520,19 @@ decide una sola delle due metà:
       sta l'utente» da «cosa ha selezionato», cioè due chiamate invece di un
       record. La prima e la terza fanno crescere la superficie; la seconda no, e
       per questo va guardata per prima.
-- [ ] **Cosa resta senza permesso, e va detto esplicitamente.** Il `PaneId`, la
+- [x] **Cosa resta senza permesso, e va detto esplicitamente.** Il `PaneId`, la
       `PaneMode` e il `DocId` attivo non sono contenuto — ma il `DocId` è il
       **nome** di una nota, e i nomi delle note sono privati quanto il testo per
       chi tiene un diario. Va deciso se «cosa guarda l'utente» resti concesso a
       chiunque, e se sì scritto **perché**, invece di essere il residuo di una
       riga che parlava dell'orologio.
-- [ ] **Il prezzo di recintarla, che esiste.** Il pannello statistiche della 0007
+- [x] **Il prezzo di recintarla, che esiste.** Il pannello statistiche della 0007
       conta le parole della selezione: è un `ViewProvider` ufficiale, e con un
       cancello dovrà dichiarare `read-vault` per fare una cosa che non legge
       nessun documento. È il caso che rende la decisione non ovvia — un permesso
       troppo grosso per la cosa che si fa è il modo in cui i permessi smettono di
       significare qualcosa, ed è l'argomento a favore della famiglia separata.
-- [ ] **Perché non è P0, e perché ha comunque un ordine.** Non c'è una firma da
+- [x] **Perché non è P0, e perché ha comunque un ordine.** Non c'è una firma da
       spostare: `Capability` è un enum del kernel e i permessi sono stringhe del
       manifest, che la [0021](../decisions/0021-il-confine.md) ha reso una mappa
       con parametro. Ma la §23.3 aggiungerà `http_fetch`, e le due voci si
@@ -750,10 +761,15 @@ manifest.
       verificato se **qualche** provider registrato interroghi `Drafts`: se la
       risposta è nessuno, il cancello non costa niente a nessuno e la voce si
       chiude in una riga — che è il caso migliore e va guardato per primo.
-- [ ] **Perché prima della §23.3.** Identico all'ordine che la §23.5 dichiara già
+- [ ] **Perché prima della §23.3.** Identico all'ordine che la §23.5 dichiarava
       per sé: finché non c'è rete, chi legge le bozze non ha dove mandarle. Il
       giorno che `http_fetch` entra, ce l'ha — e le due voci non si sono mai
-      incontrate perché stanno in due verbali diversi.
+      incontrate perché stanno in due verbali diversi. La §23.5 è stata chiusa
+      per prima dalla
+      [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md), quindi il
+      posto in cui questa casella atterra esiste già: c'è una famiglia di
+      permessi della sessione, e la domanda da farsi è se le bozze ci
+      appartengano o vogliano il loro.
 
 ### 23.11 La base di una scrittura è facoltativa, e la passa un chiamante solo
 

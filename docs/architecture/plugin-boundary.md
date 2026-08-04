@@ -692,6 +692,16 @@ ragione per cui i tre booleani sono diventati una mappa.
   `format_of` no, perché non legge niente.
 - **Rete e filesystem esterno:** `fub:network` con l'allowlist di host,
   `fub:external-fs` con quella dei path (20.3).
+- **La sessione, in due:** `fub:read-session` (quale nota è aperta, in che
+  modalità) e `fub:read-selection` (il testo selezionato, verbatim) —
+  [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md). Sono l'unico
+  caso in cui **un metodo solo** (`active_context`) ha due cancelli, e l'unica
+  eccezione alla grana «un permesso per capacità» qui sopra: la scelta che
+  serve all'utente — *«sai che nota guardo, non sai cosa ci sto scrivendo»* —
+  cade esattamente in mezzo a una famiglia. Nessuno dei due sta sotto
+  `read-vault`, che pure governa il contenuto dei documenti: legarceli avrebbe
+  reso impossibile concedere il vault e negare la selezione, cioè avrebbe
+  tolto la scelta invece di darla.
 - **Enforcement in un solo punto:** i controlli vivono nell'implementazione di
   `HostApi`, così valgono identici per plugin nativi e WASM. **Quel punto adesso
   c'è**: è `Guard<H, P: Policy>` (`kernel/host/guard.rs`), un wrapper generico e

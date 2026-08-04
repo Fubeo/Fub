@@ -945,6 +945,31 @@ pub trait HostEnv: Send + Sync {
     /// selezionato, in che modalità. `None` = la shell non ne ha ancora
     /// pubblicato uno (nessun pannello).
     ///
+    /// # Due permessi, non uno
+    ///
+    /// È il solo metodo del contratto con **due cancelli**, e li ha perché
+    /// pubblica due cose dell'utente che si concedono separatamente
+    /// (§23.5, decisione 0095):
+    /// [`READ_SESSION`](crate::options::permission::READ_SESSION) per quale
+    /// nota è aperta e in che modalità,
+    /// [`READ_SELECTION`](crate::options::permission::READ_SELECTION) per il
+    /// testo selezionato. Senza il primo la risposta è `None`; con il primo e
+    /// senza il secondo il contesto arriva con
+    /// [`selections`](crate::session::ViewContext::selections) a `None`.
+    ///
+    /// La coppia esiste per una scelta che all'utente serve e che un cancello
+    /// solo non sa esprimere: *«questo plugin può sapere che nota sto
+    /// guardando, non cosa ci sto scrivendo»*. Nessuno dei due si appoggia a
+    /// [`READ_VAULT`](crate::options::permission::READ_VAULT), che pure governa
+    /// il contenuto dei documenti: appoggiarcisi avrebbe legato la selezione
+    /// alla cecità sul vault, cioè avrebbe tolto proprio quella scelta.
+    ///
+    /// Nessuno dei due rifiuti si può **dire**, perché questa firma non ha un
+    /// esito — è una delle sei senza `Result` — e in entrambi i casi la
+    /// risposta nulla significa già un'altra cosa («nessun pannello», «nessun
+    /// cursore»). Regge lo stesso, e per una ragione che vale solo qui: chi la
+    /// riceve ha in mano il proprio manifest, quindi sa da sé perché la riceve.
+    ///
     /// È il solo contesto di sessione che il contratto espone: una view lo
     /// **chiede** quando ne ha bisogno (un pannello backlink lo fa a ogni
     /// render), invece di riceverlo come argomento — che costringerebbe *ogni*
@@ -3416,6 +3441,13 @@ impl PluginPermissions {
             // chiave**, e una chiave che non si è dichiarata scrivibile da un
             // programma resta chiusa anche a chi ha questo permesso.
             crate::options::permission::WRITE_SETTINGS,
+            // La sessione (§23.5): entrambi, e con due clienti distinti che è
+            // ciò che li giustifica. `read-session` da solo basta all'indice
+            // della nota (`fub.outline` segna la sezione del cursore) e ai
+            // backlink; `read-selection` lo vuole chi conta le parole di ciò
+            // che è selezionato e chi ci costruisce sopra un wikilink.
+            crate::options::permission::READ_SESSION,
+            crate::options::permission::READ_SELECTION,
         ])
     }
 }

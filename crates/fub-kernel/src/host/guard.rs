@@ -25,14 +25,31 @@ use fub_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le quattordici famiglie di capacità [conta: guard-famiglie], come nomi su cui
+/// Le sedici famiglie di capacità [conta: guard-famiglie], come nomi su cui
 /// una politica risponde.
 ///
-/// Sono esattamente i quattordici trait [conta: guard-famiglie] di
-/// `fub_abi::traits`, e non è una
+/// Sono i quattordici trait di `fub_abi::traits` **più due**, e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
-/// **concede**. Le due liste devono restare la stessa lista, e il presidio è
-/// che [`Guard`] non compila se una famiglia non è coperta.
+/// **concede**. Le due liste devono coprire le stesse cose, e il presidio è
+/// che [`Guard`] non compila se un trait non è coperto.
+///
+/// # Perché sedici e non quattordici
+///
+/// Per dodici trait su quattordici la corrispondenza è uno a uno, ed era vera
+/// per tutti e quattordici fino alla
+/// [0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md).
+/// [`HostEnv`] ne porta **tre** perché è il solo trait che presta, dallo stesso
+/// metodo, una cosa della macchina e due dell'utente: l'orologio e il caso
+/// sono [`Capability::Env`], quale nota è aperta è [`Capability::Session`], il
+/// testo selezionato è [`Capability::SessionSelection`].
+///
+/// La scomposizione in sotto-trait — la strada della
+/// [0021](../../../docs/decisions/0021-il-confine.md), che è ciò che di norma
+/// rende una famiglia esattamente un trait — qui **non era disponibile**: le
+/// tre cose escono da una firma sola, e un trait in più non spacca un record in
+/// due. Spaccare il record era un'opzione, ed è quella che si è scartata; vedi
+/// il verbale. Il prezzo è che l'invariante da presidiare cambia forma: non
+/// «una famiglia, un trait», ma «nessun trait senza almeno una famiglia».
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Capability {
     /// Leggere il vault: sorgente, modello, elenco, cestino.
@@ -47,8 +64,28 @@ pub enum Capability {
     DataWrite,
     /// Interrogare l'indice.
     Query,
-    /// Sapere che ore sono e cosa guarda l'utente.
+    /// Sapere che ore sono, e tirare a sorte.
+    ///
+    /// **Non** «cosa guarda l'utente»: quella era qui, e se n'è andata con la
+    /// [0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md).
+    /// Ciò che resta è della macchina, non di chi la usa, e per questo non ha
+    /// un permesso.
     Env,
+    /// Sapere **quale nota** l'utente sta guardando, e in che modalità.
+    ///
+    /// È il contesto senza il suo contenuto: il pannello, il documento, la
+    /// modalità. Il nome di una nota non è il suo testo, ma è comunque un fatto
+    /// dell'utente — per questo ha un permesso, e per questo non sta con
+    /// l'orologio.
+    Session,
+    /// Leggere il **testo selezionato**, verbatim.
+    ///
+    /// Sta accanto a [`Capability::Session`] e non dentro, perché la leva che
+    /// serve all'utente è proprio fra le due: concedere «sai che nota guardo» e
+    /// negare «sai cosa ci sto scrivendo». Chi ha questa e non quella non
+    /// riceve niente — il testo arriva dentro il contesto, e senza contesto non
+    /// c'è dove metterlo.
+    SessionSelection,
     /// Emettere eventi, chiedere job.
     Events,
     /// Invocare i comandi del registro.
@@ -77,7 +114,7 @@ impl Capability {
     /// [`Granted::new`] e il presidio delle capacità simulate in
     /// `kernel/tests/invoke_command.rs` — e una famiglia che non ci finisse
     /// sparirebbe da entrambi restando verde.
-    pub const ALL: [Capability; 14] = [
+    pub const ALL: [Capability; 16] = [
         Capability::VaultRead,
         Capability::VaultWrite,
         Capability::VaultStructure,
@@ -85,6 +122,8 @@ impl Capability {
         Capability::DataWrite,
         Capability::Query,
         Capability::Env,
+        Capability::Session,
+        Capability::SessionSelection,
         Capability::Events,
         Capability::Commands,
         Capability::Services,
@@ -109,6 +148,16 @@ impl Capability {
             Capability::VaultRead | Capability::Query => Some(permission::READ_VAULT),
             Capability::VaultWrite | Capability::VaultStructure => Some(permission::WRITE_VAULT),
             Capability::Commands => Some(permission::RUN_COMMAND),
+            // Cosa guarda l'utente e cosa ha selezionato sono **due** permessi
+            // perché sono due domande, e la risposta a una non implica l'altra:
+            // un pannello che segna la sezione corrente vuole la prima, un
+            // contatore di parole della selezione tutte e due. Non si
+            // appoggiano a `read-vault` — che pure governa il contenuto dei
+            // documenti — perché appoggiarcisi renderebbe impossibile la sola
+            // cosa che questi due esistono per permettere: concedere il vault e
+            // negare la selezione.
+            Capability::Session => Some(permission::READ_SESSION),
+            Capability::SessionSelection => Some(permission::READ_SELECTION),
             Capability::Services => Some(permission::CALL_SERVICE),
             Capability::SettingsWrite => Some(permission::WRITE_SETTINGS),
             // Leggere la configurazione non ha un permesso, e non è una
@@ -132,7 +181,7 @@ impl Capability {
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a quattordici nomi [conta: guard-famiglie]
+/// Una politica è **piccola per costruzione**: risponde a sedici nomi [conta: guard-famiglie]
 /// e non
 /// sa niente di documenti, di blob o di comandi. È ciò che permette di comporne
 /// due senza chiedersi cosa significhi comporre venticinque metodi.
@@ -200,6 +249,10 @@ impl Policy for ReadOnly {
             | Capability::DataRead
             | Capability::Query
             | Capability::Env
+            // Leggere la sessione non è un effetto: una simulazione che non
+            // sapesse quale nota è aperta direbbe cosa farebbe **su un'altra**.
+            | Capability::Session
+            | Capability::SessionSelection
             | Capability::SettingsRead
             // Rileggere dove si era rimasti non è un effetto: una simulazione
             // che disegnasse una view senza il suo scroll mostrerebbe una cosa
@@ -239,7 +292,10 @@ pub struct Granted {
 
 /// Le famiglie concesse, come insieme.
 ///
-/// Quattordici bit in un `u16`: è la forma che rende [`Granted`] clonabile senza
+/// Sedici bit in un `u16` — cioè **tutti**, da quando le famiglie sono sedici:
+/// la prossima che nascesse vuole un `u32`, e il presidio dei discriminanti è
+/// il posto in cui ci si accorge di doverlo cambiare invece di perdere un bit
+/// in silenzio. Sedici bit: è la forma che rende [`Granted`] clonabile senza
 /// allocare, ed è anche il motivo per cui [`Capability`] è un enum piccolo e
 /// chiuso invece di una stringa — e per cui i suoi discriminanti devono restare
 /// contigui, che è ciò che presidia `i_discriminanti_coprono_ogni_famiglia`.
@@ -316,7 +372,7 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le quattordici famiglie [conta: guard-famiglie]
+/// Delega ciò che la politica concede e nega il resto. Le sedici famiglie [conta: guard-famiglie]
 /// sono implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.
@@ -347,6 +403,18 @@ impl Policy for Granted {
 /// detto», quindi negarla dà ciò che darebbe un host senza shell — non una
 /// bugia. Era l'altro fallback muto del `Guard`, ed è la differenza fra i due
 /// che ha fatto scrivere la 0094.
+///
+/// `active_context` è il terzo caso, ed è quello che alla regola della 0094 ha
+/// dovuto aggiungere una clausola. Da quando i cancelli sono due
+/// ([0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md))
+/// il rifiuto è anche **per campo**: `selections: None` a `Session` concessa e
+/// `SessionSelection` negata. Quel `None` significa già «nessun cursore», cioè
+/// **non** è la risposta vera — sarebbe la bugia che la 0094 condanna, se non
+/// fosse per una differenza che vale la pena scrivere: chi la riceve può sapere
+/// da sé perché la riceve, perché il permesso che non ha se l'è non-dichiarato
+/// lui, nel proprio manifest. *Un fallback muto è onesto anche quando la
+/// risposta nulla non è quella vera, purché chi la legge abbia già in mano il
+/// motivo* — e un manifest è l'unico posto in cui questo capita.
 pub struct Guard<H, P> {
     inner: H,
     policy: P,
@@ -592,11 +660,27 @@ impl<H: HostEnv, P: Policy> HostEnv for Guard<H, P> {
     }
 
     fn active_context(&self) -> Option<ViewContext> {
-        // Senza esito, e qui `None` è già una risposta del contratto: «la shell
-        // non ne ha ancora pubblicato uno».
-        self.allows(Capability::Env)
+        // **Il solo metodo del `Guard` con due cancelli**, e li ha perché
+        // pubblica due cose dell'utente che si concedono separatamente
+        // (decisione 0095). Senza `Session` non c'è contesto; con `Session` e
+        // senza `SessionSelection` c'è il contesto e non il testo.
+        //
+        // Senza esito, quindi il rifiuto è muto in entrambi i casi, e in
+        // entrambi la risposta nulla è già una frase del dominio: `None` = «la
+        // shell non ne ha ancora pubblicato uno», `selections: None` = «nessun
+        // cursore» (modalità di lettura, o nessun documento). Non è la risposta
+        // *vera* — questo è il punto in cui si va oltre il criterio della 0094 —
+        // ma chi la riceve sa da sé perché la riceve: **è nel proprio
+        // manifest**, e un permesso che non si è dichiarato non è una sorpresa
+        // che arriva a tempo d'esecuzione.
+        let mut context = self
+            .allows(Capability::Session)
             .then(|| self.inner.active_context())
-            .flatten()
+            .flatten()?;
+        if !self.allows(Capability::SessionSelection) {
+            context.selections = None;
+        }
+        Some(context)
     }
 }
 
@@ -701,6 +785,92 @@ mod tests {
         }
     }
 
+    /// Un host che un contesto ce l'ha, con dentro una nota e del testo
+    /// selezionato: è il solo modo di provare che il cancello della selezione
+    /// taglia **un campo** e non la risposta intera.
+    struct ConContesto;
+
+    impl HostEnv for ConContesto {
+        fn now_unix_millis(&self) -> u64 {
+            0
+        }
+
+        fn user_locale(&self) -> Locale {
+            Locale::default()
+        }
+
+        fn random_bytes(&self, n: u32) -> Result<Vec<u8>, PluginError> {
+            Ok(vec![7; n as usize])
+        }
+
+        fn active_context(&self) -> Option<ViewContext> {
+            Some(
+                ViewContext::new("pane-1")
+                    .with_doc(Some(DocId::new("Diario/2026-08-04.md")))
+                    .with_selections(Some(fub_abi::session::SelectionSet::anchored(
+                        fub_abi::model::Span::new(0, 7),
+                        "segreto",
+                    ))),
+            )
+        }
+    }
+
+    /// **La leva che la 0095 esiste per dare**: il vault concesso, la nota
+    /// concessa, il testo no.
+    ///
+    /// È il caso del diario — «sai che nota guardo, non sai cosa ci sto
+    /// scrivendo» — e non sarebbe stato esprimibile appoggiando la selezione a
+    /// `read-vault`, che è la strada che la §23.5 raccomandava per prima:
+    /// negarla lì avrebbe reso il plugin cieco sul vault, cioè avrebbe tolto
+    /// all'utente proprio la scelta fine.
+    #[test]
+    fn denying_the_selection_leaves_the_note_visible() {
+        let guard = Guard::new(ConContesto, Nega(Capability::SessionSelection));
+        let context = guard
+            .active_context()
+            .expect("negare la selezione non nega il contesto");
+        assert_eq!(
+            context.doc,
+            Some(DocId::new("Diario/2026-08-04.md")),
+            "quale nota guardo resta concesso: è l'altro permesso"
+        );
+        assert!(
+            context.selections.is_none(),
+            "il testo selezionato non deve attraversare: {:?}",
+            context.selections
+        );
+    }
+
+    /// L'altro cancello, quello grosso: senza `Session` non c'è contesto, e con
+    /// lui se ne va anche il testo — che è dentro, e senza un contesto non ha
+    /// dove stare.
+    #[test]
+    fn denying_the_session_takes_the_selection_with_it() {
+        let guard = Guard::new(ConContesto, Nega(Capability::Session));
+        assert!(
+            guard.active_context().is_none(),
+            "senza `Session` la risposta è quella di un host senza shell"
+        );
+    }
+
+    /// Il cancello dell'orologio non è più quello della sessione, ed è **tutta
+    /// la voce**: prima erano la stessa famiglia, quindi negare il testo
+    /// selezionato voleva dire negare che ore sono.
+    #[test]
+    fn the_clock_and_the_session_are_no_longer_the_same_gate() {
+        let senza_sessione = Guard::new(ConContesto, Nega(Capability::Session));
+        assert_eq!(
+            senza_sessione.now_unix_millis(),
+            0,
+            "l'orologio è della macchina: negare la sessione non lo tocca"
+        );
+        let senza_orologio = Guard::new(ConContesto, Nega(Capability::Env));
+        assert!(
+            senza_orologio.active_context().is_some(),
+            "e viceversa: negare l'orologio non nega quale nota è aperta"
+        );
+    }
+
     /// Il caso negato **dice di essere negato**, e non rende il vuoto.
     ///
     /// Era l'unico fallback muto del `Guard` che mentiva: un `Vec` vuoto arriva
@@ -741,7 +911,7 @@ mod tests {
     /// negata a tutti, che è il modo giusto di sbagliare, ma va visto»: la prima
     /// metà è vera per costruzione, la seconda non lo era da nessuna parte.
     ///
-    /// La lunghezza dichiarata (`[Capability; 14]`) obbliga a **toccare**
+    /// La lunghezza dichiarata (`[Capability; 16]`) obbliga a **toccare**
     /// l'elenco quando l'enum cresce, ma non a metterci dentro la variante
     /// giusta: chi ha fretta soddisfa il compilatore duplicando una riga già
     /// presente, e la famiglia nuova non viene iterata mai.
@@ -764,6 +934,13 @@ mod tests {
              `ALL` non viene concesso da `Granted::new` e non viene preteso dal \
              presidio delle capacità simulate: sparisce da tutti e due restando \
              verde."
+        );
+        assert!(
+            Capability::ALL.len() <= u16::BITS as usize,
+            "`CapabilitySet` tiene le famiglie in un `u16`, e con la 0095 i bit \
+             sono finiti esattamente: la diciassettesima vuole un `u32`, e \
+             senza questa riga se ne accorgerebbe `1 << cap` andando in \
+             overflow — in debug con un panic, in release in silenzio."
         );
     }
 }

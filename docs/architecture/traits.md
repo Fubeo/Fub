@@ -206,6 +206,16 @@ politica che le nega può solo dare la risposta nulla. Regola che ne segue: una
 capacità nuova porti un esito **anche quando "non può fallire"** — non potendo
 fallire, non può nemmeno essere negata.
 
+Per `active_context` la risposta nulla è dalla
+[0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) anche **parziale**
+(`selections: None` a sessione concessa e selezione negata), e in nessuno dei
+due casi è la risposta vera — `None` significa già «nessun pannello», e
+`selections: None` già «nessun cursore». Regge lo stesso, con la clausola che
+quella decisione ha aggiunto al criterio della 0094: *un fallback muto è onesto
+anche quando la risposta nulla non è quella vera, purché chi la legge abbia già
+in mano il motivo* — e il motivo, qui, è un permesso che il plugin non si è
+dichiarato da sé.
+
 Diceva **sei** e ne nominava sei, e ne mancavano due: `user_locale` e
 `random_bytes`, nate con la [0039](../decisions/0039-il-locale-e-il-caso.md) dopo
 che il conto era stato fatto, non ci si erano aggiunte. La regola era scritta e
@@ -280,8 +290,12 @@ un buco nel contratto si scopre prima del freeze, invece che a M5:
   dispatch. `&self`: una query non muta, e così una view la serve sotto prestito
   condiviso.
 - `active_context` — pannello, documento, selezione, modalità (`ViewContext`, in
-  `fub_abi::session`). La view lo **chiede**; a scriverlo è solo la shell
-  (`Workspace::set_active_context`). Scartati l'evento (`render_view(&self)` è
+  `fub_abi::session`). **Due permessi, non uno**
+  ([0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md)):
+  `fub:read-session` per quale nota è aperta, `fub:read-selection` per il testo
+  selezionato — è il solo metodo del contratto con due cancelli, e li ha perché
+  la scelta che serve all'utente sta in mezzo ai due. La view lo **chiede**; a
+  scriverlo è solo la shell (`Workspace::set_active_context`). Scartati l'evento (`render_view(&self)` è
   immutabile) e l'argomento di `render_view` (obbligo per ogni view a portarsi un
   contesto che non usa). Era `active_document() -> Option<DocId>`, che non regge
   schede né split. Le selezioni sono **N** (multi-cursore) con la **primaria**

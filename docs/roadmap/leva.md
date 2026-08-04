@@ -431,6 +431,40 @@ sarà. È una specie diversa di obsolescenza e si trova solo nello stesso modo:
 rileggendo la voce contro i verbali venuti dopo di lei. Una voce è sempre più
 vecchia del verbale che la contraddice, e non ha modo di saperlo da sé.
 
+E la **settima** è la §23.5, con la
+[0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md), ed è la prima
+volta che a scegliere è stato un **ordine scritto dentro una voce**. Le sei prima
+erano state prese perché la leva le metteva in cima, o perché una voce già fatta
+diceva quale pezzo prendere; questa perché portava una frase — *va decisa prima
+della §23.3* — che nessuna tabella di priorità sa leggere, essendo una relazione
+fra due righe e non una proprietà di una. Le P0 erano finite col turno prima, e
+in un giro in cui la scadenza non ordina più niente **l'unica cosa che ordinava
+era quella frase**. Vale come criterio: una voce che dichiara di dover venire
+prima di un'altra si è già data una priorità, e sta a chi ordina il lavoro
+accorgersi che l'ha fatto — perché è scritta nel posto in cui nessuno la cerca,
+cioè dentro la voce e non nella colonna.
+
+E c'è una seconda cosa, che riguarda questa pagina più della precedente. La §23.5
+è la voce che ha **fondato la quinta specie** — quella che compone invece di
+moltiplicare — e chiuderla ha detto che la composizione era vera e la
+descrizione no. Presa da sola non era «innocua perché chi legge la selezione non
+ha dove mandarla»: era innocua perché chi la legge oggi è un plugin nativo, che
+gira in-process e non ha bisogno di leggerla dal contratto per averla. La rete non
+crea il difetto, lo rende **imponibile a qualcuno che prima non lo era** — un
+componente sotto sandbox. È una correzione piccola e cambia cosa cercare: le voci
+della quinta specie non si trovano chiedendo *cosa diventa possibile*, ma *a chi
+diventa possibile*.
+
+E la **rimisurazione** è arrivata per la quinta volta di fila, con il raccolto
+più grosso: **tre premesse su tre** cadute, e per la prima volta una che rendeva
+la voce **peggiore** invece che più piccola. Le quattro volte prima avevano
+trovato cose che si erano svuotate — un bloccante caduto, una richiesta decisa di
+no, un banco che vedeva. Qui la [0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md)
+aveva moltiplicato per N il flusso che la voce descriveva al singolare, tre
+commit prima e senza che nessuna delle due se ne accorgesse. **Una voce ferma non
+diventa solo obsoleta: può diventare più urgente stando ferma**, e il turno che
+la rilegge è l'unico posto in cui questo si vede.
+
 ## La terza verifica, e le tre voci che ne escono
 
 La [seduta 23](23-cosa-costano-le-decisioni-chiuse.md) è la prima che non ha
