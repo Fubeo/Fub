@@ -185,5 +185,18 @@ perché non traducono niente: sono **nate** con la numerazione per sedute.
   dire quanto è largo il buco, e letto come se dicesse quanto è grande il lavoro
   ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)).
 
+- Le **§23.1–§23.3** sono la **terza verifica**, e portano una provenienza che
+  nessuna delle altre ha: il loro oggetto non era il codice né un'affermazione
+  arrivata da fuori, ma **i verbali**. Un giro guarda il sistema; queste tre
+  guardano cosa il sistema costa a chi lo usa e a chi ci scriverà sopra
+  ([seduta 23](23-cosa-costano-le-decisioni-chiuse.md)).
+
+- Le **§23.4–§23.8** sono la **quarta**, e hanno la stessa provenienza con un
+  metodo diverso: non i verbali riletti in fila, ma i **primi dieci** presi uno
+  per uno e confrontati con i sorgenti di oggi. Due delle cinque non nascono da
+  una premessa invecchiata ma da un criterio che il verbale enuncia e non applica
+  a sé stesso — ed è la ragione per cui vale la pena rileggere anche i verbali
+  che nessun fatto nuovo ha toccato.
+
 Cercarle in un commit di prima della riorganizzazione non ha senso: prima non
 esistevano.

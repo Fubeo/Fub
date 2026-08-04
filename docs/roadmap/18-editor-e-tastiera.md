@@ -376,6 +376,23 @@ decidere per loro.
       mano. Serve un canale che porti alla shell le spec registrate, e la parte di
       `livepreview.ts` che oggi è un elenco di regex diventa un interprete di
       trigger.
+- [ ] **Finché le due grammatiche restano due, la loro divergenza non è rossa da
+      nessuna parte.** È la parte di questa voce che si paga **adesso** e non
+      quando la si chiude, ed è la ragione per cui la
+      [seduta 23](23-cosa-costano-le-decisioni-chiuse.md) l'ha incontrata
+      guardando i prezzi: il difetto che ne esce non è un crash — è che *ciò che
+      si vede mentre si scrive* e *ciò che viene reso e indicizzato* dicono due
+      cose diverse sullo stesso testo, sul caso che nessuno prova, e in un
+      editor quel caso lo trova l'utente tutti i giorni. Il presidio non aspetta
+      la dichiarazione condivisa e non costa quanto lei: un **corpus** di
+      frammenti su cui le due passate devono concordare — stessi confini, stessa
+      specie — e che diventa rosso quando una delle due cambia idea da sola. È
+      la mossa della [0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)
+      applicata all'altro asse: là il corpus teneva onesto il round-trip fra il
+      modello e i byte, qui tiene onesti due parser sullo stesso testo. E ha la
+      proprietà che rende un presidio utile prima della cura: quando la
+      dichiarazione condivisa arriverà, il corpus è già lo strumento con cui si
+      prova che il generato fa ciò che le regex facevano.
 - [ ] **Il secondo livello della ~~§18.1~~ è arrivato qui**, ed è la stessa cosa
       vista dall'editor: «le decorazioni semantiche vengono dal modello» diventa
       scrivibile solo quando la dichiarazione è condivisa, e a buffer pulito. Con

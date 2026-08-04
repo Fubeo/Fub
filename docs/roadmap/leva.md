@@ -430,3 +430,135 @@ nominava un canale verso la webview che la
 sarà. È una specie diversa di obsolescenza e si trova solo nello stesso modo:
 rileggendo la voce contro i verbali venuti dopo di lei. Una voce è sempre più
 vecchia del verbale che la contraddice, e non ha modo di saperlo da sé.
+
+## La terza verifica, e le tre voci che ne escono
+
+La [seduta 23](23-cosa-costano-le-decisioni-chiuse.md) è la prima che non ha
+guardato il repo né un'affermazione arrivata da fuori: ha guardato **i verbali**,
+con la domanda che questa pagina fa di mestiere applicata a un soggetto nuovo —
+non *quale voce conta di più per il sistema* ma **cosa una decisione presa bene
+costa a chi usa l'app**. Le tre voci che ne escono si ordinano fra loro col
+criterio di sempre, e cadono in tre scaglioni diversi.
+
+**§23.3 (la rete)** sta nel primo, quello del *rende inesprimibile*, e ci sta
+senza sfumature: non c'è oggi nessun modo di scrivere un plugin che parli con
+qualcosa fuori dal disco. Sotto ci stanno 18 (sync), 14.2 (clipper), 22 (AI e
+RAG), 15.1 (citazioni), 13.4 (trascrizione) — cioè la famiglia più grande fra
+quelle che non hanno **nessuna** strada. Ma la ragione per cui sta in questa
+pagina non è la dimensione: è che l'assenza **non si vede**. Un plugin di sync
+non si scrive fino a metà e poi si blocca contro una firma mancante; non lo prova
+nessuno, e il buco non lascia traccia — che è il modo in cui una capacità può
+mancare senza che nessuna riga di codice lo dica. E il no che la teneva fuori era
+scritto nella forma migliore possibile, con **due bloccanti nominati**: sono
+caduti tutti e due, in due sedute che non sapevano di toccarli.
+
+**§23.2 (l'invariante dei terzi)** sta nel secondo, quello dei
+**moltiplicatori**, e in una posizione che nessun altro membro di quella famiglia
+ha avuto: non moltiplica il lavoro, moltiplica ciò che si dà per scontato. Il
+§7.1 e il §6.2 facevano pagare ogni voce successiva; questa fa **credere** a ogni
+voce successiva che la superficie di scrittura sia raggiungibile da un terzo,
+perché è ciò che l'invariante del progetto dice. Sei decisioni l'hanno resa falsa
+una alla volta, ognuna per una ragione buona e sua, e nessuna delle sei aveva il
+compito di accorgersene. È la [0054](../decisions/0054-il-banco-del-lato-provider.md)
+letta al rovescio: là una garanzia dichiarata non era mai esistita, qui una
+garanzia esiste davvero e vale su tutto tranne dove serve di più.
+
+**§23.1 (la rinomina ad app chiusa)** non sta in nessuno dei due, ed è il primo
+caso in cui questa pagina deve aggiungere un criterio invece di applicarne uno:
+non rende inesprimibile niente e non moltiplica nessuna voce futura — **il conto
+lo paga l'utente, una volta, in silenzio, e non se lo può accorgere**. Chi sposta
+le proprie note con un altro strumento, che è la libertà che questo progetto
+promette per iscritto, perde ciò che Fub aveva costruito per quelle note. È la
+famiglia della [0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) — *una
+promessa che vale a metà e in silenzio* — con la differenza che decide dove va
+messa: là la promessa era falsa dentro l'app e la si scopriva usandola, qui è
+falsa **fuori** dall'app, dove nessun test guarda e nessun evento arriva. Il
+costo cresce con l'attesa per una ragione sua, che non è quella del §17.1: ogni
+derivato per-path nuovo eredita il difetto, e da quando la
+[0044](../decisions/0044-lo-stato-per-documento.md) lo ha dichiarato per la prima
+volta ne sono nati due.
+
+E una nota di metodo che vale più delle tre voci. Questa pagina ordina ciò che
+**resta da fare**; la seduta 23 dice che c'è un secondo posto in cui la leva si
+accumula senza che nessuno la misuri, ed è il *«cosa resta scoperto»* in fondo a
+ogni verbale. Lì un prezzo si scrive una volta, in una riga, dentro un documento
+che per disciplina non si riscrive più — e nessuno lo somma con gli altri. Le tre
+voci di quella seduta erano tutte scritte, ognuna nel suo verbale, da mesi.
+
+**§23.4 (una selezione sola) sale sopra tutte, e per il criterio in testa a
+questa pagina.** Non è la voce più importante di questa seduta — la §23.5 tocca
+la privacy e la §23.1 tocca ciò che l'utente perde — ma è l'unica che rende una
+capacità **inesprimibile per sempre invece che oggi**. La differenza è tutta nel
+verso in cui scade: ogni altra voce di questa pagina descrive qualcosa che non si
+può fare *finché non la si fa*, e il giorno che la si fa il debito si azzera. Il
+tipo di un campo di un record pubblicato, no: dopo M4 il multi-cursore non è più
+una voce di roadmap, è una **major** — cioè la stessa cosa che il presidio della
+[0002](../decisions/0002-additivita-del-contratto.md) esiste per impedire, ed è
+significativo che a scriverla sia stato lo stesso verbale che ne enuncia il
+criterio meglio di chiunque. È il caso più puro della quarta specie di leva —
+*ciò che è già pubblicato* — e l'unico in cui costa un'ora oggi e una versione
+dopo.
+
+**§23.5 (il testo selezionato senza permesso) è di una quinta specie, che questa
+pagina non aveva.** Non rende inesprimibile e non moltiplica: **compone**. Presa
+da sola è innocua per una ragione che non sta scritta in nessuno dei due verbali
+che la creano — chi legge la selezione non ha dove mandarla — e quella ragione è
+un'altra voce, la §23.3, che questa stessa roadmap si prepara a chiudere. Due
+decisioni giuste, in due sedute che non si sono mai incontrate, il cui prodotto è
+il difetto. Vale come criterio e non come voce: **una leva può stare nel prodotto
+di due righe e in nessuna delle due**, e l'unico modo di vederla è leggerle
+insieme — che è precisamente ciò che nessuna delle due sedute aveva motivo di
+fare.
+
+## La quinta specie non era un caso singolo
+
+Il terzo giro della stessa verifica — tutti e novanta i verbali, con una lente
+dichiarata: *qualità, libertà, privacy* — ha portato otto voci, e la cosa che
+questa pagina deve registrare non è il numero. È che **tre delle otto hanno la
+forma della §23.5**, cioè quella che due paragrafi fa era «una quinta specie che
+questa pagina non aveva» e un caso solo. Tre su otto in un giro non è una specie
+nuova: è una **famiglia**, e va cercata apposta invece che incontrata.
+
+- **§23.10 (le bozze leggibili da chiunque legga il vault)** compone con la
+  §23.3, e lo fa esattamente come la §23.5 — al punto che le due voci vanno decise
+  insieme o si decidono due volte. La [0088](../decisions/0088-cio-che-non-e-ancora-successo.md)
+  nega la scrittura *per sempre* perché quel testo è il dato più privato del vault,
+  e concede la lettura sul canale di tutti con un argomento — *leggere non è
+  cambiare* — che protegge l'integrità mentre la minaccia è la riservatezza. Ogni
+  metà è difendibile; il prodotto è che il permesso di leggere una nota salvata è
+  anche il permesso di leggere ciò che l'utente sta scrivendo adesso.
+- **§23.13 (un vault che rimappa la tastiera)** è la coppia più netta, perché le
+  due metà distano pochissimo: la [0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)
+  ha smontato l'argomento di rischio sulle impostazioni del vault — e su tema e
+  lingua aveva ragione — e la [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md)
+  ha messo in quel posto i **tasti**, senza riesaminare l'argomento smontato ora
+  che l'oggetto era cambiato. Nessuno dei due verbali sbaglia. La fiducia che
+  aprire un vault altrui richiede è cresciuta fra l'uno e l'altro, e non l'ha
+  dichiarato nessuno.
+- **§23.11 (la base facoltativa)** compone con la
+  [0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md): la guardia contro
+  la sovrascrittura è opt-in **proprio dove** il rilevamento delle modifiche
+  esterne non c'è. È anche l'unica delle tre che sta contemporaneamente nella
+  quarta specie, *ciò che è già pubblicato*, e per questo è P0 mentre le altre due
+  no.
+
+**Cosa cambia per chi usa questa pagina.** Le prime quattro specie si trovano
+guardando una voce e chiedendosi cosa impedisce. La quinta non si trova
+guardando: si trova **incrociando**, e il costo è quadratico nel numero di
+verbali — che è la ragione per cui i primi due giri non ne avevano trovata
+nessuna leggendo in fila, e il terzo ne ha trovate tre leggendo tutto insieme. Il
+criterio pratico che ne esce è più stretto e utilizzabile: **quando un verbale
+smonta un argomento di rischio, quell'argomento va riletto ogni volta che
+qualcuno mette una cosa nuova nel posto che quel verbale ha aperto.** La 0076 ha
+aperto un posto; sei verbali dopo ci sono finiti dentro i tasti.
+
+E una voce della terza specie, quella che la §23.1 ha inaugurato — *il conto lo
+paga l'utente, una volta, in silenzio*: **§23.9 (il registro non si spegne)**. Un
+file dentro il vault, in chiaro, non spegnibile e senza un comando che lo
+cancelli, che per le modifiche chirurgiche porta i byte sostituiti e li tiene
+**dopo** che la nota da cui vengono è stata cancellata — finché non li spinge
+fuori il tetto dei diecimila record, che è una scadenza legata a quanto si
+scrive, non a cosa si vuole far sparire. Sta qui e non fra le
+prime due specie per la stessa ragione della §23.1: non rende inesprimibile
+niente e non moltiplica nulla: semplicemente, chi cancella qualcosa credendo di
+averla fatta sparire si sbaglia, e non ha modo di accorgersene.
