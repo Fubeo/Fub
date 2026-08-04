@@ -340,13 +340,20 @@ La stringa con cui un manifest chiede una capacità: `fub:read-vault`,
 `fub:write-vault`, `fub:network`, `fub:clipboard`, `fub:run-command`… È
 il lato dichiarativo di ciò che la *famiglia* è dal lato dei tipi.
 
-**Uno solo ha un parametro che cambia cosa si può fare**, ed è `fub:network`
+Sono **tredici** [conta: permessi-dichiarabili], e l'elenco è chiuso: sta in
+`permission::ALL`, e ciò che non è lì dentro un manifest lo può scrivere ma
+nessun cancello lo consuma.
+
+**Quattro portano un parametro, e uno solo lo fa leggere a qualcuno.** Quello è
+`fub:network`
 ([0097](decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)): il
 valore della chiave è una allowlist di host, e il `Guard` la **legge**. Gli
-altri parametri dichiarabili — i prefissi di path di `read-vault` — sono scritti
-nei manifest e non li guarda nessuno (la casella del
-[§7.1](roadmap/07-il-confine.md#la-casella-rimasta)), quindi per tutti gli altri
-permessi vale ancora che *presente = acceso e basta*. È anche la ragione per cui
+altri tre — i prefissi di path di `read-vault`, `write-vault` ed `external-fs` —
+sono scritti nei manifest e non li guarda nessuno (la casella del
+[§7.1](roadmap/07-il-confine.md#la-casella-rimasta)), quindi per loro vale ancora
+che *presente = acceso e basta*, ed è la ragione per cui il pannello dei permessi
+mostra il parametro **solo** della rete: mostrare gli altri sarebbe scrivere una
+promessa che l'app non mantiene. È anche la ragione per cui
 `fub:network` **senza** elenco significa *qualunque host* invece di *nessuno*:
 ribaltarlo avrebbe reso questa l'unica chiave la cui assenza di parametro
 significa il contrario che altrove, e ciò che cambia deve restare nella frase che
@@ -364,6 +371,15 @@ stessa cosa a `query_index`, con una differenza che vale saperla: quei due si
 sta **al posto** di `fub:read-vault` sulla variante `Drafts`. Sommarli avrebbe
 reso indicibile la frase di chi ha bisogno solo di quelle: un pannello che
 recupera ciò che non è stato salvato dopo un crash.
+
+**E si negano uno per uno**
+([0098](decisions/0098-un-permesso-si-vede-e-si-nega.md)). Ciò che un manifest
+dichiara è concesso finché qualcuno non dice di no, e il «no» è una chiave
+d'impostazione che il kernel fabbrica per ogni coppia componente-permesso —
+`com.acme:permissions.network` — allo stesso modo in cui fabbrica quella di una
+scorciatoia. Vale **subito** e sopravvive allo spegnimento del componente; la
+frase che si legge negandolo la scrive la shell e non il manifest, perché chi
+chiede un permesso non deve poter scrivere la frase con cui glielo si concede.
 
 ### provider
 `FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1738`](../crates/fub-abi/src/traits.rs) · —

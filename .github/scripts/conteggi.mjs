@@ -128,6 +128,21 @@ export const CONTEGGI = [
       "ls crates/fub-features/src/*.rs | grep -vE '/(lib|inventario)\\.rs$' | wc -l",
   },
   {
+    nome: "permessi-dichiarabili",
+    ragione:
+      "I permessi che un manifest può dichiarare, cioè quante righe può avere al " +
+      "massimo l'elenco che l'utente legge decidendo di cosa fidarsi (§23.17). " +
+      "Cresce quando nasce una capacità che l'utente deve poter negare, ed è un " +
+      "numero che sta in **tre** posti — il contratto, il catalogo della shell e " +
+      "la prosa — di cui i primi due si presidiano a vicenda " +
+      "(`i_permessi_sono_gli_stessi_di_qua_e_di_la`). Questo conto è il terzo " +
+      "lato, e serve perché la frase «tredici permessi» è ciò che qualcuno legge " +
+      "invece di andare a contare.",
+    comando:
+      "sed -n '/pub const ALL: \\[&str; /,/];/p' crates/fub-abi/src/options.rs" +
+      " | grep -cE '^        [A-Z_]+,'",
+  },
+  {
     nome: "verbali",
     ragione:
       "I verbali delle decisioni chiuse. È il conteggio che `todo.md` scriveva " +

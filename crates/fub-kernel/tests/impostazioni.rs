@@ -196,16 +196,66 @@ fn il_canale_dati_risponde_con_schema_valore_e_provenienza() {
     else {
         panic!("risposta fuori tema");
     };
+    // Le chiavi **dichiarate**, cioè quelle che i due manifest portano. Le
+    // altre le fabbrica il kernel: una per permesso concesso (§23.17), e sono
+    // le sole chiavi di questo store che un manifest non nomina.
+    let dichiarate: Vec<&str> = tutte
+        .iter()
+        .map(|e| e.spec.key.as_str())
+        .filter(|k| fub_abi::settings::permission_of_key(k).is_none())
+        .collect();
     assert_eq!(
-        tutte
-            .iter()
-            .map(|e| e.spec.key.as_str())
-            .collect::<Vec<_>>(),
+        dichiarate,
         vec!["editor.font-size", "versioning.enabled"],
         "in ordine di chiave"
     );
-    assert_eq!(tutte[1].source, SettingSource::Default);
-    assert_eq!(tutte[1].spec.group, "Vault", "lo schema arriva intero");
+    let versioning = tutte
+        .iter()
+        .find(|e| e.spec.key == "versioning.enabled")
+        .expect("la chiave dichiarata c'è");
+    assert_eq!(versioning.source, SettingSource::Default);
+    assert_eq!(versioning.spec.group, "Vault", "lo schema arriva intero");
+
+    // E i permessi di una feature ufficiale ci sono tutti e sette, uno per
+    // riga, **accesi**: ciò che il manifest dichiara è concesso finché qualcuno
+    // non dice di no.
+    let suoi: Vec<&str> = tutte
+        .iter()
+        .filter_map(|e| fub_abi::settings::permission_of_key(&e.spec.key))
+        .filter(|(plugin, _)| *plugin == "fub.editor")
+        .map(|(_, permesso)| permesso)
+        .map(|p| {
+            fub_abi::options::permission::ALL
+                .into_iter()
+                .find(|k| *k == p)
+                .expect("un permesso che l'host conosce")
+        })
+        .collect();
+    assert_eq!(
+        suoi,
+        vec![
+            "fub:read-vault",
+            "fub:write-vault",
+            "fub:run-command",
+            "fub:call-service",
+            "fub:write-settings",
+            "fub:read-session",
+            "fub:read-selection",
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>(),
+        "una riga per permesso concesso, in ordine di chiave"
+    );
+    assert!(
+        tutte
+            .iter()
+            .filter(|e| fub_abi::settings::permission_of_key(&e.spec.key).is_some())
+            .all(|e| e.value == fub_abi::settings::SettingValue::Toggle(true)
+                && !e.spec.program_writable),
+        "concessi di default, e non riscrivibili da un programma"
+    );
 
     // Con un id, solo le sue: è ciò che serve al pannello di **un** plugin, e
     // ciò che permette di non filtrare per prefisso — le chiavi del core un
@@ -218,8 +268,16 @@ fn il_canale_dati_risponde_con_schema_valore_e_provenienza() {
     else {
         panic!("risposta fuori tema");
     };
-    assert_eq!(sue.len(), 1);
-    assert_eq!(sue[0].spec.key, "editor.font-size");
+    // Otto: quella che dichiara, più i sette permessi che il kernel le
+    // fabbrica. Che le une e gli altri escano dalla **stessa** domanda è ciò
+    // che permette al pannello di disegnarli con lo stesso codice.
+    assert_eq!(sue.len(), 8);
+    assert_eq!(
+        sue.iter()
+            .map(|e| e.spec.key.as_str())
+            .find(|k| fub_abi::settings::permission_of_key(k).is_none()),
+        Some("editor.font-size")
+    );
 
     // E dopo una scrittura la **provenienza** cambia insieme al valore: è ciò
     // da cui il pannello decide se mostrare «azzera».

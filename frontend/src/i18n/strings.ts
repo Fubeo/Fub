@@ -217,6 +217,60 @@ const IT = {
   "settings.read_failed": "Non riesco a leggere: {reason}",
   "settings.components_hint":
     "Un componente spento si smonta subito e non viene più montato all'apertura del vault: non registra niente, e le sue impostazioni non compaiono.",
+
+  // --- i permessi, come li legge chi deve accettarli (§23.17) ------------
+  //
+  // Queste frasi le scrive la SHELL e non chi chiede il permesso, ed è la riga
+  // di sicurezza della voce: se venissero dal manifest — o dal catalogo di
+  // stringhe del componente, che è dove finirebbe un `Text` di una
+  // `SettingSpec` — un componente potrebbe presentare `fub:read-drafts` come
+  // «migliora i suggerimenti». Sono l'unico posto dell'app in cui il testo che
+  // protegge l'utente non deve poterlo scrivere la parte da cui lo protegge.
+  //
+  // Dicono ciò che il permesso CONSENTE, al presente e alla seconda persona:
+  // non «accesso al vault» ma «può leggere le tue note». Un permesso descritto
+  // col nome della sua capacità è un permesso che si concede senza sapere cosa
+  // si è concesso.
+  "settings.permissions": "Permessi",
+  "settings.permissions.hint":
+    "Cosa questo componente ha dichiarato di voler fare. Toglierne uno ha effetto subito e resta anche se lo spegni e lo riaccendi; il componente potrebbe smettere di funzionare, ed è la sua parte del patto: chiedere solo ciò che gli serve.",
+  "settings.permissions.none": "Non chiede nessun permesso.",
+  "settings.permissions.off_hint": "Accendi il componente per vedere i suoi permessi in dettaglio.",
+  "settings.permission.grant": "Concedi «{cosa}»",
+  "settings.permission.denied": "Negato da te",
+  "settings.permission_not_changed": "Permesso non cambiato: {reason}",
+  "permission.read-vault": "Può leggere tutte le tue note e i file che tieni nel vault.",
+  "permission.write-vault":
+    "Può cambiare le tue note: scriverle, crearne di nuove, rinominarle e cestinarle.",
+  "permission.network": "Può connettersi a internet e mandare fuori ciò che legge.",
+  "permission.clipboard": "Può leggere e scrivere gli appunti di sistema.",
+  "permission.camera": "Può usare la fotocamera.",
+  "permission.microphone": "Può usare il microfono.",
+  "permission.external-fs": "Può leggere e scrivere file fuori dal vault.",
+  "permission.run-command":
+    "Può eseguire i comandi di Fub, compresi quelli che cambiano le tue note.",
+  "permission.call-service": "Può chiamare i servizi che gli altri componenti offrono.",
+  "permission.write-settings":
+    "Può cambiare le impostazioni che si sono dichiarate scrivibili da un programma.",
+  "permission.read-session": "Può sapere quale nota stai guardando, e in che modalità.",
+  "permission.read-selection": "Può leggere il testo che selezioni, mentre lo selezioni.",
+  "permission.read-drafts": "Può leggere ciò che stai scrivendo e non hai ancora salvato.",
+  "permission.unknown":
+    "Questa versione di Fub non conosce questo permesso: non concede niente, e non c'è niente da negare.",
+  // La differenza fra le due è la differenza fra un componente che parla con un
+  // servizio e uno che può mandare le tue note ovunque. La 0097 ha lasciato
+  // quella differenza fuori dal cancello apposta, delegandola «alla frase che
+  // l'utente legge accettando»: è questa.
+  "permission.network.anywhere": "verso qualunque indirizzo",
+  "permission.network.only": "solo verso: {hosts}",
+  // Di chi ci si sta fidando, che è l'altra metà della domanda: «può leggere le
+  // tue note» non vuol dire la stessa cosa detto di una feature di Fub e di un
+  // componente arrivato da fuori.
+  "trust.core": "Parte di Fub",
+  "trust.verified": "Verificato",
+  "trust.community": "Della comunità",
+  "trust.development": "In sviluppo",
+  "trust.revoked": "Revocato: non gira",
   // Dove vive il valore di una riga, che è l'unica cosa che l'utente non può
   // dedurre guardandola. Tre chiavi e non una frase composta a pezzi: «vale
   // per questa macchina» e «vale per questo vault» sono la stessa frase solo
@@ -519,6 +573,38 @@ const EN: Record<Chiave, string> = {
   "settings.read_failed": "I cannot read: {reason}",
   "settings.components_hint":
     "A component that is off unmounts at once and is not mounted again when the vault opens: it registers nothing, and its settings do not show up.",
+  "settings.permissions": "Permissions",
+  "settings.permissions.hint":
+    "What this component has declared it wants to do. Taking one away has effect at once and survives switching the component off and on again; the component may stop working, and that is its side of the deal: to ask only for what it needs.",
+  "settings.permissions.none": "It asks for no permission.",
+  "settings.permissions.off_hint": "Switch the component on to see its permissions in detail.",
+  "settings.permission.grant": "Grant “{cosa}”",
+  "settings.permission.denied": "Denied by you",
+  "settings.permission_not_changed": "Permission not changed: {reason}",
+  "permission.read-vault": "It can read all your notes and the files you keep in the vault.",
+  "permission.write-vault":
+    "It can change your notes: write them, create new ones, rename them and move them to the trash.",
+  "permission.network": "It can connect to the internet and send out what it reads.",
+  "permission.clipboard": "It can read and write the system clipboard.",
+  "permission.camera": "It can use the camera.",
+  "permission.microphone": "It can use the microphone.",
+  "permission.external-fs": "It can read and write files outside the vault.",
+  "permission.run-command": "It can run Fub's commands, including the ones that change your notes.",
+  "permission.call-service": "It can call the services the other components offer.",
+  "permission.write-settings":
+    "It can change the settings that have declared themselves writable by a program.",
+  "permission.read-session": "It can know which note you are looking at, and in which mode.",
+  "permission.read-selection": "It can read the text you select, while you select it.",
+  "permission.read-drafts": "It can read what you are writing and have not saved yet.",
+  "permission.unknown":
+    "This version of Fub does not know this permission: it grants nothing, and there is nothing to deny.",
+  "permission.network.anywhere": "to any address",
+  "permission.network.only": "only to: {hosts}",
+  "trust.core": "Part of Fub",
+  "trust.verified": "Verified",
+  "trust.community": "From the community",
+  "trust.development": "In development",
+  "trust.revoked": "Revoked: it does not run",
   "settings.scope.machine": "this machine",
   "settings.scope.vault": "this vault",
   "settings.source.default": "default value · applies to {dove}",

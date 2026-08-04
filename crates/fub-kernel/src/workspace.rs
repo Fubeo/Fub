@@ -769,6 +769,28 @@ impl Workspace {
             self.providers.plugins.retire(&id);
             return Err(RegistryError::Setting(why));
         }
+        // E le chiavi con cui si **negano i suoi permessi** (§23.17). Sono
+        // fabbricate qui e non dichiarate nel manifest per la ragione che le
+        // rende utili: un componente non deve poter decidere se il proprio
+        // recinto sia mostrabile. Vanno **dopo** lo schema suo, e ciò che ne
+        // segue è la risposta giusta al caso brutto — un plugin che dichiarasse
+        // di suo una chiave `<id>:permissions.…` fa fallire questa riga, e non
+        // si monta affatto. Se l'ordine fosse rovesciato, a fallire sarebbe la
+        // sua dichiarazione: stesso esito, ma il difetto verrebbe raccontato
+        // come se fosse dell'host.
+        let permessi = self.permission_specs(&id);
+        if let Err(why) = self
+            .settings
+            .write()
+            .expect("store di configurazione")
+            .declare(&id, &permessi)
+        {
+            self.providers.plugins.retire(&id);
+            return Err(RegistryError::Setting(why));
+        }
+        // E si applica **subito** ciò che l'utente aveva già negato: un vault
+        // che si riapre non è un'occasione per ricominciare da capo.
+        self.reapply_permissions(&id);
         if !timers_dichiarati {
             return Ok(());
         }
@@ -3907,6 +3929,107 @@ impl Workspace {
             .collect()
     }
 
+    /// Le impostazioni `<id>:permissions.<nome>` di un plugin dichiarato
+    /// (§23.17): una per ogni permesso **che il suo manifest dichiara e che
+    /// questo host conosce**.
+    ///
+    /// Quattro scelte, e ognuna ha la sua ragione.
+    ///
+    /// - **Solo i permessi dichiarati.** Un componente che non chiede la rete
+    ///   non ha un interruttore della rete: un elenco di tredici righe quasi
+    ///   tutte spente direbbe *cosa esiste* dove chi guarda vuole sapere *cosa
+    ///   è stato chiesto*.
+    /// - **Solo quelli che l'host conosce**
+    ///   ([`permission::ALL`](fub_abi::options::permission::ALL)). Un permesso
+    ///   fuori da quell'elenco non governa nessuna famiglia, quindi negarlo non
+    ///   negherebbe niente — e un interruttore che non fa niente insegna a non
+    ///   fidarsi degli interruttori (è la stessa riga con cui il pannello
+    ///   nasconde «azzera» dove non c'è nulla da azzerare). Che quel permesso
+    ///   *esista* nel manifest resta visibile: lo porta `PluginInfo`, e chi
+    ///   disegna lo dice per quello che è.
+    /// - **Il default è `true`.** Ciò che il manifest dichiara è concesso
+    ///   finché qualcuno non dice di no. È l'unica forma che non cambia il
+    ///   comportamento di ieri: un permesso che nessuno ha mai potuto vedere non
+    ///   deve cominciare a mancare il giorno in cui acquista un interruttore.
+    /// - **L'etichetta è la chiave del permesso, non una frase.** È deliberato,
+    ///   ed è la riga di sicurezza di questa voce: la frase che l'utente legge
+    ///   accettando *«può connettersi a qualunque host»* non deve poterla
+    ///   scrivere chi il permesso lo sta chiedendo. Un `Text` di catalogo qui si
+    ///   risolverebbe nel catalogo del **proprietario della chiave** (§12.1),
+    ///   cioè del plugin; e un catalogo del core non si tradurrebbe a nome suo,
+    ///   che è lo stesso ostacolo che le scorciatoie incontrano sul gruppo. La
+    ///   frase la scrive quindi chi mostra — la shell, dal proprio catalogo, su
+    ///   un elenco di nomi chiuso — e ciò che attraversa di qui è un
+    ///   **identificatore**.
+    ///
+    /// Non è `program_writable`, e qui è più che una convenzione: un componente
+    /// che potesse riscrivere questa chiave si riconcederebbe da sé ciò che
+    /// l'utente gli ha tolto. È lo stesso argomento di `plugins.disabled`, un
+    /// grado più in là — là avrebbe potuto spegnere chi lo controlla, qui
+    /// potrebbe non farsi spegnere affatto.
+    fn permission_specs(&self, plugin: &str) -> Vec<SettingSpec> {
+        let Some(entry) = self.providers.plugins.get(plugin) else {
+            return Vec::new();
+        };
+        fub_abi::options::permission::ALL
+            .iter()
+            .filter(|key| entry.manifest.permissions.has(key))
+            .map(|key| {
+                SettingSpec::toggle(
+                    fub_abi::settings::permission_key(plugin, key),
+                    Text::Literal((*key).to_string()),
+                    true,
+                )
+            })
+            .collect()
+    }
+
+    /// Rifà il recinto di un plugin da ciò che l'utente ha negato **adesso**
+    /// (§23.17).
+    ///
+    /// Si chiama alla dichiarazione e a ogni scrittura di una di quelle chiavi,
+    /// e la seconda è quella che conta: una revoca deve valere alla prossima
+    /// chiamata, non alla riapertura del vault. È il precedente che la
+    /// [0097](../../../docs/decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+    /// ha scritto per la rete — `JobHost::fetch` rilegge il permesso a ogni
+    /// chiamata invece di catturarlo all'avvio del job — onorato dalla parte
+    /// opposta: là si rilegge perché la politica può essere cambiata, qui si
+    /// riscrive la politica **nel momento** in cui cambia.
+    ///
+    /// Il conto sta da questa parte per la ragione che tiene [`Granted`]
+    /// piccola: la politica si clona a ogni prestito, e un prestito accade a
+    /// ogni evento consegnato a ogni handler. Rileggere lì dentro tredici
+    /// chiavi di configurazione sarebbe una lettura dello store per evento; qui
+    /// è un conto solo, e lo si fa quando una persona muove un interruttore.
+    fn reapply_permissions(&mut self, plugin: &str) {
+        let Some(entry) = self.providers.plugins.get(plugin) else {
+            return;
+        };
+        let dichiarati: Vec<&'static str> = fub_abi::options::permission::ALL
+            .iter()
+            .copied()
+            .filter(|key| entry.manifest.permissions.has(key))
+            .collect();
+        let store = self.settings.read().expect("store di configurazione");
+        let negati: Vec<String> = dichiarati
+            .into_iter()
+            .filter(|key| {
+                // Una chiave che non si legge — perché nessuno l'ha dichiarata,
+                // o perché il file porta un valore che non regge lo schema — è
+                // un **non ho detto di no**: il default è la concessione, e
+                // trattare l'illeggibile come un rifiuto spegnerebbe un
+                // componente per un file scritto male.
+                matches!(
+                    store.effective(&fub_abi::settings::permission_key(plugin, key)),
+                    Ok((SettingValue::Toggle(false), _))
+                )
+            })
+            .map(String::from)
+            .collect();
+        drop(store);
+        self.providers.plugins.restrict(plugin, &negati);
+    }
+
     /// I comandi offerti dai provider registrati, in ordine di registrazione.
     ///
     /// È la metà "discovery" del registro, ed è la ragione per cui una
@@ -4858,6 +4981,15 @@ impl Workspace {
     }
 
     fn announce_setting(&mut self, key: &str, scope: SettingScope) {
+        // Una chiave che è un recinto rifà il recinto, **prima** di dirlo
+        // (§23.17): chi riceve l'evento può chiamare, e riceverebbe un cancello
+        // ancora aperto. Passa di qui e non dai due chiamanti perché scrivere e
+        // azzerare sono la stessa cosa vista da due lati — azzerare una chiave
+        // negata è precisamente il modo in cui si riconcede.
+        if let Some((plugin, _)) = fub_abi::settings::permission_of_key(key) {
+            let plugin = plugin.to_string();
+            self.reapply_permissions(&plugin);
+        }
         let key = key.to_string();
         self.emit_event(Event::SettingChanged { key, scope });
         if !self.dispatch.in_provider_call() {

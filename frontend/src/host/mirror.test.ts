@@ -685,7 +685,13 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true, parts: true }),
   RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
   OpenVaults: keysOf<OpenVaults>({ roots: true, current: true }),
-  BundleInfo: keysOf<BundleInfo>({ id: true, name: true, mounted: true }),
+  BundleInfo: keysOf<BundleInfo>({
+    id: true,
+    name: true,
+    mounted: true,
+    trust: true,
+    permissions: true,
+  }),
   // La chiave resta il nome del tipo RUST (`fub_host::VaultEntry`), che è
   // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché
   // l'anagrafe del §14.1 porta lo stesso nome dal contratto (vedi

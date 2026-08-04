@@ -1381,6 +1381,18 @@ export interface BundleInfo {
   id: string;
   name: string;
   mounted: boolean;
+  // Quanto l'host si fida di chi lo ha prodotto. Non è una decorazione accanto
+  // ai permessi: «può leggere le mie note» non vuol dire la stessa cosa detto
+  // di una feature di questo repo e di un componente arrivato da fuori.
+  trust: Trust;
+  // I permessi che il suo manifest dichiara, coi loro parametri (§23.17). La
+  // chiave è `ns:nome`, il valore è il PARAMETRO: `true` per un permesso nudo,
+  // un elenco di host per `fub:network`. È la stessa regola di ogni altra
+  // `OptionMap` — presente = acceso, il valore porta il dettaglio.
+  //
+  // Ci sono anche per un componente SPENTO, ed è il punto: «cosa chiederebbe se
+  // lo accendessi» è una domanda che ci si pone prima di accenderlo.
+  permissions: Record<string, unknown>;
 }
 
 // Un vault che questa macchina conosce (rispecchia `fub_host::VaultEntry`,

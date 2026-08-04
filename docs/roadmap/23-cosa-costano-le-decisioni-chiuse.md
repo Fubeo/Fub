@@ -1072,7 +1072,7 @@ symlink invece funzionano ovunque: quel ramo passa da `symlink_metadata` e non d
 
 ### 23.17 Tre permessi nuovi in tre commit, e nessuno li mostra a chi deve accettarli
 
-*confine · **P1** — non è una firma: è la superficie che rende vere le frasi che quattro verbali hanno scritto nei manifest*
+*chiusa dalla [0098](../decisions/0098-un-permesso-si-vede-e-si-nega.md) — una chiave d'impostazione per ogni coppia componente-permesso, concessa finché qualcuno non dice di no; la frase la scrive la shell, perché chi chiede un permesso non deve poter scrivere la frase con cui glielo si concede*
 
 Questa voce esiste perché una riga si è ripetuta tre volte. La
 [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) chiude il suo
@@ -1089,7 +1089,7 @@ contare, ed è la stessa diagnosi che la
 [§16.7](16-crate-sdk-banchi-di-prova.md) fa agli elenchi: *chi lo legge, lo
 trova?* Una riga in fondo a un verbale la legge chi apre quel verbale.
 
-- [ ] **Perché adesso pesa più di prima, e non è «uno in più».** I permessi
+- [x] **Perché adesso pesa più di prima, e non è «uno in più».** I permessi
       della 0095 e della 0096 sono **binari**: vederli o no cambia se l'utente
       sa. `fub:network` ha un **parametro che è il permesso stesso** — la
       differenza fra `["api.acme.com"]` e nessun elenco è la differenza fra un
@@ -1101,7 +1101,7 @@ trova?* Una riga in fondo a un verbale la legge chi apre quel verbale.
       non gliela legge nessuno: **il verbale ha delegato a una superficie che
       non esiste**, ed è la ragione più forte per cui questa voce non può
       restare una riga.
-- [ ] **Cosa va deciso, che non è «si fa un pannello».** Se i permessi si vedono
+- [x] **Cosa va deciso, che non è «si fa un pannello».** Se i permessi si vedono
       **prima** (un momento di accettazione all'installazione, che è la forma
       che il patto suggerisce) o **dopo** (un'ispezione nelle impostazioni, che
       è quello che la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) ha già come
@@ -1113,14 +1113,14 @@ trova?* Una riga in fondo a un verbale la legge chi apre quel verbale.
       (`JobHost::fetch` rilegge il permesso a ogni chiamata invece di catturarlo
       all'avvio del job), ed è un precedente da onorare o da contraddire con un
       argomento.
-- [ ] **Il dato c'è già, ed è metà del lavoro fatto.** `PluginInfo` porta i
+- [x] **Il dato c'è già, ed è metà del lavoro fatto.** `PluginInfo` porta i
       permessi con i loro parametri, e la 0042 ha il catalogo che non compila se
       una chiave manca — quindi le frasi in italiano hanno dove stare e un
       presidio che le pretende. Ciò che manca è chi le dispone e chi le legge.
       Va misurato invece che assunto: **quante** chiavi sono oggi dichiarabili,
       e quante di quelle hanno un parametro che cambia cosa si può fare (oggi
       una sola, `fub:network`).
-- [ ] **Perché è P1 e non P0.** Nessuna firma del contratto cambia: è shell e
+- [x] **Perché è P1 e non P0.** Nessuna firma del contratto cambia: è shell e
       un pezzo di §7.6. Ma è l'unica voce di questa seduta il cui costo cade
       **interamente sull'utente** invece che su chi scrive plugin — un permesso
       invisibile non fa fallire niente, fa solo sì che una scelta che era sua la

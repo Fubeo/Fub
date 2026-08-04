@@ -1633,3 +1633,25 @@ button:hover {
   color: var(--text);
   font: inherit;
 }
+
+/* I permessi di un componente (§23.17): righe di impostazione come le altre,
+   rientrate sotto chi le ha chieste.
+
+   Il rientro è l'unica cosa che dice a chi guarda che quelle righe sono DI quel
+   componente: senza, l'elenco dei componenti e l'elenco dei permessi sarebbero
+   la stessa colonna di caselle, e la casella che spegne un componente
+   sembrerebbe una delle sue. La riga sopra sparisce perché il bordo separa i
+   componenti fra loro, non un componente dai propri permessi. */
+.setting-sub {
+  padding-left: var(--space-6);
+  border-top: none;
+}
+
+.setting-row.setting-sub {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+.setting-sub.panel-title {
+  margin-top: var(--space-2);
+}

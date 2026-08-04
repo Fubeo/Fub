@@ -109,12 +109,29 @@
     {
       "id": "fub.versioning",
       "name": "Versioning",
-      "mounted": true
+      "mounted": true,
+      "trust": "core",
+      "permissions": {
+        "fub:call-service": true,
+        "fub:read-selection": true,
+        "fub:read-session": true,
+        "fub:read-vault": true,
+        "fub:run-command": true,
+        "fub:write-settings": true,
+        "fub:write-vault": true
+      }
     },
     {
       "id": "fub.stats",
       "name": "Statistiche",
-      "mounted": false
+      "mounted": false,
+      "trust": "community",
+      "permissions": {
+        "fub:network": [
+          "api.acme.com"
+        ],
+        "fub:read-vault": true
+      }
     }
   ],
   "VaultEntry": [
