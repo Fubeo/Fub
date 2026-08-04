@@ -312,7 +312,7 @@ impl HostEnv for KernelHost<'_> {
         self.ws.locale()
     }
 
-    fn random_bytes(&self, n: u32) -> Vec<u8> {
+    fn random_bytes(&self, n: u32) -> Result<Vec<u8>, PluginError> {
         crate::random::random_bytes(n)
     }
 

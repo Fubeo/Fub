@@ -321,14 +321,32 @@ impl Policy for Granted {
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.
 ///
-/// # Le cinque capacità che non sanno dire di no
+/// # Le sei capacità che non sanno dire di no
 ///
-/// `emit`, `free_name`, `format_of`, `now_unix_millis` e `active_context` non
-/// restituiscono un `Result`. Negarle qui significa dare la **risposta nulla**
-/// — nessun evento, il nome che è stato passato, nessun formato, il tempo a
-/// zero, nessun contesto — perché non c'è un canale per dire altro. È scritto
-/// in testa al modulo, ed è una proprietà di quelle firme, non di questo
-/// wrapper.
+/// `emit`, `free_name`, `format_of`, `now_unix_millis`, `user_locale` e
+/// `active_context` non restituiscono un `Result`. Negarle qui significa dare la
+/// **risposta nulla** — nessun evento, il nome che è stato passato, nessun
+/// formato, il tempo a zero, il locale del contratto, nessun contesto — perché
+/// non c'è un canale per dire altro. È scritto in testa al modulo, ed è una
+/// proprietà di quelle firme, non di questo wrapper.
+///
+/// L'elenco diceva **cinque** e ne nominava cinque, ma quelle senza esito erano
+/// sette: `user_locale` e `random_bytes` c'erano e non erano contate. Il conto
+/// stava fermo dalla [0021](../../../docs/decisions/0021-il-confine.md), che
+/// l'aveva fatto quando le due capacità della
+/// [0039](../../../docs/decisions/0039-il-locale-e-il-caso.md) non esistevano
+/// ancora, e nessuna delle due si è aggiunta arrivando. Un elenco scritto a mano
+/// che nessun presidio conta invecchia in silenzio: è lo stesso difetto che
+/// `every_structural_capability_is_refused_by_the_same_gate` aveva già tolto
+/// alle famiglie negate, e che qui non era stato tolto.
+///
+/// `random_bytes` ne è uscita con la
+/// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md), che le ha
+/// dato un esito. `user_locale` resta, e ci resta per una ragione buona: il
+/// locale di default **è** la risposta del contratto per «nessuno me l'ha
+/// detto», quindi negarla dà ciò che darebbe un host senza shell — non una
+/// bugia. Era l'altro fallback muto del `Guard`, ed è la differenza fra i due
+/// che ha fatto scrivere la 0094.
 pub struct Guard<H, P> {
     inner: H,
     policy: P,
@@ -560,15 +578,17 @@ impl<H: HostEnv, P: Policy> HostEnv for Guard<H, P> {
         }
     }
 
-    fn random_bytes(&self, n: u32) -> Vec<u8> {
-        // Senza esito, e il vuoto è la sola risposta onesta: dei byte fissi
-        // sarebbero identità che collidono, e chi li genera non ha modo di
-        // accorgersene finché due note non hanno lo stesso id.
-        if self.allows(Capability::Env) {
-            self.inner.random_bytes(n)
-        } else {
-            Vec::new()
-        }
+    fn random_bytes(&self, n: u32) -> Result<Vec<u8>, PluginError> {
+        // L'unico dei quattro che ha un esito, e l'unico che ne aveva bisogno.
+        // Rendeva il vuoto — che è ancora, come diceva la 0039, meglio di byte
+        // fissi che collidono — ma il vuoto è una *politica travestita da dato*:
+        // arrivava a chi chiama indistinguibile dal troncamento sopra il tetto,
+        // e i due si correggono in modi opposti (chiedere meno serve nel primo
+        // caso, non serve a niente nel secondo). Adesso il rifiuto dice anche
+        // PERCHÉ, che è ciò che il `Guard` sa e nessun'altra risposta poteva
+        // portare (decisione 0094).
+        self.check(Capability::Env, || format!("chiedere {n} byte di caso"))?;
+        self.inner.random_bytes(n)
     }
 
     fn active_context(&self) -> Option<ViewContext> {
@@ -646,6 +666,71 @@ impl<H: HostServices, P: Policy> HostServices for Guard<H, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Una politica che nega una famiglia sola: serve a provare il cancello di
+    /// [`Capability::Env`], che `ReadOnly` **concede** — leggere che ore sono
+    /// non è un effetto — e che quindi il presidio delle capacità simulate non
+    /// esercita.
+    struct Nega(Capability);
+
+    impl Policy for Nega {
+        fn denies(&self, cap: Capability) -> Option<String> {
+            (cap == self.0).then(|| "per prova".to_string())
+        }
+    }
+
+    /// Un host che concede entropia a chiunque gliela chieda: ciò che si prova
+    /// qui è il cancello, non ciò che sta dietro.
+    struct Generoso;
+
+    impl HostEnv for Generoso {
+        fn now_unix_millis(&self) -> u64 {
+            0
+        }
+
+        fn user_locale(&self) -> Locale {
+            Locale::default()
+        }
+
+        fn random_bytes(&self, n: u32) -> Result<Vec<u8>, PluginError> {
+            Ok(vec![7; n as usize])
+        }
+
+        fn active_context(&self) -> Option<ViewContext> {
+            None
+        }
+    }
+
+    /// Il caso negato **dice di essere negato**, e non rende il vuoto.
+    ///
+    /// Era l'unico fallback muto del `Guard` che mentiva: un `Vec` vuoto arriva
+    /// a chi chiama identico al troncamento sopra il tetto, e i due si
+    /// correggono in modi opposti — chiedere meno serve in un caso e non serve
+    /// a niente nell'altro (§23.12, decisione 0094). Un `assert` sulla
+    /// lunghezza sarebbe passato anche prima: solo la variante lo presidia.
+    #[test]
+    fn denied_entropy_says_so_instead_of_answering_empty() {
+        let guard = Guard::new(Generoso, Nega(Capability::Env));
+        let err = guard
+            .random_bytes(16)
+            .expect_err("senza `Env` non si concede entropia");
+        assert!(
+            matches!(err, PluginError::PermissionDenied(_)),
+            "il rifiuto deve nominare il permesso: {err}"
+        );
+        assert!(
+            err.message().to_string().contains("16"),
+            "e deve dire cosa si stava facendo: {err}"
+        );
+    }
+
+    /// Negare un'altra famiglia non tocca questa: il cancello è per famiglia, e
+    /// un `check` sulla capacità sbagliata passerebbe di qui rosso.
+    #[test]
+    fn a_different_denial_leaves_entropy_alone() {
+        let guard = Guard::new(Generoso, Nega(Capability::VaultWrite));
+        assert_eq!(guard.random_bytes(4).unwrap().len(), 4);
+    }
 
     /// `ALL` è l'unico elenco scritto a mano rimasto in questo modulo, e tutto
     /// il resto gli sta a valle: `Granted::new` ci folda sopra per calcolare i

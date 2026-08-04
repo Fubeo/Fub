@@ -60,7 +60,10 @@ impl ViewProvider for Spia {
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         *self.visto.lock().unwrap() = Some(host.user_locale());
-        *self.caso.lock().unwrap() = host.random_bytes(16);
+        // Sedici byte con la capacità concessa: qui il `?` non scatta mai, ed è
+        // proprio ciò che questa spia deve provare — che una richiesta normale
+        // dentro un `render_view` arriva fino al caso del kernel e torna intera.
+        *self.caso.lock().unwrap() = host.random_bytes(16)?;
         Ok(UiNode::text(""))
     }
 

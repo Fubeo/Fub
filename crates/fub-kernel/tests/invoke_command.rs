@@ -227,7 +227,7 @@ impl CommandProvider for TriesEverything {
         );
         // `Events` si prova con `spawn_job` e **non** con `emit`, e non è un
         // dettaglio di comodo: `emit` non restituisce un `Result`: è una delle
-        // cinque capacità che non sanno dire di no (`host/guard.rs`), e il suo
+        // sei capacità che non sanno dire di no (`host/guard.rs`), e il suo
         // rifiuto è il silenzio. Un tentativo che non può fallire non prova
         // niente; un job invece rientra quando la simulazione è finita da un
         // pezzo, e il suo rifiuto ha un canale per dirsi.
@@ -596,7 +596,7 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
         "{scoperte:?}: `ReadOnly` le nega e nessuno qui le prova, quindi il \
          giorno che il cancello le lasciasse passare questo test resterebbe \
          verde. Aggiungi a `TriesEverything` una chiamata per ognuna — un \
-         metodo che restituisca `Result`, non uno delle cinque capacità che non \
+         metodo che restituisca `Result`, non uno delle sei capacità che non \
          sanno dire di no — annotandola con la sua `Capability`."
     );
 

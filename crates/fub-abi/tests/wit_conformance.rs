@@ -5003,7 +5003,8 @@ fn conform(source: &str) -> Result<(), String> {
     contract.method(
         "host-env",
         "random-bytes",
-        <dyn HostApi>::random_bytes as fn(&'static dyn HostApi, u32) -> Vec<u8>,
+        <dyn HostApi>::random_bytes
+            as fn(&'static dyn HostApi, u32) -> Result<Vec<u8>, PluginError>,
         &["n"],
     );
     contract.method(

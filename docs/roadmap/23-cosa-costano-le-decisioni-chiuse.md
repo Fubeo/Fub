@@ -209,12 +209,19 @@ tipo di qualcosa di già pubblicato, cioè la riga che
 fossero tre su sedici, e che le altre tredici non lo siano nemmeno parlando di
 privacy e di dati persi, è la prova che il criterio ha retto anche a un giro
 fatto con una lente — qualità, libertà, privacy — che spinge in direzione
-opposta. La §23.11 è **chiusa** dalla
-[0092](../decisions/0092-una-base-si-dichiara.md) e la §23.4 dalla
-[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md), che era la
-più larga delle tre e l'unica con una decisione di forma vera dentro: ne resta
-**una**, la §23.12, che è la più piccola e lo dice di sé. La scadenza non è
-cambiata, è cambiato quanto ci sta dentro.
+opposta. **Sono chiuse tutte e tre**, in tre commit di fila: la §23.11 dalla
+[0092](../decisions/0092-una-base-si-dichiara.md), la §23.4 dalla
+[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md) — la più larga
+delle tre, e l'unica con una decisione di forma vera dentro — e la §23.12 dalla
+[0094](../decisions/0094-un-tetto-che-si-fa-sentire.md), la più piccola, che lo
+diceva di sé. **Non resta nessuna P0 prima del freeze di M4.**
+
+Le tre insieme dicono una cosa che nessuna diceva da sola: in tutti e tre i casi
+la firma pubblicata **rappresentava meno di quanto l'app sapesse già fare** — una
+base che c'era e si ometteva, tre cursori accesi e uno solo pubblicato, un
+rifiuto che l'host conosceva e rendeva come un dato. Nessuno dei tre ritagli ha
+aggiunto una funzione: hanno dato una forma a ciò che si stava già perdendo per
+strada.
 
 **E una ha una scadenza che non è il freeze**, il che non la rende P0 ma le dà un
 **ordine**: la §23.5 va decisa prima della §23.3. Finché non c'è rete, un plugin
@@ -799,7 +806,7 @@ l'attrezzo e l'ha lasciato facoltativo.
 
 ### 23.12 Un troncamento che il chiamante non può vedere
 
-*contratto · **P0** — `random-bytes` restituisce una lista nuda: dirlo vuol dire ritipare il ritorno*
+*chiusa dalla [0094](../decisions/0094-un-tetto-che-si-fa-sentire.md) — `random-bytes` rende `result<list<u8>, plugin-error>`: chi riceve `ok` riceve esattamente `n` byte, e i due modi di non riceverli hanno un nome. Il tetto resta fuori dal contratto, perché ciò che va garantito è che superarlo si dica, non quanto vale*
 
 La [0039](../decisions/0039-il-locale-e-il-caso.md) ha messo un tetto a
 `random_bytes` — `MAX_RANDOM_BYTES = 1024` — e la scelta è dichiarata in tre posti,
@@ -816,28 +823,43 @@ ciò che è tornato** — cioè ricordarsi di controllare una cosa che nella fir
 applicarle la sesta domanda del [criterio](../todo.md), *cosa fallisce senza
 produrre nessun segnale*, che quel giorno esisteva già.
 
-- [ ] **La forma, che è piccola e va scelta comunque adesso.** Le strade sono tre:
-      un `result<list<u8>, _>` che fallisce sopra il tetto — netto, e rompe chi
-      chiedeva troppo, il che è il punto; una lista che resta lista con il tetto
-      **nel contratto** invece che nella prosa, così che chiedere di più sia un
-      errore del chiamante e non un fatto dell'host; o lasciare tutto e aggiungere
-      un `max-random-bytes: func() -> u32`, che è additivo e sposta il problema
-      di un passo — chi non controlla la lunghezza non chiederà nemmeno il
-      massimo.
-- [ ] **Quanto pesa davvero, detto senza gonfiarlo.** Nessuno oggi chiede più di
-      1024 byte, e la 0039 dichiara che il flusso non è di qualità crittografica —
-      quindi ciò che si perde non è un segreto forte, è un chiamante che crede di
-      avere N byte di entropia e ne ha mille. È una voce piccola. Sta qui perché è
-      **P0 per il tipo e non per l'importanza**, che è il criterio di questa
-      roadmap, e perché dopo M4 una firma muta resta muta per sempre.
-- [ ] **La regola generale, che vale oltre questa capacità.** Un limite dell'host
-      che il chiamante non può né interrogare né vedere applicato è la stessa
-      famiglia dei tetti della [0049](../decisions/0049-una-posizione-dentro-un-documento.md)
-      (64 occorrenze, 64 documenti) e di quelli della
-      [0034](../decisions/0034-il-freno-e-il-raggruppamento.md) — con la differenza
-      che là il troncamento **si dice** (`Event::Overflow`, «perdite silenziose non
-      esistono per contratto»). Qui no, ed è l'unico posto in cui quell'invariante
-      del progetto è falsa senza che nessuno l'abbia scritto.
+- [x] **La forma, che è piccola e va scelta comunque adesso.** La prima delle
+      tre — `result<list<u8>, plugin-error>` — e fa anche il lavoro della
+      seconda. La seconda è stata scartata due volte: non risolve il permesso
+      negato, cioè lascia in piedi il peggiore dei due difetti mentre sistema il
+      minore, e nel WIT non ci sono costanti, quindi «il tetto nel contratto»
+      vuol dire una `func() -> u32` che congela 1024 per sempre. La terza è la
+      firma preparata senza chiamante, rifiutata cinque volte di fila dalla 0077
+      alla 0093. Una **quarta** è stata valutata — un `variant random-error {
+      too-much(u32), denied }`, che renderebbe il tetto leggibile a macchina
+      senza prometterlo — e scartata perché costa un vocabolario d'errore
+      parallelo a quello che c'è: dalla
+      [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) in poi un
+      errore è testo che qualcuno legge, e `bad-args`/`permission-denied` dicono
+      già esattamente le due cose.
+- [x] **Quanto pesa davvero, detto senza gonfiarlo.** Poco, e resta vero: nessuno
+      chiede più di 1024 byte, e la decisione della 0039 sulla qualità del flusso
+      non è stata riaperta. Ma la voce **pesava su una cosa sola e ce n'erano
+      due**: accanto al troncamento c'era un `Vec::new()` che rispondeva al
+      permesso negato, cioè una **politica travestita da dato** — la famiglia
+      della [0013](../decisions/0013-elenco-delle-capacita.md) e della 0021, non quella di un tetto, e il
+      più grave dei due. Il guadagno vero non è nel tetto: è che il rifiuto ora
+      dice *perché*, che `user_locale` è stata assolta con un argomento invece
+      che per inerzia, e che il censimento delle capacità senza esito — fermo
+      dalla 0021, e che ne mancava **due** — è tornato giusto.
+- [x] **La regola generale, che vale oltre questa capacità.** La domanda era
+      quale delle due forme esistenti fosse *la* regola, e la risposta è la 0034:
+      **un limite dell'host non deve essere interrogabile, deve essere visibile
+      quando morde**. L'`Event::Overflow` pubblica la perdita e non la soglia del
+      bus; i tetti della
+      [0049](../decisions/0049-una-posizione-dentro-un-documento.md) si dicono
+      nella risposta, non in una funzione che li annunci. `random-bytes` era il
+      solo posto del confine in cui l'invariante era falsa, e il tetto resta
+      fuori dal contratto **perché** quella è la regola — non per pigrizia.
+      Guadagno collaterale: 1024 resta alzabile senza rompere nessuno. E ne è
+      nata una regola gemella che la voce non chiedeva, sui **fallback muti**: è
+      onesto quando la risposta nulla è già un caso del dominio, disonesto quando
+      è un valore inventato per occupare il posto di un errore.
 
 ### 23.13 Un vault che arriva da fuori rimappa la tastiera
 
