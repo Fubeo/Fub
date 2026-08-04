@@ -64,7 +64,14 @@ momento in cui poteva costare così.
       `ViewContext.doc`. È la differenza con `Query`, che il prefisso non lo può
       onorare per costruzione — una risposta aggregata non ha un path — e vale
       saperla il giorno che si scrive il filtro, perché i due casi si somigliano
-      e si comportano in modo opposto.
+      e si comportano in modo opposto. La
+      [0096](../decisions/0096-una-bozza-non-e-una-nota.md) ne aggiunge un terzo,
+      ed è dalla parte dei filtrabili: `fub:read-drafts` governa una risposta i
+      cui elementi un path ce l'hanno (`DraftInfo.doc`), quindi il prefisso si
+      onora voce per voce, scartando le bozze fuori dall'allowlist invece di
+      negare la domanda intera. Messi in fila, il criterio che li distingue è
+      più semplice di come sembrava: **si filtra ciò che nomina un documento,
+      non ciò che ne aggrega molti**.
 
       Che sia rimasta ferma per trentadue verbali dopo che il suo indirizzo era
       stato onorato è la ragione per cui adesso è **contata** in

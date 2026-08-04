@@ -720,7 +720,7 @@ delle versioni vecchie del proprio testo si sbaglia.
 
 ### 23.10 Le bozze si leggono con il permesso di leggere il vault
 
-*contratto · **P1** — sposta un permesso e non una firma, ma va decisa **insieme** alla [§23.5](#235-il-testo-che-lutente-seleziona-viaggia-sotto-una-capacità-che-nessuno-può-negare) e **prima** della [§23.3](#233-due-bloccanti-caduti-e-la-rete-non-se-nè-accorta)*
+*chiusa dalla [0096](../decisions/0096-una-bozza-non-e-una-nota.md) — `Capability::Drafts` con `fub:read-drafts`, **al posto** di `Query` e non sopra, così che l'utente possa dire tutt'e due le frasi: «puoi cercare nelle mie note, non ciò che sto scrivendo adesso» e «puoi ritrovare ciò che non ho salvato, il resto del vault no». L'**insieme** con la §23.5 era già saltato — la 0095 l'ha chiusa da sola —, ed è un quarto modo di invecchiare: una voce che dichiara un ordine e viene scavalcata da quella con cui doveva stare insieme. La casella «il caso migliore» era vera: **zero chiamanti**. Il cancello porta le famiglie a diciassette, cioè oltre i bit dell'`u16`*
 
 La [0088](../decisions/0088-cio-che-non-e-ancora-successo.md) contiene la frase
 più netta che un verbale di questo repo abbia scritto sulla privacy: *«il testo
@@ -743,25 +743,25 @@ possa leggere un documento salvato può leggere ciò che l'utente sta scrivendo 
 questo momento**, e le due cose sono concesse dalla stessa spunta nello stesso
 manifest.
 
-- [ ] **È la stessa voce della §23.5, con un altro soggetto.** Là il testo
+- [x] **È la stessa voce della §23.5, con un altro soggetto.** Là il testo
       selezionato viaggia sotto una capacità che nessun manifest dichiara; qui il
       testo non salvato viaggia sotto un permesso che ne governa un altro. Le due
       si decidono insieme o si decidono due volte, perché la risposta è la stessa
       domanda: **il contenuto che l'utente non ha consegnato al disco è una classe
       a sé, o è vault come il resto?** Se è una classe a sé, il permesso è uno solo
       e copre entrambe.
-- [ ] **Il verso in cui si sbaglia, e va scelto adesso.** Una bozza non è una nota
+- [x] **Il verso in cui si sbaglia, e va scelto adesso.** Una bozza non è una nota
       che si può rileggere dal disco: è l'**unica copia** di quel testo, e la
       [§23.1](#231-una-rinomina-fatta-ad-app-chiusa-scollega-tutto-ciò-che-è-indicizzato-per-path)
       lo scrive già («una bozza orfana è l'unica copia rimasta»). Un permesso di
       troppo costa a un plugin una riga di manifest; un permesso di meno costa
       all'utente il testo che stava scrivendo.
-- [ ] **Chi legge oggi, e se gli serve.** Il cliente vero delle bozze è il
+- [x] **Chi legge oggi, e se gli serve.** Il cliente vero delle bozze è il
       recupero dopo un crash, che è della shell e non passa dal confine. Va
       verificato se **qualche** provider registrato interroghi `Drafts`: se la
       risposta è nessuno, il cancello non costa niente a nessuno e la voce si
       chiude in una riga — che è il caso migliore e va guardato per primo.
-- [ ] **Perché prima della §23.3.** Identico all'ordine che la §23.5 dichiarava
+- [x] **Perché prima della §23.3.** Identico all'ordine che la §23.5 dichiarava
       per sé: finché non c'è rete, chi legge le bozze non ha dove mandarle. Il
       giorno che `http_fetch` entra, ce l'ha — e le due voci non si sono mai
       incontrate perché stanno in due verbali diversi. La §23.5 è stata chiusa

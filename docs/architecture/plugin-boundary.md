@@ -702,6 +702,19 @@ ragione per cui i tre booleani sono diventati una mappa.
   `read-vault`, che pure governa il contenuto dei documenti: legarceli avrebbe
   reso impossibile concedere il vault e negare la selezione, cioè avrebbe
   tolto la scelta invece di darla.
+- **Le bozze, a parte:** `fub:read-drafts` per `IndexQuery::Drafts` —
+  [0096](../decisions/0096-una-bozza-non-e-una-nota.md). Prima passava da
+  `fub:read-vault` come ogni altra query, quindi chi poteva leggere una nota
+  salvata poteva leggere ciò che l'utente stava scrivendo in quel momento. Sta
+  **al posto** di `read-vault` su quella variante e non sopra, ed è la sola
+  differenza di forma con la coppia della sessione: là i due cancelli si
+  sommano, qui si escludono, perché le frasi da rendere dicibili sono **due** —
+  *«puoi cercare nelle mie note, non ciò che sto scrivendo adesso»* e *«puoi
+  ritrovare ciò che non ho salvato, il resto del vault no»*, che è il pannello
+  di recupero dopo un crash. Un documento salvato lo si legge nominandolo; le
+  bozze arrivano **tutte insieme col testo dentro**, e sono l'unica copia di
+  quel testo. La **scrittura** resta negata per sempre
+  ([0088](../decisions/0088-cio-che-non-e-ancora-successo.md)).
 - **Enforcement in un solo punto:** i controlli vivono nell'implementazione di
   `HostApi`, così valgono identici per plugin nativi e WASM. **Quel punto adesso
   c'è**: è `Guard<H, P: Policy>` (`kernel/host/guard.rs`), un wrapper generico e

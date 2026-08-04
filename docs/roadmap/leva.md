@@ -465,6 +465,28 @@ commit prima e senza che nessuna delle due se ne accorgesse. **Una voce ferma no
 diventa solo obsoleta: può diventare più urgente stando ferma**, e il turno che
 la rilegge è l'unico posto in cui questo si vede.
 
+E l'**ottava** è la §23.10, con la
+[0096](../decisions/0096-una-bozza-non-e-una-nota.md), che a scegliere ha avuto
+lo stesso criterio della settima e ne ha scoperto il limite. La §23.10 portava
+**due** frasi d'ordine e non una — *va decisa insieme alla §23.5 e prima della
+§23.3* — e la prima delle due era già saltata: la 0095 aveva chiuso la §23.5 da
+sola, un turno prima, onorando l'ordine che la §23.5 dichiarava di sé e non
+vedendo quello che un'altra voce dichiarava su di lei. La §23.10 lo aveva
+previsto per iscritto (*«le due si decidono insieme o si decidono due volte»*), e
+si sono decise due volte.
+
+Il criterio che ne esce è la settima con un pezzo in più, e il pezzo costa poco:
+**un ordine scritto in una voce va cercato anche nelle voci che la nominano**,
+non solo in quella che si sta per fare. Una relazione fra due righe la scrive
+una delle due, e non c'è nessuna regola che dica quale — la §23.5 diceva *prima
+della §23.3* e la §23.10 diceva *insieme alla §23.5*: chi apriva la prima non
+aveva motivo di leggere la seconda. Il costo è stato piccolo qui, perché le due
+metà si sono comunque decise a un commit di distanza e la seconda ha potuto
+correggere la prima invece di ripeterla — la casella che voleva un permesso solo
+per tutt'e due è l'unica della §23.10 che non ha retto. Ma la forma dell'errore
+è la stessa che questa pagina esiste per vedere: **una relazione fra due voci non
+è di nessuna delle due, quindi non la legge nessuno.**
+
 ## La terza verifica, e le tre voci che ne escono
 
 La [seduta 23](23-cosa-costano-le-decisioni-chiuse.md) è la prima che non ha
@@ -553,9 +575,10 @@ forma della §23.5**, cioè quella che due paragrafi fa era «una quinta specie 
 questa pagina non aveva» e un caso solo. Tre su otto in un giro non è una specie
 nuova: è una **famiglia**, e va cercata apposta invece che incontrata.
 
-- **§23.10 (le bozze leggibili da chiunque legga il vault)** compone con la
+- **§23.10 (le bozze leggibili da chiunque legga il vault)** — *chiusa dalla
+  [0096](../decisions/0096-una-bozza-non-e-una-nota.md)* — compone con la
   §23.3, e lo fa esattamente come la §23.5 — al punto che le due voci vanno decise
-  insieme o si decidono due volte. La [0088](../decisions/0088-cio-che-non-e-ancora-successo.md)
+  insieme o si decidono due volte, ed è ciò che è successo. La [0088](../decisions/0088-cio-che-non-e-ancora-successo.md)
   nega la scrittura *per sempre* perché quel testo è il dato più privato del vault,
   e concede la lettura sul canale di tutti con un argomento — *leggere non è
   cambiare* — che protegge l'integrità mentre la minaccia è la riservatezza. Ogni
