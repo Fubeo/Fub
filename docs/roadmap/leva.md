@@ -487,6 +487,24 @@ per tutt'e due è l'unica della §23.10 che non ha retto. Ma la forma dell'error
 è la stessa che questa pagina esiste per vedere: **una relazione fra due voci non
 è di nessuna delle due, quindi non la legge nessuno.**
 
+**E non c'è una nona volta, il che è a suo modo il risultato.** Il turno dopo ha
+chiuso la §23.3 con la
+[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md), e a
+ordinarlo è stato di nuovo un ordine scritto — ma è **la stessa relazione** che
+l'ottava ha già analizzato, letta dal capo opposto: *prima della §23.3* vista da
+chi finalmente arriva alla §23.3. Contarla sarebbe contare due volte una
+relazione sola, che è precisamente il **doppione** che [todo.md](../todo.md)
+nomina come rischio di questa strada. Questa pagina conta le volte in cui la leva
+ha scelto **contro** l'ordine che un altro criterio avrebbe dato; qui non ha
+scelto niente, ha **eseguito**.
+
+Ciò che invece va registrato è che il criterio corretto dall'ottava ha
+funzionato al primo giro utile. La lezione era *un ordine scritto in una voce va
+cercato anche nelle voci che la nominano*: la 0097 è arrivata per terza, dopo
+0095 e 0096, e ha trovato i due cancelli già montati. **Un criterio si verifica
+il turno in cui non produce nessun aneddoto**, e l'ottava volta è l'ultima che
+questa relazione doveva generare.
+
 ## La terza verifica, e le tre voci che ne escono
 
 La [seduta 23](23-cosa-costano-le-decisioni-chiuse.md) è la prima che non ha
@@ -496,8 +514,10 @@ non *quale voce conta di più per il sistema* ma **cosa una decisione presa bene
 costa a chi usa l'app**. Le tre voci che ne escono si ordinano fra loro col
 criterio di sempre, e cadono in tre scaglioni diversi.
 
-**§23.3 (la rete)** sta nel primo, quello del *rende inesprimibile*, e ci sta
-senza sfumature: non c'è oggi nessun modo di scrivere un plugin che parli con
+**§23.3 (la rete)** — *chiusa dalla
+[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)* —
+stava nel primo, quello del *rende inesprimibile*, e ci stava
+senza sfumature: non c'era nessun modo di scrivere un plugin che parlasse con
 qualcosa fuori dal disco. Sotto ci stanno 18 (sync), 14.2 (clipper), 22 (AI e
 RAG), 15.1 (citazioni), 13.4 (trascrizione) — cioè la famiglia più grande fra
 quelle che non hanno **nessuna** strada. Ma la ragione per cui sta in questa
@@ -507,6 +527,14 @@ nessuno, e il buco non lascia traccia — che è il modo in cui una capacità pu
 mancare senza che nessuna riga di codice lo dica. E il no che la teneva fuori era
 scritto nella forma migliore possibile, con **due bloccanti nominati**: sono
 caduti tutti e due, in due sedute che non sapevano di toccarli.
+
+Chiudendola si è visto che il primo scaglione ha un rovescio che questa pagina
+non aveva scritto: **una voce che rende inesprimibile qualcosa è anche quella
+che, entrando, rende esprimibili tutte le altre in una volta**. La rete non ha
+sbloccato una feature, ne ha sbloccate sei — e ha reso operativi, nello stesso
+commit, i due permessi che 0095 e 0096 avevano messo *in previsione* di lei. Il
+primo scaglione non è quindi solo il più urgente: è il più **denso**, e ordinarlo
+per dimensione del buco lo sottostima.
 
 **§23.2 (l'invariante dei terzi)** sta nel secondo, quello dei
 **moltiplicatori**, e in una posizione che nessun altro membro di quella famiglia
@@ -559,9 +587,13 @@ dopo.
 pagina non aveva.** Non rende inesprimibile e non moltiplica: **compone**. Presa
 da sola è innocua per una ragione che non sta scritta in nessuno dei due verbali
 che la creano — chi legge la selezione non ha dove mandarla — e quella ragione è
-un'altra voce, la §23.3, che questa stessa roadmap si prepara a chiudere. Due
+un'altra voce, la §23.3, che questa stessa roadmap ha poi chiuso. Due
 decisioni giuste, in due sedute che non si sono mai incontrate, il cui prodotto è
-il difetto. Vale come criterio e non come voce: **una leva può stare nel prodotto
+il difetto. **Il prodotto è stato guardato prima invece che dopo**, ed è l'unica
+volta in questa seduta: quando la
+[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) ha
+dato a un plugin dove mandare le note dell'utente, le due cose che più valeva non
+fargli leggere avevano già un permesso proprio da due commit. Vale come criterio e non come voce: **una leva può stare nel prodotto
 di due righe e in nessuna delle due**, e l'unico modo di vederla è leggerle
 insieme — che è precisamente ciò che nessuna delle due sedute aveva motivo di
 fare.
@@ -577,7 +609,9 @@ nuova: è una **famiglia**, e va cercata apposta invece che incontrata.
 
 - **§23.10 (le bozze leggibili da chiunque legga il vault)** — *chiusa dalla
   [0096](../decisions/0096-una-bozza-non-e-una-nota.md)* — compone con la
-  §23.3, e lo fa esattamente come la §23.5 — al punto che le due voci vanno decise
+  §23.3 — *chiusa a sua volta dalla
+  [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)* —,
+  e lo fa esattamente come la §23.5, al punto che le due voci vanno decise
   insieme o si decidono due volte, ed è ciò che è successo. La [0088](../decisions/0088-cio-che-non-e-ancora-successo.md)
   nega la scrittura *per sempre* perché quel testo è il dato più privato del vault,
   e concede la lettura sul canale di tutti con un argomento — *leggere non è

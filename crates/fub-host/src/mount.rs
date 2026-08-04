@@ -203,6 +203,13 @@ pub fn mount(
         .with_view_states(view_states)
         .with_system_locale(system_locale);
 
+    // **Il filo verso fuori** (§23.3), e sta qui per la ragione del watcher: il
+    // kernel non sa cosa sia una connessione, e chi monta decide se questo
+    // montaggio ne ha una. Con la cargo feature spenta questa riga non c'è, e
+    // ogni `fetch` risponde `unserved` — che è la verità e non un rifiuto.
+    #[cfg(feature = "http-client")]
+    ws.set_network(Arc::new(crate::net::UreqNetwork::new()));
+
     // Lo store delle versioni nasce dentro il bundle e serve fuori: è la
     // composizione delle due metà, e il contenitore è il modo in cui chi monta
     // la riceve senza che il kernel debba sapere che il versioning esiste.

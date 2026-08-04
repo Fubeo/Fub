@@ -690,8 +690,15 @@ ragione per cui i tre booleani sono diventati una mappa.
   parametro, la voce vale sull'intero vault. Sotto `read-vault` ci va anche
   `read_model`, che è una lettura come l'altra e dà **di più** di una sorgente;
   `format_of` no, perché non legge niente.
-- **Rete e filesystem esterno:** `fub:network` con l'allowlist di host,
-  `fub:external-fs` con quella dei path (20.3).
+- **La rete, e il filesystem esterno che ancora non c'è:** `fub:network` con
+  l'allowlist di host è **vero da adesso**
+  ([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)):
+  la capacità è `HostNetwork::fetch`, e l'elenco dichiarato nel manifest si
+  **onora** — è il primo parametro di permesso che questo repo legga. Al suo
+  fianco `fub:external-fs` con quella dei path (20.3) resta invece una chiave
+  senza capacità dietro: metà di questo punto elenco descrive ciò che c'è,
+  metà ciò che manca, ed è scritto perché fino alla 0097 le descriveva
+  entrambe come esistenti.
 - **La sessione, in due:** `fub:read-session` (quale nota è aperta, in che
   modalità) e `fub:read-selection` (il testo selezionato, verbatim) —
   [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md). Sono l'unico
@@ -721,15 +728,27 @@ ragione per cui i tre booleani sono diventati una mappa.
   non una impl gemella, davanti a ogni host — col registro dei plugin in cui chi
   si registra si dichiara con manifest, permessi e fiducia (`kernel/plugins.rs`).
   È il §7.3, chiuso dalla [decisione 0021](../decisions/0021-il-confine.md).
-  Quello che **non** c'è è il filtro per **path**: la politica legge la presenza
-  della chiave e non il suo parametro, quindi un plugin con `read-vault`
-  ristretto a `Progetti/` legge tutto. È additivo dentro `Granted` e aspetta il
-  §15.5 — due idee di cosa sia un prefisso sarebbero peggio di nessuna.
+  Quello che **non** c'è è il filtro per **path**: per `read-vault` e
+  `write-vault` la politica legge la presenza della chiave e non il suo
+  parametro, quindi un plugin ristretto a `Progetti/` legge tutto. Non vale più
+  in generale — dalla
+  [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+  `fub:network` il suo parametro lo onora, ed è il primo —, e i due filtri non
+  condividono una riga di proposito: un path si confronta per prefisso dentro
+  una radice che è dell'utente, un host per nome dentro uno spazio che non è di
+  nessuno. Resta additivo dentro `Granted`. Il bloccante che la
+  [0021](../decisions/0021-il-confine.md) gli aveva dato — il §15.5, *«la
+  politica dei path in un modulo solo»*, perché due idee di cosa sia un prefisso
+  sarebbero peggio di nessuna — è **caduto con la
+  [0058](../decisions/0058-un-nome-che-nasce.md)**, che ha fatto di
+  `fub_abi::rules::path` quel modulo: questa riga ha detto «aspetta il §15.5»
+  per trentadue verbali dopo che non aspettava più niente. È la casella del
+  [§7.1](../roadmap/07-il-confine.md#la-casella-rimasta).
 
 ```rust
 PluginPermissions::of(&[permission::READ_VAULT])          // tutto il vault, in lettura
     .granted
-    .with(permission::NETWORK, json!(["api.esempio.com"])) // rete, con allowlist
+    .with(permission::NETWORK, json!(["api.esempio.com"])) // rete: l'elenco si ONORA (0097)
 ```
 
 `PluginError` ha già la variante `PermissionDenied(String)` per veicolare i
@@ -742,10 +761,12 @@ rifiuti al frontend/all'IPC.
   [M5](../milestones/M5-wasm-runtime.md)).
 - **Isolamento di memoria:** dato dal component model; il plugin non vede la
   memoria del core, solo i dati che passano dalle host function.
-- **Rete:** negata di default — e la riga è più corta della realtà, perché
-  nomina con una parola sola due cose diverse. `fub:network` è un **permesso**
-  con la sua allowlist di host; la **capacità** che lo userebbe non esiste, e
-  `http_fetch` non fu rifiutato genericamente ma con due bloccanti nominati
+- **Rete:** negata di default, e adesso la riga nomina una cosa sola perché le
+  due si sono ricongiunte. `fub:network` è un **permesso** con la sua allowlist
+  di host, e dalla
+  [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+  la **capacità** che lo usa esiste: `HostNetwork::fetch`. `http_fetch` non fu
+  rifiutato genericamente ma con due bloccanti nominati
   ([0013](../decisions/0013-elenco-delle-capacita.md)): *«§9.1 (un lavoro lungo
   che vede il vault) perché sia utile e §7.3 (`network` letto da qualcuno)
   perché sia sicura. Due bloccanti, entrambi nominati; dopo, additiva»*.
@@ -753,14 +774,17 @@ rifiuti al frontend/all'IPC.
   [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), il §7.3 con la
   [0021](../decisions/0021-il-confine.md), che ha perfino scritto dove atterra:
   *«il giorno che `http_fetch` entrerà, `Capability::permission()` è la riga che
-  le dà un permesso»*. La condizione che la 0013 aveva posto è quindi
-  soddisfatta, e nessuno lo ha registrato: la voce è **additiva**, quindi non
-  scade, ed è per questo che non sale da sé — il criterio della
-  [seduta 20](../roadmap/20-quando-qualcosa-va-storto.md). Finché non entra, un
-  guest non ha nessuna strada verso la rete **che passi da questo contratto**; e
-  una che gli venisse da WASI invece che dall'`HostApi` sarebbe una seconda
-  porta con una seconda politica, cioè ciò che l'«enforcement in un solo punto»
-  esiste per non far succedere.
+  le dà un permesso»*. La condizione che la 0013 aveva posto era soddisfatta da
+  settantasei verbali e **nessuno lo aveva registrato**, per una ragione che
+  vale come metodo: la voce era **additiva**, quindi non scadeva, ed è per
+  questo che non saliva da sé — il criterio della
+  [seduta 20](../roadmap/20-quando-qualcosa-va-storto.md). Adesso è entrata, e
+  la riga che resta è quella di M5: un guest deve trovare **questa** strada e
+  non un'altra: una che gli venisse da WASI invece che dall'`HostApi` sarebbe
+  una seconda porta con una seconda politica, cioè ciò che l'«enforcement in un
+  solo punto» esiste per non far succedere. E a M4 il cancello vale come
+  **dichiarazione** e non come imposizione, perché un plugin nativo gira
+  in-process e `std::net` non passa dal `Guard`.
 - **Filesystem:** nessun accesso diretto; i documenti passano da
   `read_document`/`read_model`/`write_document`/`list_documents`, i dati del
   plugin da `data_*`. **Import ed export non fanno eccezione**, ed è una

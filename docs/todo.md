@@ -5,7 +5,7 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 132 voci: novantanove da sette giri sulla stessa domanda, due da una
+Sono uscite 133 voci: novantanove da sette giri sulla stessa domanda, due da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md); e la §20.5, nata
 misurando la [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) contro il
@@ -22,12 +22,14 @@ esterna dell'intero [FEATURES.md](FEATURES.md)
 **quarta**, che ha ripercorso la terza su un insieme scelto invece che in fila —
 i **primi dieci verbali**, riletti uno per uno contro i sorgenti di oggi — otto
 dalla **quinta**, che li ha presi **tutti** con una lente dichiarata (§23.9–§23.16)
-— e **due** da una
+— una dalla
+**undicesima** (la §23.17, nata da un «resta fuori» ripetuto identico da tre
+verbali di fila) — e **due** da una
 **separazione**: la §16.8, staccata dal §16.7 nel momento in cui lo si chiudeva
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centotredici sono
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centoquattordici sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
 diciannove [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
 
@@ -177,6 +179,20 @@ per la provenienza**: si verifica contro i sorgenti ciò che suona giusto, e una
 rilettura che produce decine di affermazioni plausibili in un colpo è la sorgente
 che ne genera di più.
 
+E una **undicesima**, che non guarda né il sistema né i verbali ma **il proprio
+elenco di ciò che resta fuori**: la stessa riga, ripetuta da tre verbali di fila,
+è una voce che nessuno ha scritto. La §23.17 è nata così — «resta fuori il
+pannello che i permessi li mostra» compare identica nella
+[0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md), nella
+[0096](decisions/0096-una-bozza-non-e-una-nota.md) e nella
+[0097](decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md), tre
+commit consecutivi che aggiungono tre permessi e nessuna superficie per leggerli.
+Una riga in fondo a un verbale la legge chi apre quel verbale, e nessun totale la
+nomina: è la stessa diagnosi che il §16.7 fa agli elenchi — *chi lo legge, lo
+trova?* — applicata al posto in cui questo repo scrive i propri debiti. La regola
+che se ne ricava è un numero: **alla terza volta che un «resta fuori» si ripete
+identico, non è una dichiarazione, è una voce**.
+
 ## Le sedute
 
 Cosa c'è in questa tabella, e cosa no: la colonna *Perché insieme* dice la
@@ -210,7 +226,7 @@ che questo piano passa il tempo a togliere dal codice.
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 1 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
-| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | 11 | 1 |
+| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | 11 | 2 |
 
 ## Le voci
 
@@ -240,10 +256,10 @@ tiene undici da sola. Non è uno squilibrio da correggere: è ciò che succede
 quando una strada nuova viene percorsa tre volte di fila e produce voci ogni
 volta, e la sua forma — *prezzi dichiarati e mai risommati* — attraversa tutte le
 altre sedute invece di stare accanto a loro. Se un giorno converrà spezzarla, il
-taglio naturale non è il numero ma la **lente**: le §23.9–§23.16 rispondono a una
+taglio naturale non è il numero ma la **lente**: le §23.9–§23.17 rispondono a una
 domanda più stretta delle prime otto.
 
-Le caselle residue oggi sono **tredici**, e stanno in dieci posti:
+Le caselle residue oggi sono **quattordici**, e stanno in undici posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
@@ -277,12 +293,22 @@ persiste dove è arrivato) e la
 cursore e la sua posizione è un argomento scalare di una `CommandSpec`
 pubblicata, quindi farne una lista è una decisione di firma che la
 [0093](decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md) non ha preso di
-straforo) e la
-[§7.1](roadmap/07-il-confine.md#la-casella-rimasta) (una: le allowlist dei permessi hanno un
-**parametro** — un elenco di prefissi di path — e la politica legge solo la
-presenza della chiave, quindi un plugin con `read-vault` ristretto a `Progetti/`
-legge tutto; la [0021](decisions/0021-il-confine.md) l'aveva lasciata in attesa
-del §15.5, «la politica dei path in un modulo solo», che la
+straforo), la
+[§23.3](roadmap/23-cosa-costano-le-decisioni-chiuse.md#233-due-bloccanti-caduti-e-la-rete-non-se-nè-accorta)
+(una: fermare una richiesta di rete **già partita** — la
+[0097](decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) ha
+staccato la `fetch` dal prestito del workspace e rilegge il permesso a ogni
+chiamata, ma chi annulla un job non aspetta la rete: aspetta il tetto di tempo
+dell'host, fino a un minuto che l'utente **vede**) e la
+[§7.1](roadmap/07-il-confine.md#la-casella-rimasta) (una, e **ristretta**: le
+allowlist dei permessi hanno un **parametro**, e fino alla
+[0097](decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) non ne
+leggeva nessuno. Adesso `fub:network` sì, quindi ciò che resta sono i **prefissi
+di path** di `read-vault`/`write-vault` — un plugin ristretto a `Progetti/` legge
+ancora tutto — e restano una casella a sé perché un host e un path non si
+confrontano allo stesso modo, che è la ragione per cui `Policy::denies_host` è
+stretta invece di generica; la [0021](decisions/0021-il-confine.md) l'aveva
+lasciata in attesa del §15.5, «la politica dei path in un modulo solo», che la
 [0058](decisions/0058-un-nome-che-nasce.md) ha chiuso). Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte.
@@ -324,7 +350,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§20.5** | [Il budget del dispatch tronca senza guardare cosa sta troncando](roadmap/20-quando-qualcosa-va-storto.md#205-il-budget-del-dispatch-tronca-senza-guardare-cosa-sta-troncando) | 20. Quando qualcosa va storto | kernel | **P2** |
 | **§23.1** | [Una rinomina fatta ad app chiusa scollega tutto ciò che è indicizzato per path](roadmap/23-cosa-costano-le-decisioni-chiuse.md#231-una-rinomina-fatta-ad-app-chiusa-scollega-tutto-ciò-che-è-indicizzato-per-path) | 23. Cosa le decisioni chiuse costano | kernel | **P1** |
 | **§23.2** | [L'invariante dei terzi ha una seconda eccezione, e non è scritta](roadmap/23-cosa-costano-le-decisioni-chiuse.md#232-linvariante-dei-terzi-ha-una-seconda-eccezione-e-non-è-scritta) | 23. Cosa le decisioni chiuse costano | presidi | **P1** |
-| **§23.3** | [Due bloccanti caduti, e la rete non se n'è accorta](roadmap/23-cosa-costano-le-decisioni-chiuse.md#233-due-bloccanti-caduti-e-la-rete-non-se-nè-accorta) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
 | **§23.6** | [Un import sta tutto in memoria, e la cosa che si importa più spesso è un vault intero](roadmap/23-cosa-costano-le-decisioni-chiuse.md#236-un-import-sta-tutto-in-memoria-e-la-cosa-che-si-importa-più-spesso-è-un-vault-intero) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
 | **§23.7** | [Una data scritta come la scrive l'utente non è una data, e non c'è modo di dirlo](roadmap/23-cosa-costano-le-decisioni-chiuse.md#237-una-data-scritta-come-la-scrive-lutente-non-è-una-data-e-non-cè-modo-di-dirlo) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
 | **§23.8** | [Due file che differiscono per una maiuscola sono lo stesso arco](roadmap/23-cosa-costano-le-decisioni-chiuse.md#238-due-file-che-differiscono-per-una-maiuscola-sono-lo-stesso-arco) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
@@ -333,6 +358,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§23.14** | [Un'operazione a metà non sa di essere a metà](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2314-unoperazione-a-metà-non-sa-di-essere-a-metà) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
 | **§23.15** | [La rete che regge i panici non ha un presidio, ha una nota](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2315-la-rete-che-regge-i-panici-non-ha-un-presidio-ha-una-nota) | 23. Cosa le decisioni chiuse costano | presidi | **P2** |
 | **§23.16** | [Su Windows un hardlink si stacca in silenzio](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2316-su-windows-un-hardlink-si-stacca-in-silenzio) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
+| **§23.17** | [Tre permessi nuovi in tre commit, e nessuno li mostra a chi deve accettarli](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2317-tre-permessi-nuovi-in-tre-commit-e-nessuno-li-mostra-a-chi-deve-accettarli) | 23. Cosa le decisioni chiuse costano | confine | **P1** |
 
 ## Gli allegati
 
@@ -344,7 +370,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **novantasei** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **novantasette** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

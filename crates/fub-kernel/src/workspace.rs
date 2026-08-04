@@ -405,6 +405,22 @@ pub struct Workspace {
     /// [`Session::invalidate`]). Uno span stantio è peggio di uno span
     /// assente — chi lo usasse taglierebbe i byte sbagliati.
     session: Session,
+    /// **Il filo verso fuori** (§23.3), se chi monta ne ha messo uno.
+    ///
+    /// `None` non è un difetto ed è la ragione per cui questo campo esiste
+    /// invece di una dipendenza: il kernel non sa cosa sia un client HTTP e non
+    /// deve saperlo — è la stessa forma del watcher, che vive in `fub-host`
+    /// dietro una cargo feature perché ci sono posti dove non c'è (PWA, mobile,
+    /// e2e headless), e una dipendenza obbligatoria renderebbe il trait una
+    /// promessa che il `Cargo.toml` smentisce. Un host montato senza risponde
+    /// [`PluginError::Unserved`], che è una frase diversa da «non ti è
+    /// concesso»: di qua non ci passa nessun filo.
+    ///
+    /// Un `Arc` e non un `Box` perché lo prende anche chi esegue un job, che
+    /// lo usa **fuori** dal prestito del workspace: una richiesta di rete non
+    /// tocca il vault, e tenerne il lock per quanto dura la rete affamerebbe
+    /// chi scrive (decisione 0024).
+    network: Option<Arc<dyn fub_abi::traits::HostNetwork>>,
     /// Il vault è già stato chiuso ([`close`](Workspace::close))?
     ///
     /// **Non è un sesto proprietario** (§8.1): è lo stato del *tutto*, ed è
@@ -537,6 +553,7 @@ impl Workspace {
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
+            network: None,
             closed: false,
             settings,
             view_states: ViewStates::in_memory(),
@@ -1142,6 +1159,30 @@ impl Workspace {
     /// fallisce e quando smette — e la risposta del kernel cambia da sé.
     pub fn watch_flag(&self) -> Arc<AtomicBool> {
         self.indexes.core.watch.watching.clone()
+    }
+
+    /// Monta il filo verso fuori (§23.3). Lo chiama chi monta, una volta.
+    pub fn set_network(&mut self, client: Arc<dyn fub_abi::traits::HostNetwork>) {
+        self.network = Some(client);
+    }
+
+    /// Il client di rete montato, se c'è.
+    ///
+    /// È pubblico perché serve a chi esegue un **job**: la richiesta si fa
+    /// fuori dal prestito, quindi il client si prende di qui e il permesso da
+    /// [`Workspace::granted`].
+    pub fn network(&self) -> Option<Arc<dyn fub_abi::traits::HostNetwork>> {
+        self.network.clone()
+    }
+
+    /// La politica di un plugin, così com'è **adesso**.
+    ///
+    /// Serve allo stesso caso, e la parola *adesso* è tutta la ragione per cui
+    /// non la si cattura all'avvio di un job: un plugin revocato mentre una sua
+    /// richiesta è in volo deve trovare il cancello chiuso alla successiva, non
+    /// alla fine del job.
+    pub fn granted_policy(&self, plugin: &str) -> crate::host::Granted {
+        self.providers.plugins.granted(plugin)
     }
 
     /// Questo plugin può nominare questo id? La regola del §7.4, per chi non

@@ -1114,6 +1114,85 @@ pub trait HostServices: Send + Sync {
     ) -> Result<serde_json::Value, PluginError>;
 }
 
+/// **Parlare con qualcosa che non sta sul disco** (§23.3).
+///
+/// La [0013](../../../docs/decisions/0013-elenco-delle-capacita.md) l'aveva
+/// tenuta fuori con **due bloccanti nominati** — *«servono prima §9.1 (un
+/// lavoro lungo che vede il vault) perché sia utile e §7.3 (`network` letto da
+/// qualcuno) perché sia sicura»* — ed è la forma migliore in cui un no si possa
+/// scrivere. Sono caduti tutti e due: il primo con la
+/// [0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md), il
+/// secondo con la [0021](../../../docs/decisions/0021-il-confine.md), che aveva
+/// scritto perfino la riga d'innesto.
+///
+/// # Il permesso non dice solo *se*: dice **dove**
+///
+/// `fub:network` porta come parametro una **allowlist di host**, e lo prometteva
+/// dalla [0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+/// senza che nessuno la leggesse. È l'unico permesso il cui parametro **si
+/// onora**, e la ragione per cui si è cominciato da qui invece che dai prefissi
+/// di path è che qui il divario fra ciò che il manifest dichiara e ciò che
+/// l'app fa non è un recinto che perde: un manifest che dice *«mi connetto solo
+/// a api.acme.com»*, mostrato all'utente, **accettato** dall'utente, e che poi
+/// consenta qualunque host è una **frase falsa scritta dall'app**.
+///
+/// # Una richiesta sola, e i redirect non si seguono
+///
+/// È la proprietà su cui l'allowlist poggia, e senza la quale sarebbe una
+/// decorazione: un host dichiarato che risponde `302` verso un host che non lo
+/// è porterebbe fuori dal recinto **senza che nessuno lo abbia deciso**. Qui il
+/// `3xx` arriva a chi ha chiesto, con il suo `Location`
+/// ([`HttpResponse::redirect_to`](crate::net::HttpResponse::redirect_to));
+/// seguirlo è **una seconda chiamata**, e ogni chiamata ripassa dal cancello.
+/// Un salto che può uscire dal recinto non lo fa l'host per conto di qualcun
+/// altro.
+pub trait HostNetwork: Send + Sync {
+    /// Una richiesta, una risposta.
+    ///
+    /// `&self` e non `&mut self` — a differenza di
+    /// [`call_service`](HostServices::call_service), che pure è un effetto —
+    /// perché non tocca niente dell'host: è la proprietà che permette a un job
+    /// di farla **senza tenere il prestito del workspace** per quanto dura la
+    /// rete, che è l'unica durata di questo contratto che l'host non governa.
+    ///
+    /// **Un `4xx` o un `5xx` sono `Ok`.** L'errore è non aver potuto chiedere —
+    /// DNS, connessione, TLS, il tetto di tempo dell'host — e arriva come
+    /// [`PluginError::Io`](crate::PluginError::Io). Le due si correggono in modi
+    /// opposti, quindi vanno distinte: a un `404` si risponde guardando la
+    /// risposta, a un guasto riprovando o dicendolo a chi guarda.
+    ///
+    /// I rifiuti sono **tre**, e ognuno dice cosa manca:
+    /// [`PermissionDenied`](crate::PluginError::PermissionDenied) senza
+    /// `fub:network` **o** verso un host fuori dall'allowlist dichiarata —
+    /// perché sono la stessa frase, *non ti è concesso questo* —,
+    /// [`BadArgs`](crate::PluginError::BadArgs) per un URL che non si legge o
+    /// per uno schema che non è `https` (né `http` verso l'anello locale), e
+    /// [`Unserved`](crate::PluginError::Unserved) su un host montato **senza
+    /// client di rete**: non è un permesso che manca, è che di qua non ci passa
+    /// nessun filo, e chi lo riceve deve poterlo dire diversamente.
+    ///
+    /// **Il tetto di tempo non attraversa il confine**, per la regola della
+    /// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md): un
+    /// limite dell'host dev'essere visibile quando morde, non interrogabile.
+    /// Chi lo supera riceve un `Io` che lo dice, e il numero resta alzabile
+    /// senza rompere nessuno.
+    fn fetch(
+        &self,
+        request: crate::net::HttpRequest,
+    ) -> Result<crate::net::HttpResponse, PluginError>;
+}
+
+/// Un prestito è ancora il filo: serve a chi ha un `Arc<dyn HostNetwork>` e
+/// vuole metterci davanti un cancello senza clonarlo.
+impl<T: HostNetwork + ?Sized> HostNetwork for &T {
+    fn fetch(
+        &self,
+        request: crate::net::HttpRequest,
+    ) -> Result<crate::net::HttpResponse, PluginError> {
+        (**self).fetch(request)
+    }
+}
+
 /// Chi **offre** un servizio agli altri plugin (§7.5).
 ///
 /// Quali `ns` serva non lo dice questo trait: lo dice il
@@ -1244,7 +1323,7 @@ impl<T: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ViewStateRea
 }
 
 /// Le capacità che il kernel concede a un provider/plugin: la **somma** delle
-/// quattordici famiglie.
+/// quindici famiglie.
 ///
 /// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
 /// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
@@ -1254,7 +1333,7 @@ impl<T: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ViewStateRea
 /// freeze un metodo **aggiunto** a una famiglia è una minor, uno **tolto** è una
 /// major.
 ///
-/// Non si implementa e non si dichiara: chi ha le quattordici famiglie ce l'ha, per
+/// Non si implementa e non si dichiara: chi ha le quindici famiglie ce l'ha, per
 /// la impl generica qui sotto. Chi lo **riceve** continua a scrivere
 /// `&mut dyn HostApi` come prima — è il tipo di chi può fare tutto, e a quello
 /// non è cambiato niente.
@@ -1280,6 +1359,7 @@ pub trait HostApi:
     + HostEvents
     + HostCommands
     + HostServices
+    + HostNetwork
 {
 }
 
@@ -1293,6 +1373,7 @@ impl<T> HostApi for T where
         + HostEvents
         + HostCommands
         + HostServices
+        + HostNetwork
         + ?Sized
 {
 }

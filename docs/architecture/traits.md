@@ -131,26 +131,39 @@ Due semantiche fissate nel contratto:
 L'unico varco con cui un provider/plugin tocca il mondo esterno. Nativo → oggetto
 in-process; WASM (M5) → proxy che reinoltra come host function.
 
-**È una somma di dieci trait** ([decisione 0021](../decisions/0021-il-confine.md),
+**È una somma di quindici trait** [conta: wit-interfacce-host]
+([decisione 0021](../decisions/0021-il-confine.md),
 §7.1) e non un trait solo: un trait solo si implementa per intero o per niente, e
 chi ne può fare una metà — il percorso di render, un comando di sola lettura, a
 M5 un componente senza permesso di scrivere — era costretto a scrivere l'altra
-metà come una fila di rifiuti. Le famiglie sono `VaultRead`, `VaultWrite`,
-`VaultStructure`, `DataRead`, `DataWrite`, `HostEnv`, `HostEvents`, `HostQuery`,
-`HostCommands`, `HostServices`, e il criterio della divisione è uno: **cosa vuol
-dire negarne una**.
+metà come una fila di rifiuti. I dieci con cui la 0021 l'ha spezzato sono
+`VaultRead`, `VaultWrite`, `VaultStructure`, `DataRead`, `DataWrite`, `HostEnv`,
+`HostEvents`, `HostQuery`, `HostCommands`, `HostServices`; poi sono arrivati
+`SettingsRead` e `SettingsWrite`
+([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), `ViewStateRead` e
+`ViewStateWrite` ([0037](../decisions/0037-lo-stato-di-vista.md)) e infine
+`HostNetwork`
+([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)).
+Il criterio della divisione è uno: **cosa vuol dire negarne una**.
 
-`HostApi` e `ReadApi` (le quattro famiglie di lettura) sono somme con una impl
+Le famiglie del `Guard` sono **diciotto** e non quindici, e lo scarto non è una
+duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
+**concede**. `HostEnv` da sola ne porta tre — `Env`, `Session`,
+`SessionSelection` — perché la 0095 ha diviso il cancello senza dividere il
+trait.
+
+`HostApi` e `ReadApi` (le famiglie di lettura) sono somme con una impl
 generica: nessuno le implementa a mano, e chi le riceve continua a scrivere
-`&mut dyn HostApi`. Al confine WIT sono dieci `interface` che il `plugin-world`
-importa una per una — e là la scomposizione compra ciò che in Rust non si vede:
+`&mut dyn HostApi`. Al confine WIT sono quindici [conta: wit-interfacce-host]
+`interface` che il `plugin-world` importa una per una — e là la scomposizione compra ciò che in Rust non si vede:
 un mondo che non importa `host-vault-write` non ha quella funzione da chiamare.
 
 ```rust
 // La somma, e le sue parti (le firme sono quelle di prima).
 pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv {}
 pub trait HostApi:
-    ReadApi + VaultWrite + VaultStructure + DataWrite + HostEvents + HostCommands + HostServices {}
+    ReadApi + VaultWrite + VaultStructure + DataWrite + HostEvents + HostCommands + HostServices
+    + HostNetwork + SettingsRead + SettingsWrite + ViewStateRead + ViewStateWrite {}
 
 pub trait VaultRead: Send + Sync {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
@@ -196,8 +209,50 @@ pub trait VaultRead: Send + Sync {
     // chiamare un altro plugin ([decisione 0021](../decisions/0021-il-confine.md), §7.5)
     fn call_service(&mut self, service: &str, method: &str, args: serde_json::Value)
         -> Result<serde_json::Value, PluginError>;
+    // parlare con qualcosa che non sta sul disco ([decisione 0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md), §23.3).
+    // `&self`: la sola capacità la cui durata non la governa l'host, quindi un
+    // job la fa senza tenere il prestito del workspace.
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError>;
 }
 ```
+
+#### `HostNetwork` — parlare con qualcosa che non sta sul disco
+
+L'ultima arrivata, e l'unica la cui **durata non la governa l'host**: una
+`read_document` finisce in microsecondi, una `fetch` dura quanto la rete. Da lì
+discendono due proprietà della firma. `&self` e non `&mut self` — a differenza
+di `call_service`, che pure è un effetto — così un job può farla **senza tenere
+il prestito del workspace**, che altrimenti affamerebbe chi scrive per tutto il
+tempo di una richiesta che il vault non lo tocca affatto
+([0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)). E un tetto di
+tempo che **non attraversa il confine**, per la regola della
+[0094](../decisions/0094-un-tetto-che-si-fa-sentire.md).
+
+È anche **l'unica famiglia il cui permesso porta un parametro che si onora**:
+`fub:network` dichiara una allowlist di host, e il `Guard` ha due cancelli in
+fila — la famiglia dice *se*, l'allowlist dice *dove*. È il primo parametro di
+permesso letto in questo repo; i prefissi di path di `read-vault` restano la
+casella del [§7.1](../roadmap/07-il-confine.md#la-casella-rimasta), e non per
+pigrizia: un path si confronta per prefisso dentro una radice che è
+dell'utente, un host per nome dentro uno spazio che non è di nessuno, quindi
+`Policy::denies_host` è **stretta** invece di generica.
+
+Tre righe rendono l'allowlist vera invece che decorativa, e la prima vale le
+altre due: **i redirect non si seguono**. Un host dichiarato che risponde `302`
+verso uno che non lo è porterebbe fuori dal recinto senza che nessuno l'abbia
+deciso, e un client che li segue lo farebbe in silenzio; qui il `3xx` torna a
+chi ha chiesto, e seguirlo è una **seconda chiamata** che ripassa dal cancello.
+Le altre due: `*.` è obbligatorio per i sottodomini (una `ends_with` nuda
+regalerebbe `evil-acme.com` a chi dichiara `acme.com`), e le credenziali di un
+URL si scartano.
+
+Un `4xx` o un `5xx` sono `Ok`: l'errore è *non aver potuto chiedere*, e arriva
+come `Io` — la distinzione della
+[0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) applicata al
+filo. Il corpo è di **byte** e il `content-type` sta fra gli header, che è la
+[0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md) letta al
+contrario per una differenza vera: un file sul disco non dice di che codifica
+è, una risposta HTTP sì — ma metà della rete risponde `image/png`.
 
 **Sette di queste capacità non sanno dire di no**, ed è una proprietà delle
 firme: `emit`, `report_progress`, `free_name`, `format_of`, `now_unix_millis`,
@@ -484,8 +539,8 @@ sequenceDiagram
 | la pila del testo | [editor.ts:181](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
 | `UndoStack` | [undo.rs:52](../../crates/fub-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
 | `Undo` / `UndoStep` | [command.rs:567](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:851](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:4105](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo |
+| dove si spinge | [workspace.rs:868](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:4146](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo |
 | `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
 
 Le due pile non si fondono perché non hanno lo stesso soggetto: ordinarle
@@ -1161,7 +1216,7 @@ modello di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **35** [conta: hostapi-metodi], contando le funzioni delle quattordici [conta: wit-interfacce-host] interfacce `host-*` di `abi.wit`: le **tredici** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)) e `read_document_bytes` ([0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **36** [conta: hostapi-metodi], contando le funzioni delle quindici [conta: wit-interfacce-host] interfacce `host-*` di `abi.wit`: le **quattordici** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)) `read_document_bytes` ([0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)) e `fetch` ([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md), l'unica che porti con sé un'**interfaccia nuova** invece di aggiungersi a una che c'era). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore

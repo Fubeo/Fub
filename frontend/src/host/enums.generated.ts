@@ -55,6 +55,8 @@ export type HealthCheck = "broken_links" | "orphan_documents";
 
 export type HourCycle = "h23" | "h12";
 
+export type HttpMethod = "get" | "head" | "post" | "put" | "patch" | "delete";
+
 export type ImportMode = "preview" | "apply";
 
 export type IndexingState = "running" | "ready" | "stopped";

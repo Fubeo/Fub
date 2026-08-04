@@ -2607,6 +2607,61 @@ interface text {
     }
 }
 
+/// Una richiesta e una risposta (§23.3). Vedi `crates/fub-abi/src/net.rs`.
+///
+/// Un `record` e non un metodo per verbo: un campo si appende, un elenco di
+/// funzioni no. `method`, `headers` e `body` nascono con la prima versione
+/// anche se il primo cliente farà solo dei GET, perché aggiungerli dopo il
+/// freeze costerebbe a chi li riceve.
+interface net {
+    /// Il verbo. Sei, e non «quelli che servono adesso»: un plugin scritto
+    /// contro un enum che ne aveva due va riscritto per usarne un terzo.
+    /// `connect` e `trace` non ci sono e non sono una dimenticanza — il primo
+    /// apre un tunnel, cioè esce dalla domanda che questa capacità sa
+    /// recintare.
+    enum http-method { get, head, post, put, patch, delete }
+
+    /// Un header come coppia. Una LISTA e non una mappa perché HTTP permette
+    /// lo stesso nome più volte (`set-cookie` è il caso normale), e una mappa
+    /// perderebbe in silenzio tutte le occorrenze tranne una. Il confronto sul
+    /// nome è senza distinzione di maiuscole, come vuole HTTP.
+    record http-header {
+        name: string,
+        value: string,
+    }
+
+    record http-request {
+        /// L'URL assoluto, ed è L'UNICO POSTO in cui sta l'host a cui ci si
+        /// connette: è quello che l'allowlist del manifest confronta. Non c'è
+        /// un campo `host` accanto, perché due posti in cui è scritto dove si
+        /// va sono due posti che possono non essere d'accordo, e chi controlla
+        /// ne guarderebbe uno solo.
+        url: string,
+        method: http-method,
+        headers: list<http-header>,
+        /// `none` non è un corpo vuoto: è *non c'è corpo*, e sono due
+        /// richieste diverse sul filo.
+        body: option<list<u8>>,
+    }
+
+    /// UNO STATO 404 O 500 È UNA RISPOSTA, non un guasto: chi chiama deve poter
+    /// distinguere «ho chiesto e mi hanno detto di no» da «non ho potuto
+    /// chiedere», perché si correggono in modi opposti.
+    record http-response {
+        status: u16,
+        headers: list<http-header>,
+        /// BYTE E NON TESTO, che è la regola dei documenti letta al contrario e
+        /// per una differenza vera: un file sul disco non dice di che codifica
+        /// è, una risposta HTTP sì. Ma metà della rete risponde `image/png` o
+        /// `application/pdf`, e un corpo `string` costringerebbe l'host a
+        /// decidere per tutti e a sbagliare per chi scarica un allegato. Il
+        /// `content-type` sta DOVE HTTP LO METTE, fra gli header: un campo
+        /// accanto sarebbe lo stesso dato in due posti che possono non essere
+        /// d'accordo.
+        body: list<u8>,
+    }
+}
+
 /// Modificare **un pezzo** di documento: l'edit come coppia (span, testo) sopra
 /// la revisione su cui è stato calcolato. Vedi `crates/fub-abi/src/edit.rs`.
 interface edit {
@@ -3291,6 +3346,44 @@ interface host-services {
     call-service: func(service: string, method: string, args: json) -> result<json, plugin-error>;
 }
 
+/// Parlare con qualcosa che non sta sul disco (§23.3).
+///
+/// La decisione 0013 l'aveva tenuta fuori con DUE BLOCCANTI NOMINATI — un
+/// lavoro lungo che vede il vault, e `network` letto da qualcuno — e sono
+/// caduti tutti e due (0027, 0021).
+///
+/// IL PERMESSO NON DICE SOLO *SE*, DICE DOVE: `fub:network` porta come
+/// parametro una allowlist di host, ed è l'unico permesso il cui parametro si
+/// onora. Un manifest che dice «mi connetto solo a api.acme.com», mostrato
+/// all'utente e accettato dall'utente, e che poi consentisse qualunque host non
+/// sarebbe un recinto che perde: sarebbe una frase falsa scritta dall'app.
+interface host-network {
+    use net.{http-request, http-response};
+    use errors.{plugin-error};
+
+    /// Una richiesta, una risposta.
+    ///
+    /// I REDIRECT NON SI SEGUONO, ed è la proprietà su cui l'allowlist poggia:
+    /// un host dichiarato che risponde `302` verso un host che non lo è
+    /// porterebbe fuori dal recinto senza che nessuno lo abbia deciso. Il `3xx`
+    /// arriva a chi ha chiesto con il suo `location`; seguirlo è una SECONDA
+    /// CHIAMATA, e ogni chiamata ripassa dal cancello.
+    ///
+    /// I rifiuti sono tre e dicono cose diverse: `permission-denied` senza
+    /// `fub:network` o verso un host fuori dall'allowlist (è la stessa frase,
+    /// *non ti è concesso questo*), `bad-args` per un URL che non si legge o
+    /// per uno schema che non è `https` — né `http` verso l'anello locale, che
+    /// è dove vive un modello in esecuzione sulla macchina di chi usa l'app —
+    /// e `unserved` su un host montato SENZA CLIENT DI RETE: non è un permesso
+    /// che manca, è che di qua non ci passa nessun filo.
+    ///
+    /// Un guasto del trasporto — DNS, connessione, TLS, il tetto di tempo
+    /// dell'host — è `io`. IL TETTO DI TEMPO NON ATTRAVERSA IL CONFINE: un
+    /// limite dell'host dev'essere visibile quando morde, non interrogabile,
+    /// così resta alzabile senza rompere nessuno.
+    fetch: func(request: http-request) -> result<http-response, plugin-error>;
+}
+
 /// Invocare i comandi del registro.
 ///
 /// Una famiglia sua perché è l'unica che MOLTIPLICA: chi la ottiene può fare
@@ -3667,7 +3760,7 @@ interface exporter {
 /// Il mondo di un plugin: importa le capacità del core, esporta i provider che
 /// implementa. Il kernel non distingue nativo da WASM.
 world plugin-world {
-    // Le quattordici famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
+    // Le quindici famiglie di capacità (§7.1). **Questo elenco è il permesso**: un
     // mondo che non importa `host-vault-write` non è un mondo che la rifiuta a
     // runtime, è un mondo in cui quella funzione non esiste. Il giorno che il
     // caricatore di M5 monterà un componente sotto sandbox stretta, ciò che
@@ -3683,6 +3776,7 @@ world plugin-world {
     import host-query;
     import host-commands;
     import host-services;
+    import host-network;
     import host-settings-read;
     import host-settings-write;
     import host-view-state-read;

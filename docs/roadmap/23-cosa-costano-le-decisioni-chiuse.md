@@ -186,8 +186,10 @@ l'ha aperta. La riga resta vera e il criterio non cambia: **P0 è la scadenza, n
 l'importanza**, e [leva.md](leva.md) esiste apposta per dire che una voce può
 essere P1 e restare la più importante da capire. Passate una per una: la §23.1 è
 una regola dentro `reconcile` e non tocca una firma; la §23.2 è una riga di prosa
-e una decisione di prodotto; la §23.3 aggiunge una capacità, e l'elenco della
-0013 è chiuso alla **sottrazione**, non alla crescita; la §23.5 sposta un
+e una decisione di prodotto; la §23.3 aggiungeva una capacità, e l'elenco della
+0013 è chiuso alla **sottrazione**, non alla crescita — la
+[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+l'ha aggiunta senza toccare una firma, che è la conferma del criterio; la §23.5 sposta un
 permesso e non una firma; la §23.6 aggiunge un modo accanto a quello che c'è; la
 §23.7 e la §23.8 sono regole del kernel.
 
@@ -229,6 +231,16 @@ rete, un plugin che legge quel che l'utente seleziona non ha dove mandarlo; il
 giorno che la rete entra, ce l'ha. Le due voci non si sono mai incontrate perché
 stanno in due verbali diversi, ed è la stessa forma della §23.3 stessa — due cose
 vere separatamente che nessuno ha moltiplicato.
+
+**L'ordine è stato onorato**, e da tre verbali di fila: la
+[0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) ha messo i cancelli
+della sessione, la [0096](../decisions/0096-una-bozza-non-e-una-nota.md) quello
+delle bozze, e solo dopo la
+[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) ha
+aperto la rete. Il giorno in cui un plugin ha avuto dove mandare le note
+dell'utente, le due cose che più valeva non fargli leggere avevano già un
+permesso proprio — che è il prodotto delle due metà guardato **prima** invece
+che dopo, cioè l'unica volta in questa seduta in cui è successo.
 
 **È stata presa per prima appena le P0 sono finite**, e la
 [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) l'ha chiusa: quello
@@ -372,7 +384,7 @@ solo decorare la nostra.
 
 ### 23.3 Due bloccanti caduti, e la rete non se n'è accorta
 
-*contratto · **P1** — aggiungere una capacità è una minor: l'elenco della 0013 è chiuso alla sottrazione, non alla crescita*
+*chiusa dalla [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) — `HostNetwork::fetch` entra come quindicesima famiglia del contratto e diciottesima del `Guard`, e **`fub:network` è il primo parametro di permesso che questo repo legga**: l'allowlist di host si onora, i redirect non si seguono (è la riga su cui poggia tutto), `*.` è obbligatorio per i sottodomini e le credenziali non prestano un nome dichiarato · nessuna firma toccata, quindi **nessun ritaglio** · resta **una casella**: fermare una richiesta già partita, che oggi aspetta il tetto di tempo dell'host*
 
 La [0013](../decisions/0013-elenco-delle-capacita.md) ha tenuto fuori
 `http_fetch` con due bloccanti **nominati**, ed è la forma migliore in cui un no
@@ -389,7 +401,7 @@ perfino la riga d'innesto: *«il giorno che `http_fetch` entrerà,
 `fub:network` è già dichiarabile in un manifest, in attesa di qualcosa da
 governare.
 
-- [ ] **Il gemello di questa voce è già stato fatto, ed è il precedente che la
+- [x] **Il gemello di questa voce è già stato fatto, ed è il precedente che la
       rende ovvia.** La [§22.1](22-cosa-sa-dire-un-abbonamento.md) ha rimisurato
       l'**altro** diniego della stessa 0013 — `schedule_at` — ha trovato la
       premessa smentita dalla [0032](../decisions/0032-il-runner-dei-job.md), e ha
@@ -399,7 +411,7 @@ governare.
       fatto lo stesso giro per la rete, e la differenza sta tutta lì: qui
       l'altra regola **non c'è**. Chi scarica ha bisogno della risposta per
       proseguire, che è la definizione di capacità scritta nella 0013 stessa.
-- [ ] **Cosa va deciso, che non è «si aggiunge `http_fetch`».** Se si concede un
+- [x] **Cosa va deciso, che non è «si aggiunge `http_fetch`».** Se si concede un
       GET a un'**allowlist di host dichiarata nel manifest** o una capacità nuda
       con un permesso booleano — e la prima ha già la sua forma, perché
       `PluginPermissions.granted` è una mappa con parametro dalla
@@ -411,13 +423,13 @@ governare.
       testo, che è la stessa domanda che la
       [0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md) ha già
       risposto una volta per i documenti.
-- [ ] **Chi lo chiede.** FEATURES 18 (sync), 14.2 (clipper), 22 (AI e RAG), 15.1
+- [x] **Chi lo chiede.** FEATURES 18 (sync), 14.2 (clipper), 22 (AI e RAG), 15.1
       (citazioni: DOI, Zotero), 13.4 (trascrizione), 27.2 (API locale). È la
       famiglia più grande fra quelle che oggi non hanno **nessuna** strada, ed è
       l'unica in cui l'assenza non si vede: un plugin di sync non si scrive a
       metà e poi si blocca — non lo prova nessuno, e il buco resta senza lasciare
       traccia.
-- [ ] **Perché non è P0.** La tentazione è l'opposto — *tocca l'`HostApi`,
+- [x] **Perché non è P0.** La tentazione è l'opposto — *tocca l'`HostApi`,
       quindi è contratto, quindi P0* — ed è lo stesso errore di categoria che la
       [seduta 22](22-cosa-sa-dire-un-abbonamento.md) ha contestato a chi l'ha
       aperta. Aggiungere una capacità dopo il freeze costa una **minor**, e la
@@ -1057,3 +1069,62 @@ symlink invece funzionano ovunque: quel ramo passa da `symlink_metadata` e non d
       raro finché il vault sta su una macchina sola e non lo tocca nessun altro
       strumento — e gli hardlink dentro un vault li mettono precisamente gli
       strumenti che questo progetto promette di non ostacolare.
+
+### 23.17 Tre permessi nuovi in tre commit, e nessuno li mostra a chi deve accettarli
+
+*confine · **P1** — non è una firma: è la superficie che rende vere le frasi che quattro verbali hanno scritto nei manifest*
+
+Questa voce esiste perché una riga si è ripetuta tre volte. La
+[0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) chiude il suo
+«cosa resta fuori» con *«resta fuori il pannello che i permessi li mostra»*; la
+[0096](../decisions/0096-una-bozza-non-e-una-nota.md) la ripete per
+`fub:read-drafts`; la
+[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) per
+`fub:network`. Tre permessi nuovi in tre commit, tutti comparsi in `PluginInfo`
+da soli — cioè nel dato che l'inventario porta alla shell — e **nessuna
+superficie che li renda leggibili a chi dovrebbe deciderli**.
+
+La terza volta è il momento in cui questo repo smette di dichiarare e comincia a
+contare, ed è la stessa diagnosi che la
+[§16.7](16-crate-sdk-banchi-di-prova.md) fa agli elenchi: *chi lo legge, lo
+trova?* Una riga in fondo a un verbale la legge chi apre quel verbale.
+
+- [ ] **Perché adesso pesa più di prima, e non è «uno in più».** I permessi
+      della 0095 e della 0096 sono **binari**: vederli o no cambia se l'utente
+      sa. `fub:network` ha un **parametro che è il permesso stesso** — la
+      differenza fra `["api.acme.com"]` e nessun elenco è la differenza fra un
+      plugin che parla con un servizio e uno che può mandare le note dell'utente
+      ovunque, e la 0097 ha scelto **deliberatamente** di lasciare quella
+      differenza fuori dal cancello (senza parametro = qualunque host, per la
+      regola uniforme di `OptionMap`) proprio perché *«ciò che cambia resta dove
+      deve, cioè nella frase che l'utente legge accettando»*. Quella frase oggi
+      non gliela legge nessuno: **il verbale ha delegato a una superficie che
+      non esiste**, ed è la ragione più forte per cui questa voce non può
+      restare una riga.
+- [ ] **Cosa va deciso, che non è «si fa un pannello».** Se i permessi si vedono
+      **prima** (un momento di accettazione all'installazione, che è la forma
+      che il patto suggerisce) o **dopo** (un'ispezione nelle impostazioni, che
+      è quello che la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) ha già come
+      casa). Se sono **negabili uno per uno** — e qui la risposta sembra sì,
+      perché il `Guard` lo regge già: `Granted` calcola la maschera dai permessi
+      del manifest, e togliere una chiave è una sottrazione che il kernel
+      applica senza sapere chi l'ha decisa. Se una **revoca** a plugin montato
+      ha effetto subito: la 0097 ha scritto la riga che dice di sì per la rete
+      (`JobHost::fetch` rilegge il permesso a ogni chiamata invece di catturarlo
+      all'avvio del job), ed è un precedente da onorare o da contraddire con un
+      argomento.
+- [ ] **Il dato c'è già, ed è metà del lavoro fatto.** `PluginInfo` porta i
+      permessi con i loro parametri, e la 0042 ha il catalogo che non compila se
+      una chiave manca — quindi le frasi in italiano hanno dove stare e un
+      presidio che le pretende. Ciò che manca è chi le dispone e chi le legge.
+      Va misurato invece che assunto: **quante** chiavi sono oggi dichiarabili,
+      e quante di quelle hanno un parametro che cambia cosa si può fare (oggi
+      una sola, `fub:network`).
+- [ ] **Perché è P1 e non P0.** Nessuna firma del contratto cambia: è shell e
+      un pezzo di §7.6. Ma è l'unica voce di questa seduta il cui costo cade
+      **interamente sull'utente** invece che su chi scrive plugin — un permesso
+      invisibile non fa fallire niente, fa solo sì che una scelta che era sua la
+      prenda qualcun altro al posto suo. Ed è anche la voce che rende vere, a
+      posteriori, quattro decisioni già prese: finché non c'è, la parte
+      «l'utente può vederla e negarla» del valore che 0021, 0095, 0096 e 0097
+      attribuiscono ai loro cancelli è una promessa scoperta.

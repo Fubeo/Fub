@@ -12,30 +12,32 @@ use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::options::permission;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::text::Text;
 use fub_abi::traits::{
-    DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostQuery, HostServices, IndexQuery,
-    IndexResult, JobId, JobSpec, Page, Paged, PluginPermissions, SettingsRead, SettingsWrite,
-    TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
+    DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices,
+    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, PluginPermissions, SettingsRead,
+    SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead,
+    ViewStateWrite,
 };
 use fub_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le diciassette famiglie di capacità [conta: guard-famiglie], come nomi su
+/// Le diciotto famiglie di capacità [conta: guard-famiglie], come nomi su
 /// cui una politica risponde.
 ///
-/// Sono i quattordici trait di `fub_abi::traits` **più tre**, e non è una
+/// Sono i quindici trait di `fub_abi::traits` **più tre**, e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono coprire le stesse cose, e il presidio è
 /// che [`Guard`] non compila se un trait non è coperto.
 ///
-/// # Perché diciassette e non quattordici
+/// # Perché diciotto e non quattordici
 ///
-/// Per undici trait su quattordici la corrispondenza è uno a uno, ed era vera
+/// Per dodici trait su quindici la corrispondenza è uno a uno, ed era vera
 /// per tutti e quattordici fino alla
 /// [0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md).
 /// [`HostEnv`] ne porta **tre** perché è il solo trait che presta, dallo stesso
@@ -115,6 +117,15 @@ pub enum Capability {
     Commands,
     /// Chiamare i servizi offerti dagli altri plugin (§7.5).
     Services,
+    /// **Parlare con qualcosa che non sta sul disco** (§23.3).
+    ///
+    /// È la sola famiglia il cui permesso non dice solo *se* ma anche **dove**:
+    /// `fub:network` porta come parametro una allowlist di host, e questa è la
+    /// prima e per ora l'unica in cui quel parametro viene **letto** — vedi
+    /// [`Policy::denies_host`]. Il resto della casella del §7.1 (i prefissi di
+    /// path di `read-vault`) resta suo: un host non è un path, e i due filtri
+    /// non condividono una riga.
+    Network,
     /// Leggere le impostazioni dichiarate (§11.1).
     SettingsRead,
     /// Scrivere quelle che si sono dichiarate scrivibili da un programma.
@@ -137,7 +148,7 @@ impl Capability {
     /// [`Granted::new`] e il presidio delle capacità simulate in
     /// `kernel/tests/invoke_command.rs` — e una famiglia che non ci finisse
     /// sparirebbe da entrambi restando verde.
-    pub const ALL: [Capability; 17] = [
+    pub const ALL: [Capability; 18] = [
         Capability::VaultRead,
         Capability::VaultWrite,
         Capability::VaultStructure,
@@ -151,6 +162,7 @@ impl Capability {
         Capability::Events,
         Capability::Commands,
         Capability::Services,
+        Capability::Network,
         Capability::SettingsRead,
         Capability::SettingsWrite,
         Capability::ViewStateRead,
@@ -192,6 +204,7 @@ impl Capability {
             Capability::Session => Some(permission::READ_SESSION),
             Capability::SessionSelection => Some(permission::READ_SELECTION),
             Capability::Services => Some(permission::CALL_SERVICE),
+            Capability::Network => Some(permission::NETWORK),
             Capability::SettingsWrite => Some(permission::WRITE_SETTINGS),
             // Leggere la configurazione non ha un permesso, e non è una
             // dimenticanza: uno schema è pubblico per costruzione — sta nel
@@ -214,7 +227,7 @@ impl Capability {
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a diciassette nomi [conta: guard-famiglie]
+/// Una politica è **piccola per costruzione**: risponde a diciotto nomi [conta: guard-famiglie]
 /// e non
 /// sa niente di documenti, di blob o di comandi. È ciò che permette di comporne
 /// due senza chiedersi cosa significhi comporre venticinque metodi.
@@ -225,6 +238,27 @@ pub trait Policy: Send + Sync {
     /// si stava facendo: «creare `Nota.md`: **il comando si è dichiarato di
     /// sola lettura**».
     fn denies(&self, cap: Capability) -> Option<String>;
+
+    /// La ragione per cui **questo host** è fuori dal recinto, o `None` se ci
+    /// sta dentro.
+    ///
+    /// È la seconda domanda che una politica sa fare, e ne ha una sola perché
+    /// una sola serve: [`Capability::Network`] è l'unica famiglia il cui
+    /// permesso porta un parametro **che si onora**. Chiedere alla politica
+    /// *«questo bersaglio, per questa famiglia»* in generale sarebbe la firma
+    /// preparata senza chiamante che questo repo rifiuta da otto verbali; e
+    /// sarebbe anche sbagliata, perché l'altro parametro che esiste — i
+    /// prefissi di path di `read-vault`, la casella del §7.1 — **non è la
+    /// stessa domanda**: un path si confronta per prefisso dentro una radice
+    /// che è dell'utente, un host si confronta per nome dentro uno spazio che
+    /// non è di nessuno.
+    ///
+    /// Il default è `None` — *nessun recinto* — e non è una svista: una
+    /// politica che non sa niente di host non deve inventarsi un no. Chi il
+    /// recinto ce l'ha è [`Granted`], che è l'unica che legge un manifest.
+    fn denies_host(&self, _host: &str) -> Option<String> {
+        None
+    }
 }
 
 /// Due politiche insieme: nega chi nega per primo.
@@ -236,6 +270,12 @@ pub trait Policy: Send + Sync {
 impl<A: Policy, B: Policy> Policy for (A, B) {
     fn denies(&self, cap: Capability) -> Option<String> {
         self.0.denies(cap).or_else(|| self.1.denies(cap))
+    }
+
+    fn denies_host(&self, host: &str) -> Option<String> {
+        self.0
+            .denies_host(host)
+            .or_else(|| self.1.denies_host(host))
     }
 }
 
@@ -271,6 +311,18 @@ impl Policy for ReadOnly {
             // ricaricare l'editor, il job rientra quando la simulazione è
             // finita da un pezzo.
             | Capability::Events
+            // **Una `DryRun` che scarica non è una simulazione**, ed è la
+            // stessa ragione dei servizi qui sotto vista da fuori: un servizio
+            // può uscire dalla simulazione perché gira con le capacità di chi
+            // lo offre, una richiesta di rete perché l'effetto **non è
+            // nell'host**. Un `POST` crea qualcosa dall'altra parte, e perfino
+            // un `GET` viene contato, fatturato e registrato da chi risponde:
+            // sono le sole cose che questo processo non può ritirare nemmeno
+            // volendo. `run_command` invece passa, perché il comando invocato
+            // riceve a sua volta un host simulato — e questa è la differenza
+            // esatta: una catena che l'host governa contro un mondo che non
+            // conosce.
+            | Capability::Network
             // Un servizio di un altro plugin può **scrivere**, e girerebbe con
             // le capacità di CHI LO OFFRE: un dry-run che potesse chiamarlo
             // avrebbe una scala per uscire dalla simulazione. `run_command`
@@ -324,6 +376,23 @@ pub struct Granted {
     plugin: Arc<str>,
     /// Le famiglie concesse, calcolate una volta alla dichiarazione.
     allowed: CapabilitySet,
+    /// Gli host a cui `fub:network` consente di connettersi, se ne ha
+    /// dichiarati.
+    ///
+    /// `None` = il permesso c'è **senza parametro**, cioè *qualunque host* —
+    /// la regola uniforme di [`OptionMap`](fub_abi::options): presente =
+    /// acceso, il valore è il parametro. Non è la regola comoda per questa
+    /// chiave, e c'è stata la tentazione di ribaltarla («senza elenco, nessun
+    /// host»); ribaltarla avrebbe reso `network` **l'unica chiave del contratto
+    /// la cui assenza di parametro significa il contrario che altrove**, cioè
+    /// avrebbe rotto la sola proprietà per cui una mappa sola governa quattro
+    /// sedi: chi ne impara una le sa tutte. Ciò che l'utente vede resta
+    /// diverso, ed è lì che deve esserlo — «può connettersi a qualunque host»
+    /// non è la stessa frase di «può connettersi a api.acme.com».
+    ///
+    /// Un `Arc` perché [`Granted`] si clona a ogni prestito, e l'elenco è dello
+    /// stesso manifest per tutta la vita del montaggio.
+    network: Option<Arc<[Box<str>]>>,
     /// `None` = il plugin non è dichiarato affatto, che è un no diverso da
     /// «non ha quel permesso» e va detto diverso.
     trust: Option<Trust>,
@@ -382,9 +451,16 @@ impl Granted {
                     Some(_) => set,
                 }
             });
+        // L'allowlist si legge **una volta**, qui, e non a ogni richiesta: è la
+        // stessa ragione per cui le famiglie diventano una maschera invece di
+        // restare una mappa da interrogare.
+        let hosts = permissions.granted.as_strings(permission::NETWORK);
+        let network =
+            (!hosts.is_empty()).then(|| hosts.iter().map(|h| normalized_host(h)).collect());
         Granted {
             plugin: Arc::from(plugin),
             allowed,
+            network,
             trust: Some(trust),
         }
     }
@@ -398,6 +474,7 @@ impl Granted {
         Granted {
             plugin: Arc::from(plugin),
             allowed: CapabilitySet::default(),
+            network: None,
             trust: None,
         }
     }
@@ -409,7 +486,60 @@ impl Granted {
     }
 }
 
+/// Un host come lo si confronta: minuscolo, senza il punto finale della forma
+/// assoluta del DNS.
+///
+/// Non fa altro, e in particolare **non fa punycode**: `xn--acme-...` e il nome
+/// scritto in unicode resterebbero due stringhe diverse. È un limite vero e sta
+/// scritto invece che scoperto — chi dichiara un host internazionalizzato lo
+/// dichiara nella forma in cui l'URL lo porterà.
+fn normalized_host(host: &str) -> Box<str> {
+    host.trim()
+        .trim_end_matches('.')
+        .to_ascii_lowercase()
+        .into_boxed_str()
+}
+
+impl Granted {
+    /// L'host di questa allowlist copre `target`?
+    ///
+    /// Due forme, e la seconda è quella che rende la prima sicura:
+    ///
+    /// - `api.acme.com` copre **esattamente** `api.acme.com`;
+    /// - `*.acme.com` copre ogni sottodominio *proprio* — `api.acme.com` sì,
+    ///   `acme.com` no, e `evil-acme.com` **no**.
+    ///
+    /// La seconda riga è il difetto che una `ends_with` nuda avrebbe: chi
+    /// dichiara `acme.com` sperando nei sottodomini si ritroverebbe a coprire
+    /// `evil-acme.com`, che è un dominio di qualcun altro. Il carattere `*` è
+    /// obbligatorio proprio perché *«voglio anche i sottodomini»* sia una cosa
+    /// che si dice invece di una che succede.
+    fn covers(pattern: &str, target: &str) -> bool {
+        match pattern.strip_prefix("*.") {
+            Some(suffix) => {
+                target.len() > suffix.len() + 1 && target.ends_with(&format!(".{suffix}"))
+            }
+            None => pattern == target,
+        }
+    }
+}
+
 impl Policy for Granted {
+    fn denies_host(&self, host: &str) -> Option<String> {
+        let target = normalized_host(host);
+        match &self.network {
+            // Nessun parametro: `fub:network` acceso e basta, cioè qualunque
+            // host. Vedi il campo per perché la regola non si ribalta qui.
+            None => None,
+            Some(allowed) if allowed.iter().any(|p| Granted::covers(p, &target)) => None,
+            Some(allowed) => Some(format!(
+                "`{}` ha dichiarato `{}` e non `{target}`",
+                self.plugin,
+                allowed.join("`, `")
+            )),
+        }
+    }
+
     fn denies(&self, cap: Capability) -> Option<String> {
         match self.trust {
             None => Some(format!("`{}` non è un plugin dichiarato", self.plugin)),
@@ -427,7 +557,7 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le diciassette famiglie [conta: guard-famiglie]
+/// Delega ciò che la politica concede e nega il resto. Le diciotto famiglie [conta: guard-famiglie]
 /// sono implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.
@@ -827,6 +957,95 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
     }
 }
 
+impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
+    /// **Due cancelli, e il secondo è il primo parametro di permesso che questo
+    /// repo legge.** La famiglia dice *se*, l'allowlist dice *dove*, e senza il
+    /// secondo il permesso prometterebbe una cosa che non fa — che è la
+    /// differenza fra un recinto che perde e una frase falsa scritta dall'app.
+    ///
+    /// L'ordine conta e non è indifferente: prima la famiglia, così chi non ha
+    /// `fub:network` legge *«non hai dichiarato il permesso»* e non un elenco
+    /// di host che non lo riguarda.
+    ///
+    /// L'URL si legge **qui e una volta sola**. Non c'è un campo `host` accanto
+    /// nella richiesta apposta: due posti in cui è scritto dove si va sono due
+    /// posti che possono non essere d'accordo, e chi controlla ne guarderebbe
+    /// uno solo.
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        let (scheme, host) = split_url(&request.url)?;
+        self.check(Capability::Network, || format!("connettersi a `{host}`"))?;
+        if let Some(why) = self.policy.denies_host(&host) {
+            return Err(PluginError::PermissionDenied(
+                format!("connettersi a `{host}`: {why}").into(),
+            ));
+        }
+        // Lo schema si guarda **dopo** i permessi, perché «non ti è concesso»
+        // è una frase più utile di «l'URL è fatto male» a chi ha sbagliato
+        // tutte e due.
+        if scheme != "https" && !is_loopback(&host) {
+            return Err(PluginError::BadArgs(
+                format!(
+                    "`{scheme}` non è `https`: in chiaro l'allowlist promette un host \
+                     e la rete ne consegna un altro. L'anello locale fa eccezione, \
+                     perché lì non c'è rete da attraversare"
+                )
+                .into(),
+            ));
+        }
+        self.inner.fetch(request)
+    }
+}
+
+/// Lo schema e l'host di un URL, senza tirarsi dietro un parser di URL.
+///
+/// Fa **una** cosa e la fa stretta: quello che serve al cancello è dove si va,
+/// e dove si va sta fra `://` e il primo `/`, `?` o `#`, meno le credenziali e
+/// meno la porta. Ciò che questa funzione non sa fare — normalizzare i percorsi,
+/// decodificare le sequenze percentuali, capire l'IDN — non le serve, perché non
+/// costruisce l'URL: lo legge chi poi si connetterà davvero, e il cancello
+/// guarda la stessa stringa.
+///
+/// Le credenziali (`user:pass@`) si scartano ed è la riga che conta: senza,
+/// `https://api.acme.com@evil.example/` avrebbe un «host» che comincia con un
+/// nome dichiarato e finisce su una macchina di qualcun altro. È il modo più
+/// vecchio di far leggere a un umano un indirizzo e a una macchina un altro.
+fn split_url(url: &str) -> Result<(String, String), PluginError> {
+    let malformato = || {
+        PluginError::BadArgs(format!("`{url}` non è un URL assoluto che si possa leggere").into())
+    };
+    let (scheme, rest) = url.split_once("://").ok_or_else(malformato)?;
+    let authority = rest
+        .split(['/', '?', '#'])
+        .next()
+        .filter(|a| !a.is_empty())
+        .ok_or_else(malformato)?;
+    // Dopo l'ultima `@` c'è l'host: prima ci sono le credenziali.
+    let hostport = authority.rsplit('@').next().unwrap_or(authority);
+    let host = match hostport.strip_prefix('[') {
+        // IPv6 letterale: `[::1]:8080`.
+        Some(inside) => inside.split(']').next().unwrap_or(inside),
+        None => hostport.split(':').next().unwrap_or(hostport),
+    };
+    if host.is_empty() {
+        return Err(malformato());
+    }
+    Ok((
+        scheme.trim().to_ascii_lowercase(),
+        normalized_host(host).into_string(),
+    ))
+}
+
+/// L'host è **questa macchina**?
+///
+/// Serve a una regola sola e vale la pena scriverla: `http` in chiaro è
+/// rifiutato ovunque tranne qui, perché un modello che gira sul computer di chi
+/// usa l'app — `http://localhost:11434` — non attraversa nessuna rete, e
+/// pretendere TLS verso sé stessi vorrebbe dire escludere dal contratto
+/// l'unico modo di usare l'AI senza mandare le proprie note a qualcuno.
+fn is_loopback(host: &str) -> bool {
+    host == "localhost" || host == "::1" || host.starts_with("127.")
+}
+
 impl<H: HostServices, P: Policy> HostServices for Guard<H, P> {
     fn call_service(
         &mut self,
@@ -1127,6 +1346,186 @@ mod tests {
                 })
                 .is_err(),
             "e non devono aprire il resto dell'indice"
+        );
+    }
+
+    /// Un host che risponde `200` a chiunque: ciò che si prova qui è il
+    /// cancello, non cosa c'è dall'altra parte del filo.
+    struct Filo;
+
+    impl HostNetwork for Filo {
+        fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
+            Ok(HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: b"ciao".to_vec(),
+            })
+        }
+    }
+
+    fn con_rete(hosts: &[&str]) -> Granted {
+        let mut permessi = PluginPermissions::of(&[]);
+        permessi.granted.set(
+            permission::NETWORK,
+            serde_json::Value::Array(
+                hosts
+                    .iter()
+                    .map(|h| serde_json::Value::String((*h).into()))
+                    .collect(),
+            ),
+        );
+        Granted::new("p", &permessi, Trust::Community)
+    }
+
+    /// **L'allowlist è vera**, ed è tutta la voce: un manifest che dichiara un
+    /// host e ne raggiunge un altro è una frase falsa scritta dall'app, non un
+    /// recinto che perde.
+    ///
+    /// Prima della 0097 il parametro di un permesso non lo leggeva nessuno:
+    /// `fub:network` con un elenco dentro concedeva esattamente quanto
+    /// `fub:network` nudo.
+    #[test]
+    fn the_manifest_says_where_and_it_is_true() {
+        let guard = Guard::new(Filo, con_rete(&["api.acme.com"]));
+        guard
+            .fetch(HttpRequest::get("https://api.acme.com/v1/note"))
+            .expect("l'host dichiarato passa");
+        let err = guard
+            .fetch(HttpRequest::get("https://altrove.example/raccogli"))
+            .expect_err("quello non dichiarato no");
+        assert!(
+            matches!(err, PluginError::PermissionDenied(_)),
+            "e il rifiuto nomina il permesso: {err}"
+        );
+        assert!(
+            err.message().to_string().contains("api.acme.com"),
+            "dicendo cosa era stato dichiarato: {err}"
+        );
+    }
+
+    /// **Il modo in cui un'allowlist si scavalca**, e la riga che lo impedisce.
+    ///
+    /// Un host dichiarato che risponde `302` verso uno che non lo è porterebbe
+    /// fuori dal recinto senza che nessuno l'abbia deciso — e un client che
+    /// segue i redirect lo farebbe **in silenzio**, perché l'allowlist non ce
+    /// l'ha e non deve averla. Qui il salto è una **seconda chiamata**, quindi
+    /// ripassa dal cancello e il cancello lo ferma.
+    #[test]
+    fn a_redirect_out_of_the_fence_is_a_second_call_and_is_stopped() {
+        let guard = Guard::new(Filo, con_rete(&["api.acme.com"]));
+        let risposta = HttpResponse {
+            status: 302,
+            headers: vec![fub_abi::net::HttpHeader::new(
+                "Location",
+                "https://altrove.example/raccogli",
+            )],
+            body: Vec::new(),
+        };
+        let salto = risposta.redirect_to().expect("è un redirect");
+        assert!(
+            guard.fetch(HttpRequest::get(salto)).is_err(),
+            "seguire il salto è chiedere di nuovo, e la seconda domanda è \
+             quella che il recinto ferma"
+        );
+    }
+
+    /// Le credenziali in un URL sono il modo più vecchio di far leggere a un
+    /// umano un indirizzo e a una macchina un altro.
+    #[test]
+    fn credentials_do_not_borrow_an_allowed_name() {
+        let guard = Guard::new(Filo, con_rete(&["api.acme.com"]));
+        assert!(
+            guard
+                .fetch(HttpRequest::get("https://api.acme.com@evil.example/x"))
+                .is_err(),
+            "l'host è ciò che sta dopo l'ultima `@`, non ciò che si legge prima"
+        );
+    }
+
+    /// Il carattere `*` è obbligatorio proprio perché *«voglio anche i
+    /// sottodomini»* sia una cosa che si dice invece di una che succede — e
+    /// perché una `ends_with` nuda regalerebbe a chi dichiara `acme.com` il
+    /// dominio di qualcun altro.
+    #[test]
+    fn a_wildcard_does_not_hand_over_someone_elses_domain() {
+        let guard = Guard::new(Filo, con_rete(&["*.acme.com"]));
+        guard
+            .fetch(HttpRequest::get("https://api.acme.com/x"))
+            .expect("un sottodominio proprio passa");
+        assert!(
+            guard.fetch(HttpRequest::get("https://acme.com/x")).is_err(),
+            "il dominio nudo no: `*.` chiede un livello in più"
+        );
+        assert!(
+            guard
+                .fetch(HttpRequest::get("https://evil-acme.com/x"))
+                .is_err(),
+            "e un nome che ci finisce per caso meno che mai"
+        );
+    }
+
+    /// `fub:network` senza parametro è *qualunque host*, per la regola uniforme
+    /// di `OptionMap`. Ciò che cambia non è il cancello: è la frase che
+    /// l'utente legge quando gli si chiede di accettare.
+    #[test]
+    fn no_allowlist_means_anywhere_and_that_is_the_uniform_rule() {
+        let mut permessi = PluginPermissions::of(&[]);
+        permessi.granted.set(permission::NETWORK, true);
+        let guard = Guard::new(Filo, Granted::new("p", &permessi, Trust::Community));
+        guard
+            .fetch(HttpRequest::get("https://ovunque.example/x"))
+            .expect("senza elenco non c'è recinto: presente = acceso");
+    }
+
+    /// Senza il permesso non si esce, e il rifiuto parla del **permesso** e non
+    /// di un elenco di host che non lo riguarda.
+    #[test]
+    fn without_the_permission_the_refusal_names_the_permission() {
+        let guard = Guard::new(
+            Filo,
+            Granted::new("p", &PluginPermissions::of(&[]), Trust::Community),
+        );
+        let err = guard
+            .fetch(HttpRequest::get("https://api.acme.com/x"))
+            .expect_err("nessun permesso, nessuna rete");
+        assert!(
+            err.message().to_string().contains(permission::NETWORK),
+            "chi non ha il permesso deve leggere quale gli manca: {err}"
+        );
+    }
+
+    /// In chiaro l'allowlist promette un host e la rete ne consegna un altro —
+    /// tranne verso sé stessi, dove non c'è rete da attraversare e dove vive un
+    /// modello che gira sulla macchina di chi usa l'app.
+    #[test]
+    fn plaintext_is_refused_except_towards_this_machine() {
+        let guard = Guard::new(Filo, con_rete(&["api.acme.com", "localhost"]));
+        let err = guard
+            .fetch(HttpRequest::get("http://api.acme.com/x"))
+            .expect_err("`http` verso fuori no");
+        assert!(matches!(err, PluginError::BadArgs(_)), "{err}");
+        guard
+            .fetch(HttpRequest::get("http://localhost:11434/api/generate"))
+            .expect("verso questa macchina sì: è dove gira un modello locale");
+    }
+
+    /// **Una `DryRun` che scarica non è una simulazione.** L'effetto non è
+    /// nell'host — un `POST` crea qualcosa dall'altra parte, e perfino un `GET`
+    /// viene contato e registrato da chi risponde — quindi è la sola specie di
+    /// effetto che questo processo non può ritirare nemmeno volendo.
+    #[test]
+    fn a_simulation_does_not_reach_the_network() {
+        let guard = Guard::new(
+            Filo,
+            ReadOnly {
+                why: "una simulazione non scrive",
+            },
+        );
+        assert!(
+            guard
+                .fetch(HttpRequest::get("https://api.acme.com/x"))
+                .is_err(),
+            "simulare uno scaricamento sarebbe scaricare"
         );
     }
 

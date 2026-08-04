@@ -59,10 +59,67 @@ jiff = { version = "0.2.35", default-features = false, features = [
     "tzdb-zoneinfo",
     "tzdb-bundle-platform",
 ] }
+# **Il filo verso fuori** (§23.3, decisione 0097), e sta qui per la ragione di
+# `notify` qui sopra, non per comodità: il trait `HostNetwork` esiste anche per
+# i montaggi che una rete non ce l'hanno o non la vogliono — un vault aperto
+# dalla CLI in una pipeline, un banco e2e che deve fallire se qualcuno chiama
+# fuori, il giorno in cui qualcuno vorrà una build senza TLS. Una dipendenza
+# obbligatoria renderebbe `Workspace::set_network` una promessa che il
+# `Cargo.toml` smentisce.
+#
+# **Misurato, come vuole il precedente di `jiff` qui sopra: venti pacchetti nel
+# lockfile**, da 551 a 571. È il doppio di `jiff` ed è il conto più caro che
+# questo workspace abbia pagato per una dipendenza: va scritto invece che
+# nascosto.
+#
+# `ureq` e non `reqwest`, che pure è **già nel lockfile** — ce lo porta `tauri`,
+# quindi in `fub-app` e non qui. Costerebbe di meno in righe di lock e di più in
+# tutto il resto: è asincrono, quindi vorrebbe `tokio` dentro `fub-host`, che
+# oggi non ha un runtime e non ne vuole uno per una capacità sola. `ureq` è
+# bloccante, ed è la forma giusta per questo posto: una `fetch` gira dentro un
+# job, cioè su un thread del pool che sta lì apposta per aspettare.
+#
+# `platform-verifier` costa otto dei venti pacchetti, e i primi dodici
+# basterebbero (`webpki-roots`, cioè le radici di Mozilla imbarcate). La scelta
+# è deliberata e va nel verso di chi usa l'app: con il verificatore della
+# **piattaforma**, Fub si fida di ciò di cui si fida la macchina — la CA
+# aziendale installata, il certificato interno, il proxy che l'amministratore
+# ha messo. Con le radici imbarcate, un utente in una rete aziendale scoprirebbe
+# che «solo Fub» non riesce a connettersi, e non avrebbe **nessun modo** di
+# rimediare dall'app. Otto pacchetti per non togliere all'utente una decisione
+# che ha già preso sul proprio computer.
+#
+# `default-features = false` e poi l'elenco per esteso, così le feature sono
+# **scelte** e non ereditate: i default di `ureq` sono `rustls` e `gzip`, e
+# tacerli vorrebbe dire non sapere quale delle due si sta prendendo.
+#
+# `gzip` c'è, e non è la comodità che sembra. Senza, `ureq` non chiede la
+# compressione **e non la sa disfare**: un plugin che si scrivesse da sé
+# l'header `accept-encoding: gzip` riceverebbe byte che nel contratto non ha
+# modo di decodificare, perché una capacità che decomprime non esiste. Costa
+# **zero pacchetti** — `flate2` è già nel lockfile, ce lo portano altri — e il
+# tetto di `MAX_BODY` si applica a valle della decompressione, cioè dal lato
+# giusto: chi risponde non può far allocare sedici mebibyte con un `gzip`
+# piccolo.
+#
+# Restano fuori `json` (il corpo è di byte, e chi lo interpreta è chi ha
+# chiesto), `charset` e `brotli` — e soprattutto `cookies`, che in un client
+# condiviso da tutti i plugin sarebbe uno stato che passa **fra plugin
+# diversi** senza che nessuno lo abbia dichiarato.
+ureq = { version = "3", default-features = false, features = [
+    "rustls",
+    "platform-verifier",
+    "gzip",
+], optional = true }
 
 [features]
-default = ["notify-watcher", "feature-ufficiali"]
+default = ["notify-watcher", "http-client", "feature-ufficiali"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
+
+# Il client HTTP: acceso di default come il watcher, e per la stessa ragione —
+# i client desktop previsti (CLI 27.1, API locale 27.2, l'app) lo vogliono, e
+# spegnerlo è la scelta di chi non può o non vuole averlo.
+http-client = ["dep:ureq"]
 
 # **Le feature ufficiali, una cargo feature per bundle** (§16.3). Inoltrano e
 # basta: l'elenco vero è `fub_features::ogni_feature_ufficiale`, e questi nomi
