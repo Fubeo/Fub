@@ -14,6 +14,8 @@
           "trust": "core",
           "permissions": {
             "fub:call-service": true,
+            "fub:read-selection": true,
+            "fub:read-session": true,
             "fub:read-vault": true,
             "fub:run-command": true,
             "fub:write-settings": true,

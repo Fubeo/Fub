@@ -3161,9 +3161,13 @@ interface host-view-state-write {
 /// l'utente.
 ///
 /// Sembrano lontane e sono la stessa specie di cosa — un fatto dell'host che
-/// chi gira dentro il confine non può calcolarsi — e si negano insieme: un
-/// componente sotto sandbox può non avere orologio (WASI lo può negare) e può
-/// non avere titolo a sapere quale nota è aperta.
+/// chi gira dentro il confine non può calcolarsi — ma NON si negano insieme, e
+/// per un po' lo hanno fatto: che ore sono è della macchina, quale nota è
+/// aperta e cosa c'è selezionato sono dell'UTENTE. Le tre cose stanno in
+/// un'interfaccia sola perché escono da un host solo, e si concedono con TRE
+/// permessi diversi: l'orologio e il caso non ne hanno (non c'è niente da
+/// concedere), `fub:read-session` dice quale nota, `fub:read-selection` dice il
+/// testo. Un'interfaccia non è un cancello: il cancello è il permesso.
 interface host-env {
     use session.{view-context};
     use intl.{locale};
@@ -3202,6 +3206,14 @@ interface host-env {
     /// cliccato" è una scelta dell'utente sull'app, non una capacità concessa
     /// a un plugin. Un `doc-id` nudo non basterebbe: con schede e split il
     /// documento attivo smette di essere una variabile globale.
+    /// DUE PERMESSI, NON UNO: senza `fub:read-session` la risposta è `none` —
+    /// la stessa di un host che non ne ha ancora pubblicato uno; con quello e
+    /// senza `fub:read-selection` il contesto arriva e `selections` è `none` —
+    /// la stessa di un pannello in lettura. Non sono le risposte vere, e va
+    /// bene: un plugin sa quali permessi ha dichiarato, quindi ha già in mano
+    /// il motivo. È la sola coppia di cancelli su un metodo solo, e c'è perché
+    /// la scelta che serve all'utente sta in mezzo: «sai che nota guardo, non
+    /// sai cosa ci sto scrivendo».
     active-context: func() -> option<view-context>;
 }
 

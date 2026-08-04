@@ -32,11 +32,13 @@
 //!
 //! # Le capacità senza esito
 //!
-//! Cinque capacità non restituiscono un `Result`: `emit`, `free_name`,
-//! `format_of`, `now_unix_millis`, `active_context`. Una politica che le nega
-//! non ha modo di **dirlo** — può solo dare la risposta nulla (nessun evento,
-//! nessun formato, nessun contesto, il tempo a zero, il nome che le è stato
-//! passato). Non è una scappatoia dell'implementazione: è ciò che quelle firme
+//! Sei capacità non restituiscono un `Result`: `emit`, `free_name`,
+//! `format_of`, `now_unix_millis`, `user_locale`, `active_context`. Una
+//! politica che le nega non ha modo di **dirlo** — può solo dare la risposta
+//! nulla (nessun evento, nessun formato, nessun contesto, il tempo a zero, il
+//! locale del contratto, il nome che le è stato passato). Per `active_context`
+//! la risposta nulla è anche **parziale**, da quando i cancelli sono due: vedi
+//! [`Guard`]. Non è una scappatoia dell'implementazione: è ciò che quelle firme
 //! dicono, ed è la ragione per cui una capacità nuova del contratto dovrebbe
 //! portare un esito anche quando "non può fallire" — non potendo fallire, non
 //! può nemmeno essere negata.

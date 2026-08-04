@@ -57,7 +57,14 @@ momento in cui poteva costare così.
       il posto, e un prefisso ha una definizione sola. Resta additivo dentro
       `Granted`, e resta una casella e non una voce perché la decisione — *dove
       si applica, e con quale nozione di prefisso* — è già presa in tutte e due
-      le sue metà.
+      le sue metà. La
+      [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) ci aggiunge
+      un posto in cui applicarlo che non era in conto: `fub:read-session` e
+      `fub:read-selection` **un path da confrontare ce l'hanno**, ed è
+      `ViewContext.doc`. È la differenza con `Query`, che il prefisso non lo può
+      onorare per costruzione — una risposta aggregata non ha un path — e vale
+      saperla il giorno che si scrive il filtro, perché i due casi si somigliano
+      e si comportano in modo opposto.
 
       Che sia rimasta ferma per trentadue verbali dopo che il suo indirizzo era
       stato onorato è la ragione per cui adesso è **contata** in

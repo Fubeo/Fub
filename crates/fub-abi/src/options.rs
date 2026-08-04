@@ -275,6 +275,32 @@ pub mod permission {
     /// chiave: il permesso dice *chi*, `program_writable` dice *cosa* — perché
     /// il divieto che conta, privacy e AI, non dipende da chi sta chiedendo.
     pub const WRITE_SETTINGS: &str = "fub:write-settings";
+    /// Sapere **cosa guarda l'utente**: quale nota è aperta nel pannello con il
+    /// focus, e in che modalità
+    /// ([`HostEnv::active_context`](crate::traits::HostEnv::active_context)).
+    ///
+    /// Non è l'orologio, e non sta con lui: che ore sono è una proprietà della
+    /// macchina, quale nota ho aperto è una proprietà di **me**. Il nome di una
+    /// nota è già un fatto privato per chi tiene un diario, e per molto tempo
+    /// è viaggiato sotto la sola famiglia che nessun manifest dichiarava.
+    pub const READ_SESSION: &str = "fub:read-session";
+    /// Leggere il **testo che l'utente ha selezionato**, verbatim.
+    ///
+    /// Sta accanto a [`READ_SESSION`] e non dentro, perché sono due domande
+    /// diverse e un utente può voler rispondere di sì all'una e di no
+    /// all'altra: *«questo plugin può sapere che nota sto guardando, non cosa
+    /// ci sto scrivendo»*. Un pannello che segna la sezione corrente ha
+    /// bisogno del primo e non del secondo; un contatore di parole della
+    /// selezione ha bisogno di entrambi.
+    ///
+    /// **Non è un sottoinsieme di [`READ_VAULT`]**, ed è la ragione per cui non
+    /// gli si è appoggiato: chi legge il vault legge un documento *che ha
+    /// nominato*, chi legge la selezione riceve senza chiedere ciò che l'utente
+    /// sta facendo adesso — e alla granularità con cui lo fa, perché la shell
+    /// pubblica il contesto a ogni movimento del cursore. Appoggiarlo a
+    /// `read-vault` avrebbe reso impossibile la cosa che questo permesso
+    /// esiste per permettere: concedere il vault e negare la selezione.
+    pub const READ_SELECTION: &str = "fub:read-selection";
 }
 
 #[cfg(test)]
