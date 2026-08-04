@@ -26,7 +26,10 @@ import type {
   Locale,
   QueryExpr,
   PaneMode,
-  Selection,
+  AnchoredSelection,
+  AnchoredSelections,
+  FloatingSelection,
+  FloatingSelections,
   Span,
   SettingEntry,
   SettingKind,
@@ -572,8 +575,11 @@ const RECORD_KEYS: Record<string, string[]> = {
   // Il contesto di sessione viaggia dalla shell al kernel: qui il mirror serve
   // due volte, perché un campo che il TS dimenticasse di mandare arriverebbe
   // `undefined` e serde lo rifiuterebbe a runtime, non in compilazione.
-  ViewContext: keysOf<ViewContext>({ pane: true, doc: true, selection: true, mode: true }),
-  Selection: keysOf<Selection>({ span: true, text: true }),
+  ViewContext: keysOf<ViewContext>({ pane: true, doc: true, selections: true, mode: true }),
+  AnchoredSelection: keysOf<AnchoredSelection>({ span: true, text: true }),
+  FloatingSelection: keysOf<FloatingSelection>({ text: true }),
+  AnchoredSelections: keysOf<AnchoredSelections>({ primary: true, secondary: true }),
+  FloatingSelections: keysOf<FloatingSelections>({ primary: true, secondary: true }),
   // Il locale (§12.3): l'altro tipo che la shell costruisce e il kernel
   // consuma, quindi vale la stessa ragione del contesto — un campo dimenticato
   // di qua arriverebbe `undefined`, e serde lo rifiuterebbe a runtime.
@@ -713,7 +719,11 @@ describe("mirror TS↔Rust", () => {
       "ViewInstance",
       "UiAction",
       "ViewContext",
-      "Selection",
+      "SelectionSet",
+      "AnchoredSelection",
+      "FloatingSelection",
+      "AnchoredSelections",
+      "FloatingSelections",
       "Locale",
       "CommandSpec",
       "CommandOutcome",
@@ -943,12 +953,26 @@ describe("mirror TS↔Rust", () => {
     for (const c of fixture.ViewContext as ViewContext[]) {
       expect(tutte).toContain(c.mode);
     }
-    // La regola dello span: `text` c'è sempre, `span` no (buffer sporco).
+    // La regola dello span, dove la decisione 0093 l'ha messa: il testo c'è
+    // sempre, le coordinate ci sono per tutte o per nessuna. Il campione col
+    // buffer sporco è un insieme `floating`, e lì uno `span` non è nemmeno
+    // esprimibile.
     const sporca = (fixture.ViewContext as ViewContext[]).find(
-      (c) => c.selection !== null && c.selection.span === null,
+      (c) => c.selections !== null && c.selections.kind === "floating",
     );
     expect(sporca, "manca il campione col buffer sporco").toBeTruthy();
-    expect(typeof sporca!.selection!.text).toBe("string");
+    const fluttuanti = sporca!.selections as { kind: "floating"; value: FloatingSelections };
+    expect(typeof fluttuanti.value.primary.text).toBe("string");
+    // E il campione con più cursori: la primaria è un campo, le altre una
+    // lista, e la primaria non è la prima per posizione.
+    const molte = (fixture.ViewContext as ViewContext[]).find(
+      (c) => c.selections?.kind === "anchored" && c.selections.value.secondary.length > 1,
+    );
+    expect(molte, "manca il campione con più cursori").toBeTruthy();
+    const ancorate = molte!.selections as { kind: "anchored"; value: AnchoredSelections };
+    expect(ancorate.value.primary.span.start).toBeGreaterThan(
+      ancorate.value.secondary[0].span.start,
+    );
   });
 
   it("ogni giorno e ogni orologio prodotti da Rust sono del mirror", () => {

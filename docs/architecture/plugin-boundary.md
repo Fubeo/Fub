@@ -200,12 +200,21 @@ Quattro capacità aggiunte prima del freeze; la semantica di ognuna sta in
 
 ### La regola dello span
 
-`Selection { span: Option<Span>, text: String }` porta il **testo** sempre, lo
-**span** solo quando le sue coordinate valgono anche per il sorgente che il
-kernel ha in mano — cioè a buffer pulito. Non è prudenza: è l'unico modo di
-rendere impossibile l'errore che il contratto altrimenti inviterebbe a fare —
-leggere il documento con `read_document` e ritagliarlo con offset calcolati su un
-altro testo, cioè tagliare i byte sbagliati **proprio mentre l'utente scrive**.
+Una selezione porta il **testo** sempre; le **coordinate** solo quando valgono
+anche per il sorgente che il kernel ha in mano — cioè a buffer pulito. Non è
+prudenza: è l'unico modo di rendere impossibile l'errore che il contratto
+altrimenti inviterebbe a fare — leggere il documento con `read_document` e
+ritagliarlo con offset calcolati su un altro testo, cioè tagliare i byte
+sbagliati **proprio mentre l'utente scrive**.
+
+Dove sta quella scelta lo dice la
+[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md): **sopra
+l'insieme**, non dentro le singole selezioni. `SelectionSet` è `Anchored` o
+`Floating`, perché a decidere è lo stato del **buffer**, che è uno per pannello:
+con più cursori le selezioni sono N e non possono cadere una alla volta. Nel
+caso ancorato lo `span` non è facoltativo — un insieme metà posizionato e metà
+no non è rappresentabile, ed è il punto: un provider che agisse solo sulle
+posizionate agirebbe su due dei tre punti che l'utente vede.
 
 La stessa invariante è tenuta dal kernel dall'altro lato: quando il sorgente
 sotto la selezione cambia, viene rinominato o sparisce, la selezione **cade**

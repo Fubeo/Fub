@@ -586,6 +586,15 @@ che il core conosca il DOM. Ha un escape hatch (`WebView`, un iframe isolato) e
 una regola su quando è lecito usarlo:
 [architecture/ui-protocol.md](architecture/ui-protocol.md).
 
+### selezione
+`SelectionSet` · [`abi/session.rs:293`](../crates/fub-abi/src/session.rs) · [0007](decisions/0007-contesto-di-sessione.md), [0093](decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md)
+
+Ciò che è selezionato in un pannello — o dove stanno i cursori, che sono
+selezioni vuote. Sono **N**, con la **primaria** nominata da un campo e non
+dedotta dalla posizione, e o sono tutte *ancorate* al sorgente che il kernel ha
+in mano o non lo è nessuna: a deciderlo è lo stato del **buffer**, che è uno per
+pannello.
+
 ### shell
 `frontend/` · [`frontend/src/main.ts`](../frontend/src/main.ts) · [0015](decisions/0015-la-forma-della-shell.md)
 

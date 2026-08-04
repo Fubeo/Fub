@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorView } from "@codemirror/view";
 import { undo } from "@codemirror/commands";
+import { EditorSelection } from "@codemirror/state";
 import { createEditor, type Editor } from "./editor";
 
 // Il difetto che questo file presidia è **una perdita di dati a portata di
@@ -87,5 +88,61 @@ describe("setDoc", () => {
     const senzaPreview = view().state.facet(EditorView.decorations).length;
     ed.setDoc("altra nota");
     expect(view().state.facet(EditorView.decorations).length).toBe(senzaPreview);
+  });
+});
+
+// Il multi-cursore non è una funzione nuova dell'editor: `basicSetup` porta
+// `allowMultipleSelections`, il click con Alt e `Mod-d`, quindi l'utente tre
+// cursori li ha sempre potuti fare. Ciò che mancava era la facoltà di **dirlo**
+// al di là del confine: `selection()` leggeva `state.selection.main` e le altre
+// due morivano lì (decisione 0093).
+describe("selections", () => {
+  it("porta tutte le selezioni, e la primaria non è la prima della lista", () => {
+    const { ed, view } = editor();
+    ed.setDoc("Kant, Hegel e Fichte");
+    // Tre intervalli; la primaria è la terza — come quando la si aggiunge per
+    // ultima con Alt-click, che è il caso normale in CodeMirror.
+    view().dispatch({
+      selection: EditorSelection.create(
+        [
+          EditorSelection.range(0, 4),
+          EditorSelection.range(6, 11),
+          EditorSelection.range(14, 20),
+        ],
+        2,
+      ),
+    });
+
+    const sel = ed.selections();
+    expect(sel.primary.text).toBe("Fichte");
+    expect(sel.secondary.map((s) => s.text)).toEqual(["Kant", "Hegel"]);
+    expect(sel.primary.start).toBe(14);
+    expect(sel.secondary[0].start).toBe(0);
+  });
+
+  it("converte in byte UTF-8 ogni estremità, anche quando il testo non è ASCII", () => {
+    const { ed, view } = editor();
+    // «però» sta in cinque caratteri e sei byte: una conversione fatta a
+    // occhio sposterebbe di uno tutte le selezioni dopo la prima.
+    ed.setDoc("però e così");
+    view().dispatch({
+      selection: EditorSelection.create(
+        [EditorSelection.range(0, 4), EditorSelection.range(7, 11)],
+        0,
+      ),
+    });
+
+    const sel = ed.selections();
+    expect(sel.primary).toEqual({ start: 0, end: 5, text: "però" });
+    expect(sel.secondary[0]).toEqual({ start: 8, end: 13, text: "così" });
+  });
+
+  it("un cursore solo resta un insieme senza secondarie", () => {
+    const { ed, view } = editor();
+    ed.setDoc("una nota");
+    view().dispatch({ selection: { anchor: 4 } });
+    const sel = ed.selections();
+    expect(sel.primary).toEqual({ start: 4, end: 4, text: "" });
+    expect(sel.secondary).toEqual([]);
   });
 });

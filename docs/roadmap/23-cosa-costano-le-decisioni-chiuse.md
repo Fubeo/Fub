@@ -210,8 +210,11 @@ fossero tre su sedici, e che le altre tredici non lo siano nemmeno parlando di
 privacy e di dati persi, è la prova che il criterio ha retto anche a un giro
 fatto con una lente — qualità, libertà, privacy — che spinge in direzione
 opposta. La §23.11 è **chiusa** dalla
-[0092](../decisions/0092-una-base-si-dichiara.md), e ne restano due: la scadenza
-non è cambiata, è cambiato quanto ci sta dentro.
+[0092](../decisions/0092-una-base-si-dichiara.md) e la §23.4 dalla
+[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md), che era la
+più larga delle tre e l'unica con una decisione di forma vera dentro: ne resta
+**una**, la §23.12, che è la più piccola e lo dice di sé. La scadenza non è
+cambiata, è cambiato quanto ci sta dentro.
 
 **E una ha una scadenza che non è il freeze**, il che non la rende P0 ma le dà un
 **ordine**: la §23.5 va decisa prima della §23.3. Finché non c'è rete, un plugin
@@ -406,7 +409,7 @@ governare.
 
 ### 23.4 `Selection` ne porta una sola, e il tipo di un campo non è additivo
 
-*contratto · **P0** — è il campo di un record già pubblicato: da uno a molti è una migrazione, non un'aggiunta*
+*chiusa dalla [0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md) — il campo diventa `selections: option<selection-set>`, con la primaria **nominata** e l'ancoraggio **sopra l'insieme**, perché il buffer è uno · il multi-cursore era acceso nell'editor da sempre: fuori era la sola facoltà di dirlo · resta **una casella**: `note.task.toggle` su N cursori vuole un `at` che sia una lista, cioè una decisione di firma sua*
 
 La [0007](../decisions/0007-contesto-di-sessione.md) scrive il criterio, e lo
 scrive per prima e meglio di chiunque: *«un caso in fondo a un enum dopo il
@@ -426,7 +429,7 @@ più quelli. È esattamente ciò che
 [`wit_additivity`](../architecture/wit-congelato.md) elenca fra le venti
 rotture che deve far diventare rosse (*campo ritipato*), e sarà rosso.
 
-- [ ] **La forma, e non è solo «metterci una lista».** Una selezione primaria
+- [x] **La forma, e non è solo «metterci una lista».** Una selezione primaria
       esiste e conta: `selection.wikilink` avvolge *una* cosa, il pannello
       statistiche conta *una* cosa. Va deciso se la primaria è la prima della
       lista per convenzione — che è la regola di CodeMirror e non costa niente al
@@ -435,18 +438,18 @@ rotture che deve far diventare rosse (*campo ritipato*), e sarà rosso.
       che, quando non è vero, non c'è») vista dall'altro lato. E va deciso cosa
       significa una **lista vuota** rispetto all'assenza: in lettura non c'è
       cursore, e la 0007 quel caso lo risolve già con `Option`.
-- [ ] **La regola dello span vale per ognuna, non per l'insieme.** Lo span c'è
+- [x] **La regola dello span vale per ognuna, non per l'insieme.** Lo span c'è
       solo quando le sue coordinate valgono per il sorgente che il kernel ha in
       mano; con N selezioni le coordinate sono N e la condizione è **una sola**,
       perché il buffer è uno. Quindi o lo span sparisce da tutte insieme, e allora
       la condizione sta sopra la lista e non dentro le voci — e la forma di oggi,
       `Option` dentro ogni `Selection`, dice il contrario.
-- [ ] **Chi lo chiede.** FEATURES 4.2 (multi-cursore e selezioni multiple) per
+- [x] **Chi lo chiede.** FEATURES 4.2 (multi-cursore e selezioni multiple) per
       intero, e con essa ogni azione sulla selezione applicata a più punti — che
       è il gesto per cui il multi-cursore esiste. La shell con più cursori oggi
       pubblica la primaria: non è un difetto della shell, è la sola cosa che il
       contratto le lasci dire.
-- [ ] **Perché è P0, e cosa succede a non farla.** Non c'è una via additiva:
+- [x] **Perché è P0, e cosa succede a non farla.** Non c'è una via additiva:
       `selections: list<selection>` accanto a `selection` sarebbero due firme per
       la stessa domanda — la trappola che questa stessa decisione descrive per
       `active_document` — e tenerle allineate sarebbe compito di ogni shell. Dopo

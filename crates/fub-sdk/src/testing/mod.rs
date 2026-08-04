@@ -28,7 +28,9 @@ use fub_abi::event::Event;
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, Heading, Span};
-use fub_abi::session::{PaneMode, Selection, ViewContext};
+use fub_abi::session::{
+    AnchoredSelection, AnchoredSelections, PaneMode, SelectionSet, ViewContext,
+};
 use fub_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue};
 use fub_abi::traits::{
     BacklinkRef, DataRead, DataWrite, DocumentMatch, EntryKind, HostCommands, HostEnv, HostEvents,
@@ -193,20 +195,62 @@ impl MemoryHost {
     }
 
     /// Sposta il cursore (senza testo selezionato) nel documento attivo.
-    /// `None` = il buffer è sporco, quindi nessuno span sarebbe vero.
+    /// `None` = il buffer è sporco, quindi nessuna coordinata sarebbe vera.
     pub fn set_caret(&self, byte: Option<usize>) {
         self.map_context(|c| {
-            c.selection = Some(Selection::caret(byte.map(|b| Span::new(b, b))));
+            c.selections = Some(match byte {
+                Some(b) => SelectionSet::caret(b),
+                None => SelectionSet::floating(""),
+            });
         });
     }
 
     /// Seleziona `text` a partire da `start` byte nel documento attivo.
     pub fn set_selection(&self, start: usize, text: &str) {
         self.map_context(|c| {
-            c.selection = Some(Selection {
-                span: Some(Span::new(start, start + text.len())),
-                text: text.to_string(),
-            });
+            c.selections = Some(SelectionSet::anchored(
+                Span::new(start, start + text.len()),
+                text,
+            ));
+        });
+    }
+
+    /// Più selezioni insieme, come le pubblica un pannello con più cursori: la
+    /// **prima** coppia è la primaria, le altre le secondarie (decisione 0093).
+    ///
+    /// Che la primaria sia la prima *di questo elenco* è una comodità di questo
+    /// aiuto, non una regola del contratto: là è un campo, e proprio perché è un
+    /// campo un aiuto può sceglierla come gli torna.
+    pub fn set_selections(&self, selezioni: &[(usize, &str)]) {
+        let mut ancorate = selezioni
+            .iter()
+            .map(|(start, text)| {
+                AnchoredSelection::new(Span::new(*start, start + text.len()), *text)
+            })
+            .collect::<Vec<_>>();
+        let primary = ancorate.remove(0);
+        self.map_context(|c| {
+            c.selections = Some(SelectionSet::Anchored(AnchoredSelections {
+                primary,
+                secondary: ancorate,
+            }));
+        });
+    }
+
+    /// Le stesse, a buffer sporco: il testo è vero, le coordinate no — per
+    /// tutte.
+    pub fn set_floating_selections(&self, testi: &[&str]) {
+        use fub_abi::session::{FloatingSelection, FloatingSelections};
+        let mut fluttuanti = testi
+            .iter()
+            .map(|t| FloatingSelection::new(*t))
+            .collect::<Vec<_>>();
+        let primary = fluttuanti.remove(0);
+        self.map_context(|c| {
+            c.selections = Some(SelectionSet::Floating(FloatingSelections {
+                primary,
+                secondary: fluttuanti,
+            }));
         });
     }
 

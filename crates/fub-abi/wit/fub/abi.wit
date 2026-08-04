@@ -2441,17 +2441,55 @@ interface session {
     /// qui: non cambia cosa un provider deve fare.
     enum pane-mode { source, live-preview, reading }
 
-    /// Ciò che è selezionato in un pannello — o dove sta il cursore, che è una
-    /// selezione vuota.
-    ///
-    /// `text` è SEMPRE il testo vero dell'editor; `span` c'è solo quando le
-    /// sue coordinate valgono anche per il sorgente che il kernel ha in mano
-    /// (buffer senza modifiche non salvate). È così che il contratto rende
-    /// impossibile ritagliare `read-document` con uno span calcolato su un
-    /// altro testo.
-    record selection {
-        span: option<span>,
+    /// Una selezione di cui si sa il TESTO e basta: il buffer ha modifiche non
+    /// salvate, quindi nessuna coordinata di questo testo varrebbe per il
+    /// sorgente che il kernel ha in mano. Vuoto = un cursore.
+    record floating-selection {
         text: string,
+    }
+
+    /// Una selezione ANCORATA: sa anche dove sta nel sorgente del kernel. Lo
+    /// span non è facoltativo, e a dirlo non è questa selezione ma l'insieme a
+    /// cui appartiene (vedi `selection-set`).
+    record anchored-selection {
+        span: span,
+        text: string,
+    }
+
+    /// Le selezioni ancorate di un pannello. La PRIMARIA è un campo e non «la
+    /// prima della lista»: è quella su cui agisce un comando che ne vuole una
+    /// sola, e nominarla la rende anche una cosa che non si perde convertendo.
+    /// `secondary` vuota = un cursore solo, che è il caso normale.
+    record anchored-selections {
+        primary: anchored-selection,
+        secondary: list<anchored-selection>,
+    }
+
+    /// Le stesse, senza coordinate.
+    record floating-selections {
+        primary: floating-selection,
+        secondary: list<floating-selection>,
+    }
+
+    /// Ciò che è selezionato in un pannello — o dove stanno i cursori, che sono
+    /// selezioni vuote.
+    ///
+    /// Il `text` è SEMPRE il testo vero dell'editor; le coordinate valgono solo
+    /// quando valgono anche per il sorgente che il kernel ha in mano (buffer
+    /// senza modifiche non salvate). È così che il contratto rende impossibile
+    /// ritagliare `read-document` con uno span calcolato su un altro testo.
+    ///
+    /// Quella condizione è del BUFFER, che è uno per pannello: con N selezioni
+    /// non possono cadere una alla volta, ed è la ragione per cui la scelta sta
+    /// qui sopra e non dentro ogni selezione. Un insieme con due selezioni
+    /// posizionate e una no non è rappresentabile: un provider che agisse solo
+    /// sulle posizionate agirebbe su due dei tre punti che l'utente vede.
+    ///
+    /// L'ordine dei casi è il discriminante al confine e non si tocca:
+    /// `anchored` sta per primo perché è quello su cui si può AGIRE.
+    variant selection-set {
+        anchored(anchored-selections),
+        floating(floating-selections),
     }
 
     /// Il contesto in cui una view sta girando. Nessun gemello che scrive:
@@ -2460,7 +2498,7 @@ interface session {
     record view-context {
         pane: pane-id,
         doc: option<doc-id>,
-        selection: option<selection>,
+        selections: option<selection-set>,
         mode: pane-mode,
     }
 

@@ -2,7 +2,7 @@
 //! parole, conteggio caratteri, tempo di lettura).
 //!
 //! È il primo cliente della **selezione** nel contesto di sessione, ed è il
-//! motivo per cui [`Selection`] porta il `text` e non solo lo span: "quante
+//! motivo per cui una selezione porta il `text` e non solo lo span: "quante
 //! parole ho selezionato" si risponde con il testo che l'utente ha davvero
 //! sotto il cursore — cioè quello del buffer, che a metà di una frase appena
 //! scritta **non è** quello che `read_document` restituirebbe. Un pannello che
@@ -17,7 +17,7 @@
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::session::{ContextMask, PaneMode, Selection};
+use fub_abi::session::{ContextMask, PaneMode, SelectionSet};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     HostApi, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
@@ -112,7 +112,7 @@ impl ViewProvider for StatsView {
         let source = host.read_document(&doc)?;
         Ok(build_stats_view(
             count(&source),
-            selezione(&context.selection),
+            selezione(&context.selections),
             context.mode,
         ))
     }
@@ -128,18 +128,48 @@ impl ViewProvider for StatsView {
     }
 }
 
-/// I conteggi della selezione, se c'è del testo selezionato.
+/// Quante selezioni hanno del testo dentro, e quanto testo in tutto.
 ///
-/// Un cursore senza testo non è una selezione da contare: `Selection::text`
-/// vuoto significa "sono qui", non "ho selezionato niente".
-fn selezione(selection: &Option<Selection>) -> Option<TextStats> {
-    let s = selection.as_ref()?;
-    (!s.is_empty()).then(|| count(&s.text))
+/// Un cursore senza testo non è una selezione da contare: un `text` vuoto
+/// significa "sono qui", non "ho selezionato niente" — e con N cursori la
+/// stessa regola dice che i punti che contano sono quelli che qualcosa lo
+/// hanno.
+///
+/// La somma è **la risposta giusta e non l'unica pensabile** (decisione 0093).
+/// Con tre selezioni si potrebbero mostrare tre conteggi; ma chi seleziona in
+/// più punti lo fa per agire su un insieme — la domanda è «quanto ho preso»,
+/// non «quanto ho preso qui, e qui, e qui» —, e tre righe che cambiano a ogni
+/// battuta sarebbero un pannello che si legge peggio proprio quando c'è più da
+/// leggere. Ciò che va detto è **quanti punti** stanno dentro il totale, e
+/// infatti si dice: un numero senza quello sarebbe misterioso.
+///
+/// Le parole si contano selezione per selezione e poi si sommano: concatenare i
+/// testi e contare dopo attaccherebbe l'ultima parola di una alla prima
+/// dell'altra.
+fn selezione(selections: &Option<SelectionSet>) -> Option<(usize, TextStats)> {
+    let set = selections.as_ref()?;
+    let pezzi: Vec<TextStats> = set
+        .texts()
+        .into_iter()
+        .filter(|t| !t.is_empty())
+        .map(count)
+        .collect();
+    let somma = pezzi.iter().fold(TextStats::default(), |acc, s| TextStats {
+        words: acc.words + s.words,
+        chars: acc.chars + s.chars,
+    });
+    (!pezzi.is_empty()).then_some((pezzi.len(), somma))
 }
 
 /// Costruisce l'albero della view. Separato dal provider perché è pura
 /// trasformazione dati→UI: si prova senza un host.
-pub fn build_stats_view(doc: TextStats, selection: Option<TextStats>, mode: PaneMode) -> UiNode {
+///
+/// `selection` è *quante* selezioni e il *totale* di ciò che contengono.
+pub fn build_stats_view(
+    doc: TextStats,
+    selection: Option<(usize, TextStats)>,
+    mode: PaneMode,
+) -> UiNode {
     let mut righe = vec![conteggi(DOC_COUNTS, doc)];
     match (mode, selection) {
         // In lettura non c'è selezione da contare: ciò che serve a chi legge è
@@ -148,7 +178,15 @@ pub fn build_stats_view(doc: TextStats, selection: Option<TextStats>, mode: Pane
             READING_TIME,
             vec![Arg::int(MINUTES, reading_minutes(doc.words).max(1) as i64)],
         )),
-        (_, Some(sel)) => righe.push(conteggi(SELECTION_COUNTS, sel)),
+        (_, Some((1, sel))) => righe.push(conteggi(SELECTION_COUNTS, sel)),
+        (_, Some((quante, sel))) => righe.push(Text::message(
+            SELECTION_COUNTS_MANY,
+            vec![
+                Arg::int(SELECTIONS, quante as i64),
+                Arg::int(WORDS, sel.words as i64),
+                Arg::int(CHARS, sel.chars as i64),
+            ],
+        )),
         (_, None) => {}
     }
     UiNode::row(12, righe.into_iter().map(UiNode::text).collect())
@@ -194,6 +232,10 @@ const NO_ACTIVE_DOC: &str = "no_active_doc";
 /// prima con una parola davanti.
 const DOC_COUNTS: &str = "doc_counts";
 const SELECTION_COUNTS: &str = "selection_counts";
+/// Lo stesso, con più selezioni: il totale, e **quanti punti** ci stanno
+/// dentro. Chiave a parte e non un argomento in più a quella sopra, per la
+/// stessa ragione per cui le due di sopra sono due.
+const SELECTION_COUNTS_MANY: &str = "selection_counts_many";
 /// Il tempo di lettura stimato.
 const READING_TIME: &str = "reading_time";
 /// I nomi degli argomenti: sono parte della chiave quanto la chiave stessa —
@@ -201,6 +243,7 @@ const READING_TIME: &str = "reading_time";
 /// graffa a vista, che è il degrado giusto e va comunque saputo.
 const WORDS: &str = "words";
 const CHARS: &str = "chars";
+const SELECTIONS: &str = "selections";
 const MINUTES: &str = "minutes";
 
 /// Le stringhe del pannello statistiche. Vedi
@@ -216,6 +259,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                 SELECTION_COUNTS,
                 "Selezione — parole: {words} · caratteri: {chars}",
             )
+            .with(
+                SELECTION_COUNTS_MANY,
+                "Selezione ({selections} punti) — parole: {words} · caratteri: {chars}",
+            )
             .with(READING_TIME, "~{minutes} min di lettura"),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Statistics")
@@ -224,6 +271,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 SELECTION_COUNTS,
                 "Selection — words: {words} · characters: {chars}",
+            )
+            .with(
+                SELECTION_COUNTS_MANY,
+                "Selection ({selections} spots) — words: {words} · characters: {chars}",
             )
             .with(READING_TIME, "~{minutes} min read"),
     ]
@@ -297,10 +348,9 @@ mod tests {
         host.set_context(Some(
             fub_abi::session::ViewContext::new("main")
                 .with_doc(Some(fub_abi::model::DocId::new("nota.md")))
-                .with_selection(Some(Selection {
-                    span: None,
-                    text: "quattro cinque".into(),
-                })),
+                .with_selections(Some(fub_abi::session::SelectionSet::floating(
+                    "quattro cinque",
+                ))),
         ));
         let tree = StatsView
             .render_view(&ViewInstance::only(STATS_VIEW), &host)
@@ -314,6 +364,64 @@ mod tests {
             "il conteggio del documento viene dal vault, quello della \
              selezione dal buffer: sono due testi diversi, ed è il caso normale \
              mentre si scrive"
+        );
+    }
+
+    #[test]
+    fn many_selections_are_summed_and_counted() {
+        let host = MemoryHost::new().con_documento("nota.md", "uno due tre quattro");
+        host.set_active(Some("nota.md"));
+        // Tre punti selezionati: il pannello dice il totale, e dice che sono
+        // tre — un numero senza quello sarebbe misterioso (decisione 0093).
+        host.set_selections(&[(0, "uno"), (4, "due"), (8, "tre")]);
+        assert_eq!(
+            testi(
+                &StatsView
+                    .render_view(&ViewInstance::only(STATS_VIEW), &host)
+                    .unwrap()
+            ),
+            vec![
+                "Parole: 4 · Caratteri: 19".to_string(),
+                "Selezione (3 punti) — parole: 3 · caratteri: 9".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn a_caret_among_many_selections_adds_nothing_and_is_not_counted() {
+        let host = MemoryHost::new().con_documento("nota.md", "uno due tre");
+        host.set_active(Some("nota.md"));
+        host.set_selections(&[(0, "uno"), (4, ""), (8, "tre")]);
+        assert_eq!(
+            testi(
+                &StatsView
+                    .render_view(&ViewInstance::only(STATS_VIEW), &host)
+                    .unwrap()
+            ),
+            vec![
+                "Parole: 3 · Caratteri: 11".to_string(),
+                "Selezione (2 punti) — parole: 2 · caratteri: 6".to_string()
+            ],
+            "i punti sono quelli che hanno del testo: contare anche i cursori \
+             direbbe tre e mostrerebbe il totale di due"
+        );
+    }
+
+    #[test]
+    fn many_selections_are_counted_one_by_one_and_then_summed() {
+        // Concatenare i testi e contare dopo attaccherebbe l'ultima parola di
+        // una alla prima dell'altra: due selezioni di una parola darebbero una
+        // parola sola.
+        let host = MemoryHost::new().con_documento("nota.md", "alfa beta");
+        host.set_active(Some("nota.md"));
+        host.set_selections(&[(0, "alfa"), (5, "beta")]);
+        assert_eq!(
+            testi(
+                &StatsView
+                    .render_view(&ViewInstance::only(STATS_VIEW), &host)
+                    .unwrap()
+            )[1],
+            "Selezione (2 punti) — parole: 2 · caratteri: 8"
         );
     }
 
@@ -374,7 +482,7 @@ mod tests {
         // il motore dei template non sa scegliere una forma (vedi `conteggi`).
         let tree = build_stats_view(
             TextStats { words: 1, chars: 1 },
-            Some(TextStats { words: 1, chars: 1 }),
+            Some((1, TextStats { words: 1, chars: 1 })),
             PaneMode::LivePreview,
         );
         assert_eq!(

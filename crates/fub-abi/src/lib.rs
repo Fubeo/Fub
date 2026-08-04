@@ -89,7 +89,10 @@ pub use query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TextField,
     TextMode, TextQuery,
 };
-pub use session::{ContextKind, ContextMask, PaneId, PaneMode, Selection, ViewContext};
+pub use session::{
+    AnchoredSelection, AnchoredSelections, ContextKind, ContextMask, FloatingSelection,
+    FloatingSelections, PaneId, PaneMode, SelectionSet, ViewContext,
+};
 pub use settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };

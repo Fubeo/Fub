@@ -22,7 +22,7 @@ use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fub_abi::model::{DocId, DocumentModel, Span};
-use fub_abi::session::{ContextKind, ContextMask, PaneMode, Selection, ViewContext};
+use fub_abi::session::{ContextKind, ContextMask, PaneMode, SelectionSet, ViewContext};
 use fub_abi::traits::{HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{FormatProvider, PluginError};
@@ -187,8 +187,7 @@ fn only_the_views_that_follow_what_changed_are_redrawn() {
 
     // Solo il cursore si muove: il pannello backlink non ha ragione di
     // ridisegnarsi, ed è tutto il punto della maschera.
-    let col_cursore =
-        contesto("Nota.md").with_selection(Some(Selection::caret(Some(Span::new(7, 7)))));
+    let col_cursore = contesto("Nota.md").with_selections(Some(SelectionSet::caret(7)));
     assert_eq!(
         ws.set_active_context(Some(col_cursore.clone())),
         vec!["doc-e-selezione"]
@@ -223,20 +222,48 @@ fn only_the_views_that_follow_what_changed_are_redrawn() {
 fn the_shortcut_for_a_single_pane_shell_clears_the_selection() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.set_active_context(Some(contesto("Nota.md").with_selection(Some(Selection {
-        span: Some(Span::new(0, 4)),
-        text: "ciao".into(),
-    }))));
+    ws.set_active_context(Some(
+        contesto("Nota.md").with_selections(Some(SelectionSet::anchored(Span::new(0, 4), "ciao"))),
+    ));
 
     ws.set_active_document(Some(DocId::new("Altra.md")));
     let ctx = ws.active_context().expect("c'è un contesto");
     assert_eq!(ctx.doc, Some(DocId::new("Altra.md")));
     assert_eq!(
-        ctx.selection, None,
+        ctx.selections, None,
         "dichiarare un documento e tenere la selezione del precedente sarebbe \
          l'unico modo di produrre uno span mentitore"
     );
     assert_eq!(ctx.pane.as_str(), MAIN_PANE);
+}
+
+/// Le N selezioni cadono **tutte insieme**, perché a cambiare non è una
+/// selezione: è il testo sotto tutte (decisione 0093).
+#[test]
+fn a_write_drops_every_selection_not_just_the_primary() {
+    let fx = Fixture::new();
+    let mut ws = con_provider(&fx.root);
+    let doc = DocId::new("Nota.md");
+    ws.write_document(&doc, "# Titolo\n\ntesto\n", WriteBase::Dictated)
+        .expect("scrive");
+    ws.set_active_context(Some(contesto("Nota.md").with_selections(Some(
+        SelectionSet::Anchored(fub_abi::session::AnchoredSelections {
+            primary: fub_abi::session::AnchoredSelection::new(Span::new(2, 8), "Titolo"),
+            secondary: vec![fub_abi::session::AnchoredSelection::new(
+                Span::new(10, 15),
+                "testo",
+            )],
+        }),
+    ))));
+
+    ws.write_document(&doc, "# Altro titolo\n\ntesto\n", WriteBase::Dictated)
+        .expect("riscrive");
+    assert_eq!(
+        ws.active_context().and_then(|c| c.selections.clone()),
+        None,
+        "cade l'insieme, non la primaria: tenere le secondarie vorrebbe dire \
+         tenere degli offset di un testo che non c'è più"
+    );
 }
 
 // --- la verità degli span ---------------------------------------------------
@@ -269,10 +296,10 @@ fn a_rewritten_source_drops_the_selection_under_it() {
     )
     .expect("scrive");
 
-    ws.set_active_context(Some(contesto("Nota.md").with_selection(Some(Selection {
-        span: Some(Span::new(2, 8)),
-        text: "Titolo".into(),
-    }))));
+    ws.set_active_context(Some(
+        contesto("Nota.md")
+            .with_selections(Some(SelectionSet::anchored(Span::new(2, 8), "Titolo"))),
+    ));
 
     // Qualcuno riscrive il documento (l'utente, il watcher, un bulk fix): gli
     // offset pubblicati erano di un altro testo.
@@ -283,7 +310,7 @@ fn a_rewritten_source_drops_the_selection_under_it() {
     )
     .expect("riscrive");
     assert_eq!(
-        ws.active_context().and_then(|c| c.selection.clone()),
+        ws.active_context().and_then(|c| c.selections.clone()),
         None,
         "uno span stantio è peggio di uno span assente: chi lo usasse \
          taglierebbe i byte sbagliati"
@@ -296,13 +323,13 @@ fn a_rewritten_source_drops_the_selection_under_it() {
 
     // Una scrittura su un *altro* documento non tocca la selezione.
     ws.set_active_context(Some(
-        contesto("Nota.md").with_selection(Some(Selection::caret(Some(Span::new(3, 3))))),
+        contesto("Nota.md").with_selections(Some(SelectionSet::caret(3))),
     ));
     ws.write_document(&DocId::new("Altra.md"), "niente\n", WriteBase::Dictated)
         .expect("scrive l'altra");
     assert!(ws
         .active_context()
-        .and_then(|c| c.selection.clone())
+        .and_then(|c| c.selections.clone())
         .is_some());
 }
 
@@ -313,7 +340,7 @@ fn the_context_follows_a_rename_and_empties_on_removal() {
     ws.write_document(&DocId::new("Nota.md"), "# Titolo\n", WriteBase::Dictated)
         .expect("scrive");
     ws.set_active_context(Some(
-        contesto("Nota.md").with_selection(Some(Selection::caret(Some(Span::new(2, 2))))),
+        contesto("Nota.md").with_selections(Some(SelectionSet::caret(2))),
     ));
 
     ws.rename_document(&DocId::new("Nota.md"), &DocId::new("Spostata.md"))
@@ -326,7 +353,7 @@ fn the_context_follows_a_rename_and_empties_on_removal() {
          svuotano fino al prossimo cambio nota"
     );
     assert_eq!(
-        ctx.selection, None,
+        ctx.selections, None,
         "il rename può aver riscritto anche i link dentro la nota stessa: la \
          posizione non è più garantita"
     );

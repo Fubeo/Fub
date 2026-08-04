@@ -683,22 +683,53 @@ export type { PaneMode } from "./enums.generated";
 // Le parti del contesto che una view può dichiarare di seguire.
 export type { ContextKind } from "./enums.generated";
 
-// Ciò che è selezionato nel pannello — o dove sta il cursore (`text` vuoto).
+// Ciò che è selezionato nel pannello — o dove stanno i cursori (`text` vuoto).
 //
-// `span` è in byte UTF-8 e c'è SOLO quando quelle coordinate valgono anche per
-// il sorgente che il kernel ha in mano, cioè quando il buffer non ha modifiche
-// non salvate. `text` invece è sempre quello vero dell'editor: chi vuole il
-// testo lo ha sempre, chi vuole la posizione la ha quando è vera.
-export interface Selection {
-  span: Span | null;
+// Sono N, perché il multi-cursore dell'editor ne fa N e fino alla decisione
+// 0093 il confine sapeva dirne una sola. Due cose ne seguono, e sono la ragione
+// per cui questi tipi sono cinque e non uno con una lista dentro.
+//
+// La PRIMARIA è un campo: `EditorSelection` di CodeMirror la tiene in
+// `mainIndex` e di norma è l'ultima aggiunta, quindi «la prima della lista»
+// sarebbe stata una conversione che la perde.
+//
+// Le COORDINATE valgono o non valgono per tutte insieme: a deciderlo è lo stato
+// del buffer, che è uno per pannello. Per questo la scelta sta sopra l'insieme
+// (`SelectionSet`) e non dentro le singole selezioni — un insieme metà
+// ancorato e metà no non è rappresentabile, ed è voluto.
+export interface FloatingSelection {
   text: string;
 }
+
+// `span` è in byte UTF-8, e qui non è mai nullo: se c'è l'ancoraggio, c'è per
+// tutte.
+export interface AnchoredSelection {
+  span: Span;
+  text: string;
+}
+
+export interface AnchoredSelections {
+  primary: AnchoredSelection;
+  secondary: AnchoredSelection[];
+}
+
+export interface FloatingSelections {
+  primary: FloatingSelection;
+  secondary: FloatingSelection[];
+}
+
+// Il tag adiacente di serde (`kind`/`value`), come `WriteBase`.
+export type SelectionSet =
+  | { kind: "anchored"; value: AnchoredSelections }
+  | { kind: "floating"; value: FloatingSelections };
 
 // Il contesto del pannello con il focus.
 export interface ViewContext {
   pane: string;
   doc: string | null;
-  selection: Selection | null;
+  // `null` = niente cursore (lettura, o nessun documento). Un insieme vuoto non
+  // esiste: le due cose restano distinte.
+  selections: SelectionSet | null;
   mode: PaneMode;
 }
 

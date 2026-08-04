@@ -12,13 +12,13 @@
 //! È anche il primo cliente della **selezione** nel contesto di sessione
 //! ([`HostEnv::active_context`]): la sezione in cui sta il cursore è segnata,
 //! e lo è solo quando lo span è vero — a buffer sporco
-//! ([`Selection::span`] assente) gli offset del modello sono di un altro testo,
+//! (insieme di selezioni non ancorato) gli offset del modello sono di un altro testo,
 //! e segnare la sezione sbagliata è peggio che non segnarne nessuna.
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::model::{Heading, Span};
-use fub_abi::session::{ContextKind, ContextMask, Selection};
+use fub_abi::session::{ContextKind, ContextMask, SelectionSet};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{
     HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
@@ -88,7 +88,7 @@ impl ViewProvider for OutlineView {
                 ))
             }
         };
-        Ok(build_outline_view(&headings, caret_of(&context.selection)))
+        Ok(build_outline_view(&headings, caret_of(&context.selections)))
     }
 
     fn on_action(
@@ -118,12 +118,18 @@ impl ViewProvider for OutlineView {
 
 /// Dove sta il cursore, in byte del sorgente **che il kernel conosce**.
 ///
-/// `None` in tre casi che qui valgono lo stesso: non c'è selezione (modalità di
-/// lettura, nessun documento) e non c'è uno span (il buffer ha modifiche non
-/// salvate, quindi nessun offset di questo testo vale per quello). Vedi
-/// [`Selection::span`].
-fn caret_of(selection: &Option<Selection>) -> Option<usize> {
-    selection.as_ref()?.span.as_ref().map(|s| s.start)
+/// `None` in due casi che qui valgono lo stesso: non c'è selezione (modalità di
+/// lettura, nessun documento) e l'insieme non è ancorato (il buffer ha
+/// modifiche non salvate, quindi nessun offset di questo testo vale per
+/// quello). Vedi [`SelectionSet`].
+///
+/// Con più cursori è quello della **primaria**: questa view evidenzia la
+/// sezione in cui ci si trova, e in una sola ci si trova — evidenziarne tre
+/// direbbe «sei in tre posti», che è vero della selezione e falso di dove sta
+/// guardando chi legge la struttura. È la stessa ragione per cui l'editor
+/// stesso ha una primaria.
+fn caret_of(selections: &Option<SelectionSet>) -> Option<usize> {
+    Some(selections.as_ref()?.placed()?.primary.span.start)
 }
 
 /// `{"start":…,"end":…}` → `Span`, o `None` se il payload non è quello che

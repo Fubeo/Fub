@@ -12,7 +12,7 @@
 use camino::Utf8PathBuf;
 use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
-use fub_abi::session::{PaneMode, Selection, ViewContext};
+use fub_abi::session::{PaneMode, SelectionSet, ViewContext};
 use fub_abi::traits::ViewInstance;
 use fub_abi::ui::{UiKind, UiNode};
 use fub_features::{StatsView, STATS_ID, STATS_VIEW};
@@ -81,10 +81,7 @@ fn the_selection_text_survives_a_dirty_buffer_where_a_span_would_not() {
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(doc.clone()))
-            .with_selection(Some(Selection {
-                span: None,
-                text: "parole appena scritte".into(),
-            })),
+            .with_selections(Some(SelectionSet::floating("parole appena scritte"))),
     ));
     assert_eq!(
         testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
@@ -121,10 +118,10 @@ fn a_write_makes_the_kernel_drop_the_selection_under_it() {
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(doc.clone()))
-            .with_selection(Some(Selection {
-                span: Some(fub_abi::model::Span::new(0, 5)),
-                text: "prima".into(),
-            })),
+            .with_selections(Some(SelectionSet::anchored(
+                fub_abi::model::Span::new(0, 5),
+                "prima",
+            ))),
     ));
 
     ws.write_document(&doc, "seconda versione, più lunga\n", WriteBase::Dictated)

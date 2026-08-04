@@ -75,9 +75,12 @@ impl Session {
     /// Rimette il contesto in accordo con il vault dopo che il documento che
     /// guarda è cambiato, è stato rinominato o è sparito.
     ///
-    /// La selezione cade in tutti e tre i casi, e per la stessa ragione: i suoi
-    /// offset erano di un testo che non c'è più. Il `text` cadrebbe con essi —
-    /// tenerlo senza span darebbe una selezione che non si sa più dov'era.
+    /// Le selezioni cadono in tutti e tre i casi, e per la stessa ragione: i
+    /// loro offset erano di un testo che non c'è più. Il `text` cadrebbe con
+    /// essi — tenerlo senza coordinate darebbe una selezione che non si sa più
+    /// dov'era. Cadono **tutte insieme** anche quando sono N, ed è la stessa
+    /// cosa che dice il tipo (decisione 0093): a cambiare non è una selezione,
+    /// è il testo sotto tutte.
     pub fn invalidate(&mut self, doc: &DocId, change: ContextChange) {
         let Some(context) = self.context.as_mut() else {
             return;
@@ -85,7 +88,7 @@ impl Session {
         if context.doc.as_ref() != Some(doc) {
             return;
         }
-        context.selection = None;
+        context.selections = None;
         match change {
             ContextChange::Rewritten => {}
             ContextChange::Renamed(to) => context.doc = Some(to),

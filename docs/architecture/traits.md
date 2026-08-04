@@ -275,8 +275,9 @@ un buco nel contratto si scopre prima del freeze, invece che a M5:
   (`Workspace::set_active_context`). Scartati l'evento (`render_view(&self)` è
   immutabile) e l'argomento di `render_view` (obbligo per ogni view a portarsi un
   contesto che non usa). Era `active_document() -> Option<DocId>`, che non regge
-  schede né split. `Selection` porta il testo **sempre** e lo span **solo a
-  buffer pulito** — plugin-boundary.md, "La regola dello span". *(Queste due le
+  schede né split. Le selezioni sono **N** (multi-cursore) con la **primaria**
+  nominata, portano il testo **sempre** e le coordinate **solo a buffer
+  pulito** — plugin-boundary.md, "La regola dello span". *(Queste due le
   ha chieste la migrazione dei backlink a view: una view che non può interrogare
   il vault né sapere quale nota è aperta è un guscio che l'app riempie.)*
 - `apply_edit` — gli edit della richiesta, tutti o nessuno, sul sorgente che la
@@ -448,7 +449,7 @@ sequenceDiagram
 
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
-| la pila del testo | [editor.ts:167](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
+| la pila del testo | [editor.ts:181](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
 | `UndoStack` | [undo.rs:52](../../crates/fub-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
 | `Undo` / `UndoStep` | [command.rs:567](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
 | dove si spinge | [workspace.rs:851](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
@@ -515,8 +516,8 @@ diversa del contratto:
   `ViewUpdate::RunSearch { query }`.
 - **statistiche** — primo cliente della **selezione**: conta parole e caratteri
   del documento e di ciò che è selezionato, e in lettura mostra il tempo di
-  lettura. È la view che dimostra perché `Selection` porta il testo e non solo lo
-  span.
+  lettura. È la view che dimostra perché una selezione porta il testo e non solo
+  lo span — e con più cursori somma i punti e dice quanti sono.
 
 Prove end-to-end col kernel vero:
 `crates/fub-features/tests/{backlinks,outline,tags,stats}_view_e2e.rs`.
@@ -1168,7 +1169,7 @@ materializza in `crates/fub-abi/wit/fub/*.wit` + test abi↔WIT.
 | `ViewSpec`/`ViewPlacement` | `record` / `enum` |
 | `TextEdit`/`EditRequest`/`AppliedEdit`/`EditReport` | `record` (interface `edit`) |
 | `Revision` | `type revision = string` — **opaca**: solo l'uguaglianza è contratto, la derivazione è dell'host |
-| `ViewContext`/`Selection` | `record` (interface `session`); `selection.span` è `option<span>` — c'è solo a buffer pulito |
+| `ViewContext`/`SelectionSet` | `record` / `variant` (interface `session`); `selections` è `option<selection-set>`, e il set è `anchored` o `floating` — le coordinate ci sono per tutte o per nessuna |
 | `PaneId`/`PaneMode` | `type pane-id = string` / `enum pane-mode { source, live-preview, reading }` |
 | `ContextKind`/`ContextMask` | `enum context-kind` / `type context-mask = list<context-kind>` (come `event-mask`) |
 | `UiNode` (albero) | `variant ui-node` **in arena**: `list<ui-ref>` fra i figli, nodi in `ui-tree` |
