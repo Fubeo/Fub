@@ -428,7 +428,15 @@ async function scrivi(
 /// aver visto, e chi non risponde non perde niente: finché non lo fa, quelle
 /// combinazioni non premono.
 async function disegnaTastiProposti(): Promise<HTMLElement[]> {
-  const proposti = await api.pendingKeybindings();
+  // Il banner è un **di più**, e chi non riesce a dirlo non deve portarsi via la
+  // scheda: questa chiamata può fallire per conto suo — nessun vault aperto, o
+  // il registro dei vault che non si legge — e da dentro la `Promise.all` di
+  // `disegnaScorciatoie` un rifiuto sostituirebbe tutte le scorciatoie con
+  // «non si è riusciti a leggere». È lo stesso silenzio di
+  // `avvisaSeIlVaultPortaTasti` in `main.ts`, e per la stessa ragione: ciò che
+  // si perde è la domanda, non il presidio — le chiavi restano sospese finché
+  // qualcuno non risponde.
+  const proposti = await api.pendingKeybindings().catch((): Record<string, string> => ({}));
   const chiavi = Object.keys(proposti);
   if (chiavi.length === 0) return [];
 
