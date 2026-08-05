@@ -274,9 +274,15 @@ fn il_rapporto_diagnostico_si_scrive_fra_i_derivati() {
     let json: serde_json::Value = serde_json::from_str(&letto).expect("JSON valido");
     assert_eq!(json["v"], 1, "la versione di schema c'è (§15.3)");
     assert_eq!(json["drafts"], 1);
-    assert!(
-        json["health"].is_array(),
-        "il controllo di salute ha un lettore"
+    // «È un array» era tutto ciò che questo presidio pretendeva, e un array con
+    // dentro un controllo su tre lo soddisfa: il giorno che un controllo nuovo
+    // non fosse aggiunto all'elenco del rapporto, qui non succedeva niente.
+    let health = json["health"].as_array().expect("il rapporto ha la salute");
+    assert_eq!(
+        health.len(),
+        fub_abi::traits::HealthCheck::ALL.len(),
+        "il rapporto esegue **ogni** controllo di salute, non quelli che \
+         qualcuno si è ricordato di elencare"
     );
 }
 

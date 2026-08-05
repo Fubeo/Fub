@@ -28,9 +28,20 @@
 //!
 //! - **La chiave con cui due nomi si scoprono lo stesso nome** è
 //!   [`resolution_key`](super::path::resolution_key), e ci sta già: la
-//!   *case-insensitivity* di 2.3 non è una regola nuova, è quella. Un vault che
-//!   contiene `Nota.md` e `nota.md` è già ambiguo per il grafo prima di esserlo
-//!   per il filesystem, e la risposta è una sola perché la domanda è una sola.
+//!   *case-insensitivity* di 2.3 non è una regola nuova, è quella.
+//!
+//!   Fino alla 0107 questa riga proseguiva così: «*un vault che contiene
+//!   `Nota.md` e `nota.md` è già ambiguo per il grafo prima di esserlo per il
+//!   filesystem, e la risposta è una sola perché la domanda è una sola*». Era
+//!   **falso**, e in un modo che dichiarava coperto ciò che non lo era:
+//!   `resolution_key` non *rileva* l'ambiguità, la **collassa in silenzio** —
+//!   due file diversi diventano una chiave sola e vince chi capita. La domanda
+//!   non è una: *quali nomi sono candidati* la risponde `resolution_key`, *chi
+//!   ha ragione fra i candidati* la risponde
+//!   [`exact_key`](super::path::exact_key), e *quando nessuna delle due può
+//!   rispondere* — due file nella radice del vault, dove nessun wikilink
+//!   disambigua — la risposta non è una regola, è dirlo:
+//!   `HealthCheck::CollidingPaths`.
 //! - **La normalizzazione Unicode** è la stessa NFC di `resolution_key`, applicata
 //!   ai nomi invece che alle chiavi: [`normalized`]. Non c'è una seconda
 //!   implementazione, c'è un secondo cliente.

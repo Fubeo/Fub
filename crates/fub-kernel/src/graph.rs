@@ -52,7 +52,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget};
 use fub_abi::traits::{BacklinkRef, LinkDirection, NeighborRef};
 
-use fub_abi::rules::path::{resolution_key, resolve_against, strip_ext};
+use fub_abi::rules::path::{exact_key, resolution_key, resolve_against, strip_ext};
 
 /// Ciò che il grafo legge di un documento: identità, alias, link.
 ///
@@ -85,6 +85,12 @@ impl GraphSource for DocumentModel {
 #[derive(Clone, Debug)]
 struct LinkRef {
     key: String,
+    /// Lo stesso riferimento **senza** il passo che collassa le maiuscole: è la
+    /// forma con cui l'utente l'ha scritto, e serve a scegliere fra i candidati
+    /// che la chiave mette insieme. Non entra in nessun indice — gli indici
+    /// restano indicizzati per chiave, quindi l'invalidazione incrementale non
+    /// cambia di una riga.
+    exact: String,
     kind: RefKind,
     context: Option<String>,
 }
@@ -207,7 +213,7 @@ impl LinkGraph {
     /// per path se contiene `/`, altrimenti per nome (fra omonimi vince il
     /// più vicino alla radice), infine per alias.
     pub fn resolve_wiki(&self, page: &str) -> Option<DocId> {
-        self.resolve_key(&resolution_key(page))
+        self.resolve_key(&resolution_key(page), &exact_key(page))
     }
 
     /// Risolve la destinazione di un link markdown (`[t](note/altra.md)`)
@@ -218,7 +224,7 @@ impl LinkGraph {
     /// domanda con la stessa risposta.
     pub fn resolve_path(&self, source: &DocId, target: &str) -> Option<DocId> {
         let path = resolve_against(source, target)?;
-        self.resolve_path_key(&resolution_key(&path))
+        self.resolve_path_key(&resolution_key(&path), &exact_key(&path))
     }
 
     /// Backlink verso un documento (riferimenti entranti), ordinati per sorgente.
@@ -305,19 +311,53 @@ impl LinkGraph {
     // --- risoluzione ------------------------------------------------------
 
     /// Come [`Self::resolve_wiki`] ma su una chiave già normalizzata.
-    fn resolve_key(&self, key: &str) -> Option<DocId> {
+    fn resolve_key(&self, key: &str, exact: &str) -> Option<DocId> {
         if key.is_empty() {
             return None;
         }
         if key.contains('/') {
-            if let Some(id) = first_of(&self.path_index, &strip_ext(key)) {
+            if let Some(id) =
+                self.pick(&self.path_index, &strip_ext(key), &strip_ext(exact), |id| {
+                    exact_key(&strip_ext(id.as_str()))
+                })
+            {
                 return Some(id);
             }
         }
-        if let Some(id) = first_of(&self.name_index, key) {
+        if let Some(id) = self.pick(&self.name_index, key, exact, |id| exact_key(id.page_name())) {
             return Some(id);
         }
+        // Gli alias no, ed è una differenza di sostanza: dietro un path e un
+        // nome pagina c'è un **file**, e due file che differiscono per una
+        // maiuscola sono due cose che il filesystem distingue e la chiave no.
+        // Un alias è una dichiarazione dentro un frontmatter: due documenti che
+        // dichiarano `NASA` e `nasa` non sono due file omonimi, sono due
+        // rivendicazioni ugualmente valide, e nessun fatto sul disco dice quale
+        // l'utente intendesse. Lì l'ambiguità è genuina e la priorità resta la
+        // risposta.
         first_of(&self.alias_index, key)
+    }
+
+    /// Fra i candidati di una chiave vince chi **combacia esattamente** con ciò
+    /// che l'utente ha scritto; se nessuno combacia, il primo per priorità —
+    /// cioè la regola di prima, intera.
+    ///
+    /// Il caso in cui questo cambia qualcosa è esattamente uno: la chiave ha più
+    /// di un candidato *perché* due documenti differiscono solo per il caso. Con
+    /// un candidato solo `find` trova quello o non trova niente, e `first` lo
+    /// restituisce lo stesso.
+    fn pick(
+        &self,
+        index: &HashMap<String, Vec<DocId>>,
+        key: &str,
+        exact: &str,
+        forma: impl Fn(&DocId) -> String,
+    ) -> Option<DocId> {
+        let ids = index.get(key)?;
+        ids.iter()
+            .find(|id| forma(id) == exact)
+            .or_else(|| ids.first())
+            .cloned()
     }
 
     /// Risoluzione di una chiave di **path** (già normalizzata e già assoluta
@@ -328,16 +368,23 @@ impl LinkGraph {
     /// che è quella dei wikilink. È la regola 2 di [`crate::pathlink`]; qui c'è
     /// perché `path_index` è indicizzato *senza* estensione e l'esatto va
     /// cercato fra i suoi candidati.
-    fn resolve_path_key(&self, key: &str) -> Option<DocId> {
+    fn resolve_path_key(&self, key: &str, exact: &str) -> Option<DocId> {
         if key.is_empty() {
             return None;
         }
         if let Some(ids) = self.path_index.get(&strip_ext(key)) {
+            // Chi combacia in tutto — estensione **e** caso — prima di chi
+            // combacia solo a meno del caso.
+            if let Some(id) = ids.iter().find(|id| exact_key(id.as_str()) == exact) {
+                return Some(id.clone());
+            }
             if let Some(id) = ids.iter().find(|id| resolution_key(id.as_str()) == key) {
                 return Some(id.clone());
             }
         }
-        first_of(&self.path_index, key)
+        self.pick(&self.path_index, key, exact, |id| {
+            exact_key(&strip_ext(id.as_str()))
+        })
     }
 
     // --- indici di nome/alias/path ----------------------------------------
@@ -384,13 +431,15 @@ impl LinkGraph {
         let id = doc.graph_id();
         let mut refs = Vec::new();
         for link in doc.graph_links() {
-            let (key, kind) = match &link.target {
-                LinkTarget::Wiki { page, .. } => (resolution_key(page), RefKind::Wiki),
+            let (key, exact, kind) = match &link.target {
+                LinkTarget::Wiki { page, .. } => {
+                    (resolution_key(page), exact_key(page), RefKind::Wiki)
+                }
                 // Il path si risolve **qui**, contro la cartella del sorgente:
                 // da questo punto in poi la chiave è assoluta nel vault e il
                 // resto della macchina non deve più sapere da dove veniva.
                 LinkTarget::Path(target) => match resolve_against(id, target) {
-                    Some(path) => (resolution_key(&path), RefKind::Path),
+                    Some(path) => (resolution_key(&path), exact_key(&path), RefKind::Path),
                     None => continue,
                 },
                 LinkTarget::Url(_) => continue,
@@ -404,6 +453,7 @@ impl LinkGraph {
                 .insert(id.clone());
             refs.push(LinkRef {
                 key,
+                exact,
                 kind,
                 context: link.context.clone(),
             });
@@ -487,8 +537,8 @@ impl LinkGraph {
         let mut out = Vec::with_capacity(refs.len());
         for link in refs {
             let resolved = match link.kind {
-                RefKind::Wiki => self.resolve_key(&link.key),
-                RefKind::Path => self.resolve_path_key(&link.key),
+                RefKind::Wiki => self.resolve_key(&link.key, &link.exact),
+                RefKind::Path => self.resolve_path_key(&link.key, &link.exact),
             };
             let Some(target) = resolved else {
                 continue;
@@ -786,6 +836,36 @@ mod tests {
     }
 
     #[test]
+    fn due_file_che_differiscono_per_una_maiuscola_non_sono_lo_stesso_arco() {
+        // Il caso che in tutto il repo non era esercitato da nessuno: due file
+        // che il filesystem distingue e la chiave di risoluzione no.
+        let grande = doc_with_links("verso-grande.md", &["Nota"]);
+        let piccola = doc_with_links("verso-piccola.md", &["nota"]);
+        let a = DocumentModel::empty(DocId::new("Nota.md"));
+        let b = DocumentModel::empty(DocId::new("nota.md"));
+        let graph = LinkGraph::build([&grande, &piccola, &a, &b]);
+
+        // Ognuno dei due arriva dove l'utente l'ha scritto. Prima ci arrivavano
+        // tutti e due su `Nota.md`, perché `N` precede `n` in ASCII.
+        assert_eq!(graph.resolve_wiki("Nota"), Some(DocId::new("Nota.md")));
+        assert_eq!(graph.resolve_wiki("nota"), Some(DocId::new("nota.md")));
+        assert_eq!(sources(&graph, "Nota.md"), ["verso-grande.md"]);
+        assert_eq!(sources(&graph, "nota.md"), ["verso-piccola.md"]);
+    }
+
+    #[test]
+    fn senza_un_gemello_esatto_il_caso_resta_indifferente() {
+        // L'altra metà, ed è la regola che NON cambia: un solo candidato lo si
+        // raggiunge scrivendolo come si vuole (0004, e un vault sincronizzato
+        // fra macOS e Linux è lo stesso vault).
+        let a = doc_with_links("a.md", &["NOTA"]);
+        let nota = DocumentModel::empty(DocId::new("sub/Nota.md"));
+        let graph = LinkGraph::build([&a, &nota]);
+        assert_eq!(graph.resolve_wiki("nOtA"), Some(DocId::new("sub/Nota.md")));
+        assert_eq!(sources(&graph, "sub/Nota.md"), ["a.md"]);
+    }
+
+    #[test]
     fn duplicate_links_keep_multiplicity() {
         let a = doc_with_links("a.md", &["Nota", "Nota"]);
         let nota = DocumentModel::empty(DocId::new("Nota.md"));
@@ -911,6 +991,20 @@ mod tests {
             })
             .collect();
         m
+    }
+
+    #[test]
+    fn anche_un_link_markdown_sceglie_il_gemello_giusto() {
+        // Stessa domanda dal lato dei path, dove il danno è peggiore: qui il
+        // riferimento è quello che la riscrittura al rename scrive su disco.
+        let a = doc_with_paths("sub/a.md", &["Nota.md"]);
+        let b = doc_with_paths("sub/b.md", &["nota.md"]);
+        let grande = DocumentModel::empty(DocId::new("sub/Nota.md"));
+        let piccola = DocumentModel::empty(DocId::new("sub/nota.md"));
+        let graph = LinkGraph::build([&a, &b, &grande, &piccola]);
+
+        assert_eq!(sources(&graph, "sub/Nota.md"), ["sub/a.md"]);
+        assert_eq!(sources(&graph, "sub/nota.md"), ["sub/b.md"]);
     }
 
     #[test]

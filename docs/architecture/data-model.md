@@ -38,8 +38,15 @@ dei wikilink entranti — solo il testo-pagina dentro lo `Span` del link, e solo
 per i riferimenti **per nome o per path** che risolvevano davvero al documento
 rinominato. I riferimenti per **alias** non si toccano (l'alias vive nel
 frontmatter del target e sopravvive al rename); quelli a un **omonimo** vincente
-non vengono dirottati. Se il nuovo nome è conteso, la riscrittura usa il path
-senza estensione, che è sempre univoco.
+non vengono dirottati. Le forme che la riscrittura può scrivere sono **tre**, in quest'ordine: il nome pagina se
+nessun altro documento lo contende, il path **senza** estensione se nessun altro
+lo contende, e altrimenti il path **intero**. La terza esiste perché la seconda
+non è «sempre univoca», come questo paragrafo ha affermato fino alla
+[0107](../decisions/0107-il-caso-di-una-lettera.md): la chiave di `path_index` è
+`resolution_key(strip_ext(…))`, quindi `sub/Nota.md` e `sub/nota.txt` la
+condividono, e un path senza estensione si contende esattamente come si contende
+un nome. Qui non si sceglie cosa mostrare a schermo — si scrive su disco **dentro
+i documenti di terzi** —, quindi la condizione si verifica invece di affermarla.
 
 **Case dei path.** Il `DocId` è **byte-exact** (conserva il case del filesystem);
 la **risoluzione** wikilink è **case-insensitive** (le chiavi degli indici del
@@ -52,8 +59,24 @@ su FS case-sensitive (Linux) e case-insensitive (macOS/Windows). Conseguenze:
   collisione è intercettata dalla cache dei modelli, perché il vault è l'unica
   fonte dei `DocId`);
 - due documenti che differiscono solo per il case possono esistere solo su FS
-  case-sensitive: lì la risoluzione resta deterministica per priorità (path più
-  corto, poi lessicografico), come per qualsiasi omonimo.
+  case-sensitive, e lì la chiave sola non basta a scegliere. Accanto a
+  `resolution_key` ([`abi/rules/path.rs:49`](../../crates/fub-abi/src/rules/path.rs))
+  sta perciò `exact_key`
+  ([`abi/rules/path.rs:66`](../../crates/fub-abi/src/rules/path.rs)), che fa trim
+  e NFC **senza** minuscolare: la prima dice chi è candidato, la seconda chi ha
+  ragione fra i candidati. Fra gli omonimi di una chiave vince chi combacia
+  esattamente, e in sua assenza si torna alla priorità di sempre (path più corto,
+  poi lessicografico) — con un candidato solo le due si comportano identiche,
+  quindi `[[nOtA]]` continua a trovare `sub/Nota.md`: la case-insensitivity non
+  si è ristretta, si è **ordinata** ([0107](../decisions/0107-il-caso-di-una-lettera.md));
+- dove nemmeno la chiave esatta può decidere non c'è una regola, c'è un avviso.
+  `resolve_key` consulta l'indice dei path solo se la chiave contiene `/`, quindi
+  per `Nota.md` e `nota.md` nella **radice** del vault non esiste nessun wikilink
+  che disambigui: la collisione la dice `HealthCheck::CollidingPaths`, che
+  cammina l'anagrafe — `foto.PNG` e `foto.png` collidono come due note — sulla
+  chiave del path **intero, con estensione**, ed emette una issue per **ogni**
+  membro del gruppo. Riparare non è compito suo: quale dei due file abbia il nome
+  sbagliato lo sa solo chi possiede il vault.
 
 ## `Span` — ancoraggio alla sorgente
 

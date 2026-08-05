@@ -133,6 +133,16 @@ nel contratto. La risoluzione segue le regole di Obsidian — nome, alias, path,
 shortest-path fra omonimi — ed è l'unica specie di link che il grafo conosce
 (il perché, e il prezzo, stanno nella 0004).
 
+Fra gli omonimi le chiavi sono **due** e fanno due lavori diversi:
+`resolution_key` ([`abi/rules/path.rs:49`](../crates/fub-abi/src/rules/path.rs))
+fa trim, NFC e minuscolo e dice **chi è candidato**; `exact_key`
+([`abi/rules/path.rs:66`](../crates/fub-abi/src/rules/path.rs)) fa trim e NFC
+senza minuscolare e dice **chi ha ragione fra i candidati**, che è la scelta che
+prima toccava all'ordine ASCII. Dove nemmeno quella può decidere — due file che
+differiscono per una maiuscola nella **radice** del vault, dove nessun wikilink
+disambigua — non si sceglie affatto: lo dice `HealthCheck::CollidingPaths`
+([0107](decisions/0107-il-caso-di-una-lettera.md)).
+
 ---
 
 ## Il vault
@@ -243,7 +253,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5749`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5782`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
@@ -403,7 +413,7 @@ rottura deliberata prima del freeze si fa *ritagliandola*, con un commit che la
 tocca e dice perché — così si vede in review.
 
 ### manifest
-`PluginManifest` · [`abi/traits.rs:3656`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`PluginManifest` · [`abi/traits.rs:3686`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e i
 permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria: se
@@ -531,7 +541,7 @@ accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
 ## Il canale dati
 
 ### canale dati
-`IndexQuery` / `IndexResult` · [`abi/traits.rs:2438`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
+`IndexQuery` / `IndexResult` · [`abi/traits.rs:2468`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
 
 L'unico modo in cui chi disegna chiede dati al kernel: si costruisce una query,
 si ottiene un risultato. Esiste perché una view non deve poter chiamare il
@@ -553,14 +563,14 @@ Il modo di chiedere *venti* invece di tutto, con il totale nella risposta.
 inventarsi un tetto; ma senza finestra ogni giro clona il vault.
 
 ### indice
-`IndexProvider` · [`abi/traits.rs:3323`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`IndexProvider` · [`abi/traits.rs:3353`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Chi sa rispondere a una parte delle query. Ce n'è più di uno — il grafo e
 l'anagrafe stanno nel kernel, la ricerca full-text è un provider su tantivy — e
 il canale dati esiste anche per non far sapere a chi chiede quale sia quale.
 
 ### instradamento
-`QueryRoute` · [`abi/traits.rs:2988`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`QueryRoute` · [`abi/traits.rs:3018`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Come il kernel decide **a chi** mandare una query. Si dichiara alla
 registrazione, non si scopre per tentativi: la tabella delle rotte

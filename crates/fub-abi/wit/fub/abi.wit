@@ -1872,6 +1872,11 @@ interface index {
         broken-links,
         /// Note che nessuno nomina: zero riferimenti entranti.
         orphan-documents,
+        /// File che il filesystem distingue e la chiave di risoluzione no: due
+        /// path che differiscono solo per maiuscole o per composizione Unicode.
+        /// In radice quell'ambiguità non è esprimibile con un wikilink, quindi
+        /// l'unica risposta possibile all'utente è dirgliela.
+        colliding-paths,
     }
 
     record index-query-backlinks {

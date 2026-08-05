@@ -50,6 +50,23 @@ pub fn resolution_key(s: &str) -> String {
     s.trim().nfc().collect::<String>().to_lowercase()
 }
 
+/// La stessa chiave **senza** il passo che collassa le maiuscole: trim e NFC.
+///
+/// Non è una seconda normalizzazione e non sostituisce [`resolution_key`]: è ciò
+/// che resta da confrontare **quando i candidati sono già più d'uno**. Due file
+/// che differiscono solo per una maiuscola hanno la stessa chiave di
+/// risoluzione — è la regola giusta, perché un vault sincronizzato fra macOS e
+/// Linux è lo stesso vault — ma sono **due file**, e finché la scelta fra i
+/// candidati guardava solo la chiave, chi aveva scritto `[[nota]]` non poteva
+/// ottenere `nota.md` se accanto c'era `Nota.md`: vinceva sempre lo stesso, e
+/// quale dei due lo decideva l'ordine ASCII.
+///
+/// La differenza in una riga: `resolution_key` dice **chi è candidato**,
+/// `exact_key` dice **chi ha ragione fra i candidati**.
+pub fn exact_key(s: &str) -> String {
+    s.trim().nfc().collect::<String>()
+}
+
 /// Il path senza l'ultima estensione: `note/v1.2.md` → `note/v1.2`.
 ///
 /// È la chiave *senza estensione* con cui `note/a` e `note/a.md` si incontrano.

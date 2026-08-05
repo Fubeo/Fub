@@ -3109,8 +3109,26 @@ impl Workspace {
         let from_path = resolution_key(&strip_ext(from.as_str()));
 
         // Nuovo riferimento: il nome pagina se nessun altro documento lo
-        // contende (a quel punto la risoluzione per nome è certa), altrimenti
-        // il path senza estensione, che è sempre univoco.
+        // contende, altrimenti il path senza estensione, altrimenti il path
+        // intero.
+        //
+        // **La terza forma esiste perché la seconda non è «sempre univoca»**,
+        // come questo commento ha dichiarato fino alla
+        // [0107](../../../docs/decisions/0107-il-caso-di-una-lettera.md): la
+        // chiave di `path_index` è `resolution_key(strip_ext(…))`, quindi
+        // `sub/Nota.md` e `sub/nota.txt` la condividono. E qui non si sta
+        // scegliendo cosa mostrare a schermo: si sta **scrivendo su disco nei
+        // documenti di terzi**, cioè producendo il riferimento che un altro
+        // programma leggerà fra un anno.
+        //
+        // **La prova non si può fare qui**, ed è stato misurato provandoci: la
+        // strada onesta sarebbe chiedere al grafo se il riferimento scelto torna
+        // davvero a `to`, ma questo piano si calcola *prima* che il rename sia
+        // applicato — il grafo conosce ancora `from` e non ha mai sentito
+        // nominare `to`. Ogni candidato risulterebbe sbagliato, e la
+        // riscrittura scriverebbe sempre la forma più lunga. Quindi resta una
+        // regola; ciò che cambia è che adesso la seconda condizione la si
+        // **verifica** invece di affermarla.
         let to_name = to.page_name();
         let ambiguous = self
             .indexes
@@ -3118,10 +3136,23 @@ impl Workspace {
             .metas
             .keys()
             .any(|id| id != from && resolution_key(id.page_name()) == resolution_key(to_name));
-        let new_ref = if ambiguous {
+        // La stessa domanda sul path senza estensione, che è la chiave di
+        // `path_index`: `sub/Nota.md` e `sub/nota.txt` la condividono, quindi
+        // due file possono contenderselo esattamente come si contendono un
+        // nome. Dove anche questa è contesa si scrive il path **intero**.
+        let to_path_key = resolution_key(&strip_ext(to.as_str()));
+        let path_ambiguous = self
+            .indexes
+            .core
+            .metas
+            .keys()
+            .any(|id| id != from && resolution_key(&strip_ext(id.as_str())) == to_path_key);
+        let new_ref = if !ambiguous {
+            to_name.to_string()
+        } else if !path_ambiguous {
             strip_ext(to.as_str())
         } else {
-            to_name.to_string()
+            to.as_str().to_string()
         };
 
         let mut sources: BTreeSet<DocId> = self
@@ -5566,20 +5597,22 @@ impl Workspace {
                     .count();
                 // Il primo lettore vero di `IndexQuery::VaultHealth`: quella
                 // query esisteva e non la chiedeva nessuno.
-                let health = [
-                    fub_abi::traits::HealthCheck::BrokenLinks,
-                    fub_abi::traits::HealthCheck::OrphanDocuments,
-                ]
-                .into_iter()
-                .map(|check| {
-                    let quanti =
-                        match self.query_index(IndexQuery::VaultHealth { check, page: None }) {
-                            Ok(IndexResult::VaultHealth(page)) => page.total as usize,
-                            _ => 0,
-                        };
-                    (format!("{check:?}"), quanti)
-                })
-                .collect();
+                //
+                // L'elenco è `HealthCheck::ALL` e non tre righe scritte qui: un
+                // elenco a mano che si dimentica un controllo lascia il rapporto
+                // valido — è ancora un array — con una riga in meno, e nessun
+                // presidio guarda dentro quell'array.
+                let health = fub_abi::traits::HealthCheck::ALL
+                    .into_iter()
+                    .map(|check| {
+                        let quanti =
+                            match self.query_index(IndexQuery::VaultHealth { check, page: None }) {
+                                Ok(IndexResult::VaultHealth(page)) => page.total as usize,
+                                _ => 0,
+                            };
+                        (format!("{check:?}"), quanti)
+                    })
+                    .collect();
                 let report = Diagnostics {
                     v: DIAGNOSTICS_VERSION,
                     at: crate::time::now_unix_millis(),

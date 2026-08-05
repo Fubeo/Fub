@@ -641,7 +641,7 @@ come una data che non c'è.
 
 ### 23.8 Due file che differiscono per una maiuscola sono lo stesso arco
 
-*kernel · **P2** — una regola in `rules/path.rs`; nessuna firma, ma la scelta va scritta dove sta la regola*
+*chiusa dalla [0107](../decisions/0107-il-caso-di-una-lettera.md) — `resolution_key` non cambia di una riga e non deve: accanto nasce `exact_key`, e la differenza sta in una riga — la prima dice **chi è candidato**, la seconda **chi ha ragione fra i candidati**. Gli indici restano per chiave, quindi l'incrementale non cambia. **Il nesso della voce era falso**: il ramo «esatto» di `resolve_path_key` confrontava due chiavi già minuscolate, cioè non poteva distinguere il caso nemmeno in linea di principio, e `graph_incremental.rs` — indicato come il presidio contro cui misurare — è **strutturalmente cieco** a questo difetto, perché il suo oracolo è il full-rebuild e i due sbagliano allo stesso modo. **Il modello per il segnale era falso anche lui**: la forma della 0090 è interamente di shell, e il posto giusto c'era già ed è migliore, `IndexQuery::VaultHealth` — da cui `HealthCheck::CollidingPaths`, che cammina l'**anagrafe** perché due allegati collidono come due note. La ragione che nessuno aveva scritto: **in radice il collasso del caso non è esprimibile con un wikilink**, quindi dirlo è l'unica risposta possibile. Il difetto peggiore stava **fuori dalla voce**: `link_rewrite_plan` scriveva su disco dentro i documenti di terzi affermando che il path senza estensione «è sempre univoco» — falso, `sub/Altra.md` e `sub/Altra.txt` condividono la chiave —, e togliere la terza forma **non rendeva rosso niente***
 
 La `resolution_key` di `fub_abi::rules::path` fa `trim`, NFC e **`to_lowercase`**
 su tutta la chiave, e la [0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md) ne
@@ -657,19 +657,17 @@ riferimenti che puntavano altrove. Non è un link che non risolve — è un link
 risolve **al file sbagliato**, che è il modo peggiore in cui questa famiglia
 possa rompersi, perché non lascia traccia.
 
-- [ ] **La collisione va vista, prima ancora che risolta.** Due entry
-      dell'anagrafe ([0046](../decisions/0046-l-anagrafe-del-vault.md)) che
-      normalizzano alla stessa chiave sono un fatto che il kernel conosce già al
-      `reconcile`: dirlo — come la [0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)
-      dice i conflitti di scorciatoia all'avvio, guardando il registro fermo —
-      costa poco e toglie la parte silenziosa del difetto.
-- [ ] **Se l'esatto vince quando c'è.** È la stessa forma della regola che la 0004
-      ha già scritto per l'estensione — *«prima l'esatto, poi il senza»* — e
-      applicarla al caso sarebbe coerente: `[t](Nota.md)` prende `Nota.md` se
-      esiste, e ricade sulla chiave normalizzata solo se non c'è. Va misurato
-      contro l'invalidazione incrementale, che oggi dipende da un paio di chiavi
-      d'indice e che il test di proprietà `graph_incremental.rs` presidia.
-- [ ] **Perché è P2 e non si chiude da sola.** Nessuna firma, e il caso è raro. Ma
+- [x] **La collisione va vista, prima ancora che risolta.** Fatto, ma non dove
+      la voce lo cercava: il `reconcile` riceve **solo id** e la forma della 0090
+      è tutta di shell. Il posto è `IndexQuery::VaultHealth`, che ha grafo e
+      anagrafe ([0046](../decisions/0046-l-anagrafe-del-vault.md)) insieme —
+      `HealthCheck::CollidingPaths`, additivo, nessun record cambia.
+- [x] **Se l'esatto vince quando c'è.** Sì, e il nesso con la 0004 era **falso**:
+      quel ramo confrontava due chiavi già minuscolate. `exact_key` è la funzione
+      che mancava; gli indici restano per chiave, quindi l'invalidazione
+      incrementale non cambia — e `graph_incremental.rs` non presidiava nulla di
+      tutto ciò, perché il suo oracolo è il full-rebuild.
+- [x] **Perché è P2 e non si chiude da sola.** Nessuna firma, e il caso è raro. Ma
       «raro» qui vuol dire *raro finché il vault sta su un disco solo*: è la
       famiglia del sync (FEATURES 18), dove due macchine con due filesystem
       diversi sono il presupposto, non l'eccezione — la stessa ragione per cui la

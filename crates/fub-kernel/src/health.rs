@@ -1,6 +1,6 @@
-//! I controlli di salute del vault: link rotti e note orfane.
+//! I controlli di salute del vault: link rotti, note orfane, path che collidono.
 //!
-//! Sono le prime due voci di 7.2 (che ne conta una trentina) e stanno qui,
+//! Sono le prime tre voci di 7.2 (che ne conta una trentina) e stanno qui,
 //! dietro [`IndexQuery::VaultHealth`], invece che in un comando dell'app per la
 //! ragione di sempre: chiedono **solo** al grafo e ai modelli che il kernel ha
 //! già in memoria, e ognuna che diventasse un comando bespoke sarebbe una
@@ -15,6 +15,7 @@
 
 use fub_abi::model::{DocId, Link, LinkTarget};
 use fub_abi::rules::health::{broken_target, LinkResolver};
+use fub_abi::rules::path::resolution_key;
 use fub_abi::traits::{HealthCheck, HealthIssue};
 
 use std::collections::BTreeMap;
@@ -68,6 +69,12 @@ pub(crate) fn run<'a>(
     match check {
         HealthCheck::BrokenLinks => broken_links(docs, view, doc_extensions),
         HealthCheck::OrphanDocuments => orphans(docs.map(|(id, _)| id), view.graph),
+        // Non `docs` ma `view.entries`: i documenti sono le note, e due file
+        // che collidono possono essere due allegati (`foto.PNG` e `foto.png`
+        // collidono esattamente come due note). L'anagrafe è l'unico elenco che
+        // li contiene tutti, ed è la ragione per cui questo controllo non
+        // esisteva prima del §14.1.
+        HealthCheck::CollidingPaths => collisions(view.entries),
     }
 }
 
@@ -101,6 +108,53 @@ fn orphans<'a>(docs: impl Iterator<Item = &'a DocId>, graph: &LinkGraph) -> Vec<
             // Il problema è il documento stesso: non c'è un punto da mostrare.
             detail: None,
             span: None,
+        })
+        .collect()
+}
+
+/// I file che condividono una chiave di risoluzione: uno per ciascun membro del
+/// gruppo, col dettaglio che nomina gli **altri**.
+///
+/// La chiave è quella del path **intero, con estensione**, e non quella senza:
+/// `nota.md` e `nota.txt` sono due file diversi che si distinguono benissimo, e
+/// segnalarli sarebbe rumore. Ciò che qui è un problema è il gruppo che il
+/// filesystem distingue e la chiave no — cioè maiuscole e composizione Unicode,
+/// che è esattamente quel che [`resolution_key`] toglie.
+///
+/// Una issue per **ogni** membro e non una per gruppo perché `HealthIssue` ha
+/// un solo `doc`: dire la collisione una volta sola vorrebbe dire scegliere a
+/// quale dei due file appenderla, e non c'è nessuna ragione per preferirne uno
+/// — è la stessa asimmetria arbitraria che questa voce è venuta a togliere.
+fn collisions(entries: &BTreeMap<DocId, VaultEntry>) -> Vec<HealthIssue> {
+    let mut per_chiave: BTreeMap<String, Vec<&DocId>> = BTreeMap::new();
+    for id in entries.keys() {
+        per_chiave
+            .entry(resolution_key(id.as_str()))
+            .or_default()
+            .push(id);
+    }
+    // L'ordine è quello dell'anagrafe, come per gli altri controlli: la
+    // risposta è paginata e un ordine per gruppo non sarebbe quello che il
+    // chiamante si aspetta.
+    entries
+        .keys()
+        .filter_map(|id| {
+            let gruppo = per_chiave.get(&resolution_key(id.as_str()))?;
+            if gruppo.len() < 2 {
+                return None;
+            }
+            let altri: Vec<&str> = gruppo
+                .iter()
+                .filter(|o| **o != id)
+                .map(|o| o.as_str())
+                .collect();
+            Some(HealthIssue {
+                doc: id.clone(),
+                check: HealthCheck::CollidingPaths,
+                detail: Some(altri.join(", ")),
+                // Il problema non sta in un punto del sorgente: sta nel nome.
+                span: None,
+            })
         })
         .collect()
 }
@@ -296,5 +350,66 @@ mod tests {
             "orfana = zero riferimenti entranti; linkare non salva dall'orfanità"
         );
         assert!(found[0].detail.is_none() && found[0].span.is_none());
+    }
+
+    #[test]
+    fn due_file_che_differiscono_per_una_maiuscola_sono_una_collisione() {
+        // E il caso che vale il controllo è questo: in **radice**, dove nessun
+        // wikilink può disambiguare perché la risoluzione per nome passa da una
+        // chiave che il caso l'ha già collassato.
+        let entries = anagrafe(&["Nota.md", "nota.md", "sola.md"]);
+        let graph = LinkGraph::build(std::iter::empty::<&DocumentModel>());
+        let found = issues_con(HealthCheck::CollidingPaths, &[], &graph, &entries);
+        let colliding: Vec<(&str, &str)> = found
+            .iter()
+            .map(|i| (i.doc.as_str(), i.detail.as_deref().unwrap_or("")))
+            .collect();
+        assert_eq!(
+            colliding,
+            vec![("Nota.md", "nota.md"), ("nota.md", "Nota.md")],
+            "una issue per ciascuno dei due, e ognuna nomina l'altro: non c'è \
+             ragione di appendere la collisione a uno dei due"
+        );
+        assert!(
+            found[0].span.is_none(),
+            "il problema è il nome, non un punto"
+        );
+    }
+
+    #[test]
+    fn un_allegato_collide_come_una_nota() {
+        // L'anagrafe e non i documenti: se l'elenco fossero le note, `foto.PNG`
+        // e `foto.png` — che è come nasce il caso più comune, due export dallo
+        // stesso strumento — non li vedrebbe nessuno.
+        let entries = anagrafe(&["img/foto.PNG", "img/foto.png"]);
+        let graph = LinkGraph::build(std::iter::empty::<&DocumentModel>());
+        let found = issues_con(HealthCheck::CollidingPaths, &[], &graph, &entries);
+        assert_eq!(found.len(), 2);
+    }
+
+    #[test]
+    fn due_estensioni_diverse_non_sono_una_collisione() {
+        // La chiave è quella del path **intero**: `nota.md` e `nota.txt` sono
+        // due file che il filesystem distingue e la chiave pure. Segnalarli
+        // sarebbe rumore, ed è il modo più facile di rendere inutile un
+        // controllo di salute.
+        let entries = anagrafe(&["nota.md", "nota.txt", "note/nota.md"]);
+        let graph = LinkGraph::build(std::iter::empty::<&DocumentModel>());
+        assert!(issues_con(HealthCheck::CollidingPaths, &[], &graph, &entries).is_empty());
+    }
+
+    #[test]
+    fn anche_due_composizioni_unicode_collidono() {
+        // L'altra metà di `resolution_key`, e la meno visibile: `é` come code
+        // point solo (NFC, come lo scrive Linux) e come `e` + accento
+        // combinante (NFD, come lo scrive macOS). Sul disco di un vault
+        // sincronizzato sono due file, e a occhio sono lo stesso nome.
+        let entries = anagrafe(&["Caf\u{e9}.md", "Cafe\u{301}.md"]);
+        let graph = LinkGraph::build(std::iter::empty::<&DocumentModel>());
+        assert_eq!(
+            issues_con(HealthCheck::CollidingPaths, &[], &graph, &entries).len(),
+            2,
+            "due nomi che a schermo sono identici: è il caso che nessuno vede"
+        );
     }
 }
