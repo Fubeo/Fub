@@ -12,10 +12,13 @@
 //!    [0045](../../../docs/decisions/0045-l-undo-ha-due-pile.md), che vive
 //!    quanto il vault aperto ed è per questo che quella decisione dichiarava il
 //!    §15.2;
-//! 3. **ciò che c'è basta a tornare indietro**, e non per affermazione: l'inverso
-//!    che il registro conserva viene ripreso e **applicato**, e il documento
-//!    torna com'era;
-//! 4. **una coda troncata non fa rifiutare il resto** (§15.7).
+//! 3. **il testo dell'utente non ci entra, da nessuna variante.** Non «da
+//!    quelle che abbiamo guardato»: il presidio che lo diceva esercitava solo la
+//!    riscrittura integrale, cioè l'unica che per costruzione non poteva
+//!    portarlo, e restava verde mentre la modifica chirurgica ce lo metteva
+//!    (§23.9, [0103](../../../docs/decisions/0103-un-registro-dice-cosa-e-successo.md));
+//! 4. **una coda troncata non fa rifiutare il resto** (§15.7);
+//! 5. **la finestra è dell'utente, e il registro si può svuotare.**
 //!
 //! Cosa questi test **non** presidiano, per la ragione di `la_durabilita.rs`:
 //! che dopo un crash vero il registro sia intero. La coda troncata qui si
@@ -143,11 +146,11 @@ fn un_lotto_tiene_insieme_le_proprie_righe() {
     assert_eq!(a, b, "e le due del lotto hanno la stessa chiave");
 }
 
-/// Ciò che il registro conserva **basta** a tornare indietro, e lo si prova
-/// tornandoci: l'inverso si riprende dalla riga e si applica dal confine di
-/// sempre, non da una scorciatoia.
+/// Di una modifica chirurgica il registro conserva **dove** e **quanto**, mai
+/// **cosa**: l'impronta dice che lì cinque byte sono stati sostituiti da
+/// quattro, e chi la legge non ha modo di sapere quali fossero.
 #[test]
-fn l_inverso_di_una_modifica_chirurgica_riporta_il_documento_com_era() {
+fn di_una_modifica_chirurgica_resta_l_impronta_e_non_i_byte() {
     let mut banco = Banco::nuovo().monta();
     let id = doc("a.md");
     banco
@@ -165,44 +168,62 @@ fn l_inverso_di_una_modifica_chirurgica_riporta_il_documento_com_era() {
         .unwrap();
     assert_eq!(banco.read_source(&id).unwrap(), "il cane dorme");
 
-    let inverse = banco
-        .journal()
-        .records
+    let footprint = ops(&banco)
         .into_iter()
         .rev()
-        .find_map(|r| match r.op {
-            JournalOp::Edited { inverse, .. } => Some(inverse),
+        .find_map(|op| match op {
+            JournalOp::Edited { footprint, .. } => Some(footprint),
             _ => None,
         })
-        .expect("il registro conserva l'inverso della modifica");
-    banco.apply_edit(&id, inverse).unwrap();
-
+        .expect("la modifica ha lasciato la sua riga");
+    assert_eq!(footprint.len(), 1, "un'impronta per edit applicato");
     assert_eq!(
-        banco.read_source(&id).unwrap(),
-        "il gatto dorme",
-        "l'inverso conservato dal registro riporta il documento com'era"
+        footprint[0].span,
+        fub_abi::model::Span::new(3, 7),
+        "dove, nelle coordinate del testo **nuovo**: «cane» sta fra 3 e 7"
+    );
+    assert_eq!(
+        footprint[0].replaced,
+        "gatto".len(),
+        "e quanto c'era al suo posto — il conto, non i byte"
     );
 }
 
-/// L'unica variante senza inverso è quella che la 0045 aveva già tenuto fuori
-/// dalla pila, e lo **dichiara** invece di scoprirsi tale a chi prova a
-/// disfarla.
+/// Le righe che non si annullano sono **le due che porterebbero testo**, e lo
+/// **dichiarano** invece di scoprirsi tali a chi prova a disfarle.
+///
+/// La riscrittura integrale è quella che la 0045 aveva già tenuto fuori dalla
+/// pila; la modifica chirurgica ci si è aggiunta con la 0103, che le ha tolto i
+/// byte dell'utente. Il presidio è sull'*insieme* e non sulla singola, perché è
+/// l'insieme a essere la regola: da un registro non torna indietro ciò che per
+/// tornare indietro vuole il contenuto di ieri.
 #[test]
-fn il_salvataggio_integrale_e_la_sola_riga_che_non_si_annulla() {
+fn non_si_annulla_ciò_che_vorrebbe_il_testo_di_ieri() {
     let mut banco = Banco::nuovo().monta();
+    let id = doc("a.md");
     banco
-        .write_document(&doc("a.md"), "uno", WriteBase::Dictated)
+        .write_document(&id, "uno", WriteBase::Dictated)
         .unwrap();
     banco
-        .write_document(&doc("a.md"), "due", WriteBase::Dictated)
+        .write_document(&id, "unodue", WriteBase::Dictated)
         .unwrap();
-    banco.rename_document(&doc("a.md"), &doc("b.md")).unwrap();
+    let base = banco.document_revision(&id).unwrap();
+    banco
+        .apply_edit(
+            &id,
+            EditRequest::new(
+                base,
+                vec![TextEdit::replace(fub_abi::model::Span::new(0, 3), "tre")],
+            ),
+        )
+        .unwrap();
+    banco.rename_document(&id, &doc("b.md")).unwrap();
 
     let invertibili: Vec<bool> = ops(&banco).iter().map(JournalOp::is_invertible).collect();
     assert_eq!(
         invertibili,
-        vec![true, false, true],
-        "creazione e rinomina hanno un inverso, la riscrittura integrale no"
+        vec![true, false, false, true],
+        "creazione e rinomina hanno un inverso; riscrittura e modifica no"
     );
 }
 
@@ -278,21 +299,73 @@ fn il_registro_e_autorevole_e_il_path_lo_dice() {
 fn il_registro_non_porta_dentro_il_documento() {
     let mut banco = Banco::nuovo().monta();
     let segreto = "una frase che sta soltanto dentro la nota";
+    let id = doc("a.md");
+    // **Tutte e sei le varianti**, e non una sola. È la riga per cui questo
+    // presidio esisteva e non presidiava: fino alla 0103 esercitava le sole
+    // `write_document`, cioè `Created` e `Written`, che per costruzione portano
+    // impronte — e restava verde mentre `Edited`, cinquanta righe più su in
+    // questo stesso file, dimostrava di portarsi dentro i byte sostituiti.
     banco
-        .write_document(&doc("a.md"), segreto, WriteBase::Dictated)
+        .write_document(&id, segreto, WriteBase::Dictated)
         .unwrap();
     banco
         .write_document(
-            &doc("a.md"),
+            &id,
             &format!("{segreto} e poi dell'altro"),
             WriteBase::Dictated,
         )
         .unwrap();
+    let base = banco.document_revision(&id).unwrap();
+    banco
+        .apply_edit(
+            &id,
+            EditRequest::new(
+                base,
+                vec![TextEdit::replace(
+                    fub_abi::model::Span::new(0, segreto.len()),
+                    "poco",
+                )],
+            ),
+        )
+        .unwrap();
+    banco.rename_document(&id, &doc("b.md")).unwrap();
+    banco.delete_document(&doc("b.md")).unwrap();
+    let cestinata = ops(&banco)
+        .into_iter()
+        .rev()
+        .find_map(|op| match op {
+            JournalOp::Trashed { trash, .. } => Some(trash),
+            _ => None,
+        })
+        .expect("la cancellazione ha lasciato la sua riga");
+    banco.restore_from_trash(&cestinata, None).unwrap();
+
+    // Che ci siano davvero passate tutte: senza questa riga il presidio
+    // tornerebbe a dire «le varianti che mi è capitato di produrre», che è
+    // esattamente il difetto che aveva. Il `match` è **esaustivo e senza `_`**,
+    // così una settima variante non si può aggiungere senza passare di qui a
+    // dichiarare cosa porta.
+    let mut viste = std::collections::BTreeSet::new();
+    for op in ops(&banco) {
+        viste.insert(match op {
+            JournalOp::Created { .. } => "created",
+            JournalOp::Written { .. } => "written",
+            JournalOp::Edited { .. } => "edited",
+            JournalOp::Trashed { .. } => "trashed",
+            JournalOp::Restored { .. } => "restored",
+            JournalOp::Renamed { .. } => "renamed",
+        });
+    }
+    assert_eq!(
+        viste.len(),
+        6,
+        "il banco deve esercitare ogni variante, non quelle che gli riescono: {viste:?}"
+    );
 
     let raw = std::fs::read_to_string(fub_kernel::journal_path(banco.root())).expect("il registro");
     assert!(
         !raw.contains(segreto),
-        "il contenuto non finisce nel registro: {raw}"
+        "il testo dell'utente non finisce nel registro, da nessuna variante: {raw}"
     );
     assert!(
         raw.contains(&Revision::of(segreto).0),

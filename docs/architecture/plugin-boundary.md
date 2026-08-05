@@ -286,8 +286,16 @@ backlink). Cosa succede dentro un lotto — `IndexUpdated` coalizzato in un
   fatte, e chi lo ha aperto lo scopre dal proprio valore di ritorno. Il
   tutto-o-niente vuole il journal del §15.2 — che dalla
   [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md) **c'è**, e tiene
-  di ogni operazione i confini e l'inverso: a mancare adesso è chi lo ripercorre,
-  non l'informazione. Prometterlo qui con un nome (`transaction`, `rollback`) lo
+  di ogni operazione i confini, l'origine e il tempo: a mancare adesso è chi lo
+  ripercorre, non il posto. L'informazione, però, non basta per tutto e lo
+  dichiara: dalla
+  [0103](../decisions/0103-un-registro-dice-cosa-e-successo.md) una modifica
+  chirurgica ci lascia l'**impronta** — dove ha toccato e quanti byte — e non il
+  testo sostituito, quindi un rollback costruito su questo file rimetterà i nomi
+  al loro posto e ripescherà dal cestino, e **non** disferà gli edit. Era già
+  così per i salvataggi, che un inverso non l'hanno mai avuto; adesso è così in
+  modo uniforme, e `JournalOp::is_invertible` lo risponde invece di lasciarlo
+  scoprire applicando. Prometterlo qui con un nome (`transaction`, `rollback`) lo
   farebbe comunque credere a chi legge solo la firma.
 
 Prove: `crates/fub-kernel/tests/batch_and_origin.rs` (incluso il confronto fra

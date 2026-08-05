@@ -678,7 +678,7 @@ possa rompersi, perché non lascia traccia.
 
 ### 23.9 Il registro non si spegne, e per una modifica chirurgica porta i byte dell'utente
 
-*kernel · **P1** — un interruttore è una chiave di impostazione, additiva; ciò che va deciso è **cosa** spegne*
+*chiusa dalla [0103](../decisions/0103-un-registro-dice-cosa-e-successo.md) — un registro dice cosa è successo, non cosa c'era scritto: `Edited` porta l'**impronta** (dove, e quanti byte c'erano) e non più l'inverso. La domanda di queste caselle era mal posta e misurarla l'ha **rovesciata** — il prezzo dell'annullamento è **zero**, perché l'undo legge la pila in memoria della [0045](../decisions/0045-l-undo-ha-due-pile.md) e non è mai passato di qui, e il rollback di lotto era già parziale perché `Written` un inverso non l'ha mai avuto. Delle tre opzioni della seconda casella si è presa la **scadenza** (`journal.retention.days`, zero = per sempre) più un gesto che svuota (`vault.clear-journal`): la scrittura **non** si spegne, e la 0067 regge per intero*
 
 La [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md) ha fatto
 `.fub/journal.jsonl`, e le due scelte che lo reggono sono giuste tutte e due. È
@@ -708,27 +708,27 @@ per far sparire qualcosa non lo fa sparire. E `versioning.enabled` esiste, quind
 l'utente che ha spento il versioning *credendo* di aver spento la conservazione
 delle versioni vecchie del proprio testo si sbaglia.
 
-- [ ] **Distinguere le due domande, che il verbale tratta come una.** «Il journal
+- [x] **Distinguere le due domande, che il verbale tratta come una.** «Il journal
       si può spegnere» e «il journal conserva contenuto» non sono lo stesso
       interruttore. La seconda si chiude senza toccare la prima: un `Edited` che
       porta gli **span** dell'inverso e non i byte perde la capacità di annullare e
       tiene tutto il resto. Va deciso se l'annullamento vale quel prezzo, e la
       risposta plausibile è che valga — ma allora va scritta, perché oggi la si è
       presa senza porla.
-- [ ] **Se un interruttore ci va, cosa spegne.** Le opzioni non sono
+- [x] **Se un interruttore ci va, cosa spegne.** Le opzioni non sono
       equivalenti: spegnere la **scrittura** del journal (e allora l'audit del
       23.3 di FEATURES nasce bucato), spegnere il solo **contenuto** dentro gli
       inversi, o tenerlo acceso e dargli una **scadenza** — che è la forma che il
       tetto dei diecimila record già suggerisce, applicata al tempo invece che al
       numero. La terza non contraddice la 0067: un registro autorevole può avere
       una finestra dichiarata senza smettere di essere autorevole.
-- [ ] **La cancellazione va dove sta il potere.** La
+- [x] **La cancellazione va dove sta il potere.** La
       [0086](../decisions/0086-una-cronologia-e-la-sua-porta.md) ha già la regola
       per un dato di questa specie — la dichiarazione sta nel registro,
       l'esecuzione sta dove sta il potere — e la cronologia ha un comando che la
       cancella. Il journal no. Se resta senza interruttore, un comando che lo
       **pota** è il minimo che la stessa regola imponga.
-- [ ] **Chi lo chiede.** FEATURES 23.1 (cifratura at-rest: un file che il
+- [x] **Chi lo chiede.** FEATURES 23.1 (cifratura at-rest: un file che il
       supporto cifra è un file che qualcuno ha deciso essere sensibile, e questo
       lo è per ammissione del suo verbale), 23.3 (audit), 24.2. E il patto del
       progetto: un vault è dell'utente, e ciò che l'utente cancella deve poter

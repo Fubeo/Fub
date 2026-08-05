@@ -547,8 +547,8 @@ sequenceDiagram
 | `UndoStack` | [undo.rs:73](../../crates/fub-kernel/src/undo.rs) | `Vec<Entry>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
 | `undo::Entry` | [undo.rs:66](../../crates/fub-kernel/src/undo.rs) | la voce **e il conto dell'operazione**: i due arrivano dallo stesso esito e si separano una riga dopo, quindi o si appaiano lì o non si appaiano più (§23.14) |
 | `Undo` / `UndoStep` | [command.rs:712](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:923](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:4364](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
+| dove si spinge | [workspace.rs:4354](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:4396](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
 | `Partial` / `Failure` | [command.rs:605](../../crates/fub-abi/src/command.rs) | di N cose quante e quali; i guasti uno per uno col `PluginError` intero, perché la specie dice se ha senso riprovare |
 | `Undone` | [command.rs:822](../../crates/fub-abi/src/command.rs) | l'etichetta e i **due** conti: `operation` (era già a metà) e `replay` (l'annullamento si è fermato) |
 | `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
@@ -1186,7 +1186,10 @@ fuzzer, uno sull'export e uno sui nomi delle sorgenti
 `fub-kernel/tests/transfer_dispatch.rs` per il protocollo.
 
 Resta fuori, dichiarato: **rollback e resume** (l'inverso di un lotto, sopra il
-journal del §15.2), il **lavoro lungo** che vede il vault (§9.1: oggi un import
+journal del §15.2 — che dalla
+[0103](../decisions/0103-un-registro-dice-cosa-e-successo.md) disfa le
+mutazioni **strutturali** e non gli edit, perché il testo sostituito dal registro
+è uscito), il **lavoro lungo** che vede il vault (§9.1: oggi un import
 gira nel giro sincrono) e la **superficie IPC**. Il modello parsato a un exporter
 era in questo elenco e non c'è più: lo serve `HostApi::read_model`
 ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)).

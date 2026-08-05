@@ -1,6 +1,6 @@
-//! I **comandi di manutenzione** (§15.2): rifare il derivato, raccogliere ciò
-//! che è rimasto indietro, e mettere in un file ciò che serve per chiedere
-//! aiuto.
+//! I **comandi che solo il kernel può eseguire sul vault** (§15.2): rifare il
+//! derivato, raccogliere ciò che è rimasto indietro, mettere in un file ciò che
+//! serve per chiedere aiuto, e svuotare il registro delle modifiche.
 //!
 //! # Perché sono comandi del registro, e non comandi dell'app
 //!
@@ -57,6 +57,23 @@
 //! comando che «aggiusta» un documento è un'altra cosa e ha un'altra voce
 //! (7.2). È anche la ragione per cui tutti e tre si dichiarano reversibili: non
 //! c'è niente da tornare indietro, perché non si è perso niente.
+//!
+//! # Il quarto, che invece perde apposta
+//!
+//! - `vault.clear-journal` — svuota `.fub/journal.jsonl`. È l'unico di questo
+//!   modulo che **si dichiara irreversibile**, e la riga qui sopra dice perché
+//!   la differenza conta: gli altri tre non perdono niente, questo perde
+//!   esattamente ciò che gli si chiede di perdere.
+//!
+//! Sta qui e non fra i comandi di `fub-features` per la regola di questo modulo
+//! letta al contrario: il registro non è sull'`HostApi` e non deve diventarci —
+//! un potere che serve a un gesto dell'utente non si concede a ogni plugin
+//! montato per poterglielo servire. Ed è **un gesto dell'utente** e non
+//! manutenzione: la 0086 ha stabilito che per un dato di questa specie chi lo
+//! dichiara non è chi lo può togliere, e fino alla
+//! [0103](../../../docs/decisions/0103-un-registro-dice-cosa-e-successo.md) il
+//! journal era l'unico dato dell'utente dentro il vault che **nessun gesto
+//! dell'utente raggiungeva**.
 
 use fub_abi::command::{CommandReach, CommandScope, CommandSpec};
 use fub_abi::text::Text;
@@ -70,6 +87,8 @@ pub const VAULT_REBUILD_INDEX: &str = "vault.rebuild-index";
 pub const VAULT_REPAIR: &str = "vault.repair";
 /// Scrive un file con ciò che serve per capire un guasto.
 pub const VAULT_DIAGNOSTIC_BUNDLE: &str = "vault.diagnostic-bundle";
+/// Svuota il registro delle modifiche (§23.9). L'unico che perde qualcosa.
+pub const VAULT_CLEAR_JOURNAL: &str = "vault.clear-journal";
 
 /// Le chiavi delle frasi, nel catalogo di chi le ha scritte (0040).
 pub(crate) const T_REBUILD_TITLE: &str = "cmd.vault.rebuild-index.title";
@@ -78,6 +97,8 @@ pub(crate) const T_REPAIR_TITLE: &str = "cmd.vault.repair.title";
 pub(crate) const T_REPAIR_DESC: &str = "cmd.vault.repair.desc";
 pub(crate) const T_BUNDLE_TITLE: &str = "cmd.vault.diagnostic-bundle.title";
 pub(crate) const T_BUNDLE_DESC: &str = "cmd.vault.diagnostic-bundle.desc";
+pub(crate) const T_CLEAR_JOURNAL_TITLE: &str = "cmd.vault.clear-journal.title";
+pub(crate) const T_CLEAR_JOURNAL_DESC: &str = "cmd.vault.clear-journal.desc";
 
 /// Le frasi dell'**esito**, e i nomi dei loro argomenti.
 ///
@@ -89,6 +110,13 @@ pub(crate) const T_REBUILT: &str = "cmd.vault.rebuild-index.done";
 pub(crate) const T_REPAIRED: &str = "cmd.vault.repair.done";
 pub(crate) const T_REPAIRED_PARZIALE: &str = "cmd.vault.repair.done-parziale";
 pub(crate) const T_BUNDLE_WRITTEN: &str = "cmd.vault.diagnostic-bundle.done";
+pub(crate) const T_JOURNAL_CLEARED: &str = "cmd.vault.clear-journal.done";
+/// Il **piano** di uno svuotamento: quante righe cadranno.
+///
+/// Ce l'ha solo lui dei quattro, e non è un di più: gli altri tre in prova non
+/// hanno niente da mostrare perché non perdono niente, e chi approva questo deve
+/// poter vedere il conto di ciò che sta per sparire.
+pub(crate) const T_JOURNAL_PLAN: &str = "cmd.vault.clear-journal.plan";
 
 pub(crate) const A_DOCS: &str = "docs";
 pub(crate) const A_ENTRIES: &str = "entries";
@@ -98,6 +126,7 @@ pub(crate) const A_LOST: &str = "lost";
 pub(crate) const A_UNREAD: &str = "unread";
 pub(crate) const A_ORPHANS: &str = "orphans";
 pub(crate) const A_PATH: &str = "path";
+pub(crate) const A_LINES: &str = "lines";
 
 /// Il provider che **dichiara** i tre comandi.
 ///
@@ -123,6 +152,14 @@ impl Maintenance {
                 // chiedere conferma confronta i raggi, e questo non tocca niente
                 // di ciò che l'utente ha scritto.
                 .with_scope(CommandScope::writing(CommandReach::Session)),
+            CommandSpec::new(VAULT_CLEAR_JOURNAL, Text::key(T_CLEAR_JOURNAL_TITLE))
+                .describing(Text::key(T_CLEAR_JOURNAL_DESC))
+                // Il raggio è il **vault**: ciò che sparisce sta dentro il
+                // vault e viaggia con lui. E `irreversible`, che non è una
+                // formalità — è la riga che la palette legge per scrivere «non
+                // reversibile» accanto al nome, cioè l'unico attrito che questo
+                // gesto ha, e quello giusto: chi lo cerca lo vuole.
+                .with_scope(CommandScope::writing(CommandReach::Vault).irreversible()),
         ]
     }
 }
@@ -237,7 +274,17 @@ pub fn catalog() -> Vec<fub_abi::text::StringCatalog> {
                  registro illeggibili, {unread} bozze che non si sono lette, {orphans} \
                  bozze senza la loro nota — quelle sono l'unica copia di quel testo e \
                  non si buttano da sole.",
-            ),
+            )
+            .with(T_CLEAR_JOURNAL_TITLE, "Svuota il registro delle modifiche")
+            .with(
+                T_CLEAR_JOURNAL_DESC,
+                "Cancella le righe che dicono quale nota di questo vault è stata \
+                 creata, modificata, cestinata o rinominata, quando e da chi \
+                 (`.fub/journal.jsonl`). Le note non si toccano. Non si può \
+                 annullare.",
+            )
+            .with(T_JOURNAL_PLAN, "{lines} righe del registro, tutte.")
+            .with(T_JOURNAL_CLEARED, "Registro svuotato: {lines} righe."),
         StringCatalog::new("en")
             .with(T_REBUILD_TITLE, "Rebuild the vault index")
             .with(
@@ -274,6 +321,16 @@ pub fn catalog() -> Vec<fub_abi::text::StringCatalog> {
                  journal lines, {unread} drafts that could not be read, {orphans} \
                  drafts without their note — those are the only copy of that text and \
                  will not be discarded on their own.",
-            ),
+            )
+            .with(T_CLEAR_JOURNAL_TITLE, "Empty the change log")
+            .with(
+                T_CLEAR_JOURNAL_DESC,
+                "Deletes the lines saying which note of this vault was created, \
+                 edited, trashed or renamed, when and by whom \
+                 (`.fub/journal.jsonl`). Your notes are not touched. This cannot be \
+                 undone.",
+            )
+            .with(T_JOURNAL_PLAN, "{lines} log lines, all of them.")
+            .with(T_JOURNAL_CLEARED, "Log emptied: {lines} lines."),
     ]
 }

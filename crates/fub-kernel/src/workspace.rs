@@ -824,6 +824,17 @@ impl Workspace {
         // E si applica **subito** ciò che l'utente aveva già negato: un vault
         // che si riapre non è un'occasione per ricominciare da capo.
         self.reapply_permissions(&id);
+        // Se fra le chiavi appena dichiarate c'è la finestra del registro, il
+        // registro si pota **adesso**: prima di questa riga quella chiave non si
+        // poteva leggere, e il journal si era aperto col solo tetto. È l'altra
+        // metà di `announce_setting` — la finestra vale da quando è dichiarata,
+        // e da lì in poi a ogni cambiamento.
+        if specs
+            .iter()
+            .any(|s| s.key == crate::journal::RETENTION_DAYS)
+        {
+            self.pota_il_registro();
+        }
         if !timers_dichiarati {
             return Ok(());
         }
@@ -2086,6 +2097,25 @@ impl Workspace {
         self.journal.read()
     }
 
+    /// Pota il registro alla finestra dichiarata (§23.9).
+    ///
+    /// Una funzione sola per i due momenti in cui la finestra si sa — la si è
+    /// appena dichiarata, o l'utente l'ha appena cambiata — invece della stessa
+    /// lettura scritta due volte: il giorno che se ne aggiunge un terzo, quel
+    /// terzo la eredita.
+    ///
+    /// Una chiave che non c'è vale zero, cioè *per sempre*: è la regola di
+    /// [`FieldWeights::read`](fub_features) applicata qui — un'impostazione che
+    /// manca fa cadere nel default, non in un guasto — e per un registro
+    /// autorevole il default che non perde niente è l'unico difendibile.
+    fn pota_il_registro(&self) {
+        let giorni = match self.setting(crate::journal::RETENTION_DAYS) {
+            Ok(SettingValue::Number(n)) if n > 0.0 => n as u64,
+            _ => 0,
+        };
+        self.journal.pota(giorni);
+    }
+
     // -----------------------------------------------------------------------
     // Le bozze (§15.2)
     // -----------------------------------------------------------------------
@@ -2167,14 +2197,16 @@ impl Workspace {
         }
         let from = request.base.clone();
         let to = self.write_source(id, &next)?;
-        // L'inverso si calcola qui e si scrive nel registro: è l'unico posto in
-        // cui esiste — dopo, per riaverlo servirebbe il testo di prima, che è
-        // ciò che il registro non tiene (0067).
+        // Nel registro va l'**impronta** e non l'inverso: dove la modifica ha
+        // toccato e quanto ha sostituito, mai con cosa (0103). Non è
+        // `report.inverse()` a cui si toglie il testo — quella funzione qui non
+        // si chiama affatto, così i byte dell'utente non passano nemmeno per una
+        // variabile sulla strada del disco.
         self.record(JournalOp::Edited {
             doc: id.clone(),
             from,
             to,
-            inverse: report.inverse(),
+            footprint: crate::journal::EditFootprint::of(&report.applied),
         });
         Ok(report)
     }
@@ -5199,6 +5231,13 @@ impl Workspace {
             let plugin = plugin.to_string();
             self.reapply_permissions(&plugin);
         }
+        // E una chiave che è una **finestra** ripota il registro, subito e non
+        // alla prossima apertura: chi stringe la conservazione a trenta giorni
+        // lo fa per far cadere ciò che c'è adesso, non ciò che ci sarà. Stessa
+        // riga del recinto qui sopra, stessa ragione (§23.9).
+        if key == crate::journal::RETENTION_DAYS {
+            self.pota_il_registro();
+        }
         let key = key.to_string();
         self.emit_event(Event::SettingChanged { key, scope });
         if !self.dispatch.in_provider_call() {
@@ -5435,15 +5474,27 @@ impl Workspace {
         mode: InvokeMode,
     ) -> std::result::Result<CommandOutcome, PluginError> {
         use crate::maintenance::{
-            Diagnostics, BUNDLE_FILE, DIAGNOSTICS_VERSION, VAULT_DIAGNOSTIC_BUNDLE,
-            VAULT_REBUILD_INDEX, VAULT_REPAIR,
+            Diagnostics, BUNDLE_FILE, DIAGNOSTICS_VERSION, VAULT_CLEAR_JOURNAL,
+            VAULT_DIAGNOSTIC_BUNDLE, VAULT_REBUILD_INDEX, VAULT_REPAIR,
         };
         if mode.is_dry_run() {
-            // Il piano è **vuoto di documenti**, e non è una lacuna: nessuno dei
-            // tre tocca una nota, quindi l'insieme impattato è davvero vuoto.
-            // Dirlo è più utile che inventarsi una riga.
-            return Ok(CommandOutcome::done()
-                .with_effect(CommandEffect::Plan(fub_abi::command::CommandPlan::default())));
+            // Il piano è **vuoto di documenti** per tutti e quattro, e non è una
+            // lacuna: nessuno tocca una nota, quindi l'insieme impattato è
+            // davvero vuoto. Il sommario però non è vuoto per tutti — è il campo
+            // che esiste per dire «cosa succede» in una riga, e i tre che
+            // riparano non hanno niente da dire mentre il quarto **perde
+            // qualcosa** e chi approva deve vederne il conto.
+            let mut plan = fub_abi::command::CommandPlan::default();
+            if command == VAULT_CLEAR_JOURNAL {
+                plan.summary = Text::message(
+                    crate::maintenance::T_JOURNAL_PLAN,
+                    vec![fub_abi::text::Arg::int(
+                        crate::maintenance::A_LINES,
+                        self.journal.read().records.len() as i64,
+                    )],
+                );
+            }
+            return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
         }
         match command {
             VAULT_REBUILD_INDEX => {
@@ -5557,6 +5608,25 @@ impl Workspace {
                     vec![fub_abi::text::Arg::text(
                         crate::maintenance::A_PATH,
                         path.as_str(),
+                    )],
+                )))
+            }
+            VAULT_CLEAR_JOURNAL => {
+                // L'unico dei quattro il cui esito **risale**: gli altri tre non
+                // perdono niente, quindi un guasto si può raccontare e basta.
+                // Qui l'utente ha chiesto che una cosa sparisca, e una richiesta
+                // di far sparire qualcosa che fallisce in silenzio è la peggiore
+                // delle risposte — chi l'ha chiesta se ne va credendo che sia
+                // sparita.
+                let quante = self
+                    .journal
+                    .clear()
+                    .map_err(|e| PluginError::Internal(format!("registro: {e}").into()))?;
+                Ok(CommandOutcome::notify(Text::message(
+                    crate::maintenance::T_JOURNAL_CLEARED,
+                    vec![fub_abi::text::Arg::int(
+                        crate::maintenance::A_LINES,
+                        quante as i64,
                     )],
                 )))
             }

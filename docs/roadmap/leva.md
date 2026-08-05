@@ -665,3 +665,14 @@ scrive, non a cosa si vuole far sparire. Sta qui e non fra le
 prime due specie per la stessa ragione della §23.1: non rende inesprimibile
 niente e non moltiplica nulla: semplicemente, chi cancella qualcosa credendo di
 averla fatta sparire si sbaglia, e non ha modo di accorgersene.
+
+**Chiusa dalla [0103](../decisions/0103-un-registro-dice-cosa-e-successo.md)** —
+`Edited` porta l'impronta e non più l'inverso, il registro tiene una finestra
+dichiarata e c'è un comando che lo svuota — e la chiusura conferma il criterio
+per la seconda volta, dal lato del **prezzo**: la voce chiedeva di soppesare
+quanto valesse l'annullamento che si perdeva, e misurarlo ha detto che
+l'annullamento non passava di lì, che il suo unico consumatore era un test e che
+la facoltà temuta non era mai stata esercitata. **Un conto che l'utente paga in
+silenzio si scopre spesso essere pagato per niente**: la contropartita che ne
+giustificava il prezzo era anche lei dichiarata e mai riscossa, e nessuna delle
+due righe lo diceva perché nessuno le aveva lette insieme.

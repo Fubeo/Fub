@@ -130,6 +130,13 @@ function tabellaDeiNumeri() {
       if (nome.startsWith("o") || nome.startsWith("u")) {
         tabella.set(centinaio.slice(0, -1) + nome, c * 100 + valore);
       }
+      // L'accento del tre vale anche qui, e per la stessa ragione per cui vale
+      // dopo una decina: in coda a un numero composto il tre lo prende sempre,
+      // quindi 103 si scrive **centotré**. Senza questa riga il presidio sapeva
+      // leggere solo la grafia sbagliata.
+      if (nome === "tre") {
+        tabella.set(centinaio + "tré", c * 100 + valore);
+      }
     }
   }
   return tabella;
@@ -291,6 +298,8 @@ function autoprova() {
     // entrambe — le si trova scritte tutte e due.
     ["**centouno** verbali ", 101],
     ["centodiciassette chiuse ", 117],
+    // E l'accento del tre in coda: 103 si scrive **centotré**, non «centotre».
+    ["**centotré** verbali ", 103],
     ["centotto capacità ", 108],
     ["centoventuno righe ", 121],
     ["duecentocinquanta ", 250],

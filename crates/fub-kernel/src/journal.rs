@@ -17,25 +17,38 @@
 //! separa le due pile — *un comando entra da qui, una battuta di tastiera no* —
 //! è la stessa che separa questo file dal buffer di crash.
 //!
-//! # Il contenuto di prima non ci sta, e l'inverso sì
+//! # Il contenuto di prima non ci sta — **nessuno**
 //!
-//! È la scelta che decide la forma del formato. Un registro che si porta dietro
-//! il testo precedente di ogni salvataggio è il vault scritto una seconda volta
-//! accanto a sé stesso, dentro un file **autorevole** che nessuno può buttare.
-//! Ciò che serve per tornare indietro è l'**inverso**, e il contratto ce l'ha
-//! già: [`EditReport::inverse`](fub_abi::edit::EditReport::inverse) per una
-//! modifica chirurgica — che porta i soli byte sostituiti, non il documento —, e
-//! per tutto il resto un inverso che si **deduce** dalla riga (l'inverso di una
-//! rinomina è la rinomina all'incontrario, quello di una cancellazione è un
-//! ripristino dal cestino). È la 0045 letta qui: *l'inverso strutturale è un
-//! comando, non un vocabolario*.
+//! È la scelta che decide la forma del formato, ed è una regola senza
+//! eccezioni: *un registro dice cosa è successo, non cosa c'era scritto*. Un
+//! registro che si porta dietro il testo precedente è il vault scritto una
+//! seconda volta accanto a sé stesso, dentro un file **autorevole** che nessuno
+//! può buttare e che sopravvive alla nota da cui quel testo viene.
 //!
-//! Resta una variante senza inverso, ed è dichiarata invece che nascosta:
-//! [`JournalOp::Written`], la riscrittura integrale di un documento che c'era
-//! già — cioè il salvataggio dell'editor. Per riportarlo indietro servirebbe il
-//! testo di prima, e quello è esattamente ciò che questo file non tiene. Non è
-//! una lacuna nuova: è la riga che la 0045 aveva già rifiutato di mettere in
-//! pila, vista dal disco.
+//! Per un pezzo di strada la regola ha avuto un'eccezione, e nessuno l'aveva
+//! sommata a questo paragrafo: [`JournalOp::Edited`] portava l'inverso della
+//! modifica ([`EditReport::inverse`](fub_abi::edit::EditReport::inverse)), cioè
+//! **i byte che l'utente aveva appena sostituito**. La
+//! [0103](../../../docs/decisions/0103-un-registro-dice-cosa-e-successo.md) l'ha
+//! tolta e al suo posto ha messo l'**impronta** ([`EditFootprint`]): dove la
+//! modifica ha toccato e quanti byte c'erano al suo posto, mai quali. Un audit
+//! chiede *quando, chi, dove, quanto* e ha ancora tutto; per *cosa* c'era
+//! scritto ieri il posto è il versioning, che si spegne e si cancella.
+//!
+//! # Cosa si torna indietro da qui, e cosa no
+//!
+//! L'inverso di una mutazione **strutturale** si deduce dalla riga: l'inverso di
+//! una rinomina è la rinomina all'incontrario, quello di una cancellazione è un
+//! ripristino dal cestino. È la 0045 letta qui: *l'inverso strutturale è un
+//! comando, non un vocabolario*, e per quelle quattro varianti il registro basta.
+//!
+//! Le due che portano testo — [`JournalOp::Written`], il salvataggio
+//! dell'editor, e [`JournalOp::Edited`], la modifica chirurgica — da qui non si
+//! tornano indietro, e [`JournalOp::is_invertible`] lo dice invece di lasciarlo
+//! scoprire. Per la prima è così da sempre; per la seconda è il prezzo della
+//! 0103, ed è dichiarato perché **misurato**: l'annullamento vero non è mai
+//! passato di qui. Sta in [`crate::undo`], che è una pila in memoria (0045) e
+//! tiene i byte finché la sessione è aperta — cioè finché servono davvero.
 //!
 //! # Perché non bastano gli snapshot del versioning
 //!
@@ -95,13 +108,44 @@
 //! E il taglio **rispetta il confine di un lotto**: tagliare in mezzo a una
 //! rinomina con duecento sorgenti lascerebbe un'operazione che si annulla per un
 //! pezzo, che è peggio di una che non si annulla affatto.
+//!
+//! # E chi decide **per quanto**
+//!
+//! Il tetto è una rete strutturale, non una scelta: è una scadenza che dipende
+//! da quanto si scrive, non da cosa si vuole tenere. Chi apre il vault due volte
+//! l'anno si ritrova dieci anni di path; chi ci lavora tutti i giorni, due mesi.
+//! Accanto al tetto c'è quindi una **finestra dichiarata**,
+//! [`RETENTION_DAYS`], che è dell'utente: fuori dalla finestra la riga cade,
+//! qualunque sia il conto. Zero — il default — vuol dire *per sempre*, cioè il
+//! comportamento di prima: un registro autorevole non si accorcia perché è
+//! arrivato un aggiornamento.
+//!
+//! I due criteri non sono due potature: il taglio è **il più avanti dei due**, e
+//! da lì scorre una volta sola fino al confine di lotto. Una regola sola nel
+//! posto che entrambi attraversano.
+//!
+//! # Chi lo cancella
+//!
+//! [`Journal::clear`], dietro il comando `vault.clear-journal`. Perché la
+//! [0086](../../../docs/decisions/0086-una-cronologia-e-la-sua-porta.md) ha già
+//! la regola per un dato di questa specie — chi lo dichiara non è chi lo può
+//! togliere, e l'esecuzione sta dove sta il potere — e sul journal il potere è
+//! solo del kernel. Un dato dell'utente che nessun gesto dell'utente raggiunge è
+//! un dato che l'utente non possiede, e il patto di Fub dice il contrario.
+//!
+//! Cancella **tutto**, comprese le righe di una Fub più nuova che la potatura si
+//! guarda bene dal toccare — e la differenza è chi ha chiesto: potare è
+//! manutenzione e non deve perdere ciò che non capisce, svuotare è un gesto
+//! esplicito e irreversibile che vuole esattamente quello.
 
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::edit::{EditRequest, Revision};
+use fub_abi::edit::{AppliedEdit, Revision};
 use fub_abi::event::{BatchId, Origin};
-use fub_abi::model::DocId;
+use fub_abi::model::{DocId, Span};
+use fub_abi::settings::{SettingKind, SettingSpec};
+use fub_abi::text::{StringCatalog, Text};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::VaultStorage;
@@ -122,6 +166,79 @@ const FILE: &str = "journal.jsonl";
 /// abbastanza da tenere il file nell'ordine dei megabyte, cioè leggibile in un
 /// colpo all'apertura del vault.
 pub const TETTO: usize = 10_000;
+
+/// Per quanti giorni si conserva una riga. **Zero = per sempre**, ed è il
+/// default: vedi il § «E chi decide *per quanto*» in testa al modulo.
+pub const RETENTION_DAYS: &str = "journal.retention.days";
+
+/// Il massimo scrivibile nella finestra, in giorni. Dieci anni: oltre, una
+/// finestra è indistinguibile dal «per sempre» che lo zero dice già — e un
+/// estremo che non si può scrivere è meglio di un numero che promette una
+/// scadenza e non ne ha una.
+const RETENTION_MAX: f64 = 3650.0;
+
+/// La chiave della finestra come [`SettingSpec`], dichiarata **qui** e non fra
+/// quelle del core per il criterio di §11.1: una chiave sta dove sta chi la
+/// legge, e questa la legge il registro.
+///
+/// Non è `program_writable`, per la ragione di `history.enabled`: un componente
+/// che potesse allungare la finestra allungherebbe la conservazione dei path
+/// dell'utente da dietro un interruttore che l'utente crede suo. E non è
+/// `per_machine`: il registro vive dentro il vault e viaggia con lui, quindi
+/// «per quanto lo tengo» è una proprietà dell'archivio — la stessa riga con cui
+/// la 0076 ha fatto scendere le impostazioni nel vault.
+pub fn journal_settings() -> Vec<SettingSpec> {
+    vec![SettingSpec::new(
+        RETENTION_DAYS,
+        Text::key(J_RETENTION),
+        SettingKind::Number {
+            default: 0.0,
+            min: Some(0.0),
+            max: Some(RETENTION_MAX),
+        },
+    )
+    .describing(Text::key(J_RETENTION_DESC))
+    // Il gruppo è **quello del core**, non uno nuovo con lo stesso nome: due
+    // gruppi «Privacy» scritti da due componenti sarebbero due sezioni identiche
+    // nel pannello. Per questo la chiave del gruppo non è tradotta qui sotto —
+    // la traduce chi l'ha inventata.
+    .grouped(Text::key(GRUPPO_PRIVACY))]
+}
+
+const GRUPPO_PRIVACY: &str = "core.group.privacy";
+const J_RETENTION: &str = "journal.retention";
+const J_RETENTION_DESC: &str = "journal.retention.desc";
+
+/// Le frasi della finestra, nel catalogo di chi le ha scritte (0040).
+///
+/// La descrizione **nomina il file**, e non è una nota per sviluppatori: fino
+/// alla 0103 nessuna riga del prodotto diceva che questo registro esiste, e un
+/// dato che l'utente non sa di avere non è un dato che può decidere di tenere.
+pub fn catalog() -> Vec<StringCatalog> {
+    vec![
+        StringCatalog::new("it")
+            .with(J_RETENTION, "Conserva il registro delle modifiche per")
+            .with(
+                J_RETENTION_DESC,
+                "Giorni per cui restano nel registro di questo vault \
+                 (`.fub/journal.jsonl`) le righe che dicono quale nota è stata \
+                 creata, modificata, cestinata o rinominata, quando e da chi. Le \
+                 righe non contengono il testo delle note. Zero = per sempre; le \
+                 più vecchie cadono comunque dopo diecimila. Per svuotarlo subito, \
+                 il comando «Svuota il registro delle modifiche».",
+            ),
+        StringCatalog::new("en")
+            .with(J_RETENTION, "Keep the change log for")
+            .with(
+                J_RETENTION_DESC,
+                "Days that this vault's log (`.fub/journal.jsonl`) keeps the lines \
+                 saying which note was created, edited, trashed or renamed, when \
+                 and by whom. The lines do not contain the text of your notes. \
+                 Zero = forever; the oldest ones drop out after ten thousand \
+                 anyway. To empty it now, use the «Empty the change log» command.",
+            ),
+    ]
+}
 
 /// Cosa è successo a un documento.
 ///
@@ -146,16 +263,19 @@ pub enum JournalOp {
         from: Option<Revision>,
         to: Revision,
     },
-    /// Una modifica chirurgica, con **l'inverso già calcolato**
-    /// ([0008](../../../docs/decisions/0008-modifica-chirurgica.md)): porta i
-    /// byte sostituiti e non il documento, e la sua `base` è la revisione che
-    /// questa modifica ha prodotto — quindi applicarlo dopo che qualcun altro ha
-    /// scritto fallisce invece di cancellargli il lavoro.
+    /// Una modifica chirurgica
+    /// ([0008](../../../docs/decisions/0008-modifica-chirurgica.md)), con la sua
+    /// **impronta**: dove ha toccato e quanto ha sostituito, mai con cosa.
+    ///
+    /// Portava l'inverso, cioè i byte dell'utente; la 0103 li ha tolti. Il campo
+    /// si chiama `footprint` e non più `inverse` **apposta**: un nome che
+    /// promette di poter tornare indietro è un nome che qualcuno proverà ad
+    /// applicare.
     Edited {
         doc: DocId,
         from: Revision,
         to: Revision,
-        inverse: EditRequest,
+        footprint: Vec<EditFootprint>,
     },
     /// Cestinato: `trash` è il nome che ha assunto nel cestino. L'inverso è un
     /// ripristino verso `doc`.
@@ -168,6 +288,39 @@ pub enum JournalOp {
     Renamed { from: DocId, to: DocId },
 }
 
+/// L'impronta di **un** edit applicato: dove ha toccato il documento nuovo, e
+/// quanti byte c'erano al suo posto. Mai quali.
+///
+/// È ciò che resta di [`AppliedEdit`] quando gli si toglie il testo, e la
+/// conversione è a senso unico apposta: da qui non si risale.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EditFootprint {
+    /// Dove, in byte UTF-8 del sorgente **dopo** la modifica — le stesse
+    /// coordinate di [`AppliedEdit::span`], cioè quelle della `to` del record.
+    pub span: Span,
+    /// Quanti byte c'erano al suo posto. Zero quando l'edit ha solo inserito.
+    pub replaced: usize,
+}
+
+impl EditFootprint {
+    /// L'impronta di ciò che una modifica ha applicato.
+    ///
+    /// Una per edit e in ordine di documento, come `applied`: non si fondono le
+    /// impronte che condividono un punto di partenza — quella fusione serviva a
+    /// [`EditReport::inverse`](fub_abi::edit::EditReport::inverse) per produrre
+    /// edit disgiunti *applicabili*, e qui non si applica niente. Fonderle
+    /// perderebbe il conto di quanti edit erano.
+    pub fn of(applied: &[AppliedEdit]) -> Vec<Self> {
+        applied
+            .iter()
+            .map(|a| EditFootprint {
+                span: a.span,
+                replaced: a.replaced.len(),
+            })
+            .collect()
+    }
+}
+
 impl JournalOp {
     /// Questa riga porta con sé abbastanza per tornare indietro?
     ///
@@ -176,8 +329,15 @@ impl JournalOp {
     /// —, ma se l'informazione c'è. Esiste perché la risposta `false` deve
     /// essere leggibile da chi compone un rollback, invece di essere un ramo
     /// dimenticato in fondo a un `match`.
+    ///
+    /// Sono due le varianti che rispondono `false`, e sono **le due che
+    /// porterebbero testo**: la riscrittura integrale da sempre, la modifica
+    /// chirurgica dalla 0103. Non è una coincidenza ed è la regola del modulo
+    /// vista da qui — ciò che per tornare indietro vuole il contenuto di ieri,
+    /// da un registro non torna indietro, perché il contenuto di ieri in un
+    /// registro non ci sta.
     pub fn is_invertible(&self) -> bool {
-        !matches!(self, JournalOp::Written { .. })
+        !matches!(self, JournalOp::Written { .. } | JournalOp::Edited { .. })
     }
 }
 
@@ -261,8 +421,25 @@ impl Journal {
                 .collect(),
         };
         journal.ripara_la_coda();
-        journal.pota();
+        // Il tetto e basta: qui la finestra **non si sa ancora**. Lo schema di
+        // una chiave arriva alla dichiarazione, che è dopo, e leggerne una non
+        // dichiarata darebbe un errore — non un default. La potatura per età la
+        // fa [`Workspace`] appena la finestra esiste, e ogni volta che cambia.
+        journal.pota(0);
         journal
+    }
+
+    /// Svuota il registro: vedi il § «Chi lo cancella» in testa al modulo.
+    ///
+    /// Scrive un file vuoto invece di toglierlo, perché un file che non c'è e un
+    /// file vuoto si distinguono solo per chi guarda il disco, e il secondo dice
+    /// che qui un registro c'è ed è stato svuotato.
+    pub(crate) fn clear(&self) -> Result<usize, String> {
+        let quante = self.read().records.len();
+        self.storage
+            .write(&self.path, b"")
+            .map(|()| quante)
+            .map_err(|e| format!("non riesco a svuotare {}: {e}", self.path))
     }
 
     /// Se il file non finisce con un terminatore, ne aggiunge uno.
@@ -313,7 +490,13 @@ impl Journal {
             .map_err(|e| format!("non riesco a scrivere {}: {e}", self.path))
     }
 
-    /// Riscrive il file tenendo le ultime [`TETTO`] righe, se sono di più.
+    /// Riscrive il file tenendo le ultime [`TETTO`] righe e quelle dentro la
+    /// finestra di `giorni` ([`RETENTION_DAYS`]; zero = per sempre).
+    ///
+    /// I due criteri non fanno due potature: si prende **il taglio più avanti
+    /// dei due** e da lì si scorre una volta sola al confine di lotto. Un
+    /// secondo passaggio potrebbe tagliare a metà del lotto che il primo aveva
+    /// appena rispettato.
     ///
     /// Le righe si tengono **testuali** e non riserializzate, ed è la riga che
     /// rende la potatura sicura: qui dentro può esserci una riga di una versione
@@ -329,7 +512,7 @@ impl Journal {
     /// Un fallimento non risale e non blocca niente: un vault si apre anche se
     /// il suo registro non si è potuto potare, e la riga successiva ci si
     /// appende sopra lo stesso.
-    fn pota(&self) {
+    pub(crate) fn pota(&self, giorni: u64) {
         let Ok(raw) = self.storage.read(&self.path) else {
             return;
         };
@@ -340,14 +523,20 @@ impl Journal {
         let (Some(ultima), righe) = (righe.last(), &righe[..righe.len().saturating_sub(1)]) else {
             return;
         };
-        if !ultima.is_empty() || righe.len() <= TETTO {
+        if !ultima.is_empty() {
+            return;
+        }
+        let mut taglio = righe
+            .len()
+            .saturating_sub(TETTO)
+            .max(scadute(righe, giorni));
+        if taglio == 0 {
             return;
         }
         let chiave = |riga: &[u8]| -> Option<(String, BatchId)> {
             let r: JournalRecord = serde_json::from_slice(riga).ok()?;
             r.origin.batch.map(|b| (r.writer, b))
         };
-        let mut taglio = righe.len() - TETTO;
         while taglio > 0 && taglio < righe.len() {
             let qui = chiave(righe[taglio]);
             if qui.is_none() || qui != chiave(righe[taglio - 1]) {
@@ -368,6 +557,36 @@ impl Journal {
             tracing::warn!(target: "fub.kernel", "registro: non potato: {e}");
         }
     }
+}
+
+/// Quante righe in testa sono più vecchie della finestra. Zero giorni = per
+/// sempre, e allora nemmeno si guarda.
+///
+/// Legge il **solo** `at` e non il record intero, con un tipo suo: una riga
+/// scritta da una Fub più nuova non si sa leggere ma si sa **datare**, e
+/// trattarla come non datata la farebbe cadere fuori da una finestra che magari
+/// non ha passato. Potare non deve perdere ciò che non capisce (vedi
+/// [`Journal::pota`]) — svuotare sì, ma quello lo chiede l'utente.
+///
+/// Per la stessa ragione una riga che non porta nemmeno `at` **ferma** la
+/// scansione invece di cadere: il conto delle scadute è un prefisso, e ciò che
+/// non si data non è vecchio, è ignoto.
+fn scadute(righe: &[&[u8]], giorni: u64) -> usize {
+    if giorni == 0 {
+        return 0;
+    }
+    #[derive(Deserialize)]
+    struct Quando {
+        at: u64,
+    }
+    let soglia = crate::time::now_unix_millis().saturating_sub(giorni.saturating_mul(86_400_000));
+    righe
+        .iter()
+        .position(|riga| match serde_json::from_slice::<Quando>(riga) {
+            Ok(q) => q.at >= soglia,
+            Err(_) => true,
+        })
+        .unwrap_or(righe.len())
 }
 
 /// Le righe intere di questa versione, e il conto di ciò che si è scartato.
