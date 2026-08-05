@@ -18,6 +18,18 @@
 //!    `#[tauri::command]`;
 //! 2. **i comandi registrati**, cioè i nomi dentro `tauri::generate_handler!`.
 //!
+//! **Questo test sa di `lib.rs`, e di nient'altro** — ed è la sua zona cieca,
+//! misurata provandola: una seconda superficie IPC dichiarata in un altro file
+//! dello stesso crate e montata con un `.plugin()` che porti il proprio
+//! `generate_handler!` passerebbe di qui **verde**, e sarebbe raggiungibile dal
+//! webview come `plugin:<nome>|<comando>`. Un presidio che legge un file sa quel
+//! file; a vedere gli altri è un conto che cammina la cartella, e i file di
+//! `crates/fub-app/src` in cui compare un `#[tauri::command]` o un
+//! `generate_handler!` sono **uno** [conta: file-con-superficie-ipc]. È la stessa
+//! zona cieca che la [0106](../../../docs/decisions/0106-un-formato-si-presenta.md)
+//! ha misurato sul presidio che da qui ha copiato la forma, e ha la stessa
+//! risposta: il conto prende ciò che sta fuori dal file che il test legge.
+//!
 //! Poi li confronta fra loro e con l'allowlist, **in tutte e due le direzioni**
 //! ogni volta. La direzione che si vede subito è «ne è comparso uno»; quella che
 //! conta quasi altrettanto è «ne è sparito uno», perché un elenco che resta

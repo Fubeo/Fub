@@ -206,6 +206,46 @@ fn a_foreign_trash_entry_degrades_to_the_stamped_name_in_the_root() {
 }
 
 #[test]
+fn the_trash_sidecar_carries_its_schema_version() {
+    let fx = Fixture::new();
+    fx.put("progetti/Nota.txt", "in cartella");
+    let mut ws = fx.workspace();
+
+    let trashed = ws
+        .delete_document(&DocId::new("progetti/Nota.txt"))
+        .unwrap();
+
+    // §15.3: il numero sta **dentro** il file, perché è il file a sopravvivere
+    // alla versione di Fub che l'ha scritto.
+    let name = trashed.as_str().rsplit('/').next().unwrap();
+    let sidecar = fx.read(&format!(".fub/data/trash/{name}.json"));
+    let json: serde_json::Value = serde_json::from_str(&sidecar).expect("è JSON");
+    assert_eq!(json["v"], 1, "il sidecar dichiara il suo schema");
+    assert_eq!(json["original"], "progetti/Nota.txt");
+}
+
+#[test]
+fn a_sidecar_from_a_newer_fub_is_worth_no_sidecar_at_all() {
+    let fx = Fixture::new();
+    let ws = fx.workspace();
+    // Una copia di Fub più nuova ha cestinato la nota e ha scritto un sidecar
+    // di uno schema che questa copia non sa leggere.
+    fx.put(".trash/Idea.2026-07-24T15-30-00.txt", "di un'altra epoca");
+    fx.put(
+        ".fub/data/trash/Idea.2026-07-24T15-30-00.txt.json",
+        r#"{"v":99,"original":"progetti/Idea.txt","cartella":"che qui non si sa leggere"}"#,
+    );
+
+    let entries = ws.list_trash().unwrap();
+    assert_eq!(
+        entries[0].original,
+        DocId::new("Idea.txt"),
+        "una versione che non si conosce vale come un sidecar che non c'è: si degrada \
+         alla radice invece di credere a metà di un file scritto da un'altra epoca"
+    );
+}
+
+#[test]
 fn restoring_under_a_new_name_announces_the_identity_migration() {
     let fx = Fixture::new();
     fx.put("progetti/Nota.txt", "prima vita");

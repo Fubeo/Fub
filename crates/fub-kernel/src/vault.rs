@@ -69,9 +69,19 @@ pub const TRASH_DIR: &str = ".trash";
 /// di prima (si ripristina in radice col nome de-timbrato).
 const TRASH_META_DIR: &str = "trash";
 
+/// La versione di schema del sidecar del cestino (§15.3).
+///
+/// Ce l'ha anche un formato di due campi, e anche uno il cui degrado è già
+/// previsto: senza un numero in testa, la versione dopo dovrebbe **indovinare**
+/// che un file senza campo viene da prima — e qui indovinare male vuol dire
+/// riportare la nota di qualcuno nella cartella sbagliata.
+const SCHEMA_VERSION: u32 = 1;
+
 /// Il contenuto di un sidecar del cestino.
 #[derive(Serialize, Deserialize)]
 struct TrashSidecar {
+    /// La versione di schema di **questo** file, indipendente dalle altre.
+    v: u32,
     /// Il path (relativo al vault) da cui la voce è stata cestinata.
     original: String,
 }
@@ -378,6 +388,7 @@ impl Vault {
     fn write_trash_sidecar(&self, trashed: &DocId, original: &DocId) -> Result<()> {
         let path = self.trash_sidecar_path(trashed);
         let json = serde_json::to_string(&TrashSidecar {
+            v: SCHEMA_VERSION,
             original: original.to_string(),
         })
         .expect("un path è sempre serializzabile");
@@ -389,10 +400,22 @@ impl Vault {
     /// Il path d'origine registrato dal sidecar, se è stata Fub a cestinare
     /// questa voce. Un sidecar assente o illeggibile non è un errore: è una
     /// voce cestinata da qualcun altro (Obsidian), o di un'altra epoca.
+    ///
+    /// **Una versione che non si conosce vale come un sidecar che non c'è**, e
+    /// qui il rifiuto in avanti è muto invece che rumoroso come nelle
+    /// impostazioni o nel registro dei vault (§15.3). La differenza non è la
+    /// pigrizia: è che lì tacere farebbe **perdere** ciò che l'utente aveva
+    /// scritto, mentre qui il degrado è già la risposta prevista del formato —
+    /// la nota torna comunque, in radice col nome de-timbrato, che è
+    /// esattamente ciò che succede per ogni voce cestinata da Obsidian. Dirlo
+    /// costerebbe un campo su `TrashEntry`, cioè sul contratto, per un caso che
+    /// si dà solo aprendo il vault con una copia di Fub più vecchia di quella
+    /// che l'ha cestinata; se un giorno il sidecar porterà qualcosa che il
+    /// degrado non sa rifare, quel campo sarà da scrivere.
     fn trash_sidecar_original(&self, trashed: &DocId) -> Option<DocId> {
         let raw = self.storage.read(&self.trash_sidecar_path(trashed)).ok()?;
         let sidecar: TrashSidecar = serde_json::from_slice(&raw).ok()?;
-        Some(DocId::new(sidecar.original))
+        (sidecar.v == SCHEMA_VERSION).then(|| DocId::new(sidecar.original))
     }
 
     /// Il contenuto del cestino, dal più recente al più vecchio.

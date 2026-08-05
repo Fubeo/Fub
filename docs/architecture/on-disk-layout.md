@@ -55,7 +55,7 @@ chiamate per nome.
 | `.fub/drafts/<documento>.json` | `kernel/drafts.rs` | autorevole | 1, **per bozza** | `VaultStorage::write` — una bozza per file, così ogni salvataggio automatico è una *scrittura* e non un *aggiornamento* ([0088](../decisions/0088-cio-che-non-e-ancora-successo.md)) |
 | `.fub/data/entries.json` | `kernel/entries.rs` | derivato | 2 | `VaultStorage::write` |
 | `.fub/data/diagnostics.json` | `kernel/workspace.rs` (`vault.diagnostic-bundle`) | derivato | 1 | `VaultStorage::write` — è una copia di fatti che stanno altrove, quindi si butta |
-| `.fub/data/trash/<nome>.json` | `kernel/vault.rs` | **né l'una né l'altra** (sotto) | — | `VaultStorage::write`, best-effort |
+| `.fub/data/trash/<nome>.json` | `kernel/vault.rs` | **né l'una né l'altra** (sotto) | 1 | `VaultStorage::write`, best-effort |
 | `.fub/data/plugins/<id>/…` | chiunque abbia `DataWrite` | dichiarata derivata, **in pratica entrambe** (sotto) | per plugin | `VaultStorage::write` (`host/kernel.rs`) |
 | `.fub/data/plugins/fub.search/` | `features/search.rs` | derivato | 5 | l'indice tantivy, più un `manifest.json` |
 | `.fub/data/plugins/fub.versioning/` | `features/versioning.rs` | **autorevole** (sotto) | 1 | `versions.json` derivato dallo store, gli snapshot no |

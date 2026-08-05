@@ -92,10 +92,42 @@ export const CONTEGGI = [
   {
     nome: "schemi-su-disco",
     ragione:
-      "Gli `SCHEMA_VERSION` indipendenti: quanti formati su disco Fub versiona " +
+      "Le versioni di schema indipendenti: quanti formati su disco Fub versiona " +
       "separatamente. È il numero il cui errore non si annulla, perché la " +
-      "promessa è fatta ai file dell'utente e non a chi compila.",
-    comando: "grep -rn 'const SCHEMA_VERSION' crates/*/src | wc -l",
+      "promessa è fatta ai file dell'utente e non a chi compila. Conta la " +
+      "**proprietà** — una costante intera che dichiara una versione — e non il " +
+      "nome `SCHEMA_VERSION`: finché guardava il nome, `DIAGNOSTICS_VERSION` " +
+      "gli passava accanto, e chi l'aveva chiamata così non aveva sbagliato " +
+      "niente (§15.3).",
+    comando:
+      "grep -rhE '^ *(pub(\\([a-z]+\\))? )?const [A-Z_]+VERSION: u(8|16|32|64|size) = '" +
+      " crates/*/src | wc -l",
+  },
+  {
+    nome: "schemi-in-tabella",
+    ragione:
+      "Le righe della tabella degli schemi in `docs/versionamento.md`. Vive " +
+      "accanto a `schemi-su-disco` e dice l'altra metà: quello conta i formati " +
+      "che il codice versiona, questo i formati che il documento elenca. Che " +
+      "siano gli **stessi** — riga per riga e numero per numero — lo verifica " +
+      "`crates/fub-app/tests/schemi_su_disco.rs`; che siano **tanti quanti** lo " +
+      "dicono questi due, ed è il verso che un test non può vedere, perché un " +
+      "formato che nessuno ha incluso è un formato di cui nessun test sa.",
+    comando:
+      "grep -cE '^\\| [^|]+ \\| \\[`crates/[^`]+:[0-9]+`\\]' docs/versionamento.md",
+  },
+  {
+    nome: "file-con-superficie-ipc",
+    ragione:
+      "In quanti file di `crates/fub-app/src` compare un `#[tauri::command]` o " +
+      "un `generate_handler!`. Deve essere **uno**: `dieta_ipc.rs` giudica " +
+      "`lib.rs` con un `include_str!`, quindi una seconda superficie montata da " +
+      "un altro file dello stesso crate — un `.plugin()` col suo " +
+      "`generate_handler!` — gli è invisibile e resta raggiungibile dal webview " +
+      "come `plugin:<nome>|<comando>`. Un presidio che legge un file sa quel " +
+      "file; a vedere gli altri è un conto che cammina la cartella.",
+    comando:
+      "grep -rlE '#\\[(tauri::)?command\\]|generate_handler!' crates/fub-app/src | wc -l",
   },
   {
     nome: "crate-del-workspace",

@@ -88,6 +88,26 @@ pub const SEARCH_ID: &str = "fub.search";
 /// v5: `headings`, il campo che `TextField::Heading` chiede (decisione 0050).
 const SCHEMA_VERSION: u32 = 5;
 
+/// **La forma che quel numero versiona** (§15.3,
+/// [0106](../../../docs/decisions/0106-un-formato-si-presenta.md)).
+///
+/// Un numero di schema serve a chi rilegge, e serve a una condizione sola: che
+/// **salga quando la forma cambia**. I due banchi di questo file provano che il
+/// numero scritto è quello letto e che un numero diverso butta le impronte —
+/// nessuno dei due prova la cosa che conta, ed è stato misurato: rinominando il
+/// campo `body` in `corpo` senza toccare `SCHEMA_VERSION` la suite intera resta
+/// verde, e chi riapre un vault indicizzato ieri trova un indice **incoerente**
+/// invece di una ricostruzione.
+///
+/// Questa stringa è la forma dello schema di tantivy, campo per campo: il nome,
+/// il tokenizer con cui è indicizzato e se è memorizzato. Cambiarne uno senza
+/// alzare il numero è la sola cosa che
+/// [`lo_schema_non_cambia_senza_che_il_numero_salga`] non lascia passare.
+#[cfg(test)]
+const IMPRONTA_DELLO_SCHEMA: &str = "doc_id:raw:stored page_name:default:stored \
+body:default:stored tags:raw tag_paths:raw folder:raw folder_exact:raw \
+headings:default";
+
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
 
@@ -321,6 +341,33 @@ struct Fields {
     /// a una cosa non è come una che la nomina di sfuggita, ed è la distinzione
     /// che `TextField::Heading` esiste per dire.
     headings: Field,
+}
+
+/// La forma dello schema, in una riga: `nome:tokenizer[:stored]` per campo, in
+/// ordine di dichiarazione. Sta accanto a chi lo costruisce, perché è di lui che
+/// parla.
+#[cfg(test)]
+fn schema_fingerprint(schema: &Schema) -> String {
+    schema
+        .fields()
+        .map(|(_, entry)| {
+            let mut riga = entry.name().to_string();
+            if let tantivy::schema::FieldType::Str(opts) = entry.field_type() {
+                riga.push(':');
+                riga.push_str(match opts.get_indexing_options() {
+                    Some(i) => i.tokenizer(),
+                    None => "-",
+                });
+                if opts.is_stored() {
+                    riga.push_str(":stored");
+                }
+            } else {
+                riga.push_str(":altro");
+            }
+            riga
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn build_schema() -> (Schema, Fields) {
@@ -2340,6 +2387,20 @@ mod tests {
         // Il documento si reindicizza, e non si duplica: delete+add.
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto stabile")));
         assert_eq!(search(&idx, "stabile").len(), 1);
+    }
+
+    #[test]
+    fn lo_schema_non_cambia_senza_che_il_numero_salga() {
+        let (schema, _) = build_schema();
+        assert_eq!(
+            schema_fingerprint(&schema),
+            IMPRONTA_DELLO_SCHEMA,
+            "lo schema di tantivy è cambiato e SCHEMA_VERSION è ancora {SCHEMA_VERSION}. \
+             Chi riapre un vault indicizzato da una versione precedente non troverebbe \
+             una ricostruzione ma un indice incoerente, che è il danno che quel numero \
+             esiste per evitare. Alza SCHEMA_VERSION, aggiungi la riga di storia al suo \
+             commento, e riscrivi qui l'impronta nuova."
+        );
     }
 
     #[test]

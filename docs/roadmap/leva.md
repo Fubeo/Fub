@@ -339,8 +339,12 @@ l'atomicità di scritture che non si eseguono. Il 24.2 chiede atomic writes,
 journaling, crash recovery, autosave e corruption detection, e nessuna delle
 cinque può essere un componente perché la correttezza di **tutti gli altri**
 poggia sopra. Delle cinque ne restava fuori una sola quando la voce si è chiusa,
-ed è la **corruption detection** — che non è di qui: la sua metà scrivibile è la
-versione di schema del §15.3, e il resto è del 24.2. Le altre quattro: la prima
+ed è la **corruption detection** — che non è di qui, e adesso nemmeno per metà:
+la versione di schema del §15.3 è chiusa con la
+[0106](../decisions/0106-un-formato-si-presenta.md), che ha misurato quanto
+poco le due domande si somiglino — un numero di schema dice quale formato sono
+quei byte, non se sono integri —, quindi la corruption detection è **tutta** del
+24.2. Le altre quattro: la prima
 con la
 [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), che l'ha messa dentro
 il supporto che la 0064 aveva appena costruito — e con la

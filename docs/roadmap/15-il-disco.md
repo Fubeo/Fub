@@ -226,15 +226,17 @@ prerequisito e ciò che lo richiede, che sta in coda a
 
 ### 15.3 Una versione di schema su ogni formato persistito
 
-*ex §2.12 · kernel · **P2** — da anticipare a **ogni formato che nasce***
+*ex §2.12 · kernel · **P2** — **chiusa** dalla [0106](../decisions/0106-un-formato-si-presenta.md): i formati versionati erano
+**dieci** e non nove, l'undicesimo è il sidecar del cestino, e l'elenco che li
+dichiara adesso lo riconta un presidio*
 
-- [ ] **Ce l'hanno due formati, e uno dei due è il precedente da imitare.** Il
+- [x] **Ce l'hanno due formati, e uno dei due è il precedente da imitare.** Il
       `SearchIndex` (`search.rs`) con la regola giusta ("versione diversa →
       butto e ricostruisco"), ma quello è **derivato**: buttarlo è gratis. Lo
       store del versioning ce l'ha pure (`versioning.rs`, campo nel manifest e
       controllo al caricamento) ed è **autorevole** — quindi la disciplina esiste già
       in repo, applicata al caso difficile. Non è un buco: è il modello.
-- [ ] **Non ce l'ha chi scrive JSON nudo**: il sidecar del cestino
+- [x] **Non ce l'ha chi scrive JSON nudo**: il sidecar del cestino
       (`vault.rs`, un `serde_json::to_string` senza campo di versione). Erano
       due: `.fub/workspace.json` ce l'ha dal §11.3
       ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)), insieme alla
@@ -253,8 +255,10 @@ prerequisito e ciò che lo richiede, che sta in coda a
       per formato oggi; domani è un formato da indovinare a valle di una
       segnalazione utente.
 
-*Sblocca:* 27.4 (upgrade migration test), 2.1 (corruption detection), 24.2
-(vault repair, checksum verification).
+*Sblocca:* 27.4 (upgrade migration test), 24.2 (vault repair, checksum
+verification). La **corruption detection** (2.1) qui non c'entrava e non c'entra:
+un numero di schema dice quale formato sono quei byte, non se quei byte sono
+integri.
 
 ### 15.4 I dati persistiti non hanno né una mappa né una classe
 
