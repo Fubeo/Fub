@@ -624,16 +624,42 @@ Quindi, esplicitamente:
 
 **Un panico al confine costa la chiamata, non il vault.** L'unico isolamento che
 si può comprare da un plugin nativo è quello dai suoi *incidenti*, e c'è: ogni
-porta da cui si entra in codice di un provider — `invoke_command`, `view_action`,
-`render_view`, `call_service`, la consegna a un `EventHandler`, l'alimentazione
-degli indici, il `parse` di un `FormatProvider`, l'innesto di una `SyntaxRule`,
-il disegno di un `CustomRenderer` — gira dentro una rete
+porta da cui si entra in codice di un provider gira dentro una rete
 (`fub-kernel/src/safety.rs`) che cattura il panico e lo traduce nell'errore di
 casa, nominando il colpevole. La rete sta **attorno alla chiamata del provider e
 a niente di più**: dentro quella chiamata il kernel ha invarianti da rimettere a
 posto, e quel codice gira già sul ramo dell'errore. Senza la rete, un provider
 che pania sotto il prestito esclusivo avvelenava il `RwLock` del workspace e
 rendeva il vault irraggiungibile fino al riavvio.
+
+Le porte **sono un dato, non una frase**: `safety::Gate` le enumera, e sono
+**tredici** [conta: porte-verso-un-terzo] — un comando, una view che disegna, una view che agisce, un servizio,
+la consegna a un `EventHandler`, le quattro degli indici (alimentare,
+dimenticare, `up_to_date`, riconciliare), il `parse` di un `FormatProvider`,
+l'innesto di una `SyntaxRule`, il disegno di un `CustomRenderer`, un job sul
+pool. Erano **otto** finché l'elenco stava in prosa, e il conto era sbagliato: la
+0032 lo aveva dichiarato esaustivo a memoria, `up_to_date` è nata dopo
+([0046](../decisions/0046-l-anagrafe-del-vault.md)) senza toccarlo, e altre erano
+sfuggite al censimento del suo tempo. Adesso `Gate::what` è un `match` senza `_`
+— chi apre una porta nuova **non compila** finché non le dà una frase — e un
+secondo `match` senza `_` in `il_panico.rs` non compila finché non si dichiara
+dove quella porta è provata, o perché non lo è
+([0105](../decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)).
+La frase che l'utente legge è della porta, il soggetto («quale comando», «quale
+view») è del sito che chiama, e un presidio verifica che nessuna porta accetti un
+dettaglio per poi buttarlo via.
+
+La rete **presuppone che un panico srotoli**, e il presupposto lo verifica il
+compilatore: un `#[cfg(panic = "abort")] compile_error!` in `fub-kernel` rifiuta
+quel profilo. Non è un test perché un test non lo vedrebbe — Cargo ignora `panic`
+per i profili `test` e `bench`, quindi un `[profile.release] panic = "abort"` non
+arriva nemmeno a `cargo test --release` e il banco resterebbe **verde**
+attestando una rete che nel binario spedito non c'è più. Non è nemmeno una
+lettura del `Cargo.toml`, che non vedrebbe `RUSTFLAGS=-Cpanic=abort`. E non è un
+divieto per sempre: è un divieto finché la risposta a un componente che pania è
+*catturarlo* — il giorno che quel profilo lo si vuole davvero, la risposta è
+isolare i componenti fuori dal processo (§24.2, o il guest WASM di M5), e sta
+scritto nel messaggio dell'errore.
 
 La rete ha **tre maglie**, e quale si usa dipende da una domanda sola: chi ha
 chiamato ha un modo di ricevere un no?
@@ -644,12 +670,12 @@ flowchart TD
 
     Q -->|"sì, e l'errore è di casa sua"| C["safety::caught(wrap)"]
     Q -->|"sì, errore generico"| K["safety::calling"]
-    Q -->|"no: nessuno aspetta una risposta"| N["safety::notifying"]
+    Q -->|"no: nessuno aspetta una risposta"| N["safety::reporting"]
 
-    C --> C1["parse di un FormatProvider<br/>→ FormatError::Parse"]
-    C --> C2["disegno di un CustomRenderer<br/>→ FormatError::Render, poi Fallback"]
-    K --> K1["invoke_command · render_view · view_action<br/>call_service · run_job · up_to_date<br/>→ PluginError::Internal, col nome del colpevole"]
-    N --> N1["innesto di una SyntaxRule<br/>consegna a un EventHandler<br/>alimentazione degli indici<br/>→ eprintln! e basta"]
+    C --> C1["FormatParse<br/>→ FormatError::Parse"]
+    C --> C2["CustomRender<br/>→ FormatError::Render, poi Fallback"]
+    K --> K1["Command · ViewRender · ViewAction<br/>Service · IndexUpToDate · Job<br/>→ PluginError::Internal, col nome del colpevole"]
+    N --> N1["SyntaxRule · Event<br/>IndexFeed · IndexForget · IndexReconcile<br/>→ un PluginError restituito a chi chiama,<br/>che lo emette come Event::Trouble"]
 
     C1 --> R(["la chiamata è persa.<br/>Il componente resta acceso."])
     C2 --> R
@@ -659,9 +685,9 @@ flowchart TD
 
 | Maglia | Dove | Cosa produce |
 |---|---|---|
-| `calling` | [safety.rs:62](../../crates/fub-kernel/src/safety.rs) | `PluginError::Internal("«X» è andato in panico …")` |
-| `caught` | [safety.rs:81](../../crates/fub-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
-| `reporting` | [safety.rs:114](../../crates/fub-kernel/src/safety.rs) | il `PluginError` **restituito** a chi chiama, perché non c'è nessuno a cui dire di no |
+| `calling` | [safety.rs:220](../../crates/fub-kernel/src/safety.rs) | `PluginError::Internal("«X» è andato in panico …")` |
+| `caught` | [safety.rs:238](../../crates/fub-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
+| `reporting` | [safety.rs:273](../../crates/fub-kernel/src/safety.rs) | il `PluginError` **restituito** a chi chiama, perché non c'è nessuno a cui dire di no |
 
 Non disattiva niente, e il riquadro finale del disegno dice esattamente questo:
 il meccanismo per smontare esiste (`BundleRegistry::unmount`), e dal §11.1 esiste
@@ -669,8 +695,10 @@ anche il modo di **riaccendere** (`BundleRegistry::enable`, con lo stato in
 `plugins.disabled`) — ma **nulla collega un panico a quel meccanismo**. Non c'è
 un contatore di panici, non c'è una soglia, non c'è nessun tipo che rappresenti
 una quarantena: il «safe mode» è una voce di roadmap (§20.2), non un pezzo di
-codice, e quel che manca perché un panico costi più della chiamata è il canale
-per dare l'avviso. L'isolamento vero resta la sandbox di M5.
+codice. Ciò che manca **non è più il canale** — dirlo si può (`Event::Trouble`,
+[0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) e riaccendere anche
+(§11.1): manca la **politica**, cioè una decisione di prodotto su quanti panici
+costino cosa, e nessuna voce la pone. L'isolamento vero resta la sandbox di M5.
 
 Stesso principio per la UI: un provider non fidato non può emettere
 `UiNode::Html`/`WebView` (iniettano contenuto attivo nella webview privilegiata
@@ -919,7 +947,7 @@ lontano prima di accorgersi che gli manca un tasto.
 
 **L'invariante, misurato.** Quella frase resta vera dove è **provata**, e dove
 sia provata adesso si legge invece di dedursi: le feature ufficiali di questo
-repo stanno su **quattro** delle dieci superfici, e le altre sei sono dichiarate
+repo stanno su **quattro** delle **dieci** [conta: superfici-di-vista] superfici, e le altre sei sono dichiarate
 scoperte una per una in `fub-features/tests/conformita.rs`
 (`il_dogfooding_dichiara_fin_dove_arriva`), con la ragione accanto. Un dogfooding
 che copre meno di metà di ciò di cui parla non è un dogfooding sbagliato — è un
@@ -1038,9 +1066,9 @@ sequenceDiagram
 | `Host::open` | [session.rs:217](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
 | `mount` | [mount.rs:186](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
 | `BundleRegistry::mount` | [registry.rs:262](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
-| `reindex` | [workspace.rs:155](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
+| `reindex` | [workspace.rs:156](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
 | `bridge::spawn` | [bridge.rs:69](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
-| `JobRunner::start` | [runner.rs:694](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
+| `JobRunner::start` | [runner.rs:695](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
 La riga che è facile perdere è la prima: **`fub.core` è un bundle come gli
 altri** e si monta per primo, e non registra nulla — esiste per avere un'identità
@@ -1071,7 +1099,7 @@ stateDiagram-v2
 Anche qui **nessuno di questi stati ha un enum**. Sono l'appartenenza a una mappa
 e un booleano: un vault è aperto se sta in `Sessions.open`
 ([session.rs:184](../../crates/fub-host/src/session.rs)), un workspace è chiuso
-se `Workspace.closed` è vero ([workspace.rs:367](../../crates/fub-kernel/src/workspace.rs)),
+se `Workspace.closed` è vero ([workspace.rs:368](../../crates/fub-kernel/src/workspace.rs)),
 un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
 ([registry.rs:218](../../crates/fub-host/src/registry.rs)). Le uniche
 transizioni che il **contratto** nomina sono eventi, non stati: `VaultOpened`,
@@ -1082,7 +1110,7 @@ L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 | Regola | Dove | Cosa costerebbe non averla |
 |---|---|---|
 | il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fub-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
-| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:541](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
+| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:542](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
 | `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:469](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
 | i bundle si spengono in ordine **inverso** | [workspace.rs:1158](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
 

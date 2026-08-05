@@ -67,6 +67,29 @@ export const CONTEGGI = [
       " | grep -cE '^[[:space:]]+fn '",
   },
   {
+    nome: "superfici-di-vista",
+    ragione:
+      "Le superfici su cui una view può stare: i casi di `ViewSurface`. La 0104 " +
+      "ha dato all'elenco un presidio che vieta buchi e doppioni, e la verifica " +
+      "del rosso della 0105 ha misurato che una variante aggiunta **in coda** " +
+      "gli sfugge lo stesso, perché la sua ancora è una variante nominata a " +
+      "mano. Nessun `assert` dentro Rust può prenderla: la prende un conto che " +
+      "guarda il sorgente da fuori, ed è questo.",
+    comando:
+      "sed -n '/^pub enum ViewSurface {/,/^}/p' crates/fub-abi/src/traits.rs" +
+      " | grep -cE '^    [A-Z]'",
+  },
+  {
+    nome: "porte-verso-un-terzo",
+    ragione:
+      "Le porte da cui si entra in codice di un terzo: i casi di `Gate` in " +
+      "`safety.rs`. La decisione 0032 le aveva dichiarate «otto, e sono tutte» " +
+      "in un verbale immutabile, e quando la 0105 le ha contate erano tredici.",
+    comando:
+      "sed -n '/^pub enum Gate {/,/^}/p' crates/fub-kernel/src/safety.rs" +
+      " | grep -cE '^    [A-Z]'",
+  },
+  {
     nome: "schemi-su-disco",
     ragione:
       "Gli `SCHEMA_VERSION` indipendenti: quanti formati su disco Fub versiona " +

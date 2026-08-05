@@ -243,7 +243,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5750`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5749`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
@@ -469,6 +469,22 @@ scorciatoia. Vale **subito** e sopravvive allo spegnimento del componente; la
 frase che si legge negandolo la scrive la shell e non il manifest, perché chi
 chiede un permesso non deve poter scrivere la frase con cui glielo si concede.
 
+### porta verso un terzo
+`safety::Gate` · [`kernel/safety.rs`](../crates/fub-kernel/src/safety.rs) · [0105](decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)
+
+Un punto del kernel da cui si entra in **codice di un terzo**, e quindi un punto
+in cui serve la *rete al confine*. Sono **tredici** [conta: porte-verso-un-terzo], una per specie — un comando,
+una view che disegna, una che agisce, un servizio, un evento consegnato, le
+quattro degli indici, il `parse` di un formato, l'innesto di una regola di
+sintassi, il disegno di un renderer, un job — e sono un **enum**, non una frase:
+finché stavano in prosa il conto diceva otto ed era sbagliato. Da non confondere
+con *porta* nell'altra famiglia, che è il passaggio unico verso l'host.
+
+Ogni porta dice il **verbo** della frase che l'utente legge quando un componente
+esplode («eseguendo `x`»), il sito che chiama dice il soggetto; `Gate::what` è un
+`match` senza `_`, quindi una porta nuova non compila finché non ha una frase e
+finché il banco non dichiara dove è provata.
+
 ### provider
 `FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1850`](../crates/fub-abi/src/traits.rs) · —
 
@@ -478,12 +494,21 @@ voci di [FEATURES.md](FEATURES.md) sia un provider — ciò che non può esserlo
 diventa un comando cablato e un `if` nel kernel.
 
 ### rete al confine
-`safety::calling` · [`kernel/safety.rs`](../crates/fub-kernel/src/safety.rs) · [0032](decisions/0032-il-runner-dei-job.md)
+`safety::calling` · [`kernel/safety.rs`](../crates/fub-kernel/src/safety.rs) · [0032](decisions/0032-il-runner-dei-job.md), [0105](decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)
 
 Il `catch_unwind` attorno alla chiamata di un provider, e a niente di più: un
 panico costa **la chiamata, non il vault**. Non è un `Result` in più nel
 contratto — un panico resta un difetto — e non è una disattivazione: sta lì per
-non avvelenare il lock e lasciare il vault irraggiungibile fino al riavvio.
+non avvelenare il lock e lasciare il vault irraggiungibile fino al riavvio. Sta
+su tutte e tredici le *porte verso un terzo*, in tre maglie a seconda che chi ha
+chiamato possa ricevere un no (`calling`, `caught`) o non aspetti niente
+(`reporting`).
+
+Presuppone una cosa sola, **che un panico srotoli**, e a verificarla non è un
+test ma il compilatore: un `#[cfg(panic = "abort")] compile_error!` rifiuta quel
+profilo. Un test non lo vedrebbe — Cargo ignora `panic` per i profili `test` e
+`bench` — e resterebbe verde attestando una rete che nel binario spedito non
+c'è più.
 
 ### superficie
 — · [architecture/wit.md](architecture/wit.md) · [0002](decisions/0002-additivita-del-contratto.md)

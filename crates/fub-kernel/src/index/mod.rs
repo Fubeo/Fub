@@ -44,6 +44,7 @@ pub(crate) use routing::{RouteTable, Target};
 use crate::organization::OrganizationStore;
 use crate::providers::ProviderTable;
 use crate::registry::FormatRegistry;
+use crate::safety::Gate;
 use crate::settings::SharedSettings;
 
 /// Gli indici del workspace: quello del kernel, quelli registrati, e la tabella
@@ -65,12 +66,12 @@ use crate::settings::SharedSettings;
 /// (vedi [`Indexes::reconcile`]).
 fn feeding<'a>(
     who: &str,
-    what: &str,
+    gate: Gate,
     ids: impl Iterator<Item = &'a DocId>,
     f: impl FnOnce() -> Vec<IndexLoss>,
 ) -> Vec<IndexLoss> {
     let mut lost = Vec::new();
-    match crate::safety::reporting(who, what, || lost = f()) {
+    match crate::safety::reporting(who, gate, "", || lost = f()) {
         // Ciò che il provider aveva già raccolto prima di paniare **non** si
         // usa: dopo un panico il suo stato è ignoto, e un elenco parziale
         // direbbe «solo questi» proprio nel caso in cui non lo si può sapere.
@@ -199,7 +200,7 @@ impl Indexes {
         for (id, index) in self.providers.iter_mut() {
             lost.extend(feeding(
                 id,
-                "indicizzando un lotto di documenti",
+                Gate::IndexFeed,
                 models.iter().map(|m| &m.id),
                 || index.on_documents_indexed(models),
             ));
@@ -210,12 +211,9 @@ impl Indexes {
     pub(crate) fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         let mut lost = self.core.on_documents_removed(ids);
         for (plugin, index) in self.providers.iter_mut() {
-            lost.extend(feeding(
-                plugin,
-                "togliendo un lotto di documenti",
-                ids.iter(),
-                || index.on_documents_removed(ids),
-            ));
+            lost.extend(feeding(plugin, Gate::IndexForget, ids.iter(), || {
+                index.on_documents_removed(ids)
+            }));
         }
         lost
     }
@@ -242,9 +240,10 @@ impl Indexes {
             if agreed.is_empty() {
                 break;
             }
-            let theirs =
-                crate::safety::calling(id, "dicendo cosa ha già", || Ok(index.up_to_date(entries)))
-                    .unwrap_or_default();
+            let theirs = crate::safety::calling(id, Gate::IndexUpToDate, "", || {
+                Ok(index.up_to_date(entries))
+            })
+            .unwrap_or_default();
             let theirs: BTreeSet<&DocId> = theirs.iter().collect();
             agreed.retain(|id| theirs.contains(id));
         }
@@ -266,9 +265,12 @@ impl Indexes {
     pub(crate) fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         let mut lost = self.core.reconcile(ids);
         for (plugin, index) in self.providers.iter_mut() {
-            lost.extend(feeding(plugin, "riconciliando", ids.iter().take(1), || {
-                index.reconcile(ids)
-            }));
+            lost.extend(feeding(
+                plugin,
+                Gate::IndexReconcile,
+                ids.iter().take(1),
+                || index.reconcile(ids),
+            ));
         }
         lost
     }

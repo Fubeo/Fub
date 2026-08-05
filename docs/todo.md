@@ -29,9 +29,9 @@ verbali di fila) — e **due** da una
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centoventuno sono
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centoventidue sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-dodici [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
+undici [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -220,17 +220,17 @@ che questo piano passa il tempo a togliere dal codice.
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | lo stesso lavoro visto da quattro lati: entry, metadati, cartelle, lista | — | 3 |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | 2 | 1 |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 1 | 1 |
-| **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza: il criterio è se il costo cresce con l'attesa | 2 | — |
+| **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza: il criterio è se il costo cresce con l'attesa | 2 | 1 |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell e non appartiene a nessuna delle sedute sopra, code delle sedute 1-4 comprese | 2 | 1 |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: rimandi ai quattro giri di audit, e il lavoro sta nelle sedute che li hanno assorbiti | — | 2 |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 1 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
-| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | 4 | 2 |
+| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | 3 | 2 |
 
 ## Le voci
 
-Dodici [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
+Undici [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -242,7 +242,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-dodici [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+undici [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -251,15 +251,15 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-La colonna *Voci* somma **dodici** [conta: voci-aperte], e la seduta 23 ne
-tiene quattro da sola. Non è uno squilibrio da correggere: è ciò che succede
+La colonna *Voci* somma **undici** [conta: voci-aperte], e la seduta 23 ne
+tiene tre da sola. Non è uno squilibrio da correggere: è ciò che succede
 quando una strada nuova viene percorsa tre volte di fila e produce voci ogni
 volta, e la sua forma — *prezzi dichiarati e mai risommati* — attraversa tutte le
 altre sedute invece di stare accanto a loro. Se un giorno converrà spezzarla, il
 taglio naturale non è il numero ma la **lente**: le §23.9–§23.17 rispondono a una
 domanda più stretta delle prime otto.
 
-Le caselle residue oggi sono **quattordici**, e stanno in undici posti:
+Le caselle residue oggi sono **quindici**, e stanno in dodici posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
@@ -299,7 +299,15 @@ straforo), la
 [0097](decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) ha
 staccato la `fetch` dal prestito del workspace e rilegge il permesso a ogni
 chiamata, ma chi annulla un job non aspetta la rete: aspetta il tetto di tempo
-dell'host, fino a un minuto che l'utente **vede**) e la
+dell'host, fino a un minuto che l'utente **vede**), la
+[§17.3](roadmap/17-presidi-che-restano.md#173-osservabilità) (una: la porta da
+cui si è entrati non arriva nell'evento — la
+[0105](decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md) ha
+fatto delle tredici porte un dato, `Gate`, ma nell'`Event::Trouble` della
+[0052](decisions/0052-cio-che-va-storto-e-un-evento.md) arriva ancora solo la
+frase; portarcela dentro farebbe **raggruppare** al centro notifiche e
+**contare** a chi legge il registro, ed è un campo in un tipo del contratto,
+cioè una decisione sulla firma che quella voce non chiedeva) e la
 [§7.1](roadmap/07-il-confine.md#la-casella-rimasta) (una, e **ristretta**: le
 allowlist dei permessi hanno un **parametro**, e fino alla
 [0097](decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) non ne
@@ -350,7 +358,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§20.5** | [Il budget del dispatch tronca senza guardare cosa sta troncando](roadmap/20-quando-qualcosa-va-storto.md#205-il-budget-del-dispatch-tronca-senza-guardare-cosa-sta-troncando) | 20. Quando qualcosa va storto | kernel | **P2** |
 | **§23.7** | [Una data scritta come la scrive l'utente non è una data, e non c'è modo di dirlo](roadmap/23-cosa-costano-le-decisioni-chiuse.md#237-una-data-scritta-come-la-scrive-lutente-non-è-una-data-e-non-cè-modo-di-dirlo) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
 | **§23.8** | [Due file che differiscono per una maiuscola sono lo stesso arco](roadmap/23-cosa-costano-le-decisioni-chiuse.md#238-due-file-che-differiscono-per-una-maiuscola-sono-lo-stesso-arco) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
-| **§23.15** | [La rete che regge i panici non ha un presidio, ha una nota](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2315-la-rete-che-regge-i-panici-non-ha-un-presidio-ha-una-nota) | 23. Cosa le decisioni chiuse costano | presidi | **P2** |
 | **§23.16** | [Su Windows un hardlink si stacca in silenzio](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2316-su-windows-un-hardlink-si-stacca-in-silenzio) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
 
 ## Gli allegati
@@ -363,7 +370,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centoquattro** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centocinque** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

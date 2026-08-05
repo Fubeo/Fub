@@ -31,6 +31,8 @@ use std::collections::{BTreeSet, HashMap};
 use fub_abi::custom::{SyntaxMatch, SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger};
 use fub_abi::format::ParseContext;
 use fub_abi::model::{Block, DocumentModel, Inline, ListItem, Span, TableRow};
+
+use crate::safety::Gate;
 use fub_abi::options::OptionMap;
 
 /// Perché una regola non si è registrata.
@@ -266,25 +268,22 @@ impl SyntaxRegistry {
             // chi ha chiesto di scrivere: un panico qui si porterebbe via il
             // vault (§9.3). Si ferma, si racconta, e ciò che perde è la propria
             // trasformazione — le altre regole girano lo stesso.
-            if let Some(fault) =
-                crate::safety::reporting(&r.spec.id, "innestandosi sul documento", || {
-                    match &r.spec.trigger {
-                        SyntaxTrigger::Fence { info } => {
-                            let wanted: Vec<String> =
-                                info.iter().map(|i| i.to_lowercase()).collect();
-                            apply_to_blocks(&mut model.body, &mut |block| {
-                                fence_rule(block, r, &wanted, ctx)
-                            });
-                        }
-                        SyntaxTrigger::Inline { open, close } => {
-                            apply_to_blocks(&mut model.body, &mut |block| {
-                                inline_rule(block, r, open, close, ctx);
-                                None
-                            });
-                        }
+            if let Some(fault) = crate::safety::reporting(&r.spec.id, Gate::SyntaxRule, "", || {
+                match &r.spec.trigger {
+                    SyntaxTrigger::Fence { info } => {
+                        let wanted: Vec<String> = info.iter().map(|i| i.to_lowercase()).collect();
+                        apply_to_blocks(&mut model.body, &mut |block| {
+                            fence_rule(block, r, &wanted, ctx)
+                        });
                     }
-                })
-            {
+                    SyntaxTrigger::Inline { open, close } => {
+                        apply_to_blocks(&mut model.body, &mut |block| {
+                            inline_rule(block, r, open, close, ctx);
+                            None
+                        });
+                    }
+                }
+            }) {
                 // Una regola sintattica che pania è un difetto di chi l'ha
                 // scritta, e il posto giusto è il log — non il canale degli
                 // eventi. La ragione è il criterio della decisione 0062:

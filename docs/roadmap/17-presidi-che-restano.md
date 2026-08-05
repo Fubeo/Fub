@@ -139,3 +139,15 @@ riga in corsivo qui sotto, e non qui.
       rientra dalla finestra. Il diagnostic bundle (§15.2) lo raccoglie —
       quando il bundle esiste; il file di log c'è già, ruota a dieci mega e sta
       accanto alla configurazione e non nel vault.
+
+- [ ] **`Event::Trouble` non dice da quale porta si è entrati.** La
+      [0105](../decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)
+      ha fatto delle porte da cui si entra in codice di un plugin un **dato** —
+      `Gate`, tredici varianti — e la frase che l'utente legge la compone quel
+      dato; ma nell'evento arriva ancora solo la frase. Un `Trouble` che porti
+      la porta permetterebbe al centro notifiche di **raggruppare** («questo
+      plugin pania su ogni render», che è un'altra cosa da tre guasti sparsi) e
+      a chi legge il registro di **contare**. Non è stato fatto lì perché è un
+      campo in un tipo del **contratto**, cioè una decisione sulla firma, e la
+      §23.15 non la chiedeva: si fa dove si guardano le firme, non dove si
+      guarda un presidio.

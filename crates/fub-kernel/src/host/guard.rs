@@ -1383,6 +1383,25 @@ mod tests {
              l'aritmetica qui sotto non vede."
         );
 
+        // E ognuna al **posto** che l'enum le dà. L'aritmetica qui sotto
+        // ordina prima di confrontare, quindi due righe scambiate le sfuggono:
+        // l'ha misurato la verifica del rosso della
+        // [0105](../../../../docs/decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md),
+        // scambiando `SettingsRead` e `SettingsWrite` e trovando il workspace
+        // interamente verde. Il presidio gemello delle superfici questo ciclo
+        // ce l'aveva; questo, da cui quello aveva copiato la forma, no — ed è
+        // la seconda zona cieca che si scopre guardando l'originale invece del
+        // ricalco.
+        for &cap in &Capability::ALL {
+            assert_eq!(
+                Capability::ALL[ultima_famiglia_dichiarata(cap) as usize],
+                cap,
+                "`{cap:?}` non sta in `ALL` al posto che le dà la dichiarazione \
+                 dell'enum: due righe si sono scambiate, e chi legge `ALL` per \
+                 sapere l'ordine dei permessi legge un ordine che non è quello."
+            );
+        }
+
         let mut visti: Vec<u16> = Capability::ALL.iter().map(|&c| c as u16).collect();
         visti.sort_unstable();
         let attesi: Vec<u16> = (0..Capability::ALL.len() as u16).collect();

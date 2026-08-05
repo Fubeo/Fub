@@ -102,6 +102,7 @@ use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
 use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
 use crate::registry::FormatRegistry;
 use crate::renderer::{self, RenderedDocument};
+use crate::safety::Gate;
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
@@ -937,9 +938,12 @@ impl Workspace {
             // la pila dei servizi da svuotare, il dispatch da drenare — è già
             // scritto per girare sul ramo dell'errore, e catturare più in alto
             // lo salterebbe.
-            crate::safety::calling(&owner, &format!("servendo `{service}.{method}`"), || {
-                provider.call(service, method, args, &mut host)
-            })
+            crate::safety::calling(
+                &owner,
+                Gate::Service,
+                &format!("{service}.{method}"),
+                || provider.call(service, method, args, &mut host),
+            )
         });
         self.providers.service_stack.pop();
         self.dispatch_pending();
@@ -3812,12 +3816,11 @@ impl Workspace {
         // `ReadHost` invece di un `KernelHost` non cambia niente per la
         // politica — è la stessa, e non sa cosa ci sia sotto.
         let host = self.read_host_for_view(&registered.id, Some(instance.instance.as_str()));
-        let mut tree = crate::safety::calling(
-            &registered.id,
-            &format!("disegnando `{}`", instance.view),
-            || registered.provider.render_view(instance, &host),
-        )
-        .map_err(|e| self.localized(&registered.id, e))?;
+        let mut tree =
+            crate::safety::calling(&registered.id, Gate::ViewRender, &instance.view, || {
+                registered.provider.render_view(instance, &host)
+            })
+            .map_err(|e| self.localized(&registered.id, e))?;
         guard_ui(registered.trust, &tree)?;
         // **Dopo** la validazione del confine di fiducia, non prima: risolvere
         // una chiave non può trasformare un nodo innocuo in uno riservato — i
@@ -3873,11 +3876,9 @@ impl Workspace {
                 // Dentro il prestito, non attorno: il `lend` deve **rimettere a
                 // posto** la tabella delle view anche quando il provider pania,
                 // e lo fa perché il panico non arriva fin qui.
-                crate::safety::calling(
-                    &registered.id,
-                    &format!("reagendo a un'azione di `{}`", instance.view),
-                    || registered.provider.on_action(instance, action, &mut host),
-                )
+                crate::safety::calling(&registered.id, Gate::ViewAction, &instance.view, || {
+                    registered.provider.on_action(instance, action, &mut host)
+                })
             },
         );
         // Il proprietario è quello della view: un aggiornamento porta le
@@ -4285,7 +4286,7 @@ impl Workspace {
         } else if spec.scope.writes && mode == InvokeMode::Apply {
             self.with_provider_call(|ws| {
                 let mut host = ws.host_for(&owner, mode);
-                crate::safety::calling(&owner, &format!("eseguendo `{command}`"), || {
+                crate::safety::calling(&owner, Gate::Command, command, || {
                     provider.invoke(command, args, mode, &mut host)
                 })
             })
@@ -4311,7 +4312,7 @@ impl Workspace {
                 },
                 (ReadOnly { why }, granted),
             );
-            crate::safety::calling(&owner, &format!("eseguendo `{command}`"), || {
+            crate::safety::calling(&owner, Gate::Command, command, || {
                 provider.invoke(command, args, mode, &mut host)
             })
         };
@@ -4897,11 +4898,9 @@ impl Workspace {
                         // `EventHandler` e nient'altro — smetteva di fare
                         // snapshot in un modo indistinguibile dal funzionare.
                         let mut fault = None;
-                        if let Some(panico) =
-                            crate::safety::reporting(id, "ricevendo un evento", || {
-                                fault = handler.handle(notice, &mut host).err();
-                            })
-                        {
+                        if let Some(panico) = crate::safety::reporting(id, Gate::Event, "", || {
+                            fault = handler.handle(notice, &mut host).err();
+                        }) {
                             fault = Some(panico);
                         }
                         fault
