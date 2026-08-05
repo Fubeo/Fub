@@ -251,6 +251,7 @@ pub fn mount(
                         core_catalog(),
                         fub_kernel::locale::catalog(),
                         fub_kernel::maintenance::catalog(),
+                        fub_kernel::journal::catalog(),
                     ]
                     .concat(),
                 ),

@@ -185,12 +185,39 @@ entry. La distinzione fra loro è la *specie*, e la specie non si persiste —
 dipende da chi è registrato adesso, e un file diventa una nota il giorno in cui
 qualcuno sa parsarlo.
 
+### finestra di conservazione
+`journal.retention.days` · [`kernel/journal.rs:172`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+
+Per quanti giorni una riga resta nel [registro delle
+mutazioni](#registro-delle-mutazioni): fuori dalla finestra cade, qualunque sia
+il conto. **Zero — il default — vuol dire per sempre**, perché il registro è
+[autorevole](#autorevole) e accorciare da soli un dato che non si ricostruisce da
+niente, in un vault che si è appena aggiornato, non è difendibile. Non è il tetto
+dei diecimila record, che resta e non è la stessa cosa: quello è una scadenza che
+dipende da quanto si scrive, questa da cosa si vuole tenere. Vale da quando è
+dichiarata e da lì a ogni volta che la si cambia — chi la stringe a trenta giorni
+lo fa per far cadere ciò che c'è **adesso**.
+
 ### folder note
 — · [`frontend/src/rules/organizer.ts`](../frontend/src/rules/organizer.ts) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
 
 La nota che *è* la sua cartella: aprendo la cartella si apre lei. Convenzione
 presa da make.md, e una delle regole che stanno in `rules/` perché il Rust e la
 shell devono applicarla nello stesso modo.
+
+### impronta di una modifica
+`EditFootprint` · [`kernel/journal.rs:297`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+
+Ciò che il [registro](#registro-delle-mutazioni) tiene di una modifica
+chirurgica: **dove** ha toccato — lo [span](#span) — e **quanti** byte c'erano al
+suo posto, mai quali. Ha preso il posto dell'inverso dell'edit, che erano i byte
+appena sostituiti dall'utente conservati in chiaro dentro un file che
+sopravviveva alla nota da cui venivano. Anche il nome è parte della decisione:
+`inverse` prometteva di poter tornare indietro, e un nome che lo promette prima o
+poi qualcuno prova ad applicarlo. Si perde la facoltà di disfare un edit da lì —
+mai esercitata, perché l'annullamento vero è l'[undo a due
+pile](#undo-a-due-pile), in memoria — e si guadagna un conto che l'inverso
+perdeva: quanti edit erano.
 
 ### organizzazione
 `Organization` · [`abi/organization.rs:61`](../crates/fub-abi/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
@@ -199,8 +226,24 @@ Come l'utente ha disposto la sidebar: icone, note appuntate, ordine manuale,
 spazi. Non è nel vault come contenuto, sta nel *sidecar*, e dalla 0038 è il
 kernel a possederlo — con la migrazione al rename inclusa.
 
+### registro delle mutazioni
+`Journal` / `JournalOp` · [`kernel/journal.rs:251`](../crates/fub-kernel/src/journal.rs) · [0067](decisions/0067-il-registro-di-cio-che-e-successo.md), [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+
+`.fub/journal.jsonl`: una riga per ogni mutazione che il kernel ha fatto al
+vault — quando, chi l'ha chiesta (l'[origine](#origine)), dentro quale
+[lotto](#lotto), e quale nota è stata creata, salvata, modificata, cestinata,
+ripristinata o rinominata. È [autorevole](#autorevole), si scrive in coda dopo
+che la mutazione è riuscita, porta la versione di schema **su ogni riga** e **non
+si spegne**: un registro che si può perdere non serve a niente.
+
+Dice cosa è successo, **non cosa c'era scritto**: dalla 0103 il testo dell'utente
+non ci passa più nemmeno per una modifica chirurgica, dove resta
+l'[impronta](#impronta-di-una-modifica). Ciò che ne rimane — i path e i tempi —
+ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
+dichiara e un comando che lo svuota, `vault.clear-journal`.
+
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5680`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5750`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa

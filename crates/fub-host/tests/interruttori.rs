@@ -582,3 +582,142 @@ fn chi_puo_riaccendere_la_memoria_non_e_un_programma() {
         memoria.key
     );
 }
+
+/// La finestra del registro **pota davvero**, e subito: chi la stringe lo fa
+/// per far cadere ciò che c'è adesso, non ciò che ci sarà.
+///
+/// Il banco fabbrica il registro a mano perché ciò che deve invecchiare è il
+/// campo `at` di una riga, e l'unico modo onesto di avere una riga vecchia in un
+/// test è scriverla vecchia — l'alternativa sarebbe muovere l'orologio, cioè
+/// presidiare il banco invece del kernel.
+#[test]
+fn la_finestra_del_registro_fa_cadere_le_righe_vecchie() {
+    let v = Vault::new();
+    let vecchia = 30 * 86_400_000u64;
+    let riga = |at: u64, doc: &str| {
+        format!(
+            "{{\"v\":1,\"at\":{at},\"origin\":{{\"actor\":{{\"kind\":\"user\"}},\"batch\":null}},\
+             \"writer\":\"x\",\"op\":{{\"op\":\"renamed\",\"from\":\"{doc}\",\"to\":\"{doc}2\"}}}}\n"
+        )
+    };
+    let adesso = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("dopo il 1970")
+        .as_millis() as u64;
+    std::fs::create_dir_all(v.root.join(".fub")).expect("la cartella");
+    std::fs::write(
+        v.root.join(".fub/journal.jsonl"),
+        format!(
+            "{}{}",
+            riga(adesso - vecchia, "vecchia.md"),
+            riga(adesso, "nuova.md")
+        ),
+    )
+    .expect("il registro");
+
+    let host = headless();
+    host.open(&v.root).expect("si apre");
+
+    // Il default è **per sempre**: un registro autorevole non si accorcia
+    // perché è arrivato un aggiornamento.
+    host.with_session(None, |s| {
+        let ws = s.workspace().read().unwrap();
+        assert_eq!(
+            ws.journal().records.len(),
+            2,
+            "zero giorni = per sempre, e nessuna riga cade da sola"
+        );
+    })
+    .expect("aperto");
+
+    // Sette giorni: quella di un mese fa cade, l'altra resta.
+    host.with_session(None, |s| {
+        let mut ws = s.workspace().write().unwrap();
+        ws.set_setting(
+            fub_kernel::journal::RETENTION_DAYS,
+            fub_abi::settings::SettingValue::Number(7.0),
+        )
+        .expect("la chiave è dichiarata dal core");
+        let records = ws.journal().records;
+        assert_eq!(
+            records.len(),
+            1,
+            "la riga fuori dalla finestra cade appena la finestra è scritta"
+        );
+        assert!(
+            format!("{:?}", records[0].op).contains("nuova.md"),
+            "e quella che cade è la vecchia: {:?}",
+            records[0].op
+        );
+    })
+    .expect("aperto");
+
+    // **E vale anche all'apertura**, non solo quando la si cambia. È l'altra
+    // metà, ed è quella che serve davvero: la finestra la si scrive una volta e
+    // poi si aprono i vault per anni. Il registro si riempie di nuovo di righe
+    // vecchie con la chiave **già** scritta, e a un'apertura pulita devono
+    // cadere da sole.
+    //
+    // Senza questo pezzo il ramo che pota alla dichiarazione dello schema non
+    // sarebbe presidiato da niente — verificato togliendolo e non vedendo
+    // rosso, che è il modo in cui questo banco è nato.
+    std::fs::write(
+        v.root.join(".fub/journal.jsonl"),
+        format!(
+            "{}{}",
+            riga(adesso - vecchia, "rivecchia.md"),
+            riga(adesso, "rinuova.md")
+        ),
+    )
+    .expect("il registro");
+
+    let host = headless();
+    host.open(&v.root).expect("si riapre");
+    host.with_session(None, |s| {
+        let ws = s.workspace().read().unwrap();
+        let records = ws.journal().records;
+        assert_eq!(
+            records.len(),
+            1,
+            "la finestra scritta ieri pota all'apertura di oggi: {records:?}"
+        );
+        assert!(
+            format!("{:?}", records[0].op).contains("rinuova.md"),
+            "e cade la vecchia, non l'altra: {:?}",
+            records[0].op
+        );
+    })
+    .expect("aperto");
+}
+
+/// E la finestra non è scrivibile da un programma, per la ragione della
+/// memoria qui sopra letta al contrario: un componente che potesse **allungare**
+/// la conservazione dei path dell'utente lo farebbe da dietro un interruttore
+/// che l'utente crede suo.
+#[test]
+fn chi_puo_allungare_la_finestra_del_registro_non_e_un_programma() {
+    let finestra = fub_host::settings::core_settings()
+        .into_iter()
+        .find(|s| s.key == fub_kernel::journal::RETENTION_DAYS)
+        .expect("il core la monta");
+    assert!(
+        !finestra.program_writable,
+        "`{}` scrivibile da un programma sarebbe un componente che si allunga da \
+         sé la traccia di cosa hai toccato",
+        finestra.key
+    );
+    // E ha un massimo: un estremo che non si può scrivere è meglio di un numero
+    // che promette una scadenza e non ne ha una.
+    assert!(
+        matches!(
+            finestra.kind,
+            fub_abi::settings::SettingKind::Number {
+                default: 0.0,
+                min: Some(0.0),
+                max: Some(_)
+            }
+        ),
+        "la finestra è un numero con estremi, e il suo default è «per sempre»: {:?}",
+        finestra.kind
+    );
+}

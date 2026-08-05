@@ -14,12 +14,13 @@
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{StringCatalog, Text};
 
-/// I due cataloghi che il bundle di core porta al montaggio, uniti come li
-/// unisce `mount`.
+/// I cataloghi che il bundle di core porta al montaggio, uniti come li unisce
+/// `mount`.
 fn cataloghi_del_core() -> Vec<StringCatalog> {
     [
         fub_host::settings::core_catalog(),
         fub_kernel::locale::catalog(),
+        fub_kernel::journal::catalog(),
     ]
     .concat()
 }

@@ -62,6 +62,45 @@ chiamate per nome.
 | `.fub/data/plugins/<id>/doc/<documento>/…` | chiunque, per regola | quella del plugin | del plugin | lo stato per-documento della [0044](../decisions/0044-lo-stato-per-documento.md): il posto è dichiarato in `abi/rules/doc_data.rs`, e il kernel lo migra al rename — anche a quello fatto **ad app chiusa**, che riconosce dall'impronta alla riapertura ([0099](../decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)) |
 | `.trash/` | `kernel/vault.rs` | **contenuto dell'utente** | — | un rename, condiviso con Obsidian |
 
+## Cosa c'è dentro il registro delle mutazioni
+
+Delle righe qui sopra è la sola che, riga per riga, racconti ciò che l'utente ha
+fatto, e cosa ci stia dentro è una regola scritta e non una conseguenza del
+codice che ce lo mette. Ci sta **cosa è successo**: quando, chi l'ha chiesto
+(l'`Origin` intera), dentro quale lotto, e quale nota è stata creata, salvata,
+modificata, cestinata, ripristinata o rinominata. Non ci sta **cosa c'era
+scritto**, e da oggi senza eccezioni: fino alla
+[0103](../decisions/0103-un-registro-dice-cosa-e-successo.md) la modifica
+chirurgica portava l'inverso dell'edit, cioè i byte che l'utente aveva appena
+sostituito, e adesso porta l'**impronta** — lo span toccato e quanti byte c'erano
+al suo posto, mai quali. Un audit chiede *quando, chi, dove, quanto* e ha ancora
+tutto; il posto in cui il contenuto di ieri è conservato resta il versioning, che
+si spegne e si cancella. Ne segue cosa da qui si torna indietro: le quattro
+varianti strutturali sì — l'inverso di una rinomina è la rinomina
+all'incontrario — e le due che porterebbero testo no, che è ciò che
+`JournalOp::is_invertible` risponde invece di lasciarlo scoprire applicando.
+
+Restano quindi i path e i tempi, in chiaro, perché sono ciò per cui il registro
+esiste; **per quanto** restino lo dichiara l'utente. La chiave
+`journal.retention.days` è una finestra in giorni: fuori dalla finestra una riga
+cade qualunque sia il conto, e zero — il default — vuol dire *per sempre*, che
+per un dato autorevole è l'unico default difendibile. Il tetto dei diecimila
+record resta e non è la stessa cosa: è una rete strutturale, cioè una scadenza
+che dipende da quanto si scrive e non da cosa si vuole tenere. I due criteri non
+fanno due potature — si prende il taglio più avanti dei due e da lì si scorre una
+volta sola fino al confine di lotto, perché un secondo passaggio taglierebbe in
+mezzo al lotto che il primo aveva appena rispettato. Una riga che non si sa
+leggere ma si sa datare si valuta come le altre; una che non porta nemmeno la
+data **ferma** la scansione invece di cadere, perché ciò che non si data non è
+vecchio, è ignoto.
+
+Per svuotarlo adesso c'è un gesto, il comando `vault.clear-journal`
+(`kernel/maintenance.rs`), ed è l'unico dei comandi di manutenzione dichiarato
+**non reversibile**: gli altri tre non perdono niente, questo perde apposta.
+Cancella tutto, comprese le righe che la potatura si guarda bene dal toccare,
+e la differenza è chi ha chiesto — potare è manutenzione, svuotare è un gesto
+esplicito che vuole esattamente quel risultato.
+
 ## Fuori dal vault
 
 La cartella di configurazione della macchina (`host/config.rs`: `config_dir`,

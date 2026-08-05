@@ -214,6 +214,11 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
     settings.extend(fub_kernel::locale::locale_settings());
+    // Come quelle del locale: dichiarate dal kernel accanto a chi le legge, e
+    // montate da qui perché è qui che si monta il core (§11.1). La finestra del
+    // registro (§23.9) è la prima chiave del kernel che, appena dichiarata,
+    // **fa qualcosa** — vedi `Workspace::pota_il_registro`.
+    settings.extend(fub_kernel::journal::journal_settings());
     settings
 }
 
