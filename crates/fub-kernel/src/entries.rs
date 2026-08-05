@@ -199,6 +199,17 @@ impl EntryStore {
         self.known.get(id)
     }
 
+    /// **Tutto** ciò che si sapeva, per chi ha una domanda sull'insieme e non su
+    /// un file.
+    ///
+    /// Ce n'è uno solo, di cliente, ed è il ricongiungimento delle rinomine
+    /// fatte ad app chiusa (§23.1): la sua domanda — *cosa c'era ieri e non c'è
+    /// oggi?* — non si può fare un id alla volta, perché l'id di ciò che è
+    /// sparito non ce l'ha nessuno da nominare.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&DocId, &StoredEntry)> {
+        self.known.iter()
+    }
+
     /// Scrive la tabella e la tiene come «ciò che si sa».
     ///
     /// L'errore è una stringa e non risale: chi non riesce a scrivere una cache

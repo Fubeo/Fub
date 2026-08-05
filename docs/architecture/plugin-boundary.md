@@ -998,7 +998,7 @@ L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 | il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fub-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
 | il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:541](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
 | `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:469](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
-| i bundle si spengono in ordine **inverso** | [workspace.rs:870](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
+| i bundle si spengono in ordine **inverso** | [workspace.rs:1158](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
 
 E un caso che il codice tratta e che vale la pena sapere: se un job in volo tiene
 ancora una copia dell'`Arc<dyn Plugin>`, `deactivate` **non viene chiamato

@@ -255,7 +255,7 @@ secondo va misurato.
 
 ### 23.1 Una rinomina fatta ad app chiusa scollega tutto ciò che è indicizzato per path
 
-*kernel · **P1** — nessuna firma; il costo cresce con l'attesa perché ogni derivato per-path nuovo lo eredita*
+*chiusa dalla [0099](../decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md) — l'apertura **riconosce dal contenuto** ciò che il rilevatore non ha visto: un sparito e un comparso con la stessa impronta sono la stessa nota, e ciò che le stava attaccato la segue · nessun id e nessuna tabella nuova, perché le due metà del confronto erano già in memoria per altre ragioni (anagrafe durevole, impronta calcolata leggendo) · **uno a uno o niente**, e nel dubbio non si accoppia — verso opposto alla [0085](../decisions/0085-leggere-non-e-cambiare.md), perché la regola del dubbio non è una costante del repo ma una funzione di cosa costa sbagliare · e nel dubbio **non si raccoglie**: delle due mosse, quella irreversibile si sospende · misurando è saltato fuori un difetto accanto e peggiore — la raccolta girava anche su un'anagrafe **parziale**, quindi «annulla» sulla prima indicizzazione toglieva dal disco lo spazio per-documento delle note non ancora guardate*
 
 La [0043](../decisions/0043-il-path-e-la-chiave.md) ha deciso che **il path è la
 chiave per sempre**, e l'argomento regge: un id stabile o vive dentro il file — e
@@ -277,7 +277,7 @@ le proprie note con un altro strumento perde ciò che Fub aveva costruito per
 loro** — e spostare le note con un altro strumento è precisamente la libertà che
 il patto di questo progetto promette.
 
-- [ ] **La terza strada, che la 0043 non ha guardato.** Il verbale scarta *una*
+- [x] **La terza strada, che la 0043 non ha guardato.** Il verbale scarta *una*
       implementazione dell'id esterno — la tabella `path → id` tenuta dal kernel
       — e ne conclude, giustamente, che è «il path con un costume addosso». Ma la
       riassociazione non deve passare da un id: può passare dal **contenuto**. Un
@@ -289,7 +289,7 @@ il patto di questo progetto promette.
       ([0046](../decisions/0046-l-anagrafe-del-vault.md)), con `mtime` e `size`
       per ogni entry. Il watcher accoppia le rinomine che **vede**; qui si tratta
       di accoppiare quelle che non ha visto nessuno, al primo `reconcile`.
-- [ ] **Perché è una decisione e non una casella.** Le domande da rispondere non
+- [x] **Perché è una decisione e non una casella.** Le domande da rispondere non
       si rispondono scrivendo il codice. Due impronte uguali sono una rinomina
       solo se una nota è **sparita**: due file identici comparsi senza che
       sparisse niente sono una copia, e trattarli come una rinomina sposterebbe
@@ -300,18 +300,18 @@ il patto di questo progetto promette.
       come cambiamento, perché una rilettura di troppo costa un file aperto; qui
       nel dubbio **non si accoppia**, perché un accoppiamento sbagliato consegna
       il testo non salvato di una nota a un'altra.
-- [ ] **Fin dove arriva la migrazione.** Lo spazio per-documento e le bozze
+- [x] **Fin dove arriva la migrazione.** Lo spazio per-documento e le bozze
       seguono già la rinomina *vista* ([0044](../decisions/0044-lo-stato-per-documento.md),
       [0088](../decisions/0088-cio-che-non-e-ancora-successo.md)): la strada c'è,
       e ciò che manca è chi la imbocchi quando la rinomina non l'ha vista
       nessuno. Va deciso se vale per tutto ciò che è per-path o per i soli dati
       **autorevoli** della [0048](../decisions/0048-una-radice-sola.md) — un
       derivato si rifà, e rifarlo può costare meno che indovinare.
-- [ ] **Chi lo chiede.** FEATURES 3.1 (vault su share di rete, vault
+- [x] **Chi lo chiede.** FEATURES 3.1 (vault su share di rete, vault
       read-only), 2.3 (modifiche esterne), 18.1 (sync). Un client di sync che
       rinomina mentre l'app è chiusa è il caso **normale** di questa famiglia,
       non quello di frontiera: è il motivo per cui esiste.
-- [ ] **Perché non è P0, e perché non aspetta.** Non c'è una firma: è una regola
+- [x] **Perché non è P0, e perché non aspetta.** Non c'è una firma: è una regola
       dentro `reconcile`, additiva in qualunque momento. Ma il costo cresce con
       l'attesa in un modo che le altre due voci di questa seduta non hanno —
       **ogni derivato per-path nuovo eredita il difetto**, e da quando la 0044 lo

@@ -199,6 +199,17 @@ Come l'utente ha disposto la sidebar: icone, note appuntate, ordine manuale,
 spazi. Non è nel vault come contenuto, sta nel *sidecar*, e dalla 0038 è il
 kernel a possederlo — con la migrazione al rename inclusa.
 
+### ricongiungimento
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5440`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+
+Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
+da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
+nota. Serve perché il path è la chiave
+([0043](decisions/0043-il-path-e-la-chiave.md)) e chi rinomina da fuori — un
+client di sync, il Finder — scollegherebbe la bozza non salvata, le versioni e lo
+spazio per-documento. Accoppia **uno a uno o niente**, e nel dubbio non accoppia *e non
+raccoglie*: fra le due mosse, quella irreversibile si sospende.
+
 ### sidecar
 `.fub/workspace.json` · [`kernel/organization.rs:74`](../crates/fub-kernel/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
 
