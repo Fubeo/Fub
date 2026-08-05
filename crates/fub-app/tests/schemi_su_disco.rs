@@ -21,8 +21,8 @@
 //! riga dichiarata deve esserci una costante di versione, e il suo valore deve
 //! essere il numero scritto nella colonna *Oggi*.
 //!
-//! **Perché non basta un conto.** `[conta: schemi-su-disco]` conta le costanti
-//! nei sorgenti e `[conta: schemi-in-tabella]` conta le righe della tabella:
+//! **Perché non basta un conto.** Il conto `schemi-su-disco` conta le costanti
+//! nei sorgenti e `schemi-in-tabella` conta le righe della tabella:
 //! insieme prendono un formato **nato** e mai documentato, che è il caso che
 //! nessun `include_str!` può vedere — un file che il test non include è un file
 //! di cui il test non sa niente. Ma due conti uguali non dicono che siano gli
