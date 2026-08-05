@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec};
+use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec, Undone};
 use crate::edit::{EditReport, EditRequest, Revision, WriteBase};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
@@ -1294,7 +1294,37 @@ pub trait HostCommands: Send + Sync {
     ///   l'operazione lo aveva toccato, quindi tornare indietro cancellerebbe il
     ///   lavoro di qualcun altro. Fallire lì è il comportamento giusto, e la
     ///   voce resta consumata — riprovare vorrebbe dire riprovare a cancellarlo.
-    fn undo_last(&mut self) -> Result<Option<Text>, PluginError>;
+    ///
+    /// # Una voce non è un passo, ed è ciò che questa firma diceva male (§23.14)
+    ///
+    /// La riga qui sopra — *«può fallire come qualunque scrittura»* — descriveva
+    /// un annullamento come **una** scrittura. È una lista: una macro che ha
+    /// rinominato dodici note torna indietro da dodici rinomine, e il passo che
+    /// fallisce sta in mezzo agli altri. Con un `Option<Text>` le tre risposte
+    /// possibili erano due, e quella che mancava era la più frequente e la sola
+    /// su cui si può fare qualcosa:
+    ///
+    /// | cosa è successo | cosa risponde |
+    /// |---|---|
+    /// | tutti i passi sono andati | `Ok(Some(Undone { replay: None, … }))` |
+    /// | qualcuno sì e qualcuno no | `Ok(Some(Undone { replay: Some(…), … }))` |
+    /// | **niente** è cambiato | `Err(…)` — il primo perché |
+    /// | non c'era niente da annullare | `Ok(None)` |
+    ///
+    /// L'ultima riga della tabella non è un errore e non lo è mai stata: è la
+    /// risposta normale a un vault appena aperto.
+    ///
+    /// La terza tiene la promessa della riga qui sopra **alla lettera**: se non
+    /// è cambiato niente, un annullamento è fallito come qualunque scrittura, e
+    /// chi lo invocava sperando in un `Err` continua a riceverlo. Ciò che
+    /// smette di essere un errore è soltanto il caso in cui *una parte del
+    /// lavoro è stata fatta* — buttarla via insieme alla notizia sarebbe l'unica
+    /// risposta peggiore del silenzio.
+    ///
+    /// E l'[`Undone`] porta **due** conti, non uno: quello di questo
+    /// annullamento e quello dell'operazione che annulla, che poteva essere già
+    /// a metà per conto suo. Vedi il tipo.
+    fn undo_last(&mut self) -> Result<Option<Undone>, PluginError>;
 }
 
 // ---------------------------------------------------------------------------

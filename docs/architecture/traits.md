@@ -529,18 +529,22 @@ sequenceDiagram
     W->>St: begin_replay()
     Note over W,St: annullare non è annullabile:<br/>senza la bandiera, due pressioni si rincorrerebbero per sempre
     W->>W: batch { per ogni UndoStep: apply_edit | invoke_command }
+    Note over W: al primo passo caduto si FERMA — i passi non sono indipendenti —<br/>e conta quanti ne sono andati: §23.14
     W->>St: end_replay()
-    W-->>Sh: un solo BatchEnded, un solo ridisegno
+    W-->>Sh: un solo BatchEnded, un solo ridisegno<br/>e un Undone con DUE conti: com'era l'operazione, com'è andato l'annullamento
     end
 ```
 
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
 | la pila del testo | [editor.ts:181](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
-| `UndoStack` | [undo.rs:52](../../crates/fub-kernel/src/undo.rs) | `Vec<Undo>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
-| `Undo` / `UndoStep` | [command.rs:567](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:4300](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:4318](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo |
+| `UndoStack` | [undo.rs:73](../../crates/fub-kernel/src/undo.rs) | `Vec<Entry>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
+| `undo::Entry` | [undo.rs:66](../../crates/fub-kernel/src/undo.rs) | la voce **e il conto dell'operazione**: i due arrivano dallo stesso esito e si separano una riga dopo, quindi o si appaiano lì o non si appaiano più (§23.14) |
+| `Undo` / `UndoStep` | [command.rs:712](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
+| dove si spinge | [workspace.rs:4311](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:4353](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
+| `Partial` / `Failure` | [command.rs:605](../../crates/fub-abi/src/command.rs) | di N cose quante e quali; i guasti uno per uno col `PluginError` intero, perché la specie dice se ha senso riprovare |
+| `Undone` | [command.rs:822](../../crates/fub-abi/src/command.rs) | l'etichetta e i **due** conti: `operation` (era già a metà) e `replay` (l'annullamento si è fermato) |
 | `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
 
 Le due pile non si fondono perché non hanno lo stesso soggetto: ordinarle
@@ -861,7 +865,7 @@ sequenceDiagram
 
 | Riquadro | Dove | Cosa fa qui |
 |---|---|---|
-| `Workspace::query_index` | [workspace.rs:364](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
+| `Workspace::query_index` | [workspace.rs:3515](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
 | `plan::run` | [plan.rs:54](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
 | `sole_evaluator` | [plan.rs:335](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
 | `RouteTable` | [routing.rs:57](../../crates/fub-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |

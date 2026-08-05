@@ -93,7 +93,7 @@ const DECINE = [
   "sessanta", "settanta", "ottanta", "novanta",
 ];
 
-/** Nome → valore, da zero a cento. */
+/** Nome → valore, da zero a novecentonovantanove. */
 function tabellaDeiNumeri() {
   const tabella = new Map();
   UNITÀ.forEach((n, i) => tabella.set(n, i));
@@ -111,6 +111,27 @@ function tabellaDeiNumeri() {
   });
 
   tabella.set("cento", 100);
+  // Le centinaia, e non per completezza: il registro dei verbali ha superato
+  // cento, quindi da qui in avanti il numero **giusto** non era scrivibile in
+  // lettere. Un presidio che non sa leggere la verità costringe a scriverla in
+  // cifre in mezzo a una frase, o a lasciarla vecchia — che è precisamente il
+  // difetto per cui questo file esiste.
+  //
+  // La composizione è quella dell'italiano: `cento` davanti al resto, con
+  // l'elisione della `o` quando il resto comincia per vocale — centouno resta
+  // **anche** valido perché si scrive in tutti e due i modi, mentre
+  // centottanta è l'unica forma di 180.
+  const finoACento = [...tabella.entries()].filter(([, v]) => v > 0 && v < 100);
+  for (let c = 1; c <= 9; c += 1) {
+    const centinaio = c === 1 ? "cento" : UNITÀ[c] + "cento";
+    tabella.set(centinaio, c * 100);
+    for (const [nome, valore] of finoACento) {
+      tabella.set(centinaio + nome, c * 100 + valore);
+      if (nome.startsWith("o") || nome.startsWith("u")) {
+        tabella.set(centinaio.slice(0, -1) + nome, c * 100 + valore);
+      }
+    }
+  }
   return tabella;
 }
 
@@ -265,6 +286,14 @@ function autoprova() {
     ["3400 righe di cui 1697 di commento ", 1697],
     ["`SCHEMA_VERSION` a 5 ", 5],
     ["cento capacità ", 100],
+    // Le centinaia: il registro dei verbali ha superato cento, e la forma con
+    // l'elisione (centotto) e quella senza (centoventuno) devono valere
+    // entrambe — le si trova scritte tutte e due.
+    ["**centouno** verbali ", 101],
+    ["centodiciassette chiuse ", 117],
+    ["centotto capacità ", 108],
+    ["centoventuno righe ", 121],
+    ["duecentocinquanta ", 250],
     ["nessun numero qui dentro ", null],
     // Le parole che *sembrano* numeri e non lo sono: «sei» verbo, che in questi
     // documenti compare quanto «sei» numero. Il presidio non sa distinguerle, e

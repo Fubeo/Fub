@@ -68,7 +68,7 @@ pub mod ui;
 // Re-export dei tipi più usati, per import ergonomici.
 pub use command::{
     Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
-    CommandSpec, InvokeMode, ParamKind, ParamSpec, PlannedEdit,
+    CommandSpec, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undone,
 };
 pub use custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,

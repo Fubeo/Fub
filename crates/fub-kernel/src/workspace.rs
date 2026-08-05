@@ -53,7 +53,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::command::{CommandEffect, CommandOutcome, CommandSpec, InvokeMode, UndoStep};
+use fub_abi::command::{
+    CommandEffect, CommandOutcome, CommandSpec, Failure, InvokeMode, Partial, UndoStep, Undone,
+};
 use fub_abi::custom::{CustomRenderer, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
@@ -4297,9 +4299,18 @@ impl Workspace {
         // Solo `Apply`: una simulazione non ha fatto niente, e mettere in pila
         // l'inverso di ciò che non è successo sarebbe la scala per uscire dalla
         // simulazione — annullare qualcosa che non è mai stato fatto.
+        //
+        // Col conto dell'esito **appaiato** alla voce (§23.14): i due pezzi
+        // arrivano da qui insieme e si separano una riga dopo — l'esito torna a
+        // chi ha invocato, la voce resta in pila — quindi o si appaiano adesso o
+        // mesi dopo, davanti al menu che disfa, nessuno sa più che quella
+        // archiviazione era di undici note su dodici. La copia sta qui e non nei
+        // comandi per la ragione della decisione 0098: una regola che vale per
+        // tutti i chiamanti si scrive nel posto che tutti attraversano, e il
+        // comando che qualcuno scriverà domani la eredita senza saperlo.
         if mode == InvokeMode::Apply && self.providers.command_stack.is_empty() {
             if let Some(undo) = outcome.undo.clone() {
-                self.undo.push(undo);
+                self.undo.push(undo, outcome.partial.clone());
             }
         }
         self.dispatch_pending();
@@ -4315,28 +4326,79 @@ impl Workspace {
     /// quello in cui vanno eseguiti: chi esegue non riordina, perché riordinare
     /// vorrebbe dire capire cosa dipende da cosa, e lo sa meglio chi ha scritto
     /// l'operazione.
-    pub(crate) fn undo_last(&mut self) -> std::result::Result<Option<Text>, PluginError> {
-        let Some(undo) = self.undo.pop() else {
+    ///
+    /// # Ci si ferma al passo caduto, e lo si dice (§23.14)
+    ///
+    /// Una voce non è **un** passo: è una lista, e il passo che fallisce sta in
+    /// mezzo agli altri. Prima il `?` di questo ciclo faceva due cose in
+    /// silenzio — lasciava applicati i passi già fatti e **non provava** quelli
+    /// dopo — e restituiva un errore nudo, mentre la voce era già uscita dalla
+    /// pila. Chi annullava un'archiviazione di dodici note poteva ritrovarne
+    /// quattro tornate indietro, otto no, e sullo schermo il perché di una sola.
+    ///
+    /// Ci si ferma ancora, e **non** si tira dritto: i passi non sono
+    /// indipendenti. L'inverso di «crea `A`, poi rinominala in `B`» è
+    /// `[rinomina B→A, cestina A]`, e proseguire dopo che la prima è fallita
+    /// vorrebbe dire cestinare una nota `A` che non è quella — cioè fare un
+    /// danno per rimediare a un danno. È l'opposto della regola di
+    /// `vault.replace`, dove le N note *sono* indipendenti, e la differenza è
+    /// tutta lì.
+    ///
+    /// Ciò che cambia è che il conto esce: quanti passi c'erano, quanti sono
+    /// andati, e il perché di quello che ha fermato il giro. Se non ne è andato
+    /// **nessuno** resta un errore — niente è cambiato, e la parola giusta per
+    /// niente è ancora «fallito», che è la promessa che
+    /// [`HostCommands::undo_last`](fub_abi::traits::HostCommands::undo_last)
+    /// faceva già.
+    pub(crate) fn undo_last(&mut self) -> std::result::Result<Option<Undone>, PluginError> {
+        let Some(voce) = self.undo.pop() else {
             return Ok(None);
         };
+        let quanti = voce.undo.steps.len();
         // Tutto dentro un lotto solo: annullare una rinomina che aveva riscritto
         // quaranta sorgenti è un gesto, quindi un `batch-ended` e un ridisegno.
         let prima = self.undo.begin_replay();
-        let esito = self.batch(|ws| {
-            for step in &undo.steps {
-                match step {
-                    UndoStep::Edit(planned) => {
-                        ws.apply_edit(&planned.doc, planned.edit.clone())?;
-                    }
-                    UndoStep::Command { command, args } => {
-                        ws.invoke_command_here(command, args.clone(), InvokeMode::Apply)?;
-                    }
+        let caduto = self.batch(|ws| {
+            let mut fatti = 0usize;
+            for step in &voce.undo.steps {
+                let esito = match step {
+                    UndoStep::Edit(planned) => ws
+                        .apply_edit(&planned.doc, planned.edit.clone())
+                        .map(|_| ())
+                        .map_err(|e| Failure::of(planned.doc.clone(), e.into())),
+                    UndoStep::Command { command, args } => ws
+                        .invoke_command_here(command, args.clone(), InvokeMode::Apply)
+                        .map(|_| ())
+                        .map_err(Failure::other),
+                };
+                match esito {
+                    Ok(()) => fatti += 1,
+                    Err(guasto) => return (fatti, Some(guasto)),
                 }
             }
-            Ok::<(), PluginError>(())
+            (fatti, None)
         });
         self.undo.end_replay(prima);
-        esito.map(|()| Some(undo.label))
+
+        let (fatti, guasto) = caduto;
+        let Some(guasto) = guasto else {
+            return Ok(Some(Undone {
+                label: voce.undo.label,
+                operation: voce.partial,
+                replay: None,
+            }));
+        };
+        // Niente è cambiato: è un errore come lo era prima, e chi lo invocava
+        // aspettandoselo continua a riceverlo. Il `Partial` non aggiungerebbe
+        // niente a «zero su N» che l'errore non dica già.
+        if fatti == 0 {
+            return Err(guasto.error);
+        }
+        Ok(Some(Undone {
+            label: voce.undo.label,
+            operation: voce.partial,
+            replay: Partial::of(quanti, fatti, vec![guasto]),
+        }))
     }
 
     /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.

@@ -955,7 +955,7 @@ sbagliato si vede, una scorciatoia spostata si scopre premendola.
 
 ### 23.14 Un'operazione a metà non sa di essere a metà
 
-*contratto · **P1** — l'esito parziale è una forma che manca a tre posti diversi; il rollback invece è già scrivibile*
+*chiusa dalla [0101](../decisions/0101-una-voce-non-e-un-passo.md) — i posti erano **due** e non tre (la 0011 aveva già fatto del lotto di chi chiama la sua invocazione di comando), il parziale si diceva già in tre comandi ma **solo come prosa**, e la strada dichiarata più economica era l'unica incapace di chiudere l'undo. Il difetto peggiore stava fuori dalla voce: il `?` di `undo_last` perdeva i passi non provati e rispondeva «fallito» a un lavoro fatto a metà*
 
 Tre verbali dichiarano lo stesso buco su tre superfici, e nessuno dei tre lo
 nomina come lo stesso buco. La [0011](../decisions/0011-il-lotto.md): *«se una
@@ -973,7 +973,7 @@ userà. Ciò che resta è più stretto e non lo risolve il journal: **anche
 un'operazione che nessuno vuole annullare deve poter dire di essere riuscita a
 metà**, e oggi ha solo due parole, riuscito e fallito.
 
-- [ ] **Dove va la forma.** Non è un tipo nuovo per ogni superficie: è una
+- [x] **Dove va la forma.** Non è un tipo nuovo per ogni superficie: è una
       risposta alla domanda *«di N cose, quante e quali»*, e i posti che la vogliono
       sono l'esito di un lotto, l'esito di un comando
       ([0010](../decisions/0010-comando-descritto-a-una-macchina.md)) e la voce di
@@ -981,13 +981,13 @@ metà**, e oggi ha solo due parole, riuscito e fallito.
       all'esito riuscito — la strada della
       [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md), che costa meno —
       o una terza variante, che è la più chiara e la più invasiva.
-- [ ] **L'undo è il caso che decide.** Una voce di undo parziale che si presenta
+- [x] **L'undo è il caso che decide.** Una voce di undo parziale che si presenta
       come intera è l'unico punto in cui questo buco **produce un secondo danno**:
       l'utente annulla credendo di rimettere le cose come stavano e ne rimette
       undici su dodici. Anche senza nessuna delle forme qui sopra, quella voce deve
       portare il proprio conto — ed è la cosa da fare per prima perché non aspetta
       nessuna decisione.
-- [ ] **Perché non è P0.** Un campo in più su un record è la migrazione che la
+- [x] **Perché non è P0.** Un campo in più su un record è la migrazione che la
       0007 descrive, ma qui la strada del `Trouble` accanto all'esito non tocca
       nessuna firma esistente: è una variante già additiva su un canale che c'è. La
       scadenza era semmai quella della §23.11, con cui condivide il verso — un

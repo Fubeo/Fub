@@ -25,7 +25,7 @@
 
 use fub_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    ParamKind, ParamSpec, PlannedEdit, Undo, UndoStep,
+    Failure, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
 };
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
@@ -595,7 +595,63 @@ fn command_outcome_samples() -> Vec<Value> {
         label: "la creazione di «a.md»".into(),
         steps: passi,
     })));
+    // Un esito **a metà** (§23.14), con le due specie di guasto: quello che ha
+    // un documento da nominare e quello che non ce l'ha. Come per `undo` qui
+    // sopra, senza un campione che lo porti davvero il mirror TS non vedrebbe
+    // mai il campo — il default è «non è mancato niente».
+    campioni.push(to_value(CommandOutcome::notify("fatto a metà").partially(
+        Partial::of(
+            12,
+            10,
+            vec![
+                Failure::of(
+                    DocId::new("dodici.md"),
+                    PluginError::Conflict("scritta nel frattempo".into()),
+                ),
+                Failure::other(PluginError::PermissionDenied("sola lettura".into())),
+            ],
+        ),
+    )));
     campioni
+}
+
+/// I due conti, e le due specie di guasto: quello che ha un documento da
+/// nominare e quello che non ce l'ha. Il secondo non è un caso di ripiego —
+/// una chiave di impostazione saltata e un passo di annullamento che è un
+/// comando non hanno un `DocId`, e chi disegna non deve dedurne uno.
+fn partial_samples() -> Vec<Value> {
+    vec![
+        to_value(Partial {
+            attempted: 12,
+            done: 11,
+            failures: vec![Failure::of(
+                DocId::new("dodici.md"),
+                PluginError::Conflict("scritta nel frattempo".into()),
+            )],
+        }),
+        // Il caso in cui il resto non è vuoto: dodici davanti, dieci cambiate,
+        // una caduta — e una su cui non è successo niente e nessuno ha detto
+        // perché. È la quarta parte, quella che non ha un campo.
+        to_value(Partial {
+            attempted: 12,
+            done: 10,
+            failures: vec![Failure::other(PluginError::PermissionDenied(
+                "sola lettura".into(),
+            ))],
+        }),
+    ]
+}
+
+fn failure_samples() -> Vec<Value> {
+    vec![
+        to_value(Failure::of(
+            DocId::new("a.md"),
+            PluginError::Conflict("cambiata nel frattempo".into()),
+        )),
+        to_value(Failure::other(PluginError::BadArgs(
+            "`privacy.telemetry` (un programma non la scrive)".into(),
+        ))),
+    ]
 }
 
 fn to_value<T: serde::Serialize>(v: T) -> Value {
@@ -1285,6 +1341,13 @@ fn expected() -> Value {
         // effetto nuovo, non deve poter passare inosservato dall'altra parte.
         "CommandSpec": command_spec_samples(),
         "CommandOutcome": command_outcome_samples(),
+        // **L'esito parziale** (§23.14), a parte e non solo dentro un
+        // `CommandOutcome`: è il pezzo su cui chi disegna deve poter fare
+        // qualcosa — un link alla nota caduta, una parola diversa a seconda
+        // della specie del guasto — e un campo in più di qua non deve poter
+        // restare invisibile di là.
+        "Partial": partial_samples(),
+        "Failure": failure_samples(),
         // **L'errore** (§12.2). Attraversa l'IPC su ogni comando fallito, ed è
         // il tipo che fino alla 0041 non ci arrivava affatto: il confine Tauri
         // lo stringava, e la shell riceveva una frase italiana.

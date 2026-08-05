@@ -60,7 +60,7 @@ use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
 use fub_abi::arena::{self, BlockRef, InlineRef, UiRef};
 use fub_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    InvokeMode, ParamKind, ParamSpec, PlannedEdit, Undo, UndoStep,
+    Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep, Undone,
 };
 use fub_abi::custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
@@ -352,7 +352,10 @@ wit_kebab! {
     // I comandi: la dichiarazione (decisione 0010) e l'invocazione (decisione 0009).
     CommandSpec,
     CommandOutcome,
+    Partial,
+    Failure,
     Undo,
+    Undone,
     UndoStep,
     CommandEffect,
     CommandPlan,
@@ -3467,6 +3470,7 @@ fn conform(source: &str) -> Result<(), String> {
         notify,
         effect,
         undo,
+        partial,
     } = CommandOutcome::done();
     contract.record(
         "command-outcome",
@@ -3474,12 +3478,50 @@ fn conform(source: &str) -> Result<(), String> {
             ("notify", wit(&notify)),
             ("effect", wit(&effect)),
             ("undo", wit(&undo)),
+            ("partial", wit(&partial)),
         ],
+    );
+
+    // L'esito parziale (§23.14): di N cose, quante e quali non sono riuscite.
+    let Partial {
+        attempted,
+        done,
+        failures,
+    } = Partial {
+        attempted: 0,
+        done: 0,
+        failures: vec![],
+    };
+    contract.record(
+        "partial",
+        &[
+            ("attempted", wit(&attempted)),
+            ("done", wit(&done)),
+            ("failures", wit(&failures)),
+        ],
+    );
+    let Failure { subject, error } = Failure::other(PluginError::Internal(Text::key("")));
+    contract.record(
+        "failure",
+        &[("subject", wit(&subject)), ("error", wit(&error))],
     );
 
     // L'annullamento (§13.3): il record e le due specie di passo.
     let Undo { label, steps } = Undo::of_edits(Text::key(""), vec![]);
     contract.record("undo", &[("label", wit(&label)), ("steps", wit(&steps))]);
+    let Undone {
+        label,
+        operation,
+        replay,
+    } = Undone::whole(Text::key(""));
+    contract.record(
+        "undone",
+        &[
+            ("label", wit(&label)),
+            ("operation", wit(&operation)),
+            ("replay", wit(&replay)),
+        ],
+    );
     contract.variant_src(
         "undo-step",
         ("command.rs", "UndoStep"),
@@ -5108,7 +5150,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.method(
         "host-commands",
         "undo-last",
-        <dyn HostApi>::undo_last as fn(Host) -> Result<Option<Text>, PluginError>,
+        <dyn HostApi>::undo_last as fn(Host) -> Result<Option<Undone>, PluginError>,
         &[],
     );
 

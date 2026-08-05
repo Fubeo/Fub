@@ -1598,7 +1598,8 @@
       "effect": {
         "kind": "done"
       },
-      "undo": null
+      "undo": null,
+      "partial": null
     },
     {
       "notify": "fatto",
@@ -1606,7 +1607,8 @@
         "kind": "navigate",
         "doc": "a.md"
       },
-      "undo": null
+      "undo": null,
+      "partial": null
     },
     {
       "notify": "fatto",
@@ -1618,7 +1620,8 @@
           "end": 7
         }
       },
-      "undo": null
+      "undo": null,
+      "partial": null
     },
     {
       "notify": "fatto",
@@ -1626,7 +1629,8 @@
         "kind": "run_search",
         "query": "q"
       },
-      "undo": null
+      "undo": null,
+      "partial": null
     },
     {
       "notify": "fatto",
@@ -1654,7 +1658,8 @@
           }
         ]
       },
-      "undo": null
+      "undo": null,
+      "partial": null
     },
     {
       "notify": "fatto",
@@ -1663,7 +1668,8 @@
         "ns": "p",
         "payload": null
       },
-      "undo": null
+      "undo": null,
+      "partial": null
     },
     {
       "notify": "fatto",
@@ -1674,7 +1680,8 @@
           "tag": "rust"
         }
       },
-      "undo": null
+      "undo": null,
+      "partial": null
     },
     {
       "notify": "fatto",
@@ -1708,6 +1715,78 @@
             }
           }
         ]
+      },
+      "partial": null
+    },
+    {
+      "notify": "fatto a metà",
+      "effect": {
+        "kind": "done"
+      },
+      "undo": null,
+      "partial": {
+        "attempted": 12,
+        "done": 10,
+        "failures": [
+          {
+            "subject": "dodici.md",
+            "error": {
+              "kind": "conflict",
+              "message": "scritta nel frattempo"
+            }
+          },
+          {
+            "subject": null,
+            "error": {
+              "kind": "permission_denied",
+              "message": "sola lettura"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "Partial": [
+    {
+      "attempted": 12,
+      "done": 11,
+      "failures": [
+        {
+          "subject": "dodici.md",
+          "error": {
+            "kind": "conflict",
+            "message": "scritta nel frattempo"
+          }
+        }
+      ]
+    },
+    {
+      "attempted": 12,
+      "done": 10,
+      "failures": [
+        {
+          "subject": null,
+          "error": {
+            "kind": "permission_denied",
+            "message": "sola lettura"
+          }
+        }
+      ]
+    }
+  ],
+  "Failure": [
+    {
+      "subject": "a.md",
+      "error": {
+        "kind": "conflict",
+        "message": "cambiata nel frattempo"
+      }
+    },
+    {
+      "subject": null,
+      "error": {
+        "kind": "bad_args",
+        "message": "`privacy.telemetry` (un programma non la scrive)"
       }
     }
   ],

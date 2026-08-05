@@ -421,7 +421,7 @@ impl HostCommands for JobHost {
 
     /// Come sopra, e per la stessa ragione: annullare è scrivere, quindi entra
     /// nel giro sincrono invece di portarsi via il vault.
-    fn undo_last(&mut self) -> Result<Option<fub_abi::Text>, PluginError> {
+    fn undo_last(&mut self) -> Result<Option<fub_abi::command::Undone>, PluginError> {
         self.write_result(|h| h.undo_last())
     }
 }

@@ -502,6 +502,23 @@ pub struct CommandOutcome {
     /// disegna scopre assente il giorno in cui gli serve.
     #[serde(default)]
     pub undo: Option<Undo>,
+    /// **Di N cose, quante e quali non sono riuscite** (§23.14).
+    ///
+    /// `None` vuol dire *«non è mancato niente»*, e non *«non lo so»*: chi
+    /// costruisce un [`Partial`] passa da [`Partial::of`], che risponde `None`
+    /// quando l'elenco dei guasti è vuoto. La distinzione conta, perché un esito
+    /// che si dichiara a metà senza esserlo è il falso positivo che insegna a
+    /// non leggere gli avvisi.
+    ///
+    /// È un campo **accanto** all'esito riuscito e non una terza parola accanto
+    /// a riuscito e fallito, e la ragione non è di forma: un'operazione a metà è
+    /// riuscita davvero per la parte che ha fatto — le note archiviate sono
+    /// archiviate, e chi la annulla annulla quella parte. Renderla un errore
+    /// vorrebbe dire buttare il lavoro fatto insieme alla notizia che è a metà.
+    ///
+    /// `default` come [`undo`](CommandOutcome::undo), e per la stessa ragione.
+    #[serde(default)]
+    pub partial: Option<Partial>,
 }
 
 impl CommandOutcome {
@@ -511,6 +528,7 @@ impl CommandOutcome {
             notify: None,
             effect: CommandEffect::Done,
             undo: None,
+            partial: None,
         }
     }
 
@@ -520,6 +538,7 @@ impl CommandOutcome {
             notify: Some(message.into()),
             effect: CommandEffect::Done,
             undo: None,
+            partial: None,
         }
     }
 
@@ -532,6 +551,132 @@ impl CommandOutcome {
     pub fn undoable(mut self, undo: Undo) -> Self {
         self.undo = Some(undo);
         self
+    }
+
+    /// Dichiara che l'operazione è riuscita **a metà**, e di quanto (§23.14).
+    ///
+    /// Prende un `Option` e non un [`Partial`] perché è ciò che
+    /// [`Partial::of`] restituisce: così il caso «non è mancato niente» non ha
+    /// bisogno di un `if` in ognuno dei comandi che contano, e nessuno di loro
+    /// può dichiararsi a metà per sbaglio.
+    pub fn partially(mut self, partial: Option<Partial>) -> Self {
+        self.partial = partial;
+        self
+    }
+}
+
+// ---------------------------------------------------------------------------
+// L'esito parziale (§23.14)
+// ---------------------------------------------------------------------------
+
+/// **Di N cose, quante e quali non sono riuscite.**
+///
+/// # Perché è un tipo e non tre frasi
+///
+/// Il parziale il vault lo diceva già, in tre comandi — la sostituzione in
+/// blocco, l'archiviazione, l'import delle impostazioni — e lo diceva **solo
+/// come prosa dentro la notifica**, con tre elenchi di argomenti diversi
+/// (`notes`/`failed`, `count`/`failed`, `count`/`skipped`/`reasons`). Tre modi
+/// di dire la stessa cosa a un umano, e nessuno per dirla a chi non legge:
+/// un'automazione che invoca `vault.replace` non ha modo di sapere che undici
+/// note su dodici sono cambiate se non leggendo una frase italiana.
+///
+/// # Le tre parti, e la quarta che non ha un campo
+///
+/// - [`attempted`](Partial::attempted): quante cose l'operazione aveva davanti;
+/// - [`done`](Partial::done): quante sono **cambiate**;
+/// - [`failures`](Partial::failures): quelle che hanno detto **perché no**.
+///
+/// Il resto — `attempted - done - failures.len()` — sono le cose su cui non è
+/// successo niente e nessuno ha detto perché. Non ha un campo di proposito,
+/// perché ci si arriva in due modi che un solo nome farebbe mentire: c'era
+/// *niente da fare* (una nota già nella cartella d'archivio) oppure non sono
+/// state *provate* (l'annullamento si è fermato al passo che ha fallito). Chi
+/// mostra un esito le somma; chi deve distinguerle guarda dove il conto è nato.
+///
+/// # Non porta un rimedio, e non è una dimenticanza
+///
+/// Non c'è un «riprova quelle che mancano»: rimettere in piedi la parte caduta
+/// vuol dire rieseguire l'operazione su un vault che nel frattempo è diverso, e
+/// il posto dove si decide se si può è il registro delle mutazioni
+/// (decisione 0067), non un campo qui. Questo tipo dice ciò che è successo, che
+/// è la cosa che mancava.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Partial {
+    /// Quante cose l'operazione aveva davanti.
+    pub attempted: u32,
+    /// Quante sono cambiate.
+    pub done: u32,
+    /// Quelle che non sono riuscite, **una per una e col proprio perché**.
+    ///
+    /// Una per una e non un numero, perché il conto da solo non è azionabile:
+    /// «undici su dodici» non dice *quale* nota riaprire. È la stessa scelta
+    /// della [`IndexLoss`](crate::traits::IndexLoss) della decisione 0051, e per
+    /// la stessa ragione — un esito che nomina è un esito su cui si può fare
+    /// qualcosa.
+    pub failures: Vec<Failure>,
+}
+
+impl Partial {
+    /// Il conto di un'operazione, **se è mancato qualcosa**.
+    ///
+    /// Risponde `None` quando `failures` è vuoto, ed è l'unica porta: costruire
+    /// il record a mano è possibile, passare di qui è la regola. Il caso che
+    /// esiste per togliere di mezzo è quello di un'operazione che aveva dodici
+    /// cose davanti, ne ha cambiate undici e la dodicesima non aveva niente da
+    /// fare — è riuscita, e dichiararla a metà insegnerebbe a chi la usa che gli
+    /// avvisi di questa app si cliccano via.
+    pub fn of(attempted: usize, done: usize, failures: Vec<Failure>) -> Option<Partial> {
+        (!failures.is_empty()).then_some(Partial {
+            attempted: attempted as u32,
+            done: done as u32,
+            failures,
+        })
+    }
+
+    /// Quante cose non sono riuscite.
+    pub fn failed(&self) -> usize {
+        self.failures.len()
+    }
+}
+
+/// Una delle cose che non sono riuscite, e perché.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Failure {
+    /// Il documento su cui non è successo, se ce n'era uno.
+    ///
+    /// `None` quando il soggetto non è un documento — una chiave di
+    /// impostazione, un passo di annullamento che è un comando — e non quando
+    /// non si sa: il soggetto sta comunque dentro l'[`error`](Failure::error),
+    /// che è la frase che qualcuno legge. Il campo esiste perché chi **disegna**
+    /// ci possa attaccare un link, e un link vuole un `DocId`, non una frase che
+    /// lo nomina.
+    #[serde(default)]
+    pub subject: Option<DocId>,
+    /// Perché no.
+    ///
+    /// Un [`PluginError`] e non un [`Text`] nudo, perché la specie del guasto è
+    /// metà dell'informazione: un [`Conflict`](PluginError::Conflict) si
+    /// ricalcola, un [`PermissionDenied`](PluginError::PermissionDenied) no, e
+    /// chi mostra l'esito deve poterli dire diversamente (decisione 0041).
+    pub error: PluginError,
+}
+
+impl Failure {
+    /// Un documento che non è stato toccato, e perché.
+    pub fn of(doc: impl Into<DocId>, error: PluginError) -> Self {
+        Failure {
+            subject: Some(doc.into()),
+            error,
+        }
+    }
+
+    /// Qualcosa che non è un documento.
+    pub fn other(error: PluginError) -> Self {
+        Failure {
+            subject: None,
+            error,
+        }
     }
 }
 
@@ -645,6 +790,68 @@ pub enum UndoStep {
         command: String,
         args: serde_json::Value,
     },
+}
+
+/// **Ciò che un annullamento ha annullato** (§13.3, §23.14).
+///
+/// Era un `Text` nudo — l'etichetta della voce, e basta — e la firma diceva così
+/// una cosa sola dove ce n'erano tre. Le altre due si vedono solo tenendo
+/// presente che una voce di undo non è **un** passo ma una **lista**: una macro
+/// che ha rinominato dodici note torna indietro da dodici rinomine, e fra la
+/// prima e l'ultima può succedere di tutto.
+///
+/// # I due conti non sono lo stesso conto
+///
+/// [`operation`](Undone::operation) dice che **l'operazione era già a metà**
+/// quando è stata fatta: si è archiviate undici note su dodici, quindi anche
+/// l'annullamento perfetto ne rimette indietro undici. È il danno che la
+/// decisione 0045 aveva dichiarato e nessuno raccoglieva — *«chi la annulla non
+/// sa che stava disfacendo undici note su dodici»* — ed è l'unico posto in cui
+/// il silenzio sull'esito parziale ne produce un **secondo**, mesi dopo, in un
+/// menu, a chi crede di rimettere le cose come stavano.
+///
+/// [`replay`](Undone::replay) dice che **l'annullamento stesso** è riuscito a
+/// metà: dei dodici passi ne sono andati quattro, il quinto ha detto perché no,
+/// e gli altri sette non sono stati provati.
+///
+/// Sono due fatti diversi su due momenti diversi, e un campo solo dovrebbe
+/// scegliere quale dei due raccontare. Un'operazione intera annullata a metà e
+/// una a metà annullata per intero hanno rimediato a cose diverse, e chi legge
+/// deve poterle distinguere.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Undone {
+    /// Cosa si è annullato, com'era scritto nella voce.
+    pub label: Text,
+    /// L'operazione annullata era **già** riuscita a metà: questo è il suo
+    /// conto, così com'era il giorno in cui è stata fatta.
+    ///
+    /// Non lo dichiara chi ha scritto il comando: lo porta l'host, appaiando la
+    /// voce di undo al [`CommandOutcome::partial`] dello stesso esito nel
+    /// momento in cui la mette in pila. È deliberato che nessun autore di
+    /// comandi debba ricordarsene — un conto che si deve ricopiare a mano è un
+    /// conto che il secondo comando dimentica.
+    #[serde(default)]
+    pub operation: Option<Partial>,
+    /// L'annullamento **appena eseguito** è riuscito a metà.
+    ///
+    /// `None` vuol dire che tutti i passi sono andati. Se invece non ne è andato
+    /// **nessuno** questo campo non si vede affatto, perché l'annullamento
+    /// risponde con un errore: niente è cambiato, e la parola giusta per niente
+    /// è ancora «fallito». Le tre risposte — intero, a metà, per niente — sono
+    /// tre perché sono tre cose diverse da fare dopo.
+    #[serde(default)]
+    pub replay: Option<Partial>,
+}
+
+impl Undone {
+    /// Un annullamento andato per intero, di un'operazione intera.
+    pub fn whole(label: Text) -> Self {
+        Undone {
+            label,
+            operation: None,
+            replay: None,
+        }
+    }
 }
 
 /// Ciò che la shell deve fare dopo un comando.
@@ -890,6 +1097,28 @@ impl Localize for CommandOutcome {
         if let Some(undo) = &mut self.undo {
             visit(&mut undo.label);
         }
+        // E i perché dei guasti, per la stessa ragione dell'etichetta: un esito
+        // parziale porta N frasi scritte da chi ha eseguito, e sono le uniche
+        // del record che arrivano a uno schermo passando per una **lista**. Chi
+        // le dimenticasse qui avrebbe un esito metà tradotto e metà a chiavi
+        // nude, che è il difetto che la decisione 0041 esiste per togliere.
+        self.partial.visit_texts(visit);
+    }
+}
+
+impl Localize for Partial {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        for failure in &mut self.failures {
+            visit(failure.error.message_mut());
+        }
+    }
+}
+
+impl Localize for Undone {
+    fn visit_texts(&mut self, visit: &mut dyn FnMut(&mut Text)) {
+        visit(&mut self.label);
+        self.operation.visit_texts(visit);
+        self.replay.visit_texts(visit);
     }
 }
 

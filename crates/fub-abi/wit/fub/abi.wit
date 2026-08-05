@@ -1568,6 +1568,59 @@ interface command {
         /// perché l'inverso lo conosce solo chi ha fatto l'operazione — l'host
         /// vede una scrittura, non QUALE GESTO l'ha prodotta.
         undo: option<undo>,
+        /// DI N COSE, QUANTE E QUALI non sono riuscite (§23.14). NONE vuol dire
+        /// «non è mancato niente», non «non lo so»: un esito che si dichiara a
+        /// metà senza esserlo è il falso positivo che insegna a non leggere gli
+        /// avvisi.
+        ///
+        /// È un campo ACCANTO all'esito riuscito e non una terza parola accanto
+        /// a riuscito e fallito: un'operazione a metà è riuscita davvero per la
+        /// parte che ha fatto — le note archiviate sono archiviate, e chi la
+        /// annulla annulla quella parte. Renderla un errore vorrebbe dire
+        /// buttare il lavoro fatto insieme alla notizia che è a metà.
+        partial: option<partial>,
+    }
+
+    /// DI N COSE, QUANTE E QUALI non sono riuscite (§23.14).
+    ///
+    /// Il parziale il vault lo diceva già in tre comandi — sostituzione in
+    /// blocco, archiviazione, import delle impostazioni — e SOLO COME PROSA
+    /// dentro la notifica, con tre elenchi di argomenti diversi. Tre modi di
+    /// dirlo a un umano e nessuno per dirlo a chi non legge: un'automazione che
+    /// invoca `vault.replace` non sapeva che undici note su dodici sono
+    /// cambiate se non leggendo una frase italiana.
+    ///
+    /// LA QUARTA PARTE NON HA UN CAMPO. `attempted - done - failures` sono le
+    /// cose su cui non è successo niente e nessuno ha detto perché, e ci si
+    /// arriva in due modi che un solo nome farebbe mentire: c'era NIENTE DA
+    /// FARE (una nota già in archivio) oppure non sono state PROVATE
+    /// (l'annullamento si è fermato al passo caduto).
+    record partial {
+        /// Quante cose l'operazione aveva davanti.
+        attempted: u32,
+        /// Quante sono cambiate.
+        done: u32,
+        /// Quelle che non sono riuscite, UNA PER UNA e col proprio perché. Non
+        /// un numero: «undici su dodici» non dice QUALE nota riaprire. È la
+        /// scelta di `index-loss` (decisione 0051) — un esito che nomina è un
+        /// esito su cui si può fare qualcosa.
+        failures: list<failure>,
+    }
+
+    /// Una delle cose che non sono riuscite, e perché.
+    record failure {
+        /// Il documento su cui non è successo, se ce n'era uno. NONE quando il
+        /// soggetto non è un documento (una chiave di impostazione, un passo di
+        /// annullamento che è un comando) e non quando non si sa: il soggetto
+        /// sta comunque nell'errore, che è la frase che qualcuno legge. Il
+        /// campo esiste perché chi DISEGNA ci possa attaccare un link, e un
+        /// link vuole un `doc-id`, non una frase che lo nomina.
+        subject: option<doc-id>,
+        /// Perché no. Un `plugin-error` e non un `text` nudo, perché la specie
+        /// del guasto è metà dell'informazione: un `conflict` si ricalcola, un
+        /// `permission-denied` no, e chi mostra l'esito deve poterli dire
+        /// diversamente (decisione 0041).
+        error: plugin-error,
     }
 
     /// Un passo di un annullamento. Le due varianti non sono due meccanismi:
@@ -1617,6 +1670,35 @@ interface command {
         /// riordinare vorrebbe dire capire cosa dipende da cosa, e lo sa meglio
         /// chi ha scritto l'operazione.
         steps: list<undo-step>,
+    }
+
+    /// CIÒ CHE UN ANNULLAMENTO HA ANNULLATO (§13.3, §23.14).
+    ///
+    /// Era un `text` nudo, e diceva così una cosa sola dove ce n'erano tre. Le
+    /// altre due si vedono solo tenendo presente che UNA VOCE DI UNDO NON È UN
+    /// PASSO MA UNA LISTA: una macro che ha rinominato dodici note torna
+    /// indietro da dodici rinomine, e fra la prima e l'ultima può succedere di
+    /// tutto.
+    record undone {
+        /// Cosa si è annullato, com'era scritto nella voce.
+        label: text,
+        /// L'operazione annullata era GIÀ riuscita a metà: il suo conto, così
+        /// com'era il giorno in cui è stata fatta. È il danno che la decisione
+        /// 0045 aveva dichiarato e nessuno raccoglieva — «chi la annulla non sa
+        /// che stava disfacendo undici note su dodici» — e l'unico posto in cui
+        /// il silenzio sull'esito parziale ne produce un SECONDO, mesi dopo, in
+        /// un menu, a chi crede di rimettere le cose come stavano.
+        ///
+        /// Non lo dichiara chi ha scritto il comando: lo porta l'HOST,
+        /// appaiando la voce di undo al `partial` dello stesso esito nel momento
+        /// in cui la mette in pila. Un conto che si deve ricopiare a mano è un
+        /// conto che il secondo comando dimentica.
+        operation: option<partial>,
+        /// L'annullamento APPENA ESEGUITO è riuscito a metà. NONE = tutti i
+        /// passi sono andati. Se non ne è andato NESSUNO questo campo non si
+        /// vede affatto, perché `undo-last` risponde con un errore: niente è
+        /// cambiato, e la parola giusta per niente è ancora «fallito».
+        replay: option<partial>,
     }
 
     commands: func() -> list<command-spec>;
@@ -3391,7 +3473,7 @@ interface host-network {
 interface host-commands {
     use json.{json};
     use errors.{plugin-error};
-    use command.{command-outcome};
+    use command.{command-outcome, undone};
     use text.{text};
 
     /// Invoca un comando del registro (decisione 0009): è ciò che rende componibili macro
@@ -3426,7 +3508,24 @@ interface host-commands {
     /// qualunque scrittura, e il caso che conta è `conflict`: il documento è
     /// cambiato da quando l'operazione lo aveva toccato, quindi tornare
     /// indietro cancellerebbe il lavoro di qualcun altro.
-    undo-last: func() -> result<option<text>, plugin-error>;
+    ///
+    /// UNA VOCE NON È UN PASSO, ed è ciò che questa firma diceva male (§23.14).
+    /// La riga qui sopra descriveva un annullamento come UNA scrittura: è una
+    /// lista, e il passo che fallisce sta in mezzo agli altri. Con un
+    /// `option<text>` le risposte possibili erano due dove sono quattro —
+    /// tutti i passi sono andati (`ok(some(undone))` con `replay` a none),
+    /// qualcuno sì e qualcuno no (`replay` pieno), NIENTE è cambiato (`err`, il
+    /// primo perché), non c'era niente da annullare (`ok(none)`, che non è un
+    /// errore e non lo è mai stato: è la risposta normale a un vault appena
+    /// aperto).
+    ///
+    /// La terza tiene alla lettera la promessa della riga qui sopra: se non è
+    /// cambiato niente un annullamento è fallito come qualunque scrittura, e
+    /// chi lo invocava sperando in un `err` continua a riceverlo. Smette di
+    /// essere un errore SOLTANTO il caso in cui una parte del lavoro è stata
+    /// fatta — buttarla via insieme alla notizia sarebbe l'unica risposta
+    /// peggiore del silenzio.
+    undo-last: func() -> result<option<undone>, plugin-error>;
 }
 
 /// Reazione agli eventi (`EventHandler`).
