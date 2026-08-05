@@ -361,6 +361,40 @@ pub fn keybinding_key(command_id: &str) -> String {
     }
 }
 
+/// Il comando che una chiave fabbricata da [`keybinding_key`] nomina, o `None`
+/// se non è una di quelle.
+///
+/// È il gemello inverso, e nasce dal caso in cui la domanda si fa dalla parte
+/// opposta: si ha in mano **una chiave letta da un file** — il
+/// `.fub/settings.json` di un vault che arriva da fuori — e si deve sapere se
+/// quel valore riprogramma un gesto di chi lo apre (§23.13). Chi legge un file
+/// non ha l'elenco dei comandi: ce l'ha chi disegna, e arriva dopo.
+///
+/// Riconosce **entrambe** le forme che [`keybinding_key`] compone, e la seconda
+/// è quella che si dimentica: `keys.note.create` di un comando nudo e
+/// `com.acme:keys.tasks.add` di un comando di un componente. Una chiave che
+/// portasse `keys.` davanti al namespace (`keys.com.acme:tasks.add`) non è di
+/// questa famiglia perché non è di nessuna: è un id nudo dichiarato da un
+/// plugin, che la regola dei nomi del §7.4 rifiuta.
+pub fn command_of_keybinding_key(key: &str) -> Option<String> {
+    match key.split_once(':') {
+        Some((ns, rest)) => {
+            let name = rest.strip_prefix("keys.")?;
+            if ns.is_empty() || name.is_empty() {
+                return None;
+            }
+            Some(format!("{ns}:{name}"))
+        }
+        None => {
+            let name = key.strip_prefix("keys.")?;
+            if name.is_empty() {
+                return None;
+            }
+            Some(name.to_string())
+        }
+    }
+}
+
 /// La chiave d'impostazione con cui si **nega a un componente un permesso che
 /// il suo manifest dichiara** (§23.17).
 ///
@@ -534,6 +568,43 @@ mod tests {
             "com.acme:permission.network",
         ] {
             assert_eq!(permission_of_key(chiave), None, "`{chiave}`");
+        }
+    }
+
+    /// I due versi della stessa composizione si provano **sugli stessi casi**,
+    /// perché è l'unico modo in cui un giro completo è un presidio invece di due
+    /// funzioni che si sbagliano d'accordo.
+    #[test]
+    fn una_chiave_di_scorciatoia_si_riconosce_e_torna_al_comando() {
+        for id in ["note.create", "com.acme:tasks.add", "vault.undo"] {
+            let chiave = keybinding_key(id);
+            assert_eq!(
+                command_of_keybinding_key(&chiave).as_deref(),
+                Some(id),
+                "`{chiave}`"
+            );
+        }
+    }
+
+    /// Ciò che **non** è una scorciatoia non deve somigliarle: sospendere il
+    /// valore di una chiave qualunque vorrebbe dire un tema che non si applica
+    /// e nessuno che sappia dire perché.
+    #[test]
+    fn una_chiave_qualunque_non_e_una_scorciatoia() {
+        for chiave in [
+            "appearance.theme",
+            "locale.language",
+            "plugins.disabled",
+            "com.acme:permissions.network",
+            // `keys.` davanti al namespace: la forma che `keybinding_key` non
+            // compone mai, perché sarebbe un id nudo dichiarato da un plugin.
+            "keys.com.acme:tasks.add",
+            "keys.",
+            ":keys.tasks.add",
+            "com.acme:keys.",
+            "com.acme:key.tasks.add",
+        ] {
+            assert_eq!(command_of_keybinding_key(chiave), None, "`{chiave}`");
         }
     }
 

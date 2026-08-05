@@ -702,6 +702,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     icon: true,
     favorite: true,
     last_opened: true,
+    keys_seen: true,
   }),
 };
 

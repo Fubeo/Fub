@@ -37,6 +37,7 @@
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { impostazioni } from "../host/query";
 import { type Chiave, t } from "../i18n/strings";
+import { onEvent } from "../state/kernel";
 import { state } from "../state/store";
 import { SHELL_KEYS, type ShellCommandId } from "./shell-keys";
 
@@ -115,6 +116,45 @@ export function resetShellCommands(): void {
 /// dichiarato è ciò che rende superflua ogni fusione — il valore che arriva **è**
 /// l'accordo, sempre.
 let overrides = new Map<string, string>();
+
+/// Rilegge gli accordi **quando una scorciatoia cambia**, da qualunque finestra.
+///
+/// Senza questa riga la mappa si rinfrescava in due soli momenti — l'apertura di
+/// un vault e l'apertura della palette — e ne seguiva una cosa che nessuno aveva
+/// scritto e che si scopre solo provandola: si rimappa un comando dal pannello,
+/// si preme la combinazione nuova, e non succede niente. La scorciatoia era
+/// scritta, letta e mostrata giusta; a non saperlo era la tastiera, che l'elenco
+/// ce l'aveva vecchio.
+///
+/// Vale doppio da quando un vault può proporre i propri tasti (§23.13): adottare
+/// una scorciatoia è precisamente il gesto dopo il quale ci si aspetta che
+/// premerla funzioni.
+///
+/// Il filtro sulla chiave non è un'ottimizzazione: `setting_changed` arriva per
+/// ogni interruttore di questo pannello, e rileggere l'elenco dei comandi a ogni
+/// spunta sarebbe una chiamata al backend per una cosa che non c'entra.
+export function mountKeyOverrides(): void {
+  onEvent("setting_changed", (e) => {
+    if (commandOfKeybindingKey(e.key) === null) return;
+    void loadKeyOverrides();
+  });
+}
+
+/// Il comando che una chiave di scorciatoia nomina, o `null`. Gemello di
+/// `fub_abi::settings::command_of_keybinding_key`, e i due si provano sugli
+/// stessi casi.
+export function commandOfKeybindingKey(key: string): string | null {
+  const i = key.indexOf(":");
+  if (i < 0) {
+    const nome = key.startsWith("keys.") ? key.slice("keys.".length) : "";
+    return nome === "" ? null : nome;
+  }
+  const ns = key.slice(0, i);
+  const resto = key.slice(i + 1);
+  if (ns === "" || !resto.startsWith("keys.")) return null;
+  const nome = resto.slice("keys.".length);
+  return nome === "" ? null : `${ns}:${nome}`;
+}
 
 export async function loadKeyOverrides(): Promise<void> {
   try {

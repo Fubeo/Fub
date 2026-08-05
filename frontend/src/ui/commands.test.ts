@@ -8,6 +8,7 @@ import {
   conflitti,
   findByChord,
   frasedeiConflitti,
+  commandOfKeybindingKey,
   keybindingKey,
   leggiAccordi,
   mappaAccordi,
@@ -71,6 +72,33 @@ describe("la chiave che tiene una scorciatoia", () => {
     // `keys.com.acme:tasks.add` sarebbe un id nudo dichiarato da un plugin, che
     // la regola dei nomi (§7.4) rifiuta.
     expect(keybindingKey("com.acme:tasks.add")).toBe("com.acme:keys.tasks.add");
+  });
+
+  // Il verso opposto serve a chi ha in mano **una chiave e basta**: chi riceve
+  // un `setting_changed` e deve sapere se la tastiera è cambiata (§23.13). I due
+  // versi si provano sugli stessi casi, o un giro completo sarebbe due funzioni
+  // che si sbagliano d'accordo.
+  it("e il giro torna al comando, in tutte e due le forme", () => {
+    for (const id of ["note.create", "com.acme:tasks.add", "vault.undo"]) {
+      expect(commandOfKeybindingKey(keybindingKey(id))).toBe(id);
+    }
+  });
+
+  it("ciò che non è una scorciatoia non le somiglia", () => {
+    for (const chiave of [
+      "appearance.theme",
+      "locale.language",
+      "com.acme:permissions.network",
+      // `keys.` davanti al namespace: la forma che `keybindingKey` non compone
+      // mai, perché sarebbe un id nudo dichiarato da un plugin.
+      "keys.com.acme:tasks.add",
+      "keys.",
+      ":keys.tasks.add",
+      "com.acme:keys.",
+      "com.acme:key.tasks.add",
+    ]) {
+      expect(commandOfKeybindingKey(chiave)).toBeNull();
+    }
   });
 });
 

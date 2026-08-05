@@ -891,7 +891,7 @@ produrre nessun segnale*, che quel giorno esisteva già.
 
 ### 23.13 Un vault che arriva da fuori rimappa la tastiera
 
-*kernel · **P1** — nessuna firma: uno `scope` su una `SettingSpec` e una decisione di prodotto*
+*kernel · **P1** — chiusa dalla [0100](../decisions/0100-i-tasti-che-arrivano-da-fuori.md) — due delle tre strade non esistevano più, e la domanda non era «un vault mai visto» ma «ho già visto questi tasti»*
 
 La [0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md) ha spostato le
 impostazioni dentro il vault e nel farlo ha **smontato esplicitamente**
@@ -914,31 +914,44 @@ scaricato — rimappa i tasti di chi lo apre**, e fra i comandi che può rimappa
 sono quelli che cancellano. La differenza con il tema non è di grado: un tema
 sbagliato si vede, una scorciatoia spostata si scopre premendola.
 
-- [ ] **Quale metà si sposta.** Le opzioni sono tre e la prima è la più piccola:
-      le scorciatoie diventano `per_machine()` — e allora non viaggiano più col
-      vault, il che toglie anche la cosa buona, cioè portarsi la propria tastiera
-      da una macchina all'altra. Oppure restano nel vault ma il **livello macchina
-      vince** su di loro, che è già la forma dei due livelli della
+- [x] **Quale metà si sposta.** La terza — viaggiano e vengono **dichiarate** —
+      ma le altre due non erano alternative: erano già impossibili, e la voce non
+      lo sapeva. `per_machine()` non costa solo la cosa buona della 0077: farebbe
+      **mentire il vocabolario**, perché oggi `SettingScope::Machine` vuol dire
+      «il valore del vault è ignorato con un avviso» e la 0076 ha riservato quella
+      parola a ciò che *«non può dipendere da un vault aperto»* — falso di una
+      scorciatoia. E il «livello macchina vince» la voce lo dà per esistente,
+      *«già la forma dei due livelli della
       [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) letta al
-      contrario. Oppure viaggiano e vengono **dichiarate all'apertura** di un vault
-      mai visto — che è ciò che la 0077 già fa per i conflitti, e la strada che
-      costa meno a chi non ha il problema.
-- [ ] **Il criterio che manca, ed è più largo di questa voce.** Le impostazioni
-      del vault sono ormai due specie: quelle che descrivono **il vault** (formato
-      delle date, pesi della ricerca, quali feature accendere) e quelle che
-      descrivono **chi lo guarda** (tema, tastiera, lingua). La 0076 ha deciso per
-      tutte insieme quando la seconda specie era inerte. Va scritta la riga che le
-      separa, e le scorciatoie sono il caso che la costringe.
-- [ ] **Non è la stessa cosa di un plugin ostile**, e va detto per non
-      sopravvalutarla: un vault non esegue codice, e chi apre un vault altrui si
-      fida già del suo contenuto. Il punto è che **la fiducia richiesta è cresciuta
-      senza che nessuno lo dichiarasse** — chi ha letto la 0076 e ha concluso «al
-      massimo mi cambia il tema» ha letto una riga che quel giorno era vera.
-- [ ] **Chi lo chiede.** FEATURES 1.4 (vault multipli), 17.1 (migrazione: un vault
-      importato è per definizione un vault altrui), 25 (vault di esempio e
-      template distribuiti), e la §16.3 quando la tastiera della shell diventerà
-      configurabile come le altre — perché allora i comandi rimappabili
-      dall'esterno saranno tutti.
+      contrario»*: la scala non c'è più, la **0076 l'ha cancellata apposta**,
+      quindi rimetterla per una famiglia sola è riscrivere «prima guardo qui, poi
+      lì». Anche il criterio della terza era sbagliato — «un vault **mai visto**»
+      non è la domanda, perché un vault aperto ieri riceve tasti nuovi stanotte da
+      un sync e la riga nel registro nasce alla prima apertura, non a una risposta.
+      La domanda che regge tutti e due i casi è *«ho già visto **questi** tasti»*.
+- [x] **Il criterio che manca, ed è più largo di questa voce.** Non taglia in due
+      ma in **tre**, e non per chi descrive: per **che cosa può fare il valore
+      peggiore**. *Una sottrazione non concede* (`plugins.disabled`, i permessi
+      della [0098](../decisions/0098-un-permesso-si-vede-e-si-nega.md): il peggio è
+      il default che l'utente ha già accettato). *Si vede e si disfa* (tema,
+      `locale.*`, pesi della ricerca, feature accese — la frase della 0076, che per
+      questa specie resta vera). *Cambia cosa fa un gesto dell'utente* (oggi solo
+      `keys.*`, e il valore non si vede finché non lo premi). Il tema descrive chi
+      guarda ed è innocuo: era la riga della voce a tagliare nel posto sbagliato.
+- [x] **Non è la stessa cosa di un plugin ostile**, e la conclusione regge:
+      niente permesso, niente sandbox, nessuna chiave che un vault non possa
+      contenere. A M4 il valore del cancello è la **dichiarazione**, non
+      l'imposizione. Il prezzo misurato però è più alto di come la voce lo racconta:
+      `vault.undo` è l'**unico** comando che dichiari una scorciatoia, quindi un
+      vault estraneo non ne sposta una — ne **arma** una che non c'era, senza
+      nessuna abitudine che protegga, e `trash.empty` non ha parametri e porta
+      `.irreversible()`. Assolta invece la porta grossa: `settings.import` passa già
+      da `program_writable`.
+- [x] **Chi lo chiede.** Serviti tutti nella stessa forma, perché la domanda sta
+      sulla **chiave** e non sull'elenco dei comandi: FEATURES 1.4, 17.1 e 25 non
+      chiedono niente di nuovo, e la §16.3 nemmeno — quando la tastiera della shell
+      diventerà configurabile come le altre, i comandi rimappabili dall'esterno
+      saranno tutti e questa domanda li coprirà senza cambiare forma.
 
 ### 23.14 Un'operazione a metà non sa di essere a metà
 

@@ -627,14 +627,17 @@ nuova: è una **famiglia**, e va cercata apposta invece che incontrata.
   cambiare* — che protegge l'integrità mentre la minaccia è la riservatezza. Ogni
   metà è difendibile; il prodotto è che il permesso di leggere una nota salvata è
   anche il permesso di leggere ciò che l'utente sta scrivendo adesso.
-- **§23.13 (un vault che rimappa la tastiera)** è la coppia più netta, perché le
+- **§23.13 (un vault che rimappa la tastiera)** — *chiusa dalla
+  [0100](../decisions/0100-i-tasti-che-arrivano-da-fuori.md)* — è la coppia più netta, perché le
   due metà distano pochissimo: la [0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)
   ha smontato l'argomento di rischio sulle impostazioni del vault — e su tema e
   lingua aveva ragione — e la [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md)
   ha messo in quel posto i **tasti**, senza riesaminare l'argomento smontato ora
   che l'oggetto era cambiato. Nessuno dei due verbali sbaglia. La fiducia che
   aprire un vault altrui richiede è cresciuta fra l'uno e l'altro, e non l'ha
-  dichiarato nessuno.
+  dichiarato nessuno. Adesso la dichiara chi la richiede: un tasto che questa
+  macchina non ha mai visto arriva **sospeso**, e la risposta si dà una chiave
+  alla volta.
 - **§23.11 (la base facoltativa)** compone con la
   [0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md): la guardia contro
   la sovrascrittura è opt-in **proprio dove** il rilevamento delle modifiche

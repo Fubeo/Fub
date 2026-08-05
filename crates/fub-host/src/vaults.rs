@@ -29,6 +29,7 @@
 //! un'altra cosa e va tenuta separata — o riaprire l'app riaprirebbe da sé
 //! tutto ciò che era aperto tre settimane fa.
 
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -67,6 +68,26 @@ pub struct VaultEntry {
     /// dell'elenco, ed è l'unico campo che il registro scrive da sé.
     #[serde(default)]
     pub last_opened: u64,
+    /// Le scorciatoie di **questo vault che l'utente ha già guardato**, chiave
+    /// → accordo (§23.13).
+    ///
+    /// È l'unico campo del registro che non descrive il vault: descrive cosa
+    /// questa macchina ha visto di lui, ed è il verso in cui la domanda va
+    /// fatta. *«Ho già aperto questo vault»* non basta — il file può cambiare
+    /// stanotte, per una sincronizzazione o per un collega — mentre *«ho già
+    /// visto questi tasti»* regge in tutti e due i casi.
+    ///
+    /// Sta **qui** e non in un elenco a parte per la ragione che rende un
+    /// registro un registro: `forget` lo porta via col resto, e due elenchi
+    /// indicizzati sulla stessa radice sarebbero due cose da tenere allineate
+    /// nel momento in cui una delle due si dimentica.
+    ///
+    /// Che sia una copia degli accordi e non un'impronta è deliberato: la
+    /// domanda si fa **una chiave alla volta**, perché adottare la scorciatoia
+    /// di un comando non è dire di sì a quella di un altro. Un'impronta sola
+    /// costerebbe meno e saprebbe rispondere solo tutto o niente.
+    #[serde(default)]
+    pub keys_seen: BTreeMap<String, String>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -144,6 +165,34 @@ impl VaultRegistry {
         self.update(root, |entry| entry.favorite = favorite)
     }
 
+    /// Le scorciatoie di questo vault che l'utente ha già guardato (§23.13).
+    /// Vuoto per un vault mai visto, e anche per uno visto mille volte che non
+    /// ne ha mai portata nessuna: sono lo stesso caso, ed è giusto — in
+    /// entrambi non c'è niente che qualcuno debba adottare.
+    pub fn seen_keys(&self, root: &Utf8Path) -> BTreeMap<String, String> {
+        self.entries
+            .lock()
+            .expect("registro dei vault")
+            .iter()
+            .find(|e| e.root == root.as_str())
+            .map(|e| e.keys_seen.clone())
+            .unwrap_or_default()
+    }
+
+    /// L'utente ha guardato queste scorciatoie di questo vault.
+    ///
+    /// **Sostituisce** invece di fondere, e la differenza si vede nel caso che
+    /// conta: una scorciatoia tolta dal file del vault deve uscire anche da qui,
+    /// o il giorno che qualcuno ne rimette una uguale la troverebbe già
+    /// approvata da una decisione presa su un altro valore.
+    pub fn note_keys_seen(
+        &self,
+        root: &Utf8Path,
+        keys: BTreeMap<String, String>,
+    ) -> Result<(), PluginError> {
+        self.update(root, |entry| entry.keys_seen = keys.clone())
+    }
+
     /// L'icona (`None` la toglie) e il nome (vuoto = quello della cartella).
     pub fn set_look(
         &self,
@@ -193,6 +242,7 @@ impl VaultRegistry {
                         icon: None,
                         favorite: false,
                         last_opened: 0,
+                        keys_seen: BTreeMap::new(),
                     };
                     f(&mut entry);
                     next.push(entry);

@@ -1415,6 +1415,15 @@ export interface KnownVault {
   icon: string | null;
   favorite: boolean;
   last_opened: number;
+  // Le scorciatoie di questo vault che l'utente ha già guardato (§23.13), chiave
+  // d'impostazione → accordo. È l'unico campo che non descrive il vault: dice
+  // cosa **questa macchina** ha visto di lui, e per questo vive nel registro
+  // della macchina e non nel vault.
+  //
+  // La shell non lo disegna — chi apre un vault vuole sapere come si chiama, non
+  // cosa gli ha risposto. Sta qui perché il mirror è il contratto intero e un
+  // campo taciuto è un campo che il giorno che serve nessuno sa esserci.
+  keys_seen: Record<string, string>;
 }
 
 // Che rapporto ha questo vault con il disco (rispecchia

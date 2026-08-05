@@ -418,10 +418,66 @@ async function scrivi(
 // impostazione e non un formato nuovo: il campo di testo, il «vale per questo
 // vault» e l'«azzera» ci sono già, e nessuno li ha scritti due volte.
 
+/// **Ciò che il vault propone e nessuno ha guardato** (§23.13), in cima alla
+/// scheda: quante sono, su quali comandi, e le due risposte.
+///
+/// Sta qui e non in un dialogo all'apertura per una ragione che il verbale
+/// scrive: un momento di accettazione senza niente da guardare insegna a
+/// cliccare «accetto». Qui sotto ci sono le righe vere — la combinazione, la
+/// provenienza, l'«azzera» — quindi rispondere è una cosa che si fa **dopo**
+/// aver visto, e chi non risponde non perde niente: finché non lo fa, quelle
+/// combinazioni non premono.
+async function disegnaTastiProposti(): Promise<HTMLElement[]> {
+  const proposti = await api.pendingKeybindings();
+  const chiavi = Object.keys(proposti);
+  if (chiavi.length === 0) return [];
+
+  const perChiave = new Map(allCommands().map((c) => [keybindingKey(c.id), c.title]));
+  const box = document.createElement("div");
+  box.className = "settings-banner";
+  box.append(riga("panel-title", t("settings.vault_keys.title", { count: chiavi.length })));
+  box.append(riga("muted", t("settings.vault_keys.hint")));
+  for (const chiave of chiavi) {
+    const el = document.createElement("div");
+    el.className = "setting-row";
+    const testo = document.createElement("div");
+    testo.className = "setting-text";
+    const label = document.createElement("label");
+    // Il titolo del comando, e la chiave nuda solo se questo montaggio quel
+    // comando non ce l'ha. Non dovrebbe capitare — l'host le filtra a chi non è
+    // dichiarato — e scriverlo comunque costa una riga e non lascia una casella
+    // vuota il giorno che la filtrata cambia.
+    label.textContent = perChiave.get(chiave) ?? chiave;
+    testo.append(label);
+    const kbd = document.createElement("kbd");
+    kbd.textContent = proposti[chiave] ?? "";
+    el.append(testo, kbd);
+    box.append(el);
+  }
+
+  const azioni = document.createElement("div");
+  azioni.className = "settings-banner-actions";
+  const adotta = document.createElement("button");
+  adotta.className = "primary";
+  adotta.textContent = t("settings.vault_keys.adopt");
+  adotta.addEventListener("click", () => void scrivi(() => api.adoptKeybindings()));
+  const rifiuta = document.createElement("button");
+  rifiuta.textContent = t("settings.vault_keys.discard");
+  rifiuta.title = t("settings.vault_keys.discard.hint");
+  rifiuta.addEventListener("click", () => void scrivi(() => api.discardKeybindings()));
+  azioni.append(adotta, rifiuta);
+  box.append(azioni);
+  return [box];
+}
+
 async function disegnaScorciatoie(): Promise<HTMLElement[]> {
-  const entries = await impostazioni();
+  const [entries, proposti] = await Promise.all([impostazioni(), disegnaTastiProposti()]);
   const per_chiave = new Map(entries.map((e) => [e.spec.key, e]));
-  const nodi: HTMLElement[] = [riga("muted", t("settings.shortcuts_hint"))];
+  const nodi: HTMLElement[] = [...proposti, riga("muted", t("settings.shortcuts_hint"))];
+  // Quanti nodi c'erano **prima** delle righe vere: il banner dei tasti proposti
+  // ne aggiunge uno o nessuno, e un conto cablato direbbe «nessuna scorciatoia»
+  // esattamente nel vault che ne propone.
+  const intestazione = nodi.length;
   const comandi = allCommands();
   // In ordine di **comando**, non di chiave: chi cerca «Nuova nota» la cerca
   // dove la palette gliela mostra.
@@ -454,7 +510,7 @@ async function disegnaScorciatoie(): Promise<HTMLElement[]> {
       nodi.push(el);
     }
   }
-  if (nodi.length === 1) nodi.push(riga("muted", t("settings.shortcuts.none")));
+  if (nodi.length === intestazione) nodi.push(riga("muted", t("settings.shortcuts.none")));
   return nodi;
 }
 

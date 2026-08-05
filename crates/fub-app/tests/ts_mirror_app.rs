@@ -148,7 +148,9 @@ fn expected() -> Value {
         ],
         // Il registro dei vault (§11.1): quello appuntato con la sua icona e un
         // recente nudo, perché i campi opzionali hanno due forme e il mirror
-        // deve reggerle entrambe.
+        // deve reggerle entrambe. Il primo porta anche una scorciatoia già
+        // guardata (§23.13), che è l'unico campo del registro a non descrivere
+        // il vault ma cosa questa macchina ha visto di lui.
         "VaultEntry": [
             to_value(VaultEntry {
                 root: "/vault".into(),
@@ -156,6 +158,9 @@ fn expected() -> Value {
                 icon: Some("📓".into()),
                 favorite: true,
                 last_opened: 1_700_000_000_000,
+                keys_seen: [("keys.note.create".to_string(), "Mod-Alt-k".to_string())]
+                    .into_iter()
+                    .collect(),
             }),
             to_value(VaultEntry {
                 root: "/altro".into(),
@@ -163,6 +168,7 @@ fn expected() -> Value {
                 icon: None,
                 favorite: false,
                 last_opened: 1_699_000_000_000,
+                keys_seen: Default::default(),
             }),
         ],
     })

@@ -24,7 +24,9 @@ import { openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
   frasedeiConflitti,
+  keybindingKey,
   loadKeyOverrides,
+  mountKeyOverrides,
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
@@ -121,6 +123,9 @@ async function init(): Promise<void> {
   // va montato prima che il router parta.
   mountNotifications();
   mountActivity();
+  // La tastiera rilegge gli accordi quando una scorciatoia cambia (§18.2): anche
+  // lei si iscrive a `setting_changed`, quindi anche lei prima del router.
+  mountKeyOverrides();
   // Il pannello delle impostazioni (§11.1): il form lo genera lui dallo schema
   // che i componenti dichiarano, e da lì passano anche i componenti da
   // accendere e i vault conosciuti. Va montato prima del router, come il centro
@@ -254,6 +259,10 @@ async function openVaultPath(dir: string): Promise<void> {
   // ne sono i proprietari.
   await loadKeyOverrides();
   await avvisaSeDueComandiSiContendonoUnTasto();
+  // **Dopo** i conflitti, e non è indifferente: una scorciatoia sospesa non è in
+  // vigore, quindi non partecipa a nessun conflitto — e dire prima «questo vault
+  // ne propone tre» farebbe leggere l'avviso dei conflitti come se le riguardasse.
+  await avvisaSeIlVaultPortaTasti();
 
   await avvisaSeNessunoGuarda();
 
@@ -282,6 +291,36 @@ async function openVaultPath(dir: string): Promise<void> {
 async function avvisaSeDueComandiSiContendonoUnTasto(): Promise<void> {
   const frase = frasedeiConflitti(allCommands());
   if (frase) notify(frase, "guasto");
+}
+
+/// Se questo vault propone dei tasti che nessuno ha guardato, **dirlo** (§23.13).
+///
+/// Un vault viaggia — un repo clonato, una cartella condivisa, un vault di
+/// esempio — e le sue scorciatoie viaggiano con lui. Finché nessuno le ha
+/// guardate non premono niente, che è la metà silenziosa di questa voce; questa
+/// è l'altra metà, perché una scorciatoia sospesa e taciuta sarebbe una
+/// configurazione che non fa effetto e nessuno che sappia dire perché.
+///
+/// L'avviso **nomina i comandi** e non li conta soltanto, per la stessa ragione
+/// dei conflitti: «hai tre scorciatoie in sospeso» manda a cercare quali. E la
+/// risposta non sta qui — sta nel pannello delle impostazioni, dove quelle righe
+/// vivono e si vedono una per una. Un avviso con due bottoni chiederebbe di
+/// decidere senza guardare, che è il gesto che questa voce esiste per non
+/// insegnare.
+async function avvisaSeIlVaultPortaTasti(): Promise<void> {
+  try {
+    const proposti = await api.pendingKeybindings();
+    const chiavi = Object.keys(proposti);
+    if (chiavi.length === 0) return;
+    const perChiave = new Map(allCommands().map((c) => [keybindingKey(c.id), c.title]));
+    const nomi = chiavi.map((k) => perChiave.get(k) ?? k).join(", ");
+    notify(t("app.vault_keys_pending", { count: chiavi.length, commands: nomi }));
+  } catch {
+    // Un vault che non sa dire cosa propone non è un motivo per non aprirlo, e
+    // il silenzio qui è dalla parte giusta: le chiavi restano sospese finché
+    // qualcuno non risponde, quindi ciò che si perde è la domanda, non il
+    // presidio.
+  }
 }
 
 /// Se questo vault non ha il rilevamento delle modifiche esterne, dirlo (§9.7).

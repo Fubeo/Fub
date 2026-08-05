@@ -58,6 +58,10 @@ const IT = {
   "app.start_failed": "Avvio fallito: {reason}",
   "app.external_changes":
     "Le modifiche fatte da altre app non verranno rilevate: chiudi e riapri il vault per rileggerlo.",
+  // Nomina i comandi e non li conta soltanto, come l'avviso dei conflitti: «hai
+  // tre scorciatoie in sospeso» manda a cercare quali.
+  "app.vault_keys_pending":
+    "Questo vault propone {count} scorciatoie che non sono ancora attive ({commands}). Guardale nelle impostazioni, sezione Scorciatoie.",
 
   // --- le regioni, che si leggono solo navigando -------------------------
   "region.notes": "Note e ricerca",
@@ -211,6 +215,17 @@ const IT = {
   "settings.shortcuts_hint":
     "Una riga per comando: la combinazione che lo esegue. `Mod` è Ctrl (Cmd sul Mac); si scrive come `Mod-Shift-f`. Una combinazione senza modificatori non viene onorata, perché ruberebbe una lettera a chi sta scrivendo.",
   "settings.shortcuts.none": "Nessun comando dichiarato.",
+  // --- i tasti che il vault propone (§23.13) -----------------------------
+  //
+  // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
+  // capire che non sta scegliendo se disfare qualcosa, ma se lasciarlo fare.
+  "settings.vault_keys.title": "Questo vault propone {count} scorciatoie",
+  "settings.vault_keys.hint":
+    "Un vault porta con sé le proprie scorciatoie, e queste arrivano da fuori: finché non le guardi non premono niente, e valgono le combinazioni dichiarate dai comandi.",
+  "settings.vault_keys.adopt": "Usa quelle del vault",
+  "settings.vault_keys.discard": "Tieni le mie",
+  "settings.vault_keys.discard.hint":
+    "Le toglie dal file di configurazione del vault: non restano in sospeso, e la prossima volta non te le richiede.",
   "settings.shortcuts.shell":
     "I comandi di questa finestra hanno una combinazione fissa: cambiarla vuol dire dichiararli al kernel, e la shell non è ancora un componente.",
   "settings.none": "Nessun componente dichiara impostazioni.",
@@ -456,6 +471,8 @@ const EN: Record<Chiave, string> = {
   "app.start_failed": "Startup failed: {reason}",
   "app.external_changes":
     "Changes made by other apps will not be detected: close and reopen the vault to read it again.",
+  "app.vault_keys_pending":
+    "This vault proposes {count} shortcuts that are not active yet ({commands}). Look at them in the settings, Shortcuts section.",
 
   "region.notes": "Notes and search",
   "region.document": "Document",
@@ -566,6 +583,13 @@ const EN: Record<Chiave, string> = {
   "settings.shortcuts_hint":
     "One row per command: the combination that runs it. `Mod` is Ctrl (Cmd on the Mac); you write it as `Mod-Shift-f`. A combination without modifiers is not honoured, because it would steal a letter from whoever is typing.",
   "settings.shortcuts.none": "No command declared.",
+  "settings.vault_keys.title": "This vault proposes {count} shortcuts",
+  "settings.vault_keys.hint":
+    "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",
+  "settings.vault_keys.adopt": "Use the vault's",
+  "settings.vault_keys.discard": "Keep mine",
+  "settings.vault_keys.discard.hint":
+    "Takes them out of the vault's configuration file: nothing is left pending, and you will not be asked again next time.",
   "settings.shortcuts.shell":
     "The commands of this window have a fixed combination: changing it means declaring them to the kernel, and the shell is not a component yet.",
   "settings.group.other": "Other",

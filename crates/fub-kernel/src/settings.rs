@@ -31,6 +31,32 @@
 //! scope una regola invece di un suggerimento. Ignorarla non è silenzioso: chi
 //! carica il file raccoglie un avviso che nomina la chiave.
 //!
+//! # Un valore può essere **sospeso**, e chi lo sospende non è questo modulo
+//!
+//! Un file che viaggia col vault è un file che può arrivare da fuori, e ci sono
+//! chiavi per cui il caso peggiore non è né una sottrazione né una cosa che si
+//! vede: le **scorciatoie** (`keys.*`, [0077]) riprogrammano un gesto di chi
+//! apre, e un gesto riprogrammato si scopre premendolo. Da qui
+//! [`SettingsStore::suspend`]: un elenco di chiavi il cui valore del vault
+//! **non si legge**, e sotto cui resta il default dello schema — cioè, per una
+//! scorciatoia, la combinazione che il comando dichiara.
+//!
+//! Questo modulo tiene il **meccanismo** e non il criterio. Quali chiavi siano
+//! sospese lo decide chi monta, perché per deciderlo serve una cosa che sta
+//! fuori dal vault — cosa l'utente ha già guardato su questa macchina — e uno
+//! store che leggesse il registro dei vault per rispondere a una `effective()`
+//! sarebbe il kernel che conosce l'installazione. La regola sta in
+//! `fub_host::settings`, la sospensione arriva qui già decisa, ed è la
+//! [0100](../../../docs/decisions/0100-i-tasti-che-arrivano-da-fuori.md).
+//!
+//! Una sola cosa la decide questo modulo, perché è l'unico a saperla: **scrivere
+//! una chiave sospesa la risveglia**. Chi scrive è una persona davanti al
+//! pannello, e lasciare sospeso ciò che ha appena battuto vorrebbe dire un
+//! valore nel file che nessuno leggerà mai — che è precisamente ciò che la 0076
+//! esiste per non avere.
+//!
+//! [0077]: ../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md
+//!
 //! # Perché non è uno spazio chiave→valore
 //!
 //! Perché le chiavi le dichiara qualcuno: una chiave fuori schema non si legge e
@@ -40,7 +66,7 @@
 //! tolto, ed è ciò che rende questo store una **configurazione** invece di un
 //! database di comodo.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -286,6 +312,11 @@ pub struct SettingsStore {
     /// [`non_lo_sovrascrivo`].
     vault_readable: bool,
     machine: Arc<MachineSettings>,
+    /// Le chiavi il cui valore del vault **non si legge** finché qualcuno non
+    /// lo guarda (§23.13): vedi [`SettingsStore::suspend`] e la nota in testa al
+    /// modulo. Vuoto per quasi ogni vault, ed è la forma giusta — una
+    /// sospensione è un'eccezione con un elenco, non uno stato.
+    sospese: BTreeSet<String>,
     /// Cosa è andato storto **leggendo**: un file malformato, una chiave di
     /// macchina scritta dentro un vault. Chi monta le stampa; il canale vero è
     /// il §20.2.
@@ -317,8 +348,58 @@ impl SettingsStore {
             vault,
             vault_readable: warnings.is_empty(),
             machine,
+            sospese: BTreeSet::new(),
             warnings,
         }
+    }
+
+    /// Le scorciatoie che il file **di questo vault** dichiara, come chiave →
+    /// accordo (§23.13).
+    ///
+    /// Guarda il file e non gli schemi, e non è un dettaglio: chi deve decidere
+    /// se sospenderle è chi monta, e chiama **prima** che i provider di comandi
+    /// si registrino — cioè prima che quelle chiavi siano dichiarate da
+    /// qualcuno. Una scorciatoia scritta per un comando che questo montaggio non
+    /// ha esce di qui lo stesso, ed è giusto: il giorno che quel componente si
+    /// accende, il valore che stava lì ad aspettarlo non deve diventare attivo
+    /// senza che nessuno l'abbia mai visto.
+    ///
+    /// I valori che non sono testo non ci sono: una chiave di scorciatoia con un
+    /// numero dentro è un file scritto male, che `declare` diagnostica e
+    /// `resolve` scarta già per conto suo.
+    pub fn vault_keybindings(&self) -> BTreeMap<String, String> {
+        self.vault
+            .iter()
+            .filter(|(key, _)| fub_abi::settings::command_of_keybinding_key(key).is_some())
+            .filter_map(|(key, value)| match value {
+                SettingValue::Text(chord) => Some((key.clone(), chord.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Sospende il valore *del vault* di queste chiavi: [`resolve`] le tratta
+    /// come se il file non ne parlasse, e sotto resta il default dello schema.
+    ///
+    /// Sostituisce l'elenco invece di aggiungersi, perché una sospensione è la
+    /// risposta a una domanda fatta tutta insieme — *cosa, di ciò che questo
+    /// file porta, non è ancora stato guardato* — e due chiamate che si
+    /// sommassero lascerebbero sospesa una chiave a cui qualcuno ha già detto di
+    /// sì.
+    ///
+    /// Non tocca il file. Una sospensione che cancellasse sarebbe irreversibile
+    /// dove il caso è **il dubbio**, ed è la riga della
+    /// [0099](../../../docs/decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md):
+    /// delle due mosse si sospende quella che non si disfa.
+    ///
+    /// [`resolve`]: SettingsStore::resolve
+    pub fn suspend(&mut self, keys: BTreeSet<String>) {
+        self.sospese = keys;
+    }
+
+    /// Le chiavi sospese adesso.
+    pub fn suspended(&self) -> &BTreeSet<String> {
+        &self.sospese
     }
 
     /// Gli avvisi raccolti finora, e li **svuota**: chi li legge se ne fa
@@ -429,10 +510,20 @@ impl SettingsStore {
     /// e restituirlo qui vorrebbe dire dare a chi legge un `bool` dove il suo
     /// codice si aspetta un numero.
     ///
+    /// Una chiave **sospesa** (§23.13) si legge come se il file del vault non ne
+    /// parlasse: torna il default dello schema, e `SettingSource::Default` dice
+    /// il vero — nessuno *che valga* ha deciso quel valore. La sospensione non
+    /// è una quarta provenienza perché non dura: o la si scioglie guardandola, o
+    /// la si scioglie scrivendo, e un vocabolario nel contratto per uno stato
+    /// che finisce sarebbe firma pagata per un'attesa.
+    ///
     /// [`declare`]: SettingsStore::declare
     fn resolve(&self, declared: &Declared) -> (SettingValue, SettingSource) {
         let spec = &declared.spec;
         let (trovato, source) = match spec.scope {
+            SettingScope::Vault if self.sospese.contains(&spec.key) => {
+                (None, SettingSource::Default)
+            }
             SettingScope::Vault => (self.vault.get(&spec.key).cloned(), SettingSource::Vault),
             SettingScope::Machine => (self.machine.get(&spec.key), SettingSource::Machine),
         };
@@ -530,6 +621,21 @@ impl SettingsStore {
                     PluginError::Internal(format!("{}: {e}", self.vault_path).into())
                 })?;
                 self.vault = next;
+                // **Scrivere risveglia**, e sta qui perché qui passano tutti e
+                // due i modi di scrivere — il valore e l'azzeramento. A scrivere
+                // un'impostazione è una persona davanti al pannello (la via dei
+                // programmi ha il suo cancello, `program_writable`, e le
+                // scorciatoie non lo aprono), quindi ciò che esce da questa riga
+                // è un valore che qualcuno ha appena guardato. Lasciarlo sospeso
+                // vorrebbe dire scrivere in un file una riga che nessuno
+                // leggerà, che è la cosa che la 0076 esiste per non avere.
+                //
+                // **Una chiave alla volta**, e non l'elenco: chi rimappa *una*
+                // scorciatoia non ha guardato le altre cinque che quel vault
+                // portava, e adottargliele tutte al primo gesto sarebbe
+                // esattamente il sì che questa voce esiste per non far dare per
+                // sbaglio.
+                self.sospese.remove(&spec.key);
             }
         }
         Ok(spec.scope)
@@ -573,6 +679,116 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("path UTF-8");
         (dir, path)
+    }
+
+    /// Uno store con una scorciatoia già scritta nel file del vault.
+    fn store_con_un_tasto(dir: &Utf8Path, chord: &str) -> SettingsStore {
+        let mut store = store_su(dir);
+        store
+            .declare(
+                "fub.core",
+                &[SettingSpec::new(
+                    "keys.note.create",
+                    "Nuova nota",
+                    SettingKind::Text {
+                        default: String::new(),
+                    },
+                )],
+            )
+            .unwrap();
+        store
+            .set("keys.note.create", SettingValue::Text(chord.into()))
+            .unwrap();
+        store
+    }
+
+    /// Una chiave sospesa si legge come se il file non ne parlasse (§23.13). E
+    /// la provenienza dice il vero: `Default`, perché nessuna decisione che
+    /// valga è stata presa.
+    #[test]
+    fn una_chiave_sospesa_vale_il_default_e_il_file_non_si_tocca() {
+        let (_tmp, dir) = tempdir();
+        let mut store = store_con_un_tasto(&dir, "Mod-Alt-k");
+        assert_eq!(
+            store.effective("keys.note.create").unwrap(),
+            (SettingValue::Text("Mod-Alt-k".into()), SettingSource::Vault)
+        );
+
+        store.suspend(BTreeSet::from(["keys.note.create".to_string()]));
+        assert_eq!(
+            store.effective("keys.note.create").unwrap(),
+            (SettingValue::Text(String::new()), SettingSource::Default)
+        );
+
+        // Il valore è **sospeso**, non cancellato: si legge ancora dal file, che
+        // è ciò che permette di adottarlo dopo. Sospendere è la mossa che si
+        // disfa, ed è la ragione per cui è quella che si fa nel dubbio.
+        assert_eq!(
+            store.vault_keybindings().get("keys.note.create"),
+            Some(&"Mod-Alt-k".to_string())
+        );
+    }
+
+    /// **Scrivere risveglia**, ed è l'unica cosa che questo modulo decide da sé:
+    /// chi scrive un'impostazione è una persona, e un valore che ha appena
+    /// battuto non può restare fra quelli che nessuno leggerà mai.
+    #[test]
+    fn scrivere_una_chiave_sospesa_la_risveglia() {
+        let (_tmp, dir) = tempdir();
+        let mut store = store_con_un_tasto(&dir, "Mod-Alt-k");
+        store.suspend(BTreeSet::from(["keys.note.create".to_string()]));
+
+        store
+            .set("keys.note.create", SettingValue::Text("Mod-j".into()))
+            .unwrap();
+        assert!(store.suspended().is_empty());
+        assert_eq!(
+            store.effective("keys.note.create").unwrap(),
+            (SettingValue::Text("Mod-j".into()), SettingSource::Vault)
+        );
+    }
+
+    /// E **azzerare** la risveglia allo stesso modo: è la strada del «tieni le
+    /// mie», e se non risvegliasse resterebbe una sospensione appesa a una
+    /// chiave che nel file non c'è più.
+    #[test]
+    fn azzerare_una_chiave_sospesa_la_risveglia() {
+        let (_tmp, dir) = tempdir();
+        let mut store = store_con_un_tasto(&dir, "Mod-Alt-k");
+        store.suspend(BTreeSet::from(["keys.note.create".to_string()]));
+
+        store.reset("keys.note.create").unwrap();
+        assert!(store.suspended().is_empty());
+        assert!(store.vault_keybindings().is_empty());
+    }
+
+    /// Il file si guarda **prima** che gli schemi esistano, ed è il momento in
+    /// cui chi monta deve decidere: una scorciatoia scritta per un comando che
+    /// questo montaggio non ha esce lo stesso da `vault_keybindings`, o il
+    /// giorno che quel componente si accende il suo accordo diventerebbe attivo
+    /// senza che nessuno l'abbia mai visto.
+    #[test]
+    fn i_tasti_del_file_si_leggono_anche_senza_nessuno_che_li_dichiari() {
+        let (_tmp, dir) = tempdir();
+        write_atomic(
+            &dir.join(crate::vault::FUB_DIR).join("settings.json"),
+            br#"{"version":1,"values":{
+                "keys.note.create":"Mod-Alt-k",
+                "com.acme:keys.tasks.add":"Mod-t",
+                "appearance.theme":"dark",
+                "keys.rotto": 12
+            }}"#,
+        )
+        .unwrap();
+        let store = store_su(&dir);
+        let tasti = store.vault_keybindings();
+
+        assert_eq!(tasti.len(), 2, "{tasti:?}");
+        assert_eq!(tasti.get("com.acme:keys.tasks.add").unwrap(), "Mod-t");
+        // Il tema non è una scorciatoia, e un accordo che non è testo è un file
+        // scritto male — che `declare` diagnostica e `resolve` scarta già.
+        assert!(!tasti.contains_key("appearance.theme"));
+        assert!(!tasti.contains_key("keys.rotto"));
     }
 
     #[test]
