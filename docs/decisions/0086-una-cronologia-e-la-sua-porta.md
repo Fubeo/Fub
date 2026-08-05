@@ -48,7 +48,7 @@ La cronologia vive nello **stato di vista della shell**, sotto la chiave
   timbra la porta di Rust (`SHELL_OWNER`, `fub-app/src/lib.rs`), non il webview.
   Nessun altro componente la può leggere.
 - **`forget_vault` la dimentica già**, insieme al resto. È metà
-  «cancellazione dati locali» del §23.2 senza scrivere una riga.
+  «cancellazione dati locali» di FEATURES 23.2 (privacy) senza scrivere una riga.
 
 Ciò che stona, e che si scrive invece di lasciarlo passare: il doc di
 `ViewStateRead` descrive quello spazio come *scroll, sezioni collassate, filtro
@@ -82,8 +82,8 @@ annulla, e un tasto premuto per sbaglio è esattamente il modo in cui succedereb
 Si trova nella palette, dove per arrivarci bisogna averlo scritto.
 
 Il prezzo, in chiaro: **non è invocabile da CLI né da un'automazione**. Chi
-scriverà la CLI (27.1) non troverà un verbo per questo, e il §23.2 resta scoperto
-da quel lato. Si accetta perché l'alternativa era peggio in modo peggiore: per
+scriverà la CLI (27.1) non troverà un verbo per questo, e FEATURES 23.2 resta
+scoperto da quel lato. Si accetta perché l'alternativa era peggio in modo peggiore: per
 rendere il comando del registro possibile, la cronologia avrebbe dovuto vivere
 nel vault — cioè sincronizzarsi — e una funzione di privacy che si compra
 mettendo il dato dove viaggia non è una funzione di privacy.
@@ -110,7 +110,7 @@ memoria riaccesa comincia a raccogliere e la si scopre quando è già lunga.
 **Accesa di default**, e non per inerzia — per un dato di privacy il default non è
 mai neutro, e va argomentato in un verso o nell'altro. L'argomento è che il dato
 non esce: sta sulla macchina, non entra nel vault, non attraversa nessuna rete
-(§23.2, «nessun invio search query»), c'è un interruttore e c'è un gesto che
+(FEATURES 23.2, «nessun invio search query»), c'è un interruttore e c'è un gesto che
 cancella. L'opt-in è la forma giusta quando un dato **esce**; qui non esce, e una
 memoria spenta di default sarebbe una funzione che nessuno trova — cioè tanto
 valeva non scriverla.

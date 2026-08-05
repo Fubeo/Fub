@@ -145,6 +145,13 @@ flowchart TB
    statistiche, ricerca, comandi, versioning e blocchi implementano gli stessi
    trait che useranno i plugin di terzi, senza sandbox e senza serializzazione:
    il dogfooding è il modo in cui il contratto si scopre sbagliato prima di M5.
+   **Fin dove arriva, però, adesso è contato**
+   ([0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md)): le
+   feature ufficiali stanno su **quattro** delle **dieci** superfici che
+   `ViewSurface` nomina, e dove nessuna passa il contratto non si scopre
+   sbagliato — si scopre solo quando qualcuno ci prova. Il conto lo tiene
+   `fub-features/tests/conformita.rs`, che per ogni superficie pretende una
+   feature o una ragione scritta.
 5. **Il tratteggio è onesto; la freccia «ospiterà» no.** Il runtime WASM e
    l'intera FubSuite sono documenti, non codice: la cartella `plugins/` non
    esiste ancora, e nascerà con il runtime che dovrà caricarli. Ma quella freccia
@@ -232,6 +239,15 @@ da `official_features_do_not_depend_on_the_kernel`
 ([dependency_invariant.rs:317](../../crates/fub-abi/tests/dependency_invariant.rs)).
 Se una feature prendesse la scorciatoia, il test diventerebbe rosso prima che
 il diagramma diventasse falso.
+
+Quel «nient'altro» riguarda le **dipendenze**, e non promette che un terzo possa
+fare tutto ciò che fa una feature ufficiale: la
+[0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md) dice dove la
+somiglianza finisce — un guest non ha `UiNode::Html`/`WebView` (riservati a
+`Trust::Core`), non riceve eventi di tastiera perché il contratto non ne
+trasporta, e la **superficie di scrittura** è per questo non attrezzata pur non
+essendo vietata. È la quarta voce del metro in
+[plugin-boundary.md](plugin-boundary.md#cosa-non-può-essere-solo-un-guest-e-il-metro-per-deciderlo).
 
 E il diagramma stesso non può invecchiare in silenzio: `il_diagramma_dice_le_dipendenze_vere`
 lo rilegge da questo file e lo confronta con `cargo metadata` **nei due versi**.

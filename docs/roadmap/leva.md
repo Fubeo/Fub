@@ -547,6 +547,21 @@ compito di accorgersene. È la [0054](../decisions/0054-il-banco-del-lato-provid
 letta al rovescio: là una garanzia dichiarata non era mai esistita, qui una
 garanzia esiste davvero e vale su tutto tranne dove serve di più.
 
+**Chiusa dalla [0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md)**,
+e la diagnosi qui sopra era **sbagliata**: non sei decisioni che rendono falso
+l'invariante una alla volta — riletti contro la domanda giusta, quattro dei sei
+verbali non sfiorano nemmeno il caso e uno lo **concede per iscritto** — ma
+**due assenze che nessuno ha mai deciso**: nel contratto non esiste nessun evento
+di tastiera, e `Html`/`WebView` sono riservati a `Trust::Core` per ragioni che
+riguardano il contenuto attivo e non l'editing. Il posto nel secondo scaglione
+regge, il meccanismo no, e la differenza è utilizzabile: una decisione si discute,
+un'assenza non si trova — cercare un moltiplicatore fra i verbali lo fa vedere
+solo se qualcuno l'ha scritto, e qui il moltiplicatore stava nel **vuoto** fra
+uno e l'altro. Per questo la chiusura non ha toccato una firma: ha dato al metro
+di [plugin-boundary.md](../architecture/plugin-boundary.md) una quarta voce — *se
+la superficie esiste* — perché un metro che sa pesare solo un costo non ha modo
+di nominare chi non passa per assenza di porta.
+
 **§23.1 (la rinomina ad app chiusa)** non sta in nessuno dei due, ed è il primo
 caso in cui questa pagina deve aggiungere un criterio invece di applicarne uno:
 non rende inesprimibile niente e non moltiplica nessuna voce futura — **il conto

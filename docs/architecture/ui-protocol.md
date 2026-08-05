@@ -355,6 +355,22 @@ tiene "affamato". Ognuna esercita una parte diversa:
   di chiedere un canale nuovo; e che agisce invocando un comando del registro
   (`version.restore`) invece di scrivere da sé.
 
+**Fin dove arriva la garanzia**, che dalla
+[0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md) è **misurata**
+invece che affermata: queste sette view stanno su **quattro** delle **dieci**
+superfici che `ViewSurface` nomina, e sulle altre sei non c'è nessun dogfooding.
+Quindi «se il protocollo basta alle feature ufficiali, basta ai plugin» vale dove
+una feature ufficiale è passata davvero, ed è un enunciato su quattro superfici e
+non su tutte — il conto lo tiene `fub-features/tests/conformita.rs`
+(`il_dogfooding_dichiara_fin_dove_arriva`), che per ogni superficie pretende o
+una feature che ci stia o una ragione scritta.
+
+L'altra metà di dove finisce sta nel metro di
+[plugin-boundary.md](plugin-boundary.md#cosa-non-può-essere-solo-un-guest-e-il-metro-per-deciderlo):
+la sua **quarta voce** — *se la superficie esiste* — nomina chi non passa non
+perché costi troppo ma perché una porta non c'è, e il caso che trova è la
+**superficie di scrittura**, non vietata e non attrezzata.
+
 ## Evoluzione prevista
 
 - **Fatto ([0016](../decisions/0016-cosa-e-una-view.md))** — i nodi di input, le

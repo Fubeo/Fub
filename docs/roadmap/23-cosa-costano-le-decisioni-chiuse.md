@@ -324,7 +324,7 @@ il patto di questo progetto promette.
 
 ### 23.2 L'invariante dei terzi ha una seconda eccezione, e non è scritta
 
-*presidi · **P1** — una riga di prosa e una decisione di prodotto; non c'è una firma da scrivere*
+*chiusa dalla [0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md) — «l'editor è della shell» vuol dire **questo** editor, non **l'editing**: la superficie si presta, e un terzo che porti la propria esperienza di scrittura è un cliente previsto. La diagnosi di questa voce era **sbagliata**: le sei decisioni non sono la barriera — quattro non sfiorano il caso e la [0018](../decisions/0018-chi-vede-il-modello-parsato.md) lo **concede per iscritto** («chi disegna un editor tiene il proprio testo») —, e ciò che impedisce l'editing di terzi sono **due assenze mai decise**: nel contratto non esiste **nessun** evento di tastiera, e `Html`/`WebView` sono riservati a `Trust::Core` per ragioni che riguardano il contenuto attivo e non l'editing. Un'assenza non si discute e non si trova: ecco perché la riga non era scritta. Le due porte restano chiuse **e dichiarate** — il primo cliente ha un nome, la modalità vim, e il suo verdetto in [funzionalità future](../appendix/funzionalita-future.md) passa da `da decidere` a lavoro con una collocazione. Il metro di [plugin-boundary.md](../architecture/plugin-boundary.md) guadagna una **quarta voce** — *se la superficie esiste* — perché un metro che pesa solo un costo non sa nominare chi non passa per assenza di porta, e con lei un **buco dichiarato** (forma della [0064](../decisions/0064-il-supporto-sta-sotto.md)): i buchi diventano due, ed è il caso per cui la forma esisteva. E l'invariante impara **dove finisce**: le feature ufficiali stanno su **quattro** superfici su **dieci**, `ViewSurface::ALL` fa da elenco unico e il banco della shell diceva «sette su otto» perché quel numero era **dedotto**. Nessuna riga di WIT, nessun tipo nuovo*
 
 L'invariante è *«una feature ufficiale è ciò che scriverà un plugin di terzi»*, e
 la [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) la cita
@@ -348,7 +348,7 @@ sommate dicono una cosa che nessuna dice da sola, e che **non sta scritta da
 nessuna parte**: un terzo non può portare un'altra esperienza di scrittura. Può
 solo decorare la nostra.
 
-- [ ] **Scrivere l'eccezione dove sta l'invariante**, nella forma che la
+- [x] **Scrivere l'eccezione dove sta l'invariante**, nella forma che la
       [0064](../decisions/0064-il-supporto-sta-sotto.md) ha inventato: un **buco
       dichiarato**, che non è una casella da spuntare ma una riga da **trovare**
       prima di scoprirla. Chi arriverà a M5 e leggerà l'invariante ne dedurrà di
@@ -357,7 +357,7 @@ solo decorare la nostra.
       [0054](../decisions/0054-il-banco-del-lato-provider.md): là una garanzia
       dichiarata non esisteva, qui esiste una garanzia che vale su tutto tranne
       dove serve di più.
-- [ ] **Decidere fin dove arriva**, che è la parte che costa. Oggi la riga non
+- [x] **Decidere fin dove arriva**, che è la parte che costa. Oggi la riga non
       c'è, quindi non si sa se «l'editor è della shell» voglia dire *questo
       editor* o *l'editing*. Le due risposte producono due prodotti diversi:
       nella prima un terzo porta la propria superficie di scrittura e la shell le
@@ -366,7 +366,7 @@ solo decorare la nostra.
       riquadro tiene una tab di **view**, non per forza un documento; nella
       seconda non succederà mai, e allora i capitoli di FEATURES che descrivono
       modi di scrivere vanno letti con quella riga in mano.
-- [ ] **Il misuratore della domanda è la modalità vim**, e oggi non ha una
+- [x] **Il misuratore della domanda è la modalità vim**, e oggi non ha una
       posizione. La [0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)
       la nomina di sfuggita per scartare un esempio — `g d` è ineseguibile perché
       «sotto questa tastiera c'è un editor in cui `g` è testo di qualcuno» — e la
@@ -379,7 +379,7 @@ solo decorare la nostra.
       qui sta perché **misura** la voce: se l'editing è della shell, una modalità
       vim è una feature nostra o non è; se la superficie si presta, è il primo
       cliente di quel prestito.
-- [ ] **Perché non è P0.** Non c'è una firma da aggiungere: la superficie del
+- [x] **Perché non è P0.** Non c'è una firma da aggiungere: la superficie del
       prestito è già ospitata e il `pane` del `ViewContext` c'è dalla
       [0007](../decisions/0007-contesto-di-sessione.md). Ciò che manca è la riga
       che dice **se si può**, e una riga si scrive in qualunque momento — ma va

@@ -1313,6 +1313,46 @@ mod tests {
         assert_eq!(guard.random_bytes(4).unwrap().len(), 4);
     }
 
+    /// L'ultima famiglia dichiarata, nominata dal **compilatore** e non da un
+    /// conto.
+    ///
+    /// L'aritmetica del presidio qui sotto sa dire se `ALL` è coerente con sé
+    /// stesso — niente buchi, niente doppioni — e non sa quante famiglie
+    /// esistano fuori di lui: togliere l'**ultima** riga e portare la lunghezza
+    /// a diciotto la lascia verde, perché `visti` e `attesi` diventano tutti e
+    /// due `0..17`. Cioè restava scoperto il caso che capita davvero, ed è
+    /// quello per cui il presidio esiste: aggiungo una famiglia in fondo e mi
+    /// dimentico `ALL`.
+    ///
+    /// Il `match` è esaustivo apposta e non ha altro mestiere: una famiglia
+    /// nuova non compila finché non le si dà un posto qui. Lo ha trovato la
+    /// [§23.2](../../../../docs/decisions/0104-la-superficie-di-scrittura-si-presta.md)
+    /// provando rosso il presidio gemello delle superfici, che da questo aveva
+    /// copiato la forma **e il buco**.
+    fn ultima_famiglia_dichiarata(cap: Capability) -> u16 {
+        match cap {
+            Capability::VaultRead => 0,
+            Capability::VaultWrite => 1,
+            Capability::VaultStructure => 2,
+            Capability::DataRead => 3,
+            Capability::DataWrite => 4,
+            Capability::Query => 5,
+            Capability::Drafts => 6,
+            Capability::Env => 7,
+            Capability::Session => 8,
+            Capability::SessionSelection => 9,
+            Capability::Events => 10,
+            Capability::Commands => 11,
+            Capability::Services => 12,
+            Capability::Network => 13,
+            Capability::SettingsRead => 14,
+            Capability::SettingsWrite => 15,
+            Capability::ViewStateRead => 16,
+            Capability::ViewStateWrite => 17,
+            Capability::Transfer => 18,
+        }
+    }
+
     /// `ALL` è l'unico elenco scritto a mano rimasto in questo modulo, e tutto
     /// il resto gli sta a valle: `Granted::new` ci folda sopra per calcolare i
     /// permessi, e il presidio delle capacità simulate
@@ -1331,9 +1371,18 @@ mod tests {
     /// [`CapabilitySet`] fa già affidamento (`1 << cap as u32`): i discriminanti
     /// sono contigui da zero, quindi pretendere che quelli di `ALL` siano
     /// esattamente `0..len` vieta insieme i duplicati e i buchi. Duplicare una
-    /// riga è rosso; dimenticare la variante nuova è rosso.
+    /// riga è rosso; dimenticare la variante nuova è rosso — **tranne in coda**,
+    /// e per quello c'è `ultima_famiglia_dichiarata`.
     #[test]
     fn i_discriminanti_coprono_ogni_famiglia() {
+        assert_eq!(
+            Capability::ALL.len(),
+            ultima_famiglia_dichiarata(Capability::Transfer) as usize + 1,
+            "`Capability::ALL` è più corto dell'enum: c'è una famiglia che il \
+             compilatore conosce e che l'elenco non nomina. È il caso che \
+             l'aritmetica qui sotto non vede."
+        );
+
         let mut visti: Vec<u16> = Capability::ALL.iter().map(|&c| c as u16).collect();
         visti.sort_unstable();
         let attesi: Vec<u16> = (0..Capability::ALL.len() as u16).collect();
