@@ -789,12 +789,22 @@ impl Workspace {
         // sua dichiarazione: stesso esito, ma il difetto verrebbe raccontato
         // come se fosse dell'host.
         let permessi = self.permission_specs(&id);
-        if let Err(why) = self
-            .settings
-            .write()
-            .expect("store di configurazione")
-            .declare(&id, &permessi)
-        {
+        let esito = {
+            let mut settings = self.settings.write().expect("store di configurazione");
+            settings.declare(&id, &permessi).inspect_err(|_| {
+                // E si **ritira il suo schema**, che è stato dichiarato una
+                // riga più su e che `retire` non conosce. È il primo punto di
+                // questa funzione che poteva lasciare qualcosa a metà: senza
+                // questa riga le chiavi del manifest restavano nello store
+                // attribuite a un plugin che non è registrato, e il secondo
+                // tentativo con lo stesso id falliva **prima**, sul proprio
+                // schema, con «già dichiarata da `<id>`» — cioè raccontando
+                // come un difetto del manifest uno stato che aveva creato
+                // l'host.
+                settings.withdraw(&id);
+            })
+        };
+        if let Err(why) = esito {
             self.providers.plugins.retire(&id);
             return Err(RegistryError::Setting(why));
         }

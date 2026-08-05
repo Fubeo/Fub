@@ -23,8 +23,9 @@
 // L'elenco è chiuso di là — `fub_abi::options::permission::ALL` — e i due si
 // tengono allineati con un presidio per parte: di qua `permessi.test.ts`
 // controlla che ogni voce abbia una frase, di là
-// `crates/fub-app/tests/i_permessi_si_leggono.rs` legge *questo file* e
-// controlla che non ne manchi nessuna.
+// `crates/fub-host/tests/interruttori.rs`
+// (`i_permessi_sono_gli_stessi_di_qua_e_di_la`) legge *questo file* e controlla
+// che non ne manchi nessuna.
 //
 // # Cosa questo modulo non fa
 //

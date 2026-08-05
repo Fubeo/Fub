@@ -355,6 +355,52 @@ fn denying_the_network_takes_the_allowlist_with_it() {
     );
 }
 
+/// **Una registrazione che fallisce a metà non lascia dietro le proprie chiavi.**
+///
+/// Il caso brutto lo nomina `register_plugin`: un componente che dichiarasse di
+/// suo una chiave `<id>:permissions.…` fa fallire la fabbricazione delle chiavi
+/// dei permessi, e allora non si monta affatto. Il «non si monta affatto» però
+/// riguardava il registro dei plugin e non lo store di configurazione, dove lo
+/// schema del manifest era già entrato una riga più su: restava attribuito a un
+/// id che non è registrato: e il secondo tentativo con lo stesso id falliva
+/// **prima**, sul proprio schema, con «già dichiarata da `<id>`». Cioè l'host
+/// raccontava come un difetto del manifest uno stato che aveva creato lui.
+#[test]
+fn a_half_failed_registration_leaves_no_settings_behind() {
+    let mut ws = Banco::nuovo().senza_formato().senza_scansione().monta();
+    let sua = fub_abi::settings::permission_key("terzi.furbo", permission::READ_VAULT);
+    let manifest = || {
+        PluginManifest::new("terzi.furbo", "Furbo")
+            .granting(PluginPermissions::of(&[permission::READ_VAULT]))
+            .configuring(vec![fub_abi::settings::SettingSpec::toggle(
+                &sua, "Mio", true,
+            )])
+    };
+
+    let errore = ws
+        .register_plugin(manifest(), Trust::Community)
+        .expect_err("la chiave del recinto non la dichiara chi ci sta dentro");
+    assert!(
+        ws.plugins().is_empty(),
+        "e il plugin non si monta: {errore}"
+    );
+
+    // La prova che non è rimasto niente: lo stesso id ci riprova, con un
+    // manifest che quella chiave non la nomina più, e passa. Con lo schema
+    // orfano nello store questa riga leggerebbe «già dichiarata da
+    // `terzi.furbo`» — un plugin che collide con sé stesso.
+    ws.register_plugin(
+        PluginManifest::new("terzi.furbo", "Furbo")
+            .granting(PluginPermissions::of(&[permission::READ_VAULT])),
+        Trust::Community,
+    )
+    .expect("il secondo tentativo non trova macerie del primo");
+    assert!(
+        ws.setting(&sua).is_ok(),
+        "e la chiave del permesso adesso è quella fabbricata dall'host"
+    );
+}
+
 /// **Ciò che l'utente ha negato non si può riconcedere scrivendo un file.**
 ///
 /// La negazione si applica *prima* di [`Granted`], sulla mappa del manifest, e

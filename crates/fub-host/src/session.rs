@@ -779,18 +779,43 @@ impl Host {
     /// era già proprio.
     pub fn discard_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
         let mostrate: Vec<String> = self.pending_keybindings(vault)?.into_keys().collect();
-        self.with_session(vault, |session| {
+        let mancate = self.with_session(vault, |session| {
             let mut ws = session.workspace.write().expect("workspace avvelenato");
             // Il `reset` **risveglia** la chiave che azzera — è la riga in
             // `SettingsStore::write` — quindi alla fine del giro non resta
             // sospeso niente di ciò che è stato mostrato, e non serve una
             // seconda mossa che potrebbe non essere d'accordo con la prima.
-            for key in &mostrate {
-                ws.reset_setting(key)?;
-            }
-            Ok::<(), PluginError>(())
-        })??;
-        self.ricorda_i_tasti_visti(vault)
+            //
+            // I guasti si **raccolgono** invece di interrompere il giro, e la
+            // ragione è la promessa qui sopra: uscire alla prima chiave che non
+            // si azzera lascerebbe metà file cancellato e metà ancora sospeso,
+            // cioè esattamente l'ambiguità che questa risposta esiste per
+            // togliere — e senza nemmeno arrivare al promemoria, così la volta
+            // dopo si richiede di un insieme che è già stato in parte distrutto.
+            mostrate
+                .iter()
+                .filter_map(|key| {
+                    ws.reset_setting(key)
+                        .err()
+                        .map(|why| format!("`{key}`: {why}"))
+                })
+                .collect::<Vec<_>>()
+        })?;
+        // Il promemoria si scrive **comunque**, e dice il vero da solo: ricorda
+        // ciò che il file porta meno ciò che è rimasto sospeso, quindi le chiavi
+        // che non si sono azzerate non risultano guardate.
+        self.ricorda_i_tasti_visti(vault)?;
+        if mancate.is_empty() {
+            return Ok(());
+        }
+        Err(PluginError::Internal(
+            format!(
+                "{} scorciatoie del vault non si sono azzerate — {}",
+                mancate.len(),
+                mancate.join("; ")
+            )
+            .into(),
+        ))
     }
 
     /// Scrive un'impostazione **per conto dell'utente**: è la porta della

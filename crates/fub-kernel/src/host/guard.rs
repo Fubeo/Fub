@@ -390,6 +390,15 @@ pub struct Granted {
     /// diverso, ed è lì che deve esserlo — «può connettersi a qualunque host»
     /// non è la stessa frase di «può connettersi a api.acme.com».
     ///
+    /// I significati sono **tre**, e il terzo è quello che si scopre sbagliando:
+    /// `None` = qualunque host; `Some(elenco)` = quegli host; `Some(vuoto)` = un
+    /// parametro che c'è e non è un elenco di host, cioè **nessun** host. Il
+    /// terzo esiste perché senza di lui un manifest scritto male —
+    /// `"fub:network": "api.acme.com"`, la stringa invece dell'elenco — cadeva
+    /// nel primo: un errore di battitura che *intende restringere* apriva a
+    /// tutto, in silenzio. Un parametro illeggibile non è l'assenza di un
+    /// parametro, e le due cose non possono avere la stessa risposta.
+    ///
     /// Un `Arc` perché [`Granted`] si clona a ogni prestito, e l'elenco è dello
     /// stesso manifest per tutta la vita del montaggio.
     network: Option<Arc<[Box<str>]>>,
@@ -400,8 +409,10 @@ pub struct Granted {
 
 /// Le famiglie concesse, come insieme.
 ///
-/// Diciassette bit in un `u32`, ed era un `u16` fino alla diciassettesima
-/// famiglia.
+/// Diciotto bit in un `u32`, ed era un `u16` fino alla diciassettesima
+/// famiglia. Il numero sta scritto perché è il conto che ha già morso una
+/// volta: se qui e in [`Capability::ALL`] non dicono la stessa cosa, la riga da
+/// credere è `ALL`.
 ///
 /// **È il primo limite strutturale che questo elenco abbia incontrato**, e vale
 /// la pena che resti scritto: con la 0095 le famiglie erano diventate sedici,
@@ -454,9 +465,28 @@ impl Granted {
         // L'allowlist si legge **una volta**, qui, e non a ogni richiesta: è la
         // stessa ragione per cui le famiglie diventano una maschera invece di
         // restare una mappa da interrogare.
-        let hosts = permissions.granted.as_strings(permission::NETWORK);
-        let network =
-            (!hosts.is_empty()).then(|| hosts.iter().map(|h| normalized_host(h)).collect());
+        //
+        // Si legge il valore **grezzo** e non `as_strings`, che appiattisce su
+        // un elenco vuoto tre cose diverse — assente, vuoto, malformato — e qui
+        // la terza deve fallire chiusa invece di confondersi con la prima. Vedi
+        // il campo `network`.
+        let network = match permissions.granted.get(permission::NETWORK) {
+            // Assente, o acceso senza parametro: qualunque host.
+            None | Some(serde_json::Value::Bool(_)) | Some(serde_json::Value::Null) => None,
+            // Un elenco vuoto è un parametro che dice «non restringo», ed è la
+            // regola uniforme della mappa: presente = acceso. Ci si appoggia la
+            // UI dei permessi, che per questo mostra e non edita.
+            Some(serde_json::Value::Array(items)) if items.is_empty() => None,
+            Some(serde_json::Value::Array(items)) => Some(
+                items
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .map(normalized_host)
+                    .collect(),
+            ),
+            // Un parametro che non è un elenco: recinto che non nomina nessuno.
+            Some(_) => Some(Arc::from([])),
+        };
         Granted {
             plugin: Arc::from(plugin),
             allowed,
@@ -532,6 +562,16 @@ impl Policy for Granted {
             // host. Vedi il campo per perché la regola non si ribalta qui.
             None => None,
             Some(allowed) if allowed.iter().any(|p| Granted::covers(p, &target)) => None,
+            // Un recinto che non nomina nessuno: il parametro c'era e non era
+            // un elenco di host. Il rifiuto lo dice invece di far leggere «ha
+            // dichiarato `` e non `api.acme.com`», che manderebbe a cercare il
+            // difetto nel posto sbagliato.
+            Some(allowed) if allowed.is_empty() => Some(format!(
+                "il parametro `{}` di `{}` non è un elenco di host, e finché non lo è \
+                 non si connette a niente — `{target}` compreso",
+                permission::NETWORK,
+                self.plugin
+            )),
             Some(allowed) => Some(format!(
                 "`{}` ha dichiarato `{}` e non `{target}`",
                 self.plugin,
@@ -1042,8 +1082,21 @@ fn split_url(url: &str) -> Result<(String, String), PluginError> {
 /// usa l'app — `http://localhost:11434` — non attraversa nessuna rete, e
 /// pretendere TLS verso sé stessi vorrebbe dire escludere dal contratto
 /// l'unico modo di usare l'AI senza mandare le proprie note a qualcuno.
+///
+/// L'indirizzo si **parsa**, e non si confronta come testo: `127.` come prefisso
+/// di stringa non è una famiglia di indirizzi, è una famiglia di *nomi*.
+/// `127.0.0.1.evil.example` è un nome registrabile — la prima etichetta di un
+/// dominio può cominciare con una cifra — e con un `starts_with` si prendeva
+/// l'esenzione di questa funzione: `http` in chiaro verso la macchina di
+/// qualcun altro, cioè esattamente l'unica cosa che la regola esiste per
+/// impedire. Chi è loopback lo dice [`IpAddr`](std::net::IpAddr), che quel
+/// conto lo sa fare per `127.0.0.0/8` e per `::1` insieme; `localhost` resta a
+/// parte perché è un nome, non un indirizzo.
 fn is_loopback(host: &str) -> bool {
-    host == "localhost" || host == "::1" || host.starts_with("127.")
+    host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
 }
 
 impl<H: HostServices, P: Policy> HostServices for Guard<H, P> {
@@ -1226,13 +1279,13 @@ mod tests {
     /// negata a tutti, che è il modo giusto di sbagliare, ma va visto»: la prima
     /// metà è vera per costruzione, la seconda non lo era da nessuna parte.
     ///
-    /// La lunghezza dichiarata (`[Capability; 16]`) obbliga a **toccare**
+    /// La lunghezza dichiarata (`[Capability; N]`, oggi diciotto) obbliga a **toccare**
     /// l'elenco quando l'enum cresce, ma non a metterci dentro la variante
     /// giusta: chi ha fretta soddisfa il compilatore duplicando una riga già
     /// presente, e la famiglia nuova non viene iterata mai.
     ///
     /// Questo lo chiude senza una proc-macro, sfruttando ciò su cui
-    /// [`CapabilitySet`] fa già affidamento (`1 << cap as u16`): i discriminanti
+    /// [`CapabilitySet`] fa già affidamento (`1 << cap as u32`): i discriminanti
     /// sono contigui da zero, quindi pretendere che quelli di `ALL` siano
     /// esattamente `0..len` vieta insieme i duplicati e i buchi. Duplicare una
     /// riga è rosso; dimenticare la variante nuova è rosso.
@@ -1536,6 +1589,62 @@ mod tests {
         guard
             .fetch(HttpRequest::get("http://localhost:11434/api/generate"))
             .expect("verso questa macchina sì: è dove gira un modello locale");
+    }
+
+    /// **Il prefisso `127.` è una famiglia di nomi, non di indirizzi.**
+    ///
+    /// `127.0.0.1.evil.example` è registrabile — la prima etichetta di un
+    /// dominio può cominciare con una cifra — e con un confronto per testo si
+    /// prendeva l'esenzione del loopback: `http` in chiaro verso la macchina di
+    /// qualcun altro, cioè l'unica cosa che la regola esiste per impedire.
+    #[test]
+    fn a_name_that_starts_like_a_loopback_address_is_not_this_machine() {
+        let guard = Guard::new(Filo, con_rete(&["*.evil.example", "127.0.0.1", "::1"]));
+        let err = guard
+            .fetch(HttpRequest::get("http://127.0.0.1.evil.example/x"))
+            .expect_err("è un nome di qualcun altro, e in chiaro non ci si va");
+        assert!(matches!(err, PluginError::BadArgs(_)), "{err}");
+        guard
+            .fetch(HttpRequest::get("http://127.0.0.1:11434/api/generate"))
+            .expect("l'indirizzo vero sì");
+        guard
+            .fetch(HttpRequest::get("http://[::1]:11434/api/generate"))
+            .expect("e anche la sua forma IPv6");
+    }
+
+    /// **Un parametro illeggibile non è l'assenza di un parametro.**
+    ///
+    /// `"fub:network": "api.acme.com"` — la stringa invece dell'elenco — è un
+    /// manifest scritto male, e prima cadeva sul ramo «nessun elenco», cioè
+    /// *qualunque host*: un errore di battitura che intende restringere apriva
+    /// a tutto, senza che niente lo dicesse. Adesso il recinto c'è e non nomina
+    /// nessuno.
+    #[test]
+    fn a_malformed_allowlist_fences_everything_out() {
+        for storto in [
+            serde_json::json!("api.acme.com"),
+            serde_json::json!(7),
+            serde_json::json!([1, 2]),
+            serde_json::json!({ "host": "api.acme.com" }),
+        ] {
+            let mut permessi = PluginPermissions::of(&[]);
+            permessi.granted.set(permission::NETWORK, storto.clone());
+            let guard = Guard::new(Filo, Granted::new("p", &permessi, Trust::Community));
+            let err = guard
+                .fetch(HttpRequest::get("https://api.acme.com/x"))
+                .expect_err("un parametro storto non concede niente");
+            assert!(
+                matches!(err, PluginError::PermissionDenied(_)),
+                "e lo dice come un permesso negato ({storto}): {err}"
+            );
+            assert!(
+                err.message()
+                    .to_string()
+                    .contains("non è un elenco di host"),
+                "mandando a cercare il difetto nel manifest e non nell'URL \
+                 ({storto}): {err}"
+            );
+        }
     }
 
     /// **Una `DryRun` che scarica non è una simulazione.** L'effetto non è
