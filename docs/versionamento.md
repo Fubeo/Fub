@@ -9,8 +9,8 @@ documento esiste.
 | Numero | Dove sta | A chi promette | Cosa succede se si sbaglia |
 |---|---|---|---|
 | **versione dei crate** | [`Cargo.toml:19`](../Cargo.toml), ereditata dagli otto crate [conta: crate-del-workspace]; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila Fub, o ci compila contro | la build rossa, subito |
-| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:2912`) e `package fub:abi@0.1.0` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
-| **versione degli schemi su disco** | nove `SCHEMA_VERSION` [conta: schemi-su-disco] indipendenti nei crate (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
+| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3650`) e `package fub:abi@0.1.0` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
+| **versione degli schemi su disco** | undici numeri di versione [conta: schemi-su-disco] indipendenti nei crate, uno per formato (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
 
 ## 1. La versione dei crate
 
@@ -61,7 +61,7 @@ dei crate parla a chi **ricompila**; questa parla a un componente WASM
 accettare o rifiutare da solo, guardando la stringa che il plugin dichiara.
 
 **La regola di caricamento** è
-[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:3080`), e sta
+[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:4198`), e sta
 in quattro righe:
 
 | Caso | Esito | Perché |
@@ -99,17 +99,28 @@ file dell'utente scritto male resta scritto male. Ogni file che Fub scrive
 porta il **suo** numero, indipendente dagli altri, perché gli schemi cambiano in
 momenti diversi e legarli vorrebbe dire migrare sei file per una modifica a uno.
 
+I formati sono **undici** [conta: schemi-in-tabella], e la tabella qui sotto è
+l'elenco: che sia **tutto** l'elenco lo verifica
+[`schemi_su_disco.rs`](../crates/fub-app/tests/schemi_su_disco.rs), che legge
+questa tabella e i sorgenti che cita e li confronta nei due versi — riga per riga
+e numero per numero. Non è pedanteria da presidio: finché quel test non è
+esistito, questa tabella ne dichiarava nove mentre il codice ne aveva dieci, e
+**cinque righe su nove** puntavano a una riga di sorgente che nel frattempo si
+era spostata. Un elenco che nessuno riconta è un ricordo.
+
 | Schema | Dove | Oggi | Cosa contiene |
 |---|---|---|---|
-| registro dei vault | [`crates/fub-host/src/vaults.rs:39`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
+| registro dei vault | [`crates/fub-host/src/vaults.rs:40`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
 | organizzazione | [`crates/fub-kernel/src/organization.rs:74`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:56`](../crates/fub-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
-| anagrafe | [`crates/fub-kernel/src/entries.rs:86`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
-| impostazioni | [`crates/fub-kernel/src/settings.rs:51`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
-| versioning | [`crates/fub-features/src/versioning.rs:147`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
+| anagrafe | [`crates/fub-kernel/src/entries.rs:89`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
+| impostazioni | [`crates/fub-kernel/src/settings.rs:82`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
+| versioning | [`crates/fub-features/src/versioning.rs:253`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
 | indice di ricerca | [`crates/fub-features/src/search.rs:89`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
-| registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:112`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
+| registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:156`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
 | bozze | [`crates/fub-kernel/src/drafts.rs:109`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |
+| bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:231`](../crates/fub-kernel/src/maintenance.rs) | 1 | una copia di fatti che stanno altrove, per chi cerca un guasto |
+| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:78`](../crates/fub-kernel/src/vault.rs) | 1 | da quale cartella veniva una voce cestinata |
 
 **La regola comune è il rifiuto in avanti.** Un file la cui `version` è
 **maggiore** di quella che questa copia di Fub conosce non si legge e non si
@@ -119,15 +130,29 @@ capisce.
 
 **I due numeri che non sono 1 non sono un'anomalia, sono l'altra famiglia.** La
 riga che divide questa tabella non è il numero, è **chi sa rifare il file**.
-L'indice di ricerca e l'anagrafe sono **derivati**: un manifest con versione
-diversa fa buttare via il file e ricostruirlo dal vault, che è la sorgente di
-verità. Uno schema che si rigenera può cambiare numero senza costare niente a
-nessuno — l'indice di ricerca l'ha fatto **cinque** volte, l'anagrafe una (la
-`v2` sono le ancore della [decisione 0049](decisions/0049-una-posizione-dentro-un-documento.md),
-e il costo è stata una riapertura lenta). Gli altri cinque contengono cose che il
-vault non sa riprodurre (dove si era rimasti, come si era ordinata la sidebar,
-cosa c'era nel file prima), e lì un numero che sale è una **migrazione da
-scrivere**, o un rifiuto.
+L'indice di ricerca, l'anagrafe e il bundle diagnostico sono **derivati**: un
+manifest con versione diversa fa buttare via il file e ricostruirlo dal vault,
+che è la sorgente di verità. Uno schema che si rigenera può cambiare numero senza
+costare niente a nessuno — l'indice di ricerca l'ha fatto **cinque** volte,
+l'anagrafe una (la `v2` sono le ancore della
+[decisione 0049](decisions/0049-una-posizione-dentro-un-documento.md), e il costo
+è stata una riapertura lenta). Gli altri **sette** contengono cose che il vault
+non sa riprodurre (dove si era rimasti, come si era ordinata la sidebar, cosa
+c'era nel file prima), e lì un numero che sale è una **migrazione da scrivere**,
+o un rifiuto.
+
+**L'undicesimo non è né l'uno né l'altro, e dice quando il rifiuto si tace.** Il
+sidecar del cestino ricorda da quale cartella veniva una voce cestinata: nessuno
+lo sa rifare — l'informazione è andata con lo spostamento — ma la sua assenza ha
+già una risposta prevista, perché una voce cestinata da Obsidian il sidecar non ce
+l'ha mai avuto e si ripristina in radice col nome de-timbrato. Quindi lì una
+versione che non si conosce **vale come un sidecar che non c'è**, in silenzio:
+non perché tacere costi meno, ma perché ciò che il rifiuto rumoroso protegge —
+non perdere quello che l'utente aveva scritto — qui non è in gioco, e la nota
+torna comunque. La regola che ne esce, e vale per il formato che nascerà domani:
+**il rifiuto in avanti si dice quando tacere farebbe perdere qualcosa, e si tace
+quando il degrado è già la risposta prevista del formato**
+([0106](decisions/0106-un-formato-si-presenta.md)).
 
 Il dettaglio conta anche nel verso opposto: l'anagrafe non legge un file **senza**
 campo `version` come «versione 0», perché quel formato è nato con il campo — un
