@@ -562,6 +562,15 @@ derivato per-path nuovo eredita il difetto, e da quando la
 [0044](../decisions/0044-lo-stato-per-documento.md) lo ha dichiarato per la prima
 volta ne sono nati due.
 
+**Chiusa dalla [0099](../decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)**,
+e il criterio che aveva costretto ad aggiungere resta — anzi, chiudendola si è
+visto anche il suo rovescio: la stessa rilettura ha trovato, in una riga
+*adiacente* a quella da cambiare, un difetto della stessa specie e più grave (una
+raccolta che girava su un'anagrafe parziale). **Il conto che paga l'utente in
+silenzio non si trova cercandolo dove è stato dichiarato**, perché il posto in cui
+si dichiara è quello in cui qualcuno se n'era accorto: si trova leggendo cosa sta
+attorno.
+
 E una nota di metodo che vale più delle tre voci. Questa pagina ordina ciò che
 **resta da fare**; la seduta 23 dice che c'è un secondo posto in cui la leva si
 accumula senza che nessuno la misuri, ed è il *«cosa resta scoperto»* in fondo a

@@ -490,6 +490,15 @@ pub struct Workspace {
     /// prestito esclusivo del workspace. Un lucchetto in più non renderebbe
     /// visibile niente a nessuno che non lo veda già.
     doc_data_warnings: Vec<String>,
+    /// I documenti spariti che **potrebbero** essere stati rinominati ad app
+    /// chiusa, e su cui il ricongiungimento non ha saputo decidere (§23.1).
+    ///
+    /// Sta sul workspace e non passa da un parametro perché serve a un
+    /// chiamante che non c'era quando il dubbio è nato: `vault.repair` raccoglie
+    /// a comando, a vault aperto da un pezzo, e senza questo elenco
+    /// cancellerebbe con un clic esattamente ciò che l'apertura aveva deciso di
+    /// non cancellare.
+    sospesi_dal_dubbio: BTreeSet<DocId>,
 }
 
 impl Workspace {
@@ -569,6 +578,7 @@ impl Workspace {
             journal: Journal::open(root, storage),
             drafts,
             doc_data_warnings: Vec::new(),
+            sospesi_dal_dubbio: BTreeSet::new(),
         }
     }
 
@@ -1754,6 +1764,17 @@ impl Workspace {
         // indice è stato derivato, il vault è la verità (M4: notifica).
         let _ = self.flush_indexes();
 
+        // **Prima si riconosce, poi si raccoglie** (§23.1), e l'ordine è tutto:
+        // ciò che una rinomina fatta ad app chiusa ha lasciato sotto il nome
+        // vecchio, per la raccolta è indistinguibile da ciò che è rimasto di una
+        // nota cancellata. Invertire le due righe vorrebbe dire cancellare i
+        // dati un istante prima di sapere di chi sono.
+        //
+        // Solo se l'apertura è arrivata in fondo: da un'anagrafe parziale
+        // «sparito» e «non ancora guardato» sono la stessa cosa.
+        if !apertura.interrotta {
+            self.sospesi_dal_dubbio = self.rejoin_renamed_while_closed();
+        }
         // La raccolta dello stato per-documento (§13.2) passa di qui e non da
         // un evento: la cancellazione definitiva si può perdere — svuotare il
         // cestino ad app chiusa non lo annuncia nessuno — mentre un giro sul
@@ -2850,6 +2871,50 @@ impl Workspace {
         // vale anche per i rename non innescati da lei.
         self.session
             .invalidate(from, ContextChange::Renamed(to.clone()));
+        self.migrate_side_data(from, to);
+        // Per ogni indice — quello del kernel compreso — il rename è
+        // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
+        // tiene stato *per-documento* invece migra la chiave sull'evento
+        // `DocumentRenamed`.)
+        let lost = self
+            .indexes
+            .on_documents_removed(std::slice::from_ref(from));
+        self.report_losses(lost);
+        let lost = self
+            .indexes
+            .on_documents_indexed(std::slice::from_ref(&model));
+        self.report_losses(lost);
+        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+            self.indexes.core.rebuild_graph();
+        }
+        self.emit_event(Event::DocumentRenamed {
+            from: from.clone(),
+            to: to.clone(),
+        });
+    }
+
+    /// Porta dietro a una rinomina **tutto ciò che sta attaccato al documento e
+    /// non è il documento**: l'organizzazione del kernel, lo spazio
+    /// per-documento di chiunque altro, la bozza non salvata.
+    ///
+    /// Sta in una funzione sua perché i chiamanti sono **due**, e sono due
+    /// mondi: [`migrate_identity`](Workspace::migrate_identity) — la rinomina
+    /// che il kernel fa o vede fare — e
+    /// [`rejoin_renamed_while_closed`](Workspace::rejoin_renamed_while_closed),
+    /// la rinomina che non ha visto nessuno (§23.1). Tenerle in due copie
+    /// sarebbe il difetto che la [decisione 0044] ha appena finito di togliere,
+    /// rifatto dentro il kernel invece che fuori: *il rename è un rito che
+    /// ognuno celebra per conto proprio, e ognuno lo celebra col proprio buco*.
+    /// Il modo in cui si vedrebbe è preciso — un quarto posto per-documento
+    /// aggiunto qui e non là, e la rinomina ad app chiusa che ne perde uno solo.
+    ///
+    /// **Nessuno di questi tre errori risale**, ed è la regola dell'§11.3: chi
+    /// chiama ha già il file al posto nuovo, e far fallire una rinomina riuscita
+    /// perché un'icona non l'ha seguita sarebbe il verso sbagliato. La rinomina
+    /// vale, ciò che resta indietro si dice.
+    ///
+    /// [decisione 0044]: ../../../docs/decisions/0044-lo-stato-per-documento.md
+    fn migrate_side_data(&mut self, from: &DocId, to: &DocId) {
         // **L'organizzazione segue l'identità** (§11.3): icona, pin e posto
         // nell'ordinamento sono attaccati alla nota, non al suo vecchio path.
         //
@@ -2860,11 +2925,6 @@ impl Workspace {
         // Ne segue il guadagno che si vede: passando di qui migra anche la
         // rinomina fatta da **un'altra app** mentre Fub è aperto, perché
         // `sync_renamed_path` arriva allo stesso punto.
-        //
-        // L'errore non risale: il file è già stato spostato, e far fallire una
-        // rinomina riuscita perché un'icona non si è spostata sarebbe il verso
-        // sbagliato. La rinomina vale, l'icona resta indietro, e qualcuno lo
-        // dice (`organization_warnings`).
         if let Err(e) = self.organization.migrate(from.as_str(), to.as_str()) {
             self.organization.warn(format!(
                 "l'organizzazione di {from} non ha potuto seguire la rinomina in \
@@ -2886,34 +2946,13 @@ impl Workspace {
         // per la ragione dei due di sopra e con un motivo in più: una bozza è
         // l'**unica** copia di ciò che l'utente ha scritto. Chi rinomina una
         // nota mentre il suo buffer è sporco non deve poter perdere il testo
-        // per essere passato dal nome nuovo. L'errore non risale — la rinomina
-        // è già avvenuta — ma si dice, e per dirlo si usa lo stesso canale
-        // dell'organizzazione, che è quello che qualcuno guarda.
+        // per essere passato dal nome nuovo.
         if let Err(e) = self.drafts.migrate(from, to) {
             self.organization.warn(format!(
                 "la bozza non salvata di {from} non ha potuto seguire la \
                  rinomina in {to}: {e}"
             ));
         }
-        // Per ogni indice — quello del kernel compreso — il rename è
-        // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
-        // tiene stato *per-documento* invece migra la chiave sull'evento
-        // `DocumentRenamed`.)
-        let lost = self
-            .indexes
-            .on_documents_removed(std::slice::from_ref(from));
-        self.report_losses(lost);
-        let lost = self
-            .indexes
-            .on_documents_indexed(std::slice::from_ref(&model));
-        self.report_losses(lost);
-        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
-            self.indexes.core.rebuild_graph();
-        }
-        self.emit_event(Event::DocumentRenamed {
-            from: from.clone(),
-            to: to.clone(),
-        });
     }
 
     /// Sincronizza un **rename accoppiato** riferito dal filesystem (`from` →
@@ -5286,22 +5325,195 @@ impl Workspace {
     }
 
     fn collect_doc_data(&mut self) -> usize {
+        // **Una raccolta si fa su un'anagrafe che si dichiara completa, o non si
+        // fa** (§23.1). È la stessa riga con cui `finish_index` non riconcilia
+        // un'indicizzazione interrotta, applicata al suo vicino di tre righe
+        // sotto — dove mancava, e dove costava incomparabilmente di più: chi
+        // riconcilia su un insieme parziale svuota un **derivato**, che si rifà
+        // riaprendo; chi raccoglie su un insieme parziale cancella dal disco lo
+        // spazio per-documento di note che esistono, e quello non lo rifà
+        // nessuno. Ci si arrivava premendo «annulla» sulla prima
+        // indicizzazione di un vault grande, o chiudendo l'app mentre girava.
+        //
+        // `Ready` è il **default** di questo stato, quindi la guardia non chiude
+        // la porta a chi raccoglie senza aver aperto niente: chiude a chi ha
+        // aperto a metà, che è l'unico caso in cui l'anagrafe mente.
+        if self.indexes.core.watch.indexing != IndexingState::Ready {
+            return 0;
+        }
         let roots = self.docs.plugin_data_roots();
         if roots.is_empty() {
             return 0;
         }
-        let cestinate: std::collections::HashSet<DocId> = self
-            .docs
+        let cestinate = self.trashed_originals();
+        let metas = &self.indexes.core.metas;
+        // Ciò che il ricongiungimento ha messo in dubbio non si raccoglie: è la
+        // terza regola di [`rejoin_renamed_while_closed`], e vive qui perché la
+        // raccolta ha due chiamanti — l'apertura e `vault.repair` — e uno di
+        // essi gira quando quel dubbio non è più in vista.
+        let sospesi = &self.sospesi_dal_dubbio;
+        let storage = Arc::clone(self.docs.vault.storage());
+        crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
+            metas.contains_key(doc) || cestinate.contains(doc) || sospesi.contains(doc)
+        })
+    }
+
+    /// I documenti da cui il cestino è passato: ciò che sta lì dentro **non è
+    /// sparito**, è recuperabile.
+    fn trashed_originals(&self) -> std::collections::HashSet<DocId> {
+        self.docs
             .list_trash()
             .unwrap_or_default()
             .into_iter()
             .map(|e| e.original)
-            .collect();
-        let metas = &self.indexes.core.metas;
-        let storage = Arc::clone(self.docs.vault.storage());
-        crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
-            metas.contains_key(doc) || cestinate.contains(doc)
-        })
+            .collect()
+    }
+
+    /// **Riconosce le rinomine che non ha visto nessuno** (§23.1), e restituisce
+    /// i documenti su cui il dubbio ha sospeso il giudizio.
+    ///
+    /// # Il problema
+    ///
+    /// Il path è la chiave, e lo è per sempre
+    /// ([0043](../../../docs/decisions/0043-il-path-e-la-chiave.md)). Chi
+    /// rinomina una nota mentre Fub è aperto — dalla shell, dal Finder, da un
+    /// client di sync — la fa seguire da tutto ciò che le sta attaccato, perché
+    /// il rilevatore accoppia i due path e si finisce in
+    /// [`migrate_identity`](Workspace::migrate_identity). Chi la rinomina mentre
+    /// Fub è **chiuso** non ha nessuno che accoppi: alla riapertura una nota
+    /// risulta sparita e ne risulta nata un'altra, e lo spazio per-documento, le
+    /// versioni e — l'unica copia di un testo mai salvato — la **bozza** restano
+    /// attaccati a un nome che non esiste più.
+    ///
+    /// Non è il caso di frontiera: un client di sync che rinomina ad app chiusa
+    /// è il caso *normale* di chi tiene il vault su due macchine.
+    ///
+    /// # La terza strada
+    ///
+    /// La 0043 ha scartato l'id esterno, e giustamente — una tabella
+    /// `path → id` tenuta dal kernel è «il path con un costume addosso». Ma la
+    /// riassociazione non deve passare da un id: passa dal **contenuto**. Il
+    /// materiale è già tutto su disco e non costa una lettura in più:
+    /// l'anagrafe è durevole fra un avvio e l'altro
+    /// ([0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)) e porta
+    /// l'impronta di ogni documento che qualcuno ha letto, e l'impronta di ciò
+    /// che è comparso oggi l'ha appena calcolata
+    /// [`index_batch`](Workspace::index_batch) leggendolo.
+    ///
+    /// # Le tre regole, e perché nessuna si poteva scrivere senza deciderla
+    ///
+    /// 1. **Uno a uno, o niente.** Due impronte uguali sono una rinomina solo se
+    ///    una nota è *sparita*: due file identici comparsi senza che sparisse
+    ///    niente sono una copia, e trattarli come una rinomina sposterebbe la
+    ///    bozza dell'uno sull'altro. E quando ne spariscono N e ne compaiono N
+    ///    con la stessa impronta, l'accoppiamento non è unico.
+    /// 2. **Nel dubbio non si accoppia**, ed è il verso *opposto* a quello della
+    ///    [0085](../../../docs/decisions/0085-leggere-non-e-cambiare.md): là nel
+    ///    dubbio si conta come cambiamento, perché una rilettura di troppo costa
+    ///    un file aperto. Qui un accoppiamento sbagliato consegna il testo non
+    ///    salvato di una nota a un'altra, e non c'è nessun «di troppo» che
+    ///    costi così poco.
+    /// 3. **Nel dubbio non si nemmeno raccoglie.** Se le due mosse restano una
+    ///    sola — non accoppiare — il dubbio finisce a `remove_dir_all`, che è
+    ///    irreversibile, mentre aspettare costa qualche byte fermo. Quindi ciò
+    ///    che questa funzione mette in dubbio esce dalla porta e la raccolta lo
+    ///    salta: se domani l'ambiguità si scioglie (l'utente cancella la copia
+    ///    di troppo), il giro dopo accoppia.
+    ///
+    /// # Cosa resta fuori, e non per dimenticanza
+    ///
+    /// - **Il file vuoto**, che con un altro file vuoto ha per forza la stessa
+    ///   impronta: zero byte non sono una prova di identità, sono l'assenza di
+    ///   una prova. È il caso in cui la regola 1 sarebbe soddisfatta e la
+    ///   conclusione falsa.
+    /// - **Il cestino**: una nota cestinata non è sparita, è recuperabile, e
+    ///   spostarne i dati su un omonimo li toglierebbe a chi la ripristina.
+    /// - **Gli allegati**, che un'impronta non ce l'hanno affatto — la calcola
+    ///   solo chi legge, e nessuno legge un PNG. È la casella residua del §14.1,
+    ///   e questa funzione è il primo posto che ne dice a cosa servirebbe: il
+    ///   giorno che c'è, gli allegati si ricongiungono di qui senza una riga in
+    ///   più.
+    /// - **Un'anagrafe che non si è potuta leggere** (versione ignota, file
+    ///   rotto): niente ieri, niente spariti, nessuna rinomina da vedere. Il
+    ///   ricongiungimento è una capacità di un **derivato**, e perso il derivato
+    ///   si perde anche lei — per un giro, e in silenzio.
+    fn rejoin_renamed_while_closed(&mut self) -> BTreeSet<DocId> {
+        let cestinate = self.trashed_originals();
+        // C'era ieri, oggi non c'è, e portava l'impronta di un contenuto.
+        let mut spariti: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
+        for (id, voce) in self.entry_store.iter() {
+            if voce.size == 0
+                || self.indexes.core.entries.contains_key(id)
+                || cestinate.contains(id)
+            {
+                continue;
+            }
+            if let Some(fingerprint) = voce.fingerprint.clone() {
+                spariti.entry(fingerprint).or_default().push(id.clone());
+            }
+        }
+        if spariti.is_empty() {
+            return BTreeSet::new();
+        }
+
+        // Oggi c'è, ieri non c'era. Si guardano solo le impronte per cui
+        // qualcosa è sparito: un vault appena aperto per la prima volta ha
+        // tutto «comparso» e niente «sparito», e non deve costare una mappa
+        // grande quanto il vault per scoprirlo.
+        let mut comparsi: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
+        for entry in self.indexes.core.entries.values() {
+            if entry.size == 0 || self.entry_store.known(&entry.id).is_some() {
+                continue;
+            }
+            match &entry.fingerprint {
+                Some(fingerprint) if spariti.contains_key(fingerprint) => comparsi
+                    .entry(fingerprint.clone())
+                    .or_default()
+                    .push(entry.id.clone()),
+                _ => continue,
+            }
+        }
+
+        let mut sospesi = BTreeSet::new();
+        let mut coppie: Vec<(DocId, DocId)> = Vec::new();
+        for (fingerprint, mut da) in spariti {
+            let Some(a) = comparsi.get(&fingerprint) else {
+                // Nessun candidato: non è una rinomina, è una cancellazione. La
+                // raccolta se ne occupa come si è sempre occupata.
+                continue;
+            };
+            if da.len() == 1 && a.len() == 1 {
+                coppie.push((da.remove(0), a[0].clone()));
+            } else {
+                sospesi.extend(da);
+            }
+        }
+
+        for (from, to) in &coppie {
+            // Il pavimento e la porta insieme (0062): una riga nel log per chi
+            // fa assistenza, e l'evento qui sotto per chi sta dentro l'app.
+            tracing::info!(
+                target: "fub.kernel",
+                "rinomina fatta ad app chiusa riconosciuta dall'impronta: {from} → {to}"
+            );
+            self.migrate_side_data(from, to);
+        }
+        if !coppie.is_empty() {
+            // **E poi si dice**, con lo stesso evento della rinomina vista: chi
+            // tiene stato per-documento fuori dallo spazio dichiarato — il
+            // versioning, che ha uno store suo perché deve sopravvivere alla
+            // cancellazione (0044) — non ha altro modo di saperlo, e questo è
+            // l'unico posto in cui qualcuno lo sa. Che la coda possa troncare
+            // (0034) è la ragione per cui i tre dati autorevoli che il kernel sa
+            // spostare li ha spostati **prima**, e non aspettando che qualcuno
+            // ascoltasse.
+            self.as_actor(Actor::Kernel, |ws| {
+                for (from, to) in coppie {
+                    ws.emit_event(Event::DocumentRenamed { from, to });
+                }
+            });
+        }
+        sospesi
     }
 
     /// Cosa è andato storto **leggendo** la configurazione: un file malformato,

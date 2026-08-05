@@ -52,6 +52,14 @@ applicata al piano invece che ai sorgenti.
       dedup (13.1), rilevamento duplicati (3.2) e verifica d'integrità (24.2). Il
       campo c'è, il lavoro lungo ha il suo posto
       ([0032](../decisions/0032-il-runner-dei-job.md)), e nessuno lo fa ancora.
+      Dalla [0099](../decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+      questa casella ha un **cliente** e non solo tre usi futuri: il
+      ricongiungimento delle rinomine fatte ad app chiusa accoppia i documenti
+      per impronta, e un allegato rinominato con Fub chiuso resta scollegato
+      **solo** perché la sua impronta non la calcola nessuno. Il giorno che c'è,
+      si ricongiunge di lì senza una riga in più — e vale la pena scriverlo per
+      la ragione che [todo.md](../todo.md) dà di sé: *un indirizzo dice chi
+      potrà, non chi lo farà*.
 - [ ] **Politica cartella allegati** — configurabile, e adesso si sa come: una
       chiave dichiarata nel manifest di chi la legge
       ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)). I
