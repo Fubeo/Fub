@@ -524,7 +524,8 @@ impl Shared {
                 // lui ogni job successivo.
                 fub_kernel::safety::calling(
                     &job.plugin,
-                    &format!("eseguendo il job `{}`", job.spec.job),
+                    fub_kernel::safety::Gate::Job,
+                    &job.spec.job,
                     || plugin.run_job(&job.spec.job, job.spec.payload.clone(), &mut host),
                 )
             }

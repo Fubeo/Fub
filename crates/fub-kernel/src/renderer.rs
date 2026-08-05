@@ -281,7 +281,8 @@ pub(crate) fn compose(
         // un panico è solo il modo più brusco di fallire.
         let rendering = crate::safety::caught(
             &registered.spec.id,
-            &format!("disegnando `{custom_kind}`"),
+            crate::safety::Gate::CustomRender,
+            custom_kind,
             fub_abi::error::FormatError::Render,
             || registered.renderer.render(&custom, opts),
         )

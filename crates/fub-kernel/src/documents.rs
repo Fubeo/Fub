@@ -173,7 +173,8 @@ impl DocumentStore {
         // fallisce dicendo di chi è la colpa.
         let mut model = crate::safety::caught(
             &provider.descriptor().id,
-            &format!("parsando `{id}`"),
+            crate::safety::Gate::FormatParse,
+            id.as_str(),
             fub_abi::error::FormatError::Parse,
             || provider.parse(&source, &ctx),
         )?;

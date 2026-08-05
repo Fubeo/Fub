@@ -1002,7 +1002,7 @@ metà**, e oggi ha solo due parole, riuscito e fallito.
 
 ### 23.15 La rete che regge i panici non ha un presidio, ha una nota
 
-*presidi · **P2** — una riga di `Cargo.toml` e un test che la legga; il costo è tutto nell'attesa*
+*chiusa dalla [0105](../decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md) — il presidio che questa voce chiedeva **non è scrivibile**: Cargo ignora `panic` per i profili `test` e `bench`, quindi non c'è profilo effettivo da leggere e `il_panico.rs` sotto `abort` non sarebbe la prima vittima — resterebbe **verde**, attestando una rete che nel binario spedito non esiste più. Un banco non prova le condizioni sotto cui non gira. La risposta è un `#[cfg(panic = "abort")] compile_error!` in `fub-kernel`: del compilatore e non della suite, e vede anche `RUSTFLAGS` e `.cargo/config.toml`, che al `Cargo.toml` letto come testo passerebbero sopra la testa. Non è un divieto per sempre, e la via d'uscita — isolare i componenti fuori dal processo — sta scritta nel messaggio dell'errore. Il difetto peggiore stava **fuori dalla voce per la sesta volta**: le «otto porte» che la 0032 dichiarava esaustive erano **tredici**, una delle quali nata dopo quel conto e in produzione da allora; ora sono un dato (`Gate`) con due `match` senza `_` che non compilano finché una porta nuova non ha una frase e un posto dove è provata, e le cinque porte che nessuno provava hanno un banco. Nessuna riga di WIT: un panico è un **difetto**, non una condizione. La verifica del rosso ha poi corretto due affermazioni del verbale stesso — una porta dichiarata provata in un file dove nessuno paniava, e un elenco che diceva di prendere una variante dimenticata mentre non la prende — e ne è uscita la divisione del lavoro fra i due presidi: **il compilatore prende la variante che non vuol dire niente, il conto prende la variante che nessuno ha elencato***
 
 La [0032](../decisions/0032-il-runner-dei-job.md) ha messo un `catch_unwind`
 intorno a ciò che i componenti eseguono, e nel farlo ha scritto la riga esatta del
@@ -1023,7 +1023,7 @@ E il test che copre il comportamento non aiuta: `il_panico.rs` verifica che la
 rete tenga, ma sotto `panic = "abort"` quel test **abortirebbe il processo**
 invece di fallire con un messaggio. Non è un presidio, è la prima vittima.
 
-- [ ] **Il presidio, che è piccolo.** Un test che legga il profilo effettivo e
+- [x] **Il presidio, che è piccolo.** Un test che legga il profilo effettivo e
       fallisca se `panic` è `abort` — la stessa specie di
       [`wit_additivity`](../architecture/wit-congelato.md) e del test che conta i
       verbali della [0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md):
@@ -1031,13 +1031,13 @@ invece di fallire con un messaggio. Non è un presidio, è la prima vittima.
       compilatore o la CI sa verificare. È il criterio della
       [§16.7/§16.8](16-crate-sdk-banchi-di-prova.md) applicato a un fatto del
       `Cargo.toml` invece che a un elenco.
-- [ ] **Perché ha senso farlo prima che serva.** Un `[profile.release]` con
+- [x] **Perché ha senso farlo prima che serva.** Un `[profile.release]` con
       `panic = "abort"`, `lto` e `strip` è la prima cosa che si aggiunge quando si
       guarda la dimensione del binario — cioè quando si prepara una release, che è
       il momento peggiore per scoprire di aver disattivato la rete che protegge
       l'utente dai plugin. Il costo di scriverlo adesso è mezz'ora; il costo di
       scriverlo dopo è che non lo si scrive.
-- [ ] **La domanda vera sta sotto, e va posta una volta.** Se un giorno il profilo
+- [x] **La domanda vera sta sotto, e va posta una volta.** Se un giorno il profilo
       lo volesse davvero, la risposta non è «allora niente `catch_unwind`»: è che
       un componente che pania va isolato altrove — il processo separato, o il guest
       WASM di M5, che quella proprietà ce l'ha per costruzione. Vale la pena

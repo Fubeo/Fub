@@ -147,7 +147,7 @@ flowchart TB
    il dogfooding è il modo in cui il contratto si scopre sbagliato prima di M5.
    **Fin dove arriva, però, adesso è contato**
    ([0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md)): le
-   feature ufficiali stanno su **quattro** delle **dieci** superfici che
+   feature ufficiali stanno su **quattro** delle **dieci** [conta: superfici-di-vista] superfici che
    `ViewSurface` nomina, e dove nessuna passa il contratto non si scopre
    sbagliato — si scopre solo quando qualcuno ci prova. Il conto lo tiene
    `fub-features/tests/conformita.rs`, che per ogni superficie pretende una
