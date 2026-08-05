@@ -3721,31 +3721,121 @@ interface transfer {
         message: string,
         entry: option<string>,
     }
+
+    /// La chiave di una sorgente che l'host tiene aperta (decisione 0102).
+    ///
+    /// Opaca: la si riceve dentro un `import-source` e la si spende con
+    /// `host-transfer-read.read-source`. Vale per la durata della chiamata di
+    /// import che l'ha portata. Che la timbri l'host è ciò che rende superfluo
+    /// un recinto di path — un provider non può nominare una sorgente che non
+    /// gli è stata data, quindi leggerla non chiede un permesso del manifest:
+    /// l'utente ha già scelto QUEL file nel dialogo di sistema.
+    type source-handle = u64;
+
+    /// La chiave di un artefatto aperto: stessa opacità nel verso opposto.
+    type artifact-handle = u64;
+}
+
+/// Leggere una sorgente che l'host tiene aperta per conto di un import.
+///
+/// `TransferRead`. È l'unica famiglia che non presta niente del vault né della
+/// macchina: presta UNA cosa, quella che l'utente ha appena scelto in un
+/// dialogo, per la durata di una chiamata.
+interface host-transfer-read {
+    use errors.{plugin-error};
+    use transfer.{source-handle};
+
+    /// **Posizionale**, e non è un dettaglio: è la ragione per cui questa forma
+    /// è stata scelta al posto di uno `stream<u8>` di WASI o di un cursore
+    /// tenuto dall'host. Quelle sanno solo andare avanti, e un contenitore zip
+    /// — `.docx`, `.epub`, `.odt` e mezzo mondo dei backup — ha la propria
+    /// directory IN FONDO: chi non può tornare indietro non sfoglia un
+    /// archivio, lo scarica tutto.
+    ///
+    /// Può restituire MENO byte di `len` senza che sia un errore: è la sola
+    /// forma che regge con la stessa firma la fine della sorgente e il tetto di
+    /// una singola lettura. Il tetto non è interrogabile (decisione 0094).
+    read-source: func(handle: source-handle, offset: u64, len: u32) -> result<list<u8>, plugin-error>;
+}
+
+/// Dove un `ExportProvider` versa un artefatto MENTRE lo produce.
+///
+/// `ArtifactSink`. In Rust non sta sull'host ed è un parametro di `export`, per
+/// due ragioni scritte nel verbale: un export gira sotto prestito condiviso, e
+/// un sink non è una capacità che si presta per sempre — esiste per la durata
+/// di un export che l'utente ha chiesto. Qui diventa un'interfaccia importata
+/// come le altre, perché al confine WASM ogni capacità arriva dallo stesso
+/// posto: è il prezzo del confine, ed è dichiarato.
+interface host-transfer-write {
+    use errors.{plugin-error};
+    use transfer.{artifact-handle};
+    use exporter.{export-artifact};
+
+    /// `path` è relativo DENTRO l'esito: una risalita è `permission-denied`
+    /// qui, non un file scritto altrove.
+    open-artifact: func(path: string, media-type: string) -> result<artifact-handle, plugin-error>;
+    /// Quante volte si vuole prima di chiudere: un PDF da un gigabyte esce a
+    /// pezzi.
+    write-artifact: func(handle: artifact-handle, bytes: list<u8>) -> result<_, plugin-error>;
+    /// Restituisce la RICEVUTA da mettere nel rapporto. Che esca da qui e non
+    /// la scriva il provider è ciò che rende il conto di `artifact-content.
+    /// delivered` non falsificabile per distrazione: lo emette chi ha contato i
+    /// byte mentre passavano.
+    close-artifact: func(handle: artifact-handle) -> result<export-artifact, plugin-error>;
 }
 
 /// `ImportProvider`: come i dati ENTRANO nel vault.
 ///
-/// La sorgente arriva **già letta** (`bytes`), mai come percorso: chi apre il
-/// file è l'host. È ciò che rende il capitolo 17 esprimibile senza concedere a
-/// un plugin una capacità filesystem — la sandbox di M5 non deve aggiungere
-/// nulla. Il prezzo dichiarato: la sorgente sta in memoria (lo streaming è
-/// additivo, un `path: string` non lo sarebbe).
+/// La sorgente arriva mai come percorso: chi apre il file è l'host. È ciò che
+/// rende il capitolo 17 esprimibile senza concedere a un plugin una capacità
+/// filesystem — la sandbox di M5 non deve aggiungere nulla.
+///
+/// Fino alla decisione 0102 arrivava anche **già letta per intero**, e il
+/// prezzo dichiarato dalla 0006 («la sorgente sta in memoria») non diceva COSA
+/// si importa: il 17.1 è la migrazione da Obsidian/Notion/Evernote, cioè un
+/// vault intero. Adesso i byte possono restare dall'host, con una chiave.
 interface importer {
     use json.{json};
     use model.{doc-id};
     use errors.{plugin-error};
-    use transfer.{transfer-note};
+    use transfer.{transfer-note, source-handle};
 
-    /// I byte stanno nella sorgente, e non solo nel parametro di `import`,
-    /// perché `.docx`, `.epub`, `.odt` e mezzo mondo dei backup sono LO STESSO
-    /// contenitore zip: un dispatch sul solo nome sceglierebbe il provider
-    /// sbagliato. Il costo è una copia per candidato interpellato.
+    /// Una sorgente che l'host tiene aperta.
+    ///
+    /// `prologue` è ciò che rende questa forma possibile invece che teorica: il
+    /// dispatch è `can-handle`, che NON riceve un host e quindi non può leggere
+    /// niente. Senza un assaggio nel record, una sorgente a handle si
+    /// riconoscerebbe solo dal nome — e il nome non basta, vedi sotto. Con
+    /// l'assaggio il dispatch costa qualche kibibyte qualunque sia la sorgente,
+    /// invece dei suoi byte una volta per candidato interpellato.
+    record streamed-source {
+        handle: source-handle,
+        /// Quanti byte in tutto: la differenza fra «questo archivio lo sfoglio»
+        /// e «questo archivio lo tengo in memoria», da sapere PRIMA di leggere.
+        len: u64,
+        /// I primi byte, letti una volta sola dall'host: l'input del dispatch.
+        prologue: list<u8>,
+    }
+
+    /// Dove stanno i byte. Non è un dettaglio d'implementazione: cambia cosa
+    /// conviene fare a chi riceve, quindi è una cosa che deve poter leggere.
+    variant source-content {
+        /// Tutti i byte, nel record. Resta il caso comune.
+        bytes(list<u8>),
+        /// I byte restano dall'host, e si leggono per pezzi.
+        streamed(streamed-source),
+    }
+
+    /// I byte — o il loro assaggio — stanno nella sorgente, e non solo nel
+    /// parametro di `import`, perché `.docx`, `.epub`, `.odt` e mezzo mondo dei
+    /// backup sono LO STESSO contenitore zip: un dispatch sul solo nome
+    /// sceglierebbe il provider sbagliato.
     record import-source {
         /// Come l'utente conosce la sorgente. NON è un doc-id: sta fuori dal
         /// vault.
         name: string,
         media-type: option<string>,
-        bytes: list<u8>,
+        content: source-content,
     }
 
     /// La *preview* di 17.3 senza un secondo tipo: in `preview` il provider fa
@@ -3840,12 +3930,26 @@ interface exporter {
         target: string,
         options: json,
     }
+    /// Dove stanno i byte di un artefatto prodotto: il gemello di
+    /// `source-content`, e non per simmetria estetica — all'import la cosa
+    /// grande la sceglie l'utente, all'export la produci tu, e un export di
+    /// tutto il vault in PDF produceva un `list<export-artifact>` con dentro
+    /// l'intero vault reso.
+    variant artifact-content {
+        /// I byte, nel rapporto. Il caso comune.
+        bytes(list<u8>),
+        /// Già versato attraverso `host-transfer-write`: quanti byte sono
+        /// passati. È una RICEVUTA e non una promessa, e per questo non la si
+        /// costruisce a mano: la restituisce `close-artifact`.
+        delivered(u64),
+    }
+
     /// Byte, non un file: chi li posa sul disco è l'host.
     record export-artifact {
         /// Path relativo DENTRO l'esito.
         path: string,
         media-type: string,
-        bytes: list<u8>,
+        content: artifact-content,
     }
     record export-report {
         artifacts: list<export-artifact>,
@@ -3880,6 +3984,8 @@ world plugin-world {
     import host-settings-write;
     import host-view-state-read;
     import host-view-state-write;
+    import host-transfer-read;
+    import host-transfer-write;
 
     export plugin;
     export format;

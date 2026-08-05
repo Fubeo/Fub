@@ -11,9 +11,10 @@ use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices,
-    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TrashEntry,
-    VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
+    IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite,
+    TransferRead, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
+use fub_abi::transfer::SourceHandle;
 use fub_abi::{Event, PluginError, Severity};
 
 use crate::error::KernelError;
@@ -425,5 +426,23 @@ impl HostServices for KernelHost<'_> {
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
         self.ws.call_service(service, method, args)
+    }
+}
+
+impl TransferRead for KernelHost<'_> {
+    /// Il kernel risolve la chiave e legge; i permessi li ha già applicati il
+    /// [`Guard`](super::Guard) che sta davanti, come per ogni altra famiglia.
+    ///
+    /// Un handle che non è (o non è più) aperto è `BadArgs` e non
+    /// `PermissionDenied`: non è una cosa che ti è negata, è una cosa che non
+    /// esiste — ed è anche ciò che riceve chi prova a leggere la sorgente di
+    /// qualcun altro tirando a indovinare un numero.
+    fn read_source(
+        &self,
+        handle: SourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, PluginError> {
+        self.ws.read_open_source(handle, offset, len)
     }
 }

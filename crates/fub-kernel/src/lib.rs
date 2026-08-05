@@ -74,6 +74,7 @@ pub mod storage;
 pub mod syntax;
 mod tag_counts;
 pub mod time;
+pub mod transfer;
 mod undo;
 pub mod vault;
 pub mod viewstate;

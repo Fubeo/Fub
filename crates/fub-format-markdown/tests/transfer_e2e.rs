@@ -13,7 +13,7 @@ use fub_abi::model::{Block, DocId, DocumentModel, Frontmatter, Inline, Span};
 use fub_abi::traits::IndexQuery;
 use fub_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportReport, ExportRequest, ExportSelection, ImportMode,
-    ImportOutcome, ImportRequest, ImportSource, NoteLevel,
+    ImportOutcome, ImportRequest, ImportSource, NoteLevel, SourceContent,
 };
 use fub_abi::PluginError;
 use fub_format_markdown::{
@@ -260,7 +260,7 @@ fn a_source_nobody_claims_is_a_bad_argument_and_not_an_empty_import() {
     let zip = ImportSource {
         name: "vault.zip".to_string(),
         media_type: Some("application/zip".to_string()),
-        bytes: vec![0x50, 0x4b, 0x03, 0x04],
+        content: SourceContent::Bytes(vec![0x50, 0x4b, 0x03, 0x04]),
     };
     assert!(
         matches!(
@@ -278,7 +278,7 @@ fn a_source_that_is_not_text_stops_before_starting() {
     let rotta = ImportSource {
         name: "Nota.md".to_string(),
         media_type: None,
-        bytes: vec![0xff, 0xfe, 0x00],
+        content: SourceContent::Bytes(vec![0xff, 0xfe, 0x00]),
     };
     assert!(matches!(
         ws.import(&rotta, &ImportRequest::apply()),
@@ -318,7 +318,11 @@ fn exporting_a_folder_takes_its_descendants_and_keeps_the_paths() {
     let paths: Vec<&str> = report.artifacts.iter().map(|a| a.path.as_str()).collect();
     assert_eq!(paths, vec!["Progetti/Alpha.md", "Progetti/Beta.md"]);
     assert_eq!(
-        text(&artifact(&report, "Progetti/Beta.md").bytes),
+        text(
+            artifact(&report, "Progetti/Beta.md")
+                .as_bytes()
+                .expect("in memoria")
+        ),
         "---\ntipo: progetto\n---\n\nBeta.\n",
         "il path dentro l'esito è il path dentro il vault: si riapre com'era"
     );
@@ -388,12 +392,20 @@ fn metadata_can_be_left_behind() {
         .expect("export");
 
     assert_eq!(
-        text(&artifact(&report, "Progetti/Beta.md").bytes),
+        text(
+            artifact(&report, "Progetti/Beta.md")
+                .as_bytes()
+                .expect("in memoria")
+        ),
         "Beta.\n",
         "«export senza metadati» (17.2), tagliato sullo span del primo blocco"
     );
     assert_eq!(
-        text(&artifact(&report, "Diario.md").bytes),
+        text(
+            artifact(&report, "Diario.md")
+                .as_bytes()
+                .expect("in memoria")
+        ),
         "Nessun frontmatter qui.\n",
         "chi non ne ha non perde niente"
     );
@@ -410,7 +422,11 @@ fn a_single_document_target_produces_exactly_one_artifact() {
         .expect("export");
 
     assert_eq!(report.artifacts.len(), 1);
-    let out = text(&artifact(&report, "export.md").bytes);
+    let out = text(
+        artifact(&report, "export.md")
+            .as_bytes()
+            .expect("in memoria"),
+    );
     assert!(out.starts_with("# Alpha\n"));
     assert!(out.contains("\n---\n"), "i documenti sono separati");
     assert!(out.contains("# Beta\n"));
@@ -455,7 +471,7 @@ fn reimporta(ws: &mut Workspace, a: &ExportArtifact) -> DocId {
             &ImportSource {
                 name: name.to_string(),
                 media_type: Some("text/markdown".to_string()),
-                bytes: a.bytes.clone(),
+                content: SourceContent::Bytes(a.as_bytes().expect("in memoria").to_vec()),
             },
             &ImportRequest::apply().into_folder(folder),
         )
@@ -629,7 +645,7 @@ fn le_esclusioni_dal_cappello_servono_ancora() {
         let col_cappello = format!("{CAPPELLO}{source}");
         let (_g, ws) = vault_con(&[(path.clone(), col_cappello.clone())]);
         let fuori = ws.export(&senza_metadati()).expect("export");
-        let tagliato = text(&fuori.artifacts[0].bytes);
+        let tagliato = text(fuori.artifacts[0].as_bytes().expect("in memoria"));
         // Il confronto è quello del presidio: il documento **come sta nel vault**
         // contro quello che ne esce senza metadati. Confrontare l'uscita con la
         // sorgente originale direbbe un'altra cosa — che il taglio ha reso i byte
@@ -938,7 +954,7 @@ fn the_whole_corpus_leaves_the_vault_and_comes_back_byte_for_byte() {
             .read_source(&DocId::new(a.path.as_str()))
             .expect("il documento c'è, l'abbiamo appena esportato");
         assert_eq!(
-            text(&a.bytes),
+            text(a.as_bytes().expect("in memoria")),
             atteso.as_str(),
             "`{}` è uscita diversa da com'era nel vault",
             a.path
@@ -984,7 +1000,7 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
     let mut tagliate = 0usize;
     for a in &primo.artifacts {
         let source = ws.read_source(&DocId::new(a.path.as_str())).unwrap();
-        let fuori = text(&a.bytes);
+        let fuori = text(a.as_bytes().expect("in memoria"));
 
         // L'invariante che vale su qualunque ingresso: togliendo il frontmatter
         // l'export **non può inventare byte**. Ciò che esce è il sorgente, o una
@@ -1094,8 +1110,8 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
     );
     for (a, b) in primo.artifacts.iter().zip(secondo.artifacts.iter()) {
         assert_eq!(
-            text(&b.bytes),
-            text(&a.bytes),
+            text(b.as_bytes().expect("in memoria")),
+            text(a.as_bytes().expect("in memoria")),
             "`{}`: il secondo giro senza metadati ha tolto altro. Il taglio sullo \
              span ha lasciato dietro qualcosa che al giro dopo è tornato a essere \
              frontmatter",
@@ -1119,7 +1135,7 @@ fn and_that_fixed_point_is_a_fact_about_this_corpus_not_about_the_format() {
     let (_g, ws) = vault_con(&[("Doppio.md".to_string(), doppio.to_string())]);
 
     let primo = ws.export(&senza_metadati()).expect("export");
-    let uscito = text(&primo.artifacts[0].bytes).to_string();
+    let uscito = text(primo.artifacts[0].as_bytes().expect("in memoria")).to_string();
     assert!(
         doppio.ends_with(&uscito),
         "anche qui l'export non inventa byte"
@@ -1130,7 +1146,7 @@ fn and_that_fixed_point_is_a_fact_about_this_corpus_not_about_the_format() {
     let secondo = altro.export(&senza_metadati()).expect("export");
 
     assert_ne!(
-        text(&secondo.artifacts[0].bytes),
+        text(secondo.artifacts[0].as_bytes().expect("in memoria")),
         uscito.as_str(),
         "il secondo giro non ha tolto niente: o comrak ha smesso di vedere il \
          secondo `---` come frontmatter, o l'export ha imparato a tagliare fino \
@@ -1234,7 +1250,7 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
         };
 
         assert_eq!(report.artifacts.len(), 1);
-        let fuori = text(&report.artifacts[0].bytes);
+        let fuori = text(report.artifacts[0].as_bytes().expect("in memoria"));
         assert!(
             source.ends_with(fuori),
             "caso {n} — mutazione «{mutazione}» — l'export senza metadati ha\n\

@@ -131,7 +131,11 @@ Due semantiche fissate nel contratto:
 L'unico varco con cui un provider/plugin tocca il mondo esterno. Nativo → oggetto
 in-process; WASM (M5) → proxy che reinoltra come host function.
 
-**È una somma di quindici trait** [conta: wit-interfacce-host]
+**È una somma di sedici trait** — diciassette [conta: wit-interfacce-host]
+`interface` al confine WIT, perché
+`host-transfer-write` non ha un trait suo: chi versa un artefatto riceve un
+`ArtifactSink` come parametro, non una capacità
+([decisione 0102](../decisions/0102-i-byte-non-stanno-nel-record.md)) —
 ([decisione 0021](../decisions/0021-il-confine.md),
 §7.1) e non un trait solo: un trait solo si implementa per intero o per niente, e
 chi ne può fare una metà — il percorso di render, un comando di sola lettura, a
@@ -143,10 +147,12 @@ metà come una fila di rifiuti. I dieci con cui la 0021 l'ha spezzato sono
 ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), `ViewStateRead` e
 `ViewStateWrite` ([0037](../decisions/0037-lo-stato-di-vista.md)) e infine
 `HostNetwork`
-([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)).
+([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)) e
+`TransferRead`
+([0102](../decisions/0102-i-byte-non-stanno-nel-record.md)).
 Il criterio della divisione è uno: **cosa vuol dire negarne una**.
 
-Le famiglie del `Guard` sono **diciotto** e non quindici, e lo scarto non è una
+Le famiglie del `Guard` sono **diciannove** e non sedici, e lo scarto non è una
 duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 **concede**. `HostEnv` da sola ne porta tre — `Env`, `Session`,
 `SessionSelection` — perché la 0095 ha diviso il cancello senza dividere il
@@ -154,7 +160,7 @@ trait.
 
 `HostApi` e `ReadApi` (le famiglie di lettura) sono somme con una impl
 generica: nessuno le implementa a mano, e chi le riceve continua a scrivere
-`&mut dyn HostApi`. Al confine WIT sono quindici [conta: wit-interfacce-host]
+`&mut dyn HostApi`. Al confine WIT sono diciassette [conta: wit-interfacce-host]
 `interface` che il `plugin-world` importa una per una — e là la scomposizione compra ciò che in Rust non si vede:
 un mondo che non importa `host-vault-write` non ha quella funzione da chiamare.
 
@@ -541,8 +547,8 @@ sequenceDiagram
 | `UndoStack` | [undo.rs:73](../../crates/fub-kernel/src/undo.rs) | `Vec<Entry>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
 | `undo::Entry` | [undo.rs:66](../../crates/fub-kernel/src/undo.rs) | la voce **e il conto dell'operazione**: i due arrivano dallo stesso esito e si separano una riga dopo, quindi o si appaiano lì o non si appaiano più (§23.14) |
 | `Undo` / `UndoStep` | [command.rs:712](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:4311](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:4353](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
+| dove si spinge | [workspace.rs:923](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:4364](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
 | `Partial` / `Failure` | [command.rs:605](../../crates/fub-abi/src/command.rs) | di N cose quante e quali; i guasti uno per uno col `PluginError` intero, perché la specie dice se ha senso riprovare |
 | `Undone` | [command.rs:822](../../crates/fub-abi/src/command.rs) | l'etichetta e i **due** conti: `operation` (era già a metà) e `replay` (l'annullamento si è fermato) |
 | `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
@@ -865,7 +871,7 @@ sequenceDiagram
 
 | Riquadro | Dove | Cosa fa qui |
 |---|---|---|
-| `Workspace::query_index` | [workspace.rs:3515](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
+| `Workspace::query_index` | [workspace.rs:367](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
 | `plan::run` | [plan.rs:54](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
 | `sole_evaluator` | [plan.rs:335](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
 | `RouteTable` | [routing.rs:57](../../crates/fub-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |
@@ -1220,7 +1226,7 @@ modello di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
 | `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **36** [conta: hostapi-metodi], contando le funzioni delle quindici [conta: wit-interfacce-host] interfacce `host-*` di `abi.wit`: le **quattordici** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)) `read_document_bytes` ([0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)) e `fetch` ([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md), l'unica che porti con sé un'**interfaccia nuova** invece di aggiungersi a una che c'era). Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **40** [conta: hostapi-metodi], contando le funzioni delle diciassette [conta: wit-interfacce-host] interfacce `host-*` di `abi.wit`: le **diciotto** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)) `read_document_bytes` ([0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)) `fetch` ([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)) e le quattro del trasferimento — `read_source` più le tre dell'`ArtifactSink` ([0102](../decisions/0102-i-byte-non-stanno-nel-record.md)) —, che sono anche le sole a portare con sé **interfacce nuove** invece di aggiungersi a una che c'era: `host-network` la sua, il trasferimento due. Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore

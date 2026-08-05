@@ -346,6 +346,81 @@ fn prefix<T: PartialEq + std::fmt::Debug>(base: &[T], now: &[T], what: &str) -> 
     None
 }
 
+/// Le interfacce che il **plugin esporta**, cioè quelle che deve implementare.
+fn implementate_dal_plugin(c: &Contract) -> BTreeSet<String> {
+    c.worlds.values().flat_map(|(_, e)| e.clone()).collect()
+}
+
+/// Perché una funzione in più **non** è sempre un'aggiunta.
+///
+/// La tabella di `wit-congelato.md` diceva «funzione: una funzione **nuova**» in
+/// una casella sola, e l'autotest che la copriva aggiungeva `host-env::notify`
+/// — cioè una funzione a un'interfaccia che il plugin **importa**. Là è vero
+/// davvero: un componente già compilato non la chiama, non se ne accorge, e
+/// continua a girare. È il caso della decisione 0013, ed è quello che si aveva
+/// in mente scrivendo la regola.
+///
+/// Sulle interfacce che il plugin **esporta** è falso, e nel verso peggiore:
+/// una funzione in più non è qualcosa che il vecchio può ignorare, è qualcosa
+/// che deve **fornire**. Un componente compilato contro `fub:abi@0.1.0` esporta
+/// esattamente le funzioni di allora; un world che ne pretende una in più è un
+/// world che quel componente non soddisfa, e non si instanzia affatto. Non è
+/// una minor: è una major travestita da riga in coda.
+///
+/// Il presidio è rimasto verde per due di queste (vedi [`OBBLIGAZIONI_NOTE`]),
+/// ed è la ragione per cui questa funzione esiste: la regola era stata scritta
+/// guardando il lato che si concede e applicata anche al lato che si deve.
+fn nuove_obbligazioni(base: &Contract, now: &Contract) -> Vec<String> {
+    let esportate = implementate_dal_plugin(base);
+    let note: BTreeSet<&str> = OBBLIGAZIONI_NOTE.iter().map(|(f, _)| *f).collect();
+    let mut errors = Vec::new();
+    for name in now.functions.keys() {
+        let Some((iface, _)) = name.split_once("::") else {
+            continue;
+        };
+        if !esportate.contains(iface) || base.functions.contains_key(name) {
+            continue;
+        }
+        if note.contains(name.as_str()) {
+            continue;
+        }
+        errors.push(format!(
+            "funzione `{name}`: `{iface}` è un'interfaccia che il PLUGIN esporta, quindi una \
+             funzione in più non è un'aggiunta — è un'obbligazione. Un componente compilato \
+             contro {} non la esporta, e un world che la pretende è un world che lui non \
+             soddisfa. Se è deliberata: una riga in `OBBLIGAZIONI_NOTE` con il perché, e una \
+             riga nella tabella dei ritagli di `docs/architecture/wit-congelato.md`",
+            base.version
+        ));
+    }
+    errors
+}
+
+/// Le obbligazioni **già** aggiunte prima che questo presidio sapesse vederle.
+///
+/// Non è un condono: è il modo di renderle visibili senza riscrivere la storia.
+/// Sono due, tutte e due nate da una voce chiusa che non poteva sapere di
+/// starle aggiungendo, perché il test diceva di sì. Una riga nuova qui va
+/// **argomentata**, come nell'allowlist di `serialize_non_riscrive`: il costo è
+/// reale e va pagato da chi lo sceglie, non ereditato in silenzio.
+const OBBLIGAZIONI_NOTE: &[(&str, &str)] = &[
+    (
+        "index::up-to-date",
+        "decisione 0047 (§14.2): la domanda che mancava a un IndexProvider per poter \
+         saltare un documento invariato. La 0051 scrive esplicitamente «`up-to-date` NON è \
+         toccata» parlando dei tre metodi dell'alimentazione, e aveva ragione sul suo \
+         oggetto — ma la funzione era comunque nata dopo la linea di base, su \
+         un'interfaccia esportata, e nessuno l'ha registrata come ritaglio perché il \
+         presidio era verde",
+    ),
+    (
+        "view::interests",
+        "decisione 0033 (la maschera degli eventi dice anche DOVE): senza, una view si \
+         ridisegna a ogni evento del vault. Stessa storia: interfaccia esportata, presidio \
+         verde, nessuna riga nella tabella dei ritagli",
+    ),
+];
+
 /// Tutte le rotture di additività di `now` rispetto a `base`. Vuoto = additivo.
 fn breaks(base: &Contract, now: &Contract) -> Vec<String> {
     let mut errors = Vec::new();
@@ -427,6 +502,8 @@ fn breaks(base: &Contract, now: &Contract) -> Vec<String> {
             ));
         }
     }
+
+    errors.extend(nuove_obbligazioni(base, now));
 
     for (name, (imports, exports)) in &base.worlds {
         let Some((now_imports, now_exports)) = now.worlds.get(name) else {
@@ -695,6 +772,23 @@ fn ogni_forma_di_rottura_e_rossa() {
             }),
         ),
         (
+            // La rottura che questo presidio non sapeva vedere, e che due
+            // funzioni gli erano già passate davanti (vedi
+            // `OBBLIGAZIONI_NOTE`). `format` è esportata dal `plugin-world`:
+            // un componente già compilato non la fornisce, quindi il world non
+            // è più soddisfatto e non c'è instanziazione.
+            "una funzione nuova su un'interfaccia che il PLUGIN esporta",
+            Box::new(|c: &mut Contract| {
+                c.functions.insert(
+                    "format::describe".into(),
+                    Sig {
+                        params: vec![],
+                        result: Some("string".into()),
+                    },
+                );
+            }),
+        ),
+        (
             "una funzione rimossa",
             Box::new(|c: &mut Contract| {
                 c.functions
@@ -827,6 +921,10 @@ fn le_aggiunte_in_coda_passano() {
             }),
         ),
         (
+            // Il gemello del caso rosso qui sopra, ed è la coppia che dice
+            // dov'è il taglio: la STESSA aggiunta è additiva sull'interfaccia
+            // che il plugin importa e rotta su quella che esporta. Chi importa
+            // può ignorare ciò che non conosce; chi esporta deve fornirlo.
             "una funzione nuova (decisione 0013: una capacità in più)",
             Box::new(|c: &mut Contract| {
                 c.functions.insert(

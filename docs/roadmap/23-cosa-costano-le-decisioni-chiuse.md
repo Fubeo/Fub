@@ -190,8 +190,12 @@ e una decisione di prodotto; la §23.3 aggiungeva una capacità, e l'elenco dell
 0013 è chiuso alla **sottrazione**, non alla crescita — la
 [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
 l'ha aggiunta senza toccare una firma, che è la conferma del criterio; la §23.5 sposta un
-permesso e non una firma; la §23.6 aggiunge un modo accanto a quello che c'è; la
-§23.7 e la §23.8 sono regole del kernel.
+permesso e non una firma; la §23.6 diceva di aggiungere un modo accanto a quello
+che c'è, e la [0102](../decisions/0102-i-byte-non-stanno-nel-record.md) ha
+scoperto misurandolo che quella frase era **falsa** — un modo nuovo su
+un'interfaccia che il plugin *esporta* è un'obbligazione, non un'aggiunta, e il
+presidio che avrebbe dovuto dirlo guardava il lato sbagliato; la §23.7 e la §23.8
+sono regole del kernel.
 
 La **§23.4** è l'eccezione, e lo è per il criterio e non contro: `Selection` è un
 campo di un **record** del contratto, e passare da uno a molti gli cambia il
@@ -554,7 +558,7 @@ decide una sola delle due metà:
 
 ### 23.6 Un import sta tutto in memoria, e la cosa che si importa più spesso è un vault intero
 
-*contratto · **P1** — il modo a stream è additivo, ma va deciso prima dei cinquanta importer che nascono intorno alla firma di adesso*
+*chiusa dalla [0102](../decisions/0102-i-byte-non-stanno-nel-record.md) — i byte passano da una chiave che l'host timbra, nei due versi, e la lettura è **posizionale** perché la directory di un archivio sta in fondo: due delle tre forme elencate qui erano strutturalmente incapaci. La scusa della 0006 era scaduta con la [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), e la frase «un modo nuovo accanto a quello che c'è è additivo» era **falsa** — su un'interfaccia esportata è un'obbligazione, e `wit_additivity` non lo sapeva*
 
 La [0006](../decisions/0006-import-export-come-trait.md) ha deciso che il confine
 del trasferimento è **di byte e non di path**, ed è la decisione più protettiva
@@ -573,26 +577,26 @@ d'altro (il lavoro lungo). Dal lato export la simmetria è peggiore: un export d
 tutto il vault in PDF produce un `Vec<ExportArtifact>` con dentro l'intero vault
 reso.
 
-- [ ] **Quale forma, che non è «aggiungere uno stream».** Al confine WASM non
+- [x] **Quale forma, che non è «aggiungere uno stream».** Al confine WASM non
       esiste un `Read`: le strade sono una `stream<u8>` di WASI, un metodo a
       **chunk** con un cursore tenuto dall'host, o lasciare i byte dove sono e
       dare al provider un **handle** opaco che l'host risolve — che è la stessa
       forma con cui la 0006 tiene fuori il filesystem, applicata al contenuto
       invece che al percorso. La terza merita d'essere guardata per prima proprio
       perché non contraddice la decisione: chi apre e chi legge resta l'host.
-- [ ] **Il contenitore è la stessa domanda.** Il *resta fuori* della 0006 elenca
+- [x] **Il contenitore è la stessa domanda.** Il *resta fuori* della 0006 elenca
       «zip, cartelle: una sorgente per volta», e la riga sul dispatch spiega che
       `.docx`, `.epub`, `.odt` e mezzo mondo dei backup **sono lo stesso zip**.
       Un contenitore e uno stream non sono due voci: un archivio si sfoglia senza
       tenerlo in memoria o non si sfoglia, e decidere l'uno senza l'altro
       significa deciderlo due volte.
-- [ ] **Chi lo chiede.** FEATURES 17 per intero (~120 voci, ~50 importer), 6.3
+- [x] **Chi lo chiede.** FEATURES 17 per intero (~120 voci, ~50 importer), 6.3
       (export PDF/Pandoc/Typst), 14.3 (email/EML, che sono archivi per natura).
       È anche l'unica famiglia in cui il difetto **non si vede provando**: un
       importer scritto su un vault di prova funziona, e fallisce sul vault vero
       di chi migra — cioè al primo contatto con un utente nuovo, che è il momento
       peggiore in cui questo progetto possa fallire.
-- [ ] **Perché non è P0, e perché non aspetta comunque.** Un modo nuovo accanto a
+- [x] **Perché non è P0, e perché non aspetta comunque.** Un modo nuovo accanto a
       quello che c'è è additivo, e la 0006 lo dice. Ma il costo non è nella firma:
       è nei **cinquanta importer** che il 17.1 prevede, ognuno scritto contro la
       forma disponibile quel giorno. È lo stesso moltiplicatore della quarta

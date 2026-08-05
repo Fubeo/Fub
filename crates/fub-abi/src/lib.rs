@@ -105,13 +105,15 @@ pub use traits::{
     IndexLoss, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged,
     Plugin, PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter,
     PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider,
-    SettingsRead, SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewInstance,
-    ViewProvider, ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface, MAX_RANDOM_BYTES,
+    SettingsRead, SettingsWrite, TransferRead, TrashEntry, VaultRead, VaultStructure, VaultWrite,
+    ViewInstance, ViewProvider, ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface,
+    MAX_RANDOM_BYTES,
 };
 pub use transfer::{
-    ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
-    ExportTarget, ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest,
-    ImportSource, ImportedDocument, NoteLevel, TransferNote,
+    ArtifactContent, ArtifactHandle, ArtifactSink, ConflictPolicy, ExportArtifact, ExportProvider,
+    ExportReport, ExportRequest, ExportSelection, ExportTarget, ImportMode, ImportOutcome,
+    ImportProvider, ImportReport, ImportRequest, ImportSource, ImportedDocument, NoteLevel,
+    SourceContent, SourceHandle, StreamedSource, TransferNote,
 };
 pub use ui::{
     ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,

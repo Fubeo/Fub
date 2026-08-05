@@ -2904,6 +2904,12 @@ interface transfer {
         message: string,
         entry: option<string>,
     }
+
+    /// RITAGLIO decisione 0102: le chiavi con cui i byte di un trasferimento
+    /// smettono di stare dentro i record. Stanno qui perché servono ai due
+    /// versi e alle due interfacce host che li risolvono.
+    type source-handle = u64;
+    type artifact-handle = u64;
 }
 
 /// `ImportProvider`: come i dati ENTRANO nel vault.
@@ -2917,18 +2923,34 @@ interface importer {
     use json.{json};
     use model.{doc-id};
     use errors.{plugin-error};
-    use transfer.{transfer-note};
+    use transfer.{transfer-note, source-handle};
 
     /// I byte stanno nella sorgente, e non solo nel parametro di `import`,
     /// perché `.docx`, `.epub`, `.odt` e mezzo mondo dei backup sono LO STESSO
     /// contenitore zip: un dispatch sul solo nome sceglierebbe il provider
     /// sbagliato. Il costo è una copia per candidato interpellato.
+    /// RITAGLIO decisione 0102, con i due tipi che porta.
+    record streamed-source {
+        handle: source-handle,
+        len: u64,
+        prologue: list<u8>,
+    }
+    variant source-content {
+        bytes(list<u8>),
+        streamed(streamed-source),
+    }
+
     record import-source {
         /// Come l'utente conosce la sorgente. NON è un doc-id: sta fuori dal
         /// vault.
         name: string,
         media-type: option<string>,
-        bytes: list<u8>,
+        /// RITAGLIO decisione 0102: era `bytes: list<u8>`. La 0006 dichiarava il
+        /// prezzo («la sorgente sta in memoria») senza dire COSA si importa, e
+        /// il 17.1 importa un vault intero. Un campo ritipato, non aggiunto:
+        /// affiancare un secondo campo avrebbe lasciato per sempre due modi di
+        /// dire dove sono i byte, di cui uno che li tiene tutti.
+        content: source-content,
     }
 
     /// La *preview* di 17.3 senza un secondo tipo: in `preview` il provider fa
@@ -3024,11 +3046,18 @@ interface exporter {
         options: json,
     }
     /// Byte, non un file: chi li posa sul disco è l'host.
+    /// RITAGLIO decisione 0102: il gemello di `source-content`.
+    variant artifact-content {
+        bytes(list<u8>),
+        delivered(u64),
+    }
+
     record export-artifact {
         /// Path relativo DENTRO l'esito.
         path: string,
         media-type: string,
-        bytes: list<u8>,
+        /// RITAGLIO decisione 0102: era `bytes: list<u8>`.
+        content: artifact-content,
     }
     record export-report {
         artifacts: list<export-artifact>,
