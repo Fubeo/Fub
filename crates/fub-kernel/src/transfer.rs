@@ -1,0 +1,417 @@
+//! Cosa sta **dietro** un handle di trasferimento (decisione 0102).
+//!
+//! Il contratto dice che i byte di un import possono restare dall'host e che
+//! quelli di un export si possono versare mentre si producono
+//! ([`fub_abi::transfer`]). Qui c'è il lato host di quelle due frasi: chi tiene
+//! aperta una sorgente e la legge per pezzi, e dove finisce un artefatto.
+//!
+//! # Perché la lettura è posizionale
+//!
+//! `read_at(offset, len)` e non `next_chunk()`. La ragione non è di comodo ed è
+//! la stessa che ha scartato le altre due strade della §23.6: un contenitore
+//! zip — cioè `.docx`, `.epub`, `.odt` e mezzo mondo dei backup — tiene la
+//! propria directory **in fondo**. Chi sa solo andare avanti non lo sfoglia, lo
+//! scarica; e siccome la voce dichiarava che contenitore e stream «non sono due
+//! voci», una forma sequenziale avrebbe chiuso metà del problema fingendo di
+//! chiuderlo tutto.
+//!
+//! # Chi apre, chi chiude
+//!
+//! Apre chi ha aperto il dialogo di sistema — cioè l'app, attraverso
+//! [`Workspace::open_source`](crate::workspace::Workspace::open_source) — e
+//! chiude lo stesso. Il kernel **non** chiude alla fine di un `import`, di
+//! proposito: la coppia preview→apply della decisione 0006 è due chiamate sulla
+//! stessa sorgente, e chiuderla in mezzo vorrebbe dire riaprirla, cioè rileggere
+//! ciò che si era già letto per rispondere alla stessa domanda.
+
+use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+
+use fub_abi::transfer::{
+    ArtifactContent, ArtifactHandle, ArtifactSink, ExportArtifact, SourceHandle,
+};
+use fub_abi::PluginError;
+
+/// Quanti byte di assaggio l'host legge all'apertura, per il dispatch.
+///
+/// Non attraversa il confine e non è una promessa: è quanto basta a riconoscere
+/// una firma di formato (un `PK\x03\x04`, un `%PDF`, un frontmatter) senza
+/// leggere la sorgente. Chi ha bisogno di più di così ha bisogno di un host, e
+/// ce l'ha dentro `import`.
+pub const PROLOGUE: usize = 8 * 1024;
+
+/// Ciò che sta dietro una [`SourceHandle`].
+///
+/// Un trait e non un `File` perché le sorgenti non vengono tutte dal disco: un
+/// download, un incolla, un'entrata di un archivio già aperto. Ciò che le
+/// accomuna è saper rispondere a «dammi `len` byte a partire da `offset`», che è
+/// la sola domanda che il contratto pone.
+pub trait SourceBacking: Send {
+    /// Legge a partire da `offset`. **Può restituire meno byte di `len`**, e
+    /// deve restituirne zero quando `offset` è oltre la fine: è la firma del
+    /// contratto, e chi la implementa non deve inventarsi un errore per dire
+    /// «non c'è altro».
+    fn read_at(&mut self, offset: u64, len: u32) -> Result<Vec<u8>, PluginError>;
+
+    /// Quanti byte in tutto.
+    fn len(&self) -> u64;
+
+    /// Nessun byte.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Una sorgente che sta su disco, letta senza entrarci tutta in memoria.
+pub struct FileSource {
+    file: File,
+    len: u64,
+}
+
+impl FileSource {
+    /// Apre il file. `Io` se non si può: aprire una sorgente è la prima cosa
+    /// che può andare storta, e non è un difetto del provider che la riceverà.
+    pub fn open(path: &Path) -> Result<Self, PluginError> {
+        let file = File::open(path).map_err(|e| {
+            PluginError::Io(format!("`{}` non si apre: {e}", path.display()).into())
+        })?;
+        let len = file
+            .metadata()
+            .map_err(|e| PluginError::Io(format!("`{}`: {e}", path.display()).into()))?
+            .len();
+        Ok(FileSource { file, len })
+    }
+}
+
+impl SourceBacking for FileSource {
+    fn read_at(&mut self, offset: u64, len: u32) -> Result<Vec<u8>, PluginError> {
+        if offset >= self.len {
+            return Ok(Vec::new());
+        }
+        self.file
+            .seek(SeekFrom::Start(offset))
+            .map_err(|e| PluginError::Io(format!("non si arriva a {offset}: {e}").into()))?;
+        // `min` col residuo: allocare `len` su una richiesta da un gigabyte a
+        // due byte dalla fine sarebbe un tetto dell'host pagato da chi non lo
+        // ha superato.
+        let quanti = (self.len - offset).min(u64::from(len)) as usize;
+        let mut buf = vec![0u8; quanti];
+        let letti = read_fino_a(&mut self.file, &mut buf)?;
+        buf.truncate(letti);
+        Ok(buf)
+    }
+
+    fn len(&self) -> u64 {
+        self.len
+    }
+}
+
+/// Legge riempiendo il buffer, fermandosi alla fine. `Interrupted` non è un
+/// guasto: è il segnale che si riprova, e trattarlo come tale qui evita che una
+/// lettura interrotta diventi una sorgente troncata in silenzio.
+fn read_fino_a(f: &mut impl Read, buf: &mut [u8]) -> Result<usize, PluginError> {
+    let mut letti = 0;
+    while letti < buf.len() {
+        match f.read(&mut buf[letti..]) {
+            Ok(0) => break,
+            Ok(n) => letti += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(PluginError::Io(format!("lettura fallita: {e}").into())),
+        }
+    }
+    Ok(letti)
+}
+
+/// Una sorgente che sta già in memoria, dietro un handle.
+///
+/// Sembra una contraddizione e non lo è: serve a chi vuole *provare* la strada a
+/// handle senza un file — i banchi di questo repo — e a chi ha byte che non
+/// vengono dal disco. La forma che il provider vede è la stessa, ed è il punto.
+pub struct MemorySource(pub Vec<u8>);
+
+impl SourceBacking for MemorySource {
+    fn read_at(&mut self, offset: u64, len: u32) -> Result<Vec<u8>, PluginError> {
+        let da = (offset.min(self.0.len() as u64)) as usize;
+        let a = da.saturating_add(len as usize).min(self.0.len());
+        Ok(self.0[da..a].to_vec())
+    }
+
+    fn len(&self) -> u64 {
+        self.0.len() as u64
+    }
+}
+
+/// Le sorgenti che l'host tiene aperte, con la chiave che ha timbrato.
+///
+/// La chiave sale e non si riusa mai. Non è per eleganza: un numero riciclato
+/// farebbe sì che un provider che si è tenuto un handle vecchio — cosa che il
+/// contratto gli dice di non fare, ma che nessuno gli impedisce — leggerebbe
+/// **la sorgente di qualcun altro** invece di ricevere il `BadArgs` che merita.
+#[derive(Default)]
+pub(crate) struct OpenSources {
+    aperte: BTreeMap<u64, Box<dyn SourceBacking>>,
+    prossima: u64,
+}
+
+impl OpenSources {
+    /// Registra una sorgente e restituisce la sua chiave.
+    pub(crate) fn open(&mut self, backing: Box<dyn SourceBacking>) -> SourceHandle {
+        self.prossima += 1;
+        let h = self.prossima;
+        self.aperte.insert(h, backing);
+        SourceHandle(h)
+    }
+
+    /// Chiude. Chiudere ciò che non c'è riesce: chi chiude due volte non sta
+    /// sbagliando niente che valga un errore.
+    pub(crate) fn close(&mut self, handle: SourceHandle) {
+        self.aperte.remove(&handle.0);
+    }
+
+    pub(crate) fn read(
+        &mut self,
+        handle: SourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, PluginError> {
+        let Some(b) = self.aperte.get_mut(&handle.0) else {
+            return Err(PluginError::BadArgs(
+                "questo handle di sorgente non è (o non è più) aperto".into(),
+            ));
+        };
+        b.read_at(offset, len)
+    }
+
+    /// Quanti byte ha la sorgente dietro una chiave.
+    pub(crate) fn len(&self, handle: SourceHandle) -> Option<u64> {
+        self.aperte.get(&handle.0).map(|b| b.len())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Il verso che esce
+// ---------------------------------------------------------------------------
+
+/// Un sink che tiene gli artefatti in memoria: il comportamento di sempre,
+/// adesso dichiarato invece che implicito.
+///
+/// È il default di [`Workspace::export`](crate::workspace::Workspace::export) —
+/// chi esporta tre note non deve scegliere una destinazione per averle.
+#[derive(Default)]
+pub struct MemorySink {
+    aperti: BTreeMap<u64, (String, String, Vec<u8>)>,
+    prossima: u64,
+}
+
+impl ArtifactSink for MemorySink {
+    fn open_artifact(
+        &mut self,
+        path: &str,
+        media_type: &str,
+    ) -> Result<ArtifactHandle, PluginError> {
+        controlla_path(path)?;
+        self.prossima += 1;
+        self.aperti.insert(
+            self.prossima,
+            (path.to_string(), media_type.to_string(), Vec::new()),
+        );
+        Ok(ArtifactHandle(self.prossima))
+    }
+
+    fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError> {
+        let Some((_, _, buf)) = self.aperti.get_mut(&handle.0) else {
+            return Err(handle_ignoto());
+        };
+        buf.extend_from_slice(bytes);
+        Ok(())
+    }
+
+    fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError> {
+        let Some((path, media_type, buf)) = self.aperti.remove(&handle.0) else {
+            return Err(handle_ignoto());
+        };
+        // In memoria la ricevuta porta i byte: sono già qui, e dirlo
+        // `Delivered` costringerebbe chi legge il rapporto a cercarli altrove
+        // dove non ci sono.
+        Ok(ExportArtifact {
+            path,
+            media_type,
+            content: ArtifactContent::Bytes(buf),
+        })
+    }
+}
+
+/// Un sink che posa gli artefatti dentro una cartella.
+///
+/// È il lato host della promessa che la 0006 fa da sempre — «chi posa i byte
+/// sul disco è l'host» — e fino alla 0102 non aveva un'implementazione, perché
+/// i byte arrivavano tutti insieme e posarli era una riga di chi chiamava. Con
+/// un export che versa a pezzi non lo è più.
+pub struct DirectorySink {
+    root: PathBuf,
+    aperti: BTreeMap<u64, (String, String, File, u64)>,
+    prossima: u64,
+}
+
+impl DirectorySink {
+    /// Gli artefatti finiranno sotto `root`, che deve esistere.
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        DirectorySink {
+            root: root.into(),
+            aperti: BTreeMap::new(),
+            prossima: 0,
+        }
+    }
+}
+
+impl ArtifactSink for DirectorySink {
+    fn open_artifact(
+        &mut self,
+        path: &str,
+        media_type: &str,
+    ) -> Result<ArtifactHandle, PluginError> {
+        controlla_path(path)?;
+        let dest = self.root.join(path);
+        if let Some(dir) = dest.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| {
+                PluginError::Io(format!("`{}` non si crea: {e}", dir.display()).into())
+            })?;
+        }
+        let file = File::create(&dest).map_err(|e| {
+            PluginError::Io(format!("`{}` non si scrive: {e}", dest.display()).into())
+        })?;
+        self.prossima += 1;
+        self.aperti.insert(
+            self.prossima,
+            (path.to_string(), media_type.to_string(), file, 0),
+        );
+        Ok(ArtifactHandle(self.prossima))
+    }
+
+    fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError> {
+        let Some((path, _, file, scritti)) = self.aperti.get_mut(&handle.0) else {
+            return Err(handle_ignoto());
+        };
+        file.write_all(bytes)
+            .map_err(|e| PluginError::Io(format!("`{path}`: {e}").into()))?;
+        *scritti += bytes.len() as u64;
+        Ok(())
+    }
+
+    fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError> {
+        let Some((path, media_type, mut file, scritti)) = self.aperti.remove(&handle.0) else {
+            return Err(handle_ignoto());
+        };
+        // `flush` prima della ricevuta: un conto emesso su byte ancora nel
+        // buffer sarebbe esattamente il conto che mente, cioè la cosa che
+        // `ArtifactContent::Delivered` esiste per non essere.
+        file.flush()
+            .map_err(|e| PluginError::Io(format!("`{path}` non si chiude: {e}").into()))?;
+        Ok(ExportArtifact {
+            path,
+            media_type,
+            content: ArtifactContent::Delivered(scritti),
+        })
+    }
+}
+
+fn handle_ignoto() -> PluginError {
+    PluginError::BadArgs("questo handle di artefatto non è (o non è più) aperto".into())
+}
+
+/// Il path di un artefatto è **dentro l'esito**, e ci resta.
+///
+/// Stessa famiglia di `ImportSource::stem`, e per la stessa ragione: il path lo
+/// scrive chi ha scritto il provider, cioè qualcuno che non è l'utente. Un
+/// `../` qui non sarebbe un artefatto storto, sarebbe un file scritto fuori
+/// dalla cartella che l'utente ha scelto nel dialogo.
+fn controlla_path(path: &str) -> Result<(), PluginError> {
+    let storto = path.is_empty()
+        || path.starts_with('/')
+        || path.starts_with('\\')
+        || path.contains(':')
+        || path
+            .split(['/', '\\'])
+            .any(|c| c == ".." || c == "." || c.is_empty());
+    if storto {
+        return Err(PluginError::PermissionDenied(
+            format!("`{path}` non è un posto dentro l'esito di un export").into(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn una_lettura_oltre_la_fine_e_vuota_e_non_e_un_errore() {
+        let mut s = MemorySource(b"0123456789".to_vec());
+        assert_eq!(s.read_at(0, 4).unwrap(), b"0123");
+        assert_eq!(s.read_at(8, 100).unwrap(), b"89");
+        assert_eq!(
+            s.read_at(10, 100).unwrap(),
+            b"",
+            "la fine si dice con un vuoto: chi legge in ciclo si ferma su \
+             questo, e un errore lo farebbe fallire dopo aver letto tutto"
+        );
+        assert_eq!(s.read_at(9_999, 4).unwrap(), b"");
+    }
+
+    #[test]
+    fn una_chiave_chiusa_non_diventa_la_sorgente_di_qualcun_altro() {
+        let mut sorgenti = OpenSources::default();
+        let a = sorgenti.open(Box::new(MemorySource(b"mia".to_vec())));
+        sorgenti.close(a);
+        let b = sorgenti.open(Box::new(MemorySource(b"tua".to_vec())));
+        assert_ne!(
+            a, b,
+            "una chiave riciclata darebbe a chi si è tenuto un handle vecchio \
+             la sorgente di qualcun altro invece del BadArgs che merita"
+        );
+        assert!(matches!(
+            sorgenti.read(a, 0, 3),
+            Err(PluginError::BadArgs(_))
+        ));
+        assert_eq!(sorgenti.read(b, 0, 3).unwrap(), b"tua");
+    }
+
+    #[test]
+    fn un_artefatto_non_esce_dalla_cartella_che_l_utente_ha_scelto() {
+        let mut sink = MemorySink::default();
+        for storto in [
+            "../fuori.md",
+            "/etc/passwd",
+            "a/../../b.md",
+            "",
+            "a//b.md",
+            r"C:\x.md",
+        ] {
+            assert!(
+                matches!(
+                    sink.open_artifact(storto, "text/plain"),
+                    Err(PluginError::PermissionDenied(_))
+                ),
+                "`{storto}` è stato accettato come posto dentro l'esito"
+            );
+        }
+        assert!(sink.open_artifact("sotto/dentro.md", "text/plain").is_ok());
+    }
+
+    #[test]
+    fn la_ricevuta_conta_i_byte_che_sono_passati() {
+        let mut sink = MemorySink::default();
+        let h = sink.open_artifact("a.md", "text/markdown").unwrap();
+        sink.write_artifact(h, b"uno").unwrap();
+        sink.write_artifact(h, b"due").unwrap();
+        let a = sink.close_artifact(h).unwrap();
+        assert_eq!(a.len(), 6, "due versamenti, un conto solo");
+        assert!(matches!(
+            sink.close_artifact(h),
+            Err(PluginError::BadArgs(_)),
+        ));
+    }
+}

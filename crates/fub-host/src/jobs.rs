@@ -64,8 +64,8 @@ use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
     DataRead, DataWrite, HostApi, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery,
     HostServices, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi,
-    SettingsRead, SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead,
-    ViewStateWrite,
+    SettingsRead, SettingsWrite, TransferRead, TrashEntry, VaultRead, VaultStructure, VaultWrite,
+    ViewStateRead, ViewStateWrite,
 };
 use fub_abi::{Event, PluginError};
 use fub_kernel::host::Guard;
@@ -423,6 +423,23 @@ impl HostCommands for JobHost {
     /// nel giro sincrono invece di portarsi via il vault.
     fn undo_last(&mut self) -> Result<Option<fub_abi::command::Undone>, PluginError> {
         self.write_result(|h| h.undo_last())
+    }
+}
+
+/// Sotto prestito **condiviso**, e la decisione 0102 lo scrive dove conta: un
+/// import di un vault intero legge la sorgente per minuti, e servirlo da
+/// `writing` terrebbe il lock esclusivo per tutto quel tempo — cioè affamerebbe
+/// chi scrive esattamente come farebbe una lettura di documento, ma per minuti
+/// invece che per microsecondi. È la ragione per cui `TransferRead` sta in
+/// [`ReadApi`](fub_abi::traits::ReadApi) e non su `HostApi`.
+impl TransferRead for JobHost {
+    fn read_source(
+        &self,
+        handle: fub_abi::transfer::SourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, PluginError> {
+        self.read_result(|h| h.read_source(handle, offset, len))
     }
 }
 

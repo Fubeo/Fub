@@ -1193,6 +1193,44 @@ impl<T: HostNetwork + ?Sized> HostNetwork for &T {
     }
 }
 
+/// Leggere una sorgente che l'host tiene aperta per conto di un import.
+///
+/// È la capacità nata con la decisione 0102, e l'unica del contratto che non
+/// presta niente del vault né della macchina: presta **una cosa sola**, quella
+/// che l'utente ha appena scelto in un dialogo di sistema, e la presta per la
+/// durata di una chiamata. La chiave è
+/// [`SourceHandle`](crate::transfer::SourceHandle) e la timbra l'host — vedi lì
+/// perché questo basta a rendere superfluo un recinto di path.
+pub trait TransferRead: Send + Sync {
+    /// Legge dalla sorgente a partire da `offset`.
+    ///
+    /// **Posizionale, e non è un dettaglio**: è la ragione per cui questa forma
+    /// è stata scelta al posto di uno `stream<u8>` di WASI o di un cursore
+    /// tenuto dall'host. Quelle sanno solo andare avanti, e un contenitore zip
+    /// — cioè `.docx`, `.epub`, `.odt` e mezzo mondo dei backup — ha la propria
+    /// directory **in fondo**: chi non può tornare indietro non sfoglia un
+    /// archivio, lo scarica tutto.
+    ///
+    /// **Può restituire meno byte di `len`, e non è un errore.** È la sola
+    /// forma che regge con la stessa firma la fine della sorgente e il tetto di
+    /// una singola lettura, e obbliga chi legge a scrivere il ciclo che
+    /// dovrebbe scrivere comunque. Un vuoto significa: non c'è altro a partire
+    /// da lì. Il tetto non è interrogabile, per la regola della
+    /// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md).
+    ///
+    /// I rifiuti sono due: [`PermissionDenied`](crate::PluginError::PermissionDenied)
+    /// se la famiglia è negata, [`BadArgs`](crate::PluginError::BadArgs) per un
+    /// handle che non è (o non è più) di questa chiamata — che è anche ciò che
+    /// riceve chi prova a leggere la sorgente di qualcun altro tirando a
+    /// indovinare un numero.
+    fn read_source(
+        &self,
+        handle: crate::transfer::SourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, PluginError>;
+}
+
 /// Chi **offre** un servizio agli altri plugin (§7.5).
 ///
 /// Quali `ns` serva non lo dice questo trait: lo dice il
@@ -1340,20 +1378,36 @@ pub trait HostCommands: Send + Sync {
 /// implementava dodici capacità di scrittura come altrettanti `unreachable!()`:
 /// il divieto era vero, e non era un tipo.
 ///
-/// Non si implementa: c'è una impl generica per chiunque abbia le quattro
-/// famiglie di lettura.
+/// Leggere la **sorgente di un import** sta qui e non su [`HostApi`], e la
+/// ragione non è di classificazione: sta qui perché un import di un vault da
+/// 4 GiB legge per minuti, e sotto prestito esclusivo affamerebbe chiunque
+/// scriva — che è precisamente il difetto per cui la decisione 0024 ha scelto un
+/// `RwLock`. Dirlo nel tipo è ciò che permette a chi esegue un job di servire
+/// quelle letture tenendo il prestito **condiviso**. Che una sorgente non sia
+/// ancora nel vault non la rende una scrittura.
+///
+/// Non si implementa: c'è una impl generica per chiunque abbia le famiglie di
+/// lettura.
 pub trait ReadApi:
-    VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ViewStateRead
+    VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ViewStateRead + TransferRead
 {
 }
 
-impl<T: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ViewStateRead + ?Sized> ReadApi
-    for T
+impl<
+        T: VaultRead
+            + DataRead
+            + HostQuery
+            + HostEnv
+            + SettingsRead
+            + ViewStateRead
+            + TransferRead
+            + ?Sized,
+    > ReadApi for T
 {
 }
 
 /// Le capacità che il kernel concede a un provider/plugin: la **somma** delle
-/// quindici famiglie.
+/// sedici famiglie.
 ///
 /// È l'**unico** varco col mondo: ciò che non passa di qui, un plugin WASM non
 /// lo potrà fare. Per questo la superficie va chiusa *prima* del freeze di M4 —
@@ -1363,7 +1417,7 @@ impl<T: VaultRead + DataRead + HostQuery + HostEnv + SettingsRead + ViewStateRea
 /// freeze un metodo **aggiunto** a una famiglia è una minor, uno **tolto** è una
 /// major.
 ///
-/// Non si implementa e non si dichiara: chi ha le quindici famiglie ce l'ha, per
+/// Non si implementa e non si dichiara: chi ha le sedici famiglie ce l'ha, per
 /// la impl generica qui sotto. Chi lo **riceve** continua a scrivere
 /// `&mut dyn HostApi` come prima — è il tipo di chi può fare tutto, e a quello
 /// non è cambiato niente.

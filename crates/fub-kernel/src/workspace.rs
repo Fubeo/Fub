@@ -50,7 +50,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{
@@ -73,8 +73,8 @@ use fub_abi::traits::{
     ViewInstance, ViewInterests, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{
-    ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider, ImportReport,
-    ImportRequest, ImportSource,
+    ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider,
+    ImportReport, ImportRequest, ImportSource, SourceContent, SourceHandle, StreamedSource,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Actor, Event, Notice, PluginError, Severity};
@@ -104,6 +104,7 @@ use crate::registry::FormatRegistry;
 use crate::renderer::{self, RenderedDocument};
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
+use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
 use crate::undo::UndoStack;
 use crate::vault::TrashEntry;
 use crate::viewstate::ViewStates;
@@ -423,6 +424,15 @@ pub struct Workspace {
     /// tocca il vault, e tenerne il lock per quanto dura la rete affamerebbe
     /// chi scrive (decisione 0024).
     network: Option<Arc<dyn fub_abi::traits::HostNetwork>>,
+    /// **Le sorgenti di import che l'host tiene aperte** (decisione 0102).
+    ///
+    /// Non è un sesto proprietario: è una tabella di prestiti in corso, che vive
+    /// quanto il dialogo di sistema che l'ha riempita. Sta dietro un `Mutex` per
+    /// una ragione sola e dichiarata: `TransferRead::read_source` prende `&self`
+    /// — perché quel trait sta anche su chi legge — mentre leggere un file
+    /// avanza un cursore. Fra i due era meglio l'interiore che una firma che
+    /// mente su cosa tocca.
+    sources: Mutex<OpenSources>,
     /// Il vault è già stato chiuso ([`close`](Workspace::close))?
     ///
     /// **Non è un sesto proprietario** (§8.1): è lo stato del *tutto*, ed è
@@ -565,6 +575,7 @@ impl Workspace {
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
             network: None,
+            sources: Mutex::new(OpenSources::default()),
             closed: false,
             settings,
             view_states: ViewStates::in_memory(),
@@ -4454,6 +4465,77 @@ impl Workspace {
         Ok(())
     }
 
+    /// **Apre** una sorgente perché un provider la legga a pezzi invece che
+    /// tutta insieme (decisione 0102).
+    ///
+    /// Chi chiama è chi ha aperto il dialogo di sistema: il kernel non sceglie
+    /// il file, lo riceve già aperto sotto forma di [`SourceBacking`]. È la
+    /// stessa divisione della 0006 — «chi apre il dialogo di sistema e chi posa
+    /// i byte è l'host» — spostata di un gradino, perché adesso c'è qualcosa da
+    /// tenere aperto fra l'una e l'altra.
+    ///
+    /// Il prologo si legge **qui e una volta sola**, ed è ciò che rende
+    /// possibile il dispatch: [`ImportProvider::can_handle`] non riceve un host
+    /// e quindi non può leggere niente. Senza, una sorgente a handle si
+    /// riconoscerebbe dal solo nome — e la 0006 spiega perché non basta.
+    ///
+    /// Chiude [`close_source`](Workspace::close_source), e non `import`: la
+    /// coppia preview→apply è due chiamate sulla stessa sorgente, e chiuderla in
+    /// mezzo vorrebbe dire rileggerla per rispondere alla stessa domanda.
+    pub fn open_source(
+        &mut self,
+        name: impl Into<String>,
+        media_type: Option<String>,
+        mut backing: Box<dyn SourceBacking>,
+    ) -> std::result::Result<ImportSource, PluginError> {
+        let len = backing.len();
+        let prologue = backing.read_at(0, PROLOGUE as u32)?;
+        let handle = self
+            .sources
+            .lock()
+            .expect("le sorgenti aperte non sono avvelenate")
+            .open(backing);
+        Ok(ImportSource {
+            name: name.into(),
+            media_type,
+            content: SourceContent::Streamed(StreamedSource {
+                handle,
+                len,
+                prologue,
+            }),
+        })
+    }
+
+    /// Chiude una sorgente aperta. Chiudere ciò che non c'è riesce.
+    pub fn close_source(&mut self, handle: SourceHandle) {
+        self.sources
+            .lock()
+            .expect("le sorgenti aperte non sono avvelenate")
+            .close(handle);
+    }
+
+    /// Legge da una sorgente aperta: il lato host di
+    /// [`TransferRead::read_source`](fub_abi::traits::TransferRead::read_source).
+    pub(crate) fn read_open_source(
+        &self,
+        handle: SourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> std::result::Result<Vec<u8>, PluginError> {
+        self.sources
+            .lock()
+            .expect("le sorgenti aperte non sono avvelenate")
+            .read(handle, offset, len)
+    }
+
+    /// Quanti byte ha una sorgente aperta, se lo è.
+    pub fn source_len(&self, handle: SourceHandle) -> Option<u64> {
+        self.sources
+            .lock()
+            .expect("le sorgenti aperte non sono avvelenate")
+            .len(handle)
+    }
+
     /// Fa entrare una sorgente esterna nel vault, col **primo** provider
     /// registrato che la riconosce.
     ///
@@ -4520,6 +4602,22 @@ impl Workspace {
         &self,
         request: &ExportRequest,
     ) -> std::result::Result<ExportReport, PluginError> {
+        let mut sink = MemorySink::default();
+        self.export_to(request, &mut sink)
+    }
+
+    /// Come [`export`](Workspace::export), ma versando gli artefatti dove dice
+    /// chi chiama (decisione 0102).
+    ///
+    /// I due non sono due modi di fare la stessa cosa: `export` tiene tutto in
+    /// memoria — che è ciò che il contratto faceva sempre, e che va benissimo
+    /// per tre note — mentre qui l'esito può non entrarci. Un export del vault
+    /// intero in PDF è il caso per cui questa esiste.
+    pub fn export_to(
+        &self,
+        request: &ExportRequest,
+        out: &mut dyn ArtifactSink,
+    ) -> std::result::Result<ExportReport, PluginError> {
         let (id, provider) = self
             .providers
             .exports
@@ -4531,7 +4629,7 @@ impl Workspace {
                 )
             })?;
         let host = self.read_host_for(id);
-        provider.export(request, &host)
+        provider.export(request, &host, out)
     }
 
     // --- eventi ------------------------------------------------------------

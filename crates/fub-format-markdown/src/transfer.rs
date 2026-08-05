@@ -16,7 +16,7 @@ use fub_abi::edit::WriteBase;
 use fub_abi::format::ParseContext;
 use fub_abi::traits::ReadApi;
 use fub_abi::transfer::{
-    ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportTarget,
+    ArtifactSink, ConflictPolicy, ExportProvider, ExportReport, ExportRequest, ExportTarget,
     ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest, ImportSource,
     ImportedDocument, TransferNote,
 };
@@ -73,7 +73,7 @@ impl ImportProvider for MarkdownImport {
     ) -> Result<ImportReport, PluginError> {
         // Byte non testuali e nome inservibile sono «non ho potuto cominciare»:
         // errore, non una riga di giornale su un import per il resto riuscito.
-        let text = source.text()?;
+        let text = source.text(host)?;
         let stem = source.stem().ok_or_else(|| {
             PluginError::BadArgs(
                 format!("`{}` non dà un nome di documento utilizzabile", source.name).into(),
@@ -87,7 +87,7 @@ impl ImportProvider for MarkdownImport {
         // non entra) e raccontare cosa sta entrando. Non serve a riscriverla —
         // il documento si scrive **com'era**, che è la sola forma di import
         // markdown fedele (`serialize` è generazione, non round-trip).
-        let model = crate::parse::parse_markdown(text, &ParseContext::obsidian(wanted.as_str()))
+        let model = crate::parse::parse_markdown(&text, &ParseContext::obsidian(wanted.as_str()))
             .map_err(|e| PluginError::BadArgs(e.to_string().into()))?;
         report.log.push(
             TransferNote::info(format!(
@@ -127,7 +127,7 @@ impl ImportProvider for MarkdownImport {
             // sovrascrittura è per di più **richiesta**, e l'ha chiesta chi ha
             // scelto la politica: le altre due strade di quel `match` esistono
             // apposta per chi non la vuole.
-            match host.write_document(&doc, text, WriteBase::Dictated) {
+            match host.write_document(&doc, &text, WriteBase::Dictated) {
                 Ok(_) => outcome,
                 // Un rifiuto del recinto o un errore di scrittura riguardano
                 // QUESTO documento: il rapporto lo dice e l'import resta valido.
@@ -190,6 +190,7 @@ impl ExportProvider for MarkdownExport {
         &self,
         request: &ExportRequest,
         host: &dyn ReadApi,
+        out: &mut dyn ArtifactSink,
     ) -> Result<ExportReport, PluginError> {
         if request.target != TARGET_FILES && request.target != TARGET_SINGLE {
             return Err(PluginError::BadArgs(
@@ -228,13 +229,20 @@ impl ExportProvider for MarkdownExport {
             };
 
             match request.target.as_str() {
-                TARGET_FILES => report.artifacts.push(ExportArtifact {
-                    // Il path dentro l'esito è il path dentro il vault: un
-                    // export di una cartella si riapre com'era.
-                    path: doc.as_str().to_string(),
-                    media_type: MEDIA_TYPES[0].to_string(),
-                    bytes: body.into_bytes(),
-                }),
+                // Il path dentro l'esito è il path dentro il vault: un export
+                // di una cartella si riapre com'era.
+                //
+                // Passa dal sink **sempre**, anche quando l'esito starebbe in
+                // memoria, e non è cerimonia: con un `MemorySink` la ricevuta
+                // torna con i byte dentro e il rapporto è quello di prima, con
+                // un `DirectorySink` la nota è già sul disco e non è mai stata
+                // due volte in RAM. Una strada sola, e a scegliere è chi ha
+                // aperto il dialogo — che è l'unico a sapere dove va a finire.
+                TARGET_FILES => {
+                    let h = out.open_artifact(doc.as_str(), MEDIA_TYPES[0])?;
+                    out.write_artifact(h, body.as_bytes())?;
+                    report.artifacts.push(out.close_artifact(h)?);
+                }
                 _ => {
                     if !single.is_empty() {
                         single.push_str("\n\n---\n\n");
@@ -247,11 +255,16 @@ impl ExportProvider for MarkdownExport {
         }
 
         if request.target == TARGET_SINGLE {
-            report.artifacts.push(ExportArtifact {
-                path: format!("export.{CANONICAL_EXT}"),
-                media_type: MEDIA_TYPES[0].to_string(),
-                bytes: single.into_bytes(),
-            });
+            // Qui il buffer c'è comunque — un documento unico è una
+            // concatenazione, e concatenare vuol dire tenere — quindi il sink
+            // non fa risparmiare memoria: fa arrivare i byte dove vanno senza
+            // che chi chiama debba riconoscere quale delle due destinazioni ha
+            // chiesto. Il risparmio, per questa, sarebbe versare mentre si
+            // concatena, e vale una voce sua: qui cambierebbe la forma del
+            // giornale, perché un documento saltato si scopre dopo.
+            let h = out.open_artifact(&format!("export.{CANONICAL_EXT}"), MEDIA_TYPES[0])?;
+            out.write_artifact(h, single.as_bytes())?;
+            report.artifacts.push(out.close_artifact(h)?);
         }
         Ok(report)
     }
@@ -322,7 +335,7 @@ mod tests {
             p.can_handle(&ImportSource {
                 name: "Nota.md".into(),
                 media_type: Some("application/octet-stream".into()),
-                bytes: b"# x".to_vec(),
+                content: fub_abi::transfer::SourceContent::Bytes(b"# x".to_vec()),
             }),
             "un dialogo di sistema dichiara octet-stream di continuo: \
              l'estensione resta più affidabile"
@@ -332,14 +345,14 @@ mod tests {
             p.can_handle(&ImportSource {
                 name: "appunti".into(),
                 media_type: Some("text/markdown; charset=utf-8".into()),
-                bytes: b"# x".to_vec(),
+                content: fub_abi::transfer::SourceContent::Bytes(b"# x".to_vec()),
             }),
             "un incolla dagli appunti non ha estensione: decide il media type"
         );
         assert!(!p.can_handle(&ImportSource {
             name: "appunti".into(),
             media_type: None,
-            bytes: b"# x".to_vec(),
+            content: fub_abi::transfer::SourceContent::Bytes(b"# x".to_vec()),
         }));
     }
 

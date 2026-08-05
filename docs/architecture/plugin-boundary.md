@@ -416,13 +416,22 @@ il filesystem lo tocca più di tutti. Qui **nessuna delle due firme nomina un
 percorso**:
 
 - `ImportProvider::import(source, request, host)` riceve
-  `ImportSource { name, media_type, bytes }` — la sorgente **già letta**. Il
-  `name` è quello che l'utente conosce (`vault.zip`), non un path: viene da
-  fuori, e `ImportSource::stem()` lo riduce a un componente solo perché
-  `../../.ssh/config.md` non diventi una scrittura fuori dal vault.
-- `ExportProvider::export(request, host)` restituisce
-  `ExportArtifact { path, media_type, bytes }`, dove `path` è il posto **dentro
-  l'esito** (un albero relativo), non sul disco.
+  `ImportSource { name, media_type, content }`. Il `name` è quello che l'utente
+  conosce (`vault.zip`), non un path: viene da fuori, e `ImportSource::stem()`
+  lo riduce a un componente solo perché `../../.ssh/config.md` non diventi una
+  scrittura fuori dal vault.
+- `ExportProvider::export(request, host, out)` versa in un `ArtifactSink` e
+  restituisce `ExportArtifact { path, media_type, content }`, dove `path` è il
+  posto **dentro l'esito** (un albero relativo), non sul disco.
+
+Il `content` è la sola cosa cambiata dalla
+[0102](../decisions/0102-i-byte-non-stanno-nel-record.md): i byte possono stare
+nel record (`SourceContent::Bytes`, il caso comune) **oppure** restare dall'host
+dietro una chiave che solo lui risolve — `read_source(handle, offset, len)`, che
+è posizionale perché la directory di un archivio sta in fondo. Un handle non si
+costruisce, si riceve, e nomina la sorgente che l'utente ha appena scelto: è la
+stessa forma di questo capitolo — chi apre e chi legge resta l'host — applicata
+al *contenuto* invece che al *percorso*.
 
 Chi apre il dialogo di sistema e chi posa i byte è **l'host**, che è già l'unico
 a sapere dove sia il vault. La conseguenza è che import ed export non chiedono
@@ -430,11 +439,14 @@ nessuna capacità nuova oltre a `free_name`, e che a M5 la sandbox **non deve
 concedere niente**: la riga «Filesystem: nessun accesso diretto» resta vera senza
 eccezioni.
 
-Il prezzo è dichiarato: sorgente e artefatti stanno in memoria. Un export di
-vault enorme è lavoro lungo, e dalla
+Il prezzo che la [0006](../decisions/0006-import-export-come-trait.md)
+dichiarava — *sorgente e artefatti stanno in memoria* — era scusato da una
+condizione che è **scaduta**: valeva «finché un job non vede il vault», e dalla
 [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) il lavoro lungo il
-vault lo vede; uno `stream` al confine resta additivo, un `path: string` sarebbe
-stato una porta aperta da richiudere con una major.
+vault lo vede. La 0102 l'ha pagato senza toccare questa pagina nella sostanza:
+restare in memoria è ancora il caso comune, ma adesso è una scelta **dichiarata**
+invece dell'unica strada. Un `path: string` sarebbe stato invece una porta aperta
+da richiudere con una major, e infatti non c'è.
 
 **Il recinto, dove sta.** `KernelHost::read_document`/`write_document` validano
 il `DocId` con la stessa regola dei comandi IPC (`valid_doc_id`) e rispondono
@@ -788,8 +800,10 @@ rifiuti al frontend/all'IPC.
 - **Filesystem:** nessun accesso diretto; i documenti passano da
   `read_document`/`read_model`/`write_document`/`list_documents`, i dati del
   plugin da `data_*`. **Import ed export non fanno eccezione**, ed è una
-  proprietà della firma: una sorgente arriva già letta (`ImportSource.bytes`) e
-  un export esce come `ExportArtifact.bytes`.
+  proprietà della firma: una sorgente arriva come `ImportSource.content` — byte,
+  o una chiave che **solo l'host** risolve — e un export esce come
+  `ExportArtifact.content`, versato in un sink che l'host ha scelto. Il plugin
+  non nomina un posto del disco in nessuno dei due versi.
 - **Storage per-plugin:** `data_*` a blob dentro `.fub/data/plugins/<id>/`, e
   nient'altro (vedi "Storage").
 - **Operazioni strutturali:** `create_document`, `rename_document`,
@@ -952,7 +966,7 @@ sequenceDiagram
 | `Host::open` | [session.rs:217](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
 | `mount` | [mount.rs:186](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
 | `BundleRegistry::mount` | [registry.rs:262](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
-| `reindex` | [workspace.rs:154](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
+| `reindex` | [workspace.rs:155](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
 | `bridge::spawn` | [bridge.rs:69](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
 | `JobRunner::start` | [runner.rs:694](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
@@ -985,7 +999,7 @@ stateDiagram-v2
 Anche qui **nessuno di questi stati ha un enum**. Sono l'appartenenza a una mappa
 e un booleano: un vault è aperto se sta in `Sessions.open`
 ([session.rs:184](../../crates/fub-host/src/session.rs)), un workspace è chiuso
-se `Workspace.closed` è vero ([workspace.rs:366](../../crates/fub-kernel/src/workspace.rs)),
+se `Workspace.closed` è vero ([workspace.rs:367](../../crates/fub-kernel/src/workspace.rs)),
 un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
 ([registry.rs:218](../../crates/fub-host/src/registry.rs)). Le uniche
 transizioni che il **contratto** nomina sono eventi, non stati: `VaultOpened`,

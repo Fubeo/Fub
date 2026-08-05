@@ -36,8 +36,8 @@ use fub_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue};
 use fub_abi::traits::{
     BacklinkRef, DataRead, DataWrite, DocumentMatch, EntryKind, HostCommands, HostEnv, HostEvents,
     HostNetwork, HostQuery, HostServices, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection,
-    NeighborRef, Page, Paged, SettingsRead, SettingsWrite, TagCount, TrashEntry, VaultEntry,
-    VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
+    NeighborRef, Page, Paged, SettingsRead, SettingsWrite, TagCount, TransferRead, TrashEntry,
+    VaultEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
 use fub_abi::{PluginError, MAX_RANDOM_BYTES};
 
@@ -45,6 +45,16 @@ use fub_abi::{PluginError, MAX_RANDOM_BYTES};
 #[derive(Default)]
 pub struct MemoryHost {
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
+    /// Le sorgenti di import aperte (decisione 0102): chiave → byte.
+    ///
+    /// In memoria come tutto il resto, ma dietro un handle come quelle vere, ed
+    /// è il punto: chi scrive un importer che legge a pezzi deve poterlo provare
+    /// senza un kernel e senza un file. Si semina con
+    /// [`MemoryHost::con_sorgente`].
+    sources: Mutex<BTreeMap<u64, Vec<u8>>>,
+    /// Contatore da cui nascono le chiavi delle sorgenti. Sale e non si ricicla,
+    /// come nel kernel vero.
+    aperte: AtomicU64,
     /// I documenti **a byte**, come stanno nel vault vero: un doppio che li
     /// tenesse come `String` non saprebbe rappresentare un allegato, e chi
     /// scrive un estrattore a `SourceKind::Bytes` non avrebbe come provarlo
@@ -147,6 +157,39 @@ impl MemoryHost {
     pub fn senza_entropia(self) -> Self {
         self.senza_entropia.store(true, Ordering::Relaxed);
         self
+    }
+
+    /// Apre una sorgente di import **dietro un handle**, e restituisce la
+    /// [`ImportSource`] da dare al provider (decisione 0102).
+    ///
+    /// Il prologo è quello che leggerebbe il kernel. Serve a provare la strada a
+    /// pezzi senza un file: un importer scritto contro `SourceContent::Bytes` e
+    /// mai provato contro questa è un importer che si scoprirà sul vault vero di
+    /// chi migra, che è il momento peggiore.
+    pub fn con_sorgente(
+        &self,
+        name: impl Into<String>,
+        media_type: Option<String>,
+        bytes: impl Into<Vec<u8>>,
+    ) -> fub_abi::transfer::ImportSource {
+        use fub_abi::transfer::{ImportSource, SourceContent, SourceHandle, StreamedSource};
+        let bytes = bytes.into();
+        let handle = self
+            .aperte
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
+        let len = bytes.len() as u64;
+        let prologue = bytes[..bytes.len().min(8 * 1024)].to_vec();
+        self.sources.lock().unwrap().insert(handle, bytes);
+        ImportSource {
+            name: name.into(),
+            media_type,
+            content: SourceContent::Streamed(StreamedSource {
+                handle: SourceHandle(handle),
+                len,
+                prologue,
+            }),
+        }
     }
 
     /// Prepara la prossima risposta di rete. Si può chiamare più volte: le
@@ -965,6 +1008,25 @@ impl HostCommands for MemoryHost {
     /// eseguito niente, e non un finto successo.
     fn undo_last(&mut self) -> Result<Option<fub_abi::command::Undone>, PluginError> {
         Ok(None)
+    }
+}
+
+impl TransferRead for MemoryHost {
+    fn read_source(
+        &self,
+        handle: fub_abi::transfer::SourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, PluginError> {
+        let sources = self.sources.lock().unwrap();
+        let Some(bytes) = sources.get(&handle.0) else {
+            return Err(PluginError::BadArgs(
+                "questo handle di sorgente non è (o non è più) aperto".into(),
+            ));
+        };
+        let da = (offset.min(bytes.len() as u64)) as usize;
+        let a = da.saturating_add(len as usize).min(bytes.len());
+        Ok(bytes[da..a].to_vec())
     }
 }
 

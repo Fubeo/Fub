@@ -8,10 +8,10 @@
 //!
 //! # Il confine è di byte, non di path
 //!
-//! Un [`ImportProvider`] riceve la sorgente **già letta**
-//! ([`ImportSource::bytes`]); un [`ExportProvider`] restituisce **artefatti**
-//! ([`ExportArtifact`]), non file scritti. In mezzo, nessuno dei due nomina mai
-//! un percorso del filesystem fuori dal vault.
+//! Un [`ImportProvider`] riceve la sorgente senza mai vederne il percorso; un
+//! [`ExportProvider`] produce **artefatti** ([`ExportArtifact`]), non file
+//! scritti. In mezzo, nessuno dei due nomina mai un posto del filesystem fuori
+//! dal vault.
 //!
 //! Non è un dettaglio di comodo: è ciò che rende import ed export esprimibili
 //! *senza aggiungere una capacità filesystem* all'[`HostApi`]. Chi apre il
@@ -22,10 +22,36 @@
 //! capitolo che, in ogni altra applicazione, è quello che il filesystem lo
 //! tocca di più.
 //!
-//! Il prezzo, dichiarato: la sorgente e gli artefatti stanno **in memoria**.
-//! Un vault Obsidian da 4 GiB non entra, e non deve — quello è lavoro lungo, e
-//! il lavoro lungo non vede ancora il vault (§9.1 del piano). Questa firma non
-//! lo preclude: uno `stream` al confine è additivo, un `path: String` no.
+//! # I byte non stanno per forza nel record
+//!
+//! Fino alla decisione 0102 stavano: `ImportSource` portava un `Vec<u8>` con
+//! dentro *tutta* la sorgente, ed `ExportReport` un `Vec<ExportArtifact>` con
+//! dentro tutto l'esito. Il prezzo era dichiarato in una riga del verbale della
+//! decisione 0006 — «sorgente e artefatti stanno in memoria» — e quella riga
+//! non diceva **cosa** si importa: il capitolo 17.1 è la migrazione da
+//! Obsidian, Notion, Evernote, cioè un **vault intero**, che è la cosa più
+//! grande che l'utente possiede.
+//!
+//! La forma di adesso lascia i byte dove sono e ne dà una **chiave**:
+//! [`SourceContent::Streamed`] porta una [`SourceHandle`] che solo l'host sa
+//! risolvere ([`TransferRead::read_source`](crate::traits::TransferRead)), e
+//! l'esito di un export si versa mentre lo si produce, attraverso un
+//! [`ArtifactSink`]. È la stessa forma con cui la 0006 tiene fuori il
+//! filesystem — chi apre e chi legge resta l'host — applicata al *contenuto*
+//! invece che al *percorso*: un handle non si costruisce, si riceve, e nomina
+//! esattamente la sorgente che l'utente ha scelto e nient'altro.
+//!
+//! Le due strade scartate sono nel verbale, e la ragione è una sola: **una
+//! lettura di sorgente deve essere posizionale**. Uno `stream<u8>` di WASI e un
+//! metodo a chunk con un cursore tenuto dall'host sono tutti e due
+//! *sequenziali*, e un contenitore zip — cioè `.docx`, `.epub`, `.odt` e mezzo
+//! mondo dei backup — ha la propria directory **in fondo**. Chi può solo andare
+//! avanti non sfoglia un archivio: lo scarica tutto e siamo al punto di prima.
+//!
+//! Restare in memoria non è vietato ed è il caso comune:
+//! [`SourceContent::Bytes`] è ancora lì, e chi apre la sorgente sceglie. Ciò
+//! che cambia è che adesso la scelta si può **dichiarare** invece di essere
+//! l'unica.
 //!
 //! # Il piano è il rapporto di una prova a vuoto
 //!
@@ -65,7 +91,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
-use crate::traits::{HostApi, IndexQuery, IndexResult, ReadApi};
+use crate::traits::{HostApi, IndexQuery, IndexResult, ReadApi, TransferRead};
+
+/// Quanto chiede per volta chi legge una sorgente intera.
+///
+/// Non è un tetto del contratto e non va pubblicato come tale: è la grana con
+/// cui [`ImportSource::read_all`] chiede, e l'host può sempre dare meno. Un
+/// numero pubblicato sarebbe una promessa congelata — la forma che la
+/// decisione 0094 ha già scartato per `random-bytes`.
+const READ_CHUNK: u32 = 256 * 1024;
+
+/// Quanto si prealloca leggendo tutto: `len` è ciò che l'host ha visto *prima*
+/// della chiamata, quindi si usa come suggerimento e non come verità.
+const READ_ALL_RESERVE: u64 = 8 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Comune ai due versi
@@ -123,17 +161,100 @@ impl TransferNote {
 // Import
 // ---------------------------------------------------------------------------
 
-/// Una sorgente da importare, **già letta**: chi la apre è l'host.
+/// La chiave con cui un provider legge una sorgente che **non** ha in mano.
+///
+/// È opaca di proposito, e non è un indice in un elenco pubblico: la si riceve
+/// dentro una [`ImportSource`] e la si spende con
+/// [`TransferRead::read_source`](crate::traits::TransferRead::read_source).
+/// Vale per la durata della chiamata di import che l'ha portata — dopo, l'host
+/// ha chiuso ciò che stava dietro, e spenderla è `BadArgs` e non una lettura di
+/// qualcun altro.
+///
+/// Che sia l'host a timbrarla è tutto il punto: un provider non può nominare
+/// una sorgente che non gli è stata data, quindi non serve un recinto di path
+/// da controllare — **l'handle è il recinto**. È la ragione per cui leggere una
+/// sorgente non chiede un permesso del manifest: l'utente ha già scelto *quel*
+/// file nel dialogo di sistema, e chiederglielo una seconda volta sarebbe
+/// chiedergli della stessa cosa due volte.
+///
+/// Nel WIT resta un `u64` nativo; in JSON viaggia come stringa per la ragione
+/// di [`JobId`](crate::traits::JobId), cioè che oltre i 2^53 un `u64` non
+/// sopravvive a un `JSON.parse`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SourceHandle(pub u64);
+
+impl Serialize for SourceHandle {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        crate::ipc::u64_string::serialize(&self.0, s)
+    }
+}
+
+impl<'de> Deserialize<'de> for SourceHandle {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        crate::ipc::u64_string::deserialize(d).map(SourceHandle)
+    }
+}
+
+/// Una sorgente che l'host tiene aperta, di cui il provider ha una chiave e un
+/// assaggio.
+///
+/// `prologue` è ciò che rende questa forma possibile invece che teorica: il
+/// dispatch di un import è [`ImportProvider::can_handle`], che **non riceve un
+/// host** e quindi non può leggere niente. Senza un assaggio nel record, una
+/// sorgente a handle si potrebbe riconoscere solo dal nome — e la 0006 spiega
+/// perché non basta: `.docx`, `.epub`, `.odt` e i backup di mezzo mondo sono lo
+/// stesso zip. Con l'assaggio il dispatch costa qualche kibibyte qualunque sia
+/// la sorgente, invece dei suoi byte una volta per candidato interpellato.
+///
+/// `len` è la dimensione totale, e serve prima di leggere: è la differenza fra
+/// «questo archivio lo sfoglio» e «questo archivio lo tengo in memoria».
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StreamedSource {
+    pub handle: SourceHandle,
+    /// Quanti byte ha la sorgente, in tutto.
+    pub len: u64,
+    /// I primi byte, letti una volta sola dall'host: l'input del dispatch.
+    pub prologue: Vec<u8>,
+}
+
+/// Dove stanno i byte di una sorgente.
+///
+/// Non è «in memoria oppure no» come dettaglio di implementazione: è una cosa
+/// che un provider **deve** poter leggere, perché cambia cosa gli conviene
+/// fare. Chi riceve [`SourceContent::Bytes`] ha già tutto; chi riceve
+/// [`SourceContent::Streamed`] sa che leggere tutto è una scelta, e ha il
+/// numero (`len`) per non farla alla cieca.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+// Tag adiacente come [`SelectionSet`](crate::session::SelectionSet): entrambi i
+// casi portano un payload.
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum SourceContent {
+    /// Tutti i byte, nel record. Resta il caso comune — una nota incollata, un
+    /// CSV, un `.md` — e chi apre la sorgente sceglie questa quando la sorgente
+    /// è piccola abbastanza da non essere una decisione.
+    Bytes(Vec<u8>),
+    /// I byte restano dall'host, e si leggono per pezzi.
+    Streamed(StreamedSource),
+}
+
+impl Default for SourceContent {
+    /// Una sorgente vuota in memoria: è la sola che non ha bisogno di un host
+    /// per esistere, quindi la sola che possa essere un default.
+    fn default() -> Self {
+        SourceContent::Bytes(Vec::new())
+    }
+}
+
+/// Una sorgente da importare: chi la apre è l'host.
 ///
 /// I tre campi sono i tre modi con cui si riconosce un formato, in ordine di
 /// affidabilità crescente: il nome (`vault.zip`), il media type dichiarato da
 /// chi ha aperto la sorgente (spesso ignoto: un file scelto da un dialogo non
-/// ne ha uno) e i byte. I byte stanno qui — e non solo in
-/// [`import`](ImportProvider::import) — perché `.docx`, `.epub`, `.odt` e i
-/// backup di mezzo mondo sono **lo stesso contenitore zip**: un dispatch che
-/// guardasse il solo nome sceglierebbe il provider sbagliato e si fermerebbe
-/// lì. Il prezzo è che al confine WASM i byte si copiano una volta per
-/// candidato interpellato.
+/// ne ha uno) e i byte. I byte — o il loro assaggio, vedi [`StreamedSource`] —
+/// stanno qui e non solo in [`import`](ImportProvider::import) perché `.docx`,
+/// `.epub`, `.odt` e i backup di mezzo mondo sono **lo stesso contenitore
+/// zip**: un dispatch che guardasse il solo nome sceglierebbe il provider
+/// sbagliato e si fermerebbe lì.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImportSource {
     /// Il nome della sorgente come l'utente la conosce. **Non** è un `DocId`:
@@ -141,7 +262,7 @@ pub struct ImportSource {
     pub name: String,
     /// Media type dichiarato da chi ha aperto la sorgente, se lo sa.
     pub media_type: Option<String>,
-    pub bytes: Vec<u8>,
+    pub content: SourceContent,
 }
 
 impl ImportSource {
@@ -152,8 +273,81 @@ impl ImportSource {
         ImportSource {
             name: name.into(),
             media_type: Some("text/plain".to_string()),
-            bytes: text.as_ref().as_bytes().to_vec(),
+            content: SourceContent::Bytes(text.as_ref().as_bytes().to_vec()),
         }
+    }
+
+    /// Sorgente in memoria dai byte dati.
+    pub fn from_bytes(name: impl Into<String>, bytes: impl Into<Vec<u8>>) -> Self {
+        ImportSource {
+            name: name.into(),
+            media_type: None,
+            content: SourceContent::Bytes(bytes.into()),
+        }
+    }
+
+    /// I byte da guardare **per decidere se la sorgente è roba tua**.
+    ///
+    /// È l'unico accesso ai byte disponibile in
+    /// [`can_handle`](ImportProvider::can_handle), e per una sorgente a handle
+    /// è un assaggio: un `can_handle` che pretendesse di vedere l'ultimo byte
+    /// di un archivio da 4 GiB starebbe chiedendo all'host di leggerlo tutto
+    /// per ognuno dei candidati.
+    pub fn prologue(&self) -> &[u8] {
+        match &self.content {
+            SourceContent::Bytes(bytes) => bytes,
+            SourceContent::Streamed(s) => &s.prologue,
+        }
+    }
+
+    /// Quanti byte ha la sorgente, in tutto.
+    pub fn len(&self) -> u64 {
+        match &self.content {
+            SourceContent::Bytes(bytes) => bytes.len() as u64,
+            SourceContent::Streamed(s) => s.len,
+        }
+    }
+
+    /// La sorgente non ha byte.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Tutti i byte, **se sono già qui**. `None` quando la sorgente sta
+    /// dall'host: leggerla è una decisione, e la si prende chiamando
+    /// [`read_all`](ImportSource::read_all) con un host in mano.
+    pub fn bytes(&self) -> Option<&[u8]> {
+        match &self.content {
+            SourceContent::Bytes(bytes) => Some(bytes),
+            SourceContent::Streamed(_) => None,
+        }
+    }
+
+    /// Tutti i byte, leggendoli se serve.
+    ///
+    /// È la via d'uscita per chi non sa lavorare a pezzi — un parser che vuole
+    /// il documento intero, e sono la maggioranza. Costa la memoria che la
+    /// forma a handle esiste per non spendere, e va bene: **poterlo dichiarare
+    /// è meglio che non poter fare altro**. Chi la chiama su un archivio da
+    /// 4 GiB lo sta facendo apposta, e `len()` glielo aveva detto prima.
+    pub fn read_all(&self, host: &dyn TransferRead) -> Result<Vec<u8>, PluginError> {
+        let s = match &self.content {
+            SourceContent::Bytes(bytes) => return Ok(bytes.clone()),
+            SourceContent::Streamed(s) => s,
+        };
+        let mut out = Vec::with_capacity(s.len.min(READ_ALL_RESERVE) as usize);
+        // Una lettura può restituire meno byte di quanti se ne chiedono senza
+        // che sia un errore (vedi `read_source`), quindi il ciclo si ferma sul
+        // vuoto e non sul conto: fermarsi sul conto vorrebbe dire fidarsi di
+        // `len`, che è ciò che l'host ha visto **prima** della chiamata.
+        loop {
+            let chunk = host.read_source(s.handle, out.len() as u64, READ_CHUNK)?;
+            if chunk.is_empty() {
+                break;
+            }
+            out.extend_from_slice(&chunk);
+        }
+        Ok(out)
     }
 
     /// L'estensione del nome, minuscola e senza punto.
@@ -189,11 +383,19 @@ impl ImportSource {
         (!stem.is_empty() && stem != "." && stem != "..").then_some(stem)
     }
 
-    /// I byte come testo. `BadArgs` se non sono UTF-8: un importer testuale non
-    /// ha modo di continuare, ed è esattamente il caso in cui l'errore è la
-    /// risposta giusta e non una riga di giornale.
-    pub fn text(&self) -> Result<&str, PluginError> {
-        std::str::from_utf8(&self.bytes).map_err(|e| {
+    /// I byte come testo, leggendoli se serve. `BadArgs` se non sono UTF-8: un
+    /// importer testuale non ha modo di continuare, ed è esattamente il caso in
+    /// cui l'errore è la risposta giusta e non una riga di giornale.
+    ///
+    /// Restituisce una `String` e non un `&str` perché per una sorgente a
+    /// handle il testo **nasce qui**: non c'è niente nel record di cui prendere
+    /// un prestito. Costa una copia nel caso in memoria, ed è il prezzo per
+    /// avere una firma sola invece di due che si sceglierebbero guardando dove
+    /// stanno i byte — cioè esattamente la cosa che questo tipo esiste per non
+    /// far guardare a chi non gliene importa.
+    pub fn text(&self, host: &dyn TransferRead) -> Result<String, PluginError> {
+        let bytes = self.read_all(host)?;
+        String::from_utf8(bytes).map_err(|e| {
             PluginError::BadArgs(format!("`{}` non è testo UTF-8: {e}", self.name).into())
         })
     }
@@ -517,6 +719,55 @@ impl ExportRequest {
     }
 }
 
+/// La chiave di un artefatto **aperto**: la si riceve da
+/// [`ArtifactSink::open_artifact`] e la si spende versando byte.
+///
+/// Stessa opacità e stessa ragione di [`SourceHandle`], nel verso opposto: un
+/// provider non può nominare un artefatto che non ha aperto, quindi non c'è un
+/// path da controllare — c'è un handle che l'host ha timbrato.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ArtifactHandle(pub u64);
+
+impl Serialize for ArtifactHandle {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        crate::ipc::u64_string::serialize(&self.0, s)
+    }
+}
+
+impl<'de> Deserialize<'de> for ArtifactHandle {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        crate::ipc::u64_string::deserialize(d).map(ArtifactHandle)
+    }
+}
+
+/// Dove stanno i byte di un artefatto prodotto.
+///
+/// Il gemello di [`SourceContent`], e non per simmetria estetica: un export di
+/// tutto il vault in PDF produceva un `Vec<ExportArtifact>` con dentro l'intero
+/// vault reso, che è il verso peggiore dello stesso difetto — all'import la
+/// cosa grande la sceglie l'utente, all'export la produci tu.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum ArtifactContent {
+    /// I byte, nel rapporto. Il caso comune e quello dei test: tre note
+    /// esportate stanno in memoria e discuterne sarebbe cerimonia.
+    Bytes(Vec<u8>),
+    /// Già versato attraverso un [`ArtifactSink`]: quanti byte sono passati.
+    ///
+    /// Questo caso è una **ricevuta**, non una promessa, ed è per questo che
+    /// non lo si costruisce a mano: lo restituisce
+    /// [`ArtifactSink::close_artifact`], che il conto lo ha visto passare. Un
+    /// campo che chi scrive il provider potesse riempire da sé sarebbe un conto
+    /// che può mentire.
+    Delivered(u64),
+}
+
+impl Default for ArtifactContent {
+    fn default() -> Self {
+        ArtifactContent::Bytes(Vec::new())
+    }
+}
+
 /// Un pezzo dell'esito di un export.
 ///
 /// Byte, non un file: chi li posa sul disco (o dentro uno zip, o su una rete) è
@@ -527,7 +778,91 @@ pub struct ExportArtifact {
     /// nome, per un albero è il posto che occupa nell'albero.
     pub path: String,
     pub media_type: String,
-    pub bytes: Vec<u8>,
+    pub content: ArtifactContent,
+}
+
+impl ExportArtifact {
+    /// Un artefatto che sta in memoria.
+    pub fn bytes(
+        path: impl Into<String>,
+        media_type: impl Into<String>,
+        bytes: impl Into<Vec<u8>>,
+    ) -> Self {
+        ExportArtifact {
+            path: path.into(),
+            media_type: media_type.into(),
+            content: ArtifactContent::Bytes(bytes.into()),
+        }
+    }
+
+    /// I byte, **se sono qui**. `None` quando l'artefatto è già stato versato:
+    /// non è un rapporto incompleto, è che i byte sono dove l'utente li voleva.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match &self.content {
+            ArtifactContent::Bytes(bytes) => Some(bytes),
+            ArtifactContent::Delivered(_) => None,
+        }
+    }
+
+    /// Quanti byte ha l'artefatto, comunque sia stato prodotto.
+    pub fn len(&self) -> u64 {
+        match &self.content {
+            ArtifactContent::Bytes(bytes) => bytes.len() as u64,
+            ArtifactContent::Delivered(len) => *len,
+        }
+    }
+
+    /// L'artefatto non ha byte.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Dove un [`ExportProvider`] versa un artefatto **mentre lo produce**.
+///
+/// # Perché non sta sull'host
+///
+/// Tutte le altre capacità di questo contratto stanno su [`HostApi`] o su
+/// [`ReadApi`], e questa no. Non è un'eccezione per comodità, sono due ragioni
+/// che puntano nello stesso verso:
+///
+/// - un export gira sotto prestito **condiviso** del workspace (`&self`, vedi
+///   [`ExportProvider`]), e mettere una scrittura dentro [`ReadApi`] la
+///   regalerebbe a chi disegna una view e a chi interroga l'indice, cioè a
+///   tutti quelli per cui `ReadApi` esiste per **non** averla;
+/// - non c'è niente da concedere. Un sink non è una capacità che si presta per
+///   sempre: esiste per la durata di **un** export che l'utente ha chiesto, e
+///   verso una destinazione che l'utente ha appena scelto in un dialogo. Il
+///   rifiuto è non chiamare `export`, che è già come funziona.
+///
+/// Al confine WASM diventa un'interfaccia importata dal world come le altre, e
+/// lì la differenza si vede meno: è il prezzo di un confine in cui ogni
+/// capacità arriva dallo stesso posto. Sta scritto nel verbale.
+pub trait ArtifactSink: Send {
+    /// Apre un artefatto e restituisce dove versarlo.
+    ///
+    /// `path` è relativo **dentro l'esito**, come
+    /// [`ExportArtifact::path`], e l'host lo tratta come tale: una risalita è
+    /// `PermissionDenied` qui e non un file scritto altrove, per la stessa
+    /// ragione per cui `write_document` rifiuta le risalite di un nome nato da
+    /// una sorgente.
+    fn open_artifact(
+        &mut self,
+        path: &str,
+        media_type: &str,
+    ) -> Result<ArtifactHandle, PluginError>;
+
+    /// Versa dei byte. Si può chiamare quante volte si vuole prima di chiudere,
+    /// ed è tutto il punto: un PDF da un gigabyte esce a pezzi.
+    fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError>;
+
+    /// Chiude l'artefatto e restituisce la sua **ricevuta**, da mettere nel
+    /// rapporto.
+    ///
+    /// Che la ricevuta esca da qui e non la scriva il provider è ciò che rende
+    /// il conto di [`ArtifactContent::Delivered`] non falsificabile per
+    /// distrazione: chi lo emette è chi ha contato i byte mentre passavano.
+    fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError>;
 }
 
 /// L'esito di un export.
@@ -556,10 +891,17 @@ pub trait ExportProvider: Send + Sync {
 
     /// Produce gli artefatti. `BadArgs` se la destinazione non è fra quelle di
     /// [`targets`](ExportProvider::targets).
+    ///
+    /// `out` è dove versare ciò che non conviene tenere in mano: chi produce
+    /// tre note lo ignora e riempie [`ExportReport::artifacts`] con
+    /// [`ArtifactContent::Bytes`], chi rende un vault intero apre un artefatto e
+    /// ci versa dentro mentre lo produce. Le due strade finiscono nello stesso
+    /// rapporto, e chi lo legge non deve sapere quale è stata presa.
     fn export(
         &self,
         request: &ExportRequest,
         host: &dyn ReadApi,
+        out: &mut dyn ArtifactSink,
     ) -> Result<ExportReport, PluginError>;
 }
 
@@ -626,14 +968,118 @@ mod tests {
         assert!(in_folder(&DocId::new("x/a.md"), "/x/"));
     }
 
+    /// Un host che serve **una** sorgente e conta quanti byte per volta gli
+    /// vengono chiesti, per poter dire se qualcuno ha letto tutto.
+    struct FintoHost {
+        bytes: Vec<u8>,
+        /// Il tetto di una singola lettura: qui piccolo di proposito, perché è
+        /// la condizione in cui un ciclo scritto male si ferma a metà.
+        tetto: usize,
+    }
+
+    impl TransferRead for FintoHost {
+        fn read_source(
+            &self,
+            _handle: SourceHandle,
+            offset: u64,
+            len: u32,
+        ) -> Result<Vec<u8>, PluginError> {
+            let da = (offset.min(self.bytes.len() as u64)) as usize;
+            let quanti = (len as usize).min(self.tetto);
+            let a = da.saturating_add(quanti).min(self.bytes.len());
+            Ok(self.bytes[da..a].to_vec())
+        }
+    }
+
+    fn a_pezzi(bytes: &[u8], prologo: usize) -> ImportSource {
+        ImportSource {
+            name: "grande.zip".to_string(),
+            media_type: None,
+            content: SourceContent::Streamed(StreamedSource {
+                handle: SourceHandle(1),
+                len: bytes.len() as u64,
+                prologue: bytes[..bytes.len().min(prologo)].to_vec(),
+            }),
+        }
+    }
+
     #[test]
     fn a_non_utf8_source_is_an_error_and_not_a_log_line() {
-        let bin = ImportSource {
-            name: "immagine.png".to_string(),
-            media_type: None,
-            bytes: vec![0xff, 0xfe, 0x00],
+        let bin = ImportSource::from_bytes("immagine.png", vec![0xff, 0xfe, 0x00]);
+        let host = FintoHost {
+            bytes: Vec::new(),
+            tetto: 8,
         };
-        assert!(matches!(bin.text(), Err(PluginError::BadArgs(_))));
+        assert!(matches!(bin.text(&host), Err(PluginError::BadArgs(_))));
+    }
+
+    #[test]
+    fn leggere_tutto_non_si_ferma_al_primo_pezzo_corto() {
+        let bytes: Vec<u8> = (0..1000u32).map(|i| (i % 251) as u8).collect();
+        let source = a_pezzi(&bytes, 16);
+        let host = FintoHost {
+            bytes: bytes.clone(),
+            // Sette byte per volta: se il ciclo si fidasse di una lettura sola,
+            // o si fermasse sul conto di `len` invece che sul vuoto, qui
+            // sparirebbero 993 byte in silenzio.
+            tetto: 7,
+        };
+        assert_eq!(
+            source.read_all(&host).unwrap(),
+            bytes,
+            "una lettura può dare meno di quanto le si chiede, e leggere tutto \
+             vuol dire chiedere finché non risponde vuoto"
+        );
+    }
+
+    #[test]
+    fn il_dispatch_guarda_l_assaggio_e_non_ha_bisogno_di_un_host() {
+        let bytes = b"PK\x03\x04resto lunghissimo che nessuno deve leggere".to_vec();
+        let source = a_pezzi(&bytes, 4);
+        // `can_handle` non riceve un host: se il prologo non fosse nel record,
+        // qui non ci sarebbe niente da guardare e un dispatch potrebbe solo
+        // fidarsi del nome — che è ciò che la 0006 dichiara insufficiente.
+        assert_eq!(source.prologue(), b"PK\x03\x04");
+        assert_eq!(
+            source.len(),
+            bytes.len() as u64,
+            "la lunghezza è quella vera"
+        );
+        assert!(
+            source.bytes().is_none(),
+            "i byte non sono nel record: chiederli senza un host deve dire di no \
+             invece di restituire l'assaggio come se fosse tutto"
+        );
+    }
+
+    #[test]
+    fn una_sorgente_in_memoria_risponde_alle_stesse_domande() {
+        let source = ImportSource::text_source("nota.md", "# Ciao\n");
+        let host = FintoHost {
+            bytes: Vec::new(),
+            tetto: 1,
+        };
+        assert_eq!(source.prologue(), b"# Ciao\n");
+        assert_eq!(source.len(), 7);
+        assert_eq!(source.bytes(), Some(&b"# Ciao\n"[..]));
+        assert_eq!(
+            source.text(&host).unwrap(),
+            "# Ciao\n",
+            "chi ha i byte in mano non deve passare dall'host per leggerli: \
+             l'host qui non ha niente da dare, e la lettura riesce lo stesso"
+        );
+    }
+
+    #[test]
+    fn una_ricevuta_e_i_byte_dicono_la_stessa_lunghezza() {
+        let in_memoria = ExportArtifact::bytes("a.md", "text/markdown", b"12345".to_vec());
+        let versato = ExportArtifact {
+            path: "a.md".into(),
+            media_type: "text/markdown".into(),
+            content: ArtifactContent::Delivered(5),
+        };
+        assert_eq!(in_memoria.len(), versato.len());
+        assert!(!in_memoria.is_empty() && !versato.is_empty());
     }
 
     #[test]

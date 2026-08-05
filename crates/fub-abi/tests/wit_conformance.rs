@@ -107,9 +107,10 @@ use fub_abi::traits::{
     ViewSpec, ViewSurface, WallClock, ABI_VERSION,
 };
 use fub_abi::transfer::{
-    ConflictPolicy, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
-    ExportTarget, ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest,
-    ImportSource, ImportedDocument, NoteLevel, TransferNote,
+    ArtifactContent, ArtifactHandle, ArtifactSink, ConflictPolicy, ExportArtifact, ExportProvider,
+    ExportReport, ExportRequest, ExportSelection, ExportTarget, ImportMode, ImportOutcome,
+    ImportProvider, ImportReport, ImportRequest, ImportSource, ImportedDocument, NoteLevel,
+    SourceContent, SourceHandle, StreamedSource, TransferNote,
 };
 use fub_abi::ui::{
     ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,
@@ -124,6 +125,19 @@ const SELF: &str = "«self»";
 /// Segnaposto per l'`HostApi`: nelle firme Rust c'è, nel WIT **non deve
 /// esserci** — è importato dal world.
 const HOST: &str = "«host»";
+/// Segnaposto per l'[`ArtifactSink`]: stessa sorte dell'host, e per la stessa
+/// ragione, ma con un'asimmetria che vale nominare invece di nascondere.
+///
+/// In Rust il sink **non sta sull'host** ed è un parametro di
+/// `ExportProvider::export`: un export gira sotto prestito condiviso, e mettere
+/// una scrittura dentro [`ReadApi`] la regalerebbe a chi disegna una view e a
+/// chi interroga l'indice — cioè a tutti quelli per cui `ReadApi` esiste per
+/// **non** averla. Al confine WASM quella distinzione non è esprimibile: ogni
+/// capacità arriva dal world, quindi il sink diventa `host-transfer-write` e
+/// sparisce dai parametri di `export` esattamente come l'host. È il prezzo del
+/// confine, ed è per questo che si elide qui e sta scritto nel verbale della
+/// decisione 0102.
+const SINK: &str = "«sink»";
 
 // ---------------------------------------------------------------------------
 // La forma WIT di un tipo Rust, dedotta dal tipo
@@ -225,8 +239,15 @@ wit_type! {
     Paged<DraftInfo> => "drafts-page",
 
     // Ciò che NON attraversa il confine: il ricevitore e le capacità dell'host.
+    SourceHandle => "source-handle",
+    StreamedSource => "streamed-source",
+    ArtifactHandle => "artifact-handle",
+    SourceContent => "source-content",
+    ArtifactContent => "artifact-content",
+
     dyn HostApi => HOST,
     dyn ReadApi => HOST,
+    dyn ArtifactSink => SINK,
     dyn FormatProvider => SELF,
     dyn CommandProvider => SELF,
     dyn ViewProvider => SELF,
@@ -587,14 +608,17 @@ fn sig_from(all: Vec<String>, result: String) -> RustSig {
     let mut it = all.into_iter();
     let receiver = it.next().expect("un metodo ha almeno il ricevitore");
     assert!(
-        receiver == SELF || receiver == HOST,
+        receiver == SELF || receiver == HOST || receiver == SINK,
         "il primo parametro dovrebbe essere il ricevitore, invece è `{receiver}`: \
          questo test va chiamato con un metodo di trait, non con una funzione libera"
     );
     let mut params = Vec::new();
     let mut has_host = false;
     for ty in it {
-        if ty == HOST {
+        // I due che al confine WASM arrivano dal world invece che come
+        // argomento. Sono **due** e non uno dalla decisione 0102; il commento su
+        // [`SINK`] dice perché il secondo in Rust non sta sul primo.
+        if ty == HOST || ty == SINK {
             has_host = true;
             continue;
         }
@@ -637,6 +661,8 @@ wit_fn!(A, B, C, D, E);
 /// verifica che la firma Rust sia quella giusta, e se `render-view` tornasse a
 /// prendere un `HostApi` questo file non compilerebbe.
 type Host = &'static mut dyn HostApi;
+/// Il sink di un export: vedi [`SINK`]. Sta fra i parametri Rust e non nel WIT.
+type Sink = &'static mut dyn ArtifactSink;
 type HostRef = &'static dyn ReadApi;
 
 // ---------------------------------------------------------------------------
@@ -1142,10 +1168,13 @@ impl Wit {
         // controllo generale (nessuna funzione, in nessuna interfaccia) è in
         // `finish`, e serve per le funzioni che questo test non nominasse.
         if rust.has_host {
-            if let Some((n, t)) = declared_params.iter().find(|(n, _)| n == "host") {
+            if let Some((n, t)) = declared_params
+                .iter()
+                .find(|(n, _)| n == "host" || n == "out")
+            {
                 self.err(format!(
-                    "funzione `{iface}.{name}`: il metodo Rust prende un `HostApi` e il WIT \
-                     dichiara `{n}: {t}` — la capacità è importata dal world, va ELISA"
+                    "funzione `{iface}.{name}`: il metodo Rust prende una capacità dell'host e \
+                     il WIT dichiara `{n}: {t}` — la capacità è importata dal world, va ELISA"
                 ));
             }
         }
@@ -1194,14 +1223,14 @@ impl Wit {
             .iter()
             .flat_map(|(iface, sigs)| {
                 sigs.iter()
-                    .filter(|(_, sig)| sig.params.iter().any(|(p, _)| p == "host"))
+                    .filter(|(_, sig)| sig.params.iter().any(|(p, _)| p == "host" || p == "out"))
                     .map(move |(name, _)| format!("{iface}.{name}"))
             })
             .collect();
         if !intrusi.is_empty() {
             self.err(format!(
-                "funzioni del WIT con un parametro `host` {intrusi:?}: le capacità sono \
-                 importate dal world (`import host-api`), non passate come argomento"
+                "funzioni del WIT con un parametro `host`/`out` {intrusi:?}: le capacità sono \
+                 importate dal world, non passate come argomento"
             ));
         }
 
@@ -4511,17 +4540,57 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let SourceHandle(raw) = SourceHandle(0);
+    contract.alias("source-handle", wit(&raw));
+
+    let ArtifactHandle(raw) = ArtifactHandle(0);
+    contract.alias("artifact-handle", wit(&raw));
+
+    let StreamedSource {
+        handle,
+        len,
+        prologue,
+    } = StreamedSource {
+        handle: SourceHandle(0),
+        len: 0,
+        prologue: Vec::new(),
+    };
+    contract.record(
+        "streamed-source",
+        &[
+            ("handle", wit(&handle)),
+            ("len", wit(&len)),
+            ("prologue", wit(&prologue)),
+        ],
+    );
+
+    contract.variant_src(
+        "source-content",
+        ("transfer.rs", "SourceContent"),
+        &[
+            case_ty("bytes", wit(&Vec::<u8>::new())),
+            case_ty(
+                "streamed",
+                wit(&StreamedSource {
+                    handle: SourceHandle(0),
+                    len: 0,
+                    prologue: Vec::new(),
+                }),
+            ),
+        ],
+    );
+
     let ImportSource {
         name,
         media_type,
-        bytes,
+        content,
     } = ImportSource::default();
     contract.record(
         "import-source",
         &[
             ("name", wit(&name)),
             ("media-type", wit(&media_type)),
-            ("bytes", wit(&bytes)),
+            ("content", wit(&content)),
         ],
     );
 
@@ -4605,21 +4674,26 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    contract.variant_src(
+        "artifact-content",
+        ("transfer.rs", "ArtifactContent"),
+        &[
+            case_ty("bytes", wit(&Vec::<u8>::new())),
+            case_ty("delivered", wit(&0u64)),
+        ],
+    );
+
     let ExportArtifact {
         path,
         media_type,
-        bytes,
-    } = ExportArtifact {
-        path: String::new(),
-        media_type: String::new(),
-        bytes: Vec::new(),
-    };
+        content,
+    } = ExportArtifact::bytes("", "", Vec::new());
     contract.record(
         "export-artifact",
         &[
             ("path", wit(&path)),
             ("media-type", wit(&media_type)),
-            ("bytes", wit(&bytes)),
+            ("content", wit(&content)),
         ],
     );
 
@@ -5114,6 +5188,34 @@ fn conform(source: &str) -> Result<(), String> {
         &["request"],
     );
     contract.method(
+        "host-transfer-read",
+        "read-source",
+        <dyn HostApi>::read_source
+            as fn(&'static dyn HostApi, SourceHandle, u64, u32) -> Result<Vec<u8>, PluginError>,
+        &["handle", "offset", "len"],
+    );
+    contract.method(
+        "host-transfer-write",
+        "open-artifact",
+        <dyn ArtifactSink>::open_artifact
+            as fn(Sink, &'static str, &'static str) -> Result<ArtifactHandle, PluginError>,
+        &["path", "media-type"],
+    );
+    contract.method(
+        "host-transfer-write",
+        "write-artifact",
+        <dyn ArtifactSink>::write_artifact
+            as fn(Sink, ArtifactHandle, &'static [u8]) -> Result<(), PluginError>,
+        &["handle", "bytes"],
+    );
+    contract.method(
+        "host-transfer-write",
+        "close-artifact",
+        <dyn ArtifactSink>::close_artifact
+            as fn(Sink, ArtifactHandle) -> Result<ExportArtifact, PluginError>,
+        &["handle"],
+    );
+    contract.method(
         "host-services",
         "call-service",
         <dyn HostApi>::call_service
@@ -5233,6 +5335,7 @@ fn conform(source: &str) -> Result<(), String> {
                 &'static dyn ExportProvider,
                 &'static ExportRequest,
                 HostRef,
+                Sink,
             ) -> Result<ExportReport, PluginError>,
         &["request"],
     );
@@ -5264,6 +5367,8 @@ fn conform(source: &str) -> Result<(), String> {
         "host-settings-write",
         "host-view-state-read",
         "host-view-state-write",
+        "host-transfer-read",
+        "host-transfer-write",
     ] {
         assert!(
             imports.contains(famiglia),

@@ -130,7 +130,7 @@ fn prosa_normalizzata(sorgente: &str) -> String {
 #[derive(Debug)]
 enum Perche {
     /// **Non è questo `serialize`.** È l'altro — quello di `serde::Serializer`,
-    /// che ha lo stesso nome e nessun rapporto con i documenti: qui sono i due
+    /// che ha lo stesso nome e nessun rapporto con i documenti: qui sono i
     /// `u64_string::serialize` con cui un id numerico attraversa l'IPC come
     /// stringa (JavaScript non ha i 64 bit interi).
     ///
@@ -170,6 +170,15 @@ const ALLOWLIST: &[(&str, &str, usize, Perche)] = &[
         "crates/fub-abi/src/traits.rs",
         "u64_string::serialize",
         1,
+        Perche::UnAltroSerialize,
+    ),
+    (
+        // Due, non uno: `SourceHandle` e `ArtifactHandle` (decisione 0102).
+        // Stessa ragione degli altri due — sono chiavi opache che al confine
+        // JSON viaggiano come stringhe.
+        "crates/fub-abi/src/transfer.rs",
+        "u64_string::serialize",
+        2,
         Perche::UnAltroSerialize,
     ),
     (

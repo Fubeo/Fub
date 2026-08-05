@@ -7,9 +7,10 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
-    DataRead, HostEnv, HostQuery, IndexQuery, IndexResult, Page, Paged, SettingsRead, TrashEntry,
-    VaultRead, ViewStateRead,
+    DataRead, HostEnv, HostQuery, IndexQuery, IndexResult, Page, Paged, SettingsRead, TransferRead,
+    TrashEntry, VaultRead, ViewStateRead,
 };
+use fub_abi::transfer::SourceHandle;
 use fub_abi::PluginError;
 
 use crate::workspace::{collect_data_files, fenced_doc_id, Workspace};
@@ -113,6 +114,22 @@ impl DataRead for ReadHost<'_> {
 /// `instance` a `None` (nessun esemplare: non si sta disegnando una view) torna
 /// `None` e non un errore, come dichiara il contratto: chi non sta disegnando
 /// per conto di un'istanza non ha uno stato di vista da rileggere.
+/// Leggere la sorgente di un import è una **lettura**, e sta qui per la ragione
+/// che la decisione 0102 dichiara: un vault da 4 GiB si legge per minuti, e
+/// servire quei minuti sotto prestito esclusivo affamerebbe chiunque scriva —
+/// il difetto per cui la 0024 ha scelto un `RwLock`. Che la sorgente non sia
+/// ancora nel vault non la rende una scrittura.
+impl TransferRead for ReadHost<'_> {
+    fn read_source(
+        &self,
+        handle: SourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, PluginError> {
+        self.ws.read_open_source(handle, offset, len)
+    }
+}
+
 impl ViewStateRead for ReadHost<'_> {
     fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
         Ok(self

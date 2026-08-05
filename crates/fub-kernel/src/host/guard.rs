@@ -19,24 +19,25 @@ use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices,
     IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, PluginPermissions, SettingsRead,
-    SettingsWrite, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead,
+    SettingsWrite, TransferRead, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead,
     ViewStateWrite,
 };
+use fub_abi::transfer::SourceHandle;
 use fub_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le diciotto famiglie di capacità [conta: guard-famiglie], come nomi su
+/// Le diciannove famiglie di capacità [conta: guard-famiglie], come nomi su
 /// cui una politica risponde.
 ///
-/// Sono i quindici trait di `fub_abi::traits` **più tre**, e non è una
+/// Sono i sedici trait di `fub_abi::traits` **più tre**, e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono coprire le stesse cose, e il presidio è
 /// che [`Guard`] non compila se un trait non è coperto.
 ///
-/// # Perché diciotto e non quattordici
+/// # Perché diciannove e non quattordici
 ///
-/// Per dodici trait su quindici la corrispondenza è uno a uno, ed era vera
+/// Per tredici trait su sedici la corrispondenza è uno a uno, ed era vera
 /// per tutti e quattordici fino alla
 /// [0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md).
 /// [`HostEnv`] ne porta **tre** perché è il solo trait che presta, dallo stesso
@@ -133,6 +134,16 @@ pub enum Capability {
     ViewStateRead,
     /// Ricordarlo.
     ViewStateWrite,
+    /// **Leggere la sorgente di un import** che l'host tiene aperta (0102).
+    ///
+    /// L'unica famiglia che non presta niente del vault né della macchina:
+    /// presta una cosa sola, quella che l'utente ha appena scelto in un dialogo
+    /// di sistema, e la nomina con una chiave che l'host ha timbrato. Per
+    /// questo non ha un permesso del manifest — vedi
+    /// [`Capability::permission`] — e per questo esiste comunque come famiglia:
+    /// una politica deve poterla negare (il safe mode la nega come tutto il
+    /// resto), e senza un nome non ci sarebbe niente da negare.
+    Transfer,
 }
 
 impl Capability {
@@ -147,7 +158,7 @@ impl Capability {
     /// [`Granted::new`] e il presidio delle capacità simulate in
     /// `kernel/tests/invoke_command.rs` — e una famiglia che non ci finisse
     /// sparirebbe da entrambi restando verde.
-    pub const ALL: [Capability; 18] = [
+    pub const ALL: [Capability; 19] = [
         Capability::VaultRead,
         Capability::VaultWrite,
         Capability::VaultStructure,
@@ -166,6 +177,7 @@ impl Capability {
         Capability::SettingsWrite,
         Capability::ViewStateRead,
         Capability::ViewStateWrite,
+        Capability::Transfer,
     ];
 
     /// Il permesso del core che governa questa famiglia, se ce n'è uno.
@@ -213,7 +225,16 @@ impl Capability {
             // Lo stato di vista sta nel proprio recinto come i blob, e per la
             // stessa ragione non è un permesso dichiarabile: quello che si
             // legge e si scrive è già solo il proprio.
-            Capability::ViewStateRead
+            // Leggere la sorgente di un import non è un permesso, e qui la
+            // ragione è più forte che altrove: il recinto **è già stato
+            // disegnato dall'utente**, e non da noi. Ha scelto quel file in un
+            // dialogo di sistema un istante fa; l'handle nomina quello e
+            // nient'altro, e nessuno può fabbricarne uno. Un `fub:read-source`
+            // nel manifest chiederebbe una seconda volta della stessa cosa —
+            // che è il modo di rendere i permessi rumore, cioè di far dire di
+            // sì senza guardare anche a quelli che contano.
+            Capability::Transfer
+            | Capability::ViewStateRead
             | Capability::ViewStateWrite
             | Capability::DataRead
             | Capability::DataWrite
@@ -226,7 +247,7 @@ impl Capability {
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a diciotto nomi [conta: guard-famiglie]
+/// Una politica è **piccola per costruzione**: risponde a diciannove nomi [conta: guard-famiglie]
 /// e non
 /// sa niente di documenti, di blob o di comandi. È ciò che permette di comporne
 /// due senza chiedersi cosa significhi comporre venticinque metodi.
@@ -330,6 +351,12 @@ impl Policy for ReadOnly {
             // e una superficie che non conosce.
             | Capability::Services => Some(self.why.to_string()),
             Capability::VaultRead
+            // Leggere la sorgente di un import non è un effetto — è una
+            // lettura, e di una cosa che nel vault non è nemmeno entrata. Una
+            // preview della decisione 0006 è **esattamente** una simulazione, e
+            // negarla qui vorrebbe dire che il piano di una migrazione non può
+            // essere calcolato senza farla.
+            | Capability::Transfer
             | Capability::DataRead
             | Capability::Query
             // Rileggere ciò che si stava scrivendo non è un effetto, come non
@@ -596,7 +623,7 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le diciotto famiglie [conta: guard-famiglie]
+/// Delega ciò che la politica concede e nega il resto. Le diciannove famiglie [conta: guard-famiglie]
 /// sono implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.
@@ -993,6 +1020,23 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         self.check(Capability::Commands, || "annullare".into())?;
         self.check(Capability::VaultWrite, || "annullare".into())?;
         self.inner.undo_last()
+    }
+}
+
+impl<H: TransferRead, P: Policy> TransferRead for Guard<H, P> {
+    /// Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
+    /// posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
+    /// È la differenza con `fub:network`, che di cancelli ne ha due.
+    fn read_source(
+        &self,
+        handle: SourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, PluginError> {
+        self.check(Capability::Transfer, || {
+            "leggere la sorgente di un import".to_string()
+        })?;
+        self.inner.read_source(handle, offset, len)
     }
 }
 
