@@ -51,7 +51,7 @@ export type EventKind =
 
 export type Excerpts = "attach" | "omit";
 
-export type HealthCheck = "broken_links" | "orphan_documents";
+export type HealthCheck = "broken_links" | "orphan_documents" | "colliding_paths";
 
 export type HourCycle = "h23" | "h12";
 

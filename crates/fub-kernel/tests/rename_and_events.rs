@@ -251,6 +251,53 @@ fn rename_to_contended_name_rewrites_by_path() {
     assert_eq!(bl[0].source, DocId::new("a.lnk"));
 }
 
+/// **Anche il path senza estensione si può contendere**, e finché questo test
+/// non c'è stato la riscrittura lo dava per univoco in un commento.
+///
+/// La chiave di `path_index` è `resolution_key(strip_ext(…))`: `sub/Altra.lnk`
+/// e `sub/Altra.txt` la condividono. Con un solo formato registrato il caso non
+/// è raggiungibile — ed è la ragione per cui nessuno l'aveva mai incontrato —
+/// ma un vault con due formati è la normalità appena un plugin ne porta uno.
+///
+/// Qui non si sta scegliendo cosa mostrare a schermo: si sta **scrivendo dentro
+/// i documenti di terzi** il riferimento che un altro programma leggerà.
+#[test]
+fn rename_to_a_contended_path_writes_the_whole_path() {
+    let dir = TempDir::new("rename-path-ambiguous");
+    let mut registry = FormatRegistry::new();
+    registry.register(Box::new(LinkListProvider)).unwrap();
+    // Il secondo formato: serve solo a mettere nell'indice un documento che
+    // condivide il path senza estensione, cioè a rendere contesa la seconda
+    // forma esattamente come `Altra.lnk` rende contesa la prima.
+    registry
+        .register(fub_testkit::TestoDiProva::per_estensione("txt").boxed())
+        .unwrap();
+    let mut ws = Workspace::new(&dir.0, registry);
+    ws.reindex().unwrap();
+
+    ws.write_document(&DocId::new("Altra.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("sub/Altra.txt"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("sub/Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&DocId::new("a.lnk"), "Nota", WriteBase::Dictated)
+        .unwrap();
+
+    ws.rename_document(&DocId::new("sub/Nota.lnk"), &DocId::new("sub/Altra.lnk"))
+        .unwrap();
+
+    assert_eq!(
+        ws.read_source(&DocId::new("a.lnk")).unwrap(),
+        "sub/Altra.lnk",
+        "`sub/Altra` sarebbe stato ambiguo quanto `Altra`: il path senza \
+         estensione è una chiave, e una chiave si contende"
+    );
+    let bl = ws.backlinks(&DocId::new("sub/Altra.lnk"));
+    assert_eq!(bl.len(), 1, "e il riferimento riscritto risolve davvero");
+    assert_eq!(bl[0].source, DocId::new("a.lnk"));
+}
+
 #[test]
 fn case_only_rename_preserves_identity() {
     // `nota.lnk` → `Nota.lnk`: su un filesystem case-insensitive il target

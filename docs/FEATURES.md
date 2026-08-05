@@ -156,6 +156,22 @@
 
 ## 2.3 File system edge cases
 
+**Sul case, la gestione c'è per intero da un lato e per scelta non c'è
+dall'altro.** La risoluzione dei link resta case-insensitive — un vault
+sincronizzato fra macOS e Linux è lo stesso vault
+([decisione 0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)) — ma su un
+filesystem case-sensitive `Nota.md` e `nota.md` sono due file veri, e la
+[decisione 0107](decisions/0107-il-caso-di-una-lettera.md) ha separato le due
+domande che prima erano una: `resolution_key` dice chi è candidato, `exact_key`
+dice chi ha ragione fra i candidati. Dove nemmeno la seconda può decidere — due
+file così nella **radice** del vault, che nessun wikilink sa distinguere — il
+vault lo **dice**, con `HealthCheck::CollidingPaths` fra i controlli di salute
+(7.2). Ciò che non c'è, e non per dimenticanza, è la **riparazione**: rinominare
+uno dei due vuol dire scegliere quale abbia il nome sbagliato, che è una
+decisione dell'utente sui suoi dati. Questa casella è quindi piena sulla
+risoluzione e sulla segnalazione, e volutamente vuota sulla correzione
+automatica.
+
 - [ ] Unicode NFC/NFD normalization
 - [ ] Gestione caratteri invalidi
 - [ ] Gestione nomi riservati

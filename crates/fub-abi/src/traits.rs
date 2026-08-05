@@ -2367,6 +2367,34 @@ pub enum HealthCheck {
     BrokenLinks,
     /// Note che nessuno nomina: zero riferimenti entranti.
     OrphanDocuments,
+    /// File che il filesystem distingue e la chiave di risoluzione no: due path
+    /// che differiscono **solo** per maiuscole o per forma di composizione
+    /// Unicode (`Nota.md` e `nota.md`, `Café.md` in NFC e in NFD).
+    ///
+    /// Non è un difetto del vault — quei due file esistono ed è legittimo — ma è
+    /// l'unico caso in cui il kernel *non può* dare all'utente una risposta
+    /// giusta senza dirgliela: in una sottocartella un link markdown col path
+    /// intero disambigua, ma per due file nella **radice** del vault non esiste
+    /// nessun wikilink che li separi, perché la risoluzione per nome passa da
+    /// una chiave che il caso l'ha già collassato. Quando l'ambiguità non è
+    /// esprimibile nella lingua dei link, l'unica risposta possibile è dirlo.
+    CollidingPaths,
+}
+
+impl HealthCheck {
+    /// Tutti i controlli, in ordine di dichiarazione.
+    ///
+    /// Esiste perché c'è **un** chiamante che li vuole tutti — il rapporto
+    /// diagnostico, che è l'unico posto in cui il vault si racconta intero — e
+    /// un elenco scritto a mano lì dentro tace su un controllo nuovo restando
+    /// verde: il rapporto continua a essere un array, ha solo una riga in meno,
+    /// e nessuno confronta quell'array con l'enum. È la stessa forma di
+    /// [`ViewSurface::ALL`], e ha lo stesso presidio dei discriminanti.
+    pub const ALL: [HealthCheck; 3] = [
+        HealthCheck::BrokenLinks,
+        HealthCheck::OrphanDocuments,
+        HealthCheck::CollidingPaths,
+    ];
 }
 
 /// Un problema trovato da un [`HealthCheck`], sul documento che lo porta.
@@ -2377,8 +2405,10 @@ pub struct HealthIssue {
     pub doc: DocId,
     pub check: HealthCheck,
     /// Il dettaglio leggibile: per un link rotto la destinazione **come era
-    /// scritta**, che è ciò che serve per correggerla. Assente quando il
-    /// problema è il documento stesso (una nota orfana non ha un dettaglio).
+    /// scritta**, che è ciò che serve per correggerla; per una collisione di
+    /// path gli **altri** file che condividono la chiave, separati da `, `.
+    /// Assente quando il problema è il documento stesso (una nota orfana non ha
+    /// un dettaglio).
     pub detail: Option<String>,
     /// Dove sta nel sorgente, quando il problema ha un punto: lo span del link
     /// rotto. In byte, come ogni span del modello.
@@ -4340,6 +4370,54 @@ mod tests {
             "`ViewSurface::ALL` non copre una volta sola ogni superficie \
              dell'enum: o una riga è duplicata, o la superficie nuova non è \
              stata aggiunta e la lunghezza è stata fatta tornare con un \
+             doppione."
+        );
+    }
+
+    /// Il gemello di `indice_dichiarato` per i controlli di salute, e per la
+    /// stessa ragione: `HealthCheck::ALL` ha un chiamante che li vuole **tutti**,
+    /// e un controllo che sparisse da lì non renderebbe rosso niente — il
+    /// rapporto diagnostico resterebbe un array valido con una riga in meno.
+    fn posto_del_controllo(check: HealthCheck) -> usize {
+        match check {
+            HealthCheck::BrokenLinks => 0,
+            HealthCheck::OrphanDocuments => 1,
+            HealthCheck::CollidingPaths => 2,
+        }
+    }
+
+    #[test]
+    fn i_discriminanti_coprono_ogni_controllo_di_salute() {
+        assert_eq!(
+            HealthCheck::ALL.len(),
+            posto_del_controllo(HealthCheck::CollidingPaths) + 1,
+            "`HealthCheck::ALL` è più corto dell'enum: c'è un controllo che il \
+             compilatore conosce e che l'elenco non nomina, quindi il rapporto \
+             diagnostico non lo eseguirà mai."
+        );
+        for &check in &HealthCheck::ALL {
+            assert_eq!(
+                HealthCheck::ALL[posto_del_controllo(check)],
+                check,
+                "`{check:?}` non sta nell'elenco al posto che il contratto le dà."
+            );
+        }
+
+        // I due `assert` qui sopra da soli hanno una zona cieca, misurata
+        // costruendola: `ALL = [BrokenLinks, BrokenLinks, CollidingPaths]`
+        // passa — la lunghezza torna, e il giro visita `BrokenLinks` due volte
+        // trovandola al suo posto tutte e due le volte. È il modo in cui un
+        // elenco si accorcia senza accorciarsi: si perde una riga e si fa
+        // tornare il conto con un doppione. Lo prende l'aritmetica dei
+        // discriminanti, che è la stessa di `Capability::ALL`.
+        let mut visti: Vec<u16> = HealthCheck::ALL.iter().map(|&c| c as u16).collect();
+        visti.sort_unstable();
+        let attesi: Vec<u16> = (0..HealthCheck::ALL.len() as u16).collect();
+        assert_eq!(
+            visti, attesi,
+            "`HealthCheck::ALL` non copre una volta sola ogni controllo \
+             dell'enum: o una riga è duplicata, o il controllo nuovo non è \
+             stato aggiunto e la lunghezza è stata fatta tornare con un \
              doppione."
         );
     }
