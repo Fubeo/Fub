@@ -440,6 +440,22 @@ impl Host {
         .map_err(|e| PluginError::Internal(e.into()))?;
         let registry = Arc::new(Mutex::new(registry));
 
+        // **I tasti che questo vault propone e che nessuno ha guardato**
+        // (§23.13). Qui, e non più tardi: da questa riga in poi il vault è
+        // utilizzabile — la scansione parte subito sotto — e una scorciatoia che
+        // fosse attiva anche per un solo istante sarebbe un tasto premuto.
+        //
+        // La regola la scrive `crate::settings::tasti_da_guardare` e la sospende
+        // il kernel: il criterio ha bisogno di una cosa che nel vault non c'è —
+        // cosa questa macchina ha già visto — e uno store di configurazione che
+        // leggesse il registro dei vault per rispondere a una lettura sarebbe il
+        // kernel che conosce l'installazione.
+        let sospese = crate::settings::tasti_da_guardare(
+            &ws.vault_keybindings(),
+            &self.vaults.seen_keys(&root),
+        );
+        ws.suspend_settings(sospese);
+
         // **La prima fase, e solo quella** (§15.7): si guarda cosa c'è, e da
         // qui il vault è utilizzabile. Il `?` che resta riguarda il vault
         // intero — la scansione — e non i suoi documenti: quelli che non si
@@ -699,6 +715,155 @@ impl Host {
             )?;
             Ok(errors)
         })?
+    }
+
+    // --- i tasti che un vault propone (§23.13) -----------------------------
+
+    /// Le scorciatoie che questo vault propone e che nessuno ha ancora
+    /// guardato: chiave d'impostazione → accordo.
+    ///
+    /// Torna la **chiave** e non l'id del comando, e non è pigrizia: chi disegna
+    /// ha già l'elenco dei comandi con i loro titoli localizzati, e ricomporre
+    /// qui un titolo vorrebbe dire risolverlo nel catalogo di chi ha registrato
+    /// il comando — cioè, per un comando di un componente, nel catalogo del
+    /// componente. Ciò che attraversa di qui è un identificatore; la frase la
+    /// scrive la shell, che è la stessa riga della 0098.
+    /// Restano fuori le chiavi che **nessuno dichiara**: una scorciatoia scritta
+    /// per un comando di un componente che oggi è spento non ha un titolo da
+    /// mostrare né un modo di essere azzerata, e chiedere di una cosa che non fa
+    /// niente insegna a rispondere senza guardare. Resta sospesa, e la domanda
+    /// arriva il giorno che quel componente si accende — che è l'unico giorno in
+    /// cui vale la pena farla.
+    pub fn pending_keybindings(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<std::collections::BTreeMap<String, String>, PluginError> {
+        self.with_session(vault, |session| {
+            let ws = session.workspace.read().expect("workspace avvelenato");
+            let proposti = ws.vault_keybindings();
+            ws.suspended_settings()
+                .into_iter()
+                .filter(|key| ws.setting_is_declared(key))
+                .filter_map(|key| proposti.get(&key).map(|c| (key, c.clone())))
+                .collect()
+        })
+    }
+
+    /// **Usa le sue**: l'utente ha guardato le scorciatoie del vault e le
+    /// adotta. Da qui in poi valgono, e non gliele si chiede più — finché il
+    /// file non ne cambia una.
+    pub fn adopt_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
+        let mostrate: std::collections::BTreeSet<String> =
+            self.pending_keybindings(vault)?.into_keys().collect();
+        self.with_session(vault, |session| {
+            session
+                .workspace
+                .write()
+                .expect("workspace avvelenato")
+                .resume_settings(&mostrate);
+        })?;
+        self.ricorda_i_tasti_visti(vault)
+    }
+
+    /// **Tieni le mie**: le scorciatoie che il vault proponeva escono dal suo
+    /// file, e valgono quelle dichiarate dai comandi.
+    ///
+    /// Cancella davvero invece di lasciarle sospese per sempre, e la ragione è
+    /// la riga della 0076: un valore che nessuno leggerà mai è la cosa peggiore
+    /// che un file di configurazione possa contenere. Dopo una risposta — in
+    /// tutti e due i versi — non resta niente di ambiguo nel file.
+    ///
+    /// Tocca **solo** le chiavi sospese: una scorciatoia che l'utente si era
+    /// scelto su questa macchina e che il vault non ha cambiato non è in
+    /// discussione, e rifiutare ciò che arriva da fuori non deve buttare ciò che
+    /// era già proprio.
+    pub fn discard_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
+        let mostrate: Vec<String> = self.pending_keybindings(vault)?.into_keys().collect();
+        self.with_session(vault, |session| {
+            let mut ws = session.workspace.write().expect("workspace avvelenato");
+            // Il `reset` **risveglia** la chiave che azzera — è la riga in
+            // `SettingsStore::write` — quindi alla fine del giro non resta
+            // sospeso niente di ciò che è stato mostrato, e non serve una
+            // seconda mossa che potrebbe non essere d'accordo con la prima.
+            for key in &mostrate {
+                ws.reset_setting(key)?;
+            }
+            Ok::<(), PluginError>(())
+        })??;
+        self.ricorda_i_tasti_visti(vault)
+    }
+
+    /// Scrive un'impostazione **per conto dell'utente**: è la porta della
+    /// persona davanti allo schermo, quella che il §11.1 tiene distinta da
+    /// `settings.set` del registro (da cui passa un programma).
+    ///
+    /// Esiste come metodo dell'host, e non come la riga di `Workspace` che
+    /// chiama, per una ragione sola: una scorciatoia scritta qui è una
+    /// scorciatoia **guardata**, e ricordarlo vuol dire toccare il registro dei
+    /// vault — che il kernel non conosce e non deve conoscere. Senza questa
+    /// riga la tastiera continuerebbe a funzionare e l'app chiederebbe alla
+    /// riapertura di adottare un accordo che l'utente ha battuto lui: cioè la
+    /// domanda inutile che insegna a rispondere senza guardare.
+    pub fn set_setting_for_user(
+        &self,
+        vault: Option<&str>,
+        key: &str,
+        value: fub_abi::settings::SettingValue,
+    ) -> Result<(), PluginError> {
+        self.with_session(vault, |session| {
+            session
+                .workspace
+                .write()
+                .expect("workspace avvelenato")
+                .set_setting(key, value)
+        })??;
+        self.se_e_un_tasto_ricordalo(vault, key)
+    }
+
+    /// Azzera un'impostazione per conto dell'utente. Stessa porta, stesso
+    /// promemoria: azzerare una scorciatoia è guardarla quanto scriverla.
+    pub fn reset_setting_for_user(
+        &self,
+        vault: Option<&str>,
+        key: &str,
+    ) -> Result<(), PluginError> {
+        self.with_session(vault, |session| {
+            session
+                .workspace
+                .write()
+                .expect("workspace avvelenato")
+                .reset_setting(key)
+        })??;
+        self.se_e_un_tasto_ricordalo(vault, key)
+    }
+
+    /// Il promemoria costa una riscrittura del registro, quindi si paga solo
+    /// quando la chiave è di quella famiglia — che è quasi mai.
+    fn se_e_un_tasto_ricordalo(&self, vault: Option<&str>, key: &str) -> Result<(), PluginError> {
+        if fub_abi::settings::command_of_keybinding_key(key).is_none() {
+            return Ok(());
+        }
+        self.ricorda_i_tasti_visti(vault)
+    }
+
+    /// Cosa, dei tasti di questo vault, l'utente ha guardato: ciò che il file
+    /// porta **meno** ciò che resta sospeso.
+    ///
+    /// Una espressione sola per tutte e due le risposte, e il fatto che sia la
+    /// stessa non è un'economia: dopo un «usa le sue» non c'è più niente di
+    /// sospeso e ci finisce dentro tutto; dopo un «tieni le mie» il file non
+    /// porta più niente di ciò che era in discussione. Ciò che resta escluso in
+    /// entrambi i casi è la stessa cosa — le chiavi che nessuno dichiara, che
+    /// non sono state mostrate e quindi non sono state approvate.
+    fn ricorda_i_tasti_visti(&self, vault: Option<&str>) -> Result<(), PluginError> {
+        let (root, visti) = self.with_session(vault, |session| {
+            let ws = session.workspace.read().expect("workspace avvelenato");
+            let sospese = ws.suspended_settings();
+            let mut visti = ws.vault_keybindings();
+            visti.retain(|key, _| !sospese.contains(key));
+            (session.root.clone(), visti)
+        })?;
+        self.vaults.note_keys_seen(&root, visti)
     }
 
     /// Chiude **un** vault: flush, `close` degli indici, disattivazione di ogni

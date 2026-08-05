@@ -186,6 +186,25 @@ export const api = {
   // deve ritrovare le cartelle aperte com'erano.
   forgetVault: (path: string) => invoke<void>("forget_vault", { path }),
 
+  // --- i tasti che un vault propone (§23.13) -------------------------------
+  //
+  // Chiave d'impostazione → accordo, e non l'id del comando col suo titolo: il
+  // titolo lo risolve **questa** parte, che ha già l'elenco dei comandi
+  // localizzato. Farlo risolvere di là vorrebbe dire cercarlo nel catalogo di
+  // chi ha registrato il comando — cioè, per un comando di un componente, nel
+  // catalogo del componente: la stessa riga per cui il pannello dei permessi
+  // riceve un identificatore e non una frase (§12.1, 0098).
+  //
+  // L'elenco è vuoto per quasi ogni apertura, ed è il caso da non far pesare a
+  // nessuno: chi non ha il problema paga una chiamata che risponde `{}`.
+  pendingKeybindings: () => invoke<Record<string, string>>("pending_keybindings"),
+  // «Usa le sue»: valgono da adesso, e non le si chiede più.
+  adoptKeybindings: () => invoke<void>("adopt_keybindings"),
+  // «Tieni le mie»: escono dal file del vault. Non restano sospese per sempre —
+  // un valore che nessuno leggerà mai è la cosa peggiore che un file di
+  // configurazione possa contenere.
+  discardKeybindings: () => invoke<void>("discard_keybindings"),
+
   // --- lo stato di vista (§11.2) ------------------------------------------
   //
   // Dove la shell era rimasta: la modalità, le cartelle aperte, lo spazio

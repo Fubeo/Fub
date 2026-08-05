@@ -29,9 +29,68 @@
 //! degradare (il versioning smette di fotografare e la storia vecchia resta
 //! leggibile), un bundle non montato non sa niente perché non c'è nessuno.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::ui::UiOption;
+
+/// Le scorciatoie che questo vault propone e che **nessuno ha ancora guardato**
+/// su questa macchina (§23.13): quelle il cui valore va sospeso.
+///
+/// # La riga che questa funzione scrive, ed è più larga di lei
+///
+/// La [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)
+/// ha smontato l'argomento di rischio sulle impostazioni del vault, e su tema e
+/// lingua aveva ragione: un vault che porta con sé un tema scuro fa una cosa che
+/// si vede e si disfa in un gesto. La
+/// [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md) ha messo
+/// in quel posto i **tasti**, ed è un'altra specie di cosa. Il criterio che le
+/// separa non è *cosa la chiave descrive* — `locale.hour-cycle` descrive chi
+/// guarda e viaggiare è precisamente ciò che deve fare — ma **cosa può il valore
+/// peggiore**, e le risposte che questo repo ha già dato sono tre:
+///
+/// - **una sottrazione non concede**: `plugins.disabled`, e le chiavi dei
+///   permessi della [0098](../../../docs/decisions/0098-un-permesso-si-vede-e-si-nega.md).
+///   Il caso peggiore è il default che l'utente ha già accettato;
+/// - **si vede e si disfa**: tema, `locale.*`, i pesi della ricerca, gli
+///   interruttori delle feature. Il caso peggiore è un fastidio con davanti
+///   l'interruttore che lo toglie;
+/// - **cambia cosa fa un gesto dell'utente**: oggi le sole `keys.*`. Qui il caso
+///   peggiore non è né un default né una cosa visibile — è che il gesto
+///   dell'utente venga speso per qualcos'altro, e si scopre premendo.
+///
+/// Solo la terza specie si sospende, e la regola che la definisce è: *una chiave
+/// che viaggia col vault può cambiare ciò che l'app mostra e ciò che l'app fa da
+/// sé; non ciò che fa un gesto di chi la apre, finché quel gesto non è stato
+/// guardato.* Chi mette una cosa nuova in una chiave di vault ha qui la domanda
+/// da farsi.
+///
+/// # Perché la domanda è sui tasti e non sul vault
+///
+/// «Questo vault l'ho già aperto» sarebbe stato più semplice e sbagliato in due
+/// modi: un vault aperto ieri può ricevere tasti nuovi stanotte da una
+/// sincronizzazione, e la voce del registro nasce alla **prima** apertura,
+/// quindi la seconda troverebbe un vault "conosciuto" a cui nessuno ha mai
+/// risposto. Confrontare i valori risponde a tutti e due i casi con lo stesso
+/// paragone — ed è la forma della
+/// [0099](../../../docs/decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md):
+/// ciò che è cambiato mentre nessuno guardava si riconosce mettendo accanto
+/// quello che si sapeva ieri e quello che si legge oggi.
+///
+/// Il confronto è sul **valore** e non sulla presenza: una scorciatoia adottata
+/// e poi cambiata nel file è una scorciatoia nuova, e chiedere di nuovo è la
+/// sola risposta che non dia per buono un accordo che nessuno ha visto.
+pub fn tasti_da_guardare(
+    vault: &BTreeMap<String, String>,
+    visti: &BTreeMap<String, String>,
+) -> BTreeSet<String> {
+    vault
+        .iter()
+        .filter(|(key, chord)| visti.get(*key) != Some(chord))
+        .map(|(key, _)| key.clone())
+        .collect()
+}
 
 /// L'id del bundle che non registra niente e dichiara la configurazione
 /// dell'app.
@@ -485,4 +544,52 @@ pub fn apply_log_levels(ws: &fub_kernel::Workspace, levels: &fub_kernel::log::Le
         .and_then(|v| v.as_list().map(|l| l.to_vec()))
         .unwrap_or_default();
     levels.set_verbose(verbose);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mappa(righe: &[(&str, &str)]) -> BTreeMap<String, String> {
+        righe
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    /// Il confronto è sul **valore**, non sulla presenza: un accordo cambiato su
+    /// una chiave già adottata è un accordo nuovo, e chiedere di nuovo è la sola
+    /// risposta che non dia per buono ciò che nessuno ha visto.
+    #[test]
+    fn si_guarda_quel_che_e_cambiato_non_quel_che_e_comparso() {
+        let vault = mappa(&[
+            ("keys.note.create", "Mod-Alt-k"),
+            ("keys.trash.empty", "Mod-s"),
+            ("keys.vault.undo", "Mod-z"),
+        ]);
+        let visti = mappa(&[
+            // uguale: adottata e non cambiata
+            ("keys.note.create", "Mod-Alt-k"),
+            // diversa: adottata ieri, cambiata stanotte
+            ("keys.trash.empty", "Mod-k"),
+            // e una che il file non porta più: non è in discussione
+            ("keys.note.rename", "Mod-r"),
+        ]);
+        let da_guardare = tasti_da_guardare(&vault, &visti);
+        assert_eq!(
+            da_guardare,
+            BTreeSet::from([
+                "keys.trash.empty".to_string(),
+                "keys.vault.undo".to_string()
+            ])
+        );
+    }
+
+    /// Il caso di quasi tutti, e deve costare zero: un vault che non porta
+    /// scorciatoie non ha niente da guardare.
+    #[test]
+    fn un_vault_senza_tasti_non_chiede_niente() {
+        assert!(tasti_da_guardare(&BTreeMap::new(), &BTreeMap::new()).is_empty());
+        assert!(tasti_da_guardare(&BTreeMap::new(), &mappa(&[("keys.a", "Mod-a")])).is_empty());
+    }
 }

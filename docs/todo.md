@@ -29,9 +29,9 @@ verbali di fila) — e **due** da una
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centosedici sono
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centodiciassette sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-diciassette [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
+sedici [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -226,11 +226,11 @@ che questo piano passa il tempo a togliere dal codice.
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 1 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
-| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | 9 | 2 |
+| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | 8 | 2 |
 
 ## Le voci
 
-Diciassette [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
+Sedici [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -242,7 +242,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-diciassette [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+sedici [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -251,8 +251,8 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-La colonna *Voci* somma **diciassette** [conta: voci-aperte], e la seduta 23 ne
-tiene nove da sola. Non è uno squilibrio da correggere: è ciò che succede
+La colonna *Voci* somma **sedici** [conta: voci-aperte], e la seduta 23 ne
+tiene otto da sola. Non è uno squilibrio da correggere: è ciò che succede
 quando una strada nuova viene percorsa tre volte di fila e produce voci ogni
 volta, e la sua forma — *prezzi dichiarati e mai risommati* — attraversa tutte le
 altre sedute invece di stare accanto a loro. Se un giorno converrà spezzarla, il
@@ -353,7 +353,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§23.7** | [Una data scritta come la scrive l'utente non è una data, e non c'è modo di dirlo](roadmap/23-cosa-costano-le-decisioni-chiuse.md#237-una-data-scritta-come-la-scrive-lutente-non-è-una-data-e-non-cè-modo-di-dirlo) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
 | **§23.8** | [Due file che differiscono per una maiuscola sono lo stesso arco](roadmap/23-cosa-costano-le-decisioni-chiuse.md#238-due-file-che-differiscono-per-una-maiuscola-sono-lo-stesso-arco) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
 | **§23.9** | [Il registro non si spegne, e per una modifica chirurgica porta i byte dell'utente](roadmap/23-cosa-costano-le-decisioni-chiuse.md#239-il-registro-non-si-spegne-e-per-una-modifica-chirurgica-porta-i-byte-dellutente) | 23. Cosa le decisioni chiuse costano | kernel | **P1** |
-| **§23.13** | [Un vault che arriva da fuori rimappa la tastiera](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2313-un-vault-che-arriva-da-fuori-rimappa-la-tastiera) | 23. Cosa le decisioni chiuse costano | kernel | **P1** |
 | **§23.14** | [Un'operazione a metà non sa di essere a metà](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2314-unoperazione-a-metà-non-sa-di-essere-a-metà) | 23. Cosa le decisioni chiuse costano | contratto | **P1** |
 | **§23.15** | [La rete che regge i panici non ha un presidio, ha una nota](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2315-la-rete-che-regge-i-panici-non-ha-un-presidio-ha-una-nota) | 23. Cosa le decisioni chiuse costano | presidi | **P2** |
 | **§23.16** | [Su Windows un hardlink si stacca in silenzio](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2316-su-windows-un-hardlink-si-stacca-in-silenzio) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
@@ -368,7 +367,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **novantanove** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **cento** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

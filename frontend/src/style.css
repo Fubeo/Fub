@@ -1655,3 +1655,31 @@ button:hover {
 .setting-sub.panel-title {
   margin-top: var(--space-2);
 }
+
+/* **I tasti che un vault propone** (§23.13): un riquadro in cima alla scheda
+ * delle scorciatoie, con dentro le righe proposte e le due risposte.
+ *
+ * Il bordo colorato è l'unica cosa che lo separa dalle righe vere sotto, e
+ * serve: quelle sono le scorciatoie che valgono, queste sono quelle che
+ * *varrebbero*, e senza una cornice sarebbero la stessa colonna. Non è un
+ * colore d'allarme, ed è deliberato — non c'è niente da riparare, c'è una
+ * scelta da fare. */
+.settings-banner {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+}
+
+/* La prima riga proposta non porta il filo sopra: dentro il riquadro il bordo
+ * lo fa già il riquadro. */
+.settings-banner .setting-row:first-of-type {
+  border-top: none;
+}
+
+.settings-banner-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}

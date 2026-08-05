@@ -592,18 +592,17 @@ fn set_setting(
     value: SettingValue,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write().unwrap();
-    ws.set_setting(&key, value)
+    // Passa da `Host` e non dal `Workspace` perché una chiave scritta qui è una
+    // chiave **guardata**, e per certe famiglie ricordarlo è metà del lavoro
+    // (§23.13): il kernel il registro dei vault non lo conosce.
+    host.set_setting_for_user(vault.as_deref(), &key, value)
 }
 
 /// Dimentica ciò che era stato deciso per una chiave: torna a valere il livello
 /// sotto.
 #[tauri::command]
 fn reset_setting(host: State<Host>, key: String, vault: Option<String>) -> Result<(), PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write().unwrap();
-    ws.reset_setting(&key)
+    host.reset_setting_for_user(vault.as_deref(), &key)
 }
 
 // --- lo stato di vista della shell (§11.2) ---------------------------------
@@ -707,6 +706,28 @@ fn forget_vault(host: State<Host>, path: String) -> Result<(), PluginError> {
     host.forget_vault(&Utf8PathBuf::from(path))
 }
 
+/// Le scorciatoie che questo vault propone e che nessuno ha ancora guardato
+/// (§23.13): chiave d'impostazione → accordo.
+#[tauri::command]
+fn pending_keybindings(
+    host: State<Host>,
+    vault: Option<String>,
+) -> Result<std::collections::BTreeMap<String, String>, PluginError> {
+    host.pending_keybindings(vault.as_deref())
+}
+
+/// «Usa le sue»: le scorciatoie del vault valgono da adesso.
+#[tauri::command]
+fn adopt_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), PluginError> {
+    host.adopt_keybindings(vault.as_deref())
+}
+
+/// «Tieni le mie»: le scorciatoie del vault escono dal suo file.
+#[tauri::command]
+fn discard_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), PluginError> {
+    host.discard_keybindings(vault.as_deref())
+}
+
 pub fn run() {
     // Il collettore del log si installa **prima** di tutto: le righe che
     // `Host::installed` scrive aprendo i file della macchina devono avere un
@@ -766,6 +787,9 @@ pub fn run() {
             set_vault_favorite,
             set_vault_look,
             forget_vault,
+            pending_keybindings,
+            adopt_keybindings,
+            discard_keybindings,
         ])
         .build(tauri::generate_context!())
         .expect("errore durante l'avvio di Fub")

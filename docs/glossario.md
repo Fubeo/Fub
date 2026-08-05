@@ -200,7 +200,7 @@ spazi. Non è nel vault come contenuto, sta nel *sidecar*, e dalla 0038 è il
 kernel a possederlo — con la migrazione al rename inclusa.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5440`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5510`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
@@ -218,6 +218,18 @@ di nessuna nota. Sta in `<vault>/.fub/`, cioè direttamente nella radice unica e
 non sotto `data/`, perché è [autorevole](#autorevole); viaggia col vault se lo si
 copia, e porta un numero di schema (vedi
 [versionamento.md](versionamento.md)).
+
+### sospensione
+`tasti_da_guardare` · [`host/settings.rs:84`](../crates/fub-host/src/settings.rs) · [0100](decisions/0100-i-tasti-che-arrivano-da-fuori.md)
+
+Una chiave che sta nel file del vault ma **non vale ancora**: il valore c'è, il
+file non si tocca, e `resolve` risponde il default finché qualcuno non decide.
+Serve per una specie sola di impostazioni — quelle che **cambiano cosa fa un
+gesto dell'utente**, cioè oggi le sole `keys.*` — perché un tema che arriva da un
+vault altrui si vede e si disfa, una scorciatoia si scopre premendola. Chi
+sospende non è il kernel ma l'host, l'unico che veda insieme il file del vault e
+i tasti che questa macchina ha già visto; e la risposta si dà **una chiave alla
+volta**.
 
 ### spazio
 — · [`frontend/src/panels/explorer.ts`](../frontend/src/panels/explorer.ts) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)

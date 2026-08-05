@@ -177,6 +177,19 @@ const ALLOWLIST: &[(&str, Perche)] = &[
     // Fermare un lavoro lungo (§10.3): *elencarli* è una query (`IndexQuery::Jobs`,
     // sono dati), fermarne uno no — e il runner è dell'app, non del kernel (0032).
     ("cancel_job", Perche::SuperficieDellApp),
+    // I tasti che un vault propone e che nessuno ha guardato (§23.13). È la
+    // stessa riga di `known_vaults`, e il primo dei tre è quello che vale la
+    // pena difendere perché **risponde con dei dati**: la regola direbbe
+    // `query_index`, e non regge qui, perché la risposta non si ricava dal
+    // vault. Si ricava mettendo il file del vault accanto a ciò che **questa
+    // macchina** ha già visto, che è nel registro dei vault — cioè fuori da ogni
+    // vault, per la ragione della 0029: un elenco di vault non sta in nessun
+    // vault. Un `IndexQuery` che rispondesse sarebbe il canale dati di un vault
+    // che legge l'installazione. Gli altri due sono la risposta della persona
+    // davanti allo schermo, e scrivono nello stesso registro.
+    ("pending_keybindings", Perche::SuperficieDellApp),
+    ("adopt_keybindings", Perche::SuperficieDellApp),
+    ("discard_keybindings", Perche::SuperficieDellApp),
     // --- i tre ponti, in due metà ciascuno ----------------------------------
     ("list_views", Perche::Ponte),
     ("render_view", Perche::Ponte),

@@ -140,14 +140,18 @@
       "name": "Diario",
       "icon": "📓",
       "favorite": true,
-      "last_opened": 1700000000000
+      "last_opened": 1700000000000,
+      "keys_seen": {
+        "keys.note.create": "Mod-Alt-k"
+      }
     },
     {
       "root": "/altro",
       "name": "",
       "icon": null,
       "favorite": false,
-      "last_opened": 1699000000000
+      "last_opened": 1699000000000,
+      "keys_seen": {}
     }
   ]
 }

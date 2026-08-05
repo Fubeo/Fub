@@ -5036,6 +5036,76 @@ impl Workspace {
         }
     }
 
+    /// Le scorciatoie che il file di questo vault dichiara (§23.13), come
+    /// chiave → accordo. La chiede chi monta, per sapere cosa questo vault
+    /// propone alla tastiera di chi lo apre.
+    pub fn vault_keybindings(&self) -> std::collections::BTreeMap<String, String> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .vault_keybindings()
+    }
+
+    /// Sospende il valore del vault di queste chiavi (§23.13): finché sono
+    /// sospese si leggono come se il file non ne parlasse.
+    ///
+    /// **Non emette l'evento** delle impostazioni, e la ragione è che non
+    /// succede a impostazioni cambiate: succede all'apertura, prima che ci sia
+    /// qualcuno in ascolto, e ciò che chi legge vede è un valore che non è mai
+    /// stato altro. Scioglierla invece è un cambiamento come gli altri, e passa
+    /// da [`announce_setting`](Workspace::announce_setting) come tutti.
+    pub fn suspend_settings(&mut self, keys: std::collections::BTreeSet<String>) {
+        self.settings
+            .write()
+            .expect("store di configurazione")
+            .suspend(keys);
+    }
+
+    /// Le chiavi sospese adesso (§23.13).
+    pub fn suspended_settings(&self) -> std::collections::BTreeSet<String> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .suspended()
+            .clone()
+    }
+
+    /// Scioglie la sospensione di queste chiavi — l'utente le ha guardate — e
+    /// **lo dice**, una per una: chi disegna la tastiera rilegge gli accordi
+    /// quando sente cambiare un'impostazione, e un risveglio silenzioso
+    /// lascerebbe la scorciatoia nuova scritta nel pannello e non premibile fino
+    /// alla riapertura.
+    ///
+    /// Prende un elenco e non scioglie tutto perché chi risponde ha risposto su
+    /// ciò che ha visto: una chiave che nessuno gli ha mostrato — perché nessuno
+    /// la dichiara — non è compresa nel sì.
+    pub fn resume_settings(&mut self, keys: &std::collections::BTreeSet<String>) {
+        {
+            let mut store = self.settings.write().expect("store di configurazione");
+            let mut sospese = store.suspended().clone();
+            sospese.retain(|k| !keys.contains(k));
+            store.suspend(sospese);
+        }
+        for key in keys {
+            self.announce_setting(key, SettingScope::Vault);
+        }
+    }
+
+    /// Qualcuno dichiara questa chiave in questo montaggio?
+    ///
+    /// È una domanda diversa da «c'è un valore»: un file può portare la
+    /// scorciatoia di un comando di un componente che oggi è spento, e quella
+    /// chiave non ha uno schema, non si legge e non si scrive. Chi chiede è chi
+    /// deve **mostrarla a qualcuno** (§23.13), e una riga senza schema non ha né
+    /// un titolo da scrivere né un modo di essere azzerata.
+    pub fn setting_is_declared(&self, key: &str) -> bool {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .spec(key)
+            .is_some()
+    }
+
     /// Questa chiave si è dichiarata scrivibile da un programma? `None` = non
     /// è dichiarata affatto, che è un no diverso e va detto diverso.
     ///
