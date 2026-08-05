@@ -963,7 +963,7 @@ impl HostCommands for MemoryHost {
     /// tiene il kernel, che è l'unico che vede passare gli esiti. `None` — cioè
     /// «niente da annullare» — è la risposta vera per un host che non ha mai
     /// eseguito niente, e non un finto successo.
-    fn undo_last(&mut self) -> Result<Option<fub_abi::Text>, PluginError> {
+    fn undo_last(&mut self) -> Result<Option<fub_abi::command::Undone>, PluginError> {
         Ok(None)
     }
 }

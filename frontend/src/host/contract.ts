@@ -650,6 +650,43 @@ export interface CommandOutcome {
   // quel tanto che basta per accendere una voce di menu. Chi annulla invoca
   // `vault.undo`, che è un comando come gli altri.
   undo: Undo | null;
+  // Di N cose, quante e quali non sono riuscite (§23.14). Assente = non è
+  // mancato niente, e NON «non lo so»: chi lo costruisce passa da una porta che
+  // risponde `None` quando l'elenco dei guasti è vuoto, perché un esito che si
+  // dichiara a metà senza esserlo insegna a cliccare via gli avvisi.
+  //
+  // Il `notify` lo dice già a parole. Questo campo esiste perché ciò che una
+  // frase italiana non sa fare è **essere azionabile**: da qui si ricava quale
+  // nota riaprire, e la specie del guasto dice se ha senso riprovare.
+  partial: Partial | null;
+}
+
+// Di N cose, quante e quali non sono riuscite (rispecchia fub_abi::command::Partial).
+//
+// LA QUARTA PARTE NON HA UN CAMPO: `attempted - done - failures.length` sono le
+// cose su cui non è successo niente e nessuno ha detto perché, e ci si arriva in
+// due modi che un nome solo farebbe mentire — c'era *niente da fare* (una nota
+// già in archivio) oppure non sono state *provate* (l'annullamento si è fermato
+// al passo caduto). Chi mostra un esito le somma; chi deve distinguerle guarda
+// da quale operazione il conto è arrivato.
+export interface Partial {
+  attempted: number;
+  done: number;
+  failures: Failure[];
+}
+
+// Una delle cose che non sono riuscite, e perché.
+export interface Failure {
+  // Il documento su cui non è successo, se ce n'era uno. `null` quando il
+  // soggetto non è un documento — una chiave di impostazione, un passo di
+  // annullamento che è un comando — e non quando non si sa: il soggetto sta
+  // comunque dentro `error`. Questo campo esiste perché **qui** ci si possa
+  // attaccare un link, e un link vuole un id, non una frase che lo nomina.
+  subject: string | null;
+  // Un `PluginError` intero e non una stringa: la specie del guasto è metà
+  // dell'informazione, e un `conflict` si riprova mentre un `permission_denied`
+  // no.
+  error: PluginError;
 }
 
 // Come si torna indietro da un'operazione (rispecchia fub_abi::command::Undo).

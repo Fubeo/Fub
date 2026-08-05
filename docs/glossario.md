@@ -200,7 +200,7 @@ spazi. Non è nel vault come contenuto, sta nel *sidecar*, e dalla 0038 è il
 kernel a possederlo — con la migrazione al rename inclusa.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5520`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5582`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
@@ -289,7 +289,7 @@ backlink è un bundle, e a M5 lo sarà un plugin WASM. Esiste perché montare
 doveva avere **una strada sola**, la stessa per chi è nativo e per chi non lo è.
 
 ### capacità
-`HostApi` · [`abi/traits.rs:1352`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md)
+`HostApi` · [`abi/traits.rs:1382`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md)
 
 Ciò che un componente può chiedere all'host: leggere il vault, scriverlo,
 cambiarne la struttura, leggere i propri dati, emettere eventi, interrogare
@@ -349,7 +349,7 @@ rottura deliberata prima del freeze si fa *ritagliandola*, con un commit che la
 tocca e dice perché — così si vede in review.
 
 ### manifest
-`PluginManifest` · [`abi/traits.rs:3544`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`PluginManifest` · [`abi/traits.rs:3574`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e i
 permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria: se
@@ -405,7 +405,7 @@ frase che si legge negandolo la scrive la shell e non il manifest, perché chi
 chiede un permesso non deve poter scrivere la frase con cui glielo si concede.
 
 ### provider
-`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1738`](../crates/fub-abi/src/traits.rs) · —
+`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1768`](../crates/fub-abi/src/traits.rs) · —
 
 Chi implementa un trait del contratto e si registra: è **il** modo in cui Fub
 si estende. Il criterio di tutta la roadmap è che la stragrande maggioranza delle
@@ -441,7 +441,7 @@ accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
 ## Il canale dati
 
 ### canale dati
-`IndexQuery` / `IndexResult` · [`abi/traits.rs:2326`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
+`IndexQuery` / `IndexResult` · [`abi/traits.rs:2356`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
 
 L'unico modo in cui chi disegna chiede dati al kernel: si costruisce una query,
 si ottiene un risultato. Esiste perché una view non deve poter chiamare il
@@ -456,21 +456,21 @@ outline, tag, statistiche — invece che per il testo. È il canale che ha reso 
 pannelli nativi dei `ViewProvider` veri invece che rami privilegiati del kernel.
 
 ### finestra
-`Page` / `Paged<T>` · [`abi/traits.rs:1821`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`Page` / `Paged<T>` · [`abi/traits.rs:1851`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Il modo di chiedere *venti* invece di tutto, con il totale nella risposta.
 `None` resta «tutto», perché chi ha davvero bisogno dell'insieme intero non deve
 inventarsi un tetto; ma senza finestra ogni giro clona il vault.
 
 ### indice
-`IndexProvider` · [`abi/traits.rs:3211`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`IndexProvider` · [`abi/traits.rs:3241`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Chi sa rispondere a una parte delle query. Ce n'è più di uno — il grafo e
 l'anagrafe stanno nel kernel, la ricerca full-text è un provider su tantivy — e
 il canale dati esiste anche per non far sapere a chi chiede quale sia quale.
 
 ### instradamento
-`QueryRoute` · [`abi/traits.rs:2876`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`QueryRoute` · [`abi/traits.rs:2906`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Come il kernel decide **a chi** mandare una query. Si dichiara alla
 registrazione, non si scopre per tentativi: la tabella delle rotte
@@ -485,7 +485,7 @@ mandarne due **insieme**: non è una dichiarazione nel contratto, è una misura 
 la ricerca è passata da 1,0× a 6,8× su otto thread.
 
 ### risultato
-`DocumentMatch` · [`abi/traits.rs:2135`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`DocumentMatch` · [`abi/traits.rs:2165`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Un documento che risponde a una query, con quello che serve per mostrarlo: il
 punteggio, lo snippet, ciò che ha fatto scattare la corrispondenza. È il tipo su
@@ -616,6 +616,21 @@ L'unità di azione dell'app, registrata e non cablata: la palette la mostra, una
 scorciatoia la invoca, un'automazione la chiamerà. La 0013 ha trasformato in
 comandi le azioni strutturali della shell, e sei comandi Tauri sono spariti.
 
+### esito parziale
+`Partial` / `Failure` · [`abi/command.rs:605`](../crates/fub-abi/src/command.rs) · [0101](decisions/0101-una-voce-non-e-un-passo.md)
+
+*Di N cose, quante e quali non sono riuscite.* Non è una terza parola accanto a
+riuscito e fallito: un'operazione a metà **è riuscita** per la parte che ha
+fatto, e chi la annulla annulla quella parte. I guasti stanno uno per uno col
+proprio `PluginError`, perché un conto non dice quale nota riaprire e la specie
+dell'errore dice se ha senso riprovare. Assente vuol dire *non è mancato
+niente*, e non *non lo so*: dichiararsi a metà senza esserlo insegna a cliccare
+via gli avvisi.
+
+Il resto — `attempted - done - failures` — non ha un campo apposta: ci si arriva
+sia perché non c'era **niente da fare**, sia perché non è stato **provato**, e un
+nome solo farebbe mentire uno dei due.
+
 ### cucitura
 `host/` · [`frontend/src/host/ipc.ts`](../frontend/src/host/ipc.ts) · [0015](decisions/0015-la-forma-della-shell.md)
 
@@ -625,7 +640,7 @@ la regola si aggira con una parola — e un test lo verifica leggendo i sorgenti
 Non è stile: è il prerequisito del PWA, del mobile e degli e2e headless.
 
 ### esemplare
-`ViewInstance` · [`abi/traits.rs:1480`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
+`ViewInstance` · [`abi/traits.rs:1510`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
 
 Una particolare apparizione di una view: la stessa specie di pannello può essere
 aperta due volte, e le due hanno stato diverso. La chiave dello stato la compone
@@ -685,7 +700,7 @@ copiare un vault su un altro computer non deve portarsi dietro dove si era
 arrivati a leggere.
 
 ### superficie di vista
-`ViewSurface` · [`abi/traits.rs:1434`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewSurface` · [`abi/traits.rs:1464`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 **Dove** una view può apparire: sidebar sinistra o destra, fondo, area
 principale, modale, barra di stato, ribbon, menu. Il contratto deve poter
@@ -694,15 +709,21 @@ shell di oggi abbia un documento aperto e nessun modello di tab non è
 un'obiezione.
 
 ### undo a due pile
-`Undo` / `UndoStep` · [`abi/command.rs:567`](../crates/fub-abi/src/command.rs) · [0045](decisions/0045-l-undo-ha-due-pile.md)
+`Undo` / `UndoStep` · [`abi/command.rs:712`](../crates/fub-abi/src/command.rs) · [0045](decisions/0045-l-undo-ha-due-pile.md)
 
 Le due pile che **non si fondono**: quella dell'editor (il testo) e quella
 strutturale (rinomina, spostamento, cestino). L'inverso di un'operazione
 strutturale è un comando, non una voce di vocabolario, e `vault.undo` sta su
 `Mod-Alt-z` perché `Mod-z` è dell'editor.
 
+Una voce **non è un passo, è una lista**, e dalla
+[0101](decisions/0101-una-voce-non-e-un-passo.md) porta due conti: se
+l'operazione era già a metà quando è stata fatta, e se l'annullamento si è
+fermato al passo caduto. Se non è cambiato niente resta un errore — è il *mezzo*
+che aveva bisogno di un nome, non il fallimento.
+
 ### view
-`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1532`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1562`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 Un pannello dichiarato dal core: cosa mostra, dove sta, cosa si può fare
 dentro. Backlink, outline, tag e statistiche sono view vere — non rami del

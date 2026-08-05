@@ -1,7 +1,7 @@
 //! [`KernelHost`]: l'host che fa davvero le cose.
 
 use camino::Utf8PathBuf;
-use fub_abi::command::{CommandOutcome, InvokeMode};
+use fub_abi::command::{CommandOutcome, InvokeMode, Undone};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
@@ -9,7 +9,6 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
-use fub_abi::text::Text;
 use fub_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices,
     IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite, TrashEntry,
@@ -381,7 +380,7 @@ impl HostCommands for KernelHost<'_> {
         self.ws.invoke_command_nested(command, args, self.mode)
     }
 
-    fn undo_last(&mut self) -> Result<Option<Text>, PluginError> {
+    fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
         // In simulazione non si annulla: `Guard` lo nega già con la politica
         // `ReadOnly`, e qui c'è la seconda metà della stessa regola per quando
         // l'host gira senza politiche (il core, i banchi). Un annullamento

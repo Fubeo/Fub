@@ -345,3 +345,187 @@ fn svuotare_il_cestino_resta_irreversibile_e_lo_dice() {
         "svuotare il cestino si dichiara irreversibile"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Un'operazione a metà, e i due conti che ne restano (§23.14)
+// ---------------------------------------------------------------------------
+
+/// Invoca e restituisce l'esito intero, invece della sola frase.
+fn esito(
+    ws: &mut Workspace,
+    command: &str,
+    args: serde_json::Value,
+) -> fub_abi::command::CommandOutcome {
+    ws.invoke_command(command, args, InvokeMode::Apply, Actor::User)
+        .unwrap_or_else(|e| panic!("`{command}`: {e}"))
+}
+
+/// **Un'operazione a metà lo dice come dato, non solo come frase.**
+///
+/// Il parziale il vault lo diceva già in tre comandi, e lo diceva **solo dentro
+/// la notifica**: un'automazione che invocava `vault.archive` non aveva modo di
+/// sapere che una nota su due era rimasta indietro, se non leggendo una frase
+/// italiana e cercandoci dentro una parola.
+#[test]
+fn an_operation_that_half_succeeded_says_so_as_data() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("a.md"), "prima\n", WriteBase::Dictated)
+        .expect("scrive");
+
+    // Due note davanti, una sola esiste: la seconda non si archivia, e il
+    // comando invocato risponde `not-found`.
+    let outcome = esito(
+        &mut ws,
+        VAULT_ARCHIVE,
+        serde_json::json!({ "docs": ["a.md", "b.md"] }),
+    );
+    let conto = outcome.partial.expect("una su due è a metà, e si dichiara");
+    assert_eq!(
+        (conto.attempted, conto.done, conto.failed()),
+        (2, 1, 1),
+        "due davanti, una archiviata, una caduta"
+    );
+    assert_eq!(
+        conto.failures[0].subject.as_ref().map(|d| d.as_str()),
+        Some("b.md"),
+        "e il guasto NOMINA la nota: un conto senza il nome non dice quale \
+         riaprire"
+    );
+    assert!(esiste(&ws, "Archivio/a.md"), "l'altra è andata davvero");
+}
+
+/// **Un'operazione riuscita non si dichiara a metà.**
+///
+/// Il controllo negativo di quello sopra, ed è il più importante dei due: una
+/// nota già nella cartella d'archivio è *niente da fare*, non un guasto. Un
+/// esito che si dichiarasse a metà qui insegnerebbe a chi lo legge che gli
+/// avvisi di questa app si cliccano via — che è il modo in cui un avviso smette
+/// di valere.
+#[test]
+fn nothing_missing_means_no_partial_at_all() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("a.md"), "prima\n", WriteBase::Dictated)
+        .expect("scrive");
+    ws.write_document(
+        &DocId::new("Archivio/b.md"),
+        "già là\n",
+        WriteBase::Dictated,
+    )
+    .expect("scrive");
+
+    let outcome = esito(
+        &mut ws,
+        VAULT_ARCHIVE,
+        serde_json::json!({ "docs": ["a.md", "Archivio/b.md"] }),
+    );
+    assert!(
+        outcome.partial.is_none(),
+        "una nota già in archivio non è un guasto: è niente da fare"
+    );
+}
+
+/// **La voce di undo si ricorda che l'operazione era a metà.**
+///
+/// È il danno che la [decisione 0045] aveva dichiarato e nessuno raccoglieva:
+/// *«chi la annulla non sa che stava disfacendo undici note su dodici»*. Il
+/// conto non lo ricopia chi ha scritto il comando — lo appaia l'host quando
+/// mette la voce in pila, che è l'unico momento in cui i due pezzi sono ancora
+/// insieme.
+///
+/// [decisione 0045]: ../../../docs/decisions/0045-l-undo-ha-due-pile.md
+#[test]
+fn undoing_a_half_done_operation_says_it_was_half_done() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("a.md"), "prima\n", WriteBase::Dictated)
+        .expect("scrive");
+
+    esito(
+        &mut ws,
+        VAULT_ARCHIVE,
+        serde_json::json!({ "docs": ["a.md", "b.md"] }),
+    );
+    let detto = annulla(&mut ws);
+    assert!(
+        detto.contains("era già riuscita a metà") && detto.contains("1 su 2"),
+        "annullare deve dire che rimette indietro solo la parte che era \
+         andata; ha detto: {detto}"
+    );
+    assert!(esiste(&ws, "a.md"), "e quella parte torna davvero indietro");
+}
+
+/// **Un annullamento che si ferma a metà lo dice, e non butta ciò che ha
+/// fatto.**
+///
+/// È il difetto più grave dei due, e stava **fuori** dalla voce: il `?` del
+/// ciclo lasciava applicati i passi già fatti, non provava quelli dopo, e
+/// restituiva un errore nudo — mentre la voce era già uscita dalla pila. Chi
+/// annullava un'archiviazione di due note poteva ritrovarne una tornata
+/// indietro, una no, e sullo schermo la parola «fallito».
+///
+/// Qui il secondo passo cade per davvero: al posto della nota archiviata ne è
+/// ricomparsa una con lo stesso nome, quindi rimetterla dov'era è un
+/// `already-exists`. Nessun `mock`: è il caso vero di due app che guardano lo
+/// stesso vault.
+#[test]
+fn an_undo_that_stops_halfway_says_where_it_stopped() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    for id in ["a.md", "b.md"] {
+        ws.write_document(&DocId::new(id), "corpo\n", WriteBase::Dictated)
+            .expect("scrive");
+    }
+    esito(
+        &mut ws,
+        VAULT_ARCHIVE,
+        serde_json::json!({ "docs": ["a.md", "b.md"] }),
+    );
+    assert!(esiste(&ws, "Archivio/a.md") && esiste(&ws, "Archivio/b.md"));
+
+    // Qualcun altro rimette una nota al posto vecchio di `a.md`. I passi
+    // dell'annullamento girano dall'ultima rinomina alla prima, quindi `b.md`
+    // torna indietro e `a.md` no.
+    ws.write_document(&DocId::new("a.md"), "un'altra\n", WriteBase::Dictated)
+        .expect("scrive");
+
+    let outcome = ws
+        .invoke_command(
+            VAULT_UNDO,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("metà lavoro fatto NON è un errore: è un esito parziale");
+    let conto = outcome
+        .partial
+        .expect("l'annullamento si è fermato, e il conto esce");
+    assert_eq!(
+        (conto.attempted, conto.done, conto.failed()),
+        (2, 1, 1),
+        "due passi, uno tornato indietro, uno caduto — e i sette che in un caso \
+         più grande non sarebbero stati nemmeno provati stanno nel resto"
+    );
+    assert!(
+        matches!(conto.failures[0].error, PluginError::AlreadyExists(_)),
+        "e la specie del guasto sopravvive: {:?}",
+        conto.failures[0].error
+    );
+
+    let detto = outcome
+        .notify
+        .and_then(|t| t.as_literal().map(str::to_owned))
+        .expect("una frase c'è sempre");
+    assert!(
+        detto.contains("Annullato a metà") && detto.contains("1 su 2"),
+        "e la frase non dice «Annullato» liscio: {detto}"
+    );
+
+    assert!(esiste(&ws, "b.md"), "il passo riuscito È riuscito");
+    assert_eq!(
+        testo(&ws, "a.md"),
+        "un'altra\n",
+        "e quello caduto non ha cancellato il lavoro di chi ha scritto dopo"
+    );
+}

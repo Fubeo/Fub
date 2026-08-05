@@ -44,7 +44,7 @@
 
 use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    InvokeMode, ParamKind, ParamSpec, PlannedEdit, Undo, UndoStep,
+    Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
 };
 use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::PluginError;
@@ -229,6 +229,13 @@ const D_SETTINGS_EXPORT: &str = "done.settings_export";
 const D_SETTINGS_IMPORT: &str = "done.settings_import";
 const D_SETTINGS_IMPORT_PARTIAL: &str = "done.settings_import_partial";
 const D_UNDONE: &str = "done.undone";
+/// Annullato per intero, ma **l'operazione era già a metà** (§23.14): non è un
+/// guasto di adesso, è la notizia che il giorno in cui è stata fatta non tutto
+/// era riuscito — e quindi non tutto torna indietro.
+const D_UNDONE_OF_PARTIAL: &str = "done.undone_of_partial";
+/// L'annullamento **stesso** si è fermato a un passo, e i passi dopo non sono
+/// stati provati.
+const D_UNDONE_PARTIAL: &str = "done.undone_partial";
 const D_NOTHING_TO_UNDO: &str = "done.nothing_to_undo";
 const P_UNDO: &str = "plan.undo";
 
@@ -261,6 +268,11 @@ const A_FAILED: &str = "failed";
 const A_FOLDER: &str = "folder";
 const A_AT: &str = "at";
 const A_WHAT: &str = "what";
+/// I due conti di un esito parziale (§23.14): quante cose c'erano davanti e
+/// quante sono cambiate. Stanno insieme perché una da sola non si legge —
+/// «undici» non dice niente finché non c'è «su dodici».
+const A_ATTEMPTED: &str = "attempted";
+const A_DONE: &str = "done";
 
 /// Le stringhe dei comandi: quindici titoli, quindici descrizioni,
 /// ventisei etichette di parametro e le righe che un comando scrive quando ha
@@ -613,6 +625,16 @@ fn catalogo_it() -> StringCatalog {
         )
         .with(P_UNDO, "Disferebbe l'ultima operazione annullabile")
         .with(D_UNDONE, "Annullato: {what}")
+        .with(
+            D_UNDONE_OF_PARTIAL,
+            "Annullato: {what} — ma quell'operazione era già riuscita a metà \
+             ({done} su {attempted}), quindi torna indietro solo quella parte.",
+        )
+        .with(
+            D_UNDONE_PARTIAL,
+            "Annullato a metà: {what} · Passi tornati indietro: {done} su \
+             {attempted} · Fermato da: {failed}",
+        )
         .with(D_NOTHING_TO_UNDO, "Niente da annullare")
         .with(U_WIKILINK, "il riferimento a «{text}»")
         .with(U_WIKILINK_MANY, "i {count} riferimenti")
@@ -947,6 +969,16 @@ fn catalogo_en() -> StringCatalog {
         )
         .with(P_UNDO, "Would undo the last undoable operation")
         .with(D_UNDONE, "Undone: {what}")
+        .with(
+            D_UNDONE_OF_PARTIAL,
+            "Undone: {what} — but that operation had only half succeeded \
+             ({done} of {attempted}), so only that part comes back.",
+        )
+        .with(
+            D_UNDONE_PARTIAL,
+            "Half undone: {what} · Steps rolled back: {done} of {attempted} · \
+             Stopped by: {failed}",
+        )
         .with(D_NOTHING_TO_UNDO, "Nothing to undo")
         .with(U_WIKILINK, "the reference to “{text}”")
         .with(U_WIKILINK_MANY, "the {count} references")
@@ -1308,20 +1340,21 @@ fn vault_replace(
     // riuscito si nomina — un conflitto qui è la cosa che il piano esisteva per
     // rendere visibile, non un dettaglio da inghiottire.
     let mut fatte = 0usize;
-    let mut falliti: Vec<String> = Vec::new();
+    let mut falliti: Vec<Failure> = Vec::new();
     // L'inverso si raccoglie **mentre si scrive**, non ricalcolandolo dopo: il
     // rapporto di ogni modifica porta le coordinate nuove e il testo tolto, e
     // `EditReport::inverse` ne fa una richiesta come le altre (decisione 0008).
     // Ricalcolarlo dopo vorrebbe dire rileggere N documenti e cercarci dentro
     // il testo sostituito — cioè indovinare quali occorrenze erano le nostre.
     let mut indietro: Vec<PlannedEdit> = Vec::new();
+    let davanti = planned.len();
     for PlannedEdit { doc, edit } in planned {
         match host.apply_edit(&doc, edit) {
             Ok(report) => {
                 fatte += 1;
                 indietro.push(PlannedEdit::new(doc, report.inverse()));
             }
-            Err(e) => falliti.push(format!("{doc} ({e})")),
+            Err(e) => falliti.push(Failure::of(doc, e)),
         }
     }
     let notify = if falliti.is_empty() {
@@ -1332,10 +1365,15 @@ fn vault_replace(
             vec![
                 Arg::int(A_OCCURRENCES, occorrenze as i64),
                 Arg::int(A_NOTES, fatte as i64),
-                Arg::text(A_FAILED, falliti.join(", ")),
+                Arg::text(A_FAILED, perche(&falliti)),
             ],
         )
     };
+    // Lo stesso conto, come **dato**: la frase qui sopra la legge un umano, e
+    // fino alla §23.14 era l'unica forma in cui questa notizia esisteva —
+    // un'automazione che invocava `vault.replace` non aveva modo di sapere che
+    // undici note su dodici erano cambiate, se non leggendo italiano.
+    let conto = Partial::of(davanti, fatte, falliti);
     // Anche una sostituzione **parziale** è annullabile, e per ciò che è
     // riuscito: è il verso giusto, perché è proprio quando qualcosa è andato
     // storto che si vuole tornare indietro. Le note fallite non hanno un
@@ -1344,7 +1382,9 @@ fn vault_replace(
         conto2(U_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, fatte),
         indietro,
     );
-    Ok(CommandOutcome::notify(notify).undoable(undo))
+    Ok(CommandOutcome::notify(notify)
+        .undoable(undo)
+        .partially(conto))
 }
 
 // ---------------------------------------------------------------------------
@@ -1571,15 +1611,78 @@ fn vault_undo(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome
     if mode.is_dry_run() {
         return Ok(piano(Text::key(P_UNDO), Vec::new()));
     }
-    match host.undo_last()? {
-        Some(cosa) => Ok(CommandOutcome::notify(Text::message(
-            D_UNDONE,
-            vec![Arg::text(A_WHAT, cosa.as_literal().unwrap_or_default())],
-        ))),
+    let Some(fatto) = host.undo_last()? else {
         // Niente da annullare non è un errore: è la risposta normale a un vault
         // appena aperto, e chi la riceve ha una frase da mostrare.
-        None => Ok(CommandOutcome::notify(Text::key(D_NOTHING_TO_UNDO))),
-    }
+        return Ok(CommandOutcome::notify(Text::key(D_NOTHING_TO_UNDO)));
+    };
+    let cosa = Arg::text(A_WHAT, fatto.label.as_literal().unwrap_or_default());
+
+    // I due conti dicono cose diverse e **si scelgono in quest'ordine** (§23.14):
+    // se l'annullamento si è fermato, quella è la notizia di adesso e va detta
+    // per prima; se invece è andato per intero, resta da dire che l'operazione
+    // che ha disfatto era già a metà per conto suo. Dirle tutte e due in una
+    // riga sola vorrebbe dire quattro numeri in una notifica, che è il modo di
+    // non farne leggere nessuno.
+    //
+    // Il `partial` dell'esito porta **sempre** quello dell'annullamento, anche
+    // quando la frase parla dell'operazione: è ciò che è successo adesso, ed è
+    // l'unico dei due su cui chi automatizza può fare qualcosa.
+    let messaggio = match (&fatto.replay, &fatto.operation) {
+        (Some(replay), _) => Text::message(
+            D_UNDONE_PARTIAL,
+            vec![
+                cosa,
+                Arg::int(A_DONE, replay.done as i64),
+                Arg::int(A_ATTEMPTED, replay.attempted as i64),
+                Arg::text(A_FAILED, perche(&replay.failures)),
+            ],
+        ),
+        (None, Some(operazione)) => Text::message(
+            D_UNDONE_OF_PARTIAL,
+            vec![
+                cosa,
+                Arg::int(A_DONE, operazione.done as i64),
+                Arg::int(A_ATTEMPTED, operazione.attempted as i64),
+            ],
+        ),
+        (None, None) => Text::message(D_UNDONE, vec![cosa]),
+    };
+    Ok(CommandOutcome::notify(messaggio).partially(fatto.replay))
+}
+
+/// Una chiave di impostazione che non è passata, col perché **e la sua specie**.
+///
+/// Il soggetto non è un documento — è una chiave — quindi va dentro la frase e
+/// non nel [`Failure::subject`], che esiste perché chi disegna ci attacchi un
+/// link e un link vuole un `DocId`. Ciò che si guadagna rispetto al
+/// `format!("`{key}` ({e})")` di prima è la **variante**: un
+/// [`PermissionDenied`](PluginError::PermissionDenied) resta un permesso negato
+/// invece di appiattirsi in una stringa, e chi mostra l'esito può dire
+/// «l'amministratore l'ha bloccata» invece di «qualcosa è andato storto».
+fn chiave_saltata(key: &str, mut e: PluginError) -> Failure {
+    let dentro = e.message().to_string();
+    *e.message_mut() = format!("`{key}` ({dentro})").into();
+    Failure::other(e)
+}
+
+/// I perché dei guasti, in una riga: `«nota.md» (il documento è cambiato…)`.
+///
+/// Restano in italiano come le ragioni dell'import delle impostazioni, e per la
+/// stessa ragione scritta lì: metà di queste frasi vengono dal kernel, che
+/// scrive italiano cablato, e tradurre l'altra metà lascerebbe un messaggio
+/// mezzo in una lingua e mezzo nell'altra. Ciò che *è* traducibile viaggia
+/// intanto come dato, in [`CommandOutcome::partial`], dove chi disegna lo trova
+/// intero.
+fn perche(guasti: &[Failure]) -> String {
+    guasti
+        .iter()
+        .map(|g| match &g.subject {
+            Some(doc) => format!("«{doc}» ({})", g.error),
+            None => g.error.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn trash_empty(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
@@ -1635,7 +1738,7 @@ fn vault_archive(
 
     let mut plans: Vec<CommandPlan> = Vec::new();
     let mut fatte = 0usize;
-    let mut falliti: Vec<String> = Vec::new();
+    let mut falliti: Vec<Failure> = Vec::new();
     // I passi dell'annullamento della macro sono quelli dei comandi invocati.
     // È la terza cosa che si compone gratis passando da `run_command` — dopo il
     // piano e il lotto — e la sola che questa funzione deve **girare**: si
@@ -1663,7 +1766,7 @@ fn vault_archive(
                     indietro.extend(undo.steps);
                 }
             }
-            Err(e) => falliti.push(format!("{doc} ({e})")),
+            Err(e) => falliti.push(Failure::of(doc.clone(), e)),
         }
     }
     indietro.reverse();
@@ -1693,12 +1796,19 @@ fn vault_archive(
     let notify = if falliti.is_empty() {
         archivio(D_ARCHIVE, fatte, &folder, None)
     } else {
-        archivio(D_ARCHIVE_PARTIAL, fatte, &folder, Some(falliti.join(", ")))
+        archivio(D_ARCHIVE_PARTIAL, fatte, &folder, Some(perche(&falliti)))
     };
-    Ok(CommandOutcome::notify(notify).undoable(Undo {
-        label: archivio(U_ARCHIVE, fatte, &folder, None),
-        steps: indietro,
-    }))
+    // `docs.len()` e non `fatte + falliti.len()`: le note già nella cartella
+    // sono state guardate e non c'era niente da fare, il che è esattamente il
+    // resto che `Partial` lascia senza un campo. Contarle fuori direbbe «undici
+    // su undici» di un gesto che l'utente ha fatto su dodici note.
+    let conto = Partial::of(docs.len(), fatte, falliti);
+    Ok(CommandOutcome::notify(notify)
+        .undoable(Undo {
+            label: archivio(U_ARCHIVE, fatte, &folder, None),
+            steps: indietro,
+        })
+        .partially(conto))
 }
 
 // ---------------------------------------------------------------------------
@@ -2122,21 +2232,28 @@ fn settings_import(
         .map(|e| (e.spec.key.clone(), e))
         .collect();
 
-    let (mut applicate, mut saltate) = (0usize, Vec::new());
+    let davanti = object.len();
+    let (mut applicate, mut saltate): (usize, Vec<Failure>) = (0, Vec::new());
     for (key, raw_value) in object {
         let Some(entry) = dichiarate.get(key) else {
-            saltate.push(format!("`{key}` (nessuno la dichiara)"));
+            saltate.push(chiave_saltata(
+                key,
+                PluginError::BadArgs("nessuno la dichiara".into()),
+            ));
             continue;
         };
         let value: SettingValue = match serde_json::from_value(raw_value.clone()) {
             Ok(value) => value,
             Err(_) => {
-                saltate.push(format!("`{key}` (valore illeggibile)"));
+                saltate.push(chiave_saltata(
+                    key,
+                    PluginError::BadArgs("valore illeggibile".into()),
+                ));
                 continue;
             }
         };
         if let Some(why) = entry.spec.kind.rejects(&value) {
-            saltate.push(format!("`{key}` ({why})"));
+            saltate.push(chiave_saltata(key, PluginError::BadArgs(why.into())));
             continue;
         }
         // Il cancello della chiave si applica **anche in simulazione**, o il
@@ -2146,7 +2263,7 @@ fn settings_import(
         // saltata». Un piano che non è ciò che succederebbe non è un piano
         // (decisione 0010).
         if let Err(e) = nega_se_non_scrivibile(entry) {
-            saltate.push(format!("`{key}` ({e})"));
+            saltate.push(chiave_saltata(key, e));
             continue;
         }
         if mode.is_dry_run() {
@@ -2158,7 +2275,7 @@ fn settings_import(
             // Il rifiuto più importante è questo, e va **detto**: un file di
             // impostazioni che passa di mano non sposta le chiavi che un
             // programma non può scrivere.
-            Err(e) => saltate.push(format!("`{key}` ({e})")),
+            Err(e) => saltate.push(chiave_saltata(key, e)),
         }
     }
 
@@ -2179,11 +2296,12 @@ fn settings_import(
                 // tradurre le due righe di qui lascerebbe una frase mezza in
                 // una lingua e mezza nell'altra, che è peggio di una
                 // dichiaratamente in una sola.
-                Arg::text(A_REASONS, saltate.join(", ")),
+                Arg::text(A_REASONS, perche(&saltate)),
             ],
         )
     };
-    let outcome = CommandOutcome::notify(messaggio);
+    let outcome =
+        CommandOutcome::notify(messaggio).partially(Partial::of(davanti, applicate, saltate));
     Ok(if mode.is_dry_run() {
         outcome.with_effect(CommandEffect::Plan(CommandPlan {
             summary: conto(P_SETTINGS_IMPORT, applicate),

@@ -26,6 +26,7 @@ import type {
 import { pageName } from "../rules/organizer";
 import { errorText } from "../host/errors";
 import { intrappolaFuoco } from "./a11y";
+import type { Tono } from "./notify";
 import { type Chiave, t } from "../i18n/strings";
 import { allCommands, loadKeyOverrides, type CommandEntry } from "./commands";
 import { state } from "../state/store";
@@ -34,7 +35,11 @@ import { state } from "../state/store";
 /// all'utente. Il resto (invocare, disegnare, chiedere) è suo.
 export interface PaletteHost {
   onEffect(effect: CommandEffect): Promise<void> | void;
-  notify(message: string): void;
+  // Il tono è **facoltativo e vuole essere passato**: un esito a metà non deve
+  // avere lo stesso colore di uno riuscito, o l'unica differenza fra «dodici
+  // note archiviate» e «undici su dodici, la dodicesima no» è una frase più
+  // lunga che nessuno rilegge (§23.14).
+  notify(message: string, tono?: Tono): void;
   listDocuments(): Promise<string[]>;
 }
 
@@ -579,7 +584,15 @@ function mostraPiano(
 }
 
 async function consegna(outcome: CommandOutcome, host: PaletteHost) {
-  if (outcome.notify) host.notify(outcome.notify);
+  // Un'operazione a metà si **vede** a metà (§23.14). Il `notify` lo dice già a
+  // parole — «Note archiviate: 11 · Non spostate: …» — ma con lo stesso colore
+  // di un successo pieno, e il colore è la cosa che si legge per prima: chi
+  // scorre via un avviso verde non torna indietro a contare.
+  //
+  // Il tono lo decide il campo e non la frase, ed è tutta la differenza: prima
+  // della §23.14 questa riga avrebbe dovuto cercare una parola dentro un
+  // messaggio già tradotto per sapere com'era andata.
+  if (outcome.notify) host.notify(outcome.notify, outcome.partial ? "guasto" : "info");
   await host.onEffect(outcome.effect);
 }
 

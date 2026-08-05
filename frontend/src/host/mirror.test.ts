@@ -10,6 +10,7 @@ import type {
   DocPosition,
   DocumentMatch,
   EmbedContent,
+  Failure,
   EventMask,
   IndexQuery,
   IndexResult,
@@ -17,6 +18,7 @@ import type {
   UndoStep,
   NeighborRef,
   OpenVaults,
+  Partial,
   RenderedDocument,
   ResolvedRef,
   Actor,
@@ -600,7 +602,17 @@ const RECORD_KEYS: Record<string, string[]> = {
     params: true,
     scope: true,
   }),
-  CommandOutcome: keysOf<CommandOutcome>({ notify: true, effect: true, undo: true }),
+  CommandOutcome: keysOf<CommandOutcome>({
+    notify: true,
+    effect: true,
+    undo: true,
+    partial: true,
+  }),
+  // L'esito parziale (§23.14). I guasti si guardano uno per uno perché è
+  // l'unica parte azionabile — «undici su dodici» non dice quale nota riaprire
+  // — e un campo nuovo di là qui deve fermarsi.
+  Partial: keysOf<Partial>({ attempted: true, done: true, failures: true }),
+  Failure: keysOf<Failure>({ subject: true, error: true }),
   // L'errore (§12.2): due chiavi, ed è la forma su cui la shell rama. Se Rust
   // ne aggiungesse una terza senza che di qua se ne sappia niente, sarebbe
   // un'informazione che arriva a chi disegna e che chi disegna non guarda.

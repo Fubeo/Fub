@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use fub_abi::command::CommandOutcome;
+use fub_abi::command::{CommandOutcome, Undone};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
@@ -16,7 +16,6 @@ use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::options::permission;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
-use fub_abi::text::Text;
 use fub_abi::traits::{
     DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices,
     IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, PluginPermissions, SettingsRead,
@@ -983,7 +982,7 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         self.inner.run_command(command, args)
     }
 
-    fn undo_last(&mut self) -> Result<Option<Text>, PluginError> {
+    fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
         // **Due** controlli, e non è pignoleria. Annullare è invocare — i passi
         // di un annullamento sono per metà comandi — ma è anche, sempre e per
         // definizione, **scrivere**: e ciò che scrive non passa dal recinto del
