@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
-// **Un pannello non è una view**, e per sette superfici su otto le due cose si
+// **Un pannello non è una view**, e per nove superfici su dieci le due cose si
 // chiamano uguale.
+//
+// Diceva «sette su otto», e le superfici erano dieci da prima che questa riga
+// fosse scritta. Nessuno se n'era accorto perché il numero era **dedotto**: non
+// c'era niente che confrontasse il conto di questo commento con l'enum del
+// contratto. Adesso c'è, in fondo al file, e legge il mirror generato invece di
+// ricordarselo — la §23.2 ha chiuso su questo, che è la stessa forma del §16.7
+// («esaustivo a memoria, non per costruzione») vista dal lato della shell.
 //
 // È la trappola che la §3.3 ha aperto e in cui questo repo è caduto subito: fino
 // all'area principale un pannello *era* una view — stesso id, uno per uno —
@@ -16,6 +23,7 @@
 // suoi.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import html from "../../index.html?raw";
+import enumsGenerati from "../host/enums.generated?raw";
 import type { ViewSpec } from "../host/contract";
 
 const renderView = vi.fn(async () => ({ node: "empty_state", label: "vuoto", key: null }));
@@ -151,4 +159,74 @@ describe("le superfici che questa shell ospita da sé", () => {
     expect(renderView).toHaveBeenCalledWith("tags", "tags", null);
     expect(document.getElementById("views-left")!.children).toHaveLength(1);
   });
+});
+
+/// Ogni superficie che il contratto nomina è **classificata** da questa shell:
+/// ospitata in un contenitore, aperta in un riquadro, o non ospitata con una
+/// ragione da dire a chi ha scritto la view.
+///
+/// L'elenco non è scritto qui: si estrae dal mirror generato
+/// (`host/enums.generated.ts`, decisione 0053), che viene dall'`enum` di
+/// `fub-abi`. È la differenza che la §23.2 ha misurato — un presidio esaustivo
+/// **per costruzione** invece che a memoria — ed è la ragione per cui questo
+/// blocco esiste: il `switch` di `surfaceContainer` lo tiene già onesto il
+/// compilatore, ma il compilatore non vede che tre superfici tornano `null` e
+/// solo due hanno una ragione scritta. Quella terza è `main`, che è ospitata da
+/// un riquadro e non da un contenitore, e la differenza fra «non ancora» e «non
+/// si può» è tutta lì.
+///
+/// Chi aggiunge una superficie al contratto trova questo rosso prima di M5.
+describe("ogni superficie del contratto è classificata", () => {
+  /// Le superfici lette dal mirror, nell'ordine in cui il contratto le dichiara.
+  const DAL_CONTRATTO = [
+    .../export type ViewSurface =([\s\S]*?);/.exec(enumsGenerati)![1].matchAll(/"([a-z_]+)"/g),
+  ].map((m) => m[1]);
+
+  /// Dove finisce una view che dichiara quella superficie. `null` vuol dire che
+  /// la shell non la ospita e lo **dice**, invece di perderla in silenzio.
+  const ATTESE: Record<string, string | null> = {
+    left_sidebar: "views-left",
+    right_sidebar: "views-right",
+    bottom: "views-bottom",
+    status_bar: "views-status",
+    ribbon: "views-ribbon",
+    modal: "views-modal",
+    settings_tab: "views-settings",
+    main: "riquadro",
+    menu: null,
+    context_menu: null,
+  };
+
+  it("il mirror generato e questo banco parlano delle stesse superfici", () => {
+    expect(DAL_CONTRATTO.length).toBeGreaterThan(0);
+    expect([...DAL_CONTRATTO].sort()).toEqual(Object.keys(ATTESE).sort());
+  });
+
+  for (const surface of Object.keys(ATTESE)) {
+    const dove = ATTESE[surface];
+
+    it(`\`${surface}\` finisce ${dove === null ? "in un avviso con la sua ragione" : `in \`${dove}\``}`, async () => {
+      listViews.mockResolvedValueOnce([spec("prova", surface as ViewSpec["surface"])]);
+      const views = await moduli();
+      await views.mountDeclaredViews();
+
+      if (dove === "riquadro") {
+        // L'area principale si dichiara e aspetta: non è montata, è
+        // **disponibile**. È la strada che la 0079 ha aperto e che la §23.2 ha
+        // verificato esistere davvero — un riquadro tiene una view, non per
+        // forza un documento.
+        expect(views.viewPrincipali().map((s) => s.id)).toEqual(["prova"]);
+        return;
+      }
+
+      expect(views.viewPrincipali()).toHaveLength(0);
+      if (dove === null) {
+        // Non ospitata: nessun contenitore la prende, e nessuno la monta di
+        // nascosto altrove.
+        expect(renderView).not.toHaveBeenCalled();
+        return;
+      }
+      expect(document.getElementById(dove)!.children).toHaveLength(1);
+    });
+  }
 });

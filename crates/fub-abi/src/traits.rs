@@ -1549,6 +1549,34 @@ pub enum ViewSurface {
     SettingsTab,
 }
 
+impl ViewSurface {
+    /// Ogni superficie, una volta sola.
+    ///
+    /// Esiste per la stessa ragione di `Capability::ALL`: tutto ciò che vuole
+    /// dire qualcosa su **tutte** le superfici sta a valle di questo elenco, e
+    /// senza di lui lo direbbe a memoria. Il §16.7 chiama quella forma col suo
+    /// nome — *esaustivo a memoria, non per costruzione* — e qui aveva già
+    /// sbagliato: l'intestazione del banco della shell contava «sette superfici
+    /// su otto» quando erano dieci, e nessun presidio se n'era accorto perché
+    /// nessuno confrontava il conto con l'enum.
+    ///
+    /// L'ordine è quello della dichiarazione. Chi aggiunge una variante la
+    /// aggiunge anche qui, e il presidio dei discriminanti glielo ricorda in
+    /// rosso invece che a M5.
+    pub const ALL: [ViewSurface; 10] = [
+        ViewSurface::LeftSidebar,
+        ViewSurface::RightSidebar,
+        ViewSurface::Bottom,
+        ViewSurface::Main,
+        ViewSurface::Modal,
+        ViewSurface::StatusBar,
+        ViewSurface::Ribbon,
+        ViewSurface::Menu,
+        ViewSurface::ContextMenu,
+        ViewSurface::SettingsTab,
+    ];
+}
+
 /// Un esemplare vivo di una view: *quale* view, *quale* esemplare, e con quali
 /// parametri.
 ///
@@ -4245,6 +4273,76 @@ pub trait Plugin: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **`ViewSurface::ALL` copre ogni superficie una volta sola.**
+    ///
+    /// Stessa forma — e stessa aritmetica — del presidio dei discriminanti di
+    /// `Capability::ALL`: le varianti sono senza payload, quindi i discriminanti
+    /// sono contigui da zero, e pretendere che quelli di `ALL` siano
+    /// esattamente `0..len` vieta insieme i duplicati e i buchi.
+    ///
+    /// Serve perché chi itera le superfici lo fa per **classificarle** — dove
+    /// la shell le ospita, dove il dogfooding arriva — e una superficie che
+    /// sparisse da qui sparirebbe da tutte quelle classificazioni restando
+    /// verde. È il modo in cui un elenco tenuto a memoria mente: non dicendo il
+    /// falso, ma tacendo una riga.
+    ///
+    /// **L'aritmetica da sola non basta, e lo si è scoperto provandola rossa.**
+    /// Togliere una riga *in mezzo* è rosso, e un doppione è rosso; togliere
+    /// l'**ultima** e far tornare la lunghezza a nove no — `visti` diventa
+    /// `[0..8]` e `attesi` pure. Cioè restava scoperto proprio il caso che
+    /// capita davvero: aggiungo una variante in fondo all'enum e mi dimentico
+    /// `ALL`. Un conto sa dire se un elenco è coerente **con sé stesso**; non sa
+    /// quante varianti esistano fuori di lui. Quello lo sa solo il compilatore,
+    /// ed è il mestiere di `indice_dichiarato`.
+    fn indice_dichiarato(surface: ViewSurface) -> usize {
+        // Esaustivo apposta e senza `_`: è tutto ciò che questa funzione fa. Una
+        // variante nuova non compila finché non le si dà un posto qui, e a quel
+        // punto `ALL` che non la contenesse sarebbe rosso di sotto.
+        match surface {
+            ViewSurface::LeftSidebar => 0,
+            ViewSurface::RightSidebar => 1,
+            ViewSurface::Bottom => 2,
+            ViewSurface::Main => 3,
+            ViewSurface::Modal => 4,
+            ViewSurface::StatusBar => 5,
+            ViewSurface::Ribbon => 6,
+            ViewSurface::Menu => 7,
+            ViewSurface::ContextMenu => 8,
+            ViewSurface::SettingsTab => 9,
+        }
+    }
+
+    #[test]
+    fn i_discriminanti_coprono_ogni_superficie() {
+        assert_eq!(
+            ViewSurface::ALL.len(),
+            indice_dichiarato(ViewSurface::SettingsTab) + 1,
+            "`ViewSurface::ALL` è più corto dell'enum: c'è una variante che il \
+             compilatore conosce e che l'elenco non nomina. È il caso che \
+             l'aritmetica qui sotto non vede — togliere l'ultima riga e far \
+             tornare la lunghezza — e che il §16.7 chiama *esaustivo a memoria*."
+        );
+        for &surface in &ViewSurface::ALL {
+            assert_eq!(
+                ViewSurface::ALL[indice_dichiarato(surface)],
+                surface,
+                "`{surface:?}` non sta nell'elenco al posto che il contratto le \
+                 dà: `ALL` e la dichiarazione dell'enum si sono disallineati."
+            );
+        }
+
+        let mut visti: Vec<u16> = ViewSurface::ALL.iter().map(|&s| s as u16).collect();
+        visti.sort_unstable();
+        let attesi: Vec<u16> = (0..ViewSurface::ALL.len() as u16).collect();
+        assert_eq!(
+            visti, attesi,
+            "`ViewSurface::ALL` non copre una volta sola ogni superficie \
+             dell'enum: o una riga è duplicata, o la superficie nuova non è \
+             stata aggiunta e la lunghezza è stata fatta tornare con un \
+             doppione."
+        );
+    }
 
     #[test]
     fn the_abi_version_rule_rejects_other_majors_and_newer_minors() {

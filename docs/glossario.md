@@ -403,12 +403,23 @@ rottura deliberata prima del freeze si fa *ritagliandola*, con un commit che la
 tocca e dice perché — così si vede in review.
 
 ### manifest
-`PluginManifest` · [`abi/traits.rs:3628`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`PluginManifest` · [`abi/traits.rs:3656`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e i
 permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria: se
 si dichiarasse solo chi non esiste ancora, il punto di applicazione non sarebbe
 provato da nessuno.
+
+### metro del guest
+— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md)
+
+Le domande con cui si decide se una cosa può essere **solo** un guest. Le prime
+tre pesano un **costo** — posizione rispetto al prestito, frequenza × payload,
+prima o dopo la scrittura — e chi inciampa in una sola non può esserlo. La
+**quarta**, *se la superficie esiste*, non pesa niente: nomina chi le passa tutte
+e resta fuori lo stesso, perché una porta non c'è. È arrivata dopo, misurando: un
+metro che sa dire solo «quanto costa» lascia quel caso non vietato, non caro e
+non previsto.
 
 ### permesso
 `permission::*` · [`abi/options.rs:18`](../crates/fub-abi/src/options.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
@@ -459,7 +470,7 @@ frase che si legge negandolo la scrive la shell e non il manifest, perché chi
 chiede un permesso non deve poter scrivere la frase con cui glielo si concede.
 
 ### provider
-`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1822`](../crates/fub-abi/src/traits.rs) · —
+`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1850`](../crates/fub-abi/src/traits.rs) · —
 
 Chi implementa un trait del contratto e si registra: è **il** modo in cui Fub
 si estende. Il criterio di tutta la roadmap è che la stragrande maggioranza delle
@@ -495,7 +506,7 @@ accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
 ## Il canale dati
 
 ### canale dati
-`IndexQuery` / `IndexResult` · [`abi/traits.rs:2410`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
+`IndexQuery` / `IndexResult` · [`abi/traits.rs:2438`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
 
 L'unico modo in cui chi disegna chiede dati al kernel: si costruisce una query,
 si ottiene un risultato. Esiste perché una view non deve poter chiamare il
@@ -510,21 +521,21 @@ outline, tag, statistiche — invece che per il testo. È il canale che ha reso 
 pannelli nativi dei `ViewProvider` veri invece che rami privilegiati del kernel.
 
 ### finestra
-`Page` / `Paged<T>` · [`abi/traits.rs:1905`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`Page` / `Paged<T>` · [`abi/traits.rs:1933`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Il modo di chiedere *venti* invece di tutto, con il totale nella risposta.
 `None` resta «tutto», perché chi ha davvero bisogno dell'insieme intero non deve
 inventarsi un tetto; ma senza finestra ogni giro clona il vault.
 
 ### indice
-`IndexProvider` · [`abi/traits.rs:3295`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`IndexProvider` · [`abi/traits.rs:3323`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Chi sa rispondere a una parte delle query. Ce n'è più di uno — il grafo e
 l'anagrafe stanno nel kernel, la ricerca full-text è un provider su tantivy — e
 il canale dati esiste anche per non far sapere a chi chiede quale sia quale.
 
 ### instradamento
-`QueryRoute` · [`abi/traits.rs:2960`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`QueryRoute` · [`abi/traits.rs:2988`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Come il kernel decide **a chi** mandare una query. Si dichiara alla
 registrazione, non si scopre per tentativi: la tabella delle rotte
@@ -539,7 +550,7 @@ mandarne due **insieme**: non è una dichiarazione nel contratto, è una misura 
 la ricerca è passata da 1,0× a 6,8× su otto thread.
 
 ### risultato
-`DocumentMatch` · [`abi/traits.rs:2219`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`DocumentMatch` · [`abi/traits.rs:2247`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Un documento che risponde a una query, con quello che serve per mostrarlo: il
 punteggio, lo snippet, ciò che ha fatto scattare la corrispondenza. È il tipo su
@@ -694,7 +705,7 @@ la regola si aggira con una parola — e un test lo verifica leggendo i sorgenti
 Non è stile: è il prerequisito del PWA, del mobile e degli e2e headless.
 
 ### esemplare
-`ViewInstance` · [`abi/traits.rs:1564`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
+`ViewInstance` · [`abi/traits.rs:1592`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
 
 Una particolare apparizione di una view: la stessa specie di pannello può essere
 aperta due volte, e le due hanno stato diverso. La chiave dello stato la compone
@@ -753,6 +764,16 @@ della **macchina** e non nel vault, perché non è una proprietà del contenuto 
 copiare un vault su un altro computer non deve portarsi dietro dove si era
 arrivati a leggere.
 
+### superficie di scrittura
+`ViewSurface::Main` · [`abi/traits.rs:1518`](../crates/fub-abi/src/traits.rs) · [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md)
+
+L'editor visto come una superficie che **si presta**: *«l'editor è della shell»*
+vuol dire questo editor, non l'editing, e un terzo che porti la propria
+esperienza di scrittura — una modalità modale, un editor strutturato — è un
+cliente previsto. Non vietata, **non attrezzata**: mancano un evento di tastiera
+nel contratto e una via di disegno non riservata a `Trust::Core`, ed è un *buco
+dichiarato*, non un divieto.
+
 ### superficie di vista
 `ViewSurface` · [`abi/traits.rs:1518`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
@@ -777,7 +798,7 @@ fermato al passo caduto. Se non è cambiato niente resta un errore — è il *me
 che aveva bisogno di un nome, non il fallimento.
 
 ### view
-`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1616`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1644`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 Un pannello dichiarato dal core: cosa mostra, dove sta, cosa si può fare
 dentro. Backlink, outline, tag e statistiche sono view vere — non rami del
@@ -786,6 +807,15 @@ kernel — ed è la prova che il canale dati basta.
 ---
 
 ## Il metodo
+
+### buco dichiarato
+— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md)
+
+Un fatto sulla forma del contratto che chi legge dedurrebbe **al contrario**,
+scritto nel posto in cui ci si inciampa mentre ci si chiede se una cosa si può —
+non in fondo a un verbale e non come casella da spuntare. Non entra in nessun
+totale e non è lavoro rimandato: è ciò che si sarebbe scoperto dopo. Sono
+**due**: `plugin_data_dir` (0064) e la superficie di scrittura (0104).
 
 ### giro
 — · [todo.md](todo.md) · —

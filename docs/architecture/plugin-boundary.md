@@ -862,6 +862,70 @@ un'opinione sul valore di una feature.
 Chi inciampa in **una sola** delle tre non può essere *solo* un guest. Fuori da
 qui l'arena è un pedaggio che non si vede, e la regola non deve mangiarsi tutto.
 
+**La quarta voce, e perché è arrivata dopo.** Le tre di sopra misurano un
+**costo**: quanto tiene il vault, quanto attraversa, quando arriva. Sono le
+domande giuste per chi vuole fare da guest *ciò che il contratto sa già dire*, e
+per tre anni di decisioni sono bastate. Ma un metro che pesa solo il costo non
+sa nominare chi non passa perché **non c'è una porta**, e allora quel caso non
+risulta da nessuna parte: non è vietato, non è caro, non è impossibile — è
+semplicemente non previsto, e lo si scopre scrivendolo.
+
+4. **Se la superficie esiste.** Un plugin può occupare una superficie solo se il
+   contratto ne nomina una che gli serve, e solo se ciò che ci disegna sa
+   ricevere ciò che gli serve. `ViewSurface` ne nomina dieci e sono tutte di
+   **ancoraggio** — dicono *dove* una view si attacca, non *cosa* può fare
+   dentro. Chi ha bisogno di un gesto che il contratto non trasporta non
+   inciampa in nessuna delle tre voci di sopra: le passa tutte, e resta fuori.
+
+**Il caso che la quarta voce trova, ed è un buco dichiarato.** È la **superficie
+di scrittura**, cioè l'editor, e non è vietata a un terzo: è **non attrezzata**,
+il che è un'altra cosa e va detta con le sue parole.
+
+Ciò che c'è già, ed è più di quanto sembri: un plugin di terzi ha
+`VaultWrite::apply_edit`, quindi **può scrivere il testo di una nota**; ha
+`ViewSurface::Main`, che dalla [0079](../decisions/0079-il-grafo-esce-dall-overlay.md)
+è ospitata davvero, e un riquadro tiene una tab di *view* e non per forza un
+documento; ha il `pane` del `ViewContext` dalla
+[0007](../decisions/0007-contesto-di-sessione.md), quindi sa dove sta; e dalla
+[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md) sa leggere le
+selezioni. La strada per il riquadro esiste, ed è percorribile oggi.
+
+Ciò che manca è **due cose, e nessuna delle due è stata decisa**. La prima: nel
+contratto **non esiste nessun evento di tastiera** — non un `KeyEvent`, non una
+`key`, niente. Un provider riceve `UiAction`, cioè un gesto già interpretato da
+qualcun altro; sotto una superficie di scrittura l'interpretazione *è* il lavoro.
+La seconda: `UiNode` è dichiarativo per costruzione, i suoi nodi di testo
+(`TextInput`, `TextArea`) non hanno cursore né selezione, e `Html`/`WebView` sono
+riservati a `Trust::Core` — cioè la via d'uscita che un terzo userebbe per
+disegnarsi la propria superficie è chiusa a chiave, e per ottime ragioni che
+riguardano il contenuto attivo e non l'editing.
+
+**La decisione, perché una riga che dice «si vedrà» non serve a nessuno.** «L'editor
+è della shell» vuol dire **questo** editor, non *l'editing*. La superficie si
+presta: un terzo che porti la propria esperienza di scrittura — una modalità
+modale, un editor strutturato, una tela di scrittura — è un cliente previsto, non
+un abuso, e il giorno in cui arriva la strada che percorre è quella di sopra più
+le due porte che mancano. Non sono aperte oggi perché nessuno le ha chieste, e si
+aprono in modo additivo: un evento di tastiera è un tipo nuovo, non un tipo
+cambiato.
+
+**Sta scritto qui perché chi vorrà portare la propria superficie di scrittura
+deve trovarlo prima di scoprirlo.** Non è lavoro rimandato e non è un no: è un
+fatto sulla forma del contratto di oggi, e la differenza fra «non si può» e «non
+c'è ancora la porta» è esattamente ciò che un terzo non ha modo di dedurre da
+solo. Chi legge l'invariante — *una feature ufficiale è ciò che scriverà un
+plugin di terzi* — ne dedurrebbe di poter scrivere un editor, e ci arriverebbe
+lontano prima di accorgersi che gli manca un tasto.
+
+**L'invariante, misurato.** Quella frase resta vera dove è **provata**, e dove
+sia provata adesso si legge invece di dedursi: le feature ufficiali di questo
+repo stanno su **quattro** delle dieci superfici, e le altre sei sono dichiarate
+scoperte una per una in `fub-features/tests/conformita.rs`
+(`il_dogfooding_dichiara_fin_dove_arriva`), con la ragione accanto. Un dogfooding
+che copre meno di metà di ciò di cui parla non è un dogfooding sbagliato — è un
+dogfooding che finora non sapeva dirsi, e un invariante che non sa dire dove
+finisce è il modo in cui una garanzia diventa una scusa.
+
 **Il caso che la mappa sbaglia è il sync**, e non per la rete — quella è una voce
 additiva le cui condizioni sono cadute (sopra). È il punto 3, e poi il 2. Un sync
 deve decidere il merge **prima** che il file atterri, e da `EventHandler` arriva
