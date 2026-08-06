@@ -323,26 +323,203 @@ fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
     ))
 }
 
-/// Il file a questo path è **condiviso**: un symlink, o un inode con più di un
-/// nome.
+/// Quanti nomi ha il file a un path — **e il quarto valore, che è il punto**.
 ///
-/// Sono i due casi in cui sostituire il file invece del suo contenuto cambia una
-/// cosa che non è nostra — vedi [`FsStorage::write`]. `Err` (il file non c'è
-/// ancora) è `false`: non c'è niente da conservare.
-fn condiviso(meta: &std::fs::Metadata) -> bool {
+/// Un conteggio di hardlink sembra un numero e invece è una risposta a una
+/// domanda che su qualche piattaforma non si può porre. Finché il tipo era un
+/// `bool`, «ne ha uno solo» e «non lo so» erano lo stesso valore, e su Windows
+/// era sempre il secondo travestito da primo: `false` costante, con un commento
+/// accanto che lo ammetteva. Un commento non prende nessuna decisione — la
+/// prende [`come_scrivere`], e per prenderla ha bisogno che i casi siano
+/// distinti (§23.16).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NomiDelFile {
+    /// Il file non c'è ancora: zero nomi, e niente da conservare.
+    Nessuno,
+    /// Un nome solo. L'inode è nostro, e sostituirlo non toglie niente a
+    /// nessuno.
+    Uno,
+    /// Più di uno: un hardlink. Sostituire l'inode ne staccherebbe **uno**, e
+    /// gli altri resterebbero fermi al contenuto di prima.
+    PiuDiUno,
+    /// **Non lo sappiamo**, e non è la stessa cosa di [`NomiDelFile::Uno`]. È il
+    /// valore di una piattaforma che gli hardlink li sa avere ma non li sa
+    /// contare, o di una syscall che è fallita.
+    Ignoto,
+}
+
+/// Le due strade di una scrittura: si sostituisce il file, o gli si scrive
+/// dentro.
+///
+/// È il tipo di ritorno di [`FsStorage::write_con`] perché la strada presa è
+/// l'unica cosa osservabile di questa scelta che non richieda di guardare un
+/// inode — cioè l'unica che si possa presidiare su **ogni** piattaforma.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComeScrivere {
+    /// Temporaneo accanto, `fsync`, rename: atomica, e cambia l'inode.
+    Sostituendo,
+    /// `create` + `sync_all` sull'inode che c'è: conserva i titolari, e perde
+    /// l'atomicità.
+    SulPosto,
+}
+
+/// La decisione, **pura**: dato cosa c'è già a quel path, come si scrive.
+///
+/// Sta fuori da [`FsStorage::write`] e non è una scomposizione di comodo: è la
+/// sola metà della §15.2 che non dipende dal filesystem sotto, quindi è la sola
+/// che un banco possa esercitare intera su qualunque piattaforma. Il rilevamento
+/// — [`nomi_del_file`] — resta l'altra metà, e quella la piattaforma se la tiene.
+///
+/// [`NomiDelFile::Ignoto`] sceglie **sul posto**, ed è la riga che vale la voce.
+/// L'argomento è quello della
+/// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), preso
+/// sul serio fino in fondo: i due danni non sono uguali — il file troncato vuole
+/// un crash *durante* la scrittura ed è visibile, il nome staccato avviene a
+/// ogni salvataggio e non lo vede nessuno. Davanti a un dubbio si paga quello
+/// che si vede.
+pub fn come_scrivere(collegamento: bool, nomi: NomiDelFile) -> ComeScrivere {
+    if collegamento {
+        // La rename sostituirebbe il collegamento, e da quel momento il file
+        // vero non riceverebbe più niente. Non serve contare: un symlink ha
+        // già un altro titolare per definizione, ed è l'unico ramo che non è
+        // mai dipeso dalla piattaforma.
+        return ComeScrivere::SulPosto;
+    }
+    match nomi {
+        NomiDelFile::Nessuno | NomiDelFile::Uno => ComeScrivere::Sostituendo,
+        NomiDelFile::PiuDiUno | NomiDelFile::Ignoto => ComeScrivere::SulPosto,
+    }
+}
+
+/// Quanti nomi ha il file a questo path, **chiedendolo alla piattaforma**.
+///
+/// Riceve i metadati che il chiamante ha già letto *e* il path, perché le due
+/// piattaforme rispondono a domande diverse: su unix il conteggio è già dentro i
+/// metadati (`nlink`), su Windows sta dietro un **handle** e va aperto il file.
+/// Una firma `fn(&Metadata) -> …` — la forma che sembrava ovvia — non può
+/// esprimere il caso Windows, ed è la ragione per cui la funzione prende due
+/// argomenti invece di uno.
+pub fn nomi_del_file(path: &Utf8Path, meta: &std::fs::Metadata) -> NomiDelFile {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        meta.nlink() > 1
+        let _ = path;
+        if meta.nlink() > 1 {
+            NomiDelFile::PiuDiUno
+        } else {
+            NomiDelFile::Uno
+        }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        // Windows sa avere hardlink e sa contarli, ma non attraverso
-        // `std::fs::Metadata`: chiederlo vorrebbe dire una syscall a mano per
-        // ogni scrittura. Il caso resta scoperto, e questa riga è il posto dove
-        // si vede — non un `else` implicito.
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+        };
+
         let _ = meta;
-        false
+        // L'apertura in sola lettura è il prezzo del conteggio su questa
+        // piattaforma, e si paga **una volta per salvataggio** — accanto a una
+        // scrittura, a un `fsync` e a una rename. Un file che non si riesce ad
+        // aprire non è un file con un nome solo: è un file di cui non sappiamo
+        // niente, e la differenza la porta `Ignoto`.
+        let Ok(file) = std::fs::File::open(path) else {
+            return NomiDelFile::Ignoto;
+        };
+        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        // SAFETY: l'handle è vivo per tutta la chiamata (`file` non cade prima),
+        // e `info` è una struttura del chiamante che la funzione riempie.
+        let esito = unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) };
+        if esito == 0 {
+            return NomiDelFile::Ignoto;
+        }
+        if info.nNumberOfLinks > 1 {
+            NomiDelFile::PiuDiUno
+        } else {
+            NomiDelFile::Uno
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        // Non è un `else` di comodo: è la dichiarazione che su questa
+        // piattaforma la domanda non ha risposta, e `come_scrivere` sa cosa
+        // farne. Prima qui c'era `false`, cioè la risposta sbagliata detta con
+        // sicurezza.
+        let _ = (path, meta);
+        NomiDelFile::Ignoto
+    }
+}
+
+impl FsStorage {
+    /// Il corpo di [`VaultStorage::write`], col **rilevatore passato** invece
+    /// che nominato.
+    ///
+    /// Non è un gancio di prova travestito da API. Il rilevamento dei nomi di un
+    /// file è la sola parte di questa scrittura che cambia con la piattaforma, e
+    /// finché stava dentro il corpo *tutto* il corpo cambiava con lei: su una
+    /// macchina che non sa contare gli hardlink non c'era modo di esercitare il
+    /// ramo «sul posto», quindi la suite di durabilità là si **svuotava** —
+    /// compilata a metà, verde, e indistinguibile da una suite che passa (§23.16).
+    /// Passandolo, la regola si prova per intero su qualunque piattaforma con un
+    /// rilevatore che risponde ciò che serve.
+    ///
+    /// Restituisce la strada presa perché è l'unica cosa osservabile della
+    /// scelta che non richieda di guardare un inode — cioè l'unica che un banco
+    /// possa presidiare anche dove gli inode non ci sono.
+    pub fn write_con(
+        &self,
+        path: &Utf8Path,
+        bytes: &[u8],
+        nomi: impl Fn(&Utf8Path, &std::fs::Metadata) -> NomiDelFile,
+    ) -> io::Result<ComeScrivere> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let esistente = std::fs::symlink_metadata(path).ok();
+        let collegamento = esistente
+            .as_ref()
+            .is_some_and(|meta| meta.file_type().is_symlink());
+        let quanti = match (&esistente, collegamento) {
+            (None, _) => NomiDelFile::Nessuno,
+            // Su un collegamento il conteggio non si chiede: la risposta non
+            // cambierebbe la decisione, e su Windows costerebbe un'apertura che
+            // seguirebbe il collegamento invece di guardarlo.
+            (Some(_), true) => NomiDelFile::Ignoto,
+            (Some(meta), false) => nomi(path, meta),
+        };
+        let come = come_scrivere(collegamento, quanti);
+        if come == ComeScrivere::SulPosto {
+            let mut file = std::fs::File::create(path)?;
+            file.write_all(bytes)?;
+            file.sync_all()?;
+            return Ok(come);
+        }
+
+        let tmp = tmp_path(path);
+        let scritto = (|| -> io::Result<()> {
+            let mut file = std::fs::File::create(&tmp)?;
+            file.write_all(bytes)?;
+            if let Some(meta) = &esistente {
+                // Best-effort: un filesystem che non sa di permessi (FAT su una
+                // chiavetta) non è una ragione per non salvare la nota.
+                let _ = std::fs::set_permissions(&tmp, meta.permissions());
+            }
+            file.sync_all()
+        })();
+        if let Err(e) = scritto {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+        if let Err(e) = std::fs::rename(&tmp, path) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+        if let Some(dir) = path.parent() {
+            if let Ok(dir) = std::fs::File::open(dir) {
+                let _ = dir.sync_all();
+            }
+        }
+        Ok(come)
     }
 }
 
@@ -378,19 +555,23 @@ impl VaultStorage for FsStorage {
     ///   nota che l'utente aveva chiuso — una modifica ai permessi senza che
     ///   nessuno l'abbia chiesta.
     ///
-    /// # I due casi in cui **non** si sostituisce il file
+    /// # I tre casi in cui **non** si sostituisce il file
     ///
-    /// Una rename cambia l'inode, e ci sono due situazioni in cui quell'inode
-    /// non è solo nostro:
+    /// Una rename cambia l'inode, e ci sono tre situazioni in cui quell'inode
+    /// non è solo nostro — o non si sa se lo sia:
     ///
     /// - il path **è un symlink**: la rename sostituirebbe il collegamento, e da
     ///   quel momento il file vero non riceverebbe più niente. È il modo in cui
     ///   una nota tenuta altrove e collegata dentro il vault smette in silenzio
     ///   di essere la stessa nota;
     /// - il file ha **più di un nome** (hardlink): la rename ne staccherebbe uno
-    ///   solo, e l'altro resterebbe fermo al contenuto di prima.
+    ///   solo, e l'altro resterebbe fermo al contenuto di prima;
+    /// - **non si sa quanti nomi abbia** ([`NomiDelFile::Ignoto`]). Il terzo caso
+    ///   è nato con la §23.16: prima era il secondo detto male, perché su Windows
+    ///   il conteggio rispondeva `false` sempre, cioè «un nome solo» a un file
+    ///   che poteva averne dieci.
     ///
-    /// In entrambi si scrive **sul posto** — `create` + `sync_all` — che
+    /// In tutti si scrive **sul posto** — `create` + `sync_all` — che
     /// conserva l'inode e perde l'atomicità: un crash a metà lascia il file
     /// troncato, come prima di questa voce. È il verso giusto della scelta,
     /// perché i due danni non sono uguali: il troncamento richiede un crash
@@ -399,45 +580,11 @@ impl VaultStorage for FsStorage {
     ///
     /// Il costo è una `symlink_metadata` per scrittura, cioè la stessa syscall
     /// che `std::fs::write` fa comunque aprendo il file.
+    ///
+    /// Il corpo sta in [`FsStorage::write_con`], che prende il rilevatore invece
+    /// di nominarlo: qui si passa quello vero.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let esistente = std::fs::symlink_metadata(path).ok();
-        let sul_posto = esistente
-            .as_ref()
-            .is_some_and(|meta| meta.file_type().is_symlink() || condiviso(meta));
-        if sul_posto {
-            let mut file = std::fs::File::create(path)?;
-            file.write_all(bytes)?;
-            return file.sync_all();
-        }
-
-        let tmp = tmp_path(path);
-        let scritto = (|| -> io::Result<()> {
-            let mut file = std::fs::File::create(&tmp)?;
-            file.write_all(bytes)?;
-            if let Some(meta) = &esistente {
-                // Best-effort: un filesystem che non sa di permessi (FAT su una
-                // chiavetta) non è una ragione per non salvare la nota.
-                let _ = std::fs::set_permissions(&tmp, meta.permissions());
-            }
-            file.sync_all()
-        })();
-        if let Err(e) = scritto {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(e);
-        }
-        if let Err(e) = std::fs::rename(&tmp, path) {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(e);
-        }
-        if let Some(dir) = path.parent() {
-            if let Ok(dir) = std::fs::File::open(dir) {
-                let _ = dir.sync_all();
-            }
-        }
-        Ok(())
+        self.write_con(path, bytes, nomi_del_file).map(|_| ())
     }
 
     /// `O_APPEND` e **nessun `fsync`**: la scelta è a verbale

@@ -18,6 +18,23 @@ tracing = { workspace = true }
 # INVARIANTE: niente comrak/pulldown, wasmtime, tauri qui dentro. Il core non
 # sa cosa sia il markdown.
 
+# Il conteggio dei nomi di un file su Windows (§23.16): `std::fs::Metadata` non
+# espone `nNumberOfLinks`, e senza di lui la scrittura stacca un hardlink senza
+# dirlo. La domanda della supply chain (0001) ha una risposta misurata invece che
+# stimata: `windows-sys 0.61` era **già** nell'albero — tirato da tauri — e
+# dipende dal solo `windows-link`, che c'è pure lui. Zero crate nuovi, un solo
+# fornitore (Microsoft), e le due feature sono quelle di una syscall sola. Il
+# verso alternativo era una `extern "system"` scritta a mano con la sua
+# `BY_HANDLE_FILE_INFORMATION`: nessuna dipendenza, e una struct di dodici campi
+# il cui layout sbagliato non fa rumore — restituisce un numero, e il numero è
+# sbagliato. Fra un crate che non aggiunge niente e un `unsafe` che non si può
+# rileggere, questo repo prende il crate.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+] }
+
 [dev-dependencies]
 # i test del grafo costruiscono DocumentModel a mano: zero markdown.
 # Espliciti per gli integration test in `tests/` (niente proptest: il generatore

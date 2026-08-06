@@ -1,10 +1,22 @@
 # 23. Cosa le decisioni chiuse costano a chi usa Fub
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato.
+Una **seduta chiusa** della [roadmap infrastrutturale](../todo.md): prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
+
+**Chiusa**, dalla [0109](../decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md).
+Diciassette voci, e questa seduta lascia una cosa che le altre non lasciano: il
+**consuntivo del metodo** con cui è nata. La domanda era *una decisione presa
+bene, cosa costa a chi usa l'app?*, e la risposta misurata è che il prezzo
+dichiarato dai verbali era quasi sempre **vero** e la diagnosi che ne dava la
+voce quasi sempre **incompleta** — le premesse cadute sono state almeno una per
+voce, e nelle ultime otto il difetto peggiore stava ogni volta *fuori* dalla voce
+che lo aveva fatto trovare. È il rovescio esatto del pregio che la seduta
+celebrava: scrivere il prezzo accanto alla scelta ha retto su tutti e novanta i
+verbali, e la riga scritta allora — letta a distanza — dice **dove guardare**, non
+**cosa troverai**.
 
 **Questa seduta l'ha trovata una verifica, ed è la terza.** Le due precedenti —
 quella che ha aperto la [§21.10](21-la-ricerca-predefinita.md) e quella che ha
@@ -137,7 +149,9 @@ ritrovata tre volte.
 E una seconda cosa, che è il rovescio del pregio di questo repo: **quasi tutti
 questi difetti li dichiarano i verbali stessi**, spesso nella riga accanto al
 codice che li causa — «il caso resta scoperto, e questa riga è il posto dove si
-vede» ([0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)), «se un giorno
+vede» ([0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), riga che la
+[§23.16](#2316-su-windows-un-hardlink-si-stacca-in-silenzio) ha poi tolto perché
+**un commento non prende nessuna decisione**), «se un giorno
 lo facesse questa è la riga da rileggere»
 ([0032](../decisions/0032-il-runner-dei-job.md)). Nessuno è stato dedotto contro
 il testo. È esattamente il difetto che questa seduta esiste per riparare, visto
@@ -250,7 +264,7 @@ che dopo, cioè l'unica volta in questa seduta in cui è successo.
 [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) l'ha chiusa: quello
 che era «un ordine e non una priorità» è diventato il criterio con cui si è
 scelto, il primo turno in cui a ordinare il lavoro non era una scadenza. Ciò che
-si è trovato facendola vale per le voci di questa seduta ancora aperte: **la
+si è trovato facendola è valso per tutte le voci venute dopo: **la
 raccomandazione della voce era sbagliata**, e non per poco — diceva di guardare
 per prima l'opzione che «non inventa niente», e quell'opzione avrebbe fatto
 scomparire la scelta che la voce esiste per dare. Una voce di questa seduta
@@ -1052,7 +1066,7 @@ invece di fallire con un messaggio. Non è un presidio, è la prima vittima.
 
 ### 23.16 Su Windows un hardlink si stacca in silenzio
 
-*kernel · **P2** — nessuna firma: una funzione che su una piattaforma sa rispondere solo «no»*
+*chiusa dalla [0109](../decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md) — i valori sono **quattro** e non due: `Nessuno`, `Uno`, `PiuDiUno` e **`Ignoto`**, che finché il rilevamento era un `bool` viaggiava travestito da «ne ha uno solo». Con i casi distinti la regola diventa pura (`come_scrivere`) e la riga che vale la voce si può finalmente scrivere: **`Ignoto` sceglie come `PiuDiUno`**, cioè davanti a un dubbio si paga il danno che si vede — l'argomento della 0065 preso fino in fondo. Il verso conservativo è **scartato con una misura invece che con una stima**: il conteggio su Windows si può avere (`GetFileInformationByHandle`), quindi non c'è nessuna atomicità da togliere a una piattaforma intera. La premessa del secondo punto era **falsa e la realtà peggiore**: il job `windows-latest` esiste e gira `cargo test --workspace` da sempre — passava verde **proprio perché** i quattro presidi del caso sono `#[cfg(unix)]` e là non venivano compilati. Una suite che si svuota in silenzio è indistinguibile da una suite verde*
 
 La [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) ha deciso bene due
 volte: la scrittura è temp+rename+fsync, e dove l'inode ha **altri titolari** —
@@ -1073,7 +1087,7 @@ congelato al contenuto vecchio, senza errore e senza avviso. È esattamente il
 symlink invece funzionano ovunque: quel ramo passa da `symlink_metadata` e non da
 `nlink`.)
 
-- [ ] **La via che esiste, e va misurata.** Windows il conteggio ce l'ha —
+- [x] **La via che esiste, e va misurata.** Windows il conteggio ce l'ha —
       `GetFileInformationByHandle` restituisce `nNumberOfLinks` — quindi la
       domanda non è *se* si può, è se vale una dipendenza (`windows-sys`) o una
       chiamata FFI diretta su un progetto che ha una politica severa sulla supply
@@ -1081,17 +1095,40 @@ symlink invece funzionano ovunque: quel ramo passa da `symlink_metadata` e non d
       il verso conservativo: se il conteggio non si può avere, **scrivere sul posto
       sempre** su quella piattaforma è un'opzione — costa l'atomicità a tutti per
       proteggere pochi, ed è probabilmente troppo, ma va scartata avendola detta.
-- [ ] **Il presidio, che oggi non può esistere.** Nessun test di questo repo gira
+      **Risposta, con un numero invece di una stima**: `windows-sys 0.61` era già
+      nell'albero (tirato da tauri) e dipende dal solo `windows-link`, che c'è pure
+      lui — dichiararlo sotto `[target.'cfg(windows)'.dependencies]` muove **una
+      riga** di `Cargo.lock`. L'alternativa era una struct di dodici campi scritta
+      a mano il cui layout sbagliato non fa rumore: restituisce un numero, e il
+      numero è quello sbagliato. Il verso conservativo resta, ridotto al suo campo
+      legittimo — `NomiDelFile::Ignoto`, cioè la syscall fallita e la piattaforma
+      che la domanda non la sa proprio porre.
+- [x] **Il presidio, che oggi non può esistere.** Nessun test di questo repo gira
       su Windows, quindi il caso non è solo scoperto: è **inosservabile**. È la
       §17.2 vista da un lato che quella voce non nomina — non «i test della shell»
       ma i test di ciò che cambia con la piattaforma, di cui questo è il primo
-      esemplare vero.
-- [ ] **Perché è P2 e perché non si chiude da sola.** Nessuna firma, e chi tiene
+      esemplare vero. **La premessa è falsa, e la realtà è peggiore**: il job
+      `windows-latest` esiste, gira `cargo test --workspace` e passava verde
+      *proprio perché* i quattro presidi del caso sono `#[cfg(unix)]` e là non
+      venivano nemmeno compilati. Il presidio si può eccome, e sono tre: il corpo
+      della scrittura prende il rilevatore invece di nominarlo (quindi la regola si
+      prova ovunque), un **conto** pretende che i test non-`cfg(unix)` di
+      `la_durabilita.rs` non calino, e da CI un
+      `cargo check --target x86_64-pc-windows-msvc` porta il ramo Windows sotto il
+      compilatore dal job Linux.
+- [x] **Perché è P2 e perché non si chiude da sola.** Nessuna firma, e chi tiene
       hardlink dentro un vault è raro. Ma è la stessa parola «raro» della
       [§23.8](#238-due-file-che-differiscono-per-una-maiuscola-sono-lo-stesso-arco):
       raro finché il vault sta su una macchina sola e non lo tocca nessun altro
       strumento — e gli hardlink dentro un vault li mettono precisamente gli
-      strumenti che questo progetto promette di non ostacolare.
+      strumenti che questo progetto promette di non ostacolare. Chiusa senza dire
+      «è raro, si lascia», che era il vincolo scritto in quella riga. Resta un
+      **buco dichiarato** (forma della
+      [0064](../decisions/0064-il-supporto-sta-sotto.md), il quarto): che
+      `nNumberOfLinks` risponda giusto su un handle aperto come lo apre Fub, che la
+      `MoveFileEx` sotto `std::fs::rename` si comporti come si presume con più nomi
+      sullo stesso inode, e ReFS/SMB/UNC. Un buco dichiarato non è una casella e
+      non entra in nessun totale.
 
 ### 23.17 Tre permessi nuovi in tre commit, e nessuno li mostra a chi deve accettarli
 

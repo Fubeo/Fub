@@ -119,6 +119,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.89
         with:
           components: rustfmt, clippy
+          # Il ramo Windows del kernel sotto il compilatore, da Linux: vedi il
+          # passo in fondo a questo job.
+          targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
       - name: Dipendenze di sistema di Tauri
         run: |
@@ -127,6 +130,14 @@ jobs:
             librsvg2-dev patchelf libgtk-3-dev
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # Il codice `#[cfg(windows)]` di `fub-kernel` — il conteggio dei nomi di un
+      # file, §23.16 — non lo guarda nessuno degli altri passi: `clippy` gira su
+      # Linux, e il job `windows-latest` compila ma non ha `clippy` né `fmt`.
+      # Sono sei secondi, e prendono la classe di errore che costa di più: una
+      # FFI che non compila è una FFI che non è stata scritta, e ce ne si accorge
+      # solo dalla piattaforma su cui nessuno sviluppa.
+      - name: Il ramo Windows del kernel, compilato da qui
+        run: cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
 
   test:
     name: build + test (${{ matrix.os }})

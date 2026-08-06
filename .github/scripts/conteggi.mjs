@@ -130,6 +130,28 @@ export const CONTEGGI = [
       "grep -rlE '#\\[(tauri::)?command\\]|generate_handler!' crates/fub-app/src | wc -l",
   },
   {
+    nome: "durabilita-su-ogni-piattaforma",
+    ragione:
+      "Quanti test di `crates/fub-kernel/tests/la_durabilita.rs` non hanno " +
+      "**nessun** `#[cfg(…)]` davanti, cioè quanti ne restano dove la " +
+      "piattaforma non regala inode né hardlink. È il presidio contro una specie " +
+      "di difetto che nessun colore segnala: la CI gira `cargo test --workspace` " +
+      "anche su windows-latest, e per anni quel job è passato verde perché i " +
+      "presidi che avrebbero interrogato il caso là non erano compilati — **una " +
+      "suite che si svuota in silenzio è indistinguibile da una suite verde** " +
+      "(§23.16). Un test non può accorgersene, perché il test che se ne " +
+      "accorgerebbe è proprio quello che non c'è: se ne accorge un conto che " +
+      "legge il sorgente da fuori. Guarda `#[cfg`, non `#[cfg(unix)]`, e la " +
+      "differenza è stata misurata: la prima forma di questo comando cercava la " +
+      "stringa esatta, e mettendo `#[cfg(not(windows))]` davanti a tutti e " +
+      "undici i test la suite su Windows si svuotava del tutto mentre il conto " +
+      "restava undici — cioè il presidio era cieco proprio al gesto che esiste " +
+      "per prendere.",
+    comando:
+      "awk '/^[[:space:]]*#\\[cfg/{g=1;next} /^[[:space:]]*#\\[test\\]/{if(g==1){g=0}else{n++}}" +
+      " END{print n+0}' crates/fub-kernel/tests/la_durabilita.rs",
+  },
+  {
     nome: "crate-del-workspace",
     ragione: "I crate che ereditano la versione dal `Cargo.toml` della radice.",
     comando: "ls -d crates/*/ | wc -l",
